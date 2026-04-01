@@ -58,9 +58,12 @@ const MESES_LABEL = ['Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio', 'Jul
 
 // Helper to get month label from date
 function getMonthLabel(dateStr: string): string {
-  const date = new Date(dateStr);
-  if (isNaN(date.getTime())) return formatDate(dateStr);
-  return `${MESES_LABEL[date.getMonth()]} ${date.getFullYear()}`;
+  const parts = String(dateStr).split(/[-T]/);
+  if (parts.length >= 2) {
+    const month = parseInt(parts[1]) - 1;
+    if (month >= 0 && month < 12) return `${MESES_LABEL[month]} ${parts[0]}`;
+  }
+  return formatDate(dateStr);
 }
 
 // Helper to convert date to catorcena format

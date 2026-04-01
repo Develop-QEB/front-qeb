@@ -134,6 +134,7 @@ export function InventariosPage() {
   const [bulkValidation, setBulkValidation] = useState<{ valid: number; errors: { fila: number; campo: string; mensaje: string }[]; duplicatesInCsv: number }>({ valid: 0, errors: [], duplicatesInCsv: 0 });
   const [bulkParsing, setBulkParsing] = useState(false);
   const [bulkUploading, setBulkUploading] = useState(false);
+  const [bulkUploadProgress, setBulkUploadProgress] = useState(0);
   const [bulkResult, setBulkResult] = useState<{ insertados: number; duplicados: number; actualizados?: number; duplicados_ocupados?: number; errores: { fila: number; campo: string; mensaje: string }[]; total: number } | null>(null);
   const [bulkCheckResult, setBulkCheckResult] = useState<BulkCheckResult | null>(null);
   const [bulkChecking, setBulkChecking] = useState(false);
@@ -378,15 +379,15 @@ export function InventariosPage() {
         }
         codigosSeen.add(codigo);
       }
-      if (row.tipo_de_cara && !['Flujo', 'Contraflujo'].includes(row.tipo_de_cara)) {
+      if (row.tipo_de_cara && !['Flujo', 'Contraflujo', 'Flujo2', 'Contraflujo2'].includes(row.tipo_de_cara)) {
         errors.push({ fila, campo: 'tipo_de_cara', mensaje: 'Debe ser Flujo o Contraflujo' });
       }
       if (row.tradicional_digital && !['Tradicional', 'Digital'].includes(row.tradicional_digital)) {
         errors.push({ fila, campo: 'tradicional_digital', mensaje: 'Debe ser Tradicional o Digital' });
       }
-      const numFields = ['latitud', 'longitud', 'ancho', 'alto', 'cp', 'total_espacios', 'tarifa_publica', 'tarifa_piso'];
+      const numFields = ['latitud', 'longitud', 'cp', 'total_espacios', 'tarifa_publica', 'tarifa_piso'];
       for (const nf of numFields) {
-        if (row[nf] && row[nf].trim() !== '' && isNaN(Number(row[nf]))) {
+        if (row[nf] && row[nf].trim() !== '' && row[nf].trim().toUpperCase() !== 'NA' && isNaN(Number(row[nf]))) {
           errors.push({ fila, campo: nf, mensaje: 'Debe ser un número válido' });
         }
       }
@@ -440,18 +441,45 @@ export function InventariosPage() {
       const text = e.target?.result as string;
       // Use setTimeout to let the loading state render before heavy parsing
       setTimeout(() => {
-        const lines = text.split(/\r?\n/).filter(line => line.trim());
-        if (lines.length < 2) { setBulkParsing(false); return; }
+        // Full CSV parser: handles commas, quotes, and newlines inside quoted fields
+        const parseCsv = (csv: string): string[][] => {
+          const rows: string[][] = [];
+          let current = '', inQuotes = false;
+          const fields: string[] = [];
+          for (let j = 0; j < csv.length; j++) {
+            const ch = csv[j];
+            if (ch === '"') {
+              inQuotes = !inQuotes;
+            } else if (ch === ',' && !inQuotes) {
+              fields.push(current.trim());
+              current = '';
+            } else if ((ch === '\n' || ch === '\r') && !inQuotes) {
+              if (ch === '\r' && csv[j + 1] === '\n') j++; // skip \r\n
+              fields.push(current.trim());
+              if (fields.some(f => f !== '')) rows.push([...fields]);
+              fields.length = 0;
+              current = '';
+            } else {
+              current += ch;
+            }
+          }
+          fields.push(current.trim());
+          if (fields.some(f => f !== '')) rows.push(fields);
+          return rows;
+        };
 
-        const rawHeaders = lines[0].split(',').map(h => h.trim().replace(/"/g, ''));
+        const allRows = parseCsv(text);
+        if (allRows.length < 2) { setBulkParsing(false); return; }
+
+        const rawHeaders = allRows[0].map(h => h.replace(/"/g, ''));
         const mappedHeaders = rawHeaders.map(mapHeader);
 
         const parsed: Record<string, string>[] = [];
-        for (let i = 1; i < lines.length; i++) {
-          const values = lines[i].split(',').map(v => v.trim().replace(/"/g, ''));
+        for (let i = 1; i < allRows.length; i++) {
+          const values = allRows[i];
           const row: Record<string, string> = {};
           mappedHeaders.forEach((header, idx) => {
-            row[header] = values[idx] || '';
+            row[header] = (values[idx] || '').replace(/\n/g, ' ');
           });
           // Skip completely empty rows
           if (Object.values(row).every(v => !v)) continue;
@@ -516,9 +544,28 @@ export function InventariosPage() {
       : undefined;
 
     setBulkUploading(true);
+    setBulkUploadProgress(0);
     try {
-      const result = await inventariosService.bulkCreate(rowsToSend, overwriteCodigos);
-      setBulkResult({ ...result, duplicados_ocupados: ocupadosCodigos.size });
+      // Upload in chunks for progress tracking
+      const CHUNK_SIZE = 200;
+      const totalChunks = Math.ceil(rowsToSend.length / CHUNK_SIZE);
+      let totalInsertados = 0, totalDuplicados = 0, totalActualizados = 0;
+      const totalErrores: { fila: number; campo: string; mensaje: string }[] = [];
+
+      for (let i = 0; i < totalChunks; i++) {
+        const chunk = rowsToSend.slice(i * CHUNK_SIZE, (i + 1) * CHUNK_SIZE);
+        const chunkOverwrite = overwriteCodigos
+          ? overwriteCodigos.filter(code => chunk.some(r => r.codigo_unico?.trim() === code))
+          : undefined;
+        const result = await inventariosService.bulkCreate(chunk, chunkOverwrite);
+        totalInsertados += result.insertados || 0;
+        totalDuplicados += result.duplicados || 0;
+        totalActualizados += result.actualizados || 0;
+        if (result.errores?.length) totalErrores.push(...result.errores);
+        setBulkUploadProgress(Math.round(((i + 1) / totalChunks) * 100));
+      }
+
+      setBulkResult({ insertados: totalInsertados, duplicados: totalDuplicados, actualizados: totalActualizados, duplicados_ocupados: ocupadosCodigos.size, errores: totalErrores, total: rowsToSend.length });
       setBulkStep('result');
       queryClient.invalidateQueries({ queryKey: ['inventarios'] });
     } catch (err) {
@@ -531,6 +578,7 @@ export function InventariosPage() {
       setBulkStep('result');
     } finally {
       setBulkUploading(false);
+      setBulkUploadProgress(0);
     }
   };
 
@@ -592,7 +640,7 @@ export function InventariosPage() {
     { key: 'codigo', label: 'Código Corto' },
     { key: 'tipo_de_mueble', label: 'Tipo de Mueble' },
     { key: 'mueble', label: 'Mueble / Formato' },
-    { key: 'tipo_de_cara', label: 'Tipo de Cara', options: ['Flujo', 'Contraflujo'] },
+    { key: 'tipo_de_cara', label: 'Tipo de Cara', options: ['Flujo', 'Contraflujo', 'Flujo2', 'Contraflujo2'] },
     { key: 'cara', label: 'Cara' },
     { key: 'tradicional_digital', label: 'Trad / Digital', options: ['Tradicional', 'Digital'] },
     { key: 'sentido', label: 'Sentido' },
@@ -1280,8 +1328,8 @@ export function InventariosPage() {
 
                     return (
                       <div className={`border ${isDark ? 'border-zinc-800' : 'border-gray-200'} rounded-xl overflow-hidden`}>
-                        {/* Tab buttons */}
-                        <div className={`flex ${isDark ? 'bg-zinc-800/50 border-zinc-800' : 'bg-gray-50 border-gray-200'} border-b`}>
+                        {/* Tab buttons + download */}
+                        <div className={`flex items-center ${isDark ? 'bg-zinc-800/50 border-zinc-800' : 'bg-gray-50 border-gray-200'} border-b`}>
                           <button
                             onClick={() => { setBulkTab('errors'); setBulkPage(1); }}
                             className={`flex items-center gap-1.5 px-4 py-2 text-xs font-medium transition-colors ${bulkTab === 'errors' ? (isDark ? 'text-red-300 border-b-2 border-red-400 bg-red-500/5' : 'text-red-700 border-b-2 border-red-500 bg-red-50') : (isDark ? 'text-zinc-500 hover:text-zinc-300' : 'text-gray-400 hover:text-gray-600')}`}
@@ -1296,28 +1344,53 @@ export function InventariosPage() {
                             <CheckCircle2 className="h-3.5 w-3.5" />
                             OK ({okRows.length})
                           </button>
+                          <div className="ml-auto pr-2">
+                            <button
+                              onClick={() => {
+                                const rows = currentRows.map(({ row }) => row);
+                                if (rows.length === 0) return;
+                                const keys = FORM_FIELDS.map(f => f.key);
+                                const header = keys.join(',');
+                                const csvRows = rows.map(r => keys.map(k => {
+                                  const val = (r[k] || '').replace(/"/g, '""');
+                                  return val.includes(',') || val.includes('\n') ? `"${val}"` : val;
+                                }).join(','));
+                                const csv = '\ufeff' + header + '\n' + csvRows.join('\n');
+                                const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+                                const url = URL.createObjectURL(blob);
+                                const link = document.createElement('a');
+                                link.href = url;
+                                link.download = `inventarios_${bulkTab}.csv`;
+                                document.body.appendChild(link);
+                                link.click();
+                                document.body.removeChild(link);
+                                URL.revokeObjectURL(url);
+                              }}
+                              className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-medium ${isDark ? 'bg-purple-500/20 text-purple-300 hover:bg-purple-500/30' : 'bg-purple-100 text-purple-700 hover:bg-purple-200'} transition-colors`}
+                              title="Descargar CSV del tab actual"
+                            >
+                              <Download className="h-3.5 w-3.5" />
+                              CSV
+                            </button>
+                          </div>
                         </div>
 
-                        {/* Table */}
-                        <div className="max-h-80 overflow-auto">
-                          <table className="w-full text-xs">
+                        {/* Table - all columns editable */}
+                        <div className="max-h-96 overflow-auto">
+                          <table className="text-xs" style={{ minWidth: FORM_FIELDS.length * 110 }}>
                             <thead className={`${isDark ? 'bg-zinc-800/50' : 'bg-gray-50'} sticky top-0 z-10`}>
                               <tr>
-                                <th className={`px-1 py-2 text-center ${isDark ? 'text-zinc-500' : 'text-gray-400'} font-medium w-8`}>#</th>
-                                <th className={`px-1 py-2 text-left ${isDark ? 'text-zinc-500' : 'text-gray-400'} font-medium`}>Código Único</th>
-                                <th className={`px-1 py-2 text-left ${isDark ? 'text-zinc-500' : 'text-gray-400'} font-medium`}>Tipo Mueble</th>
-                                <th className={`px-1 py-2 text-left ${isDark ? 'text-zinc-500' : 'text-gray-400'} font-medium w-24`}>Cara</th>
-                                <th className={`px-1 py-2 text-left ${isDark ? 'text-zinc-500' : 'text-gray-400'} font-medium w-24`}>T/D</th>
-                                <th className={`px-1 py-2 text-left ${isDark ? 'text-zinc-500' : 'text-gray-400'} font-medium`}>Plaza</th>
-                                <th className={`px-1 py-2 text-left ${isDark ? 'text-zinc-500' : 'text-gray-400'} font-medium`}>Estado</th>
-                                <th className={`px-1 py-2 text-left ${isDark ? 'text-zinc-500' : 'text-gray-400'} font-medium`}>Municipio</th>
+                                <th className={`px-1 py-2 text-center ${isDark ? 'text-zinc-500' : 'text-gray-400'} font-medium w-8 sticky left-0 ${isDark ? 'bg-zinc-800/90' : 'bg-gray-50'} z-20`}>#</th>
+                                {FORM_FIELDS.map(f => (
+                                  <th key={f.key} className={`px-1 py-2 text-left ${isDark ? 'text-zinc-500' : 'text-gray-400'} font-medium whitespace-nowrap`}>{f.label}</th>
+                                ))}
                                 <th className={`px-1 py-2 text-center ${isDark ? 'text-zinc-500' : 'text-gray-400'} font-medium w-16`}>Estatus</th>
                                 <th className={`px-1 py-2 text-center ${isDark ? 'text-zinc-500' : 'text-gray-400'} font-medium w-8`}></th>
                               </tr>
                             </thead>
                             <tbody>
                               {pagedRows.length === 0 ? (
-                                <tr><td colSpan={10} className={`px-4 py-6 text-center text-xs ${isDark ? 'text-zinc-600' : 'text-gray-400'}`}>{bulkTab === 'errors' ? 'Sin errores' : 'Sin filas válidas'}</td></tr>
+                                <tr><td colSpan={FORM_FIELDS.length + 3} className={`px-4 py-6 text-center text-xs ${isDark ? 'text-zinc-600' : 'text-gray-400'}`}>{bulkTab === 'errors' ? 'Sin errores' : 'Sin filas válidas'}</td></tr>
                               ) : pagedRows.map(({ row, idx }) => {
                                 const filaNum = idx + 1;
                                 const rowErrors = bulkValidation.errors.filter(e => e.fila === filaNum);
@@ -1331,36 +1404,19 @@ export function InventariosPage() {
                                     className={`border-t ${isDark ? 'border-zinc-800/50' : 'border-gray-100'} ${hasError ? (isDupInCsv ? 'bg-amber-500/5' : 'bg-red-500/5') : ''}`}
                                     title={hasError ? rowErrors.map(e => `${e.campo}: ${e.mensaje}`).join('\n') : undefined}
                                   >
-                                    <td className={`px-1 py-1 text-center ${isDark ? 'text-zinc-600' : 'text-gray-400'} text-[10px]`}>{filaNum}</td>
-                                    <td className="px-1 py-1">
-                                      <input value={row.codigo_unico || ''} onChange={e => updateBulkRow(idx, 'codigo_unico', e.target.value)} className={`${inputClass('codigo_unico')} font-mono`} />
-                                    </td>
-                                    <td className="px-1 py-1">
-                                      <input value={row.tipo_de_mueble || ''} onChange={e => updateBulkRow(idx, 'tipo_de_mueble', e.target.value)} className={inputClass('tipo_de_mueble')} />
-                                    </td>
-                                    <td className="px-1 py-1">
-                                      <select value={row.tipo_de_cara || ''} onChange={e => updateBulkRow(idx, 'tipo_de_cara', e.target.value)} className={inputClass('tipo_de_cara')}>
-                                        <option value="">—</option>
-                                        <option value="Flujo">Flujo</option>
-                                        <option value="Contraflujo">Contraflujo</option>
-                                      </select>
-                                    </td>
-                                    <td className="px-1 py-1">
-                                      <select value={row.tradicional_digital || ''} onChange={e => updateBulkRow(idx, 'tradicional_digital', e.target.value)} className={inputClass('tradicional_digital')}>
-                                        <option value="">—</option>
-                                        <option value="Tradicional">Tradicional</option>
-                                        <option value="Digital">Digital</option>
-                                      </select>
-                                    </td>
-                                    <td className="px-1 py-1">
-                                      <input value={row.plaza || ''} onChange={e => updateBulkRow(idx, 'plaza', e.target.value)} className={inputClass('plaza')} />
-                                    </td>
-                                    <td className="px-1 py-1">
-                                      <input value={row.estado || ''} onChange={e => updateBulkRow(idx, 'estado', e.target.value)} className={inputClass('estado')} />
-                                    </td>
-                                    <td className="px-1 py-1">
-                                      <input value={row.municipio || ''} onChange={e => updateBulkRow(idx, 'municipio', e.target.value)} className={inputClass('municipio')} />
-                                    </td>
+                                    <td className={`px-1 py-1 text-center ${isDark ? 'text-zinc-600' : 'text-gray-400'} text-[10px] sticky left-0 ${isDark ? 'bg-zinc-900' : 'bg-white'} z-10`}>{filaNum}</td>
+                                    {FORM_FIELDS.map(f => (
+                                      <td key={f.key} className="px-1 py-1">
+                                        {f.options ? (
+                                          <select value={row[f.key] || ''} onChange={e => updateBulkRow(idx, f.key, e.target.value)} className={inputClass(f.key)}>
+                                            <option value="">—</option>
+                                            {f.options.map(o => <option key={o} value={o}>{o}</option>)}
+                                          </select>
+                                        ) : (
+                                          <input value={row[f.key] || ''} onChange={e => updateBulkRow(idx, f.key, e.target.value)} className={`${inputClass(f.key)} ${f.key === 'codigo_unico' ? 'font-mono' : ''}`} style={{ minWidth: 80 }} />
+                                        )}
+                                      </td>
+                                    ))}
                                     <td className="px-1 py-1 text-center">
                                       {hasError ? (
                                         <span className={`inline-flex items-center px-1.5 py-0.5 rounded text-[9px] font-medium ${isDupInCsv ? (isDark ? 'bg-amber-500/20 text-amber-300' : 'bg-amber-100 text-amber-700') : (isDark ? 'bg-red-500/20 text-red-300' : 'bg-red-100 text-red-700')}`}>
@@ -1477,9 +1533,12 @@ export function InventariosPage() {
                       <div className={`border ${isDark ? 'border-zinc-800' : 'border-gray-200'} rounded-xl overflow-hidden`}>
                         {/* Download button */}
                         <div className={`flex items-center justify-between px-3 py-2 ${isDark ? 'bg-zinc-800/50 border-zinc-800' : 'bg-gray-50 border-gray-200'} border-b`}>
-                          <span className={`text-xs ${isDark ? 'text-zinc-400' : 'text-gray-500'}`}>
-                            {matchedRows.length} filas — {checkTab === 'nuevos' ? 'Se insertarán' : checkTab === 'sobreescribibles' ? 'Se pueden sobreescribir' : 'No se sobreescribirán'}
-                          </span>
+                          <div>
+                            <span className={`text-xs ${isDark ? 'text-zinc-400' : 'text-gray-500'}`}>
+                              {matchedRows.length} filas — {checkTab === 'nuevos' ? 'Se insertarán' : checkTab === 'sobreescribibles' ? 'Se pueden sobreescribir' : 'No se sobreescribirán'}
+                            </span>
+                            {checkTab === 'ocupados' && <p className={`text-[10px] ${isDark ? 'text-zinc-500' : 'text-gray-400'}`}>Ocupación al día</p>}
+                          </div>
                           <div className="flex items-center gap-2">
                             <button
                               onClick={() => downloadBulkSubsetCsv(codigosList, `inventarios_${checkTab}.csv`)}
@@ -1691,16 +1750,26 @@ export function InventariosPage() {
                   Verificar {bulkValidation.valid} inventarios
                 </button>
               )}
-              {/* Submit button (step check -> result) */}
+              {/* Submit button + progress bar (step check -> result) */}
               {bulkStep === 'check' && bulkCheckResult && (
-                <button
-                  onClick={handleBulkSubmit}
-                  disabled={bulkUploading}
-                  className="px-5 py-2.5 bg-amber-600 hover:bg-amber-700 disabled:opacity-50 text-white rounded-xl text-sm font-medium transition-all flex items-center gap-2 shadow-lg shadow-amber-500/20"
-                >
-                  {bulkUploading && <Loader2 className="h-4 w-4 animate-spin" />}
-                  Subir {bulkCheckResult.nuevos.length + (confirmOverwrite ? bulkCheckResult.sobreescribibles.length : 0)} inventarios
-                </button>
+                bulkUploading ? (
+                  <div className="flex items-center gap-3 min-w-[250px]">
+                    <div className="flex-1">
+                      <div className={`w-full h-2.5 rounded-full ${isDark ? 'bg-zinc-800' : 'bg-gray-200'} overflow-hidden`}>
+                        <div className="h-full bg-amber-500 rounded-full transition-all duration-300" style={{ width: `${bulkUploadProgress}%` }} />
+                      </div>
+                      <p className={`text-[10px] mt-1 ${isDark ? 'text-zinc-400' : 'text-gray-500'}`}>Subiendo... {bulkUploadProgress}%</p>
+                    </div>
+                    <Loader2 className="h-4 w-4 animate-spin text-amber-400" />
+                  </div>
+                ) : (
+                  <button
+                    onClick={handleBulkSubmit}
+                    className="px-5 py-2.5 bg-amber-600 hover:bg-amber-700 text-white rounded-xl text-sm font-medium transition-all flex items-center gap-2 shadow-lg shadow-amber-500/20"
+                  >
+                    Subir {bulkCheckResult.nuevos.length + (confirmOverwrite ? bulkCheckResult.sobreescribibles.length : 0)} inventarios
+                  </button>
+                )
               )}
             </div>
           </div>

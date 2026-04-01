@@ -899,10 +899,12 @@ export function SolicitudesPage() {
         <td className="px-4 py-3">
           {(() => {
             const tp = (item as any).tipo_periodo;
+            const meses = ['Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun', 'Jul', 'Ago', 'Sep', 'Oct', 'Nov', 'Dic'];
             if (tp === 'mensual' && (item as any).periodo_fecha_inicio) {
-              const d = new Date((item as any).periodo_fecha_inicio);
-              const meses = ['Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun', 'Jul', 'Ago', 'Sep', 'Oct', 'Nov', 'Dic'];
-              return <span className={`${isDark ? 'text-zinc-300' : 'text-gray-700'} text-xs`}>{meses[d.getMonth()]} {d.getFullYear()}</span>;
+              const parts = String((item as any).periodo_fecha_inicio).split(/[-T]/);
+              const month = parseInt(parts[1]) - 1;
+              const year = parts[0];
+              return <span className={`${isDark ? 'text-zinc-300' : 'text-gray-700'} text-xs`}>{meses[month]} {year}</span>;
             }
             if ((item as any).catorcena_inicio) {
               return <span className={`${isDark ? 'text-zinc-300' : 'text-gray-700'} text-xs`}>Cat {(item as any).catorcena_inicio} / {(item as any).anio_inicio}</span>;
@@ -913,10 +915,12 @@ export function SolicitudesPage() {
         <td className="px-4 py-3">
           {(() => {
             const tp = (item as any).tipo_periodo;
+            const meses = ['Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun', 'Jul', 'Ago', 'Sep', 'Oct', 'Nov', 'Dic'];
             if (tp === 'mensual' && (item as any).periodo_fecha_fin) {
-              const d = new Date((item as any).periodo_fecha_fin);
-              const meses = ['Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun', 'Jul', 'Ago', 'Sep', 'Oct', 'Nov', 'Dic'];
-              return <span className={`${isDark ? 'text-zinc-300' : 'text-gray-700'} text-xs`}>{meses[d.getMonth()]} {d.getFullYear()}</span>;
+              const parts = String((item as any).periodo_fecha_fin).split(/[-T]/);
+              const month = parseInt(parts[1]) - 1;
+              const year = parts[0];
+              return <span className={`${isDark ? 'text-zinc-300' : 'text-gray-700'} text-xs`}>{meses[month]} {year}</span>;
             }
             if ((item as any).catorcena_fin) {
               return <span className={`${isDark ? 'text-zinc-300' : 'text-gray-700'} text-xs`}>Cat {(item as any).catorcena_fin} / {(item as any).anio_fin}</span>;

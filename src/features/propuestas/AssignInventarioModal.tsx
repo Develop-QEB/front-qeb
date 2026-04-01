@@ -2540,11 +2540,15 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
 
   // Handle reserve (smart - detects flujo/contraflujo/completo automatically) - IMMEDIATE SAVE
   const handleReservar = () => {
-    if (!selectedCaraForSearch || selectedInventory.size === 0) return;
+    console.log('[Reservar] selectedInventory size:', selectedInventory.size, 'keys:', [...selectedInventory]);
+    console.log('[Reservar] selectedCaraForSearch:', selectedCaraForSearch ? { id: selectedCaraForSearch.id, caras_flujo: selectedCaraForSearch.caras_flujo, caras_contraflujo: selectedCaraForSearch.caras_contraflujo } : null);
+    console.log('[Reservar] remainingToAssign:', remainingToAssign);
+    if (!selectedCaraForSearch || selectedInventory.size === 0) { console.log('[Reservar] ABORT: no cara or no selection'); return; }
 
     // Get all selected items from processedInventory
     const selectedItems = processedInventory.filter(i => isInventorySelected(i));
-    if (selectedItems.length === 0) return;
+    console.log('[Reservar] selectedItems:', selectedItems.length, selectedItems.map(i => ({ key: getInventoryKey(i), codigo: i.codigo_unico, tipo: i.tipo_de_cara, id: i.id, isCompleto: i.isCompleto })));
+    if (selectedItems.length === 0) { console.log('[Reservar] ABORT: no items matched'); return; }
     const potentialPairs = new Set<string>();
 
     selectedItems.forEach(item => {
@@ -2633,7 +2637,10 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
         }
       });
 
+      console.log('[Reservar] newReservas:', newReservas.length, newReservas);
+      console.log('[Reservar] flujoCount:', flujoCount, 'contraflujoCount:', contraflujoCount);
       if (newReservas.length === 0) {
+        console.log('[Reservar] ABORT: 0 reservas built. remainingToAssign:', remainingToAssign);
         showToast('No hay caras disponibles para reservar', 'error');
         return;
       }

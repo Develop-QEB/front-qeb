@@ -288,9 +288,14 @@ export function CompartirPropuestaPage() {
 
   // Period display
   const periodoInicio = useMemo(() => {
-    if (tipoPeriodo === 'mensual' && details?.cotizacion?.fecha_inicio) {
-      const parts = details.cotizacion.fecha_inicio.split('-');
-      if (parts.length >= 2) return `${MESES_LABEL[parseInt(parts[1]) - 1]} ${parts[0]}`;
+    if (tipoPeriodo === 'mensual') {
+      // Use earliest cara date for accurate month label
+      const carasDates = (inventario || []).filter(i => i.inicio_periodo).map(i => i.inicio_periodo!).sort();
+      const dateStr = carasDates[0] || details?.cotizacion?.fecha_inicio;
+      if (dateStr) {
+        const parts = String(dateStr).split(/[-T]/);
+        if (parts.length >= 2) return `${MESES_LABEL[parseInt(parts[1]) - 1]} ${parts[0]}`;
+      }
     }
     if (details?.propuesta?.catorcena_inicio && details?.propuesta?.anio_inicio) {
       return `Cat ${details.propuesta.catorcena_inicio} / ${details.propuesta.anio_inicio}`;
@@ -307,9 +312,14 @@ export function CompartirPropuestaPage() {
   }, [details, inventario, tipoPeriodo]);
 
   const periodoFin = useMemo(() => {
-    if (tipoPeriodo === 'mensual' && details?.cotizacion?.fecha_fin) {
-      const parts = details.cotizacion.fecha_fin.split('-');
-      if (parts.length >= 2) return `${MESES_LABEL[parseInt(parts[1]) - 1]} ${parts[0]}`;
+    if (tipoPeriodo === 'mensual') {
+      // Use latest cara date for accurate month label
+      const carasDates = (inventario || []).filter(i => i.inicio_periodo).map(i => i.inicio_periodo!).sort();
+      const dateStr = carasDates[carasDates.length - 1] || details?.cotizacion?.fecha_fin;
+      if (dateStr) {
+        const parts = String(dateStr).split(/[-T]/);
+        if (parts.length >= 2) return `${MESES_LABEL[parseInt(parts[1]) - 1]} ${parts[0]}`;
+      }
     }
     if (details?.propuesta?.catorcena_fin && details?.propuesta?.anio_fin) {
       return `Cat ${details.propuesta.catorcena_fin} / ${details.propuesta.anio_fin}`;

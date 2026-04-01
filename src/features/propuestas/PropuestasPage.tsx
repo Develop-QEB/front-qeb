@@ -22,8 +22,12 @@ import { useSocketEquipos, useSocketPropuestas } from '../../hooks/useSocket';
 
 const MESES_LABEL = ['Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun', 'Jul', 'Ago', 'Sep', 'Oct', 'Nov', 'Dic'];
 function getMonthShort(dateStr: string): string {
-  const d = new Date(dateStr);
-  return !isNaN(d.getTime()) ? `${MESES_LABEL[d.getMonth()]} ${d.getFullYear()}` : '-';
+  const parts = String(dateStr).split(/[-T]/);
+  if (parts.length >= 2) {
+    const month = parseInt(parts[1]) - 1;
+    return month >= 0 && month < 12 ? `${MESES_LABEL[month]} ${parts[0]}` : '-';
+  }
+  return '-';
 }
 
 // Status badge colors
