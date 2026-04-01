@@ -235,7 +235,7 @@ interface SAPArticulo {
 interface CaraEntry {
   id: string;
   articulo: SAPArticulo;
-  estado: string;
+  estados: string[];
   ciudades: string[];
   formato: string;
   tipo: string;
@@ -573,7 +573,7 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
   // New cara form
   const [newCara, setNewCara] = useState({
     articulo: null as SAPArticulo | null,
-    estado: '',
+    estados: [] as string[],
     ciudades: [] as string[],
     formato: '',
     tipo: '' as 'Tradicional' | 'Digital' | '',
@@ -727,11 +727,11 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
     queryClient.invalidateQueries({ queryKey: ['clientes-full-for-solicitud'] });
   };
 
-  // Fetch cascade-filtered options (formatos, tipos, NSE) by estado/ciudades
+  // Fetch cascade-filtered options (formatos, tipos, NSE) by estados/ciudades
   const { data: inventarioOptions } = useQuery({
-    queryKey: ['inventario-options', newCara.estado, newCara.ciudades],
-    queryFn: () => solicitudesService.getInventarioOptions(newCara.estado, newCara.ciudades),
-    enabled: isOpen && (!!newCara.estado || newCara.ciudades.length > 0),
+    queryKey: ['inventario-options', newCara.estados, newCara.ciudades],
+    queryFn: () => solicitudesService.getInventarioOptions(newCara.estados, newCara.ciudades),
+    enabled: isOpen && (newCara.estados.length > 0 || newCara.ciudades.length > 0),
     staleTime: 5 * 60 * 1000,
   });
 
@@ -851,7 +851,7 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
       setExpandedCatorcenas(new Set());
       setNewCara({
         articulo: null,
-        estado: '',
+        estados: [],
         ciudades: [],
         formato: '',
         tipo: '',
@@ -885,14 +885,14 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
     }
   }, [editSolicitudId]);
 
-  // Filter cities by estado
+  // Filter cities by estados (multi-select)
   const filteredCiudades = useMemo(() => {
-    if (!inventarioFilters?.ciudades || !newCara.estado) return [];
+    if (!inventarioFilters?.ciudades || newCara.estados.length === 0) return [];
     return inventarioFilters.ciudades
-      .filter(c => c.estado === newCara.estado)
+      .filter(c => newCara.estados.includes(c.estado as string))
       .map(c => c.ciudad)
       .filter((c): c is string => !!c);
-  }, [inventarioFilters, newCara.estado]);
+  }, [inventarioFilters, newCara.estados]);
 
   // Cascade-filtered formatos/tipos/NSE from inventario-options API
   const filteredFormatos = useMemo(() => {
@@ -1055,7 +1055,7 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
 
   // Add cara entry
   const handleAddCara = async () => {
-    if (!newCara.articulo || !newCara.estado || !newCara.formato || !newCara.tipo || newCara.nse.length === 0) return;
+    if (!newCara.articulo || newCara.estados.length === 0 || !newCara.formato || !newCara.tipo || newCara.nse.length === 0) return;
 
     // Validar tarifa pública: si es 0, solo CT y BF/CF pueden avanzar
     const artCode = newCara.articulo.ItemCode?.toUpperCase() || '';
@@ -1125,7 +1125,7 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
 
         const resultado = await solicitudesService.evaluarAutorizacion({
           ciudad: ciudadesStr,
-          estado: newCara.estado,
+          estado: newCara.estados.join(', '),
           formato: newCara.formato,
           tipo: newCara.tipo,
           caras: newCara.renta,
@@ -1165,7 +1165,7 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
     const newCaras: CaraEntry[] = periodsToCreate.map((period, idx) => ({
       id: editingCaraId || `${Date.now()}-${Math.random()}-${idx}`,
       articulo: newCara.articulo!,
-      estado: newCara.estado,
+      estados: newCara.estados,
       ciudades: newCara.ciudades.length > 0 ? newCara.ciudades : filteredCiudades,
       formato: newCara.formato,
       tipo: newCara.tipo,
@@ -1249,7 +1249,7 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
   const handleClearNewCara = () => {
     setNewCara({
       articulo: null,
-      estado: '',
+      estados: [],
       ciudades: [],
       formato: '',
       tipo: '',
@@ -1278,7 +1278,7 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
     setEditingCaraId(cara.id);
     setNewCara({
       articulo: cara.articulo,
-      estado: cara.estado,
+      estados: cara.estados,
       ciudades: cara.ciudades,
       formato: cara.formato,
       tipo: cara.tipo as 'Tradicional' | 'Digital' | '',
@@ -1298,7 +1298,7 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
     setEditingCaraId(null);
     setNewCara({
       articulo: null,
-      estado: '',
+      estados: [],
       ciudades: [],
       formato: '',
       tipo: '',
@@ -1498,7 +1498,7 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
       IMU: imu,
       caras: caras.map(c => ({
         ciudad: c.ciudades.join(', '),
-        estado: c.estado,
+        estado: c.estados.join(', '),
         tipo: c.tipo,
         flujo: 'Ambos',
         bonificacion: c.bonificacion,
@@ -1667,7 +1667,7 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
           return {
             id: `edit-${idx}-${Date.now()}-${Math.random()}`,
             articulo,
-            estado: cara.estados || '',
+            estados: cara.estados ? cara.estados.split(', ').map((e: string) => e.trim()).filter(Boolean) : [],
             ciudades: cara.ciudad ? cara.ciudad.split(', ').map(c => c.trim()) : [],
             formato: cara.formato || '',
             tipo: cara.tipo || '',
@@ -2009,7 +2009,7 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
                         setCaras([]);
                         // Clear articulo/formato if incompatible with new period type
                         if (newCara.articulo && getRequiredPeriodoForArticulo(newCara.articulo.ItemName) !== 'catorcena') {
-                          setNewCara(prev => ({ ...prev, articulo: null, formato: '', tipo: '', estado: '', ciudades: [], tarifaPublica: 0 }));
+                          setNewCara(prev => ({ ...prev, articulo: null, formato: '', tipo: '', estados: [], ciudades: [], tarifaPublica: 0 }));
                         } else if (newCara.formato && getRequiredPeriodoForFormato(newCara.formato) !== 'catorcena') {
                           setNewCara(prev => ({ ...prev, formato: '' }));
                         }
@@ -2027,7 +2027,7 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
                         setCaras([]);
                         // Clear articulo/formato if incompatible with new period type
                         if (newCara.articulo && getRequiredPeriodoForArticulo(newCara.articulo.ItemName) !== 'mensual') {
-                          setNewCara(prev => ({ ...prev, articulo: null, formato: '', tipo: '', estado: '', ciudades: [], tarifaPublica: 0 }));
+                          setNewCara(prev => ({ ...prev, articulo: null, formato: '', tipo: '', estados: [], ciudades: [], tarifaPublica: 0 }));
                         } else if (newCara.formato && getRequiredPeriodoForFormato(newCara.formato) !== 'mensual') {
                           setNewCara(prev => ({ ...prev, formato: '' }));
                         }
@@ -2273,13 +2273,13 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
                         tarifaPublica: isTarifaCero ? 0 : tarifa.tarifa_publica,
                         renta: isCortesia ? 0 : newCara.renta,
                         bonificacion: isImpresion ? 0 : newCara.bonificacion,
-                        estado: ciudadEstado?.estado || newCara.estado,
+                        estados: ciudadEstado?.estado ? [ciudadEstado.estado] : newCara.estados,
                         ciudades: ciudadEstado?.ciudades && ciudadEstado.ciudades.length > 0 ? ciudadEstado.ciudades : newCara.ciudades,
                         formato: formato || newCara.formato,
                         tipo: tipo || newCara.tipo,
                       });
                     }}
-                    onClear={() => setNewCara({ ...newCara, articulo: null, tarifaPublica: 0, estado: '', ciudades: [], formato: '', tipo: '' })}
+                    onClear={() => setNewCara({ ...newCara, articulo: null, tarifaPublica: 0, estados: [], ciudades: [], formato: '', tipo: '' })}
                     displayKey="ItemName"
                     valueKey="ItemCode"
                     searchKeys={['ItemCode', 'ItemName']}
@@ -2301,19 +2301,18 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
 
                 {/* Row 2: Estado, Ciudad (opcional), Formato, Tipo */}
                 <div className="grid grid-cols-4 gap-3 mb-4">
-                  {/* Estado */}
+                  {/* Estado (multi-select) */}
                   <div>
                     <label className={`text-xs ${isDark ? 'text-zinc-500' : 'text-gray-500'}`}>Estado</label>
-                    <select
-                      value={newCara.estado}
-                      onChange={(e) => setNewCara({ ...newCara, estado: e.target.value, ciudades: [] })}
-                      className={`w-full px-3 py-2 ${isDark ? 'bg-zinc-800 border-zinc-700 text-white' : 'bg-gray-100 border-gray-200 text-gray-900'} border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-purple-500/50`}
-                    >
-                      <option value="">Seleccionar</option>
-                      {inventarioFilters?.estados.map(e => (
-                        <option key={e} value={e}>{e}</option>
-                      ))}
-                    </select>
+                    <MultiSelectTags
+                      label="estado"
+                      options={(inventarioFilters?.estados || []).map(e => ({ estado: e }))}
+                      selected={newCara.estados.map(e => ({ estado: e }))}
+                      onChange={(items) => setNewCara({ ...newCara, estados: items.map(i => i.estado), ciudades: [] })}
+                      displayKey="estado"
+                      valueKey="estado"
+                      searchKey="estado"
+                    />
                   </div>
 
                   {/* Ciudad (opcional) */}
@@ -2544,7 +2543,7 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
                   <button
                     type="button"
                     onClick={handleAddCara}
-                    disabled={!newCara.articulo || !newCara.estado || !newCara.formato || !newCara.tipo || newCara.nse.length === 0 || !newCara.periodo || (tipoPeriodo === 'mensual' && (!newCara.periodoInicioCustom || !newCara.periodoFinCustom)) || ((newCara.renta + newCara.bonificacion) > 0 && (newCara.renta + newCara.bonificacion) % 2 !== 0)}
+                    disabled={!newCara.articulo || newCara.estados.length === 0 || !newCara.formato || !newCara.tipo || newCara.nse.length === 0 || !newCara.periodo || (tipoPeriodo === 'mensual' && (!newCara.periodoInicioCustom || !newCara.periodoFinCustom)) || ((newCara.renta + newCara.bonificacion) > 0 && (newCara.renta + newCara.bonificacion) % 2 !== 0)}
                     className={`flex items-center gap-2 px-4 py-2 ${editingCaraId ? 'bg-amber-600 hover:bg-amber-700' : 'bg-purple-600 hover:bg-purple-700'} ${isDark ? 'disabled:bg-zinc-700 disabled:text-zinc-500' : 'disabled:bg-gray-200 disabled:text-gray-400'} text-white rounded-lg text-sm font-medium transition-colors`}
                   >
                     {editingCaraId ? <Check className="h-4 w-4" /> : <Plus className="h-4 w-4" />}
@@ -2638,8 +2637,8 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
                                           <div className="truncate font-medium">{cara.articulo.ItemCode}</div>
                                           <div className={`truncate text-[10px] ${isDark ? 'text-zinc-500' : 'text-gray-400'}`}>{cara.articulo.ItemName}</div>
                                         </td>
-                                        <td className={`px-2 py-2 text-xs ${isDark ? 'text-zinc-300' : 'text-gray-700'} max-w-[80px] truncate`} title={`${cara.estado} - ${cara.ciudades.join(', ')}`}>
-                                          {cara.ciudades.join(', ')}
+                                        <td className={`px-2 py-2 text-xs ${isDark ? 'text-zinc-300' : 'text-gray-700'} max-w-[80px] truncate`} title={`${cara.estados.join(', ')} - ${cara.ciudades.join(', ')}`}>
+                                          {cara.estados.join(', ')}
                                         </td>
                                         <td className="px-2 py-2">
                                           <span className={`text-[10px] px-1.5 py-0.5 rounded ${cara.tipo === 'Digital' ? 'bg-blue-500/20 text-blue-300' : 'bg-amber-500/20 text-amber-300'

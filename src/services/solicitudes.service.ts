@@ -179,9 +179,9 @@ export const solicitudesService = {
     return response.data.data;
   },
 
-  async getInventarioOptions(estado?: string, ciudades?: string[]): Promise<InventarioOptions> {
+  async getInventarioOptions(estados?: string[], ciudades?: string[]): Promise<InventarioOptions> {
     const params: Record<string, string> = {};
-    if (estado) params.estado = estado;
+    if (estados && estados.length > 0) params.estados = estados.join(',');
     if (ciudades && ciudades.length > 0) params.ciudades = ciudades.join(',');
     const response = await api.get<ApiResponse<InventarioOptions>>('/solicitudes/inventario-options', { params });
     if (!response.data.success || !response.data.data) {

@@ -1,6 +1,18 @@
 import api from '../lib/api';
 import { ApiResponse, AuthResponse } from '../types';
 
+export interface AssignmentsData {
+  solicitudes: Array<{ id: number; razon_social: string | null; marca_nombre: string | null; status: string }>;
+  propuestas: Array<{ id: number; solicitud_id: number; status: string; articulo: string | null }>;
+  tareas: Array<{ id: number; titulo: string | null; estatus: string | null; campania_id: number | null }>;
+}
+
+export interface Reassignment {
+  type: 'solicitud' | 'propuesta' | 'tarea';
+  id: number;
+  newUserId: number;
+}
+
 export interface EquipoUsuario {
   id: number;
   nombre: string;
@@ -94,6 +106,21 @@ export const usuariosService = {
 
     if (!response.data.success) {
       throw new Error(response.data.error || 'Error al eliminar usuarios');
+    }
+  },
+
+  async getAssignments(id: number): Promise<AssignmentsData> {
+    const response = await api.get<ApiResponse<AssignmentsData>>(`/usuarios/${id}/assignments`);
+    if (!response.data.success || !response.data.data) {
+      throw new Error(response.data.error || 'Error al obtener asignaciones');
+    }
+    return response.data.data;
+  },
+
+  async reassign(id: number, reassignments: Reassignment[]): Promise<void> {
+    const response = await api.post<ApiResponse<null>>(`/usuarios/${id}/reassign`, { reassignments });
+    if (!response.data.success) {
+      throw new Error(response.data.error || 'Error al reasignar');
     }
   },
 
