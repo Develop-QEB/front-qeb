@@ -4865,7 +4865,7 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
                       center={reservadosMapCenter}
                       zoom={13}
                       options={{
-                        styles: DARK_MAP_STYLES,
+                        styles: isDark ? DARK_MAP_STYLES : [],
                         disableDefaultUI: true,
                         zoomControl: true,
                       }}
@@ -5172,7 +5172,7 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
                           {asignados.map(user => (
                             <span
                               key={user.id}
-                              className="inline-flex items-center gap-1 px-2.5 py-1 bg-purple-500/20 text-purple-300 border border-purple-500/40 rounded-full text-xs"
+                              className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs border ${isDark ? 'bg-purple-500/20 text-purple-300 border-purple-500/40' : 'bg-purple-100 text-purple-700 border-purple-200'}`}
                             >
                               {user.nombre}
                               {canEditResumen && (
@@ -5404,28 +5404,28 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
                   </h3>
                   <div className="flex items-center gap-4 text-xs">
                     <span className={`${isDark ? 'text-zinc-400' : 'text-gray-500'}`}>
-                      Renta: <span className="text-purple-300 font-medium">{carasKPIs.totalRenta}</span>
+                      Renta: <span className={`${isDark ? 'text-purple-300' : 'text-purple-700'} font-medium`}>{carasKPIs.totalRenta}</span>
                     </span>
                     {carasKPIs.totalImpresiones > 0 && (
                       <span className={`${isDark ? 'text-zinc-400' : 'text-gray-500'}`}>
-                        Impresiones: <span className="text-amber-300 font-medium">{carasKPIs.totalImpresiones}</span>
+                        Impresiones: <span className={`${isDark ? 'text-amber-300' : 'text-amber-700'} font-medium`}>{carasKPIs.totalImpresiones}</span>
                       </span>
                     )}
                     <span className={`${isDark ? 'text-zinc-400' : 'text-gray-500'}`}>
-                      Bonificación: <span className="text-emerald-300 font-medium">{carasKPIs.totalBonificacion}</span>
+                      Bonificación: <span className={`${isDark ? 'text-emerald-300' : 'text-emerald-700'} font-medium`}>{carasKPIs.totalBonificacion}</span>
                     </span>
                     {carasKPIs.totalCortesia > 0 && (
                       <span className={`${isDark ? 'text-zinc-400' : 'text-gray-500'}`}>
-                        Cortesía: <span className="text-cyan-300 font-medium">{carasKPIs.totalCortesia}</span>
+                        Cortesía: <span className={`${isDark ? 'text-cyan-300' : 'text-cyan-700'} font-medium`}>{carasKPIs.totalCortesia}</span>
                       </span>
                     )}
                     <span className={`${isDark ? 'text-zinc-400' : 'text-gray-500'}`}>
-                      Inversión: <span className="text-amber-300 font-medium">{formatCurrency(carasKPIs.totalInversion)}</span>
+                      Inversión: <span className={`${isDark ? 'text-amber-300' : 'text-amber-700'} font-medium`}>{formatCurrency(carasKPIs.totalInversion)}</span>
                     </span>
                     {effectiveCanEdit && canEditResumen && (
                       <button
                         onClick={() => { setShowAddCaraForm(true); setEditingCaraId(null); setNewCara(EMPTY_CARA); setSelectedArticulo(null); }}
-                        className="flex items-center gap-1.5 px-3 py-1.5 bg-purple-500/20 text-purple-300 border border-purple-500/40 rounded-lg hover:bg-purple-500/30 transition-colors"
+                        className={`flex items-center gap-1.5 px-3 py-1.5 border rounded-lg transition-colors ${isDark ? 'bg-purple-500/20 text-purple-300 border-purple-500/40 hover:bg-purple-500/30' : 'bg-purple-100 text-purple-700 border-purple-200 hover:bg-purple-200'}`}
                       >
                         <Plus className="h-3.5 w-3.5" />
                         Agregar Circuito
@@ -5976,7 +5976,7 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
                                       <span className={`${isDark ? 'text-zinc-500' : 'text-gray-400'} text-xs`}>Autorización</span>
                                       <div className="flex flex-col gap-0.5">
                                         {cara.autorizacion_dg === 'aprobado' && cara.autorizacion_dcm === 'aprobado' && (
-                                          <span className="text-[10px] px-1.5 py-0.5 rounded bg-emerald-500/20 text-emerald-300">Aprobado</span>
+                                          <span className={`text-[10px] px-1.5 py-0.5 rounded ${isDark ? 'bg-emerald-500/20 text-emerald-300' : 'bg-emerald-100 text-emerald-700'}`}>Aprobado</span>
                                         )}
                                         {(cara.autorizacion_dg === 'rechazado' || cara.autorizacion_dcm === 'rechazado') && (
                                           <span className="text-[10px] px-1.5 py-0.5 rounded bg-red-600/30 text-red-400">Rechazado</span>
@@ -6623,7 +6623,7 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
                               center={filteredReservas.find(r => r.latitud && r.longitud) ? { lat: filteredReservas.find(r => r.latitud && r.longitud)!.latitud, lng: filteredReservas.find(r => r.latitud && r.longitud)!.longitud } : { lat: 20.6597, lng: -103.3496 }}
                               zoom={11}
                               options={{
-                                styles: DARK_MAP_STYLES,
+                                styles: isDark ? DARK_MAP_STYLES : [],
                                 disableDefaultUI: true,
                                 zoomControl: true,
                               }}

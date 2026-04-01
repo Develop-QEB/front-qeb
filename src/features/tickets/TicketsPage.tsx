@@ -424,7 +424,7 @@ function ViewTicketModal({
 
             {/* Input */}
             <div className="mt-3 flex items-end gap-2">
-              <input type="file" ref={fileInputRef} className="hidden" onChange={handleFileUpload} accept="image/*,.pdf,.doc,.docx,.xls,.xlsx" />
+              <input type="file" ref={fileInputRef} className="hidden" onChange={handleFileUpload} accept="image/*,.pdf,.doc,.docx,.xls,.xlsx,.csv" />
               <button
                 onClick={() => fileInputRef.current?.click()}
                 disabled={uploading}

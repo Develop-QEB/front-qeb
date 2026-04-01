@@ -1963,6 +1963,7 @@ export function CampanasPage() {
                     setCatorcenaFin(undefined);
                     setPage(1);
                   }}
+                  isDark={isDark}
                 />
 
                 {/* Divider */}
@@ -1998,6 +1999,7 @@ export function CampanasPage() {
                   value={activeGroupings[0] || ''}
                   onChange={(val) => { setActiveGroupings([val as GroupByField]); setExpandedGroups(new Set()); }}
                   onClear={() => { setActiveGroupings([]); setExpandedGroups(new Set()); }}
+                  isDark={isDark}
                 />
 
                 {/* Clear All */}

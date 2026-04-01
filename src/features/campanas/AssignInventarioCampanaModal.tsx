@@ -5525,7 +5525,7 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
                   </div>
                 )}
 
-                <div className="divide-y divide-zinc-700/30">
+                <div className={`divide-y ${isDark ? 'divide-zinc-700/30' : 'divide-gray-200'}`}>
                   {caras.length === 0 ? (
                     <div className="p-8 text-center text-zinc-500">
                       <Layers className="h-10 w-10 mx-auto mb-3 opacity-30" />
@@ -5559,13 +5559,13 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
                         <div key={periodo}>
                           {/* Period Header - Collapsible */}
                           <div
-                            className="px-5 py-3 bg-purple-500/10 border-b border-purple-500/20 flex items-center gap-3 cursor-pointer hover:bg-purple-500/15 transition-colors"
+                            className={`px-5 py-3 border-b flex items-center gap-3 cursor-pointer transition-colors ${isDark ? 'bg-purple-500/10 border-purple-500/20 hover:bg-purple-500/15' : 'bg-purple-50 border-purple-100 hover:bg-purple-100'}`}
                             onClick={() => toggleCatorcena(periodo)}
                           >
                             <button className="text-purple-400">
                               {isCatorcenaExpanded ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
                             </button>
-                            <span className="text-sm font-medium text-purple-300">
+                            <span className={`text-sm font-medium ${isDark ? 'text-purple-300' : 'text-purple-700'}`}>
                               {catorcenaLabel}
                             </span>
                             <span className={`text-xs ${isDark ? 'text-zinc-500' : 'text-gray-500'}`}>
@@ -5604,7 +5604,7 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
                             return (
                               <div key={cara.localId} className={`${statusColor === 'blue' ? 'bg-blue-500/5' : statusColor === 'emerald' ? 'bg-emerald-500/5' : 'bg-amber-500/5'}`}>
                                 {/* Cara row */}
-                                <div className="flex items-center gap-3 px-5 py-3 hover:bg-zinc-800/30 transition-colors">
+                                <div className={`flex items-center gap-3 px-5 py-3 transition-colors ${isDark ? 'hover:bg-zinc-800/30' : 'hover:bg-gray-50'}`}>
                                   {/* Completion indicator */}
                                   <div className={`w-2 h-2 rounded-full ${
                                     statusColor === 'blue' ? 'bg-blue-500' : statusColor === 'emerald' ? 'bg-emerald-500' : 'bg-amber-500 animate-pulse'
@@ -5612,38 +5612,38 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
 
                                   <div className="flex-1 grid grid-cols-8 gap-3 text-sm">
                                     <div>
-                                      <span className="text-zinc-500 text-xs">Formato</span>
-                                      <p className="text-white font-medium">{cara.formato || '-'}</p>
+                                      <span className={`${isDark ? 'text-zinc-500' : 'text-gray-400'} text-xs`}>Formato</span>
+                                      <p className={`${isDark ? 'text-white' : 'text-gray-900'} font-medium`}>{cara.formato || '-'}</p>
                                     </div>
                                     <div>
-                                      <span className="text-zinc-500 text-xs">Tipo</span>
-                                      <span className={`text-[10px] px-1.5 py-0.5 rounded ${cara.tipo === 'Digital' ? 'bg-blue-500/20 text-blue-300' : 'bg-amber-500/20 text-amber-300'}`}>
+                                      <span className={`${isDark ? 'text-zinc-500' : 'text-gray-400'} text-xs`}>Tipo</span>
+                                      <span className={`text-[10px] px-1.5 py-0.5 rounded ${cara.tipo === 'Digital' ? (isDark ? 'bg-blue-500/20 text-blue-300' : 'bg-blue-100 text-blue-700') : (isDark ? 'bg-amber-500/20 text-amber-300' : 'bg-amber-100 text-amber-700')}`}>
                                         {cara.tipo || '-'}
                                       </span>
                                     </div>
                                     <div>
-                                      <span className="text-zinc-500 text-xs">Ciudad</span>
-                                      <p className="text-zinc-300 text-xs truncate" title={cara.ciudad || cara.estados}>{cara.ciudad || cara.estados || '-'}</p>
+                                      <span className={`${isDark ? 'text-zinc-500' : 'text-gray-400'} text-xs`}>Ciudad</span>
+                                      <p className={`${isDark ? 'text-zinc-300' : 'text-gray-700'} text-xs truncate`} title={cara.ciudad || cara.estados}>{cara.ciudad || cara.estados || '-'}</p>
                                     </div>
                                     <div>
-                                      <span className="text-zinc-500 text-xs">Artículo</span>
-                                      <p className="text-zinc-300 text-xs">{cara.articulo || '-'}</p>
+                                      <span className={`${isDark ? 'text-zinc-500' : 'text-gray-400'} text-xs`}>Artículo</span>
+                                      <p className={`${isDark ? 'text-zinc-300' : 'text-gray-700'} text-xs`}>{cara.articulo || '-'}</p>
                                     </div>
                                     <div>
-                                      <span className="text-zinc-500 text-xs">F. Inicio</span>
-                                      <p className="text-zinc-300 text-xs">{cara.inicio_periodo ? new Date(cara.inicio_periodo).toLocaleDateString('es-MX', { day: '2-digit', month: 'short', year: 'numeric' }) : '-'}</p>
+                                      <span className={`${isDark ? 'text-zinc-500' : 'text-gray-400'} text-xs`}>F. Inicio</span>
+                                      <p className={`${isDark ? 'text-zinc-300' : 'text-gray-700'} text-xs`}>{cara.inicio_periodo ? new Date(cara.inicio_periodo).toLocaleDateString('es-MX', { day: '2-digit', month: 'short', year: 'numeric' }) : '-'}</p>
                                     </div>
                                     <div>
-                                      <span className="text-zinc-500 text-xs">F. Fin</span>
-                                      <p className="text-zinc-300 text-xs">{cara.fin_periodo ? new Date(cara.fin_periodo).toLocaleDateString('es-MX', { day: '2-digit', month: 'short', year: 'numeric' }) : '-'}</p>
+                                      <span className={`${isDark ? 'text-zinc-500' : 'text-gray-400'} text-xs`}>F. Fin</span>
+                                      <p className={`${isDark ? 'text-zinc-300' : 'text-gray-700'} text-xs`}>{cara.fin_periodo ? new Date(cara.fin_periodo).toLocaleDateString('es-MX', { day: '2-digit', month: 'short', year: 'numeric' }) : '-'}</p>
                                     </div>
                                     <div>
-                                      <span className="text-zinc-500 text-xs">Caras</span>
+                                      <span className={`${isDark ? 'text-zinc-500' : 'text-gray-400'} text-xs`}>Caras</span>
                                       {esImpresion ? (
                                         <span className="text-[10px] px-1.5 py-0.5 rounded bg-blue-500/20 text-blue-300 font-medium">Impresión</span>
                                       ) : (
                                         <div className="flex items-center gap-1">
-                                          <p className="text-white font-medium">{status.totalReservado}/{totalCaras}</p>
+                                          <p className={`${isDark ? 'text-white' : 'text-gray-900'} font-medium`}>{status.totalReservado}/{totalCaras}</p>
                                           {diffDisplay && (
                                             <span className={`text-xs font-medium ${status.totalDiff > 0 ? 'text-red-400' : 'text-amber-400'}`}>
                                               ({diffDisplay})
@@ -5653,19 +5653,19 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
                                       )}
                                     </div>
                                     <div>
-                                      <span className="text-zinc-500 text-xs">Autorización</span>
+                                      <span className={`${isDark ? 'text-zinc-500' : 'text-gray-400'} text-xs`}>Autorización</span>
                                       <div className="flex flex-col gap-0.5">
                                         {cara.autorizacion_dg === 'aprobado' && cara.autorizacion_dcm === 'aprobado' && (
-                                          <span className="text-[10px] px-1.5 py-0.5 rounded bg-emerald-500/20 text-emerald-300">Aprobado</span>
+                                          <span className={`text-[10px] px-1.5 py-0.5 rounded ${isDark ? 'bg-emerald-500/20 text-emerald-300' : 'bg-emerald-100 text-emerald-700'}`}>Aprobado</span>
                                         )}
                                         {(cara.autorizacion_dg === 'rechazado' || cara.autorizacion_dcm === 'rechazado') && (
-                                          <span className="text-[10px] px-1.5 py-0.5 rounded bg-red-600/30 text-red-400">Rechazado</span>
+                                          <span className={`text-[10px] px-1.5 py-0.5 rounded ${isDark ? 'bg-red-600/30 text-red-400' : 'bg-red-100 text-red-700'}`}>Rechazado</span>
                                         )}
                                         {cara.autorizacion_dg === 'pendiente' && cara.autorizacion_dcm !== 'rechazado' && (
-                                          <span className="text-[10px] px-1.5 py-0.5 rounded bg-red-500/20 text-red-300">Pend. DG</span>
+                                          <span className={`text-[10px] px-1.5 py-0.5 rounded ${isDark ? 'bg-red-500/20 text-red-300' : 'bg-red-100 text-red-700'}`}>Pend. DG</span>
                                         )}
                                         {cara.autorizacion_dcm === 'pendiente' && cara.autorizacion_dg !== 'rechazado' && (
-                                          <span className="text-[10px] px-1.5 py-0.5 rounded bg-amber-500/20 text-amber-300">Pend. DCM</span>
+                                          <span className={`text-[10px] px-1.5 py-0.5 rounded ${isDark ? 'bg-amber-500/20 text-amber-300' : 'bg-amber-100 text-amber-700'}`}>Pend. DCM</span>
                                         )}
                                       </div>
                                     </div>
@@ -6273,25 +6273,25 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
                           })}
                         </div>
                         {/* KPIs Mini Summary */}
-                        <div className="p-3 border-t border-zinc-700/50 bg-zinc-800/50">
+                        <div className={`p-3 border-t ${isDark ? 'border-zinc-700/50 bg-zinc-800/50' : 'border-gray-200 bg-gray-50'}`}>
                           <div className={`grid gap-2 text-center text-xs ${reservasKPIs.completos > 0 ? 'grid-cols-4' : 'grid-cols-3'}`}>
                             <div>
-                              <p className="text-zinc-500">Flujo</p>
-                              <p className="text-blue-400 font-bold">{reservasKPIs.flujo}</p>
+                              <p className={isDark ? 'text-zinc-500' : 'text-gray-400'}>Flujo</p>
+                              <p className={`${isDark ? 'text-blue-400' : 'text-blue-600'} font-bold`}>{reservasKPIs.flujo}</p>
                             </div>
                             <div>
-                              <p className="text-zinc-500">Contra</p>
-                              <p className="text-blue-400 font-bold">{reservasKPIs.contraflujo}</p>
+                              <p className={isDark ? 'text-zinc-500' : 'text-gray-400'}>Contra</p>
+                              <p className={`${isDark ? 'text-blue-400' : 'text-blue-600'} font-bold`}>{reservasKPIs.contraflujo}</p>
                             </div>
                             {reservasKPIs.completos > 0 && (
                               <div>
-                                <p className="text-zinc-500">Completo</p>
-                                <p className="text-purple-400 font-bold">{reservasKPIs.completos}</p>
+                                <p className={isDark ? 'text-zinc-500' : 'text-gray-400'}>Completo</p>
+                                <p className={`${isDark ? 'text-purple-400' : 'text-purple-600'} font-bold`}>{reservasKPIs.completos}</p>
                               </div>
                             )}
                             <div>
-                              <p className="text-zinc-500">Bonif</p>
-                              <p className="text-emerald-400 font-bold">{reservasKPIs.bonificadas}</p>
+                              <p className={isDark ? 'text-zinc-500' : 'text-gray-400'}>Bonif</p>
+                              <p className={`${isDark ? 'text-emerald-400' : 'text-emerald-600'} font-bold`}>{reservasKPIs.bonificadas}</p>
                             </div>
                           </div>
                         </div>
@@ -6408,24 +6408,24 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
 
         {/* Footer with Aprobar button */}
         {caras.length > 0 && (
-          <div className="px-6 py-4 border-t border-zinc-800 bg-zinc-900/80 flex items-center justify-between">
+          <div className={`px-6 py-4 border-t flex items-center justify-between ${isDark ? 'border-zinc-800 bg-zinc-900/80' : 'border-gray-200 bg-white'}`}>
             <div className="flex items-center gap-4">
               {/* Status summary */}
               <div className="flex items-center gap-3 text-sm">
                 <div className="flex items-center gap-2">
                   <div className={`w-3 h-3 rounded-full ${allCarasComplete ? 'bg-emerald-500' : 'bg-amber-500 animate-pulse'}`} />
-                  <span className="text-zinc-400">
+                  <span className={isDark ? 'text-zinc-400' : 'text-gray-500'}>
                     {allCarasComplete ? (
-                      <span className="text-emerald-400">Todas las caras completas</span>
+                      <span className={isDark ? 'text-emerald-400' : 'text-emerald-600'}>Todas las caras completas</span>
                     ) : (
-                      <span className="text-amber-400">
+                      <span className={isDark ? 'text-amber-400' : 'text-amber-600'}>
                         {caras.filter(c => !getCaraCompletionStatus(c).isComplete).length} cara(s) incompleta(s)
                       </span>
                     )}
                   </span>
                 </div>
                 {hasPendingAuthorization && (
-                  <div className="flex items-center gap-2 text-amber-400">
+                  <div className={`flex items-center gap-2 ${isDark ? 'text-amber-400' : 'text-amber-600'}`}>
                     <span className="w-2 h-2 rounded-full bg-amber-500 animate-pulse" />
                     Autorizaciones pendientes
                   </div>
@@ -6435,7 +6435,7 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
             <div className="flex items-center gap-3">
               <button
                 onClick={onClose}
-                className="px-4 py-2 text-sm text-zinc-400 hover:text-white transition-colors"
+                className={`px-4 py-2 text-sm transition-colors ${isDark ? 'text-zinc-400 hover:text-white' : 'text-gray-500 hover:text-gray-900'}`}
               >
                 Cerrar
               </button>
@@ -6460,7 +6460,7 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
                   className={`px-6 py-2 rounded-lg text-sm font-medium transition-all ${
                     allCarasComplete && !hasPendingAuthorization && !isSaving
                       ? 'bg-emerald-500 text-white hover:bg-emerald-600 shadow-lg shadow-emerald-500/25'
-                      : 'bg-zinc-700 text-zinc-500 cursor-not-allowed'
+                      : `${isDark ? 'bg-zinc-700 text-zinc-500' : 'bg-gray-200 text-gray-400'} cursor-not-allowed`
                   }`}
                 >
                   {isSaving ? (
