@@ -1023,7 +1023,7 @@ const rolePermissions: Partial<Record<UserRole, Partial<RolePermissions>>> = {
     canSeePropuestas: true,
     canSeeCampanas: true,
     canSeeInventarios: true,
-    canSeeAdminUsuarios: true,
+    canSeeAdminUsuarios: false,
 
     // Clientes - oculto
     canCreateClientes: false,
