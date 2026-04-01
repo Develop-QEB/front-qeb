@@ -1,5 +1,5 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { Users, Mail, Briefcase, Building, Shield, Loader2, Search, Pencil, X, Trash2, Plus, Network, UserPlus, Check, Crown, Ticket, Send, Image, AlertTriangle, Clock, CheckCircle2, KeyRound } from 'lucide-react';
+import { Users, Mail, Briefcase, Building, Shield, Loader2, Search, Pencil, X, Trash2, Plus, Network, UserPlus, Check, Crown, Ticket, Send, Image, AlertTriangle, Clock, CheckCircle2, KeyRound, DoorOpen } from 'lucide-react';
 import { useState, useEffect, useMemo, useRef } from 'react';
 import { Header } from '../../components/layout/Header';
 import { usuariosService, UsuarioAdmin, UpdateUsuarioInput, CreateUsuarioInput } from '../../services/usuarios.service';
@@ -1544,6 +1544,26 @@ function UsuariosTab() {
                           >
                             <KeyRound className="h-4 w-4" />
                           </button>
+                          {currentUser?.rol === 'DEV' && usuario.id !== currentUser.id && (
+                            <button
+                              onClick={async () => {
+                                if (!confirm(`¿Iniciar sesión como ${usuario.nombre}?`)) return;
+                                try {
+                                  const result = await usuariosService.impersonate(usuario.id);
+                                  useAuthStore.getState().setAuth(result.user, result.accessToken, result.refreshToken);
+                                  localStorage.setItem('accessToken', result.accessToken);
+                                  localStorage.setItem('refreshToken', result.refreshToken);
+                                  window.location.href = '/';
+                                } catch (err) {
+                                  alert(err instanceof Error ? err.message : 'Error al impersonar usuario');
+                                }
+                              }}
+                              className={`p-2 rounded-lg ${isDark ? 'bg-cyan-500/10' : 'bg-cyan-50'} text-cyan-400 ${isDark ? 'hover:bg-cyan-500/20' : 'hover:bg-cyan-100'} border ${isDark ? 'border-cyan-500/20' : 'border-cyan-200'} transition-all`}
+                              title="Iniciar sesión como este usuario"
+                            >
+                              <DoorOpen className="h-4 w-4" />
+                            </button>
+                          )}
                           {canDelete && (
                             <button
                               onClick={() => setDeletingUsuario(usuario)}

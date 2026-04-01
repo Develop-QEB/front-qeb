@@ -1,5 +1,5 @@
 import api from '../lib/api';
-import { ApiResponse } from '../types';
+import { ApiResponse, AuthResponse } from '../types';
 
 export interface EquipoUsuario {
   id: number;
@@ -95,5 +95,15 @@ export const usuariosService = {
     if (!response.data.success) {
       throw new Error(response.data.error || 'Error al eliminar usuarios');
     }
+  },
+
+  async impersonate(id: number): Promise<AuthResponse> {
+    const response = await api.post<ApiResponse<AuthResponse>>(`/usuarios/${id}/impersonate`);
+
+    if (!response.data.success || !response.data.data) {
+      throw new Error(response.data.error || 'Error al impersonar usuario');
+    }
+
+    return response.data.data;
   },
 };
