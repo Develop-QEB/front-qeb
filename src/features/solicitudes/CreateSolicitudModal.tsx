@@ -505,10 +505,14 @@ function MultiSelectTags({
   );
 }
 
+// ============================================================
+// CreateSolicitudModal — también funciona como EDITAR SOLICITUD
+// Si recibe editSolicitudId, entra en modo edición (isEditMode)
+// ============================================================
 export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props) {
   const queryClient = useQueryClient();
   const isDark = useThemeStore((s) => s.theme) === 'dark';
-  const isEditMode = !!editSolicitudId;
+  const isEditMode = !!editSolicitudId; // <-- MODO EDITAR si tiene ID
   useModalTracker(isEditMode ? 'Editar Solicitud' : 'Nueva Solicitud', isOpen);
 
   // Socket para actualizar usuarios en tiempo real cuando cambian miembros de equipos
@@ -1093,48 +1097,48 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
     const precioTotal = newCara.tarifaPublica * newCara.renta;
 
     // Evaluar estado de autorización con el backend
+    // En modo edición, si solo cambiaron NSE o ciudad, mantener autorización original
     let autorizacion_dg: CaraEntry['autorizacion_dg'] = undefined;
     let autorizacion_dcm: CaraEntry['autorizacion_dcm'] = undefined;
+    const editingOriginal = editingCaraId ? caras.find(c => c.id === editingCaraId) : null;
+    const skipAuthEval = isEditMode && editingOriginal && (
+      newCara.renta === editingOriginal.renta
+      && newCara.bonificacion === editingOriginal.bonificacion
+      && newCara.tarifaPublica === editingOriginal.tarifaPublica
+      && newCara.formato === editingOriginal.formato
+      && newCara.tipo === editingOriginal.tipo
+      && newCara.articulo?.ItemCode === editingOriginal.articulo?.ItemCode
+    );
 
     // Cortesías no requieren autorización — se aprueban automáticamente
     if (esCortesia) {
       autorizacion_dg = 'aprobado';
       autorizacion_dcm = 'aprobado';
+    } else if (skipAuthEval && editingOriginal) {
+      autorizacion_dg = editingOriginal._originalDg;
+      autorizacion_dcm = editingOriginal._originalDcm;
     } else {
-    try {
-      const ciudadesStr = newCara.ciudades.length > 0
-        ? newCara.ciudades.join(', ')
-        : filteredCiudades.join(', ');
+      try {
+        const ciudadesStr = newCara.ciudades.length > 0
+          ? newCara.ciudades.join(', ')
+          : filteredCiudades.join(', ');
 
-      console.log('[handleAddCara] Evaluando autorización:', {
-        ciudad: ciudadesStr,
-        estado: newCara.estado,
-        formato: newCara.formato,
-        tipo: newCara.tipo,
-        caras: newCara.renta,
-        bonificacion: newCara.bonificacion,
-        costo: precioTotal,
-        tarifa_publica: newCara.tarifaPublica
-      });
-
-      const resultado = await solicitudesService.evaluarAutorizacion({
-        ciudad: ciudadesStr,
-        estado: newCara.estado,
-        formato: newCara.formato,
-        tipo: newCara.tipo,
-        caras: newCara.renta,
-        bonificacion: newCara.bonificacion,
-        costo: precioTotal,
-        tarifa_publica: newCara.tarifaPublica,
-        articulo: newCara.articulo?.ItemCode || null,
-      });
-      console.log('[handleAddCara] Resultado autorización:', resultado);
-      autorizacion_dg = resultado.autorizacion_dg;
-      autorizacion_dcm = resultado.autorizacion_dcm;
-    } catch (error: any) {
-      console.error('[handleAddCara] Error evaluando autorización:', error?.response?.data || error?.message || error);
-      // Si falla, dejamos sin estado (se evaluará al guardar)
-    }
+        const resultado = await solicitudesService.evaluarAutorizacion({
+          ciudad: ciudadesStr,
+          estado: newCara.estado,
+          formato: newCara.formato,
+          tipo: newCara.tipo,
+          caras: newCara.renta,
+          bonificacion: newCara.bonificacion,
+          costo: precioTotal,
+          tarifa_publica: newCara.tarifaPublica,
+          articulo: newCara.articulo?.ItemCode || null,
+        });
+        autorizacion_dg = resultado.autorizacion_dg;
+        autorizacion_dcm = resultado.autorizacion_dcm;
+      } catch (error: any) {
+        console.error('[handleAddCara] Error evaluando autorización:', error?.response?.data || error?.message || error);
+      }
     }
 
     // Build list of periods to create caras for (range support)
@@ -2540,7 +2544,7 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
                   <button
                     type="button"
                     onClick={handleAddCara}
-                    disabled={!newCara.articulo || !newCara.estado || !newCara.formato || !newCara.tipo || newCara.nse.length === 0 || !newCara.periodo || (tipoPeriodo === 'mensual' && (!newCara.periodoInicioCustom || !newCara.periodoFinCustom))}
+                    disabled={!newCara.articulo || !newCara.estado || !newCara.formato || !newCara.tipo || newCara.nse.length === 0 || !newCara.periodo || (tipoPeriodo === 'mensual' && (!newCara.periodoInicioCustom || !newCara.periodoFinCustom)) || ((newCara.renta + newCara.bonificacion) > 0 && (newCara.renta + newCara.bonificacion) % 2 !== 0)}
                     className={`flex items-center gap-2 px-4 py-2 ${editingCaraId ? 'bg-amber-600 hover:bg-amber-700' : 'bg-purple-600 hover:bg-purple-700'} ${isDark ? 'disabled:bg-zinc-700 disabled:text-zinc-500' : 'disabled:bg-gray-200 disabled:text-gray-400'} text-white rounded-lg text-sm font-medium transition-colors`}
                   >
                     {editingCaraId ? <Check className="h-4 w-4" /> : <Plus className="h-4 w-4" />}
@@ -2695,7 +2699,8 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
                                         </td>
                                         <td className="px-2 py-2 text-center">
                                           {(() => {
-                                            const authBlocked = isEditMode && (cara.autorizacion_dg === 'pendiente' || cara.autorizacion_dcm === 'pendiente');
+                                            const anyPending = caras.some(c => c.autorizacion_dg === 'pendiente' || c.autorizacion_dcm === 'pendiente');
+                                            const authBlocked = isEditMode && anyPending;
                                             return (
                                           <div className="flex items-center justify-center gap-1">
                                             <button
@@ -2989,9 +2994,9 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
             <button
               type="button"
               onClick={handleSubmit}
-              disabled={(isEditMode ? updateMutation.isPending : createMutation.isPending) || !selectedCuic || caras.length === 0 || selectedAsignados.length === 0 || invalidCaras.length > 0}
+              disabled={(isEditMode ? updateMutation.isPending : createMutation.isPending) || !selectedCuic || caras.length === 0 || selectedAsignados.length === 0 || invalidCaras.length > 0 || caras.some(c => { const t = c.renta + c.bonificacion; return t > 0 && t % 2 !== 0; })}
               className={`px-6 py-2 bg-emerald-600 text-white rounded-lg text-sm font-medium hover:bg-emerald-700 ${isDark ? 'disabled:bg-zinc-700 disabled:text-zinc-500' : 'disabled:bg-gray-200 disabled:text-gray-400'} transition-colors flex items-center gap-2`}
-              title={selectedAsignados.length === 0 ? 'Debes asignar al menos un usuario' : undefined}
+              title={caras.some(c => { const t = c.renta + c.bonificacion; return t > 0 && t % 2 !== 0; }) ? 'Hay grupos con caras impar — corrige antes de guardar' : selectedAsignados.length === 0 ? 'Debes asignar al menos un usuario' : undefined}
             >
               {(isEditMode ? updateMutation.isPending : createMutation.isPending) ? (
                 <>
