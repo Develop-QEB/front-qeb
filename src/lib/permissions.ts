@@ -1976,7 +1976,22 @@ export function getPermissions(role: string | undefined | null): RolePermissions
     };
   }
 
-  const specificPermissions = rolePermissions[role as UserRole] || {};
+  const specificPermissions = rolePermissions[role as UserRole];
+
+  // Si el rol no existe en el mapa, dar permisos mínimos (no defaults de admin)
+  if (!specificPermissions) {
+    return {
+      ...defaultPermissions,
+      canSeeDashboard: true,
+      canSeeClientes: false,
+      canSeeProveedores: false,
+      canSeeSolicitudes: false,
+      canSeePropuestas: false,
+      canSeeCampanas: false,
+      canSeeInventarios: false,
+      canSeeAdminUsuarios: false,
+    };
+  }
 
   return {
     ...defaultPermissions,
