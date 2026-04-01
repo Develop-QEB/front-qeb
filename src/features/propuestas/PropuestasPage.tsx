@@ -803,6 +803,7 @@ const ALLOWED_PUESTOS_APROBAR = [
   'Coordinador de Diseño',
   'Diseñadores',
   'Diseñador',
+  'Asesor Analista',
 ];
 
 function ApproveModal({ isOpen, onClose, propuesta, onSuccess }: ApproveModalProps) {
