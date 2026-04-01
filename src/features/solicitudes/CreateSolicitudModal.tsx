@@ -1095,6 +1095,12 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
     // Evaluar estado de autorización con el backend
     let autorizacion_dg: CaraEntry['autorizacion_dg'] = undefined;
     let autorizacion_dcm: CaraEntry['autorizacion_dcm'] = undefined;
+
+    // Cortesías no requieren autorización — se aprueban automáticamente
+    if (esCortesia) {
+      autorizacion_dg = 'aprobado';
+      autorizacion_dcm = 'aprobado';
+    } else {
     try {
       const ciudadesStr = newCara.ciudades.length > 0
         ? newCara.ciudades.join(', ')
@@ -1128,6 +1134,7 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
     } catch (error: any) {
       console.error('[handleAddCara] Error evaluando autorización:', error?.response?.data || error?.message || error);
       // Si falla, dejamos sin estado (se evaluará al guardar)
+    }
     }
 
     // Build list of periods to create caras for (range support)
@@ -1189,7 +1196,10 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
         autorizacion_dcm: c._originalDcm,
       }));
       // Paso 1: Impar por grupo — si renta+bonificacion de un grupo es impar, esa cara es DG
+      // Cortesías quedan excluidas: no requieren autorización
       updated = updated.map(c => {
+        const esCaraCortesia = c.articulo?.ItemCode?.toUpperCase().startsWith('CT');
+        if (esCaraCortesia) return c;
         const carasGrupo = c.renta + c.bonificacion;
         const esImpar = carasGrupo > 0 && carasGrupo % 2 !== 0;
         if (esImpar && c.autorizacion_dg !== 'pendiente') {
@@ -1198,9 +1208,14 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
         return c;
       });
       // Paso 2: DG contamina — si hay al menos 1 DG pendiente, las que tengan DCM pendiente pasan a DG
+      // Cortesías quedan excluidas de la contaminación
       const hayDG = updated.some(c => c.autorizacion_dg === 'pendiente');
       if (hayDG) {
-        return updated.map(c => c.autorizacion_dcm === 'pendiente' ? { ...c, autorizacion_dg: 'pendiente', autorizacion_dcm: 'aprobado' } : c);
+        return updated.map(c => {
+          const esCaraCortesia = c.articulo?.ItemCode?.toUpperCase().startsWith('CT');
+          if (esCaraCortesia) return c;
+          return c.autorizacion_dcm === 'pendiente' ? { ...c, autorizacion_dg: 'pendiente', autorizacion_dcm: 'aprobado' } : c;
+        });
       }
       return updated;
     });
@@ -2636,15 +2651,17 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
                                         <td className="px-2 py-2 text-xs text-right text-emerald-400 font-medium">{formatCurrency(precioTotal)}</td>
                                         <td className="px-2 py-2 text-center">
                                           {(() => {
+                                            // Cortesías siempre aprobadas, no requieren autorización
+                                            const esCaraCortesia = cara.articulo?.ItemCode?.toUpperCase().startsWith('CT');
                                             // Impar por grupo: si las caras de ESTE grupo son impar, requiere DG
                                             const carasGrupo = cara.renta + cara.bonificacion;
-                                            const esImpar = carasGrupo > 0 && carasGrupo % 2 !== 0;
-                                            // DG contamina: si alguna cara tiene DG, todas son DG
+                                            const esImpar = !esCaraCortesia && carasGrupo > 0 && carasGrupo % 2 !== 0;
+                                            // DG contamina: si alguna cara tiene DG, todas son DG (excepto cortesías)
                                             const hayDGEnPropuesta = caras.some(c => c.autorizacion_dg === 'pendiente');
-                                            // Solo contamina si esta cara tiene algún pendiente (no tocar las ya aprobadas)
-                                            const tienePendiente = cara.autorizacion_dg === 'pendiente' || cara.autorizacion_dcm === 'pendiente';
-                                            const dgEfectivo = esImpar || (hayDGEnPropuesta && tienePendiente) ? 'pendiente' : cara.autorizacion_dg;
-                                            const dcmEfectivo = dgEfectivo === 'pendiente' ? 'aprobado' : cara.autorizacion_dcm;
+                                            // Solo contamina si esta cara tiene algún pendiente (no tocar las ya aprobadas ni cortesías)
+                                            const tienePendiente = !esCaraCortesia && (cara.autorizacion_dg === 'pendiente' || cara.autorizacion_dcm === 'pendiente');
+                                            const dgEfectivo = esCaraCortesia ? 'aprobado' : (esImpar || (hayDGEnPropuesta && tienePendiente) ? 'pendiente' : cara.autorizacion_dg);
+                                            const dcmEfectivo = esCaraCortesia ? 'aprobado' : (dgEfectivo === 'pendiente' ? 'aprobado' : cara.autorizacion_dcm);
                                             return (
                                               <div className="flex flex-col gap-0.5">
                                                 {dgEfectivo === 'aprobado' && dcmEfectivo === 'aprobado' && (

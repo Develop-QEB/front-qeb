@@ -2,6 +2,7 @@
 
 export type UserRole =
   | 'Asesor Comercial'
+  | 'Asesor Analista'
   | 'Analista de Servicio al Cliente'
   | 'Director General'
   | 'Director Comercial'
@@ -211,6 +212,51 @@ const rolePermissions: Partial<Record<UserRole, Partial<RolePermissions>>> = {
     canDeleteDetalleCampana: false,
     canEditGestionArtes: false,
     canOpenTasks: false, // No puede abrir tareas en Gestión de Artes
+
+    canCreateInventarios: false,
+    canEditInventarios: false,
+    canDeleteInventarios: false,
+  },
+  'Asesor Analista': {
+    // Combinación de permisos de Asesor Comercial + Analista de Servicio al Cliente
+    canSeeDashboard: false,
+    canSeeInventarios: false,
+    canSeeAdminUsuarios: false,
+
+    // Clientes: puede crear/editar (Asesor) pero no borrar
+    canDeleteClientes: false,
+
+    // Proveedores: sin acceso
+    canCreateProveedores: false,
+    canEditProveedores: false,
+    canDeleteProveedores: false,
+
+    // Solicitudes: acceso total (Asesor)
+    // canCreateSolicitudes: true (default)
+    // canEditSolicitudes: true (default)
+    // canDeleteSolicitudes: true (default)
+    // canAtenderSolicitudes: true (default)
+    // canChangeEstadoSolicitud: true (default)
+
+    // Propuestas: permisos de Asesor
+    allowedPropuestaStatuses: ['Pase a ventas', 'Ajuste Cto-Cliente', 'Descartada'],
+    canBuscarInventarioEnModal: false,
+    canEditClienteEnFormularios: true, // Asesor: puede editar campo cliente
+    canEditArticuloOnEdit: true, // Asesor: puede editar artículo SAP
+
+    // Campañas: puede editar (Asesor) + detalle campaña acceso total (Analista)
+    canEditCampanas: true,
+    // canEditDetalleCampana: true (default — Analista)
+    // canDeleteDetalleCampana: true (default — Analista)
+
+    // Gestión de Artes: permisos de Analista
+    // canEditGestionArtes: true (default — Analista)
+    canResolveProduccionTasks: false,
+    canResolveCorreccionTasks: true,
+    canOnlyOpenCorreccionTasks: true,
+    canOpenTasks: true,
+    canCreateTareasGestionArtes: true,
+    canCompartirPropuesta: true,
 
     canCreateInventarios: false,
     canEditInventarios: false,

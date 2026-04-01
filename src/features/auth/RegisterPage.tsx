@@ -34,6 +34,7 @@ const PUESTOS_POR_AREA: Record<string, string[]> = {
   'Comercial': [
     'Director Comercial',
     'Asesor Comercial',
+    'Asesor Analista',
     'Analista de Servicio al Cliente',
     'Jefe Digital Comercial',
     'Especialista de BI',
