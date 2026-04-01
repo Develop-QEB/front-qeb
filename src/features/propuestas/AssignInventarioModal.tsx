@@ -4,7 +4,7 @@ import { useQuery, useQueryClient, useMutation } from '@tanstack/react-query';
 import {
   X, Search, Plus, Trash2, ChevronDown, ChevronRight, ChevronUp, Users,
   FileText, MapPin, Layers, Pencil, Map as MapIcon, Package, Calendar,
-  Gift, Target, Save, ArrowLeft, Filter, Grid, LayoutGrid, Ruler, ArrowUpDown, ArrowUp, ArrowDown, Download, Eye, Funnel, Check, Upload, Monitor
+  Gift, Target, Save, ArrowLeft, Filter, Grid, LayoutGrid, Ruler, ArrowUpDown, ArrowUp, ArrowDown, Download, Eye, Funnel, Check, Upload, Monitor, AlertTriangle
 } from 'lucide-react';
 import { GoogleMap, useLoadScript, Marker } from '@react-google-maps/api';
 import { AdvancedMapComponent } from './AdvancedMapComponent';
@@ -1107,6 +1107,10 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
 
   // Handle update propuesta
   const handleUpdatePropuesta = async () => {
+    if (invalidCaras.length > 0) {
+      alert(`No se puede actualizar: ${invalidCaras.length} cara(s) tienen catorcenas fuera del rango configurado. Elimínalas o ajusta el rango.`);
+      return;
+    }
     setIsUpdatingPropuesta(true);
     try {
       // Update propuesta data (include client fields if changed)
@@ -1526,6 +1530,17 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
       return true;
     });
   }, [catorcenasData, yearInicio, yearFin, catorcenaInicio, catorcenaFin]);
+
+  // Detect caras whose period is outside the current availablePeriods range
+  const invalidCaras = useMemo(() => {
+    if (caras.length === 0) return [];
+    if (!yearInicio || !yearFin || !catorcenaInicio || !catorcenaFin) return [];
+    const validKeys = new Set(availablePeriods.map(p => `${p.a_o}-${p.numero_catorcena}`));
+    return caras.filter(c => {
+      if (!c.anio_inicio || !c.catorcena_inicio) return false;
+      return !validKeys.has(`${c.anio_inicio}-${c.catorcena_inicio}`);
+    });
+  }, [caras, availablePeriods, yearInicio, yearFin, catorcenaInicio, catorcenaFin]);
 
   // Toggle catorcena expansion
   const toggleCatorcena = (periodo: string) => {
@@ -5374,6 +5389,16 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
                     )}
                   </div>
 
+                  {/* Invalid caras warning */}
+                  {invalidCaras.length > 0 && (
+                    <div className="flex items-start gap-2 px-3 py-2 rounded-lg bg-red-500/10 border border-red-500/30 text-red-400 text-sm">
+                      <AlertTriangle className="h-4 w-4 mt-0.5 shrink-0" />
+                      <span>
+                        <strong>{invalidCaras.length} cara{invalidCaras.length > 1 ? 's' : ''}</strong> tiene{invalidCaras.length > 1 ? 'n' : ''} catorcenas fuera del rango actual. Elimínalas o ajusta el rango de catorcenas antes de actualizar.
+                      </span>
+                    </div>
+                  )}
+
                   {/* Update button */}
                   {canEditResumen && (
                     <div className={`flex justify-end pt-2 border-t ${isDark ? 'border-zinc-700/30' : 'border-gray-200/30'}`}>
@@ -5381,7 +5406,7 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
                       {hasChanges && (
                         <button
                           onClick={handleUpdatePropuesta}
-                          disabled={isUpdatingPropuesta}
+                          disabled={isUpdatingPropuesta || invalidCaras.length > 0}
                           className="flex items-center gap-2 px-4 py-2 bg-purple-500 text-white rounded-lg text-sm font-medium hover:bg-purple-600 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                         >
                           {isUpdatingPropuesta ? (
