@@ -5398,8 +5398,8 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
                         )}
                       </div>
                       <div className="space-y-1">
-                        <label className={`text-xs ${(editingCaraHasReservas || (editingCaraId && !permissions.canEditCaraFiltersOnEdit)) ? 'text-zinc-800' : 'text-zinc-500'}`}>Ciudades {newCara.ciudad && (!editingCaraId || permissions.canEditCaraFiltersOnEdit) && <span className="text-purple-400">({newCara.ciudad.split(',').filter(Boolean).length})</span>}</label>
-                        {canEditResumen && !editingCaraHasReservas && (!editingCaraId || permissions.canEditCaraFiltersOnEdit) ? (
+                        <label className={`text-xs ${((editingCaraHasReservas && !permissions.canEditCaraFiltersOnEdit) || (editingCaraId && !permissions.canEditCaraFiltersOnEdit)) ? 'text-zinc-800' : 'text-zinc-500'}`}>Ciudades {newCara.ciudad && (!editingCaraId || permissions.canEditCaraFiltersOnEdit) && <span className="text-purple-400">({newCara.ciudad.split(',').filter(Boolean).length})</span>}</label>
+                        {canEditResumen && (!editingCaraHasReservas || permissions.canEditCaraFiltersOnEdit) && (!editingCaraId || permissions.canEditCaraFiltersOnEdit) ? (
                           <MultiSelectDropdown
                             options={
                               solicitudFilters?.ciudades

@@ -5773,8 +5773,8 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
                         )}
                       </div>
                       <div className="space-y-1">
-                        <label className={`text-xs ${(editingCaraHasReservas || (editingCaraId && !permissions.canEditCaraFiltersOnEdit)) ? 'text-zinc-800' : `${isDark ? 'text-zinc-500' : 'text-gray-400'}`}`}>Ciudades {newCara.ciudad && (!editingCaraId || permissions.canEditCaraFiltersOnEdit) && <span className="text-purple-400">({newCara.ciudad.split(',').filter(Boolean).length})</span>}</label>
-                        {canEditResumen && !editingCaraHasReservas && (!editingCaraId || permissions.canEditCaraFiltersOnEdit) ? (
+                        <label className={`text-xs ${((editingCaraHasReservas && !permissions.canEditCaraFiltersOnEdit) || (editingCaraId && !permissions.canEditCaraFiltersOnEdit)) ? 'text-zinc-800' : `${isDark ? 'text-zinc-500' : 'text-gray-400'}`}`}>Ciudades {newCara.ciudad && (!editingCaraId || permissions.canEditCaraFiltersOnEdit) && <span className="text-purple-400">({newCara.ciudad.split(',').filter(Boolean).length})</span>}</label>
+                        {canEditResumen && (!editingCaraHasReservas || permissions.canEditCaraFiltersOnEdit) && (!editingCaraId || permissions.canEditCaraFiltersOnEdit) ? (
                           <MultiSelectDropdown
                             options={
                               solicitudFilters?.ciudades
