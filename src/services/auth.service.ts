@@ -90,6 +90,10 @@ export const authService = {
   resetPassword: (correo: string, codigo: string, nuevaPassword: string) =>
   api.post('/auth/reset-password', { correo, codigo, nuevaPassword }),
 
+  async markLightThemeNotified(): Promise<void> {
+    await api.post('/auth/mark-light-theme-notified');
+  },
+
   async uploadPhoto(file: File): Promise<User> {
     const formData = new FormData();
     formData.append('foto', file);
