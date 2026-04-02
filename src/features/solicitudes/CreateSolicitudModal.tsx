@@ -735,7 +735,7 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
   // Fetch cascade-filtered options (formatos, tipos, NSE) by estado/ciudades
   const { data: inventarioOptions } = useQuery({
     queryKey: ['inventario-options', newCara.estado, newCara.ciudades],
-    queryFn: () => solicitudesService.getInventarioOptions(resolveEstados(newCara.estado).join(','), newCara.ciudades),
+    queryFn: () => solicitudesService.getInventarioOptions(resolveEstados(newCara.estado), newCara.ciudades),
     enabled: isOpen && (!!newCara.estado || newCara.ciudades.length > 0),
     staleTime: 5 * 60 * 1000,
   });
