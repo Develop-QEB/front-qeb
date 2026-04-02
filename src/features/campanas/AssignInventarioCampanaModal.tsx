@@ -1673,17 +1673,19 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
           // Update in database with authorization status
           const updatedCara = await campanasService.updateCara(campana!.id, caraToEdit.id, caraData);
 
-          // Update local state with new authorization status + recalc impar/contamination
+          // Update local state - only recalc impar/contamination if auth fields changed
           setCaras(prev => {
             let updated = prev.map(c =>
               c.localId === editingCaraId
                 ? { ...c, ...newCara, costo: costoCalculado, autorizacion_dg: updatedCara?.autorizacion_dg || autorizacion_dg, autorizacion_dcm: updatedCara?.autorizacion_dcm || autorizacion_dcm, _originalDg: updatedCara?.autorizacion_dg || autorizacion_dg, _originalDcm: updatedCara?.autorizacion_dcm || autorizacion_dcm }
                 : c
             );
-            updated = updated.map(c => ({ ...c, autorizacion_dg: c._originalDg || c.autorizacion_dg, autorizacion_dcm: c._originalDcm || c.autorizacion_dcm }));
-            updated = updated.map(c => { const total = (c.caras_flujo || 0) + (c.caras_contraflujo || 0) + (c.bonificacion || 0); if (total > 0 && total % 2 !== 0 && c.autorizacion_dg !== 'pendiente') return { ...c, autorizacion_dg: 'pendiente', autorizacion_dcm: 'aprobado' }; return c; });
-            const hayDG = updated.some(c => c.autorizacion_dg === 'pendiente');
-            if (hayDG) updated = updated.map(c => c.autorizacion_dcm === 'pendiente' ? { ...c, autorizacion_dg: 'pendiente', autorizacion_dcm: 'aprobado' } : c);
+            if (authFieldsChanged) {
+              updated = updated.map(c => ({ ...c, autorizacion_dg: c._originalDg || c.autorizacion_dg, autorizacion_dcm: c._originalDcm || c.autorizacion_dcm }));
+              updated = updated.map(c => { const total = (c.caras_flujo || 0) + (c.caras_contraflujo || 0) + (c.bonificacion || 0); if (total > 0 && total % 2 !== 0 && c.autorizacion_dg !== 'pendiente') return { ...c, autorizacion_dg: 'pendiente', autorizacion_dcm: 'aprobado' }; return c; });
+              const hayDG = updated.some(c => c.autorizacion_dg === 'pendiente');
+              if (hayDG) updated = updated.map(c => c.autorizacion_dcm === 'pendiente' ? { ...c, autorizacion_dg: 'pendiente', autorizacion_dcm: 'aprobado' } : c);
+            }
             return updated;
           });
         }
