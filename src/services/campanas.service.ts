@@ -1161,6 +1161,14 @@ async getUsuarios(): Promise<{ id: number; nombre: string }[]> {
     return response.data.data;
   },
 
+  async bulkUpdateCaras(campanaId: number, caras: { caraId: number; data: CaraUpdateData }[]): Promise<{ updated: SolicitudCara[]; message: string }> {
+    const response = await api.patch<ApiResponse<SolicitudCara[]> & { message?: string }>(`/campanas/${campanaId}/caras/bulk`, { caras });
+    if (!response.data.success) {
+      throw new Error(response.data.error || 'Error al actualizar caras en lote');
+    }
+    return { updated: response.data.data || [], message: response.data.message || '' };
+  },
+
   async createCara(campanaId: number, data: CaraUpdateData): Promise<SolicitudCara> {
     const response = await api.post<ApiResponse<SolicitudCara>>(`/campanas/${campanaId}/caras`, data);
     if (!response.data.success || !response.data.data) {

@@ -599,6 +599,9 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
   const [expandedCaras, setExpandedCaras] = useState<Set<string>>(new Set());
   const [expandedCatorcenas, setExpandedCatorcenas] = useState<Set<string>>(new Set());
   const [editingCaraId, setEditingCaraId] = useState<string | null>(null);
+  // Track locally modified caras (caraDbId -> CaraUpdateData) for bulk save
+  const [modifiedCaras, setModifiedCaras] = useState<Map<number, Record<string, unknown>>>(new Map());
+  const initialValuesSetRef = useRef(false);
 
   // New cara form
   const [newCara, setNewCara] = useState<Omit<CaraItem, 'localId'>>(EMPTY_CARA);
@@ -933,18 +936,21 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
       }
       setAsignados(loadedAsignados);
 
-      // Store initial values for change detection
-      const asignadosIdsStr = loadedAsignados.map(u => u.id).join(',');
-      setInitialValues({
-        nombreCampania: campaniaNombre,
-        notas: notasVal,
-        descripcion: descripcionVal,
-        yearInicio: yInicio ?? undefined,
-        yearFin: yFin ?? undefined,
-        catorcenaInicio: cInicio ?? undefined,
-        catorcenaFin: cFin ?? undefined,
-        asignadosIds: asignadosIdsStr,
-      });
+      // Store initial values for change detection — only on first load
+      if (!initialValuesSetRef.current) {
+        const asignadosIdsStr = loadedAsignados.map(u => u.id).join(',');
+        setInitialValues({
+          nombreCampania: campaniaNombre,
+          notas: notasVal,
+          descripcion: descripcionVal,
+          yearInicio: yInicio ?? undefined,
+          yearFin: yFin ?? undefined,
+          catorcenaInicio: cInicio ?? undefined,
+          catorcenaFin: cFin ?? undefined,
+          asignadosIds: asignadosIdsStr,
+        });
+        initialValuesSetRef.current = true;
+      }
     }
   }, [campanaDetails, isOpen, users]);
 
@@ -1009,6 +1015,8 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
       setEditingCaraId(null);
       setNewCara(EMPTY_CARA);
       setSelectedArticulo(null);
+      setModifiedCaras(new Map());
+      initialValuesSetRef.current = false;
     }
   }, [isOpen]);
 
@@ -1588,14 +1596,15 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
     setShowAddCaraForm(true);
   };
 
-  // Handle save cara (add or update) - persists to database
+  // Handle save cara (add or update)
+  // EDIT: only updates local state + tracks in modifiedCaras (bulk save later)
+  // CREATE: still persists to DB immediately (needs ID for reservas)
   const handleSaveCara = async () => {
     if (!newCara.formato || !newCara.estados) {
       alert('Por favor completa al menos el formato y estado');
       return;
     }
 
-    // Validar tarifa pública: si es 0, solo CT y BF/CF pueden avanzar
     const artCode = (newCara.articulo || '').toUpperCase();
     const esCortesia = artCode.startsWith('CT');
     const esBonificacion = artCode.startsWith('BF') || artCode.startsWith('CF');
@@ -1604,7 +1613,6 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
       return;
     }
 
-    // If no ciudad selected but estado is, get all cities from that estado
     let ciudadToSave = newCara.ciudad;
     if (!ciudadToSave && newCara.estados && solicitudFilters?.ciudades) {
       const selectedEstados = newCara.estados.split(',').map(s => s.trim());
@@ -1614,7 +1622,6 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
       ciudadToSave = allCitiesForEstado.join(', ');
     }
 
-    // Calcular costo como caras * tarifa_publica (inversión)
     const costoCalculado = (newCara.caras || 0) * (newCara.tarifa_publica || 0);
 
     const caraData = {
@@ -1638,10 +1645,9 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
 
     try {
       if (editingCaraId) {
-        // Find the cara being edited to get its database ID
+        // ---- LOCAL-ONLY UPDATE (no API call) ----
         const caraToEdit = caras.find(c => c.localId === editingCaraId);
         if (caraToEdit?.id) {
-          // Only re-evaluate authorization if fields that affect it changed (not NSE/ciudad)
           let autorizacion_dg = caraToEdit.autorizacion_dg || 'aprobado';
           let autorizacion_dcm = caraToEdit.autorizacion_dcm || 'aprobado';
           const authFieldsChanged = newCara.caras !== caraToEdit.caras_flujo + caraToEdit.caras_contraflujo
@@ -1670,14 +1676,11 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
             }
           }
 
-          // Update in database with authorization status
-          const updatedCara = await campanasService.updateCara(campana!.id, caraToEdit.id, caraData);
-
-          // Update local state with new authorization status + recalc impar/contamination
+          // Update local state only (NO API call)
           setCaras(prev => {
             let updated = prev.map(c =>
               c.localId === editingCaraId
-                ? { ...c, ...newCara, costo: costoCalculado, autorizacion_dg: updatedCara?.autorizacion_dg || autorizacion_dg, autorizacion_dcm: updatedCara?.autorizacion_dcm || autorizacion_dcm, _originalDg: updatedCara?.autorizacion_dg || autorizacion_dg, _originalDcm: updatedCara?.autorizacion_dcm || autorizacion_dcm }
+                ? { ...c, ...newCara, ciudad: ciudadToSave || newCara.ciudad, costo: costoCalculado, autorizacion_dg, autorizacion_dcm, _originalDg: autorizacion_dg, _originalDcm: autorizacion_dcm }
                 : c
             );
             updated = updated.map(c => ({ ...c, autorizacion_dg: c._originalDg || c.autorizacion_dg, autorizacion_dcm: c._originalDcm || c.autorizacion_dcm }));
@@ -1686,10 +1689,17 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
             if (hayDG) updated = updated.map(c => c.autorizacion_dcm === 'pendiente' ? { ...c, autorizacion_dg: 'pendiente', autorizacion_dcm: 'aprobado' } : c);
             return updated;
           });
+
+          // Track this cara as modified for bulk save
+          setModifiedCaras(prev => {
+            const next = new Map(prev);
+            next.set(caraToEdit.id!, caraData);
+            return next;
+          });
         }
         setEditingCaraId(null);
       } else {
-        // Create new cara in database
+        // Create new cara in database (needs DB ID for reservas)
         const createdCara = await campanasService.createCara(campana!.id, caraData);
         const newCaraItem: CaraItem = {
           ...newCara,
@@ -1715,13 +1725,103 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
       setSelectedArticulo(null);
       setShowAddCaraForm(false);
 
-      // Invalidate queries to refresh data
-      queryClient.invalidateQueries({ queryKey: ['campana-full', campana!.id] });
-      queryClient.invalidateQueries({ queryKey: ['campana-caras', campana!.id] });
-      queryClient.invalidateQueries({ queryKey: ['campana-details', campana?.id] });
+      // Only invalidate queries for new caras (edits are local until bulk save)
+      if (!editingCaraId) {
+        queryClient.invalidateQueries({ queryKey: ['campana-full', campana!.id] });
+        queryClient.invalidateQueries({ queryKey: ['campana-caras', campana!.id] });
+        queryClient.invalidateQueries({ queryKey: ['campana-details', campana?.id] });
+      }
     } catch (error) {
       console.error('Error saving cara:', error);
       alert('Error al guardar la cara');
+    }
+  };
+
+  // Bulk save ALL pending changes (campaign summary + modified caras) in one action
+  const handleBulkSaveChanges = async () => {
+    const hasCampanaChanges = hasChanges;
+    const hasCaraChanges = modifiedCaras.size > 0;
+
+    if (!hasCampanaChanges && !hasCaraChanges) {
+      showToast('No hay cambios pendientes', 'info');
+      return;
+    }
+
+    setIsSaving(true);
+    try {
+      const messages: string[] = [];
+
+      // 1. Save campaign summary changes if any
+      if (hasCampanaChanges) {
+        const asignadosStr = asignados.map(u => u.nombre).join(', ');
+        const asignadosIdsStr = asignados.map(u => u.id).join(',');
+        await campanasService.update(campana!.id, {
+          nombre: nombreCampania,
+          notas,
+          descripcion,
+          catorcenaInicioNum: catorcenaInicio,
+          catorcenaInicioAnio: yearInicio,
+          catorcenaFinNum: catorcenaFin,
+          catorcenaFinAnio: yearFin,
+          asignados: asignadosStr,
+          id_asignado: asignadosIdsStr,
+        });
+
+        setInitialValues({
+          nombreCampania,
+          notas,
+          descripcion,
+          yearInicio,
+          yearFin,
+          catorcenaInicio,
+          catorcenaFin,
+          asignadosIds: asignadosIdsStr,
+        });
+        messages.push('Campaña actualizada');
+      }
+
+      // 2. Bulk save modified caras if any
+      if (hasCaraChanges) {
+        const carasArray = Array.from(modifiedCaras.entries()).map(([caraId, data]) => ({
+          caraId,
+          data,
+        }));
+
+        const result = await campanasService.bulkUpdateCaras(campana!.id, carasArray);
+
+        if (result.updated && result.updated.length > 0) {
+          setCaras(prev => {
+            let updated = prev.map(c => {
+              const serverCara = result.updated.find(u => u.id === c.id);
+              if (serverCara) {
+                return { ...c, autorizacion_dg: serverCara.autorizacion_dg || c.autorizacion_dg, autorizacion_dcm: serverCara.autorizacion_dcm || c.autorizacion_dcm, _originalDg: serverCara.autorizacion_dg || c.autorizacion_dg, _originalDcm: serverCara.autorizacion_dcm || c.autorizacion_dcm };
+              }
+              return c;
+            });
+            updated = updated.map(c => ({ ...c, autorizacion_dg: c._originalDg || c.autorizacion_dg, autorizacion_dcm: c._originalDcm || c.autorizacion_dcm }));
+            updated = updated.map(c => { const total = (c.caras_flujo || 0) + (c.caras_contraflujo || 0) + (c.bonificacion || 0); if (total > 0 && total % 2 !== 0 && c.autorizacion_dg !== 'pendiente') return { ...c, autorizacion_dg: 'pendiente', autorizacion_dcm: 'aprobado' }; return c; });
+            const hayDG = updated.some(c => c.autorizacion_dg === 'pendiente');
+            if (hayDG) updated = updated.map(c => c.autorizacion_dcm === 'pendiente' ? { ...c, autorizacion_dg: 'pendiente', autorizacion_dcm: 'aprobado' } : c);
+            return updated;
+          });
+        }
+
+        setModifiedCaras(new Map());
+        messages.push(result.message || `${carasArray.length} circuito(s) actualizados`);
+      }
+
+      // Refresh data
+      queryClient.invalidateQueries({ queryKey: ['campana-full', campana!.id] });
+      queryClient.invalidateQueries({ queryKey: ['campana-caras', campana!.id] });
+      queryClient.invalidateQueries({ queryKey: ['campana-details', campana?.id] });
+      queryClient.invalidateQueries({ queryKey: ['campanas'] });
+
+      showToast(messages.join(' | '), 'success');
+    } catch (error) {
+      console.error('Error in bulk save:', error);
+      showToast(`Error al guardar: ${error instanceof Error ? error.message : 'Error desconocido'}`, 'error');
+    } finally {
+      setIsSaving(false);
     }
   };
 
@@ -4843,10 +4943,33 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
     );
   }
 
+  // Handle close with unsaved changes warning
+  const handleClose = () => {
+    if (hasChanges || modifiedCaras.size > 0) {
+      setConfirmModal({
+        isOpen: true,
+        title: 'Cambios sin guardar',
+        message: `Tienes ${[
+          hasChanges ? 'cambios en la campaña' : '',
+          modifiedCaras.size > 0 ? `${modifiedCaras.size} circuito(s) editado(s)` : '',
+        ].filter(Boolean).join(' y ')} sin guardar. ¿Seguro que quieres cerrar?`,
+        confirmText: 'Cerrar sin guardar',
+        cancelText: 'Volver',
+        isDestructive: true,
+        onConfirm: () => {
+          setConfirmModal(prev => ({ ...prev, isOpen: false }));
+          onClose();
+        },
+      });
+    } else {
+      onClose();
+    }
+  };
+
   // Main view
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center">
-      <div className="absolute inset-0 bg-black/70 backdrop-blur-sm" onClick={onClose} />
+      <div className="absolute inset-0 bg-black/70 backdrop-blur-sm" onClick={handleClose} />
 
       <div className={`relative w-[95vw] max-w-[1400px] h-[90vh] ${isDark ? 'bg-zinc-900' : 'bg-white'} rounded-2xl border border-purple-500/20 shadow-2xl flex flex-col overflow-hidden`}>
         {/* Header */}
@@ -4856,8 +4979,8 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
             <p className={`text-sm ${isDark ? 'text-zinc-400' : 'text-gray-500'}`}>Propuesta #{campana!.id}</p>
           </div>
           <div className="flex items-center gap-3">
-            
-            <button onClick={onClose} className="p-2 rounded-lg text-zinc-400 hover:text-white">
+
+            <button onClick={handleClose} className="p-2 rounded-lg text-zinc-400 hover:text-white">
               <X className="h-5 w-5" />
             </button>
           </div>
@@ -5143,30 +5266,11 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
                     )}
                   </div>
 
-                  {/* Update button */}
-                  {canEditResumen && (
-                    <div className="flex justify-end pt-2 border-t border-zinc-700/30">
-                      {/* Update button - shows when there are changes */}
-                      {hasChanges && (
-                        <button
-                          onClick={handleUpdateCampana}
-                          disabled={isUpdatingCampana || caras.some(c => { const t = (c.caras_flujo || 0) + (c.caras_contraflujo || 0) + (c.bonificacion || 0); return t > 0 && t % 2 !== 0; })}
-                          className="flex items-center gap-2 px-4 py-2 bg-purple-500 text-white rounded-lg text-sm font-medium hover:bg-purple-600 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                          title={caras.some(c => { const t = (c.caras_flujo || 0) + (c.caras_contraflujo || 0) + (c.bonificacion || 0); return t > 0 && t % 2 !== 0; }) ? 'Hay grupos con caras impar — corrige antes de guardar' : undefined}
-                        >
-                          {isUpdatingCampana ? (
-                            <>
-                              <div className="h-4 w-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
-                              Guardando...
-                            </>
-                          ) : (
-                            <>
-                              <Save className="h-4 w-4" />
-                              Actualizar Campaña
-                            </>
-                          )}
-                        </button>
-                      )}
+                  {/* Pending changes indicator for campaign summary */}
+                  {canEditResumen && hasChanges && (
+                    <div className={`flex items-center gap-2 pt-2 border-t ${isDark ? 'border-zinc-700/30' : 'border-gray-200/30'} text-sm text-purple-400`}>
+                      <span className="w-2 h-2 rounded-full bg-purple-500 animate-pulse" />
+                      Cambios pendientes — se guardarán con el botón "Guardar Cambios"
                     </div>
                   )}
                 </div>
@@ -6430,8 +6534,8 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
           )}
         </div>
 
-        {/* Footer with Aprobar button */}
-        {caras.length > 0 && (
+        {/* Footer with Guardar Cambios button */}
+        {(caras.length > 0 || hasChanges) && (
           <div className={`px-6 py-4 border-t flex items-center justify-between ${isDark ? 'border-zinc-800 bg-zinc-900/80' : 'border-gray-200 bg-white'}`}>
             <div className="flex items-center gap-4">
               {/* Status summary */}
@@ -6454,45 +6558,40 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
                     Autorizaciones pendientes
                   </div>
                 )}
+                {(modifiedCaras.size > 0 || hasChanges) && (
+                  <div className="flex items-center gap-2 text-purple-400">
+                    <span className="w-2 h-2 rounded-full bg-purple-500 animate-pulse" />
+                    {[
+                      hasChanges ? 'Campaña' : '',
+                      modifiedCaras.size > 0 ? `${modifiedCaras.size} circuito(s)` : '',
+                    ].filter(Boolean).join(' + ')} pendiente(s)
+                  </div>
+                )}
               </div>
             </div>
             <div className="flex items-center gap-3">
               <button
-                onClick={onClose}
+                onClick={handleClose}
                 className={`px-4 py-2 text-sm transition-colors ${isDark ? 'text-zinc-400 hover:text-white' : 'text-gray-500 hover:text-gray-900'}`}
               >
                 Cerrar
               </button>
               {effectiveCanEdit && (
                 <button
-                  disabled={!allCarasComplete || hasPendingAuthorization || isSaving}
-                  onClick={async () => {
-                    setIsSaving(true);
-                    try {
-                      await campanasService.updateStatus(campana!.id, 'Pase a ventas');
-                      queryClient.invalidateQueries({ queryKey: ['campanas'] });
-                      queryClient.invalidateQueries({ queryKey: ['campana-details', campana?.id] });
-                      showToast('Campaña aprobada y enviada a ventas', 'success');
-                      onClose();
-                    } catch (error) {
-                      console.error('Error al aprobar campaña:', error);
-                      showToast(`Error al aprobar: ${error instanceof Error ? error.message : 'Error desconocido'}`, 'error');
-                    } finally {
-                      setIsSaving(false);
-                    }
-                  }}
+                  disabled={(!hasChanges && modifiedCaras.size === 0) || isSaving}
+                  onClick={handleBulkSaveChanges}
                   className={`px-6 py-2 rounded-lg text-sm font-medium transition-all ${
-                    allCarasComplete && !hasPendingAuthorization && !isSaving
-                      ? 'bg-emerald-500 text-white hover:bg-emerald-600 shadow-lg shadow-emerald-500/25'
+                    (hasChanges || modifiedCaras.size > 0) && !isSaving
+                      ? 'bg-purple-500 text-white hover:bg-purple-600 shadow-lg shadow-purple-500/25'
                       : `${isDark ? 'bg-zinc-700 text-zinc-500' : 'bg-gray-200 text-gray-400'} cursor-not-allowed`
                   }`}
                 >
                   {isSaving ? (
                     <div className="h-4 w-4 inline-block mr-2 border-2 border-white border-t-transparent rounded-full animate-spin" />
                   ) : (
-                    <Check className="h-4 w-4 inline-block mr-2" />
+                    <Save className="h-4 w-4 inline-block mr-2" />
                   )}
-                  {isSaving ? 'Aprobando...' : 'Aprobar Campaña'}
+                  {isSaving ? 'Guardando...' : `Guardar Cambios${(hasChanges || modifiedCaras.size > 0) ? ` (${(hasChanges ? 1 : 0) + modifiedCaras.size})` : ''}`}
                 </button>
               )}
             </div>
