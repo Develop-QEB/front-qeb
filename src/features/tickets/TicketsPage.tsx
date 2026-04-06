@@ -391,7 +391,7 @@ function ViewTicketModal({
                       : isDark ? 'bg-zinc-800 border border-zinc-700' : 'bg-white border border-gray-200'
                     }`}>
                       <p className={`text-xs font-medium mb-1 ${isMe ? (isDark ? 'text-purple-300' : 'text-purple-700') : (isDark ? 'text-zinc-400' : 'text-gray-500')}`}>
-                        {msg.usuario_nombre}
+                        {isMe ? msg.usuario_nombre : 'Técnico de QEB'}
                       </p>
                       {msg.mensaje && (
                         <p className={`text-sm whitespace-pre-wrap ${isDark ? 'text-zinc-200' : 'text-gray-800'}`}>{msg.mensaje}</p>
