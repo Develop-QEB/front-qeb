@@ -217,7 +217,7 @@ function TicketDetailModal({
 
   const handleNotaFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
-    if (!file || file.size > 10 * 1024 * 1024) return;
+    if (!file || file.size > 20 * 1024 * 1024) return;
     setUploadingNotas(true);
     try {
       const uploaded = await uploadsService.uploadFile(file, 'ticket-chat');
@@ -265,7 +265,7 @@ function TicketDetailModal({
 
   const handleChatFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
-    if (!file || file.size > 10 * 1024 * 1024) return;
+    if (!file || file.size > 20 * 1024 * 1024) return;
     setUploadingSoporte(true);
     try {
       const uploaded = await uploadsService.uploadFile(file, 'ticket-chat');

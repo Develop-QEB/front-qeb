@@ -60,8 +60,8 @@ function CreateTicketModal({
   const handleImageChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file) {
-      if (file.size > 5 * 1024 * 1024) {
-        setError('La imagen no puede ser mayor a 5MB');
+      if (file.size > 20 * 1024 * 1024) {
+        setError('La imagen no puede ser mayor a 20MB');
         return;
       }
       setImageFile(file);
@@ -179,7 +179,7 @@ function CreateTicketModal({
               >
                 <Image className="h-8 w-8 text-purple-400" />
                 <span className={`text-sm ${isDark ? 'text-zinc-400' : 'text-gray-500'}`}>Haz clic para subir una imagen</span>
-                <span className={`text-xs ${isDark ? 'text-zinc-500' : 'text-gray-400'}`}>Max 5MB</span>
+                <span className={`text-xs ${isDark ? 'text-zinc-500' : 'text-gray-400'}`}>Max 20MB</span>
               </button>
             )}
           </div>
