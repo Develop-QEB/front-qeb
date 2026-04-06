@@ -1136,12 +1136,12 @@ export function CampanaDetailPage() {
         ? inventarioConAPS.filter(i => selectedItemsAPS.has(String(i.rsv_ids)))
         : inventarioConAPS;
 
-      // Fetch artículos SAP para obtener U_IMU_OcrCode (CostingCode)
+      // Fetch artículos SAP para obtener U_IMU_OcrCode (CostingCode) - usar BD de la campaña
       let articulosMap: Record<string, { U_IMU_OcrCode?: string }> = {};
       try {
         const { getEndpoints } = await import('../../store/environmentStore');
-        const { useEnvironmentStore } = await import('../../store/environmentStore');
-        const artResponse = await fetch(getEndpoints(useEnvironmentStore.getState().environment).articulos);
+        const sapDb = (campana.sap_database || 'CIMU') as import('../../store/environmentStore').SapDatabase;
+        const artResponse = await fetch(getEndpoints(sapDb).articulos);
         const artData = await artResponse.json();
         const items = artData.value || artData || [];
         items.forEach((a: { ItemCode: string; U_IMU_OcrCode?: string }) => {
@@ -1524,6 +1524,20 @@ export function CampanaDetailPage() {
     }
     // Separar artículos normales (con inventario) de artículos IM (sin inventario)
     const selectedReservado = inventarioReservado.filter(item => selectedItems.has(item.rsv_ids));
+
+    // Check if any selected item belongs to an incomplete group
+    const selectedCaraIds = new Set(selectedReservado.map(item => item.solicitud_caras_id).filter(Boolean));
+    for (const caraId of selectedCaraIds) {
+      const cara = solicitudCaras.find((c: any) => c.id === caraId);
+      if (!cara) continue;
+      const reservasDelGrupo = inventarioReservado.filter(item => item.solicitud_caras_id === caraId);
+      const carasReservadas = reservasDelGrupo.reduce((sum, item) => sum + (item.caras_totales || 1), 0);
+      const carasEsperadas = (cara.caras || 0) + (Number(cara.bonificacion) || 0);
+      if (carasEsperadas > 0 && carasReservadas < carasEsperadas) {
+        alert(`No se puede asignar APS: el grupo "${cara.articulo || ''} - ${cara.ciudad || ''}" está incompleto (${carasReservadas}/${carasEsperadas} caras asignadas)`);
+        return;
+      }
+    }
     const normalItems = selectedReservado.filter(item => !String(item.rsv_ids).startsWith('sc_'));
     const imItems = selectedReservado.filter(item => String(item.rsv_ids).startsWith('sc_'));
 
