@@ -44,6 +44,7 @@ function getTimeAgo(dateStr: string) {
 function ChatPanel({
   messages,
   userId,
+  ticketCreatorId,
   isDark,
   onSend,
   isPending,
@@ -54,6 +55,7 @@ function ChatPanel({
 }: {
   messages: (TicketMensaje | TicketChatMessage)[];
   userId: number | undefined;
+  ticketCreatorId?: number;
   isDark: boolean;
   onSend: (msg: string) => void;
   isPending: boolean;
@@ -95,7 +97,7 @@ function ChatPanel({
                 : isDark ? 'bg-zinc-800 border border-zinc-700' : 'bg-white border border-gray-200'
               }`}>
                 <p className={`text-xs font-medium mb-1 ${isMe ? (isDark ? 'text-purple-300' : 'text-purple-700') : (isDark ? 'text-zinc-400' : 'text-gray-500')}`}>
-                  {msg.usuario_nombre}
+                  {ticketCreatorId && msg.usuario_id !== ticketCreatorId ? 'Técnico de QEB' : msg.usuario_nombre}
                 </p>
                 {msg.mensaje && (
                   <p className={`text-sm whitespace-pre-wrap ${isDark ? 'text-zinc-200' : 'text-gray-800'}`}>{msg.mensaje}</p>
@@ -426,6 +428,7 @@ function TicketDetailModal({
               <ChatPanel
                 messages={chatMessages}
                 userId={user?.id}
+                ticketCreatorId={ticket.usuario_id}
                 isDark={isDark}
                 onSend={(msg) => sendChatMutation.mutate({ mensaje: msg })}
                 isPending={sendChatMutation.isPending}
