@@ -1066,11 +1066,12 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
   const handleAddCara = async () => {
     if (!newCara.articulo || !newCara.estado || !newCara.formato || !newCara.tipo || newCara.nse.length === 0) return;
 
-    // Validar tarifa pública: si es 0, solo CT y BF/CF pueden avanzar
+    // Validar tarifa pública: si es 0, solo CT, BF/CF e IM pueden avanzar
     const artCode = newCara.articulo.ItemCode?.toUpperCase() || '';
     const esCortesia = artCode.startsWith('CT');
     const esBonificacion = artCode.startsWith('BF') || artCode.startsWith('CF');
-    if (newCara.tarifaPublica <= 0 && !esCortesia && !esBonificacion) {
+    const esImpresion = artCode.startsWith('IM');
+    if (newCara.tarifaPublica <= 0 && !esCortesia && !esBonificacion && !esImpresion) {
       alert('La tarifa pública no puede ser 0. Por favor ingresa una tarifa válida.');
       return;
     }
