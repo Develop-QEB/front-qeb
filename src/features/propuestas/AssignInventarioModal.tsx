@@ -581,6 +581,7 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
   const [archivoPropuesta, setArchivoPropuesta] = useState<string | null>(null);
   const [tipoArchivoPropuesta, setTipoArchivoPropuesta] = useState<string | null>(null);
   const periodInitializedRef = useRef(false);
+  const initialValuesSetRef = useRef(false);
 
   // Client editing state
   interface CuicItem {
@@ -622,6 +623,8 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
   const [expandedCaras, setExpandedCaras] = useState<Set<string>>(new Set());
   const [expandedCatorcenas, setExpandedCatorcenas] = useState<Set<string>>(new Set());
   const [editingCaraId, setEditingCaraId] = useState<string | null>(null);
+  // Track locally modified caras (caraDbId -> CaraUpdateData) for bulk save
+  const [modifiedCaras, setModifiedCaras] = useState<Map<number, Record<string, unknown>>>(new Map());
 
   // New cara form
   const [newCara, setNewCara] = useState<Omit<CaraItem, 'localId'>>(EMPTY_CARA);
@@ -1001,17 +1004,23 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
         periodInitializedRef.current = true;
       }
 
-      // Store initial values for change detection
-      setInitialValues({
-        nombreCampania: campaniaNombre,
-        notas: notasVal,
-        descripcion: descripcionVal,
-        yearInicio: yInicio || yearInicio,
-        yearFin: yFin || yearFin,
-        catorcenaInicio: cInicio || catorcenaInicio,
-        catorcenaFin: cFin || catorcenaFin,
-        asignadosIds: propuesta.id_asignado || '',
-      });
+      // Store initial values for change detection — only on first load
+      if (!initialValuesSetRef.current) {
+        const parsedAsignadosIds = propuesta.id_asignado
+          ? propuesta.id_asignado.split(',').map(s => parseInt(s.trim()) || 0).join(',')
+          : '';
+        setInitialValues({
+          nombreCampania: campaniaNombre,
+          notas: notasVal,
+          descripcion: descripcionVal,
+          yearInicio: yInicio ?? yearInicio,
+          yearFin: yFin ?? yearFin,
+          catorcenaInicio: cInicio ?? catorcenaInicio,
+          catorcenaFin: cFin ?? catorcenaFin,
+          asignadosIds: parsedAsignadosIds,
+        });
+        initialValuesSetRef.current = true;
+      }
 
       // Set caras from solicitud
       if (solicitudDetails.caras) {
@@ -1075,6 +1084,7 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
       setNewCara(EMPTY_CARA);
       setSelectedArticulo(null);
       periodInitializedRef.current = false;
+      initialValuesSetRef.current = false;
       setCsvFile(null);
       setCsvData([]);
       setShowCsvSection(false);
@@ -1082,6 +1092,7 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
       setClienteChanged(false);
       setClienteSearchTerm('');
       setShowClienteDropdown(false);
+      setModifiedCaras(new Map());
     }
   }, [isOpen]);
 
@@ -1667,7 +1678,9 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
     setShowAddCaraForm(true);
   };
 
-  // Handle save cara (add or update) - persists to database
+  // Handle save cara (add or update)
+  // EDIT: only updates local state + tracks in modifiedCaras (bulk save later)
+  // CREATE: still persists to DB immediately (needs ID for reservas)
   const handleSaveCara = async () => {
     if (!newCara.formato || !newCara.estados) {
       alert('Por favor completa al menos el formato y estado');
@@ -1717,10 +1730,10 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
 
     try {
       if (editingCaraId) {
-        // Find the cara being edited to get its database ID
+        // ---- LOCAL-ONLY UPDATE (no API call) ----
         const caraToEdit = caras.find(c => c.localId === editingCaraId);
         if (caraToEdit?.id) {
-          // Only re-evaluate authorization if fields that affect it changed (not NSE/ciudad)
+          // Evaluate authorization locally for UI display
           let autorizacion_dg = caraToEdit.autorizacion_dg || 'aprobado';
           let autorizacion_dcm = caraToEdit.autorizacion_dcm || 'aprobado';
           const authFieldsChanged = newCara.caras !== caraToEdit.caras_flujo + caraToEdit.caras_contraflujo
@@ -1749,21 +1762,19 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
             }
           }
 
-          // Update in database with authorization status
-          const updatedCara = await propuestasService.updateCara(propuesta.id, caraToEdit.id, caraData);
-
-          // Update local state with new authorization status + recalc impar/contamination
+          // Update local state only (NO API call)
           setCaras(prev => {
             let updated = prev.map(c =>
               c.localId === editingCaraId
                 ? {
                     ...c,
                     ...newCara,
+                    ciudad: ciudadToSave || newCara.ciudad,
                     costo: costoCalculado,
-                    autorizacion_dg: updatedCara?.autorizacion_dg || autorizacion_dg,
-                    autorizacion_dcm: updatedCara?.autorizacion_dcm || autorizacion_dcm,
-                    _originalDg: updatedCara?.autorizacion_dg || autorizacion_dg,
-                    _originalDcm: updatedCara?.autorizacion_dcm || autorizacion_dcm,
+                    autorizacion_dg,
+                    autorizacion_dcm,
+                    _originalDg: autorizacion_dg,
+                    _originalDcm: autorizacion_dcm,
                   }
                 : c
             );
@@ -1778,10 +1789,17 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
             if (hayDG) updated = updated.map(c => c.autorizacion_dcm === 'pendiente' ? { ...c, autorizacion_dg: 'pendiente', autorizacion_dcm: 'aprobado' } : c);
             return updated;
           });
+
+          // Track this cara as modified for bulk save
+          setModifiedCaras(prev => {
+            const next = new Map(prev);
+            next.set(caraToEdit.id!, caraData);
+            return next;
+          });
         }
         setEditingCaraId(null);
       } else {
-        // Create new cara in database
+        // Create new cara in database (needs DB ID for reservas)
         const createdCara = await propuestasService.createCara(propuesta.id, caraData);
         // Add to local state with the database ID and authorization status from response
         const newCaraItem: CaraItem = {
@@ -1813,13 +1831,141 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
       setSelectedArticulo(null);
       setShowAddCaraForm(false);
 
-      // Invalidate queries to refresh data
-      queryClient.invalidateQueries({ queryKey: ['propuesta-full', propuesta.id] });
-      queryClient.invalidateQueries({ queryKey: ['propuesta-caras', propuesta.id] });
-      queryClient.invalidateQueries({ queryKey: ['solicitud-full-details', propuesta.solicitud_id] });
+      // Only invalidate queries for new caras (edits are local until bulk save)
+      if (!editingCaraId) {
+        queryClient.invalidateQueries({ queryKey: ['propuesta-full', propuesta.id] });
+        queryClient.invalidateQueries({ queryKey: ['propuesta-caras', propuesta.id] });
+        queryClient.invalidateQueries({ queryKey: ['solicitud-full-details', propuesta.solicitud_id] });
+      }
     } catch (error) {
       console.error('Error saving cara:', error);
       alert('Error al guardar la cara');
+    }
+  };
+
+  // Bulk save ALL pending changes (propuesta summary + modified caras) in one action
+  const handleBulkSaveChanges = async () => {
+    const hasPropuestaChanges = hasChanges;
+    const hasCaraChanges = modifiedCaras.size > 0;
+
+    if (!hasPropuestaChanges && !hasCaraChanges) {
+      showToast('No hay cambios pendientes', 'info');
+      return;
+    }
+
+    if (invalidCaras.length > 0) {
+      showToast(`No se puede guardar: ${invalidCaras.length} cara(s) tienen catorcenas fuera del rango configurado`, 'error');
+      return;
+    }
+
+    setIsSaving(true);
+    try {
+      const messages: string[] = [];
+
+      // 1. Save propuesta summary changes if any
+      if (hasPropuestaChanges) {
+        await propuestasService.updatePropuesta(propuesta.id, {
+          nombre_campania: nombreCampania,
+          notas,
+          descripcion,
+          year_inicio: yearInicio,
+          catorcena_inicio: catorcenaInicio,
+          year_fin: yearFin,
+          catorcena_fin: catorcenaFin,
+          ...(clienteChanged && selectedClienteCuic ? {
+            cliente_id: selectedClienteCuic.CUIC,
+            cuic: selectedClienteCuic.CUIC,
+            razon_social: selectedClienteCuic.T0_U_RazonSocial,
+            unidad_negocio: selectedClienteCuic.T1_U_UnidadNegocio,
+            marca_id: selectedClienteCuic.T1_U_IDMarca,
+            marca_nombre: selectedClienteCuic.T2_U_Marca,
+            asesor: selectedClienteCuic.ASESOR_U_Asesor,
+            producto_id: selectedClienteCuic.T2_U_IDProducto,
+            producto_nombre: selectedClienteCuic.T2_U_Producto,
+            agencia: selectedClienteCuic.T0_U_Agencia,
+            categoria_id: selectedClienteCuic.T2_U_IDCategoria,
+            categoria_nombre: selectedClienteCuic.T2_U_Categoria,
+            sap_database: selectedClienteCuic.sap_database,
+          } : {}),
+        });
+
+        // Update asignados if changed
+        const newAsignadosIds = asignados.map(u => u.id).join(',');
+        if (newAsignadosIds !== initialValues.asignadosIds) {
+          const asignadosStr = asignados.map(u => u.nombre).join(', ');
+          await propuestasService.updateAsignados(propuesta.id, asignadosStr, newAsignadosIds);
+        }
+
+        // Update initial values to current values
+        setInitialValues({
+          nombreCampania,
+          notas,
+          descripcion,
+          yearInicio,
+          yearFin,
+          catorcenaInicio,
+          catorcenaFin,
+          asignadosIds: asignados.map(u => u.id).join(','),
+        });
+        setClienteChanged(false);
+        messages.push('Propuesta actualizada');
+      }
+
+      // 2. Bulk save modified caras if any
+      if (hasCaraChanges) {
+        const carasArray = Array.from(modifiedCaras.entries()).map(([caraId, data]) => ({
+          caraId,
+          data,
+        }));
+
+        const result = await propuestasService.bulkUpdateCaras(propuesta.id, carasArray);
+
+        // Update local state with server response (authorization statuses)
+        if (result.updated && result.updated.length > 0) {
+          setCaras(prev => {
+            let updated = prev.map(c => {
+              const serverCara = result.updated.find(u => u.id === c.id);
+              if (serverCara) {
+                return {
+                  ...c,
+                  autorizacion_dg: serverCara.autorizacion_dg || c.autorizacion_dg,
+                  autorizacion_dcm: serverCara.autorizacion_dcm || c.autorizacion_dcm,
+                  _originalDg: serverCara.autorizacion_dg || c.autorizacion_dg,
+                  _originalDcm: serverCara.autorizacion_dcm || c.autorizacion_dcm,
+                };
+              }
+              return c;
+            });
+            // Re-apply impar + contamination rules
+            updated = updated.map(c => ({ ...c, autorizacion_dg: c._originalDg || c.autorizacion_dg, autorizacion_dcm: c._originalDcm || c.autorizacion_dcm }));
+            updated = updated.map(c => {
+              const total = (c.caras_flujo || 0) + (c.caras_contraflujo || 0) + (c.bonificacion || 0);
+              if (total > 0 && total % 2 !== 0 && c.autorizacion_dg !== 'pendiente') return { ...c, autorizacion_dg: 'pendiente', autorizacion_dcm: 'aprobado' };
+              return c;
+            });
+            const hayDG = updated.some(c => c.autorizacion_dg === 'pendiente');
+            if (hayDG) updated = updated.map(c => c.autorizacion_dcm === 'pendiente' ? { ...c, autorizacion_dg: 'pendiente', autorizacion_dcm: 'aprobado' } : c);
+            return updated;
+          });
+        }
+
+        // Clear modified caras tracking
+        setModifiedCaras(new Map());
+        messages.push(result.message || `${carasArray.length} circuito(s) actualizados`);
+      }
+
+      // Refresh data
+      queryClient.invalidateQueries({ queryKey: ['propuesta-full', propuesta.id] });
+      queryClient.invalidateQueries({ queryKey: ['propuesta-caras', propuesta.id] });
+      queryClient.invalidateQueries({ queryKey: ['propuestas'] });
+      queryClient.invalidateQueries({ queryKey: ['solicitud-full-details', propuesta.solicitud_id] });
+
+      showToast(messages.join(' | '), 'success');
+    } catch (error) {
+      console.error('Error in bulk save:', error);
+      showToast(`Error al guardar: ${error instanceof Error ? error.message : 'Error desconocido'}`, 'error');
+    } finally {
+      setIsSaving(false);
     }
   };
 
@@ -5023,10 +5169,33 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
     );
   }
 
+  // Handle close with unsaved changes warning
+  const handleClose = () => {
+    if (hasChanges || modifiedCaras.size > 0) {
+      setConfirmModal({
+        isOpen: true,
+        title: 'Cambios sin guardar',
+        message: `Tienes ${[
+          hasChanges ? 'cambios en la propuesta' : '',
+          modifiedCaras.size > 0 ? `${modifiedCaras.size} circuito(s) editado(s)` : '',
+        ].filter(Boolean).join(' y ')} sin guardar. ¿Seguro que quieres cerrar?`,
+        confirmText: 'Cerrar sin guardar',
+        cancelText: 'Volver',
+        isDestructive: true,
+        onConfirm: () => {
+          setConfirmModal(prev => ({ ...prev, isOpen: false }));
+          onClose();
+        },
+      });
+    } else {
+      onClose();
+    }
+  };
+
   // Main view
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center">
-      <div className="absolute inset-0 bg-black/70 backdrop-blur-sm" onClick={onClose} />
+      <div className="absolute inset-0 bg-black/70 backdrop-blur-sm" onClick={handleClose} />
 
       <div className={`relative w-[95vw] max-w-[1400px] h-[90vh] ${isDark ? 'bg-zinc-900' : 'bg-white'} rounded-2xl border border-purple-500/20 shadow-2xl flex flex-col overflow-hidden`}>
         {/* Header */}
@@ -5037,7 +5206,7 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
           </div>
           <div className="flex items-center gap-3">
             
-            <button onClick={onClose} className={`p-2 rounded-lg ${isDark ? 'text-zinc-400' : 'text-gray-500'} ${isDark ? 'hover:text-white' : 'hover:text-gray-900'}`}>
+            <button onClick={handleClose} className={`p-2 rounded-lg ${isDark ? 'text-zinc-400' : 'text-gray-500'} ${isDark ? 'hover:text-white' : 'hover:text-gray-900'}`}>
               <X className="h-5 w-5" />
             </button>
           </div>
@@ -5442,30 +5611,11 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
                     </div>
                   )}
 
-                  {/* Update button */}
-                  {canEditResumen && (
-                    <div className={`flex justify-end pt-2 border-t ${isDark ? 'border-zinc-700/30' : 'border-gray-200/30'}`}>
-                      {/* Update button - shows when there are changes */}
-                      {hasChanges && (
-                        <button
-                          onClick={handleUpdatePropuesta}
-                          disabled={isUpdatingPropuesta || invalidCaras.length > 0 || caras.some(c => { const t = (c.caras_flujo || 0) + (c.caras_contraflujo || 0) + (c.bonificacion || 0); return t > 0 && t % 2 !== 0; })}
-                          className="flex items-center gap-2 px-4 py-2 bg-purple-500 text-white rounded-lg text-sm font-medium hover:bg-purple-600 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                          title={caras.some(c => { const t = (c.caras_flujo || 0) + (c.caras_contraflujo || 0) + (c.bonificacion || 0); return t > 0 && t % 2 !== 0; }) ? 'Hay grupos con caras impar — corrige antes de guardar' : undefined}
-                        >
-                          {isUpdatingPropuesta ? (
-                            <>
-                              <div className="h-4 w-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
-                              Guardando...
-                            </>
-                          ) : (
-                            <>
-                              <Save className="h-4 w-4" />
-                              Actualizar Propuesta
-                            </>
-                          )}
-                        </button>
-                      )}
+                  {/* Pending changes indicator for propuesta summary */}
+                  {canEditResumen && hasChanges && (
+                    <div className={`flex items-center gap-2 pt-2 border-t ${isDark ? 'border-zinc-700/30' : 'border-gray-200/30'} text-sm text-purple-400`}>
+                      <span className="w-2 h-2 rounded-full bg-purple-500 animate-pulse" />
+                      Cambios pendientes — se guardarán con el botón "Guardar Cambios"
                     </div>
                   )}
                 </div>
@@ -6801,8 +6951,8 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
           )}
         </div>
 
-        {/* Footer with Aprobar button */}
-        {caras.length > 0 && (
+        {/* Footer with Guardar Cambios button */}
+        {(caras.length > 0 || hasChanges) && (
           <div className={`px-6 py-4 border-t ${isDark ? 'border-zinc-800' : 'border-gray-200'} ${isDark ? 'bg-zinc-900' : 'bg-white'}/80 flex items-center justify-between`}>
             <div className="flex items-center gap-4">
               {/* Status summary */}
@@ -6825,46 +6975,40 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
                     Autorizaciones pendientes
                   </div>
                 )}
+                {(modifiedCaras.size > 0 || hasChanges) && (
+                  <div className="flex items-center gap-2 text-purple-400">
+                    <span className="w-2 h-2 rounded-full bg-purple-500 animate-pulse" />
+                    {[
+                      hasChanges ? 'Propuesta' : '',
+                      modifiedCaras.size > 0 ? `${modifiedCaras.size} circuito(s)` : '',
+                    ].filter(Boolean).join(' + ')} pendiente(s)
+                  </div>
+                )}
               </div>
             </div>
             <div className="flex items-center gap-3">
               <button
-                onClick={onClose}
+                onClick={handleClose}
                 className={`px-4 py-2 text-sm ${isDark ? 'text-zinc-400' : 'text-gray-500'} ${isDark ? 'hover:text-white' : 'hover:text-gray-900'} transition-colors`}
               >
                 Cerrar
               </button>
               {effectiveCanEdit && (
                 <button
-                  disabled={!allCarasComplete || hasPendingAuthorization || isSaving}
-                  onClick={async () => {
-                    setIsSaving(true);
-                    try {
-                      await propuestasService.updateStatus(propuesta.id, 'Pase a ventas');
-                      queryClient.invalidateQueries({ queryKey: ['propuestas'] });
-                      queryClient.invalidateQueries({ queryKey: ['propuesta', propuesta.id] });
-                      queryClient.invalidateQueries({ queryKey: ['propuesta-full', propuesta.id] });
-                      showToast('Propuesta aprobada y enviada a ventas', 'success');
-                      onClose();
-                    } catch (error) {
-                      console.error('Error al aprobar propuesta:', error);
-                      showToast(`Error al aprobar: ${error instanceof Error ? error.message : 'Error desconocido'}`, 'error');
-                    } finally {
-                      setIsSaving(false);
-                    }
-                  }}
+                  disabled={(!hasChanges && modifiedCaras.size === 0) || isSaving}
+                  onClick={handleBulkSaveChanges}
                   className={`px-6 py-2 rounded-lg text-sm font-medium transition-all ${
-                    allCarasComplete && !hasPendingAuthorization && !isSaving
-                      ? 'bg-emerald-500 text-white hover:bg-emerald-600 shadow-lg shadow-emerald-500/25'
+                    (hasChanges || modifiedCaras.size > 0) && !isSaving
+                      ? 'bg-purple-500 text-white hover:bg-purple-600 shadow-lg shadow-purple-500/25'
                       : `${isDark ? 'bg-zinc-700' : 'bg-gray-200'} ${isDark ? 'text-zinc-500' : 'text-gray-400'} cursor-not-allowed`
                   }`}
                 >
                   {isSaving ? (
                     <div className="h-4 w-4 inline-block mr-2 border-2 border-white border-t-transparent rounded-full animate-spin" />
                   ) : (
-                    <Check className="h-4 w-4 inline-block mr-2" />
+                    <Save className="h-4 w-4 inline-block mr-2" />
                   )}
-                  {isSaving ? 'Aprobando...' : 'Aprobar Propuesta'}
+                  {isSaving ? 'Guardando...' : `Guardar Cambios${(hasChanges || modifiedCaras.size > 0) ? ` (${(hasChanges ? 1 : 0) + modifiedCaras.size})` : ''}`}
                 </button>
               )}
             </div>

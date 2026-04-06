@@ -310,6 +310,14 @@ export const propuestasService = {
     return response.data.data;
   },
 
+  async bulkUpdateCaras(propuestaId: number, caras: { caraId: number; data: CaraUpdateData }[]): Promise<{ updated: SolicitudCara[]; message: string }> {
+    const response = await api.patch<ApiResponse<SolicitudCara[]> & { message?: string }>(`/propuestas/${propuestaId}/caras/bulk`, { caras });
+    if (!response.data.success) {
+      throw new Error(response.data.error || 'Error al actualizar caras en lote');
+    }
+    return { updated: response.data.data || [], message: response.data.message || '' };
+  },
+
   async createCara(propuestaId: number, data: CaraUpdateData): Promise<SolicitudCara> {
     const response = await api.post<ApiResponse<SolicitudCara>>(`/propuestas/${propuestaId}/caras`, data);
     if (!response.data.success || !response.data.data) {
