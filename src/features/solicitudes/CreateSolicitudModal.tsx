@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useEffect } from 'react';
+import React, { useState, useMemo, useEffect, useRef } from 'react';
 import { useModalTracker } from '../../hooks/useModalTracker';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import {
@@ -547,6 +547,9 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
   const showToast = (message: string, type: 'success' | 'error' | 'warning' = 'success') => {
     setToast({ show: true, message, type });
   };
+
+  // Prevent double-submit (covers async file upload gap before mutation starts)
+  const isSubmittingRef = useRef(false);
 
   // Form state
   const [step, setStep] = useState(1);
@@ -1402,6 +1405,7 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
       onClose();
       resetForm();
     },
+    onSettled: () => { isSubmittingRef.current = false; },
   });
 
   // Update mutation
@@ -1423,10 +1427,12 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
       onClose();
       resetForm();
     },
+    onSettled: () => { isSubmittingRef.current = false; },
   });
 
   // Reset form
   const resetForm = () => {
+    isSubmittingRef.current = false;
     clearDraft();
     setRestoredFromDraft(false);
     setStep(1);
@@ -1455,9 +1461,11 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
 
   // Handle submit
   const handleSubmit = async () => {
+    if (isSubmittingRef.current) return;
     if (!selectedCuic || caras.length === 0 || !fechaInicio || !fechaFin || selectedAsignados.length === 0) {
       return;
     }
+    isSubmittingRef.current = true;
     if (invalidCaras.length > 0) {
       showToast('Hay circuitos con catorcenas fuera del rango de campaña. Corrígelos antes de guardar.', 'error');
       return;
@@ -1471,6 +1479,7 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
         archivoUrl = uploaded.url;
       } catch (err) {
         showToast('Error al subir el archivo', 'error');
+        isSubmittingRef.current = false;
         return;
       }
     }
