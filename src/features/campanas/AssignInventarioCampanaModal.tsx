@@ -781,8 +781,8 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
 
   // Fetch users
   const { data: users } = useQuery({
-    queryKey: ['solicitudes-users', 'team-filtered'],
-    queryFn: () => solicitudesService.getUsers(undefined, true),
+    queryKey: ['solicitudes-users', 'all'],
+    queryFn: () => solicitudesService.getUsers(undefined, false),
     enabled: isOpen,
   });
 
