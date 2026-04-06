@@ -1834,7 +1834,7 @@ export function CampanaDetailPage() {
             <h3 className={`text-xs md:text-sm font-semibold mb-2 md:mb-3 ${isDark ? 'text-purple-300' : 'text-purple-700'} uppercase tracking-wide`}>Asignacion</h3>
             <div className="space-y-0">
               <InfoItem label="Asignado" value={campana.asignado} type="user" />
-              <InfoItem label="Contacto" value={campana.contacto} type="user" />
+              <InfoItem label="Contacto" value={(campana as any).creador_nombre || campana.contacto} type="user" />
               <InfoItem label="APS Global" value={campana.solicitud_id ? `#${campana.solicitud_id}` : null} type="id" />
               <InfoItem label="Actualizado" value={campana.updated_at} type="date" />
             </div>

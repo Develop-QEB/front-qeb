@@ -701,7 +701,7 @@ export function CampanasPage() {
   });
 
   // When grouping, advanced filters, sorting, or catorcena filter are active, fetch ALL data
-  const needsAllData = activeGroupings.length > 0 || advancedFilters.length > 0 || !!sortField || !!selectedCatorcenaInicio;
+  const needsAllData = activeGroupings.length > 0 || advancedFilters.length > 0 || !!sortField || !!selectedCatorcenaInicio || status === 'Incompleta';
   const effectiveLimit = needsAllData ? 9999 : limit;
 
   const { data, isLoading } = useQuery({
@@ -710,7 +710,7 @@ export function CampanasPage() {
       campanasService.getAll({
         page: needsAllData ? 1 : page,
         limit: effectiveLimit,
-        status: status || undefined,
+        status: (status && status !== 'Incompleta') ? status : undefined,
         search: debouncedSearch || undefined,
         yearInicio,
         yearFin,
@@ -725,7 +725,7 @@ export function CampanasPage() {
     queryKey: ['campanas-stats', status, debouncedSearch, yearInicio, yearFin, catorcenaInicio, catorcenaFin, tipoPeriodo],
     queryFn: () =>
       campanasService.getStats({
-        status: status || undefined,
+        status: (status && status !== 'Incompleta') ? status : undefined,
         search: debouncedSearch || undefined,
         yearInicio,
         yearFin,
@@ -779,6 +779,13 @@ export function CampanasPage() {
           c.catorcena_inicio_num === catNum && c.catorcena_inicio_anio === catYear
         );
       }
+    }
+
+    // Filter by "Incompleta" status (frontend-only)
+    if (status === 'Incompleta') {
+      items = items.filter(c =>
+        c.caras_ultima_cat != null && Number(c.caras_ultima_cat) > 0 && Number(c.reservas_count_ultima_cat) < Number(c.caras_ultima_cat)
+      );
     }
 
     // Apply advanced filters
@@ -1324,6 +1331,11 @@ export function CampanasPage() {
     data.data.forEach(c => {
       if (c.status) statusSet.add(c.status);
     });
+    // Add "Incompleta" if any campaign has incomplete inventory
+    const hasIncompletas = data.data.some(c =>
+      c.caras_ultima_cat != null && Number(c.caras_ultima_cat) > 0 && Number(c.reservas_count_ultima_cat) < Number(c.caras_ultima_cat)
+    );
+    if (hasIncompletas) statusSet.add('Incompleta');
     return Array.from(statusSet).sort();
   }, [data?.data]);
 
