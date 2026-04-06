@@ -16,7 +16,7 @@ const ENDPOINT_CONFIG: Record<SapDatabase, { cuic: string; deliveryNotes: string
 // Endpoints segun ambiente
 export const getEndpoints = (env: Environment) => ({
   cuic: ENDPOINT_CONFIG[env].cuic,
-  articulos: `${SAP_BASE_URL}/articulos`,
+  articulos: env === 'TRADE' ? `${SAP_BASE_URL}/articulos-trade` : `${SAP_BASE_URL}/articulos`,
   deliveryNotes: ENDPOINT_CONFIG[env].deliveryNotes,
 });
 
