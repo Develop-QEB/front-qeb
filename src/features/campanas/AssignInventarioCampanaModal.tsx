@@ -784,8 +784,8 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
 
   // Fetch users
   const { data: users } = useQuery({
-    queryKey: ['solicitudes-users', 'team-filtered'],
-    queryFn: () => solicitudesService.getUsers(undefined, true),
+    queryKey: ['solicitudes-users', 'all'],
+    queryFn: () => solicitudesService.getUsers(undefined, false),
     enabled: isOpen,
   });
 
@@ -1615,7 +1615,7 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
 
     let ciudadToSave = newCara.ciudad;
     if (!ciudadToSave && newCara.estados && solicitudFilters?.ciudades) {
-      const selectedEstados = newCara.estados.split(',').map(s => s.trim());
+      const selectedEstados = newCara.estados.split(',').map(s => s.trim()).flatMap(s => s === 'Ciudad de México / AM' ? ['Ciudad de México', 'Estado de México'] : [s]);
       const allCitiesForEstado = solicitudFilters.ciudades
         .filter(c => selectedEstados.includes(c.estado))
         .map(c => c.ciudad);
@@ -1676,17 +1676,22 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
             }
           }
 
-          // Update local state only (NO API call)
+          // Update in database with authorization status
+          const updatedCara = await campanasService.updateCara(campana!.id, caraToEdit.id, caraData);
+
+          // Update local state - only recalc impar/contamination if auth fields changed
           setCaras(prev => {
             let updated = prev.map(c =>
               c.localId === editingCaraId
                 ? { ...c, ...newCara, ciudad: ciudadToSave || newCara.ciudad, costo: costoCalculado, autorizacion_dg, autorizacion_dcm, _originalDg: autorizacion_dg, _originalDcm: autorizacion_dcm }
                 : c
             );
-            updated = updated.map(c => ({ ...c, autorizacion_dg: c._originalDg || c.autorizacion_dg, autorizacion_dcm: c._originalDcm || c.autorizacion_dcm }));
-            updated = updated.map(c => { const total = (c.caras_flujo || 0) + (c.caras_contraflujo || 0) + (c.bonificacion || 0); if (total > 0 && total % 2 !== 0 && c.autorizacion_dg !== 'pendiente') return { ...c, autorizacion_dg: 'pendiente', autorizacion_dcm: 'aprobado' }; return c; });
-            const hayDG = updated.some(c => c.autorizacion_dg === 'pendiente');
-            if (hayDG) updated = updated.map(c => c.autorizacion_dcm === 'pendiente' ? { ...c, autorizacion_dg: 'pendiente', autorizacion_dcm: 'aprobado' } : c);
+            if (authFieldsChanged) {
+              updated = updated.map(c => ({ ...c, autorizacion_dg: c._originalDg || c.autorizacion_dg, autorizacion_dcm: c._originalDcm || c.autorizacion_dcm }));
+              updated = updated.map(c => { const total = (c.caras_flujo || 0) + (c.caras_contraflujo || 0) + (c.bonificacion || 0); if (total > 0 && total % 2 !== 0 && c.autorizacion_dg !== 'pendiente') return { ...c, autorizacion_dg: 'pendiente', autorizacion_dcm: 'aprobado' }; return c; });
+              const hayDG = updated.some(c => c.autorizacion_dg === 'pendiente');
+              if (hayDG) updated = updated.map(c => c.autorizacion_dcm === 'pendiente' ? { ...c, autorizacion_dg: 'pendiente', autorizacion_dcm: 'aprobado' } : c);
+            }
             return updated;
           });
 
@@ -2147,9 +2152,10 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
         }
       }
 
+      const estadoParam = cara.estados === 'Ciudad de México / AM' ? 'Ciudad de México,Estado de México' : cara.estados;
       const response = await inventariosService.getDisponibles({
         ciudad: ciudadFilter,
-        estado: cara.estados || undefined,
+        estado: estadoParam || undefined,
         formato: cara.formato || undefined,
         // Don't filter by flujo in backend - get all and filter in frontend
         nse: cara.nivel_socioeconomico || undefined,
@@ -2182,9 +2188,10 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
         }
       }
 
+      const estadoParam2 = selectedCaraForSearch.estados === 'Ciudad de México / AM' ? 'Ciudad de México,Estado de México' : selectedCaraForSearch.estados;
       const response = await inventariosService.getDisponibles({
         ciudad: ciudadFilter,
-        estado: selectedCaraForSearch.estados || undefined,
+        estado: estadoParam2 || undefined,
         formato: selectedCaraForSearch.formato || undefined,
         // Don't filter by flujo in backend - get all and filter in frontend
         nse: selectedCaraForSearch.nivel_socioeconomico || undefined,
@@ -5014,19 +5021,19 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
                     <div className="space-y-1">
                       <label className={`text-xs ${isDark ? 'text-zinc-500' : 'text-gray-500'}`}>Razón Social</label>
                       <div className={`px-3 py-2 rounded-lg text-sm border ${isDark ? 'bg-zinc-800/50 text-zinc-300 border-zinc-700/30' : 'bg-gray-100 text-gray-700 border-gray-200'} truncate`}>
-                        {(campanaDetails as any)?.razon_social || '-'}
+                        {(campanaDetails as any)?.T0_U_RazonSocial || (campanaDetails as any)?.razon_social || '-'}
                       </div>
                     </div>
                     <div className="space-y-1">
                       <label className={`text-xs ${isDark ? 'text-zinc-500' : 'text-gray-500'}`}>Marca</label>
                       <div className={`px-3 py-2 rounded-lg text-sm border ${isDark ? 'bg-zinc-800/50 text-zinc-300 border-zinc-700/30' : 'bg-gray-100 text-gray-700 border-gray-200'}`}>
-                        {(campanaDetails as any)?.marca_nombre || '-'}
+                        {(campanaDetails as any)?.T2_U_Marca || (campanaDetails as any)?.marca_nombre || '-'}
                       </div>
                     </div>
                     <div className="space-y-1">
                       <label className={`text-xs ${isDark ? 'text-zinc-500' : 'text-gray-500'}`}>Asesor</label>
                       <div className={`px-3 py-2 rounded-lg text-sm border ${isDark ? 'bg-zinc-800/50 text-zinc-300 border-zinc-700/30' : 'bg-gray-100 text-gray-700 border-gray-200'}`}>
-                        {(campanaDetails as any)?.asesor || '-'}
+                        {(campanaDetails as any)?.T0_U_Asesor || (campanaDetails as any)?.asesor || '-'}
                       </div>
                     </div>
                   </div>
@@ -5490,7 +5497,7 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
                         <label className={`text-xs ${(editingCaraHasReservas || (editingCaraId && !permissions.canEditCaraFiltersOnEdit)) ? 'text-zinc-800' : 'text-zinc-500'}`}>Estados {newCara.estados && (!editingCaraId || permissions.canEditCaraFiltersOnEdit) && <span className="text-purple-400">({newCara.estados.split(',').filter(Boolean).length})</span>}</label>
                         {canEditResumen && !editingCaraHasReservas && (!editingCaraId || permissions.canEditCaraFiltersOnEdit) ? (
                           <MultiSelectDropdown
-                            options={solicitudFilters?.estados || []}
+                            options={['Ciudad de México / AM', ...(solicitudFilters?.estados || [])]}
                             selected={newCara.estados ? newCara.estados.split(',').map(s => s.trim()).filter(Boolean) : []}
                             onChange={(selected) => setNewCara({ ...newCara, estados: selected.join(', '), ciudad: '' })}
                             placeholder="Seleccionar estados..."
@@ -5509,7 +5516,7 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
                               solicitudFilters?.ciudades
                                 .filter(c => {
                                   if (!newCara.estados) return true;
-                                  const selectedEstados = newCara.estados.split(',').map(s => s.trim());
+                                  const selectedEstados = newCara.estados.split(',').map(s => s.trim()).flatMap(s => s === 'Ciudad de México / AM' ? ['Ciudad de México', 'Estado de México'] : [s]);
                                   return selectedEstados.includes(c.estado);
                                 })
                                 .map(c => c.ciudad) || []

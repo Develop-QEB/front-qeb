@@ -1699,7 +1699,7 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
     // If no ciudad selected but estado is, get all cities from that estado
     let ciudadToSave = newCara.ciudad;
     if (!ciudadToSave && newCara.estados && solicitudFilters?.ciudades) {
-      const selectedEstados = newCara.estados.split(',').map(s => s.trim());
+      const selectedEstados = newCara.estados.split(',').map(s => s.trim()).flatMap(s => s === 'Ciudad de México / AM' ? ['Ciudad de México', 'Estado de México'] : [s]);
       const allCitiesForEstado = solicitudFilters.ciudades
         .filter(c => selectedEstados.includes(c.estado))
         .map(c => c.ciudad);
@@ -2295,9 +2295,11 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
         }
       }
 
+      // Translate "Ciudad de México / AM" to real states
+      const estadoParam = cara.estados === 'Ciudad de México / AM' ? 'Ciudad de México,Estado de México' : cara.estados;
       const response = await inventariosService.getDisponibles({
         ciudad: ciudadFilter,
-        estado: cara.estados || undefined,
+        estado: estadoParam || undefined,
         formato: cara.formato || undefined,
         // Don't filter by flujo in backend - get all and filter in frontend
         nse: cara.nivel_socioeconomico || undefined,
@@ -2340,9 +2342,10 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
         }
       }
 
+      const estadoParam2 = selectedCaraForSearch.estados === 'Ciudad de México / AM' ? 'Ciudad de México,Estado de México' : selectedCaraForSearch.estados;
       const response = await inventariosService.getDisponibles({
         ciudad: ciudadFilter,
-        estado: selectedCaraForSearch.estados || undefined,
+        estado: estadoParam2 || undefined,
         formato: selectedCaraForSearch.formato || undefined,
         // Don't filter by flujo in backend - get all and filter in frontend
         nse: selectedCaraForSearch.nivel_socioeconomico || undefined,
@@ -5911,7 +5914,7 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
                         <label className={`text-xs ${(editingCaraHasReservas || (editingCaraId && !permissions.canEditCaraFiltersOnEdit)) ? 'text-zinc-800' : `${isDark ? 'text-zinc-500' : 'text-gray-400'}`}`}>Estados {newCara.estados && (!editingCaraId || permissions.canEditCaraFiltersOnEdit) && <span className="text-purple-400">({newCara.estados.split(',').filter(Boolean).length})</span>}</label>
                         {canEditResumen && !editingCaraHasReservas && (!editingCaraId || permissions.canEditCaraFiltersOnEdit) ? (
                           <MultiSelectDropdown
-                            options={solicitudFilters?.estados || []}
+                            options={['Ciudad de México / AM', ...(solicitudFilters?.estados || [])]}
                             selected={newCara.estados ? newCara.estados.split(',').map(s => s.trim()).filter(Boolean) : []}
                             onChange={(selected) => setNewCara({ ...newCara, estados: selected.join(', '), ciudad: '' })}
                             placeholder="Seleccionar estados..."
@@ -5930,7 +5933,7 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
                               solicitudFilters?.ciudades
                                 .filter(c => {
                                   if (!newCara.estados) return true;
-                                  const selectedEstados = newCara.estados.split(',').map(s => s.trim());
+                                  const selectedEstados = newCara.estados.split(',').map(s => s.trim()).flatMap(s => s === 'Ciudad de México / AM' ? ['Ciudad de México', 'Estado de México'] : [s]);
                                   return selectedEstados.includes(c.estado);
                                 })
                                 .map(c => c.ciudad) || []
