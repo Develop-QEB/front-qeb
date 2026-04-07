@@ -18,6 +18,7 @@ const PRIORIDAD_OPTIONS = ['Baja', 'Normal', 'Alta', 'Urgente'];
 const statusStyles: Record<string, { text: string; bg: string; border: string }> = {
   'Nuevo': { text: 'text-blue-400', bg: 'bg-blue-500/10', border: 'border-blue-500/30' },
   'En Progreso': { text: 'text-yellow-400', bg: 'bg-yellow-500/10', border: 'border-yellow-500/30' },
+  'Validación': { text: 'text-orange-400', bg: 'bg-orange-500/10', border: 'border-orange-500/30' },
   'Resuelto': { text: 'text-green-400', bg: 'bg-green-500/10', border: 'border-green-500/30' },
   'Cerrado': { text: 'text-zinc-400', bg: 'bg-zinc-500/10', border: 'border-zinc-500/30' },
 };
@@ -454,7 +455,7 @@ export function HistorialTicketsPage() {
   const [filterStatus, setFilterStatus] = useState('Todos');
   const [filterPrioridad, setFilterPrioridad] = useState('Todos');
   const [selectedTicket, setSelectedTicket] = useState<TicketHistorial | null>(null);
-  const [activeTab, setActiveTab] = useState<'activos' | 'cerrados'>('activos');
+  const [activeTab, setActiveTab] = useState<'Nuevo' | 'En Progreso' | 'Validación' | 'Resuelto' | 'Cerrado'>('Nuevo');
 
   useSocketTicketsHistorial();
 
@@ -487,14 +488,21 @@ export function HistorialTicketsPage() {
     },
   });
 
-  const activosTickets = tickets.filter((t) => t.status !== 'Cerrado' && t.status !== 'Resuelto');
-  const cerradosTickets = tickets.filter((t) => t.status === 'Cerrado' || t.status === 'Resuelto');
-  const displayTickets = activeTab === 'activos' ? activosTickets : cerradosTickets;
+  const displayTickets = tickets.filter((t) => t.status === activeTab);
+
+  const adminTabs: Array<{ key: typeof activeTab; label: string; showCount: boolean }> = [
+    { key: 'Nuevo', label: 'Pendientes', showCount: true },
+    { key: 'En Progreso', label: 'En Proceso', showCount: true },
+    { key: 'Validación', label: 'Validación', showCount: true },
+    { key: 'Resuelto', label: 'Resueltos', showCount: false },
+    { key: 'Cerrado', label: 'Cerrados', showCount: false },
+  ];
 
   const stats = {
     total: tickets.length,
     nuevo: tickets.filter((t) => t.status === 'Nuevo').length,
     enProgreso: tickets.filter((t) => t.status === 'En Progreso').length,
+    validacion: tickets.filter((t) => t.status === 'Validación').length,
     resuelto: tickets.filter((t) => t.status === 'Resuelto').length,
     cerrado: tickets.filter((t) => t.status === 'Cerrado').length,
     unread: tickets.filter((t) => t.has_unread || t.has_chat_unread).length,
@@ -574,34 +582,28 @@ export function HistorialTicketsPage() {
         </div>
 
         {/* Tabs */}
-        <div className="flex gap-1">
-          {([
-            { key: 'activos' as const, label: 'Activos', count: activosTickets.length },
-            { key: 'cerrados' as const, label: 'Cerrados', count: cerradosTickets.length },
-          ]).map((tab) => (
-            <button
-              key={tab.key}
-              onClick={() => setActiveTab(tab.key)}
-              className={`px-4 py-2.5 rounded-xl text-sm font-medium transition-all duration-200 flex items-center gap-2 ${
-                activeTab === tab.key
-                  ? isDark
-                    ? 'bg-gradient-to-r from-purple-500/20 to-fuchsia-500/10 text-purple-300 border border-purple-500/30'
-                    : 'bg-gradient-to-r from-purple-100 to-fuchsia-50 text-purple-700 border border-purple-200'
-                  : isDark
-                    ? 'text-zinc-400 hover:text-zinc-300 hover:bg-zinc-800/50'
-                    : 'text-gray-500 hover:text-gray-700 hover:bg-gray-100'
-              }`}
-            >
-              {tab.label}
-              <span className={`px-1.5 py-0.5 rounded-full text-[10px] font-bold ${
-                activeTab === tab.key
-                  ? isDark ? 'bg-purple-500/30 text-purple-200' : 'bg-purple-200 text-purple-700'
-                  : isDark ? 'bg-zinc-700 text-zinc-400' : 'bg-gray-200 text-gray-500'
-              }`}>
-                {tab.count}
-              </span>
-            </button>
-          ))}
+        <div className={`flex gap-1 p-1 rounded-xl ${isDark ? 'bg-zinc-800/50' : 'bg-gray-100'}`}>
+          {adminTabs.map((tab) => {
+            const count = tickets.filter(t => t.status === tab.key).length;
+            const hasUnread = tickets.some(t => t.status === tab.key && (t.has_unread || t.has_chat_unread));
+            const isActive = activeTab === tab.key;
+            const style = statusStyles[tab.key];
+            return (
+              <button
+                key={tab.key}
+                onClick={() => setActiveTab(tab.key)}
+                className={`flex-1 flex items-center justify-center gap-2 px-3 py-2 rounded-lg text-sm font-medium transition-all ${isActive ? (isDark ? 'bg-zinc-700 text-white shadow' : 'bg-white text-gray-900 shadow') : (isDark ? 'text-zinc-400 hover:text-zinc-200' : 'text-gray-500 hover:text-gray-700')}`}
+              >
+                {tab.label}
+                {tab.showCount && count > 0 && (
+                  <span className={`text-[10px] px-1.5 py-0.5 rounded-full font-bold ${isActive ? (style?.bg || 'bg-purple-500/10') + ' ' + (style?.text || 'text-purple-400') : (isDark ? 'bg-zinc-700 text-zinc-400' : 'bg-gray-200 text-gray-500')}`}>
+                    {count}
+                  </span>
+                )}
+                {hasUnread && <span className="h-2 w-2 rounded-full bg-red-500 animate-pulse" />}
+              </button>
+            );
+          })}
         </div>
 
         {/* Tickets List */}
