@@ -664,6 +664,7 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
   const [groupMode, setGroupMode] = useState<'distancia' | 'listado'>('distancia');
   const [distanciaGrupos, setDistanciaGrupos] = useState(500); // metros
   const [tamanoGrupo, setTamanoGrupo] = useState(10);
+  const [flujoPct, setFlujoPct] = useState(50);
   const [flujoFilter, setFlujoFilter] = useState<'Todos' | 'Flujo' | 'Contraflujo'>('Todos');
   const [showOnlyIsla, setShowOnlyIsla] = useState(false);
   const [sortColumn, setSortColumn] = useState<string>('codigo_unico');
@@ -1279,6 +1280,15 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
   }, [filteredReservasData, mapsLoaded]);
 
   // Calculate remaining to assign for selected cara
+  // Recalculate flujo/contraflujo based on editable %
+  const adjustedCarasFlujo = useMemo(() => {
+    if (!selectedCaraForSearch) return { flujo: 0, contraflujo: 0 };
+    const totalRenta = (selectedCaraForSearch.caras_flujo || 0) + (selectedCaraForSearch.caras_contraflujo || 0);
+    const flujo = Math.ceil(totalRenta * flujoPct / 100);
+    const contraflujo = totalRenta - flujo;
+    return { flujo, contraflujo };
+  }, [selectedCaraForSearch, flujoPct]);
+
   const remainingToAssign = useMemo(() => {
     if (!selectedCaraForSearch) return { flujo: 0, contraflujo: 0, bonificacion: 0 };
 
@@ -1290,11 +1300,11 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
     const bonificacionReservado = caraReservas.filter(r => r.tipo === 'Bonificacion').length;
 
     return {
-      flujo: (selectedCaraForSearch.caras_flujo || 0) - flujoReservado,
-      contraflujo: (selectedCaraForSearch.caras_contraflujo || 0) - contraflujoReservado,
+      flujo: adjustedCarasFlujo.flujo - flujoReservado,
+      contraflujo: adjustedCarasFlujo.contraflujo - contraflujoReservado,
       bonificacion: (selectedCaraForSearch.bonificacion || 0) - bonificacionReservado,
     };
-  }, [selectedCaraForSearch, reservas]);
+  }, [selectedCaraForSearch, reservas, adjustedCarasFlujo]);
 
   // Check if cara has reservas
   const caraHasReservas = (localId: string, caraId?: number) => {
@@ -2214,9 +2224,13 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
   const processedInventory = useMemo((): ProcessedInventoryItem[] => {
     let data: ProcessedInventoryItem[] = [...inventarioDisponible];
 
-    // Filter out items that are already reserved (in ANY group/context)
-    const reservedIds = new Set(reservas.map(r => r.inventario_id));
-    data = data.filter(inv => !reservedIds.has(inv.id));
+    // Filter out items reserved ONLY for the current cara (not all caras)
+    const currentCaraReservedIds = new Set(
+      reservas
+        .filter(r => selectedCaraForSearch && (r.solicitudCaraId === selectedCaraForSearch.id))
+        .map(r => r.inventario_id)
+    );
+    data = data.filter(inv => !currentCaraReservedIds.has(inv.id));
 
     // Apply text search filter
     if (disponiblesSearchTerm.trim()) {
@@ -2405,7 +2419,7 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
           || getValueByColumnName(row, 'código_único')
           || getValueByColumnName(row, 'codigo_unico');
         const code = codigoUnico?.trim() || '';
-        const exists = code !== '' && inventarioDisponible.some(inv => inv.codigo_unico === code);
+        const exists = code !== '' && processedInventory.some(inv => inv.codigo_unico === code);
         return {
           codigo_unico: code || 'N/A',
           disponibilidad: exists ? 'Disponible' as const : 'No Disponible' as const,
@@ -2417,19 +2431,24 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
     };
 
     reader.readAsText(file);
-  }, [inventarioDisponible]);
+  }, [processedInventory]);
 
   const handleSelectFromCsv = useCallback(() => {
-    const availableCodes = csvData
-      .filter(row => row.disponibilidad === 'Disponible')
-      .map(row => row.codigo_unico);
+    const availableCodes = new Set(
+      csvData
+        .filter(row => row.disponibilidad === 'Disponible')
+        .map(row => row.codigo_unico)
+    );
 
-    const matchingInventory = inventarioDisponible
-      .filter(inv => inv.codigo_unico && availableCodes.includes(inv.codigo_unico));
-
-    setSelectedInventory(new Set(matchingInventory.map(inv => getInventoryKey(inv))));
+    const newKeys = new Set<string>();
+    processedInventory.forEach(inv => {
+      if (inv.codigo_unico && availableCodes.has(inv.codigo_unico)) {
+        newKeys.add(getInventoryKey(inv));
+      }
+    });
+    setSelectedInventory(newKeys);
     setShowCsvSection(false);
-  }, [csvData, inventarioDisponible, getInventoryKey]);
+  }, [csvData, processedInventory, getInventoryKey]);
 
   const handleClearCsv = useCallback(() => {
     setCsvFile(null);
@@ -3415,18 +3434,35 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
                     {(selectedCaraForSearch?.articulo || '').toUpperCase().startsWith('IM') ? 'Impresiones' : 'Flujo'}
                   </span>
                   <span className="text-sm font-bold text-blue-400">
-                    {(selectedCaraForSearch?.caras_flujo || 0) - remainingToAssign.flujo} / {selectedCaraForSearch?.caras_flujo || 0}
+                    {adjustedCarasFlujo.flujo - remainingToAssign.flujo} / {adjustedCarasFlujo.flujo}
                   </span>
                 </div>
                 <div className="w-full h-2 bg-zinc-700/50 rounded-full overflow-hidden">
                   <div
                     className="h-full bg-gradient-to-r from-blue-500 to-blue-400 rounded-full transition-all"
-                    style={{ width: `${Math.min(100, ((selectedCaraForSearch?.caras_flujo || 0) - remainingToAssign.flujo) / (selectedCaraForSearch?.caras_flujo || 1) * 100)}%` }}
+                    style={{ width: `${Math.min(100, (adjustedCarasFlujo.flujo - remainingToAssign.flujo) / (adjustedCarasFlujo.flujo || 1) * 100)}%` }}
                   />
                 </div>
                 <div className="mt-1 text-xs text-zinc-500">
                   <span className="text-blue-400 font-medium">{remainingToAssign.flujo}</span> restantes
                 </div>
+              </div>
+
+              {/* % Distribucion */}
+              <div className="flex flex-col items-center justify-center px-2 py-1 rounded-xl bg-zinc-800/30 border border-zinc-700/20 min-w-[70px]">
+                <span className="text-[9px] text-zinc-500 mb-1">Distribución</span>
+                <div className="flex items-center gap-1">
+                  <input
+                    type="number"
+                    min={0}
+                    max={100}
+                    value={flujoPct}
+                    onChange={(e) => setFlujoPct(Math.max(0, Math.min(100, parseInt(e.target.value) || 0)))}
+                    className="w-10 text-center text-xs font-bold bg-zinc-800 border-zinc-700 text-blue-400 border rounded px-1 py-0.5 focus:outline-none focus:ring-1 focus:ring-blue-500/50"
+                  />
+                  <span className="text-[10px] text-zinc-500">%</span>
+                </div>
+                <span className="text-[9px] text-zinc-600 mt-0.5">{flujoPct}/{100 - flujoPct}</span>
               </div>
 
               {/* Contraflujo KPI */}
@@ -3437,13 +3473,13 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
                     Contraflujo
                   </span>
                   <span className="text-sm font-bold text-blue-400">
-                    {(selectedCaraForSearch?.caras_contraflujo || 0) - remainingToAssign.contraflujo} / {selectedCaraForSearch?.caras_contraflujo || 0}
+                    {adjustedCarasFlujo.contraflujo - remainingToAssign.contraflujo} / {adjustedCarasFlujo.contraflujo}
                   </span>
                 </div>
                 <div className="w-full h-2 bg-zinc-700/50 rounded-full overflow-hidden">
                   <div
                     className="h-full bg-gradient-to-r from-blue-500 to-blue-400 rounded-full transition-all"
-                    style={{ width: `${Math.min(100, ((selectedCaraForSearch?.caras_contraflujo || 0) - remainingToAssign.contraflujo) / (selectedCaraForSearch?.caras_contraflujo || 1) * 100)}%` }}
+                    style={{ width: `${Math.min(100, (adjustedCarasFlujo.contraflujo - remainingToAssign.contraflujo) / (adjustedCarasFlujo.contraflujo || 1) * 100)}%` }}
                   />
                 </div>
                 <div className="mt-1 text-xs text-zinc-500">
@@ -3714,6 +3750,24 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
                   >
                     <FileText className="h-3.5 w-3.5" />
                     {csvFile ? csvFile.name.substring(0, 15) + '...' : 'Subir CSV'}
+                  </button>
+                  <button
+                    onClick={() => {
+                      const csv = '\ufeffcodigo_unico\nEJEMPLO-001_Flujo_Ciudad';
+                      const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+                      const url = URL.createObjectURL(blob);
+                      const link = document.createElement('a');
+                      link.href = url;
+                      link.download = 'plantilla_inventario.csv';
+                      document.body.appendChild(link);
+                      link.click();
+                      document.body.removeChild(link);
+                      URL.revokeObjectURL(url);
+                    }}
+                    className="p-1.5 rounded-lg text-zinc-400 hover:text-white hover:bg-zinc-700 border border-zinc-700/50 transition-all"
+                    title="Descargar plantilla CSV"
+                  >
+                    <Download className="h-3.5 w-3.5" />
                   </button>
                   {csvFile && (
                     <button
