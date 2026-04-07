@@ -110,6 +110,7 @@ const FILTER_FIELDS: FilterFieldConfig[] = [
   { field: 'tipo_de_cara', label: 'Tipo', type: 'string' },
   { field: 'mueble', label: 'Formato', type: 'string' },
   { field: 'articulo', label: 'Articulo', type: 'string' },
+  { field: 'numero_catorcena', label: 'Catorcena', type: 'number' },
   { field: 'caras_totales', label: 'Caras', type: 'number' },
   { field: 'tarifa_publica', label: 'Tarifa', type: 'number' },
 ];
@@ -204,6 +205,7 @@ export function ClientePropuestaPage() {
   // States
   const [expandedResumen, setExpandedResumen] = useState<Set<string>>(new Set());
   const [filterText, setFilterText] = useState('');
+  const [filterPeriodo, setFilterPeriodo] = useState('');
   const [sortField, setSortField] = useState<string>('');
   const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('asc');
   const [poiMarkers, setPoiMarkers] = useState<POIMarker[]>([]);
@@ -241,9 +243,28 @@ export function ClientePropuestaPage() {
     return { total: total + bonificadas, renta: total, bonificadas, inversion };
   }, [data, inventario]);
 
+  // Available periods for dropdown
+  const periodoOptions = useMemo(() => {
+    const set = new Map<string, string>();
+    inventario.forEach(i => {
+      if (i.numero_catorcena && i.anio_catorcena) {
+        const key = `${i.anio_catorcena}-${i.numero_catorcena}`;
+        const label = tipoPeriodo === 'mensual' && i.inicio_periodo
+          ? (() => { const parts = i.inicio_periodo.split('-'); return parts.length >= 2 ? `${MESES_LABEL[parseInt(parts[1]) - 1]} ${parts[0]}` : key; })()
+          : `Cat ${i.numero_catorcena} / ${i.anio_catorcena}`;
+        set.set(key, label);
+      }
+    });
+    return Array.from(set.entries()).map(([value, label]) => ({ value, label })).sort((a, b) => a.value.localeCompare(b.value));
+  }, [inventario, tipoPeriodo]);
+
   // Filtered inventario (used by resumen)
   const filteredInventario = useMemo(() => {
     let filtered = inventario;
+    if (filterPeriodo) {
+      const [year, num] = filterPeriodo.split('-').map(Number);
+      filtered = filtered.filter(i => i.numero_catorcena === num && i.anio_catorcena === year);
+    }
     if (filters.length > 0) {
       filtered = applyFilters(filtered, filters);
     }
@@ -867,6 +888,18 @@ export function ClientePropuestaPage() {
                   <Filter className="h-3 w-3" />
                   Filtros {filters.length > 0 && `(${filters.length})`}
                 </button>
+                {periodoOptions.length > 1 && (
+                  <select
+                    value={filterPeriodo}
+                    onChange={(e) => setFilterPeriodo(e.target.value)}
+                    className={`px-2.5 py-1.5 border rounded-lg text-xs ${filterPeriodo ? 'bg-[#0054A6] text-white border-[#0054A6]' : isDark ? 'bg-zinc-800 border-zinc-700 text-zinc-300' : 'bg-white border-gray-300 text-gray-700'}`}
+                  >
+                    <option value="">Todos los periodos</option>
+                    {periodoOptions.map(p => (
+                      <option key={p.value} value={p.value}>{p.label}</option>
+                    ))}
+                  </select>
+                )}
               </div>
               <div className="flex items-center gap-2">
                 <ArrowUpDown className={`h-3.5 w-3.5 ${isDark ? 'text-zinc-500' : 'text-gray-400'}`} />
@@ -884,9 +917,9 @@ export function ClientePropuestaPage() {
                   {sortOrder === 'asc' ? '↑' : '↓'}
                 </button>
               </div>
-              {(filterText || filters.length > 0) && (
+              {(filterText || filters.length > 0 || filterPeriodo) && (
                 <button
-                  onClick={() => { setFilterText(''); setFilters([]); }}
+                  onClick={() => { setFilterText(''); setFilters([]); setFilterPeriodo(''); }}
                   className="px-2.5 py-1.5 bg-red-50 text-red-600 border border-red-200 rounded-lg text-xs hover:bg-red-100"
                 >
                   Limpiar

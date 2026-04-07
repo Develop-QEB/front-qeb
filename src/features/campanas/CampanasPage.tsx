@@ -180,7 +180,7 @@ const CAMPANA_FILTER_FIELDS: FilterFieldConfig[] = [
   { field: 'cliente_nombre', label: 'Cliente', type: 'string' },
   { field: 'status', label: 'Estatus', type: 'string' },
   { field: 'articulo', label: 'Artículo', type: 'string' },
-  { field: 'creador_nombre', label: 'Creador', type: 'string' },
+  { field: 'creador_nombre', label: 'Asesor', type: 'string' },
 ];
 
 const FILTER_OPERATORS: { value: FilterOperator; label: string }[] = [
