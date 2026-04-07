@@ -1361,7 +1361,7 @@ export function CampanasPage() {
     if (!filteredData.length) return;
 
     const headers = [
-      'Periodo', 'Creador', 'Campaña', 'Cliente', 'Estatus', 'Actividad', 'Periodo Inicio', 'Periodo Fin', 'APS'
+      'ID', 'Periodo', 'Creador', 'Campaña', 'Marca', 'Estatus', 'Actividad', 'Fecha Inicio', 'Fecha Fin', 'Inversión', 'APS'
     ];
     const rows = filteredData.map(c => {
       const periodStatus = getPeriodStatus(c.fecha_inicio, c.fecha_fin);
@@ -1372,6 +1372,7 @@ export function CampanasPage() {
         ? getMonthShort(c.fecha_fin)
         : (c.catorcena_fin_num && c.catorcena_fin_anio ? `Cat ${c.catorcena_fin_num} ${c.catorcena_fin_anio}` : '-');
       return [
+        c.id,
         periodStatus,
         c.creador_nombre || '',
         c.nombre || '',
@@ -1380,6 +1381,7 @@ export function CampanasPage() {
         c.has_aps ? 'Activa' : 'Inactiva',
         catIni,
         catFin,
+        c.inversion ? formatCurrency(c.inversion) : '-',
         c.has_aps ? 'Si' : 'No'
       ];
     });
@@ -1389,11 +1391,14 @@ export function CampanasPage() {
       ...rows.map(row => row.map(cell => `"${String(cell).replace(/"/g, '""')}"`).join(','))
     ].join('\n');
 
-    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const blob = new Blob(['\ufeff' + csvContent], { type: 'text/csv;charset=utf-8;' });
     const link = document.createElement('a');
     link.href = URL.createObjectURL(blob);
     link.download = `campanas_${new Date().toISOString().split('T')[0]}.csv`;
+    document.body.appendChild(link);
     link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(link.href);
   };
 
   const handleOpenCampana = (id: number) => {
