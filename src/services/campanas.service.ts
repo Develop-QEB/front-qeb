@@ -126,6 +126,7 @@ export interface InventarioReservado {
   longitud: number;
   plaza: string | null;
   estatus_reserva: string | null;
+  estatus_inventario: string | null;
   articulo: string | null;
   tipo_medio: string | null;
   inicio_periodo: string | null;
@@ -1198,6 +1199,7 @@ export interface ReservaModalItem {
   formato: string;
   ubicacion: string | null;
   estatus: string;
+  estatus_inventario: string | null;
   grupo_completo_id: number | null;
   solicitud_cara_id: number;
   aps: number | null;

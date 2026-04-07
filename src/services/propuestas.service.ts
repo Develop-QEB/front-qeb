@@ -396,6 +396,7 @@ export interface ReservaModalItem {
   formato: string;
   ubicacion: string | null;
   isla: string | null;
+  estatus_inventario: string | null;
   estatus: string;
   grupo_completo_id: number | null;
   solicitud_cara_id: number;

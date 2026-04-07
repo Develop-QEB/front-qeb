@@ -1,8 +1,9 @@
-import { useState, useMemo } from 'react';
-import { useQuery } from '@tanstack/react-query';
-import { Ban, AlertTriangle, X, Loader2, Search, User, ExternalLink } from 'lucide-react';
+import { useState, useMemo, useEffect, useRef } from 'react';
+import { useQuery, useQueries } from '@tanstack/react-query';
+import { Ban, AlertTriangle, X, Loader2, Search, User, ExternalLink, ChevronRight, Check } from 'lucide-react';
 import { solicitudesService, UserOption } from '../../services/solicitudes.service';
 import { inventariosService } from '../../services/inventarios.service';
+import { campanasService } from '../../services/campanas.service';
 
 interface InventarioBasico {
   id: number;
@@ -19,11 +20,18 @@ export interface CampanaActiva {
   cliente_nombre: string;
 }
 
+export interface CampanaBloqueoEntry {
+  campana: CampanaActiva;
+  analistas: UserOption[];
+  trafico: UserOption[];
+}
+
 export interface BloqueoData {
   motivo: string;
   analistas: UserOption[];
   trafico: UserOption[];
   campanas: CampanaActiva[];
+  perCampana?: CampanaBloqueoEntry[];
 }
 
 interface Props {
@@ -77,7 +85,7 @@ function UserSelector({
           className="flex-1 bg-transparent text-xs text-white placeholder:text-zinc-600 focus:outline-none"
         />
       </div>
-      <div className="bg-zinc-800/60 border border-zinc-700 rounded-lg max-h-28 overflow-y-auto">
+      <div className="bg-zinc-800/60 border border-zinc-700 rounded-lg max-h-36 overflow-y-auto">
         {filtered.length === 0 ? (
           <p className="text-xs text-zinc-600 px-3 py-2">Sin resultados</p>
         ) : filtered.map(u => {
@@ -91,8 +99,8 @@ function UserSelector({
             >
               <User className="h-3 w-3 text-zinc-500 flex-shrink-0" />
               <span className="flex-1">{u.nombre}</span>
-              <span className="text-[10px] text-zinc-600">{u.puesto}</span>
-              {isSelected && <X className="h-3 w-3 text-orange-400" />}
+              <span className="text-[10px] text-zinc-600 flex-shrink-0">{u.puesto}</span>
+              {isSelected && <X className="h-3 w-3 text-orange-400 flex-shrink-0" />}
             </button>
           );
         })}
@@ -103,8 +111,10 @@ function UserSelector({
 
 export function BloqueoModal({ isOpen, onClose, item, onConfirm, isSubmitting }: Props) {
   const [motivo, setMotivo] = useState('');
-  const [analistas, setAnalistas] = useState<UserOption[]>([]);
-  const [trafico, setTrafico] = useState<UserOption[]>([]);
+  // Wizard: step 0 = motivo + overview, step 1..N = per-campaign assignment
+  const [step, setStep] = useState(0);
+  // Per-campaign selections stored by index
+  const [perCampanaSelections, setPerCampanaSelections] = useState<Record<number, { analistas: UserOption[]; trafico: UserOption[] }>>({});
   const [searchAnalista, setSearchAnalista] = useState('');
   const [searchTrafico, setSearchTrafico] = useState('');
 
@@ -138,17 +148,108 @@ export function BloqueoModal({ isOpen, onClose, item, onConfirm, isSubmitting }:
       }, []);
   }, [historialData]);
 
-  const analistasDisponibles = useMemo(() =>
-    allUsers.filter(u => u.puesto?.toLowerCase().includes('analista')),
-    [allUsers]);
+  // Fetch each affected campaign to get its assigned user IDs
+  const campanaQueries = useQueries({
+    queries: campanasActivas.map(c => ({
+      queryKey: ['campana-detail-bloqueo', c.campana_id],
+      queryFn: () => campanasService.getById(c.campana_id),
+      enabled: isOpen && campanasActivas.length > 0,
+    })),
+  });
 
-  const traficoDisponibles = useMemo(() =>
-    allUsers.filter(u =>
-      u.area?.toLowerCase().includes('tr') ||
-      u.puesto?.toLowerCase().includes('tráfico') ||
-      u.puesto?.toLowerCase().includes('trafico')
-    ),
-    [allUsers]);
+  // Per-campaign assigned user IDs
+  const perCampanaUserIds = useMemo(() => {
+    const map = new Map<number, Set<number>>();
+    for (let i = 0; i < campanaQueries.length; i++) {
+      const q = campanaQueries[i];
+      const campanaId = campanasActivas[i]?.campana_id;
+      if (!campanaId) continue;
+      const ids = new Set<number>();
+      const idAsignado = q.data?.id_asignado;
+      if (idAsignado) {
+        idAsignado.split(',').forEach(s => {
+          const n = parseInt(s.trim());
+          if (!isNaN(n)) ids.add(n);
+        });
+      }
+      map.set(campanaId, ids);
+    }
+    return map;
+  }, [campanaQueries, campanasActivas]);
+
+  // Current campaign for wizard steps (step 1 = index 0, etc.)
+  const currentCampanaIndex = step - 1;
+  const currentCampana = campanasActivas[currentCampanaIndex] ?? null;
+  const currentCampanaIds = currentCampana ? (perCampanaUserIds.get(currentCampana.campana_id) ?? new Set<number>()) : new Set<number>();
+  const hasCurrentCampanaAssignees = currentCampanaIds.size > 0;
+
+  const analistasForCurrentCampana = useMemo(() => {
+    const allAnalistas = allUsers.filter(u => u.puesto?.toLowerCase().includes('analista'));
+    if (!hasCurrentCampanaAssignees) return allAnalistas;
+    // Filter by campaign assignees; if none match, show all analistas
+    const fromCampana = allAnalistas.filter(u => currentCampanaIds.has(u.id));
+    return fromCampana.length > 0 ? fromCampana : allAnalistas;
+  }, [allUsers, hasCurrentCampanaAssignees, currentCampanaIds]);
+
+  const traficoForCurrentCampana = useMemo(() => {
+    const isTrafico = (u: UserOption) =>
+      u.area?.toLowerCase().includes('tráfico') || u.area?.toLowerCase().includes('trafico') ||
+      u.puesto?.toLowerCase().includes('tráfico') || u.puesto?.toLowerCase().includes('trafico');
+    const allTrafico = allUsers.filter(isTrafico);
+    if (!hasCurrentCampanaAssignees) return allTrafico;
+    // Filter by campaign assignees; if none match, show all tráfico
+    const fromCampana = allTrafico.filter(u => currentCampanaIds.has(u.id));
+    return fromCampana.length > 0 ? fromCampana : allTrafico;
+  }, [allUsers, hasCurrentCampanaAssignees, currentCampanaIds]);
+
+  // Pre-select campaign assignees as analistas/tráfico when data loads
+  const preselectedRef = useRef(new Set<number>());
+  const allQueriesLoaded = campanaQueries.length > 0 && campanaQueries.every(q => q.isSuccess);
+  useEffect(() => {
+    if (!allUsers.length || !campanasActivas.length || !allQueriesLoaded) return;
+
+    const isTrafico = (u: UserOption) =>
+      u.area?.toLowerCase().includes('tráfico') || u.area?.toLowerCase().includes('trafico') ||
+      u.puesto?.toLowerCase().includes('tráfico') || u.puesto?.toLowerCase().includes('trafico');
+    const isAnalista = (u: UserOption) => u.puesto?.toLowerCase().includes('analista');
+
+    const newSelections: Record<number, { analistas: UserOption[]; trafico: UserOption[] }> = {};
+    let hasNew = false;
+
+    campanasActivas.forEach((c, i) => {
+      if (preselectedRef.current.has(c.campana_id)) return;
+
+      // Read id_asignado directly from the query data
+      const campanaData = campanaQueries[i]?.data;
+      const idAsignado = campanaData?.id_asignado;
+      if (!idAsignado) return;
+
+      const idSet = new Set<number>();
+      idAsignado.split(',').forEach(s => {
+        const n = parseInt(s.trim());
+        if (!isNaN(n)) idSet.add(n);
+      });
+      if (idSet.size === 0) return;
+
+      const assignedUsers = allUsers.filter(u => idSet.has(u.id));
+      const analistas = assignedUsers.filter(isAnalista);
+      const trafico = assignedUsers.filter(isTrafico);
+      if (analistas.length > 0 || trafico.length > 0) {
+        newSelections[i] = { analistas, trafico };
+        preselectedRef.current.add(c.campana_id);
+        hasNew = true;
+      }
+    });
+
+    if (hasNew) {
+      setPerCampanaSelections(prev => ({ ...prev, ...newSelections }));
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [allUsers, campanasActivas, allQueriesLoaded]);
+
+  // Current step selections
+  const currentAnalistas = perCampanaSelections[currentCampanaIndex]?.analistas ?? [];
+  const currentTrafico = perCampanaSelections[currentCampanaIndex]?.trafico ?? [];
 
   if (!isOpen || !item) return null;
 
@@ -157,30 +258,76 @@ export function BloqueoModal({ isOpen, onClose, item, onConfirm, isSubmitting }:
   const enUso = ['Reservado', 'Ocupado', 'Vendido'].includes(estatusReal);
   const esDisponible = !yaEstaBloquedo && !enUso && campanasActivas.length === 0;
 
-  const canConfirm = esDisponible
+  const totalSteps = campanasActivas.length; // step 0 + N campaign steps
+
+  const canContinue = step === 0
     ? motivo.trim().length > 0
-    : motivo.trim().length > 0 && (analistas.length > 0 || trafico.length > 0);
+    : (currentAnalistas.length > 0 || currentTrafico.length > 0);
+
+  const isLastStep = step === totalSteps;
+
+  const handleNext = () => {
+    setSearchAnalista('');
+    setSearchTrafico('');
+    setStep(prev => prev + 1);
+  };
 
   const handleConfirm = async () => {
-    await onConfirm({ motivo, analistas, trafico, campanas: campanasActivas });
+    const perCampana: CampanaBloqueoEntry[] = campanasActivas.map((c, i) => ({
+      campana: c,
+      analistas: perCampanaSelections[i]?.analistas ?? [],
+      trafico: perCampanaSelections[i]?.trafico ?? [],
+    }));
+    // For backwards compat, also flatten all analistas/trafico
+    const allAnalistas = perCampana.flatMap(e => e.analistas);
+    const allTrafico = perCampana.flatMap(e => e.trafico);
+    await onConfirm({ motivo, analistas: allAnalistas, trafico: allTrafico, campanas: campanasActivas, perCampana });
+    reset();
+  };
+
+  const handleConfirmSimple = async () => {
+    await onConfirm({ motivo, analistas: [], trafico: [], campanas: [] });
     reset();
   };
 
   const reset = () => {
     setMotivo('');
-    setAnalistas([]);
-    setTrafico([]);
+    setStep(0);
+    setPerCampanaSelections({});
     setSearchAnalista('');
     setSearchTrafico('');
+    preselectedRef.current.clear();
   };
 
   const handleClose = () => { reset(); onClose(); };
 
-  const toggleAnalista = (u: UserOption) =>
-    setAnalistas(prev => prev.some(x => x.id === u.id) ? prev.filter(x => x.id !== u.id) : [...prev, u]);
+  const toggleAnalista = (u: UserOption) => {
+    setPerCampanaSelections(prev => {
+      const current = prev[currentCampanaIndex] ?? { analistas: [], trafico: [] };
+      const exists = current.analistas.some(x => x.id === u.id);
+      return {
+        ...prev,
+        [currentCampanaIndex]: {
+          ...current,
+          analistas: exists ? current.analistas.filter(x => x.id !== u.id) : [...current.analistas, u],
+        },
+      };
+    });
+  };
 
-  const toggleTrafico = (u: UserOption) =>
-    setTrafico(prev => prev.some(x => x.id === u.id) ? prev.filter(x => x.id !== u.id) : [...prev, u]);
+  const toggleTrafico = (u: UserOption) => {
+    setPerCampanaSelections(prev => {
+      const current = prev[currentCampanaIndex] ?? { analistas: [], trafico: [] };
+      const exists = current.trafico.some(x => x.id === u.id);
+      return {
+        ...prev,
+        [currentCampanaIndex]: {
+          ...current,
+          trafico: exists ? current.trafico.filter(x => x.id !== u.id) : [...current.trafico, u],
+        },
+      };
+    });
+  };
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60">
@@ -195,8 +342,24 @@ export function BloqueoModal({ isOpen, onClose, item, onConfirm, isSubmitting }:
           <button onClick={handleClose} className="text-zinc-500 hover:text-zinc-300"><X className="h-4 w-4" /></button>
         </div>
 
+        {/* Step indicator for wizard */}
+        {!esDisponible && totalSteps > 0 && (
+          <div className="px-5 pt-3 pb-1">
+            <div className="flex items-center gap-1.5">
+              {Array.from({ length: totalSteps + 1 }).map((_, i) => (
+                <div key={i} className="flex items-center gap-1.5 flex-1">
+                  <div className={`h-1.5 flex-1 rounded-full transition-colors ${i <= step ? 'bg-orange-500' : 'bg-zinc-800'}`} />
+                </div>
+              ))}
+            </div>
+            <p className="text-[10px] text-zinc-500 mt-1.5">
+              {step === 0 ? 'Información general' : `Campaña ${step} de ${totalSteps}`}
+            </p>
+          </div>
+        )}
+
         <div className="flex-1 overflow-y-auto px-5 py-4 space-y-4">
-          {/* Info inventario */}
+          {/* Info inventario — always visible */}
           <div className="px-3 py-2.5 bg-zinc-800/60 rounded-lg space-y-0.5">
             <p className="text-xs text-zinc-400">
               <span className="text-zinc-500">ID:</span> <span className="text-white font-mono">#{item.id}</span>
@@ -226,7 +389,8 @@ export function BloqueoModal({ isOpen, onClose, item, onConfirm, isSubmitting }:
                 />
               </div>
             </>
-          ) : (
+          ) : step === 0 ? (
+            /* ===== STEP 0: Overview + motivo ===== */
             <>
               <div className="flex items-start gap-2.5 px-3 py-2.5 bg-amber-500/10 border border-amber-500/30 rounded-lg">
                 <AlertTriangle className="h-4 w-4 text-amber-400 flex-shrink-0 mt-0.5" />
@@ -237,31 +401,42 @@ export function BloqueoModal({ isOpen, onClose, item, onConfirm, isSubmitting }:
                   <p className="text-xs text-amber-400/80 mt-0.5">
                     {yaEstaBloquedo
                       ? 'Se creará una tarea para que un usuario pueda revisar y desbloquear manualmente.'
-                      : 'Se bloqueará el inventario y se creará una tarea "Ajuste Inventario Bloqueado" en cada campaña activa.'}
+                      : 'Se bloqueará el inventario y se creará una tarea por cada campaña afectada.'}
                   </p>
                 </div>
               </div>
 
-              {/* Campañas activas */}
+              {/* Campañas afectadas */}
               {campanasActivas.length > 0 && (
                 <div>
-                  <p className="text-xs text-zinc-400 mb-1.5 font-medium">Campañas afectadas</p>
+                  <p className="text-xs text-zinc-400 mb-1.5 font-medium">Campañas afectadas ({campanasActivas.length})</p>
                   <div className="space-y-1">
-                    {campanasActivas.map(c => (
-                      <a
-                        key={c.campana_id}
-                        href={`/campanas/${c.campana_id}/tareas`}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="flex items-center justify-between px-3 py-2 bg-zinc-800/60 border border-zinc-700 rounded-lg hover:border-orange-500/40 transition-colors group"
-                      >
-                        <div>
-                          <p className="text-xs text-white">{c.campana_nombre}</p>
-                          <p className="text-[10px] text-zinc-500">{c.cliente_nombre}</p>
+                    {campanasActivas.map((c, i) => {
+                      const done = !!perCampanaSelections[i]?.analistas?.length || !!perCampanaSelections[i]?.trafico?.length;
+                      return (
+                        <div
+                          key={c.campana_id}
+                          className="flex items-center justify-between px-3 py-2 bg-zinc-800/60 border border-zinc-700 rounded-lg"
+                        >
+                          <div className="flex items-center gap-2 min-w-0">
+                            {done && <Check className="h-3 w-3 text-emerald-400 flex-shrink-0" />}
+                            <div className="min-w-0">
+                              <p className="text-xs text-white truncate">{c.campana_nombre}</p>
+                              <p className="text-[10px] text-zinc-500">{c.cliente_nombre}</p>
+                            </div>
+                          </div>
+                          <a
+                            href={`/campanas/detail/${c.campana_id}`}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="text-zinc-600 hover:text-orange-400 transition-colors flex-shrink-0"
+                            onClick={e => e.stopPropagation()}
+                          >
+                            <ExternalLink className="h-3 w-3" />
+                          </a>
                         </div>
-                        <ExternalLink className="h-3 w-3 text-zinc-600 group-hover:text-orange-400 flex-shrink-0" />
-                      </a>
-                    ))}
+                      );
+                    })}
                   </div>
                 </div>
               )}
@@ -277,48 +452,85 @@ export function BloqueoModal({ isOpen, onClose, item, onConfirm, isSubmitting }:
                   className="w-full bg-zinc-800 border border-zinc-700 text-white text-sm rounded-lg px-3 py-2 resize-none focus:outline-none focus:border-red-500/50 placeholder:text-zinc-600"
                 />
               </div>
-
-              {/* Selectores */}
-              {isLoadingUsers ? (
-                <div className="flex items-center gap-2 text-xs text-zinc-500">
-                  <Loader2 className="h-3.5 w-3.5 animate-spin" /> Cargando usuarios...
-                </div>
-              ) : (
-                <div className="space-y-4">
-                  <UserSelector
-                    label="Analistas *"
-                    users={analistasDisponibles}
-                    selected={analistas}
-                    onToggle={toggleAnalista}
-                    search={searchAnalista}
-                    onSearch={setSearchAnalista}
-                  />
-                  <UserSelector
-                    label="Tráfico *"
-                    users={traficoDisponibles.length > 0 ? traficoDisponibles : allUsers}
-                    selected={trafico}
-                    onToggle={toggleTrafico}
-                    search={searchTrafico}
-                    onSearch={setSearchTrafico}
-                  />
-                </div>
-              )}
             </>
+          ) : (
+            /* ===== STEP 1..N: Per-campaign assignment ===== */
+            currentCampana && (
+              <>
+                {/* Current campaign header */}
+                <div className="px-3 py-2.5 bg-purple-500/10 border border-purple-500/30 rounded-lg">
+                  <p className="text-xs font-semibold text-purple-300">{currentCampana.campana_nombre}</p>
+                  <p className="text-[10px] text-purple-400/80 mt-0.5">{currentCampana.cliente_nombre}</p>
+                  <p className="text-[10px] text-zinc-500 mt-1">Selecciona los analistas y tráfico responsables de esta campaña.</p>
+                </div>
+
+                {/* Selectores */}
+                {isLoadingUsers ? (
+                  <div className="flex items-center gap-2 text-xs text-zinc-500">
+                    <Loader2 className="h-3.5 w-3.5 animate-spin" /> Cargando usuarios...
+                  </div>
+                ) : (
+                  <div className="space-y-4">
+                    <UserSelector
+                      label="Analistas *"
+                      users={analistasForCurrentCampana}
+                      selected={currentAnalistas}
+                      onToggle={toggleAnalista}
+                      search={searchAnalista}
+                      onSearch={setSearchAnalista}
+                    />
+                    <UserSelector
+                      label="Tráfico *"
+                      users={traficoForCurrentCampana}
+                      selected={currentTrafico}
+                      onToggle={toggleTrafico}
+                      search={searchTrafico}
+                      onSearch={setSearchTrafico}
+                    />
+                  </div>
+                )}
+              </>
+            )
           )}
         </div>
 
         <div className="flex gap-2 px-5 py-4 border-t border-zinc-800">
-          <button onClick={handleClose} disabled={isSubmitting} className="flex-1 px-3 py-2 text-sm text-zinc-400 border border-zinc-700 rounded-lg hover:bg-zinc-800 transition-colors disabled:opacity-50">
-            Cancelar
-          </button>
           <button
-            onClick={handleConfirm}
-            disabled={isSubmitting || !canConfirm}
-            className="flex-1 flex items-center justify-center gap-2 px-3 py-2 text-sm font-medium bg-red-600 hover:bg-red-500 disabled:bg-zinc-700 disabled:text-zinc-500 text-white rounded-lg transition-colors"
+            onClick={step > 0 ? () => { setSearchAnalista(''); setSearchTrafico(''); setStep(prev => prev - 1); } : handleClose}
+            disabled={isSubmitting}
+            className="flex-1 px-3 py-2 text-sm text-zinc-400 border border-zinc-700 rounded-lg hover:bg-zinc-800 transition-colors disabled:opacity-50"
           >
-            {isSubmitting ? <Loader2 className="h-4 w-4 animate-spin" /> : <Ban className="h-4 w-4" />}
-            {isSubmitting ? (esDisponible ? 'Bloqueando...' : 'Creando...') : (esDisponible ? 'Bloquear inventario' : 'Crear tarea')}
+            {step > 0 ? 'Atrás' : 'Cancelar'}
           </button>
+
+          {esDisponible ? (
+            <button
+              onClick={handleConfirmSimple}
+              disabled={isSubmitting || !motivo.trim()}
+              className="flex-1 flex items-center justify-center gap-2 px-3 py-2 text-sm font-medium bg-red-600 hover:bg-red-500 disabled:bg-zinc-700 disabled:text-zinc-500 text-white rounded-lg transition-colors"
+            >
+              {isSubmitting ? <Loader2 className="h-4 w-4 animate-spin" /> : <Ban className="h-4 w-4" />}
+              {isSubmitting ? 'Bloqueando...' : 'Bloquear inventario'}
+            </button>
+          ) : !isLastStep ? (
+            <button
+              onClick={handleNext}
+              disabled={!canContinue}
+              className="flex-1 flex items-center justify-center gap-2 px-3 py-2 text-sm font-medium bg-orange-600 hover:bg-orange-500 disabled:bg-zinc-700 disabled:text-zinc-500 text-white rounded-lg transition-colors"
+            >
+              {step === 0 ? 'Continuar' : 'Siguiente campaña'}
+              <ChevronRight className="h-4 w-4" />
+            </button>
+          ) : (
+            <button
+              onClick={handleConfirm}
+              disabled={isSubmitting || !canContinue}
+              className="flex-1 flex items-center justify-center gap-2 px-3 py-2 text-sm font-medium bg-red-600 hover:bg-red-500 disabled:bg-zinc-700 disabled:text-zinc-500 text-white rounded-lg transition-colors"
+            >
+              {isSubmitting ? <Loader2 className="h-4 w-4 animate-spin" /> : <Ban className="h-4 w-4" />}
+              {isSubmitting ? 'Creando...' : 'Crear tareas'}
+            </button>
+          )}
         </div>
       </div>
     </div>
