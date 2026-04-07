@@ -145,6 +145,7 @@ export function CompartirPropuestaPage() {
   const [copied, setCopied] = useState(false);
   const [expandedResumen, setExpandedResumen] = useState<Set<string>>(new Set());
   const [filterText, setFilterText] = useState('');
+  const [filterPeriodo, setFilterPeriodo] = useState('');
   const [sortField, setSortField] = useState<string>('');
   const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('asc');
   const [selectedItems, setSelectedItems] = useState<Set<number>>(new Set());
@@ -227,9 +228,29 @@ export function CompartirPropuestaPage() {
   }, [inventario]);
 
   // Filtered inventario (used by resumen)
+  // Available periods for dropdown
+  const periodoOptions = useMemo(() => {
+    if (!inventario) return [];
+    const set = new Map<string, string>();
+    (inventario as InventarioReservado[]).forEach(i => {
+      if (i.numero_catorcena && i.anio_catorcena) {
+        const key = `${i.anio_catorcena}-${i.numero_catorcena}`;
+        const label = tipoPeriodo === 'mensual' && i.inicio_periodo
+          ? (() => { const parts = i.inicio_periodo.split('-'); return parts.length >= 2 ? `${MESES_LABEL[parseInt(parts[1]) - 1]} ${parts[0]}` : key; })()
+          : `Cat ${i.numero_catorcena} / ${i.anio_catorcena}`;
+        set.set(key, label);
+      }
+    });
+    return Array.from(set.entries()).map(([value, label]) => ({ value, label })).sort((a, b) => a.value.localeCompare(b.value));
+  }, [inventario, tipoPeriodo]);
+
   const filteredInventario = useMemo(() => {
     if (!inventario) return [];
     let filtered = inventario as InventarioReservado[];
+    if (filterPeriodo) {
+      const [year, num] = filterPeriodo.split('-').map(Number);
+      filtered = filtered.filter(i => i.numero_catorcena === num && i.anio_catorcena === year);
+    }
     if (filters.length > 0) {
       filtered = applyFilters(filtered, filters);
     }
@@ -251,7 +272,7 @@ export function CompartirPropuestaPage() {
       });
     }
     return filtered;
-  }, [inventario, filters, filterText, sortField, sortOrder]);
+  }, [inventario, filters, filterText, filterPeriodo, sortField, sortOrder]);
 
   // Resumen de Caras (grouped by catorcena > articulo from filtered data)
   const resumenCaras = useMemo((): ResumenCatorcenaGroup[] => {
@@ -1079,6 +1100,18 @@ export function CompartirPropuestaPage() {
                   <Filter className="h-3 w-3" />
                   Filtros {filters.length > 0 && `(${filters.length})`}
                 </button>
+                {periodoOptions.length > 1 && (
+                  <select
+                    value={filterPeriodo}
+                    onChange={(e) => setFilterPeriodo(e.target.value)}
+                    className={`px-2.5 py-1.5 border rounded-lg text-xs ${filterPeriodo ? (isDark ? 'bg-purple-500/20 text-purple-300 border-purple-500/30' : 'bg-purple-100 text-purple-700 border-purple-300') : isDark ? 'bg-zinc-800 border-purple-500/20 text-zinc-300' : 'bg-white border-gray-200 text-gray-700'}`}
+                  >
+                    <option value="">Todos los periodos</option>
+                    {periodoOptions.map(p => (
+                      <option key={p.value} value={p.value}>{p.label}</option>
+                    ))}
+                  </select>
+                )}
               </div>
               <div className="flex items-center gap-2">
                 <ArrowUpDown className={`h-3.5 w-3.5 ${isDark ? 'text-zinc-500' : 'text-gray-400'}`} />
@@ -1096,9 +1129,9 @@ export function CompartirPropuestaPage() {
                   {sortOrder === 'asc' ? '↑' : '↓'}
                 </button>
               </div>
-              {(filterText || filters.length > 0 || selectedItems.size > 0) && (
+              {(filterText || filters.length > 0 || filterPeriodo || selectedItems.size > 0) && (
                 <button
-                  onClick={() => { setFilterText(''); setFilters([]); setSelectedItems(new Set()); }}
+                  onClick={() => { setFilterText(''); setFilters([]); setFilterPeriodo(''); setSelectedItems(new Set()); }}
                   className="px-2.5 py-1.5 bg-red-500/20 text-red-400 border border-red-500/30 rounded-lg text-xs hover:bg-red-500/30"
                 >
                   Limpiar
