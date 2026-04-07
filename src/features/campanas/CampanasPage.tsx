@@ -1403,6 +1403,80 @@ export function CampanasPage() {
     URL.revokeObjectURL(link.href);
   };
 
+  const handleExportVersionarioCSV = () => {
+    if (!filteredData.length) return;
+
+    const headers = [
+      'Campaña', 'Anunciante', 'Operación', 'Código de contrato (Opcional)',
+      'Precio por cara (Opcional)', 'APS Global', 'CUIC', 'Articulo', 'Vendedor',
+      'Descripción (Opcional)', 'Inicio o Periodo', 'Fin o Segmento', 'Arte',
+      'Código de arte (Opcional)', 'Arte Url (Opcional)', 'Origen del arte (Opcional)',
+      'Unidad', 'Cara', 'Ciudad', 'Tipo de Distribución', 'Reproducciones', 'Notas'
+    ];
+
+    const rows: string[][] = [];
+    for (const campana of filteredData) {
+      const inv = campanaInventarios[campana.id];
+      if (!inv || inv.length === 0) continue;
+
+      const nombreCampana = campana.nombre || '';
+      const anunciante = (campana as any).T2_U_Marca || (campana as any).cliente_nombre || (campana as any).cliente_razon_social || '';
+      const aps = (campana as any).aps_global || campana.id || '';
+      const cuic = (campana as any).cuic || '';
+      const vendedor = (campana as any).creador_nombre || '';
+      const catInicio = campana.catorcena_inicio_num ? `Catorcena #${String(campana.catorcena_inicio_num).padStart(2, '0')}` : '';
+      const catFin = campana.catorcena_fin_num ? `Catorcena #${String(campana.catorcena_fin_num).padStart(2, '0')}` : '';
+
+      for (const item of inv) {
+        const operacion = item.cortesia ? 'CORTESIA' : (item.estatus_reserva === 'Bonificado' || item.estatus_reserva === 'Vendido bonificado') ? 'BONIFICACION' : 'RENTA';
+        const precio = item.tarifa_publica_sc || item.tarifa_publica || 0;
+        const periodo = item.numero_catorcena ? `Catorcena #${String(item.numero_catorcena).padStart(2, '0')}` : catInicio;
+
+        rows.push([
+          nombreCampana,
+          anunciante,
+          operacion,
+          '0',
+          precio ? `$${Number(precio).toLocaleString('es-MX')}` : '0',
+          String(aps),
+          String(cuic),
+          item.articulo || '',
+          vendedor,
+          '',
+          'Catorcenas ' + (item.anio_catorcena || campana.catorcena_inicio_anio || new Date().getFullYear()),
+          periodo,
+          item.arte_aprobado || '0',
+          '',
+          '',
+          '',
+          item.codigo_unico || '',
+          item.tipo_de_cara || '',
+          item.plaza || item.estado || '',
+          '0',
+          '0',
+          ''
+        ]);
+      }
+    }
+
+    if (rows.length === 0) return;
+
+    const esc = (val: string) => `"${String(val).replace(/"/g, '""')}"`;
+    const csvContent = [
+      headers.map(esc).join(','),
+      ...rows.map(row => row.map(esc).join(','))
+    ].join('\n');
+
+    const blob = new Blob(['\ufeff' + csvContent], { type: 'text/csv;charset=utf-8;' });
+    const link = document.createElement('a');
+    link.href = URL.createObjectURL(blob);
+    link.download = `versionario_${new Date().toISOString().split('T')[0]}.csv`;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(link.href);
+  };
+
   const handleOpenCampana = (id: number) => {
     navigate(`/campanas/detail/${id}`);
   };
@@ -1771,11 +1845,11 @@ export function CampanasPage() {
 
               {/* Export CSV */}
               <button
-                onClick={handleExportCSV}
+                onClick={activeView === 'catorcena' ? handleExportVersionarioCSV : handleExportCSV}
                 className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-medium ${isDark ? 'bg-zinc-800/60 text-zinc-400 border-zinc-700/50 hover:bg-zinc-800 hover:text-zinc-200' : 'bg-gray-100 text-gray-500 border-gray-200 hover:bg-gray-200 hover:text-gray-700'} border transition-all`}
               >
                 <Download className="h-4 w-4" />
-                Exportar CSV
+                {activeView === 'catorcena' ? 'Exportar Layout' : 'Exportar CSV'}
               </button>
 
               {/* Órdenes de Montaje */}
