@@ -615,7 +615,7 @@ export function HistorialTicketsPage() {
           <div className="text-center py-16">
             <Ticket className={`h-16 w-16 mx-auto mb-4 ${isDark ? 'text-purple-400/50' : 'text-purple-300'}`} />
             <p className={`${isDark ? 'text-zinc-400' : 'text-gray-500'}`}>
-              {activeTab === 'cerrados' ? 'No hay tickets cerrados' : 'No se encontraron tickets'}
+              No hay tickets en {adminTabs.find(t => t.key === activeTab)?.label || activeTab}
             </p>
           </div>
         ) : (
