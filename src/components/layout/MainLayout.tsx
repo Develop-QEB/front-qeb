@@ -5,6 +5,7 @@ import { cn } from '../../lib/utils';
 import { LoadingScreen } from '../ui/LoadingScreen';
 import { QEBooh } from '../ui/Qebsillo';
 import { usePrefetch } from '../../hooks/usePrefetch';
+import { useVersionCheck } from '../../hooks/useVersionCheck';
 import { useThemeStore } from '../../store/themeStore';
 import { useAuthStore } from '../../store/authStore';
 import { LightThemeNotificationModal } from './LightThemeNotificationModal';
@@ -16,6 +17,7 @@ export function MainLayout() {
   const { prefetchAllAsync } = usePrefetch();
   const isDark = useThemeStore((s) => s.theme) === 'dark';
   const user = useAuthStore((s) => s.user);
+  useVersionCheck();
 
   useEffect(() => {
     let cancelled = false;
