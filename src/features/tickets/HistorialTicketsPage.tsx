@@ -12,7 +12,7 @@ import { useAuthStore } from '../../store/authStore';
 import { useThemeStore } from '../../store/themeStore';
 import { useSocketTicketsHistorial, useSocketTicketChat, useSocketTicketChatSoporte } from '../../hooks/useSocket';
 
-const STATUS_OPTIONS = ['Nuevo', 'En Progreso', 'Resuelto', 'Cerrado'];
+const STATUS_OPTIONS = ['Nuevo', 'En Progreso', 'Validación', 'Resuelto', 'Cerrado'];
 const PRIORIDAD_OPTIONS = ['Baja', 'Normal', 'Alta', 'Urgente'];
 
 const statusStyles: Record<string, { text: string; bg: string; border: string }> = {

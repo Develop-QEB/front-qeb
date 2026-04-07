@@ -5,7 +5,7 @@ export interface Ticket {
   titulo: string;
   descripcion: string;
   imagen?: string | null;
-  status: 'Nuevo' | 'En Progreso' | 'Resuelto' | 'Cerrado';
+  status: 'Nuevo' | 'En Progreso' | 'Validación' | 'Resuelto' | 'Cerrado';
   prioridad: 'Baja' | 'Normal' | 'Alta' | 'Urgente';
   usuario_id: number;
   usuario_nombre: string;
@@ -26,7 +26,7 @@ export interface CreateTicketInput {
 }
 
 export interface UpdateTicketStatusInput {
-  status: 'Nuevo' | 'En Progreso' | 'Resuelto' | 'Cerrado';
+  status: 'Nuevo' | 'En Progreso' | 'Validación' | 'Resuelto' | 'Cerrado';
   respuesta?: string;
 }
 
