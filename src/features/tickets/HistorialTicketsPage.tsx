@@ -454,6 +454,7 @@ export function HistorialTicketsPage() {
   const [debouncedSearch, setDebouncedSearch] = useState('');
   const [filterStatus, setFilterStatus] = useState('Todos');
   const [filterPrioridad, setFilterPrioridad] = useState('Todos');
+  const [filterTecnico, setFilterTecnico] = useState('Todos');
   const [selectedTicket, setSelectedTicket] = useState<TicketHistorial | null>(null);
   const [activeTab, setActiveTab] = useState<'Nuevo' | 'En Progreso' | 'Validación' | 'Resuelto' | 'Cerrado'>('Nuevo');
 
@@ -488,7 +489,13 @@ export function HistorialTicketsPage() {
     },
   });
 
-  const displayTickets = tickets.filter((t) => t.status === activeTab);
+  const tecnicos = [...new Set(tickets.map(t => t.status_cambiado_por).filter(Boolean))] as string[];
+
+  const displayTickets = tickets.filter((t) => {
+    if (t.status !== activeTab) return false;
+    if (filterTecnico !== 'Todos' && t.status_cambiado_por !== filterTecnico) return false;
+    return true;
+  });
 
   const adminTabs: Array<{ key: typeof activeTab; label: string; showCount: boolean }> = [
     { key: 'Nuevo', label: 'Pendientes', showCount: true },
@@ -498,14 +505,15 @@ export function HistorialTicketsPage() {
     { key: 'Cerrado', label: 'Cerrados', showCount: false },
   ];
 
+  const filteredByTecnico = filterTecnico !== 'Todos' ? tickets.filter(t => t.status_cambiado_por === filterTecnico) : tickets;
   const stats = {
-    total: tickets.length,
-    nuevo: tickets.filter((t) => t.status === 'Nuevo').length,
-    enProgreso: tickets.filter((t) => t.status === 'En Progreso').length,
-    validacion: tickets.filter((t) => t.status === 'Validación').length,
-    resuelto: tickets.filter((t) => t.status === 'Resuelto').length,
-    cerrado: tickets.filter((t) => t.status === 'Cerrado').length,
-    unread: tickets.filter((t) => t.has_unread || t.has_chat_unread).length,
+    total: filteredByTecnico.length,
+    nuevo: filteredByTecnico.filter((t) => t.status === 'Nuevo').length,
+    enProgreso: filteredByTecnico.filter((t) => t.status === 'En Progreso').length,
+    validacion: filteredByTecnico.filter((t) => t.status === 'Validación').length,
+    resuelto: filteredByTecnico.filter((t) => t.status === 'Resuelto').length,
+    cerrado: filteredByTecnico.filter((t) => t.status === 'Cerrado').length,
+    unread: filteredByTecnico.filter((t) => t.has_unread || t.has_chat_unread).length,
   };
 
   return (
@@ -578,14 +586,22 @@ export function HistorialTicketsPage() {
               <option value="Todos">Prioridad: Todos</option>
               {PRIORIDAD_OPTIONS.map((p) => <option key={p} value={p}>{p}</option>)}
             </select>
+            <select
+              value={filterTecnico}
+              onChange={(e) => setFilterTecnico(e.target.value)}
+              className={`px-3 py-2.5 rounded-xl border text-sm ${isDark ? 'border-purple-500/20 bg-zinc-900/80 text-white' : 'border-purple-200 bg-gray-50 text-gray-900'} focus:outline-none focus:ring-2 focus:ring-purple-500/30`}
+            >
+              <option value="Todos">Técnico: Todos</option>
+              {tecnicos.map((t) => <option key={t} value={t}>{t}</option>)}
+            </select>
           </div>
         </div>
 
         {/* Tabs */}
         <div className={`flex gap-1 p-1 rounded-xl ${isDark ? 'bg-zinc-800/50' : 'bg-gray-100'}`}>
           {adminTabs.map((tab) => {
-            const count = tickets.filter(t => t.status === tab.key).length;
-            const hasUnread = tickets.some(t => t.status === tab.key && (t.has_unread || t.has_chat_unread));
+            const count = filteredByTecnico.filter(t => t.status === tab.key).length;
+            const hasUnread = filteredByTecnico.some(t => t.status === tab.key && (t.has_unread || t.has_chat_unread));
             const isActive = activeTab === tab.key;
             const style = statusStyles[tab.key];
             return (
