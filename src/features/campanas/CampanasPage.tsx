@@ -1361,7 +1361,7 @@ export function CampanasPage() {
     if (!filteredData.length) return;
 
     const headers = [
-      'ID', 'Periodo', 'Creador', 'Campaña', 'Marca', 'Estatus', 'Actividad', 'Fecha Inicio', 'Fecha Fin', 'APS'
+      'ID', 'Periodo', 'Creador', 'Campaña', 'Marca', 'Estatus', 'Actividad', 'Fecha Inicio', 'Fecha Fin', 'Inversión', 'APS'
     ];
     const rows = filteredData.map(c => {
       const periodStatus = getPeriodStatus(c.fecha_inicio, c.fecha_fin);
@@ -1381,6 +1381,7 @@ export function CampanasPage() {
         c.has_aps ? 'Activa' : 'Inactiva',
         catIni,
         catFin,
+        c.inversion ? formatCurrency(c.inversion) : '-',
         c.has_aps ? 'Si' : 'No'
       ];
     });
