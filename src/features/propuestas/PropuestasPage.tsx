@@ -1295,19 +1295,27 @@ export function PropuestasPage() {
 
     if (dataToExport.length === 0) return;
 
-    const headers = ['ID', 'Solicitud', 'Cliente', 'Artículo', 'Precio', 'Inversión', 'Asignado', 'Descripción', 'Status', 'Fecha'];
-    const rows = dataToExport.map(p => [
-      p.id,
-      p.solicitud_id,
-      p.cliente_nombre || '',
-      p.articulo || '',
-      p.precio || 0,
-      p.inversion || 0,
-      p.asignado || '',
-      p.descripcion || '',
-      p.status,
-      formatDate(p.fecha)
-    ]);
+    const headers = ['ID', 'Fecha Creación', 'Marca', 'Creador', 'Campaña', 'Asignados', 'Inversión', 'Inicio', 'Fin', 'Estatus'];
+    const rows = dataToExport.map((p: any) => {
+      const inicio = p.tipo_periodo === 'mensual' && p.fecha_inicio
+        ? getMonthShort(p.fecha_inicio)
+        : p.catorcena_inicio ? `Cat ${p.catorcena_inicio} / ${p.anio_inicio}` : '-';
+      const fin = p.tipo_periodo === 'mensual' && p.fecha_fin
+        ? getMonthShort(p.fecha_fin)
+        : p.catorcena_fin ? `Cat ${p.catorcena_fin} / ${p.anio_fin}` : '-';
+      return [
+        p.id,
+        formatDate(p.fecha),
+        p.marca_nombre || p.articulo || '',
+        p.creador_nombre || p.usuario_nombre || '',
+        p.campana_nombre || p.nombre_campania || '',
+        p.asignado || '',
+        p.inversion || 0,
+        inicio,
+        fin,
+        p.status
+      ];
+    });
 
     const csvContent = [
       headers.join(','),
