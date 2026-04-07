@@ -100,6 +100,7 @@ export const inventariosService = {
     tipo?: string;
     estatus?: string;
     plaza?: string;
+    campanaId?: number;
   }): Promise<InventarioStats> {
     const response = await api.get<ApiResponse<InventarioStats>>('/inventarios/stats', { params });
     if (!response.data.success || !response.data.data) {

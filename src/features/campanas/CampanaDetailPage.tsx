@@ -588,7 +588,16 @@ function GroupMetaBadges({ items, skipFields, isDark: isDarkProp }: { items: Inv
 }
 
 function renderReservadoCell(item: InventarioReservado, col: TableColumn, p = 'p-1.5', isDark = true) {
-  if (col.field === 'codigo_unico') return <td key={col.field} className={`${p} ${isDark ? 'text-white' : 'text-gray-900'} font-medium`}>{item.codigo_unico || '-'}</td>;
+  if (col.field === 'codigo_unico') return (
+    <td key={col.field} className={`${p} ${isDark ? 'text-white' : 'text-gray-900'} font-medium`}>
+      <div className="flex items-center gap-1.5">
+        {item.codigo_unico || '-'}
+        {item.estatus_inventario === 'Bloqueado' && (
+          <span className="px-1.5 py-0.5 rounded text-[9px] font-semibold bg-red-500/20 text-red-400 border border-red-500/30">Bloqueado</span>
+        )}
+      </div>
+    </td>
+  );
   if (col.field === 'caras_totales') return <td key={col.field} className={`${p} text-center`}><span className={`px-1 py-0.5 rounded text-[10px] ${isDark ? 'bg-pink-500/20 text-pink-400' : 'bg-pink-50 text-pink-700'}`}>{item.caras_totales}</span></td>;
   if (col.field === 'renta') return <td key={col.field} className={`${p} text-center ${isDark ? 'text-violet-300' : 'text-violet-700'} text-[10px]`}>{item.renta != null ? item.renta : '-'}</td>;
   if (col.field === 'bonificacion_sc') return <td key={col.field} className={`${p} text-center ${isDark ? 'text-pink-300' : 'text-pink-700'} text-[10px]`}>{item.bonificacion_sc != null ? item.bonificacion_sc : '-'}</td>;

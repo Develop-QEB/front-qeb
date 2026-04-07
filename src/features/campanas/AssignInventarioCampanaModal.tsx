@@ -209,6 +209,7 @@ interface ReservaItem {
   aps?: number | null; // APS asignado (si > 0, no se puede editar)
   articulo?: string; // Artículo SAP de la cara
   grupo?: string; // Distance group name
+  estatus_inventario?: string | null;
 }
 
 // ============ ADVANCED FILTERS SYSTEM (copied from CampanaDetailPage) ============
@@ -849,6 +850,7 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
           grupo_completo_id: r.grupo_completo_id,
           aps: r.aps,
           articulo: matchingCara?.articulo || r.articulo || '',
+          estatus_inventario: r.estatus_inventario,
         };
       });
 
@@ -6305,6 +6307,9 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
                                         >
                                           <input type="checkbox" checked={selectedMapReservas.has(reserva.id)} onChange={() => toggleSingleMapReserva(reserva.id)} className="checkbox-purple" />
                                           <span className="text-zinc-400 font-mono text-[11px]">{reserva.codigo_unico}</span>
+                                          {reserva.estatus_inventario === 'Bloqueado' && (
+                                            <span className="px-1 py-0.5 rounded text-[9px] font-semibold bg-red-500/20 text-red-400 border border-red-500/30">Bloqueado</span>
+                                          )}
                                           <span className="text-zinc-500 text-[11px] truncate max-w-[80px]">{reserva.plaza}</span>
                                           <span className="text-zinc-500 text-[11px]">{reserva.formato}</span>
                                           <span className={`ml-auto px-1.5 py-0.5 rounded text-[10px] ${
@@ -6356,6 +6361,9 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
                                                     >
                                                       <input type="checkbox" checked={selectedMapReservas.has(reserva.id)} onChange={() => toggleSingleMapReserva(reserva.id)} className="checkbox-purple" />
                                                       <span className="text-zinc-400 font-mono">{reserva.codigo_unico}</span>
+                                                      {reserva.estatus_inventario === 'Bloqueado' && (
+                                                        <span className="px-1 py-0.5 rounded text-[9px] font-semibold bg-red-500/20 text-red-400 border border-red-500/30">Bloqueado</span>
+                                                      )}
                                                       <span className={`ml-auto px-1.5 py-0.5 rounded text-[10px] ${
                                                         reserva.codigo_unico?.includes('_Completo') ? 'bg-purple-500/20 text-purple-300' :
                                                         reserva.tipo === 'Bonificacion' ? ((selectedCaraForSearch?.articulo || '').toUpperCase().startsWith('CT') ? 'bg-cyan-500/20 text-cyan-300' : 'bg-emerald-500/20 text-emerald-300') : 'bg-blue-500/20 text-blue-300'
@@ -6389,6 +6397,9 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
                                                           >
                                                             <input type="checkbox" checked={selectedMapReservas.has(reserva.id)} onChange={() => toggleSingleMapReserva(reserva.id)} className="checkbox-purple" />
                                                             <span className="text-zinc-400 font-mono">{reserva.codigo_unico}</span>
+                                                            {reserva.estatus_inventario === 'Bloqueado' && (
+                                                              <span className="px-1 py-0.5 rounded text-[9px] font-semibold bg-red-500/20 text-red-400 border border-red-500/30">Bloqueado</span>
+                                                            )}
                                                           </label>
                                                         ))}
                                                       </div>

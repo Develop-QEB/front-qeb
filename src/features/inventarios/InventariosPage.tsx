@@ -165,13 +165,14 @@ export function InventariosPage() {
 
   // Stats query — global KPIs with same filters
   const { data: statsData, isLoading: isLoadingStats } = useQuery({
-    queryKey: ['inventarios-stats', search, tipo, estatus, plaza],
+    queryKey: ['inventarios-stats', search, tipo, estatus, plaza, campanaIdNum],
     queryFn: () =>
       inventariosService.getStats({
         search: search || undefined,
         tipo: tipo || undefined,
         estatus: estatus || undefined,
         plaza: plaza || undefined,
+        campanaId: campanaIdNum,
       }),
   });
 
@@ -223,15 +224,20 @@ export function InventariosPage() {
         if (bloqueoItem.estatus !== 'Bloqueado') {
           await toggleBlockMutation.mutateAsync(bloqueoItem.id);
         }
-        const asignados = [...data.analistas, ...data.trafico];
         const campanasList = data.campanas.map(c => `  • ${c.campana_nombre} (${c.cliente_nombre})`).join('\n');
 
         await Promise.all(
-          data.campanas.map(c => {
+          data.campanas.map((c, i) => {
+            // Use per-campaign assignments if available, otherwise fallback to flat lists
+            const entry = data.perCampana?.[i];
+            const asignados = entry
+              ? [...entry.analistas, ...entry.trafico]
+              : [...data.analistas, ...data.trafico];
+
             const descripcion = [
               infoInventario,
               `\nFecha de bloqueo: ${fechaBloqueo}`,
-              `\nCampañas afectadas:\n${campanasList}`,
+              //`\nCampañas afectadas:\n${campanasList}`,
               `\nIndicaciones: ${data.motivo}`,
               user ? `\nSolicitado por: ${user.nombre}` : null,
             ].filter(Boolean).join('\n');
