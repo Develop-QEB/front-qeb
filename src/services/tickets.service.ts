@@ -28,6 +28,7 @@ export interface CreateTicketInput {
 export interface UpdateTicketStatusInput {
   status: 'Nuevo' | 'En Progreso' | 'Validación' | 'Resuelto' | 'Cerrado';
   respuesta?: string;
+  status_cambiado_por?: string;
 }
 
 export interface TicketStats {
