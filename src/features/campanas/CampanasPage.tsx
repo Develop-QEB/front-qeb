@@ -1376,7 +1376,7 @@ export function CampanasPage() {
         periodStatus,
         c.creador_nombre || '',
         c.nombre || '',
-        c.cliente_nombre || c.cliente_razon_social || '',
+        c.T2_U_Marca || c.cliente_nombre || c.cliente_razon_social || '',
         c.status,
         c.has_aps ? 'Activa' : 'Inactiva',
         catIni,
