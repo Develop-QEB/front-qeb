@@ -73,6 +73,7 @@ const FILTER_FIELDS: FilterFieldConfig[] = [
   { field: 'tipo_de_cara', label: 'Tipo', type: 'string' },
   { field: 'mueble', label: 'Formato', type: 'string' },
   { field: 'articulo', label: 'Articulo', type: 'string' },
+  { field: 'numero_catorcena', label: 'Catorcena', type: 'number' },
   { field: 'caras_totales', label: 'Caras', type: 'number' },
   { field: 'tarifa_publica', label: 'Tarifa', type: 'number' },
 ];
