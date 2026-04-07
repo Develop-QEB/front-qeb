@@ -122,6 +122,7 @@ const CIUDAD_ESTADO_MAP: Record<string, string> = {
 const getFormatoFromArticulo = (itemName: string): string => {
   if (!itemName) return '';
   const name = itemName.toUpperCase();
+  if (name.includes('KIOSCO') || name.includes('KIOSKO')) return 'Kiosco';
   if (name.includes('PARABUS')) return 'PARABUS';
   if (name.includes('CASETA DE TAXIS')) return 'CASETA DE TAXIS';
   if (name.includes('METROPOLITANO PARALELO')) return 'METROPOLITANO PARALELO';
@@ -1792,6 +1793,7 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
             if (authFieldsChanged) {
               updated = updated.map(c => ({ ...c, autorizacion_dg: c._originalDg || c.autorizacion_dg, autorizacion_dcm: c._originalDcm || c.autorizacion_dcm }));
               updated = updated.map(c => {
+                if (c.formato === 'Kiosco') return c;
                 const total = (c.caras_flujo || 0) + (c.caras_contraflujo || 0) + (c.bonificacion || 0);
                 if (total > 0 && total % 2 !== 0 && c.autorizacion_dg !== 'pendiente') return { ...c, autorizacion_dg: 'pendiente', autorizacion_dcm: 'aprobado' };
                 return c;
@@ -1829,6 +1831,7 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
           // Reset + impar + contamination
           updated = updated.map(c => ({ ...c, autorizacion_dg: c._originalDg || c.autorizacion_dg, autorizacion_dcm: c._originalDcm || c.autorizacion_dcm }));
           updated = updated.map(c => {
+            if (c.formato === 'Kiosco') return c;
             const total = (c.caras_flujo || 0) + (c.caras_contraflujo || 0) + (c.bonificacion || 0);
             if (total > 0 && total % 2 !== 0 && c.autorizacion_dg !== 'pendiente') return { ...c, autorizacion_dg: 'pendiente', autorizacion_dcm: 'aprobado' };
             return c;
@@ -6104,9 +6107,9 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
                       </button>
                       <button
                         onClick={handleSaveCara}
-                        disabled={!editingCaraId && (newCara.caras + (newCara.bonificacion || 0)) > 0 && (newCara.caras + (newCara.bonificacion || 0)) % 2 !== 0}
-                        className={`px-4 py-2 bg-purple-500 text-white rounded-lg text-sm hover:bg-purple-600 transition-colors ${!editingCaraId && (newCara.caras + (newCara.bonificacion || 0)) > 0 && (newCara.caras + (newCara.bonificacion || 0)) % 2 !== 0 ? 'opacity-50 cursor-not-allowed' : ''}`}
-                        title={!editingCaraId && (newCara.caras + (newCara.bonificacion || 0)) > 0 && (newCara.caras + (newCara.bonificacion || 0)) % 2 !== 0 ? 'Caras impar — no se puede guardar' : undefined}
+                        disabled={!editingCaraId && newCara.formato !== 'Kiosco' && (newCara.caras + (newCara.bonificacion || 0)) > 0 && (newCara.caras + (newCara.bonificacion || 0)) % 2 !== 0}
+                        className={`px-4 py-2 bg-purple-500 text-white rounded-lg text-sm hover:bg-purple-600 transition-colors ${!editingCaraId && newCara.formato !== 'Kiosco' && (newCara.caras + (newCara.bonificacion || 0)) > 0 && (newCara.caras + (newCara.bonificacion || 0)) % 2 !== 0 ? 'opacity-50 cursor-not-allowed' : ''}`}
+                        title={!editingCaraId && newCara.formato !== 'Kiosco' && (newCara.caras + (newCara.bonificacion || 0)) > 0 && (newCara.caras + (newCara.bonificacion || 0)) % 2 !== 0 ? 'Caras impar — no se puede guardar' : undefined}
                       >
                         {editingCaraId ? 'Actualizar' : 'Agregar'}
                       </button>

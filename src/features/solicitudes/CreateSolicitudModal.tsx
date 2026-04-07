@@ -1210,10 +1210,12 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
         autorizacion_dcm: c._originalDcm,
       }));
       // Paso 1: Impar por grupo — si renta+bonificacion de un grupo es impar, esa cara es DG
-      // Cortesías quedan excluidas: no requieren autorización
+      // Cortesías y Kioscos quedan excluidos: no requieren autorización por impar
       updated = updated.map(c => {
         const esCaraCortesia = c.articulo?.ItemCode?.toUpperCase().startsWith('CT');
-        if (esCaraCortesia) return c;
+        const artName = (c.articulo?.ItemName || '').toUpperCase();
+        const esKiosco = artName.includes('KIOSCO') || artName.includes('KIOSKO');
+        if (esCaraCortesia || esKiosco) return c;
         const carasGrupo = c.renta + c.bonificacion;
         const esImpar = carasGrupo > 0 && carasGrupo % 2 !== 0;
         if (esImpar && c.autorizacion_dg !== 'pendiente') {
@@ -2674,9 +2676,11 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
                                           {(() => {
                                             // Cortesías siempre aprobadas, no requieren autorización
                                             const esCaraCortesia = cara.articulo?.ItemCode?.toUpperCase().startsWith('CT');
-                                            // Impar por grupo: si las caras de ESTE grupo son impar, requiere DG
+                                            // Impar por grupo: si las caras de ESTE grupo son impar, requiere DG (excepto Kioscos)
+                                            const artNameDisplay = (cara.articulo?.ItemName || '').toUpperCase();
+                                            const esKioscoDisplay = artNameDisplay.includes('KIOSCO') || artNameDisplay.includes('KIOSKO');
                                             const carasGrupo = cara.renta + cara.bonificacion;
-                                            const esImpar = !esCaraCortesia && carasGrupo > 0 && carasGrupo % 2 !== 0;
+                                            const esImpar = !esCaraCortesia && !esKioscoDisplay && carasGrupo > 0 && carasGrupo % 2 !== 0;
                                             // DG contamina: si alguna cara tiene DG, todas son DG (excepto cortesías)
                                             const hayDGEnPropuesta = caras.some(c => c.autorizacion_dg === 'pendiente');
                                             // Solo contamina si esta cara tiene algún pendiente (no tocar las ya aprobadas ni cortesías)
@@ -2763,7 +2767,7 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
                           <span className="text-amber-400 font-bold">{formatCurrency(totals.totalPrecio)}</span>
                         </div>
                       </div>
-                      {caras.some(c => (c.renta + c.bonificacion) > 0 && (c.renta + c.bonificacion) % 2 !== 0) && (
+                      {caras.some(c => { const an = (c.articulo?.ItemName || '').toUpperCase(); if (an.includes('KIOSCO') || an.includes('KIOSKO')) return false; return (c.renta + c.bonificacion) > 0 && (c.renta + c.bonificacion) % 2 !== 0; }) && (
                         <div className="mt-2 flex items-center gap-2 text-xs text-red-300 bg-red-500/10 border border-red-500/20 rounded px-3 py-1.5">
                           <AlertTriangle className="h-3.5 w-3.5 flex-shrink-0" />
                           <span>Hay grupos con caras impar — Requiere autorización DG</span>
@@ -3011,9 +3015,9 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
             <button
               type="button"
               onClick={handleSubmit}
-              disabled={(isEditMode ? updateMutation.isPending : createMutation.isPending) || !selectedCuic || caras.length === 0 || selectedAsignados.length === 0 || invalidCaras.length > 0 || caras.some(c => { const t = c.renta + c.bonificacion; return t > 0 && t % 2 !== 0; })}
+              disabled={(isEditMode ? updateMutation.isPending : createMutation.isPending) || !selectedCuic || caras.length === 0 || selectedAsignados.length === 0 || invalidCaras.length > 0 || caras.some(c => { const an = (c.articulo?.ItemName || '').toUpperCase(); if (an.includes('KIOSCO') || an.includes('KIOSKO')) return false; const t = c.renta + c.bonificacion; return t > 0 && t % 2 !== 0; })}
               className={`px-6 py-2 bg-emerald-600 text-white rounded-lg text-sm font-medium hover:bg-emerald-700 ${isDark ? 'disabled:bg-zinc-700 disabled:text-zinc-500' : 'disabled:bg-gray-200 disabled:text-gray-400'} transition-colors flex items-center gap-2`}
-              title={caras.some(c => { const t = c.renta + c.bonificacion; return t > 0 && t % 2 !== 0; }) ? 'Hay grupos con caras impar — corrige antes de guardar' : selectedAsignados.length === 0 ? 'Debes asignar al menos un usuario' : undefined}
+              title={caras.some(c => { const an = (c.articulo?.ItemName || '').toUpperCase(); if (an.includes('KIOSCO') || an.includes('KIOSKO')) return false; const t = c.renta + c.bonificacion; return t > 0 && t % 2 !== 0; }) ? 'Hay grupos con caras impar — corrige antes de guardar' : selectedAsignados.length === 0 ? 'Debes asignar al menos un usuario' : undefined}
             >
               {(isEditMode ? updateMutation.isPending : createMutation.isPending) ? (
                 <>
