@@ -2845,7 +2845,20 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
       console.log('[Reservar] flujoCount:', flujoCount, 'contraflujoCount:', contraflujoCount);
       if (newReservas.length === 0) {
         console.log('[Reservar] ABORT: 0 reservas built. remainingToAssign:', remainingToAssign);
-        showToast('No hay caras disponibles para reservar', 'error');
+        // Build specific error message
+        const reasons: string[] = [];
+        if (remainingToAssign.flujo <= 0 && remainingToAssign.contraflujo <= 0 && remainingToAssign.bonificacion <= 0) {
+          reasons.push('Todas las caras (Flujo, Contraflujo y Bonificación) ya están completas');
+        } else {
+          if (remainingToAssign.flujo <= 0) reasons.push('Flujo ya está completo');
+          if (remainingToAssign.contraflujo <= 0) reasons.push('Contraflujo ya está completo');
+          const selectedItems = Array.from(selectedInventory).map(id => processedInventory.find(i => Number(i.id) === Number(id))).filter(Boolean);
+          const selectedFlujo = selectedItems.filter(i => i!.tipo_de_cara === 'Flujo').length;
+          const selectedContra = selectedItems.filter(i => i!.tipo_de_cara !== 'Flujo').length;
+          if (selectedFlujo > 0 && remainingToAssign.flujo <= 0) reasons.push(`Seleccionaste ${selectedFlujo} Flujo pero ya no caben más`);
+          if (selectedContra > 0 && remainingToAssign.contraflujo <= 0) reasons.push(`Seleccionaste ${selectedContra} Contraflujo pero ya no caben más`);
+        }
+        showToast(reasons.length > 0 ? reasons.join('. ') : 'No hay caras disponibles para reservar', 'error');
         return;
       }
 

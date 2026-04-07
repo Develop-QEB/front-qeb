@@ -2669,7 +2669,14 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
       });
 
       if (newReservas.length === 0) {
-        showToast('No hay caras disponibles para reservar', 'error');
+        const reasons: string[] = [];
+        if (remainingToAssign.flujo <= 0 && remainingToAssign.contraflujo <= 0 && remainingToAssign.bonificacion <= 0) {
+          reasons.push('Todas las caras (Flujo, Contraflujo y Bonificación) ya están completas');
+        } else {
+          if (remainingToAssign.flujo <= 0) reasons.push('Flujo ya está completo');
+          if (remainingToAssign.contraflujo <= 0) reasons.push('Contraflujo ya está completo');
+        }
+        showToast(reasons.length > 0 ? reasons.join('. ') : 'No hay caras disponibles para reservar', 'error');
         return;
       }
 
