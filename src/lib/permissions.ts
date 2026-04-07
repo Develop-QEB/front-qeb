@@ -4,6 +4,7 @@ export type UserRole =
   | 'Asesor Comercial'
   | 'Asesor Analista'
   | 'Analista de Servicio al Cliente'
+  | 'Asesor Analista'
   | 'Director General'
   | 'Director Comercial'
   | 'Jefe Digital Comercial'
@@ -240,6 +241,7 @@ const rolePermissions: Partial<Record<UserRole, Partial<RolePermissions>>> = {
 
     // Propuestas: permisos de Asesor
     allowedPropuestaStatuses: ['Pase a ventas', 'Ajuste Cto-Cliente', 'Descartada'],
+    canCompartirPropuesta: true,
     canBuscarInventarioEnModal: false,
     canEditClienteEnFormularios: true, // Asesor: puede editar campo cliente
     canEditArticuloOnEdit: true, // Asesor: puede editar artículo SAP
@@ -256,8 +258,8 @@ const rolePermissions: Partial<Record<UserRole, Partial<RolePermissions>>> = {
     canOnlyOpenCorreccionTasks: true,
     canOpenTasks: true,
     canCreateTareasGestionArtes: true,
-    canCompartirPropuesta: true,
 
+    // Inventarios: oculto
     canCreateInventarios: false,
     canEditInventarios: false,
     canDeleteInventarios: false,

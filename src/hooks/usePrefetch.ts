@@ -174,84 +174,37 @@ export function usePrefetch() {
     });
   }, [queryClient]);
 
-  // Prefetch todo (para el dashboard inicial)
+  // Prefetch ligero — solo dashboard, el resto carga lazy por ruta
   const prefetchAll = useCallback(() => {
-    // Ejecutar todos los prefetch en paralelo
-    prefetchClientes();
-    prefetchSolicitudes(); // Ya incluye SAP CUIC y Articulos
-    prefetchProveedores();
-    prefetchInventarios();
-    prefetchCampanas();
-    prefetchPropuestas();
-    // SAP data extra (por si solicitudes no lo cargó aún)
-    prefetchSapCuic();
-    prefetchSapArticulos();
-  }, [
-    prefetchClientes,
-    prefetchSolicitudes,
-    prefetchProveedores,
-    prefetchInventarios,
-    prefetchCampanas,
-    prefetchPropuestas,
-    prefetchSapCuic,
-    prefetchSapArticulos,
-  ]);
+    queryClient.prefetchQuery({
+      queryKey: ['dashboard', 'filter-options'],
+      queryFn: () => dashboardService.getFilterOptions(),
+      staleTime: 30 * 60 * 1000,
+    });
+    queryClient.prefetchQuery({
+      queryKey: ['dashboard', 'stats', {}],
+      queryFn: () => dashboardService.getStats(),
+      staleTime: 15 * 60 * 1000,
+    });
+  }, [queryClient]);
 
-  // Async version — returns promise that resolves when ALL queries finish (including dashboard)
+  // Async version — only prefetch essential dashboard data to reduce DB connections
+  // Other pages load lazily when the user navigates to them
   const prefetchAllAsync = useCallback(async () => {
     await Promise.all([
-      // Page data
-      queryClient.prefetchQuery({
-        queryKey: ['clientes', { page: 1, limit: 20 }],
-        queryFn: () => clientesService.getAll({ page: 1, limit: 20 }),
-        staleTime: 10 * 60 * 1000,
-      }),
-      queryClient.prefetchQuery({
-        queryKey: ['solicitudes', { page: 1, limit: 20 }],
-        queryFn: () => solicitudesService.getAll({ page: 1, limit: 20 }),
-        staleTime: 10 * 60 * 1000,
-      }),
-      queryClient.prefetchQuery({
-        queryKey: ['campanas', { page: 1, limit: 20 }],
-        queryFn: () => campanasService.getAll({ page: 1, limit: 20 }),
-        staleTime: 10 * 60 * 1000,
-      }),
-      queryClient.prefetchQuery({
-        queryKey: ['inventarios', { page: 1, limit: 50 }],
-        queryFn: () => inventariosService.getAll({ page: 1, limit: 50 }),
-        staleTime: 10 * 60 * 1000,
-      }),
-      queryClient.prefetchQuery({
-        queryKey: ['propuestas', { page: 1, limit: 20 }],
-        queryFn: () => propuestasService.getAll({ page: 1, limit: 20 }),
-        staleTime: 10 * 60 * 1000,
-      }),
-      queryClient.prefetchQuery({
-        queryKey: ['proveedores', { page: 1, limit: 20 }],
-        queryFn: () => proveedoresService.getAll({ page: 1, limit: 20 }),
-        staleTime: 10 * 60 * 1000,
-      }),
-      // Dashboard — these are the slow ones (~20s)
+      // Only dashboard essentials — filter-options is cached server-side (30min)
       queryClient.prefetchQuery({
         queryKey: ['dashboard', 'filter-options'],
         queryFn: () => dashboardService.getFilterOptions(),
-        staleTime: 10 * 60 * 1000,
+        staleTime: 30 * 60 * 1000,
       }),
       queryClient.prefetchQuery({
         queryKey: ['dashboard', 'stats', {}],
         queryFn: () => dashboardService.getStats(),
-        staleTime: 10 * 60 * 1000,
-      }),
-      queryClient.prefetchQuery({
-        queryKey: ['dashboard', 'inventory-detail', {}, 'total', 1],
-        queryFn: () => dashboardService.getInventoryDetail({ page: 1, limit: 50 }),
-        staleTime: 10 * 60 * 1000,
+        staleTime: 15 * 60 * 1000,
       }),
     ]);
-    // Fire-and-forget non-critical queries
-    prefetchSapCuic();
-    prefetchSapArticulos();
-  }, [queryClient, prefetchSapCuic, prefetchSapArticulos]);
+  }, [queryClient]);
 
   return {
     prefetchClientes,
