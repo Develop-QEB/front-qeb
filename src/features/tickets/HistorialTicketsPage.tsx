@@ -172,10 +172,12 @@ function TicketDetailModal({
   ticket,
   onClose,
   onStatusChange,
+  onAssigneeChange,
 }: {
   ticket: TicketHistorial;
   onClose: () => void;
   onStatusChange: (status: string) => void;
+  onAssigneeChange: (assignee: string) => void;
 }) {
   const isDark = useThemeStore((s) => s.theme) === 'dark';
   const user = useAuthStore((s) => s.user);
@@ -347,7 +349,7 @@ function TicketDetailModal({
                 value={ticket.status_cambiado_por?.trim() || ''}
                 onChange={(e) => {
                   const value = e.target.value;
-                  statusMutation.mutate({ id: ticket.id, status: ticket.status as any, status_cambiado_por: value || undefined });
+                  onAssigneeChange(value);
                 }}
                 onClick={(e) => e.stopPropagation()}
                 className={`px-2 py-1 rounded-full text-xs font-medium border cursor-pointer focus:outline-none focus:ring-1 focus:ring-purple-500/50 ${
@@ -710,7 +712,6 @@ export function HistorialTicketsPage() {
                             </span>
                           );
                         })()}
-                        )}
                         <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-medium border ${ps.text} ${ps.bg} ${ps.border}`}>
                           {t.prioridad}
                         </span>
@@ -750,6 +751,7 @@ export function HistorialTicketsPage() {
             queryClient.invalidateQueries({ queryKey: ['tickets-unread-count'] });
           }}
           onStatusChange={(status) => statusMutation.mutate({ id: selectedTicket.id, status })}
+          onAssigneeChange={(assignee) => statusMutation.mutate({ id: selectedTicket.id, status: selectedTicket.status, status_cambiado_por: assignee || undefined })}
         />
       )}
     </div>
