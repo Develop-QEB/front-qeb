@@ -120,6 +120,7 @@ interface AdvancedFilterCondition {
   field: string;
   operator: FilterOperator;
   value: string;
+  connector: 'Y' | 'O';
 }
 
 interface FilterFieldConfig {
@@ -150,46 +151,40 @@ const FILTER_OPERATORS: { value: FilterOperator; label: string; forTypes: ('stri
   { value: '<=', label: 'Menor o igual', forTypes: ['number'] },
 ];
 
-// Function to apply advanced filters to data
-function applyAdvancedFilters<T>(data: T[], filters: AdvancedFilterCondition[], mode: 'AND' | 'OR' = 'AND'): T[] {
+// Function to evaluate a single filter condition
+function evalCondition<T>(item: T, filter: AdvancedFilterCondition): boolean {
+  const fieldValue = (item as Record<string, unknown>)[filter.field];
+  const filterValue = filter.value;
+  if (!filterValue) return true;
+  if (fieldValue === null || fieldValue === undefined) {
+    return filter.operator === '!=' || filter.operator === 'not_contains';
+  }
+  const strValue = String(fieldValue).toLowerCase();
+  const strFilterValue = filterValue.toLowerCase();
+  switch (filter.operator) {
+    case '=': return strValue === strFilterValue;
+    case '!=': return strValue !== strFilterValue;
+    case 'contains': return strValue.includes(strFilterValue);
+    case 'not_contains': return !strValue.includes(strFilterValue);
+    case '>': return Number(fieldValue) > Number(filterValue);
+    case '<': return Number(fieldValue) < Number(filterValue);
+    case '>=': return Number(fieldValue) >= Number(filterValue);
+    case '<=': return Number(fieldValue) <= Number(filterValue);
+    default: return true;
+  }
+}
+
+// Function to apply advanced filters with per-row connectors (Y/O)
+function applyAdvancedFilters<T>(data: T[], filters: AdvancedFilterCondition[]): T[] {
   if (filters.length === 0) return data;
-
   return data.filter(item => {
-    const method = mode === 'OR' ? 'some' : 'every';
-    return filters[method](filter => {
-      const fieldValue = (item as Record<string, unknown>)[filter.field];
-      const filterValue = filter.value;
-
-      if (!filterValue) return true; // Empty filter value matches all
-
-      if (fieldValue === null || fieldValue === undefined) {
-        return filter.operator === '!=' || filter.operator === 'not_contains';
-      }
-
-      const strValue = String(fieldValue).toLowerCase();
-      const strFilterValue = filterValue.toLowerCase();
-
-      switch (filter.operator) {
-        case '=':
-          return strValue === strFilterValue;
-        case '!=':
-          return strValue !== strFilterValue;
-        case 'contains':
-          return strValue.includes(strFilterValue);
-        case 'not_contains':
-          return !strValue.includes(strFilterValue);
-        case '>':
-          return Number(fieldValue) > Number(filterValue);
-        case '<':
-          return Number(fieldValue) < Number(filterValue);
-        case '>=':
-          return Number(fieldValue) >= Number(filterValue);
-        case '<=':
-          return Number(fieldValue) <= Number(filterValue);
-        default:
-          return true;
-      }
-    });
+    let result = evalCondition(item, filters[0]);
+    for (let i = 1; i < filters.length; i++) {
+      const val = evalCondition(item, filters[i]);
+      if (filters[i].connector === 'O') result = result || val;
+      else result = result && val;
+    }
+    return result;
   });
 }
 
@@ -521,7 +516,6 @@ export function SolicitudesPage() {
   const [groupBy, setGroupBy] = useState('');
   const [showFilters, setShowFilters] = useState(false);
   const [advancedFilters, setAdvancedFilters] = useState<AdvancedFilterCondition[]>([]);
-  const [filterMode, setFilterMode] = useState<'AND' | 'OR'>('AND');
   const [showAdvancedFilters, setShowAdvancedFilters] = useState(false);
   const [comboboxOpen, setComboboxOpen] = useState<string | null>(null);
   const [expandedGroups, setExpandedGroups] = useState<Set<string>>(new Set());
@@ -763,7 +757,7 @@ export function SolicitudesPage() {
   // Apply advanced filters to data
   const filteredData = useMemo(() => {
     if (!data?.data) return [];
-    return applyAdvancedFilters(data.data, advancedFilters, filterMode);
+    return applyAdvancedFilters(data.data, advancedFilters);
   }, [data?.data, advancedFilters]);
 
   // Compute effective stats: when advanced filters are active, recalculate from filteredData
@@ -799,6 +793,7 @@ export function SolicitudesPage() {
       field: SOLICITUD_FILTER_FIELDS[0].field,
       operator: '=',
       value: '',
+      connector: 'Y',
     };
     setAdvancedFilters(prev => [...prev, newFilter]);
   };
@@ -1211,11 +1206,15 @@ export function SolicitudesPage() {
                           <div key={filter.id} className="flex items-center gap-2">
                             {index > 0 && (
                               <button
-                                onClick={() => setFilterMode(prev => prev === 'AND' ? 'OR' : 'AND')}
-                                className={`text-[10px] font-bold w-8 rounded px-1 py-0.5 transition-colors ${filterMode === 'OR' ? (isDark ? 'bg-amber-500/20 text-amber-300 hover:bg-amber-500/30' : 'bg-amber-100 text-amber-700 hover:bg-amber-200') : (isDark ? 'bg-purple-500/20 text-purple-300 hover:bg-purple-500/30' : 'bg-purple-100 text-purple-700 hover:bg-purple-200')}`}
-                                title={`Modo: ${filterMode}. Click para cambiar a ${filterMode === 'AND' ? 'OR' : 'AND'}`}
+                                onClick={() => {
+                                  const updated = [...advancedFilters];
+                                  updated[index] = { ...updated[index], connector: updated[index].connector === 'Y' ? 'O' : 'Y' };
+                                  setAdvancedFilters(updated);
+                                }}
+                                className={`text-[10px] font-bold w-8 rounded px-1 py-0.5 transition-colors ${filter.connector === 'O' ? (isDark ? 'bg-amber-500/20 text-amber-300 hover:bg-amber-500/30' : 'bg-amber-100 text-amber-700 hover:bg-amber-200') : (isDark ? 'bg-purple-500/20 text-purple-300 hover:bg-purple-500/30' : 'bg-purple-100 text-purple-700 hover:bg-purple-200')}`}
+                                title={`Click para cambiar a ${filter.connector === 'Y' ? 'O' : 'Y'}`}
                               >
-                                {filterMode}
+                                {filter.connector}
                               </button>
                             )}
                             {index === 0 && <span className="w-8"></span>}
