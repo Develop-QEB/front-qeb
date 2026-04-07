@@ -165,8 +165,8 @@ export function CorreosPage() {
   const { data: stats } = useQuery({
     queryKey: ['correos-stats'],
     queryFn: () => correosService.getStats(),
-    refetchInterval: 120000, // 2 minutos
-    staleTime: 30000,
+    refetchInterval: 600000, // 10 minutos (reduce DB connections)
+    staleTime: 5 * 60 * 1000,
   });
 
   // Fetch correos
