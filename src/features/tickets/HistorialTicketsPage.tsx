@@ -14,6 +14,13 @@ import { useSocketTicketsHistorial, useSocketTicketChat, useSocketTicketChatSopo
 
 const STATUS_OPTIONS = ['Nuevo', 'En Progreso', 'Validación', 'Resuelto', 'Cerrado'];
 const PRIORIDAD_OPTIONS = ['Baja', 'Normal', 'Alta', 'Urgente'];
+const TEAM_MEMBERS = ['Jos', 'Akary', 'Mario', 'Bladi'];
+const TEAM_COLORS: Record<string, { text: string; bg: string; border: string }> = {
+  'Jos': { text: 'text-cyan-400', bg: 'bg-cyan-500/15', border: 'border-cyan-500/30' },
+  'Akary': { text: 'text-pink-400', bg: 'bg-pink-500/15', border: 'border-pink-500/30' },
+  'Mario': { text: 'text-emerald-400', bg: 'bg-emerald-500/15', border: 'border-emerald-500/30' },
+  'Bladi': { text: 'text-amber-400', bg: 'bg-amber-500/15', border: 'border-amber-500/30' },
+};
 
 const statusStyles: Record<string, { text: string; bg: string; border: string }> = {
   'Nuevo': { text: 'text-blue-400', bg: 'bg-blue-500/10', border: 'border-blue-500/30' },
@@ -336,16 +343,22 @@ function TicketDetailModal({
                   </div>
                 )}
               </div>
-              {ticket.status_cambiado_por && (
-                <span className={`inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs ${isDark ? 'bg-zinc-800 text-zinc-400 border border-zinc-700' : 'bg-gray-100 text-gray-500 border border-gray-200'}`}>
-                  <User className="h-3 w-3" /> {ticket.status_cambiado_por}
-                </span>
-              )}
-              {!ticket.status_cambiado_por && (
-                <span className={`inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs ${isDark ? 'bg-amber-500/10 text-amber-400 border border-amber-500/30' : 'bg-amber-50 text-amber-600 border border-amber-200'}`}>
-                  Sin atender
-                </span>
-              )}
+              <select
+                value={ticket.status_cambiado_por?.trim() || ''}
+                onChange={(e) => {
+                  const value = e.target.value;
+                  statusMutation.mutate({ id: ticket.id, status: ticket.status as any, status_cambiado_por: value || undefined });
+                }}
+                onClick={(e) => e.stopPropagation()}
+                className={`px-2 py-1 rounded-full text-xs font-medium border cursor-pointer focus:outline-none focus:ring-1 focus:ring-purple-500/50 ${
+                  ticket.status_cambiado_por?.trim()
+                    ? `${TEAM_COLORS[ticket.status_cambiado_por.trim()]?.text || 'text-zinc-400'} ${TEAM_COLORS[ticket.status_cambiado_por.trim()]?.bg || 'bg-zinc-800'} ${TEAM_COLORS[ticket.status_cambiado_por.trim()]?.border || 'border-zinc-700'}`
+                    : isDark ? 'bg-amber-500/10 text-amber-400 border-amber-500/30' : 'bg-amber-50 text-amber-600 border-amber-200'
+                }`}
+              >
+                <option value="">Sin atender</option>
+                {TEAM_MEMBERS.map(m => <option key={m} value={m}>{m}</option>)}
+              </select>
               <span className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-medium border ${prioridadStyles[ticket.prioridad]?.text} ${prioridadStyles[ticket.prioridad]?.bg} ${prioridadStyles[ticket.prioridad]?.border}`}>
                 {ticket.prioridad}
               </span>
@@ -475,8 +488,8 @@ export function HistorialTicketsPage() {
   });
 
   const statusMutation = useMutation({
-    mutationFn: ({ id, status }: { id: number; status: string }) =>
-      ticketsService.updateStatus(id, { status: status as any }),
+    mutationFn: ({ id, status, status_cambiado_por }: { id: number; status: string; status_cambiado_por?: string }) =>
+      ticketsService.updateStatus(id, { status: status as any, status_cambiado_por }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['tickets-historial'] });
       if (selectedTicket) {
@@ -684,15 +697,19 @@ export function HistorialTicketsPage() {
                         <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-medium border ${ss.text} ${ss.bg} ${ss.border}`}>
                           {t.status}
                         </span>
-                        {t.status_cambiado_por && (
-                          <span className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full text-[10px] ${isDark ? 'bg-zinc-800 text-zinc-500 border border-zinc-700' : 'bg-gray-100 text-gray-500 border border-gray-200'}`}>
-                            <User className="h-2.5 w-2.5" /> {t.status_cambiado_por}
-                          </span>
-                        )}
-                        {!t.status_cambiado_por && (
-                          <span className={`inline-flex items-center px-1.5 py-0.5 rounded-full text-[10px] ${isDark ? 'bg-amber-500/10 text-amber-400 border border-amber-500/30' : 'bg-amber-50 text-amber-600 border border-amber-200'}`}>
-                            Sin atender
-                          </span>
+                        {(() => {
+                          const assignee = t.status_cambiado_por?.trim();
+                          const colors = assignee ? TEAM_COLORS[assignee] : null;
+                          return (
+                            <span className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full text-[10px] font-medium border ${
+                              assignee
+                                ? `${colors?.text || 'text-zinc-400'} ${colors?.bg || 'bg-zinc-800'} ${colors?.border || 'border-zinc-700'}`
+                                : isDark ? 'bg-amber-500/10 text-amber-400 border-amber-500/30' : 'bg-amber-50 text-amber-600 border-amber-200'
+                            }`}>
+                              <User className="h-2.5 w-2.5" /> {assignee || 'Sin atender'}
+                            </span>
+                          );
+                        })()}
                         )}
                         <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-medium border ${ps.text} ${ps.bg} ${ps.border}`}>
                           {t.prioridad}
