@@ -1,5 +1,5 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { Ticket, Loader2, Plus, X, Image, AlertTriangle, Clock, CheckCircle2, Send, MessageSquare, Paperclip, FileText } from 'lucide-react';
+import { Ticket, Loader2, Plus, X, Image, AlertTriangle, Clock, CheckCircle2, Send, MessageSquare, Paperclip, FileText, ShieldCheck, Archive } from 'lucide-react';
 import { useState, useRef, useEffect, useCallback } from 'react';
 import { Header } from '../../components/layout/Header';
 import { ticketsService, Ticket as TicketType, CreateTicketInput, TicketChatMessage } from '../../services/tickets.service';
@@ -14,8 +14,9 @@ const getInputClasses = (isDark: boolean) =>
 const STATUS_CONFIG: Record<string, { color: string; textColor: string; bgColor: string; borderColor: string; icon: typeof Ticket }> = {
   'Nuevo': { color: 'bg-blue-500', textColor: 'text-blue-400', bgColor: 'bg-blue-500/10', borderColor: 'border-blue-500/30', icon: Ticket },
   'En Progreso': { color: 'bg-yellow-500', textColor: 'text-yellow-400', bgColor: 'bg-yellow-500/10', borderColor: 'border-yellow-500/30', icon: Clock },
+  'Validación': { color: 'bg-orange-500', textColor: 'text-orange-400', bgColor: 'bg-orange-500/10', borderColor: 'border-orange-500/30', icon: ShieldCheck },
   'Resuelto': { color: 'bg-green-500', textColor: 'text-green-400', bgColor: 'bg-green-500/10', borderColor: 'border-green-500/30', icon: CheckCircle2 },
-  'Cerrado': { color: 'bg-zinc-500', textColor: 'text-zinc-400', bgColor: 'bg-zinc-500/10', borderColor: 'border-zinc-500/30', icon: X },
+  'Cerrado': { color: 'bg-zinc-500', textColor: 'text-zinc-400', bgColor: 'bg-zinc-500/10', borderColor: 'border-zinc-500/30', icon: Archive },
 };
 
 const PRIORIDAD_CONFIG: Record<string, { color: string; bgColor: string; borderColor: string }> = {
@@ -461,6 +462,7 @@ export function TicketsPage() {
   const queryClient = useQueryClient();
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [selectedTicket, setSelectedTicket] = useState<TicketType | null>(null);
+  const [activeTab, setActiveTab] = useState<'Nuevo' | 'En Progreso' | 'Validación' | 'Resuelto' | 'Cerrado'>('Nuevo');
 
   const { data: ticketsData, isLoading } = useQuery({
     queryKey: ['my-tickets'],
@@ -468,6 +470,15 @@ export function TicketsPage() {
   });
 
   const tickets = ticketsData?.data || [];
+  const filteredTickets = tickets.filter(t => t.status === activeTab);
+
+  const tabs: Array<{ key: typeof activeTab; label: string; showCount: boolean }> = [
+    { key: 'Nuevo', label: 'Pendientes', showCount: true },
+    { key: 'En Progreso', label: 'En Proceso', showCount: true },
+    { key: 'Validación', label: 'Validación', showCount: true },
+    { key: 'Resuelto', label: 'Resueltos', showCount: false },
+    { key: 'Cerrado', label: 'Cerrados', showCount: false },
+  ];
 
   return (
     <div className="min-h-screen">
@@ -495,15 +506,40 @@ export function TicketsPage() {
           </div>
         </div>
 
+        {/* Tabs */}
+        <div className={`flex gap-1 p-1 rounded-xl ${isDark ? 'bg-zinc-800/50' : 'bg-gray-100'}`}>
+          {tabs.map(tab => {
+            const count = tickets.filter(t => t.status === tab.key).length;
+            const hasUnread = tickets.some(t => t.status === tab.key && t.has_chat_unread);
+            const isActive = activeTab === tab.key;
+            const config = STATUS_CONFIG[tab.key];
+            return (
+              <button
+                key={tab.key}
+                onClick={() => setActiveTab(tab.key)}
+                className={`flex-1 flex items-center justify-center gap-2 px-3 py-2 rounded-lg text-sm font-medium transition-all ${isActive ? (isDark ? 'bg-zinc-700 text-white shadow' : 'bg-white text-gray-900 shadow') : (isDark ? 'text-zinc-400 hover:text-zinc-200' : 'text-gray-500 hover:text-gray-700')}`}
+              >
+                {tab.label}
+                {tab.showCount && count > 0 && (
+                  <span className={`text-[10px] px-1.5 py-0.5 rounded-full font-bold ${isActive ? (config?.bgColor || 'bg-purple-500/10') + ' ' + (config?.textColor || 'text-purple-400') : (isDark ? 'bg-zinc-700 text-zinc-400' : 'bg-gray-200 text-gray-500')}`}>
+                    {count}
+                  </span>
+                )}
+                {hasUnread && <span className="h-2 w-2 rounded-full bg-red-500 animate-pulse" />}
+              </button>
+            );
+          })}
+        </div>
+
         {/* Tickets List */}
         {isLoading ? (
           <div className="flex flex-col items-center justify-center py-20">
             <Loader2 className="h-10 w-10 text-purple-400 animate-spin mb-4" />
             <p className={`${isDark ? 'text-purple-300/70' : 'text-gray-500'} text-sm`}>Cargando tickets...</p>
           </div>
-        ) : tickets.length > 0 ? (
+        ) : filteredTickets.length > 0 ? (
           <div className="space-y-3">
-            {tickets.map((ticket) => {
+            {filteredTickets.map((ticket) => {
               const statusConfig = STATUS_CONFIG[ticket.status] || STATUS_CONFIG['Nuevo'];
               const prioridadConfig = PRIORIDAD_CONFIG[ticket.prioridad] || PRIORIDAD_CONFIG['Normal'];
               const StatusIcon = statusConfig.icon;
@@ -560,8 +596,8 @@ export function TicketsPage() {
         ) : (
           <div className={`rounded-2xl border ${isDark ? 'border-purple-500/20' : 'border-purple-200'} ${isDark ? 'bg-gradient-to-br from-zinc-900/90 via-purple-950/20 to-zinc-900/90' : 'bg-white'} p-16 text-center`}>
             <Ticket className="h-16 w-16 text-purple-400/50 mx-auto mb-4" />
-            <h3 className={`text-xl font-semibold ${isDark ? 'text-white' : 'text-gray-900'} mb-2`}>No tienes tickets</h3>
-            <p className={`${isDark ? 'text-zinc-400' : 'text-gray-500'} mb-6`}>Crea un ticket si necesitas ayuda o quieres reportar un problema</p>
+            <h3 className={`text-xl font-semibold ${isDark ? 'text-white' : 'text-gray-900'} mb-2`}>Sin tickets en {tabs.find(t => t.key === activeTab)?.label}</h3>
+            <p className={`${isDark ? 'text-zinc-400' : 'text-gray-500'} mb-6`}>{activeTab === 'Nuevo' ? 'Crea un ticket si necesitas ayuda o quieres reportar un problema' : 'No hay tickets con este estado'}</p>
             <button
               onClick={() => setShowCreateModal(true)}
               className="inline-flex items-center gap-2 px-6 py-3 rounded-xl text-sm font-semibold text-white bg-gradient-to-r from-purple-600 to-fuchsia-600 hover:from-purple-500 hover:to-fuchsia-500 shadow-lg shadow-purple-500/25 transition-all"
