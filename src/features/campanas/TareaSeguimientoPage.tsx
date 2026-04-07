@@ -215,6 +215,7 @@ interface InventoryRow {
   estado_arte?: 'sin_revisar' | 'en_revision' | 'aprobado' | 'rechazado';
   estado_tarea?: 'sin_atender' | 'en_progreso' | 'atendido';
   archivo_arte?: string;
+  artes_multiples?: string; // Multiple arts separated by '||'
   arte_aprobado?: string; // Texto original de arte_aprobado
   imu?: number | string;
   // Para Testigo
@@ -11282,12 +11283,31 @@ function CreateTaskModal({
   // Inicializar impresiones cuando cambia el inventario seleccionado (cantidad de ubicaciones por defecto)
   useEffect(() => {
     if (isOpen && selectedInventory.length > 0 && tipo === 'Impresión') {
-      // Agrupar por archivo_arte
+      // Detectar multi-arte: si algún item tiene artes_multiples con '||'
+      const hasMultiArte = selectedInventory.some(item => item.artes_multiples && item.artes_multiples.includes('||'));
       const grupos: Record<string, number> = {};
-      selectedInventory.forEach(item => {
-        const key = item.archivo_arte || 'sin_arte';
-        grupos[key] = (grupos[key] || 0) + 1;
-      });
+
+      if (hasMultiArte) {
+        // Multi-arte: cada arte distinto aplica a todas las ubicaciones
+        const allArtes = new Set<string>();
+        selectedInventory.forEach(item => {
+          if (item.artes_multiples) {
+            item.artes_multiples.split('||').forEach(a => { if (a) allArtes.add(a); });
+          } else if (item.archivo_arte) {
+            allArtes.add(item.archivo_arte);
+          }
+        });
+        allArtes.forEach(arte => {
+          grupos[arte] = selectedInventory.length;
+        });
+      } else {
+        // Single arte: agrupar por archivo_arte
+        selectedInventory.forEach(item => {
+          const key = item.archivo_arte || 'sin_arte';
+          grupos[key] = (grupos[key] || 0) + 1;
+        });
+      }
+
       // Inicializar con la cantidad de ubicaciones de cada arte
       const initial: Record<string, number> = {};
       Object.entries(grupos).forEach(([key, count]) => {
@@ -12440,15 +12460,34 @@ function CreateTaskModal({
                 {/* Lista de artes agrupados por archivo */}
                 <div>
                   {(() => {
-                    // Agrupar items por archivo_arte
-                    const artesAgrupados = selectedInventory.reduce((acc, item) => {
-                      const key = item.archivo_arte || 'sin_arte';
-                      if (!acc[key]) {
-                        acc[key] = { items: [], archivo: item.archivo_arte };
-                      }
-                      acc[key].items.push(item);
-                      return acc;
-                    }, {} as Record<string, { items: typeof selectedInventory; archivo: string | undefined }>);
+                    // Detectar multi-arte
+                    const hasMultiArte = selectedInventory.some(item => item.artes_multiples && item.artes_multiples.includes('||'));
+                    let artesAgrupados: Record<string, { items: typeof selectedInventory; archivo: string | undefined }>;
+
+                    if (hasMultiArte) {
+                      // Multi-arte: crear un grupo por cada arte distinto
+                      artesAgrupados = {};
+                      const allArtes = new Set<string>();
+                      selectedInventory.forEach(item => {
+                        if (item.artes_multiples) {
+                          item.artes_multiples.split('||').forEach(a => { if (a) allArtes.add(a); });
+                        } else if (item.archivo_arte) {
+                          allArtes.add(item.archivo_arte);
+                        }
+                      });
+                      allArtes.forEach(arte => {
+                        artesAgrupados[arte] = { items: selectedInventory, archivo: arte };
+                      });
+                    } else {
+                      artesAgrupados = selectedInventory.reduce((acc, item) => {
+                        const key = item.archivo_arte || 'sin_arte';
+                        if (!acc[key]) {
+                          acc[key] = { items: [], archivo: item.archivo_arte };
+                        }
+                        acc[key].items.push(item);
+                        return acc;
+                      }, {} as Record<string, { items: typeof selectedInventory; archivo: string | undefined }>);
+                    }
 
                     const grupos = Object.entries(artesAgrupados);
 
@@ -13947,6 +13986,7 @@ export function TareaSeguimientoPage() {
       estado_tarea: estadoTarea,
       testigo_status: item.instalado ? 'validado' : 'pendiente',
       archivo_arte: item.archivo || undefined,
+      artes_multiples: item.artes_multiples || undefined,
       arte_aprobado: item.arte_aprobado || '',
       imu: item.IMU || '',
       articulo: item.articulo || '',
