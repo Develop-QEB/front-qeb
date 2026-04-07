@@ -694,6 +694,7 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
   const [groupMode, setGroupMode] = useState<'distancia' | 'listado'>('distancia');
   const [distanciaGrupos, setDistanciaGrupos] = useState(500); // metros
   const [tamanoGrupo, setTamanoGrupo] = useState(10);
+  const [flujoPct, setFlujoPct] = useState(50); // % de caras para flujo (resto para contraflujo)
   const [flujoFilter, setFlujoFilter] = useState<'Todos' | 'Flujo' | 'Contraflujo'>('Todos');
   const [showOnlyIsla, setShowOnlyIsla] = useState(false);
   const [sortColumn, setSortColumn] = useState<string>('codigo_unico');
@@ -1374,6 +1375,15 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
     }
   }, [filteredReservasData, mapsLoaded]);
 
+  // Recalculate flujo/contraflujo based on editable %
+  const adjustedCarasFlujo = useMemo(() => {
+    if (!selectedCaraForSearch) return { flujo: 0, contraflujo: 0 };
+    const totalRenta = (selectedCaraForSearch.caras_flujo || 0) + (selectedCaraForSearch.caras_contraflujo || 0);
+    const flujo = Math.ceil(totalRenta * flujoPct / 100);
+    const contraflujo = totalRenta - flujo;
+    return { flujo, contraflujo };
+  }, [selectedCaraForSearch, flujoPct]);
+
   // Calculate remaining to assign for selected cara
   const remainingToAssign = useMemo(() => {
     if (!selectedCaraForSearch) return { flujo: 0, contraflujo: 0, bonificacion: 0 };
@@ -1386,11 +1396,11 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
     const bonificacionReservado = caraReservas.filter(r => r.tipo === 'Bonificacion').length;
 
     return {
-      flujo: (selectedCaraForSearch.caras_flujo || 0) - flujoReservado,
-      contraflujo: (selectedCaraForSearch.caras_contraflujo || 0) - contraflujoReservado,
+      flujo: adjustedCarasFlujo.flujo - flujoReservado,
+      contraflujo: adjustedCarasFlujo.contraflujo - contraflujoReservado,
       bonificacion: (selectedCaraForSearch.bonificacion || 0) - bonificacionReservado,
     };
-  }, [selectedCaraForSearch, reservas]);
+  }, [selectedCaraForSearch, reservas, adjustedCarasFlujo]);
 
   // Check if cara has reservas
   const caraHasReservas = (localId: string, caraId?: number) => {
@@ -3592,18 +3602,38 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
                     {(selectedCaraForSearch?.articulo || '').toUpperCase().startsWith('IM') ? 'Impresiones' : 'Flujo'}
                   </span>
                   <span className="text-sm font-bold text-blue-400">
-                    {(selectedCaraForSearch?.caras_flujo || 0) - remainingToAssign.flujo} / {selectedCaraForSearch?.caras_flujo || 0}
+                    {adjustedCarasFlujo.flujo - remainingToAssign.flujo} / {adjustedCarasFlujo.flujo}
                   </span>
                 </div>
                 <div className={`w-full h-2 ${isDark ? 'bg-zinc-700/50' : 'bg-gray-200/50'} rounded-full overflow-hidden`}>
                   <div
                     className="h-full bg-gradient-to-r from-blue-500 to-blue-400 rounded-full transition-all"
-                    style={{ width: `${Math.min(100, ((selectedCaraForSearch?.caras_flujo || 0) - remainingToAssign.flujo) / (selectedCaraForSearch?.caras_flujo || 1) * 100)}%` }}
+                    style={{ width: `${Math.min(100, (adjustedCarasFlujo.flujo - remainingToAssign.flujo) / (adjustedCarasFlujo.flujo || 1) * 100)}%` }}
                   />
                 </div>
                 <div className={`mt-1 text-xs ${isDark ? 'text-zinc-500' : 'text-gray-400'}`}>
                   <span className="text-blue-400 font-medium">{remainingToAssign.flujo}</span> restantes
                 </div>
+              </div>
+
+              {/* % Distribucion */}
+              <div className={`flex flex-col items-center justify-center px-2 py-1 rounded-xl ${isDark ? 'bg-zinc-800/30' : 'bg-gray-50/30'} border ${isDark ? 'border-zinc-700/20' : 'border-gray-200/20'} min-w-[70px]`}>
+                <span className={`text-[9px] ${isDark ? 'text-zinc-500' : 'text-gray-400'} mb-1`}>Distribución</span>
+                <div className="flex items-center gap-1">
+                  <input
+                    type="number"
+                    min={0}
+                    max={100}
+                    value={flujoPct}
+                    onChange={(e) => {
+                      const v = Math.max(0, Math.min(100, parseInt(e.target.value) || 0));
+                      setFlujoPct(v);
+                    }}
+                    className={`w-10 text-center text-xs font-bold ${isDark ? 'bg-zinc-800 border-zinc-700 text-blue-400' : 'bg-white border-gray-200 text-blue-600'} border rounded px-1 py-0.5 focus:outline-none focus:ring-1 focus:ring-blue-500/50`}
+                  />
+                  <span className={`text-[10px] ${isDark ? 'text-zinc-500' : 'text-gray-400'}`}>%</span>
+                </div>
+                <span className={`text-[9px] ${isDark ? 'text-zinc-600' : 'text-gray-300'} mt-0.5`}>{flujoPct}/{100 - flujoPct}</span>
               </div>
 
               {/* Contraflujo KPI */}
@@ -3614,13 +3644,13 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
                     Contraflujo
                   </span>
                   <span className="text-sm font-bold text-blue-400">
-                    {(selectedCaraForSearch?.caras_contraflujo || 0) - remainingToAssign.contraflujo} / {selectedCaraForSearch?.caras_contraflujo || 0}
+                    {adjustedCarasFlujo.contraflujo - remainingToAssign.contraflujo} / {adjustedCarasFlujo.contraflujo}
                   </span>
                 </div>
                 <div className={`w-full h-2 ${isDark ? 'bg-zinc-700/50' : 'bg-gray-200/50'} rounded-full overflow-hidden`}>
                   <div
                     className="h-full bg-gradient-to-r from-blue-500 to-blue-400 rounded-full transition-all"
-                    style={{ width: `${Math.min(100, ((selectedCaraForSearch?.caras_contraflujo || 0) - remainingToAssign.contraflujo) / (selectedCaraForSearch?.caras_contraflujo || 1) * 100)}%` }}
+                    style={{ width: `${Math.min(100, (adjustedCarasFlujo.contraflujo - remainingToAssign.contraflujo) / (adjustedCarasFlujo.contraflujo || 1) * 100)}%` }}
                   />
                 </div>
                 <div className={`mt-1 text-xs ${isDark ? 'text-zinc-500' : 'text-gray-400'}`}>

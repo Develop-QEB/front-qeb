@@ -369,10 +369,10 @@ export function ClientePropuestaPage() {
 
   // Handlers
   const handleDownloadCSV = () => {
-    const headers = ['Codigo', 'Plaza', 'Ubicacion', 'Tipo Cara', 'Formato', 'Articulo', 'Caras', 'Tarifa', 'Periodo'];
+    const headers = ['Codigo', 'Plaza', 'Ubicacion', 'Tipo Cara', 'Formato', 'Articulo', 'Caras', 'Tarifa', 'Periodo', 'Latitud', 'Longitud'];
     const rows = inventario.map(i => [
       i.codigo_unico, i.plaza, i.ubicacion, i.tipo_de_cara, i.mueble, i.articulo,
-      i.caras_totales, i.tarifa_publica, formatInicioPeriodo(i, tipoPeriodo)
+      i.caras_totales, i.tarifa_publica, formatInicioPeriodo(i, tipoPeriodo), i.latitud || '', i.longitud || ''
     ]);
     const csv = [headers.join(','), ...rows.map(r => r.map(v => `"${v || ''}"`).join(','))].join('\n');
     const blob = new Blob([csv], { type: 'text/csv' });

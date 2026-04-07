@@ -151,11 +151,12 @@ const FILTER_OPERATORS: { value: FilterOperator; label: string; forTypes: ('stri
 ];
 
 // Function to apply advanced filters to data
-function applyAdvancedFilters<T>(data: T[], filters: AdvancedFilterCondition[]): T[] {
+function applyAdvancedFilters<T>(data: T[], filters: AdvancedFilterCondition[], mode: 'AND' | 'OR' = 'AND'): T[] {
   if (filters.length === 0) return data;
 
   return data.filter(item => {
-    return filters.every(filter => {
+    const method = mode === 'OR' ? 'some' : 'every';
+    return filters[method](filter => {
       const fieldValue = (item as Record<string, unknown>)[filter.field];
       const filterValue = filter.value;
 
@@ -520,6 +521,7 @@ export function SolicitudesPage() {
   const [groupBy, setGroupBy] = useState('');
   const [showFilters, setShowFilters] = useState(false);
   const [advancedFilters, setAdvancedFilters] = useState<AdvancedFilterCondition[]>([]);
+  const [filterMode, setFilterMode] = useState<'AND' | 'OR'>('AND');
   const [showAdvancedFilters, setShowAdvancedFilters] = useState(false);
   const [comboboxOpen, setComboboxOpen] = useState<string | null>(null);
   const [expandedGroups, setExpandedGroups] = useState<Set<string>>(new Set());
@@ -761,7 +763,7 @@ export function SolicitudesPage() {
   // Apply advanced filters to data
   const filteredData = useMemo(() => {
     if (!data?.data) return [];
-    return applyAdvancedFilters(data.data, advancedFilters);
+    return applyAdvancedFilters(data.data, advancedFilters, filterMode);
   }, [data?.data, advancedFilters]);
 
   // Compute effective stats: when advanced filters are active, recalculate from filteredData
@@ -1208,7 +1210,13 @@ export function SolicitudesPage() {
                         {advancedFilters.map((filter, index) => (
                           <div key={filter.id} className="flex items-center gap-2">
                             {index > 0 && (
-                              <span className={`text-[10px] ${isDark ? 'text-purple-400' : 'text-purple-600'} font-medium w-8`}>AND</span>
+                              <button
+                                onClick={() => setFilterMode(prev => prev === 'AND' ? 'OR' : 'AND')}
+                                className={`text-[10px] font-bold w-8 rounded px-1 py-0.5 transition-colors ${filterMode === 'OR' ? (isDark ? 'bg-amber-500/20 text-amber-300 hover:bg-amber-500/30' : 'bg-amber-100 text-amber-700 hover:bg-amber-200') : (isDark ? 'bg-purple-500/20 text-purple-300 hover:bg-purple-500/30' : 'bg-purple-100 text-purple-700 hover:bg-purple-200')}`}
+                                title={`Modo: ${filterMode}. Click para cambiar a ${filterMode === 'AND' ? 'OR' : 'AND'}`}
+                              >
+                                {filterMode}
+                              </button>
                             )}
                             {index === 0 && <span className="w-8"></span>}
                             <select
