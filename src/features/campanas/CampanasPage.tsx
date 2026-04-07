@@ -16,7 +16,7 @@ import { Campana, Catorcena } from '../../types';
 
 // Tipos para las vistas
 type ViewType = 'tabla' | 'catorcena';
-import { formatDate } from '../../lib/utils';
+import { formatDate, formatCurrency } from '../../lib/utils';
 import { AssignInventarioCampanaModal } from './AssignInventarioCampanaModal';
 import { OrdenesMontajeModal } from './OrdenesMontajeModal';
 import { StatusCampanaModal } from './StatusCampanaModal';
@@ -1539,6 +1539,12 @@ export function CampanasPage() {
             <span className={`${isDark ? 'text-zinc-500' : 'text-gray-400'} text-xs`}>-</span>
           )}
         </td>
+        {/* Inversión */}
+        <td className="px-4 py-3">
+          <span className={`font-medium ${isDark ? 'text-amber-400' : 'text-amber-600'}`}>
+            {item.inversion ? formatCurrency(item.inversion) : '-'}
+          </span>
+        </td>
         {/* APS */}
         <td className="px-4 py-3 text-center">
           {item.has_aps ? (
@@ -2109,6 +2115,7 @@ export function CampanasPage() {
                       <th className={`px-4 py-3 text-left text-xs font-semibold ${isDark ? 'text-purple-300' : 'text-purple-700'} uppercase tracking-wider`}>Actividad</th>
                       <th className={`px-4 py-3 text-left text-xs font-semibold ${isDark ? 'text-purple-300' : 'text-purple-700'} uppercase tracking-wider`}>Fecha Inicio</th>
                       <th className={`px-4 py-3 text-left text-xs font-semibold ${isDark ? 'text-purple-300' : 'text-purple-700'} uppercase tracking-wider`}>Fecha Fin</th>
+                      <th className={`px-4 py-3 text-left text-xs font-semibold ${isDark ? 'text-purple-300' : 'text-purple-700'} uppercase tracking-wider`}>Inversión</th>
                       <th className={`px-4 py-3 text-center text-xs font-semibold ${isDark ? 'text-purple-300' : 'text-purple-700'} uppercase tracking-wider`}>APS</th>
                       <th className={`px-4 py-3 text-left text-xs font-semibold ${isDark ? 'text-purple-300' : 'text-purple-700'} uppercase tracking-wider`}>Acciones</th>
                     </tr>
