@@ -73,7 +73,31 @@ const tutorials: Tutorial[] = [
     category: 'Trafico',
     title: 'Manual-Trafico-QEB',
     pdfUrl: 'https://drive.google.com/file/d/1rSLKyWxsO7EPHYIeLbs4btJjZ-1Snr1Y/preview'
-  }
+  },
+  {
+    id: 'gestionar-campañas',
+    type: 'demo' as const,
+    category: 'Analistas',
+    title: 'Gestion de Campañas',
+    demoUrl: 'https://app.storylane.io/demo/taq3uxuzty4w?embed=inline_overlay',
+    width: 2560,
+    height: 1425,
+    previewImage:
+      'https://storylane-prod-uploads.s3.us-east-2.amazonaws.com/company/company_708d0493-8c70-45e6-8886-151c1cc6fa6d/project/project_9865049f-8508-4fbd-8ea5-486272859b7e/page/1775568519723.png',
+    paddingBottom: 'calc(55.66% + 25px)',
+  },
+  {
+    id: 'tutorial-versionario',
+    type: 'demo' as const,
+    category: 'Analistas',
+    title: 'Tutorial de Versionario',
+    demoUrl: 'https://app.storylane.io/demo/4zugtxb6t96w?embed=inline_overlay',
+    width: 2560,
+    height: 1425,
+    previewImage:
+      'https://storylane-prod-uploads.s3.us-east-2.amazonaws.com/company/company_708d0493-8c70-45e6-8886-151c1cc6fa6d/project/project_07d4b799-158a-492b-8ccd-0c7bad3a9fb4/page/1775570047634.png',
+    paddingBottom: 'calc(55.66% + 25px)',
+  },
 ];
 
 const categories = [...new Set(tutorials.map((t) => t.category))];

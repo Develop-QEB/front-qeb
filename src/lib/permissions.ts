@@ -293,7 +293,7 @@ const rolePermissions: Partial<Record<UserRole, Partial<RolePermissions>>> = {
     canEditPropuestaStatus: false,
     allowedPropuestaStatuses: [],
     canAprobarPropuesta: false,
-    canAsignarInventario: true,
+    canAsignarInventario: true, // No puede editar inventario, solo ver
     canCompartirPropuesta: true, // SÍ puede compartir
     canBuscarInventarioEnModal: false,
 
