@@ -1815,10 +1815,7 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
               }
               return c;
             });
-            updated = updated.map(c => ({ ...c, autorizacion_dg: c._originalDg || c.autorizacion_dg, autorizacion_dcm: c._originalDcm || c.autorizacion_dcm }));
-            updated = updated.map(c => { const total = (c.caras_flujo || 0) + (c.caras_contraflujo || 0) + (c.bonificacion || 0); if (total > 0 && total % 2 !== 0 && c.autorizacion_dg !== 'pendiente') return { ...c, autorizacion_dg: 'pendiente', autorizacion_dcm: 'aprobado' }; return c; });
-            const hayDG = updated.some(c => c.autorizacion_dg === 'pendiente');
-            if (hayDG) updated = updated.map(c => c.autorizacion_dcm === 'pendiente' ? { ...c, autorizacion_dg: 'pendiente', autorizacion_dcm: 'aprobado' } : c);
+            // Server already returned correct authorization - no need to re-apply impar/contamination
             return updated;
           });
         }
