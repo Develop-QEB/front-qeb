@@ -9,6 +9,7 @@ import { useVersionCheck } from '../../hooks/useVersionCheck';
 import { useThemeStore } from '../../store/themeStore';
 import { useAuthStore } from '../../store/authStore';
 import { LightThemeNotificationModal } from './LightThemeNotificationModal';
+import { UpdateNotificationModal } from './UpdateNotificationModal';
 
 export function MainLayout() {
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
@@ -61,6 +62,8 @@ export function MainLayout() {
       {user && user.light_theme_notified !== true && (
         <LightThemeNotificationModal />
       )}
+
+      <UpdateNotificationModal />
     </div>
   );
 }
