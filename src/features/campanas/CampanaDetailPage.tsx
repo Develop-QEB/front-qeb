@@ -1146,15 +1146,15 @@ export function CampanaDetailPage() {
         : inventarioConAPS;
 
       // Fetch artículos SAP para obtener U_IMU_OcrCode (CostingCode) - usar BD de la campaña
-      let articulosMap: Record<string, { U_IMU_OcrCode?: string }> = {};
+      let articulosMap: Record<string, { U_IMU_OcrCode?: string; U_IMU_cod_sitio?: number; U_IMU_dscSitio?: string }> = {};
       try {
         const { getEndpoints } = await import('../../store/environmentStore');
         const sapDb = (campana.sap_database || 'CIMU') as import('../../store/environmentStore').SapDatabase;
         const artResponse = await fetch(getEndpoints(sapDb).articulos);
         const artData = await artResponse.json();
         const items = artData.value || artData || [];
-        items.forEach((a: { ItemCode: string; U_IMU_OcrCode?: string }) => {
-          if (a.ItemCode) articulosMap[a.ItemCode] = { U_IMU_OcrCode: a.U_IMU_OcrCode };
+        items.forEach((a: { ItemCode: string; U_IMU_OcrCode?: string; U_IMU_cod_sitio?: number; U_IMU_dscSitio?: string }) => {
+          if (a.ItemCode) articulosMap[a.ItemCode] = { U_IMU_OcrCode: a.U_IMU_OcrCode, U_IMU_cod_sitio: a.U_IMU_cod_sitio, U_IMU_dscSitio: a.U_IMU_dscSitio };
         });
       } catch (err) {
         console.warn('Could not fetch articulos for CostingCode:', err);
