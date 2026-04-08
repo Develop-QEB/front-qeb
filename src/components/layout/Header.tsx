@@ -8,6 +8,7 @@ import { UserAvatar } from '../ui/user-avatar';
 import { useSocketNotificaciones } from '../../hooks/useSocket';
 import { useMemo } from 'react';
 import { ThemeToggle } from '../ui/ThemeToggle';
+import { authService } from '../../services/auth.service';
 
 interface HeaderProps {
   title: string;
@@ -64,6 +65,7 @@ export function Header({ title }: HeaderProps) {
         }`}>
           Activo
         </span>
+        <VersionBadge isDark={isDark} />
 
         {/* Theme Toggle */}
         <ThemeToggle />
@@ -103,5 +105,25 @@ export function Header({ title }: HeaderProps) {
         </Link>
       </div>
     </header>
+  );
+}
+
+function VersionBadge({ isDark }: { isDark: boolean }) {
+  const { data: version } = useQuery({
+    queryKey: ['app-version'],
+    queryFn: () => authService.getLatestVersion(),
+    staleTime: 5 * 60 * 1000,
+  });
+
+  if (!version?.numero) return null;
+
+  return (
+    <span className={`flex items-center gap-1 px-2 py-1 rounded-full text-[10px] font-medium border ${
+      isDark
+        ? 'bg-purple-500/15 text-purple-300 border-purple-500/25'
+        : 'bg-purple-50 text-purple-600 border-purple-200'
+    }`}>
+      v{version.numero}
+    </span>
   );
 }

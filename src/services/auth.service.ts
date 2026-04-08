@@ -94,6 +94,15 @@ export const authService = {
     await api.post('/auth/mark-light-theme-notified');
   },
 
+  async getLatestVersion(): Promise<{ numero: string; fecha: string } | null> {
+    const res = await api.get<ApiResponse<{ numero: string; fecha: string }>>('/auth/version');
+    return res.data.data || null;
+  },
+
+  async markVersionNotified(version: string): Promise<void> {
+    await api.post('/auth/mark-version-notified', { version });
+  },
+
   async uploadPhoto(file: File): Promise<User> {
     const formData = new FormData();
     formData.append('foto', file);
