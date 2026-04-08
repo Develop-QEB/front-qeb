@@ -98,6 +98,18 @@ const tutorials: Tutorial[] = [
       'https://storylane-prod-uploads.s3.us-east-2.amazonaws.com/company/company_708d0493-8c70-45e6-8886-151c1cc6fa6d/project/project_07d4b799-158a-492b-8ccd-0c7bad3a9fb4/page/1775570047634.png',
     paddingBottom: 'calc(55.66% + 25px)',
   },
+    {
+    id: 'filtrar-exportar-datos',
+    type: 'demo' as const,
+    category: 'Campañas',
+    title: 'Tutorial de Filtrar y Exportar Datos',
+    demoUrl: 'https://app.storylane.io/demo/jomjkefuskp5?embed=inline_overlay',
+    width: 2560,
+    height: 1425,
+    previewImage:
+      'https://storylane-prod-uploads.s3.us-east-2.amazonaws.com/company/company_708d0493-8c70-45e6-8886-151c1cc6fa6d/project/project_7e140c58-4280-47b4-aa0b-6a6205659a1f/page/1775591768363.png',
+    paddingBottom: 'calc(55.66% + 25px)',
+  },
 ];
 
 const categories = [...new Set(tutorials.map((t) => t.category))];
