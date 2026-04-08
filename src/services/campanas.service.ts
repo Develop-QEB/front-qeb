@@ -388,7 +388,7 @@ export function buildDeliveryNote(
   campana: CampanaWithComments,
   inventarioAPS: InventarioConAPS[],
   sapDatabase?: string | null,
-  articulosMap?: Record<string, { U_IMU_OcrCode?: string }>
+  articulosMap?: Record<string, { U_IMU_OcrCode?: string; U_IMU_cod_sitio?: number; U_IMU_dscSitio?: string }>
 ): SAPDeliveryNote | SAPDeliveryNoteMigrated {
   // Obtener valores únicos de APS
   const uniqueAPS = [...new Set(inventarioAPS.map(item => item.aps))];
