@@ -552,7 +552,7 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
   useSocketEquipos();
 
   // Si readOnly es true, sobrescribir permisos para modo visualización
-  const isDescartada = propuesta.status === 'Descartada';
+  const isDescartada = propuesta.status === 'Descartada' || propuesta.status === 'Rechazada';
   const effectiveCanEdit = !readOnly && permissions.canAsignarInventario && !isDescartada;
   const canEditResumen = !readOnly && permissions.canEditResumenPropuesta && !isDescartada;
   const canEditCliente = !readOnly && permissions.canEditClienteEnFormularios && !isDescartada;
