@@ -38,10 +38,10 @@ export function UpdateNotificationModal() {
   if (!open || !latestVersion) return null;
 
   return (
-    <div className="fixed inset-0 z-[200] flex items-center justify-center backdrop-blur-sm bg-black/50">
+    <div className="fixed inset-0 z-[200] flex items-center justify-center backdrop-blur-sm bg-black/50 p-4 overflow-y-auto">
       <div
         className={`
-          relative max-w-lg w-full mx-4 rounded-2xl shadow-2xl border p-6
+          relative max-w-md w-full mx-auto my-auto rounded-2xl shadow-2xl border p-5 max-h-[90vh] overflow-y-auto
           ${isDark
             ? 'bg-[#1a1025] border-purple-500/30 text-white'
             : 'bg-white border-purple-200 text-gray-900'
@@ -49,22 +49,22 @@ export function UpdateNotificationModal() {
         `}
       >
         {/* Icon */}
-        <div className="flex justify-center mb-4">
+        <div className="flex justify-center mb-3">
           <div
             className={`
-              flex items-center justify-center w-16 h-16 rounded-full
+              flex items-center justify-center w-12 h-12 rounded-full
               ${isDark ? 'bg-emerald-500/20' : 'bg-emerald-100'}
             `}
           >
-            <RefreshCw className={`w-8 h-8 ${isDark ? 'text-emerald-400' : 'text-emerald-500'}`} />
+            <RefreshCw className={`w-6 h-6 ${isDark ? 'text-emerald-400' : 'text-emerald-500'}`} />
           </div>
         </div>
 
         {/* Title */}
-        <h2 className="text-xl font-bold text-center mb-2">
+        <h2 className="text-lg font-bold text-center mb-1">
           Nueva Actualización Disponible
         </h2>
-        <p className={`text-center text-sm mb-4 ${isDark ? 'text-purple-300' : 'text-purple-600'} font-medium`}>
+        <p className={`text-center text-xs mb-3 ${isDark ? 'text-purple-300' : 'text-purple-600'} font-medium`}>
           Versión {latestVersion}
         </p>
 
@@ -134,7 +134,7 @@ export function UpdateNotificationModal() {
           onClick={handleAcknowledge}
           disabled={loading}
           className={`
-            mt-6 w-full py-3 px-4 rounded-xl font-semibold text-white text-sm
+            mt-4 w-full py-2.5 px-4 rounded-xl font-semibold text-white text-sm
             bg-gradient-to-r from-purple-600 to-purple-500
             hover:from-purple-700 hover:to-purple-600
             disabled:opacity-50 disabled:cursor-not-allowed
