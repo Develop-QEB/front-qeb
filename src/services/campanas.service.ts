@@ -446,7 +446,7 @@ export function buildDeliveryNote(
     U_CRM_R_S: campana.T0_U_RazonSocial || '',
     U_CRM_Camp: campana.nombre || campana.nombre_campania || '',
     U_TIPO_VENTA: 'Comercial',
-    U_IMU_ART_APS: campana.id?.toString() || '',
+    U_IMU_ART_APS: (campana.propuesta_id || campana.id)?.toString() || '',
     U_IMU_CotNum: uniqueAPS.length > 0 ? String(uniqueAPS[0]) : '',
     DocumentLines: documentLines,
   };
