@@ -859,17 +859,7 @@ export function InventariosPage() {
                   <List className="h-4 w-4" />
                   Tabla
                 </button>
-                <button
-                  onClick={() => setViewMode('map')}
-                  className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-medium transition-all ${
-                    viewMode === 'map'
-                      ? isDark ? 'bg-purple-500/20 text-purple-300 border border-purple-500/40' : 'bg-purple-50 text-purple-700 border border-purple-200'
-                      : isDark ? 'bg-zinc-800/60 text-zinc-400 border border-zinc-700/50 hover:bg-zinc-800 hover:text-zinc-200' : 'bg-gray-100 text-gray-500 border border-gray-200 hover:bg-gray-200 hover:text-gray-700'
-                  }`}
-                >
-                  <Map className="h-4 w-4" />
-                  Mapa
-                </button>
+                {/* Botón Mapa oculto */}
               </div>
 
               {/* Download CSV button */}
