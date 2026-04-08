@@ -202,6 +202,7 @@ export interface InventarioConArte {
   anio_catorcena: number | null;
   grupo_completo_id: number | null;
   grupo: number | null;
+  artes_multiples?: string | null;
 }
 
 export interface SolicitudCara {
