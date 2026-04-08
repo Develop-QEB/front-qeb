@@ -1120,11 +1120,7 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
       && newCara.articulo?.ItemCode === editingOriginal.articulo?.ItemCode
     );
 
-    // Cortesías no requieren autorización — se aprueban automáticamente
-    if (esCortesia) {
-      autorizacion_dg = 'aprobado';
-      autorizacion_dcm = 'aprobado';
-    } else if (skipAuthEval && editingOriginal) {
+    if (skipAuthEval && editingOriginal) {
       autorizacion_dg = editingOriginal._originalDg;
       autorizacion_dcm = editingOriginal._originalDcm;
     } else {
@@ -2684,9 +2680,9 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
                                             // DG contamina: si alguna cara tiene DG, todas son DG (excepto cortesías)
                                             const hayDGEnPropuesta = caras.some(c => c.autorizacion_dg === 'pendiente');
                                             // Solo contamina si esta cara tiene algún pendiente (no tocar las ya aprobadas ni cortesías)
-                                            const tienePendiente = !esCaraCortesia && (cara.autorizacion_dg === 'pendiente' || cara.autorizacion_dcm === 'pendiente');
-                                            const dgEfectivo = esCaraCortesia ? 'aprobado' : (esImpar || (hayDGEnPropuesta && tienePendiente) ? 'pendiente' : cara.autorizacion_dg);
-                                            const dcmEfectivo = esCaraCortesia ? 'aprobado' : (dgEfectivo === 'pendiente' ? 'aprobado' : cara.autorizacion_dcm);
+                                            const tienePendiente = (cara.autorizacion_dg === 'pendiente' || cara.autorizacion_dcm === 'pendiente');
+                                            const dgEfectivo = esCaraCortesia ? cara.autorizacion_dg : (esImpar || (hayDGEnPropuesta && tienePendiente) ? 'pendiente' : cara.autorizacion_dg);
+                                            const dcmEfectivo = esCaraCortesia ? cara.autorizacion_dcm : (dgEfectivo === 'pendiente' ? 'aprobado' : cara.autorizacion_dcm);
                                             return (
                                               <div className="flex flex-col gap-0.5">
                                                 {dgEfectivo === 'aprobado' && dcmEfectivo === 'aprobado' && (
