@@ -54,19 +54,27 @@ export function ReportesEspecialesPage() {
   const isDark = useThemeStore((s) => s.theme) === 'dark';
   const [detalleFilter, setDetalleFilter] = useState<DetalleFilter | null>(null);
 
+  // Fechas: default hoy
+  const todayStr = new Date().toLocaleDateString('en-CA', { timeZone: 'America/Mexico_City' }); // YYYY-MM-DD
+  const [fechaInicio, setFechaInicio] = useState(todayStr);
+  const [fechaFin, setFechaFin] = useState(todayStr);
+
   const { data, isLoading } = useQuery({
-    queryKey: ['reportes-especiales'],
+    queryKey: ['reportes-especiales', fechaInicio, fechaFin],
     queryFn: async () => {
-      const res = await api.get<{ success: boolean; data: ReportesData }>('/tickets/reportes-especiales');
+      const params = new URLSearchParams();
+      if (fechaInicio) params.set('fechaInicio', fechaInicio);
+      if (fechaFin) params.set('fechaFin', fechaFin);
+      const res = await api.get<{ success: boolean; data: ReportesData }>(`/tickets/reportes-especiales?${params}`);
       return res.data.data;
     },
     refetchInterval: 60000,
   });
 
-  const hoy = new Date().toLocaleDateString('es-MX', {
-    weekday: 'long', year: 'numeric', month: 'long', day: 'numeric',
-    timeZone: 'America/Mexico_City',
-  });
+  const esHoy = fechaInicio === todayStr && fechaFin === todayStr;
+  const labelPeriodo = esHoy
+    ? new Date().toLocaleDateString('es-MX', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric', timeZone: 'America/Mexico_City' })
+    : `${fechaInicio} — ${fechaFin}`;
 
   if (isLoading || !data) {
     return (
@@ -84,10 +92,10 @@ export function ReportesEspecialesPage() {
     : 0;
 
   const kpiCards = [
-    { label: 'Tickets Hoy', value: data.hoy.total, icon: BarChart3, color: 'purple' },
+    { label: esHoy ? 'Tickets Hoy' : 'Tickets Periodo', value: data.hoy.total, icon: BarChart3, color: 'purple' },
     { label: 'Nuevos', value: data.hoy.nuevos, icon: Zap, color: 'blue' },
     { label: 'En Atención', value: data.hoy.enProgreso + data.hoy.enValidacion, icon: Clock, color: 'amber' },
-    { label: 'Resueltos Hoy', value: data.hoy.resueltosYCerrados, icon: CheckCircle2, color: 'emerald' },
+    { label: esHoy ? 'Resueltos Hoy' : 'Resueltos Periodo', value: data.hoy.resueltosYCerrados, icon: CheckCircle2, color: 'emerald' },
     { label: 'Total Resueltos', value: data.global.resueltosYCerrados, icon: Award, color: 'cyan' },
     { label: 'Total Global', value: data.global.total, icon: TrendingUp, color: 'purple' },
   ];
@@ -101,19 +109,49 @@ export function ReportesEspecialesPage() {
     <div className={`min-h-screen ${isDark ? 'bg-zinc-950' : 'bg-gray-50'}`}>
       <Header />
       <div className="max-w-7xl mx-auto px-4 py-6 space-y-6">
-        {/* Título */}
-        <div className="flex items-center justify-between">
+        {/* Título + Filtros de fecha */}
+        <div className="flex items-center justify-between flex-wrap gap-4">
           <div>
             <h1 className={`text-2xl font-bold ${isDark ? 'text-white' : 'text-gray-900'}`}>
               Reportes Especiales
             </h1>
             <p className={`text-sm ${isDark ? 'text-zinc-400' : 'text-gray-500'} mt-1 capitalize`}>
-              {hoy} — Datos en tiempo real
+              {labelPeriodo} {esHoy ? '— Datos en tiempo real' : ''}
             </p>
           </div>
-          <div className={`flex items-center gap-2 px-3 py-1.5 rounded-full text-xs ${isDark ? 'bg-emerald-500/15 text-emerald-300 border-emerald-500/30' : 'bg-emerald-50 text-emerald-700 border-emerald-200'} border`}>
-            <span className="h-2 w-2 rounded-full bg-emerald-400 animate-pulse" />
-            En vivo
+          <div className="flex items-center gap-3">
+            <div className="flex items-center gap-2">
+              <label className={`text-xs ${isDark ? 'text-zinc-500' : 'text-gray-400'}`}>Desde</label>
+              <input
+                type="date"
+                value={fechaInicio}
+                onChange={(e) => setFechaInicio(e.target.value)}
+                className={`px-2.5 py-1.5 rounded-lg text-sm border ${isDark ? 'bg-zinc-800 border-zinc-700 text-white' : 'bg-white border-gray-200 text-gray-900'} focus:outline-none focus:ring-2 focus:ring-purple-500`}
+              />
+            </div>
+            <div className="flex items-center gap-2">
+              <label className={`text-xs ${isDark ? 'text-zinc-500' : 'text-gray-400'}`}>Hasta</label>
+              <input
+                type="date"
+                value={fechaFin}
+                onChange={(e) => setFechaFin(e.target.value)}
+                className={`px-2.5 py-1.5 rounded-lg text-sm border ${isDark ? 'bg-zinc-800 border-zinc-700 text-white' : 'bg-white border-gray-200 text-gray-900'} focus:outline-none focus:ring-2 focus:ring-purple-500`}
+              />
+            </div>
+            {!esHoy && (
+              <button
+                onClick={() => { setFechaInicio(todayStr); setFechaFin(todayStr); }}
+                className={`px-3 py-1.5 rounded-lg text-xs ${isDark ? 'bg-purple-500/20 text-purple-300 hover:bg-purple-500/30' : 'bg-purple-50 text-purple-600 hover:bg-purple-100'} transition-colors`}
+              >
+                Hoy
+              </button>
+            )}
+            {esHoy && (
+              <div className={`flex items-center gap-2 px-3 py-1.5 rounded-full text-xs ${isDark ? 'bg-emerald-500/15 text-emerald-300 border-emerald-500/30' : 'bg-emerald-50 text-emerald-700 border-emerald-200'} border`}>
+                <span className="h-2 w-2 rounded-full bg-emerald-400 animate-pulse" />
+                En vivo
+              </div>
+            )}
           </div>
         </div>
 
@@ -164,7 +202,7 @@ export function ReportesEspecialesPage() {
 
         {/* Gráfica tickets por hora HOY */}
         <div className={`${isDark ? 'bg-zinc-900/80 border-zinc-800' : 'bg-white border-gray-200'} border rounded-xl p-5`}>
-          <h3 className={`text-sm font-semibold ${isDark ? 'text-white' : 'text-gray-900'} mb-4`}>Actividad por Hora — Hoy</h3>
+          <h3 className={`text-sm font-semibold ${isDark ? 'text-white' : 'text-gray-900'} mb-4`}>Actividad por Hora {esHoy ? '— Hoy' : `— ${fechaInicio} a ${fechaFin}`}</h3>
           <ResponsiveContainer width="100%" height={200}>
             <BarChart data={data.hoy.ticketsPorHora}>
               <XAxis dataKey="hora" tick={{ fontSize: 10, fill: isDark ? '#a1a1aa' : '#6b7280' }} tickFormatter={(h) => `${h}h`} />
