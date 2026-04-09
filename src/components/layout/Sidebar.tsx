@@ -294,10 +294,10 @@ export function Sidebar({ collapsed, onToggle }: SidebarProps) {
                     collapsed && 'justify-center px-2'
                   )
                 }
-                title={collapsed ? 'Reportes Especiales' : undefined}
+                title={collapsed ? 'Reportes de Tickets' : undefined}
               >
                 <BarChart3 className="h-5 w-5 flex-shrink-0" />
-                {!collapsed && <span>Reportes Especiales</span>}
+                {!collapsed && <span>Reportes de Tickets</span>}
               </NavLink>
             )}
           </div>

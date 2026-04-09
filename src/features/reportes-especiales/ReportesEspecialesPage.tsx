@@ -83,7 +83,7 @@ export function ReportesEspecialesPage() {
   if (isLoading || !data) {
     return (
       <div className={`min-h-screen ${isDark ? 'bg-zinc-950' : 'bg-gray-50'}`}>
-        <Header title="Reportes Especiales" />
+        <Header title="Reportes de Tickets" />
         <div className="flex items-center justify-center h-[80vh]">
           <Loader2 className="h-8 w-8 text-purple-500 animate-spin" />
         </div>
@@ -111,7 +111,7 @@ export function ReportesEspecialesPage() {
 
     // Encabezado
     const rangoLabel = esHoy ? `Hoy ${fechaInicio}` : `${fechaInicio} a ${fechaFin}`;
-    lines.push(`Reporte Especial QEB — ${rangoLabel}`);
+    lines.push(`Reporte de Tickets QEB — ${rangoLabel}`);
     lines.push(`Generado por: ${user?.nombre || 'Usuario'} — ${new Date().toLocaleString('es-MX', { timeZone: 'America/Mexico_City' })}`);
     lines.push('');
 
@@ -167,13 +167,13 @@ export function ReportesEspecialesPage() {
 
   return (
     <div className={`min-h-screen ${isDark ? 'bg-zinc-950' : 'bg-gray-50'}`}>
-      <Header title="Reportes Especiales" />
+      <Header title="Reportes de Tickets" />
       <div className="max-w-7xl mx-auto px-4 py-6 space-y-6">
         {/* Título + Filtros de fecha */}
         <div className="flex items-center justify-between flex-wrap gap-4">
           <div>
             <h1 className={`text-2xl font-bold ${isDark ? 'text-white' : 'text-gray-900'}`}>
-              Reportes Especiales
+              Reportes de Tickets
             </h1>
             <p className={`text-sm ${isDark ? 'text-zinc-400' : 'text-gray-500'} mt-1 capitalize`}>
               {labelPeriodo} {esHoy ? '— Datos en tiempo real' : ''}
