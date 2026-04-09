@@ -3626,24 +3626,20 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
                     min={0}
                     max={100}
                     value={flujoPct}
-                    onChange={(e) => {
+                    onChange={async (e) => {
                       const v = Math.max(0, Math.min(100, parseInt(e.target.value) || 0));
                       setFlujoPct(v);
-                    }}
-                    onBlur={async () => {
                       if (!selectedCaraForSearch?.id) return;
                       const totalRenta = selectedCaraForSearch.caras || ((selectedCaraForSearch.caras_flujo || 0) + (selectedCaraForSearch.caras_contraflujo || 0));
                       if (totalRenta === 0) return;
-                      const newFlujo = Math.ceil(totalRenta * flujoPct / 100);
+                      const newFlujo = Math.ceil(totalRenta * v / 100);
                       const newContra = totalRenta - newFlujo;
-                      if (newFlujo === selectedCaraForSearch.caras_flujo && newContra === selectedCaraForSearch.caras_contraflujo) return;
                       setSavingPct(true);
                       try {
                         await propuestasService.updateCara(propuesta.id, selectedCaraForSearch.id, {
                           caras_flujo: newFlujo,
                           caras_contraflujo: newContra,
                         } as any);
-                        // Update both caras list and selectedCaraForSearch
                         const updatedCara = { ...selectedCaraForSearch, caras_flujo: newFlujo, caras_contraflujo: newContra };
                         setSelectedCaraForSearch(updatedCara);
                         setCaras(prev => prev.map(c => c.id === selectedCaraForSearch.id
