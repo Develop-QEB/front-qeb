@@ -3,8 +3,9 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import {
   Ticket, Search, Filter, Loader2, MessageSquare, Clock, CheckCircle2,
   X, AlertTriangle, Image, FileText, Send, Paperclip, Eye, User,
-  ChevronDown, Circle, Info,
+  ChevronDown, Circle, Info, Trophy,
 } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
 import { Header } from '../../components/layout/Header';
 import { ticketsService, TicketHistorial, TicketMensaje, TicketChatMessage } from '../../services/tickets.service';
 import { uploadsService } from '../../services/uploads.service';
@@ -465,6 +466,9 @@ function TicketDetailModal({
 export function HistorialTicketsPage() {
   const isDark = useThemeStore((s) => s.theme) === 'dark';
   const queryClient = useQueryClient();
+  const navigate = useNavigate();
+  const user = useAuthStore((s) => s.user);
+  const isDev = user?.rol === 'DEV';
   const [search, setSearch] = useState('');
   const [debouncedSearch, setDebouncedSearch] = useState('');
   const [filterStatus, setFilterStatus] = useState('Todos');
@@ -536,13 +540,28 @@ export function HistorialTicketsPage() {
       <Header title="Historial de Tickets" />
       <main className="max-w-7xl mx-auto px-4 sm:px-6 py-6 space-y-5">
         {/* Title */}
-        <div>
-          <h1 className={`text-2xl font-bold ${isDark ? 'text-white' : 'text-gray-900'}`}>
-            Historial de Tickets
-          </h1>
-          <p className={`text-sm ${isDark ? 'text-zinc-400' : 'text-gray-500'}`}>
-            Gestion y seguimiento de todos los tickets de soporte
-          </p>
+        <div className="flex items-center justify-between">
+          <div>
+            <h1 className={`text-2xl font-bold ${isDark ? 'text-white' : 'text-gray-900'}`}>
+              Historial de Tickets
+            </h1>
+            <p className={`text-sm ${isDark ? 'text-zinc-400' : 'text-gray-500'}`}>
+              Gestion y seguimiento de todos los tickets de soporte
+            </p>
+          </div>
+          {isDev && (
+            <button
+              onClick={() => navigate('/admin/tickets-ranking')}
+              className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-semibold border transition-all ${
+                isDark
+                  ? 'bg-gradient-to-r from-amber-500/10 to-yellow-500/10 border-amber-500/30 text-amber-300 hover:from-amber-500/20 hover:to-yellow-500/20'
+                  : 'bg-gradient-to-r from-amber-50 to-yellow-50 border-amber-200 text-amber-700 hover:from-amber-100 hover:to-yellow-100'
+              }`}
+            >
+              <Trophy className="h-4 w-4" />
+              Rankings
+            </button>
+          )}
         </div>
 
         {/* Stats */}
@@ -715,6 +734,16 @@ export function HistorialTicketsPage() {
                         <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-medium border ${ps.text} ${ps.bg} ${ps.border}`}>
                           {t.prioridad}
                         </span>
+                        {t.usuario_area && (
+                          <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-medium border ${isDark ? 'text-teal-400 bg-teal-500/10 border-teal-500/30' : 'text-teal-600 bg-teal-50 border-teal-200'}`}>
+                            {t.usuario_area}
+                          </span>
+                        )}
+                        {t.usuario_role && (
+                          <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-medium border ${isDark ? 'text-violet-400 bg-violet-500/10 border-violet-500/30' : 'text-violet-600 bg-violet-50 border-violet-200'}`}>
+                            {t.usuario_role}
+                          </span>
+                        )}
                         {t.imagen && <Image className={`h-3 w-3 ${isDark ? 'text-purple-400' : 'text-purple-500'}`} />}
                         {t.total_mensajes > 0 && (
                           <span className={`inline-flex items-center gap-1 text-[10px] ${isDark ? 'text-zinc-500' : 'text-gray-400'}`}>

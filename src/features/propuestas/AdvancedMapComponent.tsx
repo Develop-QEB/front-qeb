@@ -111,9 +111,9 @@ export function AdvancedMapComponent({
       }
 
       const entry = map.get(key)!;
-      if (inv.tipo_de_cara === 'Flujo') {
+      if (String(inv.tipo_de_cara).startsWith('Flujo')) {
         entry.hasFlujo = true;
-      } else if (inv.tipo_de_cara === 'Contraflujo') {
+      } else if (String(inv.tipo_de_cara).startsWith('Contraflujo')) {
         entry.hasContraflujo = true;
       }
     });
@@ -412,7 +412,7 @@ export function AdvancedMapComponent({
     }
 
     // Differentiate Flujo vs Contraflujo
-    if (inv.tipo_de_cara === 'Contraflujo') return COLORS.contraflujo;
+    if (String(inv.tipo_de_cara).startsWith('Contraflujo')) return COLORS.contraflujo;
     return COLORS.flujo;
   };
 

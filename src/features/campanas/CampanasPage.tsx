@@ -1159,6 +1159,31 @@ export function CampanasPage() {
           delete groups[key];
         }
       });
+
+      // Asegurar que todas las campañas del backend estén en algún grupo visible.
+      // El backend filtra por overlap de fechas, así que si una campaña pasa el filtro
+      // pero no tiene catorcenas_con_contenido en el rango, agregarla al grupo correspondiente.
+      const groupedIds = new Set<number>();
+      Object.values(groups).forEach(g => g.campanas.forEach(c => groupedIds.add(c.id)));
+      const ungrouped = filteredData.filter(c => !groupedIds.has(c.id));
+      if (ungrouped.length > 0) {
+        // Agregar campañas faltantes a los grupos del rango del filtro
+        for (let y = yearInicio; y <= yearFin; y++) {
+          const cStart = y === yearInicio ? catorcenaInicio : 1;
+          const cEnd = y === yearFin ? catorcenaFin : 26;
+          for (let c = cStart; c <= cEnd; c++) {
+            const key = `${y}-${String(c).padStart(2, '0')}`;
+            if (!groups[key]) {
+              groups[key] = { catorcena: { num: c, anio: y }, campanas: [] };
+            }
+            ungrouped.forEach(item => {
+              if (!groups[key].campanas.some(existing => existing.id === item.id)) {
+                groups[key].campanas.push(item);
+              }
+            });
+          }
+        }
+      }
     } else if (yearInicio && yearFin) {
       Object.keys(groups).forEach(key => {
         const groupAnio = parseInt(key.split('-')[0]);
@@ -1193,6 +1218,41 @@ export function CampanasPage() {
         return { key, ...value };
       });
   }, [filteredData, activeGroupings, catorcenasData, yearInicio, yearFin, catorcenaInicio, catorcenaFin]);
+
+  // Mapa de fechas de catorcenas para verificar overlap de periodos
+  const catorcenaDateMap = useMemo(() => {
+    const map: Record<string, { inicio: number; fin: number }> = {};
+    catorcenasData?.data?.forEach(c => {
+      map[`${c.numero_catorcena}-${c.a_o}`] = {
+        inicio: new Date(c.fecha_inicio).getTime(),
+        fin: new Date(c.fecha_fin).getTime(),
+      };
+    });
+    return map;
+  }, [catorcenasData]);
+
+  // Helper: verifica si un item de inventario pertenece a una catorcena (por match exacto o overlap de fechas)
+  const itemMatchesCatorcena = useCallback((inv: any, catNum: number, catAnio: number): boolean => {
+    // Match exacto por numero_catorcena (item inicia en esta catorcena)
+    const invCat = inv.numero_catorcena;
+    const invAnio = inv.anio_catorcena;
+    if (invCat != null && invAnio != null && Number(invCat) === catNum && Number(invAnio) === catAnio) return true;
+    // Overlap de fechas (item abarca esta catorcena aunque inicie en otra)
+    const itemInicio = inv.inicio_periodo ? new Date(inv.inicio_periodo).getTime() : null;
+    const itemFin = inv.fin_periodo ? new Date(inv.fin_periodo).getTime() : null;
+    if (!itemInicio) return false;
+    const target = catorcenaDateMap[`${catNum}-${catAnio}`];
+    if (!target) return false;
+    const efectiveFin = itemFin || itemInicio;
+    return itemInicio <= target.fin && efectiveFin >= target.inicio;
+  }, [catorcenaDateMap]);
+
+  // Campañas únicas en los grupos de catorcena visibles
+  const uniqueCampsInCatorcenaView = useMemo(() => {
+    const ids = new Set<number>();
+    campanasPorCatorcena.forEach(g => g.campanas.forEach(c => ids.add(c.id)));
+    return ids.size;
+  }, [campanasPorCatorcena]);
 
   // Estadísticas para gráfica de Status — from global stats
   const statusChartData = useMemo(() => {
@@ -2335,7 +2395,7 @@ export function CampanasPage() {
                   </div>
                   <div className={`w-px h-10 ${isDark ? 'bg-zinc-800' : 'bg-gray-200'}`} />
                   <div className="text-right">
-                    <p className={`text-2xl font-bold ${isDark ? 'text-purple-400' : 'text-purple-600'}`}>{filteredData.length}</p>
+                    <p className={`text-2xl font-bold ${isDark ? 'text-purple-400' : 'text-purple-600'}`}>{uniqueCampsInCatorcenaView}</p>
                     <p className={`text-[10px] ${isDark ? 'text-zinc-500' : 'text-gray-400'} uppercase tracking-wide`}>Campañas</p>
                   </div>
                 </div>
@@ -2371,19 +2431,13 @@ export function CampanasPage() {
                     const periodColor = PERIOD_COLORS_LOCAL[periodStatus] || getDefaultStatusColor(isDark);
                     const isExpanded = expandedCampanas.has(campana.id);
                     const allInventarios = campanaInventarios[campana.id] || [];
-                    // Filtrar inventarios por la catorcena del grupo actual
-                    const inventarios = allInventarios.filter(inv => {
-                      const invCat = (inv as any).numero_catorcena;
-                      const invAnio = (inv as any).anio_catorcena;
-                      if (invCat == null || invAnio == null) return true;
-                      return Number(invCat) === catorcena.num && Number(invAnio) === catorcena.anio;
-                    });
+                    // Filtrar inventarios por la catorcena del grupo actual (match exacto + overlap de fechas)
+                    const inventarios = allInventarios.filter(inv => itemMatchesCatorcena(inv, catorcena.num, catorcena.anio));
                     const isLoadingInv = loadingInventarios.has(campana.id);
                     const apsAgrupados = getInventarioAgrupadoPorAPS(inventarios);
                     const hasInventarios = allInventarios.length > 0;
 
-                    // Si ya cargamos inventarios y no hay ninguno en esta catorcena, ocultar la campaña
-                    if (hasInventarios && inventarios.length === 0) return null;
+                    // Nota: no ocultar campañas sin inventario en esta catorcena — el backend ya filtró por overlap
 
                     return (
                       <div key={campana.id} className={`border-t ${isDark ? 'border-zinc-800/30' : 'border-gray-200'}`}>
@@ -2459,14 +2513,11 @@ export function CampanasPage() {
                               </span>
                             ) : null;
                           })()}
-                          {hasInventarios && (() => {
-                            const invCatorcena = inventarios.reduce((sum, inv) => {
-                              const tarifa = Number((inv as any).tarifa_publica_sc) || Number((inv as any).tarifa_publica) || 0;
-                              return sum + tarifa;
-                            }, 0);
+                          {(() => {
+                            const invCampana = Number((campana as any).inversion) || 0;
                             return (
                               <span className={`px-2 py-0.5 rounded-full text-[10px] ${isDark ? 'bg-green-500/15 text-green-300' : 'bg-green-50 text-green-700'} border border-green-500/25 flex items-center gap-1`} title="Inversión">
-                                <DollarSign className="h-3 w-3" /> {invCatorcena > 0 ? `$${invCatorcena.toLocaleString()}` : 'Sin inversión'}
+                                <DollarSign className="h-3 w-3" /> {invCampana > 0 ? `$${invCampana.toLocaleString()}` : 'Sin inversión'}
                               </span>
                             );
                           })()}
@@ -2616,8 +2667,9 @@ export function CampanasPage() {
                                                     }, 0);
                                                     const sumBonif = Math.min(carasTotales, (bonifCampana > 0 ? bonifCampana : bonifGrupoFallback));
                                                     const sumNormales = Math.max(carasTotales - sumBonif, 0);
-                                                    // Inversion: tarifa por cara * caras rentadas (excluye bonificadas).
-                                                    const inversionTotal = tarifaPublica * sumNormales;
+                                                    // Inversion: usar renta (sc.costo) si está disponible, sino tarifa × caras
+                                                    const rentaGrupo = Number((grupo.items[0] as any)?.renta) || 0;
+                                                    const inversionTotal = rentaGrupo > 0 ? rentaGrupo : (tarifaPublica * sumNormales);
                                                     const artesSubidos = grupo.items.filter(i => i.archivo != null && i.archivo !== '').length;
                                                     return (
                                                       <>
@@ -2759,19 +2811,7 @@ export function CampanasPage() {
                           : `Cat ${catorcena.num} / ${catorcena.anio}`}
                       </span>
                       <span className={`px-2.5 py-1 rounded-full text-xs ${isDark ? 'bg-purple-500/20 text-purple-300 border-purple-500/30' : 'bg-purple-100 text-purple-700 border-purple-200'} border`}>
-                        {(() => {
-                          const visibleCount = campanas.filter(c => {
-                            const allInv = campanaInventarios[c.id];
-                            if (!allInv || allInv.length === 0) return true; // no cargados aún, asumir visible
-                            return allInv.some(inv => {
-                              const invCat = (inv as any).numero_catorcena;
-                              const invAnio = (inv as any).anio_catorcena;
-                              if (invCat == null || invAnio == null) return true;
-                              return Number(invCat) === catorcena.num && Number(invAnio) === catorcena.anio;
-                            });
-                          }).length;
-                          return `${visibleCount} campañas`;
-                        })()}
+                        {campanas.length} campañas
                       </span>
                       {secondGroupingLabel && subgroups && (
                         <span className={`px-2 py-0.5 rounded-full text-[10px] ${isDark ? 'bg-fuchsia-500/20 text-fuchsia-300 border-fuchsia-500/30' : 'bg-fuchsia-100 text-fuchsia-700 border-fuchsia-200'} border`}>
@@ -2786,43 +2826,9 @@ export function CampanasPage() {
                           En curso
                         </span>
                       )}
-                      {/* Inversión total de la catorcena + progreso de carga */}
+                      {/* Inversión total de la catorcena (usa campana.inversion ya recalculada por el backend) */}
                       {(() => {
-                        const loadedCount = campanas.filter(c => campanaInventarios[c.id]).length;
-                        const totalCount = campanas.length;
-                        const isFullyLoaded = loadedCount === totalCount;
-                        const percentage = totalCount > 0 ? Math.round((loadedCount / totalCount) * 100) : 100;
-
-                        // Sumar inversión solo de inventarios que pertenecen a esta catorcena
-                        const totalInversion = campanas.reduce((s, c) => {
-                          const allInv = campanaInventarios[c.id] || [];
-                          const invFiltrados = allInv.filter(inv => {
-                            const invCat = (inv as any).numero_catorcena;
-                            const invAnio = (inv as any).anio_catorcena;
-                            if (invCat == null || invAnio == null) return true;
-                            return Number(invCat) === catorcena.num && Number(invAnio) === catorcena.anio;
-                          });
-                          return s + invFiltrados.reduce((sum, inv) => {
-                            const tarifa = Number((inv as any).tarifa_publica_sc) || Number((inv as any).tarifa_publica) || 0;
-                            return sum + tarifa;
-                          }, 0);
-                        }, 0);
-
-                        if (!isFullyLoaded) {
-                          return (
-                            <div className="flex items-center gap-2 ml-auto">
-                              <div className={`w-24 h-1.5 rounded-full ${isDark ? 'bg-zinc-800' : 'bg-gray-200'} overflow-hidden`}>
-                                <div
-                                  className="h-full rounded-full bg-gradient-to-r from-purple-500 to-fuchsia-500 transition-all duration-500 ease-out"
-                                  style={{ width: `${percentage}%` }}
-                                />
-                              </div>
-                              <span className={`text-[10px] tabular-nums ${isDark ? 'text-zinc-500' : 'text-gray-400'}`}>
-                                {percentage}%
-                              </span>
-                            </div>
-                          );
-                        }
+                        const totalInversion = campanas.reduce((s, c) => s + (Number((c as any).inversion) || 0), 0);
 
                         return totalInversion > 0 ? (
                           <span className={`px-2 py-0.5 rounded-full text-[10px] ${isDark ? 'bg-green-500/15 text-green-300' : 'bg-green-50 text-green-700'} border border-green-500/25 flex items-center gap-1`} title="Inversión total">
@@ -2890,7 +2896,7 @@ export function CampanasPage() {
         {activeView === 'catorcena' && (
           <div className={`flex items-center justify-between px-5 py-3 border-t ${isDark ? 'border-zinc-800/50 bg-zinc-900/30 text-zinc-500' : 'border-gray-200 bg-gray-50 text-gray-400'} text-xs`}>
             <span>
-              {campanasPorCatorcena.length} catorcenas · {filteredData.length} campañas
+              {campanasPorCatorcena.length} catorcenas · {uniqueCampsInCatorcenaView} campañas
               {activeGroupings.length > 1 && (
                 <span className={`${isDark ? 'text-fuchsia-400' : 'text-fuchsia-600'} ml-2`}>
                   · Subagrupado por {AVAILABLE_GROUPINGS.find(g => g.field === activeGroupings[1])?.label}

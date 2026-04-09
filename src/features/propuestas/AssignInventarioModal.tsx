@@ -696,6 +696,7 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
   const [distanciaGrupos, setDistanciaGrupos] = useState(500); // metros
   const [tamanoGrupo, setTamanoGrupo] = useState(10);
   const [flujoPct, setFlujoPct] = useState(50); // % de caras para flujo (resto para contraflujo)
+  const [savingPct, setSavingPct] = useState(false); // loading para guardar % en BD
   const [flujoFilter, setFlujoFilter] = useState<'Todos' | 'Flujo' | 'Contraflujo'>('Todos');
   const [showOnlyIsla, setShowOnlyIsla] = useState(false);
   const [sortColumn, setSortColumn] = useState<string>('codigo_unico');
@@ -870,7 +871,7 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
       const loadedReservas: ReservaItem[] = existingReservas.map((r: ReservaModalItem) => {
         // Find the cara that matches this reserva
         const matchingCara = caras.find(c => c.id === r.solicitud_cara_id);
-        const tipo = r.estatus === 'Bonificado' ? 'Bonificacion' : (r.tipo_de_cara === 'Flujo' ? 'Flujo' : 'Contraflujo');
+        const tipo = r.estatus === 'Bonificado' ? 'Bonificacion' : (String(r.tipo_de_cara).startsWith('Flujo') ? 'Flujo' : 'Contraflujo');
 
         return {
           id: matchingCara
@@ -1376,14 +1377,14 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
     }
   }, [filteredReservasData, mapsLoaded]);
 
-  // Recalculate flujo/contraflujo based on editable %
+  // Show actual flujo/contraflujo from DB (updated via onChange when % changes)
   const adjustedCarasFlujo = useMemo(() => {
     if (!selectedCaraForSearch) return { flujo: 0, contraflujo: 0 };
-    const totalRenta = (selectedCaraForSearch.caras_flujo || 0) + (selectedCaraForSearch.caras_contraflujo || 0);
-    const flujo = Math.ceil(totalRenta * flujoPct / 100);
-    const contraflujo = totalRenta - flujo;
-    return { flujo, contraflujo };
-  }, [selectedCaraForSearch, flujoPct]);
+    return {
+      flujo: selectedCaraForSearch.caras_flujo || 0,
+      contraflujo: selectedCaraForSearch.caras_contraflujo || 0,
+    };
+  }, [selectedCaraForSearch]);
 
   // Calculate remaining to assign for selected cara
   const remainingToAssign = useMemo(() => {
@@ -2084,8 +2085,8 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
     Object.entries(groups).forEach(([key, group]) => {
       if (group.length >= 2) {
         const baseCode = key.split('|')[0];
-        const flujoItem = group.find(g => g.tipo_de_cara === 'Flujo');
-        const contraflujoItem = group.find(g => g.tipo_de_cara === 'Contraflujo');
+        const flujoItem = group.find(g => String(g.tipo_de_cara).startsWith('Flujo'));
+        const contraflujoItem = group.find(g => String(g.tipo_de_cara).startsWith('Contraflujo'));
 
         if (flujoItem && contraflujoItem) {
           // Create merged "completo" item - use a virtual ID
@@ -2275,6 +2276,9 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
   // Handle search inventory - open search view and fetch disponibles
   const handleSearchInventory = async (cara: CaraItem) => {
     setSelectedCaraForSearch(cara);
+    // Calculate % from actual DB values
+    const totalRenta = (cara.caras_flujo || 0) + (cara.caras_contraflujo || 0);
+    setFlujoPct(totalRenta > 0 ? Math.round((cara.caras_flujo || 0) / totalRenta * 100) : 50);
     setViewState('search-inventory');
     setShowOnlyUnicos(false);
     setShowOnlyCompletos(false);
@@ -2775,8 +2779,8 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
       const baseCode = item.codigo_unico?.split('_')[0]; // Assuming prefix_suffix format
       if (baseCode) {
         // Check if we have both Flujo and Contraflujo for this base code in selection
-        const hasFlujo = selectedItems.some(i => i.codigo_unico?.startsWith(baseCode) && i.tipo_de_cara === 'Flujo');
-        const hasContra = selectedItems.some(i => i.codigo_unico?.startsWith(baseCode) && i.tipo_de_cara === 'Contraflujo');
+        const hasFlujo = selectedItems.some(i => i.codigo_unico?.startsWith(baseCode) && String(i.tipo_de_cara).startsWith('Flujo'));
+        const hasContra = selectedItems.some(i => i.codigo_unico?.startsWith(baseCode) && String(i.tipo_de_cara).startsWith('Contraflujo'));
         if (hasFlujo && hasContra) {
           potentialPairs.add(baseCode);
         }
@@ -2827,7 +2831,7 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
           // If only one has space, skip this completo item entirely to maintain pairing
         } else {
           // Regular item - reserve based on tipo_de_cara
-          const tipo = inv.tipo_de_cara === 'Flujo' ? 'Flujo' : 'Contraflujo';
+          const tipo = String(inv.tipo_de_cara).startsWith('Flujo') ? 'Flujo' : 'Contraflujo';
           const canReserve = tipo === 'Flujo'
             ? flujoCount < remainingToAssign.flujo
             : contraflujoCount < remainingToAssign.contraflujo;
@@ -2860,8 +2864,8 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
           if (remainingToAssign.flujo <= 0) reasons.push('Flujo ya está completo');
           if (remainingToAssign.contraflujo <= 0) reasons.push('Contraflujo ya está completo');
           const selectedItems = Array.from(selectedInventory).map(id => processedInventory.find(i => Number(i.id) === Number(id))).filter(Boolean);
-          const selectedFlujo = selectedItems.filter(i => i!.tipo_de_cara === 'Flujo').length;
-          const selectedContra = selectedItems.filter(i => i!.tipo_de_cara !== 'Flujo').length;
+          const selectedFlujo = selectedItems.filter(i => String(i!.tipo_de_cara).startsWith('Flujo')).length;
+          const selectedContra = selectedItems.filter(i => String(i!.tipo_de_cara).startsWith('Contraflujo')).length;
           if (selectedFlujo > 0 && remainingToAssign.flujo <= 0) reasons.push(`Seleccionaste ${selectedFlujo} Flujo pero ya no caben más`);
           if (selectedContra > 0 && remainingToAssign.contraflujo <= 0) reasons.push(`Seleccionaste ${selectedContra} Contraflujo pero ya no caben más`);
         }
@@ -3622,15 +3626,37 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
                     min={0}
                     max={100}
                     value={flujoPct}
-                    onChange={(e) => {
+                    onChange={async (e) => {
                       const v = Math.max(0, Math.min(100, parseInt(e.target.value) || 0));
                       setFlujoPct(v);
+                      if (!selectedCaraForSearch?.id) return;
+                      const totalRenta = selectedCaraForSearch.caras || ((selectedCaraForSearch.caras_flujo || 0) + (selectedCaraForSearch.caras_contraflujo || 0));
+                      if (totalRenta === 0) return;
+                      const newFlujo = Math.ceil(totalRenta * v / 100);
+                      const newContra = totalRenta - newFlujo;
+                      setSavingPct(true);
+                      try {
+                        await propuestasService.updateCara(propuesta.id, selectedCaraForSearch.id, {
+                          caras_flujo: newFlujo,
+                          caras_contraflujo: newContra,
+                        } as any);
+                        const updatedCara = { ...selectedCaraForSearch, caras_flujo: newFlujo, caras_contraflujo: newContra };
+                        setSelectedCaraForSearch(updatedCara);
+                        setCaras(prev => prev.map(c => c.id === selectedCaraForSearch.id
+                          ? { ...c, caras_flujo: newFlujo, caras_contraflujo: newContra }
+                          : c
+                        ));
+                      } catch (err) {
+                        console.error('Error guardando distribución:', err);
+                      } finally {
+                        setSavingPct(false);
+                      }
                     }}
                     className={`w-10 text-center text-xs font-bold ${isDark ? 'bg-zinc-800 border-zinc-700 text-blue-400' : 'bg-white border-gray-200 text-blue-600'} border rounded px-1 py-0.5 focus:outline-none focus:ring-1 focus:ring-blue-500/50`}
                   />
                   <span className={`text-[10px] ${isDark ? 'text-zinc-500' : 'text-gray-400'}`}>%</span>
                 </div>
-                <span className={`text-[9px] ${isDark ? 'text-zinc-600' : 'text-gray-300'} mt-0.5`}>{flujoPct}/{100 - flujoPct}</span>
+                <span className={`text-[9px] ${isDark ? 'text-zinc-600' : 'text-gray-300'} mt-0.5`}>{savingPct ? '...' : `${flujoPct}/${100 - flujoPct}`}</span>
               </div>
 
               {/* Contraflujo KPI */}
@@ -5726,16 +5752,16 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
                             const isCortesia = item.ItemCode.toUpperCase().startsWith('CT');
                             const isIntercambio = item.ItemCode.toUpperCase().startsWith('IN');
                             const isImpresion = item.ItemCode.toUpperCase().startsWith('IM');
-                            const isTarifaCero = isCortesia || isIntercambio;
+                            const isTarifaCero = isCortesia;
                             setNewCara({
                               ...newCara,
                               articulo: item.ItemCode,
-                              tarifa_publica: isTarifaCero ? 0 : tarifa,  // CT/IN = 0, todo lo demás usa SAP
+                              tarifa_publica: isTarifaCero ? 0 : tarifa,  // CT = 0, todo lo demás usa SAP
                               costo: isTarifaCero ? 0 : tarifaPiso,  // Tarifa piso desde PriceList 11
                               caras: isCortesia ? 0 : newCara.caras,
                               caras_flujo: isCortesia ? 0 : newCara.caras_flujo,
                               caras_contraflujo: isCortesia ? 0 : newCara.caras_contraflujo,
-                              bonificacion: isImpresion ? 0 : newCara.bonificacion,
+                              bonificacion: (isImpresion || isIntercambio) ? 0 : newCara.bonificacion,
                               estados: ciudadEstado?.estado || newCara.estados,
                               // Si ciudadEstado existe, usar su ciudad (incluso si es vacía para CDMX)
                               ciudad: ciudadEstado ? ciudadEstado.ciudad : newCara.ciudad,
@@ -6035,8 +6061,8 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
                             const contraflujo = Math.floor(val / 2);
                             setNewCara({ ...newCara, caras: val, caras_flujo: flujo, caras_contraflujo: contraflujo });
                           }}
-                          disabled={!canEditResumen || newCara.articulo?.toUpperCase().startsWith('CT') || newCara.articulo?.toUpperCase().startsWith('IN')}
-                          className={`w-full px-3 py-2 ${isDark ? 'bg-zinc-800' : 'bg-gray-50'} border ${isDark ? 'border-zinc-700' : 'border-gray-200'} rounded-lg text-sm ${isDark ? 'text-white' : 'text-gray-900'} focus:outline-none focus:ring-1 focus:ring-purple-500/50 ${(!canEditResumen || newCara.articulo?.toUpperCase().startsWith('CT') || newCara.articulo?.toUpperCase().startsWith('IN')) ? 'opacity-40 cursor-not-allowed' : ''}`}
+                          disabled={!canEditResumen || newCara.articulo?.toUpperCase().startsWith('CT')}
+                          className={`w-full px-3 py-2 ${isDark ? 'bg-zinc-800' : 'bg-gray-50'} border ${isDark ? 'border-zinc-700' : 'border-gray-200'} rounded-lg text-sm ${isDark ? 'text-white' : 'text-gray-900'} focus:outline-none focus:ring-1 focus:ring-purple-500/50 ${(!canEditResumen || newCara.articulo?.toUpperCase().startsWith('CT')) ? 'opacity-40 cursor-not-allowed' : ''}`}
                           min="0"
                         />
                         <span className={`text-[10px] ${isDark ? 'text-zinc-600' : 'text-gray-400'}`}>Flujo: {newCara.caras_flujo || 0} | Contraflujo: {newCara.caras_contraflujo || 0}</span>
@@ -6047,8 +6073,8 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
                           type="number"
                           value={newCara.bonificacion || ''}
                           onChange={(e) => canEditResumen && setNewCara({ ...newCara, bonificacion: parseInt(e.target.value) || 0 })}
-                          disabled={!canEditResumen || newCara.articulo?.toUpperCase().startsWith('IM')}
-                          className={`w-full px-3 py-2 ${isDark ? 'bg-zinc-800' : 'bg-gray-50'} border ${isDark ? 'border-zinc-700' : 'border-gray-200'} rounded-lg text-sm ${isDark ? 'text-white' : 'text-gray-900'} focus:outline-none focus:ring-1 focus:ring-purple-500/50 ${(!canEditResumen || newCara.articulo?.toUpperCase().startsWith('IM')) ? 'opacity-60 cursor-not-allowed' : ''}`}
+                          disabled={!canEditResumen || newCara.articulo?.toUpperCase().startsWith('IM') || newCara.articulo?.toUpperCase().startsWith('IN')}
+                          className={`w-full px-3 py-2 ${isDark ? 'bg-zinc-800' : 'bg-gray-50'} border ${isDark ? 'border-zinc-700' : 'border-gray-200'} rounded-lg text-sm ${isDark ? 'text-white' : 'text-gray-900'} focus:outline-none focus:ring-1 focus:ring-purple-500/50 ${(!canEditResumen || newCara.articulo?.toUpperCase().startsWith('IM') || newCara.articulo?.toUpperCase().startsWith('IN')) ? 'opacity-60 cursor-not-allowed' : ''}`}
                           min="0"
                         />
                       </div>
@@ -6058,8 +6084,8 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
                           type="number"
                           value={newCara.tarifa_publica || ''}
                           onChange={(e) => canEditResumen && setNewCara({ ...newCara, tarifa_publica: parseFloat(e.target.value) || 0 })}
-                          disabled={!canEditResumen || newCara.articulo?.toUpperCase().startsWith('CT') || newCara.articulo?.toUpperCase().startsWith('IN')}
-                          className={`w-full px-3 py-2 ${isDark ? 'bg-zinc-800' : 'bg-gray-50'} border ${isDark ? 'border-zinc-700' : 'border-gray-200'} rounded-lg text-sm ${isDark ? 'text-white' : 'text-gray-900'} focus:outline-none focus:ring-1 focus:ring-purple-500/50 ${(!canEditResumen || newCara.articulo?.toUpperCase().startsWith('CT') || newCara.articulo?.toUpperCase().startsWith('IN')) ? 'opacity-40 cursor-not-allowed' : ''}`}
+                          disabled={!canEditResumen || newCara.articulo?.toUpperCase().startsWith('CT')}
+                          className={`w-full px-3 py-2 ${isDark ? 'bg-zinc-800' : 'bg-gray-50'} border ${isDark ? 'border-zinc-700' : 'border-gray-200'} rounded-lg text-sm ${isDark ? 'text-white' : 'text-gray-900'} focus:outline-none focus:ring-1 focus:ring-purple-500/50 ${(!canEditResumen || newCara.articulo?.toUpperCase().startsWith('CT')) ? 'opacity-40 cursor-not-allowed' : ''}`}
                           min="0"
                         />
                       </div>

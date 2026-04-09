@@ -60,6 +60,8 @@ export interface TicketHistorial {
   usuario_id: number;
   usuario_nombre: string;
   usuario_email: string;
+  usuario_area?: string | null;
+  usuario_role?: string | null;
   status_cambiado_por?: string | null;
   total_mensajes: number;
   total_chat: number;
@@ -196,4 +198,24 @@ export const ticketsService = {
     const response = await api.get('/tickets/chat/unread-count');
     return response.data.data.unreadCount;
   },
+
+  getRankings: async (): Promise<TicketRankings> => {
+    const response = await api.get('/tickets/rankings');
+    return response.data.data;
+  },
 };
+
+export interface TicketRankings {
+  empleadoDelMes: { nombre: string; count: number; foto_perfil: string | null; top_usuario: string | null } | null;
+  topCreadores: { nombre: string; count: number }[];
+  topTecnicos: { nombre: string; count: number }[];
+  topUrgentes: { nombre: string; count: number }[];
+  ticketsPorHora: { hora: number; count: number }[];
+  ticketsPorDia: { dia: string; count: number }[];
+  velocidadTecnicos: { nombre: string; promedio_horas: number }[];
+  topReincidentes: { nombre: string; count: number }[];
+  topAreas: { nombre: string; count: number }[];
+  topRoles: { nombre: string; count: number }[];
+  totalTickets: number;
+  totalResueltos: number;
+}

@@ -25,6 +25,7 @@ import { ChatbotHistorialPage } from './features/admin/ChatbotHistorialPage';
 import { DevTicketsPage } from './features/tickets/DevTicketsPage';
 import { TicketsPage } from './features/tickets/TicketsPage';
 import { HistorialTicketsPage } from './features/tickets/HistorialTicketsPage';
+import { RankingTicketsPage } from './features/tickets/RankingTicketsPage';
 import { useAuthStore } from './store/authStore';
 import { getPermissions } from './lib/permissions';
 
@@ -115,6 +116,16 @@ function HistorialTicketsRoute() {
   return <HistorialTicketsPage />;
 }
 
+// Componente para proteger ruta de Rankings (solo rol DEV)
+function RankingTicketsRoute() {
+  const user = useAuthStore((state) => state.user);
+
+  if (!user || user.rol !== 'DEV') {
+    return <Navigate to="/" replace />;
+  }
+  return <RankingTicketsPage />;
+}
+
 // Componente para proteger ruta de Dev Tickets (solo programadores)
 function DevTicketsRoute() {
   const user = useAuthStore((state) => state.user);
@@ -158,6 +169,7 @@ function App() {
             <Route path="/admin/chatbot" element={<AdminChatbotRoute />} />
             <Route path="/tickets" element={<TicketsPage />} />
             <Route path="/admin/tickets-historial" element={<HistorialTicketsRoute />} />
+            <Route path="/admin/tickets-ranking" element={<RankingTicketsRoute />} />
             <Route path="/dev/tickets" element={<DevTicketsRoute />} />
           </Route>
 

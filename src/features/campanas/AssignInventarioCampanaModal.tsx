@@ -830,7 +830,7 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
       const loadedReservas: ReservaItem[] = existingReservas.map((r: ReservaModalItem) => {
         // Find the cara that matches this reserva
         const matchingCara = caras.find(c => c.id === r.solicitud_cara_id);
-        const tipo = r.estatus === 'Bonificado' ? 'Bonificacion' : (r.tipo_de_cara === 'Flujo' ? 'Flujo' : 'Contraflujo');
+        const tipo = r.estatus === 'Bonificado' ? 'Bonificacion' : (String(r.tipo_de_cara).startsWith('Flujo') ? 'Flujo' : 'Contraflujo');
 
         return {
           id: matchingCara
@@ -1948,8 +1948,8 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
     Object.entries(groups).forEach(([key, group]) => {
       if (group.length >= 2) {
         const baseCode = key.split('|')[0];
-        const flujoItem = group.find(g => g.tipo_de_cara === 'Flujo');
-        const contraflujoItem = group.find(g => g.tipo_de_cara === 'Contraflujo');
+        const flujoItem = group.find(g => String(g.tipo_de_cara).startsWith('Flujo'));
+        const contraflujoItem = group.find(g => String(g.tipo_de_cara).startsWith('Contraflujo'));
 
         if (flujoItem && contraflujoItem) {
           // Create merged "completo" item - use a virtual ID
@@ -2612,8 +2612,8 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
       const baseCode = item.codigo_unico?.split('_')[0]; // Assuming prefix_suffix format
       if (baseCode) {
         // Check if we have both Flujo and Contraflujo for this base code in selection
-        const hasFlujo = selectedItems.some(i => i.codigo_unico?.startsWith(baseCode) && i.tipo_de_cara === 'Flujo');
-        const hasContra = selectedItems.some(i => i.codigo_unico?.startsWith(baseCode) && i.tipo_de_cara === 'Contraflujo');
+        const hasFlujo = selectedItems.some(i => i.codigo_unico?.startsWith(baseCode) && String(i.tipo_de_cara).startsWith('Flujo'));
+        const hasContra = selectedItems.some(i => i.codigo_unico?.startsWith(baseCode) && String(i.tipo_de_cara).startsWith('Contraflujo'));
         if (hasFlujo && hasContra) {
           potentialPairs.add(baseCode);
         }
@@ -2664,7 +2664,7 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
           // If only one has space, skip this completo item entirely to maintain pairing
         } else {
           // Regular item - reserve based on tipo_de_cara
-          const tipo = inv.tipo_de_cara === 'Flujo' ? 'Flujo' : 'Contraflujo';
+          const tipo = String(inv.tipo_de_cara).startsWith('Flujo') ? 'Flujo' : 'Contraflujo';
           const canReserve = tipo === 'Flujo'
             ? flujoCount < remainingToAssign.flujo
             : contraflujoCount < remainingToAssign.contraflujo;
@@ -5409,7 +5409,7 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
                             const isCortesia = item.ItemCode.toUpperCase().startsWith('CT');
                             const isIntercambio = item.ItemCode.toUpperCase().startsWith('IN');
                             const isImpresion = item.ItemCode.toUpperCase().startsWith('IM');
-                            const isTarifaCero = isCortesia || isIntercambio;
+                            const isTarifaCero = isCortesia;
                             setNewCara({
                               ...newCara,
                               articulo: item.ItemCode,
@@ -5418,7 +5418,7 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
                               caras: isCortesia ? 0 : newCara.caras,
                               caras_flujo: isCortesia ? 0 : newCara.caras_flujo,
                               caras_contraflujo: isCortesia ? 0 : newCara.caras_contraflujo,
-                              bonificacion: isImpresion ? 0 : newCara.bonificacion,
+                              bonificacion: (isImpresion || isIntercambio) ? 0 : newCara.bonificacion,
                               estados: ciudadEstado?.estado || newCara.estados,
                               // Si ciudadEstado existe, usar su ciudad (incluso si es vacía para CDMX)
                               ciudad: ciudadEstado ? ciudadEstado.ciudad : newCara.ciudad,
@@ -5639,8 +5639,8 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
                             const contraflujo = Math.floor(val / 2);
                             setNewCara({ ...newCara, caras: val, caras_flujo: flujo, caras_contraflujo: contraflujo });
                           }}
-                          disabled={!canEditResumen || newCara.articulo?.toUpperCase().startsWith('CT') || newCara.articulo?.toUpperCase().startsWith('IN')}
-                          className={`w-full px-3 py-2 ${isDark ? 'bg-zinc-800 border-zinc-700 text-white' : 'bg-white border-gray-300 text-gray-900'} border rounded-lg text-sm focus:outline-none focus:ring-1 focus:ring-purple-500/50 ${(!canEditResumen || newCara.articulo?.toUpperCase().startsWith('CT') || newCara.articulo?.toUpperCase().startsWith('IN')) ? 'opacity-40 cursor-not-allowed' : ''}`}
+                          disabled={!canEditResumen || newCara.articulo?.toUpperCase().startsWith('CT')}
+                          className={`w-full px-3 py-2 ${isDark ? 'bg-zinc-800 border-zinc-700 text-white' : 'bg-white border-gray-300 text-gray-900'} border rounded-lg text-sm focus:outline-none focus:ring-1 focus:ring-purple-500/50 ${(!canEditResumen || newCara.articulo?.toUpperCase().startsWith('CT')) ? 'opacity-40 cursor-not-allowed' : ''}`}
                           min="0"
                         />
                         <span className="text-[10px] text-zinc-600">Flujo: {newCara.caras_flujo || 0} | Contraflujo: {newCara.caras_contraflujo || 0}</span>
@@ -5651,8 +5651,8 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
                           type="number"
                           value={newCara.bonificacion || ''}
                           onChange={(e) => canEditResumen && setNewCara({ ...newCara, bonificacion: parseInt(e.target.value) || 0 })}
-                          disabled={!canEditResumen || newCara.articulo?.toUpperCase().startsWith('IM')}
-                          className={`w-full px-3 py-2 ${isDark ? 'bg-zinc-800 border-zinc-700 text-white' : 'bg-white border-gray-300 text-gray-900'} border rounded-lg text-sm focus:outline-none focus:ring-1 focus:ring-purple-500/50 ${(!canEditResumen || newCara.articulo?.toUpperCase().startsWith('IM')) ? 'opacity-60 cursor-not-allowed' : ''}`}
+                          disabled={!canEditResumen || newCara.articulo?.toUpperCase().startsWith('IM') || newCara.articulo?.toUpperCase().startsWith('IN')}
+                          className={`w-full px-3 py-2 ${isDark ? 'bg-zinc-800 border-zinc-700 text-white' : 'bg-white border-gray-300 text-gray-900'} border rounded-lg text-sm focus:outline-none focus:ring-1 focus:ring-purple-500/50 ${(!canEditResumen || newCara.articulo?.toUpperCase().startsWith('IM') || newCara.articulo?.toUpperCase().startsWith('IN')) ? 'opacity-60 cursor-not-allowed' : ''}`}
                           min="0"
                         />
                       </div>
@@ -5662,8 +5662,8 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
                           type="number"
                           value={newCara.tarifa_publica || ''}
                           onChange={(e) => canEditResumen && setNewCara({ ...newCara, tarifa_publica: parseFloat(e.target.value) || 0 })}
-                          disabled={!canEditResumen || newCara.articulo?.toUpperCase().startsWith('CT') || newCara.articulo?.toUpperCase().startsWith('IN')}
-                          className={`w-full px-3 py-2 ${isDark ? 'bg-zinc-800 border-zinc-700 text-white' : 'bg-white border-gray-300 text-gray-900'} border rounded-lg text-sm focus:outline-none focus:ring-1 focus:ring-purple-500/50 ${(!canEditResumen || newCara.articulo?.toUpperCase().startsWith('CT') || newCara.articulo?.toUpperCase().startsWith('IN')) ? 'opacity-40 cursor-not-allowed' : ''}`}
+                          disabled={!canEditResumen || newCara.articulo?.toUpperCase().startsWith('CT')}
+                          className={`w-full px-3 py-2 ${isDark ? 'bg-zinc-800 border-zinc-700 text-white' : 'bg-white border-gray-300 text-gray-900'} border rounded-lg text-sm focus:outline-none focus:ring-1 focus:ring-purple-500/50 ${(!canEditResumen || newCara.articulo?.toUpperCase().startsWith('CT')) ? 'opacity-40 cursor-not-allowed' : ''}`}
                           min="0"
                         />
                       </div>

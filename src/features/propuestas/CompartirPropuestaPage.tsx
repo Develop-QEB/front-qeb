@@ -1456,7 +1456,7 @@ export function CompartirPropuestaPage() {
                         scale: selectedItems.has(item.id) ? 10 : 7,
                         fillColor: selectedItems.has(item.id)
                           ? '#22c55e' // Verde si está seleccionado
-                          : item.tipo_de_cara === 'Flujo' ? '#ef4444' : item.tipo_de_cara === 'Contraflujo' ? '#3b82f6' : '#a855f7',
+                          : String(item.tipo_de_cara).startsWith('Flujo') ? '#ef4444' : String(item.tipo_de_cara).startsWith('Contraflujo') ? '#3b82f6' : '#a855f7',
                         fillOpacity: selectedItems.has(item.id) ? 1 : 0.9,
                         strokeColor: selectedItems.has(item.id) ? '#fff' : '#fff',
                         strokeWeight: selectedItems.has(item.id) ? 3 : 1.5,

@@ -570,8 +570,8 @@ function StatusModal({ isOpen, onClose, propuesta, onStatusChange, allowedStatus
       // Bonificacion is determined by estatus='Bonificado', not by tipo_de_cara
       const bonificacionReservado = caraReservas.filter(r => r.estatus === 'Bonificado').length;
       const nonBonificacion = caraReservas.filter(r => r.estatus !== 'Bonificado');
-      const flujoReservado = nonBonificacion.filter(r => r.tipo_de_cara === 'A' || r.tipo_de_cara === 'Flujo').length;
-      const contraflujoReservado = nonBonificacion.filter(r => r.tipo_de_cara === 'B' || r.tipo_de_cara === 'Contraflujo').length;
+      const flujoReservado = nonBonificacion.filter(r => r.tipo_de_cara === 'A' || String(r.tipo_de_cara).startsWith('Flujo')).length;
+      const contraflujoReservado = nonBonificacion.filter(r => r.tipo_de_cara === 'B' || String(r.tipo_de_cara).startsWith('Contraflujo')).length;
       const flujoRequerido = Number(cara.caras_flujo) || 0;
       const contraflujoRequerido = Number(cara.caras_contraflujo) || 0;
       const bonificacionRequerido = Number(cara.bonificacion) || 0;
@@ -2008,7 +2008,7 @@ export function PropuestasPage() {
       {selectedPropuestaForAssign && (
         <AssignInventarioModal
           isOpen={showAssignModal}
-          onClose={() => { setShowAssignModal(false); setSelectedPropuestaForAssign(null); }}
+          onClose={() => { setShowAssignModal(false); queryClient.invalidateQueries({ queryKey: ['propuesta-caras', selectedPropuestaForAssign?.id] }); queryClient.invalidateQueries({ queryKey: ['propuesta-reservas-modal', selectedPropuestaForAssign?.id] }); setSelectedPropuestaForAssign(null); }}
           propuesta={selectedPropuestaForAssign}
           readOnly={!permissions.canAsignarInventario || selectedPropuestaForAssign.status === 'Pase a ventas'}
         />

@@ -1238,7 +1238,7 @@ export function ClientePropuestaPage() {
                       icon={{
                         path: google.maps.SymbolPath.CIRCLE,
                         scale: 8,
-                        fillColor: item.tipo_de_cara === 'Flujo' ? '#ef4444' : item.tipo_de_cara === 'Contraflujo' ? '#3b82f6' : IMU_BLUE,
+                        fillColor: String(item.tipo_de_cara).startsWith('Flujo') ? '#ef4444' : String(item.tipo_de_cara).startsWith('Contraflujo') ? '#3b82f6' : IMU_BLUE,
                         fillOpacity: 0.9,
                         strokeColor: '#ffffff',
                         strokeWeight: 2,

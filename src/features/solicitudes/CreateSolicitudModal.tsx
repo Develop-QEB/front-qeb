@@ -1531,6 +1531,8 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
         caras_contraflujo: Math.floor(c.renta / 2),
         descuento: c.descuento,
         articulo: c.articulo.ItemCode,
+        autorizacion_dg: c.autorizacion_dg,
+        autorizacion_dcm: c.autorizacion_dcm,
       })),
     };
 
@@ -2283,14 +2285,14 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
                       const isCortesia = item.ItemCode.toUpperCase().startsWith('CT');
                       const isIntercambio = item.ItemCode.toUpperCase().startsWith('IN');
                       const isImpresion = item.ItemCode.toUpperCase().startsWith('IM');
-                      const isTarifaCero = isCortesia || isIntercambio;
+                      const isTarifaCero = isCortesia;
 
                       setNewCara({
                         ...newCara,
                         articulo: item,
                         tarifaPublica: isTarifaCero ? 0 : tarifa.tarifa_publica,
                         renta: isCortesia ? 0 : newCara.renta,
-                        bonificacion: isImpresion ? 0 : newCara.bonificacion,
+                        bonificacion: (isImpresion || isIntercambio) ? 0 : newCara.bonificacion,
                         estado: ciudadEstado?.estado || newCara.estado,
                         ciudades: ciudadEstado?.ciudades && ciudadEstado.ciudades.length > 0 ? ciudadEstado.ciudades : newCara.ciudades,
                         formato: formato || newCara.formato,
@@ -2486,8 +2488,8 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
                       value={newCara.bonificacion || ''}
                       onChange={(e) => setNewCara({ ...newCara, bonificacion: parseInt(e.target.value) || 0 })}
                       placeholder='0'
-                      disabled={newCara.articulo?.ItemCode?.toUpperCase().startsWith('IM')}
-                      className={`w-full px-3 py-2 ${isDark ? 'bg-zinc-800 border-zinc-700 text-white' : 'bg-gray-100 border-gray-200 text-gray-900'} border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-purple-500/50 ${newCara.articulo?.ItemCode?.toUpperCase().startsWith('IM') ? 'opacity-40 cursor-not-allowed' : ''}`}
+                      disabled={newCara.articulo?.ItemCode?.toUpperCase().startsWith('IM') || newCara.articulo?.ItemCode?.toUpperCase().startsWith('IN')}
+                      className={`w-full px-3 py-2 ${isDark ? 'bg-zinc-800 border-zinc-700 text-white' : 'bg-gray-100 border-gray-200 text-gray-900'} border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-purple-500/50 ${(newCara.articulo?.ItemCode?.toUpperCase().startsWith('IM') || newCara.articulo?.ItemCode?.toUpperCase().startsWith('IN')) ? 'opacity-40 cursor-not-allowed' : ''}`}
                     />
                   </div>
 
@@ -2499,7 +2501,7 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
                       value={newCara.tarifaPublica || ''}
                       onChange={(e) => setNewCara({ ...newCara, tarifaPublica: parseFloat(e.target.value) || 0 })}
                       placeholder="0"
-                      disabled={newCara.articulo?.ItemCode?.toUpperCase().startsWith('CT') || newCara.articulo?.ItemCode?.toUpperCase().startsWith('IN')}
+                      disabled={newCara.articulo?.ItemCode?.toUpperCase().startsWith('CT')}
                       className={`w-full px-3 py-2 ${isDark ? 'bg-zinc-800 border-zinc-700' : 'bg-gray-100 border-gray-200'} border rounded-lg text-emerald-400 text-sm font-medium focus:outline-none focus:ring-2 focus:ring-purple-500/50 disabled:opacity-40 disabled:cursor-not-allowed`}
                     />
                   </div>

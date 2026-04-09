@@ -461,28 +461,46 @@ export function OrdenesMontajeModal({ isOpen, onClose, canExport = true }: Orden
     queryFn: () => solicitudesService.getCatorcenas(),
   });
 
+  // Set default catorcena filter to current catorcena on open
+  useEffect(() => {
+    if (isOpen && catorcenasData?.data && selectedCatorcenas.length === 0) {
+      const now = new Date();
+      const catActual = catorcenasData.data.find((c: any) => new Date(c.fecha_inicio) <= now && new Date(c.fecha_fin) >= now);
+      if (catActual) {
+        setSelectedCatorcenas([`${catActual.numero_catorcena}-${catActual.a_o}`]);
+      }
+    }
+  }, [isOpen, catorcenasData]);
+
+  // Calculate API range from selected catorcenas
+  const apiCatorcenaRange = useMemo(() => {
+    if (selectedCatorcenas.length === 0) return {};
+    const parsed = selectedCatorcenas.map(s => { const [n, y] = s.split('-'); return { numero: parseInt(n), year: parseInt(y) }; });
+    const sorted = parsed.sort((a, b) => a.year !== b.year ? a.year - b.year : a.numero - b.numero);
+    return {
+      catorcenaInicio: sorted[0].numero,
+      yearInicio: sorted[0].year,
+      catorcenaFin: sorted[sorted.length - 1].numero,
+      yearFin: sorted[sorted.length - 1].year,
+    };
+  }, [selectedCatorcenas]);
+
   // Query for CAT data
   const { data: catData, isLoading: isLoadingCAT } = useQuery({
-    queryKey: ['ordenes-montaje-cat', status, yearInicio, yearFin, catorcenaInicio, catorcenaFin],
+    queryKey: ['ordenes-montaje-cat', status, apiCatorcenaRange, selectedCatorcenas],
     queryFn: () => campanasService.getOrdenMontajeCAT({
       status: status || undefined,
-      yearInicio,
-      yearFin,
-      catorcenaInicio,
-      catorcenaFin,
+      ...apiCatorcenaRange,
     }),
     enabled: isOpen && (activeTab === 'cat' || activeTab === 'digital' || activeTab === 'ocupacion-digital'),
   });
 
   // Query for INVIAN data
   const { data: invianData, isLoading: isLoadingINVIAN } = useQuery({
-    queryKey: ['ordenes-montaje-invian', status, yearInicio, yearFin, catorcenaInicio, catorcenaFin],
+    queryKey: ['ordenes-montaje-invian', status, apiCatorcenaRange, selectedCatorcenas],
     queryFn: () => campanasService.getOrdenMontajeINVIAN({
       status: status || undefined,
-      yearInicio,
-      yearFin,
-      catorcenaInicio,
-      catorcenaFin,
+      ...apiCatorcenaRange,
     }),
     enabled: isOpen && (activeTab === 'invian' || activeTab === 'invian-digital'),
   });
@@ -507,44 +525,20 @@ export function OrdenesMontajeModal({ isOpen, onClose, canExport = true }: Orden
     return catorcenas;
   }, [catorcenasData, yearFin, yearInicio, catorcenaInicio]);
 
-  // Catorcena multiselect options - generated from actual data
+  // Catorcena multiselect options - generated from catorcenas table (all available)
   const catorcenaOptions = useMemo(() => {
-    const catorcenasSet = new Map<string, { numero: number; year: number }>();
+    if (!catorcenasData?.data) return [];
 
-    // Get catorcenas from CAT data
-    if (catData) {
-      catData.forEach(item => {
-        if (item.catorcena_numero && item.catorcena_year) {
-          const id = `${item.catorcena_numero}-${item.catorcena_year}`;
-          if (!catorcenasSet.has(id)) {
-            catorcenasSet.set(id, { numero: item.catorcena_numero, year: item.catorcena_year });
-          }
-        }
-      });
-    }
-
-    // Get catorcenas from INVIAN data
-    if (invianData) {
-      invianData.forEach(item => {
-        if (item.catorcena_numero && item.catorcena_year) {
-          const id = `${item.catorcena_numero}-${item.catorcena_year}`;
-          if (!catorcenasSet.has(id)) {
-            catorcenasSet.set(id, { numero: item.catorcena_numero, year: item.catorcena_year });
-          }
-        }
-      });
-    }
-
-    return Array.from(catorcenasSet.entries()).map(([id, data]) => ({
-      id,
-      label: `Cat ${data.numero} / ${data.year}`,
-      numero: data.numero,
-      year: data.year,
-    })).sort((a, b) => {
+    return catorcenasData.data.map((c: any) => ({
+      id: `${c.numero_catorcena}-${c.a_o}`,
+      label: `Cat ${c.numero_catorcena} / ${c.a_o}`,
+      numero: c.numero_catorcena,
+      year: c.a_o,
+    })).sort((a: any, b: any) => {
       if (a.year !== b.year) return b.year - a.year;
       return b.numero - a.numero;
     });
-  }, [catData, invianData]);
+  }, [catorcenasData]);
 
     // Filtered and sorted CAT data
   const filteredCATData = useMemo(() => {
@@ -1560,6 +1554,7 @@ export function OrdenesMontajeModal({ isOpen, onClose, canExport = true }: Orden
                     <th className="px-3 py-3 text-left text-[10px] font-semibold text-purple-300 uppercase tracking-wider">Tipo</th>
                     <th className="px-3 py-3 text-left text-[10px] font-semibold text-purple-300 uppercase tracking-wider">Asesor</th>
                     <th className="px-3 py-3 text-left text-[10px] font-semibold text-purple-300 uppercase tracking-wider">APS</th>
+                    <th className="px-3 py-3 text-left text-[10px] font-semibold text-purple-300 uppercase tracking-wider">APS Global</th>
                     <th className="px-3 py-3 text-left text-[10px] font-semibold text-purple-300 uppercase tracking-wider">F. Inicio</th>
                     <th className="px-3 py-3 text-left text-[10px] font-semibold text-purple-300 uppercase tracking-wider">F. Fin</th>
                     <th className="px-3 py-3 text-left text-[10px] font-semibold text-purple-300 uppercase tracking-wider">Cliente</th>
@@ -1936,6 +1931,7 @@ function CATRow({ item }: { item: OrdenMontajeCAT }) {
         )}
       </td>
       <td className="px-3 py-2 text-xs text-purple-300 font-mono">{item.aps_especifico || '-'}</td>
+      <td className="px-3 py-2 text-xs text-fuchsia-300 font-mono">{item.aps_global || '-'}</td>
       <td className={`px-3 py-2 text-xs ${isDark ? 'text-zinc-400' : 'text-gray-500'}`}>{formatDate(item.fecha_inicio_periodo)}</td>
       <td className={`px-3 py-2 text-xs ${isDark ? 'text-zinc-400' : 'text-gray-500'}`}>{formatDate(item.fecha_fin_periodo)}</td>
       <td className={`px-3 py-2 text-xs ${isDark ? 'text-zinc-300' : 'text-gray-700'} max-w-[120px] truncate`} title={item.cliente || ''}>{item.cliente || '-'}</td>
