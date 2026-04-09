@@ -1163,7 +1163,11 @@ function EquipoCard({
   onRemoveMember: (userId: number) => void;
 }) {
   const isDark = useThemeStore((s) => s.theme) === 'dark';
+  const user = useAuthStore((s) => s.user);
   const [expanded, setExpanded] = useState(false);
+  const isDevTeam = equipo.nombre === 'DEV';
+  const userIsDevMember = isDevTeam ? equipo.miembros.some((m) => m.id === user?.id) : true;
+  const canManage = !isDevTeam || userIsDevMember;
 
   return (
     <div
@@ -1184,27 +1188,37 @@ function EquipoCard({
             </div>
           </div>
           <div className="flex items-center gap-2">
-            <button
-              onClick={onAddMembers}
-              className={`p-2 rounded-lg ${isDark ? 'bg-purple-500/10' : 'bg-purple-50'} text-purple-400 ${isDark ? 'hover:bg-purple-500/20' : 'hover:bg-purple-100'} border ${isDark ? 'border-purple-500/20' : 'border-purple-200'} transition-all`}
-              title="Agregar miembros"
-            >
-              <UserPlus className="h-4 w-4" />
-            </button>
-            <button
-              onClick={onEdit}
-              className={`p-2 rounded-lg ${isDark ? 'bg-purple-500/10' : 'bg-purple-50'} text-purple-400 ${isDark ? 'hover:bg-purple-500/20' : 'hover:bg-purple-100'} border ${isDark ? 'border-purple-500/20' : 'border-purple-200'} transition-all`}
-              title="Editar equipo"
-            >
-              <Pencil className="h-4 w-4" />
-            </button>
-            <button
-              onClick={onDelete}
-              className={`p-2 rounded-lg ${isDark ? 'bg-red-500/10' : 'bg-red-50'} text-red-400 ${isDark ? 'hover:bg-red-500/20' : 'hover:bg-red-100'} border ${isDark ? 'border-red-500/20' : 'border-red-200'} transition-all`}
-              title="Eliminar equipo"
-            >
-              <Trash2 className="h-4 w-4" />
-            </button>
+            {canManage ? (
+              <>
+                <button
+                  onClick={onAddMembers}
+                  className={`p-2 rounded-lg ${isDark ? 'bg-purple-500/10' : 'bg-purple-50'} text-purple-400 ${isDark ? 'hover:bg-purple-500/20' : 'hover:bg-purple-100'} border ${isDark ? 'border-purple-500/20' : 'border-purple-200'} transition-all`}
+                  title="Agregar miembros"
+                >
+                  <UserPlus className="h-4 w-4" />
+                </button>
+                <button
+                  onClick={onEdit}
+                  className={`p-2 rounded-lg ${isDark ? 'bg-purple-500/10' : 'bg-purple-50'} text-purple-400 ${isDark ? 'hover:bg-purple-500/20' : 'hover:bg-purple-100'} border ${isDark ? 'border-purple-500/20' : 'border-purple-200'} transition-all`}
+                  title="Editar equipo"
+                >
+                  <Pencil className="h-4 w-4" />
+                </button>
+                {!isDevTeam && (
+                  <button
+                    onClick={onDelete}
+                    className={`p-2 rounded-lg ${isDark ? 'bg-red-500/10' : 'bg-red-50'} text-red-400 ${isDark ? 'hover:bg-red-500/20' : 'hover:bg-red-100'} border ${isDark ? 'border-red-500/20' : 'border-red-200'} transition-all`}
+                    title="Eliminar equipo"
+                  >
+                    <Trash2 className="h-4 w-4" />
+                  </button>
+                )}
+              </>
+            ) : (
+              <span className={`text-xs px-3 py-1.5 rounded-full ${isDark ? 'bg-zinc-800 text-zinc-500 border-zinc-700' : 'bg-gray-100 text-gray-400 border-gray-200'} border`}>
+                Solo miembros DEV
+              </span>
+            )}
           </div>
         </div>
 
@@ -1235,13 +1249,15 @@ function EquipoCard({
                     <p className={`${isDark ? 'text-zinc-500' : 'text-gray-500'} text-xs`}>{miembro.area} - {miembro.puesto}</p>
                   </div>
                 </div>
-                <button
-                  onClick={() => onRemoveMember(miembro.id)}
-                  className={`p-1.5 rounded-lg ${isDark ? 'text-zinc-400' : 'text-gray-400'} hover:text-red-400 hover:bg-red-500/10 transition-all`}
-                  title="Remover del equipo"
-                >
-                  <X className="h-4 w-4" />
-                </button>
+                {canManage && (
+                  <button
+                    onClick={() => onRemoveMember(miembro.id)}
+                    className={`p-1.5 rounded-lg ${isDark ? 'text-zinc-400' : 'text-gray-400'} hover:text-red-400 hover:bg-red-500/10 transition-all`}
+                    title="Remover del equipo"
+                  >
+                    <X className="h-4 w-4" />
+                  </button>
+                )}
               </div>
             ))}
           </div>
