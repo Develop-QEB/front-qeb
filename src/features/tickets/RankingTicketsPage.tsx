@@ -261,28 +261,33 @@ export function RankingTicketsPage() {
                 <h3 className={`text-base font-bold ${isDark ? 'text-white' : 'text-gray-900'}`}>Hora pico de tickets</h3>
               </div>
               <div className="p-5">
-                <div className="flex items-end gap-1 h-40">
-                  {Array.from({ length: 24 }, (_, h) => {
-                    const entry = rankings.ticketsPorHora.find((e) => e.hora === h);
-                    const count = entry?.count || 0;
-                    const maxCount = Math.max(...rankings.ticketsPorHora.map((e) => e.count), 1);
-                    const height = (count / maxCount) * 100;
-                    const isMax = count === maxCount && count > 0;
-                    return (
-                      <div key={h} className="flex-1 flex flex-col items-center gap-1">
-                        <span className={`text-[9px] font-medium ${isMax ? (isDark ? 'text-pink-400' : 'text-pink-600') : isDark ? 'text-zinc-500' : 'text-gray-400'}`}>
-                          {count > 0 ? count : ''}
-                        </span>
-                        <div
-                          className={`w-full rounded-t-md transition-all ${isMax ? 'bg-gradient-to-t from-pink-600 to-fuchsia-500' : isDark ? 'bg-purple-500/30' : 'bg-purple-200'}`}
-                          style={{ height: `${Math.max(height, 2)}%` }}
-                        />
-                        <span className={`text-[9px] ${isDark ? 'text-zinc-600' : 'text-gray-400'}`}>{h}h</span>
-                      </div>
-                    );
-                  })}
-                </div>
-                <p className={`text-xs text-center mt-2 ${isDark ? 'text-zinc-500' : 'text-gray-400'}`}>
+                {(() => {
+                  const maxCount = Math.max(...rankings.ticketsPorHora.map((e) => e.count), 1);
+                  const BAR_MAX_HEIGHT = 140;
+                  return (
+                    <div className="flex items-end gap-1" style={{ height: `${BAR_MAX_HEIGHT + 30}px` }}>
+                      {Array.from({ length: 24 }, (_, h) => {
+                        const entry = rankings.ticketsPorHora.find((e) => e.hora === h);
+                        const count = entry?.count || 0;
+                        const barHeight = count > 0 ? Math.max((count / maxCount) * BAR_MAX_HEIGHT, 4) : 2;
+                        const isMax = count === maxCount && count > 0;
+                        return (
+                          <div key={h} className="flex-1 flex flex-col items-center justify-end" style={{ height: '100%' }}>
+                            <span className={`text-[9px] font-medium mb-1 ${isMax ? (isDark ? 'text-pink-400' : 'text-pink-600') : isDark ? 'text-zinc-500' : 'text-gray-400'}`}>
+                              {count > 0 ? count : ''}
+                            </span>
+                            <div
+                              className={`w-full max-w-[20px] rounded-t-md ${isMax ? 'bg-gradient-to-t from-pink-600 to-fuchsia-500' : isDark ? 'bg-purple-500/40' : 'bg-purple-300'}`}
+                              style={{ height: `${barHeight}px` }}
+                            />
+                            <span className={`text-[9px] mt-1 ${isDark ? 'text-zinc-600' : 'text-gray-400'}`}>{h}h</span>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  );
+                })()}
+                <p className={`text-xs text-center mt-3 ${isDark ? 'text-zinc-500' : 'text-gray-400'}`}>
                   Hora del dia (0-23) — Cuando se quejan mas? 🤔
                 </p>
               </div>
