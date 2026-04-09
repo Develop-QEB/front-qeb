@@ -1,14 +1,13 @@
 import { useQuery } from '@tanstack/react-query';
 import {
-  BarChart3, Users, Clock, CheckCircle2, AlertCircle, Loader2,
-  TrendingUp, Award, Timer, Zap, Building2, UserCheck,
+  BarChart3, Users, Clock, CheckCircle2, Loader2,
+  TrendingUp, Award, Timer, Zap, Building2, UserCheck, Target,
 } from 'lucide-react';
 import { Header } from '../../components/layout/Header';
 import { useThemeStore } from '../../store/themeStore';
 import api from '../../lib/api';
 import {
   BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Cell,
-  PieChart, Pie, Legend,
 } from 'recharts';
 
 interface ReportesData {
@@ -53,7 +52,7 @@ export function ReportesEspecialesPage() {
       const res = await api.get<{ success: boolean; data: ReportesData }>('/tickets/reportes-especiales');
       return res.data.data;
     },
-    refetchInterval: 60000, // Auto-refresh cada minuto
+    refetchInterval: 60000,
   });
 
   const hoy = new Date().toLocaleDateString('es-MX', {
@@ -72,27 +71,22 @@ export function ReportesEspecialesPage() {
     );
   }
 
+  const tasaResolucionGlobal = data.global.total > 0
+    ? Math.round((data.global.resueltosYCerrados / data.global.total) * 100)
+    : 0;
+
   const kpiCards = [
     { label: 'Tickets Hoy', value: data.hoy.total, icon: BarChart3, color: 'purple' },
-    { label: 'Nuevos', value: data.hoy.nuevos, icon: AlertCircle, color: 'blue' },
-    { label: 'En Progreso', value: data.hoy.enProgreso, icon: Clock, color: 'amber' },
-    { label: 'En Validación', value: data.hoy.enValidacion, icon: Timer, color: 'cyan' },
-    { label: 'Resueltos / Cerrados', value: data.hoy.resueltosYCerrados, icon: CheckCircle2, color: 'emerald' },
-    { label: 'Urgentes Hoy', value: data.hoy.prioridad.urgente, icon: Zap, color: 'red' },
+    { label: 'Nuevos', value: data.hoy.nuevos, icon: Zap, color: 'blue' },
+    { label: 'En Atención', value: data.hoy.enProgreso + data.hoy.enValidacion, icon: Clock, color: 'amber' },
+    { label: 'Resueltos Hoy', value: data.hoy.resueltosYCerrados, icon: CheckCircle2, color: 'emerald' },
+    { label: 'Total Resueltos', value: data.global.resueltosYCerrados, icon: Award, color: 'cyan' },
+    { label: 'Tasa Resolución', value: `${tasaResolucionGlobal}%`, icon: Target, color: 'purple' },
   ];
-
-  const colorMap: Record<string, string> = {
-    purple: isDark ? 'bg-purple-500/15 text-purple-300 border-purple-500/30' : 'bg-purple-50 text-purple-700 border-purple-200',
-    blue: isDark ? 'bg-blue-500/15 text-blue-300 border-blue-500/30' : 'bg-blue-50 text-blue-700 border-blue-200',
-    amber: isDark ? 'bg-amber-500/15 text-amber-300 border-amber-500/30' : 'bg-amber-50 text-amber-700 border-amber-200',
-    cyan: isDark ? 'bg-cyan-500/15 text-cyan-300 border-cyan-500/30' : 'bg-cyan-50 text-cyan-700 border-cyan-200',
-    emerald: isDark ? 'bg-emerald-500/15 text-emerald-300 border-emerald-500/30' : 'bg-emerald-50 text-emerald-700 border-emerald-200',
-    red: isDark ? 'bg-red-500/15 text-red-300 border-red-500/30' : 'bg-red-50 text-red-700 border-red-200',
-  };
 
   const iconColorMap: Record<string, string> = {
     purple: 'text-purple-400', blue: 'text-blue-400', amber: 'text-amber-400',
-    cyan: 'text-cyan-400', emerald: 'text-emerald-400', red: 'text-red-400',
+    cyan: 'text-cyan-400', emerald: 'text-emerald-400',
   };
 
   return (
@@ -115,7 +109,7 @@ export function ReportesEspecialesPage() {
           </div>
         </div>
 
-        {/* KPIs del día */}
+        {/* KPIs */}
         <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
           {kpiCards.map((kpi) => (
             <div key={kpi.label} className={`${isDark ? 'bg-zinc-900/80 border-zinc-800' : 'bg-white border-gray-200'} border rounded-xl p-4`}>
@@ -128,7 +122,7 @@ export function ReportesEspecialesPage() {
           ))}
         </div>
 
-        {/* Hora pico + Stats globales */}
+        {/* Hora pico + Global + Resueltos */}
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
           <div className={`${isDark ? 'bg-zinc-900/80 border-zinc-800' : 'bg-white border-gray-200'} border rounded-xl p-5`}>
             <div className="flex items-center gap-2 mb-3">
@@ -146,83 +140,50 @@ export function ReportesEspecialesPage() {
           <div className={`${isDark ? 'bg-zinc-900/80 border-zinc-800' : 'bg-white border-gray-200'} border rounded-xl p-5`}>
             <div className="flex items-center gap-2 mb-3">
               <TrendingUp className="h-5 w-5 text-purple-400" />
-              <h3 className={`text-sm font-semibold ${isDark ? 'text-white' : 'text-gray-900'}`}>Global</h3>
+              <h3 className={`text-sm font-semibold ${isDark ? 'text-white' : 'text-gray-900'}`}>Total Tickets</h3>
             </div>
             <p className={`text-4xl font-bold ${isDark ? 'text-purple-300' : 'text-purple-600'}`}>
               {data.global.total}
             </p>
             <p className={`text-sm ${isDark ? 'text-zinc-400' : 'text-gray-500'} mt-1`}>
-              tickets totales en el sistema
+              gestionados en el sistema
             </p>
           </div>
 
           <div className={`${isDark ? 'bg-zinc-900/80 border-zinc-800' : 'bg-white border-gray-200'} border rounded-xl p-5`}>
             <div className="flex items-center gap-2 mb-3">
-              <CheckCircle2 className="h-5 w-5 text-emerald-400" />
-              <h3 className={`text-sm font-semibold ${isDark ? 'text-white' : 'text-gray-900'}`}>Resueltos</h3>
+              <Target className="h-5 w-5 text-emerald-400" />
+              <h3 className={`text-sm font-semibold ${isDark ? 'text-white' : 'text-gray-900'}`}>Efectividad</h3>
             </div>
             <p className={`text-4xl font-bold ${isDark ? 'text-emerald-300' : 'text-emerald-600'}`}>
-              {data.global.resueltosYCerrados}
+              {tasaResolucionGlobal}%
             </p>
             <p className={`text-sm ${isDark ? 'text-zinc-400' : 'text-gray-500'} mt-1`}>
-              tickets resueltos en total
+              de tickets resueltos
             </p>
           </div>
         </div>
 
-        {/* Resolución del día (ranking simulado) + Ranking técnicos global */}
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          <div className={`${isDark ? 'bg-zinc-900/80 border-zinc-800' : 'bg-white border-gray-200'} border rounded-xl p-5`}>
-            <div className="flex items-center gap-2 mb-4">
-              <UserCheck className="h-5 w-5 text-emerald-400" />
-              <h3 className={`text-sm font-semibold ${isDark ? 'text-white' : 'text-gray-900'}`}>Resolución del Día</h3>
-            </div>
-            <div className="space-y-3">
-              {data.rankings.resolucionDia.sort((a, b) => b.count - a.count).map((r, i) => {
-                const maxCount = Math.max(...data.rankings.resolucionDia.map(x => x.count));
-                const pct = maxCount > 0 ? (r.count / maxCount) * 100 : 0;
-                return (
-                  <div key={r.nombre}>
-                    <div className="flex items-center justify-between mb-1">
-                      <span className={`text-sm ${isDark ? 'text-zinc-300' : 'text-gray-700'} flex items-center gap-2`}>
-                        {i === 0 && <Award className="h-4 w-4 text-amber-400" />}
-                        {r.nombre}
-                      </span>
-                      <span className={`text-sm font-semibold ${isDark ? 'text-white' : 'text-gray-900'}`}>{r.count}</span>
-                    </div>
-                    <div className={`h-2 rounded-full ${isDark ? 'bg-zinc-800' : 'bg-gray-200'} overflow-hidden`}>
-                      <div className="h-full rounded-full bg-gradient-to-r from-purple-500 to-fuchsia-500 transition-all" style={{ width: `${pct}%` }} />
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
+        {/* Top Técnicos */}
+        <div className={`${isDark ? 'bg-zinc-900/80 border-zinc-800' : 'bg-white border-gray-200'} border rounded-xl p-5`}>
+          <div className="flex items-center gap-2 mb-4">
+            <Award className="h-5 w-5 text-purple-400" />
+            <h3 className={`text-sm font-semibold ${isDark ? 'text-white' : 'text-gray-900'}`}>Tickets Resueltos por Técnico</h3>
           </div>
-
-          <div className={`${isDark ? 'bg-zinc-900/80 border-zinc-800' : 'bg-white border-gray-200'} border rounded-xl p-5`}>
-            <div className="flex items-center gap-2 mb-4">
-              <Award className="h-5 w-5 text-purple-400" />
-              <h3 className={`text-sm font-semibold ${isDark ? 'text-white' : 'text-gray-900'}`}>Top Técnicos (Global)</h3>
-            </div>
-            <div className="space-y-2">
-              {data.rankings.tecnicos.slice(0, 8).map((t, i) => (
-                <div key={t.nombre} className="flex items-center justify-between">
-                  <span className={`text-sm ${isDark ? 'text-zinc-300' : 'text-gray-700'} flex items-center gap-2`}>
-                    <span className={`w-5 h-5 rounded-full text-[10px] font-bold flex items-center justify-center ${i < 3 ? 'bg-purple-500/20 text-purple-300' : isDark ? 'bg-zinc-800 text-zinc-500' : 'bg-gray-100 text-gray-400'}`}>
-                      {i + 1}
-                    </span>
-                    {t.nombre}
-                  </span>
-                  <span className={`text-sm font-semibold ${isDark ? 'text-white' : 'text-gray-900'}`}>{t.count}</span>
-                </div>
-              ))}
-            </div>
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+            {data.rankings.tecnicos.map((t, i) => (
+              <div key={t.nombre} className={`text-center p-4 rounded-xl ${isDark ? 'bg-zinc-800/50' : 'bg-gray-50'}`}>
+                {i === 0 && <Award className="h-5 w-5 text-amber-400 mx-auto mb-2" />}
+                <p className={`text-3xl font-bold ${isDark ? 'text-white' : 'text-gray-900'}`}>{t.count}</p>
+                <p className={`text-xs mt-1 ${isDark ? 'text-zinc-400' : 'text-gray-500'}`}>{t.nombre}</p>
+              </div>
+            ))}
           </div>
         </div>
 
         {/* Gráfica tickets por hora HOY */}
         <div className={`${isDark ? 'bg-zinc-900/80 border-zinc-800' : 'bg-white border-gray-200'} border rounded-xl p-5`}>
-          <h3 className={`text-sm font-semibold ${isDark ? 'text-white' : 'text-gray-900'} mb-4`}>Tickets por Hora — Hoy</h3>
+          <h3 className={`text-sm font-semibold ${isDark ? 'text-white' : 'text-gray-900'} mb-4`}>Actividad por Hora — Hoy</h3>
           <ResponsiveContainer width="100%" height={200}>
             <BarChart data={data.hoy.ticketsPorHora}>
               <XAxis dataKey="hora" tick={{ fontSize: 10, fill: isDark ? '#a1a1aa' : '#6b7280' }} tickFormatter={(h) => `${h}h`} />
@@ -237,10 +198,10 @@ export function ReportesEspecialesPage() {
           </ResponsiveContainer>
         </div>
 
-        {/* Gráfica hora pico global + día semana */}
+        {/* Gráficas: distribución por hora global + día semana */}
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           <div className={`${isDark ? 'bg-zinc-900/80 border-zinc-800' : 'bg-white border-gray-200'} border rounded-xl p-5`}>
-            <h3 className={`text-sm font-semibold ${isDark ? 'text-white' : 'text-gray-900'} mb-4`}>Tickets por Hora (Global)</h3>
+            <h3 className={`text-sm font-semibold ${isDark ? 'text-white' : 'text-gray-900'} mb-4`}>Distribución por Hora (Global)</h3>
             <ResponsiveContainer width="100%" height={200}>
               <BarChart data={data.graficas.ticketsPorHora}>
                 <XAxis dataKey="hora" tick={{ fontSize: 10, fill: isDark ? '#a1a1aa' : '#6b7280' }} tickFormatter={(h) => `${h}h`} />
@@ -252,7 +213,7 @@ export function ReportesEspecialesPage() {
           </div>
 
           <div className={`${isDark ? 'bg-zinc-900/80 border-zinc-800' : 'bg-white border-gray-200'} border rounded-xl p-5`}>
-            <h3 className={`text-sm font-semibold ${isDark ? 'text-white' : 'text-gray-900'} mb-4`}>Tickets por Día de la Semana</h3>
+            <h3 className={`text-sm font-semibold ${isDark ? 'text-white' : 'text-gray-900'} mb-4`}>Actividad por Día de la Semana</h3>
             <ResponsiveContainer width="100%" height={200}>
               <BarChart data={data.graficas.ticketsPorDiaSemana}>
                 <XAxis dataKey="dia" tick={{ fontSize: 10, fill: isDark ? '#a1a1aa' : '#6b7280' }} />
@@ -264,46 +225,24 @@ export function ReportesEspecialesPage() {
           </div>
         </div>
 
-        {/* Rankings: Áreas + Usuarios */}
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          <div className={`${isDark ? 'bg-zinc-900/80 border-zinc-800' : 'bg-white border-gray-200'} border rounded-xl p-5`}>
-            <div className="flex items-center gap-2 mb-4">
-              <Building2 className="h-5 w-5 text-blue-400" />
-              <h3 className={`text-sm font-semibold ${isDark ? 'text-white' : 'text-gray-900'}`}>Áreas con más Actividad</h3>
-            </div>
-            <div className="space-y-2">
-              {data.rankings.areas.slice(0, 10).map((a, i) => (
-                <div key={a.nombre} className="flex items-center justify-between">
-                  <span className={`text-sm ${isDark ? 'text-zinc-300' : 'text-gray-700'} flex items-center gap-2`}>
-                    <span className={`w-5 h-5 rounded-full text-[10px] font-bold flex items-center justify-center ${i < 3 ? 'bg-blue-500/20 text-blue-300' : isDark ? 'bg-zinc-800 text-zinc-500' : 'bg-gray-100 text-gray-400'}`}>
-                      {i + 1}
-                    </span>
-                    {a.nombre}
-                  </span>
-                  <span className={`text-sm font-semibold ${isDark ? 'text-white' : 'text-gray-900'}`}>{a.count}</span>
-                </div>
-              ))}
-            </div>
+        {/* Ranking áreas */}
+        <div className={`${isDark ? 'bg-zinc-900/80 border-zinc-800' : 'bg-white border-gray-200'} border rounded-xl p-5`}>
+          <div className="flex items-center gap-2 mb-4">
+            <Building2 className="h-5 w-5 text-blue-400" />
+            <h3 className={`text-sm font-semibold ${isDark ? 'text-white' : 'text-gray-900'}`}>Áreas con más Actividad</h3>
           </div>
-
-          <div className={`${isDark ? 'bg-zinc-900/80 border-zinc-800' : 'bg-white border-gray-200'} border rounded-xl p-5`}>
-            <div className="flex items-center gap-2 mb-4">
-              <Users className="h-5 w-5 text-fuchsia-400" />
-              <h3 className={`text-sm font-semibold ${isDark ? 'text-white' : 'text-gray-900'}`}>Usuarios más Activos</h3>
-            </div>
-            <div className="space-y-2">
-              {data.rankings.usuarios.slice(0, 10).map((u, i) => (
-                <div key={u.nombre} className="flex items-center justify-between">
-                  <span className={`text-sm ${isDark ? 'text-zinc-300' : 'text-gray-700'} flex items-center gap-2`}>
-                    <span className={`w-5 h-5 rounded-full text-[10px] font-bold flex items-center justify-center ${i < 3 ? 'bg-fuchsia-500/20 text-fuchsia-300' : isDark ? 'bg-zinc-800 text-zinc-500' : 'bg-gray-100 text-gray-400'}`}>
-                      {i + 1}
-                    </span>
-                    {u.nombre}
-                  </span>
-                  <span className={`text-sm font-semibold ${isDark ? 'text-white' : 'text-gray-900'}`}>{u.count}</span>
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+            {data.rankings.areas.slice(0, 8).map((a, i) => (
+              <div key={a.nombre} className={`flex items-center gap-3 p-3 rounded-lg ${isDark ? 'bg-zinc-800/50' : 'bg-gray-50'}`}>
+                <span className={`w-6 h-6 rounded-full text-xs font-bold flex items-center justify-center ${i < 3 ? 'bg-blue-500/20 text-blue-300' : isDark ? 'bg-zinc-700 text-zinc-400' : 'bg-gray-200 text-gray-500'}`}>
+                  {i + 1}
+                </span>
+                <div className="flex-1 min-w-0">
+                  <p className={`text-xs font-medium truncate ${isDark ? 'text-zinc-300' : 'text-gray-700'}`}>{a.nombre}</p>
+                  <p className={`text-lg font-bold ${isDark ? 'text-white' : 'text-gray-900'}`}>{a.count}</p>
                 </div>
-              ))}
-            </div>
+              </div>
+            ))}
           </div>
         </div>
       </div>
