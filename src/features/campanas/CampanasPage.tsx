@@ -1500,6 +1500,7 @@ export function CampanasPage() {
             '0', '', '', '', '', '', '', '0', '0', ''
           ]);
         } else {
+          let firstRow = true;
           for (const item of inventarios) {
             const operacion = item.cortesia ? 'CORTESIA' : (item.estatus_reserva === 'Bonificado' || item.estatus_reserva === 'Vendido bonificado') ? 'BONIFICACION' : 'RENTA';
             const precio = item.tarifa_publica_sc || item.tarifa_publica || 0;
@@ -1507,7 +1508,7 @@ export function CampanasPage() {
             rows.push([
               nombreCampana,
               anunciante,
-              invStr,
+              firstRow ? invStr : '0',
               operacion,
               '0',
               precio ? `$${Number(precio).toLocaleString('es-MX')}` : '0',
@@ -1529,10 +1530,7 @@ export function CampanasPage() {
               '0',
               ''
             ]);
-            // Después de la primera fila, no repetir inversión
-            if (showInversion) {
-              // ya se marcó arriba
-            }
+            firstRow = false;
           }
         }
       }
