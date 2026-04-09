@@ -120,51 +120,115 @@ export function RankingTicketsPage() {
         </div>
 
         {/* Empleado del mes */}
-        {rankings?.empleadoDelMes && (
-          <div className={`rounded-2xl border-2 ${isDark ? 'border-yellow-500/40 bg-gradient-to-r from-yellow-900/20 via-amber-900/15 to-yellow-900/20' : 'border-yellow-300 bg-gradient-to-r from-yellow-50 via-amber-50 to-yellow-50'} p-6 text-center relative overflow-hidden`}>
-            <div className="absolute inset-0 opacity-5">
-              <div className="absolute top-2 left-8 text-6xl">👑</div>
-              <div className="absolute top-4 right-12 text-5xl">⭐</div>
-              <div className="absolute bottom-2 left-1/4 text-4xl">✨</div>
-              <div className="absolute bottom-4 right-1/4 text-4xl">🌟</div>
-            </div>
-            <div className="relative z-10">
-              <div className="flex justify-center mb-3">
-                <span className="text-4xl">👑</span>
+        {rankings?.empleadoDelMes && (() => {
+          const emp = rankings.empleadoDelMes;
+          const nombre = emp.nombre;
+          const count = emp.count;
+          const topUser = emp.top_usuario;
+          const total = rankings.totalTickets;
+          const hl = isDark ? 'text-yellow-300' : 'text-yellow-700';
+
+          const leyendas: Record<string, React.ReactNode> = {
+            'Akary': (
+              <>
+                "En los archivos secretos del reino de QEB, se habla en susurros de una hechicera del codigo
+                conocida como <strong className={hl}>Akary</strong>. Dicen que sus dedos danzan sobre el teclado
+                con la velocidad del rayo, y que ningun bug sobrevive a su mirada. Con {count} criaturas digitales
+                sometidas{topUser ? <> — siendo <strong className={hl}>{topUser}</strong> su protegida mas fiel, a quien rescato
+                incontables veces de las garras del caos</> : null}, su nombre resuena en cada linea de codigo
+                como un encantamiento de proteccion eterna."
+              </>
+            ),
+            'Jos': (
+              <>
+                "Las leyendas mas antiguas del reino de QEB narran la historia de <strong className={hl}>Jos</strong>,
+                el arquitecto silencioso. Se dice que cuando el sistema tiembla y los servidores lloran,
+                el aparece como una sombra certera, resolviendo lo imposible con una calma que hiela la sangre
+                de los bugs. Con {count} anomalias erradicadas de la faz del codigo
+                {topUser ? <> — y con <strong className={hl}>{topUser}</strong> como su aliado mas constante,
+                cuyas peticiones siempre encontraron respuesta</> : null}, Jos se convirtio en el guardian
+                que todo sistema merece pero pocos logran tener."
+              </>
+            ),
+            'Mario': (
+              <>
+                "Habia una vez, en las tierras digitales de QEB, un guerrero llamado <strong className={hl}>Mario</strong>.
+                No portaba espada ni escudo, sino una terminal y un cafe que nunca se enfriaba.
+                Los usuarios lo invocaban cuando toda esperanza se perdia, y el respondia con {count} soluciones
+                forjadas en las llamas del debugger
+                {topUser ? <>. <strong className={hl}>{topUser}</strong>, su companero de batallas mas frecuente,
+                sabe mejor que nadie que donde Mario pisa, los errores tiemblan</> : null}.
+                Su leyenda se escribe con cada deploy exitoso."
+              </>
+            ),
+            'Bladi': (
+              <>
+                "Los pergaminos mas valiosos de QEB hablan de <strong className={hl}>Bladi</strong>,
+                el estratega del reino. Mientras otros guerreros luchan con fuerza bruta,
+                Bladi observa, analiza y con una sola jugada magistral desmantela {count} fortalezas
+                de errores que parecian invencibles
+                {topUser ? <>. <strong className={hl}>{topUser}</strong>, testigo de sus hazanas mas memorables,
+                puede dar fe de que cada solucion de Bladi es una obra de arte</> : null}.
+                En el tablero del soporte tecnico, el siempre va tres movimientos adelante."
+              </>
+            ),
+          };
+
+          const leyendaDefault = (
+            <>
+              "Cuentan las antiguas cronicas del reino de QEB que, cuando los bugs acechaban
+              y los tickets se multiplicaban como dragones en la oscuridad, surgio un heroe de entre las sombras del codigo.
+              Con {count} bestias digitales derrotadas
+              {topUser ? <> — siendo <strong className={hl}>{topUser}</strong> su aliado mas protegido</> : null}, <strong className={hl}>{nombre}</strong> se
+              alzo como leyenda viviente, protector de los usuarios y guardian del sistema."
+            </>
+          );
+
+          const leyenda = leyendas[nombre] || leyendaDefault;
+
+          return (
+            <div className={`rounded-2xl border-2 ${isDark ? 'border-yellow-500/40 bg-gradient-to-r from-yellow-900/20 via-amber-900/15 to-yellow-900/20' : 'border-yellow-300 bg-gradient-to-r from-yellow-50 via-amber-50 to-yellow-50'} p-6 text-center relative overflow-hidden`}>
+              <div className="absolute inset-0 opacity-5">
+                <div className="absolute top-2 left-8 text-6xl">👑</div>
+                <div className="absolute top-4 right-12 text-5xl">⭐</div>
+                <div className="absolute bottom-2 left-1/4 text-4xl">✨</div>
+                <div className="absolute bottom-4 right-1/4 text-4xl">🌟</div>
               </div>
-              <h2 className={`text-lg font-bold mb-4 ${isDark ? 'text-yellow-300' : 'text-yellow-700'}`}>
-                Empleado del Mes
-              </h2>
-              <div className="flex justify-center mb-3">
-                <div className={`rounded-full p-1 ${isDark ? 'bg-gradient-to-br from-yellow-500/40 to-amber-500/40' : 'bg-gradient-to-br from-yellow-200 to-amber-200'}`}>
-                  <UserAvatar
-                    nombre={rankings.empleadoDelMes.nombre}
-                    foto_perfil={rankings.empleadoDelMes.foto_perfil}
-                    size="xl"
-                    className="!w-20 !h-20 !text-2xl"
-                  />
+              <div className="relative z-10">
+                <div className="flex justify-center mb-3">
+                  <span className="text-4xl">👑</span>
+                </div>
+                <h2 className={`text-lg font-bold mb-4 ${isDark ? 'text-yellow-300' : 'text-yellow-700'}`}>
+                  Empleado del Mes
+                </h2>
+                <div className="flex justify-center mb-3">
+                  <div className={`rounded-full p-1 ${isDark ? 'bg-gradient-to-br from-yellow-500/40 to-amber-500/40' : 'bg-gradient-to-br from-yellow-200 to-amber-200'}`}>
+                    <UserAvatar
+                      nombre={nombre}
+                      foto_perfil={emp.foto_perfil}
+                      size="xl"
+                      className="!w-20 !h-20 !text-2xl"
+                    />
+                  </div>
+                </div>
+                <h3 className={`text-xl font-bold ${isDark ? 'text-white' : 'text-gray-900'}`}>
+                  {nombre}
+                </h3>
+                <p className={`text-sm font-semibold mt-1 ${isDark ? 'text-yellow-400' : 'text-yellow-600'}`}>
+                  🛠️ {count} tickets resueltos
+                </p>
+                <div className={`mt-4 max-w-xl mx-auto px-4 py-3 rounded-xl ${isDark ? 'bg-zinc-900/60 border border-yellow-500/10' : 'bg-white/80 border border-yellow-200'}`}>
+                  <p className={`text-xs italic leading-relaxed ${isDark ? 'text-zinc-400' : 'text-gray-500'}`}>
+                    {leyenda}
+                  </p>
+                  <p className={`text-[10px] mt-2 ${isDark ? 'text-zinc-600' : 'text-gray-400'}`}>
+                    — Fragmento del Gran Libro de los Tickets, Capitulo {total}
+                  </p>
                 </div>
               </div>
-              <h3 className={`text-xl font-bold ${isDark ? 'text-white' : 'text-gray-900'}`}>
-                {rankings.empleadoDelMes.nombre}
-              </h3>
-              <p className={`text-sm font-semibold mt-1 ${isDark ? 'text-yellow-400' : 'text-yellow-600'}`}>
-                🛠️ {rankings.empleadoDelMes.count} tickets resueltos
-              </p>
-              <div className={`mt-4 max-w-lg mx-auto px-4 py-3 rounded-xl ${isDark ? 'bg-zinc-900/60 border border-yellow-500/10' : 'bg-white/80 border border-yellow-200'}`}>
-                <p className={`text-xs italic leading-relaxed ${isDark ? 'text-zinc-400' : 'text-gray-500'}`}>
-                  "Cuentan las antiguas cronicas del reino de QEB que, cuando los bugs acechaban
-                  y los tickets se multiplicaban como dragones en la oscuridad, surgio un heroe de entre las sombras del codigo.
-                  Con {rankings.empleadoDelMes.count} bestias digitales derrotadas, <strong className={isDark ? 'text-yellow-300' : 'text-yellow-700'}>{rankings.empleadoDelMes.nombre}</strong> se
-                  alzo como leyenda viviente, protector de los usuarios y guardian del sistema."
-                </p>
-                <p className={`text-[10px] mt-2 ${isDark ? 'text-zinc-600' : 'text-gray-400'}`}>
-                  — Fragmento del Gran Libro de los Tickets, Capitulo {rankings.totalTickets}
-                </p>
-              </div>
             </div>
-          </div>
-        )}
+          );
+        })()}
 
         {isLoading ? (
           <div className="flex justify-center py-20">
