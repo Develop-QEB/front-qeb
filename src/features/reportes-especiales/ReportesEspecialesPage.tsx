@@ -81,7 +81,7 @@ export function ReportesEspecialesPage() {
     { label: 'En Atención', value: data.hoy.enProgreso + data.hoy.enValidacion, icon: Clock, color: 'amber' },
     { label: 'Resueltos Hoy', value: data.hoy.resueltosYCerrados, icon: CheckCircle2, color: 'emerald' },
     { label: 'Total Resueltos', value: data.global.resueltosYCerrados, icon: Award, color: 'cyan' },
-    { label: 'Tasa Resolución', value: `${tasaResolucionGlobal}%`, icon: Target, color: 'purple' },
+    { label: 'Total Global', value: data.global.total, icon: TrendingUp, color: 'purple' },
   ];
 
   const iconColorMap: Record<string, string> = {
@@ -152,14 +152,14 @@ export function ReportesEspecialesPage() {
 
           <div className={`${isDark ? 'bg-zinc-900/80 border-zinc-800' : 'bg-white border-gray-200'} border rounded-xl p-5`}>
             <div className="flex items-center gap-2 mb-3">
-              <Target className="h-5 w-5 text-emerald-400" />
-              <h3 className={`text-sm font-semibold ${isDark ? 'text-white' : 'text-gray-900'}`}>Efectividad</h3>
+              <CheckCircle2 className="h-5 w-5 text-emerald-400" />
+              <h3 className={`text-sm font-semibold ${isDark ? 'text-white' : 'text-gray-900'}`}>Resueltos</h3>
             </div>
             <p className={`text-4xl font-bold ${isDark ? 'text-emerald-300' : 'text-emerald-600'}`}>
-              {tasaResolucionGlobal}%
+              {data.global.resueltosYCerrados}
             </p>
             <p className={`text-sm ${isDark ? 'text-zinc-400' : 'text-gray-500'} mt-1`}>
-              de tickets resueltos
+              tickets resueltos en total
             </p>
           </div>
         </div>
