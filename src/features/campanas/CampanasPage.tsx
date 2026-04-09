@@ -1566,7 +1566,7 @@ export function CampanasPage() {
   // Validar si el botón Editar debe estar deshabilitado
   const isEditDisabled = (campana: Campana): boolean => {
     const statusLower = campana.status?.toLowerCase() || '';
-    const disabledStatuses = ['finalizado', 'sin cotizacion activa', 'cancelada'];
+    const disabledStatuses = ['finalizado', 'sin cotizacion activa', 'cancelada', 'rechazada'];
     return disabledStatuses.includes(statusLower) || campana.has_aps === true;
   };
 
