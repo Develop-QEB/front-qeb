@@ -2008,7 +2008,7 @@ export function PropuestasPage() {
       {selectedPropuestaForAssign && (
         <AssignInventarioModal
           isOpen={showAssignModal}
-          onClose={() => { setShowAssignModal(false); setSelectedPropuestaForAssign(null); }}
+          onClose={() => { setShowAssignModal(false); queryClient.invalidateQueries({ queryKey: ['propuesta-caras', selectedPropuestaForAssign?.id] }); queryClient.invalidateQueries({ queryKey: ['propuesta-reservas-modal', selectedPropuestaForAssign?.id] }); setSelectedPropuestaForAssign(null); }}
           propuesta={selectedPropuestaForAssign}
           readOnly={!permissions.canAsignarInventario || selectedPropuestaForAssign.status === 'Pase a ventas'}
         />
