@@ -472,28 +472,35 @@ export function OrdenesMontajeModal({ isOpen, onClose, canExport = true }: Orden
     }
   }, [isOpen, catorcenasData]);
 
+  // Calculate API range from selected catorcenas
+  const apiCatorcenaRange = useMemo(() => {
+    if (selectedCatorcenas.length === 0) return {};
+    const parsed = selectedCatorcenas.map(s => { const [n, y] = s.split('-'); return { numero: parseInt(n), year: parseInt(y) }; });
+    const sorted = parsed.sort((a, b) => a.year !== b.year ? a.year - b.year : a.numero - b.numero);
+    return {
+      catorcenaInicio: sorted[0].numero,
+      yearInicio: sorted[0].year,
+      catorcenaFin: sorted[sorted.length - 1].numero,
+      yearFin: sorted[sorted.length - 1].year,
+    };
+  }, [selectedCatorcenas]);
+
   // Query for CAT data
   const { data: catData, isLoading: isLoadingCAT } = useQuery({
-    queryKey: ['ordenes-montaje-cat', status, yearInicio, yearFin, catorcenaInicio, catorcenaFin],
+    queryKey: ['ordenes-montaje-cat', status, apiCatorcenaRange, selectedCatorcenas],
     queryFn: () => campanasService.getOrdenMontajeCAT({
       status: status || undefined,
-      yearInicio,
-      yearFin,
-      catorcenaInicio,
-      catorcenaFin,
+      ...apiCatorcenaRange,
     }),
     enabled: isOpen && (activeTab === 'cat' || activeTab === 'digital' || activeTab === 'ocupacion-digital'),
   });
 
   // Query for INVIAN data
   const { data: invianData, isLoading: isLoadingINVIAN } = useQuery({
-    queryKey: ['ordenes-montaje-invian', status, yearInicio, yearFin, catorcenaInicio, catorcenaFin],
+    queryKey: ['ordenes-montaje-invian', status, apiCatorcenaRange, selectedCatorcenas],
     queryFn: () => campanasService.getOrdenMontajeINVIAN({
       status: status || undefined,
-      yearInicio,
-      yearFin,
-      catorcenaInicio,
-      catorcenaFin,
+      ...apiCatorcenaRange,
     }),
     enabled: isOpen && (activeTab === 'invian' || activeTab === 'invian-digital'),
   });
