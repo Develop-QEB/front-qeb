@@ -518,44 +518,20 @@ export function OrdenesMontajeModal({ isOpen, onClose, canExport = true }: Orden
     return catorcenas;
   }, [catorcenasData, yearFin, yearInicio, catorcenaInicio]);
 
-  // Catorcena multiselect options - generated from actual data
+  // Catorcena multiselect options - generated from catorcenas table (all available)
   const catorcenaOptions = useMemo(() => {
-    const catorcenasSet = new Map<string, { numero: number; year: number }>();
+    if (!catorcenasData?.data) return [];
 
-    // Get catorcenas from CAT data
-    if (catData) {
-      catData.forEach(item => {
-        if (item.catorcena_numero && item.catorcena_year) {
-          const id = `${item.catorcena_numero}-${item.catorcena_year}`;
-          if (!catorcenasSet.has(id)) {
-            catorcenasSet.set(id, { numero: item.catorcena_numero, year: item.catorcena_year });
-          }
-        }
-      });
-    }
-
-    // Get catorcenas from INVIAN data
-    if (invianData) {
-      invianData.forEach(item => {
-        if (item.catorcena_numero && item.catorcena_year) {
-          const id = `${item.catorcena_numero}-${item.catorcena_year}`;
-          if (!catorcenasSet.has(id)) {
-            catorcenasSet.set(id, { numero: item.catorcena_numero, year: item.catorcena_year });
-          }
-        }
-      });
-    }
-
-    return Array.from(catorcenasSet.entries()).map(([id, data]) => ({
-      id,
-      label: `Cat ${data.numero} / ${data.year}`,
-      numero: data.numero,
-      year: data.year,
-    })).sort((a, b) => {
+    return catorcenasData.data.map((c: any) => ({
+      id: `${c.numero_catorcena}-${c.a_o}`,
+      label: `Cat ${c.numero_catorcena} / ${c.a_o}`,
+      numero: c.numero_catorcena,
+      year: c.a_o,
+    })).sort((a: any, b: any) => {
       if (a.year !== b.year) return b.year - a.year;
       return b.numero - a.numero;
     });
-  }, [catData, invianData]);
+  }, [catorcenasData]);
 
     // Filtered and sorted CAT data
   const filteredCATData = useMemo(() => {
