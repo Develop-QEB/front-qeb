@@ -5726,16 +5726,16 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
                             const isCortesia = item.ItemCode.toUpperCase().startsWith('CT');
                             const isIntercambio = item.ItemCode.toUpperCase().startsWith('IN');
                             const isImpresion = item.ItemCode.toUpperCase().startsWith('IM');
-                            const isTarifaCero = isCortesia || isIntercambio;
+                            const isTarifaCero = isCortesia;
                             setNewCara({
                               ...newCara,
                               articulo: item.ItemCode,
-                              tarifa_publica: isTarifaCero ? 0 : tarifa,  // CT/IN = 0, todo lo demás usa SAP
+                              tarifa_publica: isTarifaCero ? 0 : tarifa,  // CT = 0, todo lo demás usa SAP
                               costo: isTarifaCero ? 0 : tarifaPiso,  // Tarifa piso desde PriceList 11
                               caras: isCortesia ? 0 : newCara.caras,
                               caras_flujo: isCortesia ? 0 : newCara.caras_flujo,
                               caras_contraflujo: isCortesia ? 0 : newCara.caras_contraflujo,
-                              bonificacion: isImpresion ? 0 : newCara.bonificacion,
+                              bonificacion: (isImpresion || isIntercambio) ? 0 : newCara.bonificacion,
                               estados: ciudadEstado?.estado || newCara.estados,
                               // Si ciudadEstado existe, usar su ciudad (incluso si es vacía para CDMX)
                               ciudad: ciudadEstado ? ciudadEstado.ciudad : newCara.ciudad,
@@ -6035,8 +6035,8 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
                             const contraflujo = Math.floor(val / 2);
                             setNewCara({ ...newCara, caras: val, caras_flujo: flujo, caras_contraflujo: contraflujo });
                           }}
-                          disabled={!canEditResumen || newCara.articulo?.toUpperCase().startsWith('CT') || newCara.articulo?.toUpperCase().startsWith('IN')}
-                          className={`w-full px-3 py-2 ${isDark ? 'bg-zinc-800' : 'bg-gray-50'} border ${isDark ? 'border-zinc-700' : 'border-gray-200'} rounded-lg text-sm ${isDark ? 'text-white' : 'text-gray-900'} focus:outline-none focus:ring-1 focus:ring-purple-500/50 ${(!canEditResumen || newCara.articulo?.toUpperCase().startsWith('CT') || newCara.articulo?.toUpperCase().startsWith('IN')) ? 'opacity-40 cursor-not-allowed' : ''}`}
+                          disabled={!canEditResumen || newCara.articulo?.toUpperCase().startsWith('CT')}
+                          className={`w-full px-3 py-2 ${isDark ? 'bg-zinc-800' : 'bg-gray-50'} border ${isDark ? 'border-zinc-700' : 'border-gray-200'} rounded-lg text-sm ${isDark ? 'text-white' : 'text-gray-900'} focus:outline-none focus:ring-1 focus:ring-purple-500/50 ${(!canEditResumen || newCara.articulo?.toUpperCase().startsWith('CT')) ? 'opacity-40 cursor-not-allowed' : ''}`}
                           min="0"
                         />
                         <span className={`text-[10px] ${isDark ? 'text-zinc-600' : 'text-gray-400'}`}>Flujo: {newCara.caras_flujo || 0} | Contraflujo: {newCara.caras_contraflujo || 0}</span>
@@ -6047,8 +6047,8 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
                           type="number"
                           value={newCara.bonificacion || ''}
                           onChange={(e) => canEditResumen && setNewCara({ ...newCara, bonificacion: parseInt(e.target.value) || 0 })}
-                          disabled={!canEditResumen || newCara.articulo?.toUpperCase().startsWith('IM')}
-                          className={`w-full px-3 py-2 ${isDark ? 'bg-zinc-800' : 'bg-gray-50'} border ${isDark ? 'border-zinc-700' : 'border-gray-200'} rounded-lg text-sm ${isDark ? 'text-white' : 'text-gray-900'} focus:outline-none focus:ring-1 focus:ring-purple-500/50 ${(!canEditResumen || newCara.articulo?.toUpperCase().startsWith('IM')) ? 'opacity-60 cursor-not-allowed' : ''}`}
+                          disabled={!canEditResumen || newCara.articulo?.toUpperCase().startsWith('IM') || newCara.articulo?.toUpperCase().startsWith('IN')}
+                          className={`w-full px-3 py-2 ${isDark ? 'bg-zinc-800' : 'bg-gray-50'} border ${isDark ? 'border-zinc-700' : 'border-gray-200'} rounded-lg text-sm ${isDark ? 'text-white' : 'text-gray-900'} focus:outline-none focus:ring-1 focus:ring-purple-500/50 ${(!canEditResumen || newCara.articulo?.toUpperCase().startsWith('IM') || newCara.articulo?.toUpperCase().startsWith('IN')) ? 'opacity-60 cursor-not-allowed' : ''}`}
                           min="0"
                         />
                       </div>
@@ -6058,8 +6058,8 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
                           type="number"
                           value={newCara.tarifa_publica || ''}
                           onChange={(e) => canEditResumen && setNewCara({ ...newCara, tarifa_publica: parseFloat(e.target.value) || 0 })}
-                          disabled={!canEditResumen || newCara.articulo?.toUpperCase().startsWith('CT') || newCara.articulo?.toUpperCase().startsWith('IN')}
-                          className={`w-full px-3 py-2 ${isDark ? 'bg-zinc-800' : 'bg-gray-50'} border ${isDark ? 'border-zinc-700' : 'border-gray-200'} rounded-lg text-sm ${isDark ? 'text-white' : 'text-gray-900'} focus:outline-none focus:ring-1 focus:ring-purple-500/50 ${(!canEditResumen || newCara.articulo?.toUpperCase().startsWith('CT') || newCara.articulo?.toUpperCase().startsWith('IN')) ? 'opacity-40 cursor-not-allowed' : ''}`}
+                          disabled={!canEditResumen || newCara.articulo?.toUpperCase().startsWith('CT')}
+                          className={`w-full px-3 py-2 ${isDark ? 'bg-zinc-800' : 'bg-gray-50'} border ${isDark ? 'border-zinc-700' : 'border-gray-200'} rounded-lg text-sm ${isDark ? 'text-white' : 'text-gray-900'} focus:outline-none focus:ring-1 focus:ring-purple-500/50 ${(!canEditResumen || newCara.articulo?.toUpperCase().startsWith('CT')) ? 'opacity-40 cursor-not-allowed' : ''}`}
                           min="0"
                         />
                       </div>
