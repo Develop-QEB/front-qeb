@@ -715,6 +715,16 @@ export function HistorialTicketsPage() {
                         <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-medium border ${ps.text} ${ps.bg} ${ps.border}`}>
                           {t.prioridad}
                         </span>
+                        {t.usuario_area && (
+                          <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-medium border ${isDark ? 'text-teal-400 bg-teal-500/10 border-teal-500/30' : 'text-teal-600 bg-teal-50 border-teal-200'}`}>
+                            {t.usuario_area}
+                          </span>
+                        )}
+                        {t.usuario_role && (
+                          <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-medium border ${isDark ? 'text-violet-400 bg-violet-500/10 border-violet-500/30' : 'text-violet-600 bg-violet-50 border-violet-200'}`}>
+                            {t.usuario_role}
+                          </span>
+                        )}
                         {t.imagen && <Image className={`h-3 w-3 ${isDark ? 'text-purple-400' : 'text-purple-500'}`} />}
                         {t.total_mensajes > 0 && (
                           <span className={`inline-flex items-center gap-1 text-[10px] ${isDark ? 'text-zinc-500' : 'text-gray-400'}`}>

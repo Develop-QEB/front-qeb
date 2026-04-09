@@ -60,6 +60,8 @@ export interface TicketHistorial {
   usuario_id: number;
   usuario_nombre: string;
   usuario_email: string;
+  usuario_area?: string | null;
+  usuario_role?: string | null;
   status_cambiado_por?: string | null;
   total_mensajes: number;
   total_chat: number;
