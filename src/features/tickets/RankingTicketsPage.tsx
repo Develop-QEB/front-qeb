@@ -352,7 +352,7 @@ export function RankingTicketsPage() {
                   );
                 })()}
                 <p className={`text-xs text-center mt-3 ${isDark ? 'text-zinc-500' : 'text-gray-400'}`}>
-                  Hora del dia (0-23) — Cuando se quejan mas? 🤔
+                  Hora del dia (0-23, hora Mexico) — Cuando se quejan mas? 🤔
                 </p>
               </div>
             </div>
