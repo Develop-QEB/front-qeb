@@ -83,7 +83,7 @@ export function ReportesEspecialesPage() {
   if (isLoading || !data) {
     return (
       <div className={`min-h-screen ${isDark ? 'bg-zinc-950' : 'bg-gray-50'}`}>
-        <Header />
+        <Header title="Reportes Especiales" />
         <div className="flex items-center justify-center h-[80vh]">
           <Loader2 className="h-8 w-8 text-purple-500 animate-spin" />
         </div>
@@ -167,7 +167,7 @@ export function ReportesEspecialesPage() {
 
   return (
     <div className={`min-h-screen ${isDark ? 'bg-zinc-950' : 'bg-gray-50'}`}>
-      <Header />
+      <Header title="Reportes Especiales" />
       <div className="max-w-7xl mx-auto px-4 py-6 space-y-6">
         {/* Título + Filtros de fecha */}
         <div className="flex items-center justify-between flex-wrap gap-4">
