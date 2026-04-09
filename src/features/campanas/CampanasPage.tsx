@@ -2828,38 +2828,9 @@ export function CampanasPage() {
                           En curso
                         </span>
                       )}
-                      {/* Inversión total de la catorcena + progreso de carga */}
+                      {/* Inversión total de la catorcena (usa campana.inversion ya recalculada por el backend) */}
                       {(() => {
-                        const loadedCount = campanas.filter(c => campanaInventarios[c.id]).length;
-                        const totalCount = campanas.length;
-                        const isFullyLoaded = loadedCount === totalCount;
-                        const percentage = totalCount > 0 ? Math.round((loadedCount / totalCount) * 100) : 100;
-
-                        // Sumar inversión solo de inventarios que pertenecen a esta catorcena
-                        const totalInversion = campanas.reduce((s, c) => {
-                          const allInv = campanaInventarios[c.id] || [];
-                          const invFiltrados = allInv.filter(inv => itemMatchesCatorcena(inv, catorcena.num, catorcena.anio));
-                          return s + invFiltrados.reduce((sum, inv) => {
-                            const tarifa = Number((inv as any).tarifa_publica_sc) || Number((inv as any).tarifa_publica) || 0;
-                            return sum + tarifa;
-                          }, 0);
-                        }, 0);
-
-                        if (!isFullyLoaded) {
-                          return (
-                            <div className="flex items-center gap-2 ml-auto">
-                              <div className={`w-24 h-1.5 rounded-full ${isDark ? 'bg-zinc-800' : 'bg-gray-200'} overflow-hidden`}>
-                                <div
-                                  className="h-full rounded-full bg-gradient-to-r from-purple-500 to-fuchsia-500 transition-all duration-500 ease-out"
-                                  style={{ width: `${percentage}%` }}
-                                />
-                              </div>
-                              <span className={`text-[10px] tabular-nums ${isDark ? 'text-zinc-500' : 'text-gray-400'}`}>
-                                {percentage}%
-                              </span>
-                            </div>
-                          );
-                        }
+                        const totalInversion = campanas.reduce((s, c) => s + (Number((c as any).inversion) || 0), 0);
 
                         return totalInversion > 0 ? (
                           <span className={`px-2 py-0.5 rounded-full text-[10px] ${isDark ? 'bg-green-500/15 text-green-300' : 'bg-green-50 text-green-700'} border border-green-500/25 flex items-center gap-1`} title="Inversión total">
