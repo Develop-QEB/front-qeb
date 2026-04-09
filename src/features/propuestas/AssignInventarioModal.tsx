@@ -696,6 +696,7 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
   const [distanciaGrupos, setDistanciaGrupos] = useState(500); // metros
   const [tamanoGrupo, setTamanoGrupo] = useState(10);
   const [flujoPct, setFlujoPct] = useState(50); // % de caras para flujo (resto para contraflujo)
+  const [savingPct, setSavingPct] = useState(false); // loading para guardar % en BD
   const [flujoFilter, setFlujoFilter] = useState<'Todos' | 'Flujo' | 'Contraflujo'>('Todos');
   const [showOnlyIsla, setShowOnlyIsla] = useState(false);
   const [sortColumn, setSortColumn] = useState<string>('codigo_unico');
@@ -3626,11 +3627,33 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
                       const v = Math.max(0, Math.min(100, parseInt(e.target.value) || 0));
                       setFlujoPct(v);
                     }}
+                    onBlur={async () => {
+                      if (!selectedCaraForSearch?.id) return;
+                      const totalRenta = (selectedCaraForSearch.caras_flujo || 0) + (selectedCaraForSearch.caras_contraflujo || 0);
+                      const newFlujo = Math.ceil(totalRenta * flujoPct / 100);
+                      const newContra = totalRenta - newFlujo;
+                      if (newFlujo === selectedCaraForSearch.caras_flujo && newContra === selectedCaraForSearch.caras_contraflujo) return;
+                      setSavingPct(true);
+                      try {
+                        await propuestasService.updateCara(propuesta.id, selectedCaraForSearch.id, {
+                          caras_flujo: newFlujo,
+                          caras_contraflujo: newContra,
+                        } as any);
+                        setCaras(prev => prev.map(c => c.id === selectedCaraForSearch.id
+                          ? { ...c, caras_flujo: newFlujo, caras_contraflujo: newContra }
+                          : c
+                        ));
+                      } catch (err) {
+                        console.error('Error guardando distribución:', err);
+                      } finally {
+                        setSavingPct(false);
+                      }
+                    }}
                     className={`w-10 text-center text-xs font-bold ${isDark ? 'bg-zinc-800 border-zinc-700 text-blue-400' : 'bg-white border-gray-200 text-blue-600'} border rounded px-1 py-0.5 focus:outline-none focus:ring-1 focus:ring-blue-500/50`}
                   />
                   <span className={`text-[10px] ${isDark ? 'text-zinc-500' : 'text-gray-400'}`}>%</span>
                 </div>
-                <span className={`text-[9px] ${isDark ? 'text-zinc-600' : 'text-gray-300'} mt-0.5`}>{flujoPct}/{100 - flujoPct}</span>
+                <span className={`text-[9px] ${isDark ? 'text-zinc-600' : 'text-gray-300'} mt-0.5`}>{savingPct ? '...' : `${flujoPct}/${100 - flujoPct}`}</span>
               </div>
 
               {/* Contraflujo KPI */}
