@@ -461,6 +461,17 @@ export function OrdenesMontajeModal({ isOpen, onClose, canExport = true }: Orden
     queryFn: () => solicitudesService.getCatorcenas(),
   });
 
+  // Set default catorcena filter to current catorcena on open
+  useEffect(() => {
+    if (isOpen && catorcenasData?.data && selectedCatorcenas.length === 0) {
+      const now = new Date();
+      const catActual = catorcenasData.data.find((c: any) => new Date(c.fecha_inicio) <= now && new Date(c.fecha_fin) >= now);
+      if (catActual) {
+        setSelectedCatorcenas([`${catActual.numero_catorcena}-${catActual.a_o}`]);
+      }
+    }
+  }, [isOpen, catorcenasData]);
+
   // Query for CAT data
   const { data: catData, isLoading: isLoadingCAT } = useQuery({
     queryKey: ['ordenes-montaje-cat', status, yearInicio, yearFin, catorcenaInicio, catorcenaFin],
@@ -1560,6 +1571,7 @@ export function OrdenesMontajeModal({ isOpen, onClose, canExport = true }: Orden
                     <th className="px-3 py-3 text-left text-[10px] font-semibold text-purple-300 uppercase tracking-wider">Tipo</th>
                     <th className="px-3 py-3 text-left text-[10px] font-semibold text-purple-300 uppercase tracking-wider">Asesor</th>
                     <th className="px-3 py-3 text-left text-[10px] font-semibold text-purple-300 uppercase tracking-wider">APS</th>
+                    <th className="px-3 py-3 text-left text-[10px] font-semibold text-purple-300 uppercase tracking-wider">APS Global</th>
                     <th className="px-3 py-3 text-left text-[10px] font-semibold text-purple-300 uppercase tracking-wider">F. Inicio</th>
                     <th className="px-3 py-3 text-left text-[10px] font-semibold text-purple-300 uppercase tracking-wider">F. Fin</th>
                     <th className="px-3 py-3 text-left text-[10px] font-semibold text-purple-300 uppercase tracking-wider">Cliente</th>
@@ -1936,6 +1948,7 @@ function CATRow({ item }: { item: OrdenMontajeCAT }) {
         )}
       </td>
       <td className="px-3 py-2 text-xs text-purple-300 font-mono">{item.aps_especifico || '-'}</td>
+      <td className="px-3 py-2 text-xs text-fuchsia-300 font-mono">{item.aps_global || '-'}</td>
       <td className={`px-3 py-2 text-xs ${isDark ? 'text-zinc-400' : 'text-gray-500'}`}>{formatDate(item.fecha_inicio_periodo)}</td>
       <td className={`px-3 py-2 text-xs ${isDark ? 'text-zinc-400' : 'text-gray-500'}`}>{formatDate(item.fecha_fin_periodo)}</td>
       <td className={`px-3 py-2 text-xs ${isDark ? 'text-zinc-300' : 'text-gray-700'} max-w-[120px] truncate`} title={item.cliente || ''}>{item.cliente || '-'}</td>
