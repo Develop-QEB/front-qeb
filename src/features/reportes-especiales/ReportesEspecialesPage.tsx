@@ -123,45 +123,18 @@ export function ReportesEspecialesPage() {
         </div>
 
         {/* Hora pico + Global + Resueltos */}
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-          <div className={`${isDark ? 'bg-zinc-900/80 border-zinc-800' : 'bg-white border-gray-200'} border rounded-xl p-5`}>
-            <div className="flex items-center gap-2 mb-3">
-              <Zap className="h-5 w-5 text-amber-400" />
-              <h3 className={`text-sm font-semibold ${isDark ? 'text-white' : 'text-gray-900'}`}>Hora Pico</h3>
-            </div>
-            <p className={`text-4xl font-bold ${isDark ? 'text-amber-300' : 'text-amber-600'}`}>
+        {/* Hora Pico */}
+        <div className={`${isDark ? 'bg-zinc-900/80 border-zinc-800' : 'bg-white border-gray-200'} border rounded-xl p-5 flex items-center gap-6`}>
+          <Zap className="h-8 w-8 text-amber-400" />
+          <div>
+            <h3 className={`text-sm font-semibold ${isDark ? 'text-white' : 'text-gray-900'}`}>Hora Pico</h3>
+            <p className={`text-3xl font-bold ${isDark ? 'text-amber-300' : 'text-amber-600'}`}>
               {data.graficas.horaPico.hora}:00
             </p>
-            <p className={`text-sm ${isDark ? 'text-zinc-400' : 'text-gray-500'} mt-1`}>
-              {data.graficas.horaPico.count} tickets en esa hora
-            </p>
           </div>
-
-          <div className={`${isDark ? 'bg-zinc-900/80 border-zinc-800' : 'bg-white border-gray-200'} border rounded-xl p-5`}>
-            <div className="flex items-center gap-2 mb-3">
-              <TrendingUp className="h-5 w-5 text-purple-400" />
-              <h3 className={`text-sm font-semibold ${isDark ? 'text-white' : 'text-gray-900'}`}>Total Tickets</h3>
-            </div>
-            <p className={`text-4xl font-bold ${isDark ? 'text-purple-300' : 'text-purple-600'}`}>
-              {data.global.total}
-            </p>
-            <p className={`text-sm ${isDark ? 'text-zinc-400' : 'text-gray-500'} mt-1`}>
-              gestionados en el sistema
-            </p>
-          </div>
-
-          <div className={`${isDark ? 'bg-zinc-900/80 border-zinc-800' : 'bg-white border-gray-200'} border rounded-xl p-5`}>
-            <div className="flex items-center gap-2 mb-3">
-              <CheckCircle2 className="h-5 w-5 text-emerald-400" />
-              <h3 className={`text-sm font-semibold ${isDark ? 'text-white' : 'text-gray-900'}`}>Resueltos</h3>
-            </div>
-            <p className={`text-4xl font-bold ${isDark ? 'text-emerald-300' : 'text-emerald-600'}`}>
-              {data.global.resueltosYCerrados}
-            </p>
-            <p className={`text-sm ${isDark ? 'text-zinc-400' : 'text-gray-500'} mt-1`}>
-              tickets resueltos en total
-            </p>
-          </div>
+          <p className={`text-sm ${isDark ? 'text-zinc-400' : 'text-gray-500'}`}>
+            {data.graficas.horaPico.count} tickets en esa hora — momento de mayor actividad
+          </p>
         </div>
 
         {/* Top Técnicos */}
