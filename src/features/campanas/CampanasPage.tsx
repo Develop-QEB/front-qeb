@@ -2513,14 +2513,11 @@ export function CampanasPage() {
                               </span>
                             ) : null;
                           })()}
-                          {hasInventarios && (() => {
-                            const invCatorcena = inventarios.reduce((sum, inv) => {
-                              const tarifa = Number((inv as any).tarifa_publica_sc) || Number((inv as any).tarifa_publica) || 0;
-                              return sum + tarifa;
-                            }, 0);
+                          {(() => {
+                            const invCampana = Number((campana as any).inversion) || 0;
                             return (
                               <span className={`px-2 py-0.5 rounded-full text-[10px] ${isDark ? 'bg-green-500/15 text-green-300' : 'bg-green-50 text-green-700'} border border-green-500/25 flex items-center gap-1`} title="Inversión">
-                                <DollarSign className="h-3 w-3" /> {invCatorcena > 0 ? `$${invCatorcena.toLocaleString()}` : 'Sin inversión'}
+                                <DollarSign className="h-3 w-3" /> {invCampana > 0 ? `$${invCampana.toLocaleString()}` : 'Sin inversión'}
                               </span>
                             );
                           })()}
@@ -2670,8 +2667,9 @@ export function CampanasPage() {
                                                     }, 0);
                                                     const sumBonif = Math.min(carasTotales, (bonifCampana > 0 ? bonifCampana : bonifGrupoFallback));
                                                     const sumNormales = Math.max(carasTotales - sumBonif, 0);
-                                                    // Inversion: tarifa por cara * caras rentadas (excluye bonificadas).
-                                                    const inversionTotal = tarifaPublica * sumNormales;
+                                                    // Inversion: usar renta (sc.costo) si está disponible, sino tarifa × caras
+                                                    const rentaGrupo = Number((grupo.items[0] as any)?.renta) || 0;
+                                                    const inversionTotal = rentaGrupo > 0 ? rentaGrupo : (tarifaPublica * sumNormales);
                                                     const artesSubidos = grupo.items.filter(i => i.archivo != null && i.archivo !== '').length;
                                                     return (
                                                       <>
