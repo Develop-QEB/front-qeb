@@ -206,7 +206,7 @@ export const ticketsService = {
 };
 
 export interface TicketRankings {
-  empleadoDelMes: { nombre: string; count: number; foto_perfil: string | null } | null;
+  empleadoDelMes: { nombre: string; count: number; foto_perfil: string | null; top_usuario: string | null } | null;
   topCreadores: { nombre: string; count: number }[];
   topTecnicos: { nombre: string; count: number }[];
   topUrgentes: { nombre: string; count: number }[];
