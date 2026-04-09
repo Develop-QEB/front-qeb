@@ -116,12 +116,11 @@ function HistorialTicketsRoute() {
   return <HistorialTicketsPage />;
 }
 
-// Componente para proteger ruta de Rankings (solo equipo DEV)
+// Componente para proteger ruta de Rankings (solo rol DEV)
 function RankingTicketsRoute() {
   const user = useAuthStore((state) => state.user);
-  const isDevTeam = user?.equipos?.some((e) => e.nombre === 'DEV') || false;
 
-  if (!user || !isDevTeam) {
+  if (!user || user.rol !== 'DEV') {
     return <Navigate to="/" replace />;
   }
   return <RankingTicketsPage />;

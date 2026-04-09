@@ -468,7 +468,7 @@ export function HistorialTicketsPage() {
   const queryClient = useQueryClient();
   const navigate = useNavigate();
   const user = useAuthStore((s) => s.user);
-  const isDevTeam = user?.equipos?.some((e) => e.nombre === 'DEV') || false;
+  const isDev = user?.rol === 'DEV';
   const [search, setSearch] = useState('');
   const [debouncedSearch, setDebouncedSearch] = useState('');
   const [filterStatus, setFilterStatus] = useState('Todos');
@@ -549,7 +549,7 @@ export function HistorialTicketsPage() {
               Gestion y seguimiento de todos los tickets de soporte
             </p>
           </div>
-          {isDevTeam && (
+          {isDev && (
             <button
               onClick={() => navigate('/admin/tickets-ranking')}
               className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-semibold border transition-all ${
