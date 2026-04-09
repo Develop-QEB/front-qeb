@@ -1067,6 +1067,39 @@ export function useSocketTicketRankings() {
 }
 
 /**
+ * Hook para actualizar reportes especiales en tiempo real
+ */
+export function useSocketReportesEspeciales() {
+  const queryClient = useQueryClient();
+  const joinedRef = useRef<boolean>(false);
+
+  useEffect(() => {
+    const socket = getSocket();
+
+    if (!joinedRef.current) {
+      joinRoom(socket, 'join-tickets-historial');
+      joinedRef.current = true;
+    }
+
+    const handleRefresh = () => {
+      queryClient.invalidateQueries({ queryKey: ['reportes-especiales'], refetchType: 'active' });
+    };
+
+    socket.on(SOCKET_EVENTS.TICKET_STATUS_CHANGED, handleRefresh);
+    socket.on(SOCKET_EVENTS.TICKET_MENSAJE_NUEVO, handleRefresh);
+    socket.on(SOCKET_EVENTS.TICKET_CHAT_NUEVO, handleRefresh);
+
+    return () => {
+      socket.off(SOCKET_EVENTS.TICKET_STATUS_CHANGED, handleRefresh);
+      socket.off(SOCKET_EVENTS.TICKET_MENSAJE_NUEVO, handleRefresh);
+      socket.off(SOCKET_EVENTS.TICKET_CHAT_NUEVO, handleRefresh);
+      leaveRoom(socket, 'join-tickets-historial');
+      joinedRef.current = false;
+    };
+  }, [queryClient]);
+}
+
+/**
  * Hook para escuchar mensajes nuevos en un ticket específico (chat)
  */
 export function useSocketTicketChat(ticketId: number | null, onNuevoMensaje: () => void) {

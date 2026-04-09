@@ -7,6 +7,7 @@ import {
 } from 'lucide-react';
 import { Header } from '../../components/layout/Header';
 import { useThemeStore } from '../../store/themeStore';
+import { useSocketReportesEspeciales } from '../../hooks/useSocket';
 import api from '../../lib/api';
 import {
   BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Cell,
@@ -53,6 +54,7 @@ interface DetalleFilter {
 export function ReportesEspecialesPage() {
   const isDark = useThemeStore((s) => s.theme) === 'dark';
   const [detalleFilter, setDetalleFilter] = useState<DetalleFilter | null>(null);
+  useSocketReportesEspeciales();
 
   // Fechas: default hoy
   const todayStr = new Date().toLocaleDateString('en-CA', { timeZone: 'America/Mexico_City' }); // YYYY-MM-DD
