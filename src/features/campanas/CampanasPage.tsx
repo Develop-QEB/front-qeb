@@ -1247,21 +1247,12 @@ export function CampanasPage() {
     return itemInicio <= target.fin && efectiveFin >= target.inicio;
   }, [catorcenaDateMap]);
 
-  // Campañas únicas visibles en los grupos de catorcena (filtradas por inventario real)
+  // Campañas únicas en los grupos de catorcena visibles
   const uniqueCampsInCatorcenaView = useMemo(() => {
     const ids = new Set<number>();
-    campanasPorCatorcena.forEach(({ campanas, catorcena }) => {
-      campanas.forEach(c => {
-        const allInv = campanaInventarios[c.id];
-        if (!allInv) { ids.add(c.id); return; }
-        if (allInv.length === 0) return;
-        if (allInv.some(inv => itemMatchesCatorcena(inv, catorcena.num, catorcena.anio))) {
-          ids.add(c.id);
-        }
-      });
-    });
+    campanasPorCatorcena.forEach(g => g.campanas.forEach(c => ids.add(c.id)));
     return ids.size;
-  }, [campanasPorCatorcena, campanaInventarios, itemMatchesCatorcena]);
+  }, [campanasPorCatorcena]);
 
   // Estadísticas para gráfica de Status — from global stats
   const statusChartData = useMemo(() => {
@@ -2446,8 +2437,7 @@ export function CampanasPage() {
                     const apsAgrupados = getInventarioAgrupadoPorAPS(inventarios);
                     const hasInventarios = allInventarios.length > 0;
 
-                    // Si ya cargamos inventarios y no hay ninguno en esta catorcena, ocultar la campaña
-                    if (hasInventarios && inventarios.length === 0) return null;
+                    // Nota: no ocultar campañas sin inventario en esta catorcena — el backend ya filtró por overlap
 
                     return (
                       <div key={campana.id} className={`border-t ${isDark ? 'border-zinc-800/30' : 'border-gray-200'}`}>
@@ -2823,15 +2813,7 @@ export function CampanasPage() {
                           : `Cat ${catorcena.num} / ${catorcena.anio}`}
                       </span>
                       <span className={`px-2.5 py-1 rounded-full text-xs ${isDark ? 'bg-purple-500/20 text-purple-300 border-purple-500/30' : 'bg-purple-100 text-purple-700 border-purple-200'} border`}>
-                        {(() => {
-                          const visibleCount = campanas.filter(c => {
-                            const allInv = campanaInventarios[c.id];
-                            if (!allInv) return true;
-                            if (allInv.length === 0) return false;
-                            return allInv.some(inv => itemMatchesCatorcena(inv, catorcena.num, catorcena.anio));
-                          }).length;
-                          return `${visibleCount} campañas`;
-                        })()}
+                        {campanas.length} campañas
                       </span>
                       {secondGroupingLabel && subgroups && (
                         <span className={`px-2 py-0.5 rounded-full text-[10px] ${isDark ? 'bg-fuchsia-500/20 text-fuchsia-300 border-fuchsia-500/30' : 'bg-fuchsia-100 text-fuchsia-700 border-fuchsia-200'} border`}>
