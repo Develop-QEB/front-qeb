@@ -830,7 +830,7 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
       const loadedReservas: ReservaItem[] = existingReservas.map((r: ReservaModalItem) => {
         // Find the cara that matches this reserva
         const matchingCara = caras.find(c => c.id === r.solicitud_cara_id);
-        const tipo = r.estatus === 'Bonificado' ? 'Bonificacion' : (r.tipo_de_cara === 'Flujo' ? 'Flujo' : 'Contraflujo');
+        const tipo = r.estatus === 'Bonificado' ? 'Bonificacion' : (String(r.tipo_de_cara).startsWith('Flujo') ? 'Flujo' : 'Contraflujo');
 
         return {
           id: matchingCara
@@ -1948,8 +1948,8 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
     Object.entries(groups).forEach(([key, group]) => {
       if (group.length >= 2) {
         const baseCode = key.split('|')[0];
-        const flujoItem = group.find(g => g.tipo_de_cara === 'Flujo');
-        const contraflujoItem = group.find(g => g.tipo_de_cara === 'Contraflujo');
+        const flujoItem = group.find(g => String(g.tipo_de_cara).startsWith('Flujo'));
+        const contraflujoItem = group.find(g => String(g.tipo_de_cara).startsWith('Contraflujo'));
 
         if (flujoItem && contraflujoItem) {
           // Create merged "completo" item - use a virtual ID
@@ -2612,8 +2612,8 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
       const baseCode = item.codigo_unico?.split('_')[0]; // Assuming prefix_suffix format
       if (baseCode) {
         // Check if we have both Flujo and Contraflujo for this base code in selection
-        const hasFlujo = selectedItems.some(i => i.codigo_unico?.startsWith(baseCode) && i.tipo_de_cara === 'Flujo');
-        const hasContra = selectedItems.some(i => i.codigo_unico?.startsWith(baseCode) && i.tipo_de_cara === 'Contraflujo');
+        const hasFlujo = selectedItems.some(i => i.codigo_unico?.startsWith(baseCode) && String(i.tipo_de_cara).startsWith('Flujo'));
+        const hasContra = selectedItems.some(i => i.codigo_unico?.startsWith(baseCode) && String(i.tipo_de_cara).startsWith('Contraflujo'));
         if (hasFlujo && hasContra) {
           potentialPairs.add(baseCode);
         }
@@ -2664,7 +2664,7 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
           // If only one has space, skip this completo item entirely to maintain pairing
         } else {
           // Regular item - reserve based on tipo_de_cara
-          const tipo = inv.tipo_de_cara === 'Flujo' ? 'Flujo' : 'Contraflujo';
+          const tipo = String(inv.tipo_de_cara).startsWith('Flujo') ? 'Flujo' : 'Contraflujo';
           const canReserve = tipo === 'Flujo'
             ? flujoCount < remainingToAssign.flujo
             : contraflujoCount < remainingToAssign.contraflujo;
