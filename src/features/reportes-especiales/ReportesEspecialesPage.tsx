@@ -1,7 +1,9 @@
+import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import {
   BarChart3, Users, Clock, CheckCircle2, Loader2,
   TrendingUp, Award, Timer, Zap, Building2, UserCheck, Target,
+  ChevronLeft, ChevronRight,
 } from 'lucide-react';
 import { Header } from '../../components/layout/Header';
 import { useThemeStore } from '../../store/themeStore';
@@ -218,7 +220,78 @@ export function ReportesEspecialesPage() {
             ))}
           </div>
         </div>
+        {/* Ranking usuarios que más crearon tickets — paginado */}
+        <RankingUsuariosTable usuarios={data.rankings.usuarios} isDark={isDark} />
       </div>
+    </div>
+  );
+}
+
+const PAGE_SIZE = 10;
+
+function RankingUsuariosTable({ usuarios, isDark }: { usuarios: { nombre: string; count: number }[]; isDark: boolean }) {
+  const [page, setPage] = useState(0);
+  const totalPages = Math.ceil(usuarios.length / PAGE_SIZE);
+  const paginated = usuarios.slice(page * PAGE_SIZE, (page + 1) * PAGE_SIZE);
+
+  return (
+    <div className={`${isDark ? 'bg-zinc-900/80 border-zinc-800' : 'bg-white border-gray-200'} border rounded-xl p-5`}>
+      <div className="flex items-center justify-between mb-4">
+        <div className="flex items-center gap-2">
+          <Users className="h-5 w-5 text-fuchsia-400" />
+          <h3 className={`text-sm font-semibold ${isDark ? 'text-white' : 'text-gray-900'}`}>
+            Tickets Creados por Usuario ({usuarios.length})
+          </h3>
+        </div>
+        {totalPages > 1 && (
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => setPage(p => Math.max(0, p - 1))}
+              disabled={page === 0}
+              className={`p-1.5 rounded-lg ${isDark ? 'hover:bg-zinc-800 text-zinc-400 disabled:text-zinc-700' : 'hover:bg-gray-100 text-gray-500 disabled:text-gray-300'} transition-colors disabled:cursor-not-allowed`}
+            >
+              <ChevronLeft className="h-4 w-4" />
+            </button>
+            <span className={`text-xs ${isDark ? 'text-zinc-500' : 'text-gray-400'}`}>
+              {page + 1} / {totalPages}
+            </span>
+            <button
+              onClick={() => setPage(p => Math.min(totalPages - 1, p + 1))}
+              disabled={page >= totalPages - 1}
+              className={`p-1.5 rounded-lg ${isDark ? 'hover:bg-zinc-800 text-zinc-400 disabled:text-zinc-700' : 'hover:bg-gray-100 text-gray-500 disabled:text-gray-300'} transition-colors disabled:cursor-not-allowed`}
+            >
+              <ChevronRight className="h-4 w-4" />
+            </button>
+          </div>
+        )}
+      </div>
+      <table className="w-full">
+        <thead>
+          <tr className={`text-left text-[11px] ${isDark ? 'text-zinc-500' : 'text-gray-400'} border-b ${isDark ? 'border-zinc-800' : 'border-gray-200'}`}>
+            <th className="pb-2 w-12">#</th>
+            <th className="pb-2">Usuario</th>
+            <th className="pb-2 text-right">Tickets</th>
+          </tr>
+        </thead>
+        <tbody>
+          {paginated.map((u, i) => {
+            const rank = page * PAGE_SIZE + i + 1;
+            return (
+              <tr key={u.nombre} className={`border-b ${isDark ? 'border-zinc-800/50' : 'border-gray-100'}`}>
+                <td className={`py-2.5 text-sm ${rank <= 3 ? 'font-bold text-purple-400' : isDark ? 'text-zinc-500' : 'text-gray-400'}`}>
+                  {rank}
+                </td>
+                <td className={`py-2.5 text-sm ${isDark ? 'text-zinc-300' : 'text-gray-700'}`}>
+                  {u.nombre}
+                </td>
+                <td className={`py-2.5 text-sm text-right font-semibold ${isDark ? 'text-white' : 'text-gray-900'}`}>
+                  {u.count}
+                </td>
+              </tr>
+            );
+          })}
+        </tbody>
+      </table>
     </div>
   );
 }
