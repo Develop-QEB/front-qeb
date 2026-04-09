@@ -4,6 +4,8 @@ import { useNavigate } from 'react-router-dom';
 import { Header } from '../../components/layout/Header';
 import { ticketsService } from '../../services/tickets.service';
 import { useThemeStore } from '../../store/themeStore';
+import { useSocketTicketRankings } from '../../hooks/useSocket';
+import { UserAvatar } from '../../components/ui/user-avatar';
 
 function RankingCard({
   title,
@@ -72,6 +74,8 @@ export function RankingTicketsPage() {
   const isDark = useThemeStore((s) => s.theme) === 'dark';
   const navigate = useNavigate();
 
+  useSocketTicketRankings();
+
   const { data: rankings, isLoading } = useQuery({
     queryKey: ['ticket-rankings'],
     queryFn: () => ticketsService.getRankings(),
@@ -114,6 +118,53 @@ export function RankingTicketsPage() {
             </div>
           )}
         </div>
+
+        {/* Empleado del mes */}
+        {rankings?.empleadoDelMes && (
+          <div className={`rounded-2xl border-2 ${isDark ? 'border-yellow-500/40 bg-gradient-to-r from-yellow-900/20 via-amber-900/15 to-yellow-900/20' : 'border-yellow-300 bg-gradient-to-r from-yellow-50 via-amber-50 to-yellow-50'} p-6 text-center relative overflow-hidden`}>
+            <div className="absolute inset-0 opacity-5">
+              <div className="absolute top-2 left-8 text-6xl">👑</div>
+              <div className="absolute top-4 right-12 text-5xl">⭐</div>
+              <div className="absolute bottom-2 left-1/4 text-4xl">✨</div>
+              <div className="absolute bottom-4 right-1/4 text-4xl">🌟</div>
+            </div>
+            <div className="relative z-10">
+              <div className="flex justify-center mb-3">
+                <span className="text-4xl">👑</span>
+              </div>
+              <h2 className={`text-lg font-bold mb-4 ${isDark ? 'text-yellow-300' : 'text-yellow-700'}`}>
+                Empleado del Mes
+              </h2>
+              <div className="flex justify-center mb-3">
+                <div className={`rounded-full p-1 ${isDark ? 'bg-gradient-to-br from-yellow-500/40 to-amber-500/40' : 'bg-gradient-to-br from-yellow-200 to-amber-200'}`}>
+                  <UserAvatar
+                    nombre={rankings.empleadoDelMes.nombre}
+                    foto_perfil={rankings.empleadoDelMes.foto_perfil}
+                    size="xl"
+                    className="!w-20 !h-20 !text-2xl"
+                  />
+                </div>
+              </div>
+              <h3 className={`text-xl font-bold ${isDark ? 'text-white' : 'text-gray-900'}`}>
+                {rankings.empleadoDelMes.nombre}
+              </h3>
+              <p className={`text-sm font-semibold mt-1 ${isDark ? 'text-yellow-400' : 'text-yellow-600'}`}>
+                🛠️ {rankings.empleadoDelMes.count} tickets resueltos
+              </p>
+              <div className={`mt-4 max-w-lg mx-auto px-4 py-3 rounded-xl ${isDark ? 'bg-zinc-900/60 border border-yellow-500/10' : 'bg-white/80 border border-yellow-200'}`}>
+                <p className={`text-xs italic leading-relaxed ${isDark ? 'text-zinc-400' : 'text-gray-500'}`}>
+                  "Cuentan las antiguas cronicas del reino de QEB que, cuando los bugs acechaban
+                  y los tickets se multiplicaban como dragones en la oscuridad, surgio un heroe de entre las sombras del codigo.
+                  Con {rankings.empleadoDelMes.count} bestias digitales derrotadas, <strong className={isDark ? 'text-yellow-300' : 'text-yellow-700'}>{rankings.empleadoDelMes.nombre}</strong> se
+                  alzo como leyenda viviente, protector de los usuarios y guardian del sistema."
+                </p>
+                <p className={`text-[10px] mt-2 ${isDark ? 'text-zinc-600' : 'text-gray-400'}`}>
+                  — Fragmento del Gran Libro de los Tickets, Capitulo {rankings.totalTickets}
+                </p>
+              </div>
+            </div>
+          </div>
+        )}
 
         {isLoading ? (
           <div className="flex justify-center py-20">
