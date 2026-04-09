@@ -3,11 +3,12 @@ import { useQuery } from '@tanstack/react-query';
 import {
   BarChart3, Users, Clock, CheckCircle2, Loader2,
   TrendingUp, Award, Timer, Zap, Building2, UserCheck, Target,
-  ChevronLeft, ChevronRight,
+  ChevronLeft, ChevronRight, Download,
 } from 'lucide-react';
 import { Header } from '../../components/layout/Header';
 import { useThemeStore } from '../../store/themeStore';
 import { useSocketReportesEspeciales } from '../../hooks/useSocket';
+import { useAuthStore } from '../../store/authStore';
 import api from '../../lib/api';
 import {
   BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Cell,
@@ -53,6 +54,7 @@ interface DetalleFilter {
 
 export function ReportesEspecialesPage() {
   const isDark = useThemeStore((s) => s.theme) === 'dark';
+  const user = useAuthStore((s) => s.user);
   const [detalleFilter, setDetalleFilter] = useState<DetalleFilter | null>(null);
   useSocketReportesEspeciales();
 
@@ -101,6 +103,62 @@ export function ReportesEspecialesPage() {
     { label: 'Total Resueltos', value: data.global.resueltosYCerrados, icon: Award, color: 'cyan' },
     { label: 'Total Global', value: data.global.total, icon: TrendingUp, color: 'purple' },
   ];
+
+  const handleExportCSV = () => {
+    if (!data) return;
+    const esc = (v: string | number) => `"${String(v).replace(/"/g, '""')}"`;
+    const lines: string[] = [];
+
+    // Encabezado
+    const rangoLabel = esHoy ? `Hoy ${fechaInicio}` : `${fechaInicio} a ${fechaFin}`;
+    lines.push(`Reporte Especial QEB — ${rangoLabel}`);
+    lines.push(`Generado por: ${user?.nombre || 'Usuario'} — ${new Date().toLocaleString('es-MX', { timeZone: 'America/Mexico_City' })}`);
+    lines.push('');
+
+    // KPIs
+    lines.push('--- KPIs ---');
+    lines.push('Métrica,Valor');
+    kpiCards.forEach(k => lines.push(`${esc(k.label)},${esc(k.value)}`));
+    lines.push('');
+
+    // Técnicos
+    lines.push('--- Tickets Resueltos por Técnico ---');
+    lines.push('Técnico,Resueltos');
+    data.rankings.tecnicos.forEach(t => lines.push(`${esc(t.nombre)},${t.count}`));
+    lines.push('');
+
+    // Áreas
+    lines.push('--- Áreas con más Actividad ---');
+    lines.push('Área,Tickets');
+    data.rankings.areas.forEach(a => lines.push(`${esc(a.nombre)},${a.count}`));
+    lines.push('');
+
+    // Usuarios
+    lines.push('--- Tickets Creados por Usuario ---');
+    lines.push('Usuario,Tickets');
+    data.rankings.usuarios.forEach(u => lines.push(`${esc(u.nombre)},${u.count}`));
+    lines.push('');
+
+    // Actividad por hora
+    lines.push('--- Actividad por Hora (Periodo) ---');
+    lines.push('Hora,Tickets');
+    data.hoy.ticketsPorHora.forEach(h => lines.push(`${h.hora}:00,${h.count}`));
+    lines.push('');
+
+    // Día semana
+    lines.push('--- Actividad por Día de la Semana ---');
+    lines.push('Día,Tickets');
+    data.graficas.ticketsPorDiaSemana.forEach(d => lines.push(`${esc(d.dia)},${d.count}`));
+
+    const blob = new Blob(['\ufeff' + lines.join('\n')], { type: 'text/csv;charset=utf-8;' });
+    const link = document.createElement('a');
+    link.href = URL.createObjectURL(blob);
+    link.download = `reportes_especiales_${fechaInicio}_${fechaFin}.csv`;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(link.href);
+  };
 
   const iconColorMap: Record<string, string> = {
     purple: 'text-purple-400', blue: 'text-blue-400', amber: 'text-amber-400',
@@ -154,6 +212,13 @@ export function ReportesEspecialesPage() {
                 En vivo
               </div>
             )}
+            <button
+              onClick={handleExportCSV}
+              className="p-2.5 rounded-xl bg-gradient-to-r from-purple-600 to-fuchsia-600 text-white hover:from-purple-500 hover:to-fuchsia-500 transition-all shadow-lg shadow-purple-500/25 hover:shadow-purple-500/40"
+              title="Descargar reporte CSV"
+            >
+              <Download className="h-4 w-4" />
+            </button>
           </div>
         </div>
 
