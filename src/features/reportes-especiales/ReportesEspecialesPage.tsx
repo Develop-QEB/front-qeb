@@ -34,7 +34,7 @@ interface ReportesData {
   };
   rankings: {
     areas: { nombre: string; count: number }[];
-    usuarios: { nombre: string; count: number }[];
+    usuarios: { nombre: string; count: number; countGlobal: number; estatus: { nuevo: number; enProgreso: number; enValidacion: number; resuelto: number; cerrado: number } }[];
     tecnicos: { nombre: string; count: number }[];
     resolucionDia: { nombre: string; count: number }[];
   };
@@ -100,7 +100,7 @@ export function ReportesEspecialesPage() {
     { label: 'Nuevos', value: data.hoy.nuevos, icon: Zap, color: 'blue' },
     { label: 'En Atención', value: data.hoy.enProgreso + data.hoy.enValidacion, icon: Clock, color: 'amber' },
     { label: esHoy ? 'Resueltos Hoy' : 'Resueltos Periodo', value: data.hoy.resueltosYCerrados, icon: CheckCircle2, color: 'emerald' },
-    { label: 'Total Resueltos', value: data.global.resueltosYCerrados, icon: Award, color: 'cyan' },
+    { label: 'Total Resueltos Global', value: data.global.resueltosYCerrados, icon: Award, color: 'cyan' },
     { label: 'Total Global', value: data.global.total, icon: TrendingUp, color: 'purple' },
   ];
 
@@ -135,8 +135,8 @@ export function ReportesEspecialesPage() {
 
     // Usuarios
     lines.push('--- Tickets Creados por Usuario ---');
-    lines.push('Usuario,Tickets');
-    data.rankings.usuarios.forEach(u => lines.push(`${esc(u.nombre)},${u.count}`));
+    lines.push('Usuario,Tickets Periodo,Tickets Global,Nuevo,En Progreso,Validación,Resuelto,Cerrado');
+    data.rankings.usuarios.forEach(u => lines.push(`${esc(u.nombre)},${u.count},${u.countGlobal},${u.estatus.nuevo},${u.estatus.enProgreso},${u.estatus.enValidacion},${u.estatus.resuelto},${u.estatus.cerrado}`));
     lines.push('');
 
     // Actividad por hora
@@ -250,11 +250,38 @@ export function ReportesEspecialesPage() {
           </p>
         </div>
 
-        {/* Top Técnicos */}
+        {/* Top Técnicos — Periodo */}
+        <div className={`${isDark ? 'bg-zinc-900/80 border-zinc-800' : 'bg-white border-gray-200'} border rounded-xl p-5`}>
+          <div className="flex items-center gap-2 mb-4">
+            <UserCheck className="h-5 w-5 text-emerald-400" />
+            <h3 className={`text-sm font-semibold ${isDark ? 'text-white' : 'text-gray-900'}`}>
+              Tickets Resueltos por Técnico {esHoy ? '— Hoy' : '— Periodo'}
+            </h3>
+            <span className={`text-xs px-2 py-0.5 rounded-full ${isDark ? 'bg-emerald-500/15 text-emerald-300' : 'bg-emerald-50 text-emerald-700'}`}>
+              {data.hoy.resueltosYCerrados} resueltos
+            </span>
+          </div>
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+            {data.rankings.resolucionDia.map((t, i) => (
+              <div key={t.nombre} className={`text-center p-4 rounded-xl ${isDark ? 'bg-zinc-800/50' : 'bg-gray-50'}`}>
+                {i === 0 && <Award className="h-5 w-5 text-amber-400 mx-auto mb-2" />}
+                <p className={`text-3xl font-bold ${isDark ? 'text-white' : 'text-gray-900'}`}>{t.count}</p>
+                <p className={`text-xs mt-1 ${isDark ? 'text-zinc-400' : 'text-gray-500'}`}>{t.nombre}</p>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        {/* Top Técnicos — Global */}
         <div className={`${isDark ? 'bg-zinc-900/80 border-zinc-800' : 'bg-white border-gray-200'} border rounded-xl p-5`}>
           <div className="flex items-center gap-2 mb-4">
             <Award className="h-5 w-5 text-purple-400" />
-            <h3 className={`text-sm font-semibold ${isDark ? 'text-white' : 'text-gray-900'}`}>Tickets Resueltos por Técnico</h3>
+            <h3 className={`text-sm font-semibold ${isDark ? 'text-white' : 'text-gray-900'}`}>
+              Tickets Resueltos por Técnico — Global
+            </h3>
+            <span className={`text-xs px-2 py-0.5 rounded-full ${isDark ? 'bg-purple-500/15 text-purple-300' : 'bg-purple-50 text-purple-700'}`}>
+              {data.global.resueltosYCerrados} resueltos
+            </span>
           </div>
           <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
             {data.rankings.tecnicos.map((t, i) => (
@@ -349,10 +376,26 @@ export function ReportesEspecialesPage() {
 
 const PAGE_SIZE = 10;
 
-function RankingUsuariosTable({ usuarios, isDark, onUserClick }: { usuarios: { nombre: string; count: number }[]; isDark: boolean; onUserClick: (nombre: string) => void }) {
+function RankingUsuariosTable({ usuarios, isDark, onUserClick }: { usuarios: { nombre: string; count: number; countGlobal: number; estatus: { nuevo: number; enProgreso: number; enValidacion: number; resuelto: number; cerrado: number } }[]; isDark: boolean; onUserClick: (nombre: string) => void }) {
   const [page, setPage] = useState(0);
   const totalPages = Math.ceil(usuarios.length / PAGE_SIZE);
   const paginated = usuarios.slice(page * PAGE_SIZE, (page + 1) * PAGE_SIZE);
+
+  const statusBadges = [
+    { key: 'nuevo' as const, label: 'Nuevo', cls: 'bg-blue-500/20 text-blue-300 border-blue-500/30' },
+    { key: 'enProgreso' as const, label: 'En Progreso', cls: 'bg-amber-500/20 text-amber-300 border-amber-500/30' },
+    { key: 'enValidacion' as const, label: 'Validación', cls: 'bg-cyan-500/20 text-cyan-300 border-cyan-500/30' },
+    { key: 'resuelto' as const, label: 'Resuelto', cls: 'bg-emerald-500/20 text-emerald-300 border-emerald-500/30' },
+    { key: 'cerrado' as const, label: 'Cerrado', cls: 'bg-zinc-500/20 text-zinc-300 border-zinc-500/30' },
+  ];
+
+  const statusBadgesLight = [
+    { key: 'nuevo' as const, label: 'Nuevo', cls: 'bg-blue-50 text-blue-700 border-blue-200' },
+    { key: 'enProgreso' as const, label: 'En Progreso', cls: 'bg-amber-50 text-amber-700 border-amber-200' },
+    { key: 'enValidacion' as const, label: 'Validación', cls: 'bg-cyan-50 text-cyan-700 border-cyan-200' },
+    { key: 'resuelto' as const, label: 'Resuelto', cls: 'bg-emerald-50 text-emerald-700 border-emerald-200' },
+    { key: 'cerrado' as const, label: 'Cerrado', cls: 'bg-zinc-100 text-zinc-700 border-zinc-200' },
+  ];
 
   return (
     <div className={`${isDark ? 'bg-zinc-900/80 border-zinc-800' : 'bg-white border-gray-200'} border rounded-xl p-5`}>
@@ -390,12 +433,16 @@ function RankingUsuariosTable({ usuarios, isDark, onUserClick }: { usuarios: { n
           <tr className={`text-left text-[11px] ${isDark ? 'text-zinc-500' : 'text-gray-400'} border-b ${isDark ? 'border-zinc-800' : 'border-gray-200'}`}>
             <th className="pb-2 w-12">#</th>
             <th className="pb-2">Usuario</th>
-            <th className="pb-2 text-right">Tickets</th>
+            <th className="pb-2 text-center">Tickets Periodo</th>
+            <th className="pb-2 text-center">Tickets Global</th>
+            <th className="pb-2">Desglose</th>
           </tr>
         </thead>
         <tbody>
           {paginated.map((u, i) => {
             const rank = page * PAGE_SIZE + i + 1;
+            const badges = isDark ? statusBadges : statusBadgesLight;
+            const est = u.estatus || { nuevo: 0, enProgreso: 0, enValidacion: 0, resuelto: 0, cerrado: 0 };
             return (
               <tr key={u.nombre} onClick={() => onUserClick(u.nombre)} className={`border-b cursor-pointer transition-colors ${isDark ? 'border-zinc-800/50 hover:bg-zinc-800/50' : 'border-gray-100 hover:bg-gray-50'}`}>
                 <td className={`py-2.5 text-sm ${rank <= 3 ? 'font-bold text-purple-400' : isDark ? 'text-zinc-500' : 'text-gray-400'}`}>
@@ -404,8 +451,20 @@ function RankingUsuariosTable({ usuarios, isDark, onUserClick }: { usuarios: { n
                 <td className={`py-2.5 text-sm ${isDark ? 'text-zinc-300' : 'text-gray-700'}`}>
                   {u.nombre}
                 </td>
-                <td className={`py-2.5 text-sm text-right font-semibold ${isDark ? 'text-white' : 'text-gray-900'}`}>
+                <td className={`py-2.5 text-sm text-center font-semibold ${isDark ? 'text-white' : 'text-gray-900'}`}>
                   {u.count}
+                </td>
+                <td className={`py-2.5 text-sm text-center font-semibold ${isDark ? 'text-zinc-400' : 'text-gray-500'}`}>
+                  {u.countGlobal ?? u.count}
+                </td>
+                <td className="py-2.5">
+                  <div className="flex flex-wrap gap-1">
+                    {badges.filter(b => est[b.key] > 0).map(b => (
+                      <span key={b.key} className={`px-1.5 py-0.5 rounded-full text-[10px] border ${b.cls}`}>
+                        {b.label}: {est[b.key]}
+                      </span>
+                    ))}
+                  </div>
                 </td>
               </tr>
             );
