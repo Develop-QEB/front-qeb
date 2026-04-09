@@ -1531,6 +1531,8 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
         caras_contraflujo: Math.floor(c.renta / 2),
         descuento: c.descuento,
         articulo: c.articulo.ItemCode,
+        autorizacion_dg: c.autorizacion_dg,
+        autorizacion_dcm: c.autorizacion_dcm,
       })),
     };
 
