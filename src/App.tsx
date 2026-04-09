@@ -129,7 +129,7 @@ function RankingTicketsRoute() {
 
 function ReportesEspecialesRoute() {
   const user = useAuthStore((state) => state.user);
-  if (!user || user.rol !== 'DEV') {
+  if (!user || (user.rol !== 'DEV' && user.rol !== 'Administrador')) {
     return <Navigate to="/" replace />;
   }
   return <ReportesEspecialesPage />;

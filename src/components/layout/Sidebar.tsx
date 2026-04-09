@@ -278,7 +278,7 @@ export function Sidebar({ collapsed, onToggle }: SidebarProps) {
                 {!collapsed && <span>Historial QEBooh</span>}
               </NavLink>
             )}
-            {user?.rol === 'DEV' && (
+            {(user?.rol === 'DEV' || user?.rol === 'Administrador') && (
               <NavLink
                 to="/reportes-especiales"
                 className={({ isActive }) =>

@@ -261,8 +261,9 @@ export function ReportesEspecialesPage() {
               {data.hoy.resueltosYCerrados} resueltos
             </span>
           </div>
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-            {data.rankings.resolucionDia.map((t, i) => (
+          {(() => { const filtered = data.rankings.resolucionDia.filter(t => t.count > 0); return (
+          <div className={`grid grid-cols-2 ${filtered.length >= 5 ? 'md:grid-cols-5' : filtered.length >= 3 ? 'md:grid-cols-' + filtered.length : 'md:grid-cols-2'} gap-4`}>
+            {filtered.map((t, i) => (
               <div key={t.nombre} className={`text-center p-4 rounded-xl ${isDark ? 'bg-zinc-800/50' : 'bg-gray-50'}`}>
                 {i === 0 && <Award className="h-5 w-5 text-amber-400 mx-auto mb-2" />}
                 <p className={`text-3xl font-bold ${isDark ? 'text-white' : 'text-gray-900'}`}>{t.count}</p>
@@ -270,6 +271,7 @@ export function ReportesEspecialesPage() {
               </div>
             ))}
           </div>
+          ); })()}
         </div>
 
         {/* Top Técnicos — Global */}
@@ -283,8 +285,9 @@ export function ReportesEspecialesPage() {
               {data.global.resueltosYCerrados} resueltos
             </span>
           </div>
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-            {data.rankings.tecnicos.map((t, i) => (
+          {(() => { const filtered = data.rankings.tecnicos.filter(t => t.count > 0); return (
+          <div className={`grid grid-cols-2 ${filtered.length >= 5 ? 'md:grid-cols-5' : filtered.length >= 3 ? 'md:grid-cols-' + filtered.length : 'md:grid-cols-2'} gap-4`}>
+            {filtered.map((t, i) => (
               <div key={t.nombre} className={`text-center p-4 rounded-xl ${isDark ? 'bg-zinc-800/50' : 'bg-gray-50'}`}>
                 {i === 0 && <Award className="h-5 w-5 text-amber-400 mx-auto mb-2" />}
                 <p className={`text-3xl font-bold ${isDark ? 'text-white' : 'text-gray-900'}`}>{t.count}</p>
@@ -292,6 +295,7 @@ export function ReportesEspecialesPage() {
               </div>
             ))}
           </div>
+          ); })()}
         </div>
 
         {/* Gráfica tickets por hora HOY */}
