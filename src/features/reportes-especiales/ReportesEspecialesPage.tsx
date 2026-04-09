@@ -127,13 +127,13 @@ export function ReportesEspecialesPage() {
         <div className={`${isDark ? 'bg-zinc-900/80 border-zinc-800' : 'bg-white border-gray-200'} border rounded-xl p-5 flex items-center gap-6`}>
           <Zap className="h-8 w-8 text-amber-400" />
           <div>
-            <h3 className={`text-sm font-semibold ${isDark ? 'text-white' : 'text-gray-900'}`}>Hora Pico</h3>
+            <h3 className={`text-sm font-semibold ${isDark ? 'text-white' : 'text-gray-900'}`}>Hora Pico General</h3>
             <p className={`text-3xl font-bold ${isDark ? 'text-amber-300' : 'text-amber-600'}`}>
               {data.graficas.horaPico.hora}:00
             </p>
           </div>
           <p className={`text-sm ${isDark ? 'text-zinc-400' : 'text-gray-500'}`}>
-            {data.graficas.horaPico.count} tickets en esa hora — momento de mayor actividad
+            {data.graficas.horaPico.count} tickets en esa hora — promedio histórico de mayor actividad
           </p>
         </div>
 
