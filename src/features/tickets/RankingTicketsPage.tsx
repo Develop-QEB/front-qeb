@@ -5,8 +5,6 @@ import { Header } from '../../components/layout/Header';
 import { ticketsService } from '../../services/tickets.service';
 import { useThemeStore } from '../../store/themeStore';
 
-const MEDALS = ['#FFD700', '#C0C0C0', '#CD7F32'];
-
 function RankingCard({
   title,
   emoji,
@@ -24,8 +22,6 @@ function RankingCard({
   isDark: boolean;
   emptyText?: string;
 }) {
-  const topEmojis = ['\ud83e\udd47', '\ud83e\udd48', '\ud83e\udd49'];
-
   return (
     <div className={`rounded-2xl border ${isDark ? 'border-purple-500/20 bg-gradient-to-br from-zinc-900/90 via-purple-950/20 to-zinc-900/90' : 'bg-white border-purple-200'} overflow-hidden`}>
       <div className={`px-5 py-4 border-b ${isDark ? 'border-purple-500/20' : 'border-purple-100'} flex items-center gap-3`}>
@@ -51,7 +47,7 @@ function RankingCard({
             >
               <div className="flex items-center gap-3">
                 {i < 3 ? (
-                  <span className="text-xl w-8 text-center">{topEmojis[i]}</span>
+                  <span className="text-xl w-8 text-center">{['🥇', '🥈', '🥉'][i]}</span>
                 ) : (
                   <div className={`w-8 h-7 rounded-full flex items-center justify-center text-xs font-bold ${isDark ? 'bg-zinc-700 text-zinc-400' : 'bg-gray-200 text-gray-500'}`}>
                     {i + 1}
@@ -96,7 +92,7 @@ export function RankingTicketsPage() {
             </button>
             <div>
               <h1 className={`text-2xl font-bold ${isDark ? 'text-white' : 'text-gray-900'}`}>
-                \ud83c\udfc6 Rankings de Tickets
+                🏆 Rankings de Tickets
               </h1>
               <p className={`text-sm ${isDark ? 'text-zinc-400' : 'text-gray-500'}`}>
                 Estadisticas y rankings internos del equipo
@@ -107,12 +103,12 @@ export function RankingTicketsPage() {
             <div className="flex gap-3">
               <div className={`px-4 py-2 rounded-xl ${isDark ? 'bg-purple-500/10 border-purple-500/20' : 'bg-purple-50 border-purple-200'} border`}>
                 <span className={`text-sm font-medium ${isDark ? 'text-purple-300' : 'text-purple-600'}`}>
-                  \ud83c\udfab {rankings.totalTickets} tickets totales
+                  🎫 {rankings.totalTickets} tickets totales
                 </span>
               </div>
               <div className={`px-4 py-2 rounded-xl ${isDark ? 'bg-green-500/10 border-green-500/20' : 'bg-green-50 border-green-200'} border`}>
                 <span className={`text-sm font-medium ${isDark ? 'text-green-300' : 'text-green-600'}`}>
-                  \u2705 {rankings.totalResueltos} resueltos
+                  ✅ {rankings.totalResueltos} resueltos
                 </span>
               </div>
             </div>
@@ -125,10 +121,9 @@ export function RankingTicketsPage() {
           </div>
         ) : rankings ? (
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
-            {/* Top creadores de tickets */}
             <RankingCard
-              title="M\u00e1s tickets creados"
-              emoji="\ud83d\udce9"
+              title="Mas tickets creados"
+              emoji="📩"
               items={rankings.topCreadores.map((c) => ({ nombre: c.nombre, value: c.count }))}
               valueLabel="tickets"
               color="#F59E0B"
@@ -136,10 +131,9 @@ export function RankingTicketsPage() {
               emptyText="Nadie ha creado tickets"
             />
 
-            {/* Top tecnicos solucionadores */}
             <RankingCard
-              title="M\u00e1s tickets resueltos"
-              emoji="\ud83d\udee0\ufe0f"
+              title="Mas tickets resueltos"
+              emoji="🛠️"
               items={rankings.topTecnicos.map((t) => ({ nombre: t.nombre, value: t.count }))}
               valueLabel="resueltos"
               color="#10B981"
@@ -147,10 +141,9 @@ export function RankingTicketsPage() {
               emptyText="No hay tickets resueltos"
             />
 
-            {/* Ranking por area */}
             <RankingCard
-              title="Areas que m\u00e1s reportan"
-              emoji="\ud83c\udfe2"
+              title="Areas que mas reportan"
+              emoji="🏢"
               items={rankings.topAreas.map((a) => ({ nombre: a.nombre, value: a.count }))}
               valueLabel="tickets"
               color="#3B82F6"
@@ -158,10 +151,9 @@ export function RankingTicketsPage() {
               emptyText="Sin datos de areas"
             />
 
-            {/* Ranking por rol */}
             <RankingCard
-              title="Roles que m\u00e1s reportan"
-              emoji="\ud83c\udfad"
+              title="Roles que mas reportan"
+              emoji="🎭"
               items={rankings.topRoles.map((r) => ({ nombre: r.nombre, value: r.count }))}
               valueLabel="tickets"
               color="#A855F7"
@@ -169,10 +161,9 @@ export function RankingTicketsPage() {
               emptyText="Sin datos de roles"
             />
 
-            {/* Velocidad de resolucion */}
             <RankingCard
-              title="Velocidad de resoluci\u00f3n"
-              emoji="\u26a1"
+              title="Velocidad de resolucion"
+              emoji="⚡"
               items={rankings.velocidadTecnicos.map((t) => ({
                 nombre: t.nombre,
                 value: t.promedio_horas < 24 ? `${t.promedio_horas}h` : `${Math.round(t.promedio_horas / 24)}d`,
@@ -183,32 +174,29 @@ export function RankingTicketsPage() {
               emptyText="Sin datos de velocidad"
             />
 
-            {/* Rey de las urgencias */}
             <RankingCard
               title="Rey de las urgencias"
-              emoji="\ud83d\udd25"
+              emoji="🔥"
               items={rankings.topUrgentes.map((u) => ({ nombre: u.nombre, value: u.count }))}
               valueLabel="urgentes"
               color="#EF4444"
               isDark={isDark}
-              emptyText="No hay tickets urgentes \ud83c\udf89"
+              emptyText="No hay tickets urgentes 🎉"
             />
 
-            {/* Clientes frecuentes */}
             <RankingCard
               title="Clientes frecuentes"
-              emoji="\ud83d\udd04"
+              emoji="🔄"
               items={rankings.topReincidentes.map((r) => ({ nombre: r.nombre, value: r.count }))}
               valueLabel="seguidos"
               color="#F97316"
               isDark={isDark}
-              emptyText="Nadie ha sido reincidente \ud83d\udc4d"
+              emptyText="Nadie ha sido reincidente 👍"
             />
 
-            {/* Dia de la semana */}
             <RankingCard
-              title="D\u00edas con m\u00e1s tickets"
-              emoji="\ud83d\udcc5"
+              title="Dias con mas tickets"
+              emoji="📅"
               items={rankings.ticketsPorDia.map((d) => ({ nombre: d.dia, value: d.count }))}
               valueLabel="tickets"
               color="#06B6D4"
@@ -218,7 +206,7 @@ export function RankingTicketsPage() {
             {/* Hora pico - grafica de barras full width */}
             <div className={`rounded-2xl border ${isDark ? 'border-purple-500/20 bg-gradient-to-br from-zinc-900/90 via-purple-950/20 to-zinc-900/90' : 'bg-white border-purple-200'} overflow-hidden lg:col-span-2`}>
               <div className={`px-5 py-4 border-b ${isDark ? 'border-purple-500/20' : 'border-purple-100'} flex items-center gap-3`}>
-                <span className="text-2xl">\u23f0</span>
+                <span className="text-2xl">⏰</span>
                 <h3 className={`text-base font-bold ${isDark ? 'text-white' : 'text-gray-900'}`}>Hora pico de tickets</h3>
               </div>
               <div className="p-5">
@@ -244,7 +232,7 @@ export function RankingTicketsPage() {
                   })}
                 </div>
                 <p className={`text-xs text-center mt-2 ${isDark ? 'text-zinc-500' : 'text-gray-400'}`}>
-                  Hora del d\u00eda (0-23) \u2014 \u00bfCu\u00e1ndo se quejan m\u00e1s? \ud83e\udd14
+                  Hora del dia (0-23) — Cuando se quejan mas? 🤔
                 </p>
               </div>
             </div>
