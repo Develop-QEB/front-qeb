@@ -26,6 +26,7 @@ import { DevTicketsPage } from './features/tickets/DevTicketsPage';
 import { TicketsPage } from './features/tickets/TicketsPage';
 import { HistorialTicketsPage } from './features/tickets/HistorialTicketsPage';
 import { RankingTicketsPage } from './features/tickets/RankingTicketsPage';
+import { ReportesEspecialesPage } from './features/reportes-especiales/ReportesEspecialesPage';
 import { useAuthStore } from './store/authStore';
 import { getPermissions } from './lib/permissions';
 
@@ -126,6 +127,14 @@ function RankingTicketsRoute() {
   return <RankingTicketsPage />;
 }
 
+function ReportesEspecialesRoute() {
+  const user = useAuthStore((state) => state.user);
+  if (!user || user.rol !== 'DEV') {
+    return <Navigate to="/" replace />;
+  }
+  return <ReportesEspecialesPage />;
+}
+
 // Componente para proteger ruta de Dev Tickets (solo programadores)
 function DevTicketsRoute() {
   const user = useAuthStore((state) => state.user);
@@ -171,6 +180,7 @@ function App() {
             <Route path="/admin/tickets-historial" element={<HistorialTicketsRoute />} />
             <Route path="/admin/tickets-ranking" element={<RankingTicketsRoute />} />
             <Route path="/dev/tickets" element={<DevTicketsRoute />} />
+            <Route path="/reportes-especiales" element={<ReportesEspecialesRoute />} />
           </Route>
 
           {/* Public route for clients - no auth required */}
