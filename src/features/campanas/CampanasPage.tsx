@@ -1159,6 +1159,31 @@ export function CampanasPage() {
           delete groups[key];
         }
       });
+
+      // Asegurar que todas las campañas del backend estén en algún grupo visible.
+      // El backend filtra por overlap de fechas, así que si una campaña pasa el filtro
+      // pero no tiene catorcenas_con_contenido en el rango, agregarla al grupo correspondiente.
+      const groupedIds = new Set<number>();
+      Object.values(groups).forEach(g => g.campanas.forEach(c => groupedIds.add(c.id)));
+      const ungrouped = filteredData.filter(c => !groupedIds.has(c.id));
+      if (ungrouped.length > 0) {
+        // Agregar campañas faltantes a los grupos del rango del filtro
+        for (let y = yearInicio; y <= yearFin; y++) {
+          const cStart = y === yearInicio ? catorcenaInicio : 1;
+          const cEnd = y === yearFin ? catorcenaFin : 26;
+          for (let c = cStart; c <= cEnd; c++) {
+            const key = `${y}-${String(c).padStart(2, '0')}`;
+            if (!groups[key]) {
+              groups[key] = { catorcena: { num: c, anio: y }, campanas: [] };
+            }
+            ungrouped.forEach(item => {
+              if (!groups[key].campanas.some(existing => existing.id === item.id)) {
+                groups[key].campanas.push(item);
+              }
+            });
+          }
+        }
+      }
     } else if (yearInicio && yearFin) {
       Object.keys(groups).forEach(key => {
         const groupAnio = parseInt(key.split('-')[0]);
@@ -1193,6 +1218,50 @@ export function CampanasPage() {
         return { key, ...value };
       });
   }, [filteredData, activeGroupings, catorcenasData, yearInicio, yearFin, catorcenaInicio, catorcenaFin]);
+
+  // Mapa de fechas de catorcenas para verificar overlap de periodos
+  const catorcenaDateMap = useMemo(() => {
+    const map: Record<string, { inicio: number; fin: number }> = {};
+    catorcenasData?.data?.forEach(c => {
+      map[`${c.numero_catorcena}-${c.a_o}`] = {
+        inicio: new Date(c.fecha_inicio).getTime(),
+        fin: new Date(c.fecha_fin).getTime(),
+      };
+    });
+    return map;
+  }, [catorcenasData]);
+
+  // Helper: verifica si un item de inventario pertenece a una catorcena (por match exacto o overlap de fechas)
+  const itemMatchesCatorcena = useCallback((inv: any, catNum: number, catAnio: number): boolean => {
+    // Match exacto por numero_catorcena (item inicia en esta catorcena)
+    const invCat = inv.numero_catorcena;
+    const invAnio = inv.anio_catorcena;
+    if (invCat != null && invAnio != null && Number(invCat) === catNum && Number(invAnio) === catAnio) return true;
+    // Overlap de fechas (item abarca esta catorcena aunque inicie en otra)
+    const itemInicio = inv.inicio_periodo ? new Date(inv.inicio_periodo).getTime() : null;
+    const itemFin = inv.fin_periodo ? new Date(inv.fin_periodo).getTime() : null;
+    if (!itemInicio) return false;
+    const target = catorcenaDateMap[`${catNum}-${catAnio}`];
+    if (!target) return false;
+    const efectiveFin = itemFin || itemInicio;
+    return itemInicio <= target.fin && efectiveFin >= target.inicio;
+  }, [catorcenaDateMap]);
+
+  // Campañas únicas visibles en los grupos de catorcena (filtradas por inventario real)
+  const uniqueCampsInCatorcenaView = useMemo(() => {
+    const ids = new Set<number>();
+    campanasPorCatorcena.forEach(({ campanas, catorcena }) => {
+      campanas.forEach(c => {
+        const allInv = campanaInventarios[c.id];
+        if (!allInv) { ids.add(c.id); return; }
+        if (allInv.length === 0) return;
+        if (allInv.some(inv => itemMatchesCatorcena(inv, catorcena.num, catorcena.anio))) {
+          ids.add(c.id);
+        }
+      });
+    });
+    return ids.size;
+  }, [campanasPorCatorcena, campanaInventarios, itemMatchesCatorcena]);
 
   // Estadísticas para gráfica de Status — from global stats
   const statusChartData = useMemo(() => {
@@ -2335,7 +2404,7 @@ export function CampanasPage() {
                   </div>
                   <div className={`w-px h-10 ${isDark ? 'bg-zinc-800' : 'bg-gray-200'}`} />
                   <div className="text-right">
-                    <p className={`text-2xl font-bold ${isDark ? 'text-purple-400' : 'text-purple-600'}`}>{filteredData.length}</p>
+                    <p className={`text-2xl font-bold ${isDark ? 'text-purple-400' : 'text-purple-600'}`}>{uniqueCampsInCatorcenaView}</p>
                     <p className={`text-[10px] ${isDark ? 'text-zinc-500' : 'text-gray-400'} uppercase tracking-wide`}>Campañas</p>
                   </div>
                 </div>
@@ -2371,13 +2440,8 @@ export function CampanasPage() {
                     const periodColor = PERIOD_COLORS_LOCAL[periodStatus] || getDefaultStatusColor(isDark);
                     const isExpanded = expandedCampanas.has(campana.id);
                     const allInventarios = campanaInventarios[campana.id] || [];
-                    // Filtrar inventarios por la catorcena del grupo actual
-                    const inventarios = allInventarios.filter(inv => {
-                      const invCat = (inv as any).numero_catorcena;
-                      const invAnio = (inv as any).anio_catorcena;
-                      if (invCat == null || invAnio == null) return true;
-                      return Number(invCat) === catorcena.num && Number(invAnio) === catorcena.anio;
-                    });
+                    // Filtrar inventarios por la catorcena del grupo actual (match exacto + overlap de fechas)
+                    const inventarios = allInventarios.filter(inv => itemMatchesCatorcena(inv, catorcena.num, catorcena.anio));
                     const isLoadingInv = loadingInventarios.has(campana.id);
                     const apsAgrupados = getInventarioAgrupadoPorAPS(inventarios);
                     const hasInventarios = allInventarios.length > 0;
@@ -2762,13 +2826,9 @@ export function CampanasPage() {
                         {(() => {
                           const visibleCount = campanas.filter(c => {
                             const allInv = campanaInventarios[c.id];
-                            if (!allInv || allInv.length === 0) return true; // no cargados aún, asumir visible
-                            return allInv.some(inv => {
-                              const invCat = (inv as any).numero_catorcena;
-                              const invAnio = (inv as any).anio_catorcena;
-                              if (invCat == null || invAnio == null) return true;
-                              return Number(invCat) === catorcena.num && Number(invAnio) === catorcena.anio;
-                            });
+                            if (!allInv) return true;
+                            if (allInv.length === 0) return false;
+                            return allInv.some(inv => itemMatchesCatorcena(inv, catorcena.num, catorcena.anio));
                           }).length;
                           return `${visibleCount} campañas`;
                         })()}
@@ -2796,12 +2856,7 @@ export function CampanasPage() {
                         // Sumar inversión solo de inventarios que pertenecen a esta catorcena
                         const totalInversion = campanas.reduce((s, c) => {
                           const allInv = campanaInventarios[c.id] || [];
-                          const invFiltrados = allInv.filter(inv => {
-                            const invCat = (inv as any).numero_catorcena;
-                            const invAnio = (inv as any).anio_catorcena;
-                            if (invCat == null || invAnio == null) return true;
-                            return Number(invCat) === catorcena.num && Number(invAnio) === catorcena.anio;
-                          });
+                          const invFiltrados = allInv.filter(inv => itemMatchesCatorcena(inv, catorcena.num, catorcena.anio));
                           return s + invFiltrados.reduce((sum, inv) => {
                             const tarifa = Number((inv as any).tarifa_publica_sc) || Number((inv as any).tarifa_publica) || 0;
                             return sum + tarifa;
@@ -2890,7 +2945,7 @@ export function CampanasPage() {
         {activeView === 'catorcena' && (
           <div className={`flex items-center justify-between px-5 py-3 border-t ${isDark ? 'border-zinc-800/50 bg-zinc-900/30 text-zinc-500' : 'border-gray-200 bg-gray-50 text-gray-400'} text-xs`}>
             <span>
-              {campanasPorCatorcena.length} catorcenas · {filteredData.length} campañas
+              {campanasPorCatorcena.length} catorcenas · {uniqueCampsInCatorcenaView} campañas
               {activeGroupings.length > 1 && (
                 <span className={`${isDark ? 'text-fuchsia-400' : 'text-fuchsia-600'} ml-2`}>
                   · Subagrupado por {AVAILABLE_GROUPINGS.find(g => g.field === activeGroupings[1])?.label}
