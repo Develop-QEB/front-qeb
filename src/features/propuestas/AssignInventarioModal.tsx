@@ -1377,14 +1377,14 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
     }
   }, [filteredReservasData, mapsLoaded]);
 
-  // Recalculate flujo/contraflujo based on editable %
+  // Show actual flujo/contraflujo from DB (updated via onChange when % changes)
   const adjustedCarasFlujo = useMemo(() => {
     if (!selectedCaraForSearch) return { flujo: 0, contraflujo: 0 };
-    const totalRenta = (selectedCaraForSearch.caras_flujo || 0) + (selectedCaraForSearch.caras_contraflujo || 0);
-    const flujo = Math.ceil(totalRenta * flujoPct / 100);
-    const contraflujo = totalRenta - flujo;
-    return { flujo, contraflujo };
-  }, [selectedCaraForSearch, flujoPct]);
+    return {
+      flujo: selectedCaraForSearch.caras_flujo || 0,
+      contraflujo: selectedCaraForSearch.caras_contraflujo || 0,
+    };
+  }, [selectedCaraForSearch]);
 
   // Calculate remaining to assign for selected cara
   const remainingToAssign = useMemo(() => {
