@@ -45,8 +45,14 @@ interface ReportesData {
 
 const COLORS = ['#8b5cf6', '#06b6d4', '#f59e0b', '#ef4444', '#10b981', '#ec4899', '#6366f1', '#14b8a6'];
 
+interface DetalleFilter {
+  tipo: 'area' | 'usuario';
+  valor: string;
+}
+
 export function ReportesEspecialesPage() {
   const isDark = useThemeStore((s) => s.theme) === 'dark';
+  const [detalleFilter, setDetalleFilter] = useState<DetalleFilter | null>(null);
 
   const { data, isLoading } = useQuery({
     queryKey: ['reportes-especiales'],
@@ -208,7 +214,11 @@ export function ReportesEspecialesPage() {
           </div>
           <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
             {data.rankings.areas.slice(0, 8).map((a, i) => (
-              <div key={a.nombre} className={`flex items-center gap-3 p-3 rounded-lg ${isDark ? 'bg-zinc-800/50' : 'bg-gray-50'}`}>
+              <div
+                key={a.nombre}
+                onClick={() => setDetalleFilter({ tipo: 'area', valor: a.nombre })}
+                className={`flex items-center gap-3 p-3 rounded-lg cursor-pointer transition-all ${isDark ? 'bg-zinc-800/50 hover:bg-zinc-800' : 'bg-gray-50 hover:bg-gray-100'}`}
+              >
                 <span className={`w-6 h-6 rounded-full text-xs font-bold flex items-center justify-center ${i < 3 ? 'bg-blue-500/20 text-blue-300' : isDark ? 'bg-zinc-700 text-zinc-400' : 'bg-gray-200 text-gray-500'}`}>
                   {i + 1}
                 </span>
@@ -221,7 +231,12 @@ export function ReportesEspecialesPage() {
           </div>
         </div>
         {/* Ranking usuarios que más crearon tickets — paginado */}
-        <RankingUsuariosTable usuarios={data.rankings.usuarios} isDark={isDark} />
+        <RankingUsuariosTable usuarios={data.rankings.usuarios} isDark={isDark} onUserClick={(nombre) => setDetalleFilter({ tipo: 'usuario', valor: nombre })} />
+
+        {/* Modal detalle */}
+        {detalleFilter && (
+          <DetalleModal filter={detalleFilter} isDark={isDark} onClose={() => setDetalleFilter(null)} />
+        )}
       </div>
     </div>
   );
@@ -229,7 +244,7 @@ export function ReportesEspecialesPage() {
 
 const PAGE_SIZE = 10;
 
-function RankingUsuariosTable({ usuarios, isDark }: { usuarios: { nombre: string; count: number }[]; isDark: boolean }) {
+function RankingUsuariosTable({ usuarios, isDark, onUserClick }: { usuarios: { nombre: string; count: number }[]; isDark: boolean; onUserClick: (nombre: string) => void }) {
   const [page, setPage] = useState(0);
   const totalPages = Math.ceil(usuarios.length / PAGE_SIZE);
   const paginated = usuarios.slice(page * PAGE_SIZE, (page + 1) * PAGE_SIZE);
@@ -277,7 +292,7 @@ function RankingUsuariosTable({ usuarios, isDark }: { usuarios: { nombre: string
           {paginated.map((u, i) => {
             const rank = page * PAGE_SIZE + i + 1;
             return (
-              <tr key={u.nombre} className={`border-b ${isDark ? 'border-zinc-800/50' : 'border-gray-100'}`}>
+              <tr key={u.nombre} onClick={() => onUserClick(u.nombre)} className={`border-b cursor-pointer transition-colors ${isDark ? 'border-zinc-800/50 hover:bg-zinc-800/50' : 'border-gray-100 hover:bg-gray-50'}`}>
                 <td className={`py-2.5 text-sm ${rank <= 3 ? 'font-bold text-purple-400' : isDark ? 'text-zinc-500' : 'text-gray-400'}`}>
                   {rank}
                 </td>
@@ -292,6 +307,86 @@ function RankingUsuariosTable({ usuarios, isDark }: { usuarios: { nombre: string
           })}
         </tbody>
       </table>
+    </div>
+  );
+}
+
+interface DetalleData {
+  resumen: { total: number; nuevo: number; enProgreso: number; enValidacion: number; resuelto: number; cerrado: number };
+  tickets: { id: number; titulo: string; status: string; prioridad: string; usuario_nombre: string; created_at: string; resumenAI: string }[];
+}
+
+const STATUS_COLORS: Record<string, string> = {
+  'Nuevo': 'bg-blue-500/20 text-blue-300 border-blue-500/30',
+  'En Progreso': 'bg-amber-500/20 text-amber-300 border-amber-500/30',
+  'Validación': 'bg-cyan-500/20 text-cyan-300 border-cyan-500/30',
+  'Resuelto': 'bg-emerald-500/20 text-emerald-300 border-emerald-500/30',
+  'Cerrado': 'bg-zinc-500/20 text-zinc-300 border-zinc-500/30',
+};
+
+function DetalleModal({ filter, isDark, onClose }: { filter: DetalleFilter; isDark: boolean; onClose: () => void }) {
+  const { data, isLoading } = useQuery({
+    queryKey: ['reportes-detalle', filter.tipo, filter.valor],
+    queryFn: async () => {
+      const res = await api.get<{ success: boolean; data: DetalleData }>(`/tickets/reportes-especiales/detalle?tipo=${filter.tipo}&valor=${encodeURIComponent(filter.valor)}`);
+      return res.data.data;
+    },
+  });
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center">
+      <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={onClose} />
+      <div className={`relative ${isDark ? 'bg-zinc-900 border-zinc-800' : 'bg-white border-gray-200'} border rounded-2xl w-full max-w-2xl mx-4 shadow-2xl flex flex-col max-h-[85vh]`}>
+        <div className={`flex items-center justify-between p-4 border-b ${isDark ? 'border-zinc-800' : 'border-gray-200'}`}>
+          <div>
+            <h2 className={`text-lg font-semibold ${isDark ? 'text-white' : 'text-gray-900'}`}>
+              {filter.tipo === 'area' ? `Área: ${filter.valor}` : filter.valor}
+            </h2>
+            {data && <p className={`text-sm ${isDark ? 'text-zinc-400' : 'text-gray-500'} mt-0.5`}>{data.resumen.total} tickets</p>}
+          </div>
+          <button onClick={onClose} className={`p-2 rounded-lg ${isDark ? 'hover:bg-zinc-800 text-zinc-400' : 'hover:bg-gray-100 text-gray-500'} transition-colors text-xl`}>&times;</button>
+        </div>
+
+        {data && (
+          <div className={`flex gap-2 px-4 py-3 border-b ${isDark ? 'border-zinc-800' : 'border-gray-200'} flex-wrap`}>
+            {[
+              { label: 'Nuevo', count: data.resumen.nuevo },
+              { label: 'En Progreso', count: data.resumen.enProgreso },
+              { label: 'Validación', count: data.resumen.enValidacion },
+              { label: 'Resuelto', count: data.resumen.resuelto },
+              { label: 'Cerrado', count: data.resumen.cerrado },
+            ].filter(s => s.count > 0).map(s => (
+              <span key={s.label} className={`px-2 py-0.5 rounded-full text-xs border ${STATUS_COLORS[s.label] || ''}`}>
+                {s.label}: {s.count}
+              </span>
+            ))}
+          </div>
+        )}
+
+        <div className="flex-1 overflow-y-auto p-4 space-y-2">
+          {isLoading ? (
+            <div className="flex items-center justify-center py-10">
+              <Loader2 className="h-6 w-6 text-purple-500 animate-spin" />
+            </div>
+          ) : data?.tickets.map(t => (
+            <div key={t.id} className={`p-3 rounded-lg ${isDark ? 'bg-zinc-800/50' : 'bg-gray-50'} space-y-1`}>
+              <div className="flex items-center justify-between">
+                <span className={`text-sm font-medium ${isDark ? 'text-white' : 'text-gray-900'}`}>#{t.id} — {t.titulo}</span>
+                <span className={`px-2 py-0.5 rounded-full text-[10px] border ${STATUS_COLORS[t.status] || 'bg-zinc-500/20 text-zinc-300 border-zinc-500/30'}`}>{t.status}</span>
+              </div>
+              <div className="flex items-center gap-3">
+                <span className={`text-[11px] ${isDark ? 'text-zinc-500' : 'text-gray-400'}`}>{t.usuario_nombre}</span>
+                <span className={`text-[11px] ${isDark ? 'text-zinc-600' : 'text-gray-300'}`}>
+                  {new Date(t.created_at).toLocaleDateString('es-MX', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit', timeZone: 'America/Mexico_City' })}
+                </span>
+              </div>
+              {t.resumenAI && (
+                <p className={`text-xs ${isDark ? 'text-purple-300/80' : 'text-purple-600'} italic mt-1`}>{t.resumenAI}</p>
+              )}
+            </div>
+          ))}
+        </div>
+      </div>
     </div>
   );
 }
