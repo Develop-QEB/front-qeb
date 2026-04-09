@@ -696,6 +696,7 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
   const [distanciaGrupos, setDistanciaGrupos] = useState(500); // metros
   const [tamanoGrupo, setTamanoGrupo] = useState(10);
   const [flujoPct, setFlujoPct] = useState(50); // % de caras para flujo (resto para contraflujo)
+  const [savingPct, setSavingPct] = useState(false); // loading para guardar % en BD
   const [flujoFilter, setFlujoFilter] = useState<'Todos' | 'Flujo' | 'Contraflujo'>('Todos');
   const [showOnlyIsla, setShowOnlyIsla] = useState(false);
   const [sortColumn, setSortColumn] = useState<string>('codigo_unico');
@@ -1376,14 +1377,14 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
     }
   }, [filteredReservasData, mapsLoaded]);
 
-  // Recalculate flujo/contraflujo based on editable %
+  // Show actual flujo/contraflujo from DB (updated via onChange when % changes)
   const adjustedCarasFlujo = useMemo(() => {
     if (!selectedCaraForSearch) return { flujo: 0, contraflujo: 0 };
-    const totalRenta = (selectedCaraForSearch.caras_flujo || 0) + (selectedCaraForSearch.caras_contraflujo || 0);
-    const flujo = Math.ceil(totalRenta * flujoPct / 100);
-    const contraflujo = totalRenta - flujo;
-    return { flujo, contraflujo };
-  }, [selectedCaraForSearch, flujoPct]);
+    return {
+      flujo: selectedCaraForSearch.caras_flujo || 0,
+      contraflujo: selectedCaraForSearch.caras_contraflujo || 0,
+    };
+  }, [selectedCaraForSearch]);
 
   // Calculate remaining to assign for selected cara
   const remainingToAssign = useMemo(() => {
@@ -2275,6 +2276,9 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
   // Handle search inventory - open search view and fetch disponibles
   const handleSearchInventory = async (cara: CaraItem) => {
     setSelectedCaraForSearch(cara);
+    // Calculate % from actual DB values
+    const totalRenta = (cara.caras_flujo || 0) + (cara.caras_contraflujo || 0);
+    setFlujoPct(totalRenta > 0 ? Math.round((cara.caras_flujo || 0) / totalRenta * 100) : 50);
     setViewState('search-inventory');
     setShowOnlyUnicos(false);
     setShowOnlyCompletos(false);
@@ -3622,15 +3626,37 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
                     min={0}
                     max={100}
                     value={flujoPct}
-                    onChange={(e) => {
+                    onChange={async (e) => {
                       const v = Math.max(0, Math.min(100, parseInt(e.target.value) || 0));
                       setFlujoPct(v);
+                      if (!selectedCaraForSearch?.id) return;
+                      const totalRenta = selectedCaraForSearch.caras || ((selectedCaraForSearch.caras_flujo || 0) + (selectedCaraForSearch.caras_contraflujo || 0));
+                      if (totalRenta === 0) return;
+                      const newFlujo = Math.ceil(totalRenta * v / 100);
+                      const newContra = totalRenta - newFlujo;
+                      setSavingPct(true);
+                      try {
+                        await propuestasService.updateCara(propuesta.id, selectedCaraForSearch.id, {
+                          caras_flujo: newFlujo,
+                          caras_contraflujo: newContra,
+                        } as any);
+                        const updatedCara = { ...selectedCaraForSearch, caras_flujo: newFlujo, caras_contraflujo: newContra };
+                        setSelectedCaraForSearch(updatedCara);
+                        setCaras(prev => prev.map(c => c.id === selectedCaraForSearch.id
+                          ? { ...c, caras_flujo: newFlujo, caras_contraflujo: newContra }
+                          : c
+                        ));
+                      } catch (err) {
+                        console.error('Error guardando distribución:', err);
+                      } finally {
+                        setSavingPct(false);
+                      }
                     }}
                     className={`w-10 text-center text-xs font-bold ${isDark ? 'bg-zinc-800 border-zinc-700 text-blue-400' : 'bg-white border-gray-200 text-blue-600'} border rounded px-1 py-0.5 focus:outline-none focus:ring-1 focus:ring-blue-500/50`}
                   />
                   <span className={`text-[10px] ${isDark ? 'text-zinc-500' : 'text-gray-400'}`}>%</span>
                 </div>
-                <span className={`text-[9px] ${isDark ? 'text-zinc-600' : 'text-gray-300'} mt-0.5`}>{flujoPct}/{100 - flujoPct}</span>
+                <span className={`text-[9px] ${isDark ? 'text-zinc-600' : 'text-gray-300'} mt-0.5`}>{savingPct ? '...' : `${flujoPct}/${100 - flujoPct}`}</span>
               </div>
 
               {/* Contraflujo KPI */}
