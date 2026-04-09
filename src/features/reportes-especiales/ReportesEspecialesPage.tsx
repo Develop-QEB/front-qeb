@@ -158,14 +158,14 @@ export function ReportesEspecialesPage() {
 
           <div className={`${isDark ? 'bg-zinc-900/80 border-zinc-800' : 'bg-white border-gray-200'} border rounded-xl p-5`}>
             <div className="flex items-center gap-2 mb-3">
-              <Timer className="h-5 w-5 text-cyan-400" />
-              <h3 className={`text-sm font-semibold ${isDark ? 'text-white' : 'text-gray-900'}`}>Tiempo Promedio</h3>
+              <CheckCircle2 className="h-5 w-5 text-emerald-400" />
+              <h3 className={`text-sm font-semibold ${isDark ? 'text-white' : 'text-gray-900'}`}>Resueltos</h3>
             </div>
-            <p className={`text-4xl font-bold ${isDark ? 'text-cyan-300' : 'text-cyan-600'}`}>
-              {data.global.tiempoPromedioResolucion}h
+            <p className={`text-4xl font-bold ${isDark ? 'text-emerald-300' : 'text-emerald-600'}`}>
+              {data.global.resueltosYCerrados}
             </p>
             <p className={`text-sm ${isDark ? 'text-zinc-400' : 'text-gray-500'} mt-1`}>
-              resolución promedio
+              tickets resueltos en total
             </p>
           </div>
         </div>
@@ -269,7 +269,7 @@ export function ReportesEspecialesPage() {
           <div className={`${isDark ? 'bg-zinc-900/80 border-zinc-800' : 'bg-white border-gray-200'} border rounded-xl p-5`}>
             <div className="flex items-center gap-2 mb-4">
               <Building2 className="h-5 w-5 text-blue-400" />
-              <h3 className={`text-sm font-semibold ${isDark ? 'text-white' : 'text-gray-900'}`}>Ranking de Áreas</h3>
+              <h3 className={`text-sm font-semibold ${isDark ? 'text-white' : 'text-gray-900'}`}>Áreas con más Actividad</h3>
             </div>
             <div className="space-y-2">
               {data.rankings.areas.slice(0, 10).map((a, i) => (
@@ -289,7 +289,7 @@ export function ReportesEspecialesPage() {
           <div className={`${isDark ? 'bg-zinc-900/80 border-zinc-800' : 'bg-white border-gray-200'} border rounded-xl p-5`}>
             <div className="flex items-center gap-2 mb-4">
               <Users className="h-5 w-5 text-fuchsia-400" />
-              <h3 className={`text-sm font-semibold ${isDark ? 'text-white' : 'text-gray-900'}`}>Top Usuarios (más tickets)</h3>
+              <h3 className={`text-sm font-semibold ${isDark ? 'text-white' : 'text-gray-900'}`}>Usuarios más Activos</h3>
             </div>
             <div className="space-y-2">
               {data.rankings.usuarios.slice(0, 10).map((u, i) => (
