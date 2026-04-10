@@ -1458,10 +1458,10 @@ export function CampanasPage() {
   };
 
   const handleExportVersionarioCSV = () => {
-    if (!filteredData.length) return;
+    if (!campanasPorCatorcena.length) return;
 
     const headers = [
-      'Campaña', 'Anunciante', 'Operación', 'Código de contrato (Opcional)',
+      'Campaña', 'Anunciante', 'Inversión Campaña', 'Operación', 'Código de contrato (Opcional)',
       'Precio por cara (Opcional)', 'APS Global', 'CUIC', 'Articulo', 'Vendedor',
       'Descripción (Opcional)', 'Inicio o Periodo', 'Fin o Segmento', 'Arte',
       'Código de arte (Opcional)', 'Arte Url (Opcional)', 'Origen del arte (Opcional)',
@@ -1469,47 +1469,70 @@ export function CampanasPage() {
     ];
 
     const rows: string[][] = [];
-    for (const campana of filteredData) {
-      const inv = campanaInventarios[campana.id];
-      if (!inv || inv.length === 0) continue;
+    // Rastrear campañas ya exportadas para poner inversión solo en la primera fila
+    const campanaInversionExported = new Set<number>();
 
-      const nombreCampana = campana.nombre || '';
-      const anunciante = (campana as any).T2_U_Marca || (campana as any).cliente_nombre || (campana as any).cliente_razon_social || '';
-      const aps = (campana as any).aps_global || campana.id || '';
-      const cuic = (campana as any).cuic || '';
-      const vendedor = (campana as any).creador_nombre || '';
-      const catInicio = campana.catorcena_inicio_num ? `Catorcena #${String(campana.catorcena_inicio_num).padStart(2, '0')}` : '';
-      const catFin = campana.catorcena_fin_num ? `Catorcena #${String(campana.catorcena_fin_num).padStart(2, '0')}` : '';
+    for (const { catorcena, campanas } of campanasPorCatorcena) {
+      for (const campana of campanas) {
+        const nombreCampana = campana.nombre || '';
+        const anunciante = (campana as any).T2_U_Marca || (campana as any).cliente_nombre || (campana as any).cliente_razon_social || '';
+        const aps = (campana as any).aps_global || campana.id || '';
+        const cuic = (campana as any).cuic || '';
+        const vendedor = (campana as any).creador_nombre || '';
+        const invCampana = Number((campana as any).inversion) || 0;
+        // Mostrar inversión solo en la primera fila de cada campaña para que la suma cuadre
+        const showInversion = !campanaInversionExported.has(campana.id);
+        if (showInversion) campanaInversionExported.add(campana.id);
+        const invStr = showInversion && invCampana > 0 ? `$${invCampana.toLocaleString('es-MX')}` : '0';
 
-      for (const item of inv) {
-        const operacion = item.cortesia ? 'CORTESIA' : (item.estatus_reserva === 'Bonificado' || item.estatus_reserva === 'Vendido bonificado') ? 'BONIFICACION' : 'RENTA';
-        const precio = item.tarifa_publica_sc || item.tarifa_publica || 0;
-        const periodo = item.numero_catorcena ? `Catorcena #${String(item.numero_catorcena).padStart(2, '0')}` : catInicio;
+        const allInv = campanaInventarios[campana.id] || [];
+        const inventarios = allInv.filter(inv => itemMatchesCatorcena(inv, catorcena.num, catorcena.anio));
+        const periodo = (catorcena as any).isMensual
+          ? `Mes ${catorcena.num}`
+          : `Catorcena #${String(catorcena.num).padStart(2, '0')}`;
 
-        rows.push([
-          nombreCampana,
-          anunciante,
-          operacion,
-          '0',
-          precio ? `$${Number(precio).toLocaleString('es-MX')}` : '0',
-          String(aps),
-          String(cuic),
-          item.articulo || '',
-          vendedor,
-          '',
-          'Catorcenas ' + (item.anio_catorcena || campana.catorcena_inicio_anio || new Date().getFullYear()),
-          periodo,
-          item.arte_aprobado || '0',
-          '',
-          '',
-          '',
-          item.codigo_unico || '',
-          item.tipo_de_cara || '',
-          item.plaza || item.estado || '',
-          '0',
-          '0',
-          ''
-        ]);
+        if (inventarios.length === 0) {
+          // Campaña sin inventario — incluirla igual para que aparezcan las 142
+          rows.push([
+            nombreCampana, anunciante, invStr, '', '0', '0',
+            String(aps), String(cuic), '', vendedor, '',
+            'Catorcenas ' + catorcena.anio, periodo,
+            '0', '', '', '', '', '', '', '0', '0', ''
+          ]);
+        } else {
+          let firstRow = true;
+          for (const item of inventarios) {
+            const operacion = item.cortesia ? 'CORTESIA' : (item.estatus_reserva === 'Bonificado' || item.estatus_reserva === 'Vendido bonificado') ? 'BONIFICACION' : 'RENTA';
+            const precio = item.tarifa_publica_sc || item.tarifa_publica || 0;
+
+            rows.push([
+              nombreCampana,
+              anunciante,
+              firstRow ? invStr : '0',
+              operacion,
+              '0',
+              precio ? `$${Number(precio).toLocaleString('es-MX')}` : '0',
+              String(aps),
+              String(cuic),
+              item.articulo || '',
+              vendedor,
+              '',
+              'Catorcenas ' + catorcena.anio,
+              periodo,
+              item.arte_aprobado || '0',
+              '',
+              '',
+              '',
+              item.codigo_unico || '',
+              item.tipo_de_cara || '',
+              item.plaza || item.estado || '',
+              '0',
+              '0',
+              ''
+            ]);
+            firstRow = false;
+          }
+        }
       }
     }
 
@@ -1543,7 +1566,7 @@ export function CampanasPage() {
   // Validar si el botón Editar debe estar deshabilitado
   const isEditDisabled = (campana: Campana): boolean => {
     const statusLower = campana.status?.toLowerCase() || '';
-    const disabledStatuses = ['finalizado', 'sin cotizacion activa', 'cancelada'];
+    const disabledStatuses = ['finalizado', 'sin cotizacion activa', 'cancelada', 'rechazada'];
     return disabledStatuses.includes(statusLower) || campana.has_aps === true;
   };
 
