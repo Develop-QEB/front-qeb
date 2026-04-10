@@ -908,22 +908,37 @@ export function OrdenesMontajeModal({ isOpen, onClose, canExport = true }: Orden
   // Export to XLSX
   const handleExportXLSX = () => {
     if (activeTab === 'cat' && filteredCATData.length > 0) {
+      const negociacionLabel = (neg: string) => {
+        switch (neg) {
+          case 'RENTA': return 'RENTA';
+          case 'BONIFICACION': return 'BONIFICACION';
+          case 'CORTESIA': return 'CORTESIA';
+          case 'INTERCAMBIO': return 'IN - RENTA (INTERCAMBIO)';
+          default: return neg || '';
+        }
+      };
+      const formatDateCSV = (dateStr: string | null) => {
+        if (!dateStr) return '';
+        const d = new Date(dateStr);
+        if (isNaN(d.getTime())) return dateStr;
+        return `${String(d.getDate()).padStart(2, '0')}/${String(d.getMonth() + 1).padStart(2, '0')}/${d.getFullYear()}`;
+      };
       const wsData = filteredCATData.map(item => ({
         'Plaza': item.plaza || '',
         'Tipo': item.tipo || '',
-        'Asesor': item.asesor || '',
-        'APS': item.aps_especifico || '',
-        'Fecha Inicio': item.fecha_inicio_periodo ? formatDate(item.fecha_inicio_periodo) : '',
-        'Fecha Fin': item.fecha_fin_periodo ? formatDate(item.fecha_fin_periodo) : '',
-        'Cliente': item.cliente || '',
+        'Asesor Comercial': item.asesor || '',
+        'APS Global - ID QEB': item.aps_global || '',
+        'CUIC': item.cuic || '',
+        'Fecha Inicio Periodo': formatDateCSV(item.fecha_inicio_periodo),
+        'Fecha Fin Periodo': formatDateCSV(item.fecha_fin_periodo),
+        'Cliente Comercial': item.cliente || '',
         'Marca': item.marca || '',
-        'Unidad de Negocio': item.unidad_negocio || '',
         'Campaña': item.campania || '',
-        'Artículo': item.numero_articulo || '',
-        'Negociación': item.negociacion || '',
-        'Caras': Number(item.caras) || 0,
-        'Tarifa': Number(item.tarifa) || 0,
-        'Monto Total': Number(item.monto_total) || 0,
+        'Número de artículo': item.numero_articulo || '',
+        'Articulo': negociacionLabel(item.negociacion),
+        'Suma de Caras': Number(item.caras) || 0,
+        'Suma de Tarifa': Number(item.tarifa) || 0,
+        'Suma de Monto Total': Number(item.monto_total) || 0,
       }));
 
       const ws = XLSX.utils.json_to_sheet(wsData);

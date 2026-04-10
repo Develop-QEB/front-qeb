@@ -317,6 +317,7 @@ export interface OrdenMontajeCAT {
   asesor: string | null;
   aps_especifico: number | null;
   aps_global: number | null;
+  cuic: number | null;
   fecha_inicio_periodo: string | null;
   fecha_fin_periodo: string | null;
   cliente: string | null;
