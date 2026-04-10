@@ -1,6 +1,15 @@
 import api from '../lib/api';
 import { Inventario, InventarioMapItem, InventarioStats, PaginatedResponse, ApiResponse } from '../types';
 
+export interface AccionInventario {
+  id: number;
+  inventario_id: number;
+  accion: string;
+  detalles: string | null;
+  usuario_nombre: string | null;
+  fecha: string;
+}
+
 export interface BulkCreateResult {
   insertados: number;
   duplicados: number;
@@ -242,6 +251,14 @@ export const inventariosService = {
     }>>(`/inventarios/${id}/historial`);
     if (!response.data.success || !response.data.data) {
       throw new Error(response.data.error || 'Error al obtener historial');
+    }
+    return response.data.data;
+  },
+
+  async getAcciones(id: number): Promise<AccionInventario[]> {
+    const response = await api.get<ApiResponse<AccionInventario[]>>(`/inventarios/${id}/acciones`);
+    if (!response.data.success || !response.data.data) {
+      throw new Error(response.data.error || 'Error al obtener acciones');
     }
     return response.data.data;
   },

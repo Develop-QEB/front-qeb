@@ -1022,6 +1022,30 @@ function InventoryTable({ data, isLoading, page, totalPages, total, onPageChange
     URL.revokeObjectURL(url);
   }, [filteredData, selectedIds]);
 
+  const downloadAllCSV = useCallback(() => {
+    if (filteredData.length === 0) return;
+    const headers = ['ID', 'Plaza', 'Municipio', 'Mueble', 'Tipo de Mueble', 'Tipo', 'Estatus', 'Cliente', 'APS'];
+    const rows = filteredData.map(item => [
+      item.codigo_unico || item.id,
+      item.plaza || '',
+      item.municipio || '',
+      item.mueble || '',
+      item.tipo_de_mueble || '',
+      item.tradicional_digital || 'Tradicional',
+      item.estatus || 'Disponible',
+      item.cliente_nombre || '',
+      item.APS || '',
+    ]);
+    const csv = [headers, ...rows].map(r => r.map(v => `"${String(v).replace(/"/g, '""')}"`).join(',')).join('\n');
+    const blob = new Blob(['\uFEFF' + csv], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `inventario_detallado_${new Date().toISOString().slice(0,10)}.csv`;
+    a.click();
+    URL.revokeObjectURL(url);
+  }, [filteredData]);
+
   // Grouped data (up to 2 levels)
   interface InvGroupedLevel1 { name: string; items: any[]; subgroups?: { name: string; items: any[] }[] }
   const groupedData = useMemo((): InvGroupedLevel1[] | null => {
@@ -1138,6 +1162,14 @@ function InventoryTable({ data, isLoading, page, totalPages, total, onPageChange
           </div>
         </div>
         <div className="flex items-center gap-4">
+          <button
+            onClick={(e) => { e.stopPropagation(); downloadAllCSV(); }}
+            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium ${isDark ? 'bg-pink-500/10 text-pink-300 hover:bg-pink-500/20 border-pink-500/20' : 'bg-pink-50 text-pink-600 hover:bg-pink-100 border-pink-200'} border transition-colors`}
+            title="Descargar tabla completa como CSV"
+          >
+            <Download className="h-3.5 w-3.5" />
+            Exportar CSV ({filteredData.length})
+          </button>
           {selectedIds.size > 0 && (
             <div className="flex items-center gap-2">
               <span className={`px-3 py-1 rounded-full ${isDark ? 'bg-pink-500/20 text-pink-300 border-pink-500/30' : 'bg-pink-50 text-pink-600 border-pink-200'} text-xs font-medium border`}>

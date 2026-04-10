@@ -2,15 +2,16 @@ import React, { useState, useMemo, useEffect, useCallback, useRef } from 'react'
 import { useQuery } from '@tanstack/react-query';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import {
-  Search, Download, Filter, ChevronDown, ChevronRight, X, Layers,
+  Search, Download, Filter, ChevronDown, ChevronRight, ChevronLeft, X, Layers,
   Calendar, Clock, Eye, Megaphone, Edit2, Check, Minus, ArrowUpDown, User,
   List, LayoutGrid, Building2, MapPin, Loader2, Package, ClipboardList, Plus, Trash2,
   ArrowUp, ArrowDown, Lock, SlidersHorizontal, Upload, Printer, Monitor, Camera, Share2,
-  Image, FileText, DollarSign, Hash, Gift, AlertTriangle
+  Image, FileText, DollarSign, Hash, Gift, AlertTriangle, Film, Play
 } from 'lucide-react';
 import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip, Legend } from 'recharts';
 import { Header } from '../../components/layout/Header';
 import { campanasService, InventarioConAPS, InventarioReservado } from '../../services/campanas.service';
+import { Badge } from '../../components/ui/badge';
 import { solicitudesService } from '../../services/solicitudes.service';
 import { Campana, Catorcena } from '../../types';
 
@@ -25,6 +26,40 @@ import { useThemeStore } from '../../store/themeStore';
 import { getPermissions } from '../../lib/permissions';
 import { useSocketCampanas } from '../../hooks/useSocket';
 import { IncidenciaModal } from './IncidenciaModal';
+
+const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3000/api';
+const STATIC_URL = API_URL.replace(/\/api$/, '');
+
+const getImageUrl = (url: string | undefined | null): string | null => {
+  if (!url) return null;
+  if (url === 'sin_arte') return null;
+  if (url.startsWith('data:')) return url;
+  if (url.startsWith('/uploads')) return `${STATIC_URL}${url}`;
+  if (url.startsWith('http://') || url.startsWith('https://')) {
+    try {
+      const urlObj = new URL(url);
+      if (urlObj.pathname.includes('/uploads')) return `${STATIC_URL}${urlObj.pathname}`;
+      return url;
+    } catch {
+      const match = url.match(/https?:\/\/[^/]+(\/uploads\/.+)/);
+      if (match) return `${STATIC_URL}${match[1]}`;
+      return url;
+    }
+  }
+  if (url.startsWith('/')) return `${STATIC_URL}${url}`;
+  if (url.includes('.') && !url.includes('/')) return `${STATIC_URL}/uploads/artes/${url}`;
+  return `${STATIC_URL}/${url}`;
+};
+
+interface ImagenDigitalView {
+  id: number;
+  archivo: string;
+  archivoData?: string;
+  spot: number;
+  tipo: 'image' | 'video';
+  estado: string;
+  codigoUnico?: string;
+}
 
 // Colors for dynamic tags
 const getTagColors = (isDark: boolean) => [
@@ -621,6 +656,162 @@ function GroupHeader({
 // Status options
 const STATUS_OPTIONS = ['Aprobada', 'inactiva', 'finalizada', 'por iniciar', 'en curso'];
 
+// Galería de Artes Modal Component
+function ArtGalleryModal({
+  isOpen,
+  onClose,
+  imagenes,
+  isLoading,
+  title,
+  isDark = true,
+}: {
+  isOpen: boolean;
+  onClose: () => void;
+  imagenes: ImagenDigitalView[];
+  isLoading: boolean;
+  title?: string;
+  isDark?: boolean;
+}) {
+  const [currentIndex, setCurrentIndex] = useState(0);
+
+  const handlePrev = () => {
+    setCurrentIndex((prev) => (prev > 0 ? prev - 1 : imagenes.length - 1));
+  };
+
+  const handleNext = () => {
+    setCurrentIndex((prev) => (prev < imagenes.length - 1 ? prev + 1 : 0));
+  };
+
+  useEffect(() => {
+    if (isOpen) setCurrentIndex(0);
+  }, [isOpen]);
+
+  if (!isOpen) return null;
+
+  const currentImage = imagenes[currentIndex];
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center">
+      <div className="absolute inset-0 bg-black/80" onClick={onClose} />
+      <div className={`relative ${isDark ? 'bg-zinc-900' : 'bg-white'} border ${isDark ? 'border-zinc-700' : 'border-gray-200'} rounded-xl w-full max-w-4xl mx-4 max-h-[90vh] flex flex-col`}>
+        {/* Header */}
+        <div className={`flex items-center justify-between p-4 border-b ${isDark ? 'border-zinc-700' : 'border-gray-200'} flex-shrink-0`}>
+          <h3 className={`text-lg font-semibold flex items-center gap-2 ${isDark ? 'text-white' : 'text-gray-900'}`}>
+            <Film className="h-5 w-5 text-indigo-400" />
+            {title || 'Galería de Artes'}
+            <Badge className="bg-indigo-600/30 text-indigo-300 border-indigo-500/30 text-[10px]">
+              {imagenes.length} archivo{imagenes.length !== 1 ? 's' : ''}
+            </Badge>
+          </h3>
+          <button onClick={onClose} className={`p-1 ${isDark ? 'hover:bg-zinc-800' : 'hover:bg-gray-100'} rounded-lg transition-colors`}>
+            <X className={`h-5 w-5 ${isDark ? 'text-zinc-400' : 'text-gray-500'}`} />
+          </button>
+        </div>
+
+        {/* Content */}
+        <div className="flex-1 overflow-hidden p-4 flex flex-col">
+          {isLoading ? (
+            <div className="flex-1 flex items-center justify-center min-h-[300px]">
+              <Loader2 className="h-8 w-8 animate-spin text-indigo-400" />
+            </div>
+          ) : imagenes.length === 0 ? (
+            <div className={`flex-1 flex items-center justify-center min-h-[300px] ${isDark ? 'text-zinc-500' : 'text-gray-400'}`}>
+              <div className="text-center">
+                <Film className="h-12 w-12 mx-auto mb-2 opacity-30" />
+                <p>No hay archivos de arte cargados</p>
+              </div>
+            </div>
+          ) : (
+            <>
+              {/* Main viewer */}
+              <div className="relative bg-black rounded-lg flex items-center justify-center overflow-hidden" style={{ height: '450px' }}>
+                {currentImage?.tipo === 'video' ? (
+                  <video
+                    key={currentImage.id}
+                    src={getImageUrl(currentImage.archivoData || currentImage.archivo) || ''}
+                    controls
+                    controlsList="nodownload"
+                    className="max-w-full max-h-full rounded"
+                  />
+                ) : (
+                  <img
+                    key={currentImage?.id}
+                    src={getImageUrl(currentImage?.archivoData || currentImage?.archivo) || ''}
+                    alt={`Arte ${currentIndex + 1}`}
+                    className="max-w-full max-h-full object-contain"
+                  />
+                )}
+
+                {/* Navigation arrows */}
+                {imagenes.length > 1 && (
+                  <>
+                    <button
+                      onClick={handlePrev}
+                      className="absolute left-2 p-2 bg-black/50 hover:bg-black/70 rounded-full transition-colors"
+                    >
+                      <ChevronLeft className="h-6 w-6 text-white" />
+                    </button>
+                    <button
+                      onClick={handleNext}
+                      className="absolute right-2 p-2 bg-black/50 hover:bg-black/70 rounded-full transition-colors"
+                    >
+                      <ChevronRight className="h-6 w-6 text-white" />
+                    </button>
+                  </>
+                )}
+
+                {/* Position indicator */}
+                <div className="absolute top-2 right-2 px-2 py-1 bg-black/60 rounded text-xs text-white">
+                  {currentIndex + 1} de {imagenes.length}
+                </div>
+              </div>
+
+              {/* Thumbnails */}
+              {imagenes.length > 1 && (
+                <div className="mt-3 flex gap-2 overflow-x-auto py-2 px-1">
+                  {imagenes.map((img, index) => (
+                    <button
+                      key={img.id}
+                      onClick={() => setCurrentIndex(index)}
+                      className={`relative flex-shrink-0 w-16 h-16 rounded overflow-hidden border-2 transition-all ${
+                        index === currentIndex
+                          ? 'border-indigo-400 ring-2 ring-indigo-400/30'
+                          : 'border-transparent hover:border-indigo-400/50'
+                      }`}
+                    >
+                      {img.tipo === 'video' ? (
+                        <div className={`w-full h-full ${isDark ? 'bg-zinc-800' : 'bg-gray-100'} flex items-center justify-center`}>
+                          <Play className="h-6 w-6 text-indigo-400" />
+                        </div>
+                      ) : (
+                        <img
+                          src={getImageUrl(img.archivoData || img.archivo) || ''}
+                          alt={`Thumbnail ${index + 1}`}
+                          className="w-full h-full object-cover"
+                        />
+                      )}
+                    </button>
+                  ))}
+                </div>
+              )}
+            </>
+          )}
+        </div>
+
+        {/* Footer */}
+        <div className={`flex items-center justify-end gap-2 p-4 border-t ${isDark ? 'border-zinc-700' : 'border-gray-200'} flex-shrink-0`}>
+          <button
+            onClick={onClose}
+            className={`px-4 py-2 text-sm font-medium ${isDark ? 'text-zinc-400 hover:text-zinc-300' : 'text-gray-500 hover:text-gray-700'} transition-colors`}
+          >
+            Cerrar
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export function CampanasPage() {
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
@@ -668,6 +859,12 @@ export function CampanasPage() {
   const [statusCampana, setStatusCampana] = useState<Campana | null>(null);
   const [incidenciaModalOpen, setIncidenciaModalOpen] = useState(false);
   const [incidenciaCampana, setIncidenciaCampana] = useState<Campana | null>(null);
+
+  // Estado para galería de artes en versionario
+  const [isArtGalleryOpen, setIsArtGalleryOpen] = useState(false);
+  const [artGalleryImages, setArtGalleryImages] = useState<ImagenDigitalView[]>([]);
+  const [artGalleryTitle, setArtGalleryTitle] = useState('');
+
   const limit = 20;
 
   // Estado para la vista activa (tabs)
@@ -1297,6 +1494,25 @@ export function CampanasPage() {
   }, [filteredData]);
 
   // Agrupar inventarios primero por APS, luego por período y artículo (como detalle de campaña)
+  // Handler para abrir galería de artes en versionario
+  const openArtGallery = useCallback((_campanaId: number, items: InventarioConAPS[], title: string) => {
+    setArtGalleryTitle(title);
+    // Construir galería directamente desde el campo archivo de cada item
+    const images: ImagenDigitalView[] = items
+      .filter(item => item.archivo != null && item.archivo !== '' && item.archivo !== 'sin_arte')
+      .map((item, idx) => ({
+        id: item.id || idx,
+        archivo: item.archivo!,
+        archivoData: undefined,
+        spot: idx + 1,
+        tipo: item.archivo!.match(/\.(mp4|mov|avi|webm|mkv|wmv)$/i) ? 'video' as const : 'image' as const,
+        estado: (item as any).estatus_arte || '',
+        codigoUnico: item.codigo_unico,
+      }));
+    setArtGalleryImages(images);
+    setIsArtGalleryOpen(true);
+  }, []);
+
   const getInventarioAgrupadoPorAPS = (inventarios: InventarioConAPS[]) => {
     // Separar los que tienen APS de los que no
     const conAPS: Record<number, InventarioConAPS[]> = {};
@@ -2595,9 +2811,9 @@ export function CampanasPage() {
                                             const estatusGrupoColor = estatusPredominante ? getEstatusArteColor(estatusPredominante[0], isDark) : getDefaultStatusColor(isDark);
                                             return (
                                               <div key={grupo.key} className={`border-l-2 ${isDark ? 'border-zinc-700' : 'border-gray-300'} pl-2`}>
-                                                <button
+                                                <div
                                                   onClick={() => toggleGrupo(campana.id, apsGroup.aps, grupo.key)}
-                                                  className={`w-full flex items-center gap-2 py-1 text-left ${isDark ? 'hover:bg-zinc-800/30' : 'hover:bg-gray-50'} rounded px-1 flex-wrap`}
+                                                  className={`w-full flex items-center gap-2 py-1 text-left ${isDark ? 'hover:bg-zinc-800/30' : 'hover:bg-gray-50'} rounded px-1 flex-wrap cursor-pointer`}
                                                 >
                                                   {isGrupoExpanded ? <ChevronDown className={`h-3 w-3 ${isDark ? 'text-zinc-500' : 'text-gray-400'}`} /> : <ChevronRight className={`h-3 w-3 ${isDark ? 'text-zinc-500' : 'text-gray-400'}`} />}
                                                   <ClipboardList className={`h-3 w-3 ${isDark ? 'text-purple-400' : 'text-purple-600'}`} />
@@ -2708,7 +2924,22 @@ export function CampanasPage() {
                                                       </>
                                                     );
                                                   })()}
-                                                </button>
+                                                  <span
+                                                    className={`px-1.5 py-0.5 rounded text-[9px] ${isDark ? 'bg-purple-500/20 text-purple-300 hover:bg-purple-500/40' : 'bg-purple-50 text-purple-700 hover:bg-purple-100'} border border-purple-500/30 flex items-center gap-1 cursor-pointer transition-all flex-shrink-0`}
+                                                    title="Ver galería de artes"
+                                                    onClick={(e) => {
+                                                      e.stopPropagation();
+                                                      const grupoLabel = [
+                                                        (grupo.items[0] as any)?.formato,
+                                                        grupo.items[0]?.plaza,
+                                                        grupo.items[0]?.articulo
+                                                      ].filter(Boolean).join(' · ') || grupo.key;
+                                                      openArtGallery(campana.id, grupo.items, `Galería de Artes - ${grupoLabel}`);
+                                                    }}
+                                                  >
+                                                    <Eye className="h-2.5 w-2.5" /> Ver Artes
+                                                  </span>
+                                                </div>
                                                 {isGrupoExpanded && (
                                                   <div className="pl-5 py-1 space-y-0.5">
                                                     {/* Resumen del grupo */}
@@ -2734,13 +2965,23 @@ export function CampanasPage() {
                                                     {grupo.items.map(inv => {
                                                       const estatusArteColor = getEstatusArteColor((inv as any).estatus_arte, isDark);
                                                       const hasArte = inv.archivo != null && inv.archivo !== '';
-                                                      const indicacionesProg = (inv as any).indicaciones_programacion;
-                                                      const indicacionesInst = (inv as any).indicaciones_instalacion;
+                                                      const rawProg = (inv as any).indicaciones_programacion;
+                                                      const indicacionesProg = typeof rawProg === 'string' ? rawProg : (rawProg ? JSON.stringify(rawProg) : null);
+                                                      const rawInst = (inv as any).indicaciones_instalacion;
+                                                      const indicacionesInst = typeof rawInst === 'string' ? rawInst : (rawInst ? JSON.stringify(rawInst) : null);
                                                       return (
                                                         <div key={inv.id} className={`flex items-center gap-2 text-[10px] ${isDark ? 'text-zinc-500' : 'text-gray-400'} py-0.5 flex-wrap`}>
                                                           <MapPin className={`h-2.5 w-2.5 ${isDark ? 'text-zinc-600' : 'text-gray-400'}`} />
                                                           <span className={`${isDark ? 'text-zinc-400' : 'text-gray-500'} font-mono`}>{inv.codigo_unico}</span>
-                                                          <span title={hasArte ? 'Arte subido' : 'Sin arte'} className="flex items-center gap-0.5">
+                                                          <span
+                                                            title={hasArte ? 'Ver arte' : 'Sin arte'}
+                                                            className={`flex items-center gap-0.5 ${hasArte ? 'cursor-pointer hover:opacity-80' : ''}`}
+                                                            onClick={() => {
+                                                              if (hasArte) {
+                                                                openArtGallery(campana.id, [inv], `Arte - ${inv.codigo_unico}`);
+                                                              }
+                                                            }}
+                                                          >
                                                             <Image className={`h-2.5 w-2.5 ${hasArte ? 'text-green-400' : isDark ? 'text-zinc-600' : 'text-gray-400'}`} />
                                                             {hasArte && <span className="text-green-400/70">Arte</span>}
                                                           </span>
@@ -2953,6 +3194,18 @@ export function CampanasPage() {
           onClose={() => { setIncidenciaModalOpen(false); setIncidenciaCampana(null); }}
           campanaId={incidenciaCampana.id}
           campanaNombre={incidenciaCampana.nombre}
+        />
+      )}
+
+      {/* Galería de Artes Modal - Versionario */}
+      {isArtGalleryOpen && (
+        <ArtGalleryModal
+          isOpen={isArtGalleryOpen}
+          onClose={() => { setIsArtGalleryOpen(false); setArtGalleryImages([]); }}
+          imagenes={artGalleryImages}
+          isLoading={false}
+          title={artGalleryTitle}
+          isDark={isDark}
         />
       )}
     </div>

@@ -5,7 +5,7 @@ import {
   Search, Map, List, History, X, Loader2, AlertCircle, Calendar as CalendarIcon,
   Plus, Edit2, Ban, CheckCircle, Package, MapPin, ChevronDown, ChevronRight,
   Eye, EyeOff, ArrowUp, ArrowDown, ArrowUpDown, SlidersHorizontal, Monitor, Ruler,
-  Upload, Download, AlertTriangle, CheckCircle2, FileText
+  Upload, Download, AlertTriangle, CheckCircle2, FileText, Activity
 } from 'lucide-react';
 import { Header } from '../../components/layout/Header';
 import { useThemeStore } from '../../store/themeStore';
@@ -122,6 +122,7 @@ export function InventariosPage() {
 
   // Modals
   const [isHistorialOpen, setIsHistorialOpen] = useState(false);
+  const [historialTab, setHistorialTab] = useState<'campanas' | 'acciones'>('campanas');
   const [isCreateOpen, setIsCreateOpen] = useState(false);
   const [isEditOpen, setIsEditOpen] = useState(false);
   const [bloqueoItem, setBloqueoItem] = useState<Inventario | null>(null);
@@ -180,6 +181,12 @@ export function InventariosPage() {
     queryKey: ['inventario-historial', selectedId],
     queryFn: () => inventariosService.getHistorial(selectedId!),
     enabled: isHistorialOpen && selectedId !== null,
+  });
+
+  const { data: accionesData, isLoading: isLoadingAcciones } = useQuery({
+    queryKey: ['inventario-acciones', selectedId],
+    queryFn: () => inventariosService.getAcciones(selectedId!),
+    enabled: isHistorialOpen && selectedId !== null && historialTab === 'acciones',
   });
 
   const toggleBlockMutation = useMutation({
@@ -1031,7 +1038,7 @@ export function InventariosPage() {
                                   <Edit2 className="h-3.5 w-3.5" />
                                 </button>
                                 <button
-                                  onClick={() => { setSelectedId(item.id); setIsHistorialOpen(true); }}
+                                  onClick={() => { setSelectedId(item.id); setHistorialTab('campanas'); setIsHistorialOpen(true); }}
                                   className={`p-1.5 rounded-lg ${isDark ? 'hover:bg-purple-500/10 hover:text-purple-300' : 'hover:bg-purple-50 hover:text-purple-600'} ${isDark ? 'text-zinc-500' : 'text-gray-400'} transition-colors`}
                                   title="Historial"
                                 >
@@ -1126,6 +1133,30 @@ export function InventariosPage() {
               </button>
             </div>
 
+            {/* Tabs */}
+            <div className={`flex border-b ${isDark ? 'border-zinc-800' : 'border-gray-200'}`}>
+              {[
+                { key: 'campanas' as const, label: 'Campañas', icon: History },
+                { key: 'acciones' as const, label: 'Acciones', icon: Activity },
+              ].map(({ key, label, icon: Icon }) => (
+                <button
+                  key={key}
+                  onClick={() => setHistorialTab(key)}
+                  className={`flex items-center gap-2 px-5 py-3 text-sm font-medium transition-colors relative ${
+                    historialTab === key
+                      ? isDark ? 'text-purple-400' : 'text-purple-600'
+                      : isDark ? 'text-zinc-500 hover:text-zinc-300' : 'text-gray-400 hover:text-gray-600'
+                  }`}
+                >
+                  <Icon className="h-4 w-4" />
+                  {label}
+                  {historialTab === key && (
+                    <span className={`absolute bottom-0 left-0 right-0 h-0.5 ${isDark ? 'bg-purple-400' : 'bg-purple-600'}`} />
+                  )}
+                </button>
+              ))}
+            </div>
+
             <div className="flex-1 overflow-auto p-5">
               {isLoadingHistorial ? (
                 <div className="flex items-center justify-center py-12">
@@ -1148,65 +1179,128 @@ export function InventariosPage() {
                     ))}
                   </div>
 
-                  <h3 className={`text-sm font-medium ${isDark ? 'text-zinc-300' : 'text-gray-700'}`}>
-                    Historial de Campañas ({historialData.historial.length})
-                  </h3>
+                  {/* Tab: Campañas */}
+                  {historialTab === 'campanas' && (
+                    <>
+                      <h3 className={`text-sm font-medium ${isDark ? 'text-zinc-300' : 'text-gray-700'}`}>
+                        Historial de Campañas ({historialData.historial.length})
+                      </h3>
 
-                  {historialData.historial.length === 0 ? (
-                    <div className="text-center py-8">
-                      <div className={`w-12 h-12 rounded-full ${isDark ? 'bg-purple-500/10' : 'bg-purple-50'} flex items-center justify-center mx-auto mb-3`}>
-                        <History className={`h-6 w-6 ${isDark ? 'text-purple-400' : 'text-purple-500'}`} />
-                      </div>
-                      <p className={`text-sm ${isDark ? 'text-zinc-500' : 'text-gray-400'}`}>No hay historial para este inventario</p>
-                    </div>
-                  ) : (
-                    <div className="space-y-2">
-                      {historialData.historial.map((item, index) => (
-                        <div key={`${item.reserva_id}-${index}`} className={`p-4 rounded-xl ${isDark ? 'bg-zinc-800/30 border-zinc-800/50 hover:border-purple-500/20' : 'bg-gray-50 border-gray-200 hover:border-purple-200'} border transition-colors`}>
-                          <div className="flex items-start justify-between gap-4">
-                            <div className="flex-1">
-                              <div className="flex items-center gap-2 mb-2 flex-wrap">
-                                <span className={`font-mono text-xs px-2 py-1 rounded-md ${isDark ? 'bg-purple-500/10 text-purple-300' : 'bg-purple-50 text-purple-700'}`}>
-                                  #{item.campana_id}
-                                </span>
-                                <span className={`px-2 py-0.5 rounded-full text-[10px] ${
-                                  item.reserva_estatus === 'Vendido' ? (isDark ? 'bg-emerald-500/20 text-emerald-300' : 'bg-emerald-50 text-emerald-700') + ' border border-emerald-500/30' :
-                                  item.reserva_estatus === 'Reservado' ? (isDark ? 'bg-amber-500/20 text-amber-300' : 'bg-amber-50 text-amber-700') + ' border border-amber-500/30' :
-                                  item.reserva_estatus === 'eliminada' ? (isDark ? 'bg-red-500/20 text-red-300' : 'bg-red-50 text-red-700') + ' border border-red-500/30' :
-                                  (isDark ? 'bg-zinc-500/20 text-zinc-300' : 'bg-zinc-50 text-zinc-700') + ' border border-zinc-500/30'
-                                }`}>
-                                  {item.reserva_estatus}
-                                </span>
-                                {item.instalado && (
-                                  <span className={`px-2 py-0.5 rounded-full text-[10px] ${isDark ? 'bg-blue-500/20 text-blue-300' : 'bg-blue-50 text-blue-700'} border border-blue-500/30`}>Instalado</span>
+                      {historialData.historial.length === 0 ? (
+                        <div className="text-center py-8">
+                          <div className={`w-12 h-12 rounded-full ${isDark ? 'bg-purple-500/10' : 'bg-purple-50'} flex items-center justify-center mx-auto mb-3`}>
+                            <History className={`h-6 w-6 ${isDark ? 'text-purple-400' : 'text-purple-500'}`} />
+                          </div>
+                          <p className={`text-sm ${isDark ? 'text-zinc-500' : 'text-gray-400'}`}>No hay historial para este inventario</p>
+                        </div>
+                      ) : (
+                        <div className="space-y-2">
+                          {historialData.historial.map((item, index) => (
+                            <div key={`${item.reserva_id}-${index}`} className={`p-4 rounded-xl ${isDark ? 'bg-zinc-800/30 border-zinc-800/50 hover:border-purple-500/20' : 'bg-gray-50 border-gray-200 hover:border-purple-200'} border transition-colors`}>
+                              <div className="flex items-start justify-between gap-4">
+                                <div className="flex-1">
+                                  <div className="flex items-center gap-2 mb-2 flex-wrap">
+                                    <span className={`font-mono text-xs px-2 py-1 rounded-md ${isDark ? 'bg-purple-500/10 text-purple-300' : 'bg-purple-50 text-purple-700'}`}>
+                                      #{item.campana_id}
+                                    </span>
+                                    <span className={`px-2 py-0.5 rounded-full text-[10px] ${
+                                      item.reserva_estatus === 'Vendido' ? (isDark ? 'bg-emerald-500/20 text-emerald-300' : 'bg-emerald-50 text-emerald-700') + ' border border-emerald-500/30' :
+                                      item.reserva_estatus === 'Reservado' ? (isDark ? 'bg-amber-500/20 text-amber-300' : 'bg-amber-50 text-amber-700') + ' border border-amber-500/30' :
+                                      item.reserva_estatus === 'eliminada' ? (isDark ? 'bg-red-500/20 text-red-300' : 'bg-red-50 text-red-700') + ' border border-red-500/30' :
+                                      (isDark ? 'bg-zinc-500/20 text-zinc-300' : 'bg-zinc-50 text-zinc-700') + ' border border-zinc-500/30'
+                                    }`}>
+                                      {item.reserva_estatus}
+                                    </span>
+                                    {item.instalado && (
+                                      <span className={`px-2 py-0.5 rounded-full text-[10px] ${isDark ? 'bg-blue-500/20 text-blue-300' : 'bg-blue-50 text-blue-700'} border border-blue-500/30`}>Instalado</span>
+                                    )}
+                                  </div>
+                                  <p className={`${isDark ? 'text-white' : 'text-gray-900'} font-medium text-sm`}>{item.campana_nombre}</p>
+                                  <p className={`text-xs ${isDark ? 'text-zinc-400' : 'text-gray-500'}`}>{item.cliente_nombre || 'Sin cliente'}</p>
+                                  <div className={`flex items-center gap-3 mt-2 text-xs ${isDark ? 'text-zinc-500' : 'text-gray-400'} flex-wrap`}>
+                                    <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-md ${isDark ? 'bg-cyan-500/10 text-cyan-300 border-cyan-500/20' : 'bg-cyan-50 text-cyan-700 border-cyan-200'} border`}>
+                                      <CalendarIcon className="h-3 w-3" />
+                                      {item.inicio_periodo?.split('T')[0]} — {item.fin_periodo?.split('T')[0]}
+                                    </span>
+                                    <span>{item.numero_catorcena && item.anio_catorcena
+                                      ? `Cat ${item.numero_catorcena} / ${item.anio_catorcena}`
+                                      : item.inicio_periodo
+                                        ? `${(() => { const parts = item.inicio_periodo.split('-'); const meses = ['Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic']; return parts.length >= 2 ? `${meses[parseInt(parts[1]) - 1]} ${parts[0]}` : '-'; })()}`
+                                        : 'Sin periodo'}</span>
+                                  </div>
+                                </div>
+                                {item.archivo && (
+                                  <img
+                                    src={item.archivo?.startsWith('http') ? item.archivo : `${import.meta.env.VITE_API_URL || 'http://localhost:3000'}${item.archivo}`}
+                                    alt="Arte"
+                                    className={`w-14 h-14 object-cover rounded-xl cursor-pointer hover:opacity-80 flex-shrink-0 border ${isDark ? 'border-zinc-700/50' : 'border-gray-200'}`}
+                                    onClick={() => item.archivo && window.open(item.archivo.startsWith('http') ? item.archivo : `${import.meta.env.VITE_API_URL || 'http://localhost:3000'}${item.archivo}`, '_blank')}
+                                  />
                                 )}
                               </div>
-                              <p className={`${isDark ? 'text-white' : 'text-gray-900'} font-medium text-sm`}>{item.campana_nombre}</p>
-                              <p className={`text-xs ${isDark ? 'text-zinc-400' : 'text-gray-500'}`}>{item.cliente_nombre || 'Sin cliente'}</p>
-                              <div className={`flex items-center gap-3 mt-2 text-xs ${isDark ? 'text-zinc-500' : 'text-gray-400'} flex-wrap`}>
-                                <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-md ${isDark ? 'bg-cyan-500/10 text-cyan-300 border-cyan-500/20' : 'bg-cyan-50 text-cyan-700 border-cyan-200'} border`}>
-                                  <CalendarIcon className="h-3 w-3" />
-                                  {item.inicio_periodo?.split('T')[0]} — {item.fin_periodo?.split('T')[0]}
-                                </span>
-                                <span>{item.numero_catorcena && item.anio_catorcena
-                                  ? `Cat ${item.numero_catorcena} / ${item.anio_catorcena}`
-                                  : item.inicio_periodo
-                                    ? `${(() => { const parts = item.inicio_periodo.split('-'); const meses = ['Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic']; return parts.length >= 2 ? `${meses[parseInt(parts[1]) - 1]} ${parts[0]}` : '-'; })()}`
-                                    : 'Sin periodo'}</span>
-                              </div>
                             </div>
-                            {item.archivo && (
-                              <img
-                                src={item.archivo?.startsWith('http') ? item.archivo : `${import.meta.env.VITE_API_URL || 'http://localhost:3000'}${item.archivo}`}
-                                alt="Arte"
-                                className={`w-14 h-14 object-cover rounded-xl cursor-pointer hover:opacity-80 flex-shrink-0 border ${isDark ? 'border-zinc-700/50' : 'border-gray-200'}`}
-                                onClick={() => item.archivo && window.open(item.archivo.startsWith('http') ? item.archivo : `${import.meta.env.VITE_API_URL || 'http://localhost:3000'}${item.archivo}`, '_blank')}
-                              />
-                            )}
-                          </div>
+                          ))}
                         </div>
-                      ))}
-                    </div>
+                      )}
+                    </>
+                  )}
+
+                  {/* Tab: Acciones */}
+                  {historialTab === 'acciones' && (
+                    <>
+                      <h3 className={`text-sm font-medium ${isDark ? 'text-zinc-300' : 'text-gray-700'}`}>
+                        Registro de Acciones {accionesData ? `(${accionesData.length})` : ''}
+                      </h3>
+
+                      {isLoadingAcciones ? (
+                        <div className="flex items-center justify-center py-12">
+                          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-purple-500" />
+                        </div>
+                      ) : !accionesData || accionesData.length === 0 ? (
+                        <div className="text-center py-8">
+                          <div className={`w-12 h-12 rounded-full ${isDark ? 'bg-purple-500/10' : 'bg-purple-50'} flex items-center justify-center mx-auto mb-3`}>
+                            <Activity className={`h-6 w-6 ${isDark ? 'text-purple-400' : 'text-purple-500'}`} />
+                          </div>
+                          <p className={`text-sm ${isDark ? 'text-zinc-500' : 'text-gray-400'}`}>No hay acciones registradas para este inventario</p>
+                        </div>
+                      ) : (
+                        <div className="space-y-2">
+                          {accionesData.map((accion) => {
+                            const accionStyles: Record<string, { bg: string; text: string; border: string }> = {
+                              reservado: { bg: isDark ? 'bg-amber-500/20' : 'bg-amber-50', text: isDark ? 'text-amber-300' : 'text-amber-700', border: 'border-amber-500/30' },
+                              quitado_de_campana: { bg: isDark ? 'bg-red-500/20' : 'bg-red-50', text: isDark ? 'text-red-300' : 'text-red-700', border: 'border-red-500/30' },
+                              bloqueado: { bg: isDark ? 'bg-red-500/20' : 'bg-red-50', text: isDark ? 'text-red-300' : 'text-red-700', border: 'border-red-500/30' },
+                              desbloqueado: { bg: isDark ? 'bg-emerald-500/20' : 'bg-emerald-50', text: isDark ? 'text-emerald-300' : 'text-emerald-700', border: 'border-emerald-500/30' },
+                              actualizado: { bg: isDark ? 'bg-cyan-500/20' : 'bg-cyan-50', text: isDark ? 'text-cyan-300' : 'text-cyan-700', border: 'border-cyan-500/30' },
+                              creado: { bg: isDark ? 'bg-blue-500/20' : 'bg-blue-50', text: isDark ? 'text-blue-300' : 'text-blue-700', border: 'border-blue-500/30' },
+                            };
+                            const style = accionStyles[accion.accion.toLowerCase()] || { bg: isDark ? 'bg-zinc-500/20' : 'bg-zinc-50', text: isDark ? 'text-zinc-300' : 'text-zinc-700', border: 'border-zinc-500/30' };
+                            return (
+                              <div key={accion.id} className={`p-4 rounded-xl ${isDark ? 'bg-zinc-800/30 border-zinc-800/50' : 'bg-gray-50 border-gray-200'} border`}>
+                                <div className="flex items-center justify-between gap-3">
+                                  <div className="flex items-center gap-2 flex-1 min-w-0">
+                                    <span className={`px-2 py-0.5 rounded-full text-[10px] font-medium ${style.bg} ${style.text} border ${style.border} shrink-0`}>
+                                      {accion.accion}
+                                    </span>
+                                    {accion.detalles && (
+                                      <p className={`text-xs ${isDark ? 'text-zinc-400' : 'text-gray-500'} truncate`}>{accion.detalles}</p>
+                                    )}
+                                  </div>
+                                  <div className="text-right shrink-0">
+                                    <p className={`text-[10px] ${isDark ? 'text-zinc-500' : 'text-gray-400'}`}>
+                                      {new Date(accion.fecha).toLocaleDateString('es-MX', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' })}
+                                    </p>
+                                    {accion.usuario_nombre && (
+                                      <p className={`text-[10px] ${isDark ? 'text-zinc-600' : 'text-gray-400'}`}>{accion.usuario_nombre}</p>
+                                    )}
+                                  </div>
+                                </div>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      )}
+                    </>
                   )}
                 </div>
               ) : (
