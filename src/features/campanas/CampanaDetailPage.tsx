@@ -1,7 +1,8 @@
 import { useParams, useNavigate } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useState, useRef, useEffect, useMemo, useCallback } from 'react';
-import { ArrowLeft, MessageSquare, Send, X, FileSpreadsheet, ListTodo, Layers, ChevronDown, ChevronRight, Check, Minus, Filter, Plus, Trash2, ArrowUpDown, ArrowUp, ArrowDown, Download, Upload, Loader2, CheckCircle, AlertCircle, AlertTriangle, Package, MapPinOff, RefreshCw, MessageSquareOff, ServerCrash, WifiOff, History } from 'lucide-react';
+import { ArrowLeft, MessageSquare, Send, X, FileSpreadsheet, ListTodo, Layers, ChevronDown, ChevronRight, Check, Minus, Filter, Plus, Trash2, ArrowUpDown, ArrowUp, ArrowDown, Download, Upload, Loader2, CheckCircle, AlertCircle, AlertTriangle, Package, MapPinOff, RefreshCw, MessageSquareOff, ServerCrash, WifiOff, History, Edit2 } from 'lucide-react';
+import { AssignInventarioCampanaModal } from './AssignInventarioCampanaModal';
 import { GoogleMap, useLoadScript, Marker } from '@react-google-maps/api';
 import { Header } from '../../components/layout/Header';
 import { campanasService, InventarioReservado, InventarioConAPS, SolicitudCara, buildDeliveryNote, postDeliveryNoteToSAP, resolveBaseEntry, isMigratedCampaign, HistorialItem, SAPDeliveryNoteMigrated } from '../../services/campanas.service';
@@ -815,6 +816,9 @@ export function CampanaDetailPage() {
   const [pinVerificado, setPinVerificado] = useState(false);
   const [errorPIN, setErrorPIN] = useState('');
   const [showIncompleteDetail, setShowIncompleteDetail] = useState(false);
+
+  // Estado para modal de editar campaña
+  const [editModalOpen, setEditModalOpen] = useState(false);
 
   // Estado para filtros (inventario reservado)
   const [filtersReservado, setFiltersReservado] = useState<FilterCondition[]>([]);
@@ -1729,6 +1733,26 @@ export function CampanaDetailPage() {
             <span className="text-sm sm:text-base">Volver</span>
           </button>
           <div className="flex items-center gap-2 sm:gap-3">
+            {permissions.canEditCampanas && (() => {
+              const statusLower = campana.status?.toLowerCase() || '';
+              const disabledStatuses = ['finalizado', 'sin cotizacion activa', 'cancelada', 'rechazada'];
+              const editDisabled = disabledStatuses.includes(statusLower) || campana.has_aps === true;
+              return (
+                <button
+                  onClick={() => setEditModalOpen(true)}
+                  disabled={editDisabled}
+                  className={`flex items-center gap-1 sm:gap-1.5 px-2 sm:px-3 py-1 sm:py-1.5 rounded-lg border transition-all ${
+                    editDisabled
+                      ? isDark ? 'bg-zinc-800/30 text-zinc-600 border-zinc-700/30 cursor-not-allowed' : 'bg-gray-100 text-gray-400 border-gray-200 cursor-not-allowed'
+                      : isDark ? 'bg-zinc-500/10 text-zinc-400 hover:bg-zinc-500/20 border-zinc-500/20' : 'bg-gray-50 text-gray-500 hover:bg-gray-100 border-gray-200'
+                  }`}
+                  title={editDisabled ? 'No editable' : 'Editar campaña'}
+                >
+                  <Edit2 className="h-3.5 sm:h-4 w-3.5 sm:w-4" />
+                  <span className="text-xs sm:text-sm">Editar campaña</span>
+                </button>
+              );
+            })()}
             <button
               onClick={() => setShowComments(true)}
               className={`flex items-center gap-1 sm:gap-1.5 px-2 sm:px-3 py-1 sm:py-1.5 rounded-lg ${isDark ? 'bg-purple-900/30 hover:bg-purple-900/50' : 'bg-purple-100 hover:bg-purple-200'} transition-colors`}
@@ -4089,6 +4113,15 @@ export function CampanaDetailPage() {
             )}
           </div>
         </div>
+      )}
+
+      {/* Edit Campaña Modal */}
+      {campana && (
+        <AssignInventarioCampanaModal
+          isOpen={editModalOpen}
+          onClose={() => setEditModalOpen(false)}
+          campana={campana}
+        />
       )}
     </div>
   );
