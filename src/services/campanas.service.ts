@@ -583,6 +583,15 @@ export const campanasService = {
     return response.data;
   },
 
+  async getExportLayout(params: Omit<CampanasParams, 'page' | 'limit'> = {}): Promise<{
+    inventarios: any[];
+    campaignInfo: any[];
+    campaignsWithInventory: number[];
+  }> {
+    const response = await api.get<ApiResponse<any>>('/campanas/export-layout', { params, timeout: 120000 });
+    return response.data.data;
+  },
+
   async getBatchInversiones(ids: number[]): Promise<Record<number, Record<string, { inversion: number; circuitos: number; bonificadas: number; carasNetas: number }>>> {
     const response = await api.post<ApiResponse<Record<number, Record<string, { inversion: number; circuitos: number; bonificadas: number; carasNetas: number }>>>>('/campanas/batch-inversiones', { ids });
     return response.data.data || {};
