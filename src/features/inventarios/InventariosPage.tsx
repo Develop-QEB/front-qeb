@@ -191,8 +191,10 @@ export function InventariosPage() {
 
   const toggleBlockMutation = useMutation({
     mutationFn: (id: number) => inventariosService.toggleBlock(id),
-    onSuccess: () => {
+    onSuccess: (_data, id) => {
       queryClient.invalidateQueries({ queryKey: ['inventarios'] });
+      queryClient.invalidateQueries({ queryKey: ['inventario-acciones', id] });
+      queryClient.invalidateQueries({ queryKey: ['inventario-historial', id] });
       setBloqueoItem(null);
     },
   });
@@ -1196,13 +1198,17 @@ export function InventariosPage() {
                       ) : (
                         <div className="space-y-2">
                           {historialData.historial.map((item, index) => (
-                            <div key={`${item.reserva_id}-${index}`} className={`p-4 rounded-xl ${isDark ? 'bg-zinc-800/30 border-zinc-800/50 hover:border-purple-500/20' : 'bg-gray-50 border-gray-200 hover:border-purple-200'} border transition-colors`}>
+                            <div key={`${item.reserva_id}-${index}`} className={`p-4 rounded-xl cursor-pointer ${isDark ? 'bg-zinc-800/30 border-zinc-800/50 hover:border-purple-500/30 hover:bg-zinc-800/50' : 'bg-gray-50 border-gray-200 hover:border-purple-300 hover:bg-purple-50/30'} border transition-colors`} onClick={() => window.open(`/campanas/detail/${item.campana_id}`, '_blank')}>
                               <div className="flex items-start justify-between gap-4">
                                 <div className="flex-1">
                                   <div className="flex items-center gap-2 mb-2 flex-wrap">
-                                    <span className={`font-mono text-xs px-2 py-1 rounded-md ${isDark ? 'bg-purple-500/10 text-purple-300' : 'bg-purple-50 text-purple-700'}`}>
-                                      #{item.campana_id}
-                                    </span>
+                                    <a
+                                      href={`/campanas/detail/${item.campana_id}`}
+                                      onClick={(e) => { e.preventDefault(); window.open(`/campanas/detail/${item.campana_id}`, '_blank'); }}
+                                      className={`font-mono text-xs px-2 py-1 rounded-md cursor-pointer hover:underline ${isDark ? 'bg-purple-500/10 text-purple-300 hover:text-purple-200' : 'bg-purple-50 text-purple-700 hover:text-purple-900'}`}
+                                    >
+                                      #{item.propuesta_id || item.campana_id}
+                                    </a>
                                     <span className={`px-2 py-0.5 rounded-full text-[10px] ${
                                       item.reserva_estatus === 'Vendido' ? (isDark ? 'bg-emerald-500/20 text-emerald-300' : 'bg-emerald-50 text-emerald-700') + ' border border-emerald-500/30' :
                                       item.reserva_estatus === 'Reservado' ? (isDark ? 'bg-amber-500/20 text-amber-300' : 'bg-amber-50 text-amber-700') + ' border border-amber-500/30' :
@@ -1211,12 +1217,16 @@ export function InventariosPage() {
                                     }`}>
                                       {item.reserva_estatus}
                                     </span>
-                                    {item.instalado && (
+                                    {!!item.instalado && (
                                       <span className={`px-2 py-0.5 rounded-full text-[10px] ${isDark ? 'bg-blue-500/20 text-blue-300' : 'bg-blue-50 text-blue-700'} border border-blue-500/30`}>Instalado</span>
                                     )}
                                   </div>
-                                  <p className={`${isDark ? 'text-white' : 'text-gray-900'} font-medium text-sm`}>{item.campana_nombre}</p>
-                                  <p className={`text-xs ${isDark ? 'text-zinc-400' : 'text-gray-500'}`}>{item.cliente_nombre || 'Sin cliente'}</p>
+                                  <a
+                                    href={`/campanas/detail/${item.campana_id}`}
+                                    onClick={(e) => { e.preventDefault(); window.open(`/campanas/detail/${item.campana_id}`, '_blank'); }}
+                                    className={`${isDark ? 'text-white hover:text-purple-300' : 'text-gray-900 hover:text-purple-700'} font-medium text-sm cursor-pointer hover:underline`}
+                                  >{item.campana_nombre}</a>
+                                  {/* <p className={`text-xs ${isDark ? 'text-zinc-400' : 'text-gray-500'}`}>{item.cliente_nombre || 'Sin cliente'}</p> */}
                                   <div className={`flex items-center gap-3 mt-2 text-xs ${isDark ? 'text-zinc-500' : 'text-gray-400'} flex-wrap`}>
                                     <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-md ${isDark ? 'bg-cyan-500/10 text-cyan-300 border-cyan-500/20' : 'bg-cyan-50 text-cyan-700 border-cyan-200'} border`}>
                                       <CalendarIcon className="h-3 w-3" />

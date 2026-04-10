@@ -204,11 +204,12 @@ export const inventariosService = {
       archivo: string | null;
       arte_aprobado: string | null;
       fecha_reserva: string;
-      instalado: boolean;
+      instalado: number;
       APS: number | null;
       inicio_periodo: string;
       fin_periodo: string;
       tipo_medio: string;
+      propuesta_id: number;
       campana_id: number;
       campana_nombre: string;
       cliente_nombre: string;
@@ -237,11 +238,12 @@ export const inventariosService = {
         archivo: string | null;
         arte_aprobado: string | null;
         fecha_reserva: string;
-        instalado: boolean;
+        instalado: number;
         APS: number | null;
         inicio_periodo: string;
         fin_periodo: string;
         tipo_medio: string;
+        propuesta_id: number;
         campana_id: number;
         campana_nombre: string;
         cliente_nombre: string;
