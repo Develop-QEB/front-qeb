@@ -914,6 +914,7 @@ export function OrdenesMontajeModal({ isOpen, onClose, canExport = true }: Orden
           case 'BONIFICACION': return 'BONIFICACION';
           case 'CORTESIA': return 'CORTESIA';
           case 'INTERCAMBIO': return 'IN - RENTA (INTERCAMBIO)';
+          case 'IMPRESION': return 'IMPRESION';
           default: return neg || '';
         }
       };
@@ -1567,17 +1568,16 @@ export function OrdenesMontajeModal({ isOpen, onClose, canExport = true }: Orden
                   <tr className="border-b border-purple-500/20 bg-gradient-to-r from-purple-900/40 via-fuchsia-900/30 to-purple-900/40 backdrop-blur-sm">
                     <th className="px-3 py-3 text-left text-[10px] font-semibold text-purple-300 uppercase tracking-wider">Plaza</th>
                     <th className="px-3 py-3 text-left text-[10px] font-semibold text-purple-300 uppercase tracking-wider">Tipo</th>
-                    <th className="px-3 py-3 text-left text-[10px] font-semibold text-purple-300 uppercase tracking-wider">Asesor</th>
-                    <th className="px-3 py-3 text-left text-[10px] font-semibold text-purple-300 uppercase tracking-wider">APS</th>
+                    <th className="px-3 py-3 text-left text-[10px] font-semibold text-purple-300 uppercase tracking-wider">Asesor Comercial</th>
                     <th className="px-3 py-3 text-left text-[10px] font-semibold text-purple-300 uppercase tracking-wider">APS Global</th>
+                    <th className="px-3 py-3 text-left text-[10px] font-semibold text-purple-300 uppercase tracking-wider">CUIC</th>
                     <th className="px-3 py-3 text-left text-[10px] font-semibold text-purple-300 uppercase tracking-wider">F. Inicio</th>
                     <th className="px-3 py-3 text-left text-[10px] font-semibold text-purple-300 uppercase tracking-wider">F. Fin</th>
                     <th className="px-3 py-3 text-left text-[10px] font-semibold text-purple-300 uppercase tracking-wider">Cliente</th>
                     <th className="px-3 py-3 text-left text-[10px] font-semibold text-purple-300 uppercase tracking-wider">Marca</th>
-                    <th className="px-3 py-3 text-left text-[10px] font-semibold text-purple-300 uppercase tracking-wider">U. Negocio</th>
                     <th className="px-3 py-3 text-left text-[10px] font-semibold text-purple-300 uppercase tracking-wider">Campaña</th>
+                    <th className="px-3 py-3 text-left text-[10px] font-semibold text-purple-300 uppercase tracking-wider">Nº Artículo</th>
                     <th className="px-3 py-3 text-left text-[10px] font-semibold text-purple-300 uppercase tracking-wider">Artículo</th>
-                    <th className="px-3 py-3 text-left text-[10px] font-semibold text-purple-300 uppercase tracking-wider">Negociación</th>
                     <th className="px-3 py-3 text-right text-[10px] font-semibold text-purple-300 uppercase tracking-wider">Caras</th>
                     <th className="px-3 py-3 text-right text-[10px] font-semibold text-purple-300 uppercase tracking-wider">Tarifa</th>
                     <th className="px-3 py-3 text-right text-[10px] font-semibold text-purple-300 uppercase tracking-wider">Monto Total</th>
@@ -1928,6 +1928,13 @@ function CATRow({ item }: { item: OrdenMontajeCAT }) {
     }
   };
   const negociacionColor = getNegociacionColor(item.negociacion);
+  const negociacionLabel = (() => {
+    switch (item.negociacion) {
+      case 'INTERCAMBIO': return 'IN - RENTA (INTERCAMBIO)';
+      case 'IMPRESION': return 'IMPRESION';
+      default: return item.negociacion || '';
+    }
+  })();
 
   return (
     <tr className={`border-b ${isDark ? 'border-zinc-800/50 hover:bg-zinc-800/30' : 'border-gray-200 hover:bg-gray-50'} transition-colors`}>
@@ -1945,18 +1952,17 @@ function CATRow({ item }: { item: OrdenMontajeCAT }) {
           <span className={`text-xs ${isDark ? 'text-zinc-500' : 'text-gray-400'}`}>-</span>
         )}
       </td>
-      <td className="px-3 py-2 text-xs text-purple-300 font-mono">{item.aps_especifico || '-'}</td>
       <td className="px-3 py-2 text-xs text-fuchsia-300 font-mono">{item.aps_global || '-'}</td>
+      <td className="px-3 py-2 text-xs text-purple-300 font-mono">{item.cuic || '-'}</td>
       <td className={`px-3 py-2 text-xs ${isDark ? 'text-zinc-400' : 'text-gray-500'}`}>{formatDate(item.fecha_inicio_periodo)}</td>
       <td className={`px-3 py-2 text-xs ${isDark ? 'text-zinc-400' : 'text-gray-500'}`}>{formatDate(item.fecha_fin_periodo)}</td>
       <td className={`px-3 py-2 text-xs ${isDark ? 'text-zinc-300' : 'text-gray-700'} max-w-[120px] truncate`} title={item.cliente || ''}>{item.cliente || '-'}</td>
       <td className={`px-3 py-2 text-xs ${isDark ? 'text-zinc-300' : 'text-gray-700'}`}>{item.marca || '-'}</td>
-      <td className="px-3 py-2 text-xs text-orange-300">{item.unidad_negocio || '-'}</td>
       <td className={`px-3 py-2 text-xs ${isDark ? 'text-white' : 'text-gray-900'} font-medium max-w-[150px] truncate`} title={item.campania || ''}>{item.campania || '-'}</td>
       <td className="px-3 py-2 text-xs text-violet-300 font-mono">{item.numero_articulo || '-'}</td>
       <td className="px-3 py-2">
         <span className={`px-2 py-0.5 rounded-full text-[10px] border ${negociacionColor}`}>
-          {item.negociacion}
+          {negociacionLabel}
         </span>
       </td>
       <td className={`px-3 py-2 text-xs text-right ${isDark ? 'text-white' : 'text-gray-900'} font-medium`}>{Number(item.caras) || 0}</td>

@@ -325,7 +325,7 @@ export interface OrdenMontajeCAT {
   unidad_negocio: string | null;
   campania: string | null;
   numero_articulo: string | null;
-  negociacion: 'BONIFICACION' | 'RENTA' | 'CORTESIA' | 'INTERCAMBIO';
+  negociacion: 'BONIFICACION' | 'RENTA' | 'CORTESIA' | 'INTERCAMBIO' | 'IMPRESION';
   caras: number;
   tarifa: number | null;
   monto_total: number | null;
