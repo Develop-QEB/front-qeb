@@ -474,6 +474,7 @@ export function HistorialTicketsPage() {
   const [filterStatus, setFilterStatus] = useState('Todos');
   const [filterPrioridad, setFilterPrioridad] = useState('Todos');
   const [filterTecnico, setFilterTecnico] = useState('Todos');
+  const [onlyUnread, setOnlyUnread] = useState(false);
   const [selectedTicket, setSelectedTicket] = useState<TicketHistorial | null>(null);
   const [activeTab, setActiveTab] = useState<'Nuevo' | 'En Progreso' | 'Validación' | 'Resuelto' | 'Cerrado'>('Nuevo');
 
@@ -513,6 +514,7 @@ export function HistorialTicketsPage() {
   const displayTickets = tickets.filter((t) => {
     if (t.status !== activeTab) return false;
     if (filterTecnico !== 'Todos' && t.status_cambiado_por !== filterTecnico) return false;
+    if (onlyUnread && !t.has_unread && !t.has_chat_unread) return false;
     return true;
   });
 
@@ -628,6 +630,17 @@ export function HistorialTicketsPage() {
               <option value="Todos">Técnico: Todos</option>
               {tecnicos.map((t) => <option key={t} value={t}>{t}</option>)}
             </select>
+            <button
+              onClick={() => setOnlyUnread(!onlyUnread)}
+              className={`flex items-center gap-2 px-3 py-2.5 rounded-xl border text-sm font-medium transition-all ${
+                onlyUnread
+                  ? isDark ? 'border-red-500/40 bg-red-500/10 text-red-300' : 'border-red-300 bg-red-50 text-red-600'
+                  : isDark ? 'border-purple-500/20 bg-zinc-900/80 text-zinc-400 hover:text-zinc-200' : 'border-purple-200 bg-gray-50 text-gray-500 hover:text-gray-700'
+              }`}
+            >
+              <div className={`w-2 h-2 rounded-full ${onlyUnread ? 'bg-red-500 animate-pulse' : isDark ? 'bg-zinc-600' : 'bg-gray-300'}`} />
+              No leídos
+            </button>
           </div>
         </div>
 
