@@ -355,6 +355,13 @@ function getAvatarColor(name: string | null): string {
 // Format date helper
 function formatDate(dateStr: string | null): string {
   if (!dateStr) return '-';
+  // Extract date parts directly from ISO string to avoid timezone shifts
+  const match = dateStr.match(/^(\d{4})-(\d{2})-(\d{2})/);
+  if (match) {
+    const [, y, m, d] = match;
+    const meses = ['ene', 'feb', 'mar', 'abr', 'may', 'jun', 'jul', 'ago', 'sep', 'oct', 'nov', 'dic'];
+    return `${parseInt(d)} ${meses[parseInt(m) - 1]} ${y}`;
+  }
   const date = new Date(dateStr);
   return date.toLocaleDateString('es-MX', { day: '2-digit', month: 'short', year: 'numeric' });
 }
@@ -920,6 +927,9 @@ export function OrdenesMontajeModal({ isOpen, onClose, canExport = true }: Orden
       };
       const formatDateCSV = (dateStr: string | null) => {
         if (!dateStr) return '';
+        // Handle ISO date strings - extract date part directly to avoid timezone issues
+        const match = dateStr.match(/^(\d{4})-(\d{2})-(\d{2})/);
+        if (match) return `${match[3]}/${match[2]}/${match[1]}`;
         const d = new Date(dateStr);
         if (isNaN(d.getTime())) return dateStr;
         return `${String(d.getDate()).padStart(2, '0')}/${String(d.getMonth() + 1).padStart(2, '0')}/${d.getFullYear()}`;
