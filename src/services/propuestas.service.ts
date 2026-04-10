@@ -115,6 +115,15 @@ export const propuestasService = {
     return response.data;
   },
 
+  async getVersionarioData(params: Omit<PropuestasParams, 'page' | 'limit' | 'soloAtendidas'> = {}): Promise<{
+    inventarios: any[];
+    propuestasInfo: any[];
+    carasInfo: any[];
+  }> {
+    const response = await api.get<ApiResponse<any>>('/propuestas/versionario', { params, timeout: 120000 });
+    return response.data.data;
+  },
+
   async getById(id: number): Promise<Propuesta> {
     const response = await api.get<ApiResponse<Propuesta>>(`/propuestas/${id}`);
     if (!response.data.success || !response.data.data) {

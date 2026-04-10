@@ -5,7 +5,7 @@ import {
   Search, Download, Filter, ChevronDown, ChevronRight, X, SlidersHorizontal,
   ArrowUpDown, Calendar, DollarSign, FileText, Building2, MessageSquare,
   CheckCircle, Users, Send, Loader2, User, Share2, MapPinned, Wrench, Clock,
-  Pencil, Trash2, Package, MapPin, Eye, Plus, AlertTriangle
+  Pencil, Trash2, Package, MapPin, Eye, Plus, AlertTriangle, List, LayoutGrid
 } from 'lucide-react';
 import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip as RechartsTooltip } from 'recharts';
 import { Header } from '../../components/layout/Header';
@@ -14,6 +14,7 @@ import { solicitudesService, UserOption } from '../../services/solicitudes.servi
 import { Propuesta, Catorcena } from '../../types';
 import { formatCurrency, formatDate } from '../../lib/utils';
 import { AssignInventarioModal } from './AssignInventarioModal';
+import PropuestasVersionarioView from './PropuestasVersionarioView';
 import { UserAvatar } from '../../components/ui/user-avatar';
 import { useAuthStore } from '../../store/authStore';
 import { useThemeStore } from '../../store/themeStore';
@@ -1068,6 +1069,8 @@ export function PropuestasPage() {
   const [expandedGroups, setExpandedGroups] = useState<Set<string>>(new Set());
   const [page, setPage] = useState(1);
   const limit = 20;
+  const [activeView, setActiveView] = useState<'tabla' | 'versionario'>('tabla');
+  const [exportingLayout, setExportingLayout] = useState(false);
 
   // Modals
   const [statusPropuesta, setStatusPropuesta] = useState<Propuesta | null>(null);
@@ -1321,6 +1324,96 @@ export function PropuestasPage() {
       }
       return next;
     });
+  };
+
+  // Handle export Layout (versionario)
+  const handleExportLayout = async () => {
+    setExportingLayout(true);
+    try {
+      const exportData = await propuestasService.getVersionarioData({
+        status: status || undefined,
+        search: debouncedSearchTags.length > 0 ? debouncedSearchTags.join(' ') : debouncedSearchInput || undefined,
+        yearInicio,
+        yearFin,
+        catorcenaInicio,
+        catorcenaFin,
+        tipoPeriodo: tipoPeriodo || undefined,
+      });
+      const { inventarios, propuestasInfo, carasInfo } = exportData;
+
+      const propMap = new Map(propuestasInfo.map((p: any) => [p.propuesta_id, p]));
+      // Index inventarios by propuesta+sc
+      const invMap = new Map<string, any[]>();
+      for (const inv of inventarios) {
+        const key = `${inv.propuesta_id}-${inv.solicitud_caras_id}`;
+        if (!invMap.has(key)) invMap.set(key, []);
+        invMap.get(key)!.push(inv);
+      }
+
+      const headers = [
+        'Campaña', 'Anunciante', 'Inversión Campaña', 'Operación', 'Código de contrato (Opcional)',
+        'Precio por cara (Opcional)', 'APS Global', 'CUIC', 'Articulo', 'Vendedor',
+        'Descripción (Opcional)', 'Inicio o Periodo', 'Fin o Segmento', 'Arte',
+        'Código de arte (Opcional)', 'Arte Url (Opcional)', 'Origen del arte (Opcional)',
+        'Unidad', 'Cara', 'Ciudad', 'Tipo de Distribución', 'Reproducciones', 'Notas',
+      ];
+      const rows: string[][] = [];
+      const invExported = new Set<number>();
+
+      for (const cara of carasInfo) {
+        const info = propMap.get(cara.propuesta_id) as any;
+        if (!info || info.status === 'Aprobada') continue;
+        const key = `${cara.propuesta_id}-${cara.sc_id}`;
+        const items = invMap.get(key) || [];
+        const showInv = !invExported.has(cara.propuesta_id);
+        if (showInv) invExported.add(cara.propuesta_id);
+        const invStr = showInv && info.inversion ? `$${Number(info.inversion).toLocaleString('es-MX')}` : '0';
+        const periodo = `Catorcena #${String(cara.numero_catorcena).padStart(2, '0')}`;
+
+        if (items.length > 0) {
+          let firstRow = true;
+          for (const inv of items) {
+            const operacion = inv.cortesia ? 'CORTESIA' : (inv.estatus_reserva === 'Bonificado' || inv.estatus_reserva === 'Vendido bonificado') ? 'BONIFICACION' : 'RENTA';
+            const precio = inv.tarifa_publica_sc || inv.tarifa_publica || 0;
+            rows.push([
+              info.campana_nombre || info.descripcion || '', info.anunciante || '',
+              firstRow ? invStr : '0', operacion, '0',
+              precio ? `$${Number(precio).toLocaleString('es-MX')}` : '0',
+              String(info.propuesta_id), String(info.cuic || ''),
+              inv.articulo || '', info.vendedor || '', info.descripcion || '',
+              'Catorcenas ' + (cara.anio_catorcena || ''), periodo,
+              '', '', '', '',
+              inv.codigo_unico || '', inv.tipo_de_cara || '', inv.plaza || inv.estado || '',
+              inv.tradicional_digital || inv.tipo_medio || '', '0', '',
+            ]);
+            firstRow = false;
+          }
+        } else {
+          rows.push([
+            info.campana_nombre || info.descripcion || '', info.anunciante || '',
+            invStr, '', '0', '0',
+            String(info.propuesta_id), String(info.cuic || ''),
+            cara.articulo || '', info.vendedor || '', info.descripcion || '',
+            'Catorcenas ' + (cara.anio_catorcena || ''), periodo,
+            '', '', '', '', '', '', cara.ciudad || '', '', '0', '',
+          ]);
+        }
+      }
+
+      if (rows.length === 0) return;
+      const esc = (val: string) => `"${String(val).replace(/"/g, '""')}"`;
+      const csvContent = [headers.map(esc).join(','), ...rows.map(row => row.map(esc).join(','))].join('\n');
+      const blob = new Blob(['\ufeff' + csvContent], { type: 'text/csv;charset=utf-8;' });
+      const link = document.createElement('a');
+      link.href = URL.createObjectURL(blob);
+      link.download = `propuestas_versionario_${new Date().toISOString().split('T')[0]}.csv`;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      URL.revokeObjectURL(link.href);
+    } finally {
+      setExportingLayout(false);
+    }
   };
 
   // Handle export CSV - exports only visible/filtered data
@@ -1683,13 +1776,38 @@ export function PropuestasPage() {
                 )}
               </button>
 
-              {/* Export CSV */}
+              {/* View Toggle - idéntico a campañas */}
               <button
-                onClick={handleExportCSV}
-                className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-medium ${isDark ? 'bg-zinc-800/60 text-zinc-400 border-zinc-700/50 hover:bg-zinc-800 hover:text-zinc-200' : 'bg-gray-100 text-gray-500 border-gray-200 hover:bg-gray-200 hover:text-gray-900'} border transition-all`}
+                onClick={() => setActiveView('tabla')}
+                className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-medium transition-all ${
+                  activeView === 'tabla'
+                    ? isDark ? 'bg-purple-500/20 text-purple-300 border border-purple-500/40' : 'bg-purple-100 text-purple-700 border border-purple-200'
+                    : isDark ? 'bg-zinc-800/60 text-zinc-400 border border-zinc-700/50 hover:bg-zinc-800 hover:text-zinc-200' : 'bg-gray-100 text-gray-500 border border-gray-200 hover:bg-gray-200 hover:text-gray-700'
+                }`}
               >
-                <Download className="h-4 w-4" />
-                Exportar CSV
+                <List className="h-4 w-4" />
+                Vista Tabla
+              </button>
+              <button
+                onClick={() => setActiveView('versionario')}
+                className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-medium transition-all ${
+                  activeView === 'versionario'
+                    ? isDark ? 'bg-purple-500/20 text-purple-300 border border-purple-500/40' : 'bg-purple-100 text-purple-700 border border-purple-200'
+                    : isDark ? 'bg-zinc-800/60 text-zinc-400 border border-zinc-700/50 hover:bg-zinc-800 hover:text-zinc-200' : 'bg-gray-100 text-gray-500 border border-gray-200 hover:bg-gray-200 hover:text-gray-700'
+                }`}
+              >
+                <LayoutGrid className="h-4 w-4" />
+                Versionario
+              </button>
+
+              {/* Export CSV / Layout */}
+              <button
+                onClick={activeView === 'versionario' ? handleExportLayout : handleExportCSV}
+                disabled={exportingLayout}
+                className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-medium ${isDark ? 'bg-zinc-800/60 text-zinc-400 border-zinc-700/50 hover:bg-zinc-800 hover:text-zinc-200' : 'bg-gray-100 text-gray-500 border-gray-200 hover:bg-gray-200 hover:text-gray-900'} border transition-all ${exportingLayout ? 'opacity-50 cursor-not-allowed' : ''}`}
+              >
+                {exportingLayout ? <Loader2 className="h-4 w-4 animate-spin" /> : <Download className="h-4 w-4" />}
+                {exportingLayout ? 'Generando...' : activeView === 'versionario' ? 'Exportar Layout' : 'Exportar CSV'}
               </button>
             </div>
 
@@ -1963,8 +2081,24 @@ export function PropuestasPage() {
           </div>
         </div>
 
+        {/* Versionario View */}
+        {activeView === 'versionario' && (
+          <PropuestasVersionarioView
+            isDark={isDark}
+            filters={{
+              status: status || undefined,
+              search: debouncedSearchTags.length > 0 ? debouncedSearchTags.join(' ') : debouncedSearchInput || undefined,
+              yearInicio,
+              yearFin,
+              catorcenaInicio,
+              catorcenaFin,
+              tipoPeriodo: tipoPeriodo || undefined,
+            }}
+          />
+        )}
+
         {/* Table */}
-        <div className={`rounded-2xl border backdrop-blur-xl overflow-hidden shadow-xl ${isDark ? 'border-purple-500/20 bg-gradient-to-br from-zinc-900/90 via-purple-950/20 to-zinc-900/90 shadow-purple-500/5' : 'border-gray-200 bg-white shadow-gray-200/50'}`}>
+        {activeView === 'tabla' && <div className={`rounded-2xl border backdrop-blur-xl overflow-hidden shadow-xl ${isDark ? 'border-purple-500/20 bg-gradient-to-br from-zinc-900/90 via-purple-950/20 to-zinc-900/90 shadow-purple-500/5' : 'border-gray-200 bg-white shadow-gray-200/50'}`}>
           <div className="overflow-x-auto">
             <table className="w-full">
               <thead>
@@ -2050,7 +2184,7 @@ export function PropuestasPage() {
               </div>
             </div>
           )}
-        </div>
+        </div>}
       </div>
 
       {/* Modals */}
