@@ -938,7 +938,7 @@ export function OrdenesMontajeModal({ isOpen, onClose, canExport = true }: Orden
         'Plaza': item.plaza || '',
         'Tipo': item.tipo || '',
         'Asesor Comercial': item.asesor || '',
-        'APS Global - ID QEB': item.aps_global || '',
+        'APS Global - ID QEB': item.campania_id || '',
         'CUIC': item.cuic || '',
         'Fecha Inicio Periodo': formatDateCSV(item.fecha_inicio_periodo),
         'Fecha Fin Periodo': formatDateCSV(item.fecha_fin_periodo),
@@ -1962,7 +1962,7 @@ function CATRow({ item }: { item: OrdenMontajeCAT }) {
           <span className={`text-xs ${isDark ? 'text-zinc-500' : 'text-gray-400'}`}>-</span>
         )}
       </td>
-      <td className="px-3 py-2 text-xs text-fuchsia-300 font-mono">{item.aps_global || '-'}</td>
+      <td className="px-3 py-2 text-xs text-fuchsia-300 font-mono">{item.campania_id || '-'}</td>
       <td className="px-3 py-2 text-xs text-purple-300 font-mono">{item.cuic || '-'}</td>
       <td className={`px-3 py-2 text-xs ${isDark ? 'text-zinc-400' : 'text-gray-500'}`}>{formatDate(item.fecha_inicio_periodo)}</td>
       <td className={`px-3 py-2 text-xs ${isDark ? 'text-zinc-400' : 'text-gray-500'}`}>{formatDate(item.fecha_fin_periodo)}</td>
