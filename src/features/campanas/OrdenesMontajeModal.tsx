@@ -355,6 +355,13 @@ function getAvatarColor(name: string | null): string {
 // Format date helper
 function formatDate(dateStr: string | null): string {
   if (!dateStr) return '-';
+  // Extract date parts directly from ISO string to avoid timezone shifts
+  const match = dateStr.match(/^(\d{4})-(\d{2})-(\d{2})/);
+  if (match) {
+    const [, y, m, d] = match;
+    const meses = ['ene', 'feb', 'mar', 'abr', 'may', 'jun', 'jul', 'ago', 'sep', 'oct', 'nov', 'dic'];
+    return `${parseInt(d)} ${meses[parseInt(m) - 1]} ${y}`;
+  }
   const date = new Date(dateStr);
   return date.toLocaleDateString('es-MX', { day: '2-digit', month: 'short', year: 'numeric' });
 }
@@ -908,22 +915,41 @@ export function OrdenesMontajeModal({ isOpen, onClose, canExport = true }: Orden
   // Export to XLSX
   const handleExportXLSX = () => {
     if (activeTab === 'cat' && filteredCATData.length > 0) {
+      const negociacionLabel = (neg: string) => {
+        switch (neg) {
+          case 'RENTA': return 'RENTA';
+          case 'BONIFICACION': return 'BONIFICACION';
+          case 'CORTESIA': return 'CORTESIA';
+          case 'INTERCAMBIO': return 'IN - RENTA (INTERCAMBIO)';
+          case 'IMPRESION': return 'IMPRESION';
+          default: return neg || '';
+        }
+      };
+      const formatDateCSV = (dateStr: string | null) => {
+        if (!dateStr) return '';
+        // Handle ISO date strings - extract date part directly to avoid timezone issues
+        const match = dateStr.match(/^(\d{4})-(\d{2})-(\d{2})/);
+        if (match) return `${match[3]}/${match[2]}/${match[1]}`;
+        const d = new Date(dateStr);
+        if (isNaN(d.getTime())) return dateStr;
+        return `${String(d.getDate()).padStart(2, '0')}/${String(d.getMonth() + 1).padStart(2, '0')}/${d.getFullYear()}`;
+      };
       const wsData = filteredCATData.map(item => ({
         'Plaza': item.plaza || '',
         'Tipo': item.tipo || '',
-        'Asesor': item.asesor || '',
-        'APS': item.aps_especifico || '',
-        'Fecha Inicio': item.fecha_inicio_periodo ? formatDate(item.fecha_inicio_periodo) : '',
-        'Fecha Fin': item.fecha_fin_periodo ? formatDate(item.fecha_fin_periodo) : '',
-        'Cliente': item.cliente || '',
+        'Asesor Comercial': item.asesor || '',
+        'APS Global - ID QEB': item.campania_id || '',
+        'CUIC': item.cuic || '',
+        'Fecha Inicio Periodo': formatDateCSV(item.fecha_inicio_periodo),
+        'Fecha Fin Periodo': formatDateCSV(item.fecha_fin_periodo),
+        'Cliente Comercial': item.cliente || '',
         'Marca': item.marca || '',
-        'Unidad de Negocio': item.unidad_negocio || '',
         'Campaña': item.campania || '',
-        'Artículo': item.numero_articulo || '',
-        'Negociación': item.negociacion || '',
-        'Caras': Number(item.caras) || 0,
-        'Tarifa': Number(item.tarifa) || 0,
-        'Monto Total': Number(item.monto_total) || 0,
+        'Número de artículo': item.numero_articulo || '',
+        'Articulo': negociacionLabel(item.negociacion),
+        'Suma de Caras': Number(item.caras) || 0,
+        'Suma de Tarifa': Number(item.tarifa) || 0,
+        'Suma de Monto Total': Number(item.monto_total) || 0,
       }));
 
       const ws = XLSX.utils.json_to_sheet(wsData);
@@ -1552,17 +1578,16 @@ export function OrdenesMontajeModal({ isOpen, onClose, canExport = true }: Orden
                   <tr className="border-b border-purple-500/20 bg-gradient-to-r from-purple-900/40 via-fuchsia-900/30 to-purple-900/40 backdrop-blur-sm">
                     <th className="px-3 py-3 text-left text-[10px] font-semibold text-purple-300 uppercase tracking-wider">Plaza</th>
                     <th className="px-3 py-3 text-left text-[10px] font-semibold text-purple-300 uppercase tracking-wider">Tipo</th>
-                    <th className="px-3 py-3 text-left text-[10px] font-semibold text-purple-300 uppercase tracking-wider">Asesor</th>
-                    <th className="px-3 py-3 text-left text-[10px] font-semibold text-purple-300 uppercase tracking-wider">APS</th>
+                    <th className="px-3 py-3 text-left text-[10px] font-semibold text-purple-300 uppercase tracking-wider">Asesor Comercial</th>
                     <th className="px-3 py-3 text-left text-[10px] font-semibold text-purple-300 uppercase tracking-wider">APS Global</th>
+                    <th className="px-3 py-3 text-left text-[10px] font-semibold text-purple-300 uppercase tracking-wider">CUIC</th>
                     <th className="px-3 py-3 text-left text-[10px] font-semibold text-purple-300 uppercase tracking-wider">F. Inicio</th>
                     <th className="px-3 py-3 text-left text-[10px] font-semibold text-purple-300 uppercase tracking-wider">F. Fin</th>
                     <th className="px-3 py-3 text-left text-[10px] font-semibold text-purple-300 uppercase tracking-wider">Cliente</th>
                     <th className="px-3 py-3 text-left text-[10px] font-semibold text-purple-300 uppercase tracking-wider">Marca</th>
-                    <th className="px-3 py-3 text-left text-[10px] font-semibold text-purple-300 uppercase tracking-wider">U. Negocio</th>
                     <th className="px-3 py-3 text-left text-[10px] font-semibold text-purple-300 uppercase tracking-wider">Campaña</th>
+                    <th className="px-3 py-3 text-left text-[10px] font-semibold text-purple-300 uppercase tracking-wider">Nº Artículo</th>
                     <th className="px-3 py-3 text-left text-[10px] font-semibold text-purple-300 uppercase tracking-wider">Artículo</th>
-                    <th className="px-3 py-3 text-left text-[10px] font-semibold text-purple-300 uppercase tracking-wider">Negociación</th>
                     <th className="px-3 py-3 text-right text-[10px] font-semibold text-purple-300 uppercase tracking-wider">Caras</th>
                     <th className="px-3 py-3 text-right text-[10px] font-semibold text-purple-300 uppercase tracking-wider">Tarifa</th>
                     <th className="px-3 py-3 text-right text-[10px] font-semibold text-purple-300 uppercase tracking-wider">Monto Total</th>
@@ -1913,6 +1938,13 @@ function CATRow({ item }: { item: OrdenMontajeCAT }) {
     }
   };
   const negociacionColor = getNegociacionColor(item.negociacion);
+  const negociacionLabel = (() => {
+    switch (item.negociacion) {
+      case 'INTERCAMBIO': return 'IN - RENTA (INTERCAMBIO)';
+      case 'IMPRESION': return 'IMPRESION';
+      default: return item.negociacion || '';
+    }
+  })();
 
   return (
     <tr className={`border-b ${isDark ? 'border-zinc-800/50 hover:bg-zinc-800/30' : 'border-gray-200 hover:bg-gray-50'} transition-colors`}>
@@ -1930,18 +1962,17 @@ function CATRow({ item }: { item: OrdenMontajeCAT }) {
           <span className={`text-xs ${isDark ? 'text-zinc-500' : 'text-gray-400'}`}>-</span>
         )}
       </td>
-      <td className="px-3 py-2 text-xs text-purple-300 font-mono">{item.aps_especifico || '-'}</td>
-      <td className="px-3 py-2 text-xs text-fuchsia-300 font-mono">{item.aps_global || '-'}</td>
+      <td className="px-3 py-2 text-xs text-fuchsia-300 font-mono">{item.campania_id || '-'}</td>
+      <td className="px-3 py-2 text-xs text-purple-300 font-mono">{item.cuic || '-'}</td>
       <td className={`px-3 py-2 text-xs ${isDark ? 'text-zinc-400' : 'text-gray-500'}`}>{formatDate(item.fecha_inicio_periodo)}</td>
       <td className={`px-3 py-2 text-xs ${isDark ? 'text-zinc-400' : 'text-gray-500'}`}>{formatDate(item.fecha_fin_periodo)}</td>
       <td className={`px-3 py-2 text-xs ${isDark ? 'text-zinc-300' : 'text-gray-700'} max-w-[120px] truncate`} title={item.cliente || ''}>{item.cliente || '-'}</td>
       <td className={`px-3 py-2 text-xs ${isDark ? 'text-zinc-300' : 'text-gray-700'}`}>{item.marca || '-'}</td>
-      <td className="px-3 py-2 text-xs text-orange-300">{item.unidad_negocio || '-'}</td>
       <td className={`px-3 py-2 text-xs ${isDark ? 'text-white' : 'text-gray-900'} font-medium max-w-[150px] truncate`} title={item.campania || ''}>{item.campania || '-'}</td>
       <td className="px-3 py-2 text-xs text-violet-300 font-mono">{item.numero_articulo || '-'}</td>
       <td className="px-3 py-2">
         <span className={`px-2 py-0.5 rounded-full text-[10px] border ${negociacionColor}`}>
-          {item.negociacion}
+          {negociacionLabel}
         </span>
       </td>
       <td className={`px-3 py-2 text-xs text-right ${isDark ? 'text-white' : 'text-gray-900'} font-medium`}>{Number(item.caras) || 0}</td>

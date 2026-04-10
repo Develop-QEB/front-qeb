@@ -317,6 +317,7 @@ export interface OrdenMontajeCAT {
   asesor: string | null;
   aps_especifico: number | null;
   aps_global: number | null;
+  cuic: number | null;
   fecha_inicio_periodo: string | null;
   fecha_fin_periodo: string | null;
   cliente: string | null;
@@ -324,7 +325,7 @@ export interface OrdenMontajeCAT {
   unidad_negocio: string | null;
   campania: string | null;
   numero_articulo: string | null;
-  negociacion: 'BONIFICACION' | 'RENTA' | 'CORTESIA' | 'INTERCAMBIO';
+  negociacion: 'BONIFICACION' | 'RENTA' | 'CORTESIA' | 'INTERCAMBIO' | 'IMPRESION';
   caras: number;
   tarifa: number | null;
   monto_total: number | null;
@@ -580,6 +581,15 @@ export const campanasService = {
   async getAll(params: CampanasParams = {}): Promise<PaginatedResponse<Campana>> {
     const response = await api.get<PaginatedResponse<Campana>>('/campanas', { params });
     return response.data;
+  },
+
+  async getExportLayout(params: Omit<CampanasParams, 'page' | 'limit'> = {}): Promise<{
+    inventarios: any[];
+    campaignInfo: any[];
+    campaignsWithInventory: number[];
+  }> {
+    const response = await api.get<ApiResponse<any>>('/campanas/export-layout', { params, timeout: 120000 });
+    return response.data.data;
   },
 
   async getBatchInversiones(ids: number[]): Promise<Record<number, Record<string, { inversion: number; circuitos: number; bonificadas: number; carasNetas: number }>>> {

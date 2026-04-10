@@ -25,6 +25,7 @@ const getStatusOptions = (isDark: boolean) => [
   { value: 'Ajuste Comercial', label: 'Ajuste Comercial', color: isDark ? 'bg-orange-500/20 text-orange-300 border-orange-500/30' : 'bg-orange-50 text-orange-700 border-orange-300' },
   { value: 'Aprobada', label: 'Aprobada', color: isDark ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500/30' : 'bg-emerald-50 text-emerald-700 border-emerald-300' },
   { value: 'Compartir', label: 'Compartir', color: isDark ? 'bg-cyan-500/20 text-cyan-300 border-cyan-500/30' : 'bg-cyan-50 text-cyan-700 border-cyan-300' },
+  { value: 'Rechazada', label: 'Rechazada', color: isDark ? 'bg-red-500/20 text-red-300 border-red-500/30' : 'bg-red-50 text-red-700 border-red-300' },
 ];
 
 export function StatusCampanaModal({ isOpen, onClose, campana, statusReadOnly = false }: StatusCampanaModalProps) {
@@ -174,6 +175,7 @@ export function StatusCampanaModal({ isOpen, onClose, campana, statusReadOnly = 
                 <option value="">Seleccionar estatus...</option>
                 {STATUS_OPTIONS
                   .filter((option) => !permissions.allowedCampanaStatuses || permissions.allowedCampanaStatuses.includes(option.value))
+                  .filter((option) => !(option.value === 'Rechazada' && (campana as any).has_aps))
                   .map((option) => (
                   <option key={option.value} value={option.value}>
                     {option.label}

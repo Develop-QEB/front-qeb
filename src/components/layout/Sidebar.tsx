@@ -13,6 +13,7 @@ import {
   HelpCircle,
   Bot,
   Ticket,
+  BarChart3,
 } from 'lucide-react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { cn } from '../../lib/utils';
@@ -275,6 +276,28 @@ export function Sidebar({ collapsed, onToggle }: SidebarProps) {
               >
                 <Bot className="h-5 w-5 flex-shrink-0" />
                 {!collapsed && <span>Historial QEBooh</span>}
+              </NavLink>
+            )}
+            {(user?.rol === 'DEV' || user?.rol === 'Administrador') && (
+              <NavLink
+                to="/reportes-especiales"
+                className={({ isActive }) =>
+                  cn(
+                    'flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-light transition-all duration-200',
+                    isActive
+                      ? isDark
+                        ? 'bg-gradient-to-r from-purple-500/20 to-pink-500/10 text-purple-300 border border-purple-500/30'
+                        : 'bg-gradient-to-r from-purple-100 to-pink-50 text-purple-700 border border-purple-200'
+                      : isDark
+                        ? 'text-zinc-400 hover:bg-purple-900/30 hover:text-purple-300'
+                        : 'text-gray-500 hover:bg-purple-50 hover:text-purple-700',
+                    collapsed && 'justify-center px-2'
+                  )
+                }
+                title={collapsed ? 'Reportes de Tickets' : undefined}
+              >
+                <BarChart3 className="h-5 w-5 flex-shrink-0" />
+                {!collapsed && <span>Reportes de Tickets</span>}
               </NavLink>
             )}
           </div>

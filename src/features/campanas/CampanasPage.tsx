@@ -877,6 +877,7 @@ export function CampanasPage() {
   const [expandedGrupos, setExpandedGrupos] = useState<Set<string>>(new Set()); // key: campanaId-aps-grupoKey
   const [campanaInventarios, setCampanaInventarios] = useState<Record<number, InventarioConAPS[]>>({});
   const [loadingInventarios, setLoadingInventarios] = useState<Set<number>>(new Set());
+  const [exportingLayout, setExportingLayout] = useState(false);
 
   // Debounce search
   useEffect(() => {
@@ -1673,78 +1674,136 @@ export function CampanasPage() {
     URL.revokeObjectURL(link.href);
   };
 
-  const handleExportVersionarioCSV = () => {
-    if (!filteredData.length) return;
+  const handleExportVersionarioCSV = async () => {
+    if (!campanasPorCatorcena.length) return;
+    setExportingLayout(true);
 
-    const headers = [
-      'Campaña', 'Anunciante', 'Operación', 'Código de contrato (Opcional)',
-      'Precio por cara (Opcional)', 'APS Global', 'CUIC', 'Articulo', 'Vendedor',
-      'Descripción (Opcional)', 'Inicio o Periodo', 'Fin o Segmento', 'Arte',
-      'Código de arte (Opcional)', 'Arte Url (Opcional)', 'Origen del arte (Opcional)',
-      'Unidad', 'Cara', 'Ciudad', 'Tipo de Distribución', 'Reproducciones', 'Notas'
-    ];
+    try {
+      // Un solo request al backend con los mismos filtros activos
+      const exportData = await campanasService.getExportLayout({
+        status: (status && status !== 'Incompleta') ? status : undefined,
+        search: debouncedSearch || undefined,
+        yearInicio,
+        yearFin,
+        catorcenaInicio,
+        catorcenaFin,
+        tipoPeriodo: tipoPeriodo || undefined,
+      });
 
-    const rows: string[][] = [];
-    for (const campana of filteredData) {
-      const inv = campanaInventarios[campana.id];
-      if (!inv || inv.length === 0) continue;
+      const { inventarios: allInventarios, campaignInfo, campaignsWithInventory } = exportData;
+      const campaignsWithInvSet = new Set(campaignsWithInventory);
 
-      const nombreCampana = campana.nombre || '';
-      const anunciante = (campana as any).T2_U_Marca || (campana as any).cliente_nombre || (campana as any).cliente_razon_social || '';
-      const aps = (campana as any).aps_global || campana.id || '';
-      const cuic = (campana as any).cuic || '';
-      const vendedor = (campana as any).creador_nombre || '';
-      const catInicio = campana.catorcena_inicio_num ? `Catorcena #${String(campana.catorcena_inicio_num).padStart(2, '0')}` : '';
-      const catFin = campana.catorcena_fin_num ? `Catorcena #${String(campana.catorcena_fin_num).padStart(2, '0')}` : '';
-
-      for (const item of inv) {
-        const operacion = item.cortesia ? 'CORTESIA' : (item.estatus_reserva === 'Bonificado' || item.estatus_reserva === 'Vendido bonificado') ? 'BONIFICACION' : 'RENTA';
-        const precio = item.tarifa_publica_sc || item.tarifa_publica || 0;
-        const periodo = item.numero_catorcena ? `Catorcena #${String(item.numero_catorcena).padStart(2, '0')}` : catInicio;
-
-        rows.push([
-          nombreCampana,
-          anunciante,
-          operacion,
-          '0',
-          precio ? `$${Number(precio).toLocaleString('es-MX')}` : '0',
-          String(aps),
-          String(cuic),
-          item.articulo || '',
-          vendedor,
-          '',
-          'Catorcenas ' + (item.anio_catorcena || campana.catorcena_inicio_anio || new Date().getFullYear()),
-          periodo,
-          item.arte_aprobado || '0',
-          '',
-          '',
-          '',
-          item.codigo_unico || '',
-          item.tipo_de_cara || '',
-          item.plaza || item.estado || '',
-          '0',
-          '0',
-          ''
-        ]);
+      // Index inventarios by campana_id
+      const invByCampana: Record<number, any[]> = {};
+      for (const inv of allInventarios) {
+        const cid = Number(inv.campana_id);
+        if (!invByCampana[cid]) invByCampana[cid] = [];
+        invByCampana[cid].push(inv);
       }
+
+      // Index campaign info
+      const campInfoMap = new Map<number, any>();
+      campaignInfo.forEach((c: any) => campInfoMap.set(Number(c.campana_id), c));
+
+      const headers = [
+        'Campaña', 'Anunciante', 'Inversión Campaña', 'Operación', 'Código de contrato (Opcional)',
+        'Precio por cara (Opcional)', 'APS Global', 'CUIC', 'Articulo', 'Vendedor',
+        'Descripción (Opcional)', 'Inicio o Periodo', 'Fin o Segmento', 'Arte',
+        'Código de arte (Opcional)', 'Arte Url (Opcional)', 'Origen del arte (Opcional)',
+        'Unidad', 'Cara', 'Ciudad', 'Tipo de Distribución', 'Reproducciones', 'Notas'
+      ];
+
+      const rows: string[][] = [];
+      const campanaInversionExported = new Set<number>();
+
+      for (const { catorcena, campanas } of campanasPorCatorcena) {
+        for (const campana of campanas) {
+          const info = campInfoMap.get(campana.id);
+          const nombreCampana = info?.campana_nombre || campana.nombre || '';
+          const anunciante = info?.anunciante || (campana as any).T2_U_Marca || (campana as any).cliente_nombre || '';
+          const aps = info?.aps_global || (campana as any).aps_global || campana.id || '';
+          const cuic = info?.cuic || (campana as any).cuic || '';
+          const vendedor = info?.vendedor || (campana as any).creador_nombre || '';
+          const invCampana = Number(info?.inversion || (campana as any).inversion) || 0;
+          const showInversion = !campanaInversionExported.has(campana.id);
+          if (showInversion) campanaInversionExported.add(campana.id);
+          const invStr = showInversion && invCampana > 0 ? `$${invCampana.toLocaleString('es-MX')}` : '0';
+          const descripcion = info?.descripcion || (campana as any).descripcion || '';
+
+          const allInv = invByCampana[campana.id] || [];
+          const inventarios = allInv.filter((inv: any) => {
+            const invNum = Number(inv.numero_catorcena);
+            const invAnio = Number(inv.anio_catorcena);
+            return invNum === catorcena.num && invAnio === catorcena.anio;
+          });
+          const periodo = (catorcena as any).isMensual
+            ? `Mes ${catorcena.num}`
+            : `Catorcena #${String(catorcena.num).padStart(2, '0')}`;
+
+          if (inventarios.length === 0) {
+            rows.push([
+              nombreCampana, anunciante, invStr, '', '0', '0',
+              String(aps), String(cuic), '', vendedor, descripcion,
+              'Catorcenas ' + catorcena.anio, periodo,
+              '0', '', '', '', '', '', '', '0', '0', ''
+            ]);
+          } else {
+            let firstRow = true;
+            for (const item of inventarios) {
+              const operacion = item.cortesia ? 'CORTESIA' : (item.estatus_reserva === 'Bonificado' || item.estatus_reserva === 'Vendido bonificado') ? 'BONIFICACION' : 'RENTA';
+              const precio = item.tarifa_publica_sc || item.tarifa_publica || 0;
+              const estatusArte = item.estatus_arte || 'Pendiente';
+
+              rows.push([
+                nombreCampana,
+                anunciante,
+                firstRow ? invStr : '0',
+                operacion,
+                '0',
+                precio ? `$${Number(precio).toLocaleString('es-MX')}` : '0',
+                String(aps),
+                String(cuic),
+                item.articulo || '',
+                vendedor,
+                descripcion,
+                'Catorcenas ' + catorcena.anio,
+                periodo,
+                estatusArte,
+                '',
+                item.archivo || '',
+                '',
+                item.codigo_unico || '',
+                item.tipo_de_cara || '',
+                item.plaza || item.estado || '',
+                item.tradicional_digital || item.tipo_medio || '',
+                '0',
+                ''
+              ]);
+              firstRow = false;
+            }
+          }
+        }
+      }
+
+      if (rows.length === 0) return;
+
+      const esc = (val: string) => `"${String(val).replace(/"/g, '""')}"`;
+      const csvContent = [
+        headers.map(esc).join(','),
+        ...rows.map(row => row.map(esc).join(','))
+      ].join('\n');
+
+      const blob = new Blob(['\ufeff' + csvContent], { type: 'text/csv;charset=utf-8;' });
+      const link = document.createElement('a');
+      link.href = URL.createObjectURL(blob);
+      link.download = `versionario_${new Date().toISOString().split('T')[0]}.csv`;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      URL.revokeObjectURL(link.href);
+    } finally {
+      setExportingLayout(false);
     }
-
-    if (rows.length === 0) return;
-
-    const esc = (val: string) => `"${String(val).replace(/"/g, '""')}"`;
-    const csvContent = [
-      headers.map(esc).join(','),
-      ...rows.map(row => row.map(esc).join(','))
-    ].join('\n');
-
-    const blob = new Blob(['\ufeff' + csvContent], { type: 'text/csv;charset=utf-8;' });
-    const link = document.createElement('a');
-    link.href = URL.createObjectURL(blob);
-    link.download = `versionario_${new Date().toISOString().split('T')[0]}.csv`;
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
-    URL.revokeObjectURL(link.href);
   };
 
   const handleOpenCampana = (id: number) => {
@@ -1759,7 +1818,7 @@ export function CampanasPage() {
   // Validar si el botón Editar debe estar deshabilitado
   const isEditDisabled = (campana: Campana): boolean => {
     const statusLower = campana.status?.toLowerCase() || '';
-    const disabledStatuses = ['finalizado', 'sin cotizacion activa', 'cancelada'];
+    const disabledStatuses = ['finalizado', 'sin cotizacion activa', 'cancelada', 'rechazada'];
     return disabledStatuses.includes(statusLower) || campana.has_aps === true;
   };
 
@@ -2116,10 +2175,11 @@ export function CampanasPage() {
               {/* Export CSV */}
               <button
                 onClick={activeView === 'catorcena' ? handleExportVersionarioCSV : handleExportCSV}
-                className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-medium ${isDark ? 'bg-zinc-800/60 text-zinc-400 border-zinc-700/50 hover:bg-zinc-800 hover:text-zinc-200' : 'bg-gray-100 text-gray-500 border-gray-200 hover:bg-gray-200 hover:text-gray-700'} border transition-all`}
+                disabled={exportingLayout}
+                className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-medium ${isDark ? 'bg-zinc-800/60 text-zinc-400 border-zinc-700/50 hover:bg-zinc-800 hover:text-zinc-200' : 'bg-gray-100 text-gray-500 border-gray-200 hover:bg-gray-200 hover:text-gray-700'} border transition-all ${exportingLayout ? 'opacity-50 cursor-not-allowed' : ''}`}
               >
-                <Download className="h-4 w-4" />
-                {activeView === 'catorcena' ? 'Exportar Layout' : 'Exportar CSV'}
+                {exportingLayout ? <Loader2 className="h-4 w-4 animate-spin" /> : <Download className="h-4 w-4" />}
+                {exportingLayout ? 'Generando...' : activeView === 'catorcena' ? 'Exportar Layout' : 'Exportar CSV'}
               </button>
 
               {/* Órdenes de Montaje */}

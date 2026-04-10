@@ -1055,7 +1055,7 @@ const rolePermissions: Partial<Record<UserRole, Partial<RolePermissions>>> = {
 
     // Campañas - pueden editar detalle (plaza/formato)
     canEditCampanas: true,
-    allowedCampanaStatuses: ['Compartir'],
+    allowedCampanaStatuses: ['Compartir', 'Rechazada'],
     canEditDetalleCampana: true, // Puede editar plaza y formato en detalle
     canEditCaraFiltersOnEdit: true,
     canDeleteDetalleCampana: false, // No pueden quitar APs
@@ -1121,7 +1121,7 @@ const rolePermissions: Partial<Record<UserRole, Partial<RolePermissions>>> = {
 
     // Campañas - pueden editar detalle (plaza/formato)
     canEditCampanas: true,
-    allowedCampanaStatuses: ['Compartir'],
+    allowedCampanaStatuses: ['Compartir', 'Rechazada'],
     canEditDetalleCampana: true, // Puede editar plaza y formato en detalle
     canEditCaraFiltersOnEdit: true,
     canDeleteDetalleCampana: false, // No pueden quitar APs
@@ -1190,7 +1190,7 @@ const rolePermissions: Partial<Record<UserRole, Partial<RolePermissions>>> = {
 
     // Campañas - pueden editar detalle (plaza/formato)
     canEditCampanas: true,
-    allowedCampanaStatuses: ['Compartir'],
+    allowedCampanaStatuses: ['Compartir', 'Rechazada'],
     canEditDetalleCampana: true, // Puede editar plaza y formato en detalle
     canEditCaraFiltersOnEdit: true,
     canDeleteDetalleCampana: false, // No pueden quitar APs
@@ -1259,7 +1259,7 @@ const rolePermissions: Partial<Record<UserRole, Partial<RolePermissions>>> = {
 
     // Campañas - pueden editar detalle (plaza/formato)
     canEditCampanas: true,
-    allowedCampanaStatuses: ['Compartir'],
+    allowedCampanaStatuses: ['Compartir', 'Rechazada'],
     canEditDetalleCampana: true, // Puede editar plaza y formato en detalle
     canEditCaraFiltersOnEdit: true,
     canDeleteDetalleCampana: false, // No pueden quitar APs
