@@ -1048,8 +1048,10 @@ export function PropuestasPage() {
   useSocketEquipos();
   // Socket para actualizar propuestas cuando cambian autorizaciones
   useSocketPropuestas();
-  const [search, setSearch] = useState('');
-  const [debouncedSearch, setDebouncedSearch] = useState('');
+  const [searchTags, setSearchTags] = useState<string[]>([]);
+  const [searchInput, setSearchInput] = useState('');
+  const [debouncedSearchTags, setDebouncedSearchTags] = useState<string[]>([]);
+  const [debouncedSearchInput, setDebouncedSearchInput] = useState('');
   const [status, setStatus] = useState('');
   const [tipoPeriodo, setTipoPeriodo] = useState('');
   const [yearInicio, setYearInicio] = useState<number | undefined>(undefined);
@@ -1089,30 +1091,60 @@ export function PropuestasPage() {
       }
       setSearchParams({}, { replace: true });
     } else if (searchParam) {
-      setSearch(searchParam);
+      setSearchTags([searchParam]);
       setSearchParams({}, { replace: true });
     }
   }, [searchParams, setSearchParams]);
 
-  // Debounce search
+  // Add search tag on Enter/Tab
+  const addSearchTag = (value: string) => {
+    const trimmed = value.trim();
+    if (trimmed && !searchTags.includes(trimmed)) {
+      setSearchTags(prev => [...prev, trimmed]);
+    }
+    setSearchInput('');
+  };
+
+  const removeSearchTag = (tag: string) => {
+    setSearchTags(prev => prev.filter(t => t !== tag));
+  };
+
+  // Debounce search tags and input
   useEffect(() => {
     const timer = setTimeout(() => {
-      setDebouncedSearch(search);
+      setDebouncedSearchTags(searchTags);
       setPage(1);
     }, 300);
     return () => clearTimeout(timer);
-  }, [search]);
+  }, [searchTags]);
+
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setDebouncedSearchInput(searchInput);
+      setPage(1);
+    }, 300);
+    return () => clearTimeout(timer);
+  }, [searchInput]);
 
   const { data: catorcenasData } = useQuery({
     queryKey: ['catorcenas'],
     queryFn: () => solicitudesService.getCatorcenas(),
   });
 
+  // Combine debounced tags + debounced input into all active search terms
+  const allSearchTerms = useMemo(() => {
+    const terms = [...debouncedSearchTags];
+    if (debouncedSearchInput.trim()) terms.push(debouncedSearchInput.trim());
+    return terms;
+  }, [debouncedSearchTags, debouncedSearchInput]);
+
+  const backendSearch = allSearchTerms.length === 1 ? allSearchTerms[0] : undefined;
+
   const { data: stats } = useQuery({
-    queryKey: ['propuestas-stats', status, debouncedSearch, yearInicio, yearFin, catorcenaInicio, catorcenaFin, tipoPeriodo],
+    queryKey: ['propuestas-stats', status, allSearchTerms, yearInicio, yearFin, catorcenaInicio, catorcenaFin, tipoPeriodo],
     queryFn: () => propuestasService.getStats({
       status: status || undefined,
-      search: debouncedSearch || undefined,
+      search: backendSearch,
       yearInicio,
       yearFin,
       catorcenaInicio,
@@ -1121,18 +1153,18 @@ export function PropuestasPage() {
     }),
   });
 
-  // When grouping or advanced filters are active, fetch ALL data
-  const needsAllData = !!groupBy || advancedFilters.length > 0 || !!debouncedSearch;
+  // When grouping, advanced filters, or multi-search terms are active, fetch ALL data
+  const needsAllData = !!groupBy || advancedFilters.length > 0 || allSearchTerms.length > 0;
   const effectiveLimit = needsAllData ? 9999 : limit;
 
   const { data, isLoading } = useQuery({
-    queryKey: ['propuestas', page, status, debouncedSearch, yearInicio, yearFin, catorcenaInicio, catorcenaFin, sortBy, sortOrder, groupBy, tipoPeriodo, needsAllData],
+    queryKey: ['propuestas', page, status, allSearchTerms, yearInicio, yearFin, catorcenaInicio, catorcenaFin, sortBy, sortOrder, groupBy, tipoPeriodo, needsAllData],
     queryFn: () =>
       propuestasService.getAll({
         page: needsAllData ? 1 : page,
         limit: effectiveLimit,
         status: status || undefined,
-        search: debouncedSearch || undefined,
+        search: backendSearch,
         yearInicio,
         yearFin,
         catorcenaInicio,
@@ -1145,7 +1177,7 @@ export function PropuestasPage() {
   const allStatuses = STATUS_OPTIONS;
 
   const hasPeriodFilter = yearInicio !== undefined && yearFin !== undefined;
-  const hasActiveFilters = !!(status || tipoPeriodo || hasPeriodFilter || groupBy || sortBy !== 'fecha' || advancedFilters.length > 0);
+  const hasActiveFilters = !!(status || tipoPeriodo || hasPeriodFilter || groupBy || sortBy !== 'fecha' || advancedFilters.length > 0 || searchTags.length > 0);
 
   // Get unique values for each field (for advanced filter dropdowns)
   const getUniqueFieldValues = useMemo(() => {
@@ -1165,27 +1197,31 @@ export function PropuestasPage() {
     return valuesMap;
   }, [data?.data]);
 
-  // Apply advanced filters and local search to data
+  // Apply advanced filters and multi-tag search to data
   const filteredData = useMemo(() => {
     if (!data?.data) return [];
     let items = applyAdvancedFilters(data.data, advancedFilters);
 
-    // Client-side search filter (like CampanasPage)
-    if (debouncedSearch && items.length > 0) {
-      const searchLower = debouncedSearch.toLowerCase();
+    // Client-side OR search filter for all search terms
+    if (allSearchTerms.length > 0 && items.length > 0) {
       items = items.filter(p =>
-        String(p.id).includes(searchLower) ||
-        p.articulo?.toLowerCase().includes(searchLower) ||
-        p.descripcion?.toLowerCase().includes(searchLower) ||
-        p.asignado?.toLowerCase().includes(searchLower) ||
-        p.cliente_nombre?.toLowerCase().includes(searchLower) ||
-        p.nombre_comercial?.toLowerCase().includes(searchLower) ||
-        p.marca_nombre?.toLowerCase().includes(searchLower)
+        allSearchTerms.some(term => {
+          const lowerTerm = term.toLowerCase();
+          return (
+            String(p.id).includes(lowerTerm) ||
+            p.articulo?.toLowerCase().includes(lowerTerm) ||
+            p.descripcion?.toLowerCase().includes(lowerTerm) ||
+            p.asignado?.toLowerCase().includes(lowerTerm) ||
+            p.cliente_nombre?.toLowerCase().includes(lowerTerm) ||
+            p.nombre_comercial?.toLowerCase().includes(lowerTerm) ||
+            p.marca_nombre?.toLowerCase().includes(lowerTerm)
+          );
+        })
       );
     }
 
     return items;
-  }, [data?.data, advancedFilters, debouncedSearch]);
+  }, [data?.data, advancedFilters, allSearchTerms]);
 
   // Advanced filter functions
   const addAdvancedFilter = () => {
@@ -1225,6 +1261,8 @@ export function PropuestasPage() {
     setGroupBy('');
     setExpandedGroups(new Set());
     setAdvancedFilters([]);
+    setSearchTags([]);
+    setSearchInput('');
     setPage(1);
   };
 
@@ -1480,7 +1518,7 @@ export function PropuestasPage() {
   };
 
   // Calcular paginación basada en si hay filtros locales activos
-  const hasLocalFilters = !!(debouncedSearch || advancedFilters.length > 0);
+  const hasLocalFilters = !!(allSearchTerms.length > 0 || advancedFilters.length > 0);
   const totalPages = hasLocalFilters ? 1 : (data?.pagination?.totalPages || 1);
   const total = hasLocalFilters ? filteredData.length : (data?.pagination?.total ?? 0);
 
@@ -1584,16 +1622,48 @@ export function PropuestasPage() {
           <div className="flex flex-col gap-4">
             {/* Top Row: Search + Filter Toggle + Export */}
             <div className="flex flex-col lg:flex-row items-start lg:items-center gap-4">
-              {/* Search */}
-              <div className="relative flex-1 w-full lg:max-w-xl">
-                <Search className={`absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 ${isDark ? 'text-purple-400' : 'text-purple-500'}`} />
+              {/* Search with Tags */}
+              <div className={`relative flex-1 w-full lg:max-w-xl flex items-center flex-wrap gap-1.5 min-h-[44px] px-3 py-1.5 rounded-xl border ${isDark ? 'border-purple-500/20 bg-zinc-900/80 hover:border-purple-500/40' : 'border-gray-200 bg-gray-50 hover:border-gray-300'} focus-within:ring-2 focus-within:ring-purple-500/30 focus-within:border-purple-500/40 transition-all`}>
+                <Search className={`h-4 w-4 shrink-0 ${isDark ? 'text-purple-400' : 'text-purple-500'}`} />
+                {searchTags.map((tag) => (
+                  <span
+                    key={tag}
+                    className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-xs font-medium ${isDark ? 'bg-purple-500/20 text-purple-300 border border-purple-500/30' : 'bg-purple-100 text-purple-700 border border-purple-200'}`}
+                  >
+                    {tag}
+                    <button
+                      onClick={() => removeSearchTag(tag)}
+                      className={`rounded-full p-0.5 transition-colors ${isDark ? 'hover:bg-purple-500/30' : 'hover:bg-purple-200'}`}
+                    >
+                      <X className="h-3 w-3" />
+                    </button>
+                  </span>
+                ))}
                 <input
-                  type="search"
-                  placeholder="Buscar artículo, descripción, asignado..."
-                  className={`w-full pl-11 pr-4 py-3 rounded-xl border ${isDark ? 'border-purple-500/20 bg-zinc-900/80 text-white placeholder:text-zinc-500' : 'border-gray-200 bg-gray-50 text-gray-900 placeholder:text-gray-400'} text-sm focus:outline-none focus:ring-2 focus:ring-purple-500/30 focus:border-purple-500/40 transition-all hover:border-purple-500/40`}
-                  value={search}
-                  onChange={(e) => setSearch(e.target.value)}
+                  type="text"
+                  placeholder={searchTags.length === 0 ? 'Buscar artículo, descripción, asignado... (Enter para agregar)' : 'Agregar filtro...'}
+                  className={`flex-1 min-w-[120px] bg-transparent border-none outline-none text-sm ${isDark ? 'text-white placeholder:text-zinc-500' : 'text-gray-900 placeholder:text-gray-400'}`}
+                  value={searchInput}
+                  onChange={(e) => setSearchInput(e.target.value)}
+                  onKeyDown={(e) => {
+                    if ((e.key === 'Enter' || e.key === 'Tab') && searchInput.trim()) {
+                      e.preventDefault();
+                      addSearchTag(searchInput);
+                    }
+                    if (e.key === 'Backspace' && !searchInput && searchTags.length > 0) {
+                      removeSearchTag(searchTags[searchTags.length - 1]);
+                    }
+                  }}
                 />
+                {searchTags.length > 0 && (
+                  <button
+                    onClick={() => { setSearchTags([]); setSearchInput(''); }}
+                    className={`shrink-0 p-1 rounded-full transition-colors ${isDark ? 'text-zinc-400 hover:text-white hover:bg-zinc-700' : 'text-gray-400 hover:text-gray-600 hover:bg-gray-200'}`}
+                    title="Limpiar búsqueda"
+                  >
+                    <X className="h-3.5 w-3.5" />
+                  </button>
+                )}
               </div>
 
               {/* Filter Toggle */}

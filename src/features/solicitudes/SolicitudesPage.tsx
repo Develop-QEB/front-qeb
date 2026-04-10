@@ -503,8 +503,10 @@ export function SolicitudesPage() {
   // WebSocket para actualizaciones en tiempo real
   useSocketSolicitudes();
 
-  const [search, setSearch] = useState('');
-  const [debouncedSearch, setDebouncedSearch] = useState('');
+  const [searchTags, setSearchTags] = useState<string[]>([]);
+  const [searchInput, setSearchInput] = useState('');
+  const [debouncedSearchTags, setDebouncedSearchTags] = useState<string[]>([]);
+  const [debouncedSearchInput, setDebouncedSearchInput] = useState('');
   const [status, setStatus] = useState('');
   const [yearInicio, setYearInicio] = useState<number | undefined>(undefined);
   const [yearFin, setYearFin] = useState<number | undefined>(undefined);
@@ -559,21 +561,42 @@ export function SolicitudesPage() {
       }
       setSearchParams({}, { replace: true });
     } else if (searchParam) {
-      setSearch(searchParam);
+      setSearchTags([searchParam]);
       setSearchParams({}, { replace: true });
     }
   }, [searchParams, setSearchParams]);
   const [atenderSolicitud, setAtenderSolicitud] = useState<Solicitud | null>(null);
   const limit = 20;
 
-  // Debounce search
+  // Add search tag on Enter/Tab
+  const addSearchTag = (value: string) => {
+    const trimmed = value.trim();
+    if (trimmed && !searchTags.includes(trimmed)) {
+      setSearchTags(prev => [...prev, trimmed]);
+    }
+    setSearchInput('');
+  };
+
+  const removeSearchTag = (tag: string) => {
+    setSearchTags(prev => prev.filter(t => t !== tag));
+  };
+
+  // Debounce search tags and input
   useEffect(() => {
     const timer = setTimeout(() => {
-      setDebouncedSearch(search);
+      setDebouncedSearchTags(searchTags);
       setPage(1);
     }, 300);
     return () => clearTimeout(timer);
-  }, [search]);
+  }, [searchTags]);
+
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setDebouncedSearchInput(searchInput);
+      setPage(1);
+    }, 300);
+    return () => clearTimeout(timer);
+  }, [searchInput]);
 
   // Fetch catorcenas for filter (get all years)
   const { data: catorcenasData } = useQuery({
@@ -581,32 +604,42 @@ export function SolicitudesPage() {
     queryFn: () => solicitudesService.getCatorcenas(),
   });
 
+  // Combine debounced tags + debounced input into all active search terms
+  const allSearchTerms = useMemo(() => {
+    const terms = [...debouncedSearchTags];
+    if (debouncedSearchInput.trim()) terms.push(debouncedSearchInput.trim());
+    return terms;
+  }, [debouncedSearchTags, debouncedSearchInput]);
+
+  // Backend search: only when there's exactly 1 term (simple search), otherwise client-side
+  const backendSearch = allSearchTerms.length === 1 ? allSearchTerms[0] : undefined;
+
   // Fetch stats with all active filters
   const { data: stats } = useQuery({
-    queryKey: ['solicitudes-stats', yearInicio, yearFin, catorcenaInicio, catorcenaFin, status, debouncedSearch],
+    queryKey: ['solicitudes-stats', yearInicio, yearFin, catorcenaInicio, catorcenaFin, status, allSearchTerms],
     queryFn: () => solicitudesService.getStats({
       yearInicio,
       yearFin,
       catorcenaInicio,
       catorcenaFin,
       status: status || undefined,
-      search: debouncedSearch || undefined,
+      search: backendSearch,
     }),
   });
 
-  // When grouping or advanced filters are active, fetch ALL data
-  const needsAllData = !!groupBy || advancedFilters.length > 0;
+  // When grouping, advanced filters, or any search terms are active, fetch ALL data
+  const needsAllData = !!groupBy || advancedFilters.length > 0 || allSearchTerms.length > 0;
   const effectiveLimit = needsAllData ? 9999 : limit;
 
   // Fetch solicitudes
   const { data, isLoading } = useQuery({
-    queryKey: ['solicitudes', page, status, debouncedSearch, yearInicio, yearFin, catorcenaInicio, catorcenaFin, sortBy, sortOrder, groupBy, tipoPeriodo, needsAllData],
+    queryKey: ['solicitudes', page, status, allSearchTerms, yearInicio, yearFin, catorcenaInicio, catorcenaFin, sortBy, sortOrder, groupBy, tipoPeriodo, needsAllData],
     queryFn: () =>
       solicitudesService.getAll({
         page: needsAllData ? 1 : page,
         limit: effectiveLimit,
         status: status || undefined,
-        search: debouncedSearch || undefined,
+        search: backendSearch,
         yearInicio,
         yearFin,
         catorcenaInicio,
@@ -656,7 +689,7 @@ export function SolicitudesPage() {
   // Handle export CSV - exports only visible/filtered data
   const handleExportCSV = () => {
     // Use filtered data if advanced filters are applied, otherwise use current page data
-    const dataToExport = advancedFilters.length > 0 ? filteredData : (data?.data || []);
+    const dataToExport = needsClientFilter ? filteredData : (data?.data || []);
 
     if (dataToExport.length === 0) {
       return;
@@ -734,7 +767,7 @@ export function SolicitudesPage() {
   };
 
   const hasPeriodFilter = yearInicio !== undefined && yearFin !== undefined;
-  const hasActiveFilters = !!(status || hasPeriodFilter || groupBy || sortBy !== 'fecha' || advancedFilters.length > 0);
+  const hasActiveFilters = !!(status || hasPeriodFilter || groupBy || sortBy !== 'fecha' || advancedFilters.length > 0 || searchTags.length > 0);
 
   // Get unique values for each field (for advanced filter dropdowns)
   const getUniqueFieldValues = useMemo(() => {
@@ -754,15 +787,30 @@ export function SolicitudesPage() {
     return valuesMap;
   }, [data?.data]);
 
-  // Apply advanced filters to data
+  // Apply advanced filters and multi-tag search to data
   const filteredData = useMemo(() => {
     if (!data?.data) return [];
-    return applyAdvancedFilters(data.data, advancedFilters);
-  }, [data?.data, advancedFilters]);
+    let result = applyAdvancedFilters(data.data, advancedFilters);
+    // Apply multi-term OR search client-side when there are multiple search terms
+    if (allSearchTerms.length > 0) {
+      const searchFields: (keyof Solicitud)[] = ['descripcion', 'razon_social', 'marca_nombre', 'asesor', 'producto_nombre', 'agencia', 'categoria_nombre', 'nombre_campania', 'cuic', 'status', 'asignado', 'nombre_usuario', 'unidad_negocio', 'card_code'];
+      result = result.filter(item =>
+        allSearchTerms.some(term => {
+          const lowerTerm = term.toLowerCase();
+          return searchFields.some(field => {
+            const val = item[field];
+            return val != null && String(val).toLowerCase().includes(lowerTerm);
+          });
+        })
+      );
+    }
+    return result;
+  }, [data?.data, advancedFilters, allSearchTerms]);
 
-  // Compute effective stats: when advanced filters are active, recalculate from filteredData
+  // Compute effective stats: when advanced filters or multi-tag search are active, recalculate from filteredData
+  const needsClientFilter = advancedFilters.length > 0 || allSearchTerms.length > 0;
   const effectiveStats = useMemo(() => {
-    if (advancedFilters.length > 0 && data?.data) {
+    if (needsClientFilter && data?.data) {
       const byStatus: Record<string, number> = {};
       filteredData.forEach(s => {
         byStatus[s.status] = (byStatus[s.status] || 0) + 1;
@@ -770,7 +818,7 @@ export function SolicitudesPage() {
       return { total: filteredData.length, byStatus };
     }
     return stats || null;
-  }, [advancedFilters, filteredData, data?.data, stats]);
+  }, [needsClientFilter, filteredData, data?.data, stats]);
 
   // Chart data from effective stats (after all filters)
   const chartData = useMemo(() => {
@@ -824,6 +872,8 @@ export function SolicitudesPage() {
     setGroupBy('');
     setExpandedGroups(new Set());
     setAdvancedFilters([]);
+    setSearchTags([]);
+    setSearchInput('');
     setPage(1);
   };
 
@@ -1039,7 +1089,7 @@ export function SolicitudesPage() {
             </div>
             <div className="mt-4 flex items-center gap-2">
               <span className={`text-xs px-2 py-1 rounded-full ${isDark ? 'bg-zinc-800/80 text-zinc-300 border-zinc-700/50' : 'bg-gray-100 text-gray-700 border-gray-200'} border`}>
-                {(status || debouncedSearch || advancedFilters.length > 0) ? 'Filtrado' : 'Todas las catorcenas'}
+                {(status || allSearchTerms.length > 0 || advancedFilters.length > 0) ? 'Filtrado' : 'Todas las catorcenas'}
               </span>
             </div>
           </div>
@@ -1120,16 +1170,48 @@ export function SolicitudesPage() {
           <div className="flex flex-col gap-4">
             {/* Top Row: Search + Filter Toggle + Export */}
             <div className="flex flex-col lg:flex-row items-start lg:items-center gap-4">
-              {/* Search */}
-              <div className="relative flex-1 w-full lg:max-w-xl">
-                <Search className={`absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 ${isDark ? 'text-purple-400' : 'text-purple-500'}`} />
+              {/* Search with Tags */}
+              <div className={`relative flex-1 w-full lg:max-w-xl flex items-center flex-wrap gap-1.5 min-h-[44px] px-3 py-1.5 rounded-xl border ${isDark ? 'border-purple-500/20 bg-zinc-900/80 hover:border-purple-500/40' : 'border-purple-200 bg-gray-50 hover:border-purple-300'} focus-within:ring-2 focus-within:ring-purple-500/30 focus-within:border-purple-500/40 transition-all`}>
+                <Search className={`h-4 w-4 shrink-0 ${isDark ? 'text-purple-400' : 'text-purple-500'}`} />
+                {searchTags.map((tag) => (
+                  <span
+                    key={tag}
+                    className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-xs font-medium ${isDark ? 'bg-purple-500/20 text-purple-300 border border-purple-500/30' : 'bg-purple-100 text-purple-700 border border-purple-200'}`}
+                  >
+                    {tag}
+                    <button
+                      onClick={() => removeSearchTag(tag)}
+                      className={`rounded-full p-0.5 transition-colors ${isDark ? 'hover:bg-purple-500/30' : 'hover:bg-purple-200'}`}
+                    >
+                      <X className="h-3 w-3" />
+                    </button>
+                  </span>
+                ))}
                 <input
-                  type="search"
-                  placeholder="Buscar cliente, descripcion, marca..."
-                  className={`w-full pl-11 pr-4 py-3 rounded-xl border ${isDark ? 'border-purple-500/20 bg-zinc-900/80 text-white placeholder:text-zinc-500 hover:border-purple-500/40' : 'border-purple-200 bg-gray-50 text-gray-900 placeholder:text-gray-400 hover:border-purple-300'} text-sm focus:outline-none focus:ring-2 focus:ring-purple-500/30 focus:border-purple-500/40 transition-all`}
-                  value={search}
-                  onChange={(e) => setSearch(e.target.value)}
+                  type="text"
+                  placeholder={searchTags.length === 0 ? 'Buscar cliente, descripcion, marca...' : 'Agregar filtro...'}
+                  className={`flex-1 min-w-[120px] bg-transparent border-none outline-none text-sm ${isDark ? 'text-white placeholder:text-zinc-500' : 'text-gray-900 placeholder:text-gray-400'}`}
+                  value={searchInput}
+                  onChange={(e) => setSearchInput(e.target.value)}
+                  onKeyDown={(e) => {
+                    if ((e.key === 'Enter' || e.key === 'Tab') && searchInput.trim()) {
+                      e.preventDefault();
+                      addSearchTag(searchInput);
+                    }
+                    if (e.key === 'Backspace' && !searchInput && searchTags.length > 0) {
+                      removeSearchTag(searchTags[searchTags.length - 1]);
+                    }
+                  }}
                 />
+                {searchTags.length > 0 && (
+                  <button
+                    onClick={() => { setSearchTags([]); setSearchInput(''); }}
+                    className={`shrink-0 p-1 rounded-full transition-colors ${isDark ? 'text-zinc-400 hover:text-white hover:bg-zinc-700' : 'text-gray-400 hover:text-gray-600 hover:bg-gray-200'}`}
+                    title="Limpiar búsqueda"
+                  >
+                    <X className="h-3.5 w-3.5" />
+                  </button>
+                )}
               </div>
 
               {/* Filter Toggle */}
@@ -1488,9 +1570,9 @@ export function SolicitudesPage() {
                         </React.Fragment>
                       ))
                     ) : (
-                      (advancedFilters.length > 0 ? filteredData : data?.data)?.map((item, idx) => renderSolicitudRow(item, idx))
+                      (needsClientFilter ? filteredData : data?.data)?.map((item, idx) => renderSolicitudRow(item, idx))
                     )}
-                    {(advancedFilters.length > 0 ? filteredData.length === 0 : (!data?.data || data.data.length === 0)) && !groupedData && (
+                    {(needsClientFilter ? filteredData.length === 0 : (!data?.data || data.data.length === 0)) && !groupedData && (
                       <tr>
                         <td colSpan={9} className="px-4 py-12 text-center">
                           <div className="flex flex-col items-center gap-3">
