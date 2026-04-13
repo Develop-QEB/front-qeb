@@ -183,18 +183,18 @@ export function CompartirPropuestaPage() {
 
   // Computed data
   const kpis = useMemo(() => {
-    if (!details?.caras) return { total: 0, renta: 0, bonificadas: 0, inversion: 0 };
+    if (!inventario || inventario.length === 0) return { total: 0, renta: 0, bonificadas: 0, inversion: 0 };
 
-    // Calculate from propuesta caras (the source of truth)
-    const renta = details.caras.reduce((sum, c) => sum + Number(c.caras || 0), 0);
-    const bonificadas = details.caras.reduce((sum, c) => sum + Number(c.bonificacion || 0), 0);
+    // Calculate from actual reserved/sold inventory (real data)
+    const renta = inventario.reduce((sum, i) => sum + Number(i.caras_renta || 0), 0);
+    const bonificadas = inventario.reduce((sum, i) => sum + Number(i.caras_bonificadas || 0), 0);
     const total = renta + bonificadas;
 
-    // Inversion from inventario tarifa_publica
-    const inversion = inventario?.reduce((sum, i) => sum + (Number(i.tarifa_publica || 0) * Number(i.caras_totales || 1)), 0) || 0;
+    // Inversion only from renta caras (bonificadas are free)
+    const inversion = inventario.reduce((sum, i) => sum + (Number(i.tarifa_publica || 0) * Number(i.caras_renta || 0)), 0);
 
     return { total, renta, bonificadas, inversion };
-  }, [inventario, details]);
+  }, [inventario]);
 
   // Charts data
   const chartCiudades = useMemo(() => {

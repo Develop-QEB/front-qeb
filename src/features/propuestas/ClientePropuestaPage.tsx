@@ -51,6 +51,8 @@ interface InventarioReservado {
   ubicacion: string | null;
   tipo_de_cara: string | null;
   caras_totales: number;
+  caras_bonificadas: number;
+  caras_renta: number;
   latitud: number;
   longitud: number;
   plaza: string | null;
@@ -234,13 +236,15 @@ export function ClientePropuestaPage() {
 
   // Computed data
   const kpis = useMemo(() => {
-    if (!data) return { total: 0, renta: 0, bonificadas: 0, inversion: 0 };
+    if (!data || inventario.length === 0) return { total: 0, renta: 0, bonificadas: 0, inversion: 0 };
 
-    const total = inventario.reduce((sum, i) => sum + Number(i.caras_totales || 0), 0);
-    const inversion = inventario.reduce((sum, i) => sum + (Number(i.tarifa_publica || 0) * Number(i.caras_totales || 1)), 0);
-    const bonificadas = data.caras?.reduce((sum, c) => sum + Number(c.bonificacion || 0), 0) || 0;
+    // Calculate from actual reserved/sold inventory (real data)
+    const renta = inventario.reduce((sum, i) => sum + Number(i.caras_renta || 0), 0);
+    const bonificadas = inventario.reduce((sum, i) => sum + Number(i.caras_bonificadas || 0), 0);
+    const total = renta + bonificadas;
+    const inversion = inventario.reduce((sum, i) => sum + (Number(i.tarifa_publica || 0) * Number(i.caras_renta || 0)), 0);
 
-    return { total: total + bonificadas, renta: total, bonificadas, inversion };
+    return { total, renta, bonificadas, inversion };
   }, [data, inventario]);
 
   // Available periods for dropdown
