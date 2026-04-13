@@ -401,7 +401,7 @@ export function buildDeliveryNote(
   const documentLines: SAPDocumentLine[] = uniqueKeys.map((key, index) => {
     const [apsValue, articuloValue] = key.split('||');
     // Encontrar todos los items con este APS y artículo
-    const itemsWithThisAPS = inventarioAPS.filter(item => item.aps === apsValue && item.articulo === articuloValue);
+    const itemsWithThisAPS = inventarioAPS.filter(item => String(item.aps) === apsValue && item.articulo === articuloValue);
     const firstItem = itemsWithThisAPS[0];
 
     // UnitPrice = tarifa unitaria (no suma)
@@ -452,7 +452,7 @@ export function buildDeliveryNote(
     U_CRM_Camp: campana.nombre || campana.nombre_campania || '',
     U_TIPO_VENTA: 'Comercial',
     U_IMU_ART_APS: (campana.propuesta_id || campana.id)?.toString() || '',
-    U_IMU_CotNum: uniqueAPS.length > 0 ? String(uniqueAPS[0]) : '',
+    U_IMU_CotNum: uniqueKeys.length > 0 ? String(inventarioAPS[0]?.aps || '') : '',
     DocumentLines: documentLines,
   };
 
