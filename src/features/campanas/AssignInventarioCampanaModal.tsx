@@ -5869,7 +5869,8 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
                                   <div className="flex items-center gap-2">
                                     {/* Botón Buscar Inventario - oculto para impresión, deshabilitado si hay autorizaciones pendientes */}
                                     {effectiveCanEdit && permissions.canBuscarInventarioEnModal && !esImpresion && (() => {
-                                      const tienePendientes = cara.autorizacion_dg === 'pendiente' || cara.autorizacion_dcm === 'pendiente';
+                                      const isLocallyModified = cara.id ? modifiedCaras.has(cara.id) : false;
+                                      const tienePendientes = !isLocallyModified && (cara.autorizacion_dg === 'pendiente' || cara.autorizacion_dcm === 'pendiente');
                                       const tieneRechazado = cara.autorizacion_dg === 'rechazado' || cara.autorizacion_dcm === 'rechazado';
                                       const bloqueado = tienePendientes || tieneRechazado || caraAPSBlocked;
 
@@ -5896,9 +5897,9 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
                                       );
                                     })()}
                                     {effectiveCanEdit && (() => {
-                                      const caraAuthPendiente = caras.some(c => c.autorizacion_dg === 'pendiente' || c.autorizacion_dcm === 'pendiente');
-                                      const editBlocked = caraAuthPendiente || caraAPSBlocked;
-                                      const blockReason = caraAPSBlocked ? 'Grupo con APS asignado - no se puede editar' : caraAuthPendiente ? 'Autorización pendiente - no se puede editar' : 'Editar';
+                                      const caraAuthPendienteSaved = caras.some(c => !modifiedCaras.has(c.id!) && (c.autorizacion_dg === 'pendiente' || c.autorizacion_dcm === 'pendiente'));
+                                      const editBlocked = caraAuthPendienteSaved || caraAPSBlocked;
+                                      const blockReason = caraAPSBlocked ? 'Grupo con APS asignado - no se puede editar' : caraAuthPendienteSaved ? 'Autorización pendiente - no se puede editar' : 'Editar';
                                       return (
                                       <>
                                         <button
@@ -5915,12 +5916,12 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
                                         {canEditResumen && (
                                           <button
                                             onClick={(e) => { e.stopPropagation(); handleDeleteCara(cara.localId); }}
-                                            disabled={hasReservas || caraAuthPendiente}
-                                            className={`p-2 rounded-lg border transition-colors ${hasReservas || caraAuthPendiente
+                                            disabled={hasReservas || caraAuthPendienteSaved}
+                                            className={`p-2 rounded-lg border transition-colors ${hasReservas || caraAuthPendienteSaved
                                               ? 'bg-zinc-500/10 text-zinc-500 border-zinc-500/20 cursor-not-allowed'
                                               : 'bg-red-500/10 text-red-400 border-red-500/20 hover:bg-red-500/20'
                                               }`}
-                                            title={caraAuthPendiente ? 'Autorización pendiente' : hasReservas ? 'No se puede eliminar (tiene reservas)' : 'Eliminar'}
+                                            title={caraAuthPendienteSaved ? 'Autorización pendiente' : hasReservas ? 'No se puede eliminar (tiene reservas)' : 'Eliminar'}
                                           >
                                             <Trash2 className="h-4 w-4" />
                                           </button>
