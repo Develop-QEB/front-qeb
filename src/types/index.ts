@@ -329,6 +329,7 @@ export interface Campana {
   sap_database?: string | null;
   posted_to_sap?: boolean;
   posted_aps?: number[];
+  codigos_inventario?: string | null;
 }
 
 export interface CampanaStats {

@@ -846,8 +846,10 @@ export function AdvancedMapComponent({
 
           {/* Inventory Markers */}
           {mapZoom < MIN_ZOOM_FOR_PINS ? (
-            <div /> 
-          ) : visibleInventarios.map(inv => (
+            <div />
+          ) : visibleInventarios
+            .filter(inv => selectedInventory.size === 0 || selectedInventory.has(inv.id))
+            .map(inv => (
             inv.latitud && inv.longitud && (
               <Marker
                 key={inv.espacio_id ? `${inv.id}_${inv.espacio_id}` : inv.id}

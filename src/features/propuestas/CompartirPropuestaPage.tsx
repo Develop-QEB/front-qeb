@@ -1147,7 +1147,7 @@ export function CompartirPropuestaPage() {
             <div className="flex items-center justify-between mb-3">
               <h3 className={`text-sm font-semibold flex items-center gap-2 ${isDark ? 'text-purple-300' : 'text-purple-700'}`}>
                 <Layers className="h-4 w-4" />
-                Resumen de Caras
+                Resumen de Circuitos
                 <span className={`text-xs font-normal ${isDark ? 'text-zinc-500' : 'text-gray-400'}`}>({filteredInventario.length} inventarios)</span>
               </h3>
               <div className="flex items-center gap-2">
@@ -1384,7 +1384,7 @@ export function CompartirPropuestaPage() {
                                   </span>
                                 </div>
                                 <div className="flex items-center gap-3 text-xs">
-                                  <span className={isDark ? 'text-zinc-400' : 'text-gray-500'}>Caras: <span className={`font-medium ${isDark ? 'text-white' : 'text-gray-900'}`}>{artGroup.totalCaras}</span></span>
+                                  <span className={isDark ? 'text-zinc-400' : 'text-gray-500'}>Circuitos: <span className={`font-medium ${isDark ? 'text-white' : 'text-gray-900'}`}>{artGroup.totalCaras}</span></span>
                                   <span className={isDark ? 'text-amber-300' : 'text-amber-600'}>Tarifa: <span className="font-medium">{formatCurrency(artGroup.items[0]?.tarifa_publica || 0)}</span></span>
                                   <span className={isDark ? 'text-emerald-400' : 'text-emerald-600'}>{formatCurrency(artGroup.totalInversion)}</span>
                                 </div>
@@ -1526,7 +1526,9 @@ export function CompartirPropuestaPage() {
                   }
                 }}
               >
-                {catorcenaFilteredInventario.map((item) => (
+                {catorcenaFilteredInventario
+                  .filter((item) => selectedItems.size === 0 || selectedItems.has(item.id))
+                  .map((item) => (
                   item.latitud && item.longitud && (
                     <Marker
                       key={item.id}
