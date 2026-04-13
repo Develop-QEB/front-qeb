@@ -662,6 +662,17 @@ export const campanasService = {
     return response.data.data;
   },
 
+  async getBatchInventarios(ids: number[]): Promise<Record<number, InventarioConAPS[]>> {
+    const response = await api.get<ApiResponse<Record<number, InventarioConAPS[]>>>(`/campanas/batch-inventarios`, {
+      params: { ids: ids.join(',') },
+      timeout: 120000,
+    });
+    if (!response.data.success || !response.data.data) {
+      throw new Error(response.data.error || 'Error al obtener inventarios batch');
+    }
+    return response.data.data;
+  },
+
   async assignAPS(id: number, inventarioIds: number[], solicitudCarasIds?: number[], rsvIds?: number[]): Promise<{ aps: number; message: string }> {
     const response = await api.post<ApiResponse<{ aps: number; message: string }>>(`/campanas/${id}/assign-aps`, { inventarioIds, campanaId: id, solicitudCarasIds, rsvIds });
     if (!response.data.success || !response.data.data) {

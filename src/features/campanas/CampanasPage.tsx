@@ -1304,40 +1304,48 @@ export function CampanasPage() {
     });
   };
 
-  // Auto-cargar inventarios de campañas visibles en vista catorcena
+  // Auto-cargar inventarios de campañas visibles en vista catorcena (batch endpoint)
   const loadingRef = useRef(new Set<number>());
+  const isLoadingBatchRef = useRef(false);
   useEffect(() => {
     if (activeView !== 'catorcena' || !filteredData.length) return;
+    if (isLoadingBatchRef.current) return; // Prevent concurrent batches
     const idsToLoad = filteredData
       .filter(c => !campanaInventarios[c.id] && !loadingRef.current.has(c.id))
       .map(c => c.id);
     if (idsToLoad.length === 0) return;
 
-    const BATCH_SIZE = 10;
+    const BATCH_SIZE = 20;
     const batch = idsToLoad.slice(0, BATCH_SIZE);
     batch.forEach(id => loadingRef.current.add(id));
+    isLoadingBatchRef.current = true;
     setLoadingInventarios(new Set(loadingRef.current));
 
-    Promise.all(batch.map(async (id) => {
-      try {
-        const [conAPS, sinAPS] = await Promise.all([
-          campanasService.getInventarioConAPS(id),
-          campanasService.getInventarioReservado(id)
-        ]);
-        const sinAPSConFormato: InventarioConAPS[] = sinAPS.map(item => ({ ...item, aps: 0 }));
-        return { id, data: [...conAPS, ...sinAPSConFormato] };
-      } catch {
-        return { id, data: [] as InventarioConAPS[] };
-      }
-    })).then(results => {
-      setCampanaInventarios(prev => {
-        const next = { ...prev };
-        results.forEach(r => { next[r.id] = r.data; });
-        return next;
+    campanasService.getBatchInventarios(batch)
+      .then(batchData => {
+        setCampanaInventarios(prev => {
+          const next = { ...prev };
+          for (const id of batch) {
+            next[id] = batchData[id] || [];
+          }
+          return next;
+        });
+      })
+      .catch(() => {
+        // On failure, mark as empty so they can be retried on next render
+        setCampanaInventarios(prev => {
+          const next = { ...prev };
+          for (const id of batch) {
+            next[id] = [];
+          }
+          return next;
+        });
+      })
+      .finally(() => {
+        batch.forEach(id => loadingRef.current.delete(id));
+        isLoadingBatchRef.current = false;
+        setLoadingInventarios(new Set(loadingRef.current));
       });
-      batch.forEach(id => loadingRef.current.delete(id));
-      setLoadingInventarios(new Set(loadingRef.current));
-    });
   }, [activeView, filteredData, campanaInventarios]);
 
   // Agrupar campañas por catorcena para la vista alternativa (con soporte para subagrupaciones)
