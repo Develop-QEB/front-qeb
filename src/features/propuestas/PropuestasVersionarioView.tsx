@@ -239,8 +239,18 @@ export default function PropuestasVersionarioView({ isDark, filters }: Propuesta
     // Sort groups by year then catorcena number
     groups.sort((a, b) => a.anio !== b.anio ? a.anio - b.anio : a.num - b.num);
 
+    // Filtrar catorcenas fuera del rango seleccionado
+    if (filters.yearInicio && filters.yearFin && filters.catorcenaInicio && filters.catorcenaFin) {
+      const rangeStart = filters.yearInicio * 100 + filters.catorcenaInicio;
+      const rangeEnd = filters.yearFin * 100 + filters.catorcenaFin;
+      return groups.filter(g => {
+        const val = g.anio * 100 + g.num;
+        return val >= rangeStart && val <= rangeEnd;
+      });
+    }
+
     return groups;
-  }, [data]);
+  }, [data, filters.yearInicio, filters.yearFin, filters.catorcenaInicio, filters.catorcenaFin]);
 
   // Toggle helpers
   const toggleCatorcena = (key: string) => {
