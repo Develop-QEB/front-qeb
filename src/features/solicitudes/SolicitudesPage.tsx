@@ -611,19 +611,18 @@ export function SolicitudesPage() {
     return terms;
   }, [debouncedSearchTags, debouncedSearchInput]);
 
-  // Backend search: only when there's exactly 1 term (simple search), otherwise client-side
-  const backendSearch = allSearchTerms.length === 1 ? allSearchTerms[0] : undefined;
+  // Search is always handled client-side to cover all visible fields (nombre_campania, id, etc.)
+  // Stats recalculated from filteredData via effectiveStats when search is active
 
   // Fetch stats with all active filters
   const { data: stats } = useQuery({
-    queryKey: ['solicitudes-stats', yearInicio, yearFin, catorcenaInicio, catorcenaFin, status, allSearchTerms],
+    queryKey: ['solicitudes-stats', yearInicio, yearFin, catorcenaInicio, catorcenaFin, status],
     queryFn: () => solicitudesService.getStats({
       yearInicio,
       yearFin,
       catorcenaInicio,
       catorcenaFin,
       status: status || undefined,
-      search: backendSearch,
     }),
   });
 
@@ -639,7 +638,6 @@ export function SolicitudesPage() {
         page: needsAllData ? 1 : page,
         limit: effectiveLimit,
         status: status || undefined,
-        search: backendSearch,
         yearInicio,
         yearFin,
         catorcenaInicio,
@@ -797,10 +795,13 @@ export function SolicitudesPage() {
       result = result.filter(item =>
         allSearchTerms.some(term => {
           const lowerTerm = term.toLowerCase();
-          return searchFields.some(field => {
-            const val = item[field];
-            return val != null && String(val).toLowerCase().includes(lowerTerm);
-          });
+          return (
+            String(item.id).includes(lowerTerm) ||
+            searchFields.some(field => {
+              const val = item[field];
+              return val != null && String(val).toLowerCase().includes(lowerTerm);
+            })
+          );
         })
       );
     }

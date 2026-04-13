@@ -1141,13 +1141,12 @@ export function PropuestasPage() {
     return terms;
   }, [debouncedSearchTags, debouncedSearchInput]);
 
-  const backendSearch = allSearchTerms.length === 1 ? allSearchTerms[0] : undefined;
+  // Search is always handled client-side to cover all visible fields
 
   const { data: stats } = useQuery({
-    queryKey: ['propuestas-stats', status, allSearchTerms, yearInicio, yearFin, catorcenaInicio, catorcenaFin, tipoPeriodo],
+    queryKey: ['propuestas-stats', status, yearInicio, yearFin, catorcenaInicio, catorcenaFin, tipoPeriodo],
     queryFn: () => propuestasService.getStats({
       status: status || undefined,
-      search: backendSearch,
       yearInicio,
       yearFin,
       catorcenaInicio,
@@ -1156,7 +1155,7 @@ export function PropuestasPage() {
     }),
   });
 
-  // When grouping, advanced filters, or multi-search terms are active, fetch ALL data
+  // When grouping, advanced filters, or any search terms are active, fetch ALL data
   const needsAllData = !!groupBy || advancedFilters.length > 0 || allSearchTerms.length > 0;
   const effectiveLimit = needsAllData ? 9999 : limit;
 
@@ -1167,7 +1166,6 @@ export function PropuestasPage() {
         page: needsAllData ? 1 : page,
         limit: effectiveLimit,
         status: status || undefined,
-        search: backendSearch,
         yearInicio,
         yearFin,
         catorcenaInicio,
@@ -1217,7 +1215,12 @@ export function PropuestasPage() {
             p.asignado?.toLowerCase().includes(lowerTerm) ||
             p.cliente_nombre?.toLowerCase().includes(lowerTerm) ||
             p.nombre_comercial?.toLowerCase().includes(lowerTerm) ||
-            p.marca_nombre?.toLowerCase().includes(lowerTerm)
+            p.marca_nombre?.toLowerCase().includes(lowerTerm) ||
+            p.campana_nombre?.toLowerCase().includes(lowerTerm) ||
+            p.nombre_campania?.toLowerCase().includes(lowerTerm) ||
+            p.creador_nombre?.toLowerCase().includes(lowerTerm) ||
+            p.usuario_nombre?.toLowerCase().includes(lowerTerm) ||
+            p.status?.toLowerCase().includes(lowerTerm)
           );
         })
       );
@@ -1225,6 +1228,19 @@ export function PropuestasPage() {
 
     return items;
   }, [data?.data, advancedFilters, allSearchTerms]);
+
+  // Recalculate stats from filteredData when search is active
+  const needsClientFilter = allSearchTerms.length > 0 || advancedFilters.length > 0;
+  const effectiveStats = useMemo(() => {
+    if (needsClientFilter && data?.data) {
+      const byStatus: Record<string, number> = {};
+      filteredData.forEach(p => {
+        byStatus[p.status] = (byStatus[p.status] || 0) + 1;
+      });
+      return { total: filteredData.length, byStatus };
+    }
+    return stats || null;
+  }, [needsClientFilter, filteredData, data?.data, stats]);
 
   // Advanced filter functions
   const addAdvancedFilter = () => {
@@ -1271,17 +1287,17 @@ export function PropuestasPage() {
 
   // Chart data from dynamic stats
   const chartData = useMemo(() => {
-    if (!stats?.byStatus) return null;
-    const entries = Object.entries(stats.byStatus);
+    if (!effectiveStats?.byStatus) return null;
+    const entries = Object.entries(effectiveStats.byStatus);
     if (entries.length === 0) return null;
 
     return entries.map(([statusName, count], index) => ({
       label: statusName,
       value: count,
       color: CHART_COLORS[index % CHART_COLORS.length],
-      percent: stats.total > 0 ? ((count / stats.total) * 100).toFixed(1) : '0',
+      percent: effectiveStats.total > 0 ? ((count / effectiveStats.total) * 100).toFixed(1) : '0',
     }));
-  }, [stats]);
+  }, [effectiveStats]);
 
   // Get current catorcena
   const currentCatorcena = useMemo((): Catorcena | null => {
@@ -1629,7 +1645,7 @@ export function PropuestasPage() {
             <div>
               <p className={`${isDark ? 'text-zinc-400' : 'text-gray-500'} text-sm font-medium mb-1`}>Total Propuestas</p>
               <h3 className={`text-4xl font-bold ${isDark ? 'text-white' : 'text-gray-900'} tracking-tight`}>
-                {stats?.total.toLocaleString() ?? '0'}
+                {effectiveStats?.total.toLocaleString() ?? '0'}
               </h3>
             </div>
             <div className="mt-4 flex items-center gap-2">
@@ -1693,7 +1709,7 @@ export function PropuestasPage() {
               <p className={`${isDark ? 'text-zinc-400' : 'text-gray-500'} text-sm font-medium mb-1`}>Sin Aprobar</p>
               <div className="flex items-baseline gap-2">
                 <h3 className={`text-3xl font-bold ${isDark ? 'text-amber-400' : 'text-amber-600'}`}>
-                  {((stats?.total || 0) - (stats?.byStatus['Pase a ventas'] || 0)).toLocaleString()}
+                  {((effectiveStats?.total || 0) - (effectiveStats?.byStatus['Pase a ventas'] || 0)).toLocaleString()}
                 </h3>
                 <span className={`text-xs font-medium ${isDark ? 'text-amber-500/80' : 'text-amber-600'}`}>Atención requerida</span>
               </div>
@@ -1703,7 +1719,7 @@ export function PropuestasPage() {
             <div className={`mt-4 w-full h-1.5 ${isDark ? 'bg-zinc-800' : 'bg-gray-100'} rounded-full overflow-hidden`}>
               <div
                 className="h-full bg-gradient-to-r from-amber-500 to-orange-500"
-                style={{ width: `${Math.min(100, (((stats?.total || 0) - (stats?.byStatus['Pase a ventas'] || 0)) / (stats?.total || 1)) * 100)}%` }}
+                style={{ width: `${Math.min(100, (((effectiveStats?.total || 0) - (effectiveStats?.byStatus['Pase a ventas'] || 0)) / (effectiveStats?.total || 1)) * 100)}%` }}
               />
             </div>
           </div>

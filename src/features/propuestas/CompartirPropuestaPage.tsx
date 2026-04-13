@@ -149,6 +149,7 @@ export function CompartirPropuestaPage() {
   const [sortField, setSortField] = useState<string>('');
   const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('asc');
   const [selectedItems, setSelectedItems] = useState<Set<number>>(new Set());
+  const [selectedCatorcenas, setSelectedCatorcenas] = useState<Set<string>>(new Set());
 
   // Filter states
   const [filters, setFilters] = useState<FilterCondition[]>([]);
@@ -181,72 +182,107 @@ export function CompartirPropuestaPage() {
 
   const tipoPeriodo = (details?.cotizacion as any)?.tipo_periodo || 'catorcena';
 
+  // Master catorcena-filtered inventario (affects everything: KPIs, charts, map, resumen)
+  const catorcenaFilteredInventario = useMemo(() => {
+    if (!inventario) return [];
+    if (selectedCatorcenas.size === 0) return inventario as InventarioReservado[];
+    return (inventario as InventarioReservado[]).filter(i => {
+      if (i.numero_catorcena && i.anio_catorcena) {
+        const key = `${i.anio_catorcena}-${i.numero_catorcena}`;
+        return selectedCatorcenas.has(key);
+      }
+      return false;
+    });
+  }, [inventario, selectedCatorcenas]);
+
   // Computed data
   const kpis = useMemo(() => {
-    if (!inventario || inventario.length === 0) return { total: 0, renta: 0, bonificadas: 0, inversion: 0 };
+    if (!catorcenaFilteredInventario.length) return { total: 0, renta: 0, bonificadas: 0, inversion: 0 };
 
     // Calculate from actual reserved/sold inventory (real data)
-    const renta = inventario.reduce((sum, i) => sum + Number(i.caras_renta || 0), 0);
-    const bonificadas = inventario.reduce((sum, i) => sum + Number(i.caras_bonificadas || 0), 0);
+    const renta = catorcenaFilteredInventario.reduce((sum, i) => sum + Number(i.caras_renta || 0), 0);
+    const bonificadas = catorcenaFilteredInventario.reduce((sum, i) => sum + Number(i.caras_bonificadas || 0), 0);
     const total = renta + bonificadas;
 
     // Inversion only from renta caras (bonificadas are free)
-    const inversion = inventario.reduce((sum, i) => sum + (Number(i.tarifa_publica || 0) * Number(i.caras_renta || 0)), 0);
+    const inversion = catorcenaFilteredInventario.reduce((sum, i) => sum + (Number(i.tarifa_publica || 0) * Number(i.caras_renta || 0)), 0);
 
     return { total, renta, bonificadas, inversion };
-  }, [inventario]);
+  }, [catorcenaFilteredInventario]);
 
-  // Charts data
+  // Charts data (respond to catorcena filter)
   const chartCiudades = useMemo(() => {
-    if (!inventario) return [];
+    if (!catorcenaFilteredInventario.length) return [];
     const counts: Record<string, number> = {};
-    inventario.forEach(i => {
+    catorcenaFilteredInventario.forEach(i => {
       const ciudad = i.plaza || 'Sin ciudad';
       counts[ciudad] = (counts[ciudad] || 0) + (Number(i.caras_totales) || 0);
     });
     return Object.entries(counts).map(([name, value]) => ({ name, value })).sort((a, b) => b.value - a.value).slice(0, 10);
-  }, [inventario]);
+  }, [catorcenaFilteredInventario]);
 
   const chartFormatos = useMemo(() => {
-    if (!inventario) return [];
+    if (!catorcenaFilteredInventario.length) return [];
     const counts: Record<string, number> = {};
-    inventario.forEach(i => {
+    catorcenaFilteredInventario.forEach(i => {
       const formato = i.mueble || 'Otros';
       counts[formato] = (counts[formato] || 0) + (Number(i.caras_totales) || 0);
     });
     return Object.entries(counts).map(([name, value]) => ({ name, value })).sort((a, b) => b.value - a.value);
-  }, [inventario]);
+  }, [catorcenaFilteredInventario]);
 
-  // Map center
+  // Map center (responds to catorcena filter)
   const mapCenter = useMemo(() => {
-    if (!inventario || inventario.length === 0) return { lat: 20.6597, lng: -103.3496 };
-    const validItems = inventario.filter(i => i.latitud && i.longitud);
+    if (!catorcenaFilteredInventario.length) return { lat: 20.6597, lng: -103.3496 };
+    const validItems = catorcenaFilteredInventario.filter(i => i.latitud && i.longitud);
     if (validItems.length === 0) return { lat: 20.6597, lng: -103.3496 };
     const avgLat = validItems.reduce((sum, i) => sum + i.latitud, 0) / validItems.length;
     const avgLng = validItems.reduce((sum, i) => sum + i.longitud, 0) / validItems.length;
     return { lat: avgLat, lng: avgLng };
-  }, [inventario]);
+  }, [catorcenaFilteredInventario]);
 
   // Filtered inventario (used by resumen)
-  // Available periods for dropdown
+  // Available periods for dropdown - generate full range from propuesta, not just from inventario
   const periodoOptions = useMemo(() => {
-    if (!inventario) return [];
     const set = new Map<string, string>();
-    (inventario as InventarioReservado[]).forEach(i => {
-      if (i.numero_catorcena && i.anio_catorcena) {
-        const key = `${i.anio_catorcena}-${i.numero_catorcena}`;
-        const label = tipoPeriodo === 'mensual' && i.inicio_periodo
-          ? (() => { const parts = i.inicio_periodo.split('-'); return parts.length >= 2 ? `${MESES_LABEL[parseInt(parts[1]) - 1]} ${parts[0]}` : key; })()
-          : `Cat ${i.numero_catorcena} / ${i.anio_catorcena}`;
-        set.set(key, label);
+
+    // 1. Generate all catorcenas from propuesta range (Cat inicio to Cat fin)
+    const catInicio = details?.propuesta?.catorcena_inicio;
+    const anioInicio = details?.propuesta?.anio_inicio;
+    const catFin = details?.propuesta?.catorcena_fin;
+    const anioFin = details?.propuesta?.anio_fin;
+
+    if (catInicio && anioInicio && catFin && anioFin) {
+      let year = anioInicio;
+      let cat = catInicio;
+      while (year < anioFin || (year === anioFin && cat <= catFin)) {
+        const key = `${year}-${cat}`;
+        set.set(key, `Cat ${cat} / ${year}`);
+        cat++;
+        if (cat > 26) { cat = 1; year++; }
       }
-    });
+    }
+
+    // 2. Also include any catorcenas from inventario that might be outside the range
+    if (inventario) {
+      (inventario as InventarioReservado[]).forEach(i => {
+        if (i.numero_catorcena && i.anio_catorcena) {
+          const key = `${i.anio_catorcena}-${i.numero_catorcena}`;
+          if (!set.has(key)) {
+            const label = tipoPeriodo === 'mensual' && i.inicio_periodo
+              ? (() => { const parts = i.inicio_periodo.split('-'); return parts.length >= 2 ? `${MESES_LABEL[parseInt(parts[1]) - 1]} ${parts[0]}` : key; })()
+              : `Cat ${i.numero_catorcena} / ${i.anio_catorcena}`;
+            set.set(key, label);
+          }
+        }
+      });
+    }
+
     return Array.from(set.entries()).map(([value, label]) => ({ value, label })).sort((a, b) => a.value.localeCompare(b.value));
-  }, [inventario, tipoPeriodo]);
+  }, [inventario, details, tipoPeriodo]);
 
   const filteredInventario = useMemo(() => {
-    if (!inventario) return [];
-    let filtered = inventario as InventarioReservado[];
+    let filtered = catorcenaFilteredInventario;
     if (filterPeriodo) {
       const [year, num] = filterPeriodo.split('-').map(Number);
       filtered = filtered.filter(i => i.numero_catorcena === num && i.anio_catorcena === year);
@@ -272,7 +308,7 @@ export function CompartirPropuestaPage() {
       });
     }
     return filtered;
-  }, [inventario, filters, filterText, filterPeriodo, sortField, sortOrder]);
+  }, [catorcenaFilteredInventario, filters, filterText, filterPeriodo, sortField, sortOrder]);
 
   // Resumen de Caras (grouped by catorcena > articulo from filtered data)
   const resumenCaras = useMemo((): ResumenCatorcenaGroup[] => {
@@ -296,7 +332,7 @@ export function CompartirPropuestaPage() {
         totalCaras: items.reduce((sum, i) => sum + (Number(i.caras_totales) || 0), 0),
         totalInversion: items.reduce((sum, i) => sum + ((Number(i.tarifa_publica) || 0) * (Number(i.caras_totales) || 1)), 0),
         formatos: [...new Set(items.map(i => i.mueble || 'N/A'))],
-        tipos: [...new Set(items.map(i => i.tipo_de_cara || 'N/A'))],
+        tipos: [...new Set(items.map(i => i.tradicional_digital || 'N/A'))],
         plazas: [...new Set(items.map(i => i.plaza || 'N/A'))],
       }));
       return {
@@ -962,6 +998,63 @@ export function CompartirPropuestaPage() {
           </div>
         </div>
 
+        {/* Catorcena / Periodo Filter */}
+        {periodoOptions.length > 0 && (
+          <div className={`rounded-2xl p-4 border ${isDark ? 'bg-zinc-900/80 border-purple-500/20' : 'bg-gray-50 border-gray-200'}`}>
+            <div className="flex items-center gap-3 flex-wrap">
+              <span className={`text-xs font-semibold ${isDark ? 'text-purple-300' : 'text-purple-700'}`}>
+                <Filter className="h-3.5 w-3.5 inline mr-1" />
+                Filtrar por {tipoPeriodo === 'mensual' ? 'periodo' : 'catorcena'}:
+              </span>
+              <button
+                onClick={() => setSelectedCatorcenas(new Set())}
+                className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-all border ${
+                  selectedCatorcenas.size === 0
+                    ? 'bg-gradient-to-r from-purple-600 to-violet-600 text-white border-purple-500 shadow-lg shadow-purple-500/20'
+                    : isDark ? 'bg-zinc-800 text-zinc-400 border-purple-500/20 hover:bg-purple-500/20' : 'bg-white text-gray-600 border-gray-200 hover:bg-purple-50'
+                }`}
+              >
+                Todas
+              </button>
+              {periodoOptions.map(p => {
+                const isSelected = selectedCatorcenas.has(p.value);
+                return (
+                  <button
+                    key={p.value}
+                    onClick={() => {
+                      setSelectedCatorcenas(prev => {
+                        const next = new Set(prev);
+                        if (next.has(p.value)) {
+                          next.delete(p.value);
+                        } else {
+                          next.add(p.value);
+                        }
+                        return next;
+                      });
+                    }}
+                    className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-all border ${
+                      isSelected
+                        ? 'bg-gradient-to-r from-purple-600 to-violet-600 text-white border-purple-500 shadow-lg shadow-purple-500/20'
+                        : isDark ? 'bg-zinc-800 text-zinc-400 border-purple-500/20 hover:bg-purple-500/20' : 'bg-white text-gray-600 border-gray-200 hover:bg-purple-50'
+                    }`}
+                  >
+                    {p.label}
+                  </button>
+                );
+              })}
+              {selectedCatorcenas.size > 0 && (
+                <button
+                  onClick={() => setSelectedCatorcenas(new Set())}
+                  className="px-2 py-1.5 text-xs text-red-400 hover:bg-red-500/20 rounded-lg transition-colors"
+                >
+                  <X className="h-3 w-3 inline mr-0.5" />
+                  Limpiar
+                </button>
+              )}
+            </div>
+          </div>
+        )}
+
         {/* Client Info */}
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
           {[
@@ -1059,7 +1152,7 @@ export function CompartirPropuestaPage() {
             <div className="flex items-center justify-between mb-3">
               <h3 className={`text-sm font-semibold flex items-center gap-2 ${isDark ? 'text-purple-300' : 'text-purple-700'}`}>
                 <Layers className="h-4 w-4" />
-                Resumen de Caras
+                Resumen de Circuitos
                 <span className={`text-xs font-normal ${isDark ? 'text-zinc-500' : 'text-gray-400'}`}>({filteredInventario.length} inventarios)</span>
               </h3>
               <div className="flex items-center gap-2">
@@ -1277,15 +1370,26 @@ export function CompartirPropuestaPage() {
                                   ) : (
                                     <ChevronRight className="h-3.5 w-3.5 text-violet-500/50" />
                                   )}
-                                  <span className="px-2.5 py-0.5 rounded-md bg-violet-500/20 text-violet-200 text-xs font-medium border border-violet-400/20">
-                                    {artGroup.articulo}
-                                  </span>
+                                  <div className="flex items-center gap-2 flex-wrap">
+                                    <span className={`text-[10px] ${isDark ? 'text-zinc-500' : 'text-gray-400'}`}>Plazas:</span>
+                                    {artGroup.plazas.map(p => (
+                                      <span key={p} className={`px-2 py-0.5 rounded text-[10px] font-medium ${isDark ? 'bg-zinc-700 text-zinc-300' : 'bg-gray-200 text-gray-700'}`}>{p}</span>
+                                    ))}
+                                    <span className={`text-[10px] ${isDark ? 'text-zinc-500' : 'text-gray-400'} ml-1`}>Formatos:</span>
+                                    {artGroup.formatos.map(f => (
+                                      <span key={f} className={`px-2 py-0.5 rounded text-[10px] font-medium border ${isDark ? 'bg-purple-500/20 text-purple-300 border-purple-400/20' : 'bg-purple-50 text-purple-700 border-purple-200'}`}>{f}</span>
+                                    ))}
+                                    <span className={`text-[10px] ${isDark ? 'text-zinc-500' : 'text-gray-400'} ml-1`}>Tipo:</span>
+                                    {artGroup.tipos.map(t => (
+                                      <span key={t} className={`px-2 py-0.5 rounded text-[10px] font-medium border ${isDark ? 'bg-cyan-500/20 text-cyan-300 border-cyan-400/20' : 'bg-cyan-50 text-cyan-700 border-cyan-200'}`}>{t}</span>
+                                    ))}
+                                  </div>
                                   <span className={`text-xs ${isDark ? 'text-zinc-500' : 'text-gray-400'}`}>
                                     ({artGroup.items.length} inventario{artGroup.items.length > 1 ? 's' : ''})
                                   </span>
                                 </div>
                                 <div className="flex items-center gap-3 text-xs">
-                                  <span className={isDark ? 'text-zinc-400' : 'text-gray-500'}>Caras: <span className={`font-medium ${isDark ? 'text-white' : 'text-gray-900'}`}>{artGroup.totalCaras}</span></span>
+                                  <span className={isDark ? 'text-zinc-400' : 'text-gray-500'}>Circuitos: <span className={`font-medium ${isDark ? 'text-white' : 'text-gray-900'}`}>{artGroup.totalCaras}</span></span>
                                   <span className={isDark ? 'text-amber-300' : 'text-amber-600'}>Tarifa: <span className="font-medium">{formatCurrency(artGroup.items[0]?.tarifa_publica || 0)}</span></span>
                                   <span className={isDark ? 'text-emerald-400' : 'text-emerald-600'}>{formatCurrency(artGroup.totalInversion)}</span>
                                 </div>
@@ -1302,21 +1406,6 @@ export function CompartirPropuestaPage() {
 
                             {expandedResumen.has(artKey) && (
                               <div className="px-4 pb-3">
-                                {/* Summary badges */}
-                                <div className="flex flex-wrap gap-2 mb-3 px-2">
-                                  <div className="flex items-center gap-1.5">
-                                    <span className={`text-xs ${isDark ? 'text-zinc-500' : 'text-gray-400'}`}>Formatos:</span>
-                                    {artGroup.formatos.map(f => (
-                                      <span key={f} className={`px-2 py-0.5 rounded text-[10px] font-medium border ${isDark ? 'bg-purple-500/20 text-purple-300 border-purple-400/20' : 'bg-purple-50 text-purple-700 border-purple-200'}`}>{f}</span>
-                                    ))}
-                                  </div>
-                                  <div className="flex items-center gap-1.5">
-                                    <span className={`text-xs ${isDark ? 'text-zinc-500' : 'text-gray-400'}`}>Plazas:</span>
-                                    {artGroup.plazas.map(p => (
-                                      <span key={p} className={`px-2 py-0.5 rounded text-[10px] font-medium ${isDark ? 'bg-zinc-700 text-zinc-300' : 'bg-gray-200 text-gray-700'}`}>{p}</span>
-                                    ))}
-                                  </div>
-                                </div>
                                 {/* Detail table with checkboxes */}
                                 <div className={`overflow-x-auto rounded-xl border ${isDark ? 'border-purple-500/20 bg-zinc-900/50' : 'border-gray-200 bg-white'}`}>
                                   <table className="w-full text-sm">
@@ -1429,9 +1518,9 @@ export function CompartirPropuestaPage() {
                 onLoad={(map) => {
                   mapRef.current = map;
                   // Fit bounds to all inventory items on load
-                  if (inventario && inventario.length > 0) {
+                  if (catorcenaFilteredInventario.length > 0) {
                     const bounds = new google.maps.LatLngBounds();
-                    inventario.forEach(item => {
+                    catorcenaFilteredInventario.forEach(item => {
                       if (item.latitud && item.longitud) {
                         bounds.extend({ lat: item.latitud, lng: item.longitud });
                       }
@@ -1442,7 +1531,9 @@ export function CompartirPropuestaPage() {
                   }
                 }}
               >
-                {inventario?.map((item) => (
+                {catorcenaFilteredInventario
+                  .filter((item) => selectedItems.size === 0 || selectedItems.has(item.id))
+                  .map((item) => (
                   item.latitud && item.longitud && (
                     <Marker
                       key={item.id}

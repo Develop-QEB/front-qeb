@@ -27,8 +27,8 @@ const tutorials: Tutorial[] = [
     category: 'Asesores',
     title: 'Gestion de Solicitudes',
     demoUrl: 'https://app.storylane.io/demo/aasux8feuib8?embed=inline_overlay',
-    width: 2560,
-    height: 1425,
+    width: 1500,
+    height: 1525,
     previewImage:
       'https://storylane-prod-uploads.s3.us-east-2.amazonaws.com/company/company_708d0493-8c70-45e6-8886-151c1cc6fa6d/project/project_6c04e8be-d673-40bf-a4eb-f4344fc91ebf/page/1771447559402.png',
     paddingBottom: 'calc(55.66% + 25px)',
@@ -80,8 +80,8 @@ const tutorials: Tutorial[] = [
     category: 'Analistas',
     title: 'Gestion de Campañas',
     demoUrl: 'https://app.storylane.io/demo/taq3uxuzty4w?embed=inline_overlay',
-    width: 2560,
-    height: 1425,
+    width: 1500,
+    height: 1525,
     previewImage:
       'https://storylane-prod-uploads.s3.us-east-2.amazonaws.com/company/company_708d0493-8c70-45e6-8886-151c1cc6fa6d/project/project_9865049f-8508-4fbd-8ea5-486272859b7e/page/1775568519723.png',
     paddingBottom: 'calc(55.66% + 25px)',
@@ -92,10 +92,22 @@ const tutorials: Tutorial[] = [
     category: 'Analistas',
     title: 'Tutorial de Versionario',
     demoUrl: 'https://app.storylane.io/demo/4zugtxb6t96w?embed=inline_overlay',
-    width: 2560,
-    height: 1425,
+    width: 1500,
+    height: 1525,
     previewImage:
       'https://storylane-prod-uploads.s3.us-east-2.amazonaws.com/company/company_708d0493-8c70-45e6-8886-151c1cc6fa6d/project/project_07d4b799-158a-492b-8ccd-0c7bad3a9fb4/page/1775570047634.png',
+    paddingBottom: 'calc(55.66% + 25px)',
+  },
+  {
+    id: 'tutorial-filtro',
+    type: 'demo' as const,
+    category: 'Campañas',
+    title: 'Tutorial para filtrar y exportar datos',
+    demoUrl: 'https://app.storylane.io/demo/jomjkefuskp5?embed=inline_overlay',
+    width: 2360,
+    height: 1425,
+    previewImage:
+      'https://storylane-prod-uploads.s3.us-east-2.amazonaws.com/company/company_708d0493-8c70-45e6-8886-151c1cc6fa6d/project/project_7e140c58-4280-47b4-aa0b-6a6205659a1f/page/1775591768363.png',
     paddingBottom: 'calc(55.66% + 25px)',
   },
 ];
@@ -223,7 +235,7 @@ export function AyudaModal({ isOpen, onClose, tutorialId, onSelect, chatUnreadCo
                     VER DEMO
                   </button>
                 </div>
-                <div className="sl-embed" data-sl-demo-type="image" style={{ position: 'relative', paddingBottom: selected.paddingBottom, width: '100%', height: 0, overflow: 'hidden' }}>
+                <div className="sl-embed" data-sl-demo-type="image" style={{ position: 'relative', paddingBottom: `calc(${(selected.height / selected.width) * 100}% + 25px)`, width: '100%', height: 0, overflow: 'hidden' }}>
                   <div className="sl-preview" style={{ width: '100%', height: '100%', zIndex: 99999, position: 'absolute', background: `url('${selected.previewImage}') no-repeat`, backgroundSize: '100% 100%', borderRadius: 'inherit' }} />
                   <iframe className="sl-demo" src="" name="sl-embed" allow="fullscreen" allowFullScreen style={{ display: 'none', position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', border: 'none' }} />
                 </div>

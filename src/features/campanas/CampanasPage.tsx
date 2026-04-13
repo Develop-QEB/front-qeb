@@ -216,6 +216,7 @@ const CAMPANA_FILTER_FIELDS: FilterFieldConfig[] = [
   { field: 'status', label: 'Estatus', type: 'string' },
   { field: 'articulo', label: 'Artículo', type: 'string' },
   { field: 'creador_nombre', label: 'Asesor', type: 'string' },
+  { field: 'codigos_inventario', label: 'Código Inventario', type: 'string' },
 ];
 
 const FILTER_OPERATORS: { value: FilterOperator; label: string }[] = [
@@ -1008,7 +1009,8 @@ export function CampanasPage() {
             c.T2_U_Marca?.toLowerCase().includes(lowerTerm) ||
             c.T0_U_Cliente?.toLowerCase().includes(lowerTerm) ||
             c.asignado?.toLowerCase().includes(lowerTerm) ||
-            c.nombre_campania?.toLowerCase().includes(lowerTerm)
+            c.nombre_campania?.toLowerCase().includes(lowerTerm) ||
+            c.codigos_inventario?.toLowerCase().includes(lowerTerm)
           );
         })
       );
@@ -2089,7 +2091,7 @@ export function CampanasPage() {
                 <Edit2 className="h-3.5 w-3.5" />
               </button>
             )}
-            {permissions.canSeeGestionArtes && (periodStatus === 'En curso' || item.status?.toLowerCase() === 'aprobada') && (
+            {permissions.canSeeGestionArtes && (
               <button
                 onClick={() => { setIncidenciaCampana(item); setIncidenciaModalOpen(true); }}
                 className="p-2 rounded-lg border bg-orange-500/10 text-orange-400 hover:bg-orange-500/20 hover:text-orange-300 border-orange-500/20 hover:border-orange-500/40 transition-all"
@@ -2247,7 +2249,7 @@ export function CampanasPage() {
                 ))}
                 <input
                   type="text"
-                  placeholder={searchTags.length === 0 ? 'Buscar campaña, articulo, cliente... (Enter para agregar)' : 'Agregar filtro...'}
+                  placeholder={searchTags.length === 0 ? 'Buscar campaña, articulo, cliente, código inventario... (Enter para agregar)' : 'Agregar filtro...'}
                   className={`flex-1 min-w-[120px] bg-transparent border-none outline-none text-sm ${isDark ? 'text-white placeholder:text-zinc-500' : 'text-gray-900 placeholder:text-gray-400'}`}
                   value={searchInput}
                   onChange={(e) => setSearchInput(e.target.value)}
