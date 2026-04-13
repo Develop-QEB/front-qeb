@@ -9,6 +9,7 @@ import { UserAvatar } from '../../components/ui/user-avatar';
 import { useSocketEquipos } from '../../hooks/useSocket';
 import { useThemeStore } from '../../store/themeStore';
 import { useAuthStore } from '../../store/authStore';
+import { getPermissions } from '../../lib/permissions';
 import { uploadsService } from '../../services/uploads.service';
 
 type TabType = 'usuarios' | 'equipos';
@@ -1549,8 +1550,31 @@ function UsuariosTab() {
     if (data.rol && data.rol !== editingUsuario.rol) {
       setLoadingAssignments(true);
       try {
+        const oldPerms = getPermissions(editingUsuario.rol);
+        const newPerms = getPermissions(data.rol);
+
+        // Solo pedir reasignación de elementos donde el nuevo rol pierde acceso
+        const losesSolicitudes = oldPerms.canSeeSolicitudes && !newPerms.canSeeSolicitudes;
+        const losesPropuestas = oldPerms.canSeePropuestas && !newPerms.canSeePropuestas;
+        const losesCampanas = oldPerms.canSeeCampanas && !newPerms.canSeeCampanas;
+
+        // Si el nuevo rol mantiene acceso a todo, no pedir reasignación
+        if (!losesSolicitudes && !losesPropuestas && !losesCampanas) {
+          // El nuevo rol puede seguir manejando todas las asignaciones
+          updateMutation.mutate({ id: editingUsuario.id, data });
+          return;
+        }
+
         const assignments = await usuariosService.getAssignments(editingUsuario.id);
-        const hasAny = assignments.solicitudes.length > 0 || assignments.propuestas.length > 0 || assignments.tareas.length > 0;
+
+        // Filtrar solo las asignaciones donde pierde acceso
+        const filteredAssignments: AssignmentsData = {
+          solicitudes: losesSolicitudes ? assignments.solicitudes : [],
+          propuestas: losesPropuestas ? assignments.propuestas : [],
+          tareas: losesCampanas ? assignments.tareas : [],
+        };
+
+        const hasAny = filteredAssignments.solicitudes.length > 0 || filteredAssignments.propuestas.length > 0 || filteredAssignments.tareas.length > 0;
 
         if (hasAny) {
           const capturedUser = editingUsuario;
@@ -1559,7 +1583,7 @@ function UsuariosTab() {
             userId: capturedUser.id,
             userName: capturedUser.nombre,
             userRol: capturedUser.rol,
-            assignments,
+            assignments: filteredAssignments,
             pendingAction: () => updateMutation.mutate({ id: capturedUser.id, data }),
           });
           return;

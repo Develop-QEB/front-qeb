@@ -118,10 +118,11 @@ export default function PropuestasVersionarioView({ isDark, filters }: Propuesta
   const [expandedCircuitos, setExpandedCircuitos] = useState<Set<string>>(new Set());
   const [isExporting, setIsExporting] = useState(false);
 
-  const { data, isLoading } = useQuery({
+  const { data, isLoading, isFetching } = useQuery({
     queryKey: ['propuestas-versionario', filters],
     queryFn: () => propuestasService.getVersionarioData(filters),
     refetchOnWindowFocus: false,
+    staleTime: 0,
   });
 
   const catorcenaGroups = useMemo<CatorcenaGroup[]>(() => {
@@ -230,7 +231,9 @@ export default function PropuestasVersionarioView({ isDark, filters }: Propuesta
       // Sort propuestas by name
       propuestas.sort((a, b) => (a.info.campana_nombre || '').localeCompare(b.info.campana_nombre || ''));
 
-      groups.push({ key: catKey, num, anio, propuestas });
+      if (propuestas.length > 0) {
+        groups.push({ key: catKey, num, anio, propuestas });
+      }
     }
 
     // Sort groups by year then catorcena number
@@ -385,8 +388,8 @@ export default function PropuestasVersionarioView({ isDark, filters }: Propuesta
               <Calendar className={`h-5 w-5 ${isDark ? 'text-purple-400' : 'text-purple-600'}`} />
             </div>
             <div>
-              <h3 className={`text-sm font-semibold ${isDark ? 'text-white' : 'text-gray-900'}`}>Versionario de Propuestas</h3>
-              <p className={`text-xs ${isDark ? 'text-zinc-500' : 'text-gray-400'}`}>Propuestas agrupadas por catorcena</p>
+              <h3 className={`text-sm font-semibold ${isDark ? 'text-white' : 'text-gray-900'}`}>Desglose de Propuestas</h3>
+              <p className={`text-xs ${isDark ? 'text-zinc-500' : 'text-gray-400'}`}>Propuestas desglosadas por catorcena</p>
             </div>
           </div>
           <div className="flex items-center gap-3">
@@ -404,11 +407,11 @@ export default function PropuestasVersionarioView({ isDark, filters }: Propuesta
       </div>
 
       {/* Content */}
-      {isLoading ? (
+      {isLoading || isFetching ? (
         <div className="flex items-center justify-center h-64">
           <div className="flex flex-col items-center gap-3">
             <Loader2 className={`h-8 w-8 animate-spin ${isDark ? 'text-purple-400' : 'text-purple-600'}`} />
-            <p className={`text-sm ${isDark ? 'text-zinc-500' : 'text-gray-400'}`}>Cargando versionario...</p>
+            <p className={`text-sm ${isDark ? 'text-zinc-500' : 'text-gray-400'}`}>{isFetching && !isLoading ? 'Aplicando filtros...' : 'Cargando desglose...'}</p>
           </div>
         </div>
       ) : catorcenaGroups.length === 0 ? (
