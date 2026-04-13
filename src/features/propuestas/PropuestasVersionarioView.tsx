@@ -230,7 +230,9 @@ export default function PropuestasVersionarioView({ isDark, filters }: Propuesta
       // Sort propuestas by name
       propuestas.sort((a, b) => (a.info.campana_nombre || '').localeCompare(b.info.campana_nombre || ''));
 
-      groups.push({ key: catKey, num, anio, propuestas });
+      if (propuestas.length > 0) {
+        groups.push({ key: catKey, num, anio, propuestas });
+      }
     }
 
     // Sort groups by year then catorcena number
