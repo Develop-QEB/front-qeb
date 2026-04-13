@@ -2799,7 +2799,8 @@ export function CampanaDetailPage() {
                           ? inventarioConAPS.filter(i => selectedItemsAPS.has(String(i.rsv_ids)))
                           : inventarioConAPS;
                         const dns = buildDeliveryNote(campana, itemsToPreview, campana.sap_database);
-                        setPreviewDeliveryNote(dns.length === 1 ? dns[0] : dns);
+                        const allLines = dns.flatMap((d: any) => d.DocumentLines);
+                        setPreviewDeliveryNote({ ...dns[0], DocumentLines: allLines });
                       }
                       setShowPostSAPModal(true);
                     }}
