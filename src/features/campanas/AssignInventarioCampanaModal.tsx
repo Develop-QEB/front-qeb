@@ -1689,10 +1689,8 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
             }
           }
 
-          // Update in database with authorization status
-          const updatedCara = await campanasService.updateCara(campana!.id, caraToEdit.id, caraData);
-
-          // Update local state - only recalc impar/contamination if auth fields changed
+          // Update local state only (NO API call - saved in bulk later)
+          // Only recalc impar/contamination if auth fields changed
           setCaras(prev => {
             let updated = prev.map(c =>
               c.localId === editingCaraId
