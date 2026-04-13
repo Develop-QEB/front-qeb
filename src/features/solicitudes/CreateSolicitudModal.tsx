@@ -143,7 +143,7 @@ const getTarifaFromArticulo = (articulo: SAPArticulo): { costo: number; tarifa_p
 const MULTI_CITY_RULES: { pattern: RegExp; estado: string; ciudades: string[] }[] = [
   { pattern: /\bPUERTO VALLARTA\b|\bPV\b/, estado: 'Jalisco', ciudades: ['PUERTO VALLARTA'] },
   { pattern: /\bGD\b|\bGUADALAJARA\b|\bGDL\b/, estado: 'Jalisco', ciudades: ['GUADALAJARA', 'ZAPOPAN', 'SAN PEDRO TLAQUEPAQUE'] },
-  { pattern: /\bMTY\b|\bMONTERREY\b|\bMY\b/, estado: 'Nuevo León', ciudades: ['MONTERREY', 'GUADALUPE', 'SAN NICOLÁS DE LOS GARZA', 'SANTA CATARINA'] },
+  { pattern: /\bMTY\b|\bMONTERREY\b/, estado: 'Nuevo León', ciudades: ['MONTERREY', 'GUADALUPE', 'SAN NICOLÁS DE LOS GARZA', 'SANTA CATARINA'] },
   { pattern: /\bBOCA DEL RIO\b/, estado: 'Veracruz', ciudades: ['BOCA DEL RIO'] },
   { pattern: /\bVERACRUZ\b|\bVER\b/, estado: 'Veracruz', ciudades: ['VERACRUZ', 'ALVARADO', 'BOCA DEL RIO'] },
   { pattern: /\bCHOLULA\b/, estado: 'Puebla', ciudades: ['SAN ANDRES CHOLULA', 'SAN PEDRO CHOLULA'] },
