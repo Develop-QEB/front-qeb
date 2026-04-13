@@ -1164,34 +1164,42 @@ export function CampanaDetailPage() {
         console.warn('Could not fetch articulos for CostingCode:', err);
       }
 
-      // Construir el payload
-      let deliveryNote = buildDeliveryNote(campana, itemsToPost, campana.sap_database, articulosMap);
+      // Construir los payloads (uno por APS)
+      let deliveryNotes = buildDeliveryNote(campana, itemsToPost, campana.sap_database, articulosMap);
 
-      // Si es migrada, resolver BaseEntry desde SAP
+      // Si es migrada, resolver BaseEntry desde SAP para cada delivery note
       if (isMigratedCampaign(campana)) {
         const db = campana.sap_database || 'TRADE';
         console.log('Resolving BaseEntry from SAP... DB:', db, 'DocNum:', campana.id);
-        deliveryNote = await resolveBaseEntry(
-          deliveryNote as SAPDeliveryNoteMigrated,
-          campana.id?.toString() || '',
-          db
-        );
-        console.log('BaseEntry resolved:', (deliveryNote as SAPDeliveryNoteMigrated).DocumentLines?.[0]?.BaseEntry);
+        const resolved = [];
+        for (const dn of deliveryNotes) {
+          const r = await resolveBaseEntry(dn as SAPDeliveryNoteMigrated, campana.id?.toString() || '', db);
+          resolved.push(r);
+        }
+        deliveryNotes = resolved;
       }
 
-      console.log('========== DELIVERY NOTE JSON ==========');
-      console.log('SAP Database:', campana.sap_database);
-      console.log(JSON.stringify(deliveryNote, null, 2));
-      console.log('==========================================');
+      // POST cada delivery note a SAP
+      const results = [];
+      for (let i = 0; i < deliveryNotes.length; i++) {
+        const dn = deliveryNotes[i];
+        console.log(`========== DELIVERY NOTE ${i + 1}/${deliveryNotes.length} (APS: ${dn.U_IMU_CotNum}) ==========`);
+        console.log('SAP Database:', campana.sap_database);
+        console.log(JSON.stringify(dn, null, 2));
+        console.log('==========================================');
 
-      // Hacer POST a SAP (endpoint dinamico segun sap_database)
-      const result = await postDeliveryNoteToSAP(deliveryNote, campana.sap_database);
+        const result = await postDeliveryNoteToSAP(dn, campana.sap_database);
+        results.push(result);
+      }
 
-      if (result.success) {
+      const allSuccess = results.every(r => r.success);
+      const failedCount = results.filter(r => !r.success).length;
+
+      if (allSuccess) {
         setPostSAPResult({
           success: true,
-          message: 'Delivery Note creado exitosamente en SAP',
-          data: result.data,
+          message: `${deliveryNotes.length} Delivery Note${deliveryNotes.length > 1 ? 's' : ''} creado${deliveryNotes.length > 1 ? 's' : ''} exitosamente en SAP`,
+          data: results[results.length - 1].data,
         });
         // Guardar en DB los APS posteados y actualizar estado
         const apsPosteados = Array.from(new Set(itemsToPost.map(i => i.aps)));
@@ -1202,7 +1210,9 @@ export function CampanaDetailPage() {
       } else {
         setPostSAPResult({
           success: false,
-          message: result.error || 'Error al crear Delivery Note en SAP',
+          message: failedCount === deliveryNotes.length
+            ? (results[0].error || 'Error al crear Delivery Notes en SAP')
+            : `${deliveryNotes.length - failedCount} exitosos, ${failedCount} fallidos`,
         });
       }
     } catch (error) {
@@ -2788,8 +2798,8 @@ export function CampanaDetailPage() {
                         const itemsToPreview = selectedItemsAPS.size > 0
                           ? inventarioConAPS.filter(i => selectedItemsAPS.has(String(i.rsv_ids)))
                           : inventarioConAPS;
-                        const dn = buildDeliveryNote(campana, itemsToPreview, campana.sap_database);
-                        setPreviewDeliveryNote(dn);
+                        const dns = buildDeliveryNote(campana, itemsToPreview, campana.sap_database);
+                        setPreviewDeliveryNote(dns.length === 1 ? dns[0] : dns);
                       }
                       setShowPostSAPModal(true);
                     }}
