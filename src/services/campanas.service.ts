@@ -393,83 +393,83 @@ export function buildDeliveryNote(
   inventarioAPS: InventarioConAPS[],
   sapDatabase?: string | null,
   articulosMap?: Record<string, { U_IMU_OcrCode?: string; U_IMU_cod_sitio?: number; U_IMU_dscSitio?: string }>
-): SAPDeliveryNote | SAPDeliveryNoteMigrated {
-  // Obtener combinaciones únicas de APS + Artículo
-  const uniqueKeys = [...new Set(inventarioAPS.map(item => `${item.aps}||${item.articulo}`))];
-
-  // Crear DocumentLines - una línea por cada APS + Artículo único
-  const documentLines: SAPDocumentLine[] = uniqueKeys.map((key, index) => {
-    const [apsValue, articuloValue] = key.split('||');
-    // Encontrar todos los items con este APS y artículo
-    const itemsWithThisAPS = inventarioAPS.filter(item => String(item.aps) === apsValue && item.articulo === articuloValue);
-    const firstItem = itemsWithThisAPS[0];
-
-    // UnitPrice = tarifa unitaria (no suma)
-    const totalPrice = Number(firstItem.tarifa_publica_sc) || Number(firstItem.tarifa_publica) || 0;
-
-    // Construir U_dscPeriod desde numero_catorcena y anio_catorcena
-    const dscPeriod = firstItem.numero_catorcena && firstItem.anio_catorcena
-      ? `CATORCENA ${firstItem.numero_catorcena}-${firstItem.anio_catorcena}`
-      : 'CATORCENA —-—';
-
-    return {
-      LineNum: index.toString(),
-      ItemCode: firstItem.articulo || '',
-      Quantity: itemsWithThisAPS.length.toString(),
-      TaxCode: 'A4',
-      UnitPrice: String(totalPrice || 0),
-      CostingCode: articulosMap?.[firstItem.articulo || '']?.U_IMU_OcrCode || '02-03-04',
-      CostingCode2: '1',
-      U_Cod_Sitio: articulosMap?.[firstItem.articulo || '']?.U_IMU_cod_sitio || 11,
-      U_dscSitio: articulosMap?.[firstItem.articulo || '']?.U_IMU_dscSitio || firstItem.plaza || firstItem.estado || '',
-      U_CodTAsig: (firstItem.estatus_reserva === 'Bonificado' || firstItem.estatus_reserva === 'Vendido bonificado') ? 204 : 200,
-      U_dscTAsig: firstItem.estatus_reserva === 'Vendido' ? 'Venta' : (firstItem.estatus_reserva || ''),
-      U_CodPer: 1746,
-      U_dscPeriod: dscPeriod,
-      U_FechInPer: firstItem.inicio_periodo?.split('T')[0] || '',
-      U_FechFinPer: firstItem.fin_periodo?.split('T')[0] || '',
-    };
-  });
-
-  // Construir el objeto DeliveryNote completo
+): (SAPDeliveryNote | SAPDeliveryNoteMigrated)[] {
+  // Agrupar items por APS - cada APS genera un delivery note separado
+  const uniqueAPS = [...new Set(inventarioAPS.map(item => item.aps))];
   const series = sapDatabase ? getSeriesForSapDatabase(sapDatabase as SapDatabase) : 162;
-  const deliveryNote: SAPDeliveryNote = {
-    Series: series,
-    CardCode: campana.card_code || 'IMU00351',
-    NumAtCard: campana.id?.toString() || '',
-    Comments: campana.comentario_cambio_status || '',
-    DocDueDate: (campana.fecha_fin || new Date().toISOString()).split('T')[0],
-    SalesPersonCode: sapDatabase === 'TRADE' ? -1 : ((campana as any).salesperson_code || -1),
-    U_CIC: String(campana.cuic || ''),
-    U_CRM_Asesor: campana.T0_U_Asesor || '',
-    U_CRM_Producto: campana.T2_U_Producto || '',
-    U_CRM_Marca: campana.T2_U_Marca || '',
-    U_CRM_Categoria: campana.T2_U_Categoria || '',
-    U_CRM_Cliente: campana.T0_U_Cliente || '',
-    U_CRM_Agencia: campana.T0_U_Agencia || '',
-    U_CRM_SAP: campana.card_code || 'IMU00351',
-    U_CRM_R_S: campana.T0_U_RazonSocial || '',
-    U_CRM_Camp: campana.nombre || campana.nombre_campania || '',
-    U_TIPO_VENTA: 'Comercial',
-    U_IMU_ART_APS: (campana.propuesta_id || campana.id)?.toString() || '',
-    U_IMU_CotNum: uniqueKeys.length > 0 ? String(inventarioAPS[0]?.aps || '') : '',
-    DocumentLines: documentLines,
-  };
+
+  const deliveryNotes = uniqueAPS.map(apsValue => {
+    const itemsForAPS = inventarioAPS.filter(item => item.aps === apsValue);
+    // Dentro de cada APS, agrupar por artículo para las DocumentLines
+    const uniqueArticulos = [...new Set(itemsForAPS.map(item => item.articulo))];
+
+    const documentLines: SAPDocumentLine[] = uniqueArticulos.map((articulo, index) => {
+      const itemsWithArticulo = itemsForAPS.filter(item => item.articulo === articulo);
+      const firstItem = itemsWithArticulo[0];
+      const totalPrice = Number(firstItem.tarifa_publica_sc) || Number(firstItem.tarifa_publica) || 0;
+      const dscPeriod = firstItem.numero_catorcena && firstItem.anio_catorcena
+        ? `CATORCENA ${firstItem.numero_catorcena}-${firstItem.anio_catorcena}`
+        : 'CATORCENA —-—';
+
+      return {
+        LineNum: index.toString(),
+        ItemCode: firstItem.articulo || '',
+        Quantity: itemsWithArticulo.length.toString(),
+        TaxCode: 'A4',
+        UnitPrice: String(totalPrice || 0),
+        CostingCode: articulosMap?.[firstItem.articulo || '']?.U_IMU_OcrCode || '02-03-04',
+        CostingCode2: '1',
+        U_Cod_Sitio: articulosMap?.[firstItem.articulo || '']?.U_IMU_cod_sitio || 11,
+        U_dscSitio: articulosMap?.[firstItem.articulo || '']?.U_IMU_dscSitio || firstItem.plaza || firstItem.estado || '',
+        U_CodTAsig: (firstItem.estatus_reserva === 'Bonificado' || firstItem.estatus_reserva === 'Vendido bonificado') ? 204 : 200,
+        U_dscTAsig: firstItem.estatus_reserva === 'Vendido' ? 'Venta' : (firstItem.estatus_reserva || ''),
+        U_CodPer: 1746,
+        U_dscPeriod: dscPeriod,
+        U_FechInPer: firstItem.inicio_periodo?.split('T')[0] || '',
+        U_FechFinPer: firstItem.fin_periodo?.split('T')[0] || '',
+      };
+    });
+
+    const deliveryNote: SAPDeliveryNote = {
+      Series: series,
+      CardCode: campana.card_code || 'IMU00351',
+      NumAtCard: campana.id?.toString() || '',
+      Comments: campana.comentario_cambio_status || '',
+      DocDueDate: (campana.fecha_fin || new Date().toISOString()).split('T')[0],
+      SalesPersonCode: sapDatabase === 'TRADE' ? -1 : ((campana as any).salesperson_code || -1),
+      U_CIC: String(campana.cuic || ''),
+      U_CRM_Asesor: campana.T0_U_Asesor || '',
+      U_CRM_Producto: campana.T2_U_Producto || '',
+      U_CRM_Marca: campana.T2_U_Marca || '',
+      U_CRM_Categoria: campana.T2_U_Categoria || '',
+      U_CRM_Cliente: campana.T0_U_Cliente || '',
+      U_CRM_Agencia: campana.T0_U_Agencia || '',
+      U_CRM_SAP: campana.card_code || 'IMU00351',
+      U_CRM_R_S: campana.T0_U_RazonSocial || '',
+      U_CRM_Camp: campana.nombre || campana.nombre_campania || '',
+      U_TIPO_VENTA: 'Comercial',
+      U_IMU_ART_APS: (campana.propuesta_id || campana.id)?.toString() || '',
+      U_IMU_CotNum: String(apsValue || ''),
+      DocumentLines: documentLines,
+    };
+
+    return deliveryNote;
+  });
 
   // Si es campaña migrada desde INVIAN, agregar BaseType/BaseDocNum en cada línea
   if (isMigratedCampaign(campana)) {
-    return {
-      ...deliveryNote,
-      DocumentLines: documentLines.map(line => ({
+    return deliveryNotes.map(dn => ({
+      ...dn,
+      DocumentLines: dn.DocumentLines.map(line => ({
         ...line,
         BaseType: 17,
         BaseEntry: 0, // se resuelve con resolveBaseEntry()
         BaseLine: 0, // se resuelve con resolveBaseEntry()
       })),
-    } as SAPDeliveryNoteMigrated;
+    } as SAPDeliveryNoteMigrated));
   }
 
-  return deliveryNote;
+  return deliveryNotes;
 }
 
 // Busca el BaseEntry de una Order en SAP por DocNum (APS)
