@@ -394,13 +394,14 @@ export function buildDeliveryNote(
   sapDatabase?: string | null,
   articulosMap?: Record<string, { U_IMU_OcrCode?: string; U_IMU_cod_sitio?: number; U_IMU_dscSitio?: string }>
 ): SAPDeliveryNote | SAPDeliveryNoteMigrated {
-  // Obtener valores únicos de APS
-  const uniqueAPS = [...new Set(inventarioAPS.map(item => item.aps))];
+  // Obtener combinaciones únicas de APS + Artículo
+  const uniqueKeys = [...new Set(inventarioAPS.map(item => `${item.aps}||${item.articulo}`))];
 
-  // Crear DocumentLines - una línea por cada APS único
-  const documentLines: SAPDocumentLine[] = uniqueAPS.map((apsValue, index) => {
-    // Encontrar todos los items con este APS
-    const itemsWithThisAPS = inventarioAPS.filter(item => item.aps === apsValue);
+  // Crear DocumentLines - una línea por cada APS + Artículo único
+  const documentLines: SAPDocumentLine[] = uniqueKeys.map((key, index) => {
+    const [apsValue, articuloValue] = key.split('||');
+    // Encontrar todos los items con este APS y artículo
+    const itemsWithThisAPS = inventarioAPS.filter(item => item.aps === apsValue && item.articulo === articuloValue);
     const firstItem = itemsWithThisAPS[0];
 
     // UnitPrice = tarifa unitaria (no suma)
