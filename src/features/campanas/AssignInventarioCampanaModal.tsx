@@ -1748,18 +1748,18 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
           if (hayDG) updated = updated.map(c => c.autorizacion_dcm === 'pendiente' ? { ...c, autorizacion_dg: 'pendiente', autorizacion_dcm: 'aprobado' } : c);
           return updated;
         });
+
+        // Track new cara as modified so it doesn't block editing (auth processed on bulk save)
+        setModifiedCaras(prev => {
+          const next = new Map(prev);
+          next.set(createdCara.id, caraData);
+          return next;
+        });
       }
 
       setNewCara(EMPTY_CARA);
       setSelectedArticulo(null);
       setShowAddCaraForm(false);
-
-      // Only invalidate queries for new caras (edits are local until bulk save)
-      if (!editingCaraId) {
-        queryClient.invalidateQueries({ queryKey: ['campana-full', campana!.id] });
-        queryClient.invalidateQueries({ queryKey: ['campana-caras', campana!.id] });
-        queryClient.invalidateQueries({ queryKey: ['campana-details', campana?.id] });
-      }
     } catch (error) {
       console.error('Error saving cara:', error);
       alert('Error al guardar la cara');
