@@ -156,7 +156,7 @@ const getTarifaPisoFromArticulo = (articulo: SAPArticulo): number => {
 
 // Multi-city auto-fill rules for specific article patterns
 const MULTI_CITY_RULES: { pattern: RegExp; estado: string; ciudad: string }[] = [
-  { pattern: /\bMTY\b|\bMONTERREY\b|\bMY\b/, estado: 'Nuevo León', ciudad: 'Monterrey,Guadalupe,San Nicolás de los Garza,Santa Catarina' },
+  { pattern: /\bMTY\b|\bMONTERREY\b/, estado: 'Nuevo León', ciudad: 'Monterrey,Guadalupe,San Nicolás de los Garza,Santa Catarina' },
   { pattern: /\bVERACRUZ\b|\bVER\b/, estado: 'Veracruz', ciudad: 'Veracruz,Alvarado,Boca del Río' },
   { pattern: /\bGD\b|\bGUADALAJARA\b/, estado: 'Jalisco', ciudad: 'Guadalajara,Zapopan,Tlaquepaque' },
   { pattern: /\bPUERTO VALLARTA\b|\bPV\b/, estado: 'Jalisco', ciudad: 'Puerto Vallarta' },
@@ -784,6 +784,19 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
     const hasAPS = caraReservas.some(r => r.aps && r.aps > 0);
     return hasAPS;
   }, [editingCaraId, caras, reservas, postedAPSGroups]);
+
+  // Check if the selected cara for search/reservas view is APS blocked
+  const selectedCaraAPSBlocked = useMemo(() => {
+    if (!selectedCaraForSearch) return false;
+    const caraReservas = reservas.filter(r =>
+      r.id.startsWith(selectedCaraForSearch.localId) || r.solicitudCaraId === selectedCaraForSearch.id
+    );
+    if (caraReservas.length === 0) return false;
+    if (postedAPSGroups.size > 0) {
+      return caraReservas.some(r => r.aps && postedAPSGroups.has(r.aps as number));
+    }
+    return caraReservas.some(r => r.aps && r.aps > 0);
+  }, [selectedCaraForSearch, reservas, postedAPSGroups]);
 
   // Fetch users
   const { data: users } = useQuery({
@@ -3155,6 +3168,12 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
 
   // Remove a reserva - IMMEDIATE DELETE
   const handleRemoveReserva = (reservaId: string) => {
+    // Block deletion if the selected cara has APS assigned
+    if (selectedCaraAPSBlocked) {
+      showToast('No se puede eliminar inventario de un grupo con APS asignado', 'error');
+      return;
+    }
+
     // Handle "completo" grouped items (muebles completos)
     if (reservaId.startsWith('completo-')) {
       const grupoId = Number(reservaId.replace('completo-', ''));
@@ -3258,6 +3277,12 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
 
   // Bulk delete selected reservas
   const handleBulkDeleteReservas = () => {
+    // Block deletion if the selected cara has APS assigned
+    if (selectedCaraAPSBlocked) {
+      showToast('No se puede eliminar inventario de un grupo con APS asignado', 'error');
+      return;
+    }
+
     // Expand "completo-" IDs to their individual reservas
     const expandedIds = new Set<string>();
     selectedReservados.forEach(id => {
@@ -4227,7 +4252,9 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
                         </span>
                         <button
                           onClick={handleBulkDeleteReservas}
-                          className="flex items-center gap-1 px-2 py-1 bg-red-500/20 text-red-400 border border-red-500/30 rounded-lg text-xs hover:bg-red-500/30 transition-colors"
+                          disabled={selectedCaraAPSBlocked}
+                          className={`flex items-center gap-1 px-2 py-1 border rounded-lg text-xs transition-colors ${selectedCaraAPSBlocked ? 'bg-zinc-500/20 text-zinc-500 border-zinc-500/30 cursor-not-allowed' : 'bg-red-500/20 text-red-400 border-red-500/30 hover:bg-red-500/30'}`}
+                          title={selectedCaraAPSBlocked ? 'Grupo con APS asignado - no se puede eliminar' : 'Eliminar seleccionados'}
                         >
                           <Trash2 className="h-3 w-3" />
                           Eliminar
@@ -4493,9 +4520,10 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
                                   {effectiveCanEdit && (
                                     <td className="px-4 py-2 text-center">
                                       <button
-                                        onClick={(e) => { e.stopPropagation(); handleRemoveReserva(reserva.id); }}
-                                        className="p-1.5 rounded-lg bg-red-500/10 text-red-400 hover:bg-red-500/20 transition-colors"
-                                        title="Eliminar"
+                                        onClick={(e) => { e.stopPropagation(); if (!selectedCaraAPSBlocked) handleRemoveReserva(reserva.id); }}
+                                        disabled={selectedCaraAPSBlocked}
+                                        className={`p-1.5 rounded-lg transition-colors ${selectedCaraAPSBlocked ? 'bg-zinc-500/10 text-zinc-500 cursor-not-allowed' : 'bg-red-500/10 text-red-400 hover:bg-red-500/20'}`}
+                                        title={selectedCaraAPSBlocked ? 'Grupo con APS asignado - no se puede eliminar' : 'Eliminar'}
                                       >
                                         <Trash2 className="h-3.5 w-3.5" />
                                       </button>
@@ -4543,9 +4571,10 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
                               {effectiveCanEdit && (
                                 <td className="px-4 py-2 text-center">
                                   <button
-                                    onClick={(e) => { e.stopPropagation(); handleRemoveReserva(reserva.id); }}
-                                    className="p-1.5 rounded-lg bg-red-500/10 text-red-400 hover:bg-red-500/20 transition-colors"
-                                    title="Eliminar"
+                                    onClick={(e) => { e.stopPropagation(); if (!selectedCaraAPSBlocked) handleRemoveReserva(reserva.id); }}
+                                    disabled={selectedCaraAPSBlocked}
+                                    className={`p-1.5 rounded-lg transition-colors ${selectedCaraAPSBlocked ? 'bg-zinc-500/10 text-zinc-500 cursor-not-allowed' : 'bg-red-500/10 text-red-400 hover:bg-red-500/20'}`}
+                                    title={selectedCaraAPSBlocked ? 'Grupo con APS asignado - no se puede eliminar' : 'Eliminar'}
                                   >
                                     <Trash2 className="h-3.5 w-3.5" />
                                   </button>
@@ -4776,9 +4805,10 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
                                                     {effectiveCanEdit && (
                                                       <td className="px-4 py-3 text-center" onClick={(e) => e.stopPropagation()}>
                                                         <button
-                                                          onClick={() => handleRemoveReserva(reserva.id)}
-                                                          className="p-1.5 text-zinc-500 hover:text-red-400 hover:bg-red-500/10 rounded-lg transition-colors"
-                                                          title="Quitar reserva"
+                                                          onClick={() => { if (!selectedCaraAPSBlocked) handleRemoveReserva(reserva.id); }}
+                                                          disabled={selectedCaraAPSBlocked}
+                                                          className={`p-1.5 rounded-lg transition-colors ${selectedCaraAPSBlocked ? 'text-zinc-600 cursor-not-allowed' : 'text-zinc-500 hover:text-red-400 hover:bg-red-500/10'}`}
+                                                          title={selectedCaraAPSBlocked ? 'Grupo con APS asignado - no se puede eliminar' : 'Quitar reserva'}
                                                         >
                                                           <Trash2 className="h-4 w-4" />
                                                         </button>
@@ -5913,13 +5943,13 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
                                         </button>
                                         {canEditResumen && (
                                           <button
-                                            onClick={(e) => { e.stopPropagation(); handleDeleteCara(cara.localId); }}
-                                            disabled={hasReservas || caraAuthPendienteSaved}
-                                            className={`p-2 rounded-lg border transition-colors ${hasReservas || caraAuthPendienteSaved
+                                            onClick={(e) => { e.stopPropagation(); if (!caraAPSBlocked) handleDeleteCara(cara.localId); }}
+                                            disabled={hasReservas || caraAuthPendienteSaved || caraAPSBlocked}
+                                            className={`p-2 rounded-lg border transition-colors ${hasReservas || caraAuthPendienteSaved || caraAPSBlocked
                                               ? 'bg-zinc-500/10 text-zinc-500 border-zinc-500/20 cursor-not-allowed'
                                               : 'bg-red-500/10 text-red-400 border-red-500/20 hover:bg-red-500/20'
                                               }`}
-                                            title={caraAuthPendienteSaved ? 'Autorización pendiente' : hasReservas ? 'No se puede eliminar (tiene reservas)' : 'Eliminar'}
+                                            title={caraAPSBlocked ? 'Grupo con APS asignado - no se puede eliminar' : caraAuthPendienteSaved ? 'Autorización pendiente' : hasReservas ? 'No se puede eliminar (tiene reservas)' : 'Eliminar'}
                                           >
                                             <Trash2 className="h-4 w-4" />
                                           </button>

@@ -2827,7 +2827,16 @@ export function CampanasPage() {
                     const isExpanded = expandedCampanas.has(campana.id);
                     const allInventarios = campanaInventarios[campana.id] || [];
                     // Filtrar inventarios por la catorcena del grupo actual (match exacto + overlap de fechas)
-                    const inventarios = allInventarios.filter(inv => itemMatchesCatorcena(inv, catorcena.num, catorcena.anio));
+                    let inventarios = allInventarios.filter(inv => itemMatchesCatorcena(inv, catorcena.num, catorcena.anio));
+                    // Filtrar inventarios por los términos de búsqueda (codigo_unico)
+                    if (allSearchTerms.length > 0) {
+                      const matchingInv = inventarios.filter(inv =>
+                        allSearchTerms.some(term => inv.codigo_unico?.toLowerCase().includes(term.toLowerCase()))
+                      );
+                      if (matchingInv.length > 0) {
+                        inventarios = matchingInv;
+                      }
+                    }
                     const isLoadingInv = loadingInventarios.has(campana.id);
                     const apsAgrupados = getInventarioAgrupadoPorAPS(inventarios);
                     const hasInventarios = allInventarios.length > 0;
