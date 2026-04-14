@@ -2722,8 +2722,7 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
                                         </td>
                                         <td className="px-2 py-2 text-center">
                                           {(() => {
-                                            const anyPending = caras.some(c => c.autorizacion_dg === 'pendiente' || c.autorizacion_dcm === 'pendiente');
-                                            const authBlocked = isEditMode && anyPending;
+                                            const authBlocked = false; // No bloquear edición local - autorización se evalúa al guardar
                                             return (
                                           <div className="flex items-center justify-center gap-1">
                                             <button

@@ -840,7 +840,7 @@ export function ClientesPage() {
       if (isSapTab) {
         payload.sap_database = activeTab;
         payload.card_code = cliente.ACA_U_SAPCode || null;
-        payload.salesperson_code = cliente.ASESOR_U_SAPCode_Original ? Number(cliente.ASESOR_U_SAPCode_Original) : null;
+        payload.salesperson_code = cliente.ASESOR_U_SAPCode_Original ? Number(cliente.ASESOR_U_SAPCode_Original) : (cliente.ASESOR_U_SAPCode ? Number(cliente.ASESOR_U_SAPCode) : null);
       }
       await createMutation.mutateAsync(payload);
     } catch (error) {
