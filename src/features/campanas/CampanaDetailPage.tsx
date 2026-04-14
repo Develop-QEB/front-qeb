@@ -1664,9 +1664,8 @@ export function CampanaDetailPage() {
       queryClient.invalidateQueries({ queryKey: ['campana-inventario-aps', campanaId] });
       queryClient.invalidateQueries({ queryKey: ['campanas'] });
 
-      // Limpiar selección y cerrar modal
+      // Limpiar selección
       setSelectedItemsAPS(new Set());
-      handleCloseRemoveAPSModal();
 
       alert(`APS eliminado de ${reservaIds.length} inventario(s)`);
     } catch (error) {
@@ -2773,20 +2772,25 @@ export function CampanaDetailPage() {
               <span className="text-[10px] sm:text-xs text-muted-foreground">
                 {filteredInventarioAPS.length} registros
               </span>
-              {permissions.canEditDetalleCampana && !alreadyPosted && (
+              {permissions.canEditDetalleCampana && (() => {
+                const selectedHavePosted = selectedItemsAPS.size > 0 &&
+                  inventarioConAPS.filter(i => selectedItemsAPS.has(String(i.rsv_ids))).some(i => postedAPSGroups.has(i.aps));
+                const disabled = selectedItemsAPS.size === 0 || selectedHavePosted;
+                return (
                 <button
-                  onClick={() => setShowRemoveAPSModal(true)}
-                  disabled={selectedItemsAPS.size === 0 || alreadyPosted}
+                  onClick={handleQuitarAPS}
+                  disabled={disabled || quitandoAPS}
                   className={`flex items-center justify-center w-6 sm:w-7 h-6 sm:h-7 rounded-lg border transition-colors ${
-                    selectedItemsAPS.size === 0
+                    disabled
                       ? isDark ? 'bg-red-900/20 border-red-500/20 cursor-not-allowed' : 'bg-red-50 border-red-200 cursor-not-allowed'
                       : isDark ? 'bg-red-900/50 hover:bg-red-900/70 border-red-500/30' : 'bg-red-100 hover:bg-red-200 border-red-300'
                   }`}
-                  title="Quitar APS"
+                  title={selectedHavePosted ? 'No se puede eliminar APS con POST a SAP' : quitandoAPS ? 'Quitando...' : 'Quitar APS'}
                 >
-                  <Minus className={`h-3.5 sm:h-4 w-3.5 sm:w-4 ${selectedItemsAPS.size === 0 ? (isDark ? 'text-red-400/40' : 'text-red-300') : (isDark ? 'text-red-400' : 'text-red-600')}`} />
+                  <Minus className={`h-3.5 sm:h-4 w-3.5 sm:w-4 ${disabled ? (isDark ? 'text-red-400/40' : 'text-red-300') : (isDark ? 'text-red-400' : 'text-red-600')}`} />
                 </button>
-              )}
+                );
+              })()}
               {permissions.canEditDetalleCampana && inventarioConAPS.length > 0 && (() => {
                 const selectedHavePostedAPS = selectedItemsAPS.size > 0 &&
                   inventarioConAPS.filter(i => selectedItemsAPS.has(String(i.rsv_ids))).some(i => postedAPSGroups.has(i.aps));
