@@ -2430,7 +2430,7 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
 
     // Filter by isla - only show items that have "ISLA" in the isla column
     if (showOnlyIsla) {
-      data = data.filter(inv => inv.isla?.toUpperCase().includes('ISLA'));
+      data = data.filter(inv => inv.isla?.toUpperCase() === 'SI');
     }
 
     // Apply grouping (distance or list)
@@ -3104,7 +3104,7 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
 
     // Filter by isla - only show items that have "ISLA" in the isla column
     if (showOnlyIslaReservados) {
-      data = data.filter(r => r.isla?.toUpperCase().includes('ISLA'));
+      data = data.filter(r => r.isla?.toUpperCase() === 'SI');
     }
 
     // Filter by search term
