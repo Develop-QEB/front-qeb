@@ -14,6 +14,7 @@ import { SolicitudesPage } from './features/solicitudes/SolicitudesPage';
 import { PropuestasPage } from './features/propuestas/PropuestasPage';
 import { CompartirPropuestaPage } from './features/propuestas/CompartirPropuestaPage';
 import { ClientePropuestaPage } from './features/propuestas/ClientePropuestaPage';
+import { ClientePropuestaMapPage } from './features/propuestas/ClientePropuestaMapPage';
 import { CampanasPage } from './features/campanas/CampanasPage';
 import { CampanaDetailPage } from './features/campanas/CampanaDetailPage';
 import { TareaSeguimientoPage } from './features/campanas/TareaSeguimientoPage';
@@ -185,6 +186,7 @@ function App() {
 
           {/* Public route for clients - no auth required */}
           <Route path="/cliente/propuesta/:id" element={<ClientePropuestaPage />} />
+          <Route path="/cliente/propuesta/:id/mapa" element={<ClientePropuestaMapPage />} />
 
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>

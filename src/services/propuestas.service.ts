@@ -117,12 +117,15 @@ export const propuestasService = {
     return response.data;
   },
 
-  async getVersionarioData(params: Omit<PropuestasParams, 'page' | 'limit' | 'soloAtendidas'> = {}): Promise<{
+  async getVersionarioData(params: Omit<PropuestasParams, 'soloAtendidas'> & { page?: number; limit?: number } = {}): Promise<{
     inventarios: any[];
     propuestasInfo: any[];
     carasInfo: any[];
+    total: number;
+    page: number;
+    limit: number;
   }> {
-    const response = await api.get<ApiResponse<any>>('/propuestas/versionario', { params, timeout: 120000 });
+    const response = await api.get<ApiResponse<any>>('/propuestas/versionario', { params, timeout: 60000 });
     return response.data.data;
   },
 

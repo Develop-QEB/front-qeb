@@ -848,7 +848,6 @@ export function AdvancedMapComponent({
           {mapZoom < MIN_ZOOM_FOR_PINS ? (
             <div />
           ) : visibleInventarios
-            .filter(inv => selectedInventory.size === 0 || selectedInventory.has(inv.id))
             .map(inv => (
             inv.latitud && inv.longitud && (
               <Marker
