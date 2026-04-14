@@ -127,7 +127,7 @@ export default function PropuestasVersionarioView({ isDark, filters }: Propuesta
     queryKey: ['propuestas-versionario', filters, page],
     queryFn: () => propuestasService.getVersionarioData({ ...filters, page, limit }),
     refetchOnWindowFocus: false,
-    staleTime: 0,
+    staleTime: 60000,
   });
 
   const catorcenaGroups = useMemo<CatorcenaGroup[]>(() => {
