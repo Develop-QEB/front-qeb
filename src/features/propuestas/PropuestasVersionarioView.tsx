@@ -185,7 +185,7 @@ export default function PropuestasVersionarioView({ isDark, filters }: Propuesta
         const info = propuestaMap.get(pid);
         if (!info) continue;
         // Excluir propuestas aprobadas (ya son campañas)
-        if (info.status === 'Aprobada') continue;
+        // No filtrar por status - incluir todas las propuestas
 
         // Build circuitos from carasInfo
         const carasForProp = propIdsFromCaras?.get(pid);
