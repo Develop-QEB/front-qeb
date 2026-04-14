@@ -27,9 +27,15 @@ export function UpdateNotificationModal() {
     try {
       await authService.markVersionNotified(latestVersion);
       useAuthStore.getState().setUser({ ...user, version_notified: latestVersion });
-      setOpen(false);
+
+      // Force clear cache and reload
+      if ('caches' in window) {
+        const names = await caches.keys();
+        await Promise.all(names.map(name => caches.delete(name)));
+      }
+      window.location.reload();
     } catch {
-      setOpen(false);
+      window.location.reload();
     } finally {
       setLoading(false);
     }
