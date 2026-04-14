@@ -1378,7 +1378,7 @@ export function PropuestasPage() {
 
       for (const cara of carasInfo) {
         const info = propMap.get(cara.propuesta_id) as any;
-        if (!info || info.status === 'Aprobada') continue;
+        if (!info) continue;
         const key = `${cara.propuesta_id}-${cara.sc_id}`;
         const items = invMap.get(key) || [];
         const showInv = !invExported.has(cara.propuesta_id);
