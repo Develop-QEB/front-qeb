@@ -699,6 +699,7 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
   const [savingPct, setSavingPct] = useState(false); // loading para guardar % en BD
   const [flujoFilter, setFlujoFilter] = useState<'Todos' | 'Flujo' | 'Contraflujo'>('Todos');
   const [showOnlyIsla, setShowOnlyIsla] = useState(false);
+  const [showOnlyMundialista, setShowOnlyMundialista] = useState(false);
   const [sortColumn, setSortColumn] = useState<string>('codigo_unico');
   const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('asc');
   const [agruparComoCompleto, setAgruparComoCompleto] = useState(true); // Group flujo+contraflujo at same location
@@ -2428,9 +2429,14 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
       data = filterSpotUnico(data);
     }
 
-    // Filter by isla - only show items that have "ISLA" in the isla column
+    // Filter by isla - only show items that have "SI" in the isla column
     if (showOnlyIsla) {
       data = data.filter(inv => inv.isla?.toUpperCase() === 'SI');
+    }
+
+    // Filter by mundialista - only show items that have "SI" in mueble_isla column
+    if (showOnlyMundialista) {
+      data = data.filter(inv => (inv as any).mueble_isla?.toUpperCase() === 'SI');
     }
 
     // Apply grouping (distance or list)
@@ -2481,7 +2487,7 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
     });
 
     return data;
-  }, [inventarioDisponible, disponiblesSearchTerm, poiFilterIds, flujoFilter, showOnlyUnicos, showOnlyCompletos, showOnlyUnicosDigitales, showSpotUnico, showOnlyIsla, groupByDistance, groupMode, filterUnicos, filterCompletos, filterUnicosDigitales, filterSpotUnico, groupByDistanceFunc, groupByListFunc, sortColumn, sortDirection, reservas]);
+  }, [inventarioDisponible, disponiblesSearchTerm, poiFilterIds, flujoFilter, showOnlyUnicos, showOnlyCompletos, showOnlyUnicosDigitales, showSpotUnico, showOnlyIsla, showOnlyMundialista, groupByDistance, groupMode, filterUnicos, filterCompletos, filterUnicosDigitales, filterSpotUnico, groupByDistanceFunc, groupByListFunc, sortColumn, sortDirection, reservas]);
 
   // Check if an inventory item is selected
   const isInventorySelected = useCallback((inv: InventarioDisponible | ProcessedInventoryItem): boolean => {
@@ -3855,6 +3861,26 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
                     Isla
                     {showOnlyIsla && (
                       <X className="h-3 w-3 ml-0.5 hover:text-teal-200" onClick={(e) => { e.stopPropagation(); setShowOnlyIsla(false); }} />
+                    )}
+                  </button>
+
+                  {/* Mundialista filter */}
+                  <button
+                    onClick={() => {
+                      setShowOnlyMundialista(!showOnlyMundialista);
+                      if (!showOnlyMundialista) {
+                        setSortColumn('codigo_unico');
+                        setSortDirection('asc');
+                      }
+                    }}
+                    className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-medium transition-all ${showOnlyMundialista
+                      ? 'bg-green-600 text-white shadow'
+                      : `${isDark ? 'bg-zinc-800/80' : 'bg-gray-100/80'} ${isDark ? 'text-zinc-400' : 'text-gray-500'} border ${isDark ? 'border-zinc-700/50' : 'border-gray-200/50'} ${isDark ? 'hover:text-white' : 'hover:text-gray-900'}`
+                      }`}
+                  >
+                    <span className="text-sm">⚽</span>
+                    {showOnlyMundialista && (
+                      <X className="h-3 w-3 ml-0.5 hover:text-green-200" onClick={(e) => { e.stopPropagation(); setShowOnlyMundialista(false); }} />
                     )}
                   </button>
 
