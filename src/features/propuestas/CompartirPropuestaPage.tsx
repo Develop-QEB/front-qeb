@@ -955,6 +955,15 @@ export function CompartirPropuestaPage() {
               <ExternalLink className="h-4 w-4" />
               Ver en navegador
             </a>
+            <a
+              href={`/cliente/propuesta/${propuestaId}/mapa`}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-blue-500 to-cyan-500 hover:from-blue-400 hover:to-cyan-400 text-white rounded-lg text-sm font-medium transition-all shadow-lg shadow-blue-500/20"
+            >
+              <MapIcon className="h-4 w-4" />
+              Ver Mapa
+            </a>
             <button
               onClick={handleCopyLink}
               className="flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-purple-600 to-purple-700 hover:from-purple-500 hover:to-purple-600 text-white rounded-lg text-sm font-medium transition-all shadow-lg shadow-purple-500/20"
