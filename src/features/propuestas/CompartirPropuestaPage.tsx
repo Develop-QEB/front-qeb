@@ -199,10 +199,15 @@ export function CompartirPropuestaPage() {
   const kpis = useMemo(() => {
     if (!catorcenaFilteredInventario.length) return { total: 0, renta: 0, bonificadas: 0, inversion: 0 };
 
-    const total = catorcenaFilteredInventario.reduce((sum, i) => sum + (Number(i.caras_totales) || 0), 0);
-    const inversion = catorcenaFilteredInventario.reduce((sum, i) => sum + (Number(i.tarifa_publica || 0) * Number(i.caras_totales || 1)), 0);
+    // Calculate from actual reserved/sold inventory (real data)
+    const renta = catorcenaFilteredInventario.reduce((sum, i) => sum + Number(i.caras_renta || 0), 0);
+    const bonificadas = catorcenaFilteredInventario.reduce((sum, i) => sum + Number(i.caras_bonificadas || 0), 0);
+    const total = renta + bonificadas;
 
-    return { total, renta: total, bonificadas: 0, inversion };
+    // Inversion only from renta caras (bonificadas are free)
+    const inversion = catorcenaFilteredInventario.reduce((sum, i) => sum + (Number(i.tarifa_publica || 0) * Number(i.caras_renta || 0)), 0);
+
+    return { total, renta, bonificadas, inversion };
   }, [catorcenaFilteredInventario]);
 
   // Charts data (respond to catorcena filter)

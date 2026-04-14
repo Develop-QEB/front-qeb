@@ -122,6 +122,8 @@ export interface InventarioReservado {
   estado: string | null;
   tipo_de_cara: string | null;
   caras_totales: number;
+  caras_bonificadas: number;
+  caras_renta: number;
   latitud: number;
   longitud: number;
   plaza: string | null;

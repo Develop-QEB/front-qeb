@@ -6287,7 +6287,8 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
                                   <div className="flex items-center gap-2">
                                     {/* Botón Buscar Inventario - oculto para impresión, deshabilitado si hay autorizaciones pendientes */}
                                     {effectiveCanEdit && permissions.canBuscarInventarioEnModal && !esImpresion && (() => {
-                                      const tienePendientes = cara.autorizacion_dg === 'pendiente' || cara.autorizacion_dcm === 'pendiente';
+                                      const isLocallyModified = cara.id ? modifiedCaras.has(cara.id) : false;
+                                      const tienePendientes = !isLocallyModified && (cara.autorizacion_dg === 'pendiente' || cara.autorizacion_dcm === 'pendiente');
                                       const tieneRechazado = cara.autorizacion_dg === 'rechazado' || cara.autorizacion_dcm === 'rechazado';
                                       const bloqueado = tienePendientes || tieneRechazado;
 
@@ -6313,29 +6314,29 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
                                       );
                                     })()}
                                     {effectiveCanEdit && (() => {
-                                      const caraAuthPendiente = caras.some(c => c.autorizacion_dg === 'pendiente' || c.autorizacion_dcm === 'pendiente');
+                                      const caraAuthPendienteSaved = caras.some(c => !modifiedCaras.has(c.id!) && (c.autorizacion_dg === 'pendiente' || c.autorizacion_dcm === 'pendiente'));
                                       return (
                                       <>
                                         <button
-                                          onClick={(e) => { e.stopPropagation(); if (!caraAuthPendiente) handleEditCara(cara); }}
-                                          disabled={caraAuthPendiente}
-                                          className={`p-2 rounded-lg border transition-colors ${caraAuthPendiente
+                                          onClick={(e) => { e.stopPropagation(); if (!caraAuthPendienteSaved) handleEditCara(cara); }}
+                                          disabled={caraAuthPendienteSaved}
+                                          className={`p-2 rounded-lg border transition-colors ${caraAuthPendienteSaved
                                             ? `bg-zinc-500/10 ${isDark ? 'text-zinc-500' : 'text-gray-400'} border-zinc-500/20 cursor-not-allowed`
                                             : 'bg-amber-500/10 text-amber-400 border-amber-500/20 hover:bg-amber-500/20'
                                           }`}
-                                          title={caraAuthPendiente ? 'Autorización pendiente - no se puede editar' : 'Editar'}
+                                          title={caraAuthPendienteSaved ? 'Autorización pendiente - no se puede editar' : 'Editar'}
                                         >
                                           <Pencil className="h-4 w-4" />
                                         </button>
                                         {canEditResumen && (
                                           <button
                                             onClick={(e) => { e.stopPropagation(); handleDeleteCara(cara.localId); }}
-                                            disabled={hasReservas || caraAuthPendiente}
-                                            className={`p-2 rounded-lg border transition-colors ${hasReservas || caraAuthPendiente
+                                            disabled={hasReservas || caraAuthPendienteSaved}
+                                            className={`p-2 rounded-lg border transition-colors ${hasReservas || caraAuthPendienteSaved
                                               ? `bg-zinc-500/10 ${isDark ? 'text-zinc-500' : 'text-gray-400'} border-zinc-500/20 cursor-not-allowed`
                                               : 'bg-red-500/10 text-red-400 border-red-500/20 hover:bg-red-500/20'
                                               }`}
-                                            title={caraAuthPendiente ? 'Autorización pendiente' : hasReservas ? 'No se puede eliminar (tiene reservas)' : 'Eliminar'}
+                                            title={caraAuthPendienteSaved ? 'Autorización pendiente' : hasReservas ? 'No se puede eliminar (tiene reservas)' : 'Eliminar'}
                                           >
                                             <Trash2 className="h-4 w-4" />
                                           </button>
