@@ -1354,6 +1354,8 @@ export function PropuestasPage() {
         catorcenaInicio,
         catorcenaFin,
         tipoPeriodo: tipoPeriodo || undefined,
+        page: 1,
+        limit: 100,
       });
       const { inventarios, propuestasInfo, carasInfo } = exportData;
 
