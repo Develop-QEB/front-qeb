@@ -1314,6 +1314,18 @@ export function PropuestasPage() {
     }) || null;
   }, [catorcenasData]);
 
+  // Set default catorcena filter to current catorcena
+  const [defaultCatorcenaApplied, setDefaultCatorcenaApplied] = useState(false);
+  useEffect(() => {
+    if (currentCatorcena && !defaultCatorcenaApplied) {
+      setYearInicio(currentCatorcena.a_o);
+      setYearFin(currentCatorcena.a_o);
+      setCatorcenaInicio(currentCatorcena.numero_catorcena);
+      setCatorcenaFin(currentCatorcena.numero_catorcena);
+      setDefaultCatorcenaApplied(true);
+    }
+  }, [currentCatorcena, defaultCatorcenaApplied]);
+
   // Group data
   const groupedData = useMemo(() => {
     if (!groupBy || !data?.data) return null;

@@ -978,6 +978,18 @@ export function CampanasPage() {
     }) || null;
   }, [catorcenasData]);
 
+  // Set default catorcena filter to current catorcena
+  const [defaultCatorcenaApplied, setDefaultCatorcenaApplied] = useState(false);
+  useEffect(() => {
+    if (currentCatorcena && !defaultCatorcenaApplied) {
+      setYearInicio(currentCatorcena.a_o);
+      setYearFin(currentCatorcena.a_o);
+      setCatorcenaInicio(currentCatorcena.numero_catorcena);
+      setCatorcenaFin(currentCatorcena.numero_catorcena);
+      setDefaultCatorcenaApplied(true);
+    }
+  }, [currentCatorcena, defaultCatorcenaApplied]);
+
   // Generate catorcena options for filter (sorted by year desc, then catorcena desc)
   const catorcenaInicioOptions = useMemo(() => {
     if (!catorcenasData?.data) return [];
