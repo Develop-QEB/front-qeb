@@ -1,4 +1,4 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { ChevronDown, ChevronRight, Calendar, Loader2, Download, Package, ClipboardList, MapPin, DollarSign, Layers } from 'lucide-react';
 import { propuestasService } from '../../services/propuestas.service';
@@ -117,12 +117,17 @@ export default function PropuestasVersionarioView({ isDark, filters }: Propuesta
   const [expandedPropuestas, setExpandedPropuestas] = useState<Set<number>>(new Set());
   const [expandedCircuitos, setExpandedCircuitos] = useState<Set<string>>(new Set());
   const [isExporting, setIsExporting] = useState(false);
+  const [page, setPage] = useState(1);
+  const limit = 50;
+
+  // Reset page when filters change
+  useEffect(() => { setPage(1); }, [filters.status, filters.search, filters.yearInicio, filters.yearFin, filters.catorcenaInicio, filters.catorcenaFin, filters.tipoPeriodo]);
 
   const { data, isLoading, isFetching } = useQuery({
-    queryKey: ['propuestas-versionario', filters],
-    queryFn: () => propuestasService.getVersionarioData(filters),
+    queryKey: ['propuestas-versionario', filters, page],
+    queryFn: () => propuestasService.getVersionarioData({ ...filters, page, limit }),
     refetchOnWindowFocus: false,
-    staleTime: 0,
+    staleTime: 60000,
   });
 
   const catorcenaGroups = useMemo<CatorcenaGroup[]>(() => {
@@ -607,12 +612,42 @@ export default function PropuestasVersionarioView({ isDark, filters }: Propuesta
         </div>
       )}
 
-      {/* Footer */}
-      {!isLoading && catorcenaGroups.length > 0 && (
+      {/* Footer with pagination */}
+      {!isLoading && (
         <div className={`flex items-center justify-between px-5 py-3 border-t ${isDark ? 'border-zinc-800/50 bg-zinc-900/30 text-zinc-500' : 'border-gray-200 bg-gray-50 text-gray-400'} text-xs`}>
           <span>
-            {catorcenaGroups.length} catorcena{catorcenaGroups.length !== 1 ? 's' : ''} · {totalPropuestas} propuesta{totalPropuestas !== 1 ? 's' : ''}
+            {catorcenaGroups.length > 0
+              ? `${catorcenaGroups.length} catorcena${catorcenaGroups.length !== 1 ? 's' : ''} · ${totalPropuestas} propuesta${totalPropuestas !== 1 ? 's' : ''}`
+              : 'Sin resultados'}
+            {data?.total != null && data.total > limit && ` (página ${page} de ${Math.ceil(data.total / limit)}, ${data.total} total)`}
           </span>
+          {data?.total != null && data.total > limit && (
+            <div className="flex items-center gap-2">
+              <button
+                onClick={() => setPage(p => Math.max(1, p - 1))}
+                disabled={page <= 1 || isFetching}
+                className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-all ${
+                  page <= 1 || isFetching
+                    ? isDark ? 'bg-zinc-800/30 text-zinc-600 cursor-not-allowed' : 'bg-gray-100 text-gray-300 cursor-not-allowed'
+                    : isDark ? 'bg-zinc-800 text-zinc-300 hover:bg-zinc-700' : 'bg-gray-200 text-gray-600 hover:bg-gray-300'
+                }`}
+              >
+                Anterior
+              </button>
+              <span className={`text-xs ${isDark ? 'text-zinc-400' : 'text-gray-500'}`}>{page} / {Math.ceil(data.total / limit)}</span>
+              <button
+                onClick={() => setPage(p => p + 1)}
+                disabled={page >= Math.ceil((data?.total || 0) / limit) || isFetching}
+                className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-all ${
+                  page >= Math.ceil((data?.total || 0) / limit) || isFetching
+                    ? isDark ? 'bg-zinc-800/30 text-zinc-600 cursor-not-allowed' : 'bg-gray-100 text-gray-300 cursor-not-allowed'
+                    : isDark ? 'bg-zinc-800 text-zinc-300 hover:bg-zinc-700' : 'bg-gray-200 text-gray-600 hover:bg-gray-300'
+                }`}
+              >
+                Siguiente
+              </button>
+            </div>
+          )}
         </div>
       )}
     </div>
