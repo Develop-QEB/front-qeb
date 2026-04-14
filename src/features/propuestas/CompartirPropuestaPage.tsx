@@ -396,7 +396,21 @@ export function CompartirPropuestaPage() {
 
   // Handlers
   const handleCopyLink = () => {
-    const publicUrl = `${window.location.origin}/cliente/propuesta/${propuestaId}`;
+    const params = new URLSearchParams();
+    if (selectedCatorcenas.size > 0) {
+      params.set('catorcenas', Array.from(selectedCatorcenas).join(','));
+    }
+    if (filters.length > 0) {
+      params.set('filters', JSON.stringify(filters.map(f => ({ field: f.field, operator: f.operator, value: f.value }))));
+    }
+    if (filterText) {
+      params.set('q', filterText);
+    }
+    if (filterPeriodo) {
+      params.set('periodo', filterPeriodo);
+    }
+    const qs = params.toString();
+    const publicUrl = `${window.location.origin}/cliente/propuesta/${propuestaId}${qs ? `?${qs}` : ''}`;
     navigator.clipboard.writeText(publicUrl);
     setCopied(true);
     setTimeout(() => setCopied(false), 2000);
