@@ -2776,7 +2776,7 @@ export function CampanaDetailPage() {
               {permissions.canEditDetalleCampana && !alreadyPosted && (
                 <button
                   onClick={() => setShowRemoveAPSModal(true)}
-                  disabled={selectedItemsAPS.size === 0}
+                  disabled={selectedItemsAPS.size === 0 || alreadyPosted}
                   className={`flex items-center justify-center w-6 sm:w-7 h-6 sm:h-7 rounded-lg border transition-colors ${
                     selectedItemsAPS.size === 0
                       ? isDark ? 'bg-red-900/20 border-red-500/20 cursor-not-allowed' : 'bg-red-50 border-red-200 cursor-not-allowed'
