@@ -1250,7 +1250,16 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
     setCaras(prev => {
       let updated: CaraEntry[];
       if (editingCaraId) {
+        const editingCara = prev.find(c => c.id === editingCaraId);
+        // Replace RT cara
         updated = prev.map(c => c.id === editingCaraId ? newCaras[0] : c);
+        // If editing a RT/BF pair, remove old BF and add new BF (if any)
+        if (editingCara?.grupo_rt_bf) {
+          updated = updated.filter(c => !(c.esBf && c.grupo_rt_bf === editingCara.grupo_rt_bf && c.catorcenaNum === editingCara.catorcenaNum && c.catorcenaYear === editingCara.catorcenaYear));
+        }
+        // Add new BF caras (from newCaras[1+])
+        const bfCaras = newCaras.filter(c => c.esBf);
+        if (bfCaras.length > 0) updated.push(...bfCaras);
       } else {
         updated = [...prev, ...newCaras];
       }
@@ -1336,15 +1345,29 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
 
   // Remove cara
   const handleRemoveCara = (id: string) => {
-    setCaras(caras.filter(c => c.id !== id));
-    // If we were editing this cara, clear editing state
+    const cara = caras.find(c => c.id === id);
+    // If RT/BF pair, remove both
+    if (cara?.grupo_rt_bf) {
+      setCaras(caras.filter(c => !(c.grupo_rt_bf === cara.grupo_rt_bf && c.catorcenaNum === cara.catorcenaNum && c.catorcenaYear === cara.catorcenaYear)));
+    } else {
+      setCaras(caras.filter(c => c.id !== id));
+    }
     if (editingCaraId === id) {
       setEditingCaraId(null);
     }
   };
 
-  // Edit cara - loads cara data into form
+  // Edit cara - loads cara data into form. If RT/BF pair, load both.
   const handleEditCara = (cara: CaraEntry) => {
+    // If this is a BF row, find and edit the RT row instead
+    if (cara.esBf && cara.grupo_rt_bf) {
+      const rtCara = caras.find(c => c.grupo_rt_bf === cara.grupo_rt_bf && !c.esBf && c.catorcenaNum === cara.catorcenaNum && c.catorcenaYear === cara.catorcenaYear);
+      if (rtCara) { handleEditCara(rtCara); return; }
+    }
+
+    // Find BF pair if exists
+    const bfPair = cara.grupo_rt_bf ? caras.find(c => c.grupo_rt_bf === cara.grupo_rt_bf && c.esBf && c.catorcenaNum === cara.catorcenaNum && c.catorcenaYear === cara.catorcenaYear) : null;
+
     setEditingCaraId(cara.id);
     setNewCara({
       articulo: cara.articulo,
@@ -1358,9 +1381,9 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
       periodoInicioCustom: tipoPeriodo === 'mensual' ? cara.periodoInicio : '',
       periodoFinCustom: tipoPeriodo === 'mensual' ? cara.periodoFin : '',
       renta: cara.renta,
-      bonificacion: cara.bonificacion,
+      bonificacion: bfPair ? bfPair.renta : cara.bonificacion,
       tarifaPublica: cara.tarifaPublica,
-      articuloBf: null,
+      articuloBf: bfPair ? bfPair.articulo : null,
     });
   };
 
@@ -2554,34 +2577,6 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
                     />
                   </div>
 
-                  {/* Artículo BF - only when bonificacion > 0 */}
-                  {newCara.bonificacion > 0 && !newCara.articulo?.ItemCode?.toUpperCase().startsWith('CT') && !newCara.articulo?.ItemCode?.toUpperCase().startsWith('IM') && (
-                    <div>
-                      <label className={`text-xs ${isDark ? 'text-emerald-400' : 'text-emerald-600'}`}>Artículo BF</label>
-                      <SearchableSelect
-                        label=""
-                        options={(articulosData || []).filter(a => a.ItemCode.toUpperCase().startsWith('BF') || a.ItemCode.toUpperCase().startsWith('CF'))}
-                        value={newCara.articuloBf}
-                        onChange={(item: SAPArticulo) => setNewCara({ ...newCara, articuloBf: item })}
-                        onClear={() => setNewCara({ ...newCara, articuloBf: null })}
-                        displayKey="ItemName"
-                        valueKey="ItemCode"
-                        searchKeys={['ItemCode', 'ItemName']}
-                        renderOption={(item) => (
-                          <div>
-                            <div className={`font-medium ${isDark ? 'text-white' : 'text-gray-900'}`}>{item.ItemCode}</div>
-                            <div className={`text-xs ${isDark ? 'text-zinc-500' : 'text-gray-400'}`}>{item.ItemName}</div>
-                          </div>
-                        )}
-                        renderSelected={(item) => (
-                          <div className="text-left">
-                            <div className={`text-xs font-mono ${isDark ? 'text-emerald-300' : 'text-emerald-700'}`}>{item.ItemCode}</div>
-                          </div>
-                        )}
-                      />
-                    </div>
-                  )}
-
                   {/* Tarifa Publica - Editable */}
                   <div>
                     <label className={`text-xs ${isDark ? 'text-zinc-500' : 'text-gray-500'}`}>Tarifa Pública</label>
@@ -2623,6 +2618,34 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
                       <span className="text-cyan-300 font-medium">Cortesía</span>
                       <span className="text-cyan-300">{newCara.bonificacion} caras (sin costo)</span>
                     </div>
+                  </div>
+                )}
+
+                {/* Artículo BF - below the grid when bonificacion > 0 */}
+                {newCara.bonificacion > 0 && !newCara.articulo?.ItemCode?.toUpperCase().startsWith('CT') && !newCara.articulo?.ItemCode?.toUpperCase().startsWith('IM') && (
+                  <div className={`mt-3 p-3 ${isDark ? 'bg-emerald-900/10 border-emerald-500/20' : 'bg-emerald-50 border-emerald-200'} rounded-lg border`}>
+                    <label className={`text-xs font-medium ${isDark ? 'text-emerald-400' : 'text-emerald-600'} mb-1 block`}>Artículo de Bonificación (BF)</label>
+                    <SearchableSelect
+                      label=""
+                      options={(articulosData || []).filter(a => a.ItemCode.toUpperCase().startsWith('BF') || a.ItemCode.toUpperCase().startsWith('CF'))}
+                      value={newCara.articuloBf}
+                      onChange={(item: SAPArticulo) => setNewCara({ ...newCara, articuloBf: item })}
+                      onClear={() => setNewCara({ ...newCara, articuloBf: null })}
+                      displayKey="ItemName"
+                      valueKey="ItemCode"
+                      searchKeys={['ItemCode', 'ItemName']}
+                      renderOption={(item) => (
+                        <div>
+                          <div className={`font-medium ${isDark ? 'text-white' : 'text-gray-900'}`}>{item.ItemCode}</div>
+                          <div className={`text-xs ${isDark ? 'text-zinc-500' : 'text-gray-400'}`}>{item.ItemName}</div>
+                        </div>
+                      )}
+                      renderSelected={(item) => (
+                        <div className="text-left">
+                          <div className={`text-xs font-mono ${isDark ? 'text-emerald-300' : 'text-emerald-700'}`}>{item.ItemCode}</div>
+                        </div>
+                      )}
+                    />
                   </div>
                 )}
 
