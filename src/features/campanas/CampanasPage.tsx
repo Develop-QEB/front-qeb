@@ -924,20 +924,22 @@ export function CampanasPage() {
     return terms;
   }, [debouncedSearchTags, debouncedSearchInput]);
 
-  // All search is handled client-side — fetch all data when searching
-  const hasSearch = allSearchTerms.length > 0;
+  // Single term → backend search (fast SQL). Multiple terms → client-side OR filter.
+  const backendSearch = allSearchTerms.length === 1 ? allSearchTerms[0] : '';
+  const multiSearch = allSearchTerms.length > 1;
 
-  // When grouping, advanced filters, sorting, catorcena filter, or search are active, fetch ALL data
-  const needsAllData = activeGroupings.length > 0 || advancedFilters.length > 0 || !!sortField || !!selectedCatorcenaInicio || status === 'Incompleta' || hasSearch;
+  // When grouping, advanced filters, sorting, catorcena filter, or multi-search are active, fetch ALL data
+  const needsAllData = activeGroupings.length > 0 || advancedFilters.length > 0 || !!sortField || !!selectedCatorcenaInicio || status === 'Incompleta' || multiSearch;
   const effectiveLimit = needsAllData ? 9999 : limit;
 
   const { data, isLoading } = useQuery({
-    queryKey: ['campanas', page, status, yearInicio, yearFin, catorcenaInicio, catorcenaFin, allSearchTerms, tipoPeriodo, needsAllData],
+    queryKey: ['campanas', page, status, yearInicio, yearFin, catorcenaInicio, catorcenaFin, backendSearch, allSearchTerms, tipoPeriodo, needsAllData],
     queryFn: () =>
       campanasService.getAll({
         page: needsAllData ? 1 : page,
         limit: effectiveLimit,
         status: (status && status !== 'Incompleta') ? status : undefined,
+        search: backendSearch || undefined,
         yearInicio,
         yearFin,
         catorcenaInicio,
@@ -948,10 +950,11 @@ export function CampanasPage() {
 
   // Stats query — global KPIs with same filters
   const { data: statsData, isLoading: isLoadingStats } = useQuery({
-    queryKey: ['campanas-stats', status, allSearchTerms, yearInicio, yearFin, catorcenaInicio, catorcenaFin, tipoPeriodo],
+    queryKey: ['campanas-stats', status, backendSearch, yearInicio, yearFin, catorcenaInicio, catorcenaFin, tipoPeriodo],
     queryFn: () =>
       campanasService.getStats({
         status: (status && status !== 'Incompleta') ? status : undefined,
+        search: backendSearch || undefined,
         yearInicio,
         yearFin,
         catorcenaInicio,
@@ -993,8 +996,8 @@ export function CampanasPage() {
   const filteredData = useMemo(() => {
     let items = data?.data || [];
 
-    // Client-side search filter for all search terms
-    if (hasSearch && items.length > 0) {
+    // Client-side OR search filter only for multiple terms (single term handled by backend)
+    if (multiSearch && items.length > 0) {
       items = items.filter(c =>
         allSearchTerms.some(term => {
           const lowerTerm = term.toLowerCase();
@@ -1080,7 +1083,7 @@ export function CampanasPage() {
   }, [data?.data, allSearchTerms, selectedCatorcenaInicio, advancedFilters, sortField, sortDirection]);
 
   // Recalculate stats from filteredData when client-side filters are active
-  const needsClientFilter = hasSearch || advancedFilters.length > 0 || selectedCatorcenaInicio || status === 'Incompleta';
+  const needsClientFilter = multiSearch || advancedFilters.length > 0 || selectedCatorcenaInicio || status === 'Incompleta';
   const effectiveStats = useMemo(() => {
     if (needsClientFilter && data?.data) {
       const byStatus: Record<string, number> = {};
@@ -1772,6 +1775,7 @@ export function CampanasPage() {
       // Un solo request al backend con los mismos filtros activos
       const exportData = await campanasService.getExportLayout({
         status: (status && status !== 'Incompleta') ? status : undefined,
+        search: backendSearch || undefined,
         yearInicio,
         yearFin,
         catorcenaInicio,
@@ -2109,7 +2113,7 @@ export function CampanasPage() {
   };
 
   // Calcular paginación basada en si hay filtros locales activos
-  const hasLocalFilters = !!(hasSearch || selectedCatorcenaInicio);
+  const hasLocalFilters = !!(multiSearch || selectedCatorcenaInicio);
   const totalPages = hasLocalFilters ? 1 : (data?.pagination?.totalPages || 1);
   const total = hasLocalFilters ? filteredData.length : (data?.pagination?.total ?? 0);
   const startItem = hasLocalFilters ? (filteredData.length > 0 ? 1 : 0) : ((page - 1) * limit + 1);
