@@ -396,26 +396,39 @@ export function CompartirPropuestaPage() {
 
   // Handlers
   const handleCopyLink = () => {
-    const publicUrl = `${window.location.origin}/cliente/propuesta/${propuestaId}`;
+    const params = new URLSearchParams();
+    if (selectedCatorcenas.size > 0) {
+      params.set('catorcenas', Array.from(selectedCatorcenas).join(','));
+    }
+    if (filters.length > 0) {
+      params.set('filters', JSON.stringify(filters.map(f => ({ field: f.field, operator: f.operator, value: f.value }))));
+    }
+    if (filterText) {
+      params.set('q', filterText);
+    }
+    if (filterPeriodo) {
+      params.set('periodo', filterPeriodo);
+    }
+    const qs = params.toString();
+    const publicUrl = `${window.location.origin}/cliente/propuesta/${propuestaId}${qs ? `?${qs}` : ''}`;
     navigator.clipboard.writeText(publicUrl);
     setCopied(true);
     setTimeout(() => setCopied(false), 2000);
   };
 
-  const handleDownloadCSV = () => {
+  const handleDownloadXLSX = () => {
     if (!inventario) return;
-    const headers = ['Código', 'Plaza', 'Ubicación', 'Tipo Cara', 'Formato', 'Caras', 'Tarifa', 'Periodo', 'Latitud', 'Longitud'];
-    const rows = inventario.map(i => [
-      i.codigo_unico, i.plaza, i.ubicacion, i.tipo_de_cara, i.mueble,
-      i.caras_totales, i.tarifa_publica, formatInicioPeriodo(i, tipoPeriodo), i.latitud || '', i.longitud || ''
-    ]);
-    const csv = [headers.join(','), ...rows.map(r => r.map(v => `"${v || ''}"`).join(','))].join('\n');
-    const blob = new Blob([csv], { type: 'text/csv' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `reservas_propuesta_${propuestaId}.csv`;
-    a.click();
+    import('xlsx').then(XLSX => {
+      const headers = ['Código', 'Plaza', 'Ubicación', 'Tipo Cara', 'Formato', 'Caras', 'Tarifa', 'Periodo', 'Latitud', 'Longitud'];
+      const rows = inventario.map(i => [
+        i.codigo_unico, i.plaza, i.ubicacion, i.tipo_de_cara, i.mueble,
+        i.caras_totales, i.tarifa_publica, formatInicioPeriodo(i, tipoPeriodo), i.latitud || '', i.longitud || ''
+      ]);
+      const ws = XLSX.utils.aoa_to_sheet([headers, ...rows]);
+      const wb = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(wb, ws, 'Reservas');
+      XLSX.writeFile(wb, `reservas_propuesta_${propuestaId}.xlsx`);
+    });
   };
 
   // Download ALL items as KML
@@ -955,6 +968,15 @@ export function CompartirPropuestaPage() {
               <ExternalLink className="h-4 w-4" />
               Ver en navegador
             </a>
+            <a
+              href={`/cliente/propuesta/${propuestaId}/mapa`}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-blue-500 to-cyan-500 hover:from-blue-400 hover:to-cyan-400 text-white rounded-lg text-sm font-medium transition-all shadow-lg shadow-blue-500/20"
+            >
+              <MapIcon className="h-4 w-4" />
+              Ver Mapa
+            </a>
             <button
               onClick={handleCopyLink}
               className="flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-purple-600 to-purple-700 hover:from-purple-500 hover:to-purple-600 text-white rounded-lg text-sm font-medium transition-all shadow-lg shadow-purple-500/20"
@@ -1156,8 +1178,8 @@ export function CompartirPropuestaPage() {
                 <span className={`text-xs font-normal ${isDark ? 'text-zinc-500' : 'text-gray-400'}`}>({filteredInventario.length} inventarios)</span>
               </h3>
               <div className="flex items-center gap-2">
-                <button onClick={handleDownloadCSV} className="flex items-center gap-1.5 px-3 py-1.5 bg-gradient-to-r from-emerald-600 to-emerald-700 hover:from-emerald-500 hover:to-emerald-600 text-white rounded-lg text-xs font-medium shadow-sm transition-colors">
-                  <FileSpreadsheet className="h-3.5 w-3.5" /> CSV
+                <button onClick={handleDownloadXLSX} className="flex items-center gap-1.5 px-3 py-1.5 bg-gradient-to-r from-emerald-600 to-emerald-700 hover:from-emerald-500 hover:to-emerald-600 text-white rounded-lg text-xs font-medium shadow-sm transition-colors">
+                  <FileSpreadsheet className="h-3.5 w-3.5" /> Excel
                 </button>
                 {selectedItems.size > 0 && (
                   <button onClick={handleDownloadKMLSelected} className="flex items-center gap-1.5 px-3 py-1.5 bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-500 hover:to-blue-600 text-white rounded-lg text-xs font-medium shadow-sm transition-colors" title={`Descargar KML de ${selectedItems.size} seleccionados`}>

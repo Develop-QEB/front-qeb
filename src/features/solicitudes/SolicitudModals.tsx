@@ -902,7 +902,7 @@ export function ViewSolicitudModal({ isOpen, onClose, solicitudId, onEdit, onAte
                                         {articuloGroup.articulo}
                                       </span>
                                       <span className={`${isDark ? 'text-zinc-500' : 'text-gray-400'} text-xs`}>
-                                        ({articuloGroup.caras.length} cara{articuloGroup.caras.length > 1 ? 's' : ''})
+                                        ({articuloGroup.caras.length} Circuito{articuloGroup.caras.length > 1 ? 's' : ''})
                                       </span>
                                     </div>
                                     <div className="flex items-center gap-3 text-xs">

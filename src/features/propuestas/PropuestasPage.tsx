@@ -2119,8 +2119,8 @@ export function PropuestasPage() {
 
         {/* Table */}
         {activeView === 'tabla' && <div className={`rounded-2xl border backdrop-blur-xl overflow-hidden shadow-xl ${isDark ? 'border-purple-500/20 bg-gradient-to-br from-zinc-900/90 via-purple-950/20 to-zinc-900/90 shadow-purple-500/5' : 'border-gray-200 bg-white shadow-gray-200/50'}`}>
-          <div className="overflow-x-auto">
-            <table className="w-full">
+          <div className="overflow-hidden">
+            <table className="w-full table-fixed">
               <thead>
                 <tr className={`border-b ${isDark ? 'border-purple-500/20 bg-gradient-to-r from-purple-900/30 via-fuchsia-900/20 to-purple-900/30' : 'border-gray-200 bg-gray-50'}`}>
                   <th className={`px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider ${isDark ? 'text-purple-300' : 'text-gray-600'}`}>ID</th>
