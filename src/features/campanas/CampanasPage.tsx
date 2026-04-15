@@ -1012,7 +1012,8 @@ export function CampanasPage() {
             c.T0_U_Cliente?.toLowerCase().includes(lowerTerm) ||
             c.asignado?.toLowerCase().includes(lowerTerm) ||
             c.nombre_campania?.toLowerCase().includes(lowerTerm) ||
-            c.codigos_inventario?.toLowerCase().includes(lowerTerm)
+            c.codigos_inventario?.toLowerCase().includes(lowerTerm) ||
+            c.creador_nombre?.toLowerCase().includes(lowerTerm)
           );
         })
       );
