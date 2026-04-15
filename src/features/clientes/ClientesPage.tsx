@@ -13,6 +13,7 @@ import { useAuthStore } from '../../store/authStore';
 import { getPermissions } from '../../lib/permissions';
 import { useSocketClientes } from '../../hooks/useSocket';
 import { useThemeStore } from '../../store/themeStore';
+import { SAP_BASE_URL } from '../../store/environmentStore';
 
 // ============ TIPOS Y CONFIGURACIÓN DE FILTROS/ORDENAMIENTO ============
 type FilterOperator = '=' | '!=' | 'contains' | 'not_contains';
@@ -625,6 +626,14 @@ export function ClientesPage() {
 
   // Refresh SAP data (clear cache on backend)
   const handleRefreshSap = async () => {
+    // Clear SAP proxy cache for cuic data
+    try {
+      await Promise.all([
+        fetch(`${SAP_BASE_URL}/clear-cache?key=cuic`),
+        fetch(`${SAP_BASE_URL}/clear-cache?key=cuic-test`),
+        fetch(`${SAP_BASE_URL}/clear-cache?key=cuic-trade`),
+      ]);
+    } catch (e) { /* ignore */ }
     if (activeSapRefetch) {
       await activeSapRefetch();
     }
