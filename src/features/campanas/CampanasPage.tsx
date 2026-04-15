@@ -924,22 +924,20 @@ export function CampanasPage() {
     return terms;
   }, [debouncedSearchTags, debouncedSearchInput]);
 
-  // Send first search term to backend, rest handled client-side
-  const debouncedSearch = allSearchTerms.length > 0 ? allSearchTerms[0] : '';
+  // All search is handled client-side — fetch all data when searching
   const hasSearch = allSearchTerms.length > 0;
 
   // When grouping, advanced filters, sorting, catorcena filter, or search are active, fetch ALL data
-  const needsAllData = activeGroupings.length > 0 || advancedFilters.length > 0 || !!sortField || !!selectedCatorcenaInicio || status === 'Incompleta' || allSearchTerms.length > 1;
+  const needsAllData = activeGroupings.length > 0 || advancedFilters.length > 0 || !!sortField || !!selectedCatorcenaInicio || status === 'Incompleta' || hasSearch;
   const effectiveLimit = needsAllData ? 9999 : limit;
 
   const { data, isLoading } = useQuery({
-    queryKey: ['campanas', page, status, yearInicio, yearFin, catorcenaInicio, catorcenaFin, debouncedSearch, allSearchTerms, tipoPeriodo, needsAllData],
+    queryKey: ['campanas', page, status, yearInicio, yearFin, catorcenaInicio, catorcenaFin, allSearchTerms, tipoPeriodo, needsAllData],
     queryFn: () =>
       campanasService.getAll({
         page: needsAllData ? 1 : page,
         limit: effectiveLimit,
         status: (status && status !== 'Incompleta') ? status : undefined,
-        search: debouncedSearch || undefined,
         yearInicio,
         yearFin,
         catorcenaInicio,
@@ -950,11 +948,10 @@ export function CampanasPage() {
 
   // Stats query — global KPIs with same filters
   const { data: statsData, isLoading: isLoadingStats } = useQuery({
-    queryKey: ['campanas-stats', status, debouncedSearch, allSearchTerms, yearInicio, yearFin, catorcenaInicio, catorcenaFin, tipoPeriodo],
+    queryKey: ['campanas-stats', status, allSearchTerms, yearInicio, yearFin, catorcenaInicio, catorcenaFin, tipoPeriodo],
     queryFn: () =>
       campanasService.getStats({
         status: (status && status !== 'Incompleta') ? status : undefined,
-        search: debouncedSearch || undefined,
         yearInicio,
         yearFin,
         catorcenaInicio,
@@ -1013,7 +1010,10 @@ export function CampanasPage() {
             c.asignado?.toLowerCase().includes(lowerTerm) ||
             c.nombre_campania?.toLowerCase().includes(lowerTerm) ||
             c.codigos_inventario?.toLowerCase().includes(lowerTerm) ||
-            c.creador_nombre?.toLowerCase().includes(lowerTerm)
+            c.creador_nombre?.toLowerCase().includes(lowerTerm) ||
+            c.T0_U_Asesor?.toLowerCase().includes(lowerTerm) ||
+            String(c.propuesta_id || '').includes(lowerTerm) ||
+            String(c.cotizacion_id || '').includes(lowerTerm)
           );
         })
       );
@@ -1772,7 +1772,6 @@ export function CampanasPage() {
       // Un solo request al backend con los mismos filtros activos
       const exportData = await campanasService.getExportLayout({
         status: (status && status !== 'Incompleta') ? status : undefined,
-        search: debouncedSearch || undefined,
         yearInicio,
         yearFin,
         catorcenaInicio,
