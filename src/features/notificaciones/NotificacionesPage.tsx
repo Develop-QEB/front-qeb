@@ -76,6 +76,8 @@ const FILTER_FIELDS: FilterFieldConfig[] = [
   { field: 'estatus', label: 'Estado', type: 'string' },
   { field: 'asignado', label: 'Asignado', type: 'string' },
   { field: 'responsable', label: 'Responsable', type: 'string' },
+  { field: 'asesor', label: 'Asesor', type: 'string' },
+  { field: 'creador', label: 'Creador', type: 'string' },
 ];
 
 const DATE_PRESET_OPTIONS = [
