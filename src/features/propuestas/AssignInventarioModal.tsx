@@ -3631,8 +3631,8 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
                 </div>
               </div>
 
-              {/* % Distribucion */}
-              <div className={`flex flex-col items-center justify-center px-2 py-1 rounded-xl ${isDark ? 'bg-zinc-800/30' : 'bg-gray-50/30'} border ${isDark ? 'border-zinc-700/20' : 'border-gray-200/20'} min-w-[70px]`}>
+              {/* % Distribucion - only for Digital */}
+              {selectedCaraForSearch?.tipo === 'Digital' && <div className={`flex flex-col items-center justify-center px-2 py-1 rounded-xl ${isDark ? 'bg-zinc-800/30' : 'bg-gray-50/30'} border ${isDark ? 'border-zinc-700/20' : 'border-gray-200/20'} min-w-[70px]`}>
                 <span className={`text-[9px] ${isDark ? 'text-zinc-500' : 'text-gray-400'} mb-1`}>Distribución</span>
                 <div className="flex items-center gap-1">
                   <input
@@ -3671,7 +3671,7 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
                   <span className={`text-[10px] ${isDark ? 'text-zinc-500' : 'text-gray-400'}`}>%</span>
                 </div>
                 <span className={`text-[9px] ${isDark ? 'text-zinc-600' : 'text-gray-300'} mt-0.5`}>{savingPct ? '...' : `${flujoPct}/${100 - flujoPct}`}</span>
-              </div>
+              </div>}
 
               {/* Contraflujo KPI */}
               <div className={`flex-1 ${isDark ? 'bg-zinc-800/50' : 'bg-gray-50/50'} rounded-xl p-3 border ${isDark ? 'border-zinc-700/30' : 'border-gray-200/30'}`}>
@@ -4198,6 +4198,9 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
                                 {sortColumn !== 'isla' && <ArrowUpDown className="h-3 w-3 opacity-30" />}
                               </div>
                             </th>
+                            <th className={`px-3 py-2 text-left text-xs ${isDark ? 'text-zinc-400' : 'text-gray-500'} font-medium`}>
+                              M. Isla
+                            </th>
                             <th
                               className={`px-3 py-2 text-left text-xs ${isDark ? 'text-zinc-400' : 'text-gray-500'} font-medium cursor-pointer ${isDark ? 'hover:text-white' : 'hover:text-gray-900'} transition-colors`}
                               onClick={() => handleSort('nivel_socioeconomico')}
@@ -4302,6 +4305,7 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
                                     </td>
                                     <td className={`px-3 py-2 ${isDark ? 'text-zinc-300' : 'text-gray-700'} text-sm`}>{inv.plaza}</td>
                                     <td className={`px-3 py-2 ${isDark ? 'text-zinc-400' : 'text-gray-500'} text-sm`}>{inv.isla || '-'}</td>
+                                    <td className={`px-3 py-2 ${isDark ? 'text-zinc-400' : 'text-gray-500'} text-sm`}>{(inv as any).mueble_isla || '-'}</td>
                                     <td className={`px-3 py-2 ${isDark ? 'text-zinc-400' : 'text-gray-500'} text-sm`}>{inv.nivel_socioeconomico || '-'}</td>
                                     <td className={`px-3 py-2 ${isDark ? 'text-zinc-400' : 'text-gray-500'} text-sm`} title={inv.ubicacion || ''}>
                                       {inv.ubicacion}
@@ -4356,6 +4360,7 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
                                 </td>
                                 <td className={`px-3 py-2 ${isDark ? 'text-zinc-300' : 'text-gray-700'} text-sm`}>{inv.plaza}</td>
                                 <td className={`px-3 py-2 ${isDark ? 'text-zinc-400' : 'text-gray-500'} text-sm`}>{inv.isla || '-'}</td>
+                                <td className={`px-3 py-2 ${isDark ? 'text-zinc-400' : 'text-gray-500'} text-sm`}>{(inv as any).mueble_isla || '-'}</td>
                                 <td className={`px-3 py-2 ${isDark ? 'text-zinc-400' : 'text-gray-500'} text-sm`}>{inv.nivel_socioeconomico || '-'}</td>
                                 <td className={`px-3 py-2 ${isDark ? 'text-zinc-400' : 'text-gray-500'} text-sm`} title={inv.ubicacion || ''}>
                                   {inv.ubicacion}
