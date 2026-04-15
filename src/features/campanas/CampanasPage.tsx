@@ -215,7 +215,8 @@ const CAMPANA_FILTER_FIELDS: FilterFieldConfig[] = [
   { field: 'cliente_nombre', label: 'Cliente', type: 'string' },
   { field: 'status', label: 'Estatus', type: 'string' },
   { field: 'articulo', label: 'Artículo', type: 'string' },
-  { field: 'creador_nombre', label: 'Asesor', type: 'string' },
+  { field: 'creador_nombre', label: 'Creador', type: 'string' },
+  { field: 'T0_U_Asesor', label: 'Asesor', type: 'string' },
   { field: 'codigos_inventario', label: 'Código Inventario', type: 'string' },
 ];
 
@@ -227,7 +228,7 @@ const FILTER_OPERATORS: { value: FilterOperator; label: string }[] = [
 ];
 
 // Campos disponibles para agrupar
-type GroupByField = 'status' | 'cliente_nombre' | 'catorcena_inicio';
+type GroupByField = 'status' | 'cliente_nombre' | 'catorcena_inicio' | 'creador_nombre' | 'T0_U_Asesor';
 
 interface GroupConfig {
   field: GroupByField;
@@ -238,6 +239,8 @@ const AVAILABLE_GROUPINGS: GroupConfig[] = [
   { field: 'status', label: 'Estatus' },
   { field: 'cliente_nombre', label: 'Cliente' },
   { field: 'catorcena_inicio', label: 'Fecha Inicio' },
+  { field: 'creador_nombre', label: 'Creador' },
+  { field: 'T0_U_Asesor', label: 'Asesor' },
 ];
 
 // Campos disponibles para ordenar
@@ -924,12 +927,12 @@ export function CampanasPage() {
     return terms;
   }, [debouncedSearchTags, debouncedSearchInput]);
 
-  // Single search term goes to backend (like main branch), multiple terms need client-side OR
-  const debouncedSearch = allSearchTerms.length === 1 ? allSearchTerms[0] : '';
-  const multiSearch = allSearchTerms.length > 1;
+  // All search terms are handled client-side (fetch all data when searching)
+  const debouncedSearch = '';
+  const hasSearch = allSearchTerms.length > 0;
 
-  // When grouping, advanced filters, sorting, catorcena filter, or multi-search are active, fetch ALL data
-  const needsAllData = activeGroupings.length > 0 || advancedFilters.length > 0 || !!sortField || !!selectedCatorcenaInicio || status === 'Incompleta' || multiSearch;
+  // When grouping, advanced filters, sorting, catorcena filter, or search are active, fetch ALL data
+  const needsAllData = activeGroupings.length > 0 || advancedFilters.length > 0 || !!sortField || !!selectedCatorcenaInicio || status === 'Incompleta' || hasSearch;
   const effectiveLimit = needsAllData ? 9999 : limit;
 
   const { data, isLoading } = useQuery({
@@ -996,8 +999,8 @@ export function CampanasPage() {
   const filteredData = useMemo(() => {
     let items = data?.data || [];
 
-    // Client-side OR search filter only for multiple terms (single term is handled by backend)
-    if (multiSearch && items.length > 0) {
+    // Client-side OR search filter for all search terms
+    if (hasSearch && items.length > 0) {
       items = items.filter(c =>
         allSearchTerms.some(term => {
           const lowerTerm = term.toLowerCase();
@@ -1012,7 +1015,9 @@ export function CampanasPage() {
             c.T0_U_Cliente?.toLowerCase().includes(lowerTerm) ||
             c.asignado?.toLowerCase().includes(lowerTerm) ||
             c.nombre_campania?.toLowerCase().includes(lowerTerm) ||
-            c.codigos_inventario?.toLowerCase().includes(lowerTerm)
+            c.codigos_inventario?.toLowerCase().includes(lowerTerm) ||
+            c.creador_nombre?.toLowerCase().includes(lowerTerm) ||
+            c.T0_U_Asesor?.toLowerCase().includes(lowerTerm)
           );
         })
       );
@@ -1079,7 +1084,7 @@ export function CampanasPage() {
   }, [data?.data, allSearchTerms, selectedCatorcenaInicio, advancedFilters, sortField, sortDirection]);
 
   // Recalculate stats from filteredData when client-side filters are active
-  const needsClientFilter = multiSearch || advancedFilters.length > 0 || selectedCatorcenaInicio || status === 'Incompleta';
+  const needsClientFilter = hasSearch || advancedFilters.length > 0 || selectedCatorcenaInicio || status === 'Incompleta';
   const effectiveStats = useMemo(() => {
     if (needsClientFilter && data?.data) {
       const byStatus: Record<string, number> = {};
@@ -1120,6 +1125,10 @@ export function CampanasPage() {
       return item.status || 'Sin status';
     } else if (field === 'cliente_nombre') {
       return item.cliente_nombre || item.cliente_razon_social || 'Sin cliente';
+    } else if (field === 'creador_nombre') {
+      return item.creador_nombre || 'Sin creador';
+    } else if (field === 'T0_U_Asesor') {
+      return item.T0_U_Asesor || 'Sin asesor';
     }
     return 'Sin asignar';
   };
@@ -2109,7 +2118,7 @@ export function CampanasPage() {
   };
 
   // Calcular paginación basada en si hay filtros locales activos
-  const hasLocalFilters = !!(multiSearch || selectedCatorcenaInicio);
+  const hasLocalFilters = !!(hasSearch || selectedCatorcenaInicio);
   const totalPages = hasLocalFilters ? 1 : (data?.pagination?.totalPages || 1);
   const total = hasLocalFilters ? filteredData.length : (data?.pagination?.total ?? 0);
   const startItem = hasLocalFilters ? (filteredData.length > 0 ? 1 : 0) : ((page - 1) * limit + 1);

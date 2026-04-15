@@ -7,7 +7,7 @@ import {
   PanelRight, FolderOpen, Clock, CheckCircle, AlertCircle, Circle,
   MessageSquare, Send, Plus, Pencil, Trash2, StickyNote,
   Users, Tag, Building2, Download, Table2, ExternalLink, Bell, ClipboardList,
-  Filter, Layers, ArrowUpDown, ArrowUp, ArrowDown, Check, Loader2
+  Filter, Layers, ArrowUpDown, ArrowUp, ArrowDown, Check, Loader2, UserCheck, UserPlus
 } from 'lucide-react';
 import { Header } from '../../components/layout/Header';
 import { notificacionesService, CaraAutorizacion, ResumenAutorizacion } from '../../services/notificaciones.service';
@@ -25,7 +25,7 @@ import { useSocketNotificaciones } from '../../hooks/useSocket';
 // ============ TIPOS ============
 type ContentType = 'notificaciones' | 'tareas';
 type ViewType = 'tablero' | 'lista' | 'calendario' | 'notas';
-type GroupByType = 'estatus' | 'tipo' | 'fecha' | 'responsable' | 'asignado';
+type GroupByType = 'estatus' | 'tipo' | 'fecha' | 'responsable' | 'asignado' | 'asesor' | 'creador';
 type OrderByType = 'fecha_fin' | 'fecha_inicio' | 'created_at' | 'titulo' | 'estatus';
 type DateFilterType = 'all' | 'today' | 'this_week' | 'last_week' | 'this_month' | 'last_month';
 type QuickFilter = 'all' | 'pendientes' | 'finalizadas' | 'leidas' | 'no_leidas' | null;
@@ -89,7 +89,7 @@ const DATE_PRESET_OPTIONS = [
 
 // Campos disponibles para agrupar
 // test
-type GroupByField = 'estatus' | 'tipo' | 'asignado' | 'responsable' | 'fecha';
+type GroupByField = 'estatus' | 'tipo' | 'asignado' | 'responsable' | 'fecha' | 'asesor' | 'creador';
 
 interface GroupConfig {
   field: GroupByField;
@@ -102,6 +102,8 @@ const AVAILABLE_GROUPINGS: GroupConfig[] = [
   { field: 'asignado', label: 'Asignado' },
   { field: 'responsable', label: 'Responsable' },
   { field: 'fecha', label: 'Fecha' },
+  { field: 'asesor', label: 'Asesor' },
+  { field: 'creador', label: 'Creador' },
 ];
 
 const OPERATORS: { value: FilterOperator; label: string }[] = [
@@ -202,6 +204,8 @@ const GROUP_BY_OPTIONS: { value: GroupByType; label: string; icon: typeof Circle
   { value: 'asignado', label: 'Asignado', icon: User },
   { value: 'responsable', label: 'Responsable', icon: Users },
   { value: 'fecha', label: 'Fecha', icon: Calendar },
+  { value: 'asesor', label: 'Asesor', icon: UserCheck },
+  { value: 'creador', label: 'Creador', icon: UserPlus },
 ];
 
 // Función para verificar si una fecha está en el rango
@@ -258,6 +262,10 @@ function getGroupKey(tarea: Notificacion, groupBy: GroupByType): string {
       return tarea.asignado || 'Sin asignar';
     case 'responsable':
       return tarea.responsable || 'Sin responsable';
+    case 'asesor':
+      return tarea.asesor || 'Sin asesor';
+    case 'creador':
+      return tarea.creador || 'Sin creador';
     case 'fecha':
       if (!tarea.fecha_creacion) return 'Sin fecha';
       const date = new Date(tarea.fecha_creacion);
