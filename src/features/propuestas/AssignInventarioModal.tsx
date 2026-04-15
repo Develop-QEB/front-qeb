@@ -5765,8 +5765,8 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
 
                     {/* Artículo selector */}
                     <div className="mb-4">
-                      <label className={`text-xs mb-1 block ${(editingCaraHasReservas || (editingCaraId && !permissions.canEditArticuloOnEdit)) ? 'text-zinc-800' : `${isDark ? 'text-zinc-500' : 'text-gray-400'}`}`}>Artículo SAP</label>
-                      {canEditResumen && !editingCaraHasReservas && (!editingCaraId || permissions.canEditArticuloOnEdit) ? (
+                      <label className={`text-xs mb-1 block ${(editingCaraId && !permissions.canEditArticuloOnEdit) ? 'text-zinc-800' : `${isDark ? 'text-zinc-500' : 'text-gray-400'}`}`}>Artículo SAP</label>
+                      {canEditResumen && (!editingCaraId || permissions.canEditArticuloOnEdit) ? (
                         <SearchableSelect
                           label="Seleccionar artículo"
                           options={articulosData || []}
