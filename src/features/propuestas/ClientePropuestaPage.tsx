@@ -424,19 +424,18 @@ export function ClientePropuestaPage() {
   }, [data, inventario, tipoPeriodo]);
 
   // Handlers
-  const handleDownloadCSV = () => {
-    const headers = ['Codigo', 'Plaza', 'Ubicacion', 'Tipo Cara', 'Formato', 'Articulo', 'Caras', 'Tarifa', 'Periodo', 'Latitud', 'Longitud'];
-    const rows = inventario.map(i => [
-      i.codigo_unico, i.plaza, i.ubicacion, i.tipo_de_cara, i.mueble, i.articulo,
-      i.caras_totales, i.tarifa_publica, formatInicioPeriodo(i, tipoPeriodo), i.latitud || '', i.longitud || ''
-    ]);
-    const csv = [headers.join(','), ...rows.map(r => r.map(v => `"${v || ''}"`).join(','))].join('\n');
-    const blob = new Blob([csv], { type: 'text/csv' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `reservas_propuesta_${propuestaId}.csv`;
-    a.click();
+  const handleDownloadXLSX = () => {
+    import('xlsx').then(XLSX => {
+      const headers = ['Codigo', 'Plaza', 'Ubicacion', 'Tipo Cara', 'Formato', 'Articulo', 'Caras', 'Tarifa', 'Periodo', 'Latitud', 'Longitud'];
+      const rows = inventario.map(i => [
+        i.codigo_unico, i.plaza, i.ubicacion, i.tipo_de_cara, i.mueble, i.articulo,
+        i.caras_totales, i.tarifa_publica, formatInicioPeriodo(i, tipoPeriodo), i.latitud || '', i.longitud || ''
+      ]);
+      const ws = XLSX.utils.aoa_to_sheet([headers, ...rows]);
+      const wb = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(wb, ws, 'Reservas');
+      XLSX.writeFile(wb, `reservas_propuesta_${propuestaId}.xlsx`);
+    });
   };
 
   const handleDownloadKML = () => {
@@ -883,8 +882,8 @@ export function ClientePropuestaPage() {
                 <span className={`text-xs font-normal ${isDark ? 'text-zinc-500' : 'text-gray-400'}`}>({filteredInventario.length} inventarios)</span>
               </h3>
               <div className="flex items-center gap-2">
-                <button onClick={handleDownloadCSV} className="flex items-center gap-1.5 px-3 py-1.5 bg-[#7AB800] hover:bg-[#5FA800] text-white rounded-lg text-xs font-medium shadow-sm transition-colors">
-                  <FileSpreadsheet className="h-3.5 w-3.5" /> CSV
+                <button onClick={handleDownloadXLSX} className="flex items-center gap-1.5 px-3 py-1.5 bg-[#7AB800] hover:bg-[#5FA800] text-white rounded-lg text-xs font-medium shadow-sm transition-colors">
+                  <FileSpreadsheet className="h-3.5 w-3.5" /> Excel
                 </button>
                 <button onClick={handleDownloadKML} className="flex items-center gap-1.5 px-3 py-1.5 bg-[#0054A6] hover:bg-[#003B71] text-white rounded-lg text-xs font-medium shadow-sm transition-colors">
                   <MapIcon className="h-3.5 w-3.5" /> KML

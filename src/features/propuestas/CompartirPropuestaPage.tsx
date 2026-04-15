@@ -416,20 +416,19 @@ export function CompartirPropuestaPage() {
     setTimeout(() => setCopied(false), 2000);
   };
 
-  const handleDownloadCSV = () => {
+  const handleDownloadXLSX = () => {
     if (!inventario) return;
-    const headers = ['Código', 'Plaza', 'Ubicación', 'Tipo Cara', 'Formato', 'Caras', 'Tarifa', 'Periodo', 'Latitud', 'Longitud'];
-    const rows = inventario.map(i => [
-      i.codigo_unico, i.plaza, i.ubicacion, i.tipo_de_cara, i.mueble,
-      i.caras_totales, i.tarifa_publica, formatInicioPeriodo(i, tipoPeriodo), i.latitud || '', i.longitud || ''
-    ]);
-    const csv = [headers.join(','), ...rows.map(r => r.map(v => `"${v || ''}"`).join(','))].join('\n');
-    const blob = new Blob([csv], { type: 'text/csv' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `reservas_propuesta_${propuestaId}.csv`;
-    a.click();
+    import('xlsx').then(XLSX => {
+      const headers = ['Código', 'Plaza', 'Ubicación', 'Tipo Cara', 'Formato', 'Caras', 'Tarifa', 'Periodo', 'Latitud', 'Longitud'];
+      const rows = inventario.map(i => [
+        i.codigo_unico, i.plaza, i.ubicacion, i.tipo_de_cara, i.mueble,
+        i.caras_totales, i.tarifa_publica, formatInicioPeriodo(i, tipoPeriodo), i.latitud || '', i.longitud || ''
+      ]);
+      const ws = XLSX.utils.aoa_to_sheet([headers, ...rows]);
+      const wb = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(wb, ws, 'Reservas');
+      XLSX.writeFile(wb, `reservas_propuesta_${propuestaId}.xlsx`);
+    });
   };
 
   // Download ALL items as KML
@@ -1179,8 +1178,8 @@ export function CompartirPropuestaPage() {
                 <span className={`text-xs font-normal ${isDark ? 'text-zinc-500' : 'text-gray-400'}`}>({filteredInventario.length} inventarios)</span>
               </h3>
               <div className="flex items-center gap-2">
-                <button onClick={handleDownloadCSV} className="flex items-center gap-1.5 px-3 py-1.5 bg-gradient-to-r from-emerald-600 to-emerald-700 hover:from-emerald-500 hover:to-emerald-600 text-white rounded-lg text-xs font-medium shadow-sm transition-colors">
-                  <FileSpreadsheet className="h-3.5 w-3.5" /> CSV
+                <button onClick={handleDownloadXLSX} className="flex items-center gap-1.5 px-3 py-1.5 bg-gradient-to-r from-emerald-600 to-emerald-700 hover:from-emerald-500 hover:to-emerald-600 text-white rounded-lg text-xs font-medium shadow-sm transition-colors">
+                  <FileSpreadsheet className="h-3.5 w-3.5" /> Excel
                 </button>
                 {selectedItems.size > 0 && (
                   <button onClick={handleDownloadKMLSelected} className="flex items-center gap-1.5 px-3 py-1.5 bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-500 hover:to-blue-600 text-white rounded-lg text-xs font-medium shadow-sm transition-colors" title={`Descargar KML de ${selectedItems.size} seleccionados`}>
