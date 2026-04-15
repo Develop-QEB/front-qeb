@@ -631,6 +631,8 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
   const [newCara, setNewCara] = useState<Omit<CaraItem, 'localId'>>(EMPTY_CARA);
   const [selectedArticulo, setSelectedArticulo] = useState<SAPArticulo | null>(null);
   const [showAddCaraForm, setShowAddCaraForm] = useState(false);
+  const caraFormRef = useRef<HTMLDivElement>(null);
+  const caraTableRef = useRef<HTMLDivElement>(null);
 
   // Reservas state
   const [reservas, setReservas] = useState<ReservaItem[]>([]);
@@ -1689,6 +1691,7 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
       anio_fin: anioFinVal,
     });
     setShowAddCaraForm(true);
+    setTimeout(() => caraFormRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 100);
   };
 
   // Handle save cara (add or update)
@@ -1817,6 +1820,7 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
           });
         }
         setEditingCaraId(null);
+        setTimeout(() => caraTableRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 100);
       } else {
         // Create new cara in database (needs DB ID for reservas)
         const createdCara = await propuestasService.createCara(propuesta.id, caraData);
@@ -1983,10 +1987,14 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
 
   // Handle cancel cara form
   const handleCancelCaraForm = () => {
+    const wasEditing = !!editingCaraId;
     setNewCara(EMPTY_CARA);
     setSelectedArticulo(null);
     setShowAddCaraForm(false);
     setEditingCaraId(null);
+    if (wasEditing) {
+      setTimeout(() => caraTableRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 100);
+    }
   };
 
   // Haversine distance calculation (in meters)
@@ -5763,7 +5771,7 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
 
                 {/* Add/Edit Cara Form */}
                 {showAddCaraForm && (
-                  <div className={`px-5 py-4 ${isDark ? 'bg-zinc-800/50' : 'bg-gray-50/50'} border-b ${isDark ? 'border-zinc-700/50' : 'border-gray-200/50'}`}>
+                  <div ref={caraFormRef} className={`px-5 py-4 ${isDark ? 'bg-zinc-800/50' : 'bg-gray-50/50'} border-b ${isDark ? 'border-zinc-700/50' : 'border-gray-200/50'}`}>
                     <h4 className={`text-sm font-medium ${isDark ? 'text-white' : 'text-gray-900'} mb-4`}>
                       {editingCaraId ? 'Editar Circuito' : 'Nuevo Circuito'}
                     </h4>
@@ -6183,7 +6191,7 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
                   </div>
                 )}
 
-                <div className="divide-y divide-zinc-700/30">
+                <div ref={caraTableRef} className="divide-y divide-zinc-700/30">
                   {caras.length === 0 ? (
                     <div className={`p-8 text-center ${isDark ? 'text-zinc-500' : 'text-gray-400'}`}>
                       <Layers className="h-10 w-10 mx-auto mb-3 opacity-30" />
