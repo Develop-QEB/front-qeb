@@ -924,12 +924,12 @@ export function CampanasPage() {
     return terms;
   }, [debouncedSearchTags, debouncedSearchInput]);
 
-  // All search terms are handled client-side (fetch all data when searching)
-  const debouncedSearch = '';
+  // Send first search term to backend, rest handled client-side
+  const debouncedSearch = allSearchTerms.length > 0 ? allSearchTerms[0] : '';
   const hasSearch = allSearchTerms.length > 0;
 
   // When grouping, advanced filters, sorting, catorcena filter, or search are active, fetch ALL data
-  const needsAllData = activeGroupings.length > 0 || advancedFilters.length > 0 || !!sortField || !!selectedCatorcenaInicio || status === 'Incompleta' || hasSearch;
+  const needsAllData = activeGroupings.length > 0 || advancedFilters.length > 0 || !!sortField || !!selectedCatorcenaInicio || status === 'Incompleta' || allSearchTerms.length > 1;
   const effectiveLimit = needsAllData ? 9999 : limit;
 
   const { data, isLoading } = useQuery({
