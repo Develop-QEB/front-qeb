@@ -260,6 +260,9 @@ interface CaraEntry {
   // Valores originales del backend (antes de contaminación)
   _originalDg?: 'aprobado' | 'pendiente' | 'rechazado';
   _originalDcm?: 'aprobado' | 'pendiente' | 'rechazado';
+  // RT/BF grouping
+  grupo_rt_bf?: number;
+  esBf?: boolean; // true if this is the BF row of a RT/BF pair
 }
 
 interface Props {
@@ -595,6 +598,7 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
     renta: 0,
     bonificacion: 0,
     tarifaPublica: 0,
+    articuloBf: null as SAPArticulo | null,
   });
 
   // File
@@ -872,6 +876,7 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
         renta: 0,
         bonificacion: 0,
         tarifaPublica: 0,
+        articuloBf: null,
       });
     }
   }, [isOpen, isEditMode, currentUser, restoredFromDraft]);
@@ -1182,28 +1187,64 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
       periodsToCreate.push({ catorcenaNum, catorcenaYear, periodoInicio: periodoInicioVal, periodoFin: periodoFinVal });
     }
 
-    const newCaras: CaraEntry[] = periodsToCreate.map((period, idx) => ({
-      id: editingCaraId || `${Date.now()}-${Math.random()}-${idx}`,
-      articulo: newCara.articulo!,
-      estado: newCara.estado,
-      ciudades: newCara.ciudades.length > 0 ? newCara.ciudades : filteredCiudades,
-      formato: newCara.formato,
-      tipo: newCara.tipo,
-      nse: newCara.nse,
-      catorcenaNum: period.catorcenaNum,
-      catorcenaYear: period.catorcenaYear,
-      periodoInicio: period.periodoInicio,
-      periodoFin: period.periodoFin,
-      renta: newCara.renta,
-      bonificacion: newCara.bonificacion,
-      tarifaPublica: newCara.tarifaPublica,
-      descuento: descuento * 100,
-      precioTotal,
-      autorizacion_dg,
-      autorizacion_dcm,
-      _originalDg: autorizacion_dg,
-      _originalDcm: autorizacion_dcm,
-    }));
+    const grupoRtBf = newCara.bonificacion > 0 && newCara.articuloBf ? Date.now() : undefined;
+    const ciudadesToUse = newCara.ciudades.length > 0 ? newCara.ciudades : filteredCiudades;
+
+    const newCaras: CaraEntry[] = [];
+    for (const [idx, period] of periodsToCreate.entries()) {
+      // RT cara (renta)
+      newCaras.push({
+        id: editingCaraId || `${Date.now()}-${Math.random()}-rt-${idx}`,
+        articulo: newCara.articulo!,
+        estado: newCara.estado,
+        ciudades: ciudadesToUse,
+        formato: newCara.formato,
+        tipo: newCara.tipo,
+        nse: newCara.nse,
+        catorcenaNum: period.catorcenaNum,
+        catorcenaYear: period.catorcenaYear,
+        periodoInicio: period.periodoInicio,
+        periodoFin: period.periodoFin,
+        renta: newCara.renta,
+        bonificacion: grupoRtBf ? 0 : newCara.bonificacion, // If BF separate, RT has 0 bonif
+        tarifaPublica: newCara.tarifaPublica,
+        descuento: descuento * 100,
+        precioTotal,
+        autorizacion_dg,
+        autorizacion_dcm,
+        _originalDg: autorizacion_dg,
+        _originalDcm: autorizacion_dcm,
+        grupo_rt_bf: grupoRtBf,
+      });
+
+      // BF cara (bonificación) - only if articuloBf is selected
+      if (grupoRtBf && newCara.articuloBf) {
+        newCaras.push({
+          id: `${Date.now()}-${Math.random()}-bf-${idx}`,
+          articulo: newCara.articuloBf,
+          estado: newCara.estado,
+          ciudades: ciudadesToUse,
+          formato: newCara.formato,
+          tipo: newCara.tipo,
+          nse: newCara.nse,
+          catorcenaNum: period.catorcenaNum,
+          catorcenaYear: period.catorcenaYear,
+          periodoInicio: period.periodoInicio,
+          periodoFin: period.periodoFin,
+          renta: newCara.bonificacion, // BF caras go in renta field
+          bonificacion: 0,
+          tarifaPublica: 0, // BF is free
+          descuento: 0,
+          precioTotal: 0,
+          autorizacion_dg: 'aprobado', // BF auto-approved
+          autorizacion_dcm: 'aprobado',
+          _originalDg: 'aprobado',
+          _originalDcm: 'aprobado',
+          grupo_rt_bf: grupoRtBf,
+          esBf: true,
+        });
+      }
+    }
 
     // Add or update caras, then recalculate impar + DG contamination from originals
     setCaras(prev => {
@@ -1225,8 +1266,13 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
         const esCaraCortesia = c.articulo?.ItemCode?.toUpperCase().startsWith('CT');
         const artName = (c.articulo?.ItemName || '').toUpperCase();
         const esKiosco = artName.includes('KIOSCO') || artName.includes('KIOSKO');
-        if (esCaraCortesia || esKiosco) return c;
-        const carasGrupo = c.renta + c.bonificacion;
+        if (esCaraCortesia || esKiosco || c.esBf) return c; // BF rows don't need auth check
+        // For RT/BF pairs, sum both rows' renta
+        let carasGrupo = c.renta + c.bonificacion;
+        if (c.grupo_rt_bf) {
+          const bfPair = updated.find(o => o.grupo_rt_bf === c.grupo_rt_bf && o.esBf && o.catorcenaNum === c.catorcenaNum && o.catorcenaYear === c.catorcenaYear);
+          if (bfPair) carasGrupo = c.renta + bfPair.renta;
+        }
         const esImpar = carasGrupo > 0 && carasGrupo % 2 !== 0;
         if (esImpar && c.autorizacion_dg !== 'pendiente') {
           return { ...c, autorizacion_dg: 'pendiente' as const, autorizacion_dcm: 'aprobado' as const };
@@ -1263,6 +1309,7 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
       periodoFinCustom: '',
       renta: 0,
       bonificacion: 0,
+      articuloBf: null,
       // Keep articulo, estado, ciudades, formato, tipo, nse, tarifaPublica
     });
   };
@@ -1283,6 +1330,7 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
       renta: 0,
       bonificacion: 0,
       tarifaPublica: 0,
+      articuloBf: null,
     });
   };
 
@@ -1312,6 +1360,7 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
       renta: cara.renta,
       bonificacion: cara.bonificacion,
       tarifaPublica: cara.tarifaPublica,
+      articuloBf: null,
     });
   };
 
@@ -1332,6 +1381,7 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
       renta: 0,
       bonificacion: 0,
       tarifaPublica: 0,
+      articuloBf: null,
     });
   };
 
@@ -1543,6 +1593,7 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
         articulo: c.articulo.ItemCode,
         autorizacion_dg: c.autorizacion_dg,
         autorizacion_dcm: c.autorizacion_dcm,
+        grupo_rt_bf: c.grupo_rt_bf || null,
       })),
     };
 
@@ -2503,6 +2554,34 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
                     />
                   </div>
 
+                  {/* Artículo BF - only when bonificacion > 0 */}
+                  {newCara.bonificacion > 0 && !newCara.articulo?.ItemCode?.toUpperCase().startsWith('CT') && !newCara.articulo?.ItemCode?.toUpperCase().startsWith('IM') && (
+                    <div>
+                      <label className={`text-xs ${isDark ? 'text-emerald-400' : 'text-emerald-600'}`}>Artículo BF</label>
+                      <SearchableSelect
+                        label=""
+                        options={(articulosData || []).filter(a => a.ItemCode.toUpperCase().startsWith('BF') || a.ItemCode.toUpperCase().startsWith('CF'))}
+                        value={newCara.articuloBf}
+                        onChange={(item: SAPArticulo) => setNewCara({ ...newCara, articuloBf: item })}
+                        onClear={() => setNewCara({ ...newCara, articuloBf: null })}
+                        displayKey="ItemName"
+                        valueKey="ItemCode"
+                        searchKeys={['ItemCode', 'ItemName']}
+                        renderOption={(item) => (
+                          <div>
+                            <div className={`font-medium ${isDark ? 'text-white' : 'text-gray-900'}`}>{item.ItemCode}</div>
+                            <div className={`text-xs ${isDark ? 'text-zinc-500' : 'text-gray-400'}`}>{item.ItemName}</div>
+                          </div>
+                        )}
+                        renderSelected={(item) => (
+                          <div className="text-left">
+                            <div className={`text-xs font-mono ${isDark ? 'text-emerald-300' : 'text-emerald-700'}`}>{item.ItemCode}</div>
+                          </div>
+                        )}
+                      />
+                    </div>
+                  )}
+
                   {/* Tarifa Publica - Editable */}
                   <div>
                     <label className={`text-xs ${isDark ? 'text-zinc-500' : 'text-gray-500'}`}>Tarifa Pública</label>
@@ -2614,8 +2693,8 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
                     {groupedCaras.map(([key, items]) => {
                       const isExpanded = expandedCatorcenas.has(key);
                       const groupTotal = items.reduce((acc, c) => acc + c.precioTotal, 0);
-                      const groupRenta = items.reduce((acc, c) => acc + c.renta, 0);
-                      const groupBonif = items.reduce((acc, c) => acc + c.bonificacion, 0);
+                      const groupRenta = items.filter(c => !c.esBf).reduce((acc, c) => acc + c.renta, 0);
+                      const groupBonif = items.filter(c => c.esBf).reduce((acc, c) => acc + c.renta, 0) + items.reduce((acc, c) => acc + c.bonificacion, 0);
 
                       return (
                         <div key={key}>
@@ -2883,8 +2962,8 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
                   <div className={`divide-y ${isDark ? 'divide-zinc-700/50' : 'divide-gray-200'}`}>
                     {groupedCaras.map(([key, items]) => {
                       const groupTotal = items.reduce((acc, c) => acc + c.precioTotal, 0);
-                      const groupRenta = items.reduce((acc, c) => acc + c.renta, 0);
-                      const groupBonif = items.reduce((acc, c) => acc + c.bonificacion, 0);
+                      const groupRenta = items.filter(c => !c.esBf).reduce((acc, c) => acc + c.renta, 0);
+                      const groupBonif = items.filter(c => c.esBf).reduce((acc, c) => acc + c.renta, 0) + items.reduce((acc, c) => acc + c.bonificacion, 0);
 
                       // Group by articulo within this period
                       const byArticulo = items.reduce((acc, cara) => {
