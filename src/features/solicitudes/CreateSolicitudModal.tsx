@@ -198,6 +198,7 @@ const MESES = [
 // "Ciudad de México / AM" es un super-estado virtual que combina CDMX + Estado de México
 const CDMX_AM_LABEL = 'Ciudad de México / AM';
 const CDMX_AM_STATES = ['Ciudad de México', 'Estado de México'];
+const CDMX_AM_EDO_MEX_CITIES = ['ATIZAPÁN', 'CUAUTITLÁN IZCALLI', 'ECATEPEC', 'HUIXQUILUCAN', 'NAUCALPAN', 'TLALNEPANTLA', 'TULTITLÁN'];
 const resolveEstados = (estado: string): string[] => estado === CDMX_AM_LABEL ? CDMX_AM_STATES : [estado];
 
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3000/api';
@@ -897,10 +898,19 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
   const filteredCiudades = useMemo(() => {
     if (!inventarioFilters?.ciudades || !newCara.estado) return [];
     const estadosReales = resolveEstados(newCara.estado);
+    const isAM = newCara.estado === CDMX_AM_LABEL;
     return inventarioFilters.ciudades
       .filter(c => estadosReales.includes(c.estado))
       .map(c => c.ciudad)
-      .filter((c): c is string => !!c);
+      .filter((c): c is string => !!c)
+      .filter(c => !isAM || !['Ciudad de México', 'Estado de México'].includes(c) ? true : true)
+      .filter(c => {
+        if (!isAM) return true;
+        // For AM: allow all CDMX cities, but only specific Edo Mex cities
+        const ciudadUpper = c.toUpperCase();
+        const isEdoMex = inventarioFilters.ciudades.find(ci => ci.ciudad === c)?.estado === 'Estado de México';
+        return !isEdoMex || CDMX_AM_EDO_MEX_CITIES.includes(ciudadUpper);
+      });
   }, [inventarioFilters, newCara.estado]);
 
   // Cascade-filtered formatos/tipos/NSE from inventario-options API

@@ -1712,9 +1712,12 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
     // If no ciudad selected but estado is, get all cities from that estado
     let ciudadToSave = newCara.ciudad;
     if (!ciudadToSave && newCara.estados && solicitudFilters?.ciudades) {
+      const isAM = newCara.estados.includes('Ciudad de México / AM');
       const selectedEstados = newCara.estados.split(',').map(s => s.trim()).flatMap(s => s === 'Ciudad de México / AM' ? ['Ciudad de México', 'Estado de México'] : [s]);
+      const AM_EDO_MEX_CITIES = ['ATIZAPÁN', 'CUAUTITLÁN IZCALLI', 'ECATEPEC', 'HUIXQUILUCAN', 'NAUCALPAN', 'TLALNEPANTLA', 'TULTITLÁN'];
       const allCitiesForEstado = solicitudFilters.ciudades
         .filter(c => selectedEstados.includes(c.estado))
+        .filter(c => !isAM || c.estado !== 'Estado de México' || AM_EDO_MEX_CITIES.includes(c.ciudad.toUpperCase()))
         .map(c => c.ciudad);
       ciudadToSave = allCitiesForEstado.join(', ');
     }
@@ -6023,13 +6026,18 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
                         {canEditResumen && (!editingCaraHasReservas || permissions.canEditCaraFiltersOnEdit) && (!editingCaraId || permissions.canEditCaraFiltersOnEdit) ? (
                           <MultiSelectDropdown
                             options={
-                              solicitudFilters?.ciudades
-                                .filter(c => {
-                                  if (!newCara.estados) return true;
-                                  const selectedEstados = newCara.estados.split(',').map(s => s.trim()).flatMap(s => s === 'Ciudad de México / AM' ? ['Ciudad de México', 'Estado de México'] : [s]);
-                                  return selectedEstados.includes(c.estado);
-                                })
-                                .map(c => c.ciudad) || []
+                              (() => {
+                                const isAM = newCara.estados?.includes('Ciudad de México / AM');
+                                const AM_EDO_MEX_CITIES = ['ATIZAPÁN', 'CUAUTITLÁN IZCALLI', 'ECATEPEC', 'HUIXQUILUCAN', 'NAUCALPAN', 'TLALNEPANTLA', 'TULTITLÁN'];
+                                return solicitudFilters?.ciudades
+                                  .filter(c => {
+                                    if (!newCara.estados) return true;
+                                    const selectedEstados = newCara.estados.split(',').map(s => s.trim()).flatMap(s => s === 'Ciudad de México / AM' ? ['Ciudad de México', 'Estado de México'] : [s]);
+                                    return selectedEstados.includes(c.estado);
+                                  })
+                                  .filter(c => !isAM || c.estado !== 'Estado de México' || AM_EDO_MEX_CITIES.includes(c.ciudad.toUpperCase()))
+                                  .map(c => c.ciudad) || [];
+                              })()
                             }
                             selected={newCara.ciudad ? newCara.ciudad.split(',').map(s => s.trim()).filter(Boolean) : []}
                             onChange={(selected) => setNewCara({ ...newCara, ciudad: selected.join(', ') })}
