@@ -731,12 +731,6 @@ function formatInicioPeriodo(item: InventarioReservado | InventarioConAPS, tipoP
 
 // Helper para formatear articulo con info adicional
 function formatArticulo(item: InventarioReservado | InventarioConAPS): string {
-  console.log('formatArticulo item:', {
-    articulo: item.articulo,
-    solicitud_caras_id: item.solicitud_caras_id,
-    tradicional_digital: item.tradicional_digital,
-    caras_totales: item.caras_totales
-  });
   const parts: string[] = [];
 
   if (item.articulo) {
