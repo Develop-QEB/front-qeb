@@ -1544,13 +1544,17 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
       onConfirm: async () => {
         // If cara has DB id, delete from database
         if (caraToDelete?.id) {
+          setIsSaving(true);
           try {
             await campanasService.deleteCara(campana!.id, caraToDelete.id);
           } catch (error) {
             console.error('Error deleting cara:', error);
             alert('Error al eliminar el formato de la base de datos');
+            setIsSaving(false);
             setConfirmModal(prev => ({ ...prev, isOpen: false }));
             return;
+          } finally {
+            setIsSaving(false);
           }
         }
         // Update local state
