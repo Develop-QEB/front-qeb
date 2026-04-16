@@ -274,18 +274,8 @@ function evalCondition<T>(item: T, filter: AdvancedFilterCondition): boolean {
   }
 }
 
-function applyAdvancedFilters<T>(data: T[], filters: AdvancedFilterCondition[]): T[] {
-  if (filters.length === 0) return data;
-  return data.filter(item => {
-    let result = evalCondition(item, filters[0]);
-    for (let i = 1; i < filters.length; i++) {
-      const val = evalCondition(item, filters[i]);
-      if (filters[i].connector === 'O') result = result || val;
-      else result = result && val;
-    }
-    return result;
-  });
-}
+// applyAdvancedFilters se reemplazó por evalFilterWithInventario inline en filteredData
+// para soportar búsqueda extendida de codigos_inventario desde inventarios cargados
 
 // Filter Chip Component with Search
 function FilterChip({
@@ -1017,7 +1007,11 @@ export function CampanasPage() {
             c.nombre_campania?.toLowerCase().includes(lowerTerm) ||
             c.codigos_inventario?.toLowerCase().includes(lowerTerm) ||
             c.creador_nombre?.toLowerCase().includes(lowerTerm) ||
-            c.T0_U_Asesor?.toLowerCase().includes(lowerTerm)
+            c.T0_U_Asesor?.toLowerCase().includes(lowerTerm) ||
+            // También buscar en los inventarios cargados (codigo_unico individual)
+            (campanaInventarios[c.id] || []).some(inv =>
+              inv.codigo_unico?.toLowerCase().includes(lowerTerm)
+            )
           );
         })
       );
@@ -1043,9 +1037,51 @@ export function CampanasPage() {
       );
     }
 
-    // Apply advanced filters
+    // Apply advanced filters (con soporte extendido para codigos_inventario desde inventarios cargados)
     if (advancedFilters.length > 0) {
-      items = applyAdvancedFilters(items, advancedFilters);
+      items = items.filter(item => {
+        let result = evalFilterWithInventario(item, advancedFilters[0]);
+        for (let i = 1; i < advancedFilters.length; i++) {
+          const val = evalFilterWithInventario(item, advancedFilters[i]);
+          if (advancedFilters[i].connector === 'O') result = result || val;
+          else result = result && val;
+        }
+        return result;
+      });
+    }
+
+    // Helper inline: evalúa condición extendida para codigos_inventario
+    function evalFilterWithInventario(item: Campana, filter: AdvancedFilterCondition): boolean {
+      // Para filtros de codigos_inventario, también buscar en inventarios cargados
+      if (filter.field === 'codigos_inventario' && filter.value) {
+        const baseResult = evalCondition(item, filter);
+        if (baseResult) return true;
+        // Buscar en inventarios cargados (codigo_unico individual)
+        const invItems = campanaInventarios[item.id] || [];
+        if (invItems.length > 0) {
+          const filterVal = filter.value.toLowerCase();
+          const hasMatch = invItems.some(inv => {
+            const code = inv.codigo_unico?.toLowerCase() || '';
+            switch (filter.operator) {
+              case '=': return code === filterVal;
+              case '!=': return code !== filterVal;
+              case 'contains': return code.includes(filterVal);
+              case 'not_contains': return !code.includes(filterVal);
+              default: return false;
+            }
+          });
+          // Para operadores negativos (!=, not_contains), todos los items deben cumplir
+          if (filter.operator === '!=' || filter.operator === 'not_contains') {
+            return baseResult && invItems.every(inv => {
+              const code = inv.codigo_unico?.toLowerCase() || '';
+              return filter.operator === '!=' ? code !== filterVal : !code.includes(filterVal);
+            });
+          }
+          return hasMatch;
+        }
+        return baseResult;
+      }
+      return evalCondition(item, filter);
     }
 
     // Apply sorting
@@ -1081,7 +1117,7 @@ export function CampanasPage() {
     }
 
     return items;
-  }, [data?.data, allSearchTerms, selectedCatorcenaInicio, advancedFilters, sortField, sortDirection]);
+  }, [data?.data, allSearchTerms, selectedCatorcenaInicio, advancedFilters, sortField, sortDirection, campanaInventarios]);
 
   // Recalculate stats from filteredData when client-side filters are active
   const needsClientFilter = hasSearch || advancedFilters.length > 0 || selectedCatorcenaInicio || status === 'Incompleta';
@@ -2840,10 +2876,37 @@ export function CampanasPage() {
                     // Filtrar inventarios por la catorcena del grupo actual (match exacto + overlap de fechas)
                     let inventarios = allInventarios.filter(inv => itemMatchesCatorcena(inv, catorcena.num, catorcena.anio));
                     // Filtrar inventarios por los términos de búsqueda (codigo_unico)
+                    const isSearchingInventario = allSearchTerms.length > 0 && allSearchTerms.some(term => {
+                      // Detectar si algún término parece código de inventario (busca en inventarios cargados)
+                      const lt = term.toLowerCase();
+                      return (campanaInventarios[campana.id] || []).some(inv => inv.codigo_unico?.toLowerCase().includes(lt));
+                    });
                     if (allSearchTerms.length > 0) {
                       const matchingInv = inventarios.filter(inv =>
                         allSearchTerms.some(term => inv.codigo_unico?.toLowerCase().includes(term.toLowerCase()))
                       );
+                      if (matchingInv.length > 0) {
+                        inventarios = matchingInv;
+                      } else if (isSearchingInventario && allInventarios.length > 0) {
+                        // Si estamos buscando por código de inventario y esta campaña tiene inventarios
+                        // pero ninguno coincide en esta catorcena, ocultar la campaña en este grupo
+                        return null;
+                      }
+                    }
+                    // También filtrar inventarios con filtros configurables de codigos_inventario
+                    const invFilters = advancedFilters.filter(f => f.field === 'codigos_inventario' && f.value);
+                    if (invFilters.length > 0 && inventarios.length > 0) {
+                      const matchingInv = inventarios.filter(inv => {
+                        const code = inv.codigo_unico?.toLowerCase() || '';
+                        return invFilters.some(f => {
+                          const fv = f.value.toLowerCase();
+                          switch (f.operator) {
+                            case '=': return code === fv;
+                            case 'contains': return code.includes(fv);
+                            default: return false;
+                          }
+                        });
+                      });
                       if (matchingInv.length > 0) {
                         inventarios = matchingInv;
                       }
