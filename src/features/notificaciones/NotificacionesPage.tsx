@@ -1430,27 +1430,25 @@ function TaskDrawer({
   // Obtener idquote de la propuesta (id_propuesta es el idquote en solicitudCaras)
   // Si no hay id_propuesta, intentar obtenerlo desde la solicitud
   const [idPropuestaState, setIdPropuestaState] = useState<string | null>(tarea.id_propuesta || null);
+  const [solicitudFallbackTried, setSolicitudFallbackTried] = useState(false);
+
+  const fetchPropuestaBySolicitud = async (solicitudId: string) => {
+    const response = await fetch(`${import.meta.env.VITE_API_URL}/propuestas?solicitudId=${solicitudId}`, {
+      headers: { 'Authorization': `Bearer ${localStorage.getItem('token')}` }
+    });
+    const data = await response.json();
+    if (data.success && data.data && data.data.length > 0) {
+      return data.data[0].id.toString();
+    }
+    return null;
+  };
 
   // Si no hay id_propuesta pero hay id_solicitud, buscar la propuesta
   useEffect(() => {
     if (!tarea.id_propuesta && tarea.id_solicitud && isAutorizacionTask) {
-      // Buscar propuesta por solicitud_id
-      const fetchPropuesta = async () => {
-        try {
-          const response = await fetch(`${import.meta.env.VITE_API_URL}/propuestas?solicitudId=${tarea.id_solicitud}`, {
-            headers: {
-              'Authorization': `Bearer ${localStorage.getItem('token')}`
-            }
-          });
-          const data = await response.json();
-          if (data.success && data.data && data.data.length > 0) {
-            setIdPropuestaState(data.data[0].id.toString());
-          }
-        } catch (error) {
-          console.error('Error buscando propuesta:', error);
-        }
-      };
-      fetchPropuesta();
+      fetchPropuestaBySolicitud(tarea.id_solicitud)
+        .then(id => { if (id) setIdPropuestaState(id); })
+        .catch(err => console.error('Error buscando propuesta:', err));
     } else if (tarea.id_propuesta) {
       setIdPropuestaState(tarea.id_propuesta);
     }
@@ -1464,6 +1462,28 @@ function TaskDrawer({
     queryFn: () => notificacionesService.getCarasAutorizacion(idPropuesta || ''),
     enabled: isAutorizacionTask && !!idPropuesta,
   });
+
+  // Fallback: si el id_propuesta de la tarea apunta a una propuesta huérfana (0 caras),
+  // intentar resolver la propuesta real por id_solicitud.
+  useEffect(() => {
+    if (
+      isAutorizacionTask &&
+      !solicitudFallbackTried &&
+      carasData !== undefined &&
+      carasData.length === 0 &&
+      tarea.id_solicitud &&
+      idPropuestaState === tarea.id_propuesta
+    ) {
+      setSolicitudFallbackTried(true);
+      fetchPropuestaBySolicitud(tarea.id_solicitud)
+        .then(realId => {
+          if (realId && realId !== idPropuestaState) {
+            setIdPropuestaState(realId);
+          }
+        })
+        .catch(err => console.error('Error buscando propuesta (fallback):', err));
+    }
+  }, [carasData, isAutorizacionTask, solicitudFallbackTried, tarea.id_solicitud, tarea.id_propuesta, idPropuestaState]);
 
   // Query para resumen de autorización
   const { data: resumenData, refetch: refetchResumen } = useQuery({
