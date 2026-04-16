@@ -924,12 +924,13 @@ export function CampanasPage() {
     return terms;
   }, [debouncedSearchTags, debouncedSearchInput]);
 
-  // Single term → backend search (fast SQL). Multiple terms → client-side OR filter.
-  const backendSearch = allSearchTerms.length === 1 ? allSearchTerms[0] : '';
+  // Search: send to backend (SQL fast) + fetch all matches (no pagination limit)
+  const backendSearch = allSearchTerms.length >= 1 ? allSearchTerms[0] : '';
+  const hasSearch = allSearchTerms.length > 0;
   const multiSearch = allSearchTerms.length > 1;
 
-  // When grouping, advanced filters, sorting, catorcena filter, or multi-search are active, fetch ALL data
-  const needsAllData = activeGroupings.length > 0 || advancedFilters.length > 0 || !!sortField || !!selectedCatorcenaInicio || status === 'Incompleta' || multiSearch;
+  // When searching, grouping, advanced filters, sorting, or catorcena filter active → fetch ALL matching data
+  const needsAllData = activeGroupings.length > 0 || advancedFilters.length > 0 || !!sortField || !!selectedCatorcenaInicio || status === 'Incompleta' || hasSearch;
   const effectiveLimit = needsAllData ? 9999 : limit;
 
   const { data, isLoading } = useQuery({
