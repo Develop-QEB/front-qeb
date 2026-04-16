@@ -5958,7 +5958,7 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
                                       );
                                     })()}
                                     {effectiveCanEdit && (() => {
-                                      const caraAuthPendienteSaved = caras.some(c => !modifiedCaras.has(c.id!) && (c.autorizacion_dg === 'pendiente' || c.autorizacion_dcm === 'pendiente'));
+                                      const caraAuthPendienteSaved = caras.some(c => !modifiedCaras.has(c.id!) && ((c._originalDg || c.autorizacion_dg) === 'pendiente' || (c._originalDcm || c.autorizacion_dcm) === 'pendiente'));
                                       const editBlocked = caraAuthPendienteSaved || caraAPSBlocked;
                                       const blockReason = caraAPSBlocked ? 'Grupo con APS asignado - no se puede editar' : caraAuthPendienteSaved ? 'Autorización pendiente - no se puede editar' : 'Editar';
                                       return (
