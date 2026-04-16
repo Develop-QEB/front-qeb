@@ -814,6 +814,19 @@ export function CampanaDetailPage() {
   // Estado para modal de editar campaña
   const [editModalOpen, setEditModalOpen] = useState(false);
 
+  // Overlay de transición (clicks en Volver, Editar, Comentarios, Gestión de Artes)
+  const [transitionOverlay, setTransitionOverlay] = useState<string | null>(null);
+
+  const withTransitionOverlay = (mensaje: string, action: () => void) => {
+    setTransitionOverlay(mensaje);
+    // Permite que el overlay se pinte antes de disparar la acción
+    setTimeout(() => {
+      action();
+      // Auto-limpia tras el tiempo típico de montaje de un modal pesado
+      setTimeout(() => setTransitionOverlay(null), 1200);
+    }, 30);
+  };
+
   // Estado para filtros (inventario reservado)
   const [filtersReservado, setFiltersReservado] = useState<FilterCondition[]>([]);
   const [showFiltersReservado, setShowFiltersReservado] = useState(false);
@@ -1573,7 +1586,7 @@ export function CampanaDetailPage() {
 
   // Cortesías (CT): ir directo al gestor de artes sin APS
   const handleEnviarCortesiaAGestor = () => {
-    navigate(`/campanas/${campanaId}/tareas`);
+    withTransitionOverlay('Abriendo gestor de artes...', () => navigate(`/campanas/${campanaId}/tareas`));
   };
 
   const handleCommentSubmit = () => {
@@ -1732,6 +1745,8 @@ export function CampanaDetailPage() {
       ? 'Guardando comentario...'
       : enviandoCodigo
       ? 'Enviando código...'
+      : transitionOverlay
+      ? transitionOverlay
       : null;
 
   return (
@@ -1751,7 +1766,7 @@ export function CampanaDetailPage() {
         {/* Header */}
         <div className="flex items-center justify-between gap-2 flex-wrap">
           <button
-            onClick={() => navigate('/campanas')}
+            onClick={() => withTransitionOverlay('Cargando campañas...', () => navigate('/campanas'))}
             className={`flex items-center gap-1.5 sm:gap-2 text-purple-400 hover:${isDark ? 'text-purple-300' : 'text-purple-700'} transition-colors`}
           >
             <ArrowLeft className="h-4 w-4" />
@@ -1764,7 +1779,7 @@ export function CampanaDetailPage() {
               const editDisabled = disabledStatuses.includes(statusLower) || campana.has_aps === true;
               return (
                 <button
-                  onClick={() => setEditModalOpen(true)}
+                  onClick={() => withTransitionOverlay('Abriendo editor de campaña...', () => setEditModalOpen(true))}
                   disabled={editDisabled}
                   className={`flex items-center gap-1 sm:gap-1.5 px-2 sm:px-3 py-1 sm:py-1.5 rounded-lg border transition-all ${
                     editDisabled
@@ -1779,7 +1794,7 @@ export function CampanaDetailPage() {
               );
             })()}
             <button
-              onClick={() => setShowComments(true)}
+              onClick={() => withTransitionOverlay('Abriendo comentarios...', () => setShowComments(true))}
               className={`flex items-center gap-1 sm:gap-1.5 px-2 sm:px-3 py-1 sm:py-1.5 rounded-lg ${isDark ? 'bg-purple-900/30 hover:bg-purple-900/50' : 'bg-purple-100 hover:bg-purple-200'} transition-colors`}
               title="Comentarios"
             >
@@ -2022,7 +2037,7 @@ export function CampanaDetailPage() {
               )}
               {permissions.canSeeGestionArtes && (
                 <button
-                  onClick={() => navigate(`/campanas/${campanaId}/tareas`)}
+                  onClick={() => withTransitionOverlay('Abriendo gestor de tareas...', () => navigate(`/campanas/${campanaId}/tareas`))}
                   className={`flex items-center gap-1 sm:gap-1.5 px-2 sm:px-3 py-1 sm:py-1.5 text-[10px] sm:text-xs font-medium ${isDark ? 'bg-purple-900/50 hover:bg-purple-900/70 border-purple-500/30' : 'bg-purple-100 hover:bg-purple-200 border-purple-300'} border rounded-lg transition-colors`}
                 >
                   <ListTodo className="h-3 sm:h-3.5 w-3 sm:w-3.5" />
