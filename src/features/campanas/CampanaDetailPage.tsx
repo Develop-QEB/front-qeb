@@ -1728,6 +1728,10 @@ export function CampanaDetailPage() {
       ? 'Asignando APS...'
       : postingToSAP
       ? 'Enviando a SAP...'
+      : addCommentMutation.isPending
+      ? 'Guardando comentario...'
+      : enviandoCodigo
+      ? 'Enviando código...'
       : null;
 
   return (
