@@ -609,6 +609,8 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
   const [newCara, setNewCara] = useState<Omit<CaraItem, 'localId'>>(EMPTY_CARA);
   const [selectedArticulo, setSelectedArticulo] = useState<SAPArticulo | null>(null);
   const [showAddCaraForm, setShowAddCaraForm] = useState(false);
+  const caraFormRef = useRef<HTMLDivElement>(null);
+  const caraTableRef = useRef<HTMLDivElement>(null);
 
   // Reservas state
   const [reservas, setReservas] = useState<ReservaItem[]>([]);
@@ -1620,6 +1622,7 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
       anio_fin: anioFinVal,
     });
     setShowAddCaraForm(true);
+    setTimeout(() => caraFormRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 100);
   };
 
   // Handle save cara (add or update)
@@ -1730,6 +1733,7 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
           });
         }
         setEditingCaraId(null);
+        setTimeout(() => caraTableRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 100);
       } else {
         // Create new cara in database (needs DB ID for reservas)
         const createdCara = await campanasService.createCara(campana!.id, caraData);
@@ -1856,10 +1860,14 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
 
   // Handle cancel cara form
   const handleCancelCaraForm = () => {
+    const wasEditing = !!editingCaraId;
     setNewCara(EMPTY_CARA);
     setSelectedArticulo(null);
     setShowAddCaraForm(false);
     setEditingCaraId(null);
+    if (wasEditing) {
+      setTimeout(() => caraTableRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 100);
+    }
   };
 
   // Haversine distance calculation (in meters)
@@ -5416,7 +5424,7 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
 
                 {/* Add/Edit Cara Form */}
                 {showAddCaraForm && (
-                  <div className="px-5 py-4 bg-zinc-800/50 border-b border-zinc-700/50">
+                  <div ref={caraFormRef} className="px-5 py-4 bg-zinc-800/50 border-b border-zinc-700/50">
                     <h4 className="text-sm font-medium text-white mb-4">
                       {editingCaraId ? 'Editar Cara' : 'Nueva Cara'}
                     </h4>
@@ -5757,7 +5765,7 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
                   </div>
                 )}
 
-                <div className={`divide-y ${isDark ? 'divide-zinc-700/30' : 'divide-gray-200'}`}>
+                <div ref={caraTableRef} className={`divide-y ${isDark ? 'divide-zinc-700/30' : 'divide-gray-200'}`}>
                   {caras.length === 0 ? (
                     <div className="p-8 text-center text-zinc-500">
                       <Layers className="h-10 w-10 mx-auto mb-3 opacity-30" />

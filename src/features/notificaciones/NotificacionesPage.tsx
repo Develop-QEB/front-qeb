@@ -7,7 +7,7 @@ import {
   PanelRight, FolderOpen, Clock, CheckCircle, AlertCircle, Circle,
   MessageSquare, Send, Plus, Pencil, Trash2, StickyNote,
   Users, Tag, Building2, Download, Table2, ExternalLink, Bell, ClipboardList,
-  Filter, Layers, ArrowUpDown, ArrowUp, ArrowDown, Check, Loader2
+  Filter, Layers, ArrowUpDown, ArrowUp, ArrowDown, Check, Loader2, UserCheck, UserPlus
 } from 'lucide-react';
 import { Header } from '../../components/layout/Header';
 import { notificacionesService, CaraAutorizacion, ResumenAutorizacion } from '../../services/notificaciones.service';
@@ -25,7 +25,7 @@ import { useSocketNotificaciones } from '../../hooks/useSocket';
 // ============ TIPOS ============
 type ContentType = 'notificaciones' | 'tareas';
 type ViewType = 'tablero' | 'lista' | 'calendario' | 'notas';
-type GroupByType = 'estatus' | 'tipo' | 'fecha' | 'responsable' | 'asignado';
+type GroupByType = 'estatus' | 'tipo' | 'fecha' | 'responsable' | 'asignado' | 'asesor' | 'creador';
 type OrderByType = 'fecha_fin' | 'fecha_inicio' | 'created_at' | 'titulo' | 'estatus';
 type DateFilterType = 'all' | 'today' | 'this_week' | 'last_week' | 'this_month' | 'last_month';
 type QuickFilter = 'all' | 'pendientes' | 'finalizadas' | 'leidas' | 'no_leidas' | null;
@@ -76,6 +76,8 @@ const FILTER_FIELDS: FilterFieldConfig[] = [
   { field: 'estatus', label: 'Estado', type: 'string' },
   { field: 'asignado', label: 'Asignado', type: 'string' },
   { field: 'responsable', label: 'Responsable', type: 'string' },
+  { field: 'asesor', label: 'Asesor', type: 'string' },
+  { field: 'creador', label: 'Creador', type: 'string' },
 ];
 
 const DATE_PRESET_OPTIONS = [
@@ -89,7 +91,7 @@ const DATE_PRESET_OPTIONS = [
 
 // Campos disponibles para agrupar
 // test
-type GroupByField = 'estatus' | 'tipo' | 'asignado' | 'responsable' | 'fecha';
+type GroupByField = 'estatus' | 'tipo' | 'asignado' | 'responsable' | 'fecha' | 'asesor' | 'creador';
 
 interface GroupConfig {
   field: GroupByField;
@@ -102,6 +104,8 @@ const AVAILABLE_GROUPINGS: GroupConfig[] = [
   { field: 'asignado', label: 'Asignado' },
   { field: 'responsable', label: 'Responsable' },
   { field: 'fecha', label: 'Fecha' },
+  { field: 'asesor', label: 'Asesor' },
+  { field: 'creador', label: 'Creador' },
 ];
 
 const OPERATORS: { value: FilterOperator; label: string }[] = [
@@ -202,6 +206,8 @@ const GROUP_BY_OPTIONS: { value: GroupByType; label: string; icon: typeof Circle
   { value: 'asignado', label: 'Asignado', icon: User },
   { value: 'responsable', label: 'Responsable', icon: Users },
   { value: 'fecha', label: 'Fecha', icon: Calendar },
+  { value: 'asesor', label: 'Asesor', icon: UserCheck },
+  { value: 'creador', label: 'Creador', icon: UserPlus },
 ];
 
 // Función para verificar si una fecha está en el rango
@@ -258,6 +264,10 @@ function getGroupKey(tarea: Notificacion, groupBy: GroupByType): string {
       return tarea.asignado || 'Sin asignar';
     case 'responsable':
       return tarea.responsable || 'Sin responsable';
+    case 'asesor':
+      return tarea.asesor || 'Sin asesor';
+    case 'creador':
+      return tarea.creador || 'Sin creador';
     case 'fecha':
       if (!tarea.fecha_creacion) return 'Sin fecha';
       const date = new Date(tarea.fecha_creacion);
@@ -1420,27 +1430,25 @@ function TaskDrawer({
   // Obtener idquote de la propuesta (id_propuesta es el idquote en solicitudCaras)
   // Si no hay id_propuesta, intentar obtenerlo desde la solicitud
   const [idPropuestaState, setIdPropuestaState] = useState<string | null>(tarea.id_propuesta || null);
+  const [solicitudFallbackTried, setSolicitudFallbackTried] = useState(false);
+
+  const fetchPropuestaBySolicitud = async (solicitudId: string) => {
+    const response = await fetch(`${import.meta.env.VITE_API_URL}/propuestas?solicitudId=${solicitudId}`, {
+      headers: { 'Authorization': `Bearer ${localStorage.getItem('token')}` }
+    });
+    const data = await response.json();
+    if (data.success && data.data && data.data.length > 0) {
+      return data.data[0].id.toString();
+    }
+    return null;
+  };
 
   // Si no hay id_propuesta pero hay id_solicitud, buscar la propuesta
   useEffect(() => {
     if (!tarea.id_propuesta && tarea.id_solicitud && isAutorizacionTask) {
-      // Buscar propuesta por solicitud_id
-      const fetchPropuesta = async () => {
-        try {
-          const response = await fetch(`${import.meta.env.VITE_API_URL}/propuestas?solicitudId=${tarea.id_solicitud}`, {
-            headers: {
-              'Authorization': `Bearer ${localStorage.getItem('token')}`
-            }
-          });
-          const data = await response.json();
-          if (data.success && data.data && data.data.length > 0) {
-            setIdPropuestaState(data.data[0].id.toString());
-          }
-        } catch (error) {
-          console.error('Error buscando propuesta:', error);
-        }
-      };
-      fetchPropuesta();
+      fetchPropuestaBySolicitud(tarea.id_solicitud)
+        .then(id => { if (id) setIdPropuestaState(id); })
+        .catch(err => console.error('Error buscando propuesta:', err));
     } else if (tarea.id_propuesta) {
       setIdPropuestaState(tarea.id_propuesta);
     }
@@ -1454,6 +1462,28 @@ function TaskDrawer({
     queryFn: () => notificacionesService.getCarasAutorizacion(idPropuesta || ''),
     enabled: isAutorizacionTask && !!idPropuesta,
   });
+
+  // Fallback: si el id_propuesta de la tarea apunta a una propuesta huérfana (0 caras),
+  // intentar resolver la propuesta real por id_solicitud.
+  useEffect(() => {
+    if (
+      isAutorizacionTask &&
+      !solicitudFallbackTried &&
+      carasData !== undefined &&
+      carasData.length === 0 &&
+      tarea.id_solicitud &&
+      idPropuestaState === tarea.id_propuesta
+    ) {
+      setSolicitudFallbackTried(true);
+      fetchPropuestaBySolicitud(tarea.id_solicitud)
+        .then(realId => {
+          if (realId && realId !== idPropuestaState) {
+            setIdPropuestaState(realId);
+          }
+        })
+        .catch(err => console.error('Error buscando propuesta (fallback):', err));
+    }
+  }, [carasData, isAutorizacionTask, solicitudFallbackTried, tarea.id_solicitud, tarea.id_propuesta, idPropuestaState]);
 
   // Query para resumen de autorización
   const { data: resumenData, refetch: refetchResumen } = useQuery({

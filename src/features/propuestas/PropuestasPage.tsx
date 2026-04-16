@@ -2076,7 +2076,7 @@ export function PropuestasPage() {
                 {/* Group By */}
                 <FilterChip
                   label="Agrupar"
-                  options={['status', 'asignado']}
+                  options={['status', 'asignado', 'asesor', 'creador_nombre']}
                   value={groupBy}
                   onChange={(val) => { setGroupBy(val); setExpandedGroups(new Set()); }}
                   onClear={() => { setGroupBy(''); setExpandedGroups(new Set()); }}

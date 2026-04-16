@@ -1727,9 +1727,27 @@ export function CampanaDetailPage() {
 
   const comentarios = campana.comentarios || [];
 
+  const heavyOperation =
+    quitandoAPS
+      ? 'Quitando APS...'
+      : assignAPSMutation.isPending
+      ? 'Asignando APS...'
+      : postingToSAP
+      ? 'Enviando a SAP...'
+      : null;
+
   return (
     <div className="min-h-screen">
       <Header title="Detalle de Campana" />
+      {heavyOperation && (
+        <div className="fixed inset-0 bg-black/40 backdrop-blur-[1px] z-[60] flex items-center justify-center" role="status" aria-live="polite">
+          <div className={`flex items-center gap-3 px-6 py-4 rounded-xl shadow-2xl ${isDark ? 'bg-zinc-900 text-white' : 'bg-white text-gray-900'}`}>
+            <Loader2 className="h-5 w-5 animate-spin text-purple-500" />
+            <span className="text-sm font-medium">{heavyOperation}</span>
+            <span className={`text-xs ${isDark ? 'text-zinc-400' : 'text-gray-500'}`}>Por favor no cierres ni navegues</span>
+          </div>
+        </div>
+      )}
 
       <div className="p-3 sm:p-4 md:p-6 space-y-3 md:space-y-4">
         {/* Header */}
@@ -2787,7 +2805,11 @@ export function CampanaDetailPage() {
                   }`}
                   title={selectedHavePosted ? 'No se puede eliminar APS con POST a SAP' : quitandoAPS ? 'Quitando...' : 'Quitar APS'}
                 >
-                  <Minus className={`h-3.5 sm:h-4 w-3.5 sm:w-4 ${disabled ? (isDark ? 'text-red-400/40' : 'text-red-300') : (isDark ? 'text-red-400' : 'text-red-600')}`} />
+                  {quitandoAPS ? (
+                    <Loader2 className={`h-3.5 sm:h-4 w-3.5 sm:w-4 animate-spin ${isDark ? 'text-red-400' : 'text-red-600'}`} />
+                  ) : (
+                    <Minus className={`h-3.5 sm:h-4 w-3.5 sm:w-4 ${disabled ? (isDark ? 'text-red-400/40' : 'text-red-300') : (isDark ? 'text-red-400' : 'text-red-600')}`} />
+                  )}
                 </button>
                 );
               })()}

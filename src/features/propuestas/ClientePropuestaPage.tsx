@@ -855,6 +855,63 @@ export function ClientePropuestaPage() {
           ))}
         </div>
 
+        {/* Filtro por Catorcena/Periodo (chips multi-select) */}
+        {periodoOptions.length > 1 && (
+          <div className={`rounded-2xl p-4 border ${isDark ? 'bg-zinc-900/80 border-zinc-700' : 'bg-[#E6F0FA] border-[#0054A6]/20'}`}>
+            <div className="flex items-center gap-3 flex-wrap">
+              <span className={`text-xs font-semibold ${isDark ? 'text-blue-300' : 'text-[#0054A6]'}`}>
+                <Filter className="h-3.5 w-3.5 inline mr-1" />
+                Filtrar por {tipoPeriodo === 'mensual' ? 'periodo' : 'catorcena'}:
+              </span>
+              <button
+                onClick={() => setSelectedCatorcenas(new Set())}
+                className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-all border ${
+                  selectedCatorcenas.size === 0
+                    ? 'bg-gradient-to-r from-[#0054A6] to-[#003B71] text-white border-[#0054A6] shadow-lg shadow-[#0054A6]/20'
+                    : isDark ? 'bg-zinc-800 text-zinc-400 border-zinc-600 hover:bg-zinc-700' : 'bg-white text-gray-600 border-gray-200 hover:bg-blue-50'
+                }`}
+              >
+                Todas
+              </button>
+              {periodoOptions.map(p => {
+                const isSelected = selectedCatorcenas.has(p.value);
+                return (
+                  <button
+                    key={p.value}
+                    onClick={() => {
+                      setSelectedCatorcenas(prev => {
+                        const next = new Set(prev);
+                        if (next.has(p.value)) {
+                          next.delete(p.value);
+                        } else {
+                          next.add(p.value);
+                        }
+                        return next;
+                      });
+                    }}
+                    className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-all border ${
+                      isSelected
+                        ? 'bg-gradient-to-r from-[#0054A6] to-[#003B71] text-white border-[#0054A6] shadow-lg shadow-[#0054A6]/20'
+                        : isDark ? 'bg-zinc-800 text-zinc-400 border-zinc-600 hover:bg-zinc-700' : 'bg-white text-gray-600 border-gray-200 hover:bg-blue-50'
+                    }`}
+                  >
+                    {p.label}
+                  </button>
+                );
+              })}
+              {selectedCatorcenas.size > 0 && (
+                <button
+                  onClick={() => setSelectedCatorcenas(new Set())}
+                  className="px-2 py-1.5 text-xs text-red-500 hover:bg-red-50 rounded-lg transition-colors"
+                >
+                  <X className="h-3 w-3 inline mr-0.5" />
+                  Limpiar
+                </button>
+              )}
+            </div>
+          </div>
+        )}
+
         {/* KPIs */}
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
           {[
@@ -951,12 +1008,12 @@ export function ClientePropuestaPage() {
                   {sortOrder === 'asc' ? '↑' : '↓'}
                 </button>
               </div>
-              {(filterText || filters.length > 0 || filterPeriodo) && (
+              {(filterText || filters.length > 0 || filterPeriodo || selectedCatorcenas.size > 0) && (
                 <button
-                  onClick={() => { setFilterText(''); setFilters([]); setFilterPeriodo(''); }}
+                  onClick={() => { setFilterText(''); setFilters([]); setFilterPeriodo(''); setSelectedCatorcenas(new Set()); }}
                   className="px-2.5 py-1.5 bg-red-50 text-red-600 border border-red-200 rounded-lg text-xs hover:bg-red-100"
                 >
-                  Limpiar
+                  Limpiar todo
                 </button>
               )}
             </div>

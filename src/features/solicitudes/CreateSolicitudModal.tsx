@@ -554,6 +554,8 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
 
   // Prevent double-submit (covers async file upload gap before mutation starts)
   const isSubmittingRef = useRef(false);
+  const circuitFormRef = useRef<HTMLDivElement>(null);
+  const circuitTableRef = useRef<HTMLDivElement>(null);
 
   // Form state
   const [step, setStep] = useState(1);
@@ -1300,7 +1302,12 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
       }
       return updated;
     });
+    const wasEditing = !!editingCaraId;
     if (editingCaraId) setEditingCaraId(null);
+
+    if (wasEditing) {
+      setTimeout(() => circuitTableRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 100);
+    }
 
     // Auto expand all catorcenas created
     setExpandedCatorcenas(prev => {
@@ -1385,11 +1392,13 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
       tarifaPublica: cara.tarifaPublica,
       articuloBf: bfPair ? bfPair.articulo : null,
     });
+    setTimeout(() => circuitFormRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 100);
   };
 
   // Cancel editing
   const handleCancelEdit = () => {
     setEditingCaraId(null);
+    setTimeout(() => circuitTableRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 100);
     setNewCara({
       articulo: null,
       estado: '',
@@ -2340,7 +2349,7 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
               </div>
 
               {/* Add cara form */}
-              <div className={`p-4 ${isDark ? 'bg-zinc-800/30 border-zinc-700/50' : 'bg-gray-50 border-gray-200'} rounded-xl border`}>
+              <div ref={circuitFormRef} className={`p-4 ${isDark ? 'bg-zinc-800/30 border-zinc-700/50' : 'bg-gray-50 border-gray-200'} rounded-xl border`}>
                 <h3 className={`text-sm font-semibold ${isDark ? 'text-white' : 'text-gray-900'} mb-4 flex items-center gap-2`}>
                   <Plus className="h-4 w-4 text-purple-400" />
                   Agregar Circuito
@@ -2706,7 +2715,7 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
               </div>
 
               {/* Caras table - grouped by catorcena */}
-              <div className={`rounded-xl border ${isDark ? 'border-zinc-700/50' : 'border-gray-200'} overflow-hidden`}>
+              <div ref={circuitTableRef} className={`rounded-xl border ${isDark ? 'border-zinc-700/50' : 'border-gray-200'} overflow-hidden`}>
                 {groupedCaras.length === 0 ? (
                   <div className={`px-4 py-8 text-center ${isDark ? 'text-zinc-500' : 'text-gray-400'} text-sm`}>
                     No hay circuitos agregados

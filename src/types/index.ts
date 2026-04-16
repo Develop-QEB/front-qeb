@@ -228,6 +228,7 @@ export interface Propuesta {
   cliente_nombre?: string;
   marca_nombre?: string;
   creador_nombre?: string;
+  asesor?: string;
   nombre_comercial?: string;
   campana_nombre?: string;
   nombre_campania?: string;
@@ -424,6 +425,8 @@ export interface Notificacion {
   id_solicitud?: string;
   id_propuesta?: string;
   campania_id?: number | null;
+  asesor?: string | null;
+  creador?: string | null;
 }
 
 export interface NotificacionStats {
