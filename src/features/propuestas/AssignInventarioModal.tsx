@@ -1703,11 +1703,12 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
       return;
     }
 
-    // Validar tarifa pública: si es 0, solo CT y BF/CF pueden avanzar
+    // Validar tarifa pública: si es 0, solo CT, BF/CF e IM pueden avanzar
     const artCode = (newCara.articulo || '').toUpperCase();
     const esCortesia = artCode.startsWith('CT');
     const esBonificacion = artCode.startsWith('BF') || artCode.startsWith('CF');
-    if (newCara.tarifa_publica <= 0 && !esCortesia && !esBonificacion) {
+    const esImpresion = artCode.startsWith('IM');
+    if (newCara.tarifa_publica <= 0 && !esCortesia && !esBonificacion && !esImpresion) {
       alert('La tarifa pública no puede ser 0. Por favor ingresa una tarifa válida.');
       return;
     }

@@ -1637,7 +1637,8 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
     const artCode = (newCara.articulo || '').toUpperCase();
     const esCortesia = artCode.startsWith('CT');
     const esBonificacion = artCode.startsWith('BF') || artCode.startsWith('CF');
-    if (newCara.tarifa_publica <= 0 && !esCortesia && !esBonificacion) {
+    const esImpresion = artCode.startsWith('IM');
+    if (newCara.tarifa_publica <= 0 && !esCortesia && !esBonificacion && !esImpresion) {
       alert('La tarifa pública no puede ser 0. Por favor ingresa una tarifa válida.');
       return;
     }
