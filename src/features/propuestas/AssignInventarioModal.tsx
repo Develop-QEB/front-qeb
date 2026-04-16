@@ -4,7 +4,7 @@ import { useQuery, useQueryClient, useMutation } from '@tanstack/react-query';
 import {
   X, Search, Plus, Trash2, ChevronDown, ChevronRight, ChevronUp, Users,
   FileText, MapPin, Layers, Pencil, Map as MapIcon, Package, Calendar,
-  Gift, Target, Save, ArrowLeft, Filter, Grid, LayoutGrid, Ruler, ArrowUpDown, ArrowUp, ArrowDown, Download, Eye, Funnel, Check, Upload, Monitor, AlertTriangle, Trophy
+  Gift, Target, Save, ArrowLeft, Filter, Grid, LayoutGrid, Ruler, ArrowUpDown, ArrowUp, ArrowDown, Download, Eye, Funnel, Check, Upload, Monitor, AlertTriangle, Trophy, Loader2
 } from 'lucide-react';
 import { GoogleMap, useLoadScript, Marker } from '@react-google-maps/api';
 import { AdvancedMapComponent } from './AdvancedMapComponent';
@@ -3517,6 +3517,17 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
 
   if (!isOpen) return null;
 
+  // Overlay bloqueante global cuando se está guardando fuera del confirmModal
+  const savingOverlayJSX = isSaving && !confirmModal.isOpen && (
+    <div className="fixed inset-0 z-[70] flex items-center justify-center bg-black/40 backdrop-blur-[1px]" role="status" aria-live="polite">
+      <div className={`flex items-center gap-3 px-6 py-4 rounded-xl shadow-2xl ${isDark ? 'bg-zinc-900 text-white' : 'bg-white text-gray-900'}`}>
+        <Loader2 className="h-5 w-5 animate-spin text-purple-500" />
+        <span className="text-sm font-medium">Guardando...</span>
+        <span className={`text-xs ${isDark ? 'text-zinc-400' : 'text-gray-500'}`}>Por favor no cierres ni navegues</span>
+      </div>
+    </div>
+  );
+
   // Confirmation modal content reused in both views
   const confirmModalJSX = confirmModal.isOpen && (
     <div className="fixed inset-0 z-[60] flex items-center justify-center">
@@ -3589,6 +3600,7 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
   if (viewState === 'search-inventory') {
     return (
       <div className="fixed inset-0 z-50 flex items-center justify-center">
+        {savingOverlayJSX}
         {confirmModalJSX}
         {toastJSX}
         <div className="absolute inset-0 bg-black/70 backdrop-blur-sm" onClick={handleBackToMain} />
