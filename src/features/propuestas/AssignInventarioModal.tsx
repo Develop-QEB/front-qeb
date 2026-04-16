@@ -6375,7 +6375,7 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
                                       );
                                     })()}
                                     {effectiveCanEdit && (() => {
-                                      const caraAuthPendienteSaved = caras.some(c => !modifiedCaras.has(c.id!) && (c.autorizacion_dg === 'pendiente' || c.autorizacion_dcm === 'pendiente'));
+                                      const caraAuthPendienteSaved = caras.some(c => !modifiedCaras.has(c.id!) && ((c._originalDg || c.autorizacion_dg) === 'pendiente' || (c._originalDcm || c.autorizacion_dcm) === 'pendiente'));
                                       return (
                                       <>
                                         <button
