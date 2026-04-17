@@ -135,6 +135,7 @@ const SOLICITUD_FILTER_FIELDS: FilterFieldConfig[] = [
   { field: 'cuic', label: 'CUIC', type: 'string' },
   { field: 'nombre_campania', label: 'Campaña', type: 'string' },
   { field: 'marca_nombre', label: 'Marca', type: 'string' },
+  { field: 'formatos', label: 'Formato', type: 'string' },
   { field: 'presupuesto', label: 'Presupuesto', type: 'number' },
   { field: 'asignado', label: 'Asignado', type: 'string' },
   { field: 'status', label: 'Status', type: 'string' },
@@ -791,7 +792,7 @@ export function SolicitudesPage() {
     let result = applyAdvancedFilters(data.data, advancedFilters);
     // Apply multi-term OR search client-side when there are multiple search terms
     if (allSearchTerms.length > 0) {
-      const searchFields: (keyof Solicitud)[] = ['descripcion', 'razon_social', 'marca_nombre', 'asesor', 'producto_nombre', 'agencia', 'categoria_nombre', 'nombre_campania', 'cuic', 'status', 'asignado', 'nombre_usuario', 'unidad_negocio', 'card_code'];
+      const searchFields: (keyof Solicitud)[] = ['descripcion', 'razon_social', 'marca_nombre', 'asesor', 'producto_nombre', 'agencia', 'categoria_nombre', 'nombre_campania', 'cuic', 'status', 'asignado', 'nombre_usuario', 'unidad_negocio', 'card_code', 'formatos'];
       result = result.filter(item =>
         allSearchTerms.some(term => {
           const lowerTerm = term.toLowerCase();

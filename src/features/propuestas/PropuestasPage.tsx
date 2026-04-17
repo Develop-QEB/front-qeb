@@ -199,6 +199,7 @@ const PROPUESTA_FILTER_FIELDS: FilterFieldConfig[] = [
   { field: 'id', label: 'ID', type: 'number' },
   { field: 'cliente_nombre', label: 'Cliente', type: 'string' },
   { field: 'descripcion', label: 'Descripción', type: 'string' },
+  { field: 'formatos', label: 'Formato', type: 'string' },
   { field: 'inversion', label: 'Inversión', type: 'number' },
   { field: 'asignado', label: 'Asignado', type: 'string' },
   { field: 'status', label: 'Status', type: 'string' },
@@ -1220,7 +1221,8 @@ export function PropuestasPage() {
             p.nombre_campania?.toLowerCase().includes(lowerTerm) ||
             p.creador_nombre?.toLowerCase().includes(lowerTerm) ||
             p.usuario_nombre?.toLowerCase().includes(lowerTerm) ||
-            p.status?.toLowerCase().includes(lowerTerm)
+            p.status?.toLowerCase().includes(lowerTerm) ||
+            p.formatos?.toLowerCase().includes(lowerTerm)
           );
         })
       );

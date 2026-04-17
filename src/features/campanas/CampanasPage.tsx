@@ -215,6 +215,7 @@ const CAMPANA_FILTER_FIELDS: FilterFieldConfig[] = [
   { field: 'cliente_nombre', label: 'Cliente', type: 'string' },
   { field: 'status', label: 'Estatus', type: 'string' },
   { field: 'articulo', label: 'Artículo', type: 'string' },
+  { field: 'formatos', label: 'Formato', type: 'string' },
   { field: 'creador_nombre', label: 'Creador', type: 'string' },
   { field: 'T0_U_Asesor', label: 'Asesor', type: 'string' },
   { field: 'codigos_inventario', label: 'Código Inventario', type: 'string' },
@@ -1008,6 +1009,7 @@ export function CampanasPage() {
             c.codigos_inventario?.toLowerCase().includes(lowerTerm) ||
             c.creador_nombre?.toLowerCase().includes(lowerTerm) ||
             c.T0_U_Asesor?.toLowerCase().includes(lowerTerm) ||
+            c.formatos?.toLowerCase().includes(lowerTerm) ||
             // También buscar en los inventarios cargados (codigo_unico individual)
             (campanaInventarios[c.id] || []).some(inv =>
               inv.codigo_unico?.toLowerCase().includes(lowerTerm)

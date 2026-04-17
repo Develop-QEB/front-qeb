@@ -78,6 +78,7 @@ const FILTER_FIELDS: FilterFieldConfig[] = [
   { field: 'responsable', label: 'Responsable', type: 'string' },
   { field: 'asesor', label: 'Asesor', type: 'string' },
   { field: 'creador', label: 'Creador', type: 'string' },
+  { field: 'formatos', label: 'Formato', type: 'string' },
 ];
 
 const DATE_PRESET_OPTIONS = [
