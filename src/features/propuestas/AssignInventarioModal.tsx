@@ -1597,17 +1597,20 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
 
   // Handle cara deletion
   const handleDeleteCara = (localId: string) => {
-    if (caraHasReservas(localId)) {
+    const caraToDelete = caras.find(c => c.localId === localId);
+    const tieneReservas = caraHasReservas(localId, caraToDelete?.id);
+
+    if (tieneReservas && !permissions.canDeleteCaraConReservas) {
       alert('No puedes eliminar una cara que tiene reservas. Primero elimina las reservas.');
       return;
     }
 
-    const caraToDelete = caras.find(c => c.localId === localId);
-
     setConfirmModal({
       isOpen: true,
       title: 'Eliminar Formato',
-      message: '¿Estás seguro de que deseas eliminar este formato de la propuesta?',
+      message: tieneReservas
+        ? '⚠️ Este formato tiene inventario reservado. Al eliminarlo se liberarán todas las reservas. ¿Deseas continuar?'
+        : '¿Estás seguro de que deseas eliminar este formato de la propuesta?',
       confirmText: 'Eliminar',
       isDestructive: true,
       onConfirm: async () => {
@@ -1624,7 +1627,7 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
         }
         // Update local state
         setCaras(prev => prev.filter(c => c.localId !== localId));
-        setReservas(prev => prev.filter(r => !r.id.startsWith(localId)));
+        setReservas(prev => prev.filter(r => !r.id.startsWith(localId) && r.solicitudCaraId !== caraToDelete?.id));
         setConfirmModal(prev => ({ ...prev, isOpen: false }));
       }
     });
@@ -6390,17 +6393,23 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
                                           <Pencil className="h-4 w-4" />
                                         </button>
                                         {canEditResumen && (
+                                          {(() => {
+                                            const reservaBlocked = hasReservas && !permissions.canDeleteCaraConReservas;
+                                            const isDisabled = reservaBlocked || caraAuthPendienteSaved;
+                                            return (
                                           <button
-                                            onClick={(e) => { e.stopPropagation(); handleDeleteCara(cara.localId); }}
-                                            disabled={hasReservas || caraAuthPendienteSaved}
-                                            className={`p-2 rounded-lg border transition-colors ${hasReservas || caraAuthPendienteSaved
+                                            onClick={(e) => { e.stopPropagation(); if (!isDisabled) handleDeleteCara(cara.localId); }}
+                                            disabled={isDisabled}
+                                            className={`p-2 rounded-lg border transition-colors ${isDisabled
                                               ? `bg-zinc-500/10 ${isDark ? 'text-zinc-500' : 'text-gray-400'} border-zinc-500/20 cursor-not-allowed`
                                               : 'bg-red-500/10 text-red-400 border-red-500/20 hover:bg-red-500/20'
                                               }`}
-                                            title={caraAuthPendienteSaved ? 'Autorización pendiente' : hasReservas ? 'No se puede eliminar (tiene reservas)' : 'Eliminar'}
+                                            title={caraAuthPendienteSaved ? 'Autorización pendiente' : reservaBlocked ? 'No se puede eliminar (tiene reservas)' : 'Eliminar'}
                                           >
                                             <Trash2 className="h-4 w-4" />
                                           </button>
+                                            );
+                                          })()}
                                         )}
                                       </>
                                       );
