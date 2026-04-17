@@ -1914,8 +1914,8 @@ function TaskDrawer({
             </div>
           )}
 
-          {/* Fecha límite - Editable */}
-          <div className={`p-3 rounded-xl ${isDark ? 'bg-zinc-800/30 border-zinc-800/50' : 'bg-gray-50 border-gray-200'} border`}>
+          {/* Fecha límite - Editable (oculta para tareas de Autorización DG/DCM) */}
+          {!tarea.tipo?.includes('Autorización') && <div className={`p-3 rounded-xl ${isDark ? 'bg-zinc-800/30 border-zinc-800/50' : 'bg-gray-50 border-gray-200'} border`}>
             <div className="flex items-center justify-between mb-2">
               <div className={`flex items-center gap-2 ${isDark ? 'text-zinc-500' : 'text-gray-400'}`}>
                 <Calendar className="h-4 w-4" />
@@ -1965,7 +1965,7 @@ function TaskDrawer({
                 <Pencil className="h-4 w-4 text-purple-400 group-hover:text-purple-300 transition-colors" />
               </button>
             )}
-          </div>
+          </div>}
         </div>
 
         {/* Panel de Autorización (solo si es tarea de autorización) */}
@@ -3001,8 +3001,8 @@ export function NotificacionesPage() {
                               <span className={`${isDark ? 'text-zinc-700' : 'text-gray-300'} hidden md:inline`}>•</span>
                             )}
 
-                            {/* Fecha límite - visible en sm+ */}
-                            {!isNotificacion && tarea.fecha_fin && (
+                            {/* Fecha límite - visible en sm+ (oculta para tareas de Autorización DG/DCM) */}
+                            {!isNotificacion && tarea.fecha_fin && !tarea.tipo?.includes('Autorización') && (
                               <div className="flex items-center gap-1 text-[11px]">
                                 <Clock className="h-3 w-3 text-amber-400" />
                                 <span className={`${isDark ? 'text-zinc-500' : 'text-gray-400'} hidden sm:inline`}>Límite:</span>
