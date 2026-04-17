@@ -1529,17 +1529,20 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
 
   // Handle cara deletion
   const handleDeleteCara = (localId: string) => {
-    if (caraHasReservas(localId)) {
+    const caraToDelete = caras.find(c => c.localId === localId);
+    const tieneReservas = caraHasReservas(localId, caraToDelete?.id);
+
+    if (tieneReservas && !permissions.canDeleteCaraConReservas) {
       alert('No puedes eliminar una cara que tiene reservas. Primero elimina las reservas.');
       return;
     }
 
-    const caraToDelete = caras.find(c => c.localId === localId);
-
     setConfirmModal({
       isOpen: true,
       title: 'Eliminar Formato',
-      message: '¿Estás seguro de que deseas eliminar este formato de la campaña?',
+      message: tieneReservas
+        ? '⚠️ Este formato tiene inventario reservado. Al eliminarlo se liberarán todas las reservas. ¿Deseas continuar?'
+        : '¿Estás seguro de que deseas eliminar este formato de la campaña?',
       confirmText: 'Eliminar',
       isDestructive: true,
       onConfirm: async () => {
@@ -1560,7 +1563,7 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
         }
         // Update local state
         setCaras(prev => prev.filter(c => c.localId !== localId));
-        setReservas(prev => prev.filter(r => !r.id.startsWith(localId)));
+        setReservas(prev => prev.filter(r => !r.id.startsWith(localId) && r.solicitudCaraId !== caraToDelete?.id));
         setConfirmModal(prev => ({ ...prev, isOpen: false }));
       }
     });
@@ -5984,19 +5987,23 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
                                         >
                                           {isLoadingThis ? <Loader2 className="h-4 w-4 animate-spin" /> : <Pencil className="h-4 w-4" />}
                                         </button>
-                                        {canEditResumen && (
+                                        {canEditResumen && (() => {
+                                          const reservaBlocked = hasReservas && !permissions.canDeleteCaraConReservas;
+                                          const isDisabled = reservaBlocked || caraAuthPendienteSaved || caraAPSBlocked || !!loadingCaraAction;
+                                          return (
                                           <button
-                                            onClick={(e) => { e.stopPropagation(); if (!caraAPSBlocked && !loadingCaraAction) handleDeleteCara(cara.localId); }}
-                                            disabled={hasReservas || caraAuthPendienteSaved || caraAPSBlocked || !!loadingCaraAction}
-                                            className={`p-2 rounded-lg border transition-colors ${hasReservas || caraAuthPendienteSaved || caraAPSBlocked || !!loadingCaraAction
+                                            onClick={(e) => { e.stopPropagation(); if (!isDisabled) handleDeleteCara(cara.localId); }}
+                                            disabled={isDisabled}
+                                            className={`p-2 rounded-lg border transition-colors ${isDisabled
                                               ? 'bg-zinc-500/10 text-zinc-500 border-zinc-500/20 cursor-not-allowed'
                                               : 'bg-red-500/10 text-red-400 border-red-500/20 hover:bg-red-500/20'
                                               }`}
-                                            title={caraAPSBlocked ? 'Grupo con APS asignado - no se puede eliminar' : caraAuthPendienteSaved ? 'Autorización pendiente' : hasReservas ? 'No se puede eliminar (tiene reservas)' : 'Eliminar'}
+                                            title={caraAPSBlocked ? 'Grupo con APS asignado - no se puede eliminar' : caraAuthPendienteSaved ? 'Autorización pendiente' : reservaBlocked ? 'No se puede eliminar (tiene reservas)' : 'Eliminar'}
                                           >
                                             <Trash2 className="h-4 w-4" />
                                           </button>
-                                        )}
+                                          );
+                                        })()}
                                       </>
                                       );
                                     })()}
