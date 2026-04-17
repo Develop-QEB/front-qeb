@@ -1954,7 +1954,7 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
                   onClear={() => setSelectedCuic(null)}
                   displayKey="T2_U_Marca"
                   valueKey="CUIC"
-                  searchKeys={['T2_U_Marca', 'T2_U_Producto', 'T0_U_RazonSocial', 'CUIC']}
+                  searchKeys={['T2_U_Marca', 'T2_U_Producto', 'T0_U_RazonSocial', 'T0_U_Cliente', 'CUIC']}
                   loading={cuicLoading}
                   disabled={isEditMode && !canEditCliente}
                   renderOption={(item) => (
