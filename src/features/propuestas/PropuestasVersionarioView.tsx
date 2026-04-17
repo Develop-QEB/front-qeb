@@ -33,6 +33,7 @@ interface InventarioItem {
   numero_catorcena: number;
   anio_catorcena: number;
   solicitud_caras_id: number;
+  aps_especifico?: number | null;
 }
 
 interface PropuestaInfo {
