@@ -133,6 +133,7 @@ interface ResumenArticuloGroup {
   articulo: string;
   items: InventarioReservado[];
   totalCaras: number;
+  totalBonificadas: number;
   totalInversion: number;
   formatos: string[];
   tipos: string[];
@@ -143,6 +144,7 @@ interface ResumenCatorcenaGroup {
   catorcena: string;
   articulos: ResumenArticuloGroup[];
   totalCaras: number;
+  totalBonificadas: number;
   totalInversion: number;
 }
 
@@ -342,8 +344,9 @@ export function ClientePropuestaPage() {
       const articulos: ResumenArticuloGroup[] = Array.from(artMap.entries()).map(([articulo, items]) => ({
         articulo,
         items,
-        totalCaras: items.reduce((sum, i) => sum + (Number(i.caras_totales) || 0), 0),
-        totalInversion: items.reduce((sum, i) => sum + ((Number(i.tarifa_publica) || 0) * (Number(i.caras_totales) || 1)), 0),
+        totalCaras: items.reduce((sum, i) => sum + (Number(i.caras_renta) || 0), 0),
+        totalBonificadas: items.reduce((sum, i) => sum + (Number(i.caras_bonificadas) || 0), 0),
+        totalInversion: items.reduce((sum, i) => sum + ((Number(i.tarifa_publica) || 0) * (Number(i.caras_renta) || 0)), 0),
         formatos: [...new Set(items.map(i => i.mueble || 'N/A'))],
         tipos: [...new Set(items.map(i => i.tipo_de_cara || 'N/A'))],
         plazas: [...new Set(items.map(i => i.plaza || 'N/A'))],
@@ -353,6 +356,7 @@ export function ClientePropuestaPage() {
         catorcena,
         articulos,
         totalCaras: articulos.reduce((sum, a) => sum + a.totalCaras, 0),
+        totalBonificadas: articulos.reduce((sum, a) => sum + (a.totalBonificadas || 0), 0),
         totalInversion: articulos.reduce((sum, a) => sum + a.totalInversion, 0),
       };
     });
@@ -667,8 +671,9 @@ export function ClientePropuestaPage() {
         y += 10;
 
         Object.entries(articulos).forEach(([articulo, items]) => {
-          const groupCaras = items.reduce((sum, i) => sum + (Number(i.caras_totales) || 0), 0);
-          const groupTarifa = items.reduce((sum, i) => sum + (Number(i.tarifa_publica) || 0) * (Number(i.caras_totales) || 0), 0);
+          const groupCaras = items.reduce((sum, i) => sum + (Number(i.caras_renta) || 0), 0);
+          const groupBonif = items.reduce((sum, i) => sum + (Number(i.caras_bonificadas) || 0), 0);
+          const groupTarifa = items.reduce((sum, i) => sum + (Number(i.tarifa_publica) || 0) * (Number(i.caras_renta) || 0), 0);
 
           doc.setFillColor(PDF_GREEN[0], PDF_GREEN[1], PDF_GREEN[2]);
           doc.roundedRect(marginX + 5, y, pageWidth - marginX * 2 - 10, 6, 1, 1, 'F');
@@ -678,7 +683,7 @@ export function ClientePropuestaPage() {
           const groupTarifaUnit = items.length > 0 ? (Number(items[0].tarifa_publica) || 0) : 0;
           doc.text(`${articulo}`, marginX + 10, y + 4);
           doc.setFont('helvetica', 'normal');
-          doc.text(`Caras: ${groupCaras}  |  Tarifa: ${formatCurrency(groupTarifaUnit)}  |  Inversion: ${formatCurrency(groupTarifa)}`, pageWidth - marginX - 10, y + 4, { align: 'right' });
+          doc.text(`Renta: ${groupCaras}${groupBonif > 0 ? `  |  Bonif: ${groupBonif}` : ''}  |  Tarifa: ${formatCurrency(groupTarifaUnit)}  |  Inversion: ${formatCurrency(groupTarifa)}`, pageWidth - marginX - 10, y + 4, { align: 'right' });
           y += 8;
 
           autoTable(doc, {
@@ -1103,11 +1108,17 @@ export function ClientePropuestaPage() {
                     </div>
                     <div className="flex items-center gap-4">
                       <div className="flex items-center gap-1.5">
-                        <span className="text-gray-400 text-xs">Caras:</span>
+                        <span className="text-gray-400 text-xs">Renta:</span>
                         <span className="text-gray-800 text-sm font-semibold">{catGroup.totalCaras}</span>
                       </div>
+                      {catGroup.totalBonificadas > 0 && (
+                        <div className="flex items-center gap-1.5">
+                          <span className="text-cyan-600 text-xs">Bonif:</span>
+                          <span className="text-cyan-700 text-sm font-semibold">{catGroup.totalBonificadas}</span>
+                        </div>
+                      )}
                       <div className="flex items-center gap-1.5 pl-2 border-l border-gray-200">
-                        <span className="text-[#7AB800] text-xs">Inversion:</span>
+                        <span className="text-[#7AB800] text-xs">Inversión:</span>
                         <span className="text-[#7AB800] text-sm font-semibold">{formatCurrency(catGroup.totalInversion)}</span>
                       </div>
                     </div>
@@ -1152,7 +1163,8 @@ export function ClientePropuestaPage() {
                                 </span>
                               </div>
                               <div className="flex items-center gap-3 text-xs">
-                                <span className="text-gray-400">Caras: <span className="text-gray-700 font-medium">{artGroup.totalCaras}</span></span>
+                                <span className="text-gray-400">Renta: <span className="text-gray-700 font-medium">{artGroup.totalCaras}</span></span>
+                                {artGroup.totalBonificadas > 0 && <span className="text-cyan-600">Bonif: <span className="font-medium">{artGroup.totalBonificadas}</span></span>}
                                 <span className="text-amber-600">Tarifa: <span className="font-medium">{formatCurrency(artGroup.items[0]?.tarifa_publica || 0)}</span></span>
                                 <span className="text-[#7AB800]">{formatCurrency(artGroup.totalInversion)}</span>
                               </div>
@@ -1192,7 +1204,7 @@ export function ClientePropuestaPage() {
                                     </thead>
                                     <tbody className="divide-y divide-gray-100">
                                       {artGroup.items.map((item, idx) => {
-                                        const inv = (Number(item.tarifa_publica) || 0) * (Number(item.caras_totales) || 0);
+                                        const inv = (Number(item.tarifa_publica) || 0) * (Number(item.caras_renta) || 0);
                                         return (
                                           <tr key={idx} className="hover:bg-blue-50/30 transition-colors">
                                             <td className="px-3 py-2" onClick={(e) => e.stopPropagation()}>

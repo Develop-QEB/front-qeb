@@ -94,6 +94,7 @@ interface ResumenArticuloGroup {
   articulo: string;
   items: InventarioReservado[];
   totalCaras: number;
+  totalBonificadas: number;
   totalInversion: number;
   formatos: string[];
   tipos: string[];
@@ -104,6 +105,7 @@ interface ResumenCatorcenaGroup {
   catorcena: string;
   articulos: ResumenArticuloGroup[];
   totalCaras: number;
+  totalBonificadas: number;
   totalInversion: number;
 }
 
@@ -329,8 +331,9 @@ export function CompartirPropuestaPage() {
       const articulos: ResumenArticuloGroup[] = Array.from(artMap.entries()).map(([articulo, items]) => ({
         articulo,
         items,
-        totalCaras: items.reduce((sum, i) => sum + (Number(i.caras_totales) || 0), 0),
-        totalInversion: items.reduce((sum, i) => sum + ((Number(i.tarifa_publica) || 0) * (Number(i.caras_totales) || 1)), 0),
+        totalCaras: items.reduce((sum, i) => sum + (Number(i.caras_renta) || 0), 0),
+        totalBonificadas: items.reduce((sum, i) => sum + (Number(i.caras_bonificadas) || 0), 0),
+        totalInversion: items.reduce((sum, i) => sum + ((Number(i.tarifa_publica) || 0) * (Number(i.caras_renta) || 0)), 0),
         formatos: [...new Set(items.map(i => i.mueble || 'N/A'))],
         tipos: [...new Set(items.map(i => i.tradicional_digital || 'N/A'))],
         plazas: [...new Set(items.map(i => i.plaza || 'N/A'))],
@@ -339,6 +342,7 @@ export function CompartirPropuestaPage() {
         catorcena,
         articulos,
         totalCaras: articulos.reduce((sum, a) => sum + a.totalCaras, 0),
+        totalBonificadas: articulos.reduce((sum, a) => sum + (a.totalBonificadas || 0), 0),
         totalInversion: articulos.reduce((sum, a) => sum + a.totalInversion, 0),
       };
     });
@@ -854,8 +858,9 @@ export function CompartirPropuestaPage() {
 
         Object.entries(articulos).forEach(([articulo, items]) => {
           // Calculate group totals
-          const groupCaras = items.reduce((sum, i) => sum + (Number(i.caras_totales) || 0), 0);
-          const groupTarifa = items.reduce((sum, i) => sum + (Number(i.tarifa_publica) || 0) * (Number(i.caras_totales) || 0), 0);
+          const groupCaras = items.reduce((sum, i) => sum + (Number(i.caras_renta) || 0), 0);
+          const groupBonif = items.reduce((sum, i) => sum + (Number(i.caras_bonificadas) || 0), 0);
+          const groupTarifa = items.reduce((sum, i) => sum + (Number(i.tarifa_publica) || 0) * (Number(i.caras_renta) || 0), 0);
 
           // === ARTICULO SUB-HEADER ===
           doc.setFillColor(...IMU_GREEN);
@@ -866,7 +871,7 @@ export function CompartirPropuestaPage() {
           const groupTarifaUnit = items.length > 0 ? (Number(items[0].tarifa_publica) || 0) : 0;
           doc.text(`${articulo}`, marginX + 10, y + 4);
           doc.setFont('helvetica', 'normal');
-          doc.text(`Caras: ${groupCaras}  |  Tarifa: ${formatCurrency(groupTarifaUnit)}  |  Inversion: ${formatCurrency(groupTarifa)}`, pageWidth - marginX - 10, y + 4, { align: 'right' });
+          doc.text(`Renta: ${groupCaras}${groupBonif > 0 ? `  |  Bonif: ${groupBonif}` : ''}  |  Tarifa: ${formatCurrency(groupTarifaUnit)}  |  Inversion: ${formatCurrency(groupTarifa)}`, pageWidth - marginX - 10, y + 4, { align: 'right' });
           y += 8;
 
           // === TABLE FOR THIS ARTICULO ===
@@ -1368,11 +1373,17 @@ export function CompartirPropuestaPage() {
                       </div>
                       <div className="flex items-center gap-4">
                         <div className="flex items-center gap-1.5">
-                          <span className={`text-xs ${isDark ? 'text-zinc-400' : 'text-gray-500'}`}>Caras:</span>
+                          <span className={`text-xs ${isDark ? 'text-zinc-400' : 'text-gray-500'}`}>Renta:</span>
                           <span className={`text-sm font-semibold ${isDark ? 'text-white' : 'text-gray-900'}`}>{catGroup.totalCaras}</span>
                         </div>
+                        {catGroup.totalBonificadas > 0 && (
+                          <div className="flex items-center gap-1.5">
+                            <span className={`text-xs ${isDark ? 'text-cyan-400' : 'text-cyan-600'}`}>Bonif:</span>
+                            <span className={`text-sm font-semibold ${isDark ? 'text-cyan-300' : 'text-cyan-700'}`}>{catGroup.totalBonificadas}</span>
+                          </div>
+                        )}
                         <div className="flex items-center gap-1.5 pl-2 border-l border-purple-500/30">
-                          <span className={`text-xs ${isDark ? 'text-emerald-400' : 'text-emerald-600'}`}>Inversion:</span>
+                          <span className={`text-xs ${isDark ? 'text-emerald-400' : 'text-emerald-600'}`}>Inversión:</span>
                           <span className={`text-sm font-semibold ${isDark ? 'text-emerald-300' : 'text-emerald-700'}`}>{formatCurrency(catGroup.totalInversion)}</span>
                         </div>
                       </div>
@@ -1433,7 +1444,8 @@ export function CompartirPropuestaPage() {
                                   </span>
                                 </div>
                                 <div className="flex items-center gap-3 text-xs">
-                                  <span className={isDark ? 'text-zinc-400' : 'text-gray-500'}>Circuitos: <span className={`font-medium ${isDark ? 'text-white' : 'text-gray-900'}`}>{artGroup.totalCaras}</span></span>
+                                  <span className={isDark ? 'text-zinc-400' : 'text-gray-500'}>Renta: <span className={`font-medium ${isDark ? 'text-white' : 'text-gray-900'}`}>{artGroup.totalCaras}</span></span>
+                                  {artGroup.totalBonificadas > 0 && <span className={isDark ? 'text-cyan-400' : 'text-cyan-600'}>Bonif: <span className="font-medium">{artGroup.totalBonificadas}</span></span>}
                                   <span className={isDark ? 'text-amber-300' : 'text-amber-600'}>Tarifa: <span className="font-medium">{formatCurrency(artGroup.items[0]?.tarifa_publica || 0)}</span></span>
                                   <span className={isDark ? 'text-emerald-400' : 'text-emerald-600'}>{formatCurrency(artGroup.totalInversion)}</span>
                                 </div>
@@ -1468,7 +1480,7 @@ export function CompartirPropuestaPage() {
                                     </thead>
                                     <tbody className={`divide-y ${isDark ? 'divide-purple-500/10' : 'divide-gray-100'}`}>
                                       {artGroup.items.map((item, idx) => {
-                                        const inv = (Number(item.tarifa_publica) || 0) * (Number(item.caras_totales) || 0);
+                                        const inv = (Number(item.tarifa_publica) || 0) * (Number(item.caras_renta) || 0);
                                         return (
                                           <tr key={idx} onClick={() => toggleItemSelection(item.id)} className={`cursor-pointer transition-colors ${selectedItems.has(item.id) ? 'bg-purple-500/10' : 'hover:bg-purple-500/5'}`}>
                                             <td className="px-3 py-2" onClick={(e) => e.stopPropagation()}>
