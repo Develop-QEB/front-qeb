@@ -1841,7 +1841,7 @@ export function CampanasPage() {
 
       const headers = [
         'Campaña', 'Anunciante', 'Inversión Campaña', 'Operación', 'Código de contrato (Opcional)',
-        'Precio por cara (Opcional)', 'APS Global', 'CUIC', 'Articulo', 'Vendedor',
+        'Precio por cara (Opcional)', 'APS Global', 'APS Específico', 'CUIC', 'Articulo', 'Vendedor',
         'Descripción (Opcional)', 'Inicio o Periodo', 'Fin o Segmento', 'Arte',
         'Código de arte (Opcional)', 'Arte Url (Opcional)', 'Origen del arte (Opcional)',
         'Unidad', 'Cara', 'Ciudad', 'Tipo de Distribución', 'Reproducciones', 'Notas'
@@ -1877,7 +1877,7 @@ export function CampanasPage() {
           if (inventarios.length === 0) {
             rows.push([
               nombreCampana, anunciante, invStr, '', '0', '0',
-              String(aps), String(cuic), '', vendedor, descripcion,
+              String(aps), '', String(cuic), '', vendedor, descripcion,
               'Catorcenas ' + catorcena.anio, periodo,
               '0', '', '', '', '', '', '', '0', '0', ''
             ]);
@@ -1896,6 +1896,7 @@ export function CampanasPage() {
                 '0',
                 precio ? `$${Number(precio).toLocaleString('es-MX')}` : '0',
                 String(aps),
+                String(item.aps ?? ''),
                 String(cuic),
                 item.articulo || '',
                 vendedor,
