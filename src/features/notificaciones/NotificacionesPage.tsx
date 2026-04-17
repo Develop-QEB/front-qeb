@@ -1311,8 +1311,8 @@ function getDirectNavigationPath(tipo: string, id: number, titulo: string, tipoT
     return `/propuestas?viewId=${propuestaId || id}`;
   }
 
-  // Si tiene campania_id, ir al detalle de campaña (excepto solicitud y propuesta)
-  if (campaniaId && !tipoTarea?.toLowerCase().includes('solicitud') && !tipoTarea?.toLowerCase().includes('propuesta')) {
+  // Si tiene campania_id, ir al detalle de campaña (excepto si referencia_tipo o tipoTarea indican solicitud/propuesta)
+  if (campaniaId && tipo !== 'solicitud' && tipo !== 'propuesta' && !tipoTarea?.toLowerCase().includes('solicitud') && !tipoTarea?.toLowerCase().includes('propuesta')) {
     return `/campanas/detail/${campaniaId}`;
   }
 
