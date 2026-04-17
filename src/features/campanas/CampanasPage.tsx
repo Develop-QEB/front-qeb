@@ -3098,10 +3098,14 @@ export function CampanasPage() {
                                                     const countAtOrPast = (minStage: number) => grupo.items.filter(i => getStageIndex((i as any).estatus_arte) >= minStage).length;
                                                     // Determinar tipo del grupo (siempre homogéneo)
                                                     const isDigital = grupo.items[0]?.tradicional_digital === 'Digital';
+                                                    const getIconColor = (done: number) => {
+                                                      if (done === total) return 'text-green-400';
+                                                      if (done > 0) return 'text-amber-400';
+                                                      return isDark ? 'text-zinc-600' : 'text-gray-300';
+                                                    };
                                                     const tabs = [
                                                       { icon: Upload, label: 'Subir Artes', done: countAtOrPast(1) },
                                                       { icon: Eye, label: 'Revisar y Aprobar', done: countAtOrPast(2) },
-                                                      // Tradicional → Impresiones, Digital → Programación
                                                       ...(isDigital
                                                         ? [{ icon: Monitor, label: 'Programación', done: countAtOrPast(3) }]
                                                         : [{ icon: Printer, label: 'Impresiones', done: countAtOrPast(3) }]
@@ -3114,7 +3118,7 @@ export function CampanasPage() {
                                                           <React.Fragment key={label}>
                                                             {idx > 0 && <span className={`w-px h-3 ${isDark ? 'bg-zinc-700/60' : 'bg-gray-300'}`} />}
                                                             <span title={`${label}: ${done}/${total}`}>
-                                                              <Icon className={`h-3.5 w-3.5 ${done === total ? 'text-green-400' : 'text-red-400/60'}`} />
+                                                              <Icon className={`h-3.5 w-3.5 ${getIconColor(done)}`} />
                                                             </span>
                                                           </React.Fragment>
                                                         ))}
