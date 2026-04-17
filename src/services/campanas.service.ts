@@ -242,6 +242,7 @@ export interface CampanaUpdateData {
   catorcenaFinAnio?: number;
   asignados?: string;
   id_asignado?: string;
+  IMU?: boolean;
 }
 
 export interface HistorialItem {

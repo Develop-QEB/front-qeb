@@ -295,6 +295,7 @@ export const propuestasService = {
       card_code?: string;
       salesperson_code?: number;
       sap_database?: string;
+      IMU?: boolean;
     }
   ): Promise<Propuesta> {
     const response = await api.patch<ApiResponse<Propuesta>>(`/propuestas/${id}`, data);

@@ -600,6 +600,7 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
   const [catorcenaFin, setCatorcenaFin] = useState<number | undefined>();
   const [archivoCampana, setArchivoCampana] = useState<string | null>(null);
   const [tipoArchivoCampana, setTipoArchivoCampana] = useState<string | null>(null);
+  const [imu, setImu] = useState(false);
 
   // Initial values for change detection
   const [initialValues, setInitialValues] = useState({
@@ -611,6 +612,7 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
     catorcenaInicio: undefined as number | undefined,
     catorcenaFin: undefined as number | undefined,
     asignadosIds: '' as string,
+    imu: false,
   });
   const [isUpdatingCampana, setIsUpdatingCampana] = useState(false);
 
@@ -741,6 +743,7 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
   const [inventarioDisponible, setInventarioDisponible] = useState<InventarioDisponible[]>([]);
   const [isSearching, setIsSearching] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
+  const [loadingCaraAction, setLoadingCaraAction] = useState<{ caraId: string; action: 'edit' | 'search' } | null>(null);
 
   // POI filter state
   const [poiFilterIds, setPoiFilterIds] = useState<Set<number> | null>(null);
@@ -941,6 +944,10 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
       setNotas(notasVal);
       setDescripcion(descripcionVal);
 
+      // Set IMU flag from solicitud (included in campanaDetails response)
+      const imuVal = Boolean((campanaDetails as any).IMU);
+      setImu(imuVal);
+
       // Set period from campaign data
       const yInicio = campanaDetails.catorcena_inicio_anio;
       const cInicio = campanaDetails.catorcena_inicio_num;
@@ -987,6 +994,7 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
           catorcenaInicio: cInicio ?? undefined,
           catorcenaFin: cFin ?? undefined,
           asignadosIds: asignadosIdsStr,
+          imu: imuVal,
         });
         initialValuesSetRef.current = true;
       }
@@ -1086,9 +1094,10 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
       yearFin !== initialValues.yearFin ||
       catorcenaInicio !== initialValues.catorcenaInicio ||
       catorcenaFin !== initialValues.catorcenaFin ||
-      currentAsignadosIds !== initialValues.asignadosIds
+      currentAsignadosIds !== initialValues.asignadosIds ||
+      imu !== initialValues.imu
     );
-  }, [nombreCampania, notas, descripcion, yearInicio, yearFin, catorcenaInicio, catorcenaFin, currentAsignadosIds, initialValues]);
+  }, [nombreCampania, notas, descripcion, yearInicio, yearFin, catorcenaInicio, catorcenaFin, currentAsignadosIds, imu, initialValues]);
 
   // Handle update campaign
   const handleUpdateCampana = async () => {
@@ -1106,6 +1115,7 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
         catorcenaFinAnio: yearFin,
         asignados: asignadosStr,
         id_asignado: asignadosIdsStr,
+        IMU: imu,
       });
 
       // Update initial values to current values
@@ -1119,6 +1129,7 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
         catorcenaInicio,
         catorcenaFin,
         asignadosIds: newAsignadosIds,
+        imu,
       });
 
       queryClient.invalidateQueries({ queryKey: ['campana-details', campana?.id] });
@@ -1557,61 +1568,80 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
 
   // Handle cara deletion
   const handleDeleteCara = (localId: string) => {
-    if (caraHasReservas(localId)) {
+    const caraToDelete = caras.find(c => c.localId === localId);
+    const tieneReservas = caraHasReservas(localId, caraToDelete?.id);
+
+    if (tieneReservas && !permissions.canDeleteCaraConReservas) {
       alert('No puedes eliminar una cara que tiene reservas. Primero elimina las reservas.');
       return;
     }
 
-    const caraToDelete = caras.find(c => c.localId === localId);
-
     // If cara is part of an RT/BF pair, also delete the paired cara
     // (limited to same period to be safe with multi-period campaigns)
     const pairedCaras: CaraItem[] = [];
+    let pairHasReservas = false;
     if (caraToDelete?.grupo_rt_bf) {
       const pair = caras.filter(c =>
         c.grupo_rt_bf === caraToDelete.grupo_rt_bf &&
         c.localId !== caraToDelete.localId &&
         c.inicio_periodo === caraToDelete.inicio_periodo
       );
-      // Block the delete if any paired cara has reservas
+      // Block the delete if any paired cara has reservas and user can't delete with reservas
       for (const p of pair) {
         if (caraHasReservas(p.localId, p.id)) {
-          alert('No puedes eliminar esta cara: su cara pareja (RT/BF) tiene reservas. Primero elimina las reservas.');
-          return;
+          pairHasReservas = true;
+          if (!permissions.canDeleteCaraConReservas) {
+            alert('No puedes eliminar esta cara: su cara pareja (RT/BF) tiene reservas. Primero elimina las reservas.');
+            return;
+          }
         }
       }
       pairedCaras.push(...pair);
     }
 
     const isPair = pairedCaras.length > 0;
+    const anyTieneReservas = tieneReservas || pairHasReservas;
 
     setConfirmModal({
       isOpen: true,
       title: isPair ? 'Eliminar RT + BF' : 'Eliminar Formato',
       message: isPair
-        ? '¿Estás seguro de que deseas eliminar este formato junto con su cara pareja (RT/BF) de la campaña?'
-        : '¿Estás seguro de que deseas eliminar este formato de la campaña?',
+        ? (anyTieneReservas
+            ? '⚠️ Este formato (y su cara pareja RT/BF) tiene inventario reservado. Al eliminarlo se liberarán todas las reservas. ¿Deseas continuar?'
+            : '¿Estás seguro de que deseas eliminar este formato junto con su cara pareja (RT/BF) de la campaña?')
+        : (tieneReservas
+            ? '⚠️ Este formato tiene inventario reservado. Al eliminarlo se liberarán todas las reservas. ¿Deseas continuar?'
+            : '¿Estás seguro de que deseas eliminar este formato de la campaña?'),
       confirmText: 'Eliminar',
       isDestructive: true,
       onConfirm: async () => {
         // Delete all caras in the pair (+ the primary) from DB if they have IDs
         const toDelete = [caraToDelete, ...pairedCaras].filter(Boolean) as CaraItem[];
-        for (const c of toDelete) {
-          if (c.id) {
-            try {
-              await campanasService.deleteCara(campana!.id, c.id);
-            } catch (error) {
-              console.error('Error deleting cara:', error);
-              alert('Error al eliminar el formato de la base de datos');
-              setConfirmModal(prev => ({ ...prev, isOpen: false }));
-              return;
+        const dbIdsToDelete = toDelete.map(c => c.id).filter((id): id is number => typeof id === 'number');
+        if (dbIdsToDelete.length > 0) {
+          setIsSaving(true);
+          try {
+            for (const dbId of dbIdsToDelete) {
+              await campanasService.deleteCara(campana!.id, dbId);
             }
+          } catch (error) {
+            console.error('Error deleting cara:', error);
+            alert('Error al eliminar el formato de la base de datos');
+            setIsSaving(false);
+            setConfirmModal(prev => ({ ...prev, isOpen: false }));
+            return;
+          } finally {
+            setIsSaving(false);
           }
         }
         // Update local state
         const deletedLocalIds = new Set(toDelete.map(c => c.localId));
+        const deletedDbIds = new Set<number>(dbIdsToDelete);
         setCaras(prev => prev.filter(c => !deletedLocalIds.has(c.localId)));
-        setReservas(prev => prev.filter(r => !toDelete.some(c => r.id.startsWith(c.localId))));
+        setReservas(prev => prev.filter(r =>
+          !toDelete.some(c => r.id.startsWith(c.localId)) &&
+          !(r.solicitudCaraId !== undefined && deletedDbIds.has(r.solicitudCaraId))
+        ));
         // Also drop any pending modifications for deleted caras
         setModifiedCaras(prev => {
           const next = new Map(prev);
@@ -1635,6 +1665,7 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
       if (rtCara) { handleEditCara(rtCara); return; }
     }
 
+    setLoadingCaraAction({ caraId: cara.localId, action: 'edit' });
     // Ya no bloqueamos completamente - permitimos edición de ciudad, formatos y NSE
     setEditingCaraId(cara.localId);
 
@@ -1718,7 +1749,10 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
       esBf: cara.esBf || false,
     });
     setShowAddCaraForm(true);
-    setTimeout(() => caraFormRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 100);
+    setTimeout(() => {
+      caraFormRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      setLoadingCaraAction(null);
+    }, 150);
   };
 
   // Handle save cara (add or update)
@@ -1733,7 +1767,8 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
     const artCode = (newCara.articulo || '').toUpperCase();
     const esCortesia = artCode.startsWith('CT');
     const esBonificacion = artCode.startsWith('BF') || artCode.startsWith('CF');
-    if (newCara.tarifa_publica <= 0 && !esCortesia && !esBonificacion) {
+    const esImpresion = artCode.startsWith('IM');
+    if (newCara.tarifa_publica <= 0 && !esCortesia && !esBonificacion && !esImpresion) {
       alert('La tarifa pública no puede ser 0. Por favor ingresa una tarifa válida.');
       return;
     }
@@ -2162,6 +2197,7 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
           catorcenaFinAnio: yearFin,
           asignados: asignadosStr,
           id_asignado: asignadosIdsStr,
+          IMU: imu,
         });
 
         setInitialValues({
@@ -2173,6 +2209,7 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
           catorcenaInicio,
           catorcenaFin,
           asignadosIds: asignadosIdsStr,
+          imu,
         });
         messages.push('Campaña actualizada');
       }
@@ -2522,6 +2559,7 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
 
   // Handle search inventory - open search view and fetch disponibles
   const handleSearchInventory = async (cara: CaraItem) => {
+    setLoadingCaraAction({ caraId: cara.localId, action: 'search' });
     setSelectedCaraForSearch(cara);
     setViewState('search-inventory');
     setShowOnlyUnicos(false);
@@ -2564,6 +2602,7 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
       setInventarioDisponible([]);
     } finally {
       setIsSearching(false);
+      setLoadingCaraAction(null);
     }
   };
 
@@ -3719,6 +3758,17 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
 
   if (!isOpen) return null;
 
+  // Overlay bloqueante global cuando se está guardando fuera del confirmModal
+  const savingOverlayJSX = isSaving && !confirmModal.isOpen && (
+    <div className="fixed inset-0 z-[70] flex items-center justify-center bg-black/40 backdrop-blur-[1px]" role="status" aria-live="polite">
+      <div className={`flex items-center gap-3 px-6 py-4 rounded-xl shadow-2xl ${isDark ? 'bg-zinc-900 text-white' : 'bg-white text-gray-900'}`}>
+        <Loader2 className="h-5 w-5 animate-spin text-purple-500" />
+        <span className="text-sm font-medium">Guardando...</span>
+        <span className={`text-xs ${isDark ? 'text-zinc-400' : 'text-gray-500'}`}>Por favor no cierres ni navegues</span>
+      </div>
+    </div>
+  );
+
   // Confirmation modal content reused in both views
   const confirmModalJSX = confirmModal.isOpen && (
     <div className="fixed inset-0 z-[60] flex items-center justify-center">
@@ -3791,6 +3841,7 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
   if (viewState === 'search-inventory') {
     return (
       <div className="fixed inset-0 z-50 flex items-center justify-center">
+        {savingOverlayJSX}
         {confirmModalJSX}
         {toastJSX}
         <div className="absolute inset-0 bg-black/70 backdrop-blur-sm" onClick={handleBackToMain} />
@@ -5735,6 +5786,18 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
                     )}
                   </div>
 
+                  {/* IMU checkbox */}
+                  <label className={`flex items-center gap-3 ${canEditResumen ? 'cursor-pointer' : 'cursor-not-allowed opacity-60'}`}>
+                    <input
+                      type="checkbox"
+                      checked={imu}
+                      onChange={(e) => canEditResumen && setImu(e.target.checked)}
+                      disabled={!canEditResumen}
+                      className="checkbox-purple w-5 h-5"
+                    />
+                    <span className={`text-sm ${isDark ? 'text-zinc-300' : 'text-gray-700'}`}>IMU (Impresión IMU)</span>
+                  </label>
+
                   {/* Pending changes indicator for campaign summary */}
                   {canEditResumen && hasChanges && (
                     <div className={`flex items-center gap-2 pt-2 border-t ${isDark ? 'border-zinc-700/30' : 'border-gray-200/30'} text-sm text-purple-400`}>
@@ -6335,13 +6398,14 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
                                       const tienePendientes = !isLocallyModified && (cara.autorizacion_dg === 'pendiente' || cara.autorizacion_dcm === 'pendiente');
                                       const tieneRechazado = cara.autorizacion_dg === 'rechazado' || cara.autorizacion_dcm === 'rechazado';
                                       const bloqueado = tienePendientes || tieneRechazado || caraAPSBlocked;
+                                      const isLoadingThis = loadingCaraAction?.caraId === cara.localId && loadingCaraAction?.action === 'search';
 
                                       return (
                                         <button
-                                          onClick={(e) => { e.stopPropagation(); if (!bloqueado) handleSearchInventory(cara); }}
-                                          disabled={bloqueado}
+                                          onClick={(e) => { e.stopPropagation(); if (!bloqueado && !loadingCaraAction) handleSearchInventory(cara); }}
+                                          disabled={bloqueado || !!loadingCaraAction}
                                           className={`p-2 rounded-lg border transition-colors ${
-                                            bloqueado
+                                            bloqueado || !!loadingCaraAction
                                               ? 'bg-zinc-500/10 text-zinc-500 border-zinc-500/20 cursor-not-allowed'
                                               : status.isComplete
                                                 ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20 hover:bg-emerald-500/20'
@@ -6351,43 +6415,49 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
                                             caraAPSBlocked ? 'Grupo con APS asignado - no se puede modificar inventario' :
                                             tieneRechazado ? 'Cara rechazada - no se puede asignar inventario' :
                                             tienePendientes ? 'Esta cara necesita autorización antes de asignar inventario' :
+                                            isLoadingThis ? 'Buscando inventario...' :
                                             status.isComplete ? 'Completo - clic para modificar' : 'Buscar inventario'
                                           }
                                         >
-                                          <Search className="h-4 w-4" />
+                                          {isLoadingThis ? <Loader2 className="h-4 w-4 animate-spin" /> : <Search className="h-4 w-4" />}
                                         </button>
                                       );
                                     })()}
                                     {effectiveCanEdit && (() => {
-                                      const caraAuthPendienteSaved = caras.some(c => !modifiedCaras.has(c.id!) && (c.autorizacion_dg === 'pendiente' || c.autorizacion_dcm === 'pendiente'));
+                                      const caraAuthPendienteSaved = caras.some(c => !modifiedCaras.has(c.id!) && ((c._originalDg || c.autorizacion_dg) === 'pendiente' || (c._originalDcm || c.autorizacion_dcm) === 'pendiente'));
                                       const editBlocked = caraAuthPendienteSaved || caraAPSBlocked;
-                                      const blockReason = caraAPSBlocked ? 'Grupo con APS asignado - no se puede editar' : caraAuthPendienteSaved ? 'Autorización pendiente - no se puede editar' : 'Editar';
+                                      const isLoadingThis = loadingCaraAction?.caraId === cara.localId && loadingCaraAction?.action === 'edit';
+                                      const blockReason = caraAPSBlocked ? 'Grupo con APS asignado - no se puede editar' : caraAuthPendienteSaved ? 'Autorización pendiente - no se puede editar' : isLoadingThis ? 'Cargando editor...' : 'Editar';
                                       return (
                                       <>
                                         <button
-                                          onClick={(e) => { e.stopPropagation(); if (!editBlocked) handleEditCara(cara); }}
-                                          disabled={editBlocked}
-                                          className={`p-2 rounded-lg border transition-colors ${editBlocked
+                                          onClick={(e) => { e.stopPropagation(); if (!editBlocked && !loadingCaraAction) handleEditCara(cara); }}
+                                          disabled={editBlocked || !!loadingCaraAction}
+                                          className={`p-2 rounded-lg border transition-colors ${editBlocked || !!loadingCaraAction
                                             ? 'bg-zinc-500/10 text-zinc-500 border-zinc-500/20 cursor-not-allowed'
                                             : 'bg-amber-500/10 text-amber-400 border-amber-500/20 hover:bg-amber-500/20'
                                           }`}
                                           title={blockReason}
                                         >
-                                          <Pencil className="h-4 w-4" />
+                                          {isLoadingThis ? <Loader2 className="h-4 w-4 animate-spin" /> : <Pencil className="h-4 w-4" />}
                                         </button>
-                                        {canEditResumen && (
+                                        {canEditResumen && (() => {
+                                          const reservaBlocked = hasReservas && !permissions.canDeleteCaraConReservas;
+                                          const isDisabled = reservaBlocked || caraAuthPendienteSaved || caraAPSBlocked || !!loadingCaraAction;
+                                          return (
                                           <button
-                                            onClick={(e) => { e.stopPropagation(); if (!caraAPSBlocked) handleDeleteCara(cara.localId); }}
-                                            disabled={hasReservas || caraAuthPendienteSaved || caraAPSBlocked}
-                                            className={`p-2 rounded-lg border transition-colors ${hasReservas || caraAuthPendienteSaved || caraAPSBlocked
+                                            onClick={(e) => { e.stopPropagation(); if (!isDisabled) handleDeleteCara(cara.localId); }}
+                                            disabled={isDisabled}
+                                            className={`p-2 rounded-lg border transition-colors ${isDisabled
                                               ? 'bg-zinc-500/10 text-zinc-500 border-zinc-500/20 cursor-not-allowed'
                                               : 'bg-red-500/10 text-red-400 border-red-500/20 hover:bg-red-500/20'
                                               }`}
-                                            title={caraAPSBlocked ? 'Grupo con APS asignado - no se puede eliminar' : caraAuthPendienteSaved ? 'Autorización pendiente' : hasReservas ? 'No se puede eliminar (tiene reservas)' : 'Eliminar'}
+                                            title={caraAPSBlocked ? 'Grupo con APS asignado - no se puede eliminar' : caraAuthPendienteSaved ? 'Autorización pendiente' : reservaBlocked ? 'No se puede eliminar (tiene reservas)' : 'Eliminar'}
                                           >
                                             <Trash2 className="h-4 w-4" />
                                           </button>
-                                        )}
+                                          );
+                                        })()}
                                       </>
                                       );
                                     })()}

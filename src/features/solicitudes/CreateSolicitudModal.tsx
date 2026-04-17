@@ -564,6 +564,7 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
   const isSubmittingRef = useRef(false);
   const circuitFormRef = useRef<HTMLDivElement>(null);
   const circuitTableRef = useRef<HTMLDivElement>(null);
+  const editFormPopulatedRef = useRef(false);
 
   // Form state
   const [step, setStep] = useState(1);
@@ -843,6 +844,7 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
   useEffect(() => {
     if (isOpen && !isEditMode && !restoredFromDraft) {
       // Reset all form state for a fresh start
+      editFormPopulatedRef.current = false;
       setStep(1);
       setSelectedCuic(null);
       // Pre-populate asignados with the current user (creator)
@@ -895,6 +897,7 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
   useEffect(() => {
     if (isOpen && isEditMode && editSolicitudId) {
       // Reset state before loading new solicitud data
+      editFormPopulatedRef.current = false;
       setRestoredFromDraft(false);
       setSelectedCuic(null);
       setSelectedAsignados([]);
@@ -1647,7 +1650,8 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
 
   // Populate form when editing
   useEffect(() => {
-    if (isEditMode && editSolicitudData && cuicDataRaw && articulosData && catorcenasData?.data) {
+    if (isEditMode && editSolicitudData && cuicDataRaw && articulosData && catorcenasData?.data && !editFormPopulatedRef.current) {
+      editFormPopulatedRef.current = true;
       const sol = editSolicitudData.solicitud;
 
       // Find the CUIC item from local DB data
@@ -1818,7 +1822,7 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
         }
       }
     }
-  }, [isEditMode, editSolicitudData, cuicData, articulosData, catorcenasData]);
+  }, [isEditMode, editSolicitudData, cuicDataRaw, articulosData, catorcenasData]);
 
   // Toggle NSE
   const toggleNse = (nse: string) => {
@@ -1959,7 +1963,7 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
                   onClear={() => setSelectedCuic(null)}
                   displayKey="T2_U_Marca"
                   valueKey="CUIC"
-                  searchKeys={['T2_U_Marca', 'T2_U_Producto', 'T0_U_RazonSocial', 'CUIC']}
+                  searchKeys={['T2_U_Marca', 'T2_U_Producto', 'T0_U_RazonSocial', 'T0_U_Cliente', 'CUIC']}
                   loading={cuicLoading}
                   disabled={isEditMode && !canEditCliente}
                   renderOption={(item) => (

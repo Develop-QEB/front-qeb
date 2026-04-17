@@ -4,7 +4,7 @@ import { useQuery, useQueryClient, useMutation } from '@tanstack/react-query';
 import {
   X, Search, Plus, Trash2, ChevronDown, ChevronRight, ChevronUp, Users,
   FileText, MapPin, Layers, Pencil, Map as MapIcon, Package, Calendar,
-  Gift, Target, Save, ArrowLeft, Filter, Grid, LayoutGrid, Ruler, ArrowUpDown, ArrowUp, ArrowDown, Download, Eye, Funnel, Check, Upload, Monitor, AlertTriangle, Trophy
+  Gift, Target, Save, ArrowLeft, Filter, Grid, LayoutGrid, Ruler, ArrowUpDown, ArrowUp, ArrowDown, Download, Eye, Funnel, Check, Upload, Monitor, AlertTriangle, Trophy, Loader2
 } from 'lucide-react';
 import { GoogleMap, useLoadScript, Marker } from '@react-google-maps/api';
 import { AdvancedMapComponent } from './AdvancedMapComponent';
@@ -600,6 +600,7 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
   const [catorcenaFin, setCatorcenaFin] = useState<number | undefined>();
   const [archivoPropuesta, setArchivoPropuesta] = useState<string | null>(null);
   const [tipoArchivoPropuesta, setTipoArchivoPropuesta] = useState<string | null>(null);
+  const [imu, setImu] = useState(false);
   const periodInitializedRef = useRef(false);
   const initialValuesSetRef = useRef(false);
 
@@ -635,6 +636,7 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
     catorcenaInicio: undefined as number | undefined,
     catorcenaFin: undefined as number | undefined,
     asignadosIds: '' as string,
+    imu: false,
   });
   const [isUpdatingPropuesta, setIsUpdatingPropuesta] = useState(false);
 
@@ -989,6 +991,10 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
       setArchivoPropuesta(solicitudDetails.solicitud?.archivo || null);
       setTipoArchivoPropuesta(solicitudDetails.solicitud?.tipo_archivo || null);
 
+      // Set IMU flag from solicitud
+      const imuVal = Boolean(solicitudDetails.solicitud?.IMU);
+      setImu(imuVal);
+
       // Set period from cotizacion dates — only on first load, not after updates
       const cot = solicitudDetails.cotizacion;
       let yInicio: number | undefined;
@@ -1043,6 +1049,7 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
           catorcenaInicio: cInicio ?? catorcenaInicio,
           catorcenaFin: cFin ?? catorcenaFin,
           asignadosIds: parsedAsignadosIds,
+          imu: imuVal,
         });
         initialValuesSetRef.current = true;
       }
@@ -1146,9 +1153,10 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
       catorcenaInicio !== initialValues.catorcenaInicio ||
       catorcenaFin !== initialValues.catorcenaFin ||
       currentAsignadosIds !== initialValues.asignadosIds ||
+      imu !== initialValues.imu ||
       clienteChanged
     );
-  }, [nombreCampania, notas, descripcion, yearInicio, yearFin, catorcenaInicio, catorcenaFin, currentAsignadosIds, initialValues, clienteChanged]);
+  }, [nombreCampania, notas, descripcion, yearInicio, yearFin, catorcenaInicio, catorcenaFin, currentAsignadosIds, imu, initialValues, clienteChanged]);
 
   // Handle update propuesta
   const handleUpdatePropuesta = async () => {
@@ -1167,6 +1175,7 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
         catorcena_inicio: catorcenaInicio,
         year_fin: yearFin,
         catorcena_fin: catorcenaFin,
+        IMU: imu,
         ...(clienteChanged && selectedClienteCuic ? {
           cliente_id: selectedClienteCuic.CUIC,
           cuic: selectedClienteCuic.CUIC,
@@ -1201,6 +1210,7 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
         catorcenaInicio,
         catorcenaFin,
         asignadosIds: newAsignadosIds,
+        imu,
       });
       setClienteChanged(false);
 
@@ -1622,12 +1632,13 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
 
   // Handle cara deletion
   const handleDeleteCara = (localId: string) => {
-    if (caraHasReservas(localId)) {
+    const caraToDelete = caras.find(c => c.localId === localId);
+    const tieneReservas = caraHasReservas(localId, caraToDelete?.id);
+
+    if (tieneReservas && !permissions.canDeleteCaraConReservas) {
       alert('No puedes eliminar una cara que tiene reservas. Primero elimina las reservas.');
       return;
     }
-
-    const caraToDelete = caras.find(c => c.localId === localId);
 
     // If cara belongs to RT/BF group, find its pair to delete both
     const pairCara = caraToDelete?.grupo_rt_bf
@@ -1639,18 +1650,25 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
         )
       : null;
 
-    // Block deletion if either the cara or its pair has reservas
-    if (pairCara && caraHasReservas(pairCara.localId)) {
+    // Block deletion if the pair has reservas and user can't delete with reservas
+    const pairTieneReservas = pairCara ? caraHasReservas(pairCara.localId, pairCara.id) : false;
+    if (pairTieneReservas && !permissions.canDeleteCaraConReservas) {
       alert('No puedes eliminar una cara que tiene reservas en su par RT/BF. Primero elimina las reservas.');
       return;
     }
+
+    const anyTieneReservas = tieneReservas || pairTieneReservas;
 
     setConfirmModal({
       isOpen: true,
       title: 'Eliminar Formato',
       message: pairCara
-        ? '¿Estás seguro de que deseas eliminar este formato y su par (RT/BF) de la propuesta?'
-        : '¿Estás seguro de que deseas eliminar este formato de la propuesta?',
+        ? (anyTieneReservas
+            ? '⚠️ Este formato (y su par RT/BF) tiene inventario reservado. Al eliminarlo se liberarán todas las reservas. ¿Deseas continuar?'
+            : '¿Estás seguro de que deseas eliminar este formato y su par (RT/BF) de la propuesta?')
+        : (tieneReservas
+            ? '⚠️ Este formato tiene inventario reservado. Al eliminarlo se liberarán todas las reservas. ¿Deseas continuar?'
+            : '¿Estás seguro de que deseas eliminar este formato de la propuesta?'),
       confirmText: 'Eliminar',
       isDestructive: true,
       onConfirm: async () => {
@@ -1676,11 +1694,17 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
             return;
           }
         }
-        // Update local state (remove both)
+        // Update local state (remove both cara and its RT/BF pair, if any)
         const idsToRemove = new Set<string>([localId]);
         if (pairCara) idsToRemove.add(pairCara.localId);
+        const dbIdsToRemove = new Set<string>();
+        if (caraToDelete?.id) dbIdsToRemove.add(caraToDelete.id);
+        if (pairCara?.id) dbIdsToRemove.add(pairCara.id);
         setCaras(prev => prev.filter(c => !idsToRemove.has(c.localId)));
-        setReservas(prev => prev.filter(r => ![...idsToRemove].some(id => r.id.startsWith(id))));
+        setReservas(prev => prev.filter(r =>
+          ![...idsToRemove].some(id => r.id.startsWith(id)) &&
+          !(r.solicitudCaraId && dbIdsToRemove.has(r.solicitudCaraId))
+        ));
         setConfirmModal(prev => ({ ...prev, isOpen: false }));
       }
     });
@@ -1799,11 +1823,12 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
       return;
     }
 
-    // Validar tarifa pública: si es 0, solo CT y BF/CF pueden avanzar
+    // Validar tarifa pública: si es 0, solo CT, BF/CF e IM pueden avanzar
     const artCode = (newCara.articulo || '').toUpperCase();
     const esCortesia = artCode.startsWith('CT');
     const esBonificacion = artCode.startsWith('BF') || artCode.startsWith('CF');
-    if (newCara.tarifa_publica <= 0 && !esCortesia && !esBonificacion) {
+    const esImpresion = artCode.startsWith('IM');
+    if (newCara.tarifa_publica <= 0 && !esCortesia && !esBonificacion && !esImpresion) {
       alert('La tarifa pública no puede ser 0. Por favor ingresa una tarifa válida.');
       return;
     }
@@ -2237,6 +2262,7 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
           catorcena_inicio: catorcenaInicio,
           year_fin: yearFin,
           catorcena_fin: catorcenaFin,
+          IMU: imu,
           ...(clienteChanged && selectedClienteCuic ? {
             cliente_id: selectedClienteCuic.CUIC,
             cuic: selectedClienteCuic.CUIC,
@@ -2271,6 +2297,7 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
           catorcenaInicio,
           catorcenaFin,
           asignadosIds: asignados.map(u => u.id).join(','),
+          imu,
         });
         setClienteChanged(false);
         messages.push('Propuesta actualizada');
@@ -3857,6 +3884,17 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
 
   if (!isOpen) return null;
 
+  // Overlay bloqueante global cuando se está guardando fuera del confirmModal
+  const savingOverlayJSX = isSaving && !confirmModal.isOpen && (
+    <div className="fixed inset-0 z-[70] flex items-center justify-center bg-black/40 backdrop-blur-[1px]" role="status" aria-live="polite">
+      <div className={`flex items-center gap-3 px-6 py-4 rounded-xl shadow-2xl ${isDark ? 'bg-zinc-900 text-white' : 'bg-white text-gray-900'}`}>
+        <Loader2 className="h-5 w-5 animate-spin text-purple-500" />
+        <span className="text-sm font-medium">Guardando...</span>
+        <span className={`text-xs ${isDark ? 'text-zinc-400' : 'text-gray-500'}`}>Por favor no cierres ni navegues</span>
+      </div>
+    </div>
+  );
+
   // Confirmation modal content reused in both views
   const confirmModalJSX = confirmModal.isOpen && (
     <div className="fixed inset-0 z-[60] flex items-center justify-center">
@@ -3929,6 +3967,7 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
   if (viewState === 'search-inventory') {
     return (
       <div className="fixed inset-0 z-50 flex items-center justify-center">
+        {savingOverlayJSX}
         {confirmModalJSX}
         {toastJSX}
         <div className="absolute inset-0 bg-black/70 backdrop-blur-sm" onClick={handleBackToMain} />
@@ -6051,6 +6090,18 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
                     )}
                   </div>
 
+                  {/* IMU checkbox */}
+                  <label className={`flex items-center gap-3 ${canEditResumen ? 'cursor-pointer' : 'cursor-not-allowed opacity-60'}`}>
+                    <input
+                      type="checkbox"
+                      checked={imu}
+                      onChange={(e) => canEditResumen && setImu(e.target.checked)}
+                      disabled={!canEditResumen}
+                      className="checkbox-purple w-5 h-5"
+                    />
+                    <span className={`text-sm ${isDark ? 'text-zinc-300' : 'text-gray-700'}`}>IMU (Impresión IMU)</span>
+                  </label>
+
                   {/* Invalid caras warning */}
                   {invalidCaras.length > 0 && (
                     <div className="flex items-start gap-2 px-3 py-2 rounded-lg bg-red-500/10 border border-red-500/30 text-red-400 text-sm">
@@ -6743,7 +6794,7 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
                                       );
                                     })()}
                                     {effectiveCanEdit && (() => {
-                                      const caraAuthPendienteSaved = caras.some(c => !modifiedCaras.has(c.id!) && (c.autorizacion_dg === 'pendiente' || c.autorizacion_dcm === 'pendiente'));
+                                      const caraAuthPendienteSaved = caras.some(c => !modifiedCaras.has(c.id!) && ((c._originalDg || c.autorizacion_dg) === 'pendiente' || (c._originalDcm || c.autorizacion_dcm) === 'pendiente'));
                                       return (
                                       <>
                                         <button
@@ -6757,19 +6808,23 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
                                         >
                                           <Pencil className="h-4 w-4" />
                                         </button>
-                                        {canEditResumen && (
+                                        {canEditResumen && (() => {
+                                            const reservaBlocked = hasReservas && !permissions.canDeleteCaraConReservas;
+                                            const isDisabled = reservaBlocked || caraAuthPendienteSaved;
+                                            return (
                                           <button
-                                            onClick={(e) => { e.stopPropagation(); handleDeleteCara(cara.localId); }}
-                                            disabled={hasReservas || caraAuthPendienteSaved}
-                                            className={`p-2 rounded-lg border transition-colors ${hasReservas || caraAuthPendienteSaved
+                                            onClick={(e) => { e.stopPropagation(); if (!isDisabled) handleDeleteCara(cara.localId); }}
+                                            disabled={isDisabled}
+                                            className={`p-2 rounded-lg border transition-colors ${isDisabled
                                               ? `bg-zinc-500/10 ${isDark ? 'text-zinc-500' : 'text-gray-400'} border-zinc-500/20 cursor-not-allowed`
                                               : 'bg-red-500/10 text-red-400 border-red-500/20 hover:bg-red-500/20'
                                               }`}
-                                            title={caraAuthPendienteSaved ? 'Autorización pendiente' : hasReservas ? 'No se puede eliminar (tiene reservas)' : 'Eliminar'}
+                                            title={caraAuthPendienteSaved ? 'Autorización pendiente' : reservaBlocked ? 'No se puede eliminar (tiene reservas)' : 'Eliminar'}
                                           >
                                             <Trash2 className="h-4 w-4" />
                                           </button>
-                                        )}
+                                            );
+                                        })()}
                                       </>
                                       );
                                     })()}

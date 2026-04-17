@@ -81,6 +81,7 @@ export interface RolePermissions {
   canEditCaraFiltersOnEdit: boolean; // Editar estados, ciudades y formatos al editar una cara existente en propuestas
   canEditArticuloOnEdit: boolean; // Editar artículo SAP al editar una cara existente (solo si no hay reservas)
   canDeleteDetalleCampana: boolean;
+  canDeleteCaraConReservas: boolean;
   canSeeGestionArtes: boolean; // Ver página de Gestión de Artes
   canEditGestionArtes: boolean;
   canResolveProduccionTasks: boolean; // Resolver/completar tareas de producción (Impresión, Recepción, Instalación)
@@ -157,6 +158,7 @@ const defaultPermissions: RolePermissions = {
   canEditCaraFiltersOnEdit: false,
   canEditArticuloOnEdit: false,
   canDeleteDetalleCampana: true,
+  canDeleteCaraConReservas: false,
   canSeeGestionArtes: true,
   canEditGestionArtes: true,
   canResolveProduccionTasks: true,
@@ -211,6 +213,7 @@ const rolePermissions: Partial<Record<UserRole, Partial<RolePermissions>>> = {
     canEditCampanas: true,
     canEditDetalleCampana: false,
     canDeleteDetalleCampana: false,
+    canDeleteCaraConReservas: true,
     canEditGestionArtes: false,
     canOpenTasks: false, // No puede abrir tareas en Gestión de Artes
 
@@ -248,6 +251,7 @@ const rolePermissions: Partial<Record<UserRole, Partial<RolePermissions>>> = {
 
     // Campañas: puede editar (Asesor) + detalle campaña acceso total (Analista)
     canEditCampanas: true,
+    canDeleteCaraConReservas: true,
     // canEditDetalleCampana: true (default — Analista)
     // canDeleteDetalleCampana: true (default — Analista)
 
@@ -1044,7 +1048,7 @@ const rolePermissions: Partial<Record<UserRole, Partial<RolePermissions>>> = {
     canAtenderSolicitudes: false,
     canChangeEstadoSolicitud: false,
 
-    // Propuestas - pueden cambiar a Abierto, Atendido, Ajuste Comercial y Compartir
+    // Propuestas
     canEditPropuestaStatus: true,
     allowedPropuestaStatuses: ['Abierto', 'Atendido', 'Ajuste Comercial'],
     canAprobarPropuesta: false,
@@ -1056,7 +1060,7 @@ const rolePermissions: Partial<Record<UserRole, Partial<RolePermissions>>> = {
     // Campañas - pueden editar detalle (plaza/formato)
     canEditCampanas: true,
     allowedCampanaStatuses: ['Compartir', 'Rechazada'],
-    canEditDetalleCampana: true, // Puede editar plaza y formato en detalle
+    canEditDetalleCampana: false, // No pueden asignar APS específico
     canEditCaraFiltersOnEdit: true,
     canDeleteDetalleCampana: false, // No pueden quitar APs
     canSeeGestionArtes: true, // Puede ver gestor de tareas
@@ -1122,7 +1126,7 @@ const rolePermissions: Partial<Record<UserRole, Partial<RolePermissions>>> = {
     // Campañas - pueden editar detalle (plaza/formato)
     canEditCampanas: true,
     allowedCampanaStatuses: ['Compartir', 'Rechazada'],
-    canEditDetalleCampana: true, // Puede editar plaza y formato en detalle
+    canEditDetalleCampana: false, // No pueden asignar APS específico
     canEditCaraFiltersOnEdit: true,
     canDeleteDetalleCampana: false, // No pueden quitar APs
     canSeeGestionArtes: true, // Puede ver gestor de tareas
@@ -1191,7 +1195,7 @@ const rolePermissions: Partial<Record<UserRole, Partial<RolePermissions>>> = {
     // Campañas - pueden editar detalle (plaza/formato)
     canEditCampanas: true,
     allowedCampanaStatuses: ['Compartir', 'Rechazada'],
-    canEditDetalleCampana: true, // Puede editar plaza y formato en detalle
+    canEditDetalleCampana: false, // No pueden asignar APS específico
     canEditCaraFiltersOnEdit: true,
     canDeleteDetalleCampana: false, // No pueden quitar APs
     canSeeGestionArtes: true, // Puede ver gestor de tareas
@@ -1260,7 +1264,7 @@ const rolePermissions: Partial<Record<UserRole, Partial<RolePermissions>>> = {
     // Campañas - pueden editar detalle (plaza/formato)
     canEditCampanas: true,
     allowedCampanaStatuses: ['Compartir', 'Rechazada'],
-    canEditDetalleCampana: true, // Puede editar plaza y formato en detalle
+    canEditDetalleCampana: false, // No pueden asignar APS específico
     canEditCaraFiltersOnEdit: true,
     canDeleteDetalleCampana: false, // No pueden quitar APs
     canSeeGestionArtes: true, // Puede ver gestor de tareas
