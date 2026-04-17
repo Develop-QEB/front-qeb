@@ -3098,7 +3098,7 @@ export function CampanasPage() {
                                                       // Tradicional → Impresiones, Digital → Programación
                                                       ...(isDigital
                                                         ? [{ icon: Monitor, label: 'Programación', done: countAtOrPast(3) }]
-                                                        : [{ icon: Printer, label: 'Impresiones', done: countAtOrPast(4) }]
+                                                        : [{ icon: Printer, label: 'Impresiones', done: countAtOrPast(3) }]
                                                       ),
                                                       { icon: Camera, label: 'Validar Instalación', done: countAtOrPast(5) },
                                                     ];

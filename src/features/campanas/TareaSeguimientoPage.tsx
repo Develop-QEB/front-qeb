@@ -14442,7 +14442,7 @@ export function TareaSeguimientoPage() {
     const recepcionEsFaltantesMap = new Map<number, boolean>();
 
     tareasRecepcion.forEach(recepcion => {
-      const idsRecepcion = new Set((recepcion.ids_reservas || '').split(',').map(id => id.trim()).filter(Boolean));
+      const idsRecepcion = new Set((recepcion.ids_reservas || '').replace(/\*/g, ',').split(',').map(id => id.trim()).filter(Boolean));
       recepcionIdsMap.set(recepcion.id, idsRecepcion);
       let esFaltantes = false;
       if (recepcion.evidencia) {
@@ -14459,7 +14459,7 @@ export function TareaSeguimientoPage() {
     tareasRecepcion.forEach(recepcion => {
       const recepcionIds = recepcionIdsMap.get(recepcion.id) || new Set<string>();
       tareasImpresion.forEach(impresion => {
-        const impresionIds = new Set((impresion.ids_reservas || '').split(',').map(id => id.trim()).filter(Boolean));
+        const impresionIds = new Set((impresion.ids_reservas || '').replace(/\*/g, ',').split(',').map(id => id.trim()).filter(Boolean));
         const hasCommon = [...impresionIds].some(id => recepcionIds.has(id));
         if (hasCommon) {
           const existing = impresionToRecepciones.get(impresion.id) || [];
@@ -14471,7 +14471,7 @@ export function TareaSeguimientoPage() {
 
     // Procesar cada tarea de impresión
     tareasImpresion.forEach(tarea => {
-      const ids = (tarea.ids_reservas || '').split(',').map(id => id.trim()).filter(Boolean);
+      const ids = (tarea.ids_reservas || '').replace(/\*/g, ',').split(',').map(id => id.trim()).filter(Boolean);
       const tareasRecepcionRelacionadas = impresionToRecepciones.get(tarea.id) || [];
       ids.forEach(id => {
         const recepcionesDelId = tareasRecepcionRelacionadas.filter(recepcion => {
@@ -14507,7 +14507,7 @@ export function TareaSeguimientoPage() {
     if (tareasInstalacion.length === 0) return map;
 
     tareasInstalacion.forEach(tarea => {
-      const ids = (tarea.ids_reservas || '').split(',').map(id => id.trim()).filter(Boolean);
+      const ids = (tarea.ids_reservas || '').replace(/\*/g, ',').split(',').map(id => id.trim()).filter(Boolean);
 
       // Determinar estado basado en el estatus de la tarea
       // Pendiente/Activo = en_proceso
@@ -14533,7 +14533,7 @@ export function TareaSeguimientoPage() {
     const map = new Map<string, { estado: 'en_programacion' | 'programado' }>();
     const tareasProgramacion = tareasAPI.filter(t => t.tipo === 'Programación' || t.tipo === 'Orden de Programación');
     tareasProgramacion.forEach(tarea => {
-      const ids = (tarea.ids_reservas || '').split(',').map(id => id.trim()).filter(Boolean);
+      const ids = (tarea.ids_reservas || '').replace(/\*/g, ',').split(',').map(id => id.trim()).filter(Boolean);
       const estado: 'en_programacion' | 'programado' = tarea.estatus === 'Completado' ? 'programado' : 'en_programacion';
       ids.forEach(id => {
         map.set(id, { estado });
