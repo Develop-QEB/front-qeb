@@ -1044,7 +1044,7 @@ const rolePermissions: Partial<Record<UserRole, Partial<RolePermissions>>> = {
     canAtenderSolicitudes: false,
     canChangeEstadoSolicitud: false,
 
-    // Propuestas - pueden cambiar a Abierto, Atendido, Ajuste Comercial y Compartir
+    // Propuestas
     canEditPropuestaStatus: true,
     allowedPropuestaStatuses: ['Abierto', 'Atendido', 'Ajuste Comercial'],
     canAprobarPropuesta: false,
@@ -1056,7 +1056,7 @@ const rolePermissions: Partial<Record<UserRole, Partial<RolePermissions>>> = {
     // Campañas - pueden editar detalle (plaza/formato)
     canEditCampanas: true,
     allowedCampanaStatuses: ['Compartir', 'Rechazada'],
-    canEditDetalleCampana: true, // Puede editar plaza y formato en detalle
+    canEditDetalleCampana: false, // No pueden asignar APS específico
     canEditCaraFiltersOnEdit: true,
     canDeleteDetalleCampana: false, // No pueden quitar APs
     canSeeGestionArtes: true, // Puede ver gestor de tareas
@@ -1122,7 +1122,7 @@ const rolePermissions: Partial<Record<UserRole, Partial<RolePermissions>>> = {
     // Campañas - pueden editar detalle (plaza/formato)
     canEditCampanas: true,
     allowedCampanaStatuses: ['Compartir', 'Rechazada'],
-    canEditDetalleCampana: true, // Puede editar plaza y formato en detalle
+    canEditDetalleCampana: false, // No pueden asignar APS específico
     canEditCaraFiltersOnEdit: true,
     canDeleteDetalleCampana: false, // No pueden quitar APs
     canSeeGestionArtes: true, // Puede ver gestor de tareas
@@ -1191,7 +1191,7 @@ const rolePermissions: Partial<Record<UserRole, Partial<RolePermissions>>> = {
     // Campañas - pueden editar detalle (plaza/formato)
     canEditCampanas: true,
     allowedCampanaStatuses: ['Compartir', 'Rechazada'],
-    canEditDetalleCampana: true, // Puede editar plaza y formato en detalle
+    canEditDetalleCampana: false, // No pueden asignar APS específico
     canEditCaraFiltersOnEdit: true,
     canDeleteDetalleCampana: false, // No pueden quitar APs
     canSeeGestionArtes: true, // Puede ver gestor de tareas
@@ -1260,7 +1260,7 @@ const rolePermissions: Partial<Record<UserRole, Partial<RolePermissions>>> = {
     // Campañas - pueden editar detalle (plaza/formato)
     canEditCampanas: true,
     allowedCampanaStatuses: ['Compartir', 'Rechazada'],
-    canEditDetalleCampana: true, // Puede editar plaza y formato en detalle
+    canEditDetalleCampana: false, // No pueden asignar APS específico
     canEditCaraFiltersOnEdit: true,
     canDeleteDetalleCampana: false, // No pueden quitar APs
     canSeeGestionArtes: true, // Puede ver gestor de tareas
