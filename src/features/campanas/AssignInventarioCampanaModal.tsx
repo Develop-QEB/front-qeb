@@ -721,6 +721,7 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
   const [inventarioDisponible, setInventarioDisponible] = useState<InventarioDisponible[]>([]);
   const [isSearching, setIsSearching] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
+  const [loadingCaraAction, setLoadingCaraAction] = useState<{ caraId: string; action: 'edit' | 'search' } | null>(null);
 
   // POI filter state
   const [poiFilterIds, setPoiFilterIds] = useState<Set<number> | null>(null);
@@ -1567,6 +1568,7 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
 
   // Handle edit cara - permite edición parcial cuando hay reservas
   const handleEditCara = (cara: CaraItem) => {
+    setLoadingCaraAction({ caraId: cara.localId, action: 'edit' });
     // Ya no bloqueamos completamente - permitimos edición de ciudad, formatos y NSE
     setEditingCaraId(cara.localId);
 
@@ -1626,7 +1628,10 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
       anio_fin: anioFinVal,
     });
     setShowAddCaraForm(true);
-    setTimeout(() => caraFormRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 100);
+    setTimeout(() => {
+      caraFormRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      setLoadingCaraAction(null);
+    }, 150);
   };
 
   // Handle save cara (add or update)
@@ -2165,6 +2170,7 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
 
   // Handle search inventory - open search view and fetch disponibles
   const handleSearchInventory = async (cara: CaraItem) => {
+    setLoadingCaraAction({ caraId: cara.localId, action: 'search' });
     setSelectedCaraForSearch(cara);
     setViewState('search-inventory');
     setShowOnlyUnicos(false);
@@ -2207,6 +2213,7 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
       setInventarioDisponible([]);
     } finally {
       setIsSearching(false);
+      setLoadingCaraAction(null);
     }
   };
 
@@ -5934,13 +5941,14 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
                                       const tienePendientes = !isLocallyModified && (cara.autorizacion_dg === 'pendiente' || cara.autorizacion_dcm === 'pendiente');
                                       const tieneRechazado = cara.autorizacion_dg === 'rechazado' || cara.autorizacion_dcm === 'rechazado';
                                       const bloqueado = tienePendientes || tieneRechazado || caraAPSBlocked;
+                                      const isLoadingThis = loadingCaraAction?.caraId === cara.localId && loadingCaraAction?.action === 'search';
 
                                       return (
                                         <button
-                                          onClick={(e) => { e.stopPropagation(); if (!bloqueado) handleSearchInventory(cara); }}
-                                          disabled={bloqueado}
+                                          onClick={(e) => { e.stopPropagation(); if (!bloqueado && !loadingCaraAction) handleSearchInventory(cara); }}
+                                          disabled={bloqueado || !!loadingCaraAction}
                                           className={`p-2 rounded-lg border transition-colors ${
-                                            bloqueado
+                                            bloqueado || !!loadingCaraAction
                                               ? 'bg-zinc-500/10 text-zinc-500 border-zinc-500/20 cursor-not-allowed'
                                               : status.isComplete
                                                 ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20 hover:bg-emerald-500/20'
@@ -5950,35 +5958,37 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
                                             caraAPSBlocked ? 'Grupo con APS asignado - no se puede modificar inventario' :
                                             tieneRechazado ? 'Cara rechazada - no se puede asignar inventario' :
                                             tienePendientes ? 'Esta cara necesita autorización antes de asignar inventario' :
+                                            isLoadingThis ? 'Buscando inventario...' :
                                             status.isComplete ? 'Completo - clic para modificar' : 'Buscar inventario'
                                           }
                                         >
-                                          <Search className="h-4 w-4" />
+                                          {isLoadingThis ? <Loader2 className="h-4 w-4 animate-spin" /> : <Search className="h-4 w-4" />}
                                         </button>
                                       );
                                     })()}
                                     {effectiveCanEdit && (() => {
                                       const caraAuthPendienteSaved = caras.some(c => !modifiedCaras.has(c.id!) && ((c._originalDg || c.autorizacion_dg) === 'pendiente' || (c._originalDcm || c.autorizacion_dcm) === 'pendiente'));
                                       const editBlocked = caraAuthPendienteSaved || caraAPSBlocked;
-                                      const blockReason = caraAPSBlocked ? 'Grupo con APS asignado - no se puede editar' : caraAuthPendienteSaved ? 'Autorización pendiente - no se puede editar' : 'Editar';
+                                      const isLoadingThis = loadingCaraAction?.caraId === cara.localId && loadingCaraAction?.action === 'edit';
+                                      const blockReason = caraAPSBlocked ? 'Grupo con APS asignado - no se puede editar' : caraAuthPendienteSaved ? 'Autorización pendiente - no se puede editar' : isLoadingThis ? 'Cargando editor...' : 'Editar';
                                       return (
                                       <>
                                         <button
-                                          onClick={(e) => { e.stopPropagation(); if (!editBlocked) handleEditCara(cara); }}
-                                          disabled={editBlocked}
-                                          className={`p-2 rounded-lg border transition-colors ${editBlocked
+                                          onClick={(e) => { e.stopPropagation(); if (!editBlocked && !loadingCaraAction) handleEditCara(cara); }}
+                                          disabled={editBlocked || !!loadingCaraAction}
+                                          className={`p-2 rounded-lg border transition-colors ${editBlocked || !!loadingCaraAction
                                             ? 'bg-zinc-500/10 text-zinc-500 border-zinc-500/20 cursor-not-allowed'
                                             : 'bg-amber-500/10 text-amber-400 border-amber-500/20 hover:bg-amber-500/20'
                                           }`}
                                           title={blockReason}
                                         >
-                                          <Pencil className="h-4 w-4" />
+                                          {isLoadingThis ? <Loader2 className="h-4 w-4 animate-spin" /> : <Pencil className="h-4 w-4" />}
                                         </button>
                                         {canEditResumen && (
                                           <button
-                                            onClick={(e) => { e.stopPropagation(); if (!caraAPSBlocked) handleDeleteCara(cara.localId); }}
-                                            disabled={hasReservas || caraAuthPendienteSaved || caraAPSBlocked}
-                                            className={`p-2 rounded-lg border transition-colors ${hasReservas || caraAuthPendienteSaved || caraAPSBlocked
+                                            onClick={(e) => { e.stopPropagation(); if (!caraAPSBlocked && !loadingCaraAction) handleDeleteCara(cara.localId); }}
+                                            disabled={hasReservas || caraAuthPendienteSaved || caraAPSBlocked || !!loadingCaraAction}
+                                            className={`p-2 rounded-lg border transition-colors ${hasReservas || caraAuthPendienteSaved || caraAPSBlocked || !!loadingCaraAction
                                               ? 'bg-zinc-500/10 text-zinc-500 border-zinc-500/20 cursor-not-allowed'
                                               : 'bg-red-500/10 text-red-400 border-red-500/20 hover:bg-red-500/20'
                                               }`}
