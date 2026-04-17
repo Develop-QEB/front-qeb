@@ -105,6 +105,14 @@ const getRequiredPeriodoForFormato = (formato: string): 'catorcena' | 'mensual' 
   return 'catorcena';
 };
 
+const isEspecialArticle = (itemCode: string): boolean => {
+  const code = itemCode.toUpperCase();
+  return code.startsWith('ESP') || code.startsWith('ES-');
+};
+const isNoInventoryArticle = (itemCode: string): boolean => {
+  return itemCode.toUpperCase().startsWith('IM') || isEspecialArticle(itemCode);
+};
+
 const getRequiredPeriodoForArticulo = (itemName: string): 'catorcena' | 'mensual' => {
   if (!itemName) return 'catorcena';
   const name = itemName.toUpperCase();
@@ -1091,7 +1099,8 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
     const esCortesia = artCode.startsWith('CT');
     const esBonificacion = artCode.startsWith('BF') || artCode.startsWith('CF');
     const esImpresion = artCode.startsWith('IM');
-    if (newCara.tarifaPublica <= 0 && !esCortesia && !esBonificacion && !esImpresion) {
+    const esEspecial = isEspecialArticle(artCode);
+    if (newCara.tarifaPublica <= 0 && !esCortesia && !esBonificacion && !esImpresion && !esEspecial) {
       alert('La tarifa pública no puede ser 0. Por favor ingresa una tarifa válida.');
       return;
     }
@@ -2382,6 +2391,7 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
                       const isCortesia = item.ItemCode.toUpperCase().startsWith('CT');
                       const isIntercambio = item.ItemCode.toUpperCase().startsWith('IN');
                       const isImpresion = item.ItemCode.toUpperCase().startsWith('IM');
+                      const isEspecial = isEspecialArticle(item.ItemCode);
                       const isTarifaCero = isCortesia;
 
                       setNewCara({
@@ -2389,7 +2399,7 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
                         articulo: item,
                         tarifaPublica: isTarifaCero ? 0 : tarifa.tarifa_publica,
                         renta: isCortesia ? 0 : newCara.renta,
-                        bonificacion: (isImpresion || isIntercambio) ? 0 : newCara.bonificacion,
+                        bonificacion: (isImpresion || isIntercambio || isEspecial) ? 0 : newCara.bonificacion,
                         estado: ciudadEstado?.estado || newCara.estado,
                         ciudades: ciudadEstado?.ciudades && ciudadEstado.ciudades.length > 0 ? ciudadEstado.ciudades : newCara.ciudades,
                         formato: formato || newCara.formato,
@@ -2557,7 +2567,7 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
                   {/* Renta */}
                   <div>
                     <label className={`text-xs ${isDark ? 'text-zinc-500' : 'text-gray-500'}`}>
-                      {newCara.articulo?.ItemCode?.toUpperCase().startsWith('IM') ? 'Impresiones' : 'Renta'}
+                      {newCara.articulo?.ItemCode?.toUpperCase().startsWith('IM') ? 'Impresiones' : isEspecialArticle(newCara.articulo?.ItemCode || '') ? 'Ejec. Especiales' : 'Renta'}
                       {newCara.articulo?.ItemCode?.toUpperCase().startsWith('CT') && (
                         <span className="ml-1 text-cyan-400 text-[10px]">(Cortesía)</span>
                       )}
@@ -2585,8 +2595,8 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
                       value={newCara.bonificacion || ''}
                       onChange={(e) => setNewCara({ ...newCara, bonificacion: parseInt(e.target.value) || 0 })}
                       placeholder='0'
-                      disabled={newCara.articulo?.ItemCode?.toUpperCase().startsWith('IM') || newCara.articulo?.ItemCode?.toUpperCase().startsWith('IN')}
-                      className={`w-full px-3 py-2 ${isDark ? 'bg-zinc-800 border-zinc-700 text-white' : 'bg-gray-100 border-gray-200 text-gray-900'} border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-purple-500/50 ${(newCara.articulo?.ItemCode?.toUpperCase().startsWith('IM') || newCara.articulo?.ItemCode?.toUpperCase().startsWith('IN')) ? 'opacity-40 cursor-not-allowed' : ''}`}
+                      disabled={newCara.articulo?.ItemCode?.toUpperCase().startsWith('IM') || newCara.articulo?.ItemCode?.toUpperCase().startsWith('IN') || isEspecialArticle(newCara.articulo?.ItemCode || '')}
+                      className={`w-full px-3 py-2 ${isDark ? 'bg-zinc-800 border-zinc-700 text-white' : 'bg-gray-100 border-gray-200 text-gray-900'} border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-purple-500/50 ${(newCara.articulo?.ItemCode?.toUpperCase().startsWith('IM') || newCara.articulo?.ItemCode?.toUpperCase().startsWith('IN') || isEspecialArticle(newCara.articulo?.ItemCode || '')) ? 'opacity-40 cursor-not-allowed' : ''}`}
                     />
                   </div>
 
@@ -2635,7 +2645,7 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
                 )}
 
                 {/* Artículo BF - below the grid when bonificacion > 0 */}
-                {newCara.bonificacion > 0 && !newCara.articulo?.ItemCode?.toUpperCase().startsWith('CT') && !newCara.articulo?.ItemCode?.toUpperCase().startsWith('IM') && (
+                {newCara.bonificacion > 0 && !newCara.articulo?.ItemCode?.toUpperCase().startsWith('CT') && !newCara.articulo?.ItemCode?.toUpperCase().startsWith('IM') && !isEspecialArticle(newCara.articulo?.ItemCode || '') && (
                   <div className={`mt-3 p-3 ${isDark ? 'bg-emerald-900/10 border-emerald-500/20' : 'bg-emerald-50 border-emerald-200'} rounded-lg border`}>
                     <label className={`text-xs font-medium ${isDark ? 'text-emerald-400' : 'text-emerald-600'} mb-1 block`}>Artículo de Bonificación (BF)</label>
                     <SearchableSelect
