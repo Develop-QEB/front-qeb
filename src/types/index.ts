@@ -331,6 +331,7 @@ export interface Campana {
   posted_to_sap?: boolean;
   posted_aps?: number[];
   codigos_inventario?: string | null;
+  IMU?: number | null;
 }
 
 export interface CampanaStats {

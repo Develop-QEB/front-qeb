@@ -581,6 +581,7 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
   const [catorcenaFin, setCatorcenaFin] = useState<number | undefined>();
   const [archivoPropuesta, setArchivoPropuesta] = useState<string | null>(null);
   const [tipoArchivoPropuesta, setTipoArchivoPropuesta] = useState<string | null>(null);
+  const [imu, setImu] = useState(false);
   const periodInitializedRef = useRef(false);
   const initialValuesSetRef = useRef(false);
 
@@ -616,6 +617,7 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
     catorcenaInicio: undefined as number | undefined,
     catorcenaFin: undefined as number | undefined,
     asignadosIds: '' as string,
+    imu: false,
   });
   const [isUpdatingPropuesta, setIsUpdatingPropuesta] = useState(false);
 
@@ -970,6 +972,10 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
       setArchivoPropuesta(solicitudDetails.solicitud?.archivo || null);
       setTipoArchivoPropuesta(solicitudDetails.solicitud?.tipo_archivo || null);
 
+      // Set IMU flag from solicitud
+      const imuVal = Boolean(solicitudDetails.solicitud?.IMU);
+      setImu(imuVal);
+
       // Set period from cotizacion dates — only on first load, not after updates
       const cot = solicitudDetails.cotizacion;
       let yInicio: number | undefined;
@@ -1024,6 +1030,7 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
           catorcenaInicio: cInicio ?? catorcenaInicio,
           catorcenaFin: cFin ?? catorcenaFin,
           asignadosIds: parsedAsignadosIds,
+          imu: imuVal,
         });
         initialValuesSetRef.current = true;
       }
@@ -1122,9 +1129,10 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
       catorcenaInicio !== initialValues.catorcenaInicio ||
       catorcenaFin !== initialValues.catorcenaFin ||
       currentAsignadosIds !== initialValues.asignadosIds ||
+      imu !== initialValues.imu ||
       clienteChanged
     );
-  }, [nombreCampania, notas, descripcion, yearInicio, yearFin, catorcenaInicio, catorcenaFin, currentAsignadosIds, initialValues, clienteChanged]);
+  }, [nombreCampania, notas, descripcion, yearInicio, yearFin, catorcenaInicio, catorcenaFin, currentAsignadosIds, imu, initialValues, clienteChanged]);
 
   // Handle update propuesta
   const handleUpdatePropuesta = async () => {
@@ -1143,6 +1151,7 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
         catorcena_inicio: catorcenaInicio,
         year_fin: yearFin,
         catorcena_fin: catorcenaFin,
+        IMU: imu,
         ...(clienteChanged && selectedClienteCuic ? {
           cliente_id: selectedClienteCuic.CUIC,
           cuic: selectedClienteCuic.CUIC,
@@ -1177,6 +1186,7 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
         catorcenaInicio,
         catorcenaFin,
         asignadosIds: newAsignadosIds,
+        imu,
       });
       setClienteChanged(false);
 
@@ -1900,6 +1910,7 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
           catorcena_inicio: catorcenaInicio,
           year_fin: yearFin,
           catorcena_fin: catorcenaFin,
+          IMU: imu,
           ...(clienteChanged && selectedClienteCuic ? {
             cliente_id: selectedClienteCuic.CUIC,
             cuic: selectedClienteCuic.CUIC,
@@ -1934,6 +1945,7 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
           catorcenaInicio,
           catorcenaFin,
           asignadosIds: asignados.map(u => u.id).join(','),
+          imu,
         });
         setClienteChanged(false);
         messages.push('Propuesta actualizada');
@@ -5725,6 +5737,18 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
                       </div>
                     )}
                   </div>
+
+                  {/* IMU checkbox */}
+                  <label className={`flex items-center gap-3 ${canEditResumen ? 'cursor-pointer' : 'cursor-not-allowed opacity-60'}`}>
+                    <input
+                      type="checkbox"
+                      checked={imu}
+                      onChange={(e) => canEditResumen && setImu(e.target.checked)}
+                      disabled={!canEditResumen}
+                      className="checkbox-purple w-5 h-5"
+                    />
+                    <span className={`text-sm ${isDark ? 'text-zinc-300' : 'text-gray-700'}`}>IMU (Impresión IMU)</span>
+                  </label>
 
                   {/* Invalid caras warning */}
                   {invalidCaras.length > 0 && (
