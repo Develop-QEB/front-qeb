@@ -374,6 +374,7 @@ export interface CaraUpdateData {
   caras_contraflujo?: number;
   articulo?: string;
   descuento?: number;
+  grupo_rt_bf?: number | null;
 }
 
 export interface SolicitudCara {
@@ -397,6 +398,7 @@ export interface SolicitudCara {
   descuento?: number;
   autorizacion_dg?: string;
   autorizacion_dcm?: string;
+  grupo_rt_bf?: number | null;
 }
 
 export interface ReservaModalItem {

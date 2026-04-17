@@ -228,6 +228,7 @@ export interface SolicitudCara {
   descuento: number | null;
   autorizacion_dg?: string | null;
   autorizacion_dcm?: string | null;
+  grupo_rt_bf?: number | null;
 }
 
 export interface CampanaUpdateData {
@@ -1251,4 +1252,5 @@ export interface CaraUpdateData {
   caras_contraflujo?: number;
   articulo?: string;
   descuento?: number;
+  grupo_rt_bf?: number | null;
 }
