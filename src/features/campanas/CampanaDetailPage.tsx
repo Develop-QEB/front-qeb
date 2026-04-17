@@ -661,39 +661,53 @@ function renderIMAPSCell(item: InventarioConAPS, col: TableColumn, p = 'p-1.5', 
 function applyFilters<T>(data: T[], filters: FilterCondition[]): T[] {
   if (filters.length === 0) return data;
 
+  const activeFilters = filters.filter(f => f.value !== '');
+  if (activeFilters.length === 0) return data;
+
+  const groupedByField = new Map<string, FilterCondition[]>();
+  activeFilters.forEach(filter => {
+    const arr = groupedByField.get(filter.field) ?? [];
+    arr.push(filter);
+    groupedByField.set(filter.field, arr);
+  });
+
+  const matchFilter = (item: T, filter: FilterCondition): boolean => {
+    const fieldValue = (item as Record<string, unknown>)[filter.field];
+    const filterValue = filter.value;
+
+    if (fieldValue === null || fieldValue === undefined) {
+      return filter.operator === '!=' || filter.operator === 'not_contains';
+    }
+
+    const strValue = String(fieldValue).toLowerCase();
+    const strFilterValue = filterValue.toLowerCase();
+
+    switch (filter.operator) {
+      case '=':
+        return strValue === strFilterValue;
+      case '!=':
+        return strValue !== strFilterValue;
+      case 'contains':
+        return strValue.includes(strFilterValue);
+      case 'not_contains':
+        return !strValue.includes(strFilterValue);
+      case '>':
+        return Number(fieldValue) > Number(filterValue);
+      case '<':
+        return Number(fieldValue) < Number(filterValue);
+      case '>=':
+        return Number(fieldValue) >= Number(filterValue);
+      case '<=':
+        return Number(fieldValue) <= Number(filterValue);
+      default:
+        return true;
+    }
+  };
+
   return data.filter(item => {
-    return filters.every(filter => {
-      const fieldValue = (item as Record<string, unknown>)[filter.field];
-      const filterValue = filter.value;
-
-      if (fieldValue === null || fieldValue === undefined) {
-        return filter.operator === '!=' || filter.operator === 'not_contains';
-      }
-
-      const strValue = String(fieldValue).toLowerCase();
-      const strFilterValue = filterValue.toLowerCase();
-
-      switch (filter.operator) {
-        case '=':
-          return strValue === strFilterValue;
-        case '!=':
-          return strValue !== strFilterValue;
-        case 'contains':
-          return strValue.includes(strFilterValue);
-        case 'not_contains':
-          return !strValue.includes(strFilterValue);
-        case '>':
-          return Number(fieldValue) > Number(filterValue);
-        case '<':
-          return Number(fieldValue) < Number(filterValue);
-        case '>=':
-          return Number(fieldValue) >= Number(filterValue);
-        case '<=':
-          return Number(fieldValue) <= Number(filterValue);
-        default:
-          return true;
-      }
-    });
+    return Array.from(groupedByField.values()).every(groupFilters =>
+      groupFilters.some(filter => matchFilter(item, filter))
+    );
   });
 }
 
@@ -830,10 +844,16 @@ export function CampanaDetailPage() {
   // Estado para filtros (inventario reservado)
   const [filtersReservado, setFiltersReservado] = useState<FilterCondition[]>([]);
   const [showFiltersReservado, setShowFiltersReservado] = useState(false);
+  const [openFilterInputReservado, setOpenFilterInputReservado] = useState<string | null>(null);
+  const [filterDropdownRect, setFilterDropdownRect] = useState<{ top: number; left: number; width: number } | null>(null);
+  const [filterDraftReservado, setFilterDraftReservado] = useState<Record<string, string>>({});
 
   // Estado para filtros (inventario con APS)
   const [filtersAPS, setFiltersAPS] = useState<FilterCondition[]>([]);
   const [showFiltersAPS, setShowFiltersAPS] = useState(false);
+  const [openFilterInputAPS, setOpenFilterInputAPS] = useState<string | null>(null);
+  const [filterDropdownRectAPS, setFilterDropdownRectAPS] = useState<{ top: number; left: number; width: number } | null>(null);
+  const [filterDraftAPS, setFilterDraftAPS] = useState<Record<string, string>>({});
 
   // Estado para ordenamiento (inventario reservado)
   const [sortFieldReservado, setSortFieldReservado] = useState<string | null>(null);
@@ -2143,7 +2163,7 @@ export function CampanaDetailPage() {
                           {filtersReservado.map((filter, index) => (
                             <div key={filter.id} className="flex items-center gap-2">
                               {index > 0 && (
-                                <span className="text-[10px] text-purple-400 font-medium w-8">AND</span>
+                                <span className="text-[10px] text-purple-400 font-medium w-8">{filtersReservado[index - 1].field === filter.field ? 'OR' : 'AND'}</span>
                               )}
                               {index === 0 && <span className="w-8"></span>}
                               <select
@@ -2167,16 +2187,73 @@ export function CampanaDetailPage() {
                                   <option key={op.value} value={op.value}>{op.label}</option>
                                 ))}
                               </select>
-                              <select
-                                value={filter.value}
-                                onChange={(e) => updateFilterReservado(filter.id, { value: e.target.value })}
-                                className="flex-1 text-xs bg-background border border-border rounded px-2 py-1.5"
-                              >
-                                <option value="">Seleccionar...</option>
-                                {getUniqueValuesReservado[filter.field]?.map((val) => (
-                                  <option key={val} value={val}>{val}</option>
-                                ))}
-                              </select>
+                              <div className="flex-1 relative">
+                                <input
+                                  type="text"
+                                  placeholder="Valor..."
+                                  value={filterDraftReservado[filter.id] ?? filter.value}
+                                  onChange={(e) => setFilterDraftReservado(prev => ({ ...prev, [filter.id]: e.target.value }))}
+                                  onFocus={(e) => {
+                                    const rect = e.target.getBoundingClientRect();
+                                    setFilterDropdownRect({ top: rect.bottom, left: rect.left, width: rect.width });
+                                    setOpenFilterInputReservado(filter.id);
+                                    setFilterDraftReservado(prev => ({ ...prev, [filter.id]: filter.value }));
+                                  }}
+                                  onBlur={() => setTimeout(() => {
+                                    setFilterDraftReservado(prev => {
+                                      const draftValue = prev[filter.id];
+                                      if (draftValue !== undefined && draftValue !== filter.value) {
+                                        updateFilterReservado(filter.id, { value: draftValue });
+                                      }
+                                      const next = { ...prev };
+                                      delete next[filter.id];
+                                      return next;
+                                    });
+                                    setOpenFilterInputReservado(null);
+                                    setFilterDropdownRect(null);
+                                  }, 200)}
+                                  className="w-full text-xs bg-background border border-border rounded px-2 py-1.5"
+                                />
+                                {openFilterInputReservado === filter.id && filterDropdownRect && (
+                                  <div
+                                    className={`fixed z-[9999] border rounded ${isDark ? 'bg-[#2a1540] border-purple-900/50' : 'bg-white border-purple-200'} shadow-xl max-h-[200px] overflow-y-auto`}
+                                    style={{ top: filterDropdownRect.top + 4, left: filterDropdownRect.left, width: filterDropdownRect.width }}
+                                  >
+                                    {(() => {
+                                      const draft = filterDraftReservado[filter.id] ?? filter.value;
+                                      const opts = getUniqueValuesReservado[filter.field]?.filter(val => val.toLowerCase().includes(draft.toLowerCase())) ?? [];
+                                      return (
+                                        <>
+                                          {opts.map((val) => (
+                                            <div
+                                              key={val}
+                                              onMouseDown={(e) => {
+                                                e.preventDefault();
+                                                updateFilterReservado(filter.id, { value: val });
+                                                setFilterDraftReservado(prev => {
+                                                  const next = { ...prev };
+                                                  delete next[filter.id];
+                                                  return next;
+                                                });
+                                                setOpenFilterInputReservado(null);
+                                                setFilterDropdownRect(null);
+                                              }}
+                                              className={`px-2 py-1.5 text-xs cursor-pointer ${isDark ? 'hover:bg-purple-900/50' : 'hover:bg-purple-50'}`}
+                                            >
+                                              {val}
+                                            </div>
+                                          ))}
+                                          {opts.length === 0 && (
+                                            <div className={`px-2 py-1.5 text-xs ${isDark ? 'text-purple-400' : 'text-purple-600'}`}>
+                                              Sin coincidencias
+                                            </div>
+                                          )}
+                                        </>
+                                      );
+                                    })()}
+                                  </div>
+                                )}
+                              </div>
                               <button
                                 onClick={() => removeFilterReservado(filter.id)}
                                 className="text-red-400 hover:text-red-300 p-0.5"
@@ -2966,7 +3043,7 @@ export function CampanaDetailPage() {
                           {filtersAPS.map((filter, index) => (
                             <div key={filter.id} className="flex items-center gap-2">
                               {index > 0 && (
-                                <span className="text-[10px] text-purple-400 font-medium w-8">AND</span>
+                                <span className="text-[10px] text-purple-400 font-medium w-8">{filtersAPS[index - 1].field === filter.field ? 'OR' : 'AND'}</span>
                               )}
                               {index === 0 && <span className="w-8"></span>}
                               <select
@@ -2990,16 +3067,73 @@ export function CampanaDetailPage() {
                                   <option key={op.value} value={op.value}>{op.label}</option>
                                 ))}
                               </select>
-                              <select
-                                value={filter.value}
-                                onChange={(e) => updateFilterAPS(filter.id, { value: e.target.value })}
-                                className="flex-1 text-xs bg-background border border-border rounded px-2 py-1.5"
-                              >
-                                <option value="">Seleccionar...</option>
-                                {getUniqueValuesAPS[filter.field]?.map((val) => (
-                                  <option key={val} value={val}>{val}</option>
-                                ))}
-                              </select>
+                              <div className="flex-1 relative">
+                                <input
+                                  type="text"
+                                  placeholder="Valor..."
+                                  value={filterDraftAPS[filter.id] ?? filter.value}
+                                  onChange={(e) => setFilterDraftAPS(prev => ({ ...prev, [filter.id]: e.target.value }))}
+                                  onFocus={(e) => {
+                                    const rect = e.target.getBoundingClientRect();
+                                    setFilterDropdownRectAPS({ top: rect.bottom, left: rect.left, width: rect.width });
+                                    setOpenFilterInputAPS(filter.id);
+                                    setFilterDraftAPS(prev => ({ ...prev, [filter.id]: filter.value }));
+                                  }}
+                                  onBlur={() => setTimeout(() => {
+                                    setFilterDraftAPS(prev => {
+                                      const draftValue = prev[filter.id];
+                                      if (draftValue !== undefined && draftValue !== filter.value) {
+                                        updateFilterAPS(filter.id, { value: draftValue });
+                                      }
+                                      const next = { ...prev };
+                                      delete next[filter.id];
+                                      return next;
+                                    });
+                                    setOpenFilterInputAPS(null);
+                                    setFilterDropdownRectAPS(null);
+                                  }, 200)}
+                                  className="w-full text-xs bg-background border border-border rounded px-2 py-1.5"
+                                />
+                                {openFilterInputAPS === filter.id && filterDropdownRectAPS && (
+                                  <div
+                                    className={`fixed z-[9999] border rounded ${isDark ? 'bg-[#2a1540] border-purple-900/50' : 'bg-white border-purple-200'} shadow-xl max-h-[200px] overflow-y-auto`}
+                                    style={{ top: filterDropdownRectAPS.top + 4, left: filterDropdownRectAPS.left, width: filterDropdownRectAPS.width }}
+                                  >
+                                    {(() => {
+                                      const draft = filterDraftAPS[filter.id] ?? filter.value;
+                                      const opts = getUniqueValuesAPS[filter.field]?.filter(val => val.toLowerCase().includes(draft.toLowerCase())) ?? [];
+                                      return (
+                                        <>
+                                          {opts.map((val) => (
+                                            <div
+                                              key={val}
+                                              onMouseDown={(e) => {
+                                                e.preventDefault();
+                                                updateFilterAPS(filter.id, { value: val });
+                                                setFilterDraftAPS(prev => {
+                                                  const next = { ...prev };
+                                                  delete next[filter.id];
+                                                  return next;
+                                                });
+                                                setOpenFilterInputAPS(null);
+                                                setFilterDropdownRectAPS(null);
+                                              }}
+                                              className={`px-2 py-1.5 text-xs cursor-pointer ${isDark ? 'hover:bg-purple-900/50' : 'hover:bg-purple-50'}`}
+                                            >
+                                              {val}
+                                            </div>
+                                          ))}
+                                          {opts.length === 0 && (
+                                            <div className={`px-2 py-1.5 text-xs ${isDark ? 'text-purple-400' : 'text-purple-600'}`}>
+                                              Sin coincidencias
+                                            </div>
+                                          )}
+                                        </>
+                                      );
+                                    })()}
+                                  </div>
+                                )}
+                              </div>
                               <button
                                 onClick={() => removeFilterAPS(filter.id)}
                                 className="text-red-400 hover:text-red-300 p-0.5"
