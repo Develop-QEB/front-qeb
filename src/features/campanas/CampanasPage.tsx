@@ -3232,9 +3232,9 @@ export function CampanasPage() {
                                                       const estatusArteColor = getEstatusArteColor((inv as any).estatus_arte, isDark);
                                                       const hasArte = inv.archivo != null && inv.archivo !== '';
                                                       const rawProg = (inv as any).indicaciones_programacion;
-                                                      const indicacionesProg = typeof rawProg === 'string' ? rawProg : (rawProg ? JSON.stringify(rawProg) : null);
+                                                      const indicacionesProg = typeof rawProg === 'string' ? rawProg : (rawProg && typeof rawProg === 'object' ? Object.values(rawProg).filter(Boolean).join(' | ') : null);
                                                       const rawInst = (inv as any).indicaciones_instalacion;
-                                                      const indicacionesInst = typeof rawInst === 'string' ? rawInst : (rawInst ? JSON.stringify(rawInst) : null);
+                                                      const indicacionesInst = typeof rawInst === 'string' ? rawInst : (rawInst && typeof rawInst === 'object' ? Object.values(rawInst).filter(Boolean).join(' | ') : null);
                                                       return (
                                                         <div key={inv.id} className={`flex items-center gap-2 text-[10px] ${isDark ? 'text-zinc-500' : 'text-gray-400'} py-0.5 flex-wrap`}>
                                                           <MapPin className={`h-2.5 w-2.5 ${isDark ? 'text-zinc-600' : 'text-gray-400'}`} />
