@@ -6392,8 +6392,7 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
                                         >
                                           <Pencil className="h-4 w-4" />
                                         </button>
-                                        {canEditResumen && (
-                                          {(() => {
+                                        {canEditResumen && (() => {
                                             const reservaBlocked = hasReservas && !permissions.canDeleteCaraConReservas;
                                             const isDisabled = reservaBlocked || caraAuthPendienteSaved;
                                             return (
@@ -6409,8 +6408,7 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
                                             <Trash2 className="h-4 w-4" />
                                           </button>
                                             );
-                                          })()}
-                                        )}
+                                        })()}
                                       </>
                                       );
                                     })()}
