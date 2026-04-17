@@ -1314,17 +1314,7 @@ export function PropuestasPage() {
     }) || null;
   }, [catorcenasData]);
 
-  // Set default catorcena filter to current catorcena
-  const [defaultCatorcenaApplied, setDefaultCatorcenaApplied] = useState(false);
-  useEffect(() => {
-    if (currentCatorcena && !defaultCatorcenaApplied) {
-      setYearInicio(currentCatorcena.a_o);
-      setYearFin(currentCatorcena.a_o);
-      setCatorcenaInicio(currentCatorcena.numero_catorcena);
-      setCatorcenaFin(currentCatorcena.numero_catorcena);
-      setDefaultCatorcenaApplied(true);
-    }
-  }, [currentCatorcena, defaultCatorcenaApplied]);
+  // No default catorcena filter — show all propuestas on load
 
   // Group data
   const groupedData = useMemo(() => {
@@ -2086,7 +2076,7 @@ export function PropuestasPage() {
                 {/* Group By */}
                 <FilterChip
                   label="Agrupar"
-                  options={['status', 'asignado']}
+                  options={['status', 'asignado', 'asesor', 'creador_nombre']}
                   value={groupBy}
                   onChange={(val) => { setGroupBy(val); setExpandedGroups(new Set()); }}
                   onClear={() => { setGroupBy(''); setExpandedGroups(new Set()); }}

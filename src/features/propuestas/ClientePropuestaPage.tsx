@@ -1,4 +1,4 @@
-import { useParams } from 'react-router-dom';
+import { useParams, useSearchParams } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { useState, useMemo, useRef } from 'react';
 import {
@@ -200,24 +200,42 @@ async function fetchPublicPropuesta(id: number): Promise<PublicPropuestaData> {
 export function ClientePropuestaPage() {
   const isDark = false;
   const { id } = useParams<{ id: string }>();
+  const [searchParams] = useSearchParams();
   const propuestaId = id ? parseInt(id, 10) : 0;
   const mapRef = useRef<google.maps.Map | null>(null);
   const autocompleteRef = useRef<google.maps.places.Autocomplete | null>(null);
 
+  // Parse initial filter state from URL params
+  const initialCatorcenas = useMemo(() => {
+    const param = searchParams.get('catorcenas');
+    return param ? new Set(param.split(',')) : new Set<string>();
+  }, []);
+  const initialFilters = useMemo(() => {
+    const param = searchParams.get('filters');
+    if (!param) return [];
+    try {
+      const parsed = JSON.parse(param) as { field: string; operator: FilterOperator; value: string }[];
+      return parsed.map((f, i) => ({ id: `filter-url-${i}`, ...f }));
+    } catch { return []; }
+  }, []);
+  const initialFilterText = searchParams.get('q') || '';
+  const initialFilterPeriodo = searchParams.get('periodo') || '';
+
   // States
   const [expandedResumen, setExpandedResumen] = useState<Set<string>>(new Set());
-  const [filterText, setFilterText] = useState('');
-  const [filterPeriodo, setFilterPeriodo] = useState('');
+  const [filterText, setFilterText] = useState(initialFilterText);
+  const [filterPeriodo, setFilterPeriodo] = useState(initialFilterPeriodo);
   const [sortField, setSortField] = useState<string>('');
   const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('asc');
   const [poiMarkers, setPoiMarkers] = useState<POIMarker[]>([]);
   const [searchRange, setSearchRange] = useState(300);
   const [poiSearch, setPoiSearch] = useState('');
   const [selectedMarker, setSelectedMarker] = useState<InventarioReservado | null>(null);
+  const [selectedCatorcenas, setSelectedCatorcenas] = useState<Set<string>>(initialCatorcenas);
 
   // Advanced filter states
-  const [filters, setFilters] = useState<FilterCondition[]>([]);
-  const [showFilters, setShowFilters] = useState(false);
+  const [filters, setFilters] = useState<FilterCondition[]>(initialFilters);
+  const [showFilters, setShowFilters] = useState(initialFilters.length > 0);
   const [selectedItems, setSelectedItems] = useState<Set<number>>(new Set());
 
   const { isLoaded } = useLoadScript({
@@ -234,18 +252,31 @@ export function ClientePropuestaPage() {
   const inventario = data?.inventario || [];
   const tipoPeriodo = (data?.cotizacion as any)?.tipo_periodo || 'catorcena';
 
+  // Master catorcena-filtered inventario (affects KPIs, charts, map, resumen)
+  const catorcenaFilteredInventario = useMemo(() => {
+    if (!inventario.length) return inventario;
+    if (selectedCatorcenas.size === 0) return inventario;
+    return inventario.filter(i => {
+      if (i.numero_catorcena && i.anio_catorcena) {
+        const key = `${i.anio_catorcena}-${i.numero_catorcena}`;
+        return selectedCatorcenas.has(key);
+      }
+      return false;
+    });
+  }, [inventario, selectedCatorcenas]);
+
   // Computed data
   const kpis = useMemo(() => {
-    if (!data || inventario.length === 0) return { total: 0, renta: 0, bonificadas: 0, inversion: 0 };
+    if (!data || catorcenaFilteredInventario.length === 0) return { total: 0, renta: 0, bonificadas: 0, inversion: 0 };
 
     // Calculate from actual reserved/sold inventory (real data)
-    const renta = inventario.reduce((sum, i) => sum + Number(i.caras_renta || 0), 0);
-    const bonificadas = inventario.reduce((sum, i) => sum + Number(i.caras_bonificadas || 0), 0);
+    const renta = catorcenaFilteredInventario.reduce((sum, i) => sum + Number(i.caras_renta || 0), 0);
+    const bonificadas = catorcenaFilteredInventario.reduce((sum, i) => sum + Number(i.caras_bonificadas || 0), 0);
     const total = renta + bonificadas;
-    const inversion = inventario.reduce((sum, i) => sum + (Number(i.tarifa_publica || 0) * Number(i.caras_renta || 0)), 0);
+    const inversion = catorcenaFilteredInventario.reduce((sum, i) => sum + (Number(i.tarifa_publica || 0) * Number(i.caras_renta || 0)), 0);
 
     return { total, renta, bonificadas, inversion };
-  }, [data, inventario]);
+  }, [data, catorcenaFilteredInventario]);
 
   // Available periods for dropdown
   const periodoOptions = useMemo(() => {
@@ -264,7 +295,7 @@ export function ClientePropuestaPage() {
 
   // Filtered inventario (used by resumen)
   const filteredInventario = useMemo(() => {
-    let filtered = inventario;
+    let filtered = catorcenaFilteredInventario;
     if (filterPeriodo) {
       const [year, num] = filterPeriodo.split('-').map(Number);
       filtered = filtered.filter(i => i.numero_catorcena === num && i.anio_catorcena === year);
@@ -290,7 +321,7 @@ export function ClientePropuestaPage() {
       });
     }
     return filtered;
-  }, [inventario, filters, filterText, sortField, sortOrder]);
+  }, [catorcenaFilteredInventario, filters, filterText, filterPeriodo, sortField, sortOrder]);
 
   // Resumen de Caras (grouped by catorcena > articulo from filtered data)
   const resumenCaras = useMemo((): ResumenCatorcenaGroup[] => {
@@ -329,30 +360,30 @@ export function ClientePropuestaPage() {
 
   const chartCiudades = useMemo(() => {
     const counts: Record<string, number> = {};
-    inventario.forEach(i => {
+    catorcenaFilteredInventario.forEach(i => {
       const ciudad = i.plaza || 'Sin ciudad';
       counts[ciudad] = (counts[ciudad] || 0) + (Number(i.caras_totales) || 0);
     });
     return Object.entries(counts).map(([name, value]) => ({ name, value })).sort((a, b) => b.value - a.value).slice(0, 10);
-  }, [inventario]);
+  }, [catorcenaFilteredInventario]);
 
   const chartFormatos = useMemo(() => {
     const counts: Record<string, number> = {};
-    inventario.forEach(i => {
+    catorcenaFilteredInventario.forEach(i => {
       const formato = i.mueble || 'Otros';
       counts[formato] = (counts[formato] || 0) + (Number(i.caras_totales) || 0);
     });
     return Object.entries(counts).map(([name, value]) => ({ name, value })).sort((a, b) => b.value - a.value);
-  }, [inventario]);
+  }, [catorcenaFilteredInventario]);
 
   const mapCenter = useMemo(() => {
-    if (inventario.length === 0) return { lat: 20.6597, lng: -103.3496 };
-    const validItems = inventario.filter(i => i.latitud && i.longitud);
+    if (catorcenaFilteredInventario.length === 0) return { lat: 20.6597, lng: -103.3496 };
+    const validItems = catorcenaFilteredInventario.filter(i => i.latitud && i.longitud);
     if (validItems.length === 0) return { lat: 20.6597, lng: -103.3496 };
     const avgLat = validItems.reduce((sum, i) => sum + i.latitud, 0) / validItems.length;
     const avgLng = validItems.reduce((sum, i) => sum + i.longitud, 0) / validItems.length;
     return { lat: avgLat, lng: avgLng };
-  }, [inventario]);
+  }, [catorcenaFilteredInventario]);
 
   // Period display helpers
   const periodoInicio = useMemo(() => {
@@ -393,19 +424,18 @@ export function ClientePropuestaPage() {
   }, [data, inventario, tipoPeriodo]);
 
   // Handlers
-  const handleDownloadCSV = () => {
-    const headers = ['Codigo', 'Plaza', 'Ubicacion', 'Tipo Cara', 'Formato', 'Articulo', 'Caras', 'Tarifa', 'Periodo', 'Latitud', 'Longitud'];
-    const rows = inventario.map(i => [
-      i.codigo_unico, i.plaza, i.ubicacion, i.tipo_de_cara, i.mueble, i.articulo,
-      i.caras_totales, i.tarifa_publica, formatInicioPeriodo(i, tipoPeriodo), i.latitud || '', i.longitud || ''
-    ]);
-    const csv = [headers.join(','), ...rows.map(r => r.map(v => `"${v || ''}"`).join(','))].join('\n');
-    const blob = new Blob([csv], { type: 'text/csv' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `reservas_propuesta_${propuestaId}.csv`;
-    a.click();
+  const handleDownloadXLSX = () => {
+    import('xlsx').then(XLSX => {
+      const headers = ['Codigo', 'Plaza', 'Ubicacion', 'Tipo Cara', 'Formato', 'Articulo', 'Caras', 'Tarifa', 'Periodo', 'Latitud', 'Longitud'];
+      const rows = inventario.map(i => [
+        i.codigo_unico, i.plaza, i.ubicacion, i.tipo_de_cara, i.mueble, i.articulo,
+        i.caras_totales, i.tarifa_publica, formatInicioPeriodo(i, tipoPeriodo), i.latitud || '', i.longitud || ''
+      ]);
+      const ws = XLSX.utils.aoa_to_sheet([headers, ...rows]);
+      const wb = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(wb, ws, 'Reservas');
+      XLSX.writeFile(wb, `reservas_propuesta_${propuestaId}.xlsx`);
+    });
   };
 
   const handleDownloadKML = () => {
@@ -825,6 +855,63 @@ export function ClientePropuestaPage() {
           ))}
         </div>
 
+        {/* Filtro por Catorcena/Periodo (chips multi-select) */}
+        {periodoOptions.length > 1 && (
+          <div className={`rounded-2xl p-4 border ${isDark ? 'bg-zinc-900/80 border-zinc-700' : 'bg-[#E6F0FA] border-[#0054A6]/20'}`}>
+            <div className="flex items-center gap-3 flex-wrap">
+              <span className={`text-xs font-semibold ${isDark ? 'text-blue-300' : 'text-[#0054A6]'}`}>
+                <Filter className="h-3.5 w-3.5 inline mr-1" />
+                Filtrar por {tipoPeriodo === 'mensual' ? 'periodo' : 'catorcena'}:
+              </span>
+              <button
+                onClick={() => setSelectedCatorcenas(new Set())}
+                className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-all border ${
+                  selectedCatorcenas.size === 0
+                    ? 'bg-gradient-to-r from-[#0054A6] to-[#003B71] text-white border-[#0054A6] shadow-lg shadow-[#0054A6]/20'
+                    : isDark ? 'bg-zinc-800 text-zinc-400 border-zinc-600 hover:bg-zinc-700' : 'bg-white text-gray-600 border-gray-200 hover:bg-blue-50'
+                }`}
+              >
+                Todas
+              </button>
+              {periodoOptions.map(p => {
+                const isSelected = selectedCatorcenas.has(p.value);
+                return (
+                  <button
+                    key={p.value}
+                    onClick={() => {
+                      setSelectedCatorcenas(prev => {
+                        const next = new Set(prev);
+                        if (next.has(p.value)) {
+                          next.delete(p.value);
+                        } else {
+                          next.add(p.value);
+                        }
+                        return next;
+                      });
+                    }}
+                    className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-all border ${
+                      isSelected
+                        ? 'bg-gradient-to-r from-[#0054A6] to-[#003B71] text-white border-[#0054A6] shadow-lg shadow-[#0054A6]/20'
+                        : isDark ? 'bg-zinc-800 text-zinc-400 border-zinc-600 hover:bg-zinc-700' : 'bg-white text-gray-600 border-gray-200 hover:bg-blue-50'
+                    }`}
+                  >
+                    {p.label}
+                  </button>
+                );
+              })}
+              {selectedCatorcenas.size > 0 && (
+                <button
+                  onClick={() => setSelectedCatorcenas(new Set())}
+                  className="px-2 py-1.5 text-xs text-red-500 hover:bg-red-50 rounded-lg transition-colors"
+                >
+                  <X className="h-3 w-3 inline mr-0.5" />
+                  Limpiar
+                </button>
+              )}
+            </div>
+          </div>
+        )}
+
         {/* KPIs */}
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
           {[
@@ -852,8 +939,8 @@ export function ClientePropuestaPage() {
                 <span className={`text-xs font-normal ${isDark ? 'text-zinc-500' : 'text-gray-400'}`}>({filteredInventario.length} inventarios)</span>
               </h3>
               <div className="flex items-center gap-2">
-                <button onClick={handleDownloadCSV} className="flex items-center gap-1.5 px-3 py-1.5 bg-[#7AB800] hover:bg-[#5FA800] text-white rounded-lg text-xs font-medium shadow-sm transition-colors">
-                  <FileSpreadsheet className="h-3.5 w-3.5" /> CSV
+                <button onClick={handleDownloadXLSX} className="flex items-center gap-1.5 px-3 py-1.5 bg-[#7AB800] hover:bg-[#5FA800] text-white rounded-lg text-xs font-medium shadow-sm transition-colors">
+                  <FileSpreadsheet className="h-3.5 w-3.5" /> Excel
                 </button>
                 <button onClick={handleDownloadKML} className="flex items-center gap-1.5 px-3 py-1.5 bg-[#0054A6] hover:bg-[#003B71] text-white rounded-lg text-xs font-medium shadow-sm transition-colors">
                   <MapIcon className="h-3.5 w-3.5" /> KML
@@ -921,12 +1008,12 @@ export function ClientePropuestaPage() {
                   {sortOrder === 'asc' ? '↑' : '↓'}
                 </button>
               </div>
-              {(filterText || filters.length > 0 || filterPeriodo) && (
+              {(filterText || filters.length > 0 || filterPeriodo || selectedCatorcenas.size > 0) && (
                 <button
-                  onClick={() => { setFilterText(''); setFilters([]); setFilterPeriodo(''); }}
+                  onClick={() => { setFilterText(''); setFilters([]); setFilterPeriodo(''); setSelectedCatorcenas(new Set()); }}
                   className="px-2.5 py-1.5 bg-red-50 text-red-600 border border-red-200 rounded-lg text-xs hover:bg-red-100"
                 >
-                  Limpiar
+                  Limpiar todo
                 </button>
               )}
             </div>
@@ -1220,9 +1307,9 @@ export function ClientePropuestaPage() {
                 options={{ styles: IMU_MAP_STYLES, disableDefaultUI: true, zoomControl: true }}
                 onLoad={(map) => {
                   mapRef.current = map;
-                  if (inventario.length > 0) {
+                  if (catorcenaFilteredInventario.length > 0) {
                     const bounds = new google.maps.LatLngBounds();
-                    inventario.forEach(item => {
+                    catorcenaFilteredInventario.forEach(item => {
                       if (item.latitud && item.longitud) {
                         bounds.extend({ lat: item.latitud, lng: item.longitud });
                       }
@@ -1233,7 +1320,7 @@ export function ClientePropuestaPage() {
                   }
                 }}
               >
-                {inventario.map((item) => (
+                {catorcenaFilteredInventario.map((item) => (
                   item.latitud && item.longitud && (
                     <Marker
                       key={item.id}

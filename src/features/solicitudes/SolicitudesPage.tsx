@@ -1498,7 +1498,7 @@ export function SolicitudesPage() {
                 </span>
                 <FilterChip
                   label="Sin agrupar"
-                  options={['status', 'marca_nombre', 'asignado', 'razon_social']}
+                  options={['status', 'marca_nombre', 'asignado', 'razon_social', 'asesor', 'nombre_usuario']}
                   value={groupBy}
                   onChange={(val) => { setGroupBy(val); setExpandedGroups(new Set()); setPage(1); }}
                   onClear={() => { setGroupBy(''); setExpandedGroups(new Set()); setPage(1); }}

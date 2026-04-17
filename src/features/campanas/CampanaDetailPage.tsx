@@ -731,12 +731,6 @@ function formatInicioPeriodo(item: InventarioReservado | InventarioConAPS, tipoP
 
 // Helper para formatear articulo con info adicional
 function formatArticulo(item: InventarioReservado | InventarioConAPS): string {
-  console.log('formatArticulo item:', {
-    articulo: item.articulo,
-    solicitud_caras_id: item.solicitud_caras_id,
-    tradicional_digital: item.tradicional_digital,
-    caras_totales: item.caras_totales
-  });
   const parts: string[] = [];
 
   if (item.articulo) {
@@ -819,6 +813,19 @@ export function CampanaDetailPage() {
 
   // Estado para modal de editar campaña
   const [editModalOpen, setEditModalOpen] = useState(false);
+
+  // Overlay de transición (clicks en Volver, Editar, Comentarios, Gestión de Artes)
+  const [transitionOverlay, setTransitionOverlay] = useState<string | null>(null);
+
+  const withTransitionOverlay = (mensaje: string, action: () => void) => {
+    setTransitionOverlay(mensaje);
+    // Permite que el overlay se pinte antes de disparar la acción
+    setTimeout(() => {
+      action();
+      // Auto-limpia tras el tiempo típico de montaje de un modal pesado
+      setTimeout(() => setTransitionOverlay(null), 1200);
+    }, 30);
+  };
 
   // Estado para filtros (inventario reservado)
   const [filtersReservado, setFiltersReservado] = useState<FilterCondition[]>([]);
@@ -1579,7 +1586,7 @@ export function CampanaDetailPage() {
 
   // Cortesías (CT): ir directo al gestor de artes sin APS
   const handleEnviarCortesiaAGestor = () => {
-    navigate(`/campanas/${campanaId}/tareas`);
+    withTransitionOverlay('Abriendo gestor de artes...', () => navigate(`/campanas/${campanaId}/tareas`));
   };
 
   const handleCommentSubmit = () => {
@@ -1727,15 +1734,39 @@ export function CampanaDetailPage() {
 
   const comentarios = campana.comentarios || [];
 
+  const heavyOperation =
+    quitandoAPS
+      ? 'Quitando APS...'
+      : assignAPSMutation.isPending
+      ? 'Asignando APS...'
+      : postingToSAP
+      ? 'Enviando a SAP...'
+      : addCommentMutation.isPending
+      ? 'Guardando comentario...'
+      : enviandoCodigo
+      ? 'Enviando código...'
+      : transitionOverlay
+      ? transitionOverlay
+      : null;
+
   return (
     <div className="min-h-screen">
       <Header title="Detalle de Campana" />
+      {heavyOperation && (
+        <div className="fixed inset-0 bg-black/40 backdrop-blur-[1px] z-[60] flex items-center justify-center" role="status" aria-live="polite">
+          <div className={`flex items-center gap-3 px-6 py-4 rounded-xl shadow-2xl ${isDark ? 'bg-zinc-900 text-white' : 'bg-white text-gray-900'}`}>
+            <Loader2 className="h-5 w-5 animate-spin text-purple-500" />
+            <span className="text-sm font-medium">{heavyOperation}</span>
+            <span className={`text-xs ${isDark ? 'text-zinc-400' : 'text-gray-500'}`}>Por favor no cierres ni navegues</span>
+          </div>
+        </div>
+      )}
 
       <div className="p-3 sm:p-4 md:p-6 space-y-3 md:space-y-4">
         {/* Header */}
         <div className="flex items-center justify-between gap-2 flex-wrap">
           <button
-            onClick={() => navigate('/campanas')}
+            onClick={() => withTransitionOverlay('Cargando campañas...', () => navigate('/campanas'))}
             className={`flex items-center gap-1.5 sm:gap-2 text-purple-400 hover:${isDark ? 'text-purple-300' : 'text-purple-700'} transition-colors`}
           >
             <ArrowLeft className="h-4 w-4" />
@@ -1748,7 +1779,7 @@ export function CampanaDetailPage() {
               const editDisabled = disabledStatuses.includes(statusLower) || campana.has_aps === true;
               return (
                 <button
-                  onClick={() => setEditModalOpen(true)}
+                  onClick={() => withTransitionOverlay('Abriendo editor de campaña...', () => setEditModalOpen(true))}
                   disabled={editDisabled}
                   className={`flex items-center gap-1 sm:gap-1.5 px-2 sm:px-3 py-1 sm:py-1.5 rounded-lg border transition-all ${
                     editDisabled
@@ -1763,7 +1794,7 @@ export function CampanaDetailPage() {
               );
             })()}
             <button
-              onClick={() => setShowComments(true)}
+              onClick={() => withTransitionOverlay('Abriendo comentarios...', () => setShowComments(true))}
               className={`flex items-center gap-1 sm:gap-1.5 px-2 sm:px-3 py-1 sm:py-1.5 rounded-lg ${isDark ? 'bg-purple-900/30 hover:bg-purple-900/50' : 'bg-purple-100 hover:bg-purple-200'} transition-colors`}
               title="Comentarios"
             >
@@ -2006,7 +2037,7 @@ export function CampanaDetailPage() {
               )}
               {permissions.canSeeGestionArtes && (
                 <button
-                  onClick={() => navigate(`/campanas/${campanaId}/tareas`)}
+                  onClick={() => withTransitionOverlay('Abriendo gestor de tareas...', () => navigate(`/campanas/${campanaId}/tareas`))}
                   className={`flex items-center gap-1 sm:gap-1.5 px-2 sm:px-3 py-1 sm:py-1.5 text-[10px] sm:text-xs font-medium ${isDark ? 'bg-purple-900/50 hover:bg-purple-900/70 border-purple-500/30' : 'bg-purple-100 hover:bg-purple-200 border-purple-300'} border rounded-lg transition-colors`}
                 >
                   <ListTodo className="h-3 sm:h-3.5 w-3 sm:w-3.5" />
@@ -2787,7 +2818,11 @@ export function CampanaDetailPage() {
                   }`}
                   title={selectedHavePosted ? 'No se puede eliminar APS con POST a SAP' : quitandoAPS ? 'Quitando...' : 'Quitar APS'}
                 >
-                  <Minus className={`h-3.5 sm:h-4 w-3.5 sm:w-4 ${disabled ? (isDark ? 'text-red-400/40' : 'text-red-300') : (isDark ? 'text-red-400' : 'text-red-600')}`} />
+                  {quitandoAPS ? (
+                    <Loader2 className={`h-3.5 sm:h-4 w-3.5 sm:w-4 animate-spin ${isDark ? 'text-red-400' : 'text-red-600'}`} />
+                  ) : (
+                    <Minus className={`h-3.5 sm:h-4 w-3.5 sm:w-4 ${disabled ? (isDark ? 'text-red-400/40' : 'text-red-300') : (isDark ? 'text-red-400' : 'text-red-600')}`} />
+                  )}
                 </button>
                 );
               })()}

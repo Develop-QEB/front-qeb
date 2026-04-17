@@ -4,7 +4,7 @@ import { useQuery, useQueryClient, useMutation } from '@tanstack/react-query';
 import {
   X, Search, Plus, Trash2, ChevronDown, ChevronRight, ChevronUp, Users,
   FileText, MapPin, Layers, Pencil, Map as MapIcon, Package, Calendar,
-  Gift, Target, Save, ArrowLeft, Filter, Grid, LayoutGrid, Ruler, ArrowUpDown, ArrowUp, ArrowDown, Download, Eye, Funnel, Check, Upload, Monitor, AlertTriangle
+  Gift, Target, Save, ArrowLeft, Filter, Grid, LayoutGrid, Ruler, ArrowUpDown, ArrowUp, ArrowDown, Download, Eye, Funnel, Check, Upload, Monitor, AlertTriangle, Trophy, Loader2
 } from 'lucide-react';
 import { GoogleMap, useLoadScript, Marker } from '@react-google-maps/api';
 import { AdvancedMapComponent } from './AdvancedMapComponent';
@@ -631,6 +631,8 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
   const [newCara, setNewCara] = useState<Omit<CaraItem, 'localId'>>(EMPTY_CARA);
   const [selectedArticulo, setSelectedArticulo] = useState<SAPArticulo | null>(null);
   const [showAddCaraForm, setShowAddCaraForm] = useState(false);
+  const caraFormRef = useRef<HTMLDivElement>(null);
+  const caraTableRef = useRef<HTMLDivElement>(null);
 
   // Reservas state
   const [reservas, setReservas] = useState<ReservaItem[]>([]);
@@ -698,7 +700,8 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
   const [flujoPct, setFlujoPct] = useState(50); // % de caras para flujo (resto para contraflujo)
   const [savingPct, setSavingPct] = useState(false); // loading para guardar % en BD
   const [flujoFilter, setFlujoFilter] = useState<'Todos' | 'Flujo' | 'Contraflujo'>('Todos');
-  const [showOnlyIsla, setShowOnlyIsla] = useState(false);
+  const [islaFilter, setIslaFilter] = useState<'off' | 'si' | 'no'>('off');
+  const [mundialistaFilter, setMundialistaFilter] = useState<'off' | 'si' | 'no'>('off');
   const [sortColumn, setSortColumn] = useState<string>('codigo_unico');
   const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('asc');
   const [agruparComoCompleto, setAgruparComoCompleto] = useState(true); // Group flujo+contraflujo at same location
@@ -1688,6 +1691,7 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
       anio_fin: anioFinVal,
     });
     setShowAddCaraForm(true);
+    setTimeout(() => caraFormRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 100);
   };
 
   // Handle save cara (add or update)
@@ -1699,11 +1703,12 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
       return;
     }
 
-    // Validar tarifa pública: si es 0, solo CT y BF/CF pueden avanzar
+    // Validar tarifa pública: si es 0, solo CT, BF/CF e IM pueden avanzar
     const artCode = (newCara.articulo || '').toUpperCase();
     const esCortesia = artCode.startsWith('CT');
     const esBonificacion = artCode.startsWith('BF') || artCode.startsWith('CF');
-    if (newCara.tarifa_publica <= 0 && !esCortesia && !esBonificacion) {
+    const esImpresion = artCode.startsWith('IM');
+    if (newCara.tarifa_publica <= 0 && !esCortesia && !esBonificacion && !esImpresion) {
       alert('La tarifa pública no puede ser 0. Por favor ingresa una tarifa válida.');
       return;
     }
@@ -1711,9 +1716,12 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
     // If no ciudad selected but estado is, get all cities from that estado
     let ciudadToSave = newCara.ciudad;
     if (!ciudadToSave && newCara.estados && solicitudFilters?.ciudades) {
+      const isAM = newCara.estados.includes('Ciudad de México / AM');
       const selectedEstados = newCara.estados.split(',').map(s => s.trim()).flatMap(s => s === 'Ciudad de México / AM' ? ['Ciudad de México', 'Estado de México'] : [s]);
+      const AM_EDO_MEX_CITIES = ['ATIZAPÁN', 'CUAUTITLÁN IZCALLI', 'ECATEPEC', 'HUIXQUILUCAN', 'NAUCALPAN', 'TLALNEPANTLA', 'TULTITLÁN'];
       const allCitiesForEstado = solicitudFilters.ciudades
         .filter(c => selectedEstados.includes(c.estado))
+        .filter(c => !isAM || c.estado !== 'Estado de México' || AM_EDO_MEX_CITIES.includes(c.ciudad.toUpperCase()))
         .map(c => c.ciudad);
       ciudadToSave = allCitiesForEstado.join(', ');
     }
@@ -1813,6 +1821,7 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
           });
         }
         setEditingCaraId(null);
+        setTimeout(() => caraTableRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 100);
       } else {
         // Create new cara in database (needs DB ID for reservas)
         const createdCara = await propuestasService.createCara(propuesta.id, caraData);
@@ -1979,10 +1988,14 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
 
   // Handle cancel cara form
   const handleCancelCaraForm = () => {
+    const wasEditing = !!editingCaraId;
     setNewCara(EMPTY_CARA);
     setSelectedArticulo(null);
     setShowAddCaraForm(false);
     setEditingCaraId(null);
+    if (wasEditing) {
+      setTimeout(() => caraTableRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 100);
+    }
   };
 
   // Haversine distance calculation (in meters)
@@ -2428,9 +2441,18 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
       data = filterSpotUnico(data);
     }
 
-    // Filter by isla - only show items that have "ISLA" in the isla column
-    if (showOnlyIsla) {
-      data = data.filter(inv => inv.isla?.toUpperCase().includes('ISLA'));
+    // Filter by isla - toggle: SI / NO / off
+    if (islaFilter === 'si') {
+      data = data.filter(inv => inv.isla?.toUpperCase() === 'SI');
+    } else if (islaFilter === 'no') {
+      data = data.filter(inv => !inv.isla || inv.isla.toUpperCase() !== 'SI');
+    }
+
+    // Filter by mundialista - toggle: SI / NO / off
+    if (mundialistaFilter === 'si') {
+      data = data.filter(inv => (inv as any).mueble_isla?.toUpperCase() === 'SI');
+    } else if (mundialistaFilter === 'no') {
+      data = data.filter(inv => !(inv as any).mueble_isla || (inv as any).mueble_isla.toUpperCase() !== 'SI');
     }
 
     // Apply grouping (distance or list)
@@ -2481,7 +2503,7 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
     });
 
     return data;
-  }, [inventarioDisponible, disponiblesSearchTerm, poiFilterIds, flujoFilter, showOnlyUnicos, showOnlyCompletos, showOnlyUnicosDigitales, showSpotUnico, showOnlyIsla, groupByDistance, groupMode, filterUnicos, filterCompletos, filterUnicosDigitales, filterSpotUnico, groupByDistanceFunc, groupByListFunc, sortColumn, sortDirection, reservas]);
+  }, [inventarioDisponible, disponiblesSearchTerm, poiFilterIds, flujoFilter, showOnlyUnicos, showOnlyCompletos, showOnlyUnicosDigitales, showSpotUnico, islaFilter, mundialistaFilter, groupByDistance, groupMode, filterUnicos, filterCompletos, filterUnicosDigitales, filterSpotUnico, groupByDistanceFunc, groupByListFunc, sortColumn, sortDirection, reservas]);
 
   // Check if an inventory item is selected
   const isInventorySelected = useCallback((inv: InventarioDisponible | ProcessedInventoryItem): boolean => {
@@ -2519,7 +2541,8 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
     setShowOnlyCompletos(false);
     setShowOnlyUnicosDigitales(false);
     setShowSpotUnico(false);
-    setShowOnlyIsla(false);
+    setIslaFilter('off');
+    setMundialistaFilter('off');
     setGroupByDistance(false);
     setPoiFilterIds(null);
     setDisponiblesSearchTerm('');
@@ -3104,7 +3127,7 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
 
     // Filter by isla - only show items that have "ISLA" in the isla column
     if (showOnlyIslaReservados) {
-      data = data.filter(r => r.isla?.toUpperCase().includes('ISLA'));
+      data = data.filter(r => r.isla?.toUpperCase() === 'SI');
     }
 
     // Filter by search term
@@ -3494,6 +3517,17 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
 
   if (!isOpen) return null;
 
+  // Overlay bloqueante global cuando se está guardando fuera del confirmModal
+  const savingOverlayJSX = isSaving && !confirmModal.isOpen && (
+    <div className="fixed inset-0 z-[70] flex items-center justify-center bg-black/40 backdrop-blur-[1px]" role="status" aria-live="polite">
+      <div className={`flex items-center gap-3 px-6 py-4 rounded-xl shadow-2xl ${isDark ? 'bg-zinc-900 text-white' : 'bg-white text-gray-900'}`}>
+        <Loader2 className="h-5 w-5 animate-spin text-purple-500" />
+        <span className="text-sm font-medium">Guardando...</span>
+        <span className={`text-xs ${isDark ? 'text-zinc-400' : 'text-gray-500'}`}>Por favor no cierres ni navegues</span>
+      </div>
+    </div>
+  );
+
   // Confirmation modal content reused in both views
   const confirmModalJSX = confirmModal.isOpen && (
     <div className="fixed inset-0 z-[60] flex items-center justify-center">
@@ -3566,6 +3600,7 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
   if (viewState === 'search-inventory') {
     return (
       <div className="fixed inset-0 z-50 flex items-center justify-center">
+        {savingOverlayJSX}
         {confirmModalJSX}
         {toastJSX}
         <div className="absolute inset-0 bg-black/70 backdrop-blur-sm" onClick={handleBackToMain} />
@@ -3617,8 +3652,8 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
                 </div>
               </div>
 
-              {/* % Distribucion */}
-              <div className={`flex flex-col items-center justify-center px-2 py-1 rounded-xl ${isDark ? 'bg-zinc-800/30' : 'bg-gray-50/30'} border ${isDark ? 'border-zinc-700/20' : 'border-gray-200/20'} min-w-[70px]`}>
+              {/* % Distribucion - only for Digital */}
+              {selectedCaraForSearch?.tipo === 'Digital' && <div className={`flex flex-col items-center justify-center px-2 py-1 rounded-xl ${isDark ? 'bg-zinc-800/30' : 'bg-gray-50/30'} border ${isDark ? 'border-zinc-700/20' : 'border-gray-200/20'} min-w-[70px]`}>
                 <span className={`text-[9px] ${isDark ? 'text-zinc-500' : 'text-gray-400'} mb-1`}>Distribución</span>
                 <div className="flex items-center gap-1">
                   <input
@@ -3657,7 +3692,7 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
                   <span className={`text-[10px] ${isDark ? 'text-zinc-500' : 'text-gray-400'}`}>%</span>
                 </div>
                 <span className={`text-[9px] ${isDark ? 'text-zinc-600' : 'text-gray-300'} mt-0.5`}>{savingPct ? '...' : `${flujoPct}/${100 - flujoPct}`}</span>
-              </div>
+              </div>}
 
               {/* Contraflujo KPI */}
               <div className={`flex-1 ${isDark ? 'bg-zinc-800/50' : 'bg-gray-50/50'} rounded-xl p-3 border ${isDark ? 'border-zinc-700/30' : 'border-gray-200/30'}`}>
@@ -3836,26 +3871,42 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
                     </button>
                   )}
 
-                  {/* Isla filter */}
+                  {/* Isla filter - 3-state toggle: off → SI → NO → off */}
                   <button
                     onClick={() => {
-                      setShowOnlyIsla(!showOnlyIsla);
-                      // When activating isla filter, auto-sort by codigo ascending
-                      if (!showOnlyIsla) {
-                        setSortColumn('codigo_unico');
-                        setSortDirection('asc');
-                      }
+                      const next = islaFilter === 'off' ? 'si' : islaFilter === 'si' ? 'no' : 'off';
+                      setIslaFilter(next);
+                      if (next === 'si') { setSortColumn('codigo_unico'); setSortDirection('asc'); }
                     }}
-                    className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-medium transition-all ${showOnlyIsla
+                    className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-medium transition-all ${islaFilter === 'si'
                       ? 'bg-teal-500 text-white shadow'
-                      : `${isDark ? 'bg-zinc-800/80' : 'bg-gray-100/80'} ${isDark ? 'text-zinc-400' : 'text-gray-500'} border ${isDark ? 'border-zinc-700/50' : 'border-gray-200/50'} ${isDark ? 'hover:text-white' : 'hover:text-gray-900'}`
+                      : islaFilter === 'no'
+                        ? 'bg-red-500/80 text-white shadow'
+                        : `${isDark ? 'bg-zinc-800/80' : 'bg-gray-100/80'} ${isDark ? 'text-zinc-400' : 'text-gray-500'} border ${isDark ? 'border-zinc-700/50' : 'border-gray-200/50'} ${isDark ? 'hover:text-white' : 'hover:text-gray-900'}`
                       }`}
+                    title={islaFilter === 'off' ? 'Filtrar islas' : islaFilter === 'si' ? 'Mostrando islas (click: sin islas)' : 'Sin islas (click: quitar filtro)'}
                   >
                     <MapPin className="h-3.5 w-3.5" />
-                    Isla
-                    {showOnlyIsla && (
-                      <X className="h-3 w-3 ml-0.5 hover:text-teal-200" onClick={(e) => { e.stopPropagation(); setShowOnlyIsla(false); }} />
-                    )}
+                    {islaFilter === 'si' ? 'Isla ✓' : islaFilter === 'no' ? 'Isla ✗' : 'Isla'}
+                  </button>
+
+                  {/* Mundialista filter - 3-state toggle: off → SI → NO → off */}
+                  <button
+                    onClick={() => {
+                      const next = mundialistaFilter === 'off' ? 'si' : mundialistaFilter === 'si' ? 'no' : 'off';
+                      setMundialistaFilter(next);
+                      if (next === 'si') { setSortColumn('codigo_unico'); setSortDirection('asc'); }
+                    }}
+                    className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-medium transition-all ${mundialistaFilter === 'si'
+                      ? 'bg-green-600 text-white shadow'
+                      : mundialistaFilter === 'no'
+                        ? 'bg-red-500/80 text-white shadow'
+                        : `${isDark ? 'bg-zinc-800/80' : 'bg-gray-100/80'} ${isDark ? 'text-zinc-400' : 'text-gray-500'} border ${isDark ? 'border-zinc-700/50' : 'border-gray-200/50'} ${isDark ? 'hover:text-white' : 'hover:text-gray-900'}`
+                      }`}
+                    title={mundialistaFilter === 'off' ? 'Filtrar mundialista' : mundialistaFilter === 'si' ? 'Mostrando mundialistas (click: sin mundialistas)' : 'Sin mundialistas (click: quitar filtro)'}
+                  >
+                    <Trophy className="h-3.5 w-3.5" />
+                    {mundialistaFilter === 'si' ? 'Mundial ✓' : mundialistaFilter === 'no' ? 'Mundial ✗' : 'Mundial'}
                   </button>
 
                   {/* Grouping */}
@@ -4006,7 +4057,7 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
                     </span>
 
                     {/* Clear all filters */}
-                    {(flujoFilter !== 'Todos' || showOnlyCompletos || showOnlyUnicos || showOnlyUnicosDigitales || showSpotUnico || showOnlyIsla || groupByDistance || poiFilterIds !== null || disponiblesSearchTerm) && (
+                    {(flujoFilter !== 'Todos' || showOnlyCompletos || showOnlyUnicos || showOnlyUnicosDigitales || showSpotUnico || islaFilter !== 'off' || mundialistaFilter !== 'off' || groupByDistance || poiFilterIds !== null || disponiblesSearchTerm) && (
                       <button
                         onClick={clearAllFilters}
                         className="flex items-center gap-1 px-2 py-1 rounded-lg text-xs text-red-400 hover:text-red-300 hover:bg-red-500/10 transition-colors"
@@ -4168,6 +4219,9 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
                                 {sortColumn !== 'isla' && <ArrowUpDown className="h-3 w-3 opacity-30" />}
                               </div>
                             </th>
+                            <th className={`px-3 py-2 text-left text-xs ${isDark ? 'text-zinc-400' : 'text-gray-500'} font-medium`}>
+                              M. Isla
+                            </th>
                             <th
                               className={`px-3 py-2 text-left text-xs ${isDark ? 'text-zinc-400' : 'text-gray-500'} font-medium cursor-pointer ${isDark ? 'hover:text-white' : 'hover:text-gray-900'} transition-colors`}
                               onClick={() => handleSort('nivel_socioeconomico')}
@@ -4272,6 +4326,7 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
                                     </td>
                                     <td className={`px-3 py-2 ${isDark ? 'text-zinc-300' : 'text-gray-700'} text-sm`}>{inv.plaza}</td>
                                     <td className={`px-3 py-2 ${isDark ? 'text-zinc-400' : 'text-gray-500'} text-sm`}>{inv.isla || '-'}</td>
+                                    <td className={`px-3 py-2 ${isDark ? 'text-zinc-400' : 'text-gray-500'} text-sm`}>{(inv as any).mueble_isla || '-'}</td>
                                     <td className={`px-3 py-2 ${isDark ? 'text-zinc-400' : 'text-gray-500'} text-sm`}>{inv.nivel_socioeconomico || '-'}</td>
                                     <td className={`px-3 py-2 ${isDark ? 'text-zinc-400' : 'text-gray-500'} text-sm`} title={inv.ubicacion || ''}>
                                       {inv.ubicacion}
@@ -4326,6 +4381,7 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
                                 </td>
                                 <td className={`px-3 py-2 ${isDark ? 'text-zinc-300' : 'text-gray-700'} text-sm`}>{inv.plaza}</td>
                                 <td className={`px-3 py-2 ${isDark ? 'text-zinc-400' : 'text-gray-500'} text-sm`}>{inv.isla || '-'}</td>
+                                <td className={`px-3 py-2 ${isDark ? 'text-zinc-400' : 'text-gray-500'} text-sm`}>{(inv as any).mueble_isla || '-'}</td>
                                 <td className={`px-3 py-2 ${isDark ? 'text-zinc-400' : 'text-gray-500'} text-sm`}>{inv.nivel_socioeconomico || '-'}</td>
                                 <td className={`px-3 py-2 ${isDark ? 'text-zinc-400' : 'text-gray-500'} text-sm`} title={inv.ubicacion || ''}>
                                   {inv.ubicacion}
@@ -5728,7 +5784,7 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
 
                 {/* Add/Edit Cara Form */}
                 {showAddCaraForm && (
-                  <div className={`px-5 py-4 ${isDark ? 'bg-zinc-800/50' : 'bg-gray-50/50'} border-b ${isDark ? 'border-zinc-700/50' : 'border-gray-200/50'}`}>
+                  <div ref={caraFormRef} className={`px-5 py-4 ${isDark ? 'bg-zinc-800/50' : 'bg-gray-50/50'} border-b ${isDark ? 'border-zinc-700/50' : 'border-gray-200/50'}`}>
                     <h4 className={`text-sm font-medium ${isDark ? 'text-white' : 'text-gray-900'} mb-4`}>
                       {editingCaraId ? 'Editar Circuito' : 'Nuevo Circuito'}
                     </h4>
@@ -5996,13 +6052,18 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
                         {canEditResumen && (!editingCaraHasReservas || permissions.canEditCaraFiltersOnEdit) && (!editingCaraId || permissions.canEditCaraFiltersOnEdit) ? (
                           <MultiSelectDropdown
                             options={
-                              solicitudFilters?.ciudades
-                                .filter(c => {
-                                  if (!newCara.estados) return true;
-                                  const selectedEstados = newCara.estados.split(',').map(s => s.trim()).flatMap(s => s === 'Ciudad de México / AM' ? ['Ciudad de México', 'Estado de México'] : [s]);
-                                  return selectedEstados.includes(c.estado);
-                                })
-                                .map(c => c.ciudad) || []
+                              (() => {
+                                const isAM = newCara.estados?.includes('Ciudad de México / AM');
+                                const AM_EDO_MEX_CITIES = ['ATIZAPÁN', 'CUAUTITLÁN IZCALLI', 'ECATEPEC', 'HUIXQUILUCAN', 'NAUCALPAN', 'TLALNEPANTLA', 'TULTITLÁN'];
+                                return solicitudFilters?.ciudades
+                                  .filter(c => {
+                                    if (!newCara.estados) return true;
+                                    const selectedEstados = newCara.estados.split(',').map(s => s.trim()).flatMap(s => s === 'Ciudad de México / AM' ? ['Ciudad de México', 'Estado de México'] : [s]);
+                                    return selectedEstados.includes(c.estado);
+                                  })
+                                  .filter(c => !isAM || c.estado !== 'Estado de México' || AM_EDO_MEX_CITIES.includes(c.ciudad.toUpperCase()))
+                                  .map(c => c.ciudad) || [];
+                              })()
                             }
                             selected={newCara.ciudad ? newCara.ciudad.split(',').map(s => s.trim()).filter(Boolean) : []}
                             onChange={(selected) => setNewCara({ ...newCara, ciudad: selected.join(', ') })}
@@ -6143,7 +6204,7 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
                   </div>
                 )}
 
-                <div className="divide-y divide-zinc-700/30">
+                <div ref={caraTableRef} className="divide-y divide-zinc-700/30">
                   {caras.length === 0 ? (
                     <div className={`p-8 text-center ${isDark ? 'text-zinc-500' : 'text-gray-400'}`}>
                       <Layers className="h-10 w-10 mx-auto mb-3 opacity-30" />
@@ -6314,7 +6375,7 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
                                       );
                                     })()}
                                     {effectiveCanEdit && (() => {
-                                      const caraAuthPendienteSaved = caras.some(c => !modifiedCaras.has(c.id!) && (c.autorizacion_dg === 'pendiente' || c.autorizacion_dcm === 'pendiente'));
+                                      const caraAuthPendienteSaved = caras.some(c => !modifiedCaras.has(c.id!) && ((c._originalDg || c.autorizacion_dg) === 'pendiente' || (c._originalDcm || c.autorizacion_dcm) === 'pendiente'));
                                       return (
                                       <>
                                         <button

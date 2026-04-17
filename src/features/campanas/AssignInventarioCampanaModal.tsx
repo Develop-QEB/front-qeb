@@ -609,6 +609,8 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
   const [newCara, setNewCara] = useState<Omit<CaraItem, 'localId'>>(EMPTY_CARA);
   const [selectedArticulo, setSelectedArticulo] = useState<SAPArticulo | null>(null);
   const [showAddCaraForm, setShowAddCaraForm] = useState(false);
+  const caraFormRef = useRef<HTMLDivElement>(null);
+  const caraTableRef = useRef<HTMLDivElement>(null);
 
   // Reservas state
   const [reservas, setReservas] = useState<ReservaItem[]>([]);
@@ -1542,13 +1544,17 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
       onConfirm: async () => {
         // If cara has DB id, delete from database
         if (caraToDelete?.id) {
+          setIsSaving(true);
           try {
             await campanasService.deleteCara(campana!.id, caraToDelete.id);
           } catch (error) {
             console.error('Error deleting cara:', error);
             alert('Error al eliminar el formato de la base de datos');
+            setIsSaving(false);
             setConfirmModal(prev => ({ ...prev, isOpen: false }));
             return;
+          } finally {
+            setIsSaving(false);
           }
         }
         // Update local state
@@ -1620,6 +1626,7 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
       anio_fin: anioFinVal,
     });
     setShowAddCaraForm(true);
+    setTimeout(() => caraFormRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 100);
   };
 
   // Handle save cara (add or update)
@@ -1634,16 +1641,20 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
     const artCode = (newCara.articulo || '').toUpperCase();
     const esCortesia = artCode.startsWith('CT');
     const esBonificacion = artCode.startsWith('BF') || artCode.startsWith('CF');
-    if (newCara.tarifa_publica <= 0 && !esCortesia && !esBonificacion) {
+    const esImpresion = artCode.startsWith('IM');
+    if (newCara.tarifa_publica <= 0 && !esCortesia && !esBonificacion && !esImpresion) {
       alert('La tarifa pública no puede ser 0. Por favor ingresa una tarifa válida.');
       return;
     }
 
     let ciudadToSave = newCara.ciudad;
     if (!ciudadToSave && newCara.estados && solicitudFilters?.ciudades) {
+      const isAM = newCara.estados.includes('Ciudad de México / AM');
       const selectedEstados = newCara.estados.split(',').map(s => s.trim()).flatMap(s => s === 'Ciudad de México / AM' ? ['Ciudad de México', 'Estado de México'] : [s]);
+      const AM_EDO_MEX_CITIES = ['ATIZAPÁN', 'CUAUTITLÁN IZCALLI', 'ECATEPEC', 'HUIXQUILUCAN', 'NAUCALPAN', 'TLALNEPANTLA', 'TULTITLÁN'];
       const allCitiesForEstado = solicitudFilters.ciudades
         .filter(c => selectedEstados.includes(c.estado))
+        .filter(c => !isAM || c.estado !== 'Estado de México' || AM_EDO_MEX_CITIES.includes(c.ciudad.toUpperCase()))
         .map(c => c.ciudad);
       ciudadToSave = allCitiesForEstado.join(', ');
     }
@@ -1727,6 +1738,7 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
           });
         }
         setEditingCaraId(null);
+        setTimeout(() => caraTableRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 100);
       } else {
         // Create new cara in database (needs DB ID for reservas)
         const createdCara = await campanasService.createCara(campana!.id, caraData);
@@ -1853,10 +1865,14 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
 
   // Handle cancel cara form
   const handleCancelCaraForm = () => {
+    const wasEditing = !!editingCaraId;
     setNewCara(EMPTY_CARA);
     setSelectedArticulo(null);
     setShowAddCaraForm(false);
     setEditingCaraId(null);
+    if (wasEditing) {
+      setTimeout(() => caraTableRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 100);
+    }
   };
 
   // Haversine distance calculation (in meters)
@@ -3346,6 +3362,17 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
 
   if (!isOpen) return null;
 
+  // Overlay bloqueante global cuando se está guardando fuera del confirmModal
+  const savingOverlayJSX = isSaving && !confirmModal.isOpen && (
+    <div className="fixed inset-0 z-[70] flex items-center justify-center bg-black/40 backdrop-blur-[1px]" role="status" aria-live="polite">
+      <div className={`flex items-center gap-3 px-6 py-4 rounded-xl shadow-2xl ${isDark ? 'bg-zinc-900 text-white' : 'bg-white text-gray-900'}`}>
+        <Loader2 className="h-5 w-5 animate-spin text-purple-500" />
+        <span className="text-sm font-medium">Guardando...</span>
+        <span className={`text-xs ${isDark ? 'text-zinc-400' : 'text-gray-500'}`}>Por favor no cierres ni navegues</span>
+      </div>
+    </div>
+  );
+
   // Confirmation modal content reused in both views
   const confirmModalJSX = confirmModal.isOpen && (
     <div className="fixed inset-0 z-[60] flex items-center justify-center">
@@ -3418,6 +3445,7 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
   if (viewState === 'search-inventory') {
     return (
       <div className="fixed inset-0 z-50 flex items-center justify-center">
+        {savingOverlayJSX}
         {confirmModalJSX}
         {toastJSX}
         <div className="absolute inset-0 bg-black/70 backdrop-blur-sm" onClick={handleBackToMain} />
@@ -5413,7 +5441,7 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
 
                 {/* Add/Edit Cara Form */}
                 {showAddCaraForm && (
-                  <div className="px-5 py-4 bg-zinc-800/50 border-b border-zinc-700/50">
+                  <div ref={caraFormRef} className="px-5 py-4 bg-zinc-800/50 border-b border-zinc-700/50">
                     <h4 className="text-sm font-medium text-white mb-4">
                       {editingCaraId ? 'Editar Cara' : 'Nueva Cara'}
                     </h4>
@@ -5602,13 +5630,18 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
                         {canEditResumen && (!editingCaraHasReservas || permissions.canEditCaraFiltersOnEdit) && (!editingCaraId || permissions.canEditCaraFiltersOnEdit) ? (
                           <MultiSelectDropdown
                             options={
-                              solicitudFilters?.ciudades
-                                .filter(c => {
-                                  if (!newCara.estados) return true;
-                                  const selectedEstados = newCara.estados.split(',').map(s => s.trim()).flatMap(s => s === 'Ciudad de México / AM' ? ['Ciudad de México', 'Estado de México'] : [s]);
-                                  return selectedEstados.includes(c.estado);
-                                })
-                                .map(c => c.ciudad) || []
+                              (() => {
+                                const isAM = newCara.estados?.includes('Ciudad de México / AM');
+                                const AM_EDO_MEX_CITIES = ['ATIZAPÁN', 'CUAUTITLÁN IZCALLI', 'ECATEPEC', 'HUIXQUILUCAN', 'NAUCALPAN', 'TLALNEPANTLA', 'TULTITLÁN'];
+                                return solicitudFilters?.ciudades
+                                  .filter(c => {
+                                    if (!newCara.estados) return true;
+                                    const selectedEstados = newCara.estados.split(',').map(s => s.trim()).flatMap(s => s === 'Ciudad de México / AM' ? ['Ciudad de México', 'Estado de México'] : [s]);
+                                    return selectedEstados.includes(c.estado);
+                                  })
+                                  .filter(c => !isAM || c.estado !== 'Estado de México' || AM_EDO_MEX_CITIES.includes(c.ciudad.toUpperCase()))
+                                  .map(c => c.ciudad) || [];
+                              })()
                             }
                             selected={newCara.ciudad ? newCara.ciudad.split(',').map(s => s.trim()).filter(Boolean) : []}
                             onChange={(selected) => setNewCara({ ...newCara, ciudad: selected.join(', ') })}
@@ -5749,7 +5782,7 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
                   </div>
                 )}
 
-                <div className={`divide-y ${isDark ? 'divide-zinc-700/30' : 'divide-gray-200'}`}>
+                <div ref={caraTableRef} className={`divide-y ${isDark ? 'divide-zinc-700/30' : 'divide-gray-200'}`}>
                   {caras.length === 0 ? (
                     <div className="p-8 text-center text-zinc-500">
                       <Layers className="h-10 w-10 mx-auto mb-3 opacity-30" />
@@ -5925,7 +5958,7 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
                                       );
                                     })()}
                                     {effectiveCanEdit && (() => {
-                                      const caraAuthPendienteSaved = caras.some(c => !modifiedCaras.has(c.id!) && (c.autorizacion_dg === 'pendiente' || c.autorizacion_dcm === 'pendiente'));
+                                      const caraAuthPendienteSaved = caras.some(c => !modifiedCaras.has(c.id!) && ((c._originalDg || c.autorizacion_dg) === 'pendiente' || (c._originalDcm || c.autorizacion_dcm) === 'pendiente'));
                                       const editBlocked = caraAuthPendienteSaved || caraAPSBlocked;
                                       const blockReason = caraAPSBlocked ? 'Grupo con APS asignado - no se puede editar' : caraAuthPendienteSaved ? 'Autorización pendiente - no se puede editar' : 'Editar';
                                       return (
