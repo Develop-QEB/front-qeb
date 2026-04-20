@@ -135,7 +135,20 @@ const CIUDAD_ESTADO_MAP: Record<string, string> = {
 };
 
 // Formato auto-detection from article name
-const getFormatoFromArticulo = (itemName: string): string => {
+// Lookup por segmentos del ItemCode (ej: rt-pb-seg-mx → pb=PARABUS, mx=CDMX)
+const CODE_FORMATO_MAP: Record<string, string> = {
+  pb: 'PARABUS', cl: 'COLUMNA', bol: 'BOLERO', kco: 'Kiosco',
+};
+const CODE_PLAZA_MAP: Record<string, { estado: string; ciudad: string }> = {
+  mx:  { estado: 'Ciudad de México', ciudad: '' },
+  mty: { estado: 'Nuevo León', ciudad: 'Monterrey,Guadalupe,San Nicolás de los Garza,Santa Catarina' },
+  gd:  { estado: 'Jalisco', ciudad: 'Guadalajara,Zapopan,Tlaquepaque' },
+  gdl: { estado: 'Jalisco', ciudad: 'Guadalajara,Zapopan,Tlaquepaque' },
+  ver: { estado: 'Veracruz', ciudad: 'Veracruz,Alvarado,Boca del Río' },
+  pv:  { estado: 'Jalisco', ciudad: 'Puerto Vallarta' },
+};
+
+const getFormatoFromArticulo = (itemName: string, itemCode?: string): string => {
   if (!itemName) return '';
   const name = itemName.toUpperCase();
   if (name.includes('KIOSCO') || name.includes('KIOSKO')) return 'Kiosco';
@@ -148,6 +161,11 @@ const getFormatoFromArticulo = (itemName: string): string => {
   if (name.includes('MUPI')) return 'MUPI';
   if (name.includes('COLUMNA')) return 'COLUMNA';
   if (name.includes('BOLERO')) return 'BOLERO';
+  if (itemCode) {
+    for (const seg of itemCode.toLowerCase().split('-')) {
+      if (CODE_FORMATO_MAP[seg]) return CODE_FORMATO_MAP[seg];
+    }
+  }
   return '';
 };
 
@@ -182,7 +200,7 @@ const MULTI_CITY_RULES: { pattern: RegExp; estado: string; ciudad: string }[] = 
 ];
 
 // Extract city/state from article name (sorted by length to avoid false positives)
-const getCiudadEstadoFromArticulo = (itemName: string): { estado: string; ciudad: string } | null => {
+const getCiudadEstadoFromArticulo = (itemName: string, itemCode?: string): { estado: string; ciudad: string } | null => {
   if (!itemName) return null;
   const name = itemName.toUpperCase();
 
@@ -205,6 +223,11 @@ const getCiudadEstadoFromArticulo = (itemName: string): { estado: string; ciudad
         return { estado, ciudad: '' };
       }
       return { estado, ciudad: ciudad.charAt(0) + ciudad.slice(1).toLowerCase() };
+    }
+  }
+  if (itemCode) {
+    for (const seg of itemCode.toLowerCase().split('-')) {
+      if (CODE_PLAZA_MAP[seg]) return CODE_PLAZA_MAP[seg];
     }
   }
   return null;
@@ -6192,8 +6215,8 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
                             // Auto-complete all fields from article
                             const tarifa = getTarifaPublicaFromArticulo(item);
                             const tarifaPiso = getTarifaPisoFromArticulo(item);
-                            const ciudadEstado = getCiudadEstadoFromArticulo(item.ItemName);
-                            const formato = getFormatoFromArticulo(item.ItemName);
+                            const ciudadEstado = getCiudadEstadoFromArticulo(item.ItemName, item.ItemCode);
+                            const formato = getFormatoFromArticulo(item.ItemName, item.ItemCode);
                             const tipo = getTipoFromName(item.ItemName);
                             const isCortesia = item.ItemCode.toUpperCase().startsWith('CT');
                             const isIntercambio = item.ItemCode.toUpperCase().startsWith('IN');

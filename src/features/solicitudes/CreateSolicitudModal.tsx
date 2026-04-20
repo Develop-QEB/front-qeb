@@ -22,7 +22,19 @@ import { uploadsService } from '../../services/uploads.service';
 // Tarifas now come from SAP (U_IMU_PublicPrice = tarifa publica, PriceList 11 = tarifa piso)
 
 // Formato auto-detection from article name
-const getFormatoFromArticulo = (itemName: string): string => {
+const CODE_FORMATO_MAP: Record<string, string> = {
+  pb: 'PARABUS', cl: 'COLUMNA', bol: 'BOLERO', kco: 'Kiosco',
+};
+const CODE_PLAZA_MAP_SOL: Record<string, { estado: string; ciudades: string[] }> = {
+  mx:  { estado: 'Ciudad de México', ciudades: [] },
+  mty: { estado: 'Nuevo León', ciudades: ['Monterrey', 'Guadalupe', 'San Nicolás de los Garza', 'Santa Catarina'] },
+  gd:  { estado: 'Jalisco', ciudades: ['Guadalajara', 'Zapopan', 'Tlaquepaque'] },
+  gdl: { estado: 'Jalisco', ciudades: ['Guadalajara', 'Zapopan', 'Tlaquepaque'] },
+  ver: { estado: 'Veracruz', ciudades: ['Veracruz', 'Alvarado', 'Boca del Río'] },
+  pv:  { estado: 'Jalisco', ciudades: ['Puerto Vallarta'] },
+};
+
+const getFormatoFromArticulo = (itemName: string, itemCode?: string): string => {
   if (!itemName) return '';
   const name = itemName.toUpperCase();
 
@@ -68,6 +80,11 @@ const getFormatoFromArticulo = (itemName: string): string => {
   if (name.includes('PARABUS')) return 'PARABUS';
   if (name.includes('COLUMNA')) return 'COLUMNA';
   if (name.includes('BOLERO')) return 'BOLERO';
+  if (itemCode) {
+    for (const seg of itemCode.toLowerCase().split('-')) {
+      if (CODE_FORMATO_MAP[seg]) return CODE_FORMATO_MAP[seg];
+    }
+  }
   return '';
 };
 
@@ -185,7 +202,7 @@ const MULTI_CITY_RULES: { pattern: RegExp; estado: string; ciudades: string[] }[
 ];
 
 // Extract city from article name and return estado/ciudades
-const getCiudadEstadoFromArticulo = (itemName: string): { estado: string; ciudades: string[] } | null => {
+const getCiudadEstadoFromArticulo = (itemName: string, itemCode?: string): { estado: string; ciudades: string[] } | null => {
   if (!itemName) return null;
   const name = itemName.toUpperCase();
 
@@ -193,6 +210,11 @@ const getCiudadEstadoFromArticulo = (itemName: string): { estado: string; ciudad
   for (const rule of MULTI_CITY_RULES) {
     if (rule.pattern.test(name)) {
       return { estado: rule.estado, ciudades: rule.ciudades };
+    }
+  }
+  if (itemCode) {
+    for (const seg of itemCode.toLowerCase().split('-')) {
+      if (CODE_PLAZA_MAP_SOL[seg]) return CODE_PLAZA_MAP_SOL[seg];
     }
   }
   return null;
@@ -2382,10 +2404,10 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
                     onChange={(item) => {
                       // Auto-set tarifa publica from ItemCode mapping
                       const tarifa = getTarifaFromArticulo(item);
-                      // Auto-set estado and ciudades from ItemName
-                      const ciudadEstado = getCiudadEstadoFromArticulo(item.ItemName);
-                      // Auto-set formato from ItemName
-                      const formato = getFormatoFromArticulo(item.ItemName);
+                      // Auto-set estado and ciudades from ItemName (fallback to ItemCode)
+                      const ciudadEstado = getCiudadEstadoFromArticulo(item.ItemName, item.ItemCode);
+                      // Auto-set formato from ItemName (fallback to ItemCode)
+                      const formato = getFormatoFromArticulo(item.ItemName, item.ItemCode);
                       // Auto-set tipo from ItemName
                       const tipo = getTipoFromName(item.ItemName);
                       // Detect CT (cortesia) articles
