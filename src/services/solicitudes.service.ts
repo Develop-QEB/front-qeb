@@ -331,6 +331,7 @@ export interface SolicitudCara {
   descuento: number;
   autorizacion_dg?: string;
   autorizacion_dcm?: string;
+  grupo_rt_bf?: number | null;
 }
 
 export interface Comentario {

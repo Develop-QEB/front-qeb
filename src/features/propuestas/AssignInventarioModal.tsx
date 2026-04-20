@@ -11,7 +11,7 @@ import { AdvancedMapComponent } from './AdvancedMapComponent';
 import { Propuesta } from '../../types';
 import { solicitudesService, UserOption } from '../../services/solicitudes.service';
 import { inventariosService, InventarioDisponible } from '../../services/inventarios.service';
-import { propuestasService, ReservaModalItem } from '../../services/propuestas.service';
+import { propuestasService, ReservaModalItem, CaraUpdateData } from '../../services/propuestas.service';
 import { formatCurrency } from '../../lib/utils';
 import { clientesService } from '../../services/clientes.service';
 import { useEnvironmentStore, getEndpoints } from '../../store/environmentStore';
@@ -646,7 +646,7 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
   const [expandedCatorcenas, setExpandedCatorcenas] = useState<Set<string>>(new Set());
   const [editingCaraId, setEditingCaraId] = useState<string | null>(null);
   // Track locally modified caras (caraDbId -> CaraUpdateData) for bulk save
-  const [modifiedCaras, setModifiedCaras] = useState<Map<number, Record<string, unknown>>>(new Map());
+  const [modifiedCaras, setModifiedCaras] = useState<Map<number, CaraUpdateData>>(new Map());
 
   // New cara form
   const [newCara, setNewCara] = useState<Omit<CaraItem, 'localId'>>(EMPTY_CARA);
@@ -1697,7 +1697,7 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
         // Update local state (remove both cara and its RT/BF pair, if any)
         const idsToRemove = new Set<string>([localId]);
         if (pairCara) idsToRemove.add(pairCara.localId);
-        const dbIdsToRemove = new Set<string>();
+        const dbIdsToRemove = new Set<number>();
         if (caraToDelete?.id) dbIdsToRemove.add(caraToDelete.id);
         if (pairCara?.id) dbIdsToRemove.add(pairCara.id);
         setCaras(prev => prev.filter(c => !idsToRemove.has(c.localId)));
