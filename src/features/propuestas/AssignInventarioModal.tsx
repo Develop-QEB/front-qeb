@@ -1480,6 +1480,7 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
         flujoCompleto: true, contraflujoCompleto: true, bonificacionCompleto: true,
         isComplete: true, totalReservado: 0, totalRequerido: 0,
         flujoDiff: 0, contraflujoDiff: 0, bonificacionDiff: 0, totalDiff: 0,
+        isOverReserved: false,
         needsAttention: false, isImpresion: isImpresionArticle(cara.articulo), isEspecial: isEspecialArticle(cara.articulo),
       };
     }
@@ -1523,6 +1524,7 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
       contraflujoCompleto,
       bonificacionCompleto,
       isComplete: flujoCompleto && contraflujoCompleto && bonificacionCompleto,
+      isOverReserved: totalDiff > 0,
       totalReservado,
       totalRequerido,
       flujoDiff,
@@ -1538,7 +1540,7 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
     if (caras.length === 0) return false;
     return caras.every(cara => {
       const status = getCaraCompletionStatus(cara);
-      return status.isComplete;
+      return status.isComplete && !status.isOverReserved;
     });
   }, [caras, reservas]);
 
@@ -6710,8 +6712,8 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
                             // Determine status color and indicator
                             const esImpresion = cara.articulo ? isImpresionArticle(cara.articulo) : false;
                             const esEspecial = cara.articulo ? isEspecialArticle(cara.articulo) : false;
-                            // Purple = especial, Blue = impresión (informativo), Green = complete, Amber = incomplete
-                            const statusColor = esEspecial ? 'purple' : esImpresion ? 'blue' : status.isComplete ? 'emerald' : 'amber';
+                            // Purple = especial, Blue = impresión (informativo), Red = over-reserved, Green = complete, Amber = incomplete
+                            const statusColor = esEspecial ? 'purple' : esImpresion ? 'blue' : status.isOverReserved ? 'red' : status.isComplete ? 'emerald' : 'amber';
 
                             // Display text for diff:
                             // - Missing (totalDiff < 0): show "faltan X"
@@ -6723,12 +6725,12 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
                                 : `faltan ${Math.abs(status.totalDiff)}`;
 
                             return (
-                              <div key={cara.localId} className={`${statusColor === 'blue' ? 'bg-blue-500/5' : statusColor === 'emerald' ? 'bg-emerald-500/5' : 'bg-amber-500/5'}`}>
+                              <div key={cara.localId} className={`${statusColor === 'blue' ? 'bg-blue-500/5' : statusColor === 'red' ? 'bg-red-500/5' : statusColor === 'emerald' ? 'bg-emerald-500/5' : 'bg-amber-500/5'}`}>
                                 {/* Cara row */}
                                 <div className={`flex items-center gap-3 px-5 py-3 ${isDark ? 'hover:bg-zinc-800/30' : 'hover:bg-gray-50/30'} transition-colors`}>
                                   {/* Completion indicator */}
                                   <div className={`w-2 h-2 rounded-full ${
-                                    statusColor === 'blue' ? 'bg-blue-500' : statusColor === 'emerald' ? 'bg-emerald-500' : 'bg-amber-500 animate-pulse'
+                                    statusColor === 'blue' ? 'bg-blue-500' : statusColor === 'red' ? 'bg-red-500 animate-pulse' : statusColor === 'emerald' ? 'bg-emerald-500' : 'bg-amber-500 animate-pulse'
                                   }`} />
 
                                   <div className="flex-1 grid grid-cols-8 gap-3 text-sm">
@@ -7542,7 +7544,7 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
                       <span className="text-emerald-400">Todas las caras completas</span>
                     ) : (
                       <span className="text-amber-400">
-                        {caras.filter(c => !getCaraCompletionStatus(c).isComplete).length} Circuito(s) incompleto(s)
+                        {caras.filter(c => { const s = getCaraCompletionStatus(c); return !s.isComplete || s.isOverReserved; }).length} Circuito(s) incompleto(s)
                       </span>
                     )}
                   </span>
