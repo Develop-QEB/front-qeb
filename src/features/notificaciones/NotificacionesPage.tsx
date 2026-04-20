@@ -2205,7 +2205,7 @@ export function NotificacionesPage() {
   useSocketNotificaciones();
 
   // Estado de contenido (notificaciones vs tareas)
-  const [contentType, setContentType] = useState<ContentType>('notificaciones');
+  const [contentType, setContentType] = useState<ContentType>('tareas');
 
   // Estado de vista y filtros
   const [view, setView] = useState<ViewType>('lista');
@@ -2215,14 +2215,14 @@ export function NotificacionesPage() {
   const [orderDir, setOrderDir] = useState<'asc' | 'desc'>('desc');
   const [filterEstatus, setFilterEstatus] = useState<string>('');
   const [filterFecha, setFilterFecha] = useState<DateFilterType>('all');
-  const [quickFilter, setQuickFilter] = useState<QuickFilter>('all');
+  const [quickFilter, setQuickFilter] = useState<QuickFilter>('pendientes');
   const [filtersOpen, setFiltersOpen] = useState(false);
 
 
   // Estados para filtros avanzados (estilo Proveedores)
   const [filters, setFilters] = useState<FilterCondition[]>([]);
   const [showFilterPopup, setShowFilterPopup] = useState(false);
-  const [activeGroupings, setActiveGroupings] = useState<GroupByField[]>([]);
+  const [activeGroupings, setActiveGroupings] = useState<GroupByField[]>(['tipo']);
   const [showGroupPopup, setShowGroupPopup] = useState(false);
   const [sortField, setSortField] = useState<string | null>(null);
   const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('desc');
