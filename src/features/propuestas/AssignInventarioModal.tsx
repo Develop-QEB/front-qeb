@@ -1858,6 +1858,13 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
       return;
     }
 
+    // BF validation: bonificacion > 0 on RT article requires articuloBf
+    const needsBfArticle = (newCara.bonificacion || 0) > 0 && !esCortesia && !esBonificacion && !esImpresion && !isEspecialArticle(artCode);
+    if (needsBfArticle && !newCara.articuloBf) {
+      alert('Debes seleccionar el artículo de bonificación (BF) antes de guardar, o quita las caras de bonificación a 0.');
+      return;
+    }
+
     // If no ciudad selected but estado is, get all cities from that estado
     let ciudadToSave = newCara.ciudad;
     if (!ciudadToSave && newCara.estados && solicitudFilters?.ciudades) {

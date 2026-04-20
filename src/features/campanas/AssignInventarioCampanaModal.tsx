@@ -1800,6 +1800,13 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
       return;
     }
 
+    // BF validation: bonificacion > 0 on RT article requires articuloBf
+    const needsBfArticle = (newCara.bonificacion || 0) > 0 && !esCortesia && !esBonificacion && !esImpresion && !isEspecialArticle(newCara.articulo || '');
+    if (needsBfArticle && !articuloBf) {
+      alert('Debes seleccionar el artículo de bonificación (BF) antes de guardar, o quita las caras de bonificación a 0.');
+      return;
+    }
+
     let ciudadToSave = newCara.ciudad;
     if (!ciudadToSave && newCara.estados && solicitudFilters?.ciudades) {
       const isAM = newCara.estados.includes('Ciudad de México / AM');
