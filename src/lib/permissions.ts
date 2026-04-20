@@ -323,7 +323,7 @@ const rolePermissions: Partial<Record<UserRole, Partial<RolePermissions>>> = {
   // DIRECCIÓN
   // ============================================================================
   'Director General': {
-    canSeeDashboard: false,
+    canSeeDashboard: true,
     canSeeClientes: true,
     canSeeProveedores: false,
     canSeeSolicitudes: true,
@@ -380,7 +380,7 @@ const rolePermissions: Partial<Record<UserRole, Partial<RolePermissions>>> = {
   },
   'Director Comercial': {
     // Solo lectura - permisos pendientes de definición
-    canSeeDashboard: false,
+    canSeeDashboard: true,
     canSeeClientes: true,
     canSeeProveedores: false,
     canSeeSolicitudes: true,

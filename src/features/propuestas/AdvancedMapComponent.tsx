@@ -1,5 +1,5 @@
 import React, { useState, useRef, useMemo } from 'react';
-import { GoogleMap, Marker, Circle, InfoWindow, Autocomplete } from '@react-google-maps/api';
+import { GoogleMap, Marker, Circle, InfoWindow, Autocomplete, Polygon } from '@react-google-maps/api';
 import {
   Search, X, MapPin, Navigation, FileUp, Trash2, Plus,
   Check, Ban, LocateFixed, ChevronDown, ChevronRight
@@ -34,6 +34,12 @@ interface POIMarker {
   range: number;
 }
 
+interface KMLPolygon {
+  id: string;
+  name: string;
+  paths: Array<{ lat: number; lng: number }>;
+}
+
 interface Props {
   inventarios: InventarioDisponible[];
   selectedInventory: Set<number>;
@@ -59,6 +65,7 @@ export function AdvancedMapComponent({
 
   // POI markers
   const [poiMarkers, setPoiMarkers] = useState<POIMarker[]>([]);
+  const [kmlPolygons, setKmlPolygons] = useState<KMLPolygon[]>([]);
 
   // Search states
   const [poiSearch, setPoiSearch] = useState('');
@@ -121,39 +128,48 @@ export function AdvancedMapComponent({
     return map;
   }, [inventarios]);
 
-  // Calculate which inventarios are in range
+  // Calculate which inventarios are in range (pins or polygons)
   const { inRangeSet, outOfRangeSet } = useMemo(() => {
     const inRange = new Set<number>();
     const outOfRange = new Set<number>();
 
-    if (poiMarkers.length === 0) {
-      return { inRangeSet: inRange, outOfRangeSet: outOfRange };
-    }
+    const hasFilter = poiMarkers.length > 0 || kmlPolygons.length > 0;
+    if (!hasFilter) return { inRangeSet: inRange, outOfRangeSet: outOfRange };
+
+    // Pre-build google.maps.Polygon objects for containsLocation
+    const googlePolygons = kmlPolygons.map(p => new google.maps.Polygon({ paths: p.paths }));
 
     inventarios.forEach(inv => {
       if (!inv.latitud || !inv.longitud) return;
 
       let isInRange = false;
+
+      // Check pin-based ranges
       for (const poi of poiMarkers) {
         const distance = google.maps.geometry.spherical.computeDistanceBetween(
           new google.maps.LatLng(inv.latitud, inv.longitud),
           new google.maps.LatLng(poi.position.lat, poi.position.lng)
         );
-        if (distance <= poi.range) {
-          isInRange = true;
-          break;
+        if (distance <= poi.range) { isInRange = true; break; }
+      }
+
+      // Check polygon containment
+      if (!isInRange) {
+        const point = new google.maps.LatLng(inv.latitud, inv.longitud);
+        for (const poly of googlePolygons) {
+          if (google.maps.geometry.poly.containsLocation(point, poly)) {
+            isInRange = true;
+            break;
+          }
         }
       }
 
-      if (isInRange) {
-        inRange.add(inv.id);
-      } else {
-        outOfRange.add(inv.id);
-      }
+      if (isInRange) inRange.add(inv.id);
+      else outOfRange.add(inv.id);
     });
 
     return { inRangeSet: inRange, outOfRangeSet: outOfRange };
-  }, [inventarios, poiMarkers]);
+  }, [inventarios, poiMarkers, kmlPolygons]);
 
   // Handle map load
   const handleMapLoad = (map: google.maps.Map) => {
@@ -309,11 +325,36 @@ export function AdvancedMapComponent({
         const placemarks = kmlDoc.getElementsByTagName('Placemark');
 
         const newMarkers: POIMarker[] = [];
+        const newPolygons: KMLPolygon[] = [];
+
         for (let i = 0; i < placemarks.length; i++) {
           const placemark = placemarks[i];
           const nameEl = placemark.getElementsByTagName('name')[0];
-          const coordsEl = placemark.getElementsByTagName('coordinates')[0];
+          const name = nameEl?.textContent || `KML ${i + 1}`;
 
+          // Check for Polygon geometry
+          const polygonEl = placemark.getElementsByTagName('Polygon')[0];
+          if (polygonEl) {
+            const outerCoords = polygonEl.getElementsByTagName('coordinates')[0];
+            if (outerCoords) {
+              const rawText = outerCoords.textContent?.trim() || '';
+              const paths = rawText.split(/\s+/).map(pair => {
+                const parts = pair.split(',');
+                const lng = parseFloat(parts[0]);
+                const lat = parseFloat(parts[1]);
+                return isNaN(lat) || isNaN(lng) ? null : { lat, lng };
+              }).filter((p): p is { lat: number; lng: number } => p !== null);
+
+              if (paths.length >= 3) {
+                newPolygons.push({ id: `kml-poly-${Date.now()}-${i}`, name, paths });
+              }
+            }
+            continue;
+          }
+
+          // Fallback: Point geometry
+          const pointEl = placemark.getElementsByTagName('Point')[0];
+          const coordsEl = (pointEl || placemark).getElementsByTagName('coordinates')[0];
           if (coordsEl) {
             const coords = coordsEl.textContent?.trim().split(',');
             if (coords && coords.length >= 2) {
@@ -323,7 +364,7 @@ export function AdvancedMapComponent({
                 newMarkers.push({
                   id: `kml-${Date.now()}-${i}`,
                   position: { lat, lng },
-                  name: nameEl?.textContent || `KML ${i + 1}`,
+                  name,
                   type: 'kml',
                   range: searchRange,
                 });
@@ -332,9 +373,18 @@ export function AdvancedMapComponent({
           }
         }
 
+        if (newPolygons.length > 0) {
+          setKmlPolygons(prev => [...prev, ...newPolygons]);
+          // Center map on centroid of first polygon
+          const first = newPolygons[0].paths;
+          const avgLat = first.reduce((s, p) => s + p.lat, 0) / first.length;
+          const avgLng = first.reduce((s, p) => s + p.lng, 0) / first.length;
+          mapRef.current?.setCenter({ lat: avgLat, lng: avgLng });
+          mapRef.current?.setZoom(12);
+        }
         if (newMarkers.length > 0) {
           setPoiMarkers(prev => [...prev, ...newMarkers]);
-          if (newMarkers[0]) {
+          if (!newPolygons.length && newMarkers[0]) {
             mapRef.current?.setCenter(newMarkers[0].position);
             mapRef.current?.setZoom(14);
           }
@@ -353,9 +403,10 @@ export function AdvancedMapComponent({
     setSelectedMarker(null);
   };
 
-  // Clear all markers
+  // Clear all markers and polygons
   const handleClearAll = () => {
     setPoiMarkers([]);
+    setKmlPolygons([]);
     setSelectedMarker(null);
   };
 
@@ -638,6 +689,33 @@ export function AdvancedMapComponent({
               )}
             </div>
 
+            {/* KML Polygons List */}
+            {kmlPolygons.length > 0 && (
+              <div className="flex-1 overflow-auto">
+                <div className={`p-2 border-b ${isDark ? 'border-zinc-800' : 'border-gray-200'} flex items-center justify-between`}>
+                  <span className={`text-xs ${isDark ? 'text-zinc-400' : 'text-gray-500'}`}>{kmlPolygons.length} polígono(s)</span>
+                  <button onClick={() => setKmlPolygons([])} className="text-xs text-red-400 hover:text-red-300">Limpiar</button>
+                </div>
+                <div className={`divide-y ${isDark ? 'divide-zinc-800/50' : 'divide-gray-200'}`}>
+                  {kmlPolygons.map(poly => (
+                    <div key={poly.id} className={`flex items-center gap-2 p-2 ${isDark ? 'hover:bg-zinc-800/30' : 'hover:bg-gray-100'}`}>
+                      <div className="w-3 h-3 rounded-sm flex-shrink-0 border-2" style={{ backgroundColor: '#818cf820', borderColor: '#818cf8' }} />
+                      <div className="flex-1 min-w-0">
+                        <p className={`text-xs ${isDark ? 'text-white' : 'text-gray-900'} truncate`}>{poly.name}</p>
+                        <p className={`text-[10px] ${isDark ? 'text-zinc-500' : 'text-gray-400'}`}>{poly.paths.length} vértices</p>
+                      </div>
+                      <button
+                        onClick={() => setKmlPolygons(prev => prev.filter(p => p.id !== poly.id))}
+                        className={`p-1 ${isDark ? 'text-zinc-500' : 'text-gray-400'} hover:text-red-400`}
+                      >
+                        <X className="h-3 w-3" />
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
             {/* Pins List */}
             {poiMarkers.length > 0 && (
               <div className="flex-1 overflow-auto">
@@ -671,7 +749,7 @@ export function AdvancedMapComponent({
             )}
 
             {/* Action Buttons */}
-            {poiMarkers.length > 0 && onFilterByPOI && (
+            {(poiMarkers.length > 0 || kmlPolygons.length > 0) && onFilterByPOI && (
               <div className={`p-3 border-t ${isDark ? 'border-zinc-800' : 'border-gray-200'} space-y-2`}>
                 <button
                   onClick={handleConservarConPOIs}
@@ -698,14 +776,14 @@ export function AdvancedMapComponent({
                 <span>Total inventarios:</span>
                 <span className="text-purple-400 font-medium">{inventarios.length}</span>
               </div>
-              {poiMarkers.length > 0 && (
+              {(poiMarkers.length > 0 || kmlPolygons.length > 0) && (
                 <>
                   <div className="flex items-center justify-between mt-1">
-                    <span>En rango:</span>
+                    <span>En rango/polígono:</span>
                     <span className="text-purple-400 font-medium">{inRangeSet.size}</span>
                   </div>
                   <div className="flex items-center justify-between mt-1">
-                    <span>Fuera de rango:</span>
+                    <span>Fuera:</span>
                     <span className={`${isDark ? 'text-zinc-400' : 'text-gray-500'} font-medium`}>{outOfRangeSet.size}</span>
                   </div>
                 </>
@@ -814,6 +892,21 @@ export function AdvancedMapComponent({
             }
           }}
         >
+          {/* KML Polygons */}
+          {kmlPolygons.map(poly => (
+            <Polygon
+              key={poly.id}
+              paths={poly.paths}
+              options={{
+                strokeColor: '#818cf8',
+                strokeOpacity: 0.9,
+                strokeWeight: 2,
+                fillColor: '#818cf8',
+                fillOpacity: 0.2,
+              }}
+            />
+          ))}
+
           {/* POI Markers & Circles */}
           {poiMarkers.map(marker => (
             <React.Fragment key={marker.id}>

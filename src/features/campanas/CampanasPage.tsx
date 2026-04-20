@@ -215,6 +215,7 @@ const CAMPANA_FILTER_FIELDS: FilterFieldConfig[] = [
   { field: 'cliente_nombre', label: 'Cliente', type: 'string' },
   { field: 'status', label: 'Estatus', type: 'string' },
   { field: 'articulo', label: 'Artículo', type: 'string' },
+  { field: 'formatos', label: 'Formato', type: 'string' },
   { field: 'creador_nombre', label: 'Creador', type: 'string' },
   { field: 'T0_U_Asesor', label: 'Asesor', type: 'string' },
   { field: 'codigos_inventario', label: 'Código Inventario', type: 'string' },
@@ -1003,6 +1004,7 @@ export function CampanasPage() {
             c.T0_U_Asesor?.toLowerCase().includes(lowerTerm) ||
             String(c.propuesta_id || '').includes(lowerTerm) ||
             String(c.cotizacion_id || '').includes(lowerTerm) ||
+            c.formatos?.toLowerCase().includes(lowerTerm) ||
             // También buscar en los inventarios cargados (codigo_unico individual)
             (campanaInventarios[c.id] || []).some(inv =>
               inv.codigo_unico?.toLowerCase().includes(lowerTerm)
@@ -2182,8 +2184,8 @@ export function CampanasPage() {
           <div className={`col-span-1 md:col-span-2 rounded-2xl border ${isDark ? 'border-zinc-800/80 bg-zinc-900/50' : 'border-gray-200 bg-white'} backdrop-blur-sm p-4 flex items-center relative overflow-hidden`}>
             {!isLoadingStats && statusChartData.length > 0 ? (
               <div className="w-full h-[140px] flex items-center">
-                <div className="h-full min-w-[140px]">
-                  <ResponsiveContainer width="100%" height="100%">
+                <div className="h-full w-[140px] flex-shrink-0">
+                  <ResponsiveContainer width="100%" height="100%" minWidth={1} minHeight={1}>
                     <PieChart>
                       <Pie
                         data={statusChartData}

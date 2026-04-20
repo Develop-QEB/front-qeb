@@ -199,6 +199,7 @@ export interface Solicitud {
   salesperson_code?: number | null;
   sap_database?: string | null;
   nombre_campania?: string | null;
+  formatos?: string | null;
 }
 
 export interface SolicitudStats {
@@ -240,6 +241,7 @@ export interface Propuesta {
   tipo_periodo?: string | null;
   fecha_inicio?: string | null;
   fecha_fin?: string | null;
+  formatos?: string | null;
 }
 
 export interface PropuestaStats {
@@ -332,6 +334,7 @@ export interface Campana {
   posted_aps?: number[];
   codigos_inventario?: string | null;
   IMU?: number | null;
+  formatos?: string | null;
 }
 
 export interface CampanaStats {
@@ -428,6 +431,7 @@ export interface Notificacion {
   campania_id?: number | null;
   asesor?: string | null;
   creador?: string | null;
+  formatos?: string | null;
 }
 
 export interface NotificacionStats {

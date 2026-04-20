@@ -199,6 +199,7 @@ const PROPUESTA_FILTER_FIELDS: FilterFieldConfig[] = [
   { field: 'id', label: 'ID', type: 'number' },
   { field: 'cliente_nombre', label: 'Cliente', type: 'string' },
   { field: 'descripcion', label: 'Descripción', type: 'string' },
+  { field: 'formatos', label: 'Formato', type: 'string' },
   { field: 'inversion', label: 'Inversión', type: 'number' },
   { field: 'asignado', label: 'Asignado', type: 'string' },
   { field: 'status', label: 'Status', type: 'string' },
@@ -563,9 +564,9 @@ function StatusModal({ isOpen, onClose, propuesta, onStatusChange, allowedStatus
   const reservasIncompletas = useMemo(() => {
     if (!caras || !reservas) return false;
     return caras.some(cara => {
-      // Artículos de impresión (IM) no requieren reservas — siempre completos
-      const articulo = (cara as any).articulo || '';
-      if (articulo.toUpperCase().startsWith('IM')) return false;
+      // Artículos de impresión (IM) o ejecución especial (ESP/ES-) no requieren reservas — siempre completos
+      const articulo = ((cara as any).articulo || '').toUpperCase();
+      if (articulo.startsWith('IM') || articulo.startsWith('ESP') || articulo.startsWith('ES-')) return false;
 
       const caraReservas = (reservas as any[]).filter(r => r.solicitud_cara_id === cara.id);
       // Bonificacion is determined by estatus='Bonificado', not by tipo_de_cara
@@ -1220,7 +1221,8 @@ export function PropuestasPage() {
             p.nombre_campania?.toLowerCase().includes(lowerTerm) ||
             p.creador_nombre?.toLowerCase().includes(lowerTerm) ||
             p.usuario_nombre?.toLowerCase().includes(lowerTerm) ||
-            p.status?.toLowerCase().includes(lowerTerm)
+            p.status?.toLowerCase().includes(lowerTerm) ||
+            p.formatos?.toLowerCase().includes(lowerTerm)
           );
         })
       );
