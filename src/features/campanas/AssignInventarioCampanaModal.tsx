@@ -2027,6 +2027,10 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
                     nivel_socioeconomico: newCara.nivel_socioeconomico,
                     inicio_periodo: newCara.inicio_periodo,
                     fin_periodo: newCara.fin_periodo,
+                    catorcena_inicio: newCara.catorcena_inicio,
+                    anio_inicio: newCara.anio_inicio,
+                    catorcena_fin: newCara.catorcena_fin,
+                    anio_fin: newCara.anio_fin,
                   }
                 : c
             );
@@ -2046,7 +2050,7 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
                 const bf = updated.find(o => o.grupo_rt_bf === c.grupo_rt_bf && o.esBf && o.inicio_periodo === c.inicio_periodo);
                 if (bf) total = (c.caras_flujo || 0) + (c.caras_contraflujo || 0) + ((bf.caras_flujo || 0) + (bf.caras_contraflujo || 0));
               }
-              if (total > 0 && total % 2 !== 0 && c.autorizacion_dg !== 'pendiente') return { ...c, autorizacion_dg: 'pendiente', autorizacion_dcm: 'aprobado' };
+              if (total > 0 && total % 2 !== 0 && c.autorizacion_dcm !== 'pendiente') return { ...c, autorizacion_dg: 'aprobado', autorizacion_dcm: 'pendiente' };
               return c;
             });
             const hayDG = updated.some(c => c.autorizacion_dg === 'pendiente');
@@ -6235,9 +6239,7 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
                       </button>
                       <button
                         onClick={handleSaveCara}
-                        disabled={!editingCaraId && newCara.formato !== 'Kiosco' && (newCara.caras + (newCara.bonificacion || 0)) > 0 && (newCara.caras + (newCara.bonificacion || 0)) % 2 !== 0}
-                        className={`px-4 py-2 bg-purple-500 text-white rounded-lg text-sm hover:bg-purple-600 transition-colors ${!editingCaraId && newCara.formato !== 'Kiosco' && (newCara.caras + (newCara.bonificacion || 0)) > 0 && (newCara.caras + (newCara.bonificacion || 0)) % 2 !== 0 ? 'opacity-50 cursor-not-allowed' : ''}`}
-                        title={!editingCaraId && newCara.formato !== 'Kiosco' && (newCara.caras + (newCara.bonificacion || 0)) > 0 && (newCara.caras + (newCara.bonificacion || 0)) % 2 !== 0 ? 'Caras impar — no se puede guardar' : undefined}
+                        className="px-4 py-2 bg-purple-500 text-white rounded-lg text-sm hover:bg-purple-600 transition-colors"
                       >
                         {editingCaraId ? 'Actualizar' : 'Agregar'}
                       </button>

@@ -2701,7 +2701,7 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
                   <button
                     type="button"
                     onClick={handleAddCara}
-                    disabled={!newCara.articulo || !newCara.estado || !newCara.formato || !newCara.tipo || newCara.nse.length === 0 || !newCara.periodo || (tipoPeriodo === 'mensual' && (!newCara.periodoInicioCustom || !newCara.periodoFinCustom)) || ((() => { const an = (newCara.articulo?.ItemName || '').toUpperCase(); if (an.includes('KIOSCO') || an.includes('KIOSKO')) return false; return (newCara.renta + newCara.bonificacion) > 0 && (newCara.renta + newCara.bonificacion) % 2 !== 0; })())}
+                    disabled={!newCara.articulo || !newCara.estado || !newCara.formato || !newCara.tipo || newCara.nse.length === 0 || !newCara.periodo || (tipoPeriodo === 'mensual' && (!newCara.periodoInicioCustom || !newCara.periodoFinCustom))}
                     className={`flex items-center gap-2 px-4 py-2 ${editingCaraId ? 'bg-amber-600 hover:bg-amber-700' : 'bg-purple-600 hover:bg-purple-700'} ${isDark ? 'disabled:bg-zinc-700 disabled:text-zinc-500' : 'disabled:bg-gray-200 disabled:text-gray-400'} text-white rounded-lg text-sm font-medium transition-colors`}
                   >
                     {editingCaraId ? <Check className="h-4 w-4" /> : <Plus className="h-4 w-4" />}
@@ -3153,9 +3153,9 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
             <button
               type="button"
               onClick={handleSubmit}
-              disabled={(isEditMode ? updateMutation.isPending : createMutation.isPending) || !selectedCuic || caras.length === 0 || selectedAsignados.length === 0 || invalidCaras.length > 0 || caras.some(c => { const an = (c.articulo?.ItemName || '').toUpperCase(); if (an.includes('KIOSCO') || an.includes('KIOSKO')) return false; const t = c.renta + c.bonificacion; return t > 0 && t % 2 !== 0; })}
+              disabled={(isEditMode ? updateMutation.isPending : createMutation.isPending) || !selectedCuic || caras.length === 0 || selectedAsignados.length === 0 || invalidCaras.length > 0}
               className={`px-6 py-2 bg-emerald-600 text-white rounded-lg text-sm font-medium hover:bg-emerald-700 ${isDark ? 'disabled:bg-zinc-700 disabled:text-zinc-500' : 'disabled:bg-gray-200 disabled:text-gray-400'} transition-colors flex items-center gap-2`}
-              title={caras.some(c => { const an = (c.articulo?.ItemName || '').toUpperCase(); if (an.includes('KIOSCO') || an.includes('KIOSKO')) return false; const t = c.renta + c.bonificacion; return t > 0 && t % 2 !== 0; }) ? 'Hay grupos con caras impar — corrige antes de guardar' : selectedAsignados.length === 0 ? 'Debes asignar al menos un usuario' : undefined}
+              title={selectedAsignados.length === 0 ? 'Debes asignar al menos un usuario' : undefined}
             >
               {(isEditMode ? updateMutation.isPending : createMutation.isPending) ? (
                 <>
