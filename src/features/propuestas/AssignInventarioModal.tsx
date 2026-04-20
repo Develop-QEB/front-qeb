@@ -1841,7 +1841,7 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
       const AM_EDO_MEX_CITIES = ['ATIZAPÁN', 'CUAUTITLÁN IZCALLI', 'ECATEPEC', 'HUIXQUILUCAN', 'NAUCALPAN', 'TLALNEPANTLA', 'TULTITLÁN'];
       const allCitiesForEstado = solicitudFilters.ciudades
         .filter(c => selectedEstados.includes(c.estado))
-        .filter(c => !isAM || c.estado !== 'Estado de México' || AM_EDO_MEX_CITIES.includes(c.ciudad.toUpperCase()))
+        .filter(c => !isAM || !c.estado.toUpperCase().includes('ESTADO DE M') || AM_EDO_MEX_CITIES.includes(c.ciudad.toUpperCase()))
         .map(c => c.ciudad);
       ciudadToSave = allCitiesForEstado.join(', ');
     }
@@ -6446,7 +6446,7 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
                                     const selectedEstados = newCara.estados.split(',').map(s => s.trim()).flatMap(s => s === 'Ciudad de México / AM' ? ['Ciudad de México', 'Estado de México'] : [s]);
                                     return selectedEstados.includes(c.estado);
                                   })
-                                  .filter(c => !isAM || c.estado !== 'Estado de México' || AM_EDO_MEX_CITIES.includes(c.ciudad.toUpperCase()))
+                                  .filter(c => !isAM || !c.estado.toUpperCase().includes('ESTADO DE M') || AM_EDO_MEX_CITIES.includes(c.ciudad.toUpperCase()))
                                   .map(c => c.ciudad) || [];
                               })()
                             }

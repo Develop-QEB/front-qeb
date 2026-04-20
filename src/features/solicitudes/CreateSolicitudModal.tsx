@@ -926,7 +926,8 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
         if (!isAM) return true;
         // For AM: allow all CDMX cities, but only specific Edo Mex cities
         const ciudadUpper = c.toUpperCase();
-        const isEdoMex = inventarioFilters.ciudades.find(ci => ci.ciudad === c)?.estado === 'Estado de México';
+        const estadoCiudad = inventarioFilters.ciudades.find(ci => ci.ciudad === c)?.estado || '';
+        const isEdoMex = estadoCiudad.toUpperCase().includes('ESTADO DE M');
         return !isEdoMex || CDMX_AM_EDO_MEX_CITIES.includes(ciudadUpper);
       });
   }, [inventarioFilters, newCara.estado]);
