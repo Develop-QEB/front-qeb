@@ -2189,8 +2189,8 @@ export function CampanasPage() {
           <div className={`col-span-1 md:col-span-2 rounded-2xl border ${isDark ? 'border-zinc-800/80 bg-zinc-900/50' : 'border-gray-200 bg-white'} backdrop-blur-sm p-4 flex items-center relative overflow-hidden`}>
             {!isLoadingStats && statusChartData.length > 0 ? (
               <div className="w-full h-[140px] flex items-center">
-                <div className="h-full min-w-[140px]">
-                  <ResponsiveContainer width="100%" height="100%">
+                <div className="h-full w-[140px] flex-shrink-0">
+                  <ResponsiveContainer width="100%" height="100%" minWidth={1} minHeight={1}>
                     <PieChart>
                       <Pie
                         data={statusChartData}
