@@ -1213,7 +1213,7 @@ export function ClientePropuestaPage() {
                                             <td className="px-3 py-2 text-gray-700 text-xs">{item.plaza || '-'}</td>
                                             <td className="px-3 py-2 text-gray-600 text-xs">
                                               {item.mueble || '-'}
-                                              {item.tipo_de_mueble && item.tipo_de_mueble !== item.mueble && (
+                                              {item.tipo_de_mueble && item.tipo_de_mueble?.toUpperCase() !== item.mueble?.toUpperCase() && (
                                                 <span className="block text-[10px] text-gray-400">{item.tipo_de_mueble}</span>
                                               )}
                                             </td>

@@ -1112,7 +1112,7 @@ function InventoryTable({ data, isLoading, page, totalPages, total, onPageChange
         <td className={`px-4 py-3 text-sm ${isDark ? 'text-zinc-400' : 'text-gray-500'}`}>{item.municipio || '-'}</td>
         <td className={`px-4 py-3 text-sm ${isDark ? 'text-zinc-300' : 'text-gray-600'}`}>
           {item.mueble || '-'}
-          {item.tipo_de_mueble && item.tipo_de_mueble !== item.mueble && (
+          {item.tipo_de_mueble && item.tipo_de_mueble?.toUpperCase() !== item.mueble?.toUpperCase() && (
             <span className={`block text-[10px] ${isDark ? 'text-zinc-500' : 'text-gray-400'}`}>{item.tipo_de_mueble}</span>
           )}
         </td>
