@@ -588,13 +588,23 @@ function GroupMetaBadges({ items, skipFields, isDark: isDarkProp }: { items: Inv
   );
 }
 
-function renderReservadoCell(item: InventarioReservado, col: TableColumn, p = 'p-1.5', isDark = true) {
+function renderReservadoCell(item: InventarioReservado, col: TableColumn, p = 'p-1.5', isDark = true, groupInfo?: { esperadas: number; reservadas: number; completo: boolean; exceso: boolean } | null) {
   if (col.field === 'codigo_unico') return (
     <td key={col.field} className={`${p} ${isDark ? 'text-white' : 'text-gray-900'} font-medium`}>
       <div className="flex items-center gap-1.5">
         {item.codigo_unico || '-'}
         {item.estatus_inventario === 'Bloqueado' && (
           <span className="px-1.5 py-0.5 rounded text-[9px] font-semibold bg-red-500/20 text-red-400 border border-red-500/30">Bloqueado</span>
+        )}
+        {groupInfo && !groupInfo.completo && (
+          <span className="px-1.5 py-0.5 rounded text-[9px] font-semibold bg-yellow-500/20 text-yellow-400 border border-yellow-500/30" title={`Grupo incompleto: ${groupInfo.reservadas}/${groupInfo.esperadas} caras`}>
+            {groupInfo.reservadas}/{groupInfo.esperadas}
+          </span>
+        )}
+        {groupInfo && groupInfo.exceso && (
+          <span className="px-1.5 py-0.5 rounded text-[9px] font-semibold bg-orange-500/20 text-orange-400 border border-orange-500/30" title={`Exceso de inventario: ${groupInfo.reservadas}/${groupInfo.esperadas} caras`}>
+            +{groupInfo.reservadas - groupInfo.esperadas}
+          </span>
         )}
       </div>
     </td>
@@ -800,6 +810,9 @@ export function CampanaDetailPage() {
   // Estado para selección de items (sin APS)
   const [selectedItems, setSelectedItems] = useState<Set<string>>(new Set());
 
+  // Toast para mensajes de bloqueo APS
+  const [apsBlockToast, setApsBlockToast] = useState<{ show: boolean; message: string }>({ show: false, message: '' });
+
   // Estado para selección de items (con APS)
   const [selectedItemsAPS, setSelectedItemsAPS] = useState<Set<string>>(new Set());
 
@@ -960,6 +973,60 @@ export function CampanaDetailPage() {
       }
     }
   }, [inventarioReservado]);
+
+  // Mapa de completitud por grupo (solicitudCaras)
+  const groupCompletenessMap = useMemo(() => {
+    const map = new Map<number, { esperadas: number; reservadas: number; completo: boolean; exceso: boolean }>();
+    solicitudCaras.forEach((sc: SolicitudCara) => {
+      const esperadas = (sc.caras || 0) + (Number(sc.bonificacion) || 0);
+      const reservasSinAPS = inventarioReservado.filter(i => i.solicitud_caras_id === sc.id)
+        .reduce((sum, i) => sum + (i.caras_totales || 1), 0);
+      const reservasConAPS = inventarioConAPS.filter(i => i.solicitud_caras_id === sc.id)
+        .reduce((sum, i) => sum + (i.caras_totales || 1), 0);
+      const reservadas = reservasSinAPS + reservasConAPS;
+      map.set(sc.id, {
+        esperadas,
+        reservadas,
+        completo: esperadas > 0 && reservadas >= esperadas,
+        exceso: reservadas > esperadas,
+      });
+    });
+    return map;
+  }, [solicitudCaras, inventarioReservado, inventarioConAPS]);
+
+  // Grupos sin inventario (solicitudCaras sin ninguna reserva)
+  const gruposSinInventario = useMemo(() => {
+    return solicitudCaras.filter((sc: SolicitudCara) => {
+      const info = groupCompletenessMap.get(sc.id);
+      return info && info.reservadas === 0 && info.esperadas > 0;
+    });
+  }, [solicitudCaras, groupCompletenessMap]);
+
+  // Helper: verificar si un item pertenece a un grupo incompleto
+  const isItemFromIncompleteGroup = (item: InventarioReservado): boolean => {
+    if (!item.solicitud_caras_id) return false;
+    const info = groupCompletenessMap.get(item.solicitud_caras_id);
+    return !!info && !info.completo;
+  };
+
+  // Auto-dismiss toast de bloqueo APS
+  useEffect(() => {
+    if (apsBlockToast.show) {
+      const timer = setTimeout(() => setApsBlockToast({ show: false, message: '' }), 5000);
+      return () => clearTimeout(timer);
+    }
+  }, [apsBlockToast.show]);
+
+  const showApsBlockMessage = (item: InventarioReservado) => {
+    const info = item.solicitud_caras_id ? groupCompletenessMap.get(item.solicitud_caras_id) : null;
+    const esperadas = info?.esperadas || 0;
+    const reservadas = info?.reservadas || 0;
+    const faltan = esperadas - reservadas;
+    setApsBlockToast({
+      show: true,
+      message: `No se puede asignar APS: el grupo tiene ${reservadas}/${esperadas} caras asignadas (faltan ${faltan}). Asigna el inventario completo desde el modal de "Asignar Inventario" para poder generar APS.`,
+    });
+  };
 
   // Datos filtrados y ordenados (inventario reservado)
   const filteredInventarioReservado = useMemo(() => {
@@ -1334,21 +1401,26 @@ export function CampanaDetailPage() {
     });
   };
 
-  // Seleccionar/deseleccionar todos
+  // Seleccionar/deseleccionar todos (excluye items de grupos incompletos)
+  const selectableItems = useMemo(() => {
+    return filteredInventarioReservado.filter(i => !isItemFromIncompleteGroup(i));
+  }, [filteredInventarioReservado, groupCompletenessMap]);
+
   const toggleSelectAll = () => {
-    if (selectedItems.size === filteredInventarioReservado.length) {
+    if (selectedItems.size === selectableItems.length && selectableItems.length > 0) {
       setSelectedItems(new Set<string>());
     } else {
-      setSelectedItems(new Set<string>(filteredInventarioReservado.map(i => i.rsv_ids)));
+      setSelectedItems(new Set<string>(selectableItems.map(i => i.rsv_ids)));
     }
   };
 
-  // Seleccionar/deseleccionar un grupo completo
+  // Seleccionar/deseleccionar un grupo completo (excluye items de grupos incompletos)
   const toggleGroupSelection = (groupItems: InventarioReservado[]) => {
+    const selectable = groupItems.filter(i => !isItemFromIncompleteGroup(i));
     setSelectedItems(prev => {
       const next = new Set(prev);
-      const groupIds = groupItems.map(i => i.rsv_ids);
-      const allSelected = groupIds.every(id => next.has(id));
+      const groupIds = selectable.map(i => i.rsv_ids);
+      const allSelected = groupIds.length > 0 && groupIds.every(id => next.has(id));
       if (allSelected) {
         groupIds.forEach(id => next.delete(id));
       } else {
@@ -1772,6 +1844,20 @@ export function CampanaDetailPage() {
   return (
     <div className="min-h-screen">
       <Header title="Detalle de Campana" />
+      {apsBlockToast.show && (
+        <div className="fixed top-4 left-1/2 -translate-x-1/2 z-[70] animate-in fade-in slide-in-from-top-2 duration-300">
+          <div className={`flex items-start gap-3 px-5 py-4 rounded-xl shadow-2xl border max-w-lg ${isDark ? 'bg-zinc-900 border-yellow-500/30 text-white' : 'bg-white border-yellow-300 text-gray-900'}`}>
+            <AlertTriangle className="h-5 w-5 text-yellow-500 shrink-0 mt-0.5" />
+            <div className="flex-1">
+              <p className={`text-sm font-semibold ${isDark ? 'text-yellow-300' : 'text-yellow-700'}`}>No se puede asignar APS</p>
+              <p className={`text-xs mt-1 ${isDark ? 'text-zinc-400' : 'text-gray-500'}`}>{apsBlockToast.message}</p>
+            </div>
+            <button onClick={() => setApsBlockToast({ show: false, message: '' })} className="text-zinc-400 hover:text-white">
+              <X className="h-4 w-4" />
+            </button>
+          </div>
+        </div>
+      )}
       {heavyOperation && (
         <div className="fixed inset-0 bg-black/40 backdrop-blur-[1px] z-[60] flex items-center justify-center" role="status" aria-live="polite">
           <div className={`flex items-center gap-3 px-6 py-4 rounded-xl shadow-2xl ${isDark ? 'bg-zinc-900 text-white' : 'bg-white text-gray-900'}`}>
@@ -2442,12 +2528,66 @@ export function CampanaDetailPage() {
                     message="Error al cargar el inventario reservado"
                     onRetry={() => refetchInventario()}
                   />
-                ) : inventarioReservado.length === 0 ? (
+                ) : inventarioReservado.length === 0 && gruposSinInventario.length === 0 ? (
                   <EmptyState
                     icon={<Package className="h-6 w-6 text-purple-400" />}
                     title="Todos los Inventarios tienen APS "
                     description="Esta campaña no tiene inventarios sin APS"
                   />
+                ) : inventarioReservado.length === 0 && gruposSinInventario.length > 0 ? (
+                  <div>
+                    <div className={`px-3 py-2 border-b ${isDark ? 'border-yellow-500/30 bg-yellow-500/5' : 'border-yellow-200 bg-yellow-50'}`}>
+                      <div className="flex items-center gap-2">
+                        <AlertTriangle className={`h-3.5 w-3.5 ${isDark ? 'text-yellow-400' : 'text-yellow-600'}`} />
+                        <span className={`text-xs font-semibold uppercase tracking-wide ${isDark ? 'text-yellow-300' : 'text-yellow-700'}`}>
+                          Grupos sin inventario ({gruposSinInventario.length})
+                        </span>
+                      </div>
+                    </div>
+                    <table className="w-full text-xs">
+                      <thead className="sticky top-0 bg-card z-10">
+                        <tr className="border-b border-border text-left">
+                          <th className="p-2 w-8"></th>
+                          <th className={`p-2 font-medium ${isDark ? 'text-yellow-300' : 'text-yellow-700'}`}>Artículo</th>
+                          <th className={`p-2 font-medium ${isDark ? 'text-yellow-300' : 'text-yellow-700'}`}>Ciudad</th>
+                          <th className={`p-2 font-medium ${isDark ? 'text-yellow-300' : 'text-yellow-700'}`}>Formato</th>
+                          <th className={`p-2 font-medium ${isDark ? 'text-yellow-300' : 'text-yellow-700'}`}>Caras esperadas</th>
+                          <th className={`p-2 font-medium ${isDark ? 'text-yellow-300' : 'text-yellow-700'}`}>Periodo</th>
+                          <th className={`p-2 font-medium ${isDark ? 'text-yellow-300' : 'text-yellow-700'}`}>Estatus</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {gruposSinInventario.map((sc: SolicitudCara) => {
+                          const info = groupCompletenessMap.get(sc.id);
+                          const inicio = sc.inicio_periodo ? new Date(sc.inicio_periodo).toLocaleDateString('es-MX', { day: '2-digit', month: 'short', year: 'numeric' }) : '-';
+                          const fin = sc.fin_periodo ? new Date(sc.fin_periodo).toLocaleDateString('es-MX', { day: '2-digit', month: 'short', year: 'numeric' }) : '-';
+                          return (
+                            <tr key={`noinv_${sc.id}`} className={`border-b border-border/50 ${isDark ? 'bg-yellow-500/5' : 'bg-yellow-50/30'}`}>
+                              <td className="p-2">
+                                <div className="w-4 h-4 flex items-center justify-center" title="Sin inventario asignado">
+                                  <AlertTriangle className="h-3.5 w-3.5 text-yellow-500" />
+                                </div>
+                              </td>
+                              <td className={`p-2 ${isDark ? 'text-zinc-300' : 'text-gray-700'}`}>{sc.articulo || '-'}</td>
+                              <td className={`p-2 ${isDark ? 'text-zinc-300' : 'text-gray-700'}`}>{sc.ciudad || '-'}</td>
+                              <td className={`p-2 ${isDark ? 'text-zinc-300' : 'text-gray-700'}`}>{sc.formato || '-'}</td>
+                              <td className="p-2 text-center">
+                                <span className="px-1.5 py-0.5 rounded text-[10px] font-semibold bg-yellow-500/20 text-yellow-400 border border-yellow-500/30">
+                                  0/{info?.esperadas || 0}
+                                </span>
+                              </td>
+                              <td className={`p-2 ${isDark ? 'text-zinc-400' : 'text-gray-500'} text-[10px]`}>{inicio} — {fin}</td>
+                              <td className="p-2">
+                                <span className="px-1.5 py-0.5 rounded text-[9px] font-semibold bg-red-500/20 text-red-400 border border-red-500/30">
+                                  Sin inventario
+                                </span>
+                              </td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
                 ) : activeGroupings.length === 0 ? (
                   // Sin agrupación - separar inventario normal de artículos IM
                   <div>
@@ -2476,15 +2616,28 @@ export function CampanaDetailPage() {
                           </tr>
                         </thead>
                         <tbody>
-                          {filteredInventarioReservado.filter(i => !isIMArticle(i)).map((item) => (
+                          {filteredInventarioReservado.filter(i => !isIMArticle(i)).map((item) => {
+                            const incomplete = isItemFromIncompleteGroup(item);
+                            return (
                             <tr
                               key={item.rsv_ids}
                               id={`row-${item.rsv_ids}`}
-                              className={`border-b border-border/50 hover:bg-purple-900/20 transition-colors ${
-                                selectedItems.has(item.rsv_ids) ? 'bg-yellow-500/20' : ''
+                              className={`border-b border-border/50 transition-colors ${
+                                incomplete ? (isDark ? 'bg-yellow-500/5' : 'bg-yellow-50/50') : ''
+                              } ${
+                                selectedItems.has(item.rsv_ids) ? 'bg-yellow-500/20' : 'hover:bg-purple-900/20'
                               }`}
                             >
                               <td className="p-2">
+                                {incomplete ? (
+                                  <button
+                                    onClick={() => showApsBlockMessage(item)}
+                                    className="w-4 h-4 flex items-center justify-center cursor-pointer hover:scale-110 transition-transform"
+                                    title="Grupo incompleto - clic para más información"
+                                  >
+                                    <AlertTriangle className="h-3.5 w-3.5 text-yellow-500" />
+                                  </button>
+                                ) : (
                                 <button
                                   onClick={() => toggleItemSelection(item.rsv_ids)}
                                   className={`w-4 h-4 rounded border flex items-center justify-center transition-colors ${
@@ -2497,12 +2650,71 @@ export function CampanaDetailPage() {
                                     <Check className="h-3 w-3 text-white" />
                                   )}
                                 </button>
+                                )}
                               </td>
-                              {visibleColumnsReservado.map(col => renderReservadoCell(item, col, 'p-2', isDark))}
+                              {visibleColumnsReservado.map(col => renderReservadoCell(item, col, 'p-2', isDark, item.solicitud_caras_id ? groupCompletenessMap.get(item.solicitud_caras_id) : null))}
                             </tr>
-                          ))}
+                            );
+                          })}
                         </tbody>
                       </table>
+                    )}
+
+                    {/* Grupos sin inventario */}
+                    {gruposSinInventario.length > 0 && (
+                      <>
+                        <div className={`px-3 py-2 mt-2 border-b ${isDark ? 'border-yellow-500/30 bg-yellow-500/5' : 'border-yellow-200 bg-yellow-50'}`}>
+                          <div className="flex items-center gap-2">
+                            <AlertTriangle className={`h-3.5 w-3.5 ${isDark ? 'text-yellow-400' : 'text-yellow-600'}`} />
+                            <span className={`text-xs font-semibold uppercase tracking-wide ${isDark ? 'text-yellow-300' : 'text-yellow-700'}`}>
+                              Grupos sin inventario ({gruposSinInventario.length})
+                            </span>
+                          </div>
+                        </div>
+                        <table className="w-full text-xs">
+                          <thead className="sticky top-0 bg-card z-10">
+                            <tr className="border-b border-border text-left">
+                              <th className="p-2 w-8"></th>
+                              <th className={`p-2 font-medium ${isDark ? 'text-yellow-300' : 'text-yellow-700'}`}>Artículo</th>
+                              <th className={`p-2 font-medium ${isDark ? 'text-yellow-300' : 'text-yellow-700'}`}>Ciudad</th>
+                              <th className={`p-2 font-medium ${isDark ? 'text-yellow-300' : 'text-yellow-700'}`}>Formato</th>
+                              <th className={`p-2 font-medium ${isDark ? 'text-yellow-300' : 'text-yellow-700'}`}>Caras esperadas</th>
+                              <th className={`p-2 font-medium ${isDark ? 'text-yellow-300' : 'text-yellow-700'}`}>Periodo</th>
+                              <th className={`p-2 font-medium ${isDark ? 'text-yellow-300' : 'text-yellow-700'}`}>Estatus</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {gruposSinInventario.map((sc: SolicitudCara) => {
+                              const info = groupCompletenessMap.get(sc.id);
+                              const inicio = sc.inicio_periodo ? new Date(sc.inicio_periodo).toLocaleDateString('es-MX', { day: '2-digit', month: 'short', year: 'numeric' }) : '-';
+                              const fin = sc.fin_periodo ? new Date(sc.fin_periodo).toLocaleDateString('es-MX', { day: '2-digit', month: 'short', year: 'numeric' }) : '-';
+                              return (
+                                <tr key={`noinv_${sc.id}`} className={`border-b border-border/50 ${isDark ? 'bg-yellow-500/5' : 'bg-yellow-50/30'}`}>
+                                  <td className="p-2">
+                                    <div className="w-4 h-4 flex items-center justify-center" title="Sin inventario asignado">
+                                      <AlertTriangle className="h-3.5 w-3.5 text-yellow-500" />
+                                    </div>
+                                  </td>
+                                  <td className={`p-2 ${isDark ? 'text-zinc-300' : 'text-gray-700'}`}>{sc.articulo || '-'}</td>
+                                  <td className={`p-2 ${isDark ? 'text-zinc-300' : 'text-gray-700'}`}>{sc.ciudad || '-'}</td>
+                                  <td className={`p-2 ${isDark ? 'text-zinc-300' : 'text-gray-700'}`}>{sc.formato || '-'}</td>
+                                  <td className="p-2 text-center">
+                                    <span className="px-1.5 py-0.5 rounded text-[10px] font-semibold bg-yellow-500/20 text-yellow-400 border border-yellow-500/30">
+                                      0/{info?.esperadas || 0}
+                                    </span>
+                                  </td>
+                                  <td className={`p-2 ${isDark ? 'text-zinc-400' : 'text-gray-500'} text-[10px]`}>{inicio} — {fin}</td>
+                                  <td className="p-2">
+                                    <span className="px-1.5 py-0.5 rounded text-[9px] font-semibold bg-red-500/20 text-red-400 border border-red-500/30">
+                                      Sin inventario
+                                    </span>
+                                  </td>
+                                </tr>
+                              );
+                            })}
+                          </tbody>
+                        </table>
+                      </>
                     )}
 
                     {/* Tabla de artículos de impresión */}
@@ -2688,15 +2900,28 @@ export function CampanaDetailPage() {
                                                   </tr>
                                                 </thead>
                                                 <tbody>
-                                                  {subItems.filter(i => !isIMArticle(i)).map((item) => (
+                                                  {subItems.filter(i => !isIMArticle(i)).map((item) => {
+                                                    const incomplete = isItemFromIncompleteGroup(item);
+                                                    return (
                                                     <tr
                                                       key={item.rsv_ids}
                                                       id={`row-${item.rsv_ids}`}
-                                                      className={`border-t border-border/30 hover:bg-purple-900/10 transition-colors ${
-                                                        selectedItems.has(item.rsv_ids) ? 'bg-yellow-500/20' : ''
+                                                      className={`border-t border-border/30 transition-colors ${
+                                                        incomplete ? (isDark ? 'bg-yellow-500/5' : 'bg-yellow-50/50') : ''
+                                                      } ${
+                                                        selectedItems.has(item.rsv_ids) ? 'bg-yellow-500/20' : 'hover:bg-purple-900/10'
                                                       }`}
                                                     >
                                                       <td className="p-1.5 w-8">
+                                                        {incomplete ? (
+                                                          <button
+                                                            onClick={() => showApsBlockMessage(item)}
+                                                            className="w-3.5 h-3.5 flex items-center justify-center cursor-pointer hover:scale-110 transition-transform"
+                                                            title="Grupo incompleto - clic para más información"
+                                                          >
+                                                            <AlertTriangle className="h-3 w-3 text-yellow-500" />
+                                                          </button>
+                                                        ) : (
                                                         <button
                                                           onClick={() => toggleItemSelection(item.rsv_ids)}
                                                           className={`w-3.5 h-3.5 rounded border flex items-center justify-center transition-colors ${
@@ -2709,10 +2934,12 @@ export function CampanaDetailPage() {
                                                             <Check className="h-2.5 w-2.5 text-white" />
                                                           )}
                                                         </button>
+                                                        )}
                                                       </td>
-                                                      {visibleColumnsReservado.map(col => renderReservadoCell(item, col, 'p-1.5', isDark))}
+                                                      {visibleColumnsReservado.map(col => renderReservadoCell(item, col, 'p-1.5', isDark, item.solicitud_caras_id ? groupCompletenessMap.get(item.solicitud_caras_id) : null))}
                                                     </tr>
-                                                  ))}
+                                                    );
+                                                  })}
                                                 </tbody>
                                               </table>
                                             )}
@@ -2782,15 +3009,28 @@ export function CampanaDetailPage() {
                                         </tr>
                                       </thead>
                                       <tbody>
-                                        {items.filter(i => !isIMArticle(i)).map((item) => (
+                                        {items.filter(i => !isIMArticle(i)).map((item) => {
+                                          const incomplete = isItemFromIncompleteGroup(item);
+                                          return (
                                           <tr
                                             key={item.rsv_ids}
                                             id={`row-${item.rsv_ids}`}
-                                            className={`border-t border-border/30 hover:bg-purple-900/10 transition-colors ${
-                                              selectedItems.has(item.rsv_ids) ? 'bg-yellow-500/20' : ''
+                                            className={`border-t border-border/30 transition-colors ${
+                                              incomplete ? (isDark ? 'bg-yellow-500/5' : 'bg-yellow-50/50') : ''
+                                            } ${
+                                              selectedItems.has(item.rsv_ids) ? 'bg-yellow-500/20' : 'hover:bg-purple-900/10'
                                             }`}
                                           >
                                             <td className="p-1.5 w-8">
+                                              {incomplete ? (
+                                                <button
+                                                  onClick={() => showApsBlockMessage(item)}
+                                                  className="w-3.5 h-3.5 flex items-center justify-center cursor-pointer hover:scale-110 transition-transform"
+                                                  title="Grupo incompleto - clic para más información"
+                                                >
+                                                  <AlertTriangle className="h-3 w-3 text-yellow-500" />
+                                                </button>
+                                              ) : (
                                               <button
                                                 onClick={() => toggleItemSelection(item.rsv_ids)}
                                                 className={`w-3.5 h-3.5 rounded border flex items-center justify-center transition-colors ${
@@ -2803,10 +3043,12 @@ export function CampanaDetailPage() {
                                                   <Check className="h-2.5 w-2.5 text-white" />
                                                 )}
                                               </button>
+                                              )}
                                             </td>
-                                            {visibleColumnsReservado.map(col => renderReservadoCell(item, col, 'p-1.5', isDark))}
+                                            {visibleColumnsReservado.map(col => renderReservadoCell(item, col, 'p-1.5', isDark, item.solicitud_caras_id ? groupCompletenessMap.get(item.solicitud_caras_id) : null))}
                                           </tr>
-                                        ))}
+                                          );
+                                        })}
                                       </tbody>
                                     </table>
                                   )}

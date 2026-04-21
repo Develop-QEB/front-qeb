@@ -738,6 +738,8 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
     onConfirm: () => { },
   });
 
+  const [isClosing, setIsClosing] = useState(false);
+
   // Toast notification state
   const [toast, setToast] = useState<{ show: boolean; message: string; type: 'success' | 'error' | 'info' }>({
     show: false,
@@ -3813,6 +3815,16 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
 
   if (!isOpen) return null;
 
+  // Overlay bloqueante cuando se está cerrando el modal
+  const closingOverlayJSX = isClosing && (
+    <div className="fixed inset-0 z-[70] flex items-center justify-center bg-black/40 backdrop-blur-[1px]" role="status" aria-live="polite">
+      <div className={`flex items-center gap-3 px-6 py-4 rounded-xl shadow-2xl ${isDark ? 'bg-zinc-900 text-white' : 'bg-white text-gray-900'}`}>
+        <Loader2 className="h-5 w-5 animate-spin text-purple-500" />
+        <span className="text-sm font-medium">Cerrando...</span>
+      </div>
+    </div>
+  );
+
   // Overlay bloqueante global cuando se está guardando fuera del confirmModal
   const savingOverlayJSX = isSaving && !confirmModal.isOpen && (
     <div className="fixed inset-0 z-[70] flex items-center justify-center bg-black/40 backdrop-blur-[1px]" role="status" aria-live="polite">
@@ -3896,6 +3908,7 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
   if (viewState === 'search-inventory') {
     return (
       <div className="fixed inset-0 z-50 flex items-center justify-center">
+        {closingOverlayJSX}
         {savingOverlayJSX}
         {confirmModalJSX}
         {toastJSX}
@@ -5519,6 +5532,16 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
   }
 
   // Handle close with unsaved changes warning
+  const performClose = useCallback(() => {
+    setIsClosing(true);
+    requestAnimationFrame(() => {
+      setTimeout(() => {
+        onClose();
+        setIsClosing(false);
+      }, 50);
+    });
+  }, [onClose]);
+
   const handleClose = () => {
     if (hasChanges || modifiedCaras.size > 0) {
       setConfirmModal({
@@ -5533,17 +5556,18 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
         isDestructive: true,
         onConfirm: () => {
           setConfirmModal(prev => ({ ...prev, isOpen: false }));
-          onClose();
+          performClose();
         },
       });
     } else {
-      onClose();
+      performClose();
     }
   };
 
   // Main view
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center">
+      {closingOverlayJSX}
       <div className="absolute inset-0 bg-black/70 backdrop-blur-sm" onClick={handleClose} />
 
       <div className={`relative w-[95vw] max-w-[1400px] h-[90vh] ${isDark ? 'bg-zinc-900' : 'bg-white'} rounded-2xl border border-purple-500/20 shadow-2xl flex flex-col overflow-hidden`}>
@@ -6450,7 +6474,7 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
                                       const isLocallyModified = cara.id ? modifiedCaras.has(cara.id) : false;
                                       const tienePendientes = !isLocallyModified && (cara.autorizacion_dg === 'pendiente' || cara.autorizacion_dcm === 'pendiente');
                                       const tieneRechazado = cara.autorizacion_dg === 'rechazado' || cara.autorizacion_dcm === 'rechazado';
-                                      const bloqueado = tienePendientes || tieneRechazado || caraAPSBlocked;
+                                      const bloqueado = status.isOverReserved ? false : (tienePendientes || tieneRechazado || caraAPSBlocked);
                                       const isLoadingThis = loadingCaraAction?.caraId === cara.localId && loadingCaraAction?.action === 'search';
 
                                       return (
