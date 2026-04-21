@@ -1921,7 +1921,9 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
       nivel_socioeconomico: newCara.nivel_socioeconomico,
       formato: newCara.formato,
       costo: costoCalculado,
-      tarifa_publica: newCara.tarifa_publica,
+      tarifa_publica: usePairMode && (newCara.caras || 0) + (newCara.bonificacion || 0) > 0
+        ? costoCalculado / ((newCara.caras || 0) + (newCara.bonificacion || 0))
+        : newCara.tarifa_publica,
       inicio_periodo: newCara.inicio_periodo,
       fin_periodo: newCara.fin_periodo,
       caras_flujo: newCara.caras_flujo,
