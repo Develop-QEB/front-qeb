@@ -4059,16 +4059,23 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
               </div>
 
               {/* % Distribucion - only for Digital */}
-              {selectedCaraForSearch?.tipo === 'Digital' && <div className={`flex flex-col items-center justify-center px-2 py-1 rounded-xl ${isDark ? 'bg-zinc-800/30' : 'bg-gray-50/30'} border ${isDark ? 'border-zinc-700/20' : 'border-gray-200/20'} min-w-[70px]`}>
+              {selectedCaraForSearch?.tipo === 'Digital' && (() => {
+                const totalRentaForPct = (adjustedCarasFlujo.flujo + adjustedCarasFlujo.contraflujo) || 1;
+                const flujoYaRes = adjustedCarasFlujo.flujo - remainingToAssign.flujo;
+                const contraYaRes = adjustedCarasFlujo.contraflujo - remainingToAssign.contraflujo;
+                const minPct = Math.ceil(flujoYaRes / totalRentaForPct * 100);
+                const maxPct = Math.floor((totalRentaForPct - contraYaRes) / totalRentaForPct * 100);
+                return (
+                <div className={`flex flex-col items-center justify-center px-2 py-1 rounded-xl ${isDark ? 'bg-zinc-800/30' : 'bg-gray-50/30'} border ${isDark ? 'border-zinc-700/20' : 'border-gray-200/20'} min-w-[70px]`}>
                 <span className={`text-[9px] ${isDark ? 'text-zinc-500' : 'text-gray-400'} mb-1`}>Distribución</span>
                 <div className="flex items-center gap-1">
                   <input
                     type="number"
-                    min={0}
-                    max={100}
+                    min={minPct}
+                    max={maxPct}
                     value={flujoPct}
                     onChange={async (e) => {
-                      const v = Math.max(0, Math.min(100, parseInt(e.target.value) || 0));
+                      const v = Math.max(minPct, Math.min(maxPct, parseInt(e.target.value) || 0));
                       setFlujoPct(v);
                       if (!selectedCaraForSearch?.id) return;
                       const totalRenta = selectedCaraForSearch.caras || ((selectedCaraForSearch.caras_flujo || 0) + (selectedCaraForSearch.caras_contraflujo || 0));
@@ -4098,7 +4105,9 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
                   <span className={`text-[10px] ${isDark ? 'text-zinc-500' : 'text-gray-400'}`}>%</span>
                 </div>
                 <span className={`text-[9px] ${isDark ? 'text-zinc-600' : 'text-gray-300'} mt-0.5`}>{savingPct ? '...' : `${flujoPct}/${100 - flujoPct}`}</span>
-              </div>}
+              </div>
+                );
+              })()}
 
               {/* Contraflujo KPI */}
               <div className={`flex-1 ${isDark ? 'bg-zinc-800/50' : 'bg-gray-50/50'} rounded-xl p-3 border ${isDark ? 'border-zinc-700/30' : 'border-gray-200/30'}`}>
