@@ -1176,7 +1176,8 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
     const descuento = totalCaras > 0 ? (newCara.bonificacion / totalCaras) : 0;
     const precioTotal = newCara.tarifaPublica * newCara.renta;
     // When BF pair: save tarifa efectiva (inversión ÷ total caras) instead of raw tarifa pública
-    const tarifaToSave = (grupoRtBf && totalCaras > 0)
+    const hasBfPair = newCara.bonificacion > 0 && !!newCara.articuloBf;
+    const tarifaToSave = (hasBfPair && totalCaras > 0)
       ? precioTotal / totalCaras
       : newCara.tarifaPublica;
 
