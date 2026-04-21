@@ -3938,6 +3938,17 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
     </div>
   );
 
+  // Handle close with unsaved changes warning
+  const performClose = useCallback(() => {
+    setIsClosing(true);
+    requestAnimationFrame(() => {
+      setTimeout(() => {
+        onClose();
+        setIsClosing(false);
+      }, 50);
+    });
+  }, [onClose]);
+
   // Render inventory search view
   if (viewState === 'search-inventory') {
     return (
@@ -5566,17 +5577,6 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
       </SearchViewErrorBoundary>
     );
   }
-
-  // Handle close with unsaved changes warning
-  const performClose = useCallback(() => {
-    setIsClosing(true);
-    requestAnimationFrame(() => {
-      setTimeout(() => {
-        onClose();
-        setIsClosing(false);
-      }, 50);
-    });
-  }, [onClose]);
 
   const handleClose = () => {
     if (hasChanges || modifiedCaras.size > 0) {
