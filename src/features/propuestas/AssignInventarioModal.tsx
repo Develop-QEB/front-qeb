@@ -3304,11 +3304,11 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
       // Call API immediately
       setIsSaving(true);
       try {
-        const clienteId = solicitudDetails?.propuesta?.cliente_id || propuesta.cliente_id;
+        const clienteId = solicitudDetails?.propuesta?.cliente_id ?? propuesta.cliente_id;
         const fechaInicio = selectedCaraForSearch.inicio_periodo || solicitudDetails?.cotizacion?.fecha_inicio || new Date().toISOString();
         const fechaFin = selectedCaraForSearch.fin_periodo || solicitudDetails?.cotizacion?.fecha_fin || new Date().toISOString();
 
-        if (!clienteId) throw new Error("Cliente ID no encontrado");
+        if (clienteId === undefined || clienteId === null) throw new Error("Cliente ID no encontrado");
 
         const result = await propuestasService.createReservas(propuesta.id, {
           reservas: newReservas,
@@ -3397,11 +3397,11 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
       // Call API immediately
       setIsSaving(true);
       try {
-        const clienteId = solicitudDetails?.propuesta?.cliente_id || propuesta.cliente_id;
+        const clienteId = solicitudDetails?.propuesta?.cliente_id ?? propuesta.cliente_id;
         const fechaInicio = selectedCaraForSearch.inicio_periodo || solicitudDetails?.cotizacion?.fecha_inicio || new Date().toISOString();
         const fechaFin = selectedCaraForSearch.fin_periodo || solicitudDetails?.cotizacion?.fecha_fin || new Date().toISOString();
 
-        if (!clienteId) throw new Error("Cliente ID no encontrado");
+        if (clienteId === undefined || clienteId === null) throw new Error("Cliente ID no encontrado");
 
         const result = await propuestasService.createReservas(propuesta.id, {
           reservas: newReservas,

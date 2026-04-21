@@ -211,11 +211,16 @@ const rolePermissions: Partial<Record<UserRole, Partial<RolePermissions>>> = {
     canEditArticuloOnEdit: true, // Puede editar artículo SAP al editar circuito (si no hay reservas)
 
     canEditCampanas: true,
-    canEditDetalleCampana: false,
+    canEditDetalleCampana: true, // Permitir edición de detalle para Gestor de Artes
     canDeleteDetalleCampana: false,
     canDeleteCaraConReservas: true,
-    canEditGestionArtes: false,
-    canOpenTasks: false, // No puede abrir tareas en Gestión de Artes
+    canEditGestionArtes: true,
+    canResolveProduccionTasks: false,
+    canResolveCorreccionTasks: true,
+    canOnlyOpenCorreccionTasks: true,
+    canOpenTasks: true,
+    canCreateTareasGestionArtes: true,
+    canResolveRevisionArtesTasks: true,
 
     canCreateInventarios: false,
     canEditInventarios: false,
@@ -630,15 +635,16 @@ const rolePermissions: Partial<Record<UserRole, Partial<RolePermissions>>> = {
 
     canEditCampanas: true,
     canEditCampanaStatus: false, // No puede cambiar status en modal de campaña
-    canEditDetalleCampana: false,
+    canEditDetalleCampana: true,
     canDeleteDetalleCampana: false,
 
-    // Gestión de Artes: solo visualización, no puede resolver ni crear tareas
-    canEditGestionArtes: false,
+    // Gestión de Artes: habilitado para Asesores
+    canEditGestionArtes: true,
     canResolveProduccionTasks: false,
-    canResolveRevisionArtesTasks: false,
-    canCreateTareasGestionArtes: false,
-    canOpenTasks: false,
+    canResolveRevisionArtesTasks: true,
+    canResolveCorreccionTasks: true,
+    canCreateTareasGestionArtes: true,
+    canOpenTasks: true,
 
     canCreateInventarios: false,
     canEditInventarios: false,
@@ -667,9 +673,13 @@ const rolePermissions: Partial<Record<UserRole, Partial<RolePermissions>>> = {
     canBuscarInventarioEnModal: false,
 
     canEditCampanas: true,
-    canEditDetalleCampana: false,
+    canEditDetalleCampana: true,
     canDeleteDetalleCampana: false,
-    canEditGestionArtes: false,
+    canEditGestionArtes: true,
+    canOpenTasks: true,
+    canCreateTareasGestionArtes: true,
+    canResolveRevisionArtesTasks: true,
+    canResolveCorreccionTasks: true,
 
     canCreateInventarios: false,
     canEditInventarios: false,
@@ -707,11 +717,11 @@ const rolePermissions: Partial<Record<UserRole, Partial<RolePermissions>>> = {
     canEditClienteEnFormularios: true, // Puede editar campo cliente en solicitudes y propuestas
     canEditArticuloOnEdit: true, // Puede editar artículo SAP al editar circuito (si no hay reservas)
 
-    canEditCampanas: false,
-    canEditDetalleCampana: false,
+    canEditCampanas: true,
+    canEditDetalleCampana: true,
     canDeleteDetalleCampana: false,
     canSeeGestionArtes: true,
-    canEditGestionArtes: false,
+    canEditGestionArtes: true,
     canResolveProduccionTasks: false,
     canSeeOrdenesMontajeButton: false,
 
@@ -721,9 +731,10 @@ const rolePermissions: Partial<Record<UserRole, Partial<RolePermissions>>> = {
     canSeeTabRevisarAprobar: true,
     canSeeTabTestigos: true,
     canSeeTabValidacionInstalacion: true,
-    canCreateTareasGestionArtes: false,
-    canResolveRevisionArtesTasks: false,
-    canOpenTasks: false,
+    canCreateTareasGestionArtes: true,
+    canResolveRevisionArtesTasks: true,
+    canResolveCorreccionTasks: true,
+    canOpenTasks: true,
 
     canCreateInventarios: false,
     canEditInventarios: false,

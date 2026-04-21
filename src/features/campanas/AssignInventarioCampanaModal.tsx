@@ -585,6 +585,40 @@ const LIBRARIES: ('places' | 'geometry')[] = ['places', 'geometry'];
 
 const MESES_LABEL = ['Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio', 'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre'];
 
+class SearchViewErrorBoundary extends React.Component<
+  { children: React.ReactNode; onRetry: () => void },
+  { hasError: boolean; error: Error | null; errorInfo: string }
+> {
+  state = { hasError: false, error: null as Error | null, errorInfo: '' };
+  static getDerivedStateFromError(error: Error) {
+    return { hasError: true, error };
+  }
+  componentDidCatch(error: Error, info: React.ErrorInfo) {
+    console.error('[SearchView crash]', error.message, info.componentStack);
+    this.setState({ errorInfo: info.componentStack || '' });
+  }
+  render() {
+    if (this.state.hasError) {
+      return (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80">
+          <div className="bg-zinc-900 border border-red-500/40 rounded-2xl p-8 max-w-lg text-center">
+            <div className="text-red-400 text-lg font-bold mb-3">Error en vista de búsqueda</div>
+            <pre className="text-xs text-zinc-400 text-left max-h-40 overflow-auto mb-4 bg-zinc-800 p-3 rounded-lg">
+              {this.state.error?.message}
+              {'\n\n'}
+              {this.state.errorInfo}
+            </pre>
+            <button onClick={() => { this.setState({ hasError: false, error: null, errorInfo: '' }); this.props.onRetry(); }} className="px-6 py-2 bg-purple-500 text-white rounded-lg text-sm hover:bg-purple-600">
+              Volver
+            </button>
+          </div>
+        </div>
+      );
+    }
+    return this.props.children;
+  }
+}
+
 export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props) {
   useModalTracker('Editar Campaña', isOpen);
   const isDark = useThemeStore((s) => s.theme) === 'dark';
@@ -3904,9 +3938,21 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
     </div>
   );
 
+  // Handle close with unsaved changes warning
+  const performClose = useCallback(() => {
+    setIsClosing(true);
+    requestAnimationFrame(() => {
+      setTimeout(() => {
+        onClose();
+        setIsClosing(false);
+      }, 50);
+    });
+  }, [onClose]);
+
   // Render inventory search view
   if (viewState === 'search-inventory') {
     return (
+      <SearchViewErrorBoundary onRetry={handleBackToMain}>
       <div className="fixed inset-0 z-50 flex items-center justify-center">
         {closingOverlayJSX}
         {savingOverlayJSX}
@@ -5528,19 +5574,9 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
           )}
         </div>
       </div>
+      </SearchViewErrorBoundary>
     );
   }
-
-  // Handle close with unsaved changes warning
-  const performClose = useCallback(() => {
-    setIsClosing(true);
-    requestAnimationFrame(() => {
-      setTimeout(() => {
-        onClose();
-        setIsClosing(false);
-      }, 50);
-    });
-  }, [onClose]);
 
   const handleClose = () => {
     if (hasChanges || modifiedCaras.size > 0) {
