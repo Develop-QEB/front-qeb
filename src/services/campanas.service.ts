@@ -413,10 +413,17 @@ export function buildDeliveryNote(
         ? `CATORCENA ${firstItem.numero_catorcena}-${firstItem.anio_catorcena}`
         : 'CATORCENA —-—';
 
+      // IM (impresión) articles have no inventory rows — one row with caras_totales=N
+      const articuloCode = (firstItem.articulo || '').toUpperCase();
+      const isImpresionLine = articuloCode.startsWith('IM');
+      const quantity = isImpresionLine
+        ? itemsWithArticulo.reduce((s, i) => s + (Number(i.caras_totales) || 1), 0)
+        : itemsWithArticulo.length;
+
       return {
         LineNum: index.toString(),
         ItemCode: firstItem.articulo || '',
-        Quantity: itemsWithArticulo.length.toString(),
+        Quantity: quantity.toString(),
         TaxCode: 'A4',
         UnitPrice: String(totalPrice || 0),
         CostingCode: articulosMap?.[firstItem.articulo || '']?.U_IMU_OcrCode || '02-03-04',
