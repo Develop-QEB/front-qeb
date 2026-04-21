@@ -2850,8 +2850,8 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
                                           </span>
                                         </td>
                                         <td className={`px-2 py-2 text-xs ${isDark ? 'text-zinc-300' : 'text-gray-700'}`}>{cara.formato}</td>
-                                        <td className={`px-2 py-2 text-xs text-center ${isDark ? 'text-white' : 'text-gray-900'}`}>{cara.renta}</td>
-                                        <td className="px-2 py-2 text-xs text-center text-emerald-400">{cara.bonificacion}</td>
+                                        <td className={`px-2 py-2 text-xs text-center ${isDark ? 'text-white' : 'text-gray-900'}`}>{cara.esBf ? 0 : cara.renta}</td>
+                                        <td className="px-2 py-2 text-xs text-center text-emerald-400">{cara.esBf ? cara.renta : cara.bonificacion}</td>
                                         <td className={`px-2 py-2 text-xs text-center ${isDark ? 'text-white' : 'text-gray-900'} font-medium`}>{totalCaras}</td>
                                         <td className={`px-2 py-2 text-xs text-right ${isDark ? 'text-zinc-300' : 'text-gray-700'}`}>{formatCurrency(cara.tarifaPublica)}</td>
                                         <td className="px-2 py-2 text-xs text-right text-emerald-400 font-medium">{formatCurrency(precioTotal)}</td>
