@@ -1859,8 +1859,12 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
       return;
     }
 
-    // Validar caras de renta pares (flujo + contraflujo requieren número par)
-    if (!esCortesia && !esBonificacion && !esImpresion && !isEspecialArticle(artCode) && (newCara.caras || 0) > 0 && (newCara.caras || 0) % 2 !== 0) {
+    // Validar caras de renta pares — excluir kioscos, boleros y mi macro
+    const formatoUp = (newCara.formato || '').toUpperCase();
+    const esKiosco = formatoUp.includes('KIOSCO') || formatoUp.includes('KIOSKO');
+    const esBolero = formatoUp.includes('BOLERO');
+    const esMiMacro = formatoUp.includes('MI MACRO') || formatoUp.includes('MACRO');
+    if (!esCortesia && !esBonificacion && !esImpresion && !isEspecialArticle(artCode) && !esKiosco && !esBolero && !esMiMacro && (newCara.caras || 0) > 0 && (newCara.caras || 0) % 2 !== 0) {
       alert('Las caras de renta deben ser un número par (Flujo + Contraflujo).');
       return;
     }

@@ -1129,7 +1129,12 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
     }
 
     // Validar caras de renta pares (flujo + contraflujo requieren número par)
-    if (!esCortesia && !esBonificacion && !esImpresion && !esEspecial && newCara.renta > 0 && newCara.renta % 2 !== 0) {
+    // Excluir kioscos, boleros y mi macro — esos no aplican regla de par
+    const itemName = (newCara.articulo?.ItemName || '').toUpperCase();
+    const esKiosco = itemName.includes('KIOSCO') || itemName.includes('KIOSKO');
+    const esBolero = itemName.includes('BOLERO');
+    const esMiMacro = itemName.includes('MI MACRO');
+    if (!esCortesia && !esBonificacion && !esImpresion && !esEspecial && !esKiosco && !esBolero && !esMiMacro && newCara.renta > 0 && newCara.renta % 2 !== 0) {
       alert('Las caras de renta deben ser un número par (Flujo + Contraflujo).');
       return;
     }
