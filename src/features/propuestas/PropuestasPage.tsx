@@ -554,7 +554,7 @@ function StatusModal({ isOpen, onClose, propuesta, onStatusChange, allowedStatus
   const tienePendientes = pendientesDg > 0 || pendientesDcm > 0;
 
   // Verificar si el cliente tiene CUIC 0 (Cliente Lead)
-  const esClienteLead = propuesta && (propuesta.cuic === 0 || propuesta.cuic === null);
+  const esClienteLead = !!(propuesta && (propuesta.cuic === 0 || propuesta.cuic === null));
 
   // Query para obtener las reservas y verificar si están completas
   const { data: reservas } = useQuery({
