@@ -440,36 +440,30 @@ export function CompartirPropuestaPage() {
   const handleDownloadXLSX = () => {
     if (!inventario) return;
     import('xlsx').then(XLSX => {
-      const headers = ['Código Único', 'Plaza', 'Ubicación', 'Tipo de Cara', 'Formato', 'Periodo', 'Longitud', 'Latitud'];
+      const headers = ['Clave', 'Plaza', 'Ubicación', 'Tipo de Cara', 'Formato', 'Periodo', 'Lat', 'Long', 'NOTAS'];
+      const byPlaza: Record<string, typeof inventario> = {};
+      for (const i of inventario) {
+        const plaza = i.plaza || 'Sin Plaza';
+        if (!byPlaza[plaza]) byPlaza[plaza] = [];
+        byPlaza[plaza].push(i);
+      }
       const wb = XLSX.utils.book_new();
-
-      // Agrupar por ciudad (municipio)
-      const porCiudad: Record<string, typeof inventario> = {};
-      inventario.forEach(i => {
-        const ciudad = i.municipio || i.plaza || 'Sin ciudad';
-        if (!porCiudad[ciudad]) porCiudad[ciudad] = [];
-        porCiudad[ciudad].push(i);
-      });
-
-      // Crear una hoja por ciudad
-      Object.entries(porCiudad)
-        .sort(([a], [b]) => a.localeCompare(b))
-        .forEach(([ciudad, items]) => {
-          const rows = items.map(i => [
-            i.codigo_unico,
-            i.plaza,
-            i.ubicacion,
-            i.tipo_de_cara,
-            i.mueble,
-            formatInicioPeriodo(i, tipoPeriodo),
-            i.longitud || '',
-            i.latitud || '',
-          ]);
-          const ws = XLSX.utils.aoa_to_sheet([headers, ...rows]);
-          const sheetName = ciudad.replace(/[\\/*?[\]:]/g, '').substring(0, 31);
-          XLSX.utils.book_append_sheet(wb, ws, sheetName);
-        });
-
+      for (const plaza of Object.keys(byPlaza).sort()) {
+        const rows = byPlaza[plaza].map(i => [
+          (i.codigo_unico || '').split('_')[0],
+          i.plaza || '',
+          i.ubicacion || '',
+          i.tipo_de_cara || '',
+          i.mueble || '',
+          formatInicioPeriodo(i, tipoPeriodo),
+          i.latitud || '',
+          i.longitud || '',
+          ''
+        ]);
+        const ws = XLSX.utils.aoa_to_sheet([headers, ...rows]);
+        const sheetName = plaza.substring(0, 31);
+        XLSX.utils.book_append_sheet(wb, ws, sheetName);
+      }
       XLSX.writeFile(wb, `reservas_propuesta_${propuestaId}.xlsx`);
     });
   };

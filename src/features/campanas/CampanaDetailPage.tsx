@@ -1245,9 +1245,9 @@ export function CampanaDetailPage() {
 
       // Fetch artículos SAP para obtener U_IMU_OcrCode (CostingCode) - usar BD de la campaña
       let articulosMap: Record<string, { U_IMU_OcrCode?: string; U_IMU_cod_sitio?: number; U_IMU_dscSitio?: string }> = {};
+      const { getEndpoints } = await import('../../store/environmentStore');
+      const sapDb = (campana.sap_database || 'CIMU') as import('../../store/environmentStore').SapDatabase;
       try {
-        const { getEndpoints } = await import('../../store/environmentStore');
-        const sapDb = (campana.sap_database || 'CIMU') as import('../../store/environmentStore').SapDatabase;
         const artResponse = await fetch(getEndpoints(sapDb).articulos);
         const artData = await artResponse.json();
         const items = artData.value || artData || [];
@@ -1258,8 +1258,25 @@ export function CampanaDetailPage() {
         console.warn('Could not fetch articulos for CostingCode:', err);
       }
 
+      // Resolver card_code desde SAP si la campaña no lo tiene
+      let resolvedCampana = campana;
+      if (!campana.card_code && campana.cuic) {
+        try {
+          const cuicResponse = await fetch(getEndpoints(sapDb).cuic);
+          const cuicData = await cuicResponse.json();
+          const cuicList: { CUIC?: number; ACA_U_SAPCode?: string }[] = cuicData.value || cuicData || [];
+          const match = cuicList.find(c => String(c.CUIC) === String(campana.cuic));
+          if (match?.ACA_U_SAPCode) {
+            resolvedCampana = { ...campana, card_code: match.ACA_U_SAPCode };
+            console.log(`Resolved card_code from SAP CUIC ${campana.cuic}: ${match.ACA_U_SAPCode}`);
+          }
+        } catch (err) {
+          console.warn('Could not resolve card_code from SAP CUIC:', err);
+        }
+      }
+
       // Construir los payloads (uno por APS)
-      let deliveryNotes = buildDeliveryNote(campana, itemsToPost, campana.sap_database, articulosMap);
+      let deliveryNotes = buildDeliveryNote(resolvedCampana, itemsToPost, campana.sap_database, articulosMap);
 
       // Si es migrada, resolver BaseEntry desde SAP para cada delivery note
       if (isMigratedCampaign(campana)) {
