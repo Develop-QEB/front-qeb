@@ -5890,8 +5890,8 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
 
                     {/* Artículo selector */}
                     <div className="mb-4">
-                      <label className={`text-xs mb-1 block ${(editingCaraHasReservas || editingCaraId) ? 'text-zinc-800' : 'text-zinc-500'}`}>Artículo SAP</label>
-                      {canEditResumen && !editingCaraHasReservas && !editingCaraId ? (
+                      <label className={`text-xs mb-1 block ${editingCaraHasReservas ? 'text-zinc-800' : 'text-zinc-500'}`}>Artículo SAP</label>
+                      {canEditResumen && !editingCaraHasReservas ? (
                         <SearchableSelect
                           label="Seleccionar artículo"
                           options={articulosData || []}

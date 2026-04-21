@@ -918,22 +918,16 @@ export function CampanasPage() {
     return terms;
   }, [debouncedSearchTags, debouncedSearchInput]);
 
-  // All search terms are handled client-side (fetch all data when searching)
-  const debouncedSearch = '';
+  // Always fetch all campaigns (only ~500 active) and filter client-side
   const hasSearch = allSearchTerms.length > 0;
 
-  // When grouping, advanced filters, sorting, catorcena filter, or search are active, fetch ALL data
-  const needsAllData = activeGroupings.length > 0 || advancedFilters.length > 0 || !!sortField || !!selectedCatorcenaInicio || status === 'Incompleta' || hasSearch;
-  const effectiveLimit = needsAllData ? 9999 : limit;
-
   const { data, isLoading } = useQuery({
-    queryKey: ['campanas', page, status, yearInicio, yearFin, catorcenaInicio, catorcenaFin, debouncedSearch, allSearchTerms, tipoPeriodo, needsAllData],
+    queryKey: ['campanas', status, yearInicio, yearFin, catorcenaInicio, catorcenaFin, tipoPeriodo],
     queryFn: () =>
       campanasService.getAll({
-        page: needsAllData ? 1 : page,
-        limit: effectiveLimit,
+        page: 1,
+        limit: 9999,
         status: (status && status !== 'Incompleta') ? status : undefined,
-        search: debouncedSearch || undefined,
         yearInicio,
         yearFin,
         catorcenaInicio,
@@ -944,11 +938,10 @@ export function CampanasPage() {
 
   // Stats query — global KPIs with same filters
   const { data: statsData, isLoading: isLoadingStats } = useQuery({
-    queryKey: ['campanas-stats', status, debouncedSearch, allSearchTerms, yearInicio, yearFin, catorcenaInicio, catorcenaFin, tipoPeriodo],
+    queryKey: ['campanas-stats', status, yearInicio, yearFin, catorcenaInicio, catorcenaFin, tipoPeriodo],
     queryFn: () =>
       campanasService.getStats({
         status: (status && status !== 'Incompleta') ? status : undefined,
-        search: debouncedSearch || undefined,
         yearInicio,
         yearFin,
         catorcenaInicio,
@@ -1009,6 +1002,8 @@ export function CampanasPage() {
             c.codigos_inventario?.toLowerCase().includes(lowerTerm) ||
             c.creador_nombre?.toLowerCase().includes(lowerTerm) ||
             c.T0_U_Asesor?.toLowerCase().includes(lowerTerm) ||
+            String(c.propuesta_id || '').includes(lowerTerm) ||
+            String(c.cotizacion_id || '').includes(lowerTerm) ||
             c.formatos?.toLowerCase().includes(lowerTerm) ||
             // También buscar en los inventarios cargados (codigo_unico individual)
             (campanaInventarios[c.id] || []).some(inv =>
@@ -1818,7 +1813,6 @@ export function CampanasPage() {
       // Un solo request al backend con los mismos filtros activos
       const exportData = await campanasService.getExportLayout({
         status: (status && status !== 'Incompleta') ? status : undefined,
-        search: debouncedSearch || undefined,
         yearInicio,
         yearFin,
         catorcenaInicio,
@@ -1843,7 +1837,7 @@ export function CampanasPage() {
 
       const headers = [
         'Campaña', 'Anunciante', 'Inversión Campaña', 'Operación', 'Código de contrato (Opcional)',
-        'Precio por cara (Opcional)', 'APS Global', 'CUIC', 'Articulo', 'Vendedor',
+        'Precio por cara (Opcional)', 'APS Global', 'APS Específico', 'CUIC', 'Articulo', 'Vendedor',
         'Descripción (Opcional)', 'Inicio o Periodo', 'Fin o Segmento', 'Arte',
         'Código de arte (Opcional)', 'Arte Url (Opcional)', 'Origen del arte (Opcional)',
         'Unidad', 'Cara', 'Ciudad', 'Tipo de Distribución', 'Reproducciones', 'Notas'
@@ -1879,7 +1873,7 @@ export function CampanasPage() {
           if (inventarios.length === 0) {
             rows.push([
               nombreCampana, anunciante, invStr, '', '0', '0',
-              String(aps), String(cuic), '', vendedor, descripcion,
+              String(aps), '', String(cuic), '', vendedor, descripcion,
               'Catorcenas ' + catorcena.anio, periodo,
               '0', '', '', '', '', '', '', '0', '0', ''
             ]);
@@ -1898,6 +1892,7 @@ export function CampanasPage() {
                 '0',
                 precio ? `$${Number(precio).toLocaleString('es-MX')}` : '0',
                 String(aps),
+                String(item.aps ?? ''),
                 String(cuic),
                 item.articulo || '',
                 vendedor,

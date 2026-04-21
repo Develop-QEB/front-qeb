@@ -33,6 +33,7 @@ interface InventarioItem {
   numero_catorcena: number;
   anio_catorcena: number;
   solicitud_caras_id: number;
+  aps_especifico?: number | null;
 }
 
 interface PropuestaInfo {
@@ -295,7 +296,7 @@ export default function PropuestasVersionarioView({ isDark, filters }: Propuesta
     try {
       const headers = [
         'Campaña', 'Anunciante', 'Inversión Campaña', 'Operación', 'Código de contrato (Opcional)',
-        'Precio por cara (Opcional)', 'APS Global', 'CUIC', 'Articulo', 'Vendedor',
+        'Precio por cara (Opcional)', 'APS Global', 'APS Específico', 'CUIC', 'Articulo', 'Vendedor',
         'Descripción (Opcional)', 'Inicio o Periodo', 'Fin o Segmento', 'Arte',
         'Código de arte (Opcional)', 'Arte Url (Opcional)', 'Origen del arte (Opcional)',
         'Unidad', 'Cara', 'Ciudad', 'Tipo de Distribución', 'Reproducciones', 'Notas',
@@ -317,6 +318,7 @@ export default function PropuestasVersionarioView({ isDark, filters }: Propuesta
                   '',
                   String(inv.tarifa_publica_sc || ''),
                   '',
+                  inv.aps_especifico ? String(inv.aps_especifico) : '',
                   info.cuic || '',
                   inv.articulo || '',
                   info.vendedor || '',
@@ -340,6 +342,7 @@ export default function PropuestasVersionarioView({ isDark, filters }: Propuesta
                 info.campana_nombre || '',
                 info.anunciante || '',
                 String(info.inversion || ''),
+                '',
                 '',
                 '',
                 '',
