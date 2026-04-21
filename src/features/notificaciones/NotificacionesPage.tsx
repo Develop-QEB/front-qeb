@@ -11,7 +11,7 @@ import {
   ShieldCheck, DollarSign
 } from 'lucide-react';
 import { Header } from '../../components/layout/Header';
-import { notificacionesService, CaraAutorizacion, ResumenAutorizacion } from '../../services/notificaciones.service';
+import { notificacionesService, CaraAutorizacion, ResumenAutorizacion, HistorialAutorizacion } from '../../services/notificaciones.service';
 import { notasService, NotaPersonal } from '../../services/notas.service';
 import { usuariosService } from '../../services/usuarios.service';
 import { Notificacion, ComentarioTarea } from '../../types';
@@ -1442,6 +1442,12 @@ function ApprovalModal({
     enabled: !!idPropuesta,
   });
 
+  const { data: historialData } = useQuery({
+    queryKey: ['approval-modal-historial', idPropuesta],
+    queryFn: () => notificacionesService.getHistorialAutorizacion(idPropuesta || ''),
+    enabled: !!idPropuesta,
+  });
+
   const aprobarMutation = useMutation({
     mutationFn: () => notificacionesService.aprobarAutorizacion(idPropuesta || '', tipoAutorizacion as 'dg' | 'dcm'),
     onSuccess: () => {
@@ -1449,6 +1455,7 @@ function ApprovalModal({
       refetchResumen();
       queryClient.invalidateQueries({ queryKey: ['notificaciones'] });
       queryClient.invalidateQueries({ queryKey: ['notificaciones-stats'] });
+      queryClient.invalidateQueries({ queryKey: ['approval-modal-historial', idPropuesta] });
       onAction();
     },
   });
@@ -1660,6 +1667,42 @@ function ApprovalModal({
             <div className={`text-center py-12 ${isDark ? 'text-zinc-500' : 'text-gray-400'}`}>
               <Loader2 className="h-6 w-6 animate-spin mx-auto mb-2" />
               <p className="text-sm">Cargando circuitos...</p>
+            </div>
+          )}
+
+          {/* Historial de autorización */}
+          {historialData && historialData.length > 0 && (
+            <div className="mb-6">
+              <h3 className={`text-xs font-medium ${isDark ? 'text-zinc-500' : 'text-gray-400'} uppercase tracking-wider mb-3 flex items-center gap-2`}>
+                <Clock className="h-3.5 w-3.5" />
+                Historial de Autorización
+              </h3>
+              <div className={`rounded-xl border ${isDark ? 'border-zinc-700/50' : 'border-gray-200'} overflow-hidden`}>
+                {historialData.map((entry, idx) => {
+                  const isAprobacion = entry.tipo.includes('aprobacion');
+                  const isRechazo = entry.tipo.includes('rechazo');
+                  const isSolicitud = entry.tipo.includes('solicitud') || entry.tipo.includes('propuesta') || entry.tipo.includes('campana');
+                  return (
+                    <div key={entry.id} className={`flex items-start gap-3 px-4 py-3 ${idx > 0 ? `border-t ${isDark ? 'border-zinc-800/50' : 'border-gray-100'}` : ''}`}>
+                      <div className={`mt-0.5 w-2 h-2 rounded-full flex-shrink-0 ${isAprobacion ? 'bg-emerald-400' : isRechazo ? 'bg-red-400' : 'bg-amber-400'}`} />
+                      <div className="flex-1 min-w-0">
+                        <p className={`text-xs font-medium ${isDark ? 'text-zinc-300' : 'text-gray-700'}`}>{entry.accion}</p>
+                        {isRechazo && entry.detalles?.motivo && (
+                          <p className={`text-[11px] ${isDark ? 'text-red-400/70' : 'text-red-600/70'} mt-0.5`}>Motivo: {entry.detalles.motivo}</p>
+                        )}
+                        {isSolicitud && entry.detalles?.caras && (
+                          <p className={`text-[11px] ${isDark ? 'text-zinc-500' : 'text-gray-400'} mt-0.5`}>
+                            {entry.detalles.caras.length} circuito(s) — DG: {entry.detalles.pendientesDg || 0}, DCM: {entry.detalles.pendientesDcm || 0}
+                          </p>
+                        )}
+                      </div>
+                      <span className={`text-[10px] ${isDark ? 'text-zinc-600' : 'text-gray-400'} flex-shrink-0`}>
+                        {formatDate(entry.fecha)}
+                      </span>
+                    </div>
+                  );
+                })}
+              </div>
             </div>
           )}
         </div>
@@ -2408,6 +2451,49 @@ function TaskDrawer({
               );
             })()}
 
+            {/* Inversión y desglose de caras */}
+            {carasData && carasData.length > 0 && (() => {
+              let totalInversion = 0, carasRenta = 0, carasBonif = 0;
+              carasData.forEach(c => {
+                totalInversion += Number(c.costo) || 0;
+                carasRenta += c.caras || 0;
+                carasBonif += Number(c.bonificacion) || 0;
+              });
+              return (
+                <div className={`p-3 rounded-xl ${isDark ? 'bg-purple-500/5 border-purple-500/20' : 'bg-purple-50 border-purple-200'} border mb-4`}>
+                  <div className={`flex items-center gap-2 ${isDark ? 'text-zinc-500' : 'text-gray-400'} mb-2`}>
+                    <DollarSign className="h-4 w-4 text-purple-400" />
+                    <span className="text-xs">Inversión y Caras</span>
+                  </div>
+                  <div className="grid grid-cols-3 gap-2">
+                    <div className="text-center">
+                      <div className="text-sm font-bold text-purple-400">${totalInversion.toLocaleString('es-MX', { minimumFractionDigits: 0 })}</div>
+                      <div className={`text-[10px] ${isDark ? 'text-zinc-500' : 'text-gray-400'}`}>Inversión</div>
+                    </div>
+                    <div className="text-center">
+                      <div className={`text-sm font-bold ${isDark ? 'text-white' : 'text-gray-900'}`}>{carasRenta}</div>
+                      <div className={`text-[10px] ${isDark ? 'text-zinc-500' : 'text-gray-400'}`}>Renta</div>
+                    </div>
+                    <div className="text-center">
+                      <div className="text-sm font-bold text-emerald-400">{carasBonif}</div>
+                      <div className={`text-[10px] ${isDark ? 'text-zinc-500' : 'text-gray-400'}`}>Bonificadas</div>
+                    </div>
+                  </div>
+                </div>
+              );
+            })()}
+
+            {/* Fecha de creación */}
+            {tarea.fecha_creacion && (
+              <div className={`flex items-center justify-between p-3 rounded-xl ${isDark ? 'bg-zinc-800/30 border-zinc-800/50' : 'bg-gray-50 border-gray-200'} border mb-4`}>
+                <div className={`flex items-center gap-2 ${isDark ? 'text-zinc-500' : 'text-gray-400'}`}>
+                  <Clock className="h-4 w-4" />
+                  <span className="text-xs">Fecha creación</span>
+                </div>
+                <span className={`text-sm ${isDark ? 'text-zinc-300' : 'text-gray-700'}`}>{formatDate(tarea.fecha_creacion)}</span>
+              </div>
+            )}
+
             {/* Botón abrir modal */}
             {onOpenApprovalModal && (
               <button
@@ -2540,6 +2626,7 @@ export function NotificacionesPage() {
   // Estado de selección y drawer
   const [selectedTarea, setSelectedTarea] = useState<(Notificacion & { comentarios?: ComentarioTarea[] }) | null>(null);
   const [isDrawerClosing, setIsDrawerClosing] = useState(false);
+  const [approvalModalTarea, setApprovalModalTarea] = useState<Notificacion | null>(null);
 
   // Handler para cerrar el drawer con animación
   const handleCloseDrawer = useCallback(() => {
@@ -3421,8 +3508,24 @@ export function NotificacionesPage() {
               queryClient.invalidateQueries({ queryKey: ['notificaciones-stats'] });
             }}
             contentType={contentType}
+            onOpenApprovalModal={selectedTarea.tipo?.includes('Autorización') ? () => setApprovalModalTarea(selectedTarea) : undefined}
           />
         </>
+      )}
+
+      {/* Modal de Aprobación */}
+      {approvalModalTarea && (
+        <ApprovalModal
+          tarea={approvalModalTarea}
+          onClose={() => setApprovalModalTarea(null)}
+          onAction={() => {
+            queryClient.invalidateQueries({ queryKey: ['notificaciones'] });
+            queryClient.invalidateQueries({ queryKey: ['notificaciones-stats'] });
+            if (selectedTarea) {
+              notificacionesService.getById(selectedTarea.id).then(updated => setSelectedTarea(updated));
+            }
+          }}
+        />
       )}
 
     </div>
