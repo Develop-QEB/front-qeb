@@ -2694,6 +2694,7 @@ export function CampanaDetailPage() {
                                       : '-'}
                                     </td>
                                   ))}
+                                </tr>
                               );
                             })}
                           </tbody>
