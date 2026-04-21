@@ -146,6 +146,14 @@ export const notificacionesService = {
       throw new Error(response.data.error || 'Error al rechazar solicitud');
     }
   },
+
+  async getHistorialAutorizacion(idquote: string): Promise<HistorialAutorizacion[]> {
+    const response = await api.get<ApiResponse<HistorialAutorizacion[]>>(`/notificaciones/autorizacion/${idquote}/historial`);
+    if (!response.data.success || !response.data.data) {
+      throw new Error(response.data.error || 'Error al obtener historial');
+    }
+    return response.data.data;
+  },
 };
 
 // Tipos de autorización
@@ -156,6 +164,14 @@ export interface ResumenAutorizacion {
   pendientesDcm: number;
   rechazadas: number;
   puedeContinuar: boolean;
+}
+
+export interface HistorialAutorizacion {
+  id: number;
+  tipo: string;
+  accion: string;
+  fecha: string;
+  detalles: any;
 }
 
 export interface CaraAutorizacion {
@@ -176,4 +192,7 @@ export interface CaraAutorizacion {
   cliente?: string;
   campana?: string;
   catorcena?: string;
+  fin_periodo?: string;
+  inicio_periodo?: string;
+  asesor?: string;
 }

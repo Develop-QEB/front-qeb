@@ -26,7 +26,7 @@ const CODE_FORMATO_MAP: Record<string, string> = {
   pb: 'PARABUS', cl: 'COLUMNA', bol: 'BOLERO', kco: 'Kiosco',
 };
 const CODE_PLAZA_MAP_SOL: Record<string, { estado: string; ciudades: string[] }> = {
-  mx:  { estado: 'Ciudad de México', ciudades: [] },
+  mx:  { estado: 'Ciudad de México / AM', ciudades: [] },
   mty: { estado: 'Nuevo León', ciudades: ['Monterrey', 'Guadalupe', 'San Nicolás de los Garza', 'Santa Catarina'] },
   gd:  { estado: 'Jalisco', ciudades: ['Guadalajara', 'Zapopan', 'Tlaquepaque'] },
   gdl: { estado: 'Jalisco', ciudades: ['Guadalajara', 'Zapopan', 'Tlaquepaque'] },
@@ -196,7 +196,7 @@ const MULTI_CITY_RULES: { pattern: RegExp; estado: string; ciudades: string[] }[
   { pattern: /\bTABASCO\b|\bVILLAHERMOSA\b|\bTB\b/, estado: 'Tabasco', ciudades: ['VILLAHERMOSA'] },
   { pattern: /\bMORELIA\b/, estado: 'Michoacán', ciudades: ['MORELIA'] },
   { pattern: /\bCANCUN\b/, estado: 'Quintana Roo', ciudades: ['BENITO JUÁREZ'] },
-  { pattern: /\bCDMX\b|\bCIUDAD DE MEXICO\b|\bDF\b|\bMEXICO\b(?!\s*(Y\s*AM|WI-?FI))|\bMX\b/, estado: 'Ciudad de México', ciudades: [] },
+  { pattern: /\bCDMX\b|\bCIUDAD DE MEXICO\b|\bDF\b|\bMEXICO\b(?!\s*(Y\s*AM|WI-?FI))|\bMX\b/, estado: 'Ciudad de México / AM', ciudades: [] },
   { pattern: /\bNAUC\b/, estado: 'Estado de México', ciudades: ['NAUCALPAN'] },
   { pattern: /\bEM\b/, estado: 'Estado de México', ciudades: [] },
 ];
@@ -1128,6 +1128,17 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
       return;
     }
 
+    // Validar caras de renta pares (flujo + contraflujo requieren número par)
+    // Excluir kioscos, boleros y mi macro — esos no aplican regla de par
+    const itemName = (newCara.articulo?.ItemName || '').toUpperCase();
+    const esKiosco = itemName.includes('KIOSCO') || itemName.includes('KIOSKO');
+    const esBolero = itemName.includes('BOLERO');
+    const esMiMacro = itemName.includes('MI MACRO');
+    if (!esCortesia && !esBonificacion && !esImpresion && !esEspecial && !esKiosco && !esBolero && !esMiMacro && newCara.renta > 0 && newCara.renta % 2 !== 0) {
+      alert('Las caras de renta deben ser un número par (Flujo + Contraflujo).');
+      return;
+    }
+
     // BF validation: if bonificacion > 0 on a regular RT article, require articuloBf
     const needsBfArticle = newCara.bonificacion > 0 && !esCortesia && !esBonificacion && !esImpresion && !esEspecial;
     if (needsBfArticle && !newCara.articuloBf) {
@@ -1314,12 +1325,17 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
         autorizacion_dcm: c._originalDcm,
       }));
       // Paso 1: Impar por grupo — si renta+bonificacion de un grupo es impar, esa cara es DG
-      // Cortesías y Kioscos quedan excluidos: no requieren autorización por impar
+      // Excluir: CT, Kioscos, Boleros, Mi Macro, IM, ESP — solo aplica a PB/Columna y otros RT estándar
       updated = updated.map(c => {
         const esCaraCortesia = c.articulo?.ItemCode?.toUpperCase().startsWith('CT');
         const artName = (c.articulo?.ItemName || '').toUpperCase();
+        const artCode2 = (c.articulo?.ItemCode || '').toUpperCase();
         const esKiosco = artName.includes('KIOSCO') || artName.includes('KIOSKO');
-        if (esCaraCortesia || esKiosco || c.esBf) return c; // BF rows don't need auth check
+        const esBoleroItem = artName.includes('BOLERO');
+        const esMiMacroItem = artName.includes('MI MACRO');
+        const esImpresionItem = artCode2.startsWith('IM');
+        const esEspecialItem = artCode2.startsWith('ESP') || artCode2.startsWith('ES-');
+        if (esCaraCortesia || esKiosco || esBoleroItem || esMiMacroItem || esImpresionItem || esEspecialItem || c.esBf) return c;
         // For RT/BF pairs, sum both rows' renta
         let carasGrupo = c.renta + c.bonificacion;
         if (c.grupo_rt_bf) {

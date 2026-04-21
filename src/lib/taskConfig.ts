@@ -1,4 +1,4 @@
-import { Circle, Clock, CheckCircle, AlertCircle, FileText, Send, Bell, Briefcase, Target, ClipboardList } from 'lucide-react';
+import { Circle, Clock, CheckCircle, AlertCircle, FileText, Send, Bell, Briefcase, Target, ClipboardList, ShieldCheck, ShieldX, XCircle } from 'lucide-react';
 
 // ============ CONFIGURACIÓN DE ESTATUS ============
 export const STATUS_CONFIG = {
@@ -25,6 +25,12 @@ export const STATUS_CONFIG = {
     bg: 'bg-red-500/20',
     border: 'border-red-500/30',
     icon: AlertCircle
+  },
+  'Cancelado': {
+    color: 'text-zinc-400',
+    bg: 'bg-zinc-500/20',
+    border: 'border-zinc-500/30',
+    icon: XCircle
   },
 } as const;
 
@@ -114,6 +120,48 @@ export const TIPO_CONFIG = {
     bg: 'bg-teal-500/20',
     border: 'border-teal-500/30',
     icon: ClipboardList
+  },
+
+  // Autorización - Naranja
+  'Autorización DG': {
+    color: 'text-orange-400',
+    bg: 'bg-orange-500/20',
+    border: 'border-orange-500/30',
+    icon: ShieldCheck
+  },
+  'Autorización DCM': {
+    color: 'text-orange-400',
+    bg: 'bg-orange-500/20',
+    border: 'border-orange-500/30',
+    icon: ShieldCheck
+  },
+
+  // Aprobación - Verde
+  'Aprobación DG': {
+    color: 'text-emerald-400',
+    bg: 'bg-emerald-500/20',
+    border: 'border-emerald-500/30',
+    icon: CheckCircle
+  },
+  'Aprobación DCM': {
+    color: 'text-emerald-400',
+    bg: 'bg-emerald-500/20',
+    border: 'border-emerald-500/30',
+    icon: CheckCircle
+  },
+
+  // Rechazo - Rojo
+  'Rechazo DG': {
+    color: 'text-red-400',
+    bg: 'bg-red-500/20',
+    border: 'border-red-500/30',
+    icon: ShieldX
+  },
+  'Rechazo DCM': {
+    color: 'text-red-400',
+    bg: 'bg-red-500/20',
+    border: 'border-red-500/30',
+    icon: ShieldX
   },
 } as const;
 

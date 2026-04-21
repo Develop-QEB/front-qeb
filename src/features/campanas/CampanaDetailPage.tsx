@@ -1245,9 +1245,9 @@ export function CampanaDetailPage() {
 
       // Fetch artículos SAP para obtener U_IMU_OcrCode (CostingCode) - usar BD de la campaña
       let articulosMap: Record<string, { U_IMU_OcrCode?: string; U_IMU_cod_sitio?: number; U_IMU_dscSitio?: string }> = {};
+      const { getEndpoints } = await import('../../store/environmentStore');
+      const sapDb = (campana.sap_database || 'CIMU') as import('../../store/environmentStore').SapDatabase;
       try {
-        const { getEndpoints } = await import('../../store/environmentStore');
-        const sapDb = (campana.sap_database || 'CIMU') as import('../../store/environmentStore').SapDatabase;
         const artResponse = await fetch(getEndpoints(sapDb).articulos);
         const artData = await artResponse.json();
         const items = artData.value || artData || [];
@@ -1258,8 +1258,25 @@ export function CampanaDetailPage() {
         console.warn('Could not fetch articulos for CostingCode:', err);
       }
 
+      // Resolver card_code desde SAP si la campaña no lo tiene
+      let resolvedCampana = campana;
+      if (!campana.card_code && campana.cuic) {
+        try {
+          const cuicResponse = await fetch(getEndpoints(sapDb).cuic);
+          const cuicData = await cuicResponse.json();
+          const cuicList: { CUIC?: number; ACA_U_SAPCode?: string }[] = cuicData.value || cuicData || [];
+          const match = cuicList.find(c => String(c.CUIC) === String(campana.cuic));
+          if (match?.ACA_U_SAPCode) {
+            resolvedCampana = { ...campana, card_code: match.ACA_U_SAPCode };
+            console.log(`Resolved card_code from SAP CUIC ${campana.cuic}: ${match.ACA_U_SAPCode}`);
+          }
+        } catch (err) {
+          console.warn('Could not resolve card_code from SAP CUIC:', err);
+        }
+      }
+
       // Construir los payloads (uno por APS)
-      let deliveryNotes = buildDeliveryNote(campana, itemsToPost, campana.sap_database, articulosMap);
+      let deliveryNotes = buildDeliveryNote(resolvedCampana, itemsToPost, campana.sap_database, articulosMap);
 
       // Si es migrada, resolver BaseEntry desde SAP para cada delivery note
       if (isMigratedCampaign(campana)) {
@@ -2536,31 +2553,18 @@ export function CampanaDetailPage() {
                   />
                 ) : inventarioReservado.length === 0 && gruposSinInventario.length > 0 ? (
                   <div>
-                    <div className={`px-3 py-2 border-b ${isDark ? 'border-yellow-500/30 bg-yellow-500/5' : 'border-yellow-200 bg-yellow-50'}`}>
-                      <div className="flex items-center gap-2">
-                        <AlertTriangle className={`h-3.5 w-3.5 ${isDark ? 'text-yellow-400' : 'text-yellow-600'}`} />
-                        <span className={`text-xs font-semibold uppercase tracking-wide ${isDark ? 'text-yellow-300' : 'text-yellow-700'}`}>
-                          Grupos sin inventario ({gruposSinInventario.length})
-                        </span>
-                      </div>
-                    </div>
                     <table className="w-full text-xs">
                       <thead className="sticky top-0 bg-card z-10">
                         <tr className="border-b border-border text-left">
                           <th className="p-2 w-8"></th>
-                          <th className={`p-2 font-medium ${isDark ? 'text-yellow-300' : 'text-yellow-700'}`}>Artículo</th>
-                          <th className={`p-2 font-medium ${isDark ? 'text-yellow-300' : 'text-yellow-700'}`}>Ciudad</th>
-                          <th className={`p-2 font-medium ${isDark ? 'text-yellow-300' : 'text-yellow-700'}`}>Formato</th>
-                          <th className={`p-2 font-medium ${isDark ? 'text-yellow-300' : 'text-yellow-700'}`}>Caras esperadas</th>
-                          <th className={`p-2 font-medium ${isDark ? 'text-yellow-300' : 'text-yellow-700'}`}>Periodo</th>
-                          <th className={`p-2 font-medium ${isDark ? 'text-yellow-300' : 'text-yellow-700'}`}>Estatus</th>
+                          {visibleColumnsReservado.map(col => (
+                            <th key={col.field} className={`p-2 font-medium ${isDark ? 'text-purple-300' : 'text-purple-700'}`}>{col.label}</th>
+                          ))}
                         </tr>
                       </thead>
                       <tbody>
                         {gruposSinInventario.map((sc: SolicitudCara) => {
                           const info = groupCompletenessMap.get(sc.id);
-                          const inicio = sc.inicio_periodo ? new Date(sc.inicio_periodo).toLocaleDateString('es-MX', { day: '2-digit', month: 'short', year: 'numeric' }) : '-';
-                          const fin = sc.fin_periodo ? new Date(sc.fin_periodo).toLocaleDateString('es-MX', { day: '2-digit', month: 'short', year: 'numeric' }) : '-';
                           return (
                             <tr key={`noinv_${sc.id}`} className={`border-b border-border/50 ${isDark ? 'bg-yellow-500/5' : 'bg-yellow-50/30'}`}>
                               <td className="p-2">
@@ -2568,20 +2572,21 @@ export function CampanaDetailPage() {
                                   <AlertTriangle className="h-3.5 w-3.5 text-yellow-500" />
                                 </div>
                               </td>
-                              <td className={`p-2 ${isDark ? 'text-zinc-300' : 'text-gray-700'}`}>{sc.articulo || '-'}</td>
-                              <td className={`p-2 ${isDark ? 'text-zinc-300' : 'text-gray-700'}`}>{sc.ciudad || '-'}</td>
-                              <td className={`p-2 ${isDark ? 'text-zinc-300' : 'text-gray-700'}`}>{sc.formato || '-'}</td>
-                              <td className="p-2 text-center">
-                                <span className="px-1.5 py-0.5 rounded text-[10px] font-semibold bg-yellow-500/20 text-yellow-400 border border-yellow-500/30">
-                                  0/{info?.esperadas || 0}
-                                </span>
-                              </td>
-                              <td className={`p-2 ${isDark ? 'text-zinc-400' : 'text-gray-500'} text-[10px]`}>{inicio} — {fin}</td>
-                              <td className="p-2">
-                                <span className="px-1.5 py-0.5 rounded text-[9px] font-semibold bg-red-500/20 text-red-400 border border-red-500/30">
-                                  Sin inventario
-                                </span>
-                              </td>
+                              {visibleColumnsReservado.map(col => (
+                                <td key={col.field} className={`p-2 ${isDark ? 'text-zinc-400' : 'text-gray-500'}`}>
+                                  {col.field === 'articulo' ? (
+                                    <div className="flex items-center gap-1.5">
+                                      <span className={isDark ? 'text-zinc-300' : 'text-gray-700'}>{sc.articulo || '-'}</span>
+                                      <span className="px-1.5 py-0.5 rounded text-[9px] font-semibold bg-yellow-500/20 text-yellow-400 border border-yellow-500/30">
+                                        Incompleto 0/{info?.esperadas || 0}
+                                      </span>
+                                    </div>
+                                  ) : col.field === 'plaza' ? (sc.ciudad || '-')
+                                  : col.field === 'tipo_de_cara' ? (sc.formato || '-')
+                                  : col.field === 'caras_totales' ? '0'
+                                  : '-'}
+                                </td>
+                              ))}
                             </tr>
                           );
                         })}
@@ -2660,55 +2665,35 @@ export function CampanaDetailPage() {
                       </table>
                     )}
 
-                    {/* Grupos sin inventario */}
+                    {/* Grupos sin inventario - integrados en el mismo formato */}
                     {gruposSinInventario.length > 0 && (
                       <>
-                        <div className={`px-3 py-2 mt-2 border-b ${isDark ? 'border-yellow-500/30 bg-yellow-500/5' : 'border-yellow-200 bg-yellow-50'}`}>
-                          <div className="flex items-center gap-2">
-                            <AlertTriangle className={`h-3.5 w-3.5 ${isDark ? 'text-yellow-400' : 'text-yellow-600'}`} />
-                            <span className={`text-xs font-semibold uppercase tracking-wide ${isDark ? 'text-yellow-300' : 'text-yellow-700'}`}>
-                              Grupos sin inventario ({gruposSinInventario.length})
-                            </span>
-                          </div>
-                        </div>
                         <table className="w-full text-xs">
-                          <thead className="sticky top-0 bg-card z-10">
-                            <tr className="border-b border-border text-left">
-                              <th className="p-2 w-8"></th>
-                              <th className={`p-2 font-medium ${isDark ? 'text-yellow-300' : 'text-yellow-700'}`}>Artículo</th>
-                              <th className={`p-2 font-medium ${isDark ? 'text-yellow-300' : 'text-yellow-700'}`}>Ciudad</th>
-                              <th className={`p-2 font-medium ${isDark ? 'text-yellow-300' : 'text-yellow-700'}`}>Formato</th>
-                              <th className={`p-2 font-medium ${isDark ? 'text-yellow-300' : 'text-yellow-700'}`}>Caras esperadas</th>
-                              <th className={`p-2 font-medium ${isDark ? 'text-yellow-300' : 'text-yellow-700'}`}>Periodo</th>
-                              <th className={`p-2 font-medium ${isDark ? 'text-yellow-300' : 'text-yellow-700'}`}>Estatus</th>
-                            </tr>
-                          </thead>
                           <tbody>
                             {gruposSinInventario.map((sc: SolicitudCara) => {
                               const info = groupCompletenessMap.get(sc.id);
-                              const inicio = sc.inicio_periodo ? new Date(sc.inicio_periodo).toLocaleDateString('es-MX', { day: '2-digit', month: 'short', year: 'numeric' }) : '-';
-                              const fin = sc.fin_periodo ? new Date(sc.fin_periodo).toLocaleDateString('es-MX', { day: '2-digit', month: 'short', year: 'numeric' }) : '-';
                               return (
                                 <tr key={`noinv_${sc.id}`} className={`border-b border-border/50 ${isDark ? 'bg-yellow-500/5' : 'bg-yellow-50/30'}`}>
-                                  <td className="p-2">
+                                  <td className="p-2 w-8">
                                     <div className="w-4 h-4 flex items-center justify-center" title="Sin inventario asignado">
                                       <AlertTriangle className="h-3.5 w-3.5 text-yellow-500" />
                                     </div>
                                   </td>
-                                  <td className={`p-2 ${isDark ? 'text-zinc-300' : 'text-gray-700'}`}>{sc.articulo || '-'}</td>
-                                  <td className={`p-2 ${isDark ? 'text-zinc-300' : 'text-gray-700'}`}>{sc.ciudad || '-'}</td>
-                                  <td className={`p-2 ${isDark ? 'text-zinc-300' : 'text-gray-700'}`}>{sc.formato || '-'}</td>
-                                  <td className="p-2 text-center">
-                                    <span className="px-1.5 py-0.5 rounded text-[10px] font-semibold bg-yellow-500/20 text-yellow-400 border border-yellow-500/30">
-                                      0/{info?.esperadas || 0}
-                                    </span>
-                                  </td>
-                                  <td className={`p-2 ${isDark ? 'text-zinc-400' : 'text-gray-500'} text-[10px]`}>{inicio} — {fin}</td>
-                                  <td className="p-2">
-                                    <span className="px-1.5 py-0.5 rounded text-[9px] font-semibold bg-red-500/20 text-red-400 border border-red-500/30">
-                                      Sin inventario
-                                    </span>
-                                  </td>
+                                  {visibleColumnsReservado.map(col => (
+                                    <td key={col.field} className={`p-2 ${isDark ? 'text-zinc-400' : 'text-gray-500'}`}>
+                                      {col.field === 'articulo' ? (
+                                        <div className="flex items-center gap-1.5">
+                                          <span className={isDark ? 'text-zinc-300' : 'text-gray-700'}>{sc.articulo || '-'}</span>
+                                          <span className="px-1.5 py-0.5 rounded text-[9px] font-semibold bg-yellow-500/20 text-yellow-400 border border-yellow-500/30">
+                                            Incompleto 0/{info?.esperadas || 0}
+                                          </span>
+                                        </div>
+                                      ) : col.field === 'plaza' ? (sc.ciudad || '-')
+                                      : col.field === 'tipo_de_cara' ? (sc.formato || '-')
+                                      : col.field === 'caras_totales' ? '0'
+                                      : '-'}
+                                    </td>
+                                  ))}
                                 </tr>
                               );
                             })}

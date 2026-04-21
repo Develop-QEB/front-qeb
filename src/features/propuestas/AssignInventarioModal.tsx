@@ -140,7 +140,7 @@ const CODE_FORMATO_MAP: Record<string, string> = {
   pb: 'PARABUS', cl: 'COLUMNA', bol: 'BOLERO', kco: 'Kiosco',
 };
 const CODE_PLAZA_MAP: Record<string, { estado: string; ciudad: string }> = {
-  mx:  { estado: 'Ciudad de México', ciudad: '' },
+  mx:  { estado: 'Ciudad de México / AM', ciudad: '' },
   mty: { estado: 'Nuevo León', ciudad: 'Monterrey,Guadalupe,San Nicolás de los Garza,Santa Catarina' },
   gd:  { estado: 'Jalisco', ciudad: 'Guadalajara,Zapopan,Tlaquepaque' },
   gdl: { estado: 'Jalisco', ciudad: 'Guadalajara,Zapopan,Tlaquepaque' },
@@ -197,6 +197,7 @@ const MULTI_CITY_RULES: { pattern: RegExp; estado: string; ciudad: string }[] = 
   { pattern: /\bVERACRUZ\b|\bVER\b/, estado: 'Veracruz', ciudad: 'Veracruz,Alvarado,Boca del Río' },
   { pattern: /\bGD\b|\bGUADALAJARA\b/, estado: 'Jalisco', ciudad: 'Guadalajara,Zapopan,Tlaquepaque' },
   { pattern: /\bPUERTO VALLARTA\b|\bPV\b/, estado: 'Jalisco', ciudad: 'Puerto Vallarta' },
+  { pattern: /\bTOLUCA\b|\bTL\b/, estado: 'Estado de México', ciudad: 'Toluca,Metepec,San Mateo Atenco,Lerma' },
 ];
 
 // Extract city/state from article name (sorted by length to avoid false positives)
@@ -1858,6 +1859,16 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
       return;
     }
 
+    // Validar caras de renta pares — excluir kioscos, boleros y mi macro
+    const formatoUp = (newCara.formato || '').toUpperCase();
+    const esKiosco = formatoUp.includes('KIOSCO') || formatoUp.includes('KIOSKO');
+    const esBolero = formatoUp.includes('BOLERO');
+    const esMiMacro = formatoUp.includes('MI MACRO') || formatoUp.includes('MACRO');
+    if (!esCortesia && !esBonificacion && !esImpresion && !isEspecialArticle(artCode) && !esKiosco && !esBolero && !esMiMacro && (newCara.caras || 0) > 0 && (newCara.caras || 0) % 2 !== 0) {
+      alert('Las caras de renta deben ser un número par (Flujo + Contraflujo).');
+      return;
+    }
+
     // BF validation: bonificacion > 0 on RT article requires articuloBf
     const needsBfArticle = (newCara.bonificacion || 0) > 0 && !esCortesia && !esBonificacion && !esImpresion && !isEspecialArticle(artCode);
     if (needsBfArticle && !newCara.articuloBf) {
@@ -2144,7 +2155,8 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
             if (authFieldsChanged) {
               updated = updated.map(c => ({ ...c, autorizacion_dg: c._originalDg || c.autorizacion_dg, autorizacion_dcm: c._originalDcm || c.autorizacion_dcm }));
               updated = updated.map(c => {
-                if (c.formato === 'Kiosco' || c.esBf) return c;
+                if (c.esBf) return c;
+            { const fmt = (c.formato || '').toUpperCase(); if (fmt.includes('KIOSCO') || fmt.includes('KIOSKO') || fmt.includes('BOLERO') || fmt.includes('MI MACRO') || fmt.includes('MACRO')) return c; }
                 // Sum caras across RT/BF group members (renta + bonif OR rt.caras + bf.caras)
                 let total = (c.caras_flujo || 0) + (c.caras_contraflujo || 0) + (c.bonificacion || 0);
                 if (c.grupo_rt_bf) {
@@ -2238,7 +2250,8 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
           // Reset + impar + contamination
           updated = updated.map(c => ({ ...c, autorizacion_dg: c._originalDg || c.autorizacion_dg, autorizacion_dcm: c._originalDcm || c.autorizacion_dcm }));
           updated = updated.map(c => {
-            if (c.formato === 'Kiosco' || c.esBf) return c;
+            if (c.esBf) return c;
+            { const fmt = (c.formato || '').toUpperCase(); if (fmt.includes('KIOSCO') || fmt.includes('KIOSKO') || fmt.includes('BOLERO') || fmt.includes('MI MACRO') || fmt.includes('MACRO')) return c; }
             // Sum caras across RT/BF group members
             let total = (c.caras_flujo || 0) + (c.caras_contraflujo || 0) + (c.bonificacion || 0);
             if (c.grupo_rt_bf) {
@@ -3304,11 +3317,11 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
       // Call API immediately
       setIsSaving(true);
       try {
-        const clienteId = solicitudDetails?.propuesta?.cliente_id || propuesta.cliente_id;
+        const clienteId = solicitudDetails?.propuesta?.cliente_id ?? propuesta.cliente_id;
         const fechaInicio = selectedCaraForSearch.inicio_periodo || solicitudDetails?.cotizacion?.fecha_inicio || new Date().toISOString();
         const fechaFin = selectedCaraForSearch.fin_periodo || solicitudDetails?.cotizacion?.fecha_fin || new Date().toISOString();
 
-        if (!clienteId) throw new Error("Cliente ID no encontrado");
+        if (clienteId === undefined || clienteId === null) throw new Error("Cliente ID no encontrado");
 
         const result = await propuestasService.createReservas(propuesta.id, {
           reservas: newReservas,
@@ -3397,11 +3410,11 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
       // Call API immediately
       setIsSaving(true);
       try {
-        const clienteId = solicitudDetails?.propuesta?.cliente_id || propuesta.cliente_id;
+        const clienteId = solicitudDetails?.propuesta?.cliente_id ?? propuesta.cliente_id;
         const fechaInicio = selectedCaraForSearch.inicio_periodo || solicitudDetails?.cotizacion?.fecha_inicio || new Date().toISOString();
         const fechaFin = selectedCaraForSearch.fin_periodo || solicitudDetails?.cotizacion?.fecha_fin || new Date().toISOString();
 
-        if (!clienteId) throw new Error("Cliente ID no encontrado");
+        if (clienteId === undefined || clienteId === null) throw new Error("Cliente ID no encontrado");
 
         const result = await propuestasService.createReservas(propuesta.id, {
           reservas: newReservas,
@@ -4058,16 +4071,23 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
               </div>
 
               {/* % Distribucion - only for Digital */}
-              {selectedCaraForSearch?.tipo === 'Digital' && <div className={`flex flex-col items-center justify-center px-2 py-1 rounded-xl ${isDark ? 'bg-zinc-800/30' : 'bg-gray-50/30'} border ${isDark ? 'border-zinc-700/20' : 'border-gray-200/20'} min-w-[70px]`}>
+              {selectedCaraForSearch?.tipo === 'Digital' && (() => {
+                const totalRentaForPct = (adjustedCarasFlujo.flujo + adjustedCarasFlujo.contraflujo) || 1;
+                const flujoYaRes = adjustedCarasFlujo.flujo - remainingToAssign.flujo;
+                const contraYaRes = adjustedCarasFlujo.contraflujo - remainingToAssign.contraflujo;
+                const minPct = Math.ceil(flujoYaRes / totalRentaForPct * 100);
+                const maxPct = Math.floor((totalRentaForPct - contraYaRes) / totalRentaForPct * 100);
+                return (
+                <div className={`flex flex-col items-center justify-center px-2 py-1 rounded-xl ${isDark ? 'bg-zinc-800/30' : 'bg-gray-50/30'} border ${isDark ? 'border-zinc-700/20' : 'border-gray-200/20'} min-w-[70px]`}>
                 <span className={`text-[9px] ${isDark ? 'text-zinc-500' : 'text-gray-400'} mb-1`}>Distribución</span>
                 <div className="flex items-center gap-1">
                   <input
                     type="number"
-                    min={0}
-                    max={100}
+                    min={minPct}
+                    max={maxPct}
                     value={flujoPct}
                     onChange={async (e) => {
-                      const v = Math.max(0, Math.min(100, parseInt(e.target.value) || 0));
+                      const v = Math.max(minPct, Math.min(maxPct, parseInt(e.target.value) || 0));
                       setFlujoPct(v);
                       if (!selectedCaraForSearch?.id) return;
                       const totalRenta = selectedCaraForSearch.caras || ((selectedCaraForSearch.caras_flujo || 0) + (selectedCaraForSearch.caras_contraflujo || 0));
@@ -4097,7 +4117,9 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
                   <span className={`text-[10px] ${isDark ? 'text-zinc-500' : 'text-gray-400'}`}>%</span>
                 </div>
                 <span className={`text-[9px] ${isDark ? 'text-zinc-600' : 'text-gray-300'} mt-0.5`}>{savingPct ? '...' : `${flujoPct}/${100 - flujoPct}`}</span>
-              </div>}
+              </div>
+                );
+              })()}
 
               {/* Contraflujo KPI */}
               <div className={`flex-1 ${isDark ? 'bg-zinc-800/50' : 'bg-gray-50/50'} rounded-xl p-3 border ${isDark ? 'border-zinc-700/30' : 'border-gray-200/30'}`}>

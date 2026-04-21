@@ -138,7 +138,7 @@ const CODE_FORMATO_MAP: Record<string, string> = {
   pb: 'PARABUS', cl: 'COLUMNA', bol: 'BOLERO', kco: 'Kiosco',
 };
 const CODE_PLAZA_MAP: Record<string, { estado: string; ciudad: string }> = {
-  mx:  { estado: 'Ciudad de México', ciudad: '' },
+  mx:  { estado: 'Ciudad de México / AM', ciudad: '' },
   mty: { estado: 'Nuevo León', ciudad: 'Monterrey,Guadalupe,San Nicolás de los Garza,Santa Catarina' },
   gd:  { estado: 'Jalisco', ciudad: 'Guadalajara,Zapopan,Tlaquepaque' },
   gdl: { estado: 'Jalisco', ciudad: 'Guadalajara,Zapopan,Tlaquepaque' },
@@ -195,6 +195,7 @@ const MULTI_CITY_RULES: { pattern: RegExp; estado: string; ciudad: string }[] = 
   { pattern: /\bVERACRUZ\b|\bVER\b/, estado: 'Veracruz', ciudad: 'Veracruz,Alvarado,Boca del Río' },
   { pattern: /\bGD\b|\bGUADALAJARA\b/, estado: 'Jalisco', ciudad: 'Guadalajara,Zapopan,Tlaquepaque' },
   { pattern: /\bPUERTO VALLARTA\b|\bPV\b/, estado: 'Jalisco', ciudad: 'Puerto Vallarta' },
+  { pattern: /\bTOLUCA\b|\bTL\b/, estado: 'Estado de México', ciudad: 'Toluca,Metepec,San Mateo Atenco,Lerma' },
 ];
 
 // Extract city/state from article name (sorted by length to avoid false positives)
@@ -1851,6 +1852,16 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
       return;
     }
 
+    // Validar caras de renta pares — excluir kioscos, boleros y mi macro
+    const formatoUp = (newCara.formato || '').toUpperCase();
+    const esKiosco = formatoUp.includes('KIOSCO') || formatoUp.includes('KIOSKO');
+    const esBolero = formatoUp.includes('BOLERO');
+    const esMiMacro = formatoUp.includes('MI MACRO') || formatoUp.includes('MACRO');
+    if (!esCortesia && !esBonificacion && !esImpresion && !isEspecialArticle(artCode) && !esKiosco && !esBolero && !esMiMacro && (newCara.caras || 0) > 0 && (newCara.caras || 0) % 2 !== 0) {
+      alert('Las caras de renta deben ser un número par (Flujo + Contraflujo).');
+      return;
+    }
+
     // BF validation: bonificacion > 0 on RT article requires articuloBf
     const needsBfArticle = (newCara.bonificacion || 0) > 0 && !esCortesia && !esBonificacion && !esImpresion && !isEspecialArticle(newCara.articulo || '');
     if (needsBfArticle && !articuloBf) {
@@ -2128,8 +2139,8 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
             updated = updated.map(c => ({ ...c, autorizacion_dg: c._originalDg || c.autorizacion_dg, autorizacion_dcm: c._originalDcm || c.autorizacion_dcm }));
             // Impar/DG check: sum caras across BOTH members of an RT/BF pair
             updated = updated.map(c => {
-              if (c.formato === 'Kiosco') return c;
-              if (c.esBf) return c; // BF rows don't trigger their own impar check
+              if (c.esBf) return c;
+              { const fmt = (c.formato || '').toUpperCase(); if (fmt.includes('KIOSCO') || fmt.includes('KIOSKO') || fmt.includes('BOLERO') || fmt.includes('MI MACRO') || fmt.includes('MACRO')) return c; }
               let total = (c.caras_flujo || 0) + (c.caras_contraflujo || 0) + (c.bonificacion || 0);
               if (c.grupo_rt_bf) {
                 const bf = updated.find(o => o.grupo_rt_bf === c.grupo_rt_bf && o.esBf && o.inicio_periodo === c.inicio_periodo);
@@ -2225,8 +2236,8 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
           updated = updated.map(c => ({ ...c, autorizacion_dg: c._originalDg || c.autorizacion_dg, autorizacion_dcm: c._originalDcm || c.autorizacion_dcm }));
           // Impar/DG check: sum caras across BOTH members of an RT/BF pair
           updated = updated.map(c => {
-            if (c.formato === 'Kiosco') return c;
             if (c.esBf) return c;
+            { const fmt = (c.formato || '').toUpperCase(); if (fmt.includes('KIOSCO') || fmt.includes('KIOSKO') || fmt.includes('BOLERO') || fmt.includes('MI MACRO') || fmt.includes('MACRO')) return c; }
             let total = (c.caras_flujo || 0) + (c.caras_contraflujo || 0) + (c.bonificacion || 0);
             if (c.grupo_rt_bf) {
               const bf = updated.find(o => o.grupo_rt_bf === c.grupo_rt_bf && o.esBf && o.inicio_periodo === c.inicio_periodo);
@@ -4008,21 +4019,30 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
               </div>
 
               {/* % Distribucion */}
+              {(() => {
+                const totalRentaForPct = (adjustedCarasFlujo.flujo + adjustedCarasFlujo.contraflujo) || 1;
+                const flujoYaRes = adjustedCarasFlujo.flujo - remainingToAssign.flujo;
+                const contraYaRes = adjustedCarasFlujo.contraflujo - remainingToAssign.contraflujo;
+                const minPct = Math.ceil(flujoYaRes / totalRentaForPct * 100);
+                const maxPct = Math.floor((totalRentaForPct - contraYaRes) / totalRentaForPct * 100);
+                return (
               <div className="flex flex-col items-center justify-center px-2 py-1 rounded-xl bg-zinc-800/30 border border-zinc-700/20 min-w-[70px]">
                 <span className="text-[9px] text-zinc-500 mb-1">Distribución</span>
                 <div className="flex items-center gap-1">
                   <input
                     type="number"
-                    min={0}
-                    max={100}
+                    min={minPct}
+                    max={maxPct}
                     value={flujoPct}
-                    onChange={(e) => setFlujoPct(Math.max(0, Math.min(100, parseInt(e.target.value) || 0)))}
+                    onChange={(e) => setFlujoPct(Math.max(minPct, Math.min(maxPct, parseInt(e.target.value) || 0)))}
                     className="w-10 text-center text-xs font-bold bg-zinc-800 border-zinc-700 text-blue-400 border rounded px-1 py-0.5 focus:outline-none focus:ring-1 focus:ring-blue-500/50"
                   />
                   <span className="text-[10px] text-zinc-500">%</span>
                 </div>
                 <span className="text-[9px] text-zinc-600 mt-0.5">{flujoPct}/{100 - flujoPct}</span>
               </div>
+                );
+              })()}
 
               {/* Contraflujo KPI */}
               <div className="flex-1 bg-zinc-800/50 rounded-xl p-3 border border-zinc-700/30">

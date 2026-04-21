@@ -553,6 +553,9 @@ function StatusModal({ isOpen, onClose, propuesta, onStatusChange, allowedStatus
   const pendientesDcm = caras?.filter(c => c.autorizacion_dcm === 'pendiente').length || 0;
   const tienePendientes = pendientesDg > 0 || pendientesDcm > 0;
 
+  // Verificar si el cliente tiene CUIC 0 (Cliente Lead)
+  const esClienteLead = !!(propuesta && (propuesta.cuic === 0 || propuesta.cuic === null));
+
   // Query para obtener las reservas y verificar si están completas
   const { data: reservas } = useQuery({
     queryKey: ['propuesta-reservas-modal', propuesta?.id],
@@ -685,6 +688,17 @@ function StatusModal({ isOpen, onClose, propuesta, onStatusChange, allowedStatus
               </div>
             </div>
           )}
+          {esClienteLead && (
+            <div className={`mb-4 p-3 rounded-lg ${isDark ? 'bg-orange-500/10 border-orange-500/30' : 'bg-orange-50 border-orange-200'} border flex items-start gap-3`}>
+              <AlertTriangle className={`h-5 w-5 ${isDark ? 'text-orange-400' : 'text-orange-600'} flex-shrink-0 mt-0.5`} />
+              <div>
+                <p className={`text-sm font-medium ${isDark ? 'text-orange-200' : 'text-orange-800'}`}>Cliente Lead (CUIC 0)</p>
+                <p className={`text-xs mt-1 ${isDark ? 'text-orange-300/70' : 'text-orange-700'}`}>
+                  El cliente actual es un Cliente Lead sin CUIC válido. Edita la propuesta y asigna un cliente con CUIC antes de hacer "Pase a ventas".
+                </p>
+              </div>
+            </div>
+          )}
           <label className={`block text-sm ${isDark ? 'text-zinc-400' : 'text-gray-500'} mb-2`}>Cambiar estado a:</label>
           <div className="flex items-center gap-3">
             <select
@@ -698,20 +712,22 @@ function StatusModal({ isOpen, onClose, propuesta, onStatusChange, allowedStatus
               )}
               {availableStatuses.map(s => {
                 const isBlockedByAuth = (tienePendientes || reservasIncompletas) && (s === 'Aprobada' || s === 'Pase a ventas');
+                const isBlockedByCuic = esClienteLead && s === 'Pase a ventas';
+                const isBlocked = isBlockedByAuth || isBlockedByCuic;
                 return (
                   <option
                     key={s}
                     value={s}
-                    disabled={isBlockedByAuth}
+                    disabled={isBlocked}
                   >
-                    {s}{isBlockedByAuth ? (reservasIncompletas ? ' (Reservas incompletas)' : ' (Requiere autorización)') : ''}
+                    {s}{isBlocked ? (isBlockedByCuic ? ' (Cliente Lead - CUIC 0)' : reservasIncompletas ? ' (Reservas incompletas)' : ' (Requiere autorización)') : ''}
                   </option>
                 );
               })}
             </select>
             <button
               onClick={handleChangeStatus}
-              disabled={selectedStatus === propuesta.status || updateStatusMutation.isPending || ((tienePendientes || reservasIncompletas) && (selectedStatus === 'Aprobada' || selectedStatus === 'Pase a ventas'))}
+              disabled={selectedStatus === propuesta.status || updateStatusMutation.isPending || ((tienePendientes || reservasIncompletas) && (selectedStatus === 'Aprobada' || selectedStatus === 'Pase a ventas')) || (esClienteLead && selectedStatus === 'Pase a ventas')}
               className="flex items-center gap-2 px-4 py-2 rounded-lg bg-purple-600 text-white text-sm hover:bg-purple-700 disabled:opacity-50 disabled:cursor-not-allowed min-w-[120px] justify-center"
             >
               {updateStatusMutation.isPending ? (

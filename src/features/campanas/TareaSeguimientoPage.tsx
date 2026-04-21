@@ -10925,7 +10925,7 @@ function OrdenImpresionModal({
     if (!titulo.trim()) { setError('El título es obligatorio'); return; }
     if (!descripcion.trim()) { setError('La descripción es obligatoria'); return; }
     if (!proveedorId) { setError('Selecciona un proveedor'); return; }
-    if (selectedAsignados.length === 0) { setError('Selecciona al menos un asignado del área de Compras'); return; }
+    if (selectedAsignados.length === 0) { setError('Selecciona al menos un asignado'); return; }
     setError(null);
 
     const selectedProveedor = proveedores.find(p => p.id === proveedorId);
@@ -11030,9 +11030,9 @@ function OrdenImpresionModal({
             )}
           </div>
 
-          {/* Asignados (Compras) */}
+          {/* Asignado */}
           <div>
-            <label className="block text-xs font-medium text-muted-foreground mb-1">Asignados (Área Compras) *</label>
+            <label className="block text-xs font-medium text-muted-foreground mb-1">Asignado *</label>
             {/* Tags de seleccionados */}
             {selectedAsignados.length > 0 && (
               <div className="flex flex-wrap gap-1 mb-2">
@@ -11054,7 +11054,7 @@ function OrdenImpresionModal({
                 onChange={e => { setAsignadoSearch(e.target.value); setShowAsignadoDropdown(true); }}
                 onFocus={() => setShowAsignadoDropdown(true)}
                 className="w-full px-3 py-2 text-sm bg-background border border-border rounded-lg focus:outline-none focus:ring-1 focus:ring-blue-500"
-                placeholder="Buscar usuario de Compras..."
+                placeholder="Buscar usuario..."
               />
               {showAsignadoDropdown && filteredUsuarios.length > 0 && (
                 <div className="absolute z-10 w-full mt-1 bg-card border border-border rounded-lg shadow-xl max-h-32 overflow-y-auto">
@@ -12638,7 +12638,7 @@ function CreateTaskModal({
 
                 {/* Asignados (múltiples - área Compras) */}
                 <div className="relative">
-                  <label className="block text-xs font-medium text-muted-foreground mb-1">Asignados (Compras) *</label>
+                  <label className="block text-xs font-medium text-muted-foreground mb-1">Asignado *</label>
 
                   {/* Chips de usuarios seleccionados */}
                   {selectedAsignadosImpresion.length > 0 && (
@@ -12675,7 +12675,7 @@ function CreateTaskModal({
                       }}
                       onFocus={() => setShowAsignadoDropdownImpresion(true)}
                       onBlur={() => setTimeout(() => setShowAsignadoDropdownImpresion(false), 200)}
-                      placeholder="Buscar usuario de Compras para agregar..."
+                      placeholder="Buscar usuario para agregar..."
                       disabled={isSubmitting}
                       className="w-full px-3 py-2 text-sm bg-background border border-border rounded-lg focus:outline-none focus:ring-1 focus:ring-purple-500 disabled:opacity-50"
                     />
@@ -12699,7 +12699,7 @@ function CreateTaskModal({
                     )}
                     {showAsignadoDropdownImpresion && filteredUsuariosImpresion.length === 0 && asignadoSearchImpresion && (
                       <div className="absolute z-10 w-full mt-1 bg-card border border-border rounded-lg shadow-lg p-3 text-sm text-zinc-400">
-                        No se encontraron usuarios de Compras
+                        No se encontraron usuarios
                       </div>
                     )}
                   </div>
