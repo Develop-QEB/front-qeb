@@ -3,6 +3,13 @@ import { useQuery } from '@tanstack/react-query';
 import { ChevronDown, ChevronRight, Calendar, Loader2, Download, Package, ClipboardList, MapPin, DollarSign, Layers } from 'lucide-react';
 import { propuestasService } from '../../services/propuestas.service';
 
+interface AdvancedFilter {
+  field: string;
+  operator: string;
+  value: string;
+  connector: 'Y' | 'O';
+}
+
 interface PropuestasVersionarioViewProps {
   isDark: boolean;
   filters: {
@@ -14,6 +21,7 @@ interface PropuestasVersionarioViewProps {
     catorcenaFin?: number;
     tipoPeriodo?: string;
   };
+  advancedFilters?: AdvancedFilter[];
 }
 
 interface InventarioItem {
@@ -113,7 +121,36 @@ function getStatusColor(status: string, isDark: boolean) {
   };
 }
 
-export default function PropuestasVersionarioView({ isDark, filters }: PropuestasVersionarioViewProps) {
+function matchesAdvancedFilters(item: Record<string, unknown>, filters: AdvancedFilter[]): boolean {
+  if (filters.length === 0) return true;
+  const evalOne = (f: AdvancedFilter): boolean => {
+    if (!f.value) return true;
+    const raw = item[f.field];
+    if (raw === null || raw === undefined) return f.operator === '!=' || f.operator === 'not_contains';
+    const sv = String(raw).toLowerCase();
+    const fv = f.value.toLowerCase();
+    switch (f.operator) {
+      case '=': return sv === fv;
+      case '!=': return sv !== fv;
+      case 'contains': return sv.includes(fv);
+      case 'not_contains': return !sv.includes(fv);
+      case '>': return Number(raw) > Number(f.value);
+      case '<': return Number(raw) < Number(f.value);
+      case '>=': return Number(raw) >= Number(f.value);
+      case '<=': return Number(raw) <= Number(f.value);
+      default: return true;
+    }
+  };
+  let result = evalOne(filters[0]);
+  for (let i = 1; i < filters.length; i++) {
+    const val = evalOne(filters[i]);
+    if (filters[i].connector === 'O') result = result || val;
+    else result = result && val;
+  }
+  return result;
+}
+
+export default function PropuestasVersionarioView({ isDark, filters, advancedFilters = [] }: PropuestasVersionarioViewProps) {
   const [expandedCatorcenas, setExpandedCatorcenas] = useState<Set<string>>(new Set());
   const [expandedPropuestas, setExpandedPropuestas] = useState<Set<number>>(new Set());
   const [expandedCircuitos, setExpandedCircuitos] = useState<Set<string>>(new Set());
@@ -190,8 +227,7 @@ export default function PropuestasVersionarioView({ isDark, filters }: Propuesta
       for (const pid of allPropIds) {
         const info = propuestaMap.get(pid);
         if (!info) continue;
-        // Excluir propuestas aprobadas (ya son campañas)
-        // No filtrar por status - incluir todas las propuestas
+        if (advancedFilters.length > 0 && !matchesAdvancedFilters(info as unknown as Record<string, unknown>, advancedFilters)) continue;
 
         // Build circuitos from carasInfo
         const carasForProp = propIdsFromCaras?.get(pid);
@@ -256,7 +292,7 @@ export default function PropuestasVersionarioView({ isDark, filters }: Propuesta
     }
 
     return groups;
-  }, [data, filters.yearInicio, filters.yearFin, filters.catorcenaInicio, filters.catorcenaFin]);
+  }, [data, filters.yearInicio, filters.yearFin, filters.catorcenaInicio, filters.catorcenaFin, advancedFilters]);
 
   // Toggle helpers
   const toggleCatorcena = (key: string) => {

@@ -2117,6 +2117,7 @@ export function PropuestasPage() {
               catorcenaFin,
               tipoPeriodo: tipoPeriodo || undefined,
             }}
+            advancedFilters={advancedFilters}
           />
         )}
 
