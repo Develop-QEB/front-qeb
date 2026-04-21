@@ -902,8 +902,18 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
           inventario_id: r.inventario_id,
           codigo_unico: r.codigo_unico || `INV-${r.inventario_id}`,
           tipo: tipo as 'Flujo' | 'Contraflujo' | 'Bonificacion',
-          catorcena: matchingCara?.catorcena_inicio || catorcenaInicio || 1,
-          anio: matchingCara?.anio_inicio || yearInicio || new Date().getFullYear(),
+          catorcena: (() => {
+            if (tipoPeriodo === 'mensual' && matchingCara?.inicio_periodo) {
+              return parseInt(matchingCara.inicio_periodo.split('-')[1]); // month 1-12
+            }
+            return matchingCara?.catorcena_inicio || catorcenaInicio || 1;
+          })(),
+          anio: (() => {
+            if (tipoPeriodo === 'mensual' && matchingCara?.inicio_periodo) {
+              return parseInt(matchingCara.inicio_periodo.split('-')[0]);
+            }
+            return matchingCara?.anio_inicio || yearInicio || new Date().getFullYear();
+          })(),
           latitud: Number(r.latitud) || 0,
           longitud: Number(r.longitud) || 0,
           plaza: r.plaza || '',
@@ -1030,10 +1040,15 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
   useEffect(() => {
     if (carasData && isOpen) {
       const carasWithIds: CaraItem[] = carasData.map((cara: any, idx: number) => {
-        // Calculate catorcena from inicio_periodo
+        // Calculate catorcena/month from inicio_periodo
         let catorcenaInicioCara: number | undefined;
         let anioInicioCara: number | undefined;
-        if (cara.inicio_periodo && catorcenasData?.data) {
+        if (tipoPeriodo === 'mensual' && cara.inicio_periodo) {
+          // For monthly: extract month number (1-12) directly from date
+          const parts = cara.inicio_periodo.split('-');
+          catorcenaInicioCara = parseInt(parts[1]); // month 1-12
+          anioInicioCara = parseInt(parts[0]);
+        } else if (cara.inicio_periodo && catorcenasData?.data) {
           const inicioPeriodoDate = new Date(cara.inicio_periodo);
           const catInicio = catorcenasData.data.find((c: any) => {
             const cInicioDate = new Date(c.fecha_inicio);
@@ -1423,6 +1438,7 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
         flujoCompleto: true, contraflujoCompleto: true, bonificacionCompleto: true,
         isComplete: true, totalReservado: 0, totalRequerido: 0,
         flujoDiff: 0, contraflujoDiff: 0, bonificacionDiff: 0, totalDiff: 0,
+        isOverReserved: false,
         needsAttention: false, isImpresion: isImpresionArticle(cara.articulo), isEspecial: isEspecialArticle(cara.articulo),
       };
     }
@@ -1472,6 +1488,7 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
       contraflujoCompleto,
       bonificacionCompleto,
       isComplete: flujoCompleto && contraflujoCompleto && bonificacionCompleto,
+      isOverReserved: totalDiff > 0,
       totalReservado,
       totalRequerido,
       flujoDiff,
@@ -1487,7 +1504,7 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
     if (caras.length === 0) return false;
     return caras.every(cara => {
       const status = getCaraCompletionStatus(cara);
-      return status.isComplete;
+      return status.isComplete && !status.isOverReserved;
     });
   }, [caras, reservas]);
 
@@ -1795,6 +1812,13 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
     const esImpresion = artCode.startsWith('IM');
     if (newCara.tarifa_publica <= 0 && !esCortesia && !esBonificacion && !esImpresion) {
       alert('La tarifa pública no puede ser 0. Por favor ingresa una tarifa válida.');
+      return;
+    }
+
+    // BF validation: bonificacion > 0 on RT article requires articuloBf
+    const needsBfArticle = (newCara.bonificacion || 0) > 0 && !esCortesia && !esBonificacion && !esImpresion && !isEspecialArticle(newCara.articulo || '');
+    if (needsBfArticle && !articuloBf) {
+      alert('Debes seleccionar el artículo de bonificación (BF) antes de guardar, o quita las caras de bonificación a 0.');
       return;
     }
 
@@ -3448,7 +3472,9 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
     const hierarchy: Level0 = {};
 
     filteredReservados.forEach(r => {
-      const catorcenaKey = `Cat ${r.catorcena}/${r.anio}`;
+      const catorcenaKey = tipoPeriodo === 'mensual'
+        ? `${MESES_LABEL[r.catorcena - 1] || `Mes ${r.catorcena}`} ${r.anio}`
+        : `Cat ${r.catorcena}/${r.anio}`;
       const articuloKey = r.articulo || 'Sin Artículo';
       const plazaKey = r.plaza || 'Sin Plaza';
       const formatoKey = r.formato || 'Sin Formato';
@@ -6337,8 +6363,8 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
                             // Determine status color and indicator
                             const esImpresion = cara.articulo ? isImpresionArticle(cara.articulo) : false;
                             const esEspecial = cara.articulo ? isEspecialArticle(cara.articulo) : false;
-                            // Blue = impresión, Purple = ejec especial, Green = complete, Amber = incomplete
-                            const statusColor = esImpresion ? 'blue' : esEspecial ? 'purple' : status.isComplete ? 'emerald' : 'amber';
+                            // Blue = impresión, Purple = ejec especial, Red = over-reserved, Green = complete, Amber = incomplete
+                            const statusColor = esImpresion ? 'blue' : esEspecial ? 'purple' : status.isOverReserved ? 'red' : status.isComplete ? 'emerald' : 'amber';
 
                             // Display text for diff:
                             // - Missing (totalDiff < 0): show "faltan X"
@@ -6350,12 +6376,12 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
                                 : `faltan ${Math.abs(status.totalDiff)}`;
 
                             return (
-                              <div key={cara.localId} className={`${statusColor === 'blue' ? 'bg-blue-500/5' : statusColor === 'emerald' ? 'bg-emerald-500/5' : 'bg-amber-500/5'}`}>
+                              <div key={cara.localId} className={`${statusColor === 'blue' ? 'bg-blue-500/5' : statusColor === 'red' ? 'bg-red-500/5' : statusColor === 'emerald' ? 'bg-emerald-500/5' : 'bg-amber-500/5'}`}>
                                 {/* Cara row */}
                                 <div className={`flex items-center gap-3 px-5 py-3 transition-colors ${isDark ? 'hover:bg-zinc-800/30' : 'hover:bg-gray-50'}`}>
                                   {/* Completion indicator */}
                                   <div className={`w-2 h-2 rounded-full ${
-                                    statusColor === 'blue' ? 'bg-blue-500' : statusColor === 'emerald' ? 'bg-emerald-500' : 'bg-amber-500 animate-pulse'
+                                    statusColor === 'blue' ? 'bg-blue-500' : statusColor === 'red' ? 'bg-red-500 animate-pulse' : statusColor === 'emerald' ? 'bg-emerald-500' : 'bg-amber-500 animate-pulse'
                                   }`} />
 
                                   <div className="flex-1 grid grid-cols-8 gap-3 text-sm">
@@ -6509,7 +6535,9 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
                 // Helper to get group key based on field
                 const getFieldValue = (r: ReservaItem, field: GroupByFieldReservas): string => {
                   switch (field) {
-                    case 'catorcena': return `Cat ${r.catorcena}/${r.anio}`;
+                    case 'catorcena': return tipoPeriodo === 'mensual'
+                      ? `${MESES_LABEL[r.catorcena - 1] || `Mes ${r.catorcena}`} ${r.anio}`
+                      : `Cat ${r.catorcena}/${r.anio}`;
                     case 'tipo': return r.tipo;
                     case 'plaza': return r.plaza || 'Sin Plaza';
                     case 'formato': return r.formato || 'Sin Formato';
@@ -7184,7 +7212,7 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
                       <span className={isDark ? 'text-emerald-400' : 'text-emerald-600'}>Todas las caras completas</span>
                     ) : (
                       <span className={isDark ? 'text-amber-400' : 'text-amber-600'}>
-                        {caras.filter(c => !getCaraCompletionStatus(c).isComplete).length} cara(s) incompleta(s)
+                        {caras.filter(c => { const s = getCaraCompletionStatus(c); return !s.isComplete || s.isOverReserved; }).length} cara(s) incompleta(s)
                       </span>
                     )}
                   </span>

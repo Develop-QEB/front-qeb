@@ -189,13 +189,17 @@ export function CompartirPropuestaPage() {
     if (!inventario) return [];
     if (selectedCatorcenas.size === 0) return inventario as InventarioReservado[];
     return (inventario as InventarioReservado[]).filter(i => {
+      if (tipoPeriodo === 'mensual' && i.inicio_periodo) {
+        const key = i.inicio_periodo.substring(0, 7); // "YYYY-MM"
+        return selectedCatorcenas.has(key);
+      }
       if (i.numero_catorcena && i.anio_catorcena) {
         const key = `${i.anio_catorcena}-${i.numero_catorcena}`;
         return selectedCatorcenas.has(key);
       }
       return false;
     });
-  }, [inventario, selectedCatorcenas]);
+  }, [inventario, selectedCatorcenas, tipoPeriodo]);
 
   // Computed data
   const kpis = useMemo(() => {
@@ -244,40 +248,49 @@ export function CompartirPropuestaPage() {
   }, [catorcenaFilteredInventario]);
 
   // Filtered inventario (used by resumen)
-  // Available periods for dropdown - generate full range from propuesta, not just from inventario
+  // Available periods for dropdown
   const periodoOptions = useMemo(() => {
     const set = new Map<string, string>();
 
-    // 1. Generate all catorcenas from propuesta range (Cat inicio to Cat fin)
-    const catInicio = details?.propuesta?.catorcena_inicio;
-    const anioInicio = details?.propuesta?.anio_inicio;
-    const catFin = details?.propuesta?.catorcena_fin;
-    const anioFin = details?.propuesta?.anio_fin;
-
-    if (catInicio && anioInicio && catFin && anioFin) {
-      let year = anioInicio;
-      let cat = catInicio;
-      while (year < anioFin || (year === anioFin && cat <= catFin)) {
-        const key = `${year}-${cat}`;
-        set.set(key, `Cat ${cat} / ${year}`);
-        cat++;
-        if (cat > 26) { cat = 1; year++; }
-      }
-    }
-
-    // 2. Also include any catorcenas from inventario that might be outside the range
-    if (inventario) {
-      (inventario as InventarioReservado[]).forEach(i => {
-        if (i.numero_catorcena && i.anio_catorcena) {
-          const key = `${i.anio_catorcena}-${i.numero_catorcena}`;
-          if (!set.has(key)) {
-            const label = tipoPeriodo === 'mensual' && i.inicio_periodo
-              ? (() => { const parts = i.inicio_periodo.split('-'); return parts.length >= 2 ? `${MESES_LABEL[parseInt(parts[1]) - 1]} ${parts[0]}` : key; })()
-              : `Cat ${i.numero_catorcena} / ${i.anio_catorcena}`;
-            set.set(key, label);
+    if (tipoPeriodo === 'mensual') {
+      // For monthly: derive unique months from inventory inicio_periodo
+      if (inventario) {
+        (inventario as InventarioReservado[]).forEach(i => {
+          if (i.inicio_periodo) {
+            const key = i.inicio_periodo.substring(0, 7); // "YYYY-MM"
+            if (!set.has(key)) {
+              const parts = i.inicio_periodo.split('-');
+              const label = parts.length >= 2 ? `${MESES_LABEL[parseInt(parts[1]) - 1]} ${parts[0]}` : key;
+              set.set(key, label);
+            }
           }
+        });
+      }
+    } else {
+      // Catorcena mode: generate full range from propuesta
+      const catInicio = details?.propuesta?.catorcena_inicio;
+      const anioInicio = details?.propuesta?.anio_inicio;
+      const catFin = details?.propuesta?.catorcena_fin;
+      const anioFin = details?.propuesta?.anio_fin;
+
+      if (catInicio && anioInicio && catFin && anioFin) {
+        let year = anioInicio;
+        let cat = catInicio;
+        while (year < anioFin || (year === anioFin && cat <= catFin)) {
+          const key = `${year}-${cat}`;
+          set.set(key, `Cat ${cat} / ${year}`);
+          cat++;
+          if (cat > 26) { cat = 1; year++; }
         }
-      });
+      }
+      if (inventario) {
+        (inventario as InventarioReservado[]).forEach(i => {
+          if (i.numero_catorcena && i.anio_catorcena) {
+            const key = `${i.anio_catorcena}-${i.numero_catorcena}`;
+            if (!set.has(key)) set.set(key, `Cat ${i.numero_catorcena} / ${i.anio_catorcena}`);
+          }
+        });
+      }
     }
 
     return Array.from(set.entries()).map(([value, label]) => ({ value, label })).sort((a, b) => a.value.localeCompare(b.value));
@@ -286,8 +299,12 @@ export function CompartirPropuestaPage() {
   const filteredInventario = useMemo(() => {
     let filtered = catorcenaFilteredInventario;
     if (filterPeriodo) {
-      const [year, num] = filterPeriodo.split('-').map(Number);
-      filtered = filtered.filter(i => i.numero_catorcena === num && i.anio_catorcena === year);
+      if (tipoPeriodo === 'mensual') {
+        filtered = filtered.filter(i => i.inicio_periodo?.substring(0, 7) === filterPeriodo);
+      } else {
+        const [year, num] = filterPeriodo.split('-').map(Number);
+        filtered = filtered.filter(i => i.numero_catorcena === num && i.anio_catorcena === year);
+      }
     }
     if (filters.length > 0) {
       filtered = applyFilters(filtered, filters);
@@ -1490,7 +1507,7 @@ export function CompartirPropuestaPage() {
                                             <td className={`px-3 py-2 text-xs ${isDark ? 'text-zinc-300' : 'text-gray-700'}`}>{item.plaza || '-'}</td>
                                             <td className={`px-3 py-2 text-xs ${isDark ? 'text-zinc-400' : 'text-gray-600'}`}>
                                               {item.mueble || '-'}
-                                              {item.tipo_de_mueble && item.tipo_de_mueble !== item.mueble && (
+                                              {item.tipo_de_mueble && item.tipo_de_mueble?.toUpperCase() !== item.mueble?.toUpperCase() && (
                                                 <span className={`block text-[10px] ${isDark ? 'text-zinc-500' : 'text-gray-500'}`}>{item.tipo_de_mueble}</span>
                                               )}
                                             </td>

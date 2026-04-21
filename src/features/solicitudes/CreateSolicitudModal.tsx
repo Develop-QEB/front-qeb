@@ -1128,6 +1128,13 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
       return;
     }
 
+    // BF validation: if bonificacion > 0 on a regular RT article, require articuloBf
+    const needsBfArticle = newCara.bonificacion > 0 && !esCortesia && !esBonificacion && !esImpresion && !esEspecial;
+    if (needsBfArticle && !newCara.articuloBf) {
+      alert('Debes seleccionar el artículo de bonificación (BF) antes de guardar, o quita las caras de bonificación a 0.');
+      return;
+    }
+
     let catorcenaYear: number;
     let catorcenaNum: number;
     let periodoInicioVal: string;

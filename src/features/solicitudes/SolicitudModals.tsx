@@ -236,6 +236,13 @@ export function ViewSolicitudModal({ isOpen, onClose, solicitudId, onEdit, onAte
   const catorcenas = catorcenasData?.data || [];
   const tipoPeriodo = (data?.cotizacion as any)?.tipo_periodo || 'catorcena';
 
+  // For monthly: use start-of-last-period to get correct fin month label
+  const maxInicioPeriodo = useMemo(() => {
+    if (tipoPeriodo !== 'mensual' || !data?.caras?.length) return null;
+    const dates = data.caras.map(c => c.inicio_periodo).filter(Boolean).sort() as string[];
+    return dates.length ? dates[dates.length - 1] : null;
+  }, [data?.caras, tipoPeriodo]);
+
   const groupedCaras = useMemo(() => {
     if (!data?.caras) return [];
     return groupCarasByCatorcenaAndArticulo(data.caras, catorcenas, tipoPeriodo);
@@ -351,9 +358,10 @@ export function ViewSolicitudModal({ isOpen, onClose, solicitudId, onEdit, onAte
     doc.text('Período:', col1, yPos + 24);
 
     const fechaInicio = data.cotizacion?.fecha_inicio ? formatDate(data.cotizacion.fecha_inicio) : '-';
-    const fechaFin = data.cotizacion?.fecha_fin ? formatDate(data.cotizacion.fecha_fin) : '-';
+    const finDateForLabel = maxInicioPeriodo || data.cotizacion?.fecha_fin;
+    const fechaFin = finDateForLabel ? formatDate(finDateForLabel) : '-';
     const catInicio = data.cotizacion?.fecha_inicio ? getCatorcenaDisplay(data.cotizacion.fecha_inicio, catorcenas, tipoPeriodo) : '';
-    const catFin = data.cotizacion?.fecha_fin ? getCatorcenaDisplay(data.cotizacion.fecha_fin, catorcenas, tipoPeriodo) : '';
+    const catFin = finDateForLabel ? getCatorcenaDisplay(finDateForLabel, catorcenas, tipoPeriodo) : '';
 
     doc.setTextColor(...imuBlue);
     doc.setFont('helvetica', 'bold');
@@ -736,7 +744,7 @@ export function ViewSolicitudModal({ isOpen, onClose, solicitudId, onEdit, onAte
                     <div className="flex justify-between">
                       <span className={`${isDark ? 'text-zinc-500' : 'text-gray-400'} text-sm`}>Período</span>
                       <span className={`${isDark ? 'text-violet-300' : 'text-violet-600'} text-sm font-medium`}>
-                        {data.cotizacion ? getCatorcenaRange(data.cotizacion.fecha_inicio, data.cotizacion.fecha_fin, catorcenas, tipoPeriodo) : '-'}
+                        {data.cotizacion ? getCatorcenaRange(data.cotizacion.fecha_inicio, maxInicioPeriodo || data.cotizacion.fecha_fin, catorcenas, tipoPeriodo) : '-'}
                       </span>
                     </div>
                     <div className="flex justify-between">
@@ -745,7 +753,7 @@ export function ViewSolicitudModal({ isOpen, onClose, solicitudId, onEdit, onAte
                     </div>
                     <div className="flex justify-between">
                       <span className={`${isDark ? 'text-zinc-500' : 'text-gray-400'} text-sm`}>{tipoPeriodo === 'mensual' ? 'Periodo Fin' : 'Fecha Fin'}</span>
-                      <span className={`${isDark ? 'text-white' : 'text-gray-900'} text-sm`}>{data.cotizacion?.fecha_fin ? getCatorcenaDisplay(data.cotizacion.fecha_fin, catorcenas, tipoPeriodo) : '-'}</span>
+                      <span className={`${isDark ? 'text-white' : 'text-gray-900'} text-sm`}>{(maxInicioPeriodo || data.cotizacion?.fecha_fin) ? getCatorcenaDisplay(maxInicioPeriodo || data.cotizacion!.fecha_fin, catorcenas, tipoPeriodo) : '-'}</span>
                     </div>
                     {data.solicitud.descripcion && (
                       <div className={`pt-2 border-t ${isDark ? 'border-zinc-700/50' : 'border-gray-200'}`}>
@@ -922,6 +930,8 @@ export function ViewSolicitudModal({ isOpen, onClose, solicitudId, onEdit, onAte
                                               <th className={`px-3 py-2 text-left text-xs font-semibold ${isDark ? 'text-violet-200' : 'text-violet-700'}`}>Estado</th>
                                               <th className={`px-3 py-2 text-left text-xs font-semibold ${isDark ? 'text-violet-200' : 'text-violet-700'}`}>Formato</th>
                                               <th className={`px-3 py-2 text-left text-xs font-semibold ${isDark ? 'text-violet-200' : 'text-violet-700'}`}>Tipo</th>
+                                              <th className={`px-3 py-2 text-left text-xs font-semibold ${isDark ? 'text-violet-200' : 'text-violet-700'}`}>Inicio</th>
+                                              <th className={`px-3 py-2 text-left text-xs font-semibold ${isDark ? 'text-violet-200' : 'text-violet-700'}`}>Fin</th>
                                               <th className={`px-3 py-2 text-center text-xs font-semibold ${isDark ? 'text-violet-200' : 'text-violet-700'}`}>Renta</th>
                                               <th className={`px-3 py-2 text-center text-xs font-semibold ${isDark ? 'text-violet-200' : 'text-violet-700'}`}>Bonif</th>
                                               <th className={`px-3 py-2 text-center text-xs font-semibold ${isDark ? 'text-white' : 'text-gray-900'}`}>Total</th>
@@ -971,6 +981,8 @@ export function ViewSolicitudModal({ isOpen, onClose, solicitudId, onEdit, onAte
                                                   <td className={`px-3 py-2 ${isDark ? 'text-zinc-300' : 'text-gray-700'}`}>{cara.estados || '-'}</td>
                                                   <td className={`px-3 py-2 ${isDark ? 'text-zinc-300' : 'text-gray-700'}`}>{cara.formato || '-'}</td>
                                                   <td className={`px-3 py-2 ${isDark ? 'text-zinc-300' : 'text-gray-700'}`}>{cara.tipo || '-'}</td>
+                                                  <td className={`px-3 py-2 ${isDark ? 'text-zinc-400' : 'text-gray-500'} text-xs`}>{cara.inicio_periodo ? formatDate(cara.inicio_periodo) : '-'}</td>
+                                                  <td className={`px-3 py-2 ${isDark ? 'text-zinc-400' : 'text-gray-500'} text-xs`}>{cara.fin_periodo ? formatDate(cara.fin_periodo) : '-'}</td>
                                                   <td className={`px-3 py-2 text-center ${isDark ? 'text-white' : 'text-gray-900'} font-medium`}>{Number(cara.caras) || 0}</td>
                                                   <td className={`px-3 py-2 text-center ${isDark ? 'text-white' : 'text-gray-900'} font-medium`}>{Number(cara.bonificacion) || 0}</td>
                                                   <td className={`px-3 py-2 text-center ${isDark ? 'text-white' : 'text-gray-900'} font-bold`}>{(Number(cara.caras) || 0) + (Number(cara.bonificacion) || 0)}</td>

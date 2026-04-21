@@ -1588,6 +1588,7 @@ export function CampanasPage() {
 
     let fallbackIndex = 0;
     return Object.entries(effectiveStats.byStatus)
+      .filter(([name]) => name.toLowerCase() !== 'pase a ventas')
       .map(([name, value]) => {
         const key = name.toLowerCase();
         let color = CHART_COLORS.status[key as keyof typeof CHART_COLORS.status];
@@ -2220,7 +2221,7 @@ export function CampanasPage() {
                 </div>
                 {/* Legend / List */}
                 <div className="flex-1 flex flex-wrap gap-2 content-center pl-4 h-full overflow-y-auto scrollbar-thin">
-                  {statusChartData.slice(0, 6).map((item, i) => (
+                  {statusChartData.map((item, i) => (
                     <div key={i} className={`flex items-center gap-2 p-2 rounded-lg ${isDark ? 'bg-zinc-800/30 border-zinc-800/50' : 'bg-gray-50 border-gray-200'} border min-w-[100px]`}>
                       <div className="w-2 h-8 rounded-full" style={{ backgroundColor: item.color }} />
                       <div>
@@ -2229,11 +2230,6 @@ export function CampanasPage() {
                       </div>
                     </div>
                   ))}
-                  {statusChartData.length > 6 && (
-                    <div className={`flex items-center justify-center p-2 rounded-lg ${isDark ? 'bg-zinc-800/30 border-zinc-800/50' : 'bg-gray-50 border-gray-200'} border text-xs ${isDark ? 'text-zinc-500' : 'text-gray-400'}`}>
-                      +{statusChartData.length - 6} más
-                    </div>
-                  )}
                 </div>
               </div>
             ) : (
