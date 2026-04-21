@@ -902,8 +902,18 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
           inventario_id: r.inventario_id,
           codigo_unico: r.codigo_unico || `INV-${r.inventario_id}`,
           tipo: tipo as 'Flujo' | 'Contraflujo' | 'Bonificacion',
-          catorcena: matchingCara?.catorcena_inicio || catorcenaInicio || 1,
-          anio: matchingCara?.anio_inicio || yearInicio || new Date().getFullYear(),
+          catorcena: (() => {
+            if (tipoPeriodo === 'mensual' && matchingCara?.inicio_periodo) {
+              return parseInt(matchingCara.inicio_periodo.split('-')[1]); // month 1-12
+            }
+            return matchingCara?.catorcena_inicio || catorcenaInicio || 1;
+          })(),
+          anio: (() => {
+            if (tipoPeriodo === 'mensual' && matchingCara?.inicio_periodo) {
+              return parseInt(matchingCara.inicio_periodo.split('-')[0]);
+            }
+            return matchingCara?.anio_inicio || yearInicio || new Date().getFullYear();
+          })(),
           latitud: Number(r.latitud) || 0,
           longitud: Number(r.longitud) || 0,
           plaza: r.plaza || '',
@@ -1030,10 +1040,15 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
   useEffect(() => {
     if (carasData && isOpen) {
       const carasWithIds: CaraItem[] = carasData.map((cara: any, idx: number) => {
-        // Calculate catorcena from inicio_periodo
+        // Calculate catorcena/month from inicio_periodo
         let catorcenaInicioCara: number | undefined;
         let anioInicioCara: number | undefined;
-        if (cara.inicio_periodo && catorcenasData?.data) {
+        if (tipoPeriodo === 'mensual' && cara.inicio_periodo) {
+          // For monthly: extract month number (1-12) directly from date
+          const parts = cara.inicio_periodo.split('-');
+          catorcenaInicioCara = parseInt(parts[1]); // month 1-12
+          anioInicioCara = parseInt(parts[0]);
+        } else if (cara.inicio_periodo && catorcenasData?.data) {
           const inicioPeriodoDate = new Date(cara.inicio_periodo);
           const catInicio = catorcenasData.data.find((c: any) => {
             const cInicioDate = new Date(c.fecha_inicio);
@@ -3457,7 +3472,9 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
     const hierarchy: Level0 = {};
 
     filteredReservados.forEach(r => {
-      const catorcenaKey = `Cat ${r.catorcena}/${r.anio}`;
+      const catorcenaKey = tipoPeriodo === 'mensual'
+        ? `${MESES_LABEL[r.catorcena - 1] || `Mes ${r.catorcena}`} ${r.anio}`
+        : `Cat ${r.catorcena}/${r.anio}`;
       const articuloKey = r.articulo || 'Sin Artículo';
       const plazaKey = r.plaza || 'Sin Plaza';
       const formatoKey = r.formato || 'Sin Formato';
@@ -6518,7 +6535,9 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
                 // Helper to get group key based on field
                 const getFieldValue = (r: ReservaItem, field: GroupByFieldReservas): string => {
                   switch (field) {
-                    case 'catorcena': return `Cat ${r.catorcena}/${r.anio}`;
+                    case 'catorcena': return tipoPeriodo === 'mensual'
+                      ? `${MESES_LABEL[r.catorcena - 1] || `Mes ${r.catorcena}`} ${r.anio}`
+                      : `Cat ${r.catorcena}/${r.anio}`;
                     case 'tipo': return r.tipo;
                     case 'plaza': return r.plaza || 'Sin Plaza';
                     case 'formato': return r.formato || 'Sin Formato';

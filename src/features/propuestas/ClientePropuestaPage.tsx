@@ -259,13 +259,16 @@ export function ClientePropuestaPage() {
     if (!inventario.length) return inventario;
     if (selectedCatorcenas.size === 0) return inventario;
     return inventario.filter(i => {
+      if (tipoPeriodo === 'mensual' && i.inicio_periodo) {
+        return selectedCatorcenas.has(i.inicio_periodo.substring(0, 7));
+      }
       if (i.numero_catorcena && i.anio_catorcena) {
         const key = `${i.anio_catorcena}-${i.numero_catorcena}`;
         return selectedCatorcenas.has(key);
       }
       return false;
     });
-  }, [inventario, selectedCatorcenas]);
+  }, [inventario, selectedCatorcenas, tipoPeriodo]);
 
   // Computed data
   const kpis = useMemo(() => {
@@ -283,15 +286,24 @@ export function ClientePropuestaPage() {
   // Available periods for dropdown
   const periodoOptions = useMemo(() => {
     const set = new Map<string, string>();
-    inventario.forEach(i => {
-      if (i.numero_catorcena && i.anio_catorcena) {
-        const key = `${i.anio_catorcena}-${i.numero_catorcena}`;
-        const label = tipoPeriodo === 'mensual' && i.inicio_periodo
-          ? (() => { const parts = i.inicio_periodo.split('-'); return parts.length >= 2 ? `${MESES_LABEL[parseInt(parts[1]) - 1]} ${parts[0]}` : key; })()
-          : `Cat ${i.numero_catorcena} / ${i.anio_catorcena}`;
-        set.set(key, label);
-      }
-    });
+    if (tipoPeriodo === 'mensual') {
+      inventario.forEach(i => {
+        if (i.inicio_periodo) {
+          const key = i.inicio_periodo.substring(0, 7); // "YYYY-MM"
+          if (!set.has(key)) {
+            const parts = i.inicio_periodo.split('-');
+            set.set(key, parts.length >= 2 ? `${MESES_LABEL[parseInt(parts[1]) - 1]} ${parts[0]}` : key);
+          }
+        }
+      });
+    } else {
+      inventario.forEach(i => {
+        if (i.numero_catorcena && i.anio_catorcena) {
+          const key = `${i.anio_catorcena}-${i.numero_catorcena}`;
+          if (!set.has(key)) set.set(key, `Cat ${i.numero_catorcena} / ${i.anio_catorcena}`);
+        }
+      });
+    }
     return Array.from(set.entries()).map(([value, label]) => ({ value, label })).sort((a, b) => a.value.localeCompare(b.value));
   }, [inventario, tipoPeriodo]);
 
@@ -299,8 +311,12 @@ export function ClientePropuestaPage() {
   const filteredInventario = useMemo(() => {
     let filtered = catorcenaFilteredInventario;
     if (filterPeriodo) {
-      const [year, num] = filterPeriodo.split('-').map(Number);
-      filtered = filtered.filter(i => i.numero_catorcena === num && i.anio_catorcena === year);
+      if (tipoPeriodo === 'mensual') {
+        filtered = filtered.filter(i => i.inicio_periodo?.substring(0, 7) === filterPeriodo);
+      } else {
+        const [year, num] = filterPeriodo.split('-').map(Number);
+        filtered = filtered.filter(i => i.numero_catorcena === num && i.anio_catorcena === year);
+      }
     }
     if (filters.length > 0) {
       filtered = applyFilters(filtered, filters);

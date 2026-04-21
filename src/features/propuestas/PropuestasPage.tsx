@@ -1449,8 +1449,8 @@ export function PropuestasPage() {
       const inicio = p.tipo_periodo === 'mensual' && p.fecha_inicio
         ? getMonthShort(p.fecha_inicio)
         : p.catorcena_inicio ? `Cat ${p.catorcena_inicio} / ${p.anio_inicio}` : '-';
-      const fin = p.tipo_periodo === 'mensual' && p.fecha_fin
-        ? getMonthShort(p.fecha_fin)
+      const fin = p.tipo_periodo === 'mensual' && (p.max_inicio_periodo || p.fecha_fin)
+        ? getMonthShort(p.max_inicio_periodo || p.fecha_fin)
         : p.catorcena_fin ? `Cat ${p.catorcena_fin} / ${p.anio_fin}` : '-';
       return [
         p.id,
@@ -1559,10 +1559,10 @@ export function PropuestasPage() {
           )}
         </td>
         <td className="px-4 py-3">
-          {item.tipo_periodo === 'mensual' && item.fecha_fin ? (
+          {item.tipo_periodo === 'mensual' && (item.max_inicio_periodo || item.fecha_fin) ? (
             <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-xs border ${isDark ? 'bg-amber-500/10 text-amber-300 border-amber-500/20' : 'bg-amber-50 text-amber-700 border-amber-200'}`}>
               <Calendar className="h-3 w-3" />
-              {getMonthShort(item.fecha_fin)}
+              {getMonthShort((item as any).max_inicio_periodo || item.fecha_fin)}
             </span>
           ) : item.catorcena_fin ? (
             <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-xs border ${isDark ? 'bg-amber-500/10 text-amber-300 border-amber-500/20' : 'bg-amber-50 text-amber-700 border-amber-200'}`}>
