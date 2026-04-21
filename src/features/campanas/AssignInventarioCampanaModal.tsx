@@ -195,6 +195,7 @@ const MULTI_CITY_RULES: { pattern: RegExp; estado: string; ciudad: string }[] = 
   { pattern: /\bVERACRUZ\b|\bVER\b/, estado: 'Veracruz', ciudad: 'Veracruz,Alvarado,Boca del Río' },
   { pattern: /\bGD\b|\bGUADALAJARA\b/, estado: 'Jalisco', ciudad: 'Guadalajara,Zapopan,Tlaquepaque' },
   { pattern: /\bPUERTO VALLARTA\b|\bPV\b/, estado: 'Jalisco', ciudad: 'Puerto Vallarta' },
+  { pattern: /\bTOLUCA\b|\bTL\b/, estado: 'Estado de México', ciudad: 'Toluca,Metepec,San Mateo Atenco,Lerma' },
 ];
 
 // Extract city/state from article name (sorted by length to avoid false positives)
