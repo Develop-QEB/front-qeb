@@ -1175,6 +1175,10 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
     const totalCaras = newCara.renta + newCara.bonificacion;
     const descuento = totalCaras > 0 ? (newCara.bonificacion / totalCaras) : 0;
     const precioTotal = newCara.tarifaPublica * newCara.renta;
+    // When BF pair: save tarifa efectiva (inversión ÷ total caras) instead of raw tarifa pública
+    const tarifaToSave = (grupoRtBf && totalCaras > 0)
+      ? precioTotal / totalCaras
+      : newCara.tarifaPublica;
 
     // Evaluar estado de autorización con el backend
     // En modo edición, si solo cambiaron NSE o ciudad, mantener autorización original
@@ -1262,7 +1266,7 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
         periodoFin: period.periodoFin,
         renta: newCara.renta,
         bonificacion: grupoRtBf ? 0 : newCara.bonificacion, // If BF separate, RT has 0 bonif
-        tarifaPublica: newCara.tarifaPublica,
+        tarifaPublica: tarifaToSave,
         descuento: descuento * 100,
         precioTotal,
         autorizacion_dg,
@@ -2799,7 +2803,7 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
                             <div className="flex items-center gap-3">
                               {isExpanded ? <ChevronDown className={`h-4 w-4 ${isDark ? 'text-zinc-400' : 'text-gray-500'}`} /> : <ChevronRight className={`h-4 w-4 ${isDark ? 'text-zinc-400' : 'text-gray-500'}`} />}
                               <span className={`font-medium ${isDark ? 'text-white' : 'text-gray-900'}`}>{getPeriodLabel(key)}</span>
-                              <span className={`text-xs ${isDark ? 'text-zinc-500' : 'text-gray-400'}`}>({items.length} caras)</span>
+                              <span className={`text-xs ${isDark ? 'text-zinc-500' : 'text-gray-400'}`}>({items.filter(c => !c.esBf).length} circuitos)</span>
                             </div>
                             <div className="flex items-center gap-4 text-sm">
                               <span className={isDark ? 'text-zinc-400' : 'text-gray-500'}>{groupRenta} renta</span>
@@ -2863,7 +2867,7 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
                                             const artNameDisplay = (cara.articulo?.ItemName || '').toUpperCase();
                                             const esKioscoDisplay = artNameDisplay.includes('KIOSCO') || artNameDisplay.includes('KIOSKO');
                                             const carasGrupo = cara.renta + cara.bonificacion;
-                                            const esImpar = !esCaraCortesia && !esKioscoDisplay && carasGrupo > 0 && carasGrupo % 2 !== 0;
+                                            const esImpar = !esCaraCortesia && !esKioscoDisplay && !cara.esBf && carasGrupo > 0 && carasGrupo % 2 !== 0;
                                             // DG contamina: si alguna cara tiene DG, todas son DG (excepto cortesías)
                                             const hayDGEnPropuesta = caras.some(c => c.autorizacion_dg === 'pendiente');
                                             // Solo contamina si esta cara tiene algún pendiente (no tocar las ya aprobadas ni cortesías)
