@@ -242,6 +242,7 @@ export interface Propuesta {
   fecha_inicio?: string | null;
   fecha_fin?: string | null;
   formatos?: string | null;
+  cuic?: number | null;
 }
 
 export interface PropuestaStats {

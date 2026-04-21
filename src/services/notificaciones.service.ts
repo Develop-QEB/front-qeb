@@ -176,4 +176,7 @@ export interface CaraAutorizacion {
   cliente?: string;
   campana?: string;
   catorcena?: string;
+  fin_periodo?: string;
+  inicio_periodo?: string;
+  asesor?: string;
 }

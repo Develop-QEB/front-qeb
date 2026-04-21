@@ -913,9 +913,10 @@ function InvGroupHeader({ groupName, count, expanded, onToggle, level = 1, isDar
   );
 }
 
-function InventoryTable({ data, isLoading, page, totalPages, total, onPageChange, selectedIds, onSelectionChange }: {
+function InventoryTable({ data, isLoading, page, totalPages, total, onPageChange, selectedIds, onSelectionChange, filters, activeEstatus }: {
   data: any[]; isLoading: boolean; page: number; totalPages: number; total: number; onPageChange: (p: number) => void;
   selectedIds: Set<number>; onSelectionChange: (ids: Set<number>) => void;
+  filters?: DashboardFilters; activeEstatus?: string;
 }) {
   const isDark = useThemeStore((s) => s.theme) === 'dark';
   const navigate = useNavigate();
@@ -930,14 +931,17 @@ function InventoryTable({ data, isLoading, page, totalPages, total, onPageChange
   const [invSortDirection, setInvSortDirection] = useState<'asc' | 'desc'>('asc');
   const [showInvSortPopup, setShowInvSortPopup] = useState(false);
   const [invExpandedGroups, setInvExpandedGroups] = useState<Set<string>>(new Set());
+  const [selectAllPages, setSelectAllPages] = useState(false);
+  const [loadingAllPages, setLoadingAllPages] = useState(false);
 
   const handleToggleItem = (id: number) => {
+    setSelectAllPages(false);
     const newSet = new Set(selectedIds);
     if (newSet.has(id)) newSet.delete(id); else newSet.add(id);
     onSelectionChange(newSet);
   };
 
-  const handleClearSelection = () => onSelectionChange(new Set());
+  const handleClearSelection = () => { setSelectAllPages(false); onSelectionChange(new Set()); };
 
   // Filter functions
   const addInvFilter = useCallback(() => {
@@ -998,29 +1002,54 @@ function InventoryTable({ data, isLoading, page, totalPages, total, onPageChange
     return result;
   }, [data, invFilters, invSortField, invSortDirection]);
 
-  const downloadCSV = useCallback(() => {
-    const selected = filteredData.filter(item => selectedIds.has(item.id));
-    if (selected.length === 0) return;
-    const headers = ['ID', 'Plaza', 'Municipio', 'Mueble', 'Tipo', 'Estatus', 'Cliente', 'APS'];
-    const rows = selected.map(item => [
-      item.codigo_unico || item.id,
-      item.plaza || '',
-      item.municipio || '',
-      item.mueble || '',
-      item.tradicional_digital || 'Tradicional',
-      item.estatus || 'Disponible',
-      item.cliente_nombre || '',
-      item.APS || '',
-    ]);
-    const csv = [headers, ...rows].map(r => r.map(v => `"${String(v).replace(/"/g, '""')}"`).join(',')).join('\n');
-    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+  const downloadCSV = useCallback(async () => {
+    const generateCSV = (items: any[]) => {
+      const headers = ['ID', 'Plaza', 'Municipio', 'Mueble', 'Tipo', 'Estatus', 'Cliente', 'APS'];
+      const rows = items.map(item => [
+        item.codigo_unico || item.id,
+        item.plaza || '',
+        item.municipio || '',
+        item.mueble || '',
+        item.tradicional_digital || 'Tradicional',
+        item.estatus || 'Disponible',
+        item.cliente_nombre || '',
+        item.APS || '',
+      ]);
+      return [headers, ...rows].map(r => r.map(v => `"${String(v).replace(/"/g, '""')}"`).join(',')).join('\n');
+    };
+
+    let csvContent: string;
+    if (selectAllPages) {
+      setLoadingAllPages(true);
+      try {
+        const allData = await dashboardService.getInventoryDetail({
+          ...filters,
+          estatus: activeEstatus && activeEstatus !== 'total' ? activeEstatus : undefined,
+          page: 1,
+          limit: total,
+          includeCoords: false,
+        });
+        csvContent = generateCSV(allData.items);
+      } catch (err) {
+        console.error('Error al descargar:', err);
+        return;
+      } finally {
+        setLoadingAllPages(false);
+      }
+    } else {
+      const selected = filteredData.filter(item => selectedIds.has(item.id));
+      if (selected.length === 0) return;
+      csvContent = generateCSV(selected);
+    }
+
+    const blob = new Blob(['\uFEFF' + csvContent], { type: 'text/csv;charset=utf-8;' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
     a.download = `inventario_${new Date().toISOString().slice(0,10)}.csv`;
     a.click();
     URL.revokeObjectURL(url);
-  }, [filteredData, selectedIds]);
+  }, [filteredData, selectedIds, selectAllPages, filters, activeEstatus, total]);
 
   const downloadAllCSV = useCallback(() => {
     if (filteredData.length === 0) return;
@@ -1080,6 +1109,7 @@ function InventoryTable({ data, isLoading, page, totalPages, total, onPageChange
   const handleToggleAll = () => {
     const displayItems = filteredData;
     if (displayItems.every(item => selectedIds.has(item.id))) {
+      setSelectAllPages(false);
       const newSet = new Set(selectedIds);
       displayItems.forEach(item => newSet.delete(item.id));
       onSelectionChange(newSet);
@@ -1089,6 +1119,27 @@ function InventoryTable({ data, isLoading, page, totalPages, total, onPageChange
       onSelectionChange(newSet);
     }
   };
+
+  const handleSelectAllPages = async () => {
+    setLoadingAllPages(true);
+    try {
+      const allData = await dashboardService.getInventoryDetail({
+        ...filters,
+        estatus: activeEstatus && activeEstatus !== 'total' ? activeEstatus : undefined,
+        page: 1,
+        limit: total,
+        includeCoords: false,
+      });
+      const allIds = new Set<number>(allData.items.map((item: any) => item.id));
+      onSelectionChange(allIds);
+      setSelectAllPages(true);
+    } catch (err) {
+      console.error('Error al seleccionar todos:', err);
+    } finally {
+      setLoadingAllPages(false);
+    }
+  };
+
   const allCurrentPageSelected = filteredData.length > 0 && filteredData.every(item => selectedIds.has(item.id));
   const someCurrentPageSelected = filteredData.some(item => selectedIds.has(item.id));
 
@@ -1173,15 +1224,16 @@ function InventoryTable({ data, isLoading, page, totalPages, total, onPageChange
           {selectedIds.size > 0 && (
             <div className="flex items-center gap-2">
               <span className={`px-3 py-1 rounded-full ${isDark ? 'bg-pink-500/20 text-pink-300 border-pink-500/30' : 'bg-pink-50 text-pink-600 border-pink-200'} text-xs font-medium border`}>
-                {selectedIds.size} seleccionados
+                {selectAllPages ? total.toLocaleString() : selectedIds.size} seleccionados
               </span>
               <button
                 onClick={(e) => { e.stopPropagation(); downloadCSV(); }}
-                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium ${isDark ? 'bg-emerald-500/10 text-emerald-300 hover:bg-emerald-500/20' : 'bg-emerald-50 text-emerald-600 hover:bg-emerald-100'} transition-colors`}
+                disabled={loadingAllPages}
+                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium ${isDark ? 'bg-emerald-500/10 text-emerald-300 hover:bg-emerald-500/20' : 'bg-emerald-50 text-emerald-600 hover:bg-emerald-100'} transition-colors disabled:opacity-50`}
                 title="Descargar CSV"
               >
                 <Download className="h-3.5 w-3.5" />
-                Descargar CSV
+                {loadingAllPages ? 'Cargando...' : 'Descargar CSV'}
               </button>
               <button
                 onClick={(e) => { e.stopPropagation(); handleClearSelection(); }}
@@ -1449,6 +1501,37 @@ function InventoryTable({ data, isLoading, page, totalPages, total, onPageChange
                   </tbody>
                 </table>
               </div>
+
+              {/* Banner de "Seleccionar todos" */}
+              {allCurrentPageSelected && totalPages > 1 && !selectAllPages && (
+                <div className={`px-4 py-2 text-center text-xs border-t ${isDark ? 'border-purple-900/30 bg-purple-500/5' : 'border-purple-200/50 bg-purple-50'}`}>
+                  <span className={isDark ? 'text-purple-300' : 'text-purple-600'}>
+                    {filteredData.length} elementos de esta página seleccionados.
+                  </span>
+                  {' '}
+                  <button
+                    onClick={handleSelectAllPages}
+                    disabled={loadingAllPages}
+                    className={`font-semibold underline underline-offset-2 ${isDark ? 'text-pink-400 hover:text-pink-300' : 'text-pink-600 hover:text-pink-500'} transition-colors`}
+                  >
+                    {loadingAllPages ? 'Cargando...' : `Seleccionar todos los ${total.toLocaleString()} registros`}
+                  </button>
+                </div>
+              )}
+              {selectAllPages && (
+                <div className={`px-4 py-2 text-center text-xs border-t ${isDark ? 'border-pink-900/30 bg-pink-500/10' : 'border-pink-200/50 bg-pink-50'}`}>
+                  <span className={`font-semibold ${isDark ? 'text-pink-300' : 'text-pink-600'}`}>
+                    Los {total.toLocaleString()} registros están seleccionados.
+                  </span>
+                  {' '}
+                  <button
+                    onClick={handleClearSelection}
+                    className={`underline underline-offset-2 ${isDark ? 'text-zinc-400 hover:text-zinc-300' : 'text-gray-500 hover:text-gray-700'} transition-colors`}
+                  >
+                    Limpiar selección
+                  </button>
+                </div>
+              )}
 
               {/* Pagination */}
               {totalPages > 1 && (
@@ -1839,6 +1922,8 @@ export function DashboardPage() {
           onPageChange={setInventoryPage}
           selectedIds={selectedInventoryIds}
           onSelectionChange={setSelectedInventoryIds}
+          filters={filters}
+          activeEstatus={activeEstatus}
         />
       </div>
     </div>
