@@ -1324,15 +1324,16 @@ export function PropuestasPage() {
 
     const groupKey = groupBy as keyof Propuesta;
     const groups: Record<string, Propuesta[]> = {};
+    const sourceData = (advancedFilters.length > 0 || allSearchTerms.length > 0) ? filteredData : data.data;
 
-    data.data.forEach(item => {
+    sourceData.forEach(item => {
       const key = String(item[groupKey] || 'Sin asignar');
       if (!groups[key]) groups[key] = [];
       groups[key].push(item);
     });
 
     return Object.entries(groups).sort((a, b) => b[1].length - a[1].length);
-  }, [data, groupBy]);
+  }, [data, groupBy, filteredData, advancedFilters, allSearchTerms]);
 
   const toggleGroup = (groupName: string) => {
     setExpandedGroups(prev => {
