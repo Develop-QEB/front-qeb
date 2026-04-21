@@ -1128,6 +1128,12 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
       return;
     }
 
+    // Validar caras de renta pares (flujo + contraflujo requieren número par)
+    if (!esCortesia && !esBonificacion && !esImpresion && !esEspecial && newCara.renta > 0 && newCara.renta % 2 !== 0) {
+      alert('Las caras de renta deben ser un número par (Flujo + Contraflujo).');
+      return;
+    }
+
     // BF validation: if bonificacion > 0 on a regular RT article, require articuloBf
     const needsBfArticle = newCara.bonificacion > 0 && !esCortesia && !esBonificacion && !esImpresion && !esEspecial;
     if (needsBfArticle && !newCara.articuloBf) {

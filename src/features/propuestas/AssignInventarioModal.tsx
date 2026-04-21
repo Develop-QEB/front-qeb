@@ -1859,6 +1859,12 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
       return;
     }
 
+    // Validar caras de renta pares (flujo + contraflujo requieren número par)
+    if (!esCortesia && !esBonificacion && !esImpresion && !isEspecialArticle(artCode) && (newCara.caras || 0) > 0 && (newCara.caras || 0) % 2 !== 0) {
+      alert('Las caras de renta deben ser un número par (Flujo + Contraflujo).');
+      return;
+    }
+
     // BF validation: bonificacion > 0 on RT article requires articuloBf
     const needsBfArticle = (newCara.bonificacion || 0) > 0 && !esCortesia && !esBonificacion && !esImpresion && !isEspecialArticle(artCode);
     if (needsBfArticle && !newCara.articuloBf) {
