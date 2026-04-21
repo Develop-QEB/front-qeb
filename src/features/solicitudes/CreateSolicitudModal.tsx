@@ -1325,12 +1325,17 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
         autorizacion_dcm: c._originalDcm,
       }));
       // Paso 1: Impar por grupo — si renta+bonificacion de un grupo es impar, esa cara es DG
-      // Cortesías y Kioscos quedan excluidos: no requieren autorización por impar
+      // Excluir: CT, Kioscos, Boleros, Mi Macro, IM, ESP — solo aplica a PB/Columna y otros RT estándar
       updated = updated.map(c => {
         const esCaraCortesia = c.articulo?.ItemCode?.toUpperCase().startsWith('CT');
         const artName = (c.articulo?.ItemName || '').toUpperCase();
+        const artCode2 = (c.articulo?.ItemCode || '').toUpperCase();
         const esKiosco = artName.includes('KIOSCO') || artName.includes('KIOSKO');
-        if (esCaraCortesia || esKiosco || c.esBf) return c; // BF rows don't need auth check
+        const esBoleroItem = artName.includes('BOLERO');
+        const esMiMacroItem = artName.includes('MI MACRO');
+        const esImpresionItem = artCode2.startsWith('IM');
+        const esEspecialItem = artCode2.startsWith('ESP') || artCode2.startsWith('ES-');
+        if (esCaraCortesia || esKiosco || esBoleroItem || esMiMacroItem || esImpresionItem || esEspecialItem || c.esBf) return c;
         // For RT/BF pairs, sum both rows' renta
         let carasGrupo = c.renta + c.bonificacion;
         if (c.grupo_rt_bf) {

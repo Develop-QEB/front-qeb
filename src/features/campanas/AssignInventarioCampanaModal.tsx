@@ -2139,8 +2139,8 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
             updated = updated.map(c => ({ ...c, autorizacion_dg: c._originalDg || c.autorizacion_dg, autorizacion_dcm: c._originalDcm || c.autorizacion_dcm }));
             // Impar/DG check: sum caras across BOTH members of an RT/BF pair
             updated = updated.map(c => {
-              if (c.formato === 'Kiosco') return c;
-              if (c.esBf) return c; // BF rows don't trigger their own impar check
+              if (c.esBf) return c;
+              { const fmt = (c.formato || '').toUpperCase(); if (fmt.includes('KIOSCO') || fmt.includes('KIOSKO') || fmt.includes('BOLERO') || fmt.includes('MI MACRO') || fmt.includes('MACRO')) return c; }
               let total = (c.caras_flujo || 0) + (c.caras_contraflujo || 0) + (c.bonificacion || 0);
               if (c.grupo_rt_bf) {
                 const bf = updated.find(o => o.grupo_rt_bf === c.grupo_rt_bf && o.esBf && o.inicio_periodo === c.inicio_periodo);
@@ -2236,8 +2236,8 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
           updated = updated.map(c => ({ ...c, autorizacion_dg: c._originalDg || c.autorizacion_dg, autorizacion_dcm: c._originalDcm || c.autorizacion_dcm }));
           // Impar/DG check: sum caras across BOTH members of an RT/BF pair
           updated = updated.map(c => {
-            if (c.formato === 'Kiosco') return c;
             if (c.esBf) return c;
+            { const fmt = (c.formato || '').toUpperCase(); if (fmt.includes('KIOSCO') || fmt.includes('KIOSKO') || fmt.includes('BOLERO') || fmt.includes('MI MACRO') || fmt.includes('MACRO')) return c; }
             let total = (c.caras_flujo || 0) + (c.caras_contraflujo || 0) + (c.bonificacion || 0);
             if (c.grupo_rt_bf) {
               const bf = updated.find(o => o.grupo_rt_bf === c.grupo_rt_bf && o.esBf && o.inicio_periodo === c.inicio_periodo);

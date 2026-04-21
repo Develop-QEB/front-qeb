@@ -2155,7 +2155,8 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
             if (authFieldsChanged) {
               updated = updated.map(c => ({ ...c, autorizacion_dg: c._originalDg || c.autorizacion_dg, autorizacion_dcm: c._originalDcm || c.autorizacion_dcm }));
               updated = updated.map(c => {
-                if (c.formato === 'Kiosco' || c.esBf) return c;
+                if (c.esBf) return c;
+            { const fmt = (c.formato || '').toUpperCase(); if (fmt.includes('KIOSCO') || fmt.includes('KIOSKO') || fmt.includes('BOLERO') || fmt.includes('MI MACRO') || fmt.includes('MACRO')) return c; }
                 // Sum caras across RT/BF group members (renta + bonif OR rt.caras + bf.caras)
                 let total = (c.caras_flujo || 0) + (c.caras_contraflujo || 0) + (c.bonificacion || 0);
                 if (c.grupo_rt_bf) {
@@ -2249,7 +2250,8 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
           // Reset + impar + contamination
           updated = updated.map(c => ({ ...c, autorizacion_dg: c._originalDg || c.autorizacion_dg, autorizacion_dcm: c._originalDcm || c.autorizacion_dcm }));
           updated = updated.map(c => {
-            if (c.formato === 'Kiosco' || c.esBf) return c;
+            if (c.esBf) return c;
+            { const fmt = (c.formato || '').toUpperCase(); if (fmt.includes('KIOSCO') || fmt.includes('KIOSKO') || fmt.includes('BOLERO') || fmt.includes('MI MACRO') || fmt.includes('MACRO')) return c; }
             // Sum caras across RT/BF group members
             let total = (c.caras_flujo || 0) + (c.caras_contraflujo || 0) + (c.bonificacion || 0);
             if (c.grupo_rt_bf) {
