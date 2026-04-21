@@ -26,7 +26,7 @@ const CODE_FORMATO_MAP: Record<string, string> = {
   pb: 'PARABUS', cl: 'COLUMNA', bol: 'BOLERO', kco: 'Kiosco',
 };
 const CODE_PLAZA_MAP_SOL: Record<string, { estado: string; ciudades: string[] }> = {
-  mx:  { estado: 'Ciudad de México', ciudades: [] },
+  mx:  { estado: 'Ciudad de México / AM', ciudades: [] },
   mty: { estado: 'Nuevo León', ciudades: ['Monterrey', 'Guadalupe', 'San Nicolás de los Garza', 'Santa Catarina'] },
   gd:  { estado: 'Jalisco', ciudades: ['Guadalajara', 'Zapopan', 'Tlaquepaque'] },
   gdl: { estado: 'Jalisco', ciudades: ['Guadalajara', 'Zapopan', 'Tlaquepaque'] },
@@ -196,7 +196,7 @@ const MULTI_CITY_RULES: { pattern: RegExp; estado: string; ciudades: string[] }[
   { pattern: /\bTABASCO\b|\bVILLAHERMOSA\b|\bTB\b/, estado: 'Tabasco', ciudades: ['VILLAHERMOSA'] },
   { pattern: /\bMORELIA\b/, estado: 'Michoacán', ciudades: ['MORELIA'] },
   { pattern: /\bCANCUN\b/, estado: 'Quintana Roo', ciudades: ['BENITO JUÁREZ'] },
-  { pattern: /\bCDMX\b|\bCIUDAD DE MEXICO\b|\bDF\b|\bMEXICO\b(?!\s*(Y\s*AM|WI-?FI))|\bMX\b/, estado: 'Ciudad de México', ciudades: [] },
+  { pattern: /\bCDMX\b|\bCIUDAD DE MEXICO\b|\bDF\b|\bMEXICO\b(?!\s*(Y\s*AM|WI-?FI))|\bMX\b/, estado: 'Ciudad de México / AM', ciudades: [] },
   { pattern: /\bNAUC\b/, estado: 'Estado de México', ciudades: ['NAUCALPAN'] },
   { pattern: /\bEM\b/, estado: 'Estado de México', ciudades: [] },
 ];

@@ -140,7 +140,7 @@ const CODE_FORMATO_MAP: Record<string, string> = {
   pb: 'PARABUS', cl: 'COLUMNA', bol: 'BOLERO', kco: 'Kiosco',
 };
 const CODE_PLAZA_MAP: Record<string, { estado: string; ciudad: string }> = {
-  mx:  { estado: 'Ciudad de México', ciudad: '' },
+  mx:  { estado: 'Ciudad de México / AM', ciudad: '' },
   mty: { estado: 'Nuevo León', ciudad: 'Monterrey,Guadalupe,San Nicolás de los Garza,Santa Catarina' },
   gd:  { estado: 'Jalisco', ciudad: 'Guadalajara,Zapopan,Tlaquepaque' },
   gdl: { estado: 'Jalisco', ciudad: 'Guadalajara,Zapopan,Tlaquepaque' },
