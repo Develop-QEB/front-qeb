@@ -1297,10 +1297,10 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
           tarifaPublica: 0, // BF is free
           descuento: 0,
           precioTotal: 0,
-          autorizacion_dg: 'aprobado', // BF auto-approved
-          autorizacion_dcm: 'aprobado',
-          _originalDg: 'aprobado',
-          _originalDcm: 'aprobado',
+          autorizacion_dg, // BF inherits RT auth state
+          autorizacion_dcm,
+          _originalDg: autorizacion_dg,
+          _originalDcm: autorizacion_dcm,
           grupo_rt_bf: grupoRtBf,
           esBf: true,
         });
