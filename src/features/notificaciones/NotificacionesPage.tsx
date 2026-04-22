@@ -2175,7 +2175,7 @@ function TaskDrawer({
           {/* Botón Revisar y Autorizar para directores */}
           {isAutorizacionTask && ['Director General', 'Director Comercial'].includes(user?.rol || '') && tarea.estatus !== 'Atendido' && tarea.estatus !== 'Cancelado' && onOpenApprovalModal && (
             <button
-              onClick={() => onOpenApprovalModal(tarea)}
+              onClick={() => onOpenApprovalModal()}
               className="mt-4 w-full flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl bg-gradient-to-r from-orange-500 to-amber-500 text-white text-sm font-bold hover:from-orange-400 hover:to-amber-400 transition-all hover:scale-[1.02] active:scale-[0.98] shadow-lg shadow-orange-500/20"
             >
               <ShieldCheck className="h-4 w-4" />
