@@ -2188,7 +2188,7 @@ function TaskDrawer({
           )}
 
           {/* Botón finalizar tarea */}
-          {contentType === 'tareas' && (
+          {contentType === 'tareas' && user?.rol !== 'Director General' && (
             <button
               onClick={(e) => {
                 e.stopPropagation();
