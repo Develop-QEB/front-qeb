@@ -1668,11 +1668,7 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
     // Calculate caras en renta (flujo + contraflujo)
     const carasEnRenta = (cara.caras_flujo || 0) + (cara.caras_contraflujo || 0);
 
-    // If BF pair exists, show the BF caras count as "bonificacion" on the form
-    // (BF pair stores its count in caras_flujo/caras_contraflujo, i.e. the BF's "caras" field)
-    const bonificacionForForm = bfPair
-      ? (bfPair.caras_flujo || 0) + (bfPair.caras_contraflujo || 0) || bfPair.caras || 0
-      : cara.bonificacion;
+    const bonificacionForForm = bfPair ? (bfPair.bonificacion || 0) : cara.bonificacion;
 
     // Try to find the matching catorcena from inicio_periodo
     let catorcenaInicioVal = cara.catorcena_inicio;
@@ -1795,23 +1791,21 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
 
     // Build a BF caraData given the BF article and count
     const buildBfCaraData = (bfArticuloCode: string, bfCount: number, grupoRtBf: number): Record<string, unknown> => {
-      const flujo = Math.ceil(bfCount / 2);
-      const contraflujo = Math.floor(bfCount / 2);
       return {
         ciudad: ciudadToSave,
         estados: newCara.estados,
         tipo: newCara.tipo,
         flujo: newCara.flujo,
-        bonificacion: 0,
-        caras: bfCount,
+        bonificacion: bfCount,
+        caras: 0,
         nivel_socioeconomico: newCara.nivel_socioeconomico,
         formato: newCara.formato,
         costo: 0,
         tarifa_publica: 0,
         inicio_periodo: newCara.inicio_periodo,
         fin_periodo: newCara.fin_periodo,
-        caras_flujo: flujo,
-        caras_contraflujo: contraflujo,
+        caras_flujo: 0,
+        caras_contraflujo: 0,
         articulo: bfArticuloCode,
         descuento: 0,
         grupo_rt_bf: grupoRtBf,
@@ -1829,7 +1823,7 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
 
         // Determine grupo_rt_bf: reuse existing, or generate a new one if pairing now.
         let grupoRtBf: number | null = caraToEdit.grupo_rt_bf || null;
-        if (wantsPair && !grupoRtBf) grupoRtBf = Date.now();
+        if (wantsPair && !grupoRtBf) grupoRtBf = Date.now() % 2000000000;
         if (!wantsPair) grupoRtBf = null;
 
         // Find existing BF pair (if any)
@@ -1917,16 +1911,16 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
               estados: newCara.estados,
               tipo: newCara.tipo,
               flujo: newCara.flujo,
-              bonificacion: 0,
-              caras: bfCount,
+              bonificacion: bfCount,
+              caras: 0,
               nivel_socioeconomico: newCara.nivel_socioeconomico,
               formato: newCara.formato,
               costo: 0,
               tarifa_publica: 0,
               inicio_periodo: newCara.inicio_periodo,
               fin_periodo: newCara.fin_periodo,
-              caras_flujo: Math.ceil(bfCount / 2),
-              caras_contraflujo: Math.floor(bfCount / 2),
+              caras_flujo: 0,
+              caras_contraflujo: 0,
               articulo: articuloBf.ItemCode,
               descuento: 0,
               catorcena_inicio: newCara.catorcena_inicio,
@@ -1982,11 +1976,11 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
               c.localId === existingBfPair.localId
                 ? {
                     ...c,
-                    caras: bfCount,
-                    caras_flujo: Math.ceil(bfCount / 2),
-                    caras_contraflujo: Math.floor(bfCount / 2),
+                    bonificacion: bfCount,
+                    caras: 0,
+                    caras_flujo: 0,
+                    caras_contraflujo: 0,
                     articulo: articuloBf.ItemCode,
-                    bonificacion: 0,
                     tarifa_publica: 0,
                     costo: 0,
                     descuento: 0,
@@ -2016,7 +2010,7 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
               let total = (c.caras_flujo || 0) + (c.caras_contraflujo || 0) + (c.bonificacion || 0);
               if (c.grupo_rt_bf) {
                 const bf = updated.find(o => o.grupo_rt_bf === c.grupo_rt_bf && o.esBf && o.inicio_periodo === c.inicio_periodo);
-                if (bf) total = (c.caras_flujo || 0) + (c.caras_contraflujo || 0) + ((bf.caras_flujo || 0) + (bf.caras_contraflujo || 0));
+                if (bf) total = (c.caras_flujo || 0) + (c.caras_contraflujo || 0) + (bf.bonificacion || 0);
               }
               if (total > 0 && total % 2 !== 0 && c.autorizacion_dg !== 'pendiente') return { ...c, autorizacion_dg: 'pendiente', autorizacion_dcm: 'aprobado' };
               return c;
@@ -2045,26 +2039,10 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
       } else {
         // ---- CREATE ----
         // If pairing requested, generate a grupo id
-        const grupoRtBf: number | null = wantsPair ? Date.now() : null;
+        const grupoRtBf: number | null = wantsPair ? Date.now() % 2000000000 : null;
         const rtCaraData = buildRtCaraData(grupoRtBf);
 
-        // Create RT cara in database (needs DB ID for reservas)
-        const createdCara = await campanasService.createCara(campana!.id, rtCaraData as any);
-        const newRtItem: CaraItem = {
-          ...newCara,
-          id: createdCara.id,
-          localId: `cara-${createdCara.id}`,
-          bonificacion: rtBonificacion,
-          costo: costoCalculado,
-          autorizacion_dg: createdCara.autorizacion_dg || 'aprobado',
-          autorizacion_dcm: createdCara.autorizacion_dcm || 'aprobado',
-          _originalDg: createdCara.autorizacion_dg || 'aprobado',
-          _originalDcm: createdCara.autorizacion_dcm || 'aprobado',
-          grupo_rt_bf: grupoRtBf,
-          esBf: false,
-        };
-
-        // If pairing: create the BF cara too
+        // Create BF cara FIRST (so backend can look it up when evaluating RT auth)
         let newBfItem: CaraItem | null = null;
         if (wantsPair && articuloBf && grupoRtBf) {
           const bfCount = newCara.bonificacion || 0;
@@ -2077,16 +2055,16 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
             estados: newCara.estados,
             tipo: newCara.tipo,
             flujo: newCara.flujo,
-            bonificacion: 0,
-            caras: bfCount,
+            bonificacion: bfCount,
+            caras: 0,
             nivel_socioeconomico: newCara.nivel_socioeconomico,
             formato: newCara.formato,
             costo: 0,
             tarifa_publica: 0,
             inicio_periodo: newCara.inicio_periodo,
             fin_periodo: newCara.fin_periodo,
-            caras_flujo: Math.ceil(bfCount / 2),
-            caras_contraflujo: Math.floor(bfCount / 2),
+            caras_flujo: 0,
+            caras_contraflujo: 0,
             articulo: articuloBf.ItemCode,
             descuento: 0,
             catorcena_inicio: newCara.catorcena_inicio,
@@ -2102,6 +2080,22 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
           };
         }
 
+        // Create RT cara after BF (so backend auth lookup finds BF pair)
+        const createdCara = await campanasService.createCara(campana!.id, rtCaraData as any);
+        const newRtItem: CaraItem = {
+          ...newCara,
+          id: createdCara.id,
+          localId: `cara-${createdCara.id}`,
+          bonificacion: rtBonificacion,
+          costo: costoCalculado,
+          autorizacion_dg: createdCara.autorizacion_dg || 'aprobado',
+          autorizacion_dcm: createdCara.autorizacion_dcm || 'aprobado',
+          _originalDg: createdCara.autorizacion_dg || 'aprobado',
+          _originalDcm: createdCara.autorizacion_dcm || 'aprobado',
+          grupo_rt_bf: grupoRtBf,
+          esBf: false,
+        };
+
         setCaras(prev => {
           let updated = [...prev, newRtItem];
           if (newBfItem) updated = [...updated, newBfItem];
@@ -2113,7 +2107,7 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
             let total = (c.caras_flujo || 0) + (c.caras_contraflujo || 0) + (c.bonificacion || 0);
             if (c.grupo_rt_bf) {
               const bf = updated.find(o => o.grupo_rt_bf === c.grupo_rt_bf && o.esBf && o.inicio_periodo === c.inicio_periodo);
-              if (bf) total = (c.caras_flujo || 0) + (c.caras_contraflujo || 0) + ((bf.caras_flujo || 0) + (bf.caras_contraflujo || 0));
+              if (bf) total = (c.caras_flujo || 0) + (c.caras_contraflujo || 0) + (bf.bonificacion || 0);
             }
             if (total > 0 && total % 2 !== 0 && c.autorizacion_dg !== 'pendiente') return { ...c, autorizacion_dg: 'pendiente', autorizacion_dcm: 'aprobado' };
             return c;

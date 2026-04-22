@@ -1808,9 +1808,7 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
       }
     }
 
-    // If there's a BF pair, the user-facing "bonificacion" value is the BF pair's "caras"
-    // (BF caras are stored in `caras`, not `bonificacion`, when linked via grupo_rt_bf)
-    const bonificacionDisplay = bfPair ? (bfPair.caras || 0) : cara.bonificacion;
+    const bonificacionDisplay = bfPair ? (bfPair.bonificacion || 0) : cara.bonificacion;
 
     setNewCara({
       ciudad: cara.ciudad,
@@ -1908,7 +1906,7 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
 
     // Reuse existing grupo_rt_bf (for edits) or create a new one (for new pairs)
     const grupoRtBfVal: number | null = usePairMode
-      ? (newCara.grupo_rt_bf ?? Date.now())
+      ? (newCara.grupo_rt_bf ?? Date.now() % 2000000000)
       : null;
 
     // RT cara data (when pair mode, bonificacion is 0 — the bonificacion count lives on the BF row's `caras`)
@@ -1944,16 +1942,16 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
           estados: newCara.estados,
           tipo: newCara.tipo,
           flujo: newCara.flujo,
-          bonificacion: 0,
-          caras: bfCarasCount,
+          bonificacion: bfCarasCount,
+          caras: 0,
           nivel_socioeconomico: newCara.nivel_socioeconomico,
           formato: newCara.formato,
           costo: 0,
           tarifa_publica: 0,
           inicio_periodo: newCara.inicio_periodo,
           fin_periodo: newCara.fin_periodo,
-          caras_flujo: bfCarasFlujo,
-          caras_contraflujo: bfCarasContraflujo,
+          caras_flujo: 0,
+          caras_contraflujo: 0,
           articulo: newCara.articuloBf.ItemCode,
           descuento: 0,
           grupo_rt_bf: grupoRtBfVal,
@@ -1980,7 +1978,7 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
           let autorizacion_dg = caraToEdit.autorizacion_dg || 'aprobado';
           let autorizacion_dcm = caraToEdit.autorizacion_dcm || 'aprobado';
           const authFieldsChanged = newCara.caras !== caraToEdit.caras_flujo + caraToEdit.caras_contraflujo
-            || newCara.bonificacion !== (caraToEdit.bonificacion || 0) + (existingBfPair?.caras || 0)
+            || newCara.bonificacion !== (caraToEdit.bonificacion || 0) + (existingBfPair?.bonificacion || 0)
             || newCara.tarifa_publica !== (caraToEdit.tarifa_publica || 0)
             || newCara.formato !== (caraToEdit.formato || '')
             || newCara.tipo !== (caraToEdit.tipo || '')
@@ -2034,16 +2032,16 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
                 estados: bfCaraData.estados || '',
                 tipo: bfCaraData.tipo || '',
                 flujo: bfCaraData.flujo || '',
-                bonificacion: 0,
-                caras: bfCarasCount,
+                bonificacion: bfCarasCount,
+                caras: 0,
                 nivel_socioeconomico: bfCaraData.nivel_socioeconomico || '',
                 formato: bfCaraData.formato || '',
                 costo: 0,
                 tarifa_publica: 0,
                 inicio_periodo: bfCaraData.inicio_periodo || '',
                 fin_periodo: bfCaraData.fin_periodo || '',
-                caras_flujo: bfCarasFlujo,
-                caras_contraflujo: bfCarasContraflujo,
+                caras_flujo: 0,
+                caras_contraflujo: 0,
                 articulo: bfCaraData.articulo || '',
                 descuento: 0,
                 catorcena_inicio: newCara.catorcena_inicio,
@@ -2084,16 +2082,16 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
               estados: bfCaraData.estados || '',
               tipo: bfCaraData.tipo || '',
               flujo: bfCaraData.flujo || '',
-              bonificacion: 0,
-              caras: bfCarasCount,
+              bonificacion: bfCarasCount,
+              caras: 0,
               nivel_socioeconomico: bfCaraData.nivel_socioeconomico || '',
               formato: bfCaraData.formato || '',
               costo: 0,
               tarifa_publica: 0,
               inicio_periodo: bfCaraData.inicio_periodo || '',
               fin_periodo: bfCaraData.fin_periodo || '',
-              caras_flujo: bfCarasFlujo,
-              caras_contraflujo: bfCarasContraflujo,
+              caras_flujo: 0,
+              caras_contraflujo: 0,
               articulo: bfCaraData.articulo || '',
               descuento: 0,
               catorcena_inicio: newCara.catorcena_inicio,
@@ -2138,9 +2136,10 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
               updated = updated.map(c => c.localId === existingBfPair.localId
                 ? {
                     ...c,
-                    caras: bfCarasCount,
-                    caras_flujo: bfCarasFlujo,
-                    caras_contraflujo: bfCarasContraflujo,
+                    bonificacion: bfCarasCount,
+                    caras: 0,
+                    caras_flujo: 0,
+                    caras_contraflujo: 0,
                     inicio_periodo: newCara.inicio_periodo,
                     fin_periodo: newCara.fin_periodo,
                     catorcena_inicio: newCara.catorcena_inicio,
@@ -2160,11 +2159,11 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
               updated = updated.map(c => {
                 if (c.esBf) return c;
             { const fmt = (c.formato || '').toUpperCase(); if (fmt.includes('KIOSCO') || fmt.includes('KIOSKO') || fmt.includes('BOLERO') || fmt.includes('MI MACRO') || fmt.includes('MACRO')) return c; }
-                // Sum caras across RT/BF group members (renta + bonif OR rt.caras + bf.caras)
+                // Sum caras across RT/BF group members
                 let total = (c.caras_flujo || 0) + (c.caras_contraflujo || 0) + (c.bonificacion || 0);
                 if (c.grupo_rt_bf) {
                   const bf = updated.find(o => o.esBf && o.grupo_rt_bf === c.grupo_rt_bf && o.inicio_periodo === c.inicio_periodo && o.fin_periodo === c.fin_periodo);
-                  if (bf) total = (c.caras_flujo || 0) + (c.caras_contraflujo || 0) + (bf.caras || 0);
+                  if (bf) total = (c.caras_flujo || 0) + (c.caras_contraflujo || 0) + (bf.bonificacion || 0);
                 }
                 if (total > 0 && total % 2 !== 0 && c.autorizacion_dcm !== 'pendiente') return { ...c, autorizacion_dg: 'aprobado', autorizacion_dcm: 'pendiente' };
                 return c;
@@ -2193,24 +2192,7 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
         setTimeout(() => caraTableRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 100);
       } else {
         // ---- CREATE ----
-        // Create the RT cara in database (needs DB ID for reservas)
-        const createdCara = await propuestasService.createCara(propuesta.id, caraData);
-        const newCaraItem: CaraItem = {
-          ...newCara,
-          id: createdCara.id,
-          localId: `cara-${createdCara.id}`,
-          // Override: RT row's stored `bonificacion` is 0 in pair mode
-          bonificacion: usePairMode ? 0 : newCara.bonificacion,
-          costo: costoCalculado,
-          grupo_rt_bf: grupoRtBfVal,
-          esBf: false,
-          autorizacion_dg: createdCara.autorizacion_dg || 'aprobado',
-          autorizacion_dcm: createdCara.autorizacion_dcm || 'aprobado',
-          _originalDg: createdCara.autorizacion_dg || 'aprobado',
-          _originalDcm: createdCara.autorizacion_dcm || 'aprobado',
-        };
-
-        // Create BF cara (pair) if applicable
+        // Create BF cara FIRST (so backend can look it up when evaluating RT auth)
         let createdBfItem: CaraItem | null = null;
         if (bfCaraData) {
           const createdBf = await propuestasService.createCara(propuesta.id, bfCaraData);
@@ -2221,16 +2203,16 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
             estados: bfCaraData.estados || '',
             tipo: bfCaraData.tipo || '',
             flujo: bfCaraData.flujo || '',
-            bonificacion: 0,
-            caras: bfCarasCount,
+            bonificacion: bfCarasCount,
+            caras: 0,
             nivel_socioeconomico: bfCaraData.nivel_socioeconomico || '',
             formato: bfCaraData.formato || '',
             costo: 0,
             tarifa_publica: 0,
             inicio_periodo: bfCaraData.inicio_periodo || '',
             fin_periodo: bfCaraData.fin_periodo || '',
-            caras_flujo: bfCarasFlujo,
-            caras_contraflujo: bfCarasContraflujo,
+            caras_flujo: 0,
+            caras_contraflujo: 0,
             articulo: bfCaraData.articulo || '',
             descuento: 0,
             catorcena_inicio: newCara.catorcena_inicio,
@@ -2245,6 +2227,22 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
             esBf: true,
           };
         }
+
+        // Create RT cara after BF (so backend auth lookup finds BF pair)
+        const createdCara = await propuestasService.createCara(propuesta.id, caraData);
+        const newCaraItem: CaraItem = {
+          ...newCara,
+          id: createdCara.id,
+          localId: `cara-${createdCara.id}`,
+          bonificacion: usePairMode ? 0 : newCara.bonificacion,
+          costo: costoCalculado,
+          grupo_rt_bf: grupoRtBfVal,
+          esBf: false,
+          autorizacion_dg: createdCara.autorizacion_dg || 'aprobado',
+          autorizacion_dcm: createdCara.autorizacion_dcm || 'aprobado',
+          _originalDg: createdCara.autorizacion_dg || 'aprobado',
+          _originalDcm: createdCara.autorizacion_dcm || 'aprobado',
+        };
 
         setCaras(prev => {
           let updated = createdBfItem

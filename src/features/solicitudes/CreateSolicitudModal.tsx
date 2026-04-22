@@ -1259,7 +1259,7 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
       periodsToCreate.push({ catorcenaNum, catorcenaYear, periodoInicio: periodoInicioVal, periodoFin: periodoFinVal });
     }
 
-    const grupoRtBf = newCara.bonificacion > 0 && newCara.articuloBf ? Date.now() : undefined;
+    const grupoRtBf = newCara.bonificacion > 0 && newCara.articuloBf ? Date.now() % 2000000000 : undefined;
     const ciudadesToUse = newCara.ciudades.length > 0 ? newCara.ciudades : filteredCiudades;
 
     const newCaras: CaraEntry[] = [];
@@ -1537,8 +1537,8 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
 
   // Calculate totals
   const totals = useMemo(() => {
-    const totalRenta = caras.reduce((acc, c) => acc + c.renta, 0);
-    const totalBonificacion = caras.reduce((acc, c) => acc + c.bonificacion, 0);
+    const totalRenta = caras.reduce((acc, c) => acc + (c.esBf ? 0 : c.renta), 0);
+    const totalBonificacion = caras.reduce((acc, c) => acc + (c.esBf ? c.renta : c.bonificacion), 0);
     const totalPrecio = caras.reduce((acc, c) => acc + c.precioTotal, 0);
     const totalCarasAll = totalRenta + totalBonificacion;
     // Tarifa Efectiva = Inversión Total / Total Caras (renta + bonificación)
@@ -1686,16 +1686,16 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
         estado: c.estado,
         tipo: c.tipo,
         flujo: 'Ambos',
-        bonificacion: c.bonificacion,
-        caras: c.renta,
+        bonificacion: c.esBf ? c.renta : c.bonificacion,
+        caras: c.esBf ? 0 : c.renta,
         nivel_socioeconomico: c.nse.join(','),
         formato: c.formato,
         costo: c.precioTotal,
         tarifa_publica: c.tarifaPublica,
         inicio_periodo: c.periodoInicio,
         fin_periodo: c.periodoFin,
-        caras_flujo: Math.ceil(c.renta / 2),
-        caras_contraflujo: Math.floor(c.renta / 2),
+        caras_flujo: c.esBf ? 0 : Math.ceil(c.renta / 2),
+        caras_contraflujo: c.esBf ? 0 : Math.floor(c.renta / 2),
         descuento: c.descuento,
         articulo: c.articulo.ItemCode,
         autorizacion_dg: c.autorizacion_dg,
@@ -3086,8 +3086,8 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
                             items: []
                           };
                         }
-                        acc[artKey].renta += cara.renta;
-                        acc[artKey].bonificacion += cara.bonificacion;
+                        acc[artKey].renta += cara.esBf ? 0 : cara.renta;
+                        acc[artKey].bonificacion += cara.esBf ? cara.renta : cara.bonificacion;
                         acc[artKey].precioTotal += cara.precioTotal;
                         acc[artKey].items.push(cara);
                         return acc;
