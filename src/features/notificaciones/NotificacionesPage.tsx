@@ -1302,12 +1302,16 @@ function getNavigationLabel(tipo: string, tipoTarea?: string, campaniaId?: numbe
   if (isGestionArtesTarea(tipoTarea)) {
     return 'Ver Gestión de Artes';
   }
-  // Tareas de Rechazo: abrir modal de edición de solicitud
+  // Tareas de Rechazo: usar referencia_tipo para el label correcto
   if (tipoTarea?.includes('Rechazo')) {
+    if (tipo === 'propuesta') return 'Editar Propuesta';
+    if (tipo === 'campana') return 'Editar Campaña';
     return 'Editar Solicitud';
   }
-  // Tareas de Aprobación: siempre Ver Solicitud
+  // Tareas de Aprobación: usar referencia_tipo
   if (tipoTarea?.includes('Aprobación')) {
+    if (tipo === 'propuesta') return 'Ver Propuesta';
+    if (tipo === 'campana') return 'Ver Campaña';
     return 'Ver Solicitud';
   }
   // Tareas de Autorización: usar referencia_tipo (tipo) del backend
