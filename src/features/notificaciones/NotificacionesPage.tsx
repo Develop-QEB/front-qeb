@@ -15,7 +15,7 @@ import { notificacionesService, CaraAutorizacion, ResumenAutorizacion, Historial
 import { notasService, NotaPersonal } from '../../services/notas.service';
 import { usuariosService } from '../../services/usuarios.service';
 import { Notificacion, ComentarioTarea } from '../../types';
-import { formatDate } from '../../lib/utils';
+import { formatDate, formatDateCompact } from '../../lib/utils';
 import { STATUS_CONFIG, getTipoConfig, getStatusConfig } from '../../lib/taskConfig';
 import { useAuthStore } from '../../store/authStore';
 import { useThemeStore } from '../../store/themeStore';
@@ -1772,7 +1772,7 @@ function ApprovalModal({
                         )}
                       </div>
                       <span className={`text-[10px] ${isDark ? 'text-zinc-600' : 'text-gray-400'} flex-shrink-0`}>
-                        {formatDate(entry.fecha)}
+                        {formatDateCompact(entry.fecha)}
                       </span>
                     </div>
                   );
