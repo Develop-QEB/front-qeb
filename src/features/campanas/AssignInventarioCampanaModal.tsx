@@ -84,7 +84,6 @@ interface CaraItem {
   // RT/BF grouping: pair an RT (renta) cara with a BF (bonificación) cara
   grupo_rt_bf?: number | null;
   esBf?: boolean; // true if this cara is the BF row of an RT/BF pair
-  plaza?: string;
 }
 
 // SAP Articulo interface
