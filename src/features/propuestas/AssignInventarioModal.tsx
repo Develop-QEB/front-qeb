@@ -6771,28 +6771,46 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
                                     </div>
                                     <div>
                                       <span className={`${isDark ? 'text-zinc-500' : 'text-gray-400'} text-xs`}>Autorización</span>
+                                      {(() => {
+                                        let dgDisplay = cara.autorizacion_dg;
+                                        let dcmDisplay = cara.autorizacion_dcm;
+                                        if (cara.esBf && cara.grupo_rt_bf) {
+                                          const rtPair = caras.find(c => !c.esBf && c.grupo_rt_bf === cara.grupo_rt_bf && c.inicio_periodo === cara.inicio_periodo && c.fin_periodo === cara.fin_periodo);
+                                          if (rtPair) { dgDisplay = rtPair.autorizacion_dg; dcmDisplay = rtPair.autorizacion_dcm; }
+                                        }
+                                        return (
                                       <div className="flex flex-col gap-0.5">
-                                        {cara.autorizacion_dg === 'aprobado' && cara.autorizacion_dcm === 'aprobado' && (
+                                        {dgDisplay === 'aprobado' && dcmDisplay === 'aprobado' && (
                                           <span className={`text-[10px] px-1.5 py-0.5 rounded ${isDark ? 'bg-emerald-500/20 text-emerald-300' : 'bg-emerald-100 text-emerald-700'}`}>Aprobado</span>
                                         )}
-                                        {(cara.autorizacion_dg === 'rechazado' || cara.autorizacion_dcm === 'rechazado') && (
+                                        {(dgDisplay === 'rechazado' || dcmDisplay === 'rechazado') && (
                                           <span className="text-[10px] px-1.5 py-0.5 rounded bg-red-600/30 text-red-400">Rechazado</span>
                                         )}
-                                        {cara.autorizacion_dg === 'pendiente' && cara.autorizacion_dcm !== 'rechazado' && (
+                                        {dgDisplay === 'pendiente' && dcmDisplay !== 'rechazado' && (
                                           <span className="text-[10px] px-1.5 py-0.5 rounded bg-red-500/20 text-red-300">Pend. DG</span>
                                         )}
-                                        {cara.autorizacion_dcm === 'pendiente' && cara.autorizacion_dg !== 'rechazado' && (
+                                        {dcmDisplay === 'pendiente' && dgDisplay !== 'rechazado' && (
                                           <span className="text-[10px] px-1.5 py-0.5 rounded bg-amber-500/20 text-amber-300">Pend. DCM</span>
                                         )}
                                       </div>
+                                        );
+                                      })()}
                                     </div>
                                   </div>
                                   <div className="flex items-center gap-2">
                                     {/* Botón Buscar Inventario - oculto para impresión, deshabilitado si hay autorizaciones pendientes */}
                                     {effectiveCanEdit && permissions.canBuscarInventarioEnModal && !esImpresion && (() => {
                                       const isLocallyModified = cara.id ? modifiedCaras.has(cara.id) : false;
-                                      const tienePendientes = !isLocallyModified && (cara.autorizacion_dg === 'pendiente' || cara.autorizacion_dcm === 'pendiente');
-                                      const tieneRechazado = cara.autorizacion_dg === 'rechazado' || cara.autorizacion_dcm === 'rechazado';
+                                      let tienePendientes = !isLocallyModified && (cara.autorizacion_dg === 'pendiente' || cara.autorizacion_dcm === 'pendiente');
+                                      let tieneRechazado = cara.autorizacion_dg === 'rechazado' || cara.autorizacion_dcm === 'rechazado';
+                                      if (cara.esBf && cara.grupo_rt_bf) {
+                                        const rtPair = caras.find(c => !c.esBf && c.grupo_rt_bf === cara.grupo_rt_bf && c.inicio_periodo === cara.inicio_periodo && c.fin_periodo === cara.fin_periodo);
+                                        if (rtPair) {
+                                          const rtModified = rtPair.id ? modifiedCaras.has(rtPair.id) : false;
+                                          if (!rtModified && (rtPair.autorizacion_dg === 'pendiente' || rtPair.autorizacion_dcm === 'pendiente')) tienePendientes = true;
+                                          if (rtPair.autorizacion_dg === 'rechazado' || rtPair.autorizacion_dcm === 'rechazado') tieneRechazado = true;
+                                        }
+                                      }
                                       const bloqueado = tienePendientes || tieneRechazado;
 
                                       return (
