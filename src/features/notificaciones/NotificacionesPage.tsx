@@ -1531,6 +1531,25 @@ function ApprovalModal({
     return carasData.filter(c => c.autorizacion_dcm === 'pendiente');
   }, [carasData, tipoAutorizacion]);
 
+  const [autoFinalized, setAutoFinalized] = useState(false);
+  useEffect(() => {
+    if (
+      carasData &&
+      carasData.length > 0 &&
+      carasPendientes.length === 0 &&
+      tarea.estatus !== 'Atendido' &&
+      tarea.estatus !== 'Cancelado' &&
+      !autoFinalized
+    ) {
+      setAutoFinalized(true);
+      notificacionesService.marcarLeida(tarea.id).then(() => {
+        queryClient.invalidateQueries({ queryKey: ['notificaciones'] });
+        queryClient.invalidateQueries({ queryKey: ['notificaciones-stats'] });
+        onAction();
+      }).catch(err => console.error('Error auto-finalizando tarea:', err));
+    }
+  }, [carasData, carasPendientes, tarea.estatus, tarea.id, autoFinalized]);
+
   const cliente = allCaras[0]?.cliente || tarea.cliente || '—';
   const creador = tarea.creador || tarea.asesor || '—';
   const origen = tarea.contenido === 'campana' ? 'Campaña' : tarea.contenido === 'propuesta' ? 'Propuesta' : tarea.contenido === 'solicitud' ? 'Solicitud' : '—';
@@ -1805,7 +1824,8 @@ function ApprovalModal({
                 </button>
                 <button
                   onClick={() => setShowRechazoInput(true)}
-                  className="flex items-center justify-center gap-2 px-6 py-3 rounded-xl bg-red-600/20 text-red-400 text-sm font-medium hover:bg-red-600/30 border border-red-500/30 transition-all"
+                  disabled={carasPendientes.length === 0}
+                  className="flex items-center justify-center gap-2 px-6 py-3 rounded-xl bg-red-600/20 text-red-400 text-sm font-medium hover:bg-red-600/30 border border-red-500/30 disabled:opacity-50 disabled:cursor-not-allowed transition-all"
                 >
                   <X className="h-4 w-4" />
                   Rechazar
