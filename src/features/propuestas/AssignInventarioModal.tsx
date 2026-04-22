@@ -1858,16 +1858,6 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
       return;
     }
 
-    // Validar caras de renta pares — excluir kioscos, boleros y mi macro
-    const formatoUp = (newCara.formato || '').toUpperCase();
-    const esKiosco = formatoUp.includes('KIOSCO') || formatoUp.includes('KIOSKO');
-    const esBolero = formatoUp.includes('BOLERO');
-    const esMiMacro = formatoUp.includes('MI MACRO') || formatoUp.includes('MACRO');
-    if (!esCortesia && !esBonificacion && !esImpresion && !isEspecialArticle(artCode) && !esKiosco && !esBolero && !esMiMacro && (newCara.caras || 0) > 0 && (newCara.caras || 0) % 2 !== 0) {
-      alert('Las caras de renta deben ser un número par (Flujo + Contraflujo).');
-      return;
-    }
-
     // BF validation: bonificacion > 0 on RT article requires articuloBf
     const needsBfArticle = (newCara.bonificacion || 0) > 0 && !esCortesia && !esBonificacion && !esImpresion && !isEspecialArticle(artCode);
     if (needsBfArticle && !newCara.articuloBf) {
