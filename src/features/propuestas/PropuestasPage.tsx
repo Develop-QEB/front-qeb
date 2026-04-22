@@ -553,8 +553,14 @@ function StatusModal({ isOpen, onClose, propuesta, onStatusChange, allowedStatus
   const pendientesDcm = caras?.filter(c => c.autorizacion_dcm === 'pendiente').length || 0;
   const tienePendientes = pendientesDg > 0 || pendientesDcm > 0;
 
-  // Verificar si el cliente tiene CUIC 0 (Cliente Lead)
-  const esClienteLead = !!(propuesta && (propuesta.cuic === 0 || propuesta.cuic === null));
+  // Obtener propuesta fresca para verificar cliente_id (que almacena el CUIC)
+  const { data: propuestaFresh } = useQuery({
+    queryKey: ['propuesta-fresh', propuesta?.id],
+    queryFn: () => propuestasService.getById(propuesta!.id),
+    enabled: isOpen && !!propuesta,
+  });
+  const cuicActual = propuestaFresh?.cliente_id ?? propuesta?.cuic;
+  const esClienteLead = !cuicActual || cuicActual === 0;
 
   // Query para obtener las reservas y verificar si están completas
   const { data: reservas } = useQuery({
@@ -2252,7 +2258,7 @@ export function PropuestasPage() {
       {selectedPropuestaForAssign && (
         <AssignInventarioModal
           isOpen={showAssignModal}
-          onClose={() => { setShowAssignModal(false); queryClient.invalidateQueries({ queryKey: ['propuesta-caras', selectedPropuestaForAssign?.id] }); queryClient.invalidateQueries({ queryKey: ['propuesta-reservas-modal', selectedPropuestaForAssign?.id] }); setSelectedPropuestaForAssign(null); }}
+          onClose={() => { setShowAssignModal(false); queryClient.invalidateQueries({ queryKey: ['propuesta-caras', selectedPropuestaForAssign?.id] }); queryClient.invalidateQueries({ queryKey: ['propuesta-reservas-modal', selectedPropuestaForAssign?.id] }); queryClient.invalidateQueries({ queryKey: ['propuesta-fresh'] }); queryClient.invalidateQueries({ queryKey: ['propuestas'] }); setSelectedPropuestaForAssign(null); }}
           propuesta={selectedPropuestaForAssign}
           readOnly={!permissions.canAsignarInventario || selectedPropuestaForAssign.status === 'Pase a ventas'}
         />
