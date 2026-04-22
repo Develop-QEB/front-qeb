@@ -24,7 +24,9 @@ import { UserAvatar } from '../../components/ui/user-avatar';
 import { useSocketNotificaciones } from '../../hooks/useSocket';
 import { CreateSolicitudModal } from '../solicitudes/CreateSolicitudModal';
 import { AssignInventarioModal } from '../propuestas/AssignInventarioModal';
+import { AssignInventarioCampanaModal } from '../campanas/AssignInventarioCampanaModal';
 import { propuestasService } from '../../services/propuestas.service';
+import { campanasService } from '../../services/campanas.service';
 
 // ============ TIPOS ============
 type ContentType = 'notificaciones' | 'tareas';
@@ -2626,6 +2628,7 @@ export function NotificacionesPage() {
   const [approvalModalTarea, setApprovalModalTarea] = useState<Notificacion | null>(null);
   const [editSolicitudId, setEditSolicitudId] = useState<number | null>(null);
   const [editPropuesta, setEditPropuesta] = useState<any>(null);
+  const [editCampana, setEditCampana] = useState<any>(null);
 
   // Handler para cerrar el drawer con animación
   const handleCloseDrawer = useCallback(() => {
@@ -3443,6 +3446,8 @@ export function NotificacionesPage() {
                                 if (tarea.tipo?.includes('Rechazo')) {
                                   if (tarea.referencia_tipo === 'propuesta' && tarea.id_propuesta) {
                                     propuestasService.getById(parseInt(tarea.id_propuesta)).then(p => setEditPropuesta(p)).catch(console.error);
+                                  } else if (tarea.referencia_tipo === 'campana' && tarea.campania_id) {
+                                    campanasService.getById(tarea.campania_id).then(c => setEditCampana(c)).catch(console.error);
                                   } else {
                                     const rejSolId = getRejectionSolicitudId(tarea);
                                     if (rejSolId) setEditSolicitudId(rejSolId);
@@ -3541,15 +3546,14 @@ export function NotificacionesPage() {
             onUpdateFechaFin={(fecha_fin) => updateTareaMutation.mutate({ id: selectedTarea.id, fecha_fin })}
             onNavigate={(path) => {
               if (selectedTarea.tipo?.includes('Rechazo')) {
+                handleCloseDrawer();
                 if (selectedTarea.referencia_tipo === 'propuesta' && selectedTarea.id_propuesta) {
-                  handleCloseDrawer();
                   propuestasService.getById(parseInt(selectedTarea.id_propuesta)).then(p => setTimeout(() => setEditPropuesta(p), 250)).catch(console.error);
+                } else if (selectedTarea.referencia_tipo === 'campana' && selectedTarea.campania_id) {
+                  campanasService.getById(selectedTarea.campania_id).then(c => setTimeout(() => setEditCampana(c), 250)).catch(console.error);
                 } else {
                   const rejSolId = getRejectionSolicitudId(selectedTarea);
-                  if (rejSolId) {
-                    handleCloseDrawer();
-                    setTimeout(() => setEditSolicitudId(rejSolId), 250);
-                  }
+                  if (rejSolId) setTimeout(() => setEditSolicitudId(rejSolId), 250);
                 }
                 return;
               }
@@ -3596,6 +3600,15 @@ export function NotificacionesPage() {
           onClose={() => setEditPropuesta(null)}
           propuesta={editPropuesta}
           readOnly={false}
+        />
+      )}
+
+      {/* Modal de Asignar Inventario Campaña (para tareas de rechazo de campaña) */}
+      {editCampana && (
+        <AssignInventarioCampanaModal
+          isOpen={!!editCampana}
+          onClose={() => setEditCampana(null)}
+          campana={editCampana}
         />
       )}
 
