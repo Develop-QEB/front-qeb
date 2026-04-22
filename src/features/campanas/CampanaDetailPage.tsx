@@ -131,7 +131,7 @@ function InfoItem({ label, value, type = 'default', isDark: isDarkProp }: InfoIt
     displayValue = new Intl.NumberFormat('es-MX', {
       style: 'currency',
       currency: 'MXN',
-      minimumFractionDigits: 0,
+      minimumFractionDigits: 2,
       maximumFractionDigits: 2
     }).format(value);
   }
@@ -531,7 +531,7 @@ const OPERATORS: { value: FilterOperator; label: string; forTypes: ('string' | '
 ];
 
 function fmtMoney(n: number): string {
-  return `$${n.toLocaleString('es-MX', { minimumFractionDigits: 0, maximumFractionDigits: 2 })}`;
+  return `$${n.toLocaleString('es-MX', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 }
 
 function GroupSummaryInline({ items, groupField, isDark: isDarkProp }: { items: InventarioReservado[]; groupField: string; isDark?: boolean }) {
