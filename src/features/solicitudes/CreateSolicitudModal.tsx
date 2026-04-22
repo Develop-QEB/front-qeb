@@ -1307,7 +1307,7 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
       }
     }
 
-    // Add or update caras, then recalculate impar + DG contamination from originals
+    // Add or update caras, then recalculate DG contamination from originals
     setCaras(prev => {
       let updated: CaraEntry[];
       if (editingCaraId) {
@@ -2841,7 +2841,7 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
                                           {(() => {
                                             // Cortesías siempre aprobadas, no requieren autorización
                                             const esCaraCortesia = cara.articulo?.ItemCode?.toUpperCase().startsWith('CT');
-                                            // Impar por grupo: si las caras de ESTE grupo son impar, requiere DG (excepto Kioscos)
+                                            // DG contamina: si alguna cara tiene DG, todas las pendientes son DG
                                             const hayDGEnPropuesta = caras.some(c => c.autorizacion_dg === 'pendiente');
                                             const tienePendiente = !esCaraCortesia && (cara.autorizacion_dg === 'pendiente' || cara.autorizacion_dcm === 'pendiente');
                                             const dgEfectivo = esCaraCortesia ? 'aprobado' : ((hayDGEnPropuesta && tienePendiente) ? 'pendiente' : cara.autorizacion_dg);

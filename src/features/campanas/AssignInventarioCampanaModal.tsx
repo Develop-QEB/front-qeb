@@ -6163,9 +6163,7 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
                       </button>
                       <button
                         onClick={handleSaveCara}
-                        disabled={!editingCaraId && newCara.formato !== 'Kiosco' && (newCara.caras + (newCara.bonificacion || 0)) > 0 && (newCara.caras + (newCara.bonificacion || 0)) % 2 !== 0}
-                        className={`px-4 py-2 bg-purple-500 text-white rounded-lg text-sm hover:bg-purple-600 transition-colors ${!editingCaraId && newCara.formato !== 'Kiosco' && (newCara.caras + (newCara.bonificacion || 0)) > 0 && (newCara.caras + (newCara.bonificacion || 0)) % 2 !== 0 ? 'opacity-50 cursor-not-allowed' : ''}`}
-                        title={!editingCaraId && newCara.formato !== 'Kiosco' && (newCara.caras + (newCara.bonificacion || 0)) > 0 && (newCara.caras + (newCara.bonificacion || 0)) % 2 !== 0 ? 'Caras impar — no se puede guardar' : undefined}
+                        className="px-4 py-2 bg-purple-500 text-white rounded-lg text-sm hover:bg-purple-600 transition-colors"
                       >
                         {editingCaraId ? 'Actualizar' : 'Agregar'}
                       </button>
