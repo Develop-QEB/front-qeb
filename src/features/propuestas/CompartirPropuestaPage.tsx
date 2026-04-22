@@ -984,7 +984,7 @@ export function CompartirPropuestaPage() {
       <header className={`sticky top-0 z-50 backdrop-blur ${isDark ? 'bg-gradient-to-r from-zinc-900/95 via-purple-900/20 to-zinc-900/95 border-b border-purple-500/20' : 'bg-white/95 border-b border-gray-200'}`}>
         <div className="max-w-7xl mx-auto px-4 py-4 flex items-center justify-between">
           <div className="flex items-center gap-4">
-            <button onClick={() => navigate('/campanas')} className="p-2 hover:bg-purple-500/20 rounded-lg transition-colors">
+            <button onClick={() => navigate(-1)} className="p-2 hover:bg-purple-500/20 rounded-lg transition-colors">
               <ArrowLeft className={`h-5 w-5 ${isDark ? 'text-zinc-400' : 'text-gray-500'}`} />
             </button>
             <div>
