@@ -173,7 +173,7 @@ function groupCarasByCatorcenaAndArticulo(caras: SolicitudCara[], catorcenas: Ca
     articuloMap.forEach((carasList, articulo) => {
       const artCaras = carasList.reduce((sum, c) => sum + (Number(c.caras) || 0), 0);
       const artBonif = carasList.reduce((sum, c) => sum + (Number(c.bonificacion) || 0), 0);
-      const artInversion = carasList.reduce((sum, c) => sum + ((c.tarifa_publica || 0) * (Number(c.caras) || 0)), 0);
+      const artInversion = carasList.reduce((sum, c) => sum + (Number(c.costo) || 0), 0);
 
       articulos.push({
         articulo,
@@ -631,8 +631,7 @@ export function ViewSolicitudModal({ isOpen, onClose, solicitudId, onEdit, onAte
   const totalBonificacion = data?.caras?.reduce((sum, c) => sum + (Number(c.bonificacion) || 0), 0) || 0;
   const totalCaras = totalRenta + totalBonificacion;
   const totalTarifaPublica = data?.caras?.reduce((sum, c) => sum + (Number(c.tarifa_publica) || 0), 0) || 0;
-  // Inversión = tarifa pública * caras en renta
-  const inversion = data?.caras?.reduce((sum, c) => sum + ((Number(c.tarifa_publica) || 0) * (Number(c.caras) || 0)), 0) || 0;
+  const inversion = data?.caras?.reduce((sum, c) => sum + (Number(c.costo) || 0), 0) || 0;
 
   return (
     <div className="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center z-50 p-4 isolate">
@@ -943,14 +942,25 @@ export function ViewSolicitudModal({ isOpen, onClose, solicitudId, onEdit, onAte
                                               <th className={`px-3 py-2 text-center text-xs font-semibold ${isDark ? 'text-violet-200' : 'text-violet-700'}`}>Renta</th>
                                               <th className={`px-3 py-2 text-center text-xs font-semibold ${isDark ? 'text-violet-200' : 'text-violet-700'}`}>Bonif</th>
                                               <th className={`px-3 py-2 text-center text-xs font-semibold ${isDark ? 'text-white' : 'text-gray-900'}`}>Total</th>
-                                              <th className={`px-3 py-2 text-right text-xs font-semibold ${isDark ? 'text-amber-300' : 'text-amber-700'}`}>Tarifa</th>
-                                              <th className={`px-3 py-2 text-right text-xs font-semibold ${isDark ? 'text-emerald-300' : 'text-emerald-700'}`}>Inversión</th>
+                                              <th className={`px-3 py-2 text-right text-xs font-semibold ${isDark ? 'text-amber-300' : 'text-amber-700'}`}>Tarifa Púb.</th>
+                                              <th className={`px-3 py-2 text-right text-xs font-semibold ${isDark ? 'text-blue-300' : 'text-blue-700'}`}>Tarifa Efect.</th>
+                                              <th className={`px-3 py-2 text-right text-xs font-semibold ${isDark ? 'text-emerald-300' : 'text-emerald-700'}`}>Precio Total</th>
                                               <th className={`px-3 py-2 text-center text-xs font-semibold ${isDark ? 'text-violet-200' : 'text-violet-700'}`}>Autorización</th>
                                             </tr>
                                           </thead>
                                           <tbody className={`divide-y ${isDark ? 'divide-violet-500/10' : 'divide-gray-100'}`}>
-                                            {articuloGroup.caras.map((cara, idx) => {
-                                              const inversion = (cara.tarifa_publica || 0) * (Number(cara.caras) || 0);
+                                            {(() => {
+                                              const grupoCarasMap = new Map<number, number>();
+                                              for (const c of (data?.caras || [])) {
+                                                if (c.grupo_rt_bf) {
+                                                  grupoCarasMap.set(c.grupo_rt_bf, (grupoCarasMap.get(c.grupo_rt_bf) || 0) + (Number(c.caras) || 0) + (Number(c.bonificacion) || 0));
+                                                }
+                                              }
+                                              return articuloGroup.caras.map((cara, idx) => {
+                                              const totalCarasLocal = (Number(cara.caras) || 0) + (Number(cara.bonificacion) || 0);
+                                              const totalCarasGrupo = cara.grupo_rt_bf ? (grupoCarasMap.get(cara.grupo_rt_bf) || totalCarasLocal) : totalCarasLocal;
+                                              const tarifaPublicaReal = (Number(cara.caras) || 0) > 0 ? (Number(cara.costo) || 0) / (Number(cara.caras) || 1) : (cara.tarifa_publica || 0);
+                                              const tarifaEfectiva = totalCarasGrupo > 0 ? (Number(cara.costo) || 0) / totalCarasGrupo : 0;
                                               // Compute combined authorization state from both columns
                                               const authDg = cara.autorizacion_dg || 'aprobado';
                                               const authDcm = cara.autorizacion_dcm || 'aprobado';
@@ -993,8 +1003,9 @@ export function ViewSolicitudModal({ isOpen, onClose, solicitudId, onEdit, onAte
                                                   <td className={`px-3 py-2 text-center ${isDark ? 'text-white' : 'text-gray-900'} font-medium`}>{Number(cara.caras) || 0}</td>
                                                   <td className={`px-3 py-2 text-center ${isDark ? 'text-white' : 'text-gray-900'} font-medium`}>{Number(cara.bonificacion) || 0}</td>
                                                   <td className={`px-3 py-2 text-center ${isDark ? 'text-white' : 'text-gray-900'} font-bold`}>{(Number(cara.caras) || 0) + (Number(cara.bonificacion) || 0)}</td>
-                                                  <td className={`px-3 py-2 text-right ${isDark ? 'text-amber-300' : 'text-amber-700'} font-medium`}>{formatCurrency(cara.tarifa_publica || 0)}</td>
-                                                  <td className={`px-3 py-2 text-right ${isDark ? 'text-emerald-300' : 'text-emerald-700'} font-medium`}>{formatCurrency(inversion)}</td>
+                                                  <td className={`px-3 py-2 text-right ${isDark ? 'text-amber-300' : 'text-amber-700'} font-medium`}>{formatCurrency(tarifaPublicaReal)}</td>
+                                                  <td className={`px-3 py-2 text-right ${isDark ? 'text-blue-300' : 'text-blue-700'} font-medium`}>{formatCurrency(tarifaEfectiva)}</td>
+                                                  <td className={`px-3 py-2 text-right ${isDark ? 'text-emerald-300' : 'text-emerald-700'} font-medium`}>{formatCurrency(Number(cara.costo) || 0)}</td>
                                                   <td className="px-3 py-2 text-center">
                                                     <div className="flex flex-col gap-0.5 items-center">
                                                       {authBadges.map((badge, badgeIdx) => (
@@ -1006,7 +1017,8 @@ export function ViewSolicitudModal({ isOpen, onClose, solicitudId, onEdit, onAte
                                                   </td>
                                                 </tr>
                                               );
-                                            })}
+                                            });
+                                            })()}
                                           </tbody>
                                         </table>
                                       </div>
