@@ -1,7 +1,7 @@
 import { useParams, useNavigate } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useState, useRef, useEffect, useMemo, useCallback } from 'react';
-import { ArrowLeft, MessageSquare, Send, X, FileSpreadsheet, ListTodo, Layers, ChevronDown, ChevronRight, Check, Minus, Filter, Plus, Trash2, ArrowUpDown, ArrowUp, ArrowDown, Download, Upload, Loader2, CheckCircle, AlertCircle, AlertTriangle, Package, MapPinOff, RefreshCw, MessageSquareOff, ServerCrash, WifiOff, History, Edit2 } from 'lucide-react';
+import { ArrowLeft, MessageSquare, Send, X, FileSpreadsheet, ListTodo, Layers, ChevronDown, ChevronRight, Check, Minus, Filter, Plus, Trash2, ArrowUpDown, ArrowUp, ArrowDown, Download, Upload, Loader2, CheckCircle, AlertCircle, AlertTriangle, Package, MapPinOff, RefreshCw, MessageSquareOff, ServerCrash, WifiOff, History, Edit2, XCircle } from 'lucide-react';
 import { AssignInventarioCampanaModal } from './AssignInventarioCampanaModal';
 import { GoogleMap, useLoadScript, Marker } from '@react-google-maps/api';
 import { Header } from '../../components/layout/Header';
@@ -882,6 +882,9 @@ export function CampanaDetailPage() {
   const [showPostSAPModal, setShowPostSAPModal] = useState(false);
   const [postingToSAP, setPostingToSAP] = useState(false);
   const [postSAPResult, setPostSAPResult] = useState<{ success: boolean; message: string; data?: unknown } | null>(null);
+  const [showCancelPostSAPModal, setShowCancelPostSAPModal] = useState(false);
+  const [cancellingPostSAP, setCancellingPostSAP] = useState(false);
+  const [cancelPostSAPResult, setCancelPostSAPResult] = useState<{ success: boolean; message: string } | null>(null);
   const [alreadyPosted, setAlreadyPosted] = useState(false);
   const [previewDeliveryNote, setPreviewDeliveryNote] = useState<any>(null);
   const [postedAPSGroups, setPostedAPSGroups] = useState<Set<number>>(new Set());
@@ -1334,6 +1337,26 @@ export function CampanaDetailPage() {
       });
     } finally {
       setPostingToSAP(false);
+    }
+  }, [campana, inventarioConAPS, selectedItemsAPS]);
+
+  // Handler para cancelar POST a SAP (solo TI/DEV)
+  const handleCancelPostSAP = useCallback(async () => {
+    if (!campana) return;
+    setCancellingPostSAP(true);
+    setCancelPostSAPResult(null);
+    try {
+      const apsToCancel = selectedItemsAPS.size > 0
+        ? inventarioConAPS.filter(i => selectedItemsAPS.has(String(i.rsv_ids))).map(i => i.aps)
+        : undefined;
+      const updatedAPS = await campanasService.unmarkPostedAPS(campana.id, apsToCancel);
+      setPostedAPSGroups(new Set(updatedAPS));
+      if (updatedAPS.length === 0) setAlreadyPosted(false);
+      setCancelPostSAPResult({ success: true, message: 'POST cancelado correctamente' });
+    } catch (error) {
+      setCancelPostSAPResult({ success: false, message: error instanceof Error ? error.message : 'Error al cancelar POST' });
+    } finally {
+      setCancellingPostSAP(false);
     }
   }, [campana, inventarioConAPS, selectedItemsAPS]);
 
@@ -3156,6 +3179,16 @@ export function CampanaDetailPage() {
                   </button>
                 );
               })()}
+              {(permissions.canCancelPostSAP || user?.area === 'TI') && inventarioConAPS.length > 0 && (
+                <button
+                  onClick={() => { setCancelPostSAPResult(null); setShowCancelPostSAPModal(true); }}
+                  className={`flex items-center justify-center px-2 sm:px-3 py-1 sm:py-1.5 rounded-lg border transition-colors ${isDark ? 'bg-red-900/30 border-red-500/20 hover:bg-red-500/20 hover:border-red-500/40' : 'bg-red-50 border-red-200 hover:bg-red-100'}`}
+                  title="Cancelar POST a SAP (solo TI)"
+                >
+                  <XCircle className={`h-3 sm:h-3.5 w-3 sm:w-3.5 mr-1 ${isDark ? 'text-red-400' : 'text-red-600'}`} />
+                  <span className={`text-[10px] sm:text-xs font-medium ${isDark ? 'text-red-300' : 'text-red-700'}`}>Cancelar POST</span>
+                </button>
+              )}
             </div>
           </div>
           <div className="grid grid-cols-1 lg:grid-cols-[1fr_2fr] gap-3 md:gap-4 p-3 md:p-4">
@@ -4521,6 +4554,55 @@ export function CampanaDetailPage() {
                   Cerrar
                 </button>
               </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* Modal Cancelar POST SAP */}
+      {showCancelPostSAPModal && (
+        <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50" onClick={() => !cancellingPostSAP && setShowCancelPostSAPModal(false)}>
+          <div className={`rounded-xl shadow-2xl p-6 max-w-md w-full mx-4 ${isDark ? 'bg-zinc-900 border border-red-500/20' : 'bg-white border border-red-200'}`} onClick={e => e.stopPropagation()}>
+            <div className="flex items-center gap-3 mb-4">
+              <XCircle className="h-6 w-6 text-red-500" />
+              <h2 className={`text-lg font-bold ${isDark ? 'text-white' : 'text-gray-900'}`}>Cancelar POST a SAP</h2>
+            </div>
+            {!cancelPostSAPResult ? (
+              <>
+                <p className={`text-sm mb-2 ${isDark ? 'text-zinc-300' : 'text-gray-700'}`}>
+                  {selectedItemsAPS.size > 0
+                    ? `¿Cancelar el POST de los ${selectedItemsAPS.size} APS seleccionados?`
+                    : `¿Cancelar el POST de todos los APS enviados a SAP en esta campaña?`}
+                </p>
+                <p className={`text-xs mb-6 ${isDark ? 'text-zinc-400' : 'text-gray-500'}`}>
+                  Esta acción marcará los APS como no enviados y permitirá volver a hacer POST.
+                </p>
+                <div className="flex gap-3 justify-end">
+                  <button onClick={() => setShowCancelPostSAPModal(false)} className={`px-4 py-2 rounded-lg text-sm ${isDark ? 'bg-zinc-700 hover:bg-zinc-600 text-white' : 'bg-gray-100 hover:bg-gray-200 text-gray-700'}`}>
+                    Cerrar
+                  </button>
+                  <button
+                    onClick={handleCancelPostSAP}
+                    disabled={cancellingPostSAP}
+                    className="flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium bg-red-600 hover:bg-red-700 text-white disabled:opacity-50"
+                  >
+                    {cancellingPostSAP ? <Loader2 className="h-4 w-4 animate-spin" /> : <XCircle className="h-4 w-4" />}
+                    {cancellingPostSAP ? 'Cancelando...' : 'Confirmar Cancelar'}
+                  </button>
+                </div>
+              </>
+            ) : (
+              <>
+                <div className={`flex items-center gap-2 p-3 rounded-lg mb-4 ${cancelPostSAPResult.success ? (isDark ? 'bg-emerald-900/30 text-emerald-300' : 'bg-emerald-50 text-emerald-700') : (isDark ? 'bg-red-900/30 text-red-300' : 'bg-red-50 text-red-700')}`}>
+                  {cancelPostSAPResult.success ? <Check className="h-4 w-4" /> : <XCircle className="h-4 w-4" />}
+                  <span className="text-sm">{cancelPostSAPResult.message}</span>
+                </div>
+                <div className="flex justify-end">
+                  <button onClick={() => setShowCancelPostSAPModal(false)} className={`px-4 py-2 rounded-lg text-sm ${isDark ? 'bg-zinc-700 hover:bg-zinc-600 text-white' : 'bg-gray-100 hover:bg-gray-200 text-gray-700'}`}>
+                    Cerrar
+                  </button>
+                </div>
+              </>
             )}
           </div>
         </div>

@@ -1171,9 +1171,20 @@ export function ClientePropuestaPage() {
                                 ) : (
                                   <ChevronRight className="h-3.5 w-3.5 text-[#7AB800]/50" />
                                 )}
-                                <span className="px-2.5 py-0.5 rounded-md bg-[#7AB800]/10 text-[#7AB800] text-xs font-medium border border-[#7AB800]/20">
-                                  {artGroup.articulo}
-                                </span>
+                                <div className="flex items-center gap-2 flex-wrap">
+                                  <span className="text-[10px] text-gray-400">Plazas:</span>
+                                  {artGroup.plazas.map(p => (
+                                    <span key={p} className="px-2 py-0.5 rounded text-[10px] font-medium bg-gray-100 text-gray-700">{p}</span>
+                                  ))}
+                                  <span className="text-[10px] text-gray-400 ml-1">Formatos:</span>
+                                  {artGroup.formatos.map(f => (
+                                    <span key={f} className="px-2 py-0.5 rounded text-[10px] font-medium border bg-blue-50 text-[#0054A6] border-blue-100">{f}</span>
+                                  ))}
+                                  <span className="text-[10px] text-gray-400 ml-1">Tipo:</span>
+                                  {artGroup.tipos.map(t => (
+                                    <span key={t} className="px-2 py-0.5 rounded text-[10px] font-medium border bg-cyan-50 text-cyan-700 border-cyan-200">{t}</span>
+                                  ))}
+                                </div>
                                 <span className="text-gray-400 text-xs">
                                   ({artGroup.items.length} inventario{artGroup.items.length > 1 ? 's' : ''})
                                 </span>
@@ -1188,21 +1199,6 @@ export function ClientePropuestaPage() {
 
                             {expandedResumen.has(artKey) && (
                               <div className="px-4 pb-3">
-                                {/* Summary badges */}
-                                <div className="flex flex-wrap gap-2 mb-3 px-2">
-                                  <div className="flex items-center gap-1.5">
-                                    <span className="text-xs text-gray-400">Formatos:</span>
-                                    {artGroup.formatos.map(f => (
-                                      <span key={f} className="px-2 py-0.5 bg-blue-50 text-[#0054A6] rounded text-[10px] font-medium border border-blue-100">{f}</span>
-                                    ))}
-                                  </div>
-                                  <div className="flex items-center gap-1.5">
-                                    <span className="text-xs text-gray-400">Plazas:</span>
-                                    {artGroup.plazas.map(p => (
-                                      <span key={p} className="px-2 py-0.5 bg-gray-50 text-gray-600 rounded text-[10px] font-medium border border-gray-200">{p}</span>
-                                    ))}
-                                  </div>
-                                </div>
                                 {/* Detail table */}
                                 <div className="overflow-x-auto rounded-xl border border-gray-200 bg-white">
                                   <table className="w-full text-sm">

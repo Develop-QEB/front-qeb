@@ -115,6 +115,9 @@ export interface RolePermissions {
 
   // Órdenes de Montaje
   canExportOrdenesMontaje: boolean;
+
+  // SAP
+  canCancelPostSAP: boolean;
 }
 
 // Permisos por defecto (acceso total - para Admin)
@@ -189,6 +192,8 @@ const defaultPermissions: RolePermissions = {
   canDeleteInventarios: true,
 
   canExportOrdenesMontaje: true,
+
+  canCancelPostSAP: false,
 };
 
 // Permisos específicos por rol
@@ -1030,6 +1035,7 @@ const rolePermissions: Partial<Record<UserRole, Partial<RolePermissions>>> = {
     canEditClienteEnFormularios: true,
     canEditCaraFiltersOnEdit: true,
     canEditArticuloOnEdit: true,
+    canCancelPostSAP: true,
   },
   'Gerente de Trafico': {
     // Secciones visibles
