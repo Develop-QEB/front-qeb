@@ -1325,22 +1325,13 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
         updated = [...prev, ...newCaras];
       }
       // Reset todas las caras a sus valores originales del backend
-      updated = updated.map(c => ({
+      // No contaminar aquí — mostrar estado real de cada circuito.
+      // La contaminación DG se aplica al guardar (backend crea una sola tarea DG).
+      return updated.map(c => ({
         ...c,
         autorizacion_dg: c._originalDg,
         autorizacion_dcm: c._originalDcm,
       }));
-      // DG contamina — si hay al menos 1 DG pendiente, las que tengan DCM pendiente pasan a DG
-      // Cortesías quedan excluidas de la contaminación
-      const hayDG = updated.some(c => c.autorizacion_dg === 'pendiente');
-      if (hayDG) {
-        return updated.map(c => {
-          const esCaraCortesia = c.articulo?.ItemCode?.toUpperCase().startsWith('CT');
-          if (esCaraCortesia) return c;
-          return c.autorizacion_dcm === 'pendiente' ? { ...c, autorizacion_dg: 'pendiente', autorizacion_dcm: 'aprobado' } : c;
-        });
-      }
-      return updated;
     });
     const wasEditing = !!editingCaraId;
     if (editingCaraId) setEditingCaraId(null);
@@ -2841,11 +2832,9 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
                                           {(() => {
                                             // Cortesías siempre aprobadas, no requieren autorización
                                             const esCaraCortesia = cara.articulo?.ItemCode?.toUpperCase().startsWith('CT');
-                                            // DG contamina: si alguna cara tiene DG, todas las pendientes son DG
-                                            const hayDGEnPropuesta = caras.some(c => c.autorizacion_dg === 'pendiente');
-                                            const tienePendiente = !esCaraCortesia && (cara.autorizacion_dg === 'pendiente' || cara.autorizacion_dcm === 'pendiente');
-                                            const dgEfectivo = esCaraCortesia ? 'aprobado' : ((hayDGEnPropuesta && tienePendiente) ? 'pendiente' : cara.autorizacion_dg);
-                                            const dcmEfectivo = esCaraCortesia ? 'aprobado' : (dgEfectivo === 'pendiente' ? 'aprobado' : cara.autorizacion_dcm);
+                                            // Mostrar estado real de cada circuito (sin contaminación DG — eso se aplica al guardar)
+                                            const dgEfectivo = esCaraCortesia ? 'aprobado' : cara.autorizacion_dg;
+                                            const dcmEfectivo = esCaraCortesia ? 'aprobado' : cara.autorizacion_dcm;
                                             return (
                                               <div className="flex flex-col gap-0.5">
                                                 {dgEfectivo === 'aprobado' && dcmEfectivo === 'aprobado' && (
