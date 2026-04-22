@@ -71,7 +71,7 @@ const FILTER_FIELDS: FilterFieldConfig[] = [
   { field: 'codigo_unico', label: 'Codigo', type: 'string' },
   { field: 'plaza', label: 'Plaza', type: 'string' },
   { field: 'tipo_de_cara', label: 'Tipo', type: 'string' },
-  { field: 'mueble', label: 'Formato', type: 'string' },
+  { field: 'formato', label: 'Formato', type: 'string' },
   { field: 'articulo', label: 'Articulo', type: 'string' },
   { field: 'numero_catorcena', label: 'Catorcena', type: 'number' },
   { field: 'caras_totales', label: 'Caras', type: 'number' },
@@ -316,6 +316,7 @@ export function CompartirPropuestaPage() {
         i.plaza?.toLowerCase().includes(search) ||
         i.ubicacion?.toLowerCase().includes(search) ||
         i.mueble?.toLowerCase().includes(search) ||
+        i.formato?.toLowerCase().includes(search) ||
         i.articulo?.toLowerCase().includes(search)
       );
     }

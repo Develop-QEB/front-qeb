@@ -66,6 +66,7 @@ export interface InventarioReservado {
   grupo_completo_id: number | null;
   numero_catorcena?: number | null;
   anio_catorcena?: number | null;
+  formato?: string | null;
 }
 
 export interface PropuestaFullDetails {
