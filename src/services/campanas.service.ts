@@ -333,6 +333,7 @@ export interface OrdenMontajeCAT {
   caras: number;
   tarifa: number | null;
   monto_total: number | null;
+  delta_caras: number;
   campania_id: number | null;
   grupo_id: number | null;
   tipo_fila: string | null;

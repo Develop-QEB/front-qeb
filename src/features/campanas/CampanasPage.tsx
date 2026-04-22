@@ -10,7 +10,7 @@ import {
 } from 'lucide-react';
 import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip, Legend } from 'recharts';
 import { Header } from '../../components/layout/Header';
-import { campanasService, InventarioConAPS, InventarioReservado } from '../../services/campanas.service';
+import { campanasService, InventarioConAPS, InventarioReservado, SolicitudCara } from '../../services/campanas.service';
 import { Badge } from '../../components/ui/badge';
 import { solicitudesService } from '../../services/solicitudes.service';
 import { Campana, Catorcena } from '../../types';
@@ -873,6 +873,7 @@ export function CampanasPage() {
   const [expandedAPS, setExpandedAPS] = useState<Set<string>>(new Set()); // key: campanaId-aps
   const [expandedGrupos, setExpandedGrupos] = useState<Set<string>>(new Set()); // key: campanaId-aps-grupoKey
   const [campanaInventarios, setCampanaInventarios] = useState<Record<number, InventarioConAPS[]>>({});
+  const [campanaCaras, setCampanaCaras] = useState<Record<number, SolicitudCara[]>>({});
   const [loadingInventarios, setLoadingInventarios] = useState<Set<number>>(new Set());
   const [exportingLayout, setExportingLayout] = useState(false);
 
@@ -1294,13 +1295,14 @@ export function CampanasPage() {
     });
 
     // Si estamos expandiendo y no tenemos los datos, cargarlos
-    if (isExpanding && !campanaInventarios[campanaId]) {
+    if (isExpanding && (!campanaInventarios[campanaId] || !campanaCaras[campanaId])) {
       setLoadingInventarios(prev => new Set(prev).add(campanaId));
       try {
-        // Llamar a ambos endpoints en paralelo: con APS y sin APS
-        const [conAPS, sinAPS] = await Promise.all([
+        // Llamar a los tres endpoints en paralelo: con APS, sin APS y solicitud_caras
+        const [conAPS, sinAPS, caras] = await Promise.all([
           campanasService.getInventarioConAPS(campanaId),
-          campanasService.getInventarioReservado(campanaId)
+          campanasService.getInventarioReservado(campanaId),
+          campanasService.getCaras(campanaId),
         ]);
 
         // Combinar ambos resultados, agregando aps: 0 a los sin APS
@@ -1311,6 +1313,7 @@ export function CampanasPage() {
 
         const todosLosInventarios = [...conAPS, ...sinAPSConFormato];
         setCampanaInventarios(prev => ({ ...prev, [campanaId]: todosLosInventarios }));
+        setCampanaCaras(prev => ({ ...prev, [campanaId]: caras }));
       } catch (error) {
         console.error('Error cargando inventario:', error);
         setCampanaInventarios(prev => ({ ...prev, [campanaId]: [] }));
@@ -3182,6 +3185,25 @@ export function CampanasPage() {
                                                         </span>
                                                       </>
                                                     );
+                                                  })()}
+                                                  {/* Badge incompleto / exceso */}
+                                                  {(() => {
+                                                    const sc = campanaCaras[campana.id]?.find(s => s.id === grupo.grupoId);
+                                                    if (!sc) return null;
+                                                    const esperadas = (sc.caras || 0) + (Number(sc.bonificacion) || 0);
+                                                    if (esperadas <= 0) return null;
+                                                    const actuales = grupo.items.reduce((sum, i) => sum + (i.caras_totales || 1), 0);
+                                                    if (actuales > esperadas) return (
+                                                      <span className="px-1.5 py-0.5 rounded text-[9px] font-semibold bg-orange-500/20 text-orange-400 border border-orange-500/30 flex items-center gap-1 flex-shrink-0" title={`Exceso: ${actuales}/${esperadas} caras`}>
+                                                        <AlertTriangle className="h-2.5 w-2.5" />+{actuales - esperadas}
+                                                      </span>
+                                                    );
+                                                    if (actuales < esperadas) return (
+                                                      <span className="px-1.5 py-0.5 rounded text-[9px] font-semibold bg-yellow-500/20 text-yellow-400 border border-yellow-500/30 flex items-center gap-1 flex-shrink-0" title={`Incompleto: ${actuales}/${esperadas} caras`}>
+                                                        <AlertTriangle className="h-2.5 w-2.5" />{actuales}/{esperadas}
+                                                      </span>
+                                                    );
+                                                    return null;
                                                   })()}
                                                   <span
                                                     className={`px-1.5 py-0.5 rounded text-[9px] ${isDark ? 'bg-purple-500/20 text-purple-300 hover:bg-purple-500/40' : 'bg-purple-50 text-purple-700 hover:bg-purple-100'} border border-purple-500/30 flex items-center gap-1 cursor-pointer transition-all flex-shrink-0`}

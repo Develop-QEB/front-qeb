@@ -1591,6 +1591,7 @@ export function OrdenesMontajeModal({ isOpen, onClose, canExport = true }: Orden
                     <th className="px-3 py-3 text-right text-[10px] font-semibold text-purple-300 uppercase tracking-wider">Caras</th>
                     <th className="px-3 py-3 text-right text-[10px] font-semibold text-purple-300 uppercase tracking-wider">Tarifa</th>
                     <th className="px-3 py-3 text-right text-[10px] font-semibold text-purple-300 uppercase tracking-wider">Monto Total</th>
+                    <th className="px-3 py-3 text-center text-[10px] font-semibold text-purple-300 uppercase tracking-wider">Diferencia</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -1657,6 +1658,7 @@ export function OrdenesMontajeModal({ isOpen, onClose, canExport = true }: Orden
                       <td className="px-3 py-3 text-right text-sm font-bold text-emerald-400">
                         ${catTotals.monto.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                       </td>
+                      <td></td>
                     </tr>
                   </tfoot>
                 )}
@@ -1682,6 +1684,7 @@ export function OrdenesMontajeModal({ isOpen, onClose, canExport = true }: Orden
                     <th className="px-3 py-3 text-right text-[10px] font-semibold text-sky-300 uppercase tracking-wider">Caras</th>
                     <th className="px-3 py-3 text-right text-[10px] font-semibold text-sky-300 uppercase tracking-wider">Tarifa</th>
                     <th className="px-3 py-3 text-right text-[10px] font-semibold text-sky-300 uppercase tracking-wider">Monto Total</th>
+                    <th className="px-3 py-3 text-center text-[10px] font-semibold text-sky-300 uppercase tracking-wider">Diferencia</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -1748,6 +1751,7 @@ export function OrdenesMontajeModal({ isOpen, onClose, canExport = true }: Orden
                       <td className="px-3 py-3 text-right text-sm font-bold text-emerald-400">
                         ${ocupacionDigitalTotals.monto.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                       </td>
+                      <td></td>
                     </tr>
                   </tfoot>
                 )}
@@ -1978,6 +1982,14 @@ function CATRow({ item }: { item: OrdenMontajeCAT }) {
       <td className={`px-3 py-2 text-xs text-right ${isDark ? 'text-white' : 'text-gray-900'} font-medium`}>{Number(item.caras) || 0}</td>
       <td className={`px-3 py-2 text-xs text-right ${isDark ? 'text-zinc-300' : 'text-gray-700'}`}>${(Number(item.tarifa) || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
       <td className="px-3 py-2 text-xs text-right text-emerald-400 font-medium">${(Number(item.monto_total) || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
+      <td className="px-3 py-2 text-xs text-center font-medium">
+        {(() => {
+          const delta = Number(item.delta_caras) || 0;
+          if (delta === 0) return <span className="text-emerald-400">✓</span>;
+          if (delta > 0) return <span className="px-1.5 py-0.5 rounded text-[10px] bg-orange-500/20 text-orange-300 border border-orange-500/30">+{delta}</span>;
+          return <span className="px-1.5 py-0.5 rounded text-[10px] bg-red-500/20 text-red-300 border border-red-500/30">{delta}</span>;
+        })()}
+      </td>
     </tr>
   );
 }
