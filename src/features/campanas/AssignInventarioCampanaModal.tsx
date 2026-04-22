@@ -84,6 +84,7 @@ interface CaraItem {
   // RT/BF grouping: pair an RT (renta) cara with a BF (bonificación) cara
   grupo_rt_bf?: number | null;
   esBf?: boolean; // true if this cara is the BF row of an RT/BF pair
+  plaza?: string;
 }
 
 // SAP Articulo interface
@@ -134,20 +135,7 @@ const CIUDAD_ESTADO_MAP: Record<string, string> = {
 };
 
 // Formato auto-detection from article name
-// Lookup por segmentos del ItemCode (ej: rt-pb-seg-mx → pb=PARABUS, mx=CDMX)
-const CODE_FORMATO_MAP: Record<string, string> = {
-  pb: 'PARABUS', cl: 'COLUMNA', bol: 'BOLERO', kco: 'Kiosco',
-};
-const CODE_PLAZA_MAP: Record<string, { estado: string; ciudad: string }> = {
-  mx:  { estado: 'Ciudad de México / AM', ciudad: '' },
-  mty: { estado: 'Nuevo León', ciudad: 'Monterrey,Guadalupe,San Nicolás de los Garza,Santa Catarina' },
-  gd:  { estado: 'Jalisco', ciudad: 'Guadalajara,Zapopan,Tlaquepaque' },
-  gdl: { estado: 'Jalisco', ciudad: 'Guadalajara,Zapopan,Tlaquepaque' },
-  ver: { estado: 'Veracruz', ciudad: 'Veracruz,Alvarado,Boca del Río' },
-  pv:  { estado: 'Jalisco', ciudad: 'Puerto Vallarta' },
-};
-
-const getFormatoFromArticulo = (itemName: string, itemCode?: string): string => {
+const getFormatoFromArticulo = (itemName: string): string => {
   if (!itemName) return '';
   const name = itemName.toUpperCase();
   if (name.includes('KIOSCO') || name.includes('KIOSKO')) return 'Kiosco';
@@ -160,12 +148,6 @@ const getFormatoFromArticulo = (itemName: string, itemCode?: string): string => 
   if (name.includes('MUPI')) return 'MUPI';
   if (name.includes('COLUMNA')) return 'COLUMNA';
   if (name.includes('BOLERO')) return 'BOLERO';
-  // Fallback: parse ItemCode segments (ej: rt-pb-seg-mx)
-  if (itemCode) {
-    for (const seg of itemCode.toLowerCase().split('-')) {
-      if (CODE_FORMATO_MAP[seg]) return CODE_FORMATO_MAP[seg];
-    }
-  }
   return '';
 };
 
@@ -196,11 +178,10 @@ const MULTI_CITY_RULES: { pattern: RegExp; estado: string; ciudad: string }[] = 
   { pattern: /\bVERACRUZ\b|\bVER\b/, estado: 'Veracruz', ciudad: 'Veracruz,Alvarado,Boca del Río' },
   { pattern: /\bGD\b|\bGUADALAJARA\b/, estado: 'Jalisco', ciudad: 'Guadalajara,Zapopan,Tlaquepaque' },
   { pattern: /\bPUERTO VALLARTA\b|\bPV\b/, estado: 'Jalisco', ciudad: 'Puerto Vallarta' },
-  { pattern: /\bTOLUCA\b|\bTL\b/, estado: 'Estado de México', ciudad: 'Toluca,Metepec,San Mateo Atenco,Lerma' },
 ];
 
 // Extract city/state from article name (sorted by length to avoid false positives)
-const getCiudadEstadoFromArticulo = (itemName: string, itemCode?: string): { estado: string; ciudad: string } | null => {
+const getCiudadEstadoFromArticulo = (itemName: string): { estado: string; ciudad: string } | null => {
   if (!itemName) return null;
   const name = itemName.toUpperCase();
 
@@ -223,12 +204,6 @@ const getCiudadEstadoFromArticulo = (itemName: string, itemCode?: string): { est
         return { estado, ciudad: '' };
       }
       return { estado, ciudad: ciudad.charAt(0) + ciudad.slice(1).toLowerCase() };
-    }
-  }
-  // Fallback: parse ItemCode segments (ej: rt-pb-seg-mx → mx=CDMX)
-  if (itemCode) {
-    for (const seg of itemCode.toLowerCase().split('-')) {
-      if (CODE_PLAZA_MAP[seg]) return CODE_PLAZA_MAP[seg];
     }
   }
   return null;
@@ -587,40 +562,6 @@ const LIBRARIES: ('places' | 'geometry')[] = ['places', 'geometry'];
 
 const MESES_LABEL = ['Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio', 'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre'];
 
-class SearchViewErrorBoundary extends React.Component<
-  { children: React.ReactNode; onRetry: () => void },
-  { hasError: boolean; error: Error | null; errorInfo: string }
-> {
-  state = { hasError: false, error: null as Error | null, errorInfo: '' };
-  static getDerivedStateFromError(error: Error) {
-    return { hasError: true, error };
-  }
-  componentDidCatch(error: Error, info: React.ErrorInfo) {
-    console.error('[SearchView crash]', error.message, info.componentStack);
-    this.setState({ errorInfo: info.componentStack || '' });
-  }
-  render() {
-    if (this.state.hasError) {
-      return (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80">
-          <div className="bg-zinc-900 border border-red-500/40 rounded-2xl p-8 max-w-lg text-center">
-            <div className="text-red-400 text-lg font-bold mb-3">Error en vista de búsqueda</div>
-            <pre className="text-xs text-zinc-400 text-left max-h-40 overflow-auto mb-4 bg-zinc-800 p-3 rounded-lg">
-              {this.state.error?.message}
-              {'\n\n'}
-              {this.state.errorInfo}
-            </pre>
-            <button onClick={() => { this.setState({ hasError: false, error: null, errorInfo: '' }); this.props.onRetry(); }} className="px-6 py-2 bg-purple-500 text-white rounded-lg text-sm hover:bg-purple-600">
-              Volver
-            </button>
-          </div>
-        </div>
-      );
-    }
-    return this.props.children;
-  }
-}
-
 export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props) {
   useModalTracker('Editar Campaña', isOpen);
   const isDark = useThemeStore((s) => s.theme) === 'dark';
@@ -661,7 +602,6 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
   const [catorcenaFin, setCatorcenaFin] = useState<number | undefined>();
   const [archivoCampana, setArchivoCampana] = useState<string | null>(null);
   const [tipoArchivoCampana, setTipoArchivoCampana] = useState<string | null>(null);
-  const [imu, setImu] = useState(false);
 
   // Initial values for change detection
   const [initialValues, setInitialValues] = useState({
@@ -673,7 +613,6 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
     catorcenaInicio: undefined as number | undefined,
     catorcenaFin: undefined as number | undefined,
     asignadosIds: '' as string,
-    imu: false,
   });
   const [isUpdatingCampana, setIsUpdatingCampana] = useState(false);
 
@@ -773,8 +712,6 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
     message: '',
     onConfirm: () => { },
   });
-
-  const [isClosing, setIsClosing] = useState(false);
 
   // Toast notification state
   const [toast, setToast] = useState<{ show: boolean; message: string; type: 'success' | 'error' | 'info' }>({
@@ -940,18 +877,8 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
           inventario_id: r.inventario_id,
           codigo_unico: r.codigo_unico || `INV-${r.inventario_id}`,
           tipo: tipo as 'Flujo' | 'Contraflujo' | 'Bonificacion',
-          catorcena: (() => {
-            if (tipoPeriodo === 'mensual' && matchingCara?.inicio_periodo) {
-              return parseInt(matchingCara.inicio_periodo.split('-')[1]); // month 1-12
-            }
-            return matchingCara?.catorcena_inicio || catorcenaInicio || 1;
-          })(),
-          anio: (() => {
-            if (tipoPeriodo === 'mensual' && matchingCara?.inicio_periodo) {
-              return parseInt(matchingCara.inicio_periodo.split('-')[0]);
-            }
-            return matchingCara?.anio_inicio || yearInicio || new Date().getFullYear();
-          })(),
+          catorcena: matchingCara?.catorcena_inicio || catorcenaInicio || 1,
+          anio: matchingCara?.anio_inicio || yearInicio || new Date().getFullYear(),
           latitud: Number(r.latitud) || 0,
           longitud: Number(r.longitud) || 0,
           plaza: r.plaza || '',
@@ -1017,10 +944,6 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
       setNotas(notasVal);
       setDescripcion(descripcionVal);
 
-      // Set IMU flag from solicitud (included in campanaDetails response)
-      const imuVal = Boolean((campanaDetails as any).IMU);
-      setImu(imuVal);
-
       // Set period from campaign data
       const yInicio = campanaDetails.catorcena_inicio_anio;
       const cInicio = campanaDetails.catorcena_inicio_num;
@@ -1067,7 +990,6 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
           catorcenaInicio: cInicio ?? undefined,
           catorcenaFin: cFin ?? undefined,
           asignadosIds: asignadosIdsStr,
-          imu: imuVal,
         });
         initialValuesSetRef.current = true;
       }
@@ -1078,15 +1000,10 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
   useEffect(() => {
     if (carasData && isOpen) {
       const carasWithIds: CaraItem[] = carasData.map((cara: any, idx: number) => {
-        // Calculate catorcena/month from inicio_periodo
+        // Calculate catorcena from inicio_periodo
         let catorcenaInicioCara: number | undefined;
         let anioInicioCara: number | undefined;
-        if (tipoPeriodo === 'mensual' && cara.inicio_periodo) {
-          // For monthly: extract month number (1-12) directly from date
-          const parts = cara.inicio_periodo.split('-');
-          catorcenaInicioCara = parseInt(parts[1]); // month 1-12
-          anioInicioCara = parseInt(parts[0]);
-        } else if (cara.inicio_periodo && catorcenasData?.data) {
+        if (cara.inicio_periodo && catorcenasData?.data) {
           const inicioPeriodoDate = new Date(cara.inicio_periodo);
           const catInicio = catorcenasData.data.find((c: any) => {
             const cInicioDate = new Date(c.fecha_inicio);
@@ -1172,10 +1089,9 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
       yearFin !== initialValues.yearFin ||
       catorcenaInicio !== initialValues.catorcenaInicio ||
       catorcenaFin !== initialValues.catorcenaFin ||
-      currentAsignadosIds !== initialValues.asignadosIds ||
-      imu !== initialValues.imu
+      currentAsignadosIds !== initialValues.asignadosIds
     );
-  }, [nombreCampania, notas, descripcion, yearInicio, yearFin, catorcenaInicio, catorcenaFin, currentAsignadosIds, imu, initialValues]);
+  }, [nombreCampania, notas, descripcion, yearInicio, yearFin, catorcenaInicio, catorcenaFin, currentAsignadosIds, initialValues]);
 
   // Handle update campaign
   const handleUpdateCampana = async () => {
@@ -1193,7 +1109,6 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
         catorcenaFinAnio: yearFin,
         asignados: asignadosStr,
         id_asignado: asignadosIdsStr,
-        IMU: imu,
       });
 
       // Update initial values to current values
@@ -1207,7 +1122,6 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
         catorcenaInicio,
         catorcenaFin,
         asignadosIds: newAsignadosIds,
-        imu,
       });
 
       queryClient.invalidateQueries({ queryKey: ['campana-details', campana?.id] });
@@ -1476,7 +1390,6 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
         flujoCompleto: true, contraflujoCompleto: true, bonificacionCompleto: true,
         isComplete: true, totalReservado: 0, totalRequerido: 0,
         flujoDiff: 0, contraflujoDiff: 0, bonificacionDiff: 0, totalDiff: 0,
-        isOverReserved: false,
         needsAttention: false, isImpresion: isImpresionArticle(cara.articulo), isEspecial: isEspecialArticle(cara.articulo),
       };
     }
@@ -1526,7 +1439,6 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
       contraflujoCompleto,
       bonificacionCompleto,
       isComplete: flujoCompleto && contraflujoCompleto && bonificacionCompleto,
-      isOverReserved: totalDiff > 0,
       totalReservado,
       totalRequerido,
       flujoDiff,
@@ -1542,7 +1454,7 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
     if (caras.length === 0) return false;
     return caras.every(cara => {
       const status = getCaraCompletionStatus(cara);
-      return status.isComplete && !status.isOverReserved;
+      return status.isComplete;
     });
   }, [caras, reservas]);
 
@@ -1659,69 +1571,51 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
     // If cara is part of an RT/BF pair, also delete the paired cara
     // (limited to same period to be safe with multi-period campaigns)
     const pairedCaras: CaraItem[] = [];
-    let pairHasReservas = false;
     if (caraToDelete?.grupo_rt_bf) {
       const pair = caras.filter(c =>
         c.grupo_rt_bf === caraToDelete.grupo_rt_bf &&
         c.localId !== caraToDelete.localId &&
         c.inicio_periodo === caraToDelete.inicio_periodo
       );
-      // Block the delete if any paired cara has reservas and user can't delete with reservas
+      // Block the delete if any paired cara has reservas
       for (const p of pair) {
         if (caraHasReservas(p.localId, p.id)) {
-          pairHasReservas = true;
-          if (!permissions.canDeleteCaraConReservas) {
-            alert('No puedes eliminar esta cara: su cara pareja (RT/BF) tiene reservas. Primero elimina las reservas.');
-            return;
-          }
+          alert('No puedes eliminar esta cara: su cara pareja (RT/BF) tiene reservas. Primero elimina las reservas.');
+          return;
         }
       }
       pairedCaras.push(...pair);
     }
 
     const isPair = pairedCaras.length > 0;
-    const anyTieneReservas = tieneReservas || pairHasReservas;
 
     setConfirmModal({
       isOpen: true,
       title: isPair ? 'Eliminar RT + BF' : 'Eliminar Formato',
       message: isPair
-        ? (anyTieneReservas
-            ? '⚠️ Este formato (y su cara pareja RT/BF) tiene inventario reservado. Al eliminarlo se liberarán todas las reservas. ¿Deseas continuar?'
-            : '¿Estás seguro de que deseas eliminar este formato junto con su cara pareja (RT/BF) de la campaña?')
-        : (tieneReservas
-            ? '⚠️ Este formato tiene inventario reservado. Al eliminarlo se liberarán todas las reservas. ¿Deseas continuar?'
-            : '¿Estás seguro de que deseas eliminar este formato de la campaña?'),
+        ? '¿Estás seguro de que deseas eliminar este formato junto con su cara pareja (RT/BF) de la campaña?'
+        : '¿Estás seguro de que deseas eliminar este formato de la campaña?',
       confirmText: 'Eliminar',
       isDestructive: true,
       onConfirm: async () => {
         // Delete all caras in the pair (+ the primary) from DB if they have IDs
         const toDelete = [caraToDelete, ...pairedCaras].filter(Boolean) as CaraItem[];
-        const dbIdsToDelete = toDelete.map(c => c.id).filter((id): id is number => typeof id === 'number');
-        if (dbIdsToDelete.length > 0) {
-          setIsSaving(true);
-          try {
-            for (const dbId of dbIdsToDelete) {
-              await campanasService.deleteCara(campana!.id, dbId);
+        for (const c of toDelete) {
+          if (c.id) {
+            try {
+              await campanasService.deleteCara(campana!.id, c.id);
+            } catch (error) {
+              console.error('Error deleting cara:', error);
+              alert('Error al eliminar el formato de la base de datos');
+              setConfirmModal(prev => ({ ...prev, isOpen: false }));
+              return;
             }
-          } catch (error) {
-            console.error('Error deleting cara:', error);
-            alert('Error al eliminar el formato de la base de datos');
-            setIsSaving(false);
-            setConfirmModal(prev => ({ ...prev, isOpen: false }));
-            return;
-          } finally {
-            setIsSaving(false);
           }
         }
         // Update local state
         const deletedLocalIds = new Set(toDelete.map(c => c.localId));
-        const deletedDbIds = new Set<number>(dbIdsToDelete);
         setCaras(prev => prev.filter(c => !deletedLocalIds.has(c.localId)));
-        setReservas(prev => prev.filter(r =>
-          !toDelete.some(c => r.id.startsWith(c.localId)) &&
-          !(r.solicitudCaraId !== undefined && deletedDbIds.has(r.solicitudCaraId))
-        ));
+        setReservas(prev => prev.filter(r => !toDelete.some(c => r.id.startsWith(c.localId))));
         // Also drop any pending modifications for deleted caras
         setModifiedCaras(prev => {
           const next = new Map(prev);
@@ -1745,7 +1639,6 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
       if (rtCara) { handleEditCara(rtCara); return; }
     }
 
-    setLoadingCaraAction({ caraId: cara.localId, action: 'edit' });
     // Ya no bloqueamos completamente - permitimos edición de ciudad, formatos y NSE
     setEditingCaraId(cara.localId);
 
@@ -1853,23 +1746,6 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
       return;
     }
 
-    // Validar caras de renta pares — excluir kioscos, boleros y mi macro
-    const formatoUp = (newCara.formato || '').toUpperCase();
-    const esKiosco = formatoUp.includes('KIOSCO') || formatoUp.includes('KIOSKO');
-    const esBolero = formatoUp.includes('BOLERO');
-    const esMiMacro = formatoUp.includes('MI MACRO') || formatoUp.includes('MACRO');
-    if (!esCortesia && !esBonificacion && !esImpresion && !isEspecialArticle(artCode) && !esKiosco && !esBolero && !esMiMacro && (newCara.caras || 0) > 0 && (newCara.caras || 0) % 2 !== 0) {
-      alert('Las caras de renta deben ser un número par (Flujo + Contraflujo).');
-      return;
-    }
-
-    // BF validation: bonificacion > 0 on RT article requires articuloBf
-    const needsBfArticle = (newCara.bonificacion || 0) > 0 && !esCortesia && !esBonificacion && !esImpresion && !isEspecialArticle(newCara.articulo || '');
-    if (needsBfArticle && !articuloBf) {
-      alert('Debes seleccionar el artículo de bonificación (BF) antes de guardar, o quita las caras de bonificación a 0.');
-      return;
-    }
-
     let ciudadToSave = newCara.ciudad;
     if (!ciudadToSave && newCara.estados && solicitudFilters?.ciudades) {
       const isAM = newCara.estados.includes('Ciudad de México / AM');
@@ -1877,7 +1753,7 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
       const AM_EDO_MEX_CITIES = ['ATIZAPÁN', 'CUAUTITLÁN IZCALLI', 'ECATEPEC', 'HUIXQUILUCAN', 'NAUCALPAN', 'TLALNEPANTLA', 'TULTITLÁN'];
       const allCitiesForEstado = solicitudFilters.ciudades
         .filter(c => selectedEstados.includes(c.estado))
-        .filter(c => !isAM || !c.estado.toUpperCase().includes('ESTADO DE M') || AM_EDO_MEX_CITIES.includes(c.ciudad.toUpperCase()))
+        .filter(c => !isAM || c.estado !== 'Estado de México' || AM_EDO_MEX_CITIES.includes(c.ciudad.toUpperCase()))
         .map(c => c.ciudad);
       ciudadToSave = allCitiesForEstado.join(', ');
     }
@@ -1908,9 +1784,7 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
       nivel_socioeconomico: newCara.nivel_socioeconomico,
       formato: newCara.formato,
       costo: costoCalculado,
-      tarifa_publica: wantsPair && (newCara.caras || 0) + (newCara.bonificacion || 0) > 0
-        ? costoCalculado / ((newCara.caras || 0) + (newCara.bonificacion || 0))
-        : newCara.tarifa_publica,
+      tarifa_publica: newCara.tarifa_publica,
       inicio_periodo: newCara.inicio_periodo,
       fin_periodo: newCara.fin_periodo,
       caras_flujo: newCara.caras_flujo,
@@ -2126,10 +2000,6 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
                     nivel_socioeconomico: newCara.nivel_socioeconomico,
                     inicio_periodo: newCara.inicio_periodo,
                     fin_periodo: newCara.fin_periodo,
-                    catorcena_inicio: newCara.catorcena_inicio,
-                    anio_inicio: newCara.anio_inicio,
-                    catorcena_fin: newCara.catorcena_fin,
-                    anio_fin: newCara.anio_fin,
                   }
                 : c
             );
@@ -2142,14 +2012,14 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
             updated = updated.map(c => ({ ...c, autorizacion_dg: c._originalDg || c.autorizacion_dg, autorizacion_dcm: c._originalDcm || c.autorizacion_dcm }));
             // Impar/DG check: sum caras across BOTH members of an RT/BF pair
             updated = updated.map(c => {
-              if (c.esBf) return c;
-              { const fmt = (c.formato || '').toUpperCase(); if (fmt.includes('KIOSCO') || fmt.includes('KIOSKO') || fmt.includes('BOLERO') || fmt.includes('MI MACRO') || fmt.includes('MACRO')) return c; }
+              if (c.formato === 'Kiosco') return c;
+              if (c.esBf) return c; // BF rows don't trigger their own impar check
               let total = (c.caras_flujo || 0) + (c.caras_contraflujo || 0) + (c.bonificacion || 0);
               if (c.grupo_rt_bf) {
                 const bf = updated.find(o => o.grupo_rt_bf === c.grupo_rt_bf && o.esBf && o.inicio_periodo === c.inicio_periodo);
                 if (bf) total = (c.caras_flujo || 0) + (c.caras_contraflujo || 0) + ((bf.caras_flujo || 0) + (bf.caras_contraflujo || 0));
               }
-              if (total > 0 && total % 2 !== 0 && c.autorizacion_dcm !== 'pendiente') return { ...c, autorizacion_dg: 'aprobado', autorizacion_dcm: 'pendiente' };
+              if (total > 0 && total % 2 !== 0 && c.autorizacion_dg !== 'pendiente') return { ...c, autorizacion_dg: 'pendiente', autorizacion_dcm: 'aprobado' };
               return c;
             });
             const hayDG = updated.some(c => c.autorizacion_dg === 'pendiente');
@@ -2239,8 +2109,8 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
           updated = updated.map(c => ({ ...c, autorizacion_dg: c._originalDg || c.autorizacion_dg, autorizacion_dcm: c._originalDcm || c.autorizacion_dcm }));
           // Impar/DG check: sum caras across BOTH members of an RT/BF pair
           updated = updated.map(c => {
+            if (c.formato === 'Kiosco') return c;
             if (c.esBf) return c;
-            { const fmt = (c.formato || '').toUpperCase(); if (fmt.includes('KIOSCO') || fmt.includes('KIOSKO') || fmt.includes('BOLERO') || fmt.includes('MI MACRO') || fmt.includes('MACRO')) return c; }
             let total = (c.caras_flujo || 0) + (c.caras_contraflujo || 0) + (c.bonificacion || 0);
             if (c.grupo_rt_bf) {
               const bf = updated.find(o => o.grupo_rt_bf === c.grupo_rt_bf && o.esBf && o.inicio_periodo === c.inicio_periodo);
@@ -2300,7 +2170,6 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
           catorcenaFinAnio: yearFin,
           asignados: asignadosStr,
           id_asignado: asignadosIdsStr,
-          IMU: imu,
         });
 
         setInitialValues({
@@ -2312,7 +2181,6 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
           catorcenaInicio,
           catorcenaFin,
           asignadosIds: asignadosIdsStr,
-          imu,
         });
         messages.push('Campaña actualizada');
       }
@@ -3522,9 +3390,7 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
     const hierarchy: Level0 = {};
 
     filteredReservados.forEach(r => {
-      const catorcenaKey = tipoPeriodo === 'mensual'
-        ? `${MESES_LABEL[r.catorcena - 1] || `Mes ${r.catorcena}`} ${r.anio}`
-        : `Cat ${r.catorcena}/${r.anio}`;
+      const catorcenaKey = `Cat ${r.catorcena}/${r.anio}`;
       const articuloKey = r.articulo || 'Sin Artículo';
       const plazaKey = r.plaza || 'Sin Plaza';
       const formatoKey = r.formato || 'Sin Formato';
@@ -3863,16 +3729,6 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
 
   if (!isOpen) return null;
 
-  // Overlay bloqueante cuando se está cerrando el modal
-  const closingOverlayJSX = isClosing && (
-    <div className="fixed inset-0 z-[70] flex items-center justify-center bg-black/40 backdrop-blur-[1px]" role="status" aria-live="polite">
-      <div className={`flex items-center gap-3 px-6 py-4 rounded-xl shadow-2xl ${isDark ? 'bg-zinc-900 text-white' : 'bg-white text-gray-900'}`}>
-        <Loader2 className="h-5 w-5 animate-spin text-purple-500" />
-        <span className="text-sm font-medium">Cerrando...</span>
-      </div>
-    </div>
-  );
-
   // Overlay bloqueante global cuando se está guardando fuera del confirmModal
   const savingOverlayJSX = isSaving && !confirmModal.isOpen && (
     <div className="fixed inset-0 z-[70] flex items-center justify-center bg-black/40 backdrop-blur-[1px]" role="status" aria-live="polite">
@@ -3952,23 +3808,10 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
     </div>
   );
 
-  // Handle close with unsaved changes warning
-  const performClose = useCallback(() => {
-    setIsClosing(true);
-    requestAnimationFrame(() => {
-      setTimeout(() => {
-        onClose();
-        setIsClosing(false);
-      }, 50);
-    });
-  }, [onClose]);
-
   // Render inventory search view
   if (viewState === 'search-inventory') {
     return (
-      <SearchViewErrorBoundary onRetry={handleBackToMain}>
       <div className="fixed inset-0 z-50 flex items-center justify-center">
-        {closingOverlayJSX}
         {savingOverlayJSX}
         {confirmModalJSX}
         {toastJSX}
@@ -4022,30 +3865,21 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
               </div>
 
               {/* % Distribucion */}
-              {(() => {
-                const totalRentaForPct = (adjustedCarasFlujo.flujo + adjustedCarasFlujo.contraflujo) || 1;
-                const flujoYaRes = adjustedCarasFlujo.flujo - remainingToAssign.flujo;
-                const contraYaRes = adjustedCarasFlujo.contraflujo - remainingToAssign.contraflujo;
-                const minPct = Math.ceil(flujoYaRes / totalRentaForPct * 100);
-                const maxPct = Math.floor((totalRentaForPct - contraYaRes) / totalRentaForPct * 100);
-                return (
               <div className="flex flex-col items-center justify-center px-2 py-1 rounded-xl bg-zinc-800/30 border border-zinc-700/20 min-w-[70px]">
                 <span className="text-[9px] text-zinc-500 mb-1">Distribución</span>
                 <div className="flex items-center gap-1">
                   <input
                     type="number"
-                    min={minPct}
-                    max={maxPct}
+                    min={0}
+                    max={100}
                     value={flujoPct}
-                    onChange={(e) => setFlujoPct(Math.max(minPct, Math.min(maxPct, parseInt(e.target.value) || 0)))}
+                    onChange={(e) => setFlujoPct(Math.max(0, Math.min(100, parseInt(e.target.value) || 0)))}
                     className="w-10 text-center text-xs font-bold bg-zinc-800 border-zinc-700 text-blue-400 border rounded px-1 py-0.5 focus:outline-none focus:ring-1 focus:ring-blue-500/50"
                   />
                   <span className="text-[10px] text-zinc-500">%</span>
                 </div>
                 <span className="text-[9px] text-zinc-600 mt-0.5">{flujoPct}/{100 - flujoPct}</span>
               </div>
-                );
-              })()}
 
               {/* Contraflujo KPI */}
               <div className="flex-1 bg-zinc-800/50 rounded-xl p-3 border border-zinc-700/30">
@@ -5597,10 +5431,10 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
           )}
         </div>
       </div>
-      </SearchViewErrorBoundary>
     );
   }
 
+  // Handle close with unsaved changes warning
   const handleClose = () => {
     if (hasChanges || modifiedCaras.size > 0) {
       setConfirmModal({
@@ -5615,18 +5449,17 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
         isDestructive: true,
         onConfirm: () => {
           setConfirmModal(prev => ({ ...prev, isOpen: false }));
-          performClose();
+          onClose();
         },
       });
     } else {
-      performClose();
+      onClose();
     }
   };
 
   // Main view
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center">
-      {closingOverlayJSX}
       <div className="absolute inset-0 bg-black/70 backdrop-blur-sm" onClick={handleClose} />
 
       <div className={`relative w-[95vw] max-w-[1400px] h-[90vh] ${isDark ? 'bg-zinc-900' : 'bg-white'} rounded-2xl border border-purple-500/20 shadow-2xl flex flex-col overflow-hidden`}>
@@ -5924,18 +5757,6 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
                     )}
                   </div>
 
-                  {/* IMU checkbox */}
-                  <label className={`flex items-center gap-3 ${canEditResumen ? 'cursor-pointer' : 'cursor-not-allowed opacity-60'}`}>
-                    <input
-                      type="checkbox"
-                      checked={imu}
-                      onChange={(e) => canEditResumen && setImu(e.target.checked)}
-                      disabled={!canEditResumen}
-                      className="checkbox-purple w-5 h-5"
-                    />
-                    <span className={`text-sm ${isDark ? 'text-zinc-300' : 'text-gray-700'}`}>IMU (Impresión IMU)</span>
-                  </label>
-
                   {/* Pending changes indicator for campaign summary */}
                   {canEditResumen && hasChanges && (
                     <div className={`flex items-center gap-2 pt-2 border-t ${isDark ? 'border-zinc-700/30' : 'border-gray-200/30'} text-sm text-purple-400`}>
@@ -5999,8 +5820,8 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
 
                     {/* Artículo selector */}
                     <div className="mb-4">
-                      <label className={`text-xs mb-1 block ${editingCaraHasReservas ? 'text-zinc-800' : 'text-zinc-500'}`}>Artículo SAP</label>
-                      {canEditResumen && !editingCaraHasReservas ? (
+                      <label className={`text-xs mb-1 block ${(editingCaraHasReservas || editingCaraId) ? 'text-zinc-800' : 'text-zinc-500'}`}>Artículo SAP</label>
+                      {canEditResumen && !editingCaraHasReservas && !editingCaraId ? (
                         <SearchableSelect
                           label="Seleccionar artículo"
                           options={articulosData || []}
@@ -6010,8 +5831,8 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
                             // Auto-complete all fields from article
                             const tarifa = getTarifaPublicaFromArticulo(item);
                             const tarifaPiso = getTarifaPisoFromArticulo(item);
-                            const ciudadEstado = getCiudadEstadoFromArticulo(item.ItemName, item.ItemCode);
-                            const formato = getFormatoFromArticulo(item.ItemName, item.ItemCode);
+                            const ciudadEstado = getCiudadEstadoFromArticulo(item.ItemName);
+                            const formato = getFormatoFromArticulo(item.ItemName);
                             const tipo = getTipoFromName(item.ItemName);
                             const isCortesia = item.ItemCode.toUpperCase().startsWith('CT');
                             const isIntercambio = item.ItemCode.toUpperCase().startsWith('IN');
@@ -6191,7 +6012,7 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
                                     const selectedEstados = newCara.estados.split(',').map(s => s.trim()).flatMap(s => s === 'Ciudad de México / AM' ? ['Ciudad de México', 'Estado de México'] : [s]);
                                     return selectedEstados.includes(c.estado);
                                   })
-                                  .filter(c => !isAM || !c.estado.toUpperCase().includes('ESTADO DE M') || AM_EDO_MEX_CITIES.includes(c.ciudad.toUpperCase()))
+                                  .filter(c => !isAM || c.estado !== 'Estado de México' || AM_EDO_MEX_CITIES.includes(c.ciudad.toUpperCase()))
                                   .map(c => c.ciudad) || [];
                               })()
                             }
@@ -6373,7 +6194,9 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
                       </button>
                       <button
                         onClick={handleSaveCara}
-                        className="px-4 py-2 bg-purple-500 text-white rounded-lg text-sm hover:bg-purple-600 transition-colors"
+                        disabled={!editingCaraId && newCara.formato !== 'Kiosco' && (newCara.caras + (newCara.bonificacion || 0)) > 0 && (newCara.caras + (newCara.bonificacion || 0)) % 2 !== 0}
+                        className={`px-4 py-2 bg-purple-500 text-white rounded-lg text-sm hover:bg-purple-600 transition-colors ${!editingCaraId && newCara.formato !== 'Kiosco' && (newCara.caras + (newCara.bonificacion || 0)) > 0 && (newCara.caras + (newCara.bonificacion || 0)) % 2 !== 0 ? 'opacity-50 cursor-not-allowed' : ''}`}
+                        title={!editingCaraId && newCara.formato !== 'Kiosco' && (newCara.caras + (newCara.bonificacion || 0)) > 0 && (newCara.caras + (newCara.bonificacion || 0)) % 2 !== 0 ? 'Caras impar — no se puede guardar' : undefined}
                       >
                         {editingCaraId ? 'Actualizar' : 'Agregar'}
                       </button>
@@ -6446,8 +6269,8 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
                             // Determine status color and indicator
                             const esImpresion = cara.articulo ? isImpresionArticle(cara.articulo) : false;
                             const esEspecial = cara.articulo ? isEspecialArticle(cara.articulo) : false;
-                            // Blue = impresión, Purple = ejec especial, Red = over-reserved, Green = complete, Amber = incomplete
-                            const statusColor = esImpresion ? 'blue' : esEspecial ? 'purple' : status.isOverReserved ? 'red' : status.isComplete ? 'emerald' : 'amber';
+                            // Blue = impresión, Purple = ejec especial, Green = complete, Amber = incomplete
+                            const statusColor = esImpresion ? 'blue' : esEspecial ? 'purple' : status.isComplete ? 'emerald' : 'amber';
 
                             // Display text for diff:
                             // - Missing (totalDiff < 0): show "faltan X"
@@ -6459,12 +6282,12 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
                                 : `faltan ${Math.abs(status.totalDiff)}`;
 
                             return (
-                              <div key={cara.localId} className={`${statusColor === 'blue' ? 'bg-blue-500/5' : statusColor === 'red' ? 'bg-red-500/5' : statusColor === 'emerald' ? 'bg-emerald-500/5' : 'bg-amber-500/5'}`}>
+                              <div key={cara.localId} className={`${statusColor === 'blue' ? 'bg-blue-500/5' : statusColor === 'emerald' ? 'bg-emerald-500/5' : 'bg-amber-500/5'}`}>
                                 {/* Cara row */}
                                 <div className={`flex items-center gap-3 px-5 py-3 transition-colors ${isDark ? 'hover:bg-zinc-800/30' : 'hover:bg-gray-50'}`}>
                                   {/* Completion indicator */}
                                   <div className={`w-2 h-2 rounded-full ${
-                                    statusColor === 'blue' ? 'bg-blue-500' : statusColor === 'red' ? 'bg-red-500 animate-pulse' : statusColor === 'emerald' ? 'bg-emerald-500' : 'bg-amber-500 animate-pulse'
+                                    statusColor === 'blue' ? 'bg-blue-500' : statusColor === 'emerald' ? 'bg-emerald-500' : 'bg-amber-500 animate-pulse'
                                   }`} />
 
                                   <div className="flex-1 grid grid-cols-8 gap-3 text-sm">
@@ -6479,8 +6302,8 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
                                       </span>
                                     </div>
                                     <div>
-                                      <span className={`${isDark ? 'text-zinc-500' : 'text-gray-400'} text-xs`}>Plaza</span>
-                                      <p className={`${isDark ? 'text-zinc-300' : 'text-gray-700'} text-xs truncate`} title={cara.plaza || cara.ciudad || cara.estados}>{cara.plaza || cara.ciudad || cara.estados || '-'}</p>
+                                      <span className={`${isDark ? 'text-zinc-500' : 'text-gray-400'} text-xs`}>Ciudad</span>
+                                      <p className={`${isDark ? 'text-zinc-300' : 'text-gray-700'} text-xs truncate`} title={cara.ciudad || cara.estados}>{cara.ciudad || cara.estados || '-'}</p>
                                     </div>
                                     <div>
                                       <span className={`${isDark ? 'text-zinc-500' : 'text-gray-400'} text-xs`}>Artículo</span>
@@ -6533,7 +6356,7 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
                                       const isLocallyModified = cara.id ? modifiedCaras.has(cara.id) : false;
                                       const tienePendientes = !isLocallyModified && (cara.autorizacion_dg === 'pendiente' || cara.autorizacion_dcm === 'pendiente');
                                       const tieneRechazado = cara.autorizacion_dg === 'rechazado' || cara.autorizacion_dcm === 'rechazado';
-                                      const bloqueado = status.isOverReserved ? false : (tienePendientes || tieneRechazado || caraAPSBlocked);
+                                      const bloqueado = tienePendientes || tieneRechazado || caraAPSBlocked;
                                       const isLoadingThis = loadingCaraAction?.caraId === cara.localId && loadingCaraAction?.action === 'search';
 
                                       return (
@@ -6561,7 +6384,7 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
                                     })()}
                                     {effectiveCanEdit && (() => {
                                       const caraAuthPendienteSaved = caras.some(c => !modifiedCaras.has(c.id!) && ((c._originalDg || c.autorizacion_dg) === 'pendiente' || (c._originalDcm || c.autorizacion_dcm) === 'pendiente'));
-                                      const editBlocked = status.isOverReserved ? false : (caraAuthPendienteSaved || caraAPSBlocked);
+                                      const editBlocked = caraAuthPendienteSaved || caraAPSBlocked;
                                       const isLoadingThis = loadingCaraAction?.caraId === cara.localId && loadingCaraAction?.action === 'edit';
                                       const blockReason = caraAPSBlocked ? 'Grupo con APS asignado - no se puede editar' : caraAuthPendienteSaved ? 'Autorización pendiente - no se puede editar' : isLoadingThis ? 'Cargando editor...' : 'Editar';
                                       return (
@@ -6618,9 +6441,7 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
                 // Helper to get group key based on field
                 const getFieldValue = (r: ReservaItem, field: GroupByFieldReservas): string => {
                   switch (field) {
-                    case 'catorcena': return tipoPeriodo === 'mensual'
-                      ? `${MESES_LABEL[r.catorcena - 1] || `Mes ${r.catorcena}`} ${r.anio}`
-                      : `Cat ${r.catorcena}/${r.anio}`;
+                    case 'catorcena': return `Cat ${r.catorcena}/${r.anio}`;
                     case 'tipo': return r.tipo;
                     case 'plaza': return r.plaza || 'Sin Plaza';
                     case 'formato': return r.formato || 'Sin Formato';
@@ -7295,7 +7116,7 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
                       <span className={isDark ? 'text-emerald-400' : 'text-emerald-600'}>Todas las caras completas</span>
                     ) : (
                       <span className={isDark ? 'text-amber-400' : 'text-amber-600'}>
-                        {caras.filter(c => { const s = getCaraCompletionStatus(c); return !s.isComplete || s.isOverReserved; }).length} cara(s) incompleta(s)
+                        {caras.filter(c => !getCaraCompletionStatus(c).isComplete).length} cara(s) incompleta(s)
                       </span>
                     )}
                   </span>

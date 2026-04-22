@@ -22,6 +22,7 @@ import { useThemeStore } from '../../store/themeStore';
 import { TableroView } from './KanbanView';
 import { UserAvatar } from '../../components/ui/user-avatar';
 import { useSocketNotificaciones } from '../../hooks/useSocket';
+import { CreateSolicitudModal } from '../solicitudes/CreateSolicitudModal';
 
 // ============ TIPOS ============
 type ContentType = 'notificaciones' | 'tareas';
@@ -338,10 +339,12 @@ function TareaRow({
   const isAuthTask = tarea.tipo?.includes('Autorización');
   const isAprobacion = tarea.tipo?.includes('Aprobación');
   const isRechazo = tarea.tipo?.includes('Rechazo');
+  const isRechazado = tarea.estatus === 'Rechazado';
   const isCancelado = tarea.estatus === 'Cancelado';
 
   const getAuthStatusBadge = () => {
     if (isCancelado) return { bg: 'bg-zinc-500/20', border: 'border-zinc-500/30', color: 'text-zinc-400', label: 'Cancelado' };
+    if (isRechazado) return { bg: 'bg-red-500/20', border: 'border-red-500/30', color: 'text-red-400', label: 'Rechazada' };
     if (isCompleted) return { bg: 'bg-emerald-500/20', border: 'border-emerald-500/30', color: 'text-emerald-400', label: 'Aprobada' };
     if (isAprobacion) return { bg: 'bg-emerald-500/20', border: 'border-emerald-500/30', color: 'text-emerald-400', label: 'Aprobada' };
     if (isRechazo) return { bg: 'bg-red-500/20', border: 'border-red-500/30', color: 'text-red-400', label: 'Rechazada' };
@@ -353,33 +356,47 @@ function TareaRow({
   return (
     <div
       onClick={onSelect}
-      className={`group flex items-center gap-4 px-4 py-3 cursor-pointer transition-all ${isDark ? 'hover:bg-zinc-800/50' : 'hover:bg-gray-100'} ${showBorder ? `border-b ${isDark ? 'border-zinc-800/60' : 'border-gray-200'}` : ''} ${isCompleted || isCancelado ? 'opacity-60' : ''}`}
+      className={`group flex items-center gap-4 px-4 py-3 cursor-pointer transition-all ${isDark ? 'hover:bg-zinc-800/50' : 'hover:bg-gray-100'} ${showBorder ? `border-b ${isDark ? 'border-zinc-800/60' : 'border-gray-200'}` : ''} ${isCompleted || isCancelado || isRechazado ? 'opacity-60' : ''}`}
     >
       {/* Indicador de estado visual */}
-      <div className={`w-1 h-8 rounded-full ${authBadge ? authBadge.bg : statusConfig.bg} ${isCompleted ? 'bg-emerald-500/40' : ''}`} />
+      {!isAuthTask && (
+        <div className={`w-1 h-8 rounded-full ${authBadge ? authBadge.bg : statusConfig.bg} ${isCompleted ? 'bg-emerald-500/40' : ''}`} />
+      )}
 
-      {/* Icono de estado */}
-      <div className={`flex-shrink-0 w-7 h-7 rounded-lg flex items-center justify-center ${statusConfig.bg} border ${statusConfig.border}`}>
-        <StatusIcon className={`h-4 w-4 ${statusConfig.color}`} />
-      </div>
+      {/* Icono de estado (oculto para tareas de autorización) */}
+      {!isAuthTask && (
+        <div className={`flex-shrink-0 w-7 h-7 rounded-lg flex items-center justify-center ${statusConfig.bg} border ${statusConfig.border}`}>
+          <StatusIcon className={`h-4 w-4 ${statusConfig.color}`} />
+        </div>
+      )}
 
       {/* Badge de tipo con color diferenciado */}
-      <div className={`flex-shrink-0 flex items-center gap-1.5 px-2 py-1 rounded-lg ${tipoConfig.bg} border ${tipoConfig.border}`}>
-        <TipoIcon className={`h-3 w-3 ${tipoConfig.color}`} />
-        <span className={`text-[11px] font-medium ${tipoConfig.color}`}>{tarea.tipo}</span>
-      </div>
-
-      {/* Badge de estado de autorización */}
-      {authBadge && (
-        <div className={`flex-shrink-0 px-2 py-0.5 rounded-full ${authBadge.bg} border ${authBadge.border}`}>
-          <span className={`text-[10px] font-semibold ${authBadge.color}`}>{authBadge.label}</span>
+      {isAuthTask ? (
+        <div className={`flex-shrink-0 flex items-center gap-2 px-3 py-1.5 rounded-lg bg-gradient-to-r from-orange-500/25 to-amber-500/20 border-2 border-orange-400/50 shadow-sm shadow-orange-500/10`}>
+          <TipoIcon className="h-4 w-4 text-orange-300" />
+          <span className="text-xs font-bold text-orange-300 tracking-wide">{tarea.tipo}</span>
+          {authBadge && (
+            <span className={`ml-1 px-1.5 py-0.5 rounded text-[10px] font-bold ${authBadge.bg} ${authBadge.color} border ${authBadge.border}`}>{authBadge.label}</span>
+          )}
         </div>
+      ) : (
+        <>
+          <div className={`flex-shrink-0 flex items-center gap-1.5 px-2 py-1 rounded-lg ${tipoConfig.bg} border ${tipoConfig.border}`}>
+            <TipoIcon className={`h-3 w-3 ${tipoConfig.color}`} />
+            <span className={`text-[11px] font-medium ${tipoConfig.color}`}>{tarea.tipo}</span>
+          </div>
+          {authBadge && (
+            <div className={`flex-shrink-0 px-2 py-0.5 rounded-full ${authBadge.bg} border ${authBadge.border}`}>
+              <span className={`text-[10px] font-semibold ${authBadge.color}`}>{authBadge.label}</span>
+            </div>
+          )}
+        </>
       )}
 
       {/* Contenido principal */}
       <div className="flex-1 min-w-0">
         <div className="flex items-center gap-2">
-          <span className={`text-sm font-medium group-hover:text-purple-300 transition-colors ${isCompleted ? 'line-through text-zinc-500' : isDark ? 'text-white' : 'text-gray-900'}`}>
+          <span className={`text-sm font-medium group-hover:text-purple-300 transition-colors ${isCompleted || isRechazado ? 'line-through text-zinc-500' : isDark ? 'text-white' : 'text-gray-900'}`}>
             {tarea.titulo}
           </span>
           <span className={`text-[10px] ${isDark ? 'text-zinc-600' : 'text-gray-400'} font-mono`}>#{tarea.id}</span>
@@ -391,14 +408,14 @@ function TareaRow({
 
       {/* Metadatos agrupados */}
       <div className="flex items-center gap-3 flex-shrink-0">
-        {tarea.asignado && (
+        {tarea.asignado && !isAuthTask && (
           <div className={`hidden md:flex items-center gap-1.5 px-2 py-1 rounded-lg ${isDark ? 'bg-zinc-800/50' : 'bg-gray-50'}`} title={`Asignado: ${tarea.asignado}`}>
             <UserAvatar nombre={tarea.asignado} size="sm" />
             <span className={`text-xs ${isDark ? 'text-zinc-400' : 'text-gray-500'} truncate max-w-16`}>{tarea.asignado}</span>
           </div>
         )}
 
-        {!isNotificacion && (tarea.fecha_inicio || tarea.fecha_fin) && (
+        {!isNotificacion && !isAuthTask && (tarea.fecha_inicio || tarea.fecha_fin) && (
           <div className={`hidden lg:flex items-center gap-2 px-2 py-1 rounded-lg ${isDark ? 'bg-zinc-800/30' : 'bg-gray-50'}`}>
             {tarea.fecha_inicio && (
               <div className={`flex items-center gap-1 text-[11px] ${isDark ? 'text-zinc-500' : 'text-gray-400'}`} title="Fecha inicio">
@@ -417,12 +434,19 @@ function TareaRow({
         )}
 
         {tarea.responsable && (
-          <span className={`hidden xl:block text-[11px] ${isDark ? 'text-zinc-600' : 'text-gray-500'} px-2 py-1 rounded ${isDark ? 'bg-zinc-800/30' : 'bg-gray-50'}`} title="Creador">
+          <span className={`hidden xl:block text-[11px] font-medium px-2 py-1 rounded ${isAuthTask ? 'text-orange-300 bg-orange-500/10 border border-orange-500/20' : `${isDark ? 'text-zinc-600' : 'text-gray-500'} ${isDark ? 'bg-zinc-800/30' : 'bg-gray-50'}`}`} title="Creador">
             {tarea.responsable}
           </span>
         )}
 
-        {tarea.referencia_id && (
+        {isAuthTask && tarea.cliente && (
+          <span className="text-[11px] px-2 py-1 rounded-lg bg-purple-500/10 border border-purple-500/20">
+            <span className="text-purple-400/70">Cliente: </span>
+            <span className="text-purple-300 font-medium">{tarea.cliente}</span>
+          </span>
+        )}
+
+        {tarea.referencia_id && !isAuthTask && (
           <span className="text-[11px] font-mono px-2 py-1 rounded-lg bg-purple-500/10 text-purple-400 border border-purple-500/20">
             #{tarea.referencia_id}
           </span>
@@ -1278,14 +1302,20 @@ function getNavigationLabel(tipo: string, tipoTarea?: string, campaniaId?: numbe
   if (isGestionArtesTarea(tipoTarea)) {
     return 'Ver Gestión de Artes';
   }
-  // Tareas de Autorización/Rechazo: usar referencia_tipo (tipo) del backend
-  if (tipoTarea?.includes('Autorización') || tipoTarea?.includes('Rechazo')) {
+  // Tareas de Rechazo: abrir modal de edición de solicitud
+  if (tipoTarea?.includes('Rechazo')) {
+    return 'Editar Solicitud';
+  }
+  // Tareas de Aprobación: siempre Ver Solicitud
+  if (tipoTarea?.includes('Aprobación')) {
+    return 'Ver Solicitud';
+  }
+  // Tareas de Autorización: usar referencia_tipo (tipo) del backend
+  if (tipoTarea?.includes('Autorización')) {
     if (tipo === 'campana') return 'Ver Campaña';
     if (tipo === 'propuesta') return 'Ver Propuesta';
     if (tipo === 'solicitud') return 'Ver Solicitud';
-    // Fallback para tareas viejas sin referencia_tipo correcto
     if (campaniaId) return 'Ver Campaña';
-    if (titulo?.toLowerCase().includes('solicitud')) return 'Ver Solicitud';
     if (propuestaId) return 'Ver Propuesta';
     return 'Ver Solicitud';
   }
@@ -1326,6 +1356,12 @@ function isRejectionTask(titulo: string): boolean {
   return lower.includes('rechazad') || lower.includes('rechazo') || lower.includes('requiere edición');
 }
 
+function getRejectionSolicitudId(tarea: Notificacion): number | null {
+  if (!tarea.tipo?.includes('Rechazo')) return null;
+  const solId = tarea.id_solicitud ? parseInt(tarea.id_solicitud) : null;
+  return solId && !isNaN(solId) ? solId : null;
+}
+
 // Función para obtener la ruta de navegación directa al detalle
 function getDirectNavigationPath(tipo: string, id: number, titulo: string, tipoTarea?: string, campaniaId?: number | null, propuestaId?: number | null, tareaId?: number): string {
   const isComment = isCommentNotification(titulo);
@@ -1339,7 +1375,7 @@ function getDirectNavigationPath(tipo: string, id: number, titulo: string, tipoT
   // Si es tarea de propuesta (ajuste cto, etc.) o tiene id_propuesta, ir al detalle de propuesta
   // Excluir tareas de Autorización/Rechazo — esas usan referencia_tipo del backend
   const isSeguimientoCampana = tipoTarea?.toLowerCase().includes('seguimiento') && tipoTarea?.toLowerCase().includes('campaña');
-  const isAutorizacionOrRechazo = tipoTarea?.includes('Autorización') || tipoTarea?.includes('Rechazo');
+  const isAutorizacionOrRechazo = tipoTarea?.includes('Autorización') || tipoTarea?.includes('Rechazo') || tipoTarea?.includes('Aprobación');
   if (!isSeguimientoCampana && !isAutorizacionOrRechazo && (tipoTarea?.toLowerCase().includes('propuesta') || tipoTarea?.toLowerCase().includes('ajuste cto') || propuestaId)) {
     return `/propuestas?viewId=${propuestaId || id}`;
   }
@@ -1360,7 +1396,11 @@ function getDirectNavigationPath(tipo: string, id: number, titulo: string, tipoT
         return `/solicitudes?editId=${id}`;
       }
       // Si es notificación de comentario, abrir modal de comentarios
-      return isComment ? `/solicitudes?commentsId=${id}` : `/solicitudes?viewId=${id}`;
+      return isComment
+        ? `/solicitudes?commentsId=${id}`
+        : (tipoTarea?.includes('AprobaciÃ³n') || tipoTarea?.includes('Rechazo')) && titulo.toLowerCase().includes('solicitud')
+          ? `/solicitudes?editId=${id}`
+          : `/solicitudes?viewId=${id}`;
     default:
       return '/';
   }
@@ -1386,6 +1426,10 @@ function ApprovalModal({
 
   const [idPropuestaState, setIdPropuestaState] = useState<string | null>(tarea.id_propuesta || null);
   const [solicitudFallbackTried, setSolicitudFallbackTried] = useState(false);
+  const [collapsedCatorcenas, setCollapsedCatorcenas] = useState<Set<string>>(new Set());
+  const toggleCatorcena = (key: string) => {
+    setCollapsedCatorcenas(prev => { const next = new Set(prev); next.has(key) ? next.delete(key) : next.add(key); return next; });
+  };
 
   const fetchPropuestaBySolicitud = async (solicitudId: string) => {
     const response = await fetch(`${import.meta.env.VITE_API_URL}/propuestas?solicitudId=${solicitudId}`, {
@@ -1463,13 +1507,12 @@ function ApprovalModal({
   const rechazarMutation = useMutation({
     mutationFn: (motivo: string) => notificacionesService.rechazarAutorizacion(idPropuesta || '', motivo),
     onSuccess: () => {
-      refetchCaras();
-      refetchResumen();
       setShowRechazoInput(false);
       setRechazoMotivo('');
       queryClient.invalidateQueries({ queryKey: ['notificaciones'] });
       queryClient.invalidateQueries({ queryKey: ['notificaciones-stats'] });
       onAction();
+      onClose();
     },
   });
 
@@ -1480,18 +1523,22 @@ function ApprovalModal({
     return carasData.filter(c => c.autorizacion_dcm === 'pendiente');
   }, [carasData, tipoAutorizacion]);
 
-  const cliente = allCaras[0]?.cliente || '—';
-  const asesor = allCaras[0]?.asesor || '—';
+  const cliente = allCaras[0]?.cliente || tarea.cliente || '—';
+  const creador = tarea.creador || tarea.asesor || '—';
   const origen = tarea.contenido === 'campana' ? 'Campaña' : tarea.contenido === 'propuesta' ? 'Propuesta' : tarea.contenido === 'solicitud' ? 'Solicitud' : '—';
 
   const catorcenaGroups = useMemo(() => {
-    const groups = new Map<string, CaraAutorizacion[]>();
+    const unsorted = new Map<string, CaraAutorizacion[]>();
     allCaras.forEach(c => {
       const key = c.catorcena || 'Sin periodo';
-      if (!groups.has(key)) groups.set(key, []);
-      groups.get(key)!.push(c);
+      if (!unsorted.has(key)) unsorted.set(key, []);
+      unsorted.get(key)!.push(c);
     });
-    return groups;
+    const sorted = new Map([...unsorted.entries()].sort((a, b) => {
+      const parse = (k: string) => { const m = k.match(/Cat\s+(\d+)\s*-\s*(\d+)/); return m ? Number(m[2]) * 100 + Number(m[1]) : 9999; };
+      return parse(a[0]) - parse(b[0]);
+    }));
+    return sorted;
   }, [allCaras]);
 
   const totals = useMemo(() => {
@@ -1532,8 +1579,8 @@ function ApprovalModal({
               <div className={`text-sm font-medium ${isDark ? 'text-white' : 'text-gray-900'} truncate`}>{cliente}</div>
             </div>
             <div className={`p-3 rounded-xl ${isDark ? 'bg-zinc-800/50 border-zinc-700/50' : 'bg-gray-50 border-gray-200'} border`}>
-              <div className={`text-[10px] uppercase tracking-wider ${isDark ? 'text-zinc-500' : 'text-gray-400'} mb-1`}>Asesor</div>
-              <div className={`text-sm font-medium ${isDark ? 'text-white' : 'text-gray-900'} truncate`}>{asesor}</div>
+              <div className={`text-[10px] uppercase tracking-wider ${isDark ? 'text-zinc-500' : 'text-gray-400'} mb-1`}>Creador</div>
+              <div className={`text-sm font-medium ${isDark ? 'text-white' : 'text-gray-900'} truncate`}>{creador}</div>
             </div>
             <div className={`p-3 rounded-xl ${isDark ? 'bg-zinc-800/50 border-zinc-700/50' : 'bg-gray-50 border-gray-200'} border`}>
               <div className={`text-[10px] uppercase tracking-wider ${isDark ? 'text-zinc-500' : 'text-gray-400'} mb-1`}>Origen</div>
@@ -1548,16 +1595,12 @@ function ApprovalModal({
 
         {/* Resumen + Inversión */}
         <div className={`px-6 py-4 border-b ${isDark ? 'border-zinc-800' : 'border-gray-200'}`}>
-          <div className="grid grid-cols-2 md:grid-cols-6 gap-3">
+          <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
             {resumenData && (
               <>
                 <div className="p-2 rounded-lg bg-emerald-500/10 border border-emerald-500/20 text-center">
                   <div className="text-lg font-bold text-emerald-400">{resumenData.aprobadas}</div>
                   <div className={`text-[10px] ${isDark ? 'text-zinc-500' : 'text-gray-400'}`}>Aprobadas</div>
-                </div>
-                <div className="p-2 rounded-lg bg-amber-500/10 border border-amber-500/20 text-center">
-                  <div className="text-lg font-bold text-amber-400">{resumenData.pendientesDcm}</div>
-                  <div className={`text-[10px] ${isDark ? 'text-zinc-500' : 'text-gray-400'}`}>Pend. DCM</div>
                 </div>
                 <div className="p-2 rounded-lg bg-red-500/10 border border-red-500/20 text-center">
                   <div className="text-lg font-bold text-red-400">{resumenData.pendientesDg}</div>
@@ -1586,27 +1629,37 @@ function ApprovalModal({
             const periodoInfo = caras[0]?.inicio_periodo && caras[0]?.fin_periodo
               ? `${formatDate(caras[0].inicio_periodo)} → ${formatDate(caras[0].fin_periodo)}`
               : '';
+            const isCollapsed = collapsedCatorcenas.has(catorcena);
+            const subtotalInversion = caras.reduce((sum, c) => sum + (Number(c.costo) || 0), 0);
+            const subtotalCaras = caras.reduce((sum, c) => sum + (c.caras || 0) + (Number(c.bonificacion) || 0), 0);
             return (
-              <div key={catorcena} className="mb-6">
-                <div className="flex items-center gap-3 mb-3">
-                  <div className="flex items-center gap-2">
-                    <Calendar className="h-4 w-4 text-cyan-400" />
-                    <span className={`text-sm font-semibold ${isDark ? 'text-white' : 'text-gray-900'}`}>{catorcena}</span>
-                  </div>
+              <div key={catorcena} className="mb-4">
+                <button
+                  type="button"
+                  onClick={() => toggleCatorcena(catorcena)}
+                  className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl transition-colors ${isDark ? 'hover:bg-zinc-800/60 bg-zinc-800/30' : 'hover:bg-gray-100 bg-gray-50'}`}
+                >
+                  {isCollapsed ? <ChevronRight className="h-4 w-4 text-cyan-400 flex-shrink-0" /> : <ChevronDown className="h-4 w-4 text-cyan-400 flex-shrink-0" />}
+                  <Calendar className="h-4 w-4 text-cyan-400 flex-shrink-0" />
+                  <span className={`text-sm font-semibold ${isDark ? 'text-white' : 'text-gray-900'}`}>{catorcena}</span>
                   {periodoInfo && (
                     <span className={`text-xs ${isDark ? 'text-zinc-500' : 'text-gray-400'}`}>{periodoInfo}</span>
                   )}
                   <span className={`text-[10px] px-2 py-0.5 rounded-full ${isDark ? 'bg-zinc-800 text-zinc-400' : 'bg-gray-100 text-gray-500'}`}>
                     {caras.length} circuito{caras.length !== 1 ? 's' : ''}
                   </span>
-                </div>
+                  <span className={`ml-auto text-[10px] ${isDark ? 'text-zinc-500' : 'text-gray-400'}`}>
+                    {subtotalCaras} caras · ${subtotalInversion.toLocaleString('es-MX', { minimumFractionDigits: 0 })}
+                  </span>
+                </button>
 
-                <div className={`rounded-xl border ${isDark ? 'border-zinc-700/50' : 'border-gray-200'} overflow-hidden`}>
+                {!isCollapsed && (
+                <div className={`mt-2 rounded-xl border ${isDark ? 'border-zinc-700/50' : 'border-gray-200'} overflow-hidden`}>
                   <table className="w-full">
                     <thead className={isDark ? 'bg-zinc-800/70' : 'bg-gray-50'}>
                       <tr>
                         <th className={`px-3 py-2.5 text-left text-[10px] font-semibold ${isDark ? 'text-zinc-500' : 'text-gray-400'} uppercase`}>Artículo</th>
-                        <th className={`px-3 py-2.5 text-left text-[10px] font-semibold ${isDark ? 'text-zinc-500' : 'text-gray-400'} uppercase`}>Ciudad</th>
+                        <th className={`px-3 py-2.5 text-left text-[10px] font-semibold ${isDark ? 'text-zinc-500' : 'text-gray-400'} uppercase`}>Plaza</th>
                         <th className={`px-3 py-2.5 text-left text-[10px] font-semibold ${isDark ? 'text-zinc-500' : 'text-gray-400'} uppercase`}>Tipo</th>
                         <th className={`px-3 py-2.5 text-center text-[10px] font-semibold ${isDark ? 'text-zinc-500' : 'text-gray-400'} uppercase`}>Caras</th>
                         <th className={`px-3 py-2.5 text-center text-[10px] font-semibold ${isDark ? 'text-zinc-500' : 'text-gray-400'} uppercase`}>Bonif.</th>
@@ -1623,7 +1676,7 @@ function ApprovalModal({
                             <div className={`text-xs ${isDark ? 'text-white' : 'text-gray-900'} font-medium`}>{cara.articulo || '—'}</div>
                             <div className={`text-[10px] ${isDark ? 'text-zinc-500' : 'text-gray-400'}`}>{cara.formato}</div>
                           </td>
-                          <td className={`px-3 py-2.5 text-xs ${isDark ? 'text-zinc-300' : 'text-gray-700'}`}>{cara.ciudad}</td>
+                          <td className={`px-3 py-2.5 text-xs ${isDark ? 'text-zinc-300' : 'text-gray-700'}`}>{cara.estados || cara.ciudad}</td>
                           <td className="px-3 py-2.5">
                             <span className={`text-[10px] px-1.5 py-0.5 rounded ${cara.tipo === 'Digital' ? 'bg-blue-500/20 text-blue-300' : 'bg-amber-500/20 text-amber-300'}`}>
                               {cara.tipo}
@@ -1659,6 +1712,7 @@ function ApprovalModal({
                     </tbody>
                   </table>
                 </div>
+                )}
               </div>
             );
           })}
@@ -1675,16 +1729,19 @@ function ApprovalModal({
             <div className="mb-6">
               <h3 className={`text-xs font-medium ${isDark ? 'text-zinc-500' : 'text-gray-400'} uppercase tracking-wider mb-3 flex items-center gap-2`}>
                 <Clock className="h-3.5 w-3.5" />
-                Historial de Autorización
+                Historial de cambios
               </h3>
-              <div className={`rounded-xl border ${isDark ? 'border-zinc-700/50' : 'border-gray-200'} overflow-hidden`}>
+              <div className={`rounded-xl border ${isDark ? 'border-zinc-700/50' : 'border-gray-200'} overflow-hidden max-h-60 overflow-y-auto`}>
                 {historialData.map((entry, idx) => {
                   const isAprobacion = entry.tipo.includes('aprobacion');
                   const isRechazo = entry.tipo.includes('rechazo');
-                  const isSolicitud = entry.tipo.includes('solicitud') || entry.tipo.includes('propuesta') || entry.tipo.includes('campana');
+                  const isCambio = entry.tipo.includes('cambio');
+                  const isNuevaCara = entry.tipo.includes('nueva_cara');
+                  const isSolicitud = !isCambio && !isNuevaCara && (entry.tipo.includes('solicitud') || entry.tipo.includes('propuesta') || entry.tipo.includes('campana'));
+                  const dotColor = isAprobacion ? 'bg-emerald-400' : isRechazo ? 'bg-red-400' : isCambio ? 'bg-blue-400' : isNuevaCara ? 'bg-cyan-400' : 'bg-amber-400';
                   return (
                     <div key={entry.id} className={`flex items-start gap-3 px-4 py-3 ${idx > 0 ? `border-t ${isDark ? 'border-zinc-800/50' : 'border-gray-100'}` : ''}`}>
-                      <div className={`mt-0.5 w-2 h-2 rounded-full flex-shrink-0 ${isAprobacion ? 'bg-emerald-400' : isRechazo ? 'bg-red-400' : 'bg-amber-400'}`} />
+                      <div className={`mt-0.5 w-2 h-2 rounded-full flex-shrink-0 ${dotColor}`} />
                       <div className="flex-1 min-w-0">
                         <p className={`text-xs font-medium ${isDark ? 'text-zinc-300' : 'text-gray-700'}`}>{entry.accion}</p>
                         {isRechazo && entry.detalles?.motivo && (
@@ -1692,8 +1749,18 @@ function ApprovalModal({
                         )}
                         {isSolicitud && entry.detalles?.caras && (
                           <p className={`text-[11px] ${isDark ? 'text-zinc-500' : 'text-gray-400'} mt-0.5`}>
-                            {entry.detalles.caras.length} circuito(s) — DG: {entry.detalles.pendientesDg || 0}, DCM: {entry.detalles.pendientesDcm || 0}
+                            {entry.detalles.caras.length} circuito(s) — Pend. DG: {entry.detalles.pendientesDg || 0}
                           </p>
+                        )}
+                        {isCambio && entry.detalles?.cambios && (
+                          <div className="mt-1 space-y-0.5">
+                            {(entry.detalles.cambios as { articulo: string; label: string; antes: string; despues: string }[]).map((c: { articulo: string; label: string; antes: string; despues: string }, i: number) => (
+                              <p key={i} className={`text-[11px] ${isDark ? 'text-zinc-500' : 'text-gray-400'}`}>
+                                <span className={isDark ? 'text-zinc-400' : 'text-gray-500'}>{c.articulo}</span>
+                                {' · '}{c.label}: <span className="line-through text-red-400/60">{c.antes}</span> → <span className="text-emerald-400">{c.despues}</span>
+                              </p>
+                            ))}
+                          </div>
                         )}
                       </div>
                       <span className={`text-[10px] ${isDark ? 'text-zinc-600' : 'text-gray-400'} flex-shrink-0`}>
@@ -1852,10 +1919,12 @@ function TaskDrawer({
   const isAutorizacionTask = tarea.tipo?.includes('Autorización');
   const tipoAutorizacion = tarea.tipo?.includes('DG') ? 'dg' : tarea.tipo?.includes('DCM') ? 'dcm' : null;
 
-  // Obtener idquote de la propuesta (id_propuesta es el idquote en solicitudCaras)
-  // Si no hay id_propuesta, intentar obtenerlo desde la solicitud
   const [idPropuestaState, setIdPropuestaState] = useState<string | null>(tarea.id_propuesta || null);
   const [solicitudFallbackTried, setSolicitudFallbackTried] = useState(false);
+  const [collapsedCatorcenas, setCollapsedCatorcenas] = useState<Set<string>>(new Set());
+  const toggleCatorcena = (key: string) => {
+    setCollapsedCatorcenas(prev => { const next = new Set(prev); next.has(key) ? next.delete(key) : next.add(key); return next; });
+  };
 
   const fetchPropuestaBySolicitud = async (solicitudId: string) => {
     const response = await fetch(`${import.meta.env.VITE_API_URL}/propuestas?solicitudId=${solicitudId}`, {
@@ -1981,7 +2050,7 @@ function TaskDrawer({
       if (tituloLower.includes('solicitud') && tarea.id_solicitud) {
         const solicitudId = parseInt(tarea.id_solicitud);
         if (!isNaN(solicitudId)) {
-          onNavigate(getDirectNavigationPath('solicitud', solicitudId, tarea.titulo || ''));
+          onNavigate(getDirectNavigationPath('solicitud', solicitudId, tarea.titulo || '', tarea.tipo || undefined));
           return;
         }
       }
@@ -2001,7 +2070,7 @@ function TaskDrawer({
       // Fallback: solicitud
       const solicitudId = parseInt(tarea.id_solicitud);
       if (!isNaN(solicitudId)) {
-        onNavigate(getDirectNavigationPath('solicitud', solicitudId, tarea.titulo || ''));
+        onNavigate(getDirectNavigationPath('solicitud', solicitudId, tarea.titulo || '', tarea.tipo || undefined));
       }
     }
   };
@@ -2092,14 +2161,25 @@ function TaskDrawer({
             </div>
           )}
 
-          {/* Botón Ir a ver */}
-          {canNavigate && onNavigate && (
+          {/* Botón Ir a ver (oculto para directores en tareas de autorización) */}
+          {canNavigate && onNavigate && !(isAutorizacionTask && ['Director General', 'Director Comercial'].includes(user?.rol || '')) && (
             <button
               onClick={handleNavigate}
               className="mt-4 w-full flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl bg-gradient-to-r from-purple-600 to-pink-600 text-white text-sm font-medium hover:from-purple-500 hover:to-pink-500 transition-all hover:scale-[1.02] active:scale-[0.98] shadow-lg shadow-purple-500/20"
             >
               <ExternalLink className="h-4 w-4" />
               {getNavigationLabel(tarea.referencia_tipo || '', tarea.tipo || undefined, tarea.campania_id, tarea.id_propuesta, tarea.id_solicitud, tarea.titulo || '')}
+            </button>
+          )}
+
+          {/* Botón Revisar y Autorizar para directores */}
+          {isAutorizacionTask && ['Director General', 'Director Comercial'].includes(user?.rol || '') && tarea.estatus !== 'Atendido' && tarea.estatus !== 'Cancelado' && onOpenApprovalModal && (
+            <button
+              onClick={() => onOpenApprovalModal()}
+              className="mt-4 w-full flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl bg-gradient-to-r from-orange-500 to-amber-500 text-white text-sm font-bold hover:from-orange-400 hover:to-amber-400 transition-all hover:scale-[1.02] active:scale-[0.98] shadow-lg shadow-orange-500/20"
+            >
+              <ShieldCheck className="h-4 w-4" />
+              Revisar y Autorizar
             </button>
           )}
 
@@ -2328,15 +2408,27 @@ function TaskDrawer({
             </div>
           )}
 
-          {/* Fecha inicio (no editable) */}
-          {tarea.fecha_inicio && (
-            <div className={`flex items-center justify-between p-3 rounded-xl ${isDark ? 'bg-zinc-800/30 border-zinc-800/50' : 'bg-gray-50 border-gray-200'} border`}>
-              <div className={`flex items-center gap-2 ${isDark ? 'text-zinc-500' : 'text-gray-400'}`}>
-                <Clock className="h-4 w-4" />
-                <span className="text-xs">Fecha inicio</span>
+          {/* Fecha inicio / Fecha creación para auth tasks */}
+          {isAutorizacionTask ? (
+            tarea.fecha_creacion && (
+              <div className={`flex items-center justify-between p-3 rounded-xl ${isDark ? 'bg-zinc-800/30 border-zinc-800/50' : 'bg-gray-50 border-gray-200'} border`}>
+                <div className={`flex items-center gap-2 ${isDark ? 'text-zinc-500' : 'text-gray-400'}`}>
+                  <Clock className="h-4 w-4" />
+                  <span className="text-xs">Fecha creación</span>
+                </div>
+                <span className={`text-sm ${isDark ? 'text-zinc-300' : 'text-gray-700'}`}>{formatDate(tarea.fecha_creacion)}</span>
               </div>
-              <span className={`text-sm ${isDark ? 'text-zinc-300' : 'text-gray-700'}`}>{formatDate(tarea.fecha_inicio)}</span>
-            </div>
+            )
+          ) : (
+            tarea.fecha_inicio && (
+              <div className={`flex items-center justify-between p-3 rounded-xl ${isDark ? 'bg-zinc-800/30 border-zinc-800/50' : 'bg-gray-50 border-gray-200'} border`}>
+                <div className={`flex items-center gap-2 ${isDark ? 'text-zinc-500' : 'text-gray-400'}`}>
+                  <Clock className="h-4 w-4" />
+                  <span className="text-xs">Fecha inicio</span>
+                </div>
+                <span className={`text-sm ${isDark ? 'text-zinc-300' : 'text-gray-700'}`}>{formatDate(tarea.fecha_inicio)}</span>
+              </div>
+            )
           )}
 
           {/* Fecha límite - Editable (oculta para tareas de Autorización DG/DCM) */}
@@ -2393,122 +2485,22 @@ function TaskDrawer({
           </div>}
         </div>
 
-        {/* Panel de Autorización - Botón para abrir modal */}
-        {isAutorizacionTask && (
+
+        {/* Notas Dirección (solo para directores en tareas de autorización) */}
+        {isAutorizacionTask && ['Director General', 'Director Comercial'].includes(user?.rol || '') && tarea.notas_direccion && (
           <div className={`p-5 border-t ${isDark ? 'border-zinc-800/50' : 'border-gray-200'}`}>
-            <h3 className={`text-xs font-medium ${isDark ? 'text-zinc-500' : 'text-gray-400'} uppercase tracking-wider mb-4 flex items-center gap-2`}>
-              <ShieldCheck className="h-3.5 w-3.5 text-orange-400" />
-              Autorización
+            <h3 className={`text-xs font-medium ${isDark ? 'text-zinc-500' : 'text-gray-400'} uppercase tracking-wider mb-3 flex items-center gap-2`}>
+              <FileText className="h-3.5 w-3.5 text-orange-400" />
+              Notas Dirección
             </h3>
-
-            {/* Resumen rápido */}
-            {resumenData && (
-              <div className="grid grid-cols-3 gap-2 mb-4">
-                <div className="p-2 rounded-lg bg-emerald-500/10 border border-emerald-500/20 text-center">
-                  <div className="text-lg font-bold text-emerald-400">{resumenData.aprobadas}</div>
-                  <div className={`text-[10px] ${isDark ? 'text-zinc-500' : 'text-gray-400'}`}>Aprobadas</div>
-                </div>
-                <div className="p-2 rounded-lg bg-amber-500/10 border border-amber-500/20 text-center">
-                  <div className="text-lg font-bold text-amber-400">{resumenData.pendientesDcm + resumenData.pendientesDg}</div>
-                  <div className={`text-[10px] ${isDark ? 'text-zinc-500' : 'text-gray-400'}`}>Pendientes</div>
-                </div>
-                <div className="p-2 rounded-lg bg-red-500/10 border border-red-500/20 text-center">
-                  <div className="text-lg font-bold text-red-400">{resumenData.rechazadas}</div>
-                  <div className={`text-[10px] ${isDark ? 'text-zinc-500' : 'text-gray-400'}`}>Rechazadas</div>
-                </div>
-              </div>
-            )}
-
-            {/* Asesor */}
-            {carasData && carasData.length > 0 && carasData[0].asesor && (
-              <div className={`flex items-center justify-between p-3 rounded-xl ${isDark ? 'bg-zinc-800/30 border-zinc-800/50' : 'bg-gray-50 border-gray-200'} border mb-3`}>
-                <div className={`flex items-center gap-2 ${isDark ? 'text-zinc-500' : 'text-gray-400'}`}>
-                  <User className="h-4 w-4" />
-                  <span className="text-xs">Asesor</span>
-                </div>
-                <span className={`text-sm ${isDark ? 'text-white' : 'text-gray-900'} font-medium`}>{carasData[0].asesor}</span>
-              </div>
-            )}
-
-            {/* Catorcenas */}
-            {carasData && carasData.length > 0 && (() => {
-              const catorcenas = [...new Set(carasData.map(c => c.catorcena).filter(Boolean))];
-              if (catorcenas.length === 0) return null;
-              return (
-                <div className={`p-3 rounded-xl ${isDark ? 'bg-zinc-800/30 border-zinc-800/50' : 'bg-gray-50 border-gray-200'} border mb-4`}>
-                  <div className={`flex items-center gap-2 ${isDark ? 'text-zinc-500' : 'text-gray-400'} mb-2`}>
-                    <Calendar className="h-4 w-4 text-cyan-400" />
-                    <span className="text-xs">Catorcenas</span>
-                  </div>
-                  <div className="flex flex-wrap gap-1.5">
-                    {catorcenas.map((cat, i) => (
-                      <span key={i} className={`text-[11px] px-2 py-1 rounded-lg ${isDark ? 'bg-cyan-500/10 border-cyan-500/20 text-cyan-300' : 'bg-cyan-50 border-cyan-200 text-cyan-700'} border font-medium`}>
-                        {cat}
-                      </span>
-                    ))}
-                  </div>
-                </div>
-              );
-            })()}
-
-            {/* Inversión y desglose de caras */}
-            {carasData && carasData.length > 0 && (() => {
-              let totalInversion = 0, carasRenta = 0, carasBonif = 0;
-              carasData.forEach(c => {
-                totalInversion += Number(c.costo) || 0;
-                carasRenta += c.caras || 0;
-                carasBonif += Number(c.bonificacion) || 0;
-              });
-              return (
-                <div className={`p-3 rounded-xl ${isDark ? 'bg-purple-500/5 border-purple-500/20' : 'bg-purple-50 border-purple-200'} border mb-4`}>
-                  <div className={`flex items-center gap-2 ${isDark ? 'text-zinc-500' : 'text-gray-400'} mb-2`}>
-                    <DollarSign className="h-4 w-4 text-purple-400" />
-                    <span className="text-xs">Inversión y Caras</span>
-                  </div>
-                  <div className="grid grid-cols-3 gap-2">
-                    <div className="text-center">
-                      <div className="text-sm font-bold text-purple-400">${totalInversion.toLocaleString('es-MX', { minimumFractionDigits: 0 })}</div>
-                      <div className={`text-[10px] ${isDark ? 'text-zinc-500' : 'text-gray-400'}`}>Inversión</div>
-                    </div>
-                    <div className="text-center">
-                      <div className={`text-sm font-bold ${isDark ? 'text-white' : 'text-gray-900'}`}>{carasRenta}</div>
-                      <div className={`text-[10px] ${isDark ? 'text-zinc-500' : 'text-gray-400'}`}>Renta</div>
-                    </div>
-                    <div className="text-center">
-                      <div className="text-sm font-bold text-emerald-400">{carasBonif}</div>
-                      <div className={`text-[10px] ${isDark ? 'text-zinc-500' : 'text-gray-400'}`}>Bonificadas</div>
-                    </div>
-                  </div>
-                </div>
-              );
-            })()}
-
-            {/* Fecha de creación */}
-            {tarea.fecha_creacion && (
-              <div className={`flex items-center justify-between p-3 rounded-xl ${isDark ? 'bg-zinc-800/30 border-zinc-800/50' : 'bg-gray-50 border-gray-200'} border mb-4`}>
-                <div className={`flex items-center gap-2 ${isDark ? 'text-zinc-500' : 'text-gray-400'}`}>
-                  <Clock className="h-4 w-4" />
-                  <span className="text-xs">Fecha creación</span>
-                </div>
-                <span className={`text-sm ${isDark ? 'text-zinc-300' : 'text-gray-700'}`}>{formatDate(tarea.fecha_creacion)}</span>
-              </div>
-            )}
-
-            {/* Botón abrir modal */}
-            {onOpenApprovalModal && (
-              <button
-                onClick={onOpenApprovalModal}
-                className="w-full flex items-center justify-center gap-2 px-4 py-3 rounded-xl bg-gradient-to-r from-orange-600 to-amber-600 text-white text-sm font-medium hover:from-orange-500 hover:to-amber-500 transition-all hover:scale-[1.02] active:scale-[0.98] shadow-lg shadow-orange-500/20"
-              >
-                <ShieldCheck className="h-4 w-4" />
-                Revisar y Autorizar
-              </button>
-            )}
+            <div className={`p-3 rounded-xl ${isDark ? 'bg-zinc-800/30 border-zinc-800/50' : 'bg-gray-50 border-gray-200'} border max-h-60 overflow-y-auto scrollbar-purple`}>
+              <p className={`text-sm ${isDark ? 'text-zinc-300' : 'text-gray-700'} whitespace-pre-wrap break-words leading-relaxed`}>{tarea.notas_direccion}</p>
+            </div>
           </div>
         )}
 
-        {/* Comentarios */}
-        <div className={`p-5 border-t ${isDark ? 'border-zinc-800/50' : 'border-gray-200'}`}>
+        {/* Comentarios (oculto para directores en tareas de autorización) */}
+        {!(isAutorizacionTask && ['Director General', 'Director Comercial'].includes(user?.rol || '')) && <div className={`p-5 border-t ${isDark ? 'border-zinc-800/50' : 'border-gray-200'}`}>
           <div className="flex items-center justify-between mb-4">
             <h3 className={`text-xs font-medium ${isDark ? 'text-zinc-500' : 'text-gray-400'} uppercase tracking-wider flex items-center gap-2`}>
               <MessageSquare className="h-3.5 w-3.5" />
@@ -2568,7 +2560,7 @@ function TaskDrawer({
               </div>
             </div>
           </div>
-        </div>
+        </div>}
       </div>
     </div>
   );
@@ -2601,7 +2593,9 @@ export function NotificacionesPage() {
   // Estados para filtros avanzados (estilo Proveedores)
   const [filters, setFilters] = useState<FilterCondition[]>([]);
   const [showFilterPopup, setShowFilterPopup] = useState(false);
-  const [activeGroupings, setActiveGroupings] = useState<GroupByField[]>(['tipo']);
+  const user = useAuthStore((state) => state.user);
+  const isDirector = ['Director General', 'Director Comercial'].includes(user?.rol || '');
+  const [activeGroupings, setActiveGroupings] = useState<GroupByField[]>(isDirector ? [] : ['tipo']);
   const [showGroupPopup, setShowGroupPopup] = useState(false);
   const [sortField, setSortField] = useState<string | null>(null);
   const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('desc');
@@ -2620,13 +2614,11 @@ export function NotificacionesPage() {
     return () => document.removeEventListener('mousedown', handler);
   }, []);
 
-  // Obtener usuario actual
-  const user = useAuthStore((state) => state.user);
-
   // Estado de selección y drawer
   const [selectedTarea, setSelectedTarea] = useState<(Notificacion & { comentarios?: ComentarioTarea[] }) | null>(null);
   const [isDrawerClosing, setIsDrawerClosing] = useState(false);
   const [approvalModalTarea, setApprovalModalTarea] = useState<Notificacion | null>(null);
+  const [editSolicitudId, setEditSolicitudId] = useState<number | null>(null);
 
   // Handler para cerrar el drawer con animación
   const handleCloseDrawer = useCallback(() => {
@@ -2768,15 +2760,15 @@ export function NotificacionesPage() {
 
       return baseTareas.filter(item => {
         if (quickFilter === 'pendientes') {
-          return item.estatus !== 'Atendido';
+          return item.estatus !== 'Atendido' && item.estatus !== 'Rechazado' && item.estatus !== 'Cancelado';
         }
 
         if (quickFilter === 'finalizadas') {
-          return item.estatus === 'Atendido';
+          return item.estatus === 'Atendido' || item.estatus === 'Rechazado' || item.estatus === 'Cancelado';
         }
 
         if (quickFilter === 'leidas') {
-          return item.estatus === 'Atendido';
+          return item.estatus === 'Atendido' || item.estatus === 'Rechazado';
         }
 
         if (quickFilter === 'no_leidas') {
@@ -2997,17 +2989,15 @@ export function NotificacionesPage() {
                 <button
                   onClick={() => { setShowFilterPopup(v => !v); setShowGroupPopup(false); setShowSortPopup(false); }}
                   className={`relative flex items-center justify-center w-9 h-9 rounded-lg transition-colors ${
-                    filters.length > 0
+                    filters.length > 0 || (quickFilter && quickFilter !== 'all')
                       ? 'bg-purple-600 text-white'
                       : isDark ? 'bg-purple-900/50 hover:bg-purple-900/70 border border-purple-500/30 text-purple-300' : 'bg-purple-50 hover:bg-purple-100 border border-purple-200 text-purple-600'
                   }`}
                   title="Filtrar"
                 >
                   <Filter className="h-4 w-4" />
-                  {filters.length > 0 && (
-                    <span className="absolute -top-1 -right-1 min-w-[16px] h-4 flex items-center justify-center rounded-full bg-pink-500 text-[10px] font-bold text-white px-1">
-                      {filters.length}
-                    </span>
+                  {(filters.length > 0 || (quickFilter && quickFilter !== 'all')) && (
+                    <span className="absolute -top-0.5 -right-0.5 w-2.5 h-2.5 rounded-full bg-purple-400 border-2 border-[#1a1025] animate-pulse" />
                   )}
                 </button>
                 {showFilterPopup && (
@@ -3318,31 +3308,58 @@ export function NotificacionesPage() {
                   const TipoIcon = tipoConfig.icon;
                   const isNotificacion = tarea.tipo === 'Notificación';
                   const isCompleted = tarea.estatus === 'Atendido';
+                  const isAuthTaskInline = tarea.tipo?.includes('Autorización');
+                  const isAprobacionInline = tarea.tipo?.includes('Aprobación');
+                  const isRechazoInline = tarea.tipo?.includes('Rechazo');
+                  const isRechazadoInline = tarea.estatus === 'Rechazado';
+                  const isCanceladoInline = tarea.estatus === 'Cancelado';
+                  const getInlineAuthBadge = () => {
+                    if (isCanceladoInline) return { bg: 'bg-zinc-500/20', border: 'border-zinc-500/30', color: 'text-zinc-400', label: 'Cancelado' };
+                    if (isRechazadoInline) return { bg: 'bg-red-500/20', border: 'border-red-500/30', color: 'text-red-400', label: 'Rechazada' };
+                    if (isCompleted) return { bg: 'bg-emerald-500/20', border: 'border-emerald-500/30', color: 'text-emerald-400', label: 'Aprobada' };
+                    if (isAprobacionInline) return { bg: 'bg-emerald-500/20', border: 'border-emerald-500/30', color: 'text-emerald-400', label: 'Aprobada' };
+                    if (isRechazoInline) return { bg: 'bg-red-500/20', border: 'border-red-500/30', color: 'text-red-400', label: 'Rechazada' };
+                    if (isAuthTaskInline) return { bg: 'bg-amber-500/20', border: 'border-amber-500/30', color: 'text-amber-400', label: 'Pendiente' };
+                    return null;
+                  };
+                  const inlineAuthBadge = getInlineAuthBadge();
                   return (
                     <div
                       key={tarea.id}
                       onClick={() => handleSelectTarea(tarea)}
-                      className={`group cursor-pointer transition-all ${isDark ? 'hover:bg-zinc-800/50' : 'hover:bg-gray-50'} ${index !== filteredTareas.length - 1 ? `border-b ${isDark ? 'border-zinc-800/60' : 'border-gray-200'}` : ''} ${isCompleted ? 'opacity-60' : ''}`}
+                      className={`group cursor-pointer transition-all ${isDark ? 'hover:bg-zinc-800/50' : 'hover:bg-gray-50'} ${index !== filteredTareas.length - 1 ? `border-b ${isDark ? 'border-zinc-800/60' : 'border-gray-200'}` : ''} ${isCompleted || isRechazadoInline ? 'opacity-60' : ''}`}
                     >
                       {/* Layout móvil y desktop */}
                       <div className="flex items-start gap-3 px-4 py-3">
-                        {/* Indicador de estado + icono */}
-                        <div className="flex items-center gap-2 pt-0.5">
-                          <div className={`w-1 h-10 rounded-full ${statusConfig.bg} ${isCompleted ? 'bg-emerald-500/40' : ''}`} />
-                          <div className={`flex-shrink-0 w-8 h-8 rounded-lg flex items-center justify-center ${statusConfig.bg} border ${statusConfig.border}`}>
-                            <StatusIcon className={`h-4 w-4 ${statusConfig.color}`} />
+                        {/* Indicador de estado + icono (oculto para auth) */}
+                        {!isAuthTaskInline && (
+                          <div className="flex items-center gap-2 pt-0.5">
+                            <div className={`w-1 h-10 rounded-full ${statusConfig.bg} ${isCompleted ? 'bg-emerald-500/40' : ''}`} />
+                            <div className={`flex-shrink-0 w-8 h-8 rounded-lg flex items-center justify-center ${statusConfig.bg} border ${statusConfig.border}`}>
+                              <StatusIcon className={`h-4 w-4 ${statusConfig.color}`} />
+                            </div>
                           </div>
-                        </div>
+                        )}
 
                         {/* Contenido principal */}
                         <div className="flex-1 min-w-0">
                           {/* Fila 1: Tipo + Título + ID */}
                           <div className="flex items-center gap-2 flex-wrap">
-                            <div className={`flex-shrink-0 inline-flex items-center gap-1 px-1.5 py-0.5 rounded ${tipoConfig.bg} border ${tipoConfig.border}`}>
-                              <TipoIcon className={`h-3 w-3 ${tipoConfig.color}`} />
-                              <span className={`text-[10px] font-medium ${tipoConfig.color}`}>{tarea.tipo}</span>
-                            </div>
-                            <span className={`text-sm font-medium group-hover:text-purple-300 transition-colors ${isCompleted ? 'line-through text-zinc-500' : isDark ? 'text-white' : 'text-gray-900'}`}>
+                            {isAuthTaskInline ? (
+                              <div className="flex-shrink-0 inline-flex items-center gap-2 px-3 py-1.5 rounded-lg bg-gradient-to-r from-orange-500/25 to-amber-500/20 border-2 border-orange-400/50 shadow-sm shadow-orange-500/10">
+                                <TipoIcon className="h-4 w-4 text-orange-300" />
+                                <span className="text-xs font-bold text-orange-300 tracking-wide">{tarea.tipo}</span>
+                                {inlineAuthBadge && (
+                                  <span className={`ml-1 px-1.5 py-0.5 rounded text-[10px] font-bold ${inlineAuthBadge.bg} ${inlineAuthBadge.color} border ${inlineAuthBadge.border}`}>{inlineAuthBadge.label}</span>
+                                )}
+                              </div>
+                            ) : (
+                              <div className={`flex-shrink-0 inline-flex items-center gap-1 px-1.5 py-0.5 rounded ${tipoConfig.bg} border ${tipoConfig.border}`}>
+                                <TipoIcon className={`h-3 w-3 ${tipoConfig.color}`} />
+                                <span className={`text-[10px] font-medium ${tipoConfig.color}`}>{tarea.tipo}</span>
+                              </div>
+                            )}
+                            <span className={`text-sm font-medium group-hover:text-purple-300 transition-colors ${isCompleted || isRechazadoInline ? 'line-through text-zinc-500' : isDark ? 'text-white' : 'text-gray-900'}`}>
                               {tarea.titulo}
                             </span>
                             <span className={`text-[10px] ${isDark ? 'text-zinc-600' : 'text-gray-400'} font-mono`}>#{tarea.id}</span>
@@ -3355,8 +3372,8 @@ export function NotificacionesPage() {
 
                           {/* Fila 3: Metadatos - responsive */}
                           <div className="flex items-center gap-2 mt-2 flex-wrap">
-                            {/* Asignado - siempre visible pero compacto en móvil */}
-                            {tarea.asignado && (
+                            {/* Asignado - oculto para auth tasks */}
+                            {tarea.asignado && !isAuthTaskInline && (
                               <div className="flex items-center gap-1.5 text-[11px]">
                                 <UserAvatar nombre={tarea.asignado} size="xs" />
                                 <span className={`${isDark ? 'text-zinc-500' : 'text-gray-400'} hidden sm:inline`}>Asignado:</span>
@@ -3365,15 +3382,15 @@ export function NotificacionesPage() {
                             )}
 
                             {/* Separador visual */}
-                            {tarea.asignado && (tarea.responsable || tarea.fecha_fin) && (
+                            {tarea.asignado && !isAuthTaskInline && (tarea.responsable || tarea.fecha_fin) && (
                               <span className={`${isDark ? 'text-zinc-700' : 'text-gray-300'} hidden sm:inline`}>•</span>
                             )}
 
-                            {/* Creador - visible en md+ */}
+                            {/* Creador - resaltado para auth tasks */}
                             {tarea.responsable && (
-                              <div className="hidden md:flex items-center gap-1.5 text-[11px]">
-                                <span className={isDark ? 'text-zinc-500' : 'text-gray-400'}>Creador:</span>
-                                <span className={isDark ? 'text-zinc-400' : 'text-gray-500'}>{tarea.responsable}</span>
+                              <div className={`${isAuthTaskInline ? 'flex' : 'hidden md:flex'} items-center gap-1.5 text-[11px] ${isAuthTaskInline ? 'px-2 py-0.5 rounded bg-orange-500/10 border border-orange-500/20' : ''}`}>
+                                <span className={isAuthTaskInline ? 'text-orange-400/70' : isDark ? 'text-zinc-500' : 'text-gray-400'}>Creador:</span>
+                                <span className={isAuthTaskInline ? 'text-orange-300 font-medium' : isDark ? 'text-zinc-400' : 'text-gray-500'}>{tarea.responsable}</span>
                               </div>
                             )}
 
@@ -3391,8 +3408,16 @@ export function NotificacionesPage() {
                               </div>
                             )}
 
-                            {/* Propuesta - siempre visible */}
-                            {tarea.referencia_id && (
+                            {/* Cliente - solo para auth tasks */}
+                            {isAuthTaskInline && tarea.cliente && (
+                              <div className="flex items-center gap-1 text-[11px] px-2 py-0.5 rounded bg-purple-500/10 border border-purple-500/20">
+                                <span className="text-purple-400/70">Cliente:</span>
+                                <span className="text-purple-300 font-medium">{tarea.cliente}</span>
+                              </div>
+                            )}
+
+                            {/* Propuesta - oculto para auth tasks */}
+                            {tarea.referencia_id && !isAuthTaskInline && (
                               <div className="flex items-center gap-1 text-[11px] px-1.5 py-0.5 rounded bg-purple-500/10 border border-purple-500/20">
                                 <span className="text-purple-400/70 hidden sm:inline">Prop:</span>
                                 <span className="font-mono text-purple-400">#{tarea.referencia_id}</span>
@@ -3408,6 +3433,11 @@ export function NotificacionesPage() {
                             <button
                               onClick={(e) => {
                                 e.stopPropagation();
+                                const rejSolId = getRejectionSolicitudId(tarea);
+                                if (rejSolId) {
+                                  setEditSolicitudId(rejSolId);
+                                  return;
+                                }
                                 // Si tiene referencia_tipo y referencia_id, usar esos
                                 if (tarea.referencia_tipo && tarea.referencia_id) {
                                   const propId = tarea.id_propuesta ? parseInt(tarea.id_propuesta) : null;
@@ -3426,7 +3456,7 @@ export function NotificacionesPage() {
                                   if (tituloLower.includes('solicitud') && tarea.id_solicitud) {
                                     const solicitudId = parseInt(tarea.id_solicitud);
                                     if (!isNaN(solicitudId)) {
-                                      navigate(getDirectNavigationPath('solicitud', solicitudId, tarea.titulo || ''));
+                                      navigate(getDirectNavigationPath('solicitud', solicitudId, tarea.titulo || '', tarea.tipo || undefined));
                                       return;
                                     }
                                   }
@@ -3443,7 +3473,7 @@ export function NotificacionesPage() {
                                   }
                                   const solicitudId = parseInt(tarea.id_solicitud);
                                   if (!isNaN(solicitudId)) {
-                                    navigate(getDirectNavigationPath('solicitud', solicitudId, tarea.titulo || ''));
+                                    navigate(getDirectNavigationPath('solicitud', solicitudId, tarea.titulo || '', tarea.tipo || undefined));
                                   }
                                 }
                               }}
@@ -3499,6 +3529,12 @@ export function NotificacionesPage() {
             onAddComment={(contenido) => addCommentMutation.mutate({ id: selectedTarea.id, contenido })}
             onUpdateFechaFin={(fecha_fin) => updateTareaMutation.mutate({ id: selectedTarea.id, fecha_fin })}
             onNavigate={(path) => {
+              const rejSolId = getRejectionSolicitudId(selectedTarea);
+              if (rejSolId) {
+                handleCloseDrawer();
+                setTimeout(() => setEditSolicitudId(rejSolId), 250);
+                return;
+              }
               handleCloseDrawer();
               setTimeout(() => navigate(path), 250);
             }}
@@ -3527,6 +3563,13 @@ export function NotificacionesPage() {
           }}
         />
       )}
+
+      {/* Modal de Editar Solicitud (para tareas de rechazo) */}
+      <CreateSolicitudModal
+        isOpen={!!editSolicitudId}
+        onClose={() => setEditSolicitudId(null)}
+        editSolicitudId={editSolicitudId ?? undefined}
+      />
 
     </div>
   );

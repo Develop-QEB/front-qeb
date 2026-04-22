@@ -86,6 +86,7 @@ interface CaraItem {
   grupo_rt_bf?: number | null;
   esBf?: boolean;
   articuloBf?: SAPArticulo | null;
+  plaza?: string;
 }
 
 // SAP Articulo interface
