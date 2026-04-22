@@ -13,7 +13,7 @@ import { useAuthStore } from '../../store/authStore';
 import { useThemeStore } from '../../store/themeStore';
 import { useSocketTicketsHistorial, useSocketTicketChat, useSocketTicketChatSoporte } from '../../hooks/useSocket';
 
-const STATUS_OPTIONS = ['Nuevo', 'En Progreso', 'Validación', 'Resuelto', 'Cerrado'];
+const STATUS_OPTIONS = ['Nuevo', 'En Progreso', 'Validación', 'Duda del Bot', 'Resuelto', 'Cerrado'];
 const PRIORIDAD_OPTIONS = ['Baja', 'Normal', 'Alta', 'Urgente'];
 const TEAM_MEMBERS = ['Jos', 'Akary', 'Mario', 'Bladi'];
 const TEAM_COLORS: Record<string, { text: string; bg: string; border: string }> = {
@@ -29,6 +29,7 @@ const statusStyles: Record<string, { text: string; bg: string; border: string }>
   'Validación': { text: 'text-orange-400', bg: 'bg-orange-500/10', border: 'border-orange-500/30' },
   'Resuelto': { text: 'text-green-400', bg: 'bg-green-500/10', border: 'border-green-500/30' },
   'Cerrado': { text: 'text-zinc-400', bg: 'bg-zinc-500/10', border: 'border-zinc-500/30' },
+  'Duda del Bot': { text: 'text-pink-400', bg: 'bg-pink-500/10', border: 'border-pink-500/30' },
 };
 
 const prioridadStyles: Record<string, { text: string; bg: string; border: string }> = {
@@ -476,7 +477,7 @@ export function HistorialTicketsPage() {
   const [filterTecnico, setFilterTecnico] = useState('Todos');
   const [onlyUnread, setOnlyUnread] = useState(false);
   const [selectedTicket, setSelectedTicket] = useState<TicketHistorial | null>(null);
-  const [activeTab, setActiveTab] = useState<'Nuevo' | 'En Progreso' | 'Validación' | 'Resuelto' | 'Cerrado'>('Nuevo');
+  const [activeTab, setActiveTab] = useState<'Nuevo' | 'En Progreso' | 'Validación' | 'Duda del Bot' | 'Resuelto' | 'Cerrado'>('Nuevo');
 
   useSocketTicketsHistorial();
 
@@ -522,6 +523,7 @@ export function HistorialTicketsPage() {
     { key: 'Nuevo', label: 'Pendientes', showCount: true },
     { key: 'En Progreso', label: 'En Proceso', showCount: true },
     { key: 'Validación', label: 'Validación', showCount: true },
+    { key: 'Duda del Bot', label: 'Duda del Bot', showCount: true },
     { key: 'Resuelto', label: 'Resueltos', showCount: false },
     { key: 'Cerrado', label: 'Cerrados', showCount: false },
   ];
@@ -532,6 +534,7 @@ export function HistorialTicketsPage() {
     nuevo: filteredByTecnico.filter((t) => t.status === 'Nuevo').length,
     enProgreso: filteredByTecnico.filter((t) => t.status === 'En Progreso').length,
     validacion: filteredByTecnico.filter((t) => t.status === 'Validación').length,
+    dudaBot: filteredByTecnico.filter((t) => t.status === 'Duda del Bot').length,
     resuelto: filteredByTecnico.filter((t) => t.status === 'Resuelto').length,
     cerrado: filteredByTecnico.filter((t) => t.status === 'Cerrado').length,
     unread: filteredByTecnico.filter((t) => t.has_unread || t.has_chat_unread).length,
@@ -567,11 +570,12 @@ export function HistorialTicketsPage() {
         </div>
 
         {/* Stats */}
-        <div className="grid grid-cols-3 md:grid-cols-6 gap-3">
+        <div className="grid grid-cols-3 md:grid-cols-7 gap-3">
           {[
             { label: 'Total', value: stats.total, tooltip: 'Cantidad total de tickets registrados en el sistema', dark: 'border-purple-500/20 bg-purple-500/5', light: 'border-purple-200 bg-purple-50' },
             { label: 'Nuevos', value: stats.nuevo, tooltip: 'Tickets recien creados que aun no han sido atendidos por nadie', dark: 'border-blue-500/20 bg-blue-500/5', light: 'border-blue-200 bg-blue-50' },
             { label: 'En Progreso', value: stats.enProgreso, tooltip: 'Tickets que alguien ya esta revisando o trabajando en ellos', dark: 'border-yellow-500/20 bg-yellow-500/5', light: 'border-yellow-200 bg-yellow-50' },
+            { label: 'Duda Bot', value: stats.dudaBot, tooltip: 'Tickets donde QEBooh no supo responder y necesita orientacion del equipo', dark: 'border-pink-500/20 bg-pink-500/5', light: 'border-pink-200 bg-pink-50' },
             { label: 'Resueltos', value: stats.resuelto, tooltip: 'Tickets cuyo problema fue solucionado y estan listos para cerrarse', dark: 'border-green-500/20 bg-green-500/5', light: 'border-green-200 bg-green-50' },
             { label: 'Cerrados', value: stats.cerrado, tooltip: 'Tickets finalizados que ya no requieren atencion', dark: 'border-zinc-500/20 bg-zinc-500/5', light: 'border-gray-200 bg-gray-50' },
             { label: 'No leidos', value: stats.unread, tooltip: 'Tickets con mensajes nuevos en el chat que aun no has leido', dark: 'border-red-500/20 bg-red-500/5', light: 'border-red-200 bg-red-50' },

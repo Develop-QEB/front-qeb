@@ -473,7 +473,9 @@ export function TicketsPage() {
   });
 
   const tickets = ticketsData?.data || [];
-  const filteredTickets = tickets.filter(t => t.status === activeTab);
+  const filteredTickets = tickets.filter(t =>
+    t.status === activeTab || (activeTab === 'Nuevo' && t.status === 'Duda del Bot')
+  );
 
   const tabs: Array<{ key: typeof activeTab; label: string; showCount: boolean }> = [
     { key: 'Nuevo', label: 'Pendientes', showCount: true },
@@ -512,8 +514,8 @@ export function TicketsPage() {
         {/* Tabs */}
         <div className={`flex gap-1 p-1 rounded-xl ${isDark ? 'bg-zinc-800/50' : 'bg-gray-100'}`}>
           {tabs.map(tab => {
-            const count = tickets.filter(t => t.status === tab.key).length;
-            const hasUnread = tickets.some(t => t.status === tab.key && t.has_chat_unread);
+            const count = tickets.filter(t => t.status === tab.key || (tab.key === 'Nuevo' && t.status === 'Duda del Bot')).length;
+            const hasUnread = tickets.some(t => (t.status === tab.key || (tab.key === 'Nuevo' && t.status === 'Duda del Bot')) && t.has_chat_unread);
             const isActive = activeTab === tab.key;
             const config = STATUS_CONFIG[tab.key];
             return (
