@@ -1921,7 +1921,9 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
       nivel_socioeconomico: newCara.nivel_socioeconomico,
       formato: newCara.formato,
       costo: costoCalculado,
-      tarifa_publica: newCara.tarifa_publica,
+      tarifa_publica: usePairMode && (newCara.caras || 0) + (newCara.bonificacion || 0) > 0
+        ? costoCalculado / ((newCara.caras || 0) + (newCara.bonificacion || 0))
+        : newCara.tarifa_publica,
       inicio_periodo: newCara.inicio_periodo,
       fin_periodo: newCara.fin_periodo,
       caras_flujo: newCara.caras_flujo,
@@ -6774,8 +6776,8 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
                                       </span>
                                     </div>
                                     <div>
-                                      <span className={`${isDark ? 'text-zinc-500' : 'text-gray-400'} text-xs`}>Ciudad</span>
-                                      <p className={`${isDark ? 'text-zinc-300' : 'text-gray-700'} text-xs truncate`} title={cara.ciudad || cara.estados}>{cara.ciudad || cara.estados || '-'}</p>
+                                      <span className={`${isDark ? 'text-zinc-500' : 'text-gray-400'} text-xs`}>Plaza</span>
+                                      <p className={`${isDark ? 'text-zinc-300' : 'text-gray-700'} text-xs truncate`} title={cara.plaza || cara.ciudad || cara.estados}>{cara.plaza || cara.ciudad || cara.estados || '-'}</p>
                                     </div>
                                     <div>
                                       <span className={`${isDark ? 'text-zinc-500' : 'text-gray-400'} text-xs`}>Artículo</span>

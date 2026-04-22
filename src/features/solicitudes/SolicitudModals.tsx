@@ -66,6 +66,17 @@ function getMonthLabel(dateStr: string): string {
   return formatDate(dateStr);
 }
 
+const CODE_TO_PLAZA_DISPLAY: Record<string, string> = {
+  mx: 'Ciudad de México / AM', mty: 'Monterrey',
+  gd: 'Guadalajara', gdl: 'Guadalajara',
+  ver: 'Veracruz', pv: 'Puerto Vallarta', tl: 'Toluca',
+};
+function getPlazaFromArticle(articulo: string, fallback?: string): string {
+  const segs = (articulo || '').toLowerCase().split('-');
+  for (const seg of segs) { if (CODE_TO_PLAZA_DISPLAY[seg]) return CODE_TO_PLAZA_DISPLAY[seg]; }
+  return fallback || articulo || '-';
+}
+
 // Helper to convert date to catorcena format
 function dateToCatorcena(dateStr: string, catorcenas: Catorcena[]): { catorcena: string; year: number } | null {
   if (!dateStr || !catorcenas.length) return null;
@@ -536,8 +547,7 @@ export function ViewSolicitudModal({ isOpen, onClose, solicitudId, onEdit, onAte
             const inversionCara = (Number(c.tarifa_publica) || 0) * (Number(c.caras) || 0);
             return [
               rowNum.toString(),
-              c.estados || '-',
-              c.ciudad || '-',
+              getPlazaFromArticle(c.articulo || '', c.ciudad || c.estados || '-'),
               c.formato || '-',
               (Number(c.caras) || 0).toString(),
               (Number(c.bonificacion) || 0).toString(),
@@ -547,7 +557,7 @@ export function ViewSolicitudModal({ isOpen, onClose, solicitudId, onEdit, onAte
 
           autoTable(doc, {
             startY: yPos,
-            head: [['#', 'Estado', 'Ciudad', 'Formato', 'Caras', 'Bonif.', 'Inversión']],
+            head: [['#', 'Plaza', 'Formato', 'Caras', 'Bonif.', 'Inversión']],
             body: tableData,
             theme: 'plain',
             margin: { left: marginX + 5, right: marginX + 5 },
@@ -568,12 +578,11 @@ export function ViewSolicitudModal({ isOpen, onClose, solicitudId, onEdit, onAte
             alternateRowStyles: { fillColor: [252, 253, 255] },
             columnStyles: {
               0: { cellWidth: 8, halign: 'center' },   // #
-              1: { cellWidth: 30 },                     // Estado
-              2: { cellWidth: 30 },                     // Ciudad
-              3: { cellWidth: 35 },                     // Formato
-              4: { cellWidth: 15, halign: 'center' },  // Caras
-              5: { cellWidth: 15, halign: 'center' },  // Bonif.
-              6: { cellWidth: 25, halign: 'right' },   // Inversión
+              1: { cellWidth: 50 },                     // Plaza
+              2: { cellWidth: 35 },                     // Formato
+              3: { cellWidth: 15, halign: 'center' },  // Caras
+              4: { cellWidth: 15, halign: 'center' },  // Bonif.
+              5: { cellWidth: 25, halign: 'right' },   // Inversión
             },
           });
 
@@ -926,8 +935,7 @@ export function ViewSolicitudModal({ isOpen, onClose, solicitudId, onEdit, onAte
                                         <table className="w-full text-sm">
                                           <thead>
                                             <tr className={isDark ? 'bg-violet-600/20' : 'bg-violet-50'}>
-                                              <th className={`px-3 py-2 text-left text-xs font-semibold ${isDark ? 'text-violet-200' : 'text-violet-700'}`}>Ciudad</th>
-                                              <th className={`px-3 py-2 text-left text-xs font-semibold ${isDark ? 'text-violet-200' : 'text-violet-700'}`}>Estado</th>
+                                              <th className={`px-3 py-2 text-left text-xs font-semibold ${isDark ? 'text-violet-200' : 'text-violet-700'}`}>Plaza</th>
                                               <th className={`px-3 py-2 text-left text-xs font-semibold ${isDark ? 'text-violet-200' : 'text-violet-700'}`}>Formato</th>
                                               <th className={`px-3 py-2 text-left text-xs font-semibold ${isDark ? 'text-violet-200' : 'text-violet-700'}`}>Tipo</th>
                                               <th className={`px-3 py-2 text-left text-xs font-semibold ${isDark ? 'text-violet-200' : 'text-violet-700'}`}>Inicio</th>
@@ -977,8 +985,7 @@ export function ViewSolicitudModal({ isOpen, onClose, solicitudId, onEdit, onAte
 
                                               return (
                                                 <tr key={idx} className={`transition-colors ${isDark ? 'hover:bg-violet-600/10' : 'hover:bg-violet-50'}`}>
-                                                  <td className={`px-3 py-2 ${isDark ? 'text-zinc-200' : 'text-gray-800'}`}>{cara.ciudad || '-'}</td>
-                                                  <td className={`px-3 py-2 ${isDark ? 'text-zinc-300' : 'text-gray-700'}`}>{cara.estados || '-'}</td>
+                                                  <td className={`px-3 py-2 ${isDark ? 'text-zinc-200' : 'text-gray-800'}`}>{getPlazaFromArticle(cara.articulo || '', cara.ciudad || cara.estados || '-')}</td>
                                                   <td className={`px-3 py-2 ${isDark ? 'text-zinc-300' : 'text-gray-700'}`}>{cara.formato || '-'}</td>
                                                   <td className={`px-3 py-2 ${isDark ? 'text-zinc-300' : 'text-gray-700'}`}>{cara.tipo || '-'}</td>
                                                   <td className={`px-3 py-2 ${isDark ? 'text-zinc-400' : 'text-gray-500'} text-xs`}>{cara.inicio_periodo ? formatDate(cara.inicio_periodo) : '-'}</td>

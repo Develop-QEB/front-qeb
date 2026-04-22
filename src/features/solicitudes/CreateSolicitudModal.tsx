@@ -32,6 +32,18 @@ const CODE_PLAZA_MAP_SOL: Record<string, { estado: string; ciudades: string[] }>
   gdl: { estado: 'Jalisco', ciudades: ['Guadalajara', 'Zapopan', 'Tlaquepaque'] },
   ver: { estado: 'Veracruz', ciudades: ['Veracruz', 'Alvarado', 'Boca del Río'] },
   pv:  { estado: 'Jalisco', ciudades: ['Puerto Vallarta'] },
+  tl:  { estado: 'Estado de México', ciudades: ['Toluca'] },
+};
+
+const CODE_TO_PLAZA_DISPLAY: Record<string, string> = {
+  mx: 'Ciudad de México / AM', mty: 'Monterrey',
+  gd: 'Guadalajara', gdl: 'Guadalajara',
+  ver: 'Veracruz', pv: 'Puerto Vallarta', tl: 'Toluca',
+};
+const getPlazaFromArticle = (articulo: string, fallback?: string): string => {
+  const segs = (articulo || '').toLowerCase().split('-');
+  for (const seg of segs) { if (CODE_TO_PLAZA_DISPLAY[seg]) return CODE_TO_PLAZA_DISPLAY[seg]; }
+  return fallback || articulo || '-';
 };
 
 const getFormatoFromArticulo = (itemName: string, itemCode?: string): string => {
@@ -1176,7 +1188,8 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
     const descuento = totalCaras > 0 ? (newCara.bonificacion / totalCaras) : 0;
     const precioTotal = newCara.tarifaPublica * newCara.renta;
     // When BF pair: save tarifa efectiva (inversión ÷ total caras) instead of raw tarifa pública
-    const tarifaToSave = (grupoRtBf && totalCaras > 0)
+    const hasBfPair = newCara.bonificacion > 0 && !!newCara.articuloBf;
+    const tarifaToSave = (hasBfPair && totalCaras > 0)
       ? precioTotal / totalCaras
       : newCara.tarifaPublica;
 
@@ -2819,7 +2832,7 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
                                 <thead>
                                   <tr className={isDark ? 'bg-zinc-800/30' : 'bg-gray-50'}>
                                     <th className={`px-2 py-2 text-left text-[10px] font-semibold ${isDark ? 'text-zinc-500' : 'text-gray-500'}`}>Artículo</th>
-                                    <th className={`px-2 py-2 text-left text-[10px] font-semibold ${isDark ? 'text-zinc-500' : 'text-gray-500'}`}>Ciudad</th>
+                                    <th className={`px-2 py-2 text-left text-[10px] font-semibold ${isDark ? 'text-zinc-500' : 'text-gray-500'}`}>Plaza</th>
                                     <th className={`px-2 py-2 text-left text-[10px] font-semibold ${isDark ? 'text-zinc-500' : 'text-gray-500'}`}>Tipo</th>
                                     <th className={`px-2 py-2 text-left text-[10px] font-semibold ${isDark ? 'text-zinc-500' : 'text-gray-500'}`}>Formato</th>
                                     <th className={`px-2 py-2 text-center text-[10px] font-semibold ${isDark ? 'text-zinc-500' : 'text-gray-500'}`}>Caras</th>
@@ -2844,8 +2857,8 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
                                           <div className="truncate font-medium">{cara.articulo.ItemCode}</div>
                                           <div className={`truncate text-[10px] ${isDark ? 'text-zinc-500' : 'text-gray-400'}`}>{cara.articulo.ItemName}</div>
                                         </td>
-                                        <td className={`px-2 py-2 text-xs ${isDark ? 'text-zinc-300' : 'text-gray-700'} max-w-[80px] truncate`} title={`${cara.estado} - ${cara.ciudades.join(', ')}`}>
-                                          {cara.ciudades.join(', ')}
+                                        <td className={`px-2 py-2 text-xs ${isDark ? 'text-zinc-300' : 'text-gray-700'} max-w-[80px] truncate`} title={getPlazaFromArticle(cara.articulo?.ItemCode || '', cara.estado)}>
+                                          {getPlazaFromArticle(cara.articulo?.ItemCode || '', cara.estado)}
                                         </td>
                                         <td className="px-2 py-2">
                                           <span className={`text-[10px] px-1.5 py-0.5 rounded ${cara.tipo === 'Digital' ? 'bg-blue-500/20 text-blue-300' : 'bg-amber-500/20 text-amber-300'
