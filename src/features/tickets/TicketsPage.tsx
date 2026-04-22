@@ -6,7 +6,7 @@ import { ticketsService, Ticket as TicketType, CreateTicketInput, TicketChatMess
 import { useThemeStore } from '../../store/themeStore';
 import { useAuthStore } from '../../store/authStore';
 import { uploadsService } from '../../services/uploads.service';
-import { useSocketTicketChatSoporte } from '../../hooks/useSocket';
+import { useSocketTicketChatSoporte, useSocketChatNotifications } from '../../hooks/useSocket';
 
 const getInputClasses = (isDark: boolean) =>
   `w-full px-4 py-2.5 rounded-xl border ${isDark ? 'border-purple-500/20 bg-zinc-800/50 text-white placeholder-zinc-500 focus:border-purple-500/50' : 'border-purple-200 bg-white text-gray-900 placeholder-gray-400 focus:border-purple-400'} focus:outline-none focus:ring-1 ${isDark ? 'focus:ring-purple-500/30' : 'focus:ring-purple-300'} transition-colors`;
@@ -459,10 +459,13 @@ function ViewTicketModal({
 
 export function TicketsPage() {
   const isDark = useThemeStore((s) => s.theme) === 'dark';
+  const user = useAuthStore((s) => s.user);
   const queryClient = useQueryClient();
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [selectedTicket, setSelectedTicket] = useState<TicketType | null>(null);
   const [activeTab, setActiveTab] = useState<'Nuevo' | 'En Progreso' | 'Validación' | 'Resuelto' | 'Cerrado'>('Nuevo');
+
+  useSocketChatNotifications(user?.id ?? null);
 
   const { data: ticketsData, isLoading } = useQuery({
     queryKey: ['my-tickets'],
