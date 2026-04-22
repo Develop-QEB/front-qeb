@@ -442,11 +442,24 @@ export default function PropuestasVersionarioView({ isDark, filters, advancedFil
               <Calendar className={`h-5 w-5 ${isDark ? 'text-purple-400' : 'text-purple-600'}`} />
             </div>
             <div>
-              <h3 className={`text-sm font-semibold ${isDark ? 'text-white' : 'text-gray-900'}`}>Desglose de Propuestas</h3>
+              <h3 className={`text-sm font-semibold ${isDark ? 'text-white' : 'text-gray-900'}`}>Versionario de Propuestas</h3>
               <p className={`text-xs ${isDark ? 'text-zinc-500' : 'text-gray-400'}`}>Propuestas desglosadas por catorcena</p>
             </div>
           </div>
           <div className="flex items-center gap-3">
+            <button
+              onClick={handleExportCSV}
+              disabled={isExporting || catorcenaGroups.length === 0}
+              className={`flex items-center gap-2 px-3 py-2 rounded-xl text-xs font-medium transition-all ${
+                isExporting || catorcenaGroups.length === 0
+                  ? isDark ? 'bg-zinc-800/30 text-zinc-600 cursor-not-allowed' : 'bg-gray-100 text-gray-300 cursor-not-allowed'
+                  : isDark ? 'bg-zinc-800 text-zinc-300 hover:bg-zinc-700 border border-zinc-700/50' : 'bg-gray-100 text-gray-600 hover:bg-gray-200 border border-gray-200'
+              }`}
+            >
+              {isExporting ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Download className="h-3.5 w-3.5" />}
+              {isExporting ? 'Exportando...' : 'Exportar CSV'}
+            </button>
+            <div className={`w-px h-10 ${isDark ? 'bg-zinc-800' : 'bg-gray-200'}`} />
             <div className="text-right">
               <p className={`text-2xl font-bold ${isDark ? 'text-white' : 'text-gray-900'}`}>{catorcenaGroups.length}</p>
               <p className={`text-[10px] ${isDark ? 'text-zinc-500' : 'text-gray-400'} uppercase tracking-wide`}>Catorcenas</p>
@@ -503,7 +516,7 @@ export default function PropuestasVersionarioView({ isDark, filters, advancedFil
                   const totalInversion = group.propuestas.reduce((s, p) => s + (Number(p.info.inversion) || 0), 0);
                   return totalInversion > 0 ? (
                     <span className={`px-2 py-0.5 rounded-full text-[10px] ${isDark ? 'bg-green-500/15 text-green-300' : 'bg-green-50 text-green-700'} border border-green-500/25 flex items-center gap-1`}>
-                      <DollarSign className="h-3 w-3" /> ${totalInversion.toLocaleString()}
+                      <DollarSign className="h-3 w-3" /> {totalInversion.toLocaleString()}
                     </span>
                   ) : null;
                 })()}
@@ -544,7 +557,7 @@ export default function PropuestasVersionarioView({ isDark, filters, advancedFil
                           )}
                           <span className={`px-2 py-0.5 rounded-full text-[10px] ${isDark ? 'bg-green-500/15 text-green-300' : 'bg-green-50 text-green-700'} border border-green-500/25 flex items-center gap-1`}>
                             <DollarSign className="h-3 w-3" />
-                            {Number(info.inversion) > 0 ? `$${Number(info.inversion).toLocaleString()}` : 'Sin inversión'}
+                            {Number(info.inversion) > 0 ? Number(info.inversion).toLocaleString() : 'Sin inversión'}
                           </span>
                           {circuitosCount > 0 && (
                             <span className={`px-2 py-0.5 rounded-full text-[10px] ${isDark ? 'bg-blue-500/15 text-blue-300' : 'bg-blue-50 text-blue-700'} border border-blue-500/25 flex items-center gap-1`}>
@@ -627,7 +640,7 @@ export default function PropuestasVersionarioView({ isDark, filters, advancedFil
                                               )}
                                               {Number(inv.tarifa_publica_sc) > 0 && (
                                                 <span className={`text-[9px] ${isDark ? 'text-zinc-500' : 'text-gray-400'}`}>
-                                                  ${Number(inv.tarifa_publica_sc).toLocaleString()}
+                                                  ${Number(inv.tarifa_publica_sc).toLocaleString('es-MX')}
                                                 </span>
                                               )}
                                             </div>

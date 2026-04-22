@@ -1842,7 +1842,7 @@ export function PropuestasPage() {
                 }`}
               >
                 <LayoutGrid className="h-4 w-4" />
-                Desglose
+                Versionario
               </button>
 
               {/* Export CSV / Layout */}
