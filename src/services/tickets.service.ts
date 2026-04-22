@@ -190,6 +190,10 @@ export const ticketsService = {
     return response.data.data;
   },
 
+  deleteChatMessage: async (messageId: number): Promise<void> => {
+    await api.delete(`/tickets/chat/${messageId}`);
+  },
+
   markChatRead: async (ticketId: number, ultimoMensajeId: number): Promise<void> => {
     await api.post(`/tickets/${ticketId}/chat/read`, { ultimo_mensaje_id: ultimoMensajeId });
   },

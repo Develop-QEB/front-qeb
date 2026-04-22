@@ -3,7 +3,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import {
   Ticket, Search, Filter, Loader2, MessageSquare, Clock, CheckCircle2,
   X, AlertTriangle, Image, FileText, Send, Paperclip, Eye, User,
-  ChevronDown, Circle, Info, Trophy,
+  ChevronDown, Circle, Info, Trophy, Trash2,
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { Header } from '../../components/layout/Header';
@@ -62,6 +62,7 @@ function ChatPanel({
   uploading,
   emptyText,
   chatEndRef,
+  onDelete,
 }: {
   messages: (TicketMensaje | TicketChatMessage)[];
   userId: number | undefined;
@@ -73,6 +74,7 @@ function ChatPanel({
   uploading: boolean;
   emptyText: string;
   chatEndRef: React.RefObject<HTMLDivElement | null>;
+  onDelete?: (messageId: number) => void;
 }) {
   const [mensaje, setMensaje] = useState('');
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -102,7 +104,7 @@ function ChatPanel({
           const isMe = msg.usuario_id === userId;
           return (
             <div key={msg.id} className={`flex ${isMe ? 'justify-end' : 'justify-start'}`}>
-              <div className={`max-w-[80%] rounded-xl px-3 py-2 ${isMe
+              <div className={`group/msg max-w-[80%] rounded-xl px-3 py-2 ${isMe
                 ? isDark ? 'bg-purple-600/30 border border-purple-500/30' : 'bg-purple-100 border border-purple-200'
                 : isDark ? 'bg-zinc-800 border border-zinc-700' : 'bg-white border border-gray-200'
               }`}>
@@ -128,9 +130,20 @@ function ChatPanel({
                     {msg.archivo_nombre || 'Archivo'}
                   </a>
                 )}
-                <p className={`text-[10px] mt-1 ${isDark ? 'text-zinc-600' : 'text-gray-400'}`}>
-                  {new Date(msg.created_at).toLocaleTimeString('es-MX', { hour: '2-digit', minute: '2-digit' })}
-                </p>
+                <div className="flex items-center justify-between mt-1">
+                  <p className={`text-[10px] ${isDark ? 'text-zinc-600' : 'text-gray-400'}`}>
+                    {new Date(msg.created_at).toLocaleTimeString('es-MX', { hour: '2-digit', minute: '2-digit' })}
+                  </p>
+                  {onDelete && (
+                    <button
+                      onClick={(e) => { e.stopPropagation(); if (confirm('¿Eliminar este mensaje?')) onDelete(msg.id); }}
+                      className={`p-0.5 rounded opacity-0 group-hover/msg:opacity-100 transition-opacity ${isDark ? 'hover:bg-red-500/20 text-red-400' : 'hover:bg-red-50 text-red-500'}`}
+                      title="Eliminar mensaje"
+                    >
+                      <Trash2 className="h-3 w-3" />
+                    </button>
+                  )}
+                </div>
               </div>
             </div>
           );
@@ -274,6 +287,11 @@ function TicketDetailModal({
   const sendChatMutation = useMutation({
     mutationFn: (data: { mensaje?: string; archivo_url?: string; archivo_nombre?: string; archivo_tipo?: string }) =>
       ticketsService.createChatMessage(ticket.id, data),
+    onSuccess: () => refetchChat(),
+  });
+
+  const deleteChatMutation = useMutation({
+    mutationFn: (messageId: number) => ticketsService.deleteChatMessage(messageId),
     onSuccess: () => refetchChat(),
   });
 
@@ -454,6 +472,7 @@ function TicketDetailModal({
                 uploading={uploadingSoporte}
                 emptyText="No hay mensajes en el chat de soporte. Escribe para comunicarte con el creador del ticket."
                 chatEndRef={soporteChatEndRef}
+                onDelete={(id) => deleteChatMutation.mutate(id)}
               />
             )}
           </div>
