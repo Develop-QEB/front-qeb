@@ -1826,16 +1826,32 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
             periodoFin: cara.fin_periodo || '',
             renta: Number(cara.caras) || 0,
             bonificacion: Number(cara.bonificacion) || 0,
-            tarifaPublica: Number(cara.tarifa_publica) || 0,
-            tarifaEfectiva: Number(cara.tarifa_publica) || 0,
+            tarifaPublica: (cara.caras || 0) > 0 ? (Number(cara.costo) || 0) / (cara.caras || 1) : Number(cara.tarifa_publica) || 0,
+            tarifaEfectiva: Number(cara.tarifa_publica) || 0, // recalculated below with grupo_rt_bf
             descuento: Number(cara.descuento) || 0,
             precioTotal: Number(cara.costo) || 0,
+            grupo_rt_bf: cara.grupo_rt_bf || undefined,
+            esBf: (cara.articulo || '').toUpperCase().startsWith('BF') || (cara.articulo || '').toUpperCase().startsWith('CF'),
             autorizacion_dg: cara.autorizacion_dg as CaraEntry['autorizacion_dg'],
             autorizacion_dcm: cara.autorizacion_dcm as CaraEntry['autorizacion_dcm'],
             _originalDg: cara.autorizacion_dg as CaraEntry['autorizacion_dg'],
             _originalDcm: cara.autorizacion_dcm as CaraEntry['autorizacion_dcm'],
           };
         });
+        // Recalculate tarifaEfectiva using grupo_rt_bf total caras
+        const grupoTotalMap = new Map<number, number>();
+        for (const c of loadedCaras) {
+          if (c.grupo_rt_bf) {
+            grupoTotalMap.set(c.grupo_rt_bf, (grupoTotalMap.get(c.grupo_rt_bf) || 0) + c.renta + c.bonificacion);
+          }
+        }
+        for (const c of loadedCaras) {
+          if (c.grupo_rt_bf && !c.esBf) {
+            const totalGrupo = grupoTotalMap.get(c.grupo_rt_bf) || (c.renta + c.bonificacion);
+            c.tarifaEfectiva = totalGrupo > 0 ? c.precioTotal / totalGrupo : 0;
+          }
+        }
+
         setCaras(loadedCaras);
 
         // Auto-expand all catorcenas in edit mode so user can see them

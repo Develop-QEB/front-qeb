@@ -1674,6 +1674,7 @@ function ApprovalModal({
                         <th className={`px-3 py-2.5 text-center text-[10px] font-semibold ${isDark ? 'text-zinc-500' : 'text-gray-400'} uppercase`}>Total</th>
                         <th className={`px-3 py-2.5 text-right text-[10px] font-semibold ${isDark ? 'text-zinc-500' : 'text-gray-400'} uppercase`}>T. Efectiva</th>
                         <th className={`px-3 py-2.5 text-right text-[10px] font-semibold ${isDark ? 'text-zinc-500' : 'text-gray-400'} uppercase`}>Tarifa Pub.</th>
+                        <th className={`px-3 py-2.5 text-right text-[10px] font-semibold ${isDark ? 'text-zinc-500' : 'text-gray-400'} uppercase`}>Precio Total</th>
                         <th className={`px-3 py-2.5 text-center text-[10px] font-semibold ${isDark ? 'text-zinc-500' : 'text-gray-400'} uppercase`}>Estado</th>
                       </tr>
                     </thead>
@@ -1698,6 +1699,9 @@ function ApprovalModal({
                           </td>
                           <td className="px-3 py-2.5 text-xs text-right text-amber-300 font-mono">
                             ${cara.tarifa_publica?.toLocaleString('es-MX', { minimumFractionDigits: 0, maximumFractionDigits: 0 }) || '0'}
+                          </td>
+                          <td className="px-3 py-2.5 text-xs text-right text-emerald-400 font-mono font-medium">
+                            ${(Number(cara.costo) || 0).toLocaleString('es-MX', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}
                           </td>
                           <td className="px-3 py-2.5 text-center">
                             <div className="flex flex-col gap-0.5 items-center">
