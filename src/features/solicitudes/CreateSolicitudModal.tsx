@@ -1324,37 +1324,13 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
       } else {
         updated = [...prev, ...newCaras];
       }
-      // Paso 0: Reset todas las caras a sus valores originales del backend
+      // Reset todas las caras a sus valores originales del backend
       updated = updated.map(c => ({
         ...c,
         autorizacion_dg: c._originalDg,
         autorizacion_dcm: c._originalDcm,
       }));
-      // Paso 1: Impar por grupo — si renta+bonificacion de un grupo es impar, esa cara es DG
-      // Excluir: CT, Kioscos, Boleros, Mi Macro, IM, ESP — solo aplica a PB/Columna y otros RT estándar
-      updated = updated.map(c => {
-        const esCaraCortesia = c.articulo?.ItemCode?.toUpperCase().startsWith('CT');
-        const artName = (c.articulo?.ItemName || '').toUpperCase();
-        const artCode2 = (c.articulo?.ItemCode || '').toUpperCase();
-        const esKiosco = artName.includes('KIOSCO') || artName.includes('KIOSKO');
-        const esBoleroItem = artName.includes('BOLERO');
-        const esMiMacroItem = artName.includes('MI MACRO');
-        const esImpresionItem = artCode2.startsWith('IM');
-        const esEspecialItem = artCode2.startsWith('ESP') || artCode2.startsWith('ES-');
-        if (esCaraCortesia || esKiosco || esBoleroItem || esMiMacroItem || esImpresionItem || esEspecialItem || c.esBf) return c;
-        // For RT/BF pairs, sum both rows' renta
-        let carasGrupo = c.renta + c.bonificacion;
-        if (c.grupo_rt_bf) {
-          const bfPair = updated.find(o => o.grupo_rt_bf === c.grupo_rt_bf && o.esBf && o.catorcenaNum === c.catorcenaNum && o.catorcenaYear === c.catorcenaYear);
-          if (bfPair) carasGrupo = c.renta + bfPair.renta;
-        }
-        const esImpar = carasGrupo > 0 && carasGrupo % 2 !== 0;
-        if (esImpar && c.autorizacion_dg !== 'pendiente') {
-          return { ...c, autorizacion_dg: 'pendiente' as const, autorizacion_dcm: 'aprobado' as const };
-        }
-        return c;
-      });
-      // Paso 2: DG contamina — si hay al menos 1 DG pendiente, las que tengan DCM pendiente pasan a DG
+      // DG contamina — si hay al menos 1 DG pendiente, las que tengan DCM pendiente pasan a DG
       // Cortesías quedan excluidas de la contaminación
       const hayDG = updated.some(c => c.autorizacion_dg === 'pendiente');
       if (hayDG) {
@@ -2866,15 +2842,9 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
                                             // Cortesías siempre aprobadas, no requieren autorización
                                             const esCaraCortesia = cara.articulo?.ItemCode?.toUpperCase().startsWith('CT');
                                             // Impar por grupo: si las caras de ESTE grupo son impar, requiere DG (excepto Kioscos)
-                                            const artNameDisplay = (cara.articulo?.ItemName || '').toUpperCase();
-                                            const esKioscoDisplay = artNameDisplay.includes('KIOSCO') || artNameDisplay.includes('KIOSKO');
-                                            const carasGrupo = cara.renta + cara.bonificacion;
-                                            const esImpar = !esCaraCortesia && !esKioscoDisplay && !cara.esBf && carasGrupo > 0 && carasGrupo % 2 !== 0;
-                                            // DG contamina: si alguna cara tiene DG, todas son DG (excepto cortesías)
                                             const hayDGEnPropuesta = caras.some(c => c.autorizacion_dg === 'pendiente');
-                                            // Solo contamina si esta cara tiene algún pendiente (no tocar las ya aprobadas ni cortesías)
                                             const tienePendiente = !esCaraCortesia && (cara.autorizacion_dg === 'pendiente' || cara.autorizacion_dcm === 'pendiente');
-                                            const dgEfectivo = esCaraCortesia ? 'aprobado' : (esImpar || (hayDGEnPropuesta && tienePendiente) ? 'pendiente' : cara.autorizacion_dg);
+                                            const dgEfectivo = esCaraCortesia ? 'aprobado' : ((hayDGEnPropuesta && tienePendiente) ? 'pendiente' : cara.autorizacion_dg);
                                             const dcmEfectivo = esCaraCortesia ? 'aprobado' : (dgEfectivo === 'pendiente' ? 'aprobado' : cara.autorizacion_dcm);
                                             return (
                                               <div className="flex flex-col gap-0.5">
@@ -2889,7 +2859,7 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
                                                   </span>
                                                 )}
                                                 {dgEfectivo === 'pendiente' && dcmEfectivo !== 'rechazado' && (
-                                                  <span className="text-[10px] px-1.5 py-0.5 rounded bg-red-500/20 text-red-300" title={esImpar ? 'Caras impar en este grupo - Requiere autorización DG' : 'Requiere autorización DG'}>
+                                                  <span className="text-[10px] px-1.5 py-0.5 rounded bg-red-500/20 text-red-300" title="Requiere autorización DG">
                                                     Pend. DG
                                                   </span>
                                                 )}
@@ -2956,12 +2926,6 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
                           <span className="text-amber-400 font-bold">{formatCurrency(totals.totalPrecio)}</span>
                         </div>
                       </div>
-                      {caras.some(c => { const an = (c.articulo?.ItemName || '').toUpperCase(); if (an.includes('KIOSCO') || an.includes('KIOSKO')) return false; return (c.renta + c.bonificacion) > 0 && (c.renta + c.bonificacion) % 2 !== 0; }) && (
-                        <div className="mt-2 flex items-center gap-2 text-xs text-red-300 bg-red-500/10 border border-red-500/20 rounded px-3 py-1.5">
-                          <AlertTriangle className="h-3.5 w-3.5 flex-shrink-0" />
-                          <span>Hay grupos con caras impar — Requiere autorización DG</span>
-                        </div>
-                      )}
                     </div>
                   </div>
                 )}
