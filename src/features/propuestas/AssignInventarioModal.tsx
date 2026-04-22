@@ -2143,21 +2143,8 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
             if (newBfCaraItem) {
               updated = [...updated, newBfCaraItem];
             }
-            // Only re-apply impar + contamination if auth-affecting fields changed
             if (authFieldsChanged) {
               updated = updated.map(c => ({ ...c, autorizacion_dg: c._originalDg || c.autorizacion_dg, autorizacion_dcm: c._originalDcm || c.autorizacion_dcm }));
-              updated = updated.map(c => {
-                if (c.esBf) return c;
-            { const fmt = (c.formato || '').toUpperCase(); if (fmt.includes('KIOSCO') || fmt.includes('KIOSKO') || fmt.includes('BOLERO') || fmt.includes('MI MACRO') || fmt.includes('MACRO')) return c; }
-                // Sum caras across RT/BF group members
-                let total = (c.caras_flujo || 0) + (c.caras_contraflujo || 0) + (c.bonificacion || 0);
-                if (c.grupo_rt_bf) {
-                  const bf = updated.find(o => o.esBf && o.grupo_rt_bf === c.grupo_rt_bf && o.inicio_periodo === c.inicio_periodo && o.fin_periodo === c.fin_periodo);
-                  if (bf) total = (c.caras_flujo || 0) + (c.caras_contraflujo || 0) + (bf.bonificacion || 0);
-                }
-                if (total > 0 && total % 2 !== 0 && c.autorizacion_dcm !== 'pendiente') return { ...c, autorizacion_dg: 'aprobado', autorizacion_dcm: 'pendiente' };
-                return c;
-              });
               const hayDG = updated.some(c => c.autorizacion_dg === 'pendiente');
               if (hayDG) updated = updated.map(c => c.autorizacion_dcm === 'pendiente' ? { ...c, autorizacion_dg: 'pendiente', autorizacion_dcm: 'aprobado' } : c);
             }
@@ -2238,20 +2225,7 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
           let updated = createdBfItem
             ? [...prev, newCaraItem, createdBfItem]
             : [...prev, newCaraItem];
-          // Reset + impar + contamination
           updated = updated.map(c => ({ ...c, autorizacion_dg: c._originalDg || c.autorizacion_dg, autorizacion_dcm: c._originalDcm || c.autorizacion_dcm }));
-          updated = updated.map(c => {
-            if (c.esBf) return c;
-            { const fmt = (c.formato || '').toUpperCase(); if (fmt.includes('KIOSCO') || fmt.includes('KIOSKO') || fmt.includes('BOLERO') || fmt.includes('MI MACRO') || fmt.includes('MACRO')) return c; }
-            // Sum caras across RT/BF group members
-            let total = (c.caras_flujo || 0) + (c.caras_contraflujo || 0) + (c.bonificacion || 0);
-            if (c.grupo_rt_bf) {
-              const bf = updated.find(o => o.esBf && o.grupo_rt_bf === c.grupo_rt_bf && o.inicio_periodo === c.inicio_periodo && o.fin_periodo === c.fin_periodo);
-              if (bf) total = (c.caras_flujo || 0) + (c.caras_contraflujo || 0) + (bf.caras || 0);
-            }
-            if (total > 0 && total % 2 !== 0 && c.autorizacion_dg !== 'pendiente') return { ...c, autorizacion_dg: 'pendiente', autorizacion_dcm: 'aprobado' };
-            return c;
-          });
           const hayDG = updated.some(c => c.autorizacion_dg === 'pendiente');
           if (hayDG) updated = updated.map(c => c.autorizacion_dcm === 'pendiente' ? { ...c, autorizacion_dg: 'pendiente', autorizacion_dcm: 'aprobado' } : c);
           return updated;

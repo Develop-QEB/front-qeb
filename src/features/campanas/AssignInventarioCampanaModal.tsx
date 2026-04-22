@@ -2003,18 +2003,6 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
 
           if (authFieldsChanged) {
             updated = updated.map(c => ({ ...c, autorizacion_dg: c._originalDg || c.autorizacion_dg, autorizacion_dcm: c._originalDcm || c.autorizacion_dcm }));
-            // Impar/DG check: sum caras across BOTH members of an RT/BF pair
-            updated = updated.map(c => {
-              if (c.formato === 'Kiosco') return c;
-              if (c.esBf) return c; // BF rows don't trigger their own impar check
-              let total = (c.caras_flujo || 0) + (c.caras_contraflujo || 0) + (c.bonificacion || 0);
-              if (c.grupo_rt_bf) {
-                const bf = updated.find(o => o.grupo_rt_bf === c.grupo_rt_bf && o.esBf && o.inicio_periodo === c.inicio_periodo);
-                if (bf) total = (c.caras_flujo || 0) + (c.caras_contraflujo || 0) + (bf.bonificacion || 0);
-              }
-              if (total > 0 && total % 2 !== 0 && c.autorizacion_dg !== 'pendiente') return { ...c, autorizacion_dg: 'pendiente', autorizacion_dcm: 'aprobado' };
-              return c;
-            });
             const hayDG = updated.some(c => c.autorizacion_dg === 'pendiente');
             if (hayDG) updated = updated.map(c => c.autorizacion_dcm === 'pendiente' ? { ...c, autorizacion_dg: 'pendiente', autorizacion_dcm: 'aprobado' } : c);
           }
@@ -2100,18 +2088,6 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
           let updated = [...prev, newRtItem];
           if (newBfItem) updated = [...updated, newBfItem];
           updated = updated.map(c => ({ ...c, autorizacion_dg: c._originalDg || c.autorizacion_dg, autorizacion_dcm: c._originalDcm || c.autorizacion_dcm }));
-          // Impar/DG check: sum caras across BOTH members of an RT/BF pair
-          updated = updated.map(c => {
-            if (c.formato === 'Kiosco') return c;
-            if (c.esBf) return c;
-            let total = (c.caras_flujo || 0) + (c.caras_contraflujo || 0) + (c.bonificacion || 0);
-            if (c.grupo_rt_bf) {
-              const bf = updated.find(o => o.grupo_rt_bf === c.grupo_rt_bf && o.esBf && o.inicio_periodo === c.inicio_periodo);
-              if (bf) total = (c.caras_flujo || 0) + (c.caras_contraflujo || 0) + (bf.bonificacion || 0);
-            }
-            if (total > 0 && total % 2 !== 0 && c.autorizacion_dg !== 'pendiente') return { ...c, autorizacion_dg: 'pendiente', autorizacion_dcm: 'aprobado' };
-            return c;
-          });
           const hayDG = updated.some(c => c.autorizacion_dg === 'pendiente');
           if (hayDG) updated = updated.map(c => c.autorizacion_dcm === 'pendiente' ? { ...c, autorizacion_dg: 'pendiente', autorizacion_dcm: 'aprobado' } : c);
           return updated;
