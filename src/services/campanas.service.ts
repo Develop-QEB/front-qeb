@@ -229,6 +229,7 @@ export interface SolicitudCara {
   autorizacion_dg?: string | null;
   autorizacion_dcm?: string | null;
   grupo_rt_bf?: number | null;
+  cortesia?: number | null;
 }
 
 export interface CampanaUpdateData {
