@@ -23,6 +23,8 @@ import { TableroView } from './KanbanView';
 import { UserAvatar } from '../../components/ui/user-avatar';
 import { useSocketNotificaciones } from '../../hooks/useSocket';
 import { CreateSolicitudModal } from '../solicitudes/CreateSolicitudModal';
+import { AssignInventarioModal } from '../propuestas/AssignInventarioModal';
+import { propuestasService } from '../../services/propuestas.service';
 
 // ============ TIPOS ============
 type ContentType = 'notificaciones' | 'tareas';
@@ -2623,6 +2625,7 @@ export function NotificacionesPage() {
   const [isDrawerClosing, setIsDrawerClosing] = useState(false);
   const [approvalModalTarea, setApprovalModalTarea] = useState<Notificacion | null>(null);
   const [editSolicitudId, setEditSolicitudId] = useState<number | null>(null);
+  const [editPropuesta, setEditPropuesta] = useState<any>(null);
 
   // Handler para cerrar el drawer con animación
   const handleCloseDrawer = useCallback(() => {
@@ -3437,9 +3440,13 @@ export function NotificacionesPage() {
                             <button
                               onClick={(e) => {
                                 e.stopPropagation();
-                                const rejSolId = getRejectionSolicitudId(tarea);
-                                if (rejSolId) {
-                                  setEditSolicitudId(rejSolId);
+                                if (tarea.tipo?.includes('Rechazo')) {
+                                  if (tarea.referencia_tipo === 'propuesta' && tarea.id_propuesta) {
+                                    propuestasService.getById(parseInt(tarea.id_propuesta)).then(p => setEditPropuesta(p)).catch(console.error);
+                                  } else {
+                                    const rejSolId = getRejectionSolicitudId(tarea);
+                                    if (rejSolId) setEditSolicitudId(rejSolId);
+                                  }
                                   return;
                                 }
                                 // Si tiene referencia_tipo y referencia_id, usar esos
@@ -3533,10 +3540,17 @@ export function NotificacionesPage() {
             onAddComment={(contenido) => addCommentMutation.mutate({ id: selectedTarea.id, contenido })}
             onUpdateFechaFin={(fecha_fin) => updateTareaMutation.mutate({ id: selectedTarea.id, fecha_fin })}
             onNavigate={(path) => {
-              const rejSolId = getRejectionSolicitudId(selectedTarea);
-              if (rejSolId) {
-                handleCloseDrawer();
-                setTimeout(() => setEditSolicitudId(rejSolId), 250);
+              if (selectedTarea.tipo?.includes('Rechazo')) {
+                if (selectedTarea.referencia_tipo === 'propuesta' && selectedTarea.id_propuesta) {
+                  handleCloseDrawer();
+                  propuestasService.getById(parseInt(selectedTarea.id_propuesta)).then(p => setTimeout(() => setEditPropuesta(p), 250)).catch(console.error);
+                } else {
+                  const rejSolId = getRejectionSolicitudId(selectedTarea);
+                  if (rejSolId) {
+                    handleCloseDrawer();
+                    setTimeout(() => setEditSolicitudId(rejSolId), 250);
+                  }
+                }
                 return;
               }
               handleCloseDrawer();
@@ -3568,12 +3582,22 @@ export function NotificacionesPage() {
         />
       )}
 
-      {/* Modal de Editar Solicitud (para tareas de rechazo) */}
+      {/* Modal de Editar Solicitud (para tareas de rechazo de solicitud) */}
       <CreateSolicitudModal
         isOpen={!!editSolicitudId}
         onClose={() => setEditSolicitudId(null)}
         editSolicitudId={editSolicitudId ?? undefined}
       />
+
+      {/* Modal de Asignar Inventario (para tareas de rechazo de propuesta) */}
+      {editPropuesta && (
+        <AssignInventarioModal
+          isOpen={!!editPropuesta}
+          onClose={() => setEditPropuesta(null)}
+          propuesta={editPropuesta}
+          readOnly={false}
+        />
+      )}
 
     </div>
   );
