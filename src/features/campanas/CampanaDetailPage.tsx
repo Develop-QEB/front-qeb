@@ -2144,23 +2144,57 @@ export function CampanaDetailPage() {
                 const fechaObj = item.fecha_hora ? new Date(item.fecha_hora) : null;
                 const fecha = fechaObj ? fechaObj.toLocaleDateString('es-MX') : '';
                 const hora = fechaObj ? fechaObj.toLocaleTimeString('es-MX', { hour: '2-digit', minute: '2-digit', hour12: true }) : '';
-                // Capitalizar tipo para mejor presentación
-                const tipoCapitalizado = item.tipo ? item.tipo.charAt(0).toUpperCase() + item.tipo.slice(1) : '';
+                const isAuthEntry = item.tipo?.startsWith('autorizacion_') || item.tipo?.startsWith('Autorizacion_');
+                let parsedDetalles: any = null;
+                if (isAuthEntry && item.detalles) {
+                  try { parsedDetalles = typeof item.detalles === 'string' ? JSON.parse(item.detalles) : item.detalles; } catch { /* ignore */ }
+                }
+                const isRechazo = item.tipo?.includes('rechazo');
+                const isAprobacion = item.tipo?.includes('aprobacion');
+                const isCambio = item.tipo?.includes('cambio');
+                const isNuevaCara = item.tipo?.includes('nueva_cara');
+                const dotColor = isAprobacion ? 'bg-emerald-400' : isRechazo ? 'bg-red-400' : isCambio ? 'bg-blue-400' : isNuevaCara ? 'bg-cyan-400' : 'bg-purple-400';
                 return (
                   <div
                     key={item.id}
-                    className={`flex items-center gap-3 px-3 py-2 rounded-lg ${isDark ? 'bg-purple-900/20' : 'bg-purple-50'} border ${isDark ? 'border-purple-900/30' : 'border-purple-200'}`}
+                    className={`flex items-start gap-3 px-3 py-2 rounded-lg ${isDark ? 'bg-purple-900/20' : 'bg-purple-50'} border ${isDark ? 'border-purple-900/30' : 'border-purple-200'}`}
                   >
-                    <div className="flex-shrink-0 w-2 h-2 rounded-full bg-purple-400" />
+                    <div className={`flex-shrink-0 w-2 h-2 rounded-full mt-1.5 ${dotColor}`} />
                     <div className="flex-1 min-w-0">
                       <span className={`text-sm ${isDark ? 'text-zinc-200' : 'text-gray-800'}`}>
-                        {item.accion} {tipoCapitalizado}
+                        {item.accion}
                       </span>
-                      {item.detalles && (
+                      {isAuthEntry && parsedDetalles ? (
+                        <div className="mt-0.5">
+                          {isRechazo && parsedDetalles.motivo && (
+                            <p className={`text-xs ${isDark ? 'text-red-400/70' : 'text-red-600/70'}`}>Motivo: {parsedDetalles.motivo}</p>
+                          )}
+                          {isCambio && parsedDetalles.cambios && (
+                            <div className="space-y-0.5">
+                              {(parsedDetalles.cambios as { articulo: string; label: string; antes: string; despues: string }[]).map((c: { articulo: string; label: string; antes: string; despues: string }, i: number) => (
+                                <p key={i} className={`text-[11px] ${isDark ? 'text-zinc-500' : 'text-gray-400'}`}>
+                                  <span className={isDark ? 'text-zinc-400' : 'text-gray-500'}>{c.articulo}</span>
+                                  {' · '}{c.label}: <span className="line-through text-red-400/60">{c.antes}</span> → <span className="text-emerald-400">{c.despues}</span>
+                                </p>
+                              ))}
+                            </div>
+                          )}
+                          {isNuevaCara && parsedDetalles.cara && (
+                            <p className={`text-[11px] ${isDark ? 'text-zinc-500' : 'text-gray-400'}`}>
+                              {parsedDetalles.cara.articulo} — {parsedDetalles.cara.caras} caras, ${Number(parsedDetalles.cara.costo).toLocaleString()}
+                            </p>
+                          )}
+                          {!isCambio && !isRechazo && !isNuevaCara && !isAprobacion && parsedDetalles.caras && (
+                            <p className={`text-[11px] ${isDark ? 'text-zinc-500' : 'text-gray-400'}`}>
+                              {parsedDetalles.caras.length} circuito(s){parsedDetalles.pendientesDg ? ` — Pend. DG: ${parsedDetalles.pendientesDg}` : ''}
+                            </p>
+                          )}
+                        </div>
+                      ) : item.detalles && !isAuthEntry ? (
                         <p className={`text-xs truncate ${isDark ? 'text-zinc-500' : 'text-gray-400'}`} title={item.detalles}>
                           {item.detalles}
                         </p>
-                      )}
+                      ) : null}
                     </div>
                     <div className="text-right flex-shrink-0">
                       <span className={`text-xs block ${isDark ? 'text-zinc-500' : 'text-gray-400'}`}>{fecha}</span>
