@@ -1032,7 +1032,9 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
           nivel_socioeconomico: cara.nivel_socioeconomico || '',
           formato: cara.formato || '',
           costo: Number(cara.costo) || 0,
-          tarifa_publica: Number(cara.tarifa_publica) || 0,
+          tarifa_publica: (Number(cara.caras) || 0) > 0
+            ? (Number(cara.costo) || 0) / (Number(cara.caras) || 1)
+            : Number(cara.tarifa_publica) || 0,
           inicio_periodo: cara.inicio_periodo || '',
           fin_periodo: cara.fin_periodo || '',
           caras_flujo: Number(cara.caras_flujo) || 0,
@@ -1160,7 +1162,7 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
     const totalEspeciales = caras.filter(c => isEspecialArticle(c.articulo || '')).reduce((acc, c) => acc + (c.caras || 0), 0);
     const totalBonificacion = caras.filter(c => !(c.articulo || '').toUpperCase().startsWith('CT') && !isNoInventoryArticle(c.articulo || '')).reduce((acc, c) => acc + (c.bonificacion || 0), 0);
     const totalCortesia = caras.filter(c => (c.articulo || '').toUpperCase().startsWith('CT')).reduce((acc, c) => acc + (c.bonificacion || 0), 0);
-    const totalInversion = caras.reduce((acc, c) => acc + ((c.caras || 0) * (c.tarifa_publica || 0)), 0);
+    const totalInversion = caras.reduce((acc, c) => acc + (Number(c.costo) || 0), 0);
     return { totalRenta, totalImpresiones, totalEspeciales, totalBonificacion, totalCortesia, totalInversion };
   }, [caras]);
 
