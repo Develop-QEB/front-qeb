@@ -348,10 +348,10 @@ function TareaRow({
 
   const getAuthStatusBadge = () => {
     if (isCancelado) return { bg: 'bg-zinc-500/20', border: 'border-zinc-500/30', color: 'text-zinc-400', label: 'Cancelado' };
-    if (isRechazado) return { bg: 'bg-red-500/20', border: 'border-red-500/30', color: 'text-red-400', label: 'Rechazada' };
-    if (isCompleted) return { bg: 'bg-emerald-500/20', border: 'border-emerald-500/30', color: 'text-emerald-400', label: 'Aprobada' };
-    if (isAprobacion) return { bg: 'bg-emerald-500/20', border: 'border-emerald-500/30', color: 'text-emerald-400', label: 'Aprobada' };
     if (isRechazo) return { bg: 'bg-red-500/20', border: 'border-red-500/30', color: 'text-red-400', label: 'Rechazada' };
+    if (isAprobacion) return { bg: 'bg-emerald-500/20', border: 'border-emerald-500/30', color: 'text-emerald-400', label: 'Aprobada' };
+    if (isRechazado) return { bg: 'bg-red-500/20', border: 'border-red-500/30', color: 'text-red-400', label: 'Rechazada' };
+    if (isCompleted && isAuthTask) return { bg: 'bg-emerald-500/20', border: 'border-emerald-500/30', color: 'text-emerald-400', label: 'Aprobada' };
     if (isAuthTask) return { bg: 'bg-amber-500/20', border: 'border-amber-500/30', color: 'text-amber-400', label: 'Pendiente' };
     return null;
   };
@@ -379,7 +379,7 @@ function TareaRow({
         <div className={`flex-shrink-0 flex items-center gap-2 px-3 py-1.5 rounded-lg bg-gradient-to-r from-orange-500/25 to-amber-500/20 border-2 border-orange-400/50 shadow-sm shadow-orange-500/10`}>
           <TipoIcon className="h-4 w-4 text-orange-300" />
           <span className="text-xs font-bold text-orange-300 tracking-wide">{tarea.tipo}</span>
-          {authBadge && (
+          {authBadge && !isRechazo && !isAprobacion && (
             <span className={`ml-1 px-1.5 py-0.5 rounded text-[10px] font-bold ${authBadge.bg} ${authBadge.color} border ${authBadge.border}`}>{authBadge.label}</span>
           )}
         </div>
@@ -389,7 +389,7 @@ function TareaRow({
             <TipoIcon className={`h-3 w-3 ${tipoConfig.color}`} />
             <span className={`text-[11px] font-medium ${tipoConfig.color}`}>{tarea.tipo}</span>
           </div>
-          {authBadge && (
+          {authBadge && !isRechazo && !isAprobacion && (
             <div className={`flex-shrink-0 px-2 py-0.5 rounded-full ${authBadge.bg} border ${authBadge.border}`}>
               <span className={`text-[10px] font-semibold ${authBadge.color}`}>{authBadge.label}</span>
             </div>
@@ -3325,10 +3325,10 @@ export function NotificacionesPage() {
                   const isCanceladoInline = tarea.estatus === 'Cancelado';
                   const getInlineAuthBadge = () => {
                     if (isCanceladoInline) return { bg: 'bg-zinc-500/20', border: 'border-zinc-500/30', color: 'text-zinc-400', label: 'Cancelado' };
-                    if (isRechazadoInline) return { bg: 'bg-red-500/20', border: 'border-red-500/30', color: 'text-red-400', label: 'Rechazada' };
-                    if (isCompleted) return { bg: 'bg-emerald-500/20', border: 'border-emerald-500/30', color: 'text-emerald-400', label: 'Aprobada' };
-                    if (isAprobacionInline) return { bg: 'bg-emerald-500/20', border: 'border-emerald-500/30', color: 'text-emerald-400', label: 'Aprobada' };
                     if (isRechazoInline) return { bg: 'bg-red-500/20', border: 'border-red-500/30', color: 'text-red-400', label: 'Rechazada' };
+                    if (isAprobacionInline) return { bg: 'bg-emerald-500/20', border: 'border-emerald-500/30', color: 'text-emerald-400', label: 'Aprobada' };
+                    if (isRechazadoInline) return { bg: 'bg-red-500/20', border: 'border-red-500/30', color: 'text-red-400', label: 'Rechazada' };
+                    if (isCompleted && isAuthTaskInline) return { bg: 'bg-emerald-500/20', border: 'border-emerald-500/30', color: 'text-emerald-400', label: 'Aprobada' };
                     if (isAuthTaskInline) return { bg: 'bg-amber-500/20', border: 'border-amber-500/30', color: 'text-amber-400', label: 'Pendiente' };
                     return null;
                   };
@@ -3359,7 +3359,7 @@ export function NotificacionesPage() {
                               <div className="flex-shrink-0 inline-flex items-center gap-2 px-3 py-1.5 rounded-lg bg-gradient-to-r from-orange-500/25 to-amber-500/20 border-2 border-orange-400/50 shadow-sm shadow-orange-500/10">
                                 <TipoIcon className="h-4 w-4 text-orange-300" />
                                 <span className="text-xs font-bold text-orange-300 tracking-wide">{tarea.tipo}</span>
-                                {inlineAuthBadge && (
+                                {inlineAuthBadge && !isRechazoInline && !isAprobacionInline && (
                                   <span className={`ml-1 px-1.5 py-0.5 rounded text-[10px] font-bold ${inlineAuthBadge.bg} ${inlineAuthBadge.color} border ${inlineAuthBadge.border}`}>{inlineAuthBadge.label}</span>
                                 )}
                               </div>
