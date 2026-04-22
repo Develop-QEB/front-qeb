@@ -432,6 +432,9 @@ export interface Notificacion {
   campania_id?: number | null;
   asesor?: string | null;
   creador?: string | null;
+  cliente?: string | null;
+  notas_direccion?: string | null;
+  descripcion_trafico?: string | null;
   formatos?: string | null;
 }
 

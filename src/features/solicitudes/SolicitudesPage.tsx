@@ -540,12 +540,16 @@ export function SolicitudesPage() {
     if (editIdParam) {
       const id = parseInt(editIdParam, 10);
       if (!isNaN(id)) {
-        // Fetch solicitud and open edit modal
         solicitudesService.getById(id).then((solicitud) => {
           setEditSolicitud(solicitud);
-        }).catch(console.error);
+          setSearchParams({}, { replace: true });
+        }).catch((err) => {
+          console.error(err);
+          setSearchParams({}, { replace: true });
+        });
+      } else {
+        setSearchParams({}, { replace: true });
       }
-      setSearchParams({}, { replace: true });
     } else if (viewIdParam) {
       const id = parseInt(viewIdParam, 10);
       if (!isNaN(id)) {

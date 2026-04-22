@@ -178,6 +178,7 @@ export interface CaraAutorizacion {
   id: number;
   clave: string;
   ciudad: string;
+  estados?: string;
   formato: string;
   tipo: string;
   caras: number;

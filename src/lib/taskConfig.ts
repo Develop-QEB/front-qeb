@@ -32,6 +32,12 @@ export const STATUS_CONFIG = {
     border: 'border-zinc-500/30',
     icon: XCircle
   },
+  'Rechazado': {
+    color: 'text-red-400',
+    bg: 'bg-red-500/20',
+    border: 'border-red-500/30',
+    icon: ShieldX
+  },
 } as const;
 
 // ============ CONFIGURACIÓN DE TIPOS DE TAREA ============
