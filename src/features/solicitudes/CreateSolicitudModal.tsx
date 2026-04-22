@@ -295,6 +295,7 @@ interface CaraEntry {
   renta: number;
   bonificacion: number;
   tarifaPublica: number;
+  tarifaEfectiva?: number;
   descuento: number;
   precioTotal: number;
   autorizacion_dg?: 'aprobado' | 'pendiente' | 'rechazado';
@@ -1268,7 +1269,8 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
         periodoFin: period.periodoFin,
         renta: newCara.renta,
         bonificacion: grupoRtBf ? 0 : newCara.bonificacion, // If BF separate, RT has 0 bonif
-        tarifaPublica: tarifaToSave,
+        tarifaPublica: newCara.tarifaPublica,
+        tarifaEfectiva: tarifaToSave,
         descuento: descuento * 100,
         precioTotal,
         autorizacion_dg,
@@ -1295,6 +1297,7 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
           renta: newCara.bonificacion, // BF caras go in renta field
           bonificacion: 0,
           tarifaPublica: 0, // BF is free
+          tarifaEfectiva: 0,
           descuento: 0,
           precioTotal: 0,
           autorizacion_dg, // BF inherits RT auth state
@@ -1647,7 +1650,7 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
         nivel_socioeconomico: c.nse.join(','),
         formato: c.formato,
         costo: c.precioTotal,
-        tarifa_publica: c.tarifaPublica,
+        tarifa_publica: c.tarifaEfectiva ?? c.tarifaPublica,
         inicio_periodo: c.periodoInicio,
         fin_periodo: c.periodoFin,
         caras_flujo: c.esBf ? 0 : Math.ceil(c.renta / 2),
@@ -1824,6 +1827,7 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
             renta: Number(cara.caras) || 0,
             bonificacion: Number(cara.bonificacion) || 0,
             tarifaPublica: Number(cara.tarifa_publica) || 0,
+            tarifaEfectiva: Number(cara.tarifa_publica) || 0,
             descuento: Number(cara.descuento) || 0,
             precioTotal: Number(cara.costo) || 0,
             autorizacion_dg: cara.autorizacion_dg as CaraEntry['autorizacion_dg'],
@@ -2795,6 +2799,7 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
                                     <th className={`px-2 py-2 text-center text-[10px] font-semibold ${isDark ? 'text-zinc-500' : 'text-gray-500'}`}>Bonif.</th>
                                     <th className={`px-2 py-2 text-center text-[10px] font-semibold ${isDark ? 'text-zinc-500' : 'text-gray-500'}`}>Total</th>
                                     <th className={`px-2 py-2 text-right text-[10px] font-semibold ${isDark ? 'text-zinc-500' : 'text-gray-500'}`}>Tarifa Púb.</th>
+                                    <th className={`px-2 py-2 text-right text-[10px] font-semibold ${isDark ? 'text-zinc-500' : 'text-gray-500'}`}>Tarifa Efect.</th>
                                     <th className={`px-2 py-2 text-right text-[10px] font-semibold ${isDark ? 'text-zinc-500' : 'text-gray-500'}`}>Precio Total</th>
                                     <th className={`px-2 py-2 text-center text-[10px] font-semibold ${isDark ? 'text-zinc-500' : 'text-gray-500'}`}>Estado</th>
                                     <th className={`px-2 py-2 text-center text-[10px] font-semibold ${isDark ? 'text-zinc-500' : 'text-gray-500'}`}></th>
@@ -2803,8 +2808,7 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
                                 <tbody>
                                   {items.map((cara) => {
                                     const totalCaras = cara.renta + cara.bonificacion;
-                                    const precioTotal = cara.tarifaPublica * cara.renta;
-                                    const tarifaEfectiva = totalCaras > 0 ? precioTotal / totalCaras : 0;
+                                    const precioTotal = cara.precioTotal || (cara.tarifaPublica * cara.renta);
                                     const descuento = totalCaras > 0 ? ((cara.bonificacion / totalCaras) * 100) : 0;
 
                                     return (
@@ -2827,6 +2831,7 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
                                         <td className="px-2 py-2 text-xs text-center text-emerald-400">{cara.esBf ? cara.renta : cara.bonificacion}</td>
                                         <td className={`px-2 py-2 text-xs text-center ${isDark ? 'text-white' : 'text-gray-900'} font-medium`}>{totalCaras}</td>
                                         <td className={`px-2 py-2 text-xs text-right ${isDark ? 'text-zinc-300' : 'text-gray-700'}`}>{formatCurrency(cara.tarifaPublica)}</td>
+                                        <td className={`px-2 py-2 text-xs text-right ${isDark ? 'text-purple-400' : 'text-purple-600'}`}>{formatCurrency(cara.tarifaEfectiva ?? cara.tarifaPublica)}</td>
                                         <td className="px-2 py-2 text-xs text-right text-emerald-400 font-medium">{formatCurrency(precioTotal)}</td>
                                         <td className="px-2 py-2 text-center">
                                           {(() => {
