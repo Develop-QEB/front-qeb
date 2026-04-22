@@ -57,6 +57,7 @@ interface CaraItem {
   id?: number;
   ciudad: string;
   estados: string;
+  plaza?: string;
   tipo: string;
   flujo: string;
   bonificacion: number;

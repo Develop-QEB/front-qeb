@@ -588,7 +588,7 @@ function GroupMetaBadges({ items, skipFields, isDark: isDarkProp }: { items: Inv
   );
 }
 
-function renderReservadoCell(item: InventarioReservado, col: TableColumn, p = 'p-1.5', isDark = true, groupInfo?: { esperadas: number; reservadas: number; completo: boolean; exceso: boolean } | null) {
+function renderReservadoCell(item: InventarioReservado, col: TableColumn, p = 'p-1.5', isDark = true, groupInfo?: { esperadas: number; reservadas: number; completo: boolean; exceso: boolean } | null, hideGroupBadge = false) {
   if (col.field === 'codigo_unico') return (
     <td key={col.field} className={`${p} ${isDark ? 'text-white' : 'text-gray-900'} font-medium`}>
       <div className="flex items-center gap-1.5">
@@ -596,12 +596,12 @@ function renderReservadoCell(item: InventarioReservado, col: TableColumn, p = 'p
         {item.estatus_inventario === 'Bloqueado' && (
           <span className="px-1.5 py-0.5 rounded text-[9px] font-semibold bg-red-500/20 text-red-400 border border-red-500/30">Bloqueado</span>
         )}
-        {groupInfo && !groupInfo.completo && (
+        {!hideGroupBadge && groupInfo && !groupInfo.completo && (
           <span className="px-1.5 py-0.5 rounded text-[9px] font-semibold bg-yellow-500/20 text-yellow-400 border border-yellow-500/30" title={`Grupo incompleto: ${groupInfo.reservadas}/${groupInfo.esperadas} caras`}>
             {groupInfo.reservadas}/{groupInfo.esperadas}
           </span>
         )}
-        {groupInfo && groupInfo.exceso && (
+        {!hideGroupBadge && groupInfo && groupInfo.exceso && (
           <span className="px-1.5 py-0.5 rounded text-[9px] font-semibold bg-orange-500/20 text-orange-400 border border-orange-500/30" title={`Exceso de inventario: ${groupInfo.reservadas}/${groupInfo.esperadas} caras`}>
             +{groupInfo.reservadas - groupInfo.esperadas}
           </span>
@@ -656,10 +656,10 @@ function renderIMCell(item: InventarioReservado, col: TableColumn, p = 'p-1.5', 
   return <td key={col.field} className={`${p} ${isDark ? 'text-zinc-300' : 'text-gray-700'} text-[10px]`}>{value !== null && value !== undefined ? String(value) : '-'}</td>;
 }
 
-function renderAPSCell(item: InventarioConAPS, col: TableColumn, p = 'p-1.5', isDark = true) {
-  if (col.field === 'aps') return <td key={col.field} className={`${p} text-center`}><span className={`px-1.5 py-0.5 rounded font-medium ${isDark ? 'bg-cyan-500/20 text-cyan-400' : 'bg-cyan-50 text-cyan-700'}`}>{item.aps}</span></td>;
+function renderAPSCell(item: InventarioConAPS, col: TableColumn, p = 'p-1.5', isDark = true, groupInfo?: { esperadas: number; reservadas: number; completo: boolean; exceso: boolean } | null) {
+  if (col.field === 'aps') return <td key={col.field} className={`${p} text-center`}><span className={`px-1.5 py-0.5 rounded font-medium ${item.aps ? (isDark ? 'bg-cyan-500/20 text-cyan-400' : 'bg-cyan-50 text-cyan-700') : (isDark ? 'bg-zinc-500/20 text-zinc-400' : 'bg-gray-100 text-gray-500')}`}>{item.aps || '—'}</span></td>;
   if (col.field === 'estatus_reserva') return <td key={col.field} className={p}><span className={`px-1.5 py-0.5 rounded text-[10px] ${item.estatus_reserva === 'confirmado' ? (isDark ? 'bg-green-500/20 text-green-400' : 'bg-green-50 text-green-700') : item.estatus_reserva === 'pendiente' ? (isDark ? 'bg-yellow-500/20 text-yellow-400' : 'bg-yellow-50 text-yellow-700') : (isDark ? 'bg-zinc-500/20 text-zinc-400' : 'bg-gray-100 text-gray-500')}`}>{item.estatus_reserva || 'N/A'}</span></td>;
-  return renderReservadoCell(item, col, p, isDark);
+  return renderReservadoCell(item, col, p, isDark, groupInfo);
 }
 
 function renderIMAPSCell(item: InventarioConAPS, col: TableColumn, p = 'p-1.5', isDark = true) {
@@ -1011,6 +1011,34 @@ export function CampanaDetailPage() {
     const info = groupCompletenessMap.get(item.solicitud_caras_id);
     return !!info && !info.completo;
   };
+
+  // Helper: verificar si un item pertenece a un grupo con exceso de caras
+  const isItemFromExcessGroup = (item: InventarioReservado): boolean => {
+    if (!item.solicitud_caras_id) return false;
+    const info = groupCompletenessMap.get(item.solicitud_caras_id);
+    return !!info && info.exceso;
+  };
+
+  // Hay algún item seleccionado en grupo incompleto o con exceso → deshabilita botón APS
+  const selectedHasIncompleteOrExcess = useMemo(() => {
+    if (selectedItems.size === 0) return false;
+    return inventarioReservado
+      .filter(i => selectedItems.has(i.rsv_ids))
+      .some(item => {
+        if (!item.solicitud_caras_id) return false;
+        const info = groupCompletenessMap.get(item.solicitud_caras_id);
+        return !!info && (!info.completo || info.exceso);
+      });
+  }, [selectedItems, inventarioReservado, groupCompletenessMap]);
+
+  // Items de inventarioReservado cuyos grupos están incompletos → aparecen en tabla APS como pendientes
+  const incompleteReservadoForAPS = useMemo(() => {
+    return inventarioReservado.filter(item => {
+      if (!item.solicitud_caras_id) return false;
+      const info = groupCompletenessMap.get(item.solicitud_caras_id);
+      return !!info && !info.completo;
+    });
+  }, [inventarioReservado, groupCompletenessMap]);
 
   // Auto-dismiss toast de bloqueo APS
   useEffect(() => {
@@ -1441,9 +1469,9 @@ export function CampanaDetailPage() {
     });
   };
 
-  // Seleccionar/deseleccionar todos (excluye items de grupos incompletos)
+  // Seleccionar/deseleccionar todos (excluye items de grupos incompletos o con exceso)
   const selectableItems = useMemo(() => {
-    return filteredInventarioReservado.filter(i => !isItemFromIncompleteGroup(i));
+    return filteredInventarioReservado.filter(i => !isItemFromIncompleteGroup(i) && !isItemFromExcessGroup(i));
   }, [filteredInventarioReservado, groupCompletenessMap]);
 
   const toggleSelectAll = () => {
@@ -1454,9 +1482,9 @@ export function CampanaDetailPage() {
     }
   };
 
-  // Seleccionar/deseleccionar un grupo completo (excluye items de grupos incompletos)
+  // Seleccionar/deseleccionar un grupo completo (excluye items de grupos incompletos o con exceso)
   const toggleGroupSelection = (groupItems: InventarioReservado[]) => {
-    const selectable = groupItems.filter(i => !isItemFromIncompleteGroup(i));
+    const selectable = groupItems.filter(i => !isItemFromIncompleteGroup(i) && !isItemFromExcessGroup(i));
     setSelectedItems(prev => {
       const next = new Set(prev);
       const groupIds = selectable.map(i => i.rsv_ids);
@@ -1697,6 +1725,10 @@ export function CampanaDetailPage() {
       const carasEsperadas = (cara.caras || 0) + (Number(cara.bonificacion) || 0);
       if (carasEsperadas > 0 && carasReservadas < carasEsperadas) {
         alert(`No se puede asignar APS: el grupo "${cara.articulo || ''} - ${cara.ciudad || ''}" está incompleto (${carasReservadas}/${carasEsperadas} caras asignadas)`);
+        return;
+      }
+      if (carasEsperadas > 0 && carasReservadas > carasEsperadas) {
+        alert(`No se puede asignar APS: el grupo "${cara.articulo || ''} - ${cara.ciudad || ''}" tiene exceso de caras (${carasReservadas}/${carasEsperadas})`);
         return;
       }
     }
@@ -2156,10 +2188,10 @@ export function CampanaDetailPage() {
               {permissions.canEditDetalleCampana && (
                 <button
                   onClick={handleAssignAPS}
-                  disabled={selectedItems.size === 0 || assignAPSMutation.isPending}
-                  title={selectedAreCortesias ? 'Las cortesías pueden tener APS opcional' : undefined}
+                  disabled={selectedItems.size === 0 || assignAPSMutation.isPending || selectedHasIncompleteOrExcess}
+                  title={selectedHasIncompleteOrExcess ? 'Hay grupos incompletos o con exceso de caras — ajusta el inventario antes de asignar APS' : selectedAreCortesias ? 'Las cortesías pueden tener APS opcional' : undefined}
                   className={`flex items-center gap-1 sm:gap-1.5 px-2 sm:px-3 py-1 sm:py-1.5 text-[10px] sm:text-xs font-medium rounded-lg transition-colors ${
-                    selectedItems.size === 0
+                    selectedItems.size === 0 || selectedHasIncompleteOrExcess
                       ? isDark ? 'bg-purple-900/30 text-purple-400/50 cursor-not-allowed' : 'bg-purple-100 text-purple-300 cursor-not-allowed'
                       : 'bg-purple-600 hover:bg-purple-700 text-white'
                   }`}
@@ -2646,25 +2678,21 @@ export function CampanaDetailPage() {
                         <tbody>
                           {filteredInventarioReservado.filter(i => !isIMArticle(i)).map((item) => {
                             const incomplete = isItemFromIncompleteGroup(item);
+                            const excess = isItemFromExcessGroup(item);
+                            const blocked = incomplete || excess;
                             return (
                             <tr
                               key={item.rsv_ids}
                               id={`row-${item.rsv_ids}`}
                               className={`border-b border-border/50 transition-colors ${
-                                incomplete ? (isDark ? 'bg-yellow-500/5' : 'bg-yellow-50/50') : ''
+                                excess ? (isDark ? 'bg-orange-500/5' : 'bg-orange-50/50') : incomplete ? (isDark ? 'bg-yellow-500/5' : 'bg-yellow-50/50') : ''
                               } ${
                                 selectedItems.has(item.rsv_ids) ? 'bg-yellow-500/20' : 'hover:bg-purple-900/20'
                               }`}
                             >
                               <td className="p-2">
-                                {incomplete ? (
-                                  <button
-                                    onClick={() => showApsBlockMessage(item)}
-                                    className="w-4 h-4 flex items-center justify-center cursor-pointer hover:scale-110 transition-transform"
-                                    title="Grupo incompleto - clic para más información"
-                                  >
-                                    <AlertTriangle className="h-3.5 w-3.5 text-yellow-500" />
-                                  </button>
+                                {blocked ? (
+                                  <div className={`w-4 h-4 rounded border flex items-center justify-center opacity-40 cursor-not-allowed ${excess ? 'border-orange-500/30' : 'border-yellow-500/30'}`} title={excess ? 'Grupo con exceso de caras — ajusta el inventario' : 'Grupo incompleto — ajusta las caras para poder seleccionar'} />
                                 ) : (
                                 <button
                                   onClick={() => toggleItemSelection(item.rsv_ids)}
@@ -2839,6 +2867,15 @@ export function CampanaDetailPage() {
                               </span>
                               <span className={`text-xs ${isDark ? 'text-white' : 'text-gray-900'}`}>{groupKey}</span>
                               <GroupSummaryInline items={allGroupItems} groupField={activeGroupings[0]} />
+                              {(() => {
+                                const ids = [...new Set(allGroupItems.map(i => i.solicitud_caras_id).filter((id): id is number => id !== null))];
+                                if (ids.length !== 1) return null;
+                                const info = groupCompletenessMap.get(ids[0]);
+                                if (!info) return null;
+                                if (info.exceso) return <span className="flex items-center gap-1"><AlertTriangle className="h-3 w-3 text-orange-400 shrink-0" /><span className="px-1.5 py-0.5 rounded text-[9px] font-semibold bg-orange-500/20 text-orange-400 border border-orange-500/30" title={`Exceso: ${info.reservadas}/${info.esperadas} caras`}>+{info.reservadas - info.esperadas}</span></span>;
+                                if (!info.completo) return <span className="flex items-center gap-1"><AlertTriangle className="h-3 w-3 text-yellow-400 shrink-0" /><span className="px-1.5 py-0.5 rounded text-[9px] font-semibold bg-yellow-500/20 text-yellow-400 border border-yellow-500/30" title={`Incompleto: ${info.reservadas}/${info.esperadas} caras`}>{info.reservadas}/{info.esperadas}</span></span>;
+                                return null;
+                              })()}
                               <span className="ml-auto text-[10px] text-muted-foreground shrink-0">
                                 {totalItems} items
                               </span>
@@ -2889,6 +2926,15 @@ export function CampanaDetailPage() {
                                             </span>
                                             <span className={`text-[10px] ${isDark ? 'text-white' : 'text-gray-900'}`}>{subGroupKey}</span>
                                             <GroupSummaryInline items={subItems} groupField={activeGroupings[1]} />
+                                            {(() => {
+                                              const ids = [...new Set(subItems.map(i => i.solicitud_caras_id).filter((id): id is number => id !== null))];
+                                              if (ids.length !== 1) return null;
+                                              const info = groupCompletenessMap.get(ids[0]);
+                                              if (!info) return null;
+                                              if (info.exceso) return <span className="flex items-center gap-1"><AlertTriangle className="h-3 w-3 text-orange-400 shrink-0" /><span className="px-1.5 py-0.5 rounded text-[9px] font-semibold bg-orange-500/20 text-orange-400 border border-orange-500/30" title={`Exceso: ${info.reservadas}/${info.esperadas} caras`}>+{info.reservadas - info.esperadas}</span></span>;
+                                              if (!info.completo) return <span className="flex items-center gap-1"><AlertTriangle className="h-3 w-3 text-yellow-400 shrink-0" /><span className="px-1.5 py-0.5 rounded text-[9px] font-semibold bg-yellow-500/20 text-yellow-400 border border-yellow-500/30" title={`Incompleto: ${info.reservadas}/${info.esperadas} caras`}>{info.reservadas}/{info.esperadas}</span></span>;
+                                              return null;
+                                            })()}
                                             <span className="ml-auto text-[10px] text-muted-foreground shrink-0">
                                               {subItems.length}
                                             </span>
@@ -2910,25 +2956,21 @@ export function CampanaDetailPage() {
                                                 <tbody>
                                                   {subItems.filter(i => !isIMArticle(i)).map((item) => {
                                                     const incomplete = isItemFromIncompleteGroup(item);
+                                                    const excess = isItemFromExcessGroup(item);
+                                                    const blocked = incomplete || excess;
                                                     return (
                                                     <tr
                                                       key={item.rsv_ids}
                                                       id={`row-${item.rsv_ids}`}
                                                       className={`border-t border-border/30 transition-colors ${
-                                                        incomplete ? (isDark ? 'bg-yellow-500/5' : 'bg-yellow-50/50') : ''
+                                                        excess ? (isDark ? 'bg-orange-500/5' : 'bg-orange-50/50') : incomplete ? (isDark ? 'bg-yellow-500/5' : 'bg-yellow-50/50') : ''
                                                       } ${
                                                         selectedItems.has(item.rsv_ids) ? 'bg-yellow-500/20' : 'hover:bg-purple-900/10'
                                                       }`}
                                                     >
                                                       <td className="p-1.5 w-8">
-                                                        {incomplete ? (
-                                                          <button
-                                                            onClick={() => showApsBlockMessage(item)}
-                                                            className="w-3.5 h-3.5 flex items-center justify-center cursor-pointer hover:scale-110 transition-transform"
-                                                            title="Grupo incompleto - clic para más información"
-                                                          >
-                                                            <AlertTriangle className="h-3 w-3 text-yellow-500" />
-                                                          </button>
+                                                        {blocked ? (
+                                                          <div className={`w-3.5 h-3.5 rounded border opacity-40 cursor-not-allowed ${excess ? 'border-orange-500/30' : 'border-yellow-500/30'}`} title={excess ? 'Grupo con exceso de caras — ajusta el inventario' : 'Grupo incompleto — ajusta las caras para poder seleccionar'} />
                                                         ) : (
                                                         <button
                                                           onClick={() => toggleItemSelection(item.rsv_ids)}
@@ -2944,7 +2986,7 @@ export function CampanaDetailPage() {
                                                         </button>
                                                         )}
                                                       </td>
-                                                      {visibleColumnsReservado.map(col => renderReservadoCell(item, col, 'p-1.5', isDark, item.solicitud_caras_id ? groupCompletenessMap.get(item.solicitud_caras_id) : null))}
+                                                      {visibleColumnsReservado.map(col => renderReservadoCell(item, col, 'p-1.5', isDark, item.solicitud_caras_id ? groupCompletenessMap.get(item.solicitud_caras_id) : null, true))}
                                                     </tr>
                                                     );
                                                   })}
@@ -3019,25 +3061,21 @@ export function CampanaDetailPage() {
                                       <tbody>
                                         {items.filter(i => !isIMArticle(i)).map((item) => {
                                           const incomplete = isItemFromIncompleteGroup(item);
+                                          const excess = isItemFromExcessGroup(item);
+                                          const blocked = incomplete || excess;
                                           return (
                                           <tr
                                             key={item.rsv_ids}
                                             id={`row-${item.rsv_ids}`}
                                             className={`border-t border-border/30 transition-colors ${
-                                              incomplete ? (isDark ? 'bg-yellow-500/5' : 'bg-yellow-50/50') : ''
+                                              excess ? (isDark ? 'bg-orange-500/5' : 'bg-orange-50/50') : incomplete ? (isDark ? 'bg-yellow-500/5' : 'bg-yellow-50/50') : ''
                                             } ${
                                               selectedItems.has(item.rsv_ids) ? 'bg-yellow-500/20' : 'hover:bg-purple-900/10'
                                             }`}
                                           >
                                             <td className="p-1.5 w-8">
-                                              {incomplete ? (
-                                                <button
-                                                  onClick={() => showApsBlockMessage(item)}
-                                                  className="w-3.5 h-3.5 flex items-center justify-center cursor-pointer hover:scale-110 transition-transform"
-                                                  title="Grupo incompleto - clic para más información"
-                                                >
-                                                  <AlertTriangle className="h-3 w-3 text-yellow-500" />
-                                                </button>
+                                              {blocked ? (
+                                                <div className={`w-3.5 h-3.5 rounded border opacity-40 cursor-not-allowed ${excess ? 'border-orange-500/30' : 'border-yellow-500/30'}`} title={excess ? 'Grupo con exceso de caras — ajusta el inventario' : 'Grupo incompleto — ajusta las caras para poder seleccionar'} />
                                               ) : (
                                               <button
                                                 onClick={() => toggleItemSelection(item.rsv_ids)}
@@ -3053,7 +3091,7 @@ export function CampanaDetailPage() {
                                               </button>
                                               )}
                                             </td>
-                                            {visibleColumnsReservado.map(col => renderReservadoCell(item, col, 'p-1.5', isDark, item.solicitud_caras_id ? groupCompletenessMap.get(item.solicitud_caras_id) : null))}
+                                            {visibleColumnsReservado.map(col => renderReservadoCell(item, col, 'p-1.5', isDark, item.solicitud_caras_id ? groupCompletenessMap.get(item.solicitud_caras_id) : null, true))}
                                           </tr>
                                           );
                                         })}
@@ -3641,11 +3679,48 @@ export function CampanaDetailPage() {
                                 )}
                               </button>
                             </td>
-                            {visibleColumnsAPS.map(col => renderAPSCell(item, col, 'p-2', isDark))}
+                            {visibleColumnsAPS.map(col => renderAPSCell(item, col, 'p-2', isDark, item.solicitud_caras_id ? groupCompletenessMap.get(item.solicitud_caras_id) : null))}
                           </tr>
                         ))}
                       </tbody>
                     </table>
+                  )}
+
+                  {/* Grupos incompletos — pendiente de APS */}
+                  {incompleteReservadoForAPS.filter(i => !isIMArticle(i)).length > 0 && (
+                    <>
+                      <div className={`px-3 py-2 mt-2 border-b border-yellow-500/30 ${isDark ? 'bg-yellow-500/5' : 'bg-yellow-50'}`}>
+                        <span className="text-xs font-semibold uppercase tracking-wide text-yellow-400">
+                          Grupos incompletos — sin APS
+                        </span>
+                      </div>
+                      <table className="w-full text-xs opacity-60">
+                        <thead>
+                          <tr className="border-b border-border text-left">
+                            <th className="p-2 w-8"></th>
+                            {visibleColumnsAPS.map(col => (
+                              <th key={col.field} className="p-2 font-medium text-yellow-400/80">{col.label}</th>
+                            ))}
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {incompleteReservadoForAPS.filter(i => !isIMArticle(i)).map(item => {
+                            const groupInfo = item.solicitud_caras_id ? groupCompletenessMap.get(item.solicitud_caras_id) : null;
+                            const apsItem = { ...item, aps: 0 } as InventarioConAPS;
+                            return (
+                              <tr key={`pending-${item.rsv_ids}`} className="border-b border-border/50 cursor-not-allowed">
+                                <td className="p-2">
+                                  <div className="w-4 h-4 rounded border border-yellow-500/30 flex items-center justify-center" title="Completa el grupo para poder asignar APS">
+                                    <span className="text-yellow-400 text-[8px] font-bold">!</span>
+                                  </div>
+                                </td>
+                                {visibleColumnsAPS.map(col => renderAPSCell(apsItem, col, 'p-2', isDark, groupInfo))}
+                              </tr>
+                            );
+                          })}
+                        </tbody>
+                      </table>
+                    </>
                   )}
 
                   {/* Tabla de artículos de impresión con APS */}
