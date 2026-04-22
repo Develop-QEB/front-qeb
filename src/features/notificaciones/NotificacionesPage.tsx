@@ -1306,6 +1306,10 @@ function getNavigationLabel(tipo: string, tipoTarea?: string, campaniaId?: numbe
   if (tipoTarea?.includes('Rechazo')) {
     return 'Editar Solicitud';
   }
+  // Tareas de Aprobación: siempre Ver Solicitud
+  if (tipoTarea?.includes('Aprobación')) {
+    return 'Ver Solicitud';
+  }
   // Tareas de Autorización: usar referencia_tipo (tipo) del backend
   if (tipoTarea?.includes('Autorización')) {
     if (tipo === 'campana') return 'Ver Campaña';
