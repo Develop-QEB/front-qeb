@@ -4,7 +4,7 @@ import { useQuery, useQueryClient, useMutation } from '@tanstack/react-query';
 import {
   X, Search, Plus, Trash2, ChevronDown, ChevronRight, ChevronUp, Users,
   FileText, MapPin, Layers, Pencil, Map as MapIcon, Package, Calendar,
-  Gift, Target, Save, ArrowLeft, Filter, Grid, LayoutGrid, Ruler, ArrowUpDown, ArrowUp, ArrowDown, Download, Eye, Funnel, Check, Upload, Monitor, Loader2
+  Gift, Target, Save, ArrowLeft, Filter, Grid, LayoutGrid, Ruler, ArrowUpDown, ArrowUp, ArrowDown, Download, Eye, Funnel, Check, Upload, Monitor, Loader2, Trophy
 } from 'lucide-react';
 import { GoogleMap, useLoadScript, Marker } from '@react-google-maps/api';
 import { AdvancedMapComponent } from '../propuestas/AdvancedMapComponent';
@@ -689,8 +689,10 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
   const [distanciaGrupos, setDistanciaGrupos] = useState(500); // metros
   const [tamanoGrupo, setTamanoGrupo] = useState(10);
   const [flujoPct, setFlujoPct] = useState(50);
+  const [savingPct, setSavingPct] = useState(false);
   const [flujoFilter, setFlujoFilter] = useState<'Todos' | 'Flujo' | 'Contraflujo'>('Todos');
-  const [showOnlyIsla, setShowOnlyIsla] = useState(false);
+  const [islaFilter, setIslaFilter] = useState<'off' | 'si' | 'no'>('off');
+  const [mundialistaFilter, setMundialistaFilter] = useState<'off' | 'si' | 'no'>('off');
   const [sortColumn, setSortColumn] = useState<string>('codigo_unico');
   const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('asc');
   const [agruparComoCompleto, setAgruparComoCompleto] = useState(true); // Group flujo+contraflujo at same location
@@ -2663,9 +2665,18 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
       data = filterSpotUnico(data);
     }
 
-    // Filter by isla - only show items that have "ISLA" in the isla column
-    if (showOnlyIsla) {
-      data = data.filter(inv => inv.isla?.toUpperCase().includes('ISLA'));
+    // Filter by isla - toggle: SI / NO / off
+    if (islaFilter === 'si') {
+      data = data.filter(inv => inv.isla?.toUpperCase() === 'SI');
+    } else if (islaFilter === 'no') {
+      data = data.filter(inv => !inv.isla || inv.isla.toUpperCase() !== 'SI');
+    }
+
+    // Filter by mundialista - toggle: SI / NO / off
+    if (mundialistaFilter === 'si') {
+      data = data.filter(inv => (inv as any).mueble_isla?.toUpperCase() === 'SI');
+    } else if (mundialistaFilter === 'no') {
+      data = data.filter(inv => !(inv as any).mueble_isla || (inv as any).mueble_isla.toUpperCase() !== 'SI');
     }
 
     // Apply grouping (distance or list)
@@ -2716,7 +2727,7 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
     });
 
     return data;
-  }, [inventarioDisponible, disponiblesSearchTerm, poiFilterIds, flujoFilter, showOnlyUnicos, showOnlyCompletos, showOnlyUnicosDigitales, showSpotUnico, showOnlyIsla, groupByDistance, groupMode, filterUnicos, filterCompletos, filterUnicosDigitales, filterSpotUnico, groupByDistanceFunc, groupByListFunc, sortColumn, sortDirection, reservas]);
+  }, [inventarioDisponible, disponiblesSearchTerm, poiFilterIds, flujoFilter, showOnlyUnicos, showOnlyCompletos, showOnlyUnicosDigitales, showSpotUnico, islaFilter, mundialistaFilter, groupByDistance, groupMode, filterUnicos, filterCompletos, filterUnicosDigitales, filterSpotUnico, groupByDistanceFunc, groupByListFunc, sortColumn, sortDirection, reservas]);
 
   // Handle POI filter from map
   const handlePOIFilter = useCallback((idsToKeep: number[]) => {
@@ -2749,7 +2760,8 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
     setShowOnlyCompletos(false);
     setShowOnlyUnicosDigitales(false);
     setShowSpotUnico(false);
-    setShowOnlyIsla(false);
+    setIslaFilter('off');
+    setMundialistaFilter('off');
     setGroupByDistance(false);
     setPoiFilterIds(null);
     setDisponiblesSearchTerm('');
@@ -3860,22 +3872,56 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
                 </div>
               </div>
 
-              {/* % Distribucion */}
-              <div className="flex flex-col items-center justify-center px-2 py-1 rounded-xl bg-zinc-800/30 border border-zinc-700/20 min-w-[70px]">
+              {/* % Distribucion - only for Digital */}
+              {selectedCaraForSearch?.tipo === 'Digital' && (() => {
+                const totalRentaForPct = (adjustedCarasFlujo.flujo + adjustedCarasFlujo.contraflujo) || 1;
+                const flujoYaRes = adjustedCarasFlujo.flujo - remainingToAssign.flujo;
+                const contraYaRes = adjustedCarasFlujo.contraflujo - remainingToAssign.contraflujo;
+                const minPct = Math.ceil(flujoYaRes / totalRentaForPct * 100);
+                const maxPct = Math.floor((totalRentaForPct - contraYaRes) / totalRentaForPct * 100);
+                return (
+                <div className="flex flex-col items-center justify-center px-2 py-1 rounded-xl bg-zinc-800/30 border border-zinc-700/20 min-w-[70px]">
                 <span className="text-[9px] text-zinc-500 mb-1">Distribución</span>
                 <div className="flex items-center gap-1">
                   <input
                     type="number"
-                    min={0}
-                    max={100}
+                    min={minPct}
+                    max={maxPct}
                     value={flujoPct}
-                    onChange={(e) => setFlujoPct(Math.max(0, Math.min(100, parseInt(e.target.value) || 0)))}
+                    onChange={async (e) => {
+                      const v = Math.max(minPct, Math.min(maxPct, parseInt(e.target.value) || 0));
+                      setFlujoPct(v);
+                      if (!selectedCaraForSearch?.id || !campana) return;
+                      const totalRenta = selectedCaraForSearch.caras || ((selectedCaraForSearch.caras_flujo || 0) + (selectedCaraForSearch.caras_contraflujo || 0));
+                      if (totalRenta === 0) return;
+                      const newFlujo = Math.ceil(totalRenta * v / 100);
+                      const newContra = totalRenta - newFlujo;
+                      setSavingPct(true);
+                      try {
+                        await campanasService.updateCara(campana.id, selectedCaraForSearch.id, {
+                          caras_flujo: newFlujo,
+                          caras_contraflujo: newContra,
+                        } as any);
+                        const updatedCara = { ...selectedCaraForSearch, caras_flujo: newFlujo, caras_contraflujo: newContra };
+                        setSelectedCaraForSearch(updatedCara);
+                        setCaras(prev => prev.map(c => c.id === selectedCaraForSearch.id
+                          ? { ...c, caras_flujo: newFlujo, caras_contraflujo: newContra }
+                          : c
+                        ));
+                      } catch (err) {
+                        console.error('Error guardando distribución:', err);
+                      } finally {
+                        setSavingPct(false);
+                      }
+                    }}
                     className="w-10 text-center text-xs font-bold bg-zinc-800 border-zinc-700 text-blue-400 border rounded px-1 py-0.5 focus:outline-none focus:ring-1 focus:ring-blue-500/50"
                   />
                   <span className="text-[10px] text-zinc-500">%</span>
                 </div>
-                <span className="text-[9px] text-zinc-600 mt-0.5">{flujoPct}/{100 - flujoPct}</span>
+                <span className="text-[9px] text-zinc-600 mt-0.5">{savingPct ? '...' : `${flujoPct}/${100 - flujoPct}`}</span>
               </div>
+                );
+              })()}
 
               {/* Contraflujo KPI */}
               <div className="flex-1 bg-zinc-800/50 rounded-xl p-3 border border-zinc-700/30">
@@ -4054,26 +4100,42 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
                     </button>
                   )}
 
-                  {/* Isla filter */}
+                  {/* Isla filter - 3-state toggle: off → SI → NO → off */}
                   <button
                     onClick={() => {
-                      setShowOnlyIsla(!showOnlyIsla);
-                      // When activating isla filter, auto-sort by codigo ascending
-                      if (!showOnlyIsla) {
-                        setSortColumn('codigo_unico');
-                        setSortDirection('asc');
-                      }
+                      const next = islaFilter === 'off' ? 'si' : islaFilter === 'si' ? 'no' : 'off';
+                      setIslaFilter(next);
+                      if (next === 'si') { setSortColumn('codigo_unico'); setSortDirection('asc'); }
                     }}
-                    className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-medium transition-all ${showOnlyIsla
+                    className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-medium transition-all ${islaFilter === 'si'
                       ? 'bg-teal-500 text-white shadow'
-                      : 'bg-zinc-800/80 text-zinc-400 border border-zinc-700/50 hover:text-white'
+                      : islaFilter === 'no'
+                        ? 'bg-red-500/80 text-white shadow'
+                        : `${isDark ? 'bg-zinc-800/80' : 'bg-gray-100/80'} ${isDark ? 'text-zinc-400' : 'text-gray-500'} border ${isDark ? 'border-zinc-700/50' : 'border-gray-200/50'} ${isDark ? 'hover:text-white' : 'hover:text-gray-900'}`
                       }`}
+                    title={islaFilter === 'off' ? 'Filtrar islas' : islaFilter === 'si' ? 'Mostrando islas (click: sin islas)' : 'Sin islas (click: quitar filtro)'}
                   >
                     <MapPin className="h-3.5 w-3.5" />
-                    Isla
-                    {showOnlyIsla && (
-                      <X className="h-3 w-3 ml-0.5 hover:text-teal-200" onClick={(e) => { e.stopPropagation(); setShowOnlyIsla(false); }} />
-                    )}
+                    {islaFilter === 'si' ? 'Isla ✓' : islaFilter === 'no' ? 'Isla ✗' : 'Isla'}
+                  </button>
+
+                  {/* Mundialista filter - 3-state toggle: off → SI → NO → off */}
+                  <button
+                    onClick={() => {
+                      const next = mundialistaFilter === 'off' ? 'si' : mundialistaFilter === 'si' ? 'no' : 'off';
+                      setMundialistaFilter(next);
+                      if (next === 'si') { setSortColumn('codigo_unico'); setSortDirection('asc'); }
+                    }}
+                    className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-medium transition-all ${mundialistaFilter === 'si'
+                      ? 'bg-green-600 text-white shadow'
+                      : mundialistaFilter === 'no'
+                        ? 'bg-red-500/80 text-white shadow'
+                        : `${isDark ? 'bg-zinc-800/80' : 'bg-gray-100/80'} ${isDark ? 'text-zinc-400' : 'text-gray-500'} border ${isDark ? 'border-zinc-700/50' : 'border-gray-200/50'} ${isDark ? 'hover:text-white' : 'hover:text-gray-900'}`
+                      }`}
+                    title={mundialistaFilter === 'off' ? 'Filtrar mundialista' : mundialistaFilter === 'si' ? 'Mostrando mundialistas (click: sin mundialistas)' : 'Sin mundialistas (click: quitar filtro)'}
+                  >
+                    <Trophy className="h-3.5 w-3.5" />
+                    {mundialistaFilter === 'si' ? 'Mundial ✓' : mundialistaFilter === 'no' ? 'Mundial ✗' : 'Mundial'}
                   </button>
 
                   {/* Grouping */}
@@ -4222,7 +4284,7 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
                     </span>
 
                     {/* Clear all filters */}
-                    {(flujoFilter !== 'Todos' || showOnlyCompletos || showOnlyUnicos || showOnlyUnicosDigitales || showSpotUnico || showOnlyIsla || groupByDistance || poiFilterIds !== null || disponiblesSearchTerm) && (
+                    {(flujoFilter !== 'Todos' || showOnlyCompletos || showOnlyUnicos || showOnlyUnicosDigitales || showSpotUnico || islaFilter !== 'off' || mundialistaFilter !== 'off' || groupByDistance || poiFilterIds !== null || disponiblesSearchTerm) && (
                       <button
                         onClick={clearAllFilters}
                         className="flex items-center gap-1 px-2 py-1 rounded-lg text-xs text-red-400 hover:text-red-300 hover:bg-red-500/10 transition-colors"
