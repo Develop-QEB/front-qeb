@@ -1631,7 +1631,7 @@ function ApprovalModal({
                 </div>
                 <div className="p-2 rounded-lg bg-red-500/10 border border-red-500/20 text-center">
                   <div className="text-lg font-bold text-red-400">{resumenData.pendientesDg}</div>
-                  <div className={`text-[10px] ${isDark ? 'text-zinc-500' : 'text-gray-400'}`}>Pend. DG</div>
+                  <div className={`text-[10px] ${isDark ? 'text-zinc-500' : 'text-gray-400'}`}>Pend. {tipoAutorizacion === 'dcm' ? 'DCM' : 'DG'}</div>
                 </div>
               </>
             )}
