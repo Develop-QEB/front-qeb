@@ -20,6 +20,7 @@ import { useAuthStore } from '../../store/authStore';
 import { useThemeStore } from '../../store/themeStore';
 import { getPermissions } from '../../lib/permissions';
 import { useSocketEquipos, useSocketPropuestas } from '../../hooks/useSocket';
+import { ConfirmModal } from '../../components/ui/confirm-modal';
 
 const MESES_LABEL = ['Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun', 'Jul', 'Ago', 'Sep', 'Oct', 'Nov', 'Dic'];
 function getMonthShort(dateStr: string): string {
@@ -539,6 +540,7 @@ function StatusModal({ isOpen, onClose, propuesta, onStatusChange, allowedStatus
   const queryClient = useQueryClient();
   const [newComment, setNewComment] = useState('');
   const [selectedStatus, setSelectedStatus] = useState('');
+  const [showRechazoConfirm, setShowRechazoConfirm] = useState(false);
   const commentsEndRef = useRef<HTMLDivElement>(null);
 
   // Query para obtener las caras de la propuesta y verificar autorizaciones pendientes
@@ -640,6 +642,16 @@ function StatusModal({ isOpen, onClose, propuesta, onStatusChange, allowedStatus
 
   const handleChangeStatus = () => {
     if (!propuesta || selectedStatus === propuesta.status) return;
+    if (selectedStatus === 'Rechazada') {
+      setShowRechazoConfirm(true);
+      return;
+    }
+    updateStatusMutation.mutate({ id: propuesta.id, status: selectedStatus });
+  };
+
+  const handleConfirmRechazo = () => {
+    if (!propuesta) return;
+    setShowRechazoConfirm(false);
     updateStatusMutation.mutate({ id: propuesta.id, status: selectedStatus });
   };
 
@@ -804,6 +816,17 @@ function StatusModal({ isOpen, onClose, propuesta, onStatusChange, allowedStatus
           </div>
         </div>
       </div>
+      <ConfirmModal
+        isOpen={showRechazoConfirm}
+        onClose={() => setShowRechazoConfirm(false)}
+        onConfirm={handleConfirmRechazo}
+        title="¿Rechazar propuesta?"
+        message="Esta acción no es reversible. Al rechazar la propuesta se liberará todo el inventario reservado y quedará disponible para otras propuestas."
+        confirmText="Sí, rechazar"
+        cancelText="Cancelar"
+        variant="danger"
+        isLoading={updateStatusMutation.isPending}
+      />
     </div>
   );
 }
