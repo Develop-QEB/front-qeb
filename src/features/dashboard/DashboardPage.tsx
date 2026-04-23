@@ -1004,7 +1004,7 @@ function InventoryTable({ data, isLoading, page, totalPages, total, onPageChange
 
   const downloadCSV = useCallback(async () => {
     const generateCSV = (items: any[]) => {
-      const headers = ['ID', 'Plaza', 'Municipio', 'Mueble', 'Tipo', 'Estatus', 'Cliente', 'APS'];
+      const headers = ['ID', 'Plaza', 'Municipio', 'Mueble', 'Tipo', 'Estatus', 'Cliente', 'CUIC', 'Marca', 'Cliente (Grupo)', 'APS'];
       const rows = items.map(item => [
         item.codigo_unico || item.id,
         item.plaza || '',
@@ -1013,6 +1013,9 @@ function InventoryTable({ data, isLoading, page, totalPages, total, onPageChange
         item.tradicional_digital || 'Tradicional',
         item.estatus || 'Disponible',
         item.cliente_nombre || '',
+        item.cuic || '',
+        item.marca || '',
+        item.cliente || '',
         item.APS || '',
       ]);
       return [headers, ...rows].map(r => r.map(v => `"${String(v).replace(/"/g, '""')}"`).join(',')).join('\n');
@@ -1063,7 +1066,7 @@ function InventoryTable({ data, isLoading, page, totalPages, total, onPageChange
       });
       const items = allData.items;
       if (items.length === 0) return;
-      const headers = ['ID', 'Plaza', 'Municipio', 'Mueble', 'Tipo de Mueble', 'Tipo', 'Estatus', 'Cliente', 'APS'];
+      const headers = ['ID', 'Plaza', 'Municipio', 'Mueble', 'Tipo de Mueble', 'Tipo', 'Estatus', 'Cliente', 'CUIC', 'Marca', 'Cliente (Grupo)', 'APS'];
       const rows = items.map((item: any) => [
         item.codigo_unico || item.id,
         item.plaza || '',
@@ -1073,6 +1076,9 @@ function InventoryTable({ data, isLoading, page, totalPages, total, onPageChange
         item.tradicional_digital || 'Tradicional',
         item.estatus || 'Disponible',
         item.cliente_nombre || '',
+        item.cuic || '',
+        item.marca || '',
+        item.cliente || '',
         item.APS || '',
       ]);
       const csv = [headers, ...rows].map(r => r.map(v => `"${String(v).replace(/"/g, '""')}"`).join(',')).join('\n');
