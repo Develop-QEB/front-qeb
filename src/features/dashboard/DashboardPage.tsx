@@ -1004,7 +1004,7 @@ function InventoryTable({ data, isLoading, page, totalPages, total, onPageChange
 
   const downloadCSV = useCallback(async () => {
     const generateCSV = (items: any[]) => {
-      const headers = ['ID', 'Plaza', 'Municipio', 'Mueble', 'Tipo', 'Estatus', 'Cliente', 'CUIC', 'Marca', 'Cliente (Grupo)', 'Propuesta', 'APS'];
+      const headers = ['ID', 'Plaza', 'Municipio', 'Mueble', 'Tipo', 'Estatus', 'Cliente', 'CUIC', 'Marca', 'Cliente (Grupo)', 'ID QEB', 'APS'];
       const rows = items.map(item => [
         item.codigo_unico || item.id,
         item.plaza || '',
@@ -1067,7 +1067,7 @@ function InventoryTable({ data, isLoading, page, totalPages, total, onPageChange
       });
       const items = allData.items;
       if (items.length === 0) return;
-      const headers = ['ID', 'Plaza', 'Municipio', 'Mueble', 'Tipo de Mueble', 'Tipo', 'Estatus', 'Cliente', 'CUIC', 'Marca', 'Cliente (Grupo)', 'Propuesta', 'APS'];
+      const headers = ['ID', 'Plaza', 'Municipio', 'Mueble', 'Tipo de Mueble', 'Tipo', 'Estatus', 'Cliente', 'CUIC', 'Marca', 'Cliente (Grupo)', 'ID QEB', 'APS'];
       const rows = items.map((item: any) => [
         item.codigo_unico || item.id,
         item.plaza || '',
