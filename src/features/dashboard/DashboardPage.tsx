@@ -1051,29 +1051,44 @@ function InventoryTable({ data, isLoading, page, totalPages, total, onPageChange
     URL.revokeObjectURL(url);
   }, [filteredData, selectedIds, selectAllPages, filters, activeEstatus, total]);
 
-  const downloadAllCSV = useCallback(() => {
-    if (filteredData.length === 0) return;
-    const headers = ['ID', 'Plaza', 'Municipio', 'Mueble', 'Tipo de Mueble', 'Tipo', 'Estatus', 'Cliente', 'APS'];
-    const rows = filteredData.map(item => [
-      item.codigo_unico || item.id,
-      item.plaza || '',
-      item.municipio || '',
-      item.mueble || '',
-      item.tipo_de_mueble || '',
-      item.tradicional_digital || 'Tradicional',
-      item.estatus || 'Disponible',
-      item.cliente_nombre || '',
-      item.APS || '',
-    ]);
-    const csv = [headers, ...rows].map(r => r.map(v => `"${String(v).replace(/"/g, '""')}"`).join(',')).join('\n');
-    const blob = new Blob(['\uFEFF' + csv], { type: 'text/csv;charset=utf-8;' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `inventario_detallado_${new Date().toISOString().slice(0,10)}.csv`;
-    a.click();
-    URL.revokeObjectURL(url);
-  }, [filteredData]);
+  const downloadAllCSV = useCallback(async () => {
+    setLoadingAllPages(true);
+    try {
+      const allData = await dashboardService.getInventoryDetail({
+        ...filters,
+        estatus: activeEstatus && activeEstatus !== 'total' ? activeEstatus : undefined,
+        page: 1,
+        limit: total,
+        includeCoords: false,
+      });
+      const items = allData.items;
+      if (items.length === 0) return;
+      const headers = ['ID', 'Plaza', 'Municipio', 'Mueble', 'Tipo de Mueble', 'Tipo', 'Estatus', 'Cliente', 'APS'];
+      const rows = items.map((item: any) => [
+        item.codigo_unico || item.id,
+        item.plaza || '',
+        item.municipio || '',
+        item.mueble || '',
+        item.tipo_de_mueble || '',
+        item.tradicional_digital || 'Tradicional',
+        item.estatus || 'Disponible',
+        item.cliente_nombre || '',
+        item.APS || '',
+      ]);
+      const csv = [headers, ...rows].map(r => r.map(v => `"${String(v).replace(/"/g, '""')}"`).join(',')).join('\n');
+      const blob = new Blob(['﻿' + csv], { type: 'text/csv;charset=utf-8;' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `inventario_detallado_${new Date().toISOString().slice(0,10)}.csv`;
+      a.click();
+      URL.revokeObjectURL(url);
+    } catch (err) {
+      console.error('Error al descargar todos:', err);
+    } finally {
+      setLoadingAllPages(false);
+    }
+  }, [filters, activeEstatus, total]);
 
   // Grouped data (up to 2 levels)
   interface InvGroupedLevel1 { name: string; items: any[]; subgroups?: { name: string; items: any[] }[] }
@@ -1219,7 +1234,7 @@ function InventoryTable({ data, isLoading, page, totalPages, total, onPageChange
             title="Descargar tabla completa como CSV"
           >
             <Download className="h-3.5 w-3.5" />
-            Exportar CSV ({filteredData.length})
+            {loadingAllPages ? 'Cargando...' : `Exportar CSV (${total.toLocaleString()})`}
           </button>
           {selectedIds.size > 0 && (
             <div className="flex items-center gap-2">
