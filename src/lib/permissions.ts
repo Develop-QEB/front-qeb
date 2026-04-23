@@ -161,7 +161,7 @@ const defaultPermissions: RolePermissions = {
   canEditCaraFiltersOnEdit: false,
   canEditArticuloOnEdit: false,
   canDeleteDetalleCampana: true,
-  canDeleteCaraConReservas: false,
+  canDeleteCaraConReservas: true,
   canSeeGestionArtes: true,
   canEditGestionArtes: true,
   canResolveProduccionTasks: true,
