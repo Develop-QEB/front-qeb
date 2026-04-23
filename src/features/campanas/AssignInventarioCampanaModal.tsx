@@ -1071,11 +1071,10 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
     }
   }, [isOpen]);
 
-  // Expand all catorcenas by default when caras change
+  // Collapse all catorcenas by default — user expands on demand (perf: avoids rendering 100+ caras at once)
   useEffect(() => {
     if (caras.length > 0) {
-      const periodos = new Set(caras.map(c => c.inicio_periodo || 'Sin periodo'));
-      setExpandedCatorcenas(periodos);
+      setExpandedCatorcenas(new Set());
     }
   }, [caras]);
 
@@ -1164,6 +1163,32 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
     const totalCortesia = caras.filter(c => (c.articulo || '').toUpperCase().startsWith('CT')).reduce((acc, c) => acc + (c.bonificacion || 0), 0);
     const totalInversion = caras.reduce((acc, c) => acc + (Number(c.costo) || 0), 0);
     return { totalRenta, totalImpresiones, totalEspeciales, totalBonificacion, totalCortesia, totalInversion };
+  }, [caras]);
+
+  // Pre-compute reservas indexed by cara for O(1) lookup instead of O(n) per cara
+  const reservasByCara = useMemo(() => {
+    const map = new Map<string, ReservaItem[]>();
+    reservas.forEach(r => {
+      const caraMatch = caras.find(c => r.id.startsWith(c.localId) || r.solicitudCaraId === c.id);
+      if (caraMatch) {
+        const key = caraMatch.localId;
+        if (!map.has(key)) map.set(key, []);
+        map.get(key)!.push(r);
+      }
+    });
+    return map;
+  }, [reservas, caras]);
+
+  // Pre-compute RT pair map for O(1) lookup
+  const rtPairMap = useMemo(() => {
+    const map = new Map<string, CaraItem>();
+    caras.forEach(cara => {
+      if (cara.esBf && cara.grupo_rt_bf) {
+        const rtPair = caras.find(c => !c.esBf && c.grupo_rt_bf === cara.grupo_rt_bf && c.inicio_periodo === cara.inicio_periodo && c.fin_periodo === cara.fin_periodo);
+        if (rtPair) map.set(cara.localId, rtPair);
+      }
+    });
+    return map;
   }, [caras]);
 
   // Merge all reservas by grupo_completo_id (for display)
@@ -6223,9 +6248,7 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
 
                           {isCatorcenaExpanded && groupData.caras.map((cara) => {
                             const isExpanded = expandedCaras.has(cara.localId);
-                            const caraReservas = reservas.filter(r =>
-                              r.id.startsWith(cara.localId) || r.solicitudCaraId === cara.id
-                            );
+                            const caraReservas = reservasByCara.get(cara.localId) || [];
                             const hasReservas = caraReservas.length > 0;
                             const caraHasAPS = caraReservas.some(r => r.aps && r.aps > 0);
                             const caraAPSBlocked = postedAPSGroups.size > 0
@@ -6307,7 +6330,7 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
                                         let dgDisplay = cara.autorizacion_dg;
                                         let dcmDisplay = cara.autorizacion_dcm;
                                         if (cara.esBf && cara.grupo_rt_bf) {
-                                          const rtPair = caras.find(c => !c.esBf && c.grupo_rt_bf === cara.grupo_rt_bf && c.inicio_periodo === cara.inicio_periodo && c.fin_periodo === cara.fin_periodo);
+                                          const rtPair = rtPairMap.get(cara.localId);
                                           if (rtPair) { dgDisplay = rtPair.autorizacion_dg; dcmDisplay = rtPair.autorizacion_dcm; }
                                         }
                                         return (
@@ -6336,7 +6359,7 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
                                       let tienePendientes = !isLocallyModified && (cara.autorizacion_dg === 'pendiente' || cara.autorizacion_dcm === 'pendiente');
                                       let tieneRechazado = cara.autorizacion_dg === 'rechazado' || cara.autorizacion_dcm === 'rechazado';
                                       if (cara.esBf && cara.grupo_rt_bf) {
-                                        const rtPair = caras.find(c => !c.esBf && c.grupo_rt_bf === cara.grupo_rt_bf && c.inicio_periodo === cara.inicio_periodo && c.fin_periodo === cara.fin_periodo);
+                                        const rtPair = rtPairMap.get(cara.localId);
                                         if (rtPair) {
                                           const rtModified = rtPair.id ? modifiedCaras.has(rtPair.id) : false;
                                           if (!rtModified && (rtPair.autorizacion_dg === 'pendiente' || rtPair.autorizacion_dcm === 'pendiente')) tienePendientes = true;
