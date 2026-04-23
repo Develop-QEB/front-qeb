@@ -427,10 +427,22 @@ function TicketDetailModal({
   useEffect(() => {
     if (chatMessages.length > 0) {
       const lastId = chatMessages[chatMessages.length - 1].id;
-      ticketsService.markChatRead(ticket.id, lastId);
-      queryClient.invalidateQueries({ queryKey: ['tickets-historial'] });
+      ticketsService.markChatRead(ticket.id, lastId).then(() => {
+        queryClient.invalidateQueries({ queryKey: ['tickets-historial'] });
+      });
     }
   }, [chatMessages, ticket.id, queryClient]);
+
+  // Mark chat as read on modal open (covers cached data scenario)
+  useEffect(() => {
+    ticketsService.getChatMessages(ticket.id).then(msgs => {
+      if (msgs.length > 0) {
+        ticketsService.markChatRead(ticket.id, msgs[msgs.length - 1].id).then(() => {
+          queryClient.invalidateQueries({ queryKey: ['tickets-historial'] });
+        });
+      }
+    });
+  }, [ticket.id]);
 
   useEffect(() => {
     if (activeChat === 'soporte') soporteChatEndRef.current?.scrollIntoView({ behavior: 'smooth' });
