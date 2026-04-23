@@ -1630,7 +1630,7 @@ function ApprovalModal({
                   <div className={`text-[10px] ${isDark ? 'text-zinc-500' : 'text-gray-400'}`}>Aprobadas</div>
                 </div>
                 <div className="p-2 rounded-lg bg-red-500/10 border border-red-500/20 text-center">
-                  <div className="text-lg font-bold text-red-400">{resumenData.pendientesDg}</div>
+                  <div className="text-lg font-bold text-red-400">{tipoAutorizacion === 'dcm' ? resumenData.pendientesDcm : resumenData.pendientesDg}</div>
                   <div className={`text-[10px] ${isDark ? 'text-zinc-500' : 'text-gray-400'}`}>Pend. {tipoAutorizacion === 'dcm' ? 'DCM' : 'DG'}</div>
                 </div>
               </>
@@ -1780,7 +1780,7 @@ function ApprovalModal({
                         )}
                         {isSolicitud && entry.detalles?.caras && (
                           <p className={`text-[11px] ${isDark ? 'text-zinc-500' : 'text-gray-400'} mt-0.5`}>
-                            {entry.detalles.caras.length} circuito(s) — Pend. DG: {entry.detalles.pendientesDg || 0}
+                            {entry.detalles.caras.length} circuito(s){entry.detalles.pendientesDg ? ` — Pend. DG: ${entry.detalles.pendientesDg}` : ''}{entry.detalles.pendientesDcm ? ` — Pend. DCM: ${entry.detalles.pendientesDcm}` : ''}
                           </p>
                         )}
                         {isCambio && entry.detalles?.cambios && (
