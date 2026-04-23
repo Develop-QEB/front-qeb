@@ -954,7 +954,9 @@ export function SolicitudesPage() {
             const tp = (item as any).tipo_periodo;
             const meses = ['Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun', 'Jul', 'Ago', 'Sep', 'Oct', 'Nov', 'Dic'];
             if (tp === 'mensual' && (item as any).periodo_fecha_inicio) {
-              const parts = String((item as any).periodo_fecha_inicio).split(/[-T]/);
+              const raw = (item as any).periodo_fecha_inicio;
+              const iso = raw instanceof Date ? raw.toISOString() : String(raw);
+              const parts = iso.split(/[-T]/);
               const month = parseInt(parts[1]) - 1;
               const year = parts[0];
               return <span className={`${isDark ? 'text-zinc-300' : 'text-gray-700'} text-xs`}>{meses[month]} {year}</span>;
@@ -970,7 +972,9 @@ export function SolicitudesPage() {
             const tp = (item as any).tipo_periodo;
             const meses = ['Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun', 'Jul', 'Ago', 'Sep', 'Oct', 'Nov', 'Dic'];
             if (tp === 'mensual' && (item as any).periodo_fecha_fin) {
-              const parts = String((item as any).periodo_fecha_fin).split(/[-T]/);
+              const raw = (item as any).periodo_fecha_fin;
+              const iso = raw instanceof Date ? raw.toISOString() : String(raw);
+              const parts = iso.split(/[-T]/);
               const month = parseInt(parts[1]) - 1;
               const year = parts[0];
               return <span className={`${isDark ? 'text-zinc-300' : 'text-gray-700'} text-xs`}>{meses[month]} {year}</span>;

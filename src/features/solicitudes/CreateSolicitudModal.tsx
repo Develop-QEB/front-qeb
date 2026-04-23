@@ -2545,7 +2545,11 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
                         <label className={`text-xs ${isDark ? 'text-zinc-500' : 'text-gray-500'}`}>Mes</label>
                         <select
                           value={newCara.periodo}
-                          onChange={(e) => setNewCara({ ...newCara, periodo: e.target.value, periodoInicioCustom: '', periodoFinCustom: '' })}
+                          onChange={(e) => {
+                            const val = e.target.value;
+                            const match = availablePeriods.find(p => `${p.a_o}-${p.numero_catorcena}` === val);
+                            setNewCara({ ...newCara, periodo: val, periodoInicioCustom: match?.fecha_inicio || '', periodoFinCustom: match?.fecha_fin || '' });
+                          }}
                           disabled={availablePeriods.length === 0}
                           className={`w-full px-2 py-2 ${isDark ? 'bg-zinc-800 border-zinc-700 text-white' : 'bg-gray-100 border-gray-200 text-gray-900'} border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-purple-500/50 disabled:opacity-50`}
                         >
@@ -2564,8 +2568,8 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
                           value={newCara.periodoInicioCustom}
                           onChange={(e) => setNewCara({ ...newCara, periodoInicioCustom: e.target.value })}
                           disabled={!newCara.periodo}
-                          min={availablePeriods.length > 0 ? availablePeriods[0].fecha_inicio : undefined}
-                          max={newCara.periodoFinCustom || (availablePeriods.length > 0 ? availablePeriods[availablePeriods.length - 1].fecha_fin : undefined)}
+                          min={(() => { const m = availablePeriods.find(p => `${p.a_o}-${p.numero_catorcena}` === newCara.periodo); return m?.fecha_inicio; })()}
+                          max={(() => { const m = availablePeriods.find(p => `${p.a_o}-${p.numero_catorcena}` === newCara.periodo); return newCara.periodoFinCustom || m?.fecha_fin; })()}
                           className={`w-full px-2 py-2 ${isDark ? 'bg-zinc-800 border-zinc-700 text-white' : 'bg-gray-100 border-gray-200 text-gray-900'} border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-purple-500/50 disabled:opacity-50`}
                         />
                       </div>
@@ -2576,8 +2580,8 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
                           value={newCara.periodoFinCustom}
                           onChange={(e) => setNewCara({ ...newCara, periodoFinCustom: e.target.value })}
                           disabled={!newCara.periodo}
-                          min={newCara.periodoInicioCustom || (availablePeriods.length > 0 ? availablePeriods[0].fecha_inicio : undefined)}
-                          max={availablePeriods.length > 0 ? availablePeriods[availablePeriods.length - 1].fecha_fin : undefined}
+                          min={(() => { const m = availablePeriods.find(p => `${p.a_o}-${p.numero_catorcena}` === newCara.periodo); return newCara.periodoInicioCustom || m?.fecha_inicio; })()}
+                          max={(() => { const m = availablePeriods.find(p => `${p.a_o}-${p.numero_catorcena}` === newCara.periodo); return m?.fecha_fin; })()}
                           className={`w-full px-2 py-2 ${isDark ? 'bg-zinc-800 border-zinc-700 text-white' : 'bg-gray-100 border-gray-200 text-gray-900'} border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-purple-500/50 disabled:opacity-50`}
                         />
                       </div>

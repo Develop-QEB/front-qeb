@@ -1492,8 +1492,8 @@ export function PropuestasPage() {
 
     const headers = ['ID', 'Fecha Creación', 'Marca', 'Creador', 'Campaña', 'Asignados', 'Inversión', 'Inicio', 'Fin', 'Estatus'];
     const rows = dataToExport.map((p: any) => {
-      const inicio = p.tipo_periodo === 'mensual' && p.fecha_inicio
-        ? getMonthShort(p.fecha_inicio)
+      const inicio = p.tipo_periodo === 'mensual' && (p.min_inicio_periodo || p.fecha_inicio)
+        ? getMonthShort(p.min_inicio_periodo || p.fecha_inicio)
         : p.catorcena_inicio ? `Cat ${p.catorcena_inicio} / ${p.anio_inicio}` : '-';
       const fin = p.tipo_periodo === 'mensual' && (p.max_inicio_periodo || p.fecha_fin)
         ? getMonthShort(p.max_inicio_periodo || p.fecha_fin)
@@ -1590,10 +1590,10 @@ export function PropuestasPage() {
           <span className={`font-medium ${isDark ? 'text-amber-400' : 'text-amber-600'}`}>{formatCurrency(item.inversion)}</span>
         </td>
         <td className="px-4 py-3">
-          {item.tipo_periodo === 'mensual' && item.fecha_inicio ? (
+          {item.tipo_periodo === 'mensual' && ((item as any).min_inicio_periodo || item.fecha_inicio) ? (
             <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-xs border ${isDark ? 'bg-cyan-500/10 text-cyan-300 border-cyan-500/20' : 'bg-cyan-50 text-cyan-700 border-cyan-200'}`}>
               <Calendar className="h-3 w-3" />
-              {getMonthShort(item.fecha_inicio)}
+              {getMonthShort((item as any).min_inicio_periodo || item.fecha_inicio)}
             </span>
           ) : item.catorcena_inicio ? (
             <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-xs border ${isDark ? 'bg-cyan-500/10 text-cyan-300 border-cyan-500/20' : 'bg-cyan-50 text-cyan-700 border-cyan-200'}`}>

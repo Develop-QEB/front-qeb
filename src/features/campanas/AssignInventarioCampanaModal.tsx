@@ -560,6 +560,16 @@ function SearchableSelect({
 const LIBRARIES: ('places' | 'geometry')[] = ['places', 'geometry'];
 
 const MESES_LABEL = ['Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio', 'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre'];
+const MESES_CORTOS_CAM = ['Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun', 'Jul', 'Ago', 'Sep', 'Oct', 'Nov', 'Dic'];
+function formatDayMonthCam(dateStr: string | null | undefined): string {
+  if (!dateStr) return '';
+  const iso = String(dateStr);
+  const parts = iso.split(/[-T]/);
+  if (parts.length < 3) return '';
+  const day = parseInt(parts[2]).toString();
+  const month = parseInt(parts[1]) - 1;
+  return month >= 0 && month < 12 ? `${day} ${MESES_CORTOS_CAM[month]}` : '';
+}
 
 export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props) {
   useModalTracker('Editar Campaña', isOpen);
@@ -6321,6 +6331,11 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
                             return `Periodo: ${periodo}`;
                           })();
 
+                      const groupFechas = groupData.caras.map(c => c.inicio_periodo).filter(Boolean).sort();
+                      const groupFechasFin = groupData.caras.map(c => c.fin_periodo).filter(Boolean).sort();
+                      const groupFechaInicio = groupFechas.length ? groupFechas[0] : null;
+                      const groupFechaFin = groupFechasFin.length ? groupFechasFin[groupFechasFin.length - 1] : null;
+
                       return (
                         <div key={periodo}>
                           {/* Period Header - Collapsible */}
@@ -6334,6 +6349,11 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
                             <span className={`text-sm font-medium ${isDark ? 'text-purple-300' : 'text-purple-700'}`}>
                               {catorcenaLabel}
                             </span>
+                            {groupFechaInicio && groupFechaFin && (
+                              <span className={`text-xs ${isDark ? 'text-zinc-400' : 'text-gray-500'}`}>
+                                {formatDayMonthCam(groupFechaInicio)} – {formatDayMonthCam(groupFechaFin)}
+                              </span>
+                            )}
                             <span className={`text-xs ${isDark ? 'text-zinc-500' : 'text-gray-500'}`}>
                               ({groupData.caras.length} {groupData.caras.length === 1 ? 'formato' : 'formatos'})
                             </span>

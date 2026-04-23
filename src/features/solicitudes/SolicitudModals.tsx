@@ -136,6 +136,21 @@ interface CatorcenaGroup {
   totalCaras: number;
   totalBonificacion: number;
   totalInversion: number;
+  fechaInicio: string | null;
+  fechaFin: string | null;
+}
+
+// Format date string "2026-04-01T..." as "01 Abr"
+const MESES_CORTOS = ['Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun', 'Jul', 'Ago', 'Sep', 'Oct', 'Nov', 'Dic'];
+function formatDayMonth(dateStr: string | null | undefined): string {
+  if (!dateStr) return '';
+  const raw = dateStr as unknown;
+  const iso = raw instanceof Date ? (raw as Date).toISOString() : String(dateStr);
+  const parts = iso.split(/[-T]/);
+  if (parts.length < 3) return '';
+  const day = parts[2].substring(0, 2).replace(/^0/, '');
+  const month = parseInt(parts[1]) - 1;
+  return month >= 0 && month < 12 ? `${day} ${MESES_CORTOS[month]}` : '';
 }
 
 function groupCarasByCatorcenaAndArticulo(caras: SolicitudCara[], catorcenas: Catorcena[], tipoPeriodo?: string): CatorcenaGroup[] {
@@ -169,6 +184,7 @@ function groupCarasByCatorcenaAndArticulo(caras: SolicitudCara[], catorcenas: Ca
     let totalCaras = 0;
     let totalBonificacion = 0;
     let totalInversion = 0;
+    const allCaras: SolicitudCara[] = [];
 
     articuloMap.forEach((carasList, articulo) => {
       const artCaras = carasList.reduce((sum, c) => sum + (Number(c.caras) || 0), 0);
@@ -186,7 +202,11 @@ function groupCarasByCatorcenaAndArticulo(caras: SolicitudCara[], catorcenas: Ca
       totalCaras += artCaras;
       totalBonificacion += artBonif;
       totalInversion += artInversion;
+      allCaras.push(...carasList);
     });
+
+    const fechas = allCaras.map(c => c.inicio_periodo).filter(Boolean).sort();
+    const fechasFin = allCaras.map(c => c.fin_periodo).filter(Boolean).sort();
 
     result.push({
       catorcena,
@@ -194,6 +214,8 @@ function groupCarasByCatorcenaAndArticulo(caras: SolicitudCara[], catorcenas: Ca
       totalCaras,
       totalBonificacion,
       totalInversion,
+      fechaInicio: fechas.length ? fechas[0] : null,
+      fechaFin: fechasFin.length ? fechasFin[fechasFin.length - 1] : null,
     });
   });
 
@@ -503,7 +525,10 @@ export function ViewSolicitudModal({ isOpen, onClose, solicitudId, onEdit, onAte
         doc.setTextColor(...white);
         doc.setFontSize(8);
         doc.setFont('helvetica', 'bold');
-        doc.text(catorcenaGroup.catorcena, marginX + 4, yPos + 5.5);
+        const catorcenaLabel = catorcenaGroup.fechaInicio && catorcenaGroup.fechaFin
+          ? `${catorcenaGroup.catorcena}  |  ${formatDayMonth(catorcenaGroup.fechaInicio)} – ${formatDayMonth(catorcenaGroup.fechaFin)}`
+          : catorcenaGroup.catorcena;
+        doc.text(catorcenaLabel, marginX + 4, yPos + 5.5);
 
         // Subtotales en el header de catorcena
         doc.setFontSize(6);
@@ -873,6 +898,11 @@ export function ViewSolicitudModal({ isOpen, onClose, solicitudId, onEdit, onAte
                             <span className={`px-3 py-1 rounded-lg text-xs font-medium border ${isDark ? 'bg-violet-500/30 text-violet-200 border-violet-400/30' : 'bg-violet-100 text-violet-700 border-violet-200'}`}>
                               {catorcenaGroup.catorcena}
                             </span>
+                            {catorcenaGroup.fechaInicio && catorcenaGroup.fechaFin && (
+                              <span className={`text-xs ${isDark ? 'text-zinc-400' : 'text-gray-500'}`}>
+                                {formatDayMonth(catorcenaGroup.fechaInicio)} – {formatDayMonth(catorcenaGroup.fechaFin)}
+                              </span>
+                            )}
                             <span className={`${isDark ? 'text-zinc-500' : 'text-gray-400'} text-xs`}>
                               ({catorcenaGroup.articulos.length} artículo{catorcenaGroup.articulos.length > 1 ? 's' : ''})
                             </span>

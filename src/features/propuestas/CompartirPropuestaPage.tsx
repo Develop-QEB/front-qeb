@@ -107,6 +107,18 @@ interface ResumenCatorcenaGroup {
   totalCaras: number;
   totalBonificadas: number;
   totalInversion: number;
+  fechaInicio: string | null;
+  fechaFin: string | null;
+}
+
+const MESES_CORTOS_COM = ['Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun', 'Jul', 'Ago', 'Sep', 'Oct', 'Nov', 'Dic'];
+function formatDayMonthCom(dateStr: string | null | undefined): string {
+  if (!dateStr) return '';
+  const parts = String(dateStr).split(/[-T]/);
+  if (parts.length < 3) return '';
+  const day = parseInt(parts[2]).toString();
+  const month = parseInt(parts[1]) - 1;
+  return month >= 0 && month < 12 ? `${day} ${MESES_CORTOS_COM[month]}` : '';
 }
 
 function applyFilters<T>(data: T[], filters: FilterCondition[]): T[] {
@@ -356,12 +368,17 @@ export function CompartirPropuestaPage() {
         tipos: [...new Set(items.map(i => i.tradicional_digital || 'N/A'))],
         plazas: [...new Set(items.map(i => i.plaza || 'N/A'))],
       }));
+      const allItems = articulos.flatMap(a => a.items);
+      const fechas = allItems.map(i => i.inicio_periodo).filter(Boolean).sort() as string[];
+      const fechasFin = allItems.map(i => i.fin_periodo).filter(Boolean).sort() as string[];
       return {
         catorcena,
         articulos,
         totalCaras: articulos.reduce((sum, a) => sum + a.totalCaras, 0),
         totalBonificadas: articulos.reduce((sum, a) => sum + (a.totalBonificadas || 0), 0),
         totalInversion: articulos.reduce((sum, a) => sum + a.totalInversion, 0),
+        fechaInicio: fechas.length ? fechas[0] : null,
+        fechaFin: fechasFin.length ? fechasFin[fechasFin.length - 1] : null,
       };
     });
   }, [filteredInventario]);
@@ -860,12 +877,20 @@ export function CompartirPropuestaPage() {
 
       Object.entries(grouped).forEach(([catorcena, articulos]) => {
         // === CATORCENA HEADER (separate section) ===
+        const allGroupItems = Object.values(articulos).flat();
+        const groupFechas = allGroupItems.map(i => i.inicio_periodo).filter(Boolean).sort() as string[];
+        const groupFechasFin = allGroupItems.map(i => i.fin_periodo).filter(Boolean).sort() as string[];
+        const groupFechaIni = groupFechas.length ? groupFechas[0] : null;
+        const groupFechaFin = groupFechasFin.length ? groupFechasFin[groupFechasFin.length - 1] : null;
+        const catHeaderLabel = groupFechaIni && groupFechaFin
+          ? `${catorcena}  |  ${formatDayMonthCom(groupFechaIni)} – ${formatDayMonthCom(groupFechaFin)}`
+          : catorcena;
         doc.setFillColor(...IMU_BLUE);
         doc.roundedRect(marginX, y, pageWidth - marginX * 2, 8, 1, 1, 'F');
         doc.setFontSize(10);
         doc.setFont('helvetica', 'bold');
         doc.setTextColor(...WHITE);
-        doc.text(catorcena, marginX + 5, y + 5.5);
+        doc.text(catHeaderLabel, marginX + 5, y + 5.5);
         y += 10;
 
         Object.entries(articulos).forEach(([articulo, items]) => {
@@ -1379,6 +1404,11 @@ export function CompartirPropuestaPage() {
                         <span className={`px-3 py-1 rounded-lg text-xs font-medium border ${isDark ? 'bg-purple-500/30 text-purple-200 border-purple-400/30' : 'bg-purple-100 text-purple-700 border-purple-300'}`}>
                           {catGroup.catorcena}
                         </span>
+                        {catGroup.fechaInicio && catGroup.fechaFin && (
+                          <span className={`text-xs ${isDark ? 'text-zinc-400' : 'text-gray-500'}`}>
+                            {formatDayMonthCom(catGroup.fechaInicio)} – {formatDayMonthCom(catGroup.fechaFin)}
+                          </span>
+                        )}
                         <span className={`text-xs ${isDark ? 'text-zinc-500' : 'text-gray-400'}`}>
                           ({catGroup.articulos.length} articulo{catGroup.articulos.length > 1 ? 's' : ''})
                         </span>
