@@ -4446,6 +4446,9 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
                                 {sortColumn !== 'isla' && <ArrowUpDown className="h-3 w-3 opacity-30" />}
                               </div>
                             </th>
+                            <th className={`px-3 py-2 text-left text-xs ${isDark ? 'text-zinc-400' : 'text-gray-500'} font-medium`}>
+                              M. Isla
+                            </th>
                             <th
                               className="px-3 py-2 text-left text-xs text-zinc-400 font-medium cursor-pointer hover:text-white transition-colors"
                               onClick={() => handleSort('nivel_socioeconomico')}
@@ -4550,6 +4553,7 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
                                     </td>
                                     <td className="px-3 py-2 text-zinc-300 text-sm">{inv.plaza}</td>
                                     <td className="px-3 py-2 text-zinc-400 text-sm">{inv.isla || '-'}</td>
+                                    <td className={`px-3 py-2 ${isDark ? 'text-zinc-400' : 'text-gray-500'} text-sm`}>{(inv as any).mueble_isla || '-'}</td>
                                     <td className="px-3 py-2 text-zinc-400 text-sm">{inv.nivel_socioeconomico || '-'}</td>
                                     <td className="px-3 py-2 text-zinc-400 text-sm" title={inv.ubicacion || ''}>
                                       {inv.ubicacion}
@@ -4604,6 +4608,7 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
                                 </td>
                                 <td className="px-3 py-2 text-zinc-300 text-sm">{inv.plaza}</td>
                                 <td className="px-3 py-2 text-zinc-400 text-sm">{inv.isla || '-'}</td>
+                                <td className={`px-3 py-2 ${isDark ? 'text-zinc-400' : 'text-gray-500'} text-sm`}>{(inv as any).mueble_isla || '-'}</td>
                                 <td className="px-3 py-2 text-zinc-400 text-sm">{inv.nivel_socioeconomico || '-'}</td>
                                 <td className="px-3 py-2 text-zinc-400 text-sm" title={inv.ubicacion || ''}>
                                   {inv.ubicacion}
@@ -4869,8 +4874,34 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
                       </button>
                     )}
 
+                    {/* Download CSV Reservados */}
+                    <button
+                      onClick={() => {
+                        if (filteredReservados.length === 0) return;
+                        const headers = ['Código', 'Tipo', 'Plaza', 'Formato', 'Ubicación', 'Isla'];
+                        const rows = filteredReservados.map(r => [
+                          r.codigo_unico || '', r.tipo || '', r.plaza || '', r.formato || '', r.ubicacion || '', r.isla || ''
+                        ].map(v => `"${String(v).replace(/"/g, '""')}"`));
+                        const csv = '﻿' + headers.join(',') + '\n' + rows.map(r => r.join(',')).join('\n');
+                        const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+                        const url = URL.createObjectURL(blob);
+                        const link = document.createElement('a');
+                        link.href = url;
+                        link.download = `reservados_${selectedCaraForSearch?.articulo || 'cara'}.csv`;
+                        document.body.appendChild(link);
+                        link.click();
+                        document.body.removeChild(link);
+                        URL.revokeObjectURL(url);
+                      }}
+                      disabled={filteredReservados.length === 0}
+                      className={`p-1.5 rounded-lg ${isDark ? 'bg-zinc-800' : 'bg-gray-50'} ${isDark ? 'text-zinc-400' : 'text-gray-500'} hover:text-emerald-400 hover:bg-emerald-500/10 transition-colors disabled:opacity-50`}
+                      title="Descargar CSV"
+                    >
+                      <Download className="h-4 w-4" />
+                    </button>
+
                     {/* Results count */}
-                    <span className="text-xs text-zinc-500 ml-auto">
+                    <span className={`text-xs ${isDark ? 'text-zinc-500' : 'text-gray-400'} ml-auto`}>
                       {filteredReservados.length} de {currentCaraReservas.length}
                     </span>
                   </div>
