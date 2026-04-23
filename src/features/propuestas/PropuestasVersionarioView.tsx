@@ -336,11 +336,13 @@ export default function PropuestasVersionarioView({ isDark, filters, advancedFil
         'Descripción (Opcional)', 'Inicio o Periodo', 'Fin o Segmento', 'Arte',
         'Código de arte (Opcional)', 'Arte Url (Opcional)', 'Origen del arte (Opcional)',
         'Unidad', 'Cara', 'Ciudad', 'Tipo de Distribución', 'Reproducciones', 'Notas',
+        'Estatus', 'Catorcena',
       ];
 
       const rows: string[][] = [];
 
       for (const group of catorcenaGroups) {
+        const catorcenaLabel = `Cat ${group.num}/${group.anio}`;
         for (const prop of group.propuestas) {
           const info = prop.info;
           for (const circ of prop.circuitos) {
@@ -371,6 +373,8 @@ export default function PropuestasVersionarioView({ isDark, filters, advancedFil
                   inv.tradicional_digital || '',
                   '',
                   '',
+                  info.status || '',
+                  catorcenaLabel,
                 ]);
               }
             } else {
@@ -399,6 +403,8 @@ export default function PropuestasVersionarioView({ isDark, filters, advancedFil
                 '',
                 '',
                 '',
+                info.status || '',
+                catorcenaLabel,
               ]);
             }
           }
