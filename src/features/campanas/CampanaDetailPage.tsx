@@ -1003,7 +1003,8 @@ export function CampanaDetailPage() {
     return solicitudCaras.filter((sc: SolicitudCara) => {
       if (sc.cortesia === 1) return false;
       const info = groupCompletenessMap.get(sc.id);
-      return info && info.reservadas === 0 && info.esperadas > 0;
+      const esperadas = (info?.esperadas ?? (sc.caras || 0) + (Number(sc.bonificacion) || 0));
+      return !!info && info.reservadas === 0 && esperadas > 0;
     });
   }, [solicitudCaras, groupCompletenessMap]);
 
