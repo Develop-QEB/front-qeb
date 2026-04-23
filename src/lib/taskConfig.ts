@@ -1,4 +1,4 @@
-import { Circle, Clock, CheckCircle, AlertCircle, FileText, Send, Bell, Briefcase, Target, ClipboardList, ShieldCheck, ShieldX, XCircle } from 'lucide-react';
+import { Circle, Clock, CheckCircle, AlertCircle, FileText, Send, Bell, Briefcase, Target, ClipboardList, ShieldCheck, ShieldX, XCircle, AtSign } from 'lucide-react';
 
 // ============ CONFIGURACIÓN DE ESTATUS ============
 export const STATUS_CONFIG = {
@@ -168,6 +168,14 @@ export const TIPO_CONFIG = {
     bg: 'bg-red-500/20',
     border: 'border-red-500/30',
     icon: ShieldX
+  },
+
+  // Mención en Ticket - Azul
+  'Mención en Ticket': {
+    color: 'text-blue-400',
+    bg: 'bg-blue-500/20',
+    border: 'border-blue-500/30',
+    icon: AtSign
   },
 } as const;
 

@@ -1,13 +1,13 @@
-import { useState, useEffect, useRef, useCallback } from 'react';
+import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import {
   Ticket, Search, Filter, Loader2, MessageSquare, Clock, CheckCircle2,
   X, AlertTriangle, Image, FileText, Send, Paperclip, Eye, User,
-  ChevronDown, Circle, Info, Trophy, Trash2,
+  ChevronDown, Circle, Info, Trophy, Trash2, AtSign,
 } from 'lucide-react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { Header } from '../../components/layout/Header';
-import { ticketsService, TicketHistorial, TicketMensaje, TicketChatMessage } from '../../services/tickets.service';
+import { ticketsService, TicketHistorial, TicketMensaje, TicketChatMessage, DevUser } from '../../services/tickets.service';
 import { uploadsService } from '../../services/uploads.service';
 import { useAuthStore } from '../../store/authStore';
 import { useThemeStore } from '../../store/themeStore';
@@ -50,6 +50,22 @@ function getTimeAgo(dateStr: string) {
   return `${days}d`;
 }
 
+// Renderizar texto con @menciones resaltadas
+function RenderMentionText({ text, isDark }: { text: string; isDark: boolean }) {
+  const parts = text.split(/(@\w[\w\s]*?\w(?=\s|$|[.,;:!?]))/g);
+  return (
+    <>
+      {parts.map((part, i) =>
+        part.startsWith('@') ? (
+          <span key={i} className={`font-semibold ${isDark ? 'text-blue-400 bg-blue-500/15' : 'text-blue-600 bg-blue-100'} px-0.5 rounded`}>{part}</span>
+        ) : (
+          <span key={i}>{part}</span>
+        )
+      )}
+    </>
+  );
+}
+
 // ===================== CHAT PANEL (reusable) =====================
 function ChatPanel({
   messages,
@@ -63,32 +79,110 @@ function ChatPanel({
   emptyText,
   chatEndRef,
   onDelete,
+  devUsers,
+  enableMentions,
 }: {
   messages: (TicketMensaje | TicketChatMessage)[];
   userId: number | undefined;
   ticketCreatorId?: number;
   isDark: boolean;
-  onSend: (msg: string) => void;
+  onSend: (msg: string, menciones?: number[]) => void;
   isPending: boolean;
   onFileUpload: (e: React.ChangeEvent<HTMLInputElement>) => void;
   uploading: boolean;
   emptyText: string;
   chatEndRef: React.RefObject<HTMLDivElement | null>;
   onDelete?: (messageId: number) => void;
+  devUsers?: DevUser[];
+  enableMentions?: boolean;
 }) {
   const [mensaje, setMensaje] = useState('');
+  const [menciones, setMenciones] = useState<number[]>([]);
+  const [showMentionDropdown, setShowMentionDropdown] = useState(false);
+  const [mentionFilter, setMentionFilter] = useState('');
+  const [mentionIndex, setMentionIndex] = useState(0);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const dropdownRef = useRef<HTMLDivElement>(null);
+
+  const filteredDevUsers = useMemo(() => {
+    if (!devUsers || !mentionFilter) return devUsers || [];
+    const lower = mentionFilter.toLowerCase();
+    return devUsers.filter(u => u.nombre.toLowerCase().includes(lower));
+  }, [devUsers, mentionFilter]);
 
   const handleSend = () => {
     if (!mensaje.trim()) return;
-    onSend(mensaje.trim());
+    onSend(mensaje.trim(), menciones.length > 0 ? menciones : undefined);
     setMensaje('');
+    setMenciones([]);
   };
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
+    if (showMentionDropdown && filteredDevUsers.length > 0) {
+      if (e.key === 'ArrowDown') {
+        e.preventDefault();
+        setMentionIndex(i => (i + 1) % filteredDevUsers.length);
+        return;
+      }
+      if (e.key === 'ArrowUp') {
+        e.preventDefault();
+        setMentionIndex(i => (i - 1 + filteredDevUsers.length) % filteredDevUsers.length);
+        return;
+      }
+      if (e.key === 'Enter' || e.key === 'Tab') {
+        e.preventDefault();
+        selectMention(filteredDevUsers[mentionIndex]);
+        return;
+      }
+      if (e.key === 'Escape') {
+        setShowMentionDropdown(false);
+        return;
+      }
+    }
     if (e.key === 'Enter' && !e.shiftKey) {
       e.preventDefault();
       handleSend();
+    }
+  };
+
+  const selectMention = (user: DevUser) => {
+    const textarea = textareaRef.current;
+    if (!textarea) return;
+    const cursorPos = textarea.selectionStart;
+    const textBefore = mensaje.substring(0, cursorPos);
+    const atIndex = textBefore.lastIndexOf('@');
+    if (atIndex === -1) return;
+
+    const firstName = user.nombre.split(' ')[0];
+    const newText = mensaje.substring(0, atIndex) + '@' + firstName + ' ' + mensaje.substring(cursorPos);
+    setMensaje(newText);
+    if (!menciones.includes(user.id)) {
+      setMenciones(prev => [...prev, user.id]);
+    }
+    setShowMentionDropdown(false);
+    setMentionFilter('');
+    setTimeout(() => {
+      const newPos = atIndex + firstName.length + 2;
+      textarea.focus();
+      textarea.setSelectionRange(newPos, newPos);
+    }, 0);
+  };
+
+  const handleTextChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
+    const val = e.target.value;
+    setMensaje(val);
+
+    if (!enableMentions || !devUsers) return;
+    const cursorPos = e.target.selectionStart;
+    const textBefore = val.substring(0, cursorPos);
+    const atMatch = textBefore.match(/@(\w*)$/);
+    if (atMatch) {
+      setMentionFilter(atMatch[1]);
+      setShowMentionDropdown(true);
+      setMentionIndex(0);
+    } else {
+      setShowMentionDropdown(false);
     }
   };
 
@@ -112,7 +206,9 @@ function ChatPanel({
                   {ticketCreatorId && msg.usuario_id !== ticketCreatorId ? 'Técnico de QEB' : msg.usuario_nombre}
                 </p>
                 {msg.mensaje && (
-                  <p className={`text-sm whitespace-pre-wrap ${isDark ? 'text-zinc-200' : 'text-gray-800'}`}>{msg.mensaje}</p>
+                  <p className={`text-sm whitespace-pre-wrap ${isDark ? 'text-zinc-200' : 'text-gray-800'}`}>
+                    <RenderMentionText text={msg.mensaje} isDark={isDark} />
+                  </p>
                 )}
                 {msg.archivo_url && msg.archivo_tipo === 'image' && (
                   <a href={msg.archivo_url} target="_blank" rel="noopener noreferrer">
@@ -152,31 +248,80 @@ function ChatPanel({
       </div>
 
       {/* Input */}
-      <div className="mt-3 flex items-end gap-2">
-        <input type="file" ref={fileInputRef} className="hidden" onChange={onFileUpload} accept="image/*,.pdf,.doc,.docx,.xls,.xlsx,.csv" />
-        <button
-          onClick={() => fileInputRef.current?.click()}
-          disabled={uploading}
-          className={`p-2.5 rounded-xl border ${isDark ? 'border-purple-500/20 bg-zinc-800 text-purple-400 hover:bg-purple-500/10' : 'border-purple-200 bg-gray-50 text-purple-600 hover:bg-purple-50'} transition-colors flex-shrink-0`}
-          title="Adjuntar archivo"
-        >
-          {uploading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Paperclip className="h-4 w-4" />}
-        </button>
-        <textarea
-          value={mensaje}
-          onChange={(e) => setMensaje(e.target.value)}
-          onKeyDown={handleKeyDown}
-          rows={1}
-          placeholder="Escribe un mensaje..."
-          className={`flex-1 px-3 py-2.5 rounded-xl border ${isDark ? 'border-purple-500/20 bg-zinc-800/80 text-white placeholder:text-zinc-500' : 'border-purple-200 bg-gray-50 text-gray-900 placeholder:text-gray-400'} text-sm focus:outline-none focus:ring-2 focus:ring-purple-500/30 resize-none`}
-        />
-        <button
-          onClick={handleSend}
-          disabled={!mensaje.trim() || isPending}
-          className="p-2.5 rounded-xl bg-gradient-to-r from-purple-600 to-fuchsia-600 text-white hover:from-purple-500 hover:to-fuchsia-500 disabled:opacity-50 transition-all flex-shrink-0"
-        >
-          {isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
-        </button>
+      <div className="mt-3 relative">
+        {/* Mention dropdown */}
+        {showMentionDropdown && enableMentions && filteredDevUsers.length > 0 && (
+          <div
+            ref={dropdownRef}
+            className={`absolute bottom-full mb-1 left-0 right-0 z-50 rounded-xl border shadow-xl max-h-[180px] overflow-y-auto ${isDark ? 'bg-zinc-900 border-purple-500/30' : 'bg-white border-gray-200'}`}
+          >
+            {filteredDevUsers.map((u, i) => (
+              <button
+                key={u.id}
+                onClick={() => selectMention(u)}
+                className={`w-full flex items-center gap-2.5 px-3 py-2 text-left text-sm transition-colors ${
+                  i === mentionIndex
+                    ? isDark ? 'bg-blue-500/20 text-blue-300' : 'bg-blue-50 text-blue-700'
+                    : isDark ? 'text-zinc-300 hover:bg-zinc-800' : 'text-gray-700 hover:bg-gray-50'
+                }`}
+              >
+                {u.foto_perfil ? (
+                  <img src={u.foto_perfil} alt="" className="w-6 h-6 rounded-full object-cover" />
+                ) : (
+                  <div className={`w-6 h-6 rounded-full flex items-center justify-center text-[10px] font-bold ${isDark ? 'bg-blue-500/20 text-blue-400' : 'bg-blue-100 text-blue-600'}`}>
+                    {u.nombre.charAt(0)}
+                  </div>
+                )}
+                <span className="font-medium">{u.nombre}</span>
+              </button>
+            ))}
+          </div>
+        )}
+
+        <div className="flex items-end gap-2">
+          <input type="file" ref={fileInputRef} className="hidden" onChange={onFileUpload} accept="image/*,.pdf,.doc,.docx,.xls,.xlsx,.csv" />
+          <button
+            onClick={() => fileInputRef.current?.click()}
+            disabled={uploading}
+            className={`p-2.5 rounded-xl border ${isDark ? 'border-purple-500/20 bg-zinc-800 text-purple-400 hover:bg-purple-500/10' : 'border-purple-200 bg-gray-50 text-purple-600 hover:bg-purple-50'} transition-colors flex-shrink-0`}
+            title="Adjuntar archivo"
+          >
+            {uploading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Paperclip className="h-4 w-4" />}
+          </button>
+          <textarea
+            ref={textareaRef}
+            value={mensaje}
+            onChange={handleTextChange}
+            onKeyDown={handleKeyDown}
+            rows={1}
+            placeholder={enableMentions ? 'Escribe un mensaje... usa @ para mencionar' : 'Escribe un mensaje...'}
+            className={`flex-1 px-3 py-2.5 rounded-xl border ${isDark ? 'border-purple-500/20 bg-zinc-800/80 text-white placeholder:text-zinc-500' : 'border-purple-200 bg-gray-50 text-gray-900 placeholder:text-gray-400'} text-sm focus:outline-none focus:ring-2 focus:ring-purple-500/30 resize-none`}
+          />
+          <button
+            onClick={handleSend}
+            disabled={!mensaje.trim() || isPending}
+            className="p-2.5 rounded-xl bg-gradient-to-r from-purple-600 to-fuchsia-600 text-white hover:from-purple-500 hover:to-fuchsia-500 disabled:opacity-50 transition-all flex-shrink-0"
+          >
+            {isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
+          </button>
+        </div>
+        {/* Mention tags */}
+        {enableMentions && menciones.length > 0 && devUsers && (
+          <div className="flex flex-wrap gap-1 mt-1.5">
+            {menciones.map(id => {
+              const u = devUsers.find(d => d.id === id);
+              return u ? (
+                <span key={id} className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-medium ${isDark ? 'bg-blue-500/20 text-blue-300 border border-blue-500/30' : 'bg-blue-50 text-blue-600 border border-blue-200'}`}>
+                  <AtSign className="h-2.5 w-2.5" />
+                  {u.nombre.split(' ')[0]}
+                  <button onClick={() => setMenciones(prev => prev.filter(m => m !== id))} className="ml-0.5 hover:text-red-400">
+                    <X className="h-2.5 w-2.5" />
+                  </button>
+                </span>
+              ) : null;
+            })}
+          </div>
+        )}
       </div>
     </>
   );
@@ -203,6 +348,13 @@ function TicketDetailModal({
   const [uploadingNotas, setUploadingNotas] = useState(false);
   const [uploadingSoporte, setUploadingSoporte] = useState(false);
   const [activeChat, setActiveChat] = useState<'notas' | 'soporte'>('notas');
+
+  // DEV users for @mentions
+  const { data: devUsers = [] } = useQuery({
+    queryKey: ['dev-users'],
+    queryFn: () => ticketsService.getDevUsers(),
+    staleTime: 5 * 60 * 1000,
+  });
 
   // Mark as opened
   useEffect(() => {
@@ -237,7 +389,7 @@ function TicketDetailModal({
   }, [mensajes, activeChat]);
 
   const sendNotaMutation = useMutation({
-    mutationFn: (data: { mensaje?: string; archivo_url?: string; archivo_nombre?: string; archivo_tipo?: string }) =>
+    mutationFn: (data: { mensaje?: string; archivo_url?: string; archivo_nombre?: string; archivo_tipo?: string; menciones?: number[] }) =>
       ticketsService.createMensaje(ticket.id, data),
     onSuccess: () => refetchMensajes(),
   });
@@ -453,12 +605,14 @@ function TicketDetailModal({
                 messages={mensajes}
                 userId={user?.id}
                 isDark={isDark}
-                onSend={(msg) => sendNotaMutation.mutate({ mensaje: msg })}
+                onSend={(msg, menciones) => sendNotaMutation.mutate({ mensaje: msg, menciones })}
                 isPending={sendNotaMutation.isPending}
                 onFileUpload={handleNotaFileUpload}
                 uploading={uploadingNotas}
                 emptyText="No hay notas internas aun. Inicia la conversacion."
                 chatEndRef={notasChatEndRef}
+                devUsers={devUsers}
+                enableMentions
               />
             ) : (
               <ChatPanel
@@ -487,6 +641,7 @@ export function HistorialTicketsPage() {
   const isDark = useThemeStore((s) => s.theme) === 'dark';
   const queryClient = useQueryClient();
   const navigate = useNavigate();
+  const [searchParams, setSearchParams] = useSearchParams();
   const user = useAuthStore((s) => s.user);
   const isDev = user?.rol === 'DEV';
   const [search, setSearch] = useState('');
@@ -513,6 +668,19 @@ export function HistorialTicketsPage() {
       search: debouncedSearch || undefined,
     }),
   });
+
+  // Auto-open ticket from URL params (e.g., ?ticketId=123)
+  useEffect(() => {
+    const ticketIdParam = searchParams.get('ticketId');
+    if (ticketIdParam && tickets.length > 0 && !selectedTicket) {
+      const id = Number(ticketIdParam);
+      const found = tickets.find(t => t.id === id);
+      if (found) {
+        setSelectedTicket(found);
+        setSearchParams({}, { replace: true });
+      }
+    }
+  }, [tickets, searchParams, selectedTicket, setSearchParams]);
 
   const statusMutation = useMutation({
     mutationFn: ({ id, status, status_cambiado_por }: { id: number; status: string; status_cambiado_por?: string }) =>
@@ -726,15 +894,18 @@ export function HistorialTicketsPage() {
                   }`}
                 >
                   <div className="flex items-start gap-3">
-                    {/* Unread / new indicators */}
+                    {/* Unread / new / mention indicators */}
                     <div className="flex flex-col items-center gap-1 pt-1 flex-shrink-0">
                       {isNew && (
                         <div className="w-2.5 h-2.5 rounded-full bg-purple-500 animate-pulse" title="No abierto" />
                       )}
-                      {!isNew && (t.has_unread || t.has_chat_unread) && (
+                      {!isNew && t.has_mention && (
+                        <div className="w-2.5 h-2.5 rounded-full bg-blue-500 animate-pulse" title="Te mencionaron" />
+                      )}
+                      {!isNew && !t.has_mention && (t.has_unread || t.has_chat_unread) && (
                         <div className="w-2.5 h-2.5 rounded-full bg-red-500 animate-pulse" title="Mensajes no leidos" />
                       )}
-                      {!isNew && !t.has_unread && !t.has_chat_unread && (
+                      {!isNew && !t.has_mention && !t.has_unread && !t.has_chat_unread && (
                         <div className={`w-2.5 h-2.5 rounded-full ${isDark ? 'bg-zinc-700' : 'bg-gray-300'}`} />
                       )}
                     </div>

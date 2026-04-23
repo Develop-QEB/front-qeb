@@ -49,6 +49,12 @@ export interface TicketsResponse {
   };
 }
 
+export interface DevUser {
+  id: number;
+  nombre: string;
+  foto_perfil?: string | null;
+}
+
 // Historial types
 export interface TicketHistorial {
   id: number;
@@ -67,6 +73,7 @@ export interface TicketHistorial {
   total_chat: number;
   has_unread: boolean;
   has_chat_unread: boolean;
+  has_mention: boolean;
   is_opened: boolean;
   created_at: string;
   updated_at: string;
@@ -170,7 +177,7 @@ export const ticketsService = {
     return response.data.data;
   },
 
-  createMensaje: async (ticketId: number, data: { mensaje?: string; archivo_url?: string; archivo_nombre?: string; archivo_tipo?: string }): Promise<TicketMensaje> => {
+  createMensaje: async (ticketId: number, data: { mensaje?: string; archivo_url?: string; archivo_nombre?: string; archivo_tipo?: string; menciones?: number[] }): Promise<TicketMensaje> => {
     const response = await api.post(`/tickets/${ticketId}/mensajes`, data);
     return response.data.data;
   },
@@ -201,6 +208,11 @@ export const ticketsService = {
   getChatUnreadCount: async (): Promise<number> => {
     const response = await api.get('/tickets/chat/unread-count');
     return response.data.data.unreadCount;
+  },
+
+  getDevUsers: async (): Promise<DevUser[]> => {
+    const response = await api.get('/tickets/dev-users');
+    return response.data.data;
   },
 
   getRankings: async (): Promise<TicketRankings> => {

@@ -1285,6 +1285,10 @@ function hasNavigationRoute(tarea: Notificacion): boolean {
   if (tarea.tipo === 'Ajuste Inventario Bloqueado') {
     return false;
   }
+  // Menciones en ticket siempre tienen navegación
+  if (tarea.tipo === 'Mención en Ticket') {
+    return true;
+  }
   // Si tiene referencia_tipo y referencia_id válidos
   if (tarea.referencia_tipo && tarea.referencia_id && tarea.referencia_tipo !== 'sistema') {
     return true;
@@ -1302,6 +1306,9 @@ function hasNavigationRoute(tarea: Notificacion): boolean {
 
 // Función para obtener la etiqueta del botón
 function getNavigationLabel(tipo: string, tipoTarea?: string, campaniaId?: number | null, propuestaId?: string | null, idSolicitud?: string | null, titulo?: string): string {
+  if (tipoTarea === 'Mención en Ticket') {
+    return 'Ver Ticket';
+  }
   // Tareas de Gestión de Artes → Ver Gestión de Artes
   if (isGestionArtesTarea(tipoTarea)) {
     return 'Ver Gestión de Artes';
@@ -2063,6 +2070,11 @@ function TaskDrawer({
 
   const handleNavigate = () => {
     if (!onNavigate) return;
+    // Mención en Ticket → abrir historial con el ticket
+    if (tarea.tipo === 'Mención en Ticket' && tarea.id_solicitud) {
+      onNavigate(`/admin/tickets-historial?ticketId=${tarea.id_solicitud}`);
+      return;
+    }
     // Si tiene referencia_tipo y referencia_id, usar esos
     if (tarea.referencia_tipo && tarea.referencia_id) {
       const propId = tarea.id_propuesta ? parseInt(tarea.id_propuesta) : null;
@@ -3467,6 +3479,10 @@ export function NotificacionesPage() {
                             <button
                               onClick={(e) => {
                                 e.stopPropagation();
+                                if (tarea.tipo === 'Mención en Ticket' && tarea.id_solicitud) {
+                                  navigate(`/admin/tickets-historial?ticketId=${tarea.id_solicitud}`);
+                                  return;
+                                }
                                 if (tarea.tipo?.includes('Rechazo')) {
                                   if (tarea.referencia_tipo === 'propuesta' && tarea.id_propuesta) {
                                     propuestasService.getById(parseInt(tarea.id_propuesta)).then(p => setEditPropuesta(p)).catch(console.error);
