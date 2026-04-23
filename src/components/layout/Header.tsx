@@ -12,9 +12,10 @@ import { authService } from '../../services/auth.service';
 
 interface HeaderProps {
   title: string;
+  badgeCount?: number;
 }
 
-export function Header({ title }: HeaderProps) {
+export function Header({ title, badgeCount }: HeaderProps) {
   const user = useAuthStore((state) => state.user);
   const isDark = useThemeStore((s) => s.theme) === 'dark';
   useSocketNotificaciones();
@@ -54,7 +55,14 @@ export function Header({ title }: HeaderProps) {
         ? 'border-purple-900/30 bg-[#1a1025]/80'
         : 'border-purple-200/50 bg-white/80'
     }`}>
-      <h1 className={`text-lg font-light tracking-wide uppercase ${isDark ? 'text-white' : 'text-gray-700'}`}>{title}</h1>
+      <h1 className={`text-lg font-light tracking-wide uppercase ${isDark ? 'text-white' : 'text-gray-700'}`}>
+        {title}
+        {badgeCount !== undefined && badgeCount > 0 && (
+          <span className="ml-2 inline-flex items-center justify-center min-w-[22px] h-[22px] rounded-full bg-red-500 text-[11px] font-bold text-white px-1.5 align-middle">
+            {badgeCount > 99 ? '99+' : badgeCount}
+          </span>
+        )}
+      </h1>
 
       <div className="ml-auto flex items-center gap-4">
         {/* Indicador de ambiente */}

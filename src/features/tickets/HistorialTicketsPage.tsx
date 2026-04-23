@@ -729,7 +729,7 @@ export function HistorialTicketsPage() {
 
   return (
     <div className={`min-h-screen ${isDark ? 'bg-[#0f0a1a]' : 'bg-gray-50'}`}>
-      <Header title="Historial de Tickets" />
+      <Header title="Historial de Tickets" badgeCount={tickets.filter(t => t.has_chat_unread).length} />
       <main className="max-w-7xl mx-auto px-4 sm:px-6 py-6 space-y-5">
         {/* Title */}
         <div className="flex items-center justify-between">
