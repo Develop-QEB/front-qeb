@@ -2991,7 +2991,7 @@ export function CampanasPage() {
                             const invCampana = Number((campana as any).inversion) || 0;
                             return (
                               <span className={`px-2 py-0.5 rounded-full text-[10px] ${isDark ? 'bg-green-500/15 text-green-300' : 'bg-green-50 text-green-700'} border border-green-500/25 flex items-center gap-1`} title="Inversión">
-                                <DollarSign className="h-3 w-3" /> {invCampana > 0 ? `$${invCampana.toLocaleString()}` : 'Sin inversión'}
+                                <DollarSign className="h-3 w-3" /> {invCampana > 0 ? invCampana.toLocaleString('es-MX', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : 'Sin inversión'}
                               </span>
                             );
                           })()}
@@ -3354,7 +3354,7 @@ export function CampanasPage() {
 
                         return totalInversion > 0 ? (
                           <span className={`px-2 py-0.5 rounded-full text-[10px] ${isDark ? 'bg-green-500/15 text-green-300' : 'bg-green-50 text-green-700'} border border-green-500/25 flex items-center gap-1`} title="Inversión total">
-                            <DollarSign className="h-3 w-3" /> {'$'}{totalInversion.toLocaleString()}
+                            <DollarSign className="h-3 w-3" /> {totalInversion.toLocaleString('es-MX', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                           </span>
                         ) : (
                           <span className={`px-2 py-0.5 rounded-full text-[10px] ${isDark ? 'bg-zinc-500/15 text-zinc-400 border-zinc-500/25' : 'bg-gray-100 text-gray-500 border-gray-300'} border flex items-center gap-1`} title="Sin inversión registrada">
