@@ -3,7 +3,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import {
   Ticket, Search, Filter, Loader2, MessageSquare, Clock, CheckCircle2,
   X, AlertTriangle, Image, FileText, Send, Paperclip, Eye, User,
-  ChevronDown, Circle, Info, Trophy, Trash2, AtSign,
+  ChevronDown, Circle, Info, Trophy, Trash2, AtSign, Copy,
 } from 'lucide-react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { Header } from '../../components/layout/Header';
@@ -66,6 +66,17 @@ function RenderMentionText({ text, isDark }: { text: string; isDark: boolean }) 
   );
 }
 
+// Extrae solo la respuesta sugerida (sin cabecera ni nota tecnica) de una nota interna de QEBooh
+function extractSuggestedReply(text: string): string | null {
+  const headerPattern = /^Respuesta sugerida para [^:]+:\n\n/;
+  const match = headerPattern.exec(text);
+  if (!match) return null;
+  const afterHeader = text.slice(match[0].length);
+  const noteMarker = '\n\n---\nNota tecnica:';
+  const noteIdx = afterHeader.indexOf(noteMarker);
+  return noteIdx === -1 ? afterHeader.trim() : afterHeader.slice(0, noteIdx).trim();
+}
+
 // ===================== CHAT PANEL (reusable) =====================
 function ChatPanel({
   messages,
@@ -81,6 +92,9 @@ function ChatPanel({
   onDelete,
   devUsers,
   enableMentions,
+  onCopyToClient,
+  prefillText,
+  onPrefillConsumed,
 }: {
   messages: (TicketMensaje | TicketChatMessage)[];
   userId: number | undefined;
@@ -95,6 +109,9 @@ function ChatPanel({
   onDelete?: (messageId: number) => void;
   devUsers?: DevUser[];
   enableMentions?: boolean;
+  onCopyToClient?: (text: string) => void;
+  prefillText?: string;
+  onPrefillConsumed?: () => void;
 }) {
   const [mensaje, setMensaje] = useState('');
   const [menciones, setMenciones] = useState<number[]>([]);
@@ -104,6 +121,15 @@ function ChatPanel({
   const fileInputRef = useRef<HTMLInputElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const dropdownRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (prefillText) {
+      setMensaje(prefillText);
+      setTimeout(() => textareaRef.current?.focus(), 0);
+      onPrefillConsumed?.();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [prefillText]);
 
   const filteredDevUsers = useMemo(() => {
     if (!devUsers || !mentionFilter) return devUsers || [];
@@ -196,6 +222,9 @@ function ChatPanel({
         )}
         {messages.map((msg) => {
           const isMe = msg.usuario_id === userId;
+          const suggestedReply = onCopyToClient && msg.usuario_id === 0 && msg.mensaje
+            ? extractSuggestedReply(msg.mensaje)
+            : null;
           return (
             <div key={msg.id} className={`flex ${isMe ? 'justify-end' : 'justify-start'}`}>
               <div className={`group/msg max-w-[80%] rounded-xl px-3 py-2 ${isMe
@@ -225,6 +254,16 @@ function ChatPanel({
                     <FileText className="h-4 w-4" />
                     {msg.archivo_nombre || 'Archivo'}
                   </a>
+                )}
+                {suggestedReply && onCopyToClient && (
+                  <button
+                    onClick={(e) => { e.stopPropagation(); onCopyToClient(suggestedReply); }}
+                    className={`mt-2 flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-[11px] font-medium transition-colors ${isDark ? 'bg-cyan-500/15 text-cyan-300 border border-cyan-500/30 hover:bg-cyan-500/25' : 'bg-cyan-50 text-cyan-700 border border-cyan-200 hover:bg-cyan-100'}`}
+                    title="Copia la respuesta sugerida al chat con el cliente"
+                  >
+                    <Copy className="h-3 w-3" />
+                    Copiar al chat del cliente
+                  </button>
                 )}
                 <div className="flex items-center justify-between mt-1">
                   <p className={`text-[10px] ${isDark ? 'text-zinc-600' : 'text-gray-400'}`}>
@@ -348,6 +387,7 @@ function TicketDetailModal({
   const [uploadingNotas, setUploadingNotas] = useState(false);
   const [uploadingSoporte, setUploadingSoporte] = useState(false);
   const [activeChat, setActiveChat] = useState<'notas' | 'soporte'>('notas');
+  const [prefillChatText, setPrefillChatText] = useState('');
 
   // DEV users for @mentions
   const { data: devUsers = [] } = useQuery({
@@ -625,6 +665,11 @@ function TicketDetailModal({
                 chatEndRef={notasChatEndRef}
                 devUsers={devUsers}
                 enableMentions
+                onCopyToClient={(text) => {
+                  navigator.clipboard?.writeText(text).catch(() => {});
+                  setPrefillChatText(text);
+                  setActiveChat('soporte');
+                }}
               />
             ) : (
               <ChatPanel
@@ -639,6 +684,8 @@ function TicketDetailModal({
                 emptyText="No hay mensajes en el chat de soporte. Escribe para comunicarte con el creador del ticket."
                 chatEndRef={soporteChatEndRef}
                 onDelete={(id) => deleteChatMutation.mutate(id)}
+                prefillText={prefillChatText}
+                onPrefillConsumed={() => setPrefillChatText('')}
               />
             )}
           </div>
