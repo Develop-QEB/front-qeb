@@ -11,6 +11,7 @@ import { useSocketCampana } from '../../hooks/useSocket';
 import { getPermissions } from '../../lib/permissions';
 import { useFormPersist } from '../../hooks/useFormPersist';
 import { useThemeStore } from '../../store/themeStore';
+import { ConfirmModal } from '../../components/ui/confirm-modal';
 
 interface StatusCampanaModalProps {
   isOpen: boolean;
@@ -36,6 +37,7 @@ export function StatusCampanaModal({ isOpen, onClose, campana, statusReadOnly = 
   const permissions = getPermissions(user?.rol);
   const STATUS_OPTIONS = getStatusOptions(isDark);
   const [selectedStatus, setSelectedStatus] = useState(campana.status || '');
+  const [showRechazoConfirm, setShowRechazoConfirm] = useState(false);
   const { save: saveDraft, load: loadDraft, clear: clearDraft } = useFormPersist(`qeb_campana_comment_${campana.id}`);
   const [comment, setComment] = useState(() => {
     const draft = loadDraft<{ comment: string }>();
@@ -113,10 +115,24 @@ export function StatusCampanaModal({ isOpen, onClose, campana, statusReadOnly = 
   });
 
   const handleSave = async () => {
+    if (selectedStatus === 'Rechazada' && selectedStatus !== campana.status) {
+      setShowRechazoConfirm(true);
+      return;
+    }
     try {
       if (selectedStatus && selectedStatus !== campana.status) {
         await updateStatusMutation.mutateAsync(selectedStatus);
       }
+      onClose();
+    } catch (error) {
+      console.error('Error al guardar:', error);
+    }
+  };
+
+  const handleConfirmRechazo = async () => {
+    setShowRechazoConfirm(false);
+    try {
+      await updateStatusMutation.mutateAsync(selectedStatus);
       onClose();
     } catch (error) {
       console.error('Error al guardar:', error);
@@ -298,6 +314,17 @@ export function StatusCampanaModal({ isOpen, onClose, campana, statusReadOnly = 
           </div>
         )}
       </div>
+      <ConfirmModal
+        isOpen={showRechazoConfirm}
+        onClose={() => setShowRechazoConfirm(false)}
+        onConfirm={handleConfirmRechazo}
+        title="¿Rechazar campaña?"
+        message="Esta acción no es reversible. Al rechazar la campaña se liberarán todas las ubicaciones reservadas y quedarán disponibles para otras campañas."
+        confirmText="Sí, rechazar"
+        cancelText="Cancelar"
+        variant="danger"
+        isLoading={updateStatusMutation.isPending}
+      />
     </div>
   );
 }
