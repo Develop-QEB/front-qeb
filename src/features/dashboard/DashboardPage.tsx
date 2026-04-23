@@ -1004,7 +1004,7 @@ function InventoryTable({ data, isLoading, page, totalPages, total, onPageChange
 
   const downloadCSV = useCallback(async () => {
     const generateCSV = (items: any[]) => {
-      const headers = ['Codigo', 'Plaza', 'Municipio', 'Mueble', 'Tipo', 'Estatus', 'Cliente', 'CUIC', 'Marca', 'Cliente (Grupo)', 'ID', 'Nombre', 'APS'];
+      const headers = ['Codigo', 'Plaza', 'Municipio', 'Mueble', 'Tipo', 'Estatus', 'Cliente', 'CUIC', 'Marca', 'ID', 'Nombre', 'APS'];
       const rows = items.map(item => [
         item.codigo_unico || item.id,
         item.plaza || '',
@@ -1012,10 +1012,9 @@ function InventoryTable({ data, isLoading, page, totalPages, total, onPageChange
         item.mueble || '',
         item.tradicional_digital || 'Tradicional',
         item.estatus || 'Disponible',
-        item.cliente_nombre || '',
+        item.cliente || '',
         item.cuic || '',
         item.marca || '',
-        item.cliente || '',
         item.propuesta_id || '',
         item.nombre_campania || '',
         item.APS || '',
@@ -1068,7 +1067,7 @@ function InventoryTable({ data, isLoading, page, totalPages, total, onPageChange
       });
       const items = allData.items;
       if (items.length === 0) return;
-      const headers = ['Codigo', 'Plaza', 'Municipio', 'Mueble', 'Tipo de Mueble', 'Tipo', 'Estatus', 'Cliente', 'CUIC', 'Marca', 'Cliente (Grupo)', 'ID', 'Nombre', 'APS'];
+      const headers = ['Codigo', 'Plaza', 'Municipio', 'Mueble', 'Tipo de Mueble', 'Tipo', 'Estatus', 'Cliente', 'CUIC', 'Marca', 'ID', 'Nombre', 'APS'];
       const rows = items.map((item: any) => [
         item.codigo_unico || item.id,
         item.plaza || '',
@@ -1077,10 +1076,9 @@ function InventoryTable({ data, isLoading, page, totalPages, total, onPageChange
         item.tipo_de_mueble || '',
         item.tradicional_digital || 'Tradicional',
         item.estatus || 'Disponible',
-        item.cliente_nombre || '',
+        item.cliente || '',
         item.cuic || '',
         item.marca || '',
-        item.cliente || '',
         item.propuesta_id || '',
         item.nombre_campania || '',
         item.APS || '',
