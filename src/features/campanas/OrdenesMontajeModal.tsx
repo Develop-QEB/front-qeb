@@ -950,6 +950,7 @@ export function OrdenesMontajeModal({ isOpen, onClose, canExport = true }: Orden
         'Suma de Caras': Number(item.caras) || 0,
         'Suma de Tarifa': Number(item.tarifa) || 0,
         'Suma de Monto Total': Number(item.monto_total) || 0,
+        'Diferencia': (() => { const d = Number(item.delta_caras) || 0; if (d === 0) return '✓'; return d > 0 ? `+${d}` : `${d}`; })(),
       }));
 
       const ws = XLSX.utils.json_to_sheet(wsData);
@@ -973,6 +974,7 @@ export function OrdenesMontajeModal({ isOpen, onClose, canExport = true }: Orden
         'Caras': Number(item.caras) || 0,
         'Tarifa': Number(item.tarifa) || 0,
         'Monto Total': Number(item.monto_total) || 0,
+        'Diferencia': (() => { const d = Number(item.delta_caras) || 0; if (d === 0) return '✓'; return d > 0 ? `+${d}` : `${d}`; })(),
       }));
       const ws = XLSX.utils.json_to_sheet(wsData);
       const wb = XLSX.utils.book_new();
