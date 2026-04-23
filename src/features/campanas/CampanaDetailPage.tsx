@@ -2665,16 +2665,18 @@ export function CampanaDetailPage() {
                               </td>
                               {visibleColumnsReservado.map(col => (
                                 <td key={col.field} className={`p-2 ${isDark ? 'text-zinc-400' : 'text-gray-500'}`}>
-                                  {col.field === 'articulo' ? (
+                                  {col.field === 'codigo_unico' ? (
                                     <div className="flex items-center gap-1.5">
                                       <span className={isDark ? 'text-zinc-300' : 'text-gray-700'}>{sc.articulo || '-'}</span>
                                       <span className="px-1.5 py-0.5 rounded text-[9px] font-semibold bg-yellow-500/20 text-yellow-400 border border-yellow-500/30">
-                                        Incompleto 0/{info?.esperadas || 0}
+                                        Sin inventario 0/{info?.esperadas || 0}
                                       </span>
                                     </div>
-                                  ) : col.field === 'plaza' ? (sc.ciudad || '-')
+                                  ) : col.field === 'articulo' ? (sc.articulo || '-')
+                                  : col.field === 'plaza' ? (sc.ciudad || '-')
                                   : col.field === 'tipo_de_cara' ? (sc.formato || '-')
-                                  : col.field === 'caras_totales' ? '0'
+                                  : col.field === 'caras_totales' ? (info?.esperadas ?? 0)
+                                  : col.field === 'tarifa_publica' ? (sc.tarifa_publica ? `$${Number(sc.tarifa_publica).toLocaleString('es-MX', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : '-')
                                   : '-'}
                                 </td>
                               ))}
