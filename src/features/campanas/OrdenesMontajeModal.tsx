@@ -1654,9 +1654,9 @@ export function OrdenesMontajeModal({ isOpen, onClose, canExport = true }: Orden
                       <td className="px-3 py-3 text-right text-sm font-bold text-white">
                         {catTotals.caras.toLocaleString()}
                       </td>
-                      <td className="px-3 py-3 text-right text-sm font-bold text-white">
+                      {/* <td className="px-3 py-3 text-right text-sm font-bold text-white">
                         ${catTotals.tarifa.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                      </td>
+                      </td> */}
                       <td className="px-3 py-3 text-right text-sm font-bold text-emerald-400">
                         ${catTotals.monto.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                       </td>

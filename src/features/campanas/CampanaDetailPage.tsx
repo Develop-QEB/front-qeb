@@ -2643,48 +2643,142 @@ export function CampanaDetailPage() {
                     description="Esta campaña no tiene inventarios sin APS"
                   />
                 ) : inventarioReservado.length === 0 && gruposSinInventario.length > 0 ? (
-                  <div>
-                    <table className="w-full text-xs">
-                      <thead className="sticky top-0 bg-card z-10">
-                        <tr className="border-b border-border text-left">
-                          <th className="p-2 w-8"></th>
-                          {visibleColumnsReservado.map(col => (
-                            <th key={col.field} className={`p-2 font-medium ${isDark ? 'text-purple-300' : 'text-purple-700'}`}>{col.label}</th>
-                          ))}
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {gruposSinInventario.map((sc: SolicitudCara) => {
-                          const info = groupCompletenessMap.get(sc.id);
-                          return (
-                            <tr key={`noinv_${sc.id}`} className={`border-b border-border/50 ${isDark ? 'bg-yellow-500/5' : 'bg-yellow-50/30'}`}>
-                              <td className="p-2">
-                                <div className="w-4 h-4 flex items-center justify-center" title="Sin inventario asignado">
-                                  <AlertTriangle className="h-3.5 w-3.5 text-yellow-500" />
-                                </div>
-                              </td>
-                              {visibleColumnsReservado.map(col => (
-                                <td key={col.field} className={`p-2 ${isDark ? 'text-zinc-400' : 'text-gray-500'}`}>
-                                  {col.field === 'codigo_unico' ? (
-                                    <div className="flex items-center gap-1.5">
-                                      <span className={isDark ? 'text-zinc-300' : 'text-gray-700'}>{sc.articulo || '-'}</span>
-                                      <span className="px-1.5 py-0.5 rounded text-[9px] font-semibold bg-yellow-500/20 text-yellow-400 border border-yellow-500/30">
-                                        Sin inventario 0/{info?.esperadas || 0}
-                                      </span>
+                  <div className="space-y-2 p-2">
+                    {(() => {
+                      const fmtScPeriodo = (ip: string | null): string => {
+                        if (!ip) return 'Sin Período';
+                        if (tipoPeriodo === 'mensual') {
+                          const parts = ip.split('T')[0].split('-');
+                          if (parts.length >= 2) return `${MESES_LABEL[parseInt(parts[1]) - 1]} ${parts[0]}`;
+                        }
+                        const fecha = new Date(ip);
+                        return `Cat ${calcularCatorcena(fecha)} / ${fecha.getFullYear()}`;
+                      };
+                      const byPeriodo = gruposSinInventario.reduce((acc, sc) => {
+                        const key = fmtScPeriodo(sc.inicio_periodo);
+                        if (!acc[key]) acc[key] = [];
+                        acc[key].push(sc);
+                        return acc;
+                      }, {} as Record<string, SolicitudCara[]>);
+                      return Object.entries(byPeriodo).map(([periodo, scItems]) => {
+                        const periodKey = `noinv_period_${periodo}`;
+                        const isPeriodExpanded = expandedGroups.has(periodKey);
+                        const totalEsperadas = scItems.reduce((s, sc) => s + (groupCompletenessMap.get(sc.id)?.esperadas || 0), 0);
+                        const totalInversion = scItems.reduce((s, sc) => {
+                          const esp = groupCompletenessMap.get(sc.id)?.esperadas || 0;
+                          return s + (Number(sc.tarifa_publica) || 0) * esp;
+                        }, 0);
+                        return (
+                          <div key={periodKey} className={`border ${isDark ? 'border-purple-900/30' : 'border-purple-200'} rounded-lg overflow-hidden`}>
+                            <div
+                              className={`flex items-center gap-2 px-3 py-2 cursor-pointer ${isDark ? 'bg-purple-900/20 hover:bg-purple-900/30' : 'bg-purple-50 hover:bg-purple-100'} transition-colors`}
+                              onClick={() => toggleGroup(periodKey)}
+                            >
+                              {isPeriodExpanded ? <ChevronDown className="h-4 w-4 text-purple-400 shrink-0" /> : <ChevronRight className="h-4 w-4 text-purple-400 shrink-0" />}
+                              <span className={`text-xs font-medium ${isDark ? 'text-purple-300' : 'text-purple-700'}`}>Inicio Periodo:</span>
+                              <span className={`text-xs ${isDark ? 'text-white' : 'text-gray-900'}`}>{periodo}</span>
+                              <div className="flex items-center gap-2 text-[10px] ml-2 shrink-0">
+                                <span className={isDark ? 'text-zinc-400' : 'text-gray-500'}>Caras: <span className={`font-medium ${isDark ? 'text-white' : 'text-gray-900'}`}>{totalEsperadas}</span></span>
+                                <span className={isDark ? 'text-zinc-400' : 'text-gray-500'}>Inv: <span className="text-emerald-400 font-medium">{fmtMoney(totalInversion)}</span></span>
+                              </div>
+                              <span className="ml-auto text-[10px] text-muted-foreground shrink-0">{scItems.length} items</span>
+                            </div>
+                            {isPeriodExpanded && (
+                              <div className="px-2 py-1 space-y-1">
+                                {(() => {
+                                  const plazas = [...new Set(scItems.map(sc => sc.ciudad).filter(Boolean))] as string[];
+                                  const formatos = [...new Set(scItems.map(sc => sc.formato).filter(Boolean))] as string[];
+                                  if (!plazas.length && !formatos.length) return null;
+                                  return (
+                                    <div className={`flex flex-wrap gap-x-3 gap-y-1 px-2 py-1.5 mb-1 border-b ${isDark ? 'border-purple-900/10' : 'border-purple-100'}`}>
+                                      {plazas.length > 0 && (
+                                        <div className="flex items-center gap-1">
+                                          <span className={`text-[10px] ${isDark ? 'text-zinc-500' : 'text-gray-400'}`}>Plaza:</span>
+                                          {plazas.slice(0, 3).map(p => <span key={p} className={`px-1.5 py-0.5 rounded text-[10px] ${isDark ? 'bg-zinc-800 text-zinc-300' : 'bg-gray-100 text-gray-700'}`}>{p}</span>)}
+                                          {plazas.length > 3 && <span className={`text-[10px] ${isDark ? 'text-zinc-500' : 'text-gray-400'}`}>+{plazas.length - 3}</span>}
+                                        </div>
+                                      )}
+                                      {formatos.length > 0 && (
+                                        <div className="flex items-center gap-1">
+                                          <span className={`text-[10px] ${isDark ? 'text-zinc-500' : 'text-gray-400'}`}>Formato:</span>
+                                          {formatos.slice(0, 3).map(f => <span key={f} className={`px-1.5 py-0.5 rounded text-[10px] ${isDark ? 'bg-zinc-800 text-zinc-300' : 'bg-gray-100 text-gray-700'}`}>{f}</span>)}
+                                          {formatos.length > 3 && <span className={`text-[10px] ${isDark ? 'text-zinc-500' : 'text-gray-400'}`}>+{formatos.length - 3}</span>}
+                                        </div>
+                                      )}
                                     </div>
-                                  ) : col.field === 'articulo' ? (sc.articulo || '-')
-                                  : col.field === 'plaza' ? (sc.ciudad || '-')
-                                  : col.field === 'tipo_de_cara' ? (sc.formato || '-')
-                                  : col.field === 'caras_totales' ? (info?.esperadas ?? 0)
-                                  : col.field === 'tarifa_publica' ? (sc.tarifa_publica ? `$${Number(sc.tarifa_publica).toLocaleString('es-MX', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : '-')
-                                  : '-'}
-                                </td>
-                              ))}
-                            </tr>
-                          );
-                        })}
-                      </tbody>
-                    </table>
+                                  );
+                                })()}
+                                {scItems.map(sc => {
+                                  const noInvInfo = groupCompletenessMap.get(sc.id);
+                                  const sinInvKey = `noinv_${sc.id}`;
+                                  const isSinInvExpanded = expandedGroups.has(sinInvKey);
+                                  const tarifaNum = Number(sc.tarifa_publica) || 0;
+                                  const esperadas = noInvInfo?.esperadas || 0;
+                                  return (
+                                    <div key={sinInvKey} className={`border ${isDark ? 'border-purple-900/20' : 'border-purple-100'} rounded-lg overflow-hidden ml-2`}>
+                                      <div
+                                        className={`flex items-center gap-2 px-2 py-1.5 cursor-pointer ${isDark ? 'bg-purple-900/10 hover:bg-purple-900/20' : 'bg-purple-50/50 hover:bg-purple-50'} transition-colors`}
+                                        onClick={() => toggleGroup(sinInvKey)}
+                                      >
+                                        {isSinInvExpanded ? <ChevronDown className="h-3 w-3 text-pink-400 shrink-0" /> : <ChevronRight className="h-3 w-3 text-pink-400 shrink-0" />}
+                                        <span className="text-[10px] font-medium text-pink-300">Artículo:</span>
+                                        <span className={`text-[10px] ${isDark ? 'text-white' : 'text-gray-900'}`}>{sc.articulo || '-'}</span>
+                                        <div className="flex items-center gap-2 text-[10px] ml-2 shrink-0">
+                                          <span className={isDark ? 'text-zinc-400' : 'text-gray-500'}>Caras: <span className={`font-medium ${isDark ? 'text-white' : 'text-gray-900'}`}>{esperadas}</span></span>
+                                          <span className={isDark ? 'text-zinc-400' : 'text-gray-500'}>Tarifa: <span className="text-amber-400 font-medium">{tarifaNum > 0 ? fmtMoney(tarifaNum) : '$0'}</span></span>
+                                          <span className={isDark ? 'text-zinc-400' : 'text-gray-500'}>Inv: <span className="text-emerald-400 font-medium">{fmtMoney(tarifaNum * esperadas)}</span></span>
+                                        </div>
+                                        <span className="px-1.5 py-0.5 rounded text-[9px] font-semibold bg-yellow-500/20 text-yellow-400 border border-yellow-500/30 ml-1">
+                                          0/{esperadas}
+                                        </span>
+                                        <span className="ml-auto text-[10px] text-muted-foreground shrink-0">0</span>
+                                      </div>
+                                      {(sc.ciudad || sc.formato) && (
+                                        <div className={`flex flex-wrap gap-x-3 gap-y-1 px-2 py-1.5 border-b ${isDark ? 'border-purple-900/10' : 'border-purple-100'}`}>
+                                          {sc.ciudad && (
+                                            <div className="flex items-center gap-1">
+                                              <span className={`text-[10px] ${isDark ? 'text-zinc-500' : 'text-gray-400'}`}>Plaza:</span>
+                                              <span className={`px-1.5 py-0.5 rounded text-[10px] ${isDark ? 'bg-zinc-800 text-zinc-300' : 'bg-gray-100 text-gray-700'}`}>{sc.ciudad}</span>
+                                            </div>
+                                          )}
+                                          {sc.formato && (
+                                            <div className="flex items-center gap-1">
+                                              <span className={`text-[10px] ${isDark ? 'text-zinc-500' : 'text-gray-400'}`}>Formato:</span>
+                                              <span className={`px-1.5 py-0.5 rounded text-[10px] ${isDark ? 'bg-zinc-800 text-zinc-300' : 'bg-gray-100 text-gray-700'}`}>{sc.formato}</span>
+                                            </div>
+                                          )}
+                                        </div>
+                                      )}
+                                      {isSinInvExpanded && (
+                                        <div>
+                                          <table className="w-full text-xs">
+                                            <thead>
+                                              <tr className="border-b border-border/30 text-left">
+                                                <th className="p-1.5 w-8"></th>
+                                                {visibleColumnsReservado.map(col => (
+                                                  <th key={col.field} className={`p-1.5 text-[10px] font-medium ${isDark ? 'text-purple-300' : 'text-purple-700'}`}>{col.label}</th>
+                                                ))}
+                                              </tr>
+                                            </thead>
+                                            <tbody>
+                                              <tr>
+                                                <td colSpan={visibleColumnsReservado.length + 1} className={`p-4 text-center text-xs ${isDark ? 'text-zinc-500' : 'text-gray-400'}`}>
+                                                  Sin inventario asignado
+                                                </td>
+                                              </tr>
+                                            </tbody>
+                                          </table>
+                                        </div>
+                                      )}
+                                    </div>
+                                  );
+                                })}
+                              </div>
+                            )}
+                          </div>
+                        );
+                      });
+                    })()}
                   </div>
                 ) : activeGroupings.length === 0 ? (
                   // Sin agrupación - separar inventario normal de artículos IM
@@ -2756,41 +2850,55 @@ export function CampanaDetailPage() {
 
                     {/* Grupos sin inventario - integrados en el mismo formato */}
                     {gruposSinInventario.length > 0 && (
-                      <>
-                        <table className="w-full text-xs">
-                          <tbody>
-                            {gruposSinInventario.map((sc: SolicitudCara) => {
-                              const info = groupCompletenessMap.get(sc.id);
-                              return (
-                                <tr key={`noinv_${sc.id}`} className={`border-b border-border/50 ${isDark ? 'bg-yellow-500/5' : 'bg-yellow-50/30'}`}>
-                                  <td className="p-2 w-8">
-                                    <div className="w-4 h-4 flex items-center justify-center" title="Sin inventario asignado">
-                                      <AlertTriangle className="h-3.5 w-3.5 text-yellow-500" />
-                                    </div>
-                                  </td>
-                                  {visibleColumnsReservado.map(col => (
-                                    <td key={col.field} className={`p-2 ${isDark ? 'text-zinc-400' : 'text-gray-500'}`}>
-                                      {col.field === 'codigo_unico' ? (
-                                        <div className="flex items-center gap-1.5">
-                                          <span className={isDark ? 'text-zinc-300' : 'text-gray-700'}>{sc.articulo || '-'}</span>
-                                          <span className="px-1.5 py-0.5 rounded text-[9px] font-semibold bg-yellow-500/20 text-yellow-400 border border-yellow-500/30">
-                                            Sin inventario 0/{info?.esperadas || 0}
-                                          </span>
-                                        </div>
-                                      ) : col.field === 'articulo' ? (sc.articulo || '-')
-                                      : col.field === 'plaza' ? (sc.ciudad || '-')
-                                      : col.field === 'tipo_de_cara' ? (sc.formato || '-')
-                                      : col.field === 'caras_totales' ? (info?.esperadas ?? 0)
-                                      : col.field === 'tarifa_publica' ? (sc.tarifa_publica ? `$${Number(sc.tarifa_publica).toLocaleString()}` : '-')
-                                      : '-'}
-                                    </td>
-                                  ))}
-                                </tr>
-                              );
-                            })}
-                          </tbody>
-                        </table>
-                      </>
+                      <div className="space-y-2 p-2">
+                        {gruposSinInventario.map((sc: SolicitudCara) => {
+                          const info = groupCompletenessMap.get(sc.id);
+                          const groupKey = `noinv_${sc.id}`;
+                          const isExpanded = expandedGroups.has(groupKey);
+                          return (
+                            <div key={groupKey} className={`border ${isDark ? 'border-purple-900/30' : 'border-purple-200'} rounded-lg overflow-hidden`}>
+                              <div
+                                className={`flex items-center gap-2 px-3 py-2 cursor-pointer ${isDark ? 'bg-purple-900/20 hover:bg-purple-900/30' : 'bg-purple-50 hover:bg-purple-100'} transition-colors`}
+                                onClick={() => toggleGroup(groupKey)}
+                              >
+                                {isExpanded ? (
+                                  <ChevronDown className="h-4 w-4 text-purple-400 shrink-0" />
+                                ) : (
+                                  <ChevronRight className="h-4 w-4 text-purple-400 shrink-0" />
+                                )}
+                                <span className={`text-xs ${isDark ? 'text-white' : 'text-gray-900'}`}>{sc.articulo || '-'}</span>
+                                {sc.ciudad && <span className={`text-xs ${isDark ? 'text-zinc-400' : 'text-gray-500'}`}>{sc.ciudad}</span>}
+                                {sc.formato && <span className={`text-xs ${isDark ? 'text-zinc-400' : 'text-gray-500'}`}>· {sc.formato}</span>}
+                                <span className="px-1.5 py-0.5 rounded text-[9px] font-semibold bg-yellow-500/20 text-yellow-400 border border-yellow-500/30">
+                                  0/{info?.esperadas || 0}
+                                </span>
+                                <span className="ml-auto text-[10px] text-muted-foreground shrink-0">0 items</span>
+                              </div>
+                              {isExpanded && (
+                                <div className="px-2 py-1">
+                                  <table className="w-full text-xs">
+                                    <thead>
+                                      <tr className="border-b border-border/30 text-left">
+                                        <th className="p-1.5 w-8"></th>
+                                        {visibleColumnsReservado.map(col => (
+                                          <th key={col.field} className={`p-1.5 text-[10px] font-medium ${isDark ? 'text-purple-300' : 'text-purple-700'}`}>{col.label}</th>
+                                        ))}
+                                      </tr>
+                                    </thead>
+                                    <tbody>
+                                      <tr>
+                                        <td colSpan={visibleColumnsReservado.length + 1} className={`p-4 text-center text-xs ${isDark ? 'text-zinc-500' : 'text-gray-400'}`}>
+                                          Sin inventario asignado
+                                        </td>
+                                      </tr>
+                                    </tbody>
+                                  </table>
+                                </div>
+                              )}
+                            </div>
+                          );
+                        })}
+                      </div>
                     )}
 
                     {/* Tabla de artículos de impresión */}
@@ -3186,11 +3294,124 @@ export function CampanaDetailPage() {
                                   )}
                                 </>
                               ) : null}
+                            {/* Sin inventario que pertenecen a este grupo */}
+                            {(() => {
+                              const firstField = activeGroupings[0] as keyof SolicitudCara;
+                              const matchingNoInv = gruposSinInventario.filter(sc => String(sc[firstField] ?? '') === groupKey);
+                              if (matchingNoInv.length === 0) return null;
+                              return (
+                                <div className="space-y-1 mt-1">
+                                  {matchingNoInv.map(sc => {
+                                    const noInvInfo = groupCompletenessMap.get(sc.id);
+                                    const sinInvKey = `noinv_${sc.id}`;
+                                    const isSinInvExpanded = expandedGroups.has(sinInvKey);
+                                    return (
+                                      <div key={sinInvKey} className={`border ${isDark ? 'border-purple-900/20' : 'border-purple-100'} rounded-lg overflow-hidden ml-2`}>
+                                        <div
+                                          className={`flex items-center gap-2 px-2 py-1.5 cursor-pointer ${isDark ? 'bg-purple-900/10 hover:bg-purple-900/20' : 'bg-purple-50/50 hover:bg-purple-50'} transition-colors`}
+                                          onClick={() => toggleGroup(sinInvKey)}
+                                        >
+                                          {isSinInvExpanded ? (
+                                            <ChevronDown className="h-3 w-3 text-pink-400 shrink-0" />
+                                          ) : (
+                                            <ChevronRight className="h-3 w-3 text-pink-400 shrink-0" />
+                                          )}
+                                          <span className="text-[10px] font-medium text-pink-300">Artículo:</span>
+                                          <span className={`text-[10px] ${isDark ? 'text-white' : 'text-gray-900'}`}>{sc.articulo || '-'}</span>
+                                          {sc.ciudad && <span className={`text-[10px] ${isDark ? 'text-zinc-400' : 'text-gray-500'}`}>{sc.ciudad}</span>}
+                                          {sc.formato && <span className={`text-[10px] ${isDark ? 'text-zinc-400' : 'text-gray-500'}`}>· {sc.formato}</span>}
+                                          <span className="px-1.5 py-0.5 rounded text-[9px] font-semibold bg-yellow-500/20 text-yellow-400 border border-yellow-500/30">
+                                            0/{noInvInfo?.esperadas || 0}
+                                          </span>
+                                          <span className="ml-auto text-[10px] text-muted-foreground shrink-0">0</span>
+                                        </div>
+                                        {isSinInvExpanded && (
+                                          <div>
+                                            <table className="w-full text-xs">
+                                              <thead>
+                                                <tr className="border-b border-border/30 text-left">
+                                                  <th className="p-1.5 w-8"></th>
+                                                  {visibleColumnsReservado.map(col => (
+                                                    <th key={col.field} className={`p-1.5 text-[10px] font-medium ${isDark ? 'text-purple-300' : 'text-purple-700'}`}>{col.label}</th>
+                                                  ))}
+                                                </tr>
+                                              </thead>
+                                              <tbody>
+                                                <tr>
+                                                  <td colSpan={visibleColumnsReservado.length + 1} className={`p-4 text-center text-xs ${isDark ? 'text-zinc-500' : 'text-gray-400'}`}>
+                                                    Sin inventario asignado
+                                                  </td>
+                                                </tr>
+                                              </tbody>
+                                            </table>
+                                          </div>
+                                        )}
+                                      </div>
+                                    );
+                                  })}
+                                </div>
+                              );
+                            })()}
                             </div>
                           )}
                         </div>
                       );
                     })}
+                    {/* Sin inventario sin grupo coincidente */}
+                    {(() => {
+                      const firstField = activeGroupings[0] as keyof SolicitudCara;
+                      const groupKeys = Object.keys(groupedInventario);
+                      const unmatchedNoInv = gruposSinInventario.filter(sc => !groupKeys.includes(String(sc[firstField] ?? '')));
+                      if (unmatchedNoInv.length === 0) return null;
+                      return unmatchedNoInv.map(sc => {
+                        const noInvInfo = groupCompletenessMap.get(sc.id);
+                        const sinInvKey = `noinv_${sc.id}`;
+                        const isSinInvExpanded = expandedGroups.has(sinInvKey);
+                        return (
+                          <div key={sinInvKey} className={`border ${isDark ? 'border-purple-900/30' : 'border-purple-200'} rounded-lg overflow-hidden`}>
+                            <div
+                              className={`flex items-center gap-2 px-3 py-2 cursor-pointer ${isDark ? 'bg-purple-900/20 hover:bg-purple-900/30' : 'bg-purple-50 hover:bg-purple-100'} transition-colors`}
+                              onClick={() => toggleGroup(sinInvKey)}
+                            >
+                              {isSinInvExpanded ? (
+                                <ChevronDown className="h-4 w-4 text-purple-400 shrink-0" />
+                              ) : (
+                                <ChevronRight className="h-4 w-4 text-purple-400 shrink-0" />
+                              )}
+                              <span className={`text-xs font-medium ${isDark ? 'text-purple-300' : 'text-purple-700'}`}>
+                                {AVAILABLE_GROUPINGS.find(g => g.field === activeGroupings[0])?.label}:
+                              </span>
+                              <span className={`text-xs ${isDark ? 'text-white' : 'text-gray-900'}`}>{String(sc[firstField] || '-')}</span>
+                              <span className="px-1.5 py-0.5 rounded text-[9px] font-semibold bg-yellow-500/20 text-yellow-400 border border-yellow-500/30">
+                                0/{noInvInfo?.esperadas || 0}
+                              </span>
+                              <span className="ml-auto text-[10px] text-muted-foreground shrink-0">0 items</span>
+                            </div>
+                            {isSinInvExpanded && (
+                              <div className="px-2 py-1">
+                                <table className="w-full text-xs">
+                                  <thead>
+                                    <tr className="border-b border-border/30 text-left">
+                                      <th className="p-1.5 w-8"></th>
+                                      {visibleColumnsReservado.map(col => (
+                                        <th key={col.field} className={`p-1.5 text-[10px] font-medium ${isDark ? 'text-purple-300' : 'text-purple-700'}`}>{col.label}</th>
+                                      ))}
+                                    </tr>
+                                  </thead>
+                                  <tbody>
+                                    <tr>
+                                      <td colSpan={visibleColumnsReservado.length + 1} className={`p-4 text-center text-xs ${isDark ? 'text-zinc-500' : 'text-gray-400'}`}>
+                                        Sin inventario asignado
+                                      </td>
+                                    </tr>
+                                  </tbody>
+                                </table>
+                              </div>
+                            )}
+                          </div>
+                        );
+                      });
+                    })()}
                   </div>
                 )}
               </div>
