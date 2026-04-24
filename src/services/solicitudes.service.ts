@@ -29,11 +29,18 @@ export interface UserOption {
   puesto: string;
 }
 
+export interface PlazaInfo {
+  plaza: string;
+  estados: string[];
+  ciudades: string[];
+}
+
 export interface InventarioFilters {
   estados: string[];
-  ciudades: { ciudad: string; estado: string }[];
+  ciudades: { ciudad: string; estado: string; plaza?: string | null }[];
   formatos: string[];
   nse: string[];
+  plazas?: PlazaInfo[];
 }
 
 export interface InventarioOptions {

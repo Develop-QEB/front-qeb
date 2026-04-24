@@ -285,6 +285,7 @@ interface CaraEntry {
   articulo: SAPArticulo;
   estado: string;
   ciudades: string[];
+  plaza?: string; // display-only (derived from plaza selection); backend still uses estado+ciudades
   formato: string;
   tipo: string;
   nse: string[];
@@ -631,6 +632,7 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
   // New cara form
   const [newCara, setNewCara] = useState({
     articulo: null as SAPArticulo | null,
+    plaza: '', // UI-facing plaza; populates estado/ciudades on change
     estado: '',
     ciudades: [] as string[],
     formato: '',
@@ -911,6 +913,7 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
       setExpandedCatorcenas(new Set());
       setNewCara({
         articulo: null,
+        plaza: '',
         estado: '',
         ciudades: [],
         formato: '',
@@ -1271,6 +1274,7 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
         articulo: newCara.articulo!,
         estado: newCara.estado,
         ciudades: ciudadesToUse,
+        plaza: newCara.plaza || newCara.estado,
         formato: newCara.formato,
         tipo: newCara.tipo,
         nse: newCara.nse,
@@ -1298,6 +1302,7 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
           articulo: newCara.articuloBf,
           estado: newCara.estado,
           ciudades: ciudadesToUse,
+          plaza: newCara.plaza || newCara.estado,
           formato: newCara.formato,
           tipo: newCara.tipo,
           nse: newCara.nse,
@@ -1379,6 +1384,7 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
   const handleClearNewCara = () => {
     setNewCara({
       articulo: null,
+      plaza: '',
       estado: '',
       ciudades: [],
       formato: '',
@@ -1423,6 +1429,7 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
     setEditingCaraId(cara.id);
     setNewCara({
       articulo: cara.articulo,
+      plaza: cara.plaza || cara.estado,
       estado: cara.estado,
       ciudades: cara.ciudades,
       formato: cara.formato,
@@ -1446,6 +1453,7 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
     setTimeout(() => circuitTableRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 100);
     setNewCara({
       articulo: null,
+      plaza: '',
       estado: '',
       ciudades: [],
       formato: '',
@@ -1828,6 +1836,7 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
             articulo,
             estado: cara.estados || '',
             ciudades: cara.ciudad ? cara.ciudad.split(', ').map(c => c.trim()) : [],
+            plaza: getPlazaFromArticle(cara.articulo || '', cara.estados || cara.ciudad || ''),
             formato: cara.formato || '',
             tipo: cara.tipo || '',
             nse: cara.nivel_socioeconomico ? cara.nivel_socioeconomico.split(',') : [],
@@ -2476,20 +2485,44 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
                   />
                 </div>
 
-                {/* Row 2: Estado, Ciudad (opcional), Formato, Tipo */}
+                {/* Row 2: Plaza, Ciudad (opcional), Formato, Tipo */}
                 <div className="grid grid-cols-4 gap-3 mb-4">
-                  {/* Estado */}
+                  {/* Plaza (UI); internally seleciona estado+ciudades */}
                   <div>
-                    <label className={`text-xs ${isDark ? 'text-zinc-500' : 'text-gray-500'}`}>Estado</label>
+                    <label className={`text-xs ${isDark ? 'text-zinc-500' : 'text-gray-500'}`}>Plaza</label>
                     <select
-                      value={newCara.estado}
-                      onChange={(e) => setNewCara({ ...newCara, estado: e.target.value, ciudades: [] })}
+                      value={newCara.plaza || newCara.estado}
+                      onChange={(e) => {
+                        const val = e.target.value;
+                        // Special: CDMX / AM combina 2 estados
+                        if (val === CDMX_AM_LABEL) {
+                          setNewCara({ ...newCara, plaza: val, estado: val, ciudades: [] });
+                          return;
+                        }
+                        // Buscar plaza en filtros
+                        const plazaInfo = inventarioFilters?.plazas?.find(p => p.plaza === val);
+                        if (plazaInfo) {
+                          const estadoPrim = plazaInfo.estados[0] || '';
+                          setNewCara({
+                            ...newCara,
+                            plaza: val,
+                            estado: estadoPrim,
+                            ciudades: [],
+                          });
+                        } else {
+                          // Fallback: val puede ser un estado (backward compat)
+                          setNewCara({ ...newCara, plaza: val, estado: val, ciudades: [] });
+                        }
+                      }}
                       className={`w-full px-3 py-2 ${isDark ? 'bg-zinc-800 border-zinc-700 text-white' : 'bg-gray-100 border-gray-200 text-gray-900'} border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-purple-500/50`}
                     >
                       <option value="">Seleccionar</option>
                       <option value={CDMX_AM_LABEL}>{CDMX_AM_LABEL}</option>
-                      {inventarioFilters?.estados.map(e => (
-                        <option key={e} value={e}>{e}</option>
+                      {(inventarioFilters?.plazas && inventarioFilters.plazas.length > 0
+                        ? inventarioFilters.plazas.map(p => p.plaza)
+                        : (inventarioFilters?.estados || [])
+                      ).map(p => (
+                        <option key={p} value={p}>{p}</option>
                       ))}
                     </select>
                   </div>
@@ -2872,8 +2905,8 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
                                           <div className="truncate font-medium">{cara.articulo.ItemCode}</div>
                                           <div className={`truncate text-[10px] ${isDark ? 'text-zinc-500' : 'text-gray-400'}`}>{cara.articulo.ItemName}</div>
                                         </td>
-                                        <td className={`px-2 py-2 text-xs ${isDark ? 'text-zinc-300' : 'text-gray-700'} max-w-[80px] truncate`} title={getPlazaFromArticle(cara.articulo?.ItemCode || '', cara.estado)}>
-                                          {getPlazaFromArticle(cara.articulo?.ItemCode || '', cara.estado)}
+                                        <td className={`px-2 py-2 text-xs ${isDark ? 'text-zinc-300' : 'text-gray-700'} max-w-[80px] truncate`} title={cara.plaza || getPlazaFromArticle(cara.articulo?.ItemCode || '', cara.estado)}>
+                                          {cara.plaza || getPlazaFromArticle(cara.articulo?.ItemCode || '', cara.estado)}
                                         </td>
                                         <td className="px-2 py-2">
                                           <span className={`text-[10px] px-1.5 py-0.5 rounded ${cara.tipo === 'Digital' ? 'bg-blue-500/20 text-blue-300' : 'bg-amber-500/20 text-amber-300'
