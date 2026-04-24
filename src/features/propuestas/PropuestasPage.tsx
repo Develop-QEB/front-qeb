@@ -1424,6 +1424,7 @@ export function PropuestasPage() {
         'Descripción (Opcional)', 'Inicio o Periodo', 'Fin o Segmento', 'Arte',
         'Código de arte (Opcional)', 'Arte Url (Opcional)', 'Origen del arte (Opcional)',
         'Unidad', 'Cara', 'Ciudad', 'Tipo de Distribución', 'Reproducciones', 'Notas',
+        'Estatus', 'Catorcena',
       ];
       const rows: string[][] = [];
       const invExported = new Set<number>();
@@ -1453,6 +1454,7 @@ export function PropuestasPage() {
               '', '', '', '',
               inv.codigo_unico || '', inv.tipo_de_cara || '', inv.plaza || inv.estado || '',
               inv.tradicional_digital || inv.tipo_medio || '', '0', '',
+              info.status || '', cara.numero_catorcena ? `Cat ${String(cara.numero_catorcena).padStart(2, '0')} / ${cara.anio_catorcena || ''}` : '',
             ]);
             firstRow = false;
           }
@@ -1464,6 +1466,7 @@ export function PropuestasPage() {
             cara.articulo || '', info.vendedor || '', info.descripcion || '',
             'Catorcenas ' + (cara.anio_catorcena || ''), periodo,
             '', '', '', '', '', '', cara.ciudad || '', '', '0', '',
+            info.status || '', cara.numero_catorcena ? `Cat ${String(cara.numero_catorcena).padStart(2, '0')} / ${cara.anio_catorcena || ''}` : '',
           ]);
         }
       }
