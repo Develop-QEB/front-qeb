@@ -1364,9 +1364,7 @@ export function PropuestasPage() {
 
     const groupKey = groupBy as keyof Propuesta;
     const groups: Record<string, Propuesta[]> = {};
-    const sourceData = (advancedFilters.length > 0 || allSearchTerms.length > 0) ? filteredData : data.data;
-
-    sourceData.forEach(item => {
+    filteredData.forEach(item => {
       const key = String(item[groupKey] || 'Sin asignar');
       if (!groups[key]) groups[key] = [];
       groups[key].push(item);
@@ -2218,9 +2216,14 @@ export function PropuestasPage() {
                       {expandedGroups.has(groupName) && items.map((item, idx) => renderPropuestaRow(item, idx))}
                     </React.Fragment>
                   ))
+                ) : filteredData.length === 0 && hasLocalFilters ? (
+                  <tr>
+                    <td colSpan={11} className="px-4 py-12 text-center">
+                      <span className={`text-sm ${isDark ? 'text-zinc-500' : 'text-gray-400'}`}>No se encontraron propuestas con los filtros aplicados</span>
+                    </td>
+                  </tr>
                 ) : (
-                  // Flat view - use filtered data if advanced filters applied
-                  (hasLocalFilters ? filteredData : data.data).map((item, idx) => renderPropuestaRow(item, idx))
+                  filteredData.map((item, idx) => renderPropuestaRow(item, idx))
                 )}
               </tbody>
             </table>

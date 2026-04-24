@@ -744,19 +744,19 @@ export function SolicitudesPage() {
 
   // Group data
   const groupedData = useMemo(() => {
-    if (!groupBy || !data?.data) return null;
+    if (!groupBy || !filteredData.length) return null;
 
     const groupKey = groupBy as keyof Solicitud;
     const groups: Record<string, Solicitud[]> = {};
 
-    data.data.forEach(item => {
+    filteredData.forEach(item => {
       const key = String(item[groupKey] || 'Sin asignar');
       if (!groups[key]) groups[key] = [];
       groups[key].push(item);
     });
 
     return Object.entries(groups).sort((a, b) => b[1].length - a[1].length);
-  }, [data, groupBy]);
+  }, [filteredData, groupBy]);
 
   const toggleGroup = (groupName: string) => {
     setExpandedGroups(prev => {
@@ -1561,9 +1561,9 @@ export function SolicitudesPage() {
                         </React.Fragment>
                       ))
                     ) : (
-                      (needsClientFilter ? filteredData : data?.data)?.map((item, idx) => renderSolicitudRow(item, idx))
+                      filteredData.map((item, idx) => renderSolicitudRow(item, idx))
                     )}
-                    {(needsClientFilter ? filteredData.length === 0 : (!data?.data || data.data.length === 0)) && !groupedData && (
+                    {filteredData.length === 0 && !groupedData && (
                       <tr>
                         <td colSpan={9} className="px-4 py-12 text-center">
                           <div className="flex flex-col items-center gap-3">
