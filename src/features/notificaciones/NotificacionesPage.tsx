@@ -348,9 +348,9 @@ function TareaRow({
 
   const getAuthStatusBadge = () => {
     if (isCancelado) return { bg: 'bg-zinc-500/20', border: 'border-zinc-500/30', color: 'text-zinc-400', label: 'Cancelado' };
-    if (isRechazo) return { bg: 'bg-red-500/20', border: 'border-red-500/30', color: 'text-red-400', label: 'Rechazada' };
+    if (isRechazo) return { bg: 'bg-red-500/20', border: 'border-red-500/30', color: 'text-red-400', label: 'Rechazo' };
     if (isAprobacion) return { bg: 'bg-emerald-500/20', border: 'border-emerald-500/30', color: 'text-emerald-400', label: 'Aprobada' };
-    if (isRechazado) return { bg: 'bg-red-500/20', border: 'border-red-500/30', color: 'text-red-400', label: 'Rechazada' };
+    if (isRechazado) return { bg: 'bg-red-500/20', border: 'border-red-500/30', color: 'text-red-400', label: 'Rechazo' };
     if (isCompleted && isAuthTask) return { bg: 'bg-emerald-500/20', border: 'border-emerald-500/30', color: 'text-emerald-400', label: 'Aprobada' };
     if (isAuthTask) return { bg: 'bg-amber-500/20', border: 'border-amber-500/30', color: 'text-amber-400', label: 'Pendiente' };
     return null;
@@ -1791,12 +1791,23 @@ function ApprovalModal({
                           </p>
                         )}
                         {isCambio && entry.detalles?.cambios && (
-                          <div className="mt-1 space-y-0.5">
+                          <div className="mt-2 space-y-1.5">
                             {(entry.detalles.cambios as { articulo: string; label: string; antes: string; despues: string }[]).map((c: { articulo: string; label: string; antes: string; despues: string }, i: number) => (
-                              <p key={i} className={`text-[11px] ${isDark ? 'text-zinc-500' : 'text-gray-400'}`}>
-                                <span className={isDark ? 'text-zinc-400' : 'text-gray-500'}>{c.articulo}</span>
-                                {' · '}{c.label}: <span className="line-through text-red-400/60">{c.antes}</span> → <span className="text-emerald-400">{c.despues}</span>
-                              </p>
+                              <div key={i} className={`rounded-lg border ${isDark ? 'border-zinc-700/50' : 'border-gray-200'} overflow-hidden`}>
+                                <div className={`px-2.5 py-1 text-[10px] font-medium ${isDark ? 'bg-zinc-800/50 text-zinc-400' : 'bg-gray-50 text-gray-500'}`}>
+                                  {c.articulo} · {c.label}
+                                </div>
+                                <div className="grid grid-cols-2 divide-x divide-zinc-700/30">
+                                  <div className="px-2.5 py-1.5 bg-red-500/5">
+                                    <div className="text-[9px] uppercase text-red-400/70 mb-0.5">Antes</div>
+                                    <div className={`text-[11px] font-mono ${isDark ? 'text-red-300' : 'text-red-600'}`}>{c.antes}</div>
+                                  </div>
+                                  <div className="px-2.5 py-1.5 bg-emerald-500/5">
+                                    <div className="text-[9px] uppercase text-emerald-400/70 mb-0.5">Actual</div>
+                                    <div className={`text-[11px] font-mono ${isDark ? 'text-emerald-300' : 'text-emerald-600'}`}>{c.despues}</div>
+                                  </div>
+                                </div>
+                              </div>
                             ))}
                           </div>
                         )}
@@ -1807,6 +1818,19 @@ function ApprovalModal({
                     </div>
                   );
                 })}
+              </div>
+            </div>
+          )}
+
+          {/* Notas Dirección */}
+          {tarea.notas_direccion && (
+            <div className="mb-6">
+              <h3 className={`text-xs font-medium ${isDark ? 'text-zinc-500' : 'text-gray-400'} uppercase tracking-wider mb-3 flex items-center gap-2`}>
+                <FileText className="h-3.5 w-3.5 text-orange-400" />
+                Notas Dirección
+              </h3>
+              <div className={`p-3 rounded-xl ${isDark ? 'bg-zinc-800/30 border-zinc-800/50' : 'bg-gray-50 border-gray-200'} border max-h-60 overflow-y-auto`}>
+                <p className={`text-sm ${isDark ? 'text-zinc-300' : 'text-gray-700'} whitespace-pre-wrap break-words leading-relaxed`}>{tarea.notas_direccion}</p>
               </div>
             </div>
           )}
@@ -2216,14 +2240,18 @@ function TaskDrawer({
             </button>
           )}
 
-          {/* Botón Revisar y Autorizar para directores */}
-          {isAutorizacionTask && ['Director General', 'Director Comercial'].includes(user?.rol || '') && tarea.estatus !== 'Atendido' && tarea.estatus !== 'Cancelado' && onOpenApprovalModal && (
+          {/* Botón Revisar y Autorizar para directores (visible incluso en finalizadas) */}
+          {isAutorizacionTask && ['Director General', 'Director Comercial'].includes(user?.rol || '') && tarea.estatus !== 'Cancelado' && onOpenApprovalModal && (
             <button
               onClick={() => onOpenApprovalModal()}
-              className="mt-4 w-full flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl bg-gradient-to-r from-orange-500 to-amber-500 text-white text-sm font-bold hover:from-orange-400 hover:to-amber-400 transition-all hover:scale-[1.02] active:scale-[0.98] shadow-lg shadow-orange-500/20"
+              className={`mt-4 w-full flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl text-sm font-bold transition-all hover:scale-[1.02] active:scale-[0.98] ${
+                tarea.estatus === 'Atendido'
+                  ? 'bg-gradient-to-r from-zinc-600 to-zinc-500 text-white hover:from-zinc-500 hover:to-zinc-400 shadow-lg shadow-zinc-500/20'
+                  : 'bg-gradient-to-r from-orange-500 to-amber-500 text-white hover:from-orange-400 hover:to-amber-400 shadow-lg shadow-orange-500/20'
+              }`}
             >
               <ShieldCheck className="h-4 w-4" />
-              Revisar y Autorizar
+              {tarea.estatus === 'Atendido' ? 'Ver Autorización' : 'Revisar y Autorizar'}
             </button>
           )}
 
@@ -2388,15 +2416,105 @@ function TaskDrawer({
           <h3 className={`text-xs font-medium ${isDark ? 'text-zinc-500' : 'text-gray-400'} uppercase tracking-wider mb-3`}>Detalles</h3>
 
           {/* Cliente (si es tarea de autorización) */}
-          {carasPendientes.length > 0 && carasPendientes[0].cliente && (
-            <div className="flex items-center justify-between p-3 rounded-xl bg-purple-500/10 border border-purple-500/30">
-              <div className="flex items-center gap-2 text-purple-400">
-                <Building2 className="h-4 w-4" />
-                <span className="text-xs">Cliente</span>
+          {(() => {
+            const clienteName = (carasData && carasData.length > 0 ? carasData[0].cliente : null) || tarea.cliente;
+            if (!clienteName) return null;
+            return (
+              <div className="flex items-center justify-between p-3 rounded-xl bg-purple-500/10 border border-purple-500/30">
+                <div className="flex items-center gap-2 text-purple-400">
+                  <Building2 className="h-4 w-4" />
+                  <span className="text-xs">Cliente</span>
+                </div>
+                <span className={`text-sm ${isDark ? 'text-white' : 'text-gray-900'} font-medium`}>{clienteName}</span>
               </div>
-              <span className={`text-sm ${isDark ? 'text-white' : 'text-gray-900'} font-medium`}>{carasPendientes[0].cliente}</span>
+            );
+          })()}
+
+          {/* Asesor */}
+          {(tarea.asesor || (carasData && carasData.length > 0 && carasData[0].asesor)) && (
+            <div className={`flex items-center justify-between p-3 rounded-xl ${isDark ? 'bg-zinc-800/30 border-zinc-800/50' : 'bg-gray-50 border-gray-200'} border`}>
+              <div className={`flex items-center gap-2 ${isDark ? 'text-zinc-500' : 'text-gray-400'}`}>
+                <UserCheck className="h-4 w-4" />
+                <span className="text-xs">Asesor</span>
+              </div>
+              <span className={`text-sm ${isDark ? 'text-white' : 'text-gray-900'} font-medium`}>{tarea.asesor || carasData?.[0]?.asesor}</span>
             </div>
           )}
+
+          {/* Catorcenas + fechas (solo auth tasks con caras) */}
+          {isAutorizacionTask && carasData && carasData.length > 0 && (() => {
+            const catMap = new Map<string, { inicio?: string; fin?: string }>();
+            carasData.forEach(c => {
+              const key = c.catorcena || 'Sin periodo';
+              if (!catMap.has(key)) catMap.set(key, { inicio: c.inicio_periodo, fin: c.fin_periodo });
+            });
+            if (catMap.size === 0) return null;
+            return (
+              <div className={`p-3 rounded-xl ${isDark ? 'bg-cyan-500/5 border-cyan-500/20' : 'bg-cyan-50 border-cyan-200'} border`}>
+                <div className={`flex items-center gap-2 mb-2 ${isDark ? 'text-cyan-400' : 'text-cyan-600'}`}>
+                  <Calendar className="h-4 w-4" />
+                  <span className="text-xs font-medium">Catorcenas</span>
+                </div>
+                <div className="space-y-1">
+                  {Array.from(catMap.entries()).map(([cat, dates]) => (
+                    <div key={cat} className="flex items-center justify-between">
+                      <span className={`text-xs font-medium ${isDark ? 'text-white' : 'text-gray-900'}`}>{cat}</span>
+                      {dates.inicio && dates.fin && (
+                        <span className={`text-[10px] ${isDark ? 'text-zinc-500' : 'text-gray-400'}`}>
+                          {formatDate(dates.inicio)} → {formatDate(dates.fin)}
+                        </span>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              </div>
+            );
+          })()}
+
+          {/* Inversión total + desglose caras (solo auth tasks con caras) */}
+          {isAutorizacionTask && carasData && carasData.length > 0 && (() => {
+            let totalInversion = 0, totalRenta = 0, totalBonif = 0, totalCortesia = 0, totalIntercambio = 0;
+            carasData.forEach(c => {
+              totalInversion += Number(c.costo) || 0;
+              const art = (c.articulo || '').toUpperCase();
+              if (art.startsWith('CT')) totalCortesia += c.caras + (Number(c.bonificacion) || 0);
+              else if (art.startsWith('IN')) totalIntercambio += c.caras + (Number(c.bonificacion) || 0);
+              else {
+                totalRenta += c.caras;
+                totalBonif += Number(c.bonificacion) || 0;
+              }
+            });
+            return (
+              <div className={`p-3 rounded-xl ${isDark ? 'bg-emerald-500/5 border-emerald-500/20' : 'bg-emerald-50 border-emerald-200'} border`}>
+                <div className={`flex items-center gap-2 mb-2 ${isDark ? 'text-emerald-400' : 'text-emerald-600'}`}>
+                  <DollarSign className="h-4 w-4" />
+                  <span className="text-xs font-medium">Inversión y Caras</span>
+                </div>
+                <div className="grid grid-cols-2 gap-2">
+                  <div>
+                    <div className={`text-[10px] ${isDark ? 'text-zinc-500' : 'text-gray-400'}`}>Inversión</div>
+                    <div className={`text-sm font-bold ${isDark ? 'text-emerald-400' : 'text-emerald-600'}`}>${totalInversion.toLocaleString('es-MX', { minimumFractionDigits: 0 })}</div>
+                  </div>
+                  <div>
+                    <div className={`text-[10px] ${isDark ? 'text-zinc-500' : 'text-gray-400'}`}>Renta</div>
+                    <div className={`text-sm font-bold ${isDark ? 'text-white' : 'text-gray-900'}`}>{totalRenta}</div>
+                  </div>
+                  <div>
+                    <div className={`text-[10px] ${isDark ? 'text-zinc-500' : 'text-gray-400'}`}>Bonificadas</div>
+                    <div className={`text-sm font-bold ${isDark ? 'text-cyan-400' : 'text-cyan-600'}`}>{totalBonif}</div>
+                  </div>
+                  <div>
+                    <div className={`text-[10px] ${isDark ? 'text-zinc-500' : 'text-gray-400'}`}>Cortesías</div>
+                    <div className={`text-sm font-bold ${isDark ? 'text-amber-400' : 'text-amber-600'}`}>{totalCortesia}</div>
+                  </div>
+                  {totalIntercambio > 0 && <div>
+                    <div className={`text-[10px] ${isDark ? 'text-zinc-500' : 'text-gray-400'}`}>Intercambios</div>
+                    <div className={`text-sm font-bold ${isDark ? 'text-pink-400' : 'text-pink-600'}`}>{totalIntercambio}</div>
+                  </div>}
+                </div>
+              </div>
+            );
+          })()}
 
           {/* Asignado */}
           <div className={`flex items-center justify-between p-3 rounded-xl ${isDark ? 'bg-zinc-800/30 border-zinc-800/50' : 'bg-gray-50 border-gray-200'} border`}>
@@ -2802,7 +2920,19 @@ export function NotificacionesPage() {
     return items;
   }, [data?.data, filterFecha, user?.id, contentType, filters, sortField, sortDirection]);
     const tareasConQuickFilter = useMemo(() => {
-      if (quickFilter === 'all') return baseTareas;
+      const isDirectorUser = ['Director General', 'Director Comercial'].includes(user?.rol || '');
+      const cutoff14d = new Date();
+      cutoff14d.setDate(cutoff14d.getDate() - 14);
+
+      if (quickFilter === 'all') {
+        if (!isDirectorUser) return baseTareas;
+        return baseTareas.filter(item => {
+          if (item.estatus === 'Atendido' && item.tipo?.includes('Autorización') && item.fecha_creacion) {
+            return new Date(item.fecha_creacion) > cutoff14d;
+          }
+          return true;
+        });
+      }
 
       return baseTareas.filter(item => {
         if (quickFilter === 'pendientes') {
@@ -2823,7 +2953,7 @@ export function NotificacionesPage() {
 
         return true;
       });
-    }, [baseTareas, quickFilter]);
+    }, [baseTareas, quickFilter, user?.rol]);
 
   const filteredTareas = tareasConQuickFilter;
 
@@ -2911,9 +3041,15 @@ export function NotificacionesPage() {
 
   // Handlers
   const handleSelectTarea = useCallback(async (tarea: Notificacion) => {
+    const isDirectorUser = ['Director General', 'Director Comercial'].includes(user?.rol || '');
+    const isAuthTask = tarea.tipo?.includes('Autorización');
+    if (isDirectorUser && isAuthTask) {
+      setApprovalModalTarea(tarea);
+      return;
+    }
     const full = await notificacionesService.getById(tarea.id);
     setSelectedTarea(full);
-  }, []);
+  }, [user?.rol]);
 
   // Vista de tabs
   const viewTabs = [
@@ -3361,9 +3497,9 @@ export function NotificacionesPage() {
                   const isCanceladoInline = tarea.estatus === 'Cancelado';
                   const getInlineAuthBadge = () => {
                     if (isCanceladoInline) return { bg: 'bg-zinc-500/20', border: 'border-zinc-500/30', color: 'text-zinc-400', label: 'Cancelado' };
-                    if (isRechazoInline) return { bg: 'bg-red-500/20', border: 'border-red-500/30', color: 'text-red-400', label: 'Rechazada' };
+                    if (isRechazoInline) return { bg: 'bg-red-500/20', border: 'border-red-500/30', color: 'text-red-400', label: 'Rechazo' };
                     if (isAprobacionInline) return { bg: 'bg-emerald-500/20', border: 'border-emerald-500/30', color: 'text-emerald-400', label: 'Aprobada' };
-                    if (isRechazadoInline) return { bg: 'bg-red-500/20', border: 'border-red-500/30', color: 'text-red-400', label: 'Rechazada' };
+                    if (isRechazadoInline) return { bg: 'bg-red-500/20', border: 'border-red-500/30', color: 'text-red-400', label: 'Rechazo' };
                     if (isCompleted && isAuthTaskInline) return { bg: 'bg-emerald-500/20', border: 'border-emerald-500/30', color: 'text-emerald-400', label: 'Aprobada' };
                     if (isAuthTaskInline) return { bg: 'bg-amber-500/20', border: 'border-amber-500/30', color: 'text-amber-400', label: 'Pendiente' };
                     return null;
