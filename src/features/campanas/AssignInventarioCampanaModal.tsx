@@ -611,6 +611,7 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
   const [catorcenaFin, setCatorcenaFin] = useState<number | undefined>();
   const [archivoCampana, setArchivoCampana] = useState<string | null>(null);
   const [tipoArchivoCampana, setTipoArchivoCampana] = useState<string | null>(null);
+  const [imu, setImu] = useState(false);
 
   // Initial values for change detection
   const [initialValues, setInitialValues] = useState({
@@ -622,6 +623,7 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
     catorcenaInicio: undefined as number | undefined,
     catorcenaFin: undefined as number | undefined,
     asignadosIds: '' as string,
+    imu: false,
   });
   const [isUpdatingCampana, setIsUpdatingCampana] = useState(false);
 
@@ -955,6 +957,10 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
       setNotas(notasVal);
       setDescripcion(descripcionVal);
 
+      // Set IMU flag from solicitud (included in campanaDetails response)
+      const imuVal = Boolean((campanaDetails as any).IMU);
+      setImu(imuVal);
+
       // Set period from campaign data
       const yInicio = campanaDetails.catorcena_inicio_anio;
       const cInicio = campanaDetails.catorcena_inicio_num;
@@ -1001,6 +1007,7 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
           catorcenaInicio: cInicio ?? undefined,
           catorcenaFin: cFin ?? undefined,
           asignadosIds: asignadosIdsStr,
+          imu: imuVal,
         });
         initialValuesSetRef.current = true;
       }
@@ -1101,9 +1108,10 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
       yearFin !== initialValues.yearFin ||
       catorcenaInicio !== initialValues.catorcenaInicio ||
       catorcenaFin !== initialValues.catorcenaFin ||
-      currentAsignadosIds !== initialValues.asignadosIds
+      currentAsignadosIds !== initialValues.asignadosIds ||
+      imu !== initialValues.imu
     );
-  }, [nombreCampania, notas, descripcion, yearInicio, yearFin, catorcenaInicio, catorcenaFin, currentAsignadosIds, initialValues]);
+  }, [nombreCampania, notas, descripcion, yearInicio, yearFin, catorcenaInicio, catorcenaFin, currentAsignadosIds, imu, initialValues]);
 
   // Handle update campaign
   const handleUpdateCampana = async () => {
@@ -1121,6 +1129,7 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
         catorcenaFinAnio: yearFin,
         asignados: asignadosStr,
         id_asignado: asignadosIdsStr,
+        IMU: imu,
       });
 
       // Update initial values to current values
@@ -1134,6 +1143,7 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
         catorcenaInicio,
         catorcenaFin,
         asignadosIds: newAsignadosIds,
+        imu,
       });
 
       queryClient.invalidateQueries({ queryKey: ['campana-details', campana?.id] });
@@ -2178,6 +2188,7 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
           catorcenaFinAnio: yearFin,
           asignados: asignadosStr,
           id_asignado: asignadosIdsStr,
+          IMU: imu,
         });
 
         setInitialValues({
@@ -2189,6 +2200,7 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
           catorcenaInicio,
           catorcenaFin,
           asignadosIds: asignadosIdsStr,
+          imu,
         });
         messages.push('Campaña actualizada');
       }
@@ -5855,6 +5867,18 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
                       </div>
                     )}
                   </div>
+
+                  {/* IMU checkbox */}
+                  <label className={`flex items-center gap-3 ${canEditResumen ? 'cursor-pointer' : 'cursor-not-allowed opacity-60'}`}>
+                    <input
+                      type="checkbox"
+                      checked={imu}
+                      onChange={(e) => canEditResumen && setImu(e.target.checked)}
+                      disabled={!canEditResumen}
+                      className="checkbox-purple w-5 h-5"
+                    />
+                    <span className={`text-sm ${isDark ? 'text-zinc-300' : 'text-gray-700'}`}>IMU (Impresión IMU)</span>
+                  </label>
 
                   {/* Pending changes indicator for campaign summary */}
                   {canEditResumen && hasChanges && (
