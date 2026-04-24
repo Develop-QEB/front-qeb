@@ -62,6 +62,7 @@ interface InventarioReservado {
   numero_catorcena?: number | null;
   anio_catorcena?: number | null;
   inicio_periodo?: string | null;
+  fin_periodo?: string | null;
   formato?: string | null;
 }
 
@@ -147,6 +148,8 @@ interface ResumenCatorcenaGroup {
   totalCaras: number;
   totalBonificadas: number;
   totalInversion: number;
+  fechaInicio: string | null;
+  fechaFin: string | null;
 }
 
 const MESES_LABEL = ['Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio', 'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre'];
@@ -370,12 +373,18 @@ export function ClientePropuestaPage() {
         plazas: [...new Set(items.map(i => i.plaza || 'N/A'))],
       }));
 
+      const allItems = articulos.flatMap(a => a.items);
+      const fechas = allItems.map(i => i.inicio_periodo).filter(Boolean).sort() as string[];
+      const fechasFin = allItems.map(i => i.fin_periodo).filter(Boolean).sort() as string[];
+
       return {
         catorcena,
         articulos,
         totalCaras: articulos.reduce((sum, a) => sum + a.totalCaras, 0),
         totalBonificadas: articulos.reduce((sum, a) => sum + (a.totalBonificadas || 0), 0),
         totalInversion: articulos.reduce((sum, a) => sum + a.totalInversion, 0),
+        fechaInicio: fechas.length ? fechas[0] : null,
+        fechaFin: fechasFin.length ? fechasFin[fechasFin.length - 1] : null,
       };
     });
   }, [filteredInventario]);
@@ -680,12 +689,26 @@ export function ClientePropuestaPage() {
       });
 
       Object.entries(grouped).forEach(([catorcena, articulos]) => {
+        const allGroupItems = Object.values(articulos).flat();
+        const gFechas = allGroupItems.map(i => i.inicio_periodo).filter(Boolean).sort() as string[];
+        const gFechasFin = allGroupItems.map(i => i.fin_periodo).filter(Boolean).sort() as string[];
+        const gFechaIni = gFechas.length ? gFechas[0] : null;
+        const gFechaFin = gFechasFin.length ? gFechasFin[gFechasFin.length - 1] : null;
+        const cortosPdf = ['Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun', 'Jul', 'Ago', 'Sep', 'Oct', 'Nov', 'Dic'];
+        const fmtDM = (d: string | null) => {
+          if (!d) return '';
+          const p = d.split(/[-T]/);
+          return p.length >= 3 ? `${parseInt(p[2])} ${cortosPdf[parseInt(p[1]) - 1] || ''}` : '';
+        };
+        const catHeaderLabel = gFechaIni && gFechaFin
+          ? `${catorcena}  |  ${fmtDM(gFechaIni)} – ${fmtDM(gFechaFin)}`
+          : catorcena;
         doc.setFillColor(PDF_BLUE[0], PDF_BLUE[1], PDF_BLUE[2]);
         doc.roundedRect(marginX, y, pageWidth - marginX * 2, 8, 1, 1, 'F');
         doc.setFontSize(10);
         doc.setFont('helvetica', 'bold');
         doc.setTextColor(255, 255, 255);
-        doc.text(catorcena, marginX + 5, y + 5.5);
+        doc.text(catHeaderLabel, marginX + 5, y + 5.5);
         y += 10;
 
         Object.entries(articulos).forEach(([articulo, items]) => {
@@ -1120,6 +1143,14 @@ export function ClientePropuestaPage() {
                       <span className="px-3 py-1 rounded-lg bg-[#0054A6]/10 text-[#0054A6] text-xs font-medium border border-[#0054A6]/20">
                         {catGroup.catorcena}
                       </span>
+                      {catGroup.fechaInicio && catGroup.fechaFin && (() => {
+                        const dFrom = (catGroup.fechaInicio as string).split(/[-T]/);
+                        const dTo = (catGroup.fechaFin as string).split(/[-T]/);
+                        const cortos = ['Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun', 'Jul', 'Ago', 'Sep', 'Oct', 'Nov', 'Dic'];
+                        const fromLabel = dFrom.length >= 3 ? `${parseInt(dFrom[2])} ${cortos[parseInt(dFrom[1]) - 1] || ''}` : '';
+                        const toLabel = dTo.length >= 3 ? `${parseInt(dTo[2])} ${cortos[parseInt(dTo[1]) - 1] || ''}` : '';
+                        return <span className="text-gray-500 text-xs">{fromLabel} – {toLabel}</span>;
+                      })()}
                       <span className="text-gray-400 text-xs">
                         ({catGroup.articulos.length} articulo{catGroup.articulos.length > 1 ? 's' : ''})
                       </span>

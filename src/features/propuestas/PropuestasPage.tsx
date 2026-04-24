@@ -21,15 +21,10 @@ import { useThemeStore } from '../../store/themeStore';
 import { getPermissions } from '../../lib/permissions';
 import { useSocketEquipos, useSocketPropuestas } from '../../hooks/useSocket';
 import { ConfirmModal } from '../../components/ui/confirm-modal';
+import { monthLabelShort } from '../../lib/periodos';
 
-const MESES_LABEL = ['Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun', 'Jul', 'Ago', 'Sep', 'Oct', 'Nov', 'Dic'];
 function getMonthShort(dateStr: string): string {
-  const parts = String(dateStr).split(/[-T]/);
-  if (parts.length >= 2) {
-    const month = parseInt(parts[1]) - 1;
-    return month >= 0 && month < 12 ? `${MESES_LABEL[month]} ${parts[0]}` : '-';
-  }
-  return '-';
+  return monthLabelShort(dateStr) || '-';
 }
 
 // Status badge colors

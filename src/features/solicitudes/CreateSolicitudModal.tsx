@@ -1155,12 +1155,21 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
 
     if (tipoPeriodo === 'mensual') {
       // Mensual: month from dropdown + custom dates per cara
-      if (!newCara.periodo || !newCara.periodoInicioCustom || !newCara.periodoFinCustom) return;
+      if (!newCara.periodo) return;
       const [yearStr, mesStr] = newCara.periodo.split('-');
       catorcenaYear = parseInt(yearStr);
       catorcenaNum = parseInt(mesStr); // month number (1-12) for grouping
-      periodoInicioVal = newCara.periodoInicioCustom;
-      periodoFinVal = newCara.periodoFinCustom;
+      // If periodoFinCat is set (range mode) we'll build per-month periods later — use month bounds
+      const isRangeMensual = !editingCaraId && newCara.periodoFinCat && newCara.periodoFinCat !== newCara.periodo;
+      const matchInicio = availablePeriods.find(p => p.a_o === catorcenaYear && p.numero_catorcena === catorcenaNum);
+      if (isRangeMensual) {
+        periodoInicioVal = matchInicio?.fecha_inicio || '';
+        periodoFinVal = matchInicio?.fecha_fin || '';
+      } else {
+        if (!newCara.periodoInicioCustom || !newCara.periodoFinCustom) return;
+        periodoInicioVal = newCara.periodoInicioCustom;
+        periodoFinVal = newCara.periodoFinCustom;
+      }
     } else {
       // Catorcena mode - supports range (inicio to fin)
       if (!newCara.periodo) return;
@@ -1231,8 +1240,10 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
     // Build list of periods to create caras for (range support)
     const periodsToCreate: Array<{ catorcenaNum: number; catorcenaYear: number; periodoInicio: string; periodoFin: string }> = [];
 
-    if (tipoPeriodo === 'catorcena' && !editingCaraId && newCara.periodoFinCat && newCara.periodoFinCat !== newCara.periodo) {
-      // Range mode: create one cara per catorcena
+    const isRangeMode = !editingCaraId && newCara.periodoFinCat && newCara.periodoFinCat !== newCara.periodo;
+
+    if (isRangeMode) {
+      // Range mode (mensual or catorcena): create one cara per period
       const [yearFinStr, catFinStr] = newCara.periodoFinCat.split('-');
       const yearFin = parseInt(yearFinStr);
       const catFin = parseInt(catFinStr);
@@ -2537,12 +2548,12 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
                 </div>
 
                 {/* Row 3: Periodo, Renta, Bonificación, Tarifa Pública */}
-                <div className={`grid ${tipoPeriodo === 'mensual' ? 'grid-cols-6' : 'grid-cols-4'} gap-3 mb-4`}>
+                <div className={`grid ${tipoPeriodo === 'mensual' ? 'grid-cols-7' : 'grid-cols-4'} gap-3 mb-4`}>
                   {/* Periodo */}
                   {tipoPeriodo === 'mensual' ? (
                     <>
                       <div>
-                        <label className={`text-xs ${isDark ? 'text-zinc-500' : 'text-gray-500'}`}>Mes</label>
+                        <label className={`text-xs ${isDark ? 'text-zinc-500' : 'text-gray-500'}`}>Mes Inicio</label>
                         <select
                           value={newCara.periodo}
                           onChange={(e) => {
@@ -2562,12 +2573,36 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
                         </select>
                       </div>
                       <div>
+                        <label className={`text-xs ${isDark ? 'text-zinc-500' : 'text-gray-500'}`}>Mes Fin {editingCaraId ? '' : '(opcional)'}</label>
+                        <select
+                          value={newCara.periodoFinCat}
+                          onChange={(e) => setNewCara({ ...newCara, periodoFinCat: e.target.value })}
+                          disabled={!newCara.periodo || !!editingCaraId}
+                          className={`w-full px-2 py-2 ${isDark ? 'bg-zinc-800 border-zinc-700 text-white' : 'bg-gray-100 border-gray-200 text-gray-900'} border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-purple-500/50 disabled:opacity-50`}
+                        >
+                          <option value="">Solo {newCara.periodo ? (MESES[(parseInt(newCara.periodo.split('-')[1]) || 1) - 1] || 'mes') : 'uno'}</option>
+                          {availablePeriods
+                            .filter(p => {
+                              if (!newCara.periodo) return false;
+                              const [yStr, mStr] = newCara.periodo.split('-');
+                              const yIni = parseInt(yStr);
+                              const mIni = parseInt(mStr);
+                              return (p.a_o * 100 + p.numero_catorcena) >= (yIni * 100 + mIni);
+                            })
+                            .map(p => (
+                              <option key={`${p.a_o}-${p.numero_catorcena}-fin`} value={`${p.a_o}-${p.numero_catorcena}`}>
+                                {MESES[p.numero_catorcena - 1]} {p.a_o}
+                              </option>
+                            ))}
+                        </select>
+                      </div>
+                      <div>
                         <label className={`text-xs ${isDark ? 'text-zinc-500' : 'text-gray-500'}`}>Fecha Inicio</label>
                         <input
                           type="date"
                           value={newCara.periodoInicioCustom}
                           onChange={(e) => setNewCara({ ...newCara, periodoInicioCustom: e.target.value })}
-                          disabled={!newCara.periodo}
+                          disabled={!newCara.periodo || (!!newCara.periodoFinCat && newCara.periodoFinCat !== newCara.periodo)}
                           min={(() => { const m = availablePeriods.find(p => `${p.a_o}-${p.numero_catorcena}` === newCara.periodo); return m?.fecha_inicio; })()}
                           max={(() => { const m = availablePeriods.find(p => `${p.a_o}-${p.numero_catorcena}` === newCara.periodo); return newCara.periodoFinCustom || m?.fecha_fin; })()}
                           className={`w-full px-2 py-2 ${isDark ? 'bg-zinc-800 border-zinc-700 text-white' : 'bg-gray-100 border-gray-200 text-gray-900'} border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-purple-500/50 disabled:opacity-50`}
@@ -2579,7 +2614,7 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
                           type="date"
                           value={newCara.periodoFinCustom}
                           onChange={(e) => setNewCara({ ...newCara, periodoFinCustom: e.target.value })}
-                          disabled={!newCara.periodo}
+                          disabled={!newCara.periodo || (!!newCara.periodoFinCat && newCara.periodoFinCat !== newCara.periodo)}
                           min={(() => { const m = availablePeriods.find(p => `${p.a_o}-${p.numero_catorcena}` === newCara.periodo); return newCara.periodoInicioCustom || m?.fecha_inicio; })()}
                           max={(() => { const m = availablePeriods.find(p => `${p.a_o}-${p.numero_catorcena}` === newCara.periodo); return m?.fecha_fin; })()}
                           className={`w-full px-2 py-2 ${isDark ? 'bg-zinc-800 border-zinc-700 text-white' : 'bg-gray-100 border-gray-200 text-gray-900'} border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-purple-500/50 disabled:opacity-50`}

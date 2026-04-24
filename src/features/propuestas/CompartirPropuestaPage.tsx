@@ -42,8 +42,11 @@ const MESES_LABEL = ['Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio', 'Jul
 
 function formatInicioPeriodo(item: InventarioReservado, tipoPeriodo?: string): string {
   if (tipoPeriodo === 'mensual' && item.inicio_periodo) {
-    const parts = item.inicio_periodo.split('-');
-    if (parts.length >= 2) return `${MESES_LABEL[parseInt(parts[1]) - 1]} ${parts[0]}`;
+    const parts = item.inicio_periodo.split(/[-T]/);
+    if (parts.length >= 2) {
+      const month = parseInt(parts[1]) - 1;
+      if (month >= 0 && month < 12) return `${MESES_LABEL[month]} ${parts[0]}`;
+    }
   }
   if (item.numero_catorcena && item.anio_catorcena) {
     return `Cat ${item.numero_catorcena} / ${item.anio_catorcena}`;

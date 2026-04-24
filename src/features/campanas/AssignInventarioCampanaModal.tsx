@@ -13,6 +13,7 @@ import { solicitudesService, UserOption } from '../../services/solicitudes.servi
 import { inventariosService, InventarioDisponible } from '../../services/inventarios.service';
 import { campanasService, ReservaModalItem } from '../../services/campanas.service';
 import { formatCurrency } from '../../lib/utils';
+import { monthLabelLong, monthLabelShort, dayMonthShort } from '../../lib/periodos';
 import { useEnvironmentStore, getEndpoints } from '../../store/environmentStore';
 import { useAuthStore } from '../../store/authStore';
 import { usePermissions } from '../../lib/permissions';
@@ -560,16 +561,6 @@ function SearchableSelect({
 const LIBRARIES: ('places' | 'geometry')[] = ['places', 'geometry'];
 
 const MESES_LABEL = ['Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio', 'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre'];
-const MESES_CORTOS_CAM = ['Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun', 'Jul', 'Ago', 'Sep', 'Oct', 'Nov', 'Dic'];
-function formatDayMonthCam(dateStr: string | null | undefined): string {
-  if (!dateStr) return '';
-  const iso = String(dateStr);
-  const parts = iso.split(/[-T]/);
-  if (parts.length < 3) return '';
-  const day = parseInt(parts[2]).toString();
-  const month = parseInt(parts[1]) - 1;
-  return month >= 0 && month < 12 ? `${day} ${MESES_CORTOS_CAM[month]}` : '';
-}
 
 export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props) {
   useModalTracker('Editar Campaña', isOpen);
@@ -6335,6 +6326,10 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
                       const groupFechasFin = groupData.caras.map(c => c.fin_periodo).filter(Boolean).sort();
                       const groupFechaInicio = groupFechas.length ? groupFechas[0] : null;
                       const groupFechaFin = groupFechasFin.length ? groupFechasFin[groupFechasFin.length - 1] : null;
+                      // For mensual mode, always prefer the month label derived from actual cara dates
+                      const headerLabel = tipoPeriodo === 'mensual' && groupFechaInicio
+                        ? monthLabelLong(groupFechaInicio)
+                        : catorcenaLabel;
 
                       return (
                         <div key={periodo}>
@@ -6347,11 +6342,11 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
                               {isCatorcenaExpanded ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
                             </button>
                             <span className={`text-sm font-medium ${isDark ? 'text-purple-300' : 'text-purple-700'}`}>
-                              {catorcenaLabel}
+                              {headerLabel}
                             </span>
                             {groupFechaInicio && groupFechaFin && (
                               <span className={`text-xs ${isDark ? 'text-zinc-400' : 'text-gray-500'}`}>
-                                {formatDayMonthCam(groupFechaInicio)} – {formatDayMonthCam(groupFechaFin)}
+                                {dayMonthShort(groupFechaInicio)} – {dayMonthShort(groupFechaFin)}
                               </span>
                             )}
                             <span className={`text-xs ${isDark ? 'text-zinc-500' : 'text-gray-500'}`}>

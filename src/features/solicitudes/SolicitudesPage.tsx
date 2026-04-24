@@ -12,6 +12,7 @@ import { Header } from '../../components/layout/Header';
 import { solicitudesService } from '../../services/solicitudes.service';
 import { Solicitud, Catorcena } from '../../types';
 import { formatCurrency, formatDate } from '../../lib/utils';
+import { tablePeriodoLabel } from '../../lib/periodos';
 import { CreateSolicitudModal } from './CreateSolicitudModal';
 import { ViewSolicitudModal, StatusModal, AtenderModal } from './SolicitudModals';
 import { useAuthStore } from '../../store/authStore';
@@ -952,37 +953,17 @@ export function SolicitudesPage() {
         <td className="px-4 py-3">
           {(() => {
             const tp = (item as any).tipo_periodo;
-            const meses = ['Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun', 'Jul', 'Ago', 'Sep', 'Oct', 'Nov', 'Dic'];
-            if (tp === 'mensual' && (item as any).periodo_fecha_inicio) {
-              const raw = (item as any).periodo_fecha_inicio;
-              const iso = raw instanceof Date ? raw.toISOString() : String(raw);
-              const parts = iso.split(/[-T]/);
-              const month = parseInt(parts[1]) - 1;
-              const year = parts[0];
-              return <span className={`${isDark ? 'text-zinc-300' : 'text-gray-700'} text-xs`}>{meses[month]} {year}</span>;
-            }
-            if ((item as any).catorcena_inicio) {
-              return <span className={`${isDark ? 'text-zinc-300' : 'text-gray-700'} text-xs`}>Cat {(item as any).catorcena_inicio} / {(item as any).anio_inicio}</span>;
-            }
-            return <span className={`${isDark ? 'text-zinc-600' : 'text-gray-400'} text-xs`}>-</span>;
+            const label = tablePeriodoLabel(tp, (item as any).periodo_fecha_inicio, (item as any).catorcena_inicio, (item as any).anio_inicio);
+            if (label === '-') return <span className={`${isDark ? 'text-zinc-600' : 'text-gray-400'} text-xs`}>-</span>;
+            return <span className={`${isDark ? 'text-zinc-300' : 'text-gray-700'} text-xs`}>{label}</span>;
           })()}
         </td>
         <td className="px-4 py-3">
           {(() => {
             const tp = (item as any).tipo_periodo;
-            const meses = ['Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun', 'Jul', 'Ago', 'Sep', 'Oct', 'Nov', 'Dic'];
-            if (tp === 'mensual' && (item as any).periodo_fecha_fin) {
-              const raw = (item as any).periodo_fecha_fin;
-              const iso = raw instanceof Date ? raw.toISOString() : String(raw);
-              const parts = iso.split(/[-T]/);
-              const month = parseInt(parts[1]) - 1;
-              const year = parts[0];
-              return <span className={`${isDark ? 'text-zinc-300' : 'text-gray-700'} text-xs`}>{meses[month]} {year}</span>;
-            }
-            if ((item as any).catorcena_fin) {
-              return <span className={`${isDark ? 'text-zinc-300' : 'text-gray-700'} text-xs`}>Cat {(item as any).catorcena_fin} / {(item as any).anio_fin}</span>;
-            }
-            return <span className={`${isDark ? 'text-zinc-600' : 'text-gray-400'} text-xs`}>-</span>;
+            const label = tablePeriodoLabel(tp, (item as any).periodo_fecha_fin, (item as any).catorcena_fin, (item as any).anio_fin);
+            if (label === '-') return <span className={`${isDark ? 'text-zinc-600' : 'text-gray-400'} text-xs`}>-</span>;
+            return <span className={`${isDark ? 'text-zinc-300' : 'text-gray-700'} text-xs`}>{label}</span>;
           })()}
         </td>
         <td className="px-4 py-3 max-w-[160px]">
