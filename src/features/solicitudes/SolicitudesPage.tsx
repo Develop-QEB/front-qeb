@@ -742,22 +742,6 @@ export function SolicitudesPage() {
     }) || null;
   }, [catorcenasData]);
 
-  // Group data
-  const groupedData = useMemo(() => {
-    if (!groupBy || !filteredData.length) return null;
-
-    const groupKey = groupBy as keyof Solicitud;
-    const groups: Record<string, Solicitud[]> = {};
-
-    filteredData.forEach(item => {
-      const key = String(item[groupKey] || 'Sin asignar');
-      if (!groups[key]) groups[key] = [];
-      groups[key].push(item);
-    });
-
-    return Object.entries(groups).sort((a, b) => b[1].length - a[1].length);
-  }, [filteredData, groupBy]);
-
   const toggleGroup = (groupName: string) => {
     setExpandedGroups(prev => {
       const next = new Set(prev);
@@ -813,6 +797,22 @@ export function SolicitudesPage() {
     }
     return result;
   }, [data?.data, advancedFilters, allSearchTerms]);
+
+  // Group data
+  const groupedData = useMemo(() => {
+    if (!groupBy || !filteredData.length) return null;
+
+    const groupKey = groupBy as keyof Solicitud;
+    const groups: Record<string, Solicitud[]> = {};
+
+    filteredData.forEach(item => {
+      const key = String(item[groupKey] || 'Sin asignar');
+      if (!groups[key]) groups[key] = [];
+      groups[key].push(item);
+    });
+
+    return Object.entries(groups).sort((a, b) => b[1].length - a[1].length);
+  }, [filteredData, groupBy]);
 
   // Compute effective stats: when advanced filters or multi-tag search are active, recalculate from filteredData
   const needsClientFilter = advancedFilters.length > 0 || allSearchTerms.length > 0;
