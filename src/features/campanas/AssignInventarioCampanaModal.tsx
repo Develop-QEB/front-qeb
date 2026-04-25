@@ -14,6 +14,8 @@ import { inventariosService, InventarioDisponible } from '../../services/inventa
 import { campanasService, ReservaModalItem } from '../../services/campanas.service';
 import { formatCurrency } from '../../lib/utils';
 import { monthLabelLong, monthLabelShort, dayMonthShort } from '../../lib/periodos';
+import { parseCircuitoDigital } from '../../lib/circuitos';
+import { circuitosService } from '../../services/circuitos.service';
 import { useEnvironmentStore, getEndpoints } from '../../store/environmentStore';
 import { useAuthStore } from '../../store/authStore';
 import { usePermissions } from '../../lib/permissions';
@@ -5940,8 +5942,47 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
                           label="Seleccionar artículo"
                           options={articulosData || []}
                           value={selectedArticulo}
-                          onChange={(item: SAPArticulo) => {
+                          onChange={async (item: SAPArticulo) => {
                             setSelectedArticulo(item);
+                            // Detectar CIRCUITO DIGITAL
+                            const circuito = parseCircuitoDigital(item.ItemCode);
+                            if (circuito) {
+                              // Validar unicidad: mismo CTO+plaza solo una vez
+                              const ya = caras.find(c => {
+                                const ci = parseCircuitoDigital(c.articulo);
+                                return ci && ci.cto === circuito.cto && ci.plazaCode === circuito.plazaCode && !c.esBf;
+                              });
+                              if (ya && !editingCaraId) {
+                                alert(`Ya tienes el circuito ${circuito.ctoLabel} (${circuito.plazaLabel}) en esta campaña. Solo se puede incluir una vez.`);
+                                setSelectedArticulo(null);
+                                return;
+                              }
+                              try {
+                                const det = await circuitosService.detalle(item.ItemCode);
+                                const tarifa = getTarifaPublicaFromArticulo(item);
+                                const tarifaPiso = getTarifaPisoFromArticulo(item);
+                                setNewCara({
+                                  ...newCara,
+                                  articulo: item.ItemCode,
+                                  tarifa_publica: tarifa,
+                                  costo: tarifaPiso,
+                                  caras: det.total,
+                                  caras_flujo: Math.ceil(det.total / 2),
+                                  caras_contraflujo: Math.floor(det.total / 2),
+                                  bonificacion: 0,
+                                  estados: circuito.plazaLabel,
+                                  ciudad: '',
+                                  formato: 'DIGITAL',
+                                  tipo: 'Digital',
+                                });
+                                return;
+                              } catch (e: any) {
+                                alert(`Error al cargar circuito: ${e?.message || e}`);
+                                setSelectedArticulo(null);
+                                return;
+                              }
+                            }
+
                             // Auto-complete all fields from article
                             const tarifa = getTarifaPublicaFromArticulo(item);
                             const tarifaPiso = getTarifaPisoFromArticulo(item);
