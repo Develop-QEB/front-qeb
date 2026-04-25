@@ -115,6 +115,7 @@ export function InventariosPage() {
   const [tipo, setTipo] = useState('');
   const [estatus, setEstatus] = useState('');
   const [plaza, setPlaza] = useState('');
+  const [cto, setCto] = useState('');
   const [viewMode, setViewMode] = useState<'table' | 'map'>('table');
   const [sortCol, setSortCol] = useState<SortCol>('id');
   const [sortDir, setSortDir] = useState<'asc' | 'desc'>('asc');
@@ -155,13 +156,14 @@ export function InventariosPage() {
   const limit = 50;
   const campanaIdNum = campanaIdParam ? parseInt(campanaIdParam) : undefined;
   const { data, isLoading } = useQuery({
-    queryKey: ['inventarios', page, search, tipo, estatus, plaza, campanaIdNum],
+    queryKey: ['inventarios', page, search, tipo, estatus, plaza, cto, campanaIdNum],
     queryFn: () =>
-      inventariosService.getAll({ page, limit, search, tipo: tipo || undefined, estatus: estatus || undefined, plaza: plaza || undefined, campanaId: campanaIdNum }),
+      inventariosService.getAll({ page, limit, search, tipo: tipo || undefined, estatus: estatus || undefined, plaza: plaza || undefined, cto: cto || undefined, campanaId: campanaIdNum }),
   });
 
   const { data: tipos } = useQuery({ queryKey: ['inventarios', 'tipos'], queryFn: () => inventariosService.getTipos() });
   const { data: plazas } = useQuery({ queryKey: ['inventarios', 'plazas'], queryFn: () => inventariosService.getPlazas() });
+  const { data: ctos } = useQuery({ queryKey: ['inventarios', 'ctos'], queryFn: () => inventariosService.getCtos() });
   const { data: estatusList } = useQuery({ queryKey: ['inventarios', 'estatus'], queryFn: () => inventariosService.getEstatus() });
 
   // Stats query — global KPIs with same filters
@@ -647,7 +649,7 @@ export function InventariosPage() {
 
   const totalPages = data?.pagination?.totalPages || 1;
   const totalItems = data?.pagination?.total || 0;
-  const hasActiveFilters = !!(tipo || plaza || estatus || search || campanaIdParam);
+  const hasActiveFilters = !!(tipo || plaza || cto || estatus || search || campanaIdParam);
 
   // Form fields for create/edit
   const FORM_FIELDS: { key: string; label: string; type?: string; options?: string[]; span?: number }[] = [
@@ -904,11 +906,12 @@ export function InventariosPage() {
               <div className={`flex flex-wrap items-center gap-2 pt-3 border-t ${isDark ? 'border-zinc-800/50' : 'border-gray-200'} relative z-50`}>
                 <FilterChip label="Tipo" options={tipos || []} value={tipo} onChange={v => { setTipo(v); setPage(1); }} onClear={() => { setTipo(''); setPage(1); }} />
                 <FilterChip label="Plaza" options={plazas || []} value={plaza} onChange={v => { setPlaza(v); setPage(1); }} onClear={() => { setPlaza(''); setPage(1); }} />
+                <FilterChip label="CTO" options={ctos || []} value={cto} onChange={v => { setCto(v); setPage(1); }} onClear={() => { setCto(''); setPage(1); }} />
                 <FilterChip label="Estatus" options={estatusList || []} value={estatus} onChange={v => { setEstatus(v); setPage(1); }} onClear={() => { setEstatus(''); setPage(1); }} />
 
                 {hasActiveFilters && (
                   <button
-                    onClick={() => { setSearch(''); setTipo(''); setPlaza(''); setEstatus(''); setPage(1); }}
+                    onClick={() => { setSearch(''); setTipo(''); setPlaza(''); setCto(''); setEstatus(''); setPage(1); }}
                     className={`flex items-center gap-1 px-2 py-1 rounded-full text-xs ${isDark ? 'bg-red-500/10 text-red-400 border-red-500/30 hover:bg-red-500/20' : 'bg-red-50 text-red-600 border-red-200 hover:bg-red-100'} border transition-all`}
                   >
                     <X className="h-3 w-3" /> Limpiar todo
@@ -956,6 +959,7 @@ export function InventariosPage() {
                           { col: '' as SortCol, label: 'Formato', sortable: false },
                           { col: '' as SortCol, label: 'Ubicación', sortable: false },
                           { col: 'plaza' as SortCol, label: 'Plaza', sortable: true },
+                          { col: '' as SortCol, label: 'CTO', sortable: false },
                           { col: '' as SortCol, label: 'Cara', sortable: false },
                           { col: '' as SortCol, label: 'Dimensiones', sortable: false },
                           { col: 'estatus' as SortCol, label: 'Actividad', sortable: true },
@@ -1006,6 +1010,13 @@ export function InventariosPage() {
                             </td>
                             <td className="px-4 py-3">
                               <span className={`text-sm ${isDark ? 'text-zinc-300' : 'text-gray-700'}`}>{item.plaza || '-'}</span>
+                            </td>
+                            <td className="px-4 py-3">
+                              {(item as any).cto ? (
+                                <span className={`px-2 py-0.5 rounded-full text-[10px] font-medium border ${isDark ? 'bg-violet-500/15 text-violet-300 border-violet-500/30' : 'bg-violet-50 text-violet-700 border-violet-200'}`}>{(item as any).cto}</span>
+                              ) : (
+                                <span className={`text-xs ${isDark ? 'text-zinc-600' : 'text-gray-400'}`}>-</span>
+                              )}
                             </td>
                             <td className="px-4 py-3">
                               <span className={`text-xs ${isDark ? 'text-zinc-400' : 'text-gray-500'}`}>{item.tipo_de_cara || '-'}</span>

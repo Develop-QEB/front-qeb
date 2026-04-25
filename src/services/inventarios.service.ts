@@ -40,6 +40,7 @@ export interface InventariosParams {
   tipo?: string;
   estatus?: string;
   plaza?: string;
+  cto?: string;
   campanaId?: number;
 }
 
@@ -130,6 +131,14 @@ export const inventariosService = {
     const response = await api.get<ApiResponse<string[]>>('/inventarios/plazas');
     if (!response.data.success || !response.data.data) {
       throw new Error(response.data.error || 'Error al obtener plazas');
+    }
+    return response.data.data;
+  },
+
+  async getCtos(): Promise<string[]> {
+    const response = await api.get<ApiResponse<string[]>>('/inventarios/ctos');
+    if (!response.data.success || !response.data.data) {
+      throw new Error(response.data.error || 'Error al obtener CTOs');
     }
     return response.data.data;
   },

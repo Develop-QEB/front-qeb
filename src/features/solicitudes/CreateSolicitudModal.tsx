@@ -18,6 +18,8 @@ import { getPermissions } from '../../lib/permissions';
 import { useThemeStore } from '../../store/themeStore';
 import { useFormPersist } from '../../hooks/useFormPersist';
 import { uploadsService } from '../../services/uploads.service';
+import { parseCircuitoDigital, type CircuitoInfo } from '../../lib/circuitos';
+import { circuitosService } from '../../services/circuitos.service';
 
 // Tarifas now come from SAP (U_IMU_PublicPrice = tarifa publica, PriceList 11 = tarifa piso)
 
@@ -286,6 +288,8 @@ interface CaraEntry {
   estado: string;
   ciudades: string[];
   plaza?: string; // display-only (derived from plaza selection); backend still uses estado+ciudades
+  circuito?: CircuitoInfo; // marcado si el artículo es un circuito digital (RT-DIG-NN-XX)
+  circuitoTotal?: number; // total de inventarios del circuito (para fijar caras)
   formato: string;
   tipo: string;
   nse: string[];
@@ -1209,8 +1213,10 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
       && newCara.articulo?.ItemCode === editingOriginal.articulo?.ItemCode
     );
 
+    // Circuitos Digitales: aprobado automático (pending tabulador real)
+    const esCircuito = !!(newCara.articulo && parseCircuitoDigital(newCara.articulo.ItemCode));
     // Cortesías no requieren autorización — se aprueban automáticamente
-    if (esCortesia) {
+    if (esCortesia || esCircuito) {
       autorizacion_dg = 'aprobado';
       autorizacion_dcm = 'aprobado';
     } else if (skipAuthEval && editingOriginal) {
@@ -1268,6 +1274,9 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
 
     const newCaras: CaraEntry[] = [];
     for (const [idx, period] of periodsToCreate.entries()) {
+      // Detectar si es circuito digital
+      const circuitoInfo = newCara.articulo ? parseCircuitoDigital(newCara.articulo.ItemCode) : null;
+
       // RT cara (renta)
       newCaras.push({
         id: editingCaraId || `${Date.now()}-${Math.random()}-rt-${idx}`,
@@ -1275,6 +1284,8 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
         estado: newCara.estado,
         ciudades: ciudadesToUse,
         plaza: newCara.plaza || newCara.estado,
+        circuito: circuitoInfo || undefined,
+        circuitoTotal: circuitoInfo ? (newCara.renta + newCara.bonificacion) : undefined,
         formato: newCara.formato,
         tipo: newCara.tipo,
         nse: newCara.nse,
@@ -2437,7 +2448,39 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
                     label="Seleccionar artículo"
                     options={articulosFiltrados}
                     value={newCara.articulo}
-                    onChange={(item) => {
+                    onChange={async (item) => {
+                      // Detectar CIRCUITO DIGITAL
+                      const circuito = parseCircuitoDigital(item.ItemCode);
+                      if (circuito) {
+                        // Validar unicidad: el mismo CTO+plaza solo una vez por propuesta
+                        const ya = caras.find(c => c.circuito && c.circuito.cto === circuito.cto && c.circuito.plazaCode === circuito.plazaCode && !c.esBf);
+                        if (ya && !editingCaraId) {
+                          alert(`Ya tienes el circuito ${circuito.ctoLabel} (${circuito.plazaLabel}) agregado en esta propuesta. Solo se puede incluir una vez.`);
+                          return;
+                        }
+                        try {
+                          const det = await circuitosService.detalle(item.ItemCode);
+                          const tarifa = getTarifaFromArticulo(item);
+                          setNewCara({
+                            ...newCara,
+                            articulo: item,
+                            plaza: circuito.plazaLabel,
+                            estado: circuito.plazaLabel,
+                            ciudades: [],
+                            formato: 'DIGITAL',
+                            tipo: 'Digital',
+                            tarifaPublica: tarifa.tarifa_publica,
+                            renta: det.total, // fijo al tamaño del circuito
+                            bonificacion: 0,
+                            articuloBf: null,
+                          });
+                          return;
+                        } catch (e: any) {
+                          alert(`Error al cargar circuito: ${e?.message || e}`);
+                          return;
+                        }
+                      }
+
                       // Auto-set tarifa publica from ItemCode mapping
                       const tarifa = getTarifaFromArticulo(item);
                       // Auto-set estado and ciudades from ItemName (fallback to ItemCode)
@@ -2491,6 +2534,8 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
                   <div>
                     <label className={`text-xs ${isDark ? 'text-zinc-500' : 'text-gray-500'}`}>Plaza</label>
                     <select
+                      disabled={!!(newCara.articulo && parseCircuitoDigital(newCara.articulo.ItemCode))}
+                      title={newCara.articulo && parseCircuitoDigital(newCara.articulo.ItemCode) ? 'Plaza fijada por el circuito digital' : undefined}
                       value={newCara.plaza || newCara.estado}
                       onChange={(e) => {
                         const val = e.target.value;
@@ -2547,7 +2592,9 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
                     <select
                       value={newCara.formato}
                       onChange={(e) => setNewCara({ ...newCara, formato: e.target.value })}
-                      className={`w-full px-3 py-2 ${isDark ? 'bg-zinc-800 border-zinc-700 text-white' : 'bg-gray-100 border-gray-200 text-gray-900'} border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-purple-500/50`}
+                      disabled={!!(newCara.articulo && parseCircuitoDigital(newCara.articulo.ItemCode))}
+                      title={newCara.articulo && parseCircuitoDigital(newCara.articulo.ItemCode) ? 'Formato fijado por el circuito digital' : undefined}
+                      className={`w-full px-3 py-2 ${isDark ? 'bg-zinc-800 border-zinc-700 text-white' : 'bg-gray-100 border-gray-200 text-gray-900'} border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-purple-500/50 disabled:opacity-40 disabled:cursor-not-allowed`}
                     >
                       <option value="">Seleccionar</option>
                       {tipoPeriodo === 'mensual' ? (
@@ -2687,9 +2734,16 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
                       type="number"
                       min={0}
                       value={newCara.renta || ''}
-                      onChange={(e) => setNewCara({ ...newCara, renta: parseInt(e.target.value) || 0 })}
+                      onChange={(e) => {
+                        const v = parseInt(e.target.value) || 0;
+                        // Si es circuito, renta está fijada: total = renta + bonif
+                        const circ = newCara.articulo ? parseCircuitoDigital(newCara.articulo.ItemCode) : null;
+                        if (circ) return; // no permitir cambio manual
+                        setNewCara({ ...newCara, renta: v });
+                      }}
                       placeholder='0'
-                      disabled={newCara.articulo?.ItemCode?.toUpperCase().startsWith('CT')}
+                      disabled={newCara.articulo?.ItemCode?.toUpperCase().startsWith('CT') || !!(newCara.articulo && parseCircuitoDigital(newCara.articulo.ItemCode))}
+                      title={newCara.articulo && parseCircuitoDigital(newCara.articulo.ItemCode) ? 'Circuito Digital: total fijo. Ajusta solo bonificación.' : undefined}
                       className={`w-full px-3 py-2 ${isDark ? 'bg-zinc-800 border-zinc-700 text-white' : 'bg-gray-100 border-gray-200 text-gray-900'} border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-purple-500/50 disabled:opacity-40 disabled:cursor-not-allowed`}
                     />
                   </div>
@@ -2702,9 +2756,24 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
                     <input
                       type="number"
                       min={0}
-                      max={newCara.articulo?.ItemCode?.toUpperCase().startsWith('CT') ? undefined : newCara.renta}
+                      max={(() => {
+                        const circ = newCara.articulo ? parseCircuitoDigital(newCara.articulo.ItemCode) : null;
+                        if (circ) return newCara.renta + newCara.bonificacion; // max = total del circuito
+                        return newCara.articulo?.ItemCode?.toUpperCase().startsWith('CT') ? undefined : newCara.renta;
+                      })()}
                       value={newCara.bonificacion || ''}
-                      onChange={(e) => setNewCara({ ...newCara, bonificacion: parseInt(e.target.value) || 0 })}
+                      onChange={(e) => {
+                        const v = parseInt(e.target.value) || 0;
+                        // Si es circuito: total fijo, renta = total - bonif
+                        const circ = newCara.articulo ? parseCircuitoDigital(newCara.articulo.ItemCode) : null;
+                        if (circ) {
+                          const total = newCara.renta + newCara.bonificacion;
+                          const bonifCap = Math.min(Math.max(0, v), total);
+                          setNewCara({ ...newCara, bonificacion: bonifCap, renta: total - bonifCap });
+                          return;
+                        }
+                        setNewCara({ ...newCara, bonificacion: v });
+                      }}
                       placeholder='0'
                       disabled={newCara.articulo?.ItemCode?.toUpperCase().startsWith('IM') || newCara.articulo?.ItemCode?.toUpperCase().startsWith('IN') || isEspecialArticle(newCara.articulo?.ItemCode || '')}
                       className={`w-full px-3 py-2 ${isDark ? 'bg-zinc-800 border-zinc-700 text-white' : 'bg-gray-100 border-gray-200 text-gray-900'} border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-purple-500/50 ${(newCara.articulo?.ItemCode?.toUpperCase().startsWith('IM') || newCara.articulo?.ItemCode?.toUpperCase().startsWith('IN') || isEspecialArticle(newCara.articulo?.ItemCode || '')) ? 'opacity-40 cursor-not-allowed' : ''}`}
@@ -2754,6 +2823,28 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
                     </div>
                   </div>
                 )}
+
+                {/* Preview: Circuito Digital info */}
+                {newCara.articulo && (() => {
+                  const circ = parseCircuitoDigital(newCara.articulo.ItemCode);
+                  if (!circ) return null;
+                  const total = newCara.renta + newCara.bonificacion;
+                  return (
+                    <div className={`mt-4 p-3 rounded-lg border ${isDark ? 'bg-violet-500/10 border-violet-500/30' : 'bg-violet-50 border-violet-200'}`}>
+                      <div className="flex items-center justify-between mb-2">
+                        <span className={`text-xs font-semibold ${isDark ? 'text-violet-300' : 'text-violet-700'}`}>
+                          🔁 Circuito Digital · {circ.ctoLabel} · {circ.plazaLabel}
+                        </span>
+                        <span className={`text-xs ${isDark ? 'text-violet-200' : 'text-violet-700'}`}>
+                          Total: {total} caras (fijo) · Auto-reserva al crear propuesta
+                        </span>
+                      </div>
+                      <div className={`text-[10px] ${isDark ? 'text-zinc-400' : 'text-gray-500'}`}>
+                        Renta: {newCara.renta} · Bonif: {newCara.bonificacion} · Autorización: aprobado automático
+                      </div>
+                    </div>
+                  );
+                })()}
 
                 {/* Artículo BF - below the grid when bonificacion > 0 */}
                 {newCara.bonificacion > 0 && !newCara.articulo?.ItemCode?.toUpperCase().startsWith('CT') && !newCara.articulo?.ItemCode?.toUpperCase().startsWith('IM') && !isEspecialArticle(newCara.articulo?.ItemCode || '') && (

@@ -133,6 +133,7 @@ export interface Inventario {
   orientacion: string | null;
   tarifa_piso: number | null;
   tarifa_publica: number | null;
+  cto?: string | null;
   estatus_real?: string | null;
 }
 
