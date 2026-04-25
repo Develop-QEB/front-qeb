@@ -1842,12 +1842,17 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
             }
           }
 
+          // Detectar si la cara cargada es un circuito digital
+          const circuitoLoaded = parseCircuitoDigital(cara.articulo || '');
+
           return {
             id: `edit-${idx}-${Date.now()}-${Math.random()}`,
             articulo,
             estado: cara.estados || '',
             ciudades: cara.ciudad ? cara.ciudad.split(', ').map(c => c.trim()) : [],
-            plaza: getPlazaFromArticle(cara.articulo || '', cara.estados || cara.ciudad || ''),
+            plaza: circuitoLoaded ? circuitoLoaded.plazaLabel : getPlazaFromArticle(cara.articulo || '', cara.estados || cara.ciudad || ''),
+            circuito: circuitoLoaded || undefined,
+            circuitoTotal: circuitoLoaded ? (Number(cara.caras) || 0) + (Number(cara.bonificacion) || 0) : undefined,
             formato: cara.formato || '',
             tipo: cara.tipo || '',
             nse: cara.nivel_socioeconomico ? cara.nivel_socioeconomico.split(',') : [],
