@@ -2213,7 +2213,7 @@ export function CampanaDetailPage() {
         {campana?.status === 'Rechazada' ? (
           <div className="bg-card rounded-xl border border-border p-4 md:p-6 text-center">
             <span className={`text-xs md:text-sm ${isDark ? 'text-zinc-400' : 'text-gray-500'}`}>
-              Campaña rechazada — el inventario fue liberado.
+              Campaña rechazada — el inventario fue liberado y los grupos/circuitos eliminados.
             </span>
           </div>
         ) : (
