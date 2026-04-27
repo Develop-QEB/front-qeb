@@ -1098,7 +1098,8 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
         let anioInicioCara: number | undefined;
         if (cara.inicio_periodo) {
           if (tipoPeriodo === 'mensual') {
-            const s = cara.inicio_periodo instanceof Date ? cara.inicio_periodo.toISOString() : String(cara.inicio_periodo);
+            const raw = cara.inicio_periodo as unknown;
+            const s = raw instanceof Date ? raw.toISOString() : String(raw);
             const parts = s.split(/[-T]/);
             const y = parseInt(parts[0]);
             const m = parseInt(parts[1]);
