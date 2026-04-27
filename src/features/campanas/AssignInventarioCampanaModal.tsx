@@ -4,7 +4,7 @@ import { useQuery, useQueryClient, useMutation } from '@tanstack/react-query';
 import {
   X, Search, Plus, Trash2, ChevronDown, ChevronRight, ChevronUp, Users,
   FileText, MapPin, Layers, Pencil, Map as MapIcon, Package, Calendar,
-  Gift, Target, Save, ArrowLeft, Filter, Grid, LayoutGrid, Ruler, ArrowUpDown, ArrowUp, ArrowDown, Download, Eye, Funnel, Check, Upload, Monitor, Loader2, Trophy
+  Gift, Target, Save, ArrowLeft, Filter, Grid, LayoutGrid, Ruler, ArrowUpDown, ArrowUp, ArrowDown, Download, Eye, Funnel, Check, Upload, Monitor, Loader2, Trophy, AlertTriangle
 } from 'lucide-react';
 import { GoogleMap, useLoadScript, Marker } from '@react-google-maps/api';
 import { AdvancedMapComponent } from '../propuestas/AdvancedMapComponent';
@@ -86,6 +86,7 @@ interface CaraItem {
   _originalDcm?: string;
   // RT/BF grouping: pair an RT (renta) cara with a BF (bonificación) cara
   grupo_rt_bf?: number | null;
+  grupo_masivo_id?: number | null;
   esBf?: boolean; // true if this cara is the BF row of an RT/BF pair
 }
 
@@ -136,20 +137,63 @@ const CIUDAD_ESTADO_MAP: Record<string, string> = {
   'TOLUCA': 'Estado de México', 'PACHUCA': 'Hidalgo', 'ZACATECAS': 'Zacatecas', 'DURANGO': 'Durango',
 };
 
-// Formato auto-detection from article name
-const getFormatoFromArticulo = (itemName: string): string => {
+// Code-based fallback maps for short article codes
+const CODE_FORMATO_MAP: Record<string, string> = {
+  pb: 'PARABUS', cl: 'COLUMNA', bol: 'BOLERO', kco: 'Kiosco',
+};
+const CODE_PLAZA_MAP: Record<string, { estado: string; ciudad: string }> = {
+  mx:  { estado: 'Ciudad de México / AM', ciudad: '' },
+  mty: { estado: 'Nuevo León', ciudad: 'Monterrey,Guadalupe,San Nicolás de los Garza,Santa Catarina' },
+  gd:  { estado: 'Jalisco', ciudad: 'Guadalajara,Zapopan,Tlaquepaque' },
+  gdl: { estado: 'Jalisco', ciudad: 'Guadalajara,Zapopan,Tlaquepaque' },
+  ver: { estado: 'Veracruz', ciudad: 'Veracruz,Alvarado,Boca del Río' },
+  pv:  { estado: 'Jalisco', ciudad: 'Puerto Vallarta' },
+  tl:  { estado: 'Estado de México', ciudad: 'Toluca' },
+};
+
+// Formato auto-detection from article name + optional code fallback
+const getFormatoFromArticulo = (itemName: string, itemCode?: string): string => {
   if (!itemName) return '';
   const name = itemName.toUpperCase();
+
+  if (name.includes('BAJO PUENTE')) {
+    if (name.includes('GRAN TERRAZA')) return 'Bajo Puente Gran Terraza';
+    if (name.includes('GEOGRAFOS')) return 'Bajo Puente Circuito Geografos';
+    if (name.includes('DEL PARQUE')) return 'Bajo Puente Circuito del Parque';
+    if (name.includes('FUENTES')) return 'Bajo Puente Fuentes';
+    if (name.includes('COLORINES 1') || name.includes('COLORINES1')) return 'Bajo Puente Colorines Bloque 1';
+    if (name.includes('COLORINES 2') || name.includes('COLORINES2')) return 'Bajo Puente Colorines Bloque 2';
+    if (name.includes('COLORINES 3') || name.includes('COLORINES3')) return 'Bajo Puente Colorines Bloque 3';
+    if (name.includes('COLORINES')) return 'Bajo Puente Colorines Bloque 4';
+    return 'Bajo Puente';
+  }
+
+  if (name.includes('MI MACRO')) {
+    if (name.includes('VIDRIO INTERIOR')) return 'MI MACRO Vidrio Int';
+    if (name.includes('VIDRIO EXTERIOR')) return 'MI MACRO Vidrio Ext';
+    if (name.includes('MUPI')) return 'MI MACRO MUPI Int';
+    if (name.includes('PARABUS')) return 'MI MACRO Parabus';
+    if (name.includes('MODULO')) return 'MI MACRO Modulos';
+    return 'MI MACRO';
+  }
+
+  if (name.includes('PUENTE PEATONAL')) return 'Puente Peatonal';
+  if (name.includes('TOTEM')) return 'TOTEM';
   if (name.includes('KIOSCO') || name.includes('KIOSKO')) return 'Kiosco';
-  if (name.includes('PARABUS')) return 'PARABUS';
   if (name.includes('CASETA DE TAXIS')) return 'CASETA DE TAXIS';
   if (name.includes('METROPOLITANO PARALELO')) return 'METROPOLITANO PARALELO';
   if (name.includes('METROPOLITANO PERPENDICULAR')) return 'METROPOLITANO PERPENDICULAR';
   if (name.includes('COLUMNA RECARGA')) return 'COLUMNA RECARGA';
   if (name.includes('MUPI DE PIEDRA')) return 'MUPI DE PIEDRA';
   if (name.includes('MUPI')) return 'MUPI';
+  if (name.includes('PARABUS')) return 'PARABUS';
   if (name.includes('COLUMNA')) return 'COLUMNA';
   if (name.includes('BOLERO')) return 'BOLERO';
+  if (itemCode) {
+    for (const seg of itemCode.toLowerCase().split('-')) {
+      if (CODE_FORMATO_MAP[seg]) return CODE_FORMATO_MAP[seg];
+    }
+  }
   return '';
 };
 
@@ -175,15 +219,45 @@ const getTarifaPisoFromArticulo = (articulo: SAPArticulo): number => {
 };
 
 // Multi-city auto-fill rules for specific article patterns
+// Order matters: more specific patterns BEFORE generic ones
 const MULTI_CITY_RULES: { pattern: RegExp; estado: string; ciudad: string }[] = [
-  { pattern: /\bMTY\b|\bMONTERREY\b/, estado: 'Nuevo León', ciudad: 'Monterrey,Guadalupe,San Nicolás de los Garza,Santa Catarina' },
-  { pattern: /\bVERACRUZ\b|\bVER\b/, estado: 'Veracruz', ciudad: 'Veracruz,Alvarado,Boca del Río' },
-  { pattern: /\bGD\b|\bGUADALAJARA\b/, estado: 'Jalisco', ciudad: 'Guadalajara,Zapopan,Tlaquepaque' },
   { pattern: /\bPUERTO VALLARTA\b|\bPV\b/, estado: 'Jalisco', ciudad: 'Puerto Vallarta' },
+  { pattern: /\bGD\b|\bGUADALAJARA\b|\bGDL\b/, estado: 'Jalisco', ciudad: 'GUADALAJARA,ZAPOPAN,SAN PEDRO TLAQUEPAQUE' },
+  { pattern: /\bMTY\b|\bMONTERREY\b/, estado: 'Nuevo León', ciudad: 'MONTERREY,GUADALUPE,SAN NICOLÁS DE LOS GARZA,SANTA CATARINA' },
+  { pattern: /\bBOCA DEL RIO\b/, estado: 'Veracruz', ciudad: 'BOCA DEL RIO' },
+  { pattern: /\bVERACRUZ\b|\bVER\b/, estado: 'Veracruz', ciudad: 'VERACRUZ,ALVARADO,BOCA DEL RIO' },
+  { pattern: /\bCHOLULA\b/, estado: 'Puebla', ciudad: 'SAN ANDRES CHOLULA,SAN PEDRO CHOLULA' },
+  { pattern: /\bPUEBLA\b|\bPB\b/, estado: 'Puebla', ciudad: 'PUEBLA,SAN ANDRES CHOLULA,SAN PEDRO CHOLULA' },
+  { pattern: /\bMERIDA\b|\bMR\b/, estado: 'Yucatán', ciudad: 'MÉRIDA' },
+  { pattern: /\bLEON\b|\bLEN\b/, estado: 'Guanajuato', ciudad: 'LEÓN' },
+  { pattern: /\bSALAMANCA\b/, estado: 'Guanajuato', ciudad: 'SALAMANCA' },
+  { pattern: /\bCELAYA\b/, estado: 'Guanajuato', ciudad: 'CELAYA' },
+  { pattern: /\bIRAPUATO\b/, estado: 'Guanajuato', ciudad: 'IRAPUATO' },
+  { pattern: /\bGUANAJUATO\b|\bGTO\b/, estado: 'Guanajuato', ciudad: '' },
+  { pattern: /\bOAXACA\b|\bOAX\b/, estado: 'Oaxaca de Juárez', ciudad: 'OAXACA DE JUÁREZ' },
+  { pattern: /\bAGS\b|\bAGUASCALIENTES\b/, estado: 'Aguascalientes', ciudad: 'AGUASCALIENTES' },
+  { pattern: /\bCULIACAN\b/, estado: 'Sinaloa', ciudad: 'CULIACÁN' },
+  { pattern: /\bMAZATLAN\b|\bMZ\b/, estado: 'Sinaloa', ciudad: 'MAZATLÁN' },
+  { pattern: /\bSLP\b|\bSAN LUIS POTOSI\b/, estado: 'San Luis Potosí', ciudad: 'SAN LUIS POTOSÍ' },
+  { pattern: /\bTIJUANA\b|\bTJ\b/, estado: 'Baja California', ciudad: 'TIJUANA' },
+  { pattern: /\bACAPULCO\b|\bAC\b/, estado: 'Guerrero', ciudad: 'ACAPULCO DE JUÁREZ' },
+  { pattern: /\bPACHUCA\b|\bPH\b/, estado: 'Hidalgo', ciudad: 'PACHUCA DE SOTO' },
+  { pattern: /\bTOLUCA\b|\bTL\b/, estado: 'Estado de México', ciudad: 'TOLUCA,METEPEC,LERMA,SAN MATEO ATENCO' },
+  { pattern: /\bCUERNAVACA\b|\bCV\b/, estado: 'Morelos', ciudad: 'CUERNAVACA' },
+  { pattern: /\bTAMPICO\b|\bTM\b/, estado: 'Tamaulipas', ciudad: 'TAMPICO' },
+  { pattern: /\bTORREON\b|\bTR\b/, estado: 'Coahuila', ciudad: 'TORREON' },
+  { pattern: /\bQUERETARO\b|\bQR\b/, estado: 'Querétaro', ciudad: 'QUERÉTARO' },
+  { pattern: /\bTUXTLA\b|\bTG\b/, estado: 'Chiapas', ciudad: 'TUXTLA GUTIERREZ' },
+  { pattern: /\bTABASCO\b|\bVILLAHERMOSA\b|\bTB\b/, estado: 'Tabasco', ciudad: 'VILLAHERMOSA' },
+  { pattern: /\bMORELIA\b/, estado: 'Michoacán', ciudad: 'MORELIA' },
+  { pattern: /\bCANCUN\b/, estado: 'Quintana Roo', ciudad: 'BENITO JUÁREZ' },
+  { pattern: /\bCDMX\b|\bCIUDAD DE MEXICO\b|\bDF\b|\bMEXICO\b(?!\s*(Y\s*AM|WI-?FI))|\bMX\b/, estado: 'Ciudad de México / AM', ciudad: '' },
+  { pattern: /\bNAUC\b/, estado: 'Estado de México', ciudad: 'NAUCALPAN' },
+  { pattern: /\bEM\b/, estado: 'Estado de México', ciudad: '' },
 ];
 
-// Extract city/state from article name (sorted by length to avoid false positives)
-const getCiudadEstadoFromArticulo = (itemName: string): { estado: string; ciudad: string } | null => {
+// Extract city/state from article name (sorted by length to avoid false positives) + optional code fallback
+const getCiudadEstadoFromArticulo = (itemName: string, itemCode?: string): { estado: string; ciudad: string } | null => {
   if (!itemName) return null;
   const name = itemName.toUpperCase();
 
@@ -206,6 +280,11 @@ const getCiudadEstadoFromArticulo = (itemName: string): { estado: string; ciudad
         return { estado, ciudad: '' };
       }
       return { estado, ciudad: ciudad.charAt(0) + ciudad.slice(1).toLowerCase() };
+    }
+  }
+  if (itemCode) {
+    for (const seg of itemCode.toLowerCase().split('-')) {
+      if (CODE_PLAZA_MAP[seg]) return CODE_PLAZA_MAP[seg];
     }
   }
   return null;
@@ -750,6 +829,8 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
   const [inventarioDisponible, setInventarioDisponible] = useState<InventarioDisponible[]>([]);
   const [isSearching, setIsSearching] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
+  // Reserva Masiva: toggle (solo aparece cuando la cara tiene grupo_masivo_id)
+  const [reservaMasivaC, setReservaMasivaC] = useState<boolean>(false);
   const [loadingCaraAction, setLoadingCaraAction] = useState<{ caraId: string; action: 'edit' | 'search' } | null>(null);
 
   // POI filter state
@@ -1012,19 +1093,30 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
   useEffect(() => {
     if (carasData && isOpen) {
       const carasWithIds: CaraItem[] = carasData.map((cara: any, idx: number) => {
-        // Calculate catorcena from inicio_periodo
+        // Calculate catorcena/mes from inicio_periodo según tipo_periodo
         let catorcenaInicioCara: number | undefined;
         let anioInicioCara: number | undefined;
-        if (cara.inicio_periodo && catorcenasData?.data) {
-          const inicioPeriodoDate = new Date(cara.inicio_periodo);
-          const catInicio = catorcenasData.data.find((c: any) => {
-            const cInicioDate = new Date(c.fecha_inicio);
-            const cFinDate = new Date(c.fecha_fin);
-            return inicioPeriodoDate >= cInicioDate && inicioPeriodoDate <= cFinDate;
-          });
-          if (catInicio) {
-            catorcenaInicioCara = catInicio.numero_catorcena;
-            anioInicioCara = catInicio.a_o;
+        if (cara.inicio_periodo) {
+          if (tipoPeriodo === 'mensual') {
+            const s = cara.inicio_periodo instanceof Date ? cara.inicio_periodo.toISOString() : String(cara.inicio_periodo);
+            const parts = s.split(/[-T]/);
+            const y = parseInt(parts[0]);
+            const m = parseInt(parts[1]);
+            if (Number.isFinite(y) && Number.isFinite(m) && m >= 1 && m <= 12) {
+              catorcenaInicioCara = m;
+              anioInicioCara = y;
+            }
+          } else if (catorcenasData?.data) {
+            const inicioPeriodoDate = new Date(cara.inicio_periodo);
+            const catInicio = catorcenasData.data.find((c: any) => {
+              const cInicioDate = new Date(c.fecha_inicio);
+              const cFinDate = new Date(c.fecha_fin);
+              return inicioPeriodoDate >= cInicioDate && inicioPeriodoDate <= cFinDate;
+            });
+            if (catInicio) {
+              catorcenaInicioCara = catInicio.numero_catorcena;
+              anioInicioCara = catInicio.a_o;
+            }
           }
         }
 
@@ -1061,12 +1153,13 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
           _originalDg: cara.autorizacion_dg || 'aprobado',
           _originalDcm: cara.autorizacion_dcm || 'aprobado',
           grupo_rt_bf: grupoRtBf,
+          grupo_masivo_id: (cara as any).grupo_masivo_id != null ? Number((cara as any).grupo_masivo_id) : null,
           esBf,
         };
       });
       setCaras(carasWithIds);
     }
-  }, [carasData, isOpen, catorcenasData]);
+  }, [carasData, isOpen, catorcenasData, tipoPeriodo]);
 
   // Reset state when modal closes
   useEffect(() => {
@@ -1109,6 +1202,10 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
 
   // Handle update campaign
   const handleUpdateCampana = async () => {
+    if (invalidCaras.length > 0) {
+      alert(`No se puede actualizar: ${invalidCaras.length} cara(s) tienen catorcenas fuera del rango configurado. Elimínalas o ajusta el rango.`);
+      return;
+    }
     setIsUpdatingCampana(true);
     try {
       const asignadosStr = asignados.map(u => u.nombre).join(', ');
@@ -1568,14 +1665,45 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
 
   // Available periods based on year range
   const availablePeriods = useMemo(() => {
-    if (!catorcenasData?.data || !yearInicio || !yearFin || !catorcenaInicio || !catorcenaFin) return [];
+    if (!yearInicio || !yearFin || !catorcenaInicio || !catorcenaFin) return [];
+    // Mensual: generar periodos por mes (1-12) entre yearInicio/mesInicio y yearFin/mesFin
+    if (tipoPeriodo === 'mensual') {
+      const periods: { id: number; a_o: number; numero_catorcena: number; fecha_inicio: string; fecha_fin: string }[] = [];
+      let y = yearInicio, m = catorcenaInicio;
+      while (y < yearFin || (y === yearFin && m <= catorcenaFin)) {
+        const fechaIni = new Date(y, m - 1, 1);
+        const fechaFinMes = new Date(y, m, 0);
+        periods.push({
+          id: y * 100 + m,
+          a_o: y,
+          numero_catorcena: m,
+          fecha_inicio: fechaIni.toISOString().split('T')[0],
+          fecha_fin: fechaFinMes.toISOString().split('T')[0],
+        });
+        m++;
+        if (m > 12) { m = 1; y++; }
+      }
+      return periods;
+    }
+    if (!catorcenasData?.data) return [];
     return catorcenasData.data.filter(c => {
       if (c.a_o < yearInicio || c.a_o > yearFin) return false;
       if (c.a_o === yearInicio && c.numero_catorcena < catorcenaInicio) return false;
       if (c.a_o === yearFin && c.numero_catorcena > catorcenaFin) return false;
       return true;
     });
-  }, [catorcenasData, yearInicio, yearFin, catorcenaInicio, catorcenaFin]);
+  }, [catorcenasData, yearInicio, yearFin, catorcenaInicio, catorcenaFin, tipoPeriodo]);
+
+  // Detect caras whose period is outside the current availablePeriods range
+  const invalidCaras = useMemo(() => {
+    if (caras.length === 0) return [];
+    if (!yearInicio || !yearFin || !catorcenaInicio || !catorcenaFin) return [];
+    const validKeys = new Set(availablePeriods.map(p => `${p.a_o}-${p.numero_catorcena}`));
+    return caras.filter(c => {
+      if (!c.anio_inicio || !c.catorcena_inicio) return false;
+      return !validKeys.has(`${c.anio_inicio}-${c.catorcena_inicio}`);
+    });
+  }, [caras, availablePeriods, yearInicio, yearFin, catorcenaInicio, catorcenaFin]);
 
   // Toggle catorcena expansion
   const toggleCatorcena = (periodo: string) => {
@@ -1608,6 +1736,37 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
     if (tieneReservas && !permissions.canDeleteCaraConReservas) {
       alert('No puedes eliminar una cara que tiene reservas. Primero elimina las reservas.');
       return;
+    }
+
+    // Si la cara pertenece a un grupo masivo, preguntar si eliminar todo el grupo
+    if (caraToDelete?.grupo_masivo_id) {
+      const cuantasEnGrupo = caras.filter(c => c.grupo_masivo_id === caraToDelete.grupo_masivo_id).length;
+      if (cuantasEnGrupo > 1) {
+        const eliminarGrupo = window.confirm(
+          `Esta cara forma parte de un grupo masivo de ${cuantasEnGrupo} cara(s) en distintos periodos.\n\n` +
+          `Aceptar = eliminar TODO el grupo masivo (${cuantasEnGrupo} caras + sus pares BF)\n` +
+          `Cancelar = eliminar solo esta cara`
+        );
+        if (eliminarGrupo) {
+          if (!caraToDelete.id) {
+            alert('No se puede eliminar el grupo: la cara no está guardada.');
+            return;
+          }
+          (async () => {
+            try {
+              // El backend campanas.deleteCara acepta ?eliminarGrupo=true
+              await campanasService.deleteCara(campana!.id, caraToDelete.id!, true);
+              const grupo = caraToDelete.grupo_masivo_id;
+              setCaras(prev => prev.filter(c => c.grupo_masivo_id !== grupo));
+              setReservas(prev => prev.filter(r => !r.solicitudCaraId || !caras.find(c => c.id === r.solicitudCaraId && c.grupo_masivo_id === grupo)));
+              showToast(`Grupo masivo eliminado (${cuantasEnGrupo} caras)`, 'success');
+            } catch (e: any) {
+              alert('Error al eliminar el grupo masivo: ' + (e?.message || e));
+            }
+          })();
+          return;
+        }
+      }
     }
 
     // If cara is part of an RT/BF pair, also delete the paired cara
@@ -2573,6 +2732,18 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
       }
 
       const estadoParam = cara.estados === 'Ciudad de México / AM' ? 'Ciudad de México,Estado de México' : cara.estados;
+
+      // Si Reserva Masiva está ON y la cara tiene grupo_masivo_id, usar rango total del grupo
+      let fechaIniSearch = cara.inicio_periodo || undefined;
+      let fechaFinSearch = cara.fin_periodo || undefined;
+      if (reservaMasivaC && cara.grupo_masivo_id) {
+        const grupo = caras.filter(c => c.grupo_masivo_id === cara.grupo_masivo_id && !c.esBf);
+        const fechasIni = grupo.map(c => c.inicio_periodo).filter(Boolean).sort();
+        const fechasFin = grupo.map(c => c.fin_periodo).filter(Boolean).sort();
+        if (fechasIni.length) fechaIniSearch = fechasIni[0];
+        if (fechasFin.length) fechaFinSearch = fechasFin[fechasFin.length - 1];
+      }
+
       const response = await inventariosService.getDisponibles({
         ciudad: ciudadFilter,
         estado: estadoParam || undefined,
@@ -2580,8 +2751,8 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
         // Don't filter by flujo in backend - get all and filter in frontend
         nse: cara.nivel_socioeconomico || undefined,
         tipo: cara.tipo || undefined,
-        fecha_inicio: cara.inicio_periodo || undefined,
-        fecha_fin: cara.fin_periodo || undefined,
+        fecha_inicio: fechaIniSearch,
+        fecha_fin: fechaFinSearch,
         solicitudCaraId: cara.id,
       });
       setInventarioDisponible(response.data || []);
@@ -2593,6 +2764,14 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
       setLoadingCaraAction(null);
     }
   };
+
+  // Re-search cuando se prende/apaga reserva masiva
+  useEffect(() => {
+    if (viewState === 'search-inventory' && selectedCaraForSearch?.grupo_masivo_id) {
+      handleSearchInventory(selectedCaraForSearch);
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [reservaMasivaC]);
 
   // Refetch disponibles with current filters
   const handleRefetchDisponibles = async () => {
@@ -2610,6 +2789,17 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
       }
 
       const estadoParam2 = selectedCaraForSearch.estados === 'Ciudad de México / AM' ? 'Ciudad de México,Estado de México' : selectedCaraForSearch.estados;
+
+      let fechaIniSearch2 = selectedCaraForSearch.inicio_periodo || undefined;
+      let fechaFinSearch2 = selectedCaraForSearch.fin_periodo || undefined;
+      if (reservaMasivaC && selectedCaraForSearch.grupo_masivo_id) {
+        const grupo = caras.filter(c => c.grupo_masivo_id === selectedCaraForSearch.grupo_masivo_id && !c.esBf);
+        const fechasIni = grupo.map(c => c.inicio_periodo).filter(Boolean).sort();
+        const fechasFin = grupo.map(c => c.fin_periodo).filter(Boolean).sort();
+        if (fechasIni.length) fechaIniSearch2 = fechasIni[0];
+        if (fechasFin.length) fechaFinSearch2 = fechasFin[fechasFin.length - 1];
+      }
+
       const response = await inventariosService.getDisponibles({
         ciudad: ciudadFilter,
         estado: estadoParam2 || undefined,
@@ -2617,8 +2807,8 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
         // Don't filter by flujo in backend - get all and filter in frontend
         nse: selectedCaraForSearch.nivel_socioeconomico || undefined,
         tipo: selectedCaraForSearch.tipo || undefined,
-        fecha_inicio: selectedCaraForSearch.inicio_periodo || undefined,
-        fecha_fin: selectedCaraForSearch.fin_periodo || undefined,
+        fecha_inicio: fechaIniSearch2,
+        fecha_fin: fechaFinSearch2,
         solicitudCaraId: selectedCaraForSearch.id,
       });
       setInventarioDisponible(response.data || []);
@@ -3127,14 +3317,25 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
 
         if (clienteId === undefined || clienteId === null) throw new Error("Cliente ID no encontrado");
 
-        const result = await campanasService.createReservas(campana!.id, {
-          reservas: newReservas,
-          solicitudCaraId: selectedCaraForSearch.id!,
-          clienteId,
-          fechaInicio,
-          fechaFin,
-          agruparComoCompleto: shouldGroup,
-        });
+        // Replicar a todas las caras del grupo masivo si reservaMasivaC está ON
+        const carasObjetivo = (reservaMasivaC && selectedCaraForSearch.grupo_masivo_id)
+          ? caras.filter(c => c.grupo_masivo_id === selectedCaraForSearch.grupo_masivo_id && !c.esBf && c.id)
+          : [selectedCaraForSearch];
+
+        let totalReservasCreadas = 0;
+        for (const cTarget of carasObjetivo) {
+          const fIni = cTarget.inicio_periodo || fechaInicio;
+          const fFin = cTarget.fin_periodo || fechaFin;
+          const result = await campanasService.createReservas(campana!.id, {
+            reservas: newReservas,
+            solicitudCaraId: cTarget.id!,
+            clienteId,
+            fechaInicio: fIni,
+            fechaFin: fFin,
+            agruparComoCompleto: shouldGroup,
+          });
+          totalReservasCreadas += result.reservasCreadas;
+        }
 
         queryClient.invalidateQueries({ queryKey: ['campana-reservas-modal', campana!.id] });
         queryClient.invalidateQueries({ queryKey: ['campana-inventario', campana!.id] }); // Refresh map
@@ -3142,7 +3343,8 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
         // Also refresh disponibles
         handleRefetchDisponibles();
 
-        showToast(`Se guardaron ${result.reservasCreadas} reservas exitosamente`, 'success');
+        const sufijo = carasObjetivo.length > 1 ? ` en ${carasObjetivo.length} periodos` : '';
+        showToast(`Se guardaron ${totalReservasCreadas} reservas exitosamente${sufijo}`, 'success');
         setSelectedInventory(new Set());
       } catch (error) {
         console.error('Error saving reservas:', error);
@@ -3174,17 +3376,41 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
         onCancel: () => runReservation(false)
       });
     } else if (potentialPairs.size > 0 && !showOnlyCompletos) {
-      // Hay pares pero NO está activo el filtro completos - reservar sin agrupar directamente
-      runReservation(false);
+      // Hay pares pero NO está activo el filtro completos
+      // Si reserva masiva está ON, igual confirmar (más reservas en juego)
+      if (reservaMasivaC && selectedCaraForSearch?.grupo_masivo_id) {
+        const grupoSize = caras.filter(c => c.grupo_masivo_id === selectedCaraForSearch.grupo_masivo_id && !c.esBf && c.id).length;
+        setConfirmModal({
+          isOpen: true,
+          title: 'Reserva Masiva',
+          message: `Vas a crear ${selectedInventory.size * grupoSize} reservas (${selectedInventory.size} inventario${selectedInventory.size > 1 ? 's' : ''} × ${grupoSize} periodos del grupo masivo). ¿Confirmas?`,
+          confirmText: `Reservar en ${grupoSize} periodos`,
+          onConfirm: () => runReservation(false),
+        });
+      } else {
+        runReservation(false);
+      }
     } else {
-      // Sin pares, confirmar reservación normal
-      setConfirmModal({
-        isOpen: true,
-        title: 'Confirmar Reservación',
-        message: `¿Estás seguro de reservar ${selectedInventory.size} espacios?`,
-        confirmText: 'Reservar',
-        onConfirm: () => runReservation(false),
-      });
+      // Si reserva masiva está ON, mostrar mensaje específico de masiva
+      if (reservaMasivaC && selectedCaraForSearch?.grupo_masivo_id) {
+        const grupoSize = caras.filter(c => c.grupo_masivo_id === selectedCaraForSearch.grupo_masivo_id && !c.esBf && c.id).length;
+        setConfirmModal({
+          isOpen: true,
+          title: 'Reserva Masiva',
+          message: `Vas a crear ${selectedInventory.size * grupoSize} reservas (${selectedInventory.size} inventario${selectedInventory.size > 1 ? 's' : ''} × ${grupoSize} periodos del grupo masivo). ¿Confirmas?`,
+          confirmText: `Reservar en ${grupoSize} periodos`,
+          onConfirm: () => runReservation(false),
+        });
+      } else {
+        // Sin pares, confirmar reservación normal
+        setConfirmModal({
+          isOpen: true,
+          title: 'Confirmar Reservación',
+          message: `¿Estás seguro de reservar ${selectedInventory.size} espacios?`,
+          confirmText: 'Reservar',
+          onConfirm: () => runReservation(false),
+        });
+      }
     }
   };
 
@@ -3417,7 +3643,9 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
     const hierarchy: Level0 = {};
 
     filteredReservados.forEach(r => {
-      const catorcenaKey = `Cat ${r.catorcena}/${r.anio}`;
+      const catorcenaKey = tipoPeriodo === 'mensual'
+        ? `${MESES_LABEL[r.catorcena - 1] || `Mes ${r.catorcena}`} ${r.anio}`
+        : `Cat ${r.catorcena}/${r.anio}`;
       const articuloKey = r.articulo || 'Sin Artículo';
       const plazaKey = r.plaza || 'Sin Plaza';
       const formatoKey = r.formato || 'Sin Formato';
@@ -3431,7 +3659,7 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
     });
 
     return hierarchy;
-  }, [filteredReservados]);
+  }, [filteredReservados, tipoPeriodo]);
 
   // Helper to get type breakdown for reservados tab
   const getReservadosBreakdown = (items: ReservaItem[]) => {
@@ -4293,6 +4521,24 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
                       </button>
                     )}
                   </div>
+
+                  {/* Toggle Reserva Masiva (solo si la cara tiene grupo masivo) */}
+                  {selectedCaraForSearch?.grupo_masivo_id && (() => {
+                    const grupo = caras.filter(c => c.grupo_masivo_id === selectedCaraForSearch.grupo_masivo_id && !c.esBf);
+                    return (
+                      <label className={`flex items-center gap-2 text-xs cursor-pointer select-none px-2 py-1.5 rounded-lg border ${reservaMasivaC ? 'bg-purple-500/20 border-purple-500/40 text-purple-300' : 'bg-zinc-800 border-zinc-700 text-zinc-300'}`}>
+                        <span>Reserva masiva ({grupo.length} periodos)</span>
+                        <button
+                          type="button"
+                          onClick={() => setReservaMasivaC(!reservaMasivaC)}
+                          className={`relative inline-flex h-4 w-7 items-center rounded-full transition-colors ${reservaMasivaC ? 'bg-purple-500' : 'bg-zinc-700'}`}
+                          title="Filtra inventario disponible en TODO el rango y replica cada reserva a las caras del grupo"
+                        >
+                          <span className={`inline-block h-3 w-3 transform rounded-full bg-white transition-transform ${reservaMasivaC ? 'translate-x-3.5' : 'translate-x-0.5'}`} />
+                        </button>
+                      </label>
+                    );
+                  })()}
 
                   <div className="flex-1" />
 
@@ -5969,15 +6215,21 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
                             // Detectar CIRCUITO DIGITAL
                             const circuito = parseCircuitoDigital(item.ItemCode);
                             if (circuito) {
-                              // Validar unicidad: mismo CTO+plaza solo una vez
-                              const ya = caras.find(c => {
-                                const ci = parseCircuitoDigital(c.articulo);
-                                return ci && ci.cto === circuito.cto && ci.plazaCode === circuito.plazaCode && !c.esBf;
-                              });
-                              if (ya && !editingCaraId) {
-                                alert(`Ya tienes el circuito ${circuito.ctoLabel} (${circuito.plazaLabel}) en esta campaña. Solo se puede incluir una vez.`);
-                                setSelectedArticulo(null);
-                                return;
+                              // Validar unicidad: mismo CTO+plaza+catorcena/mes solo una vez
+                              // Se permite repetir en distintas catorcenas/meses
+                              if (newCara.catorcena_inicio && newCara.anio_inicio) {
+                                const ya = caras.find(c => {
+                                  if (editingCaraId && c.localId === editingCaraId) return false;
+                                  if (c.esBf) return false;
+                                  const ci = parseCircuitoDigital(c.articulo);
+                                  if (!ci || ci.cto !== circuito.cto || ci.plazaCode !== circuito.plazaCode) return false;
+                                  return c.catorcena_inicio === newCara.catorcena_inicio && c.anio_inicio === newCara.anio_inicio;
+                                });
+                                if (ya) {
+                                  alert(`Ya tienes el circuito ${circuito.ctoLabel} (${circuito.plazaLabel}) en ese ${tipoPeriodo === 'mensual' ? 'mes' : 'catorcena'}. Solo se puede incluir una vez por periodo.`);
+                                  setSelectedArticulo(null);
+                                  return;
+                                }
                               }
                               try {
                                 const det = await circuitosService.detalle(item.ItemCode);
@@ -6009,8 +6261,8 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
                             // Auto-complete all fields from article
                             const tarifa = getTarifaPublicaFromArticulo(item);
                             const tarifaPiso = getTarifaPisoFromArticulo(item);
-                            const ciudadEstado = getCiudadEstadoFromArticulo(item.ItemName);
-                            const formato = getFormatoFromArticulo(item.ItemName);
+                            const ciudadEstado = getCiudadEstadoFromArticulo(item.ItemName, item.ItemCode);
+                            const formato = getFormatoFromArticulo(item.ItemName, item.ItemCode);
                             const tipo = getTipoFromName(item.ItemName);
                             const isCortesia = item.ItemCode.toUpperCase().startsWith('CT');
                             const isIntercambio = item.ItemCode.toUpperCase().startsWith('IN');
@@ -6073,7 +6325,7 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
                           )}
                         </label>
                         {tipoPeriodo === 'mensual' ? (
-                          // Mensual: 2 date inputs (calendario) — usar rango configurado en los selectores Año/Cat de la campaña
+                          // Mensual: dropdown Mes + 2 date inputs (Fecha Inicio + Fecha Fin)
                           (() => {
                             const minDate = (yearInicio && catorcenaInicio)
                               ? new Date(yearInicio, catorcenaInicio - 1, 1).toISOString().split('T')[0]
@@ -6081,67 +6333,117 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
                             const maxDate = (yearFin && catorcenaFin)
                               ? new Date(yearFin, catorcenaFin, 0).toISOString().split('T')[0]
                               : (campana?.fecha_fin ? String(campana.fecha_fin).split('T')[0] : undefined);
+                            const mesOptions: { year: number; month: number }[] = [];
+                            if (yearInicio && catorcenaInicio && yearFin && catorcenaFin) {
+                              let y = yearInicio, m = catorcenaInicio;
+                              while (y < yearFin || (y === yearFin && m <= catorcenaFin)) {
+                                mesOptions.push({ year: y, month: m });
+                                m++;
+                                if (m > 12) { m = 1; y++; }
+                              }
+                            }
                             return (
-                          <div className="grid grid-cols-2 gap-2">
-                            <input
-                              type="date"
-                              value={newCara.inicio_periodo || ''}
-                              onChange={(e) => {
-                                if (!canEditResumen) return;
-                                const v = e.target.value;
-                                if (!v) {
-                                  setNewCara({ ...newCara, inicio_periodo: '', catorcena_inicio: undefined, anio_inicio: undefined });
-                                  return;
-                                }
-                                const [yStr, mStr] = v.split('-');
-                                const y = parseInt(yStr);
-                                const m = parseInt(mStr);
-                                const newIniVal = y * 100 + m;
-                                const curFinVal = (newCara.anio_fin || 0) * 100 + (newCara.catorcena_fin || 0);
-                                let finPeriodo = newCara.fin_periodo;
-                                let finCat = newCara.catorcena_fin;
-                                let finYear = newCara.anio_fin;
-                                if (!finPeriodo || curFinVal < newIniVal) {
-                                  const lastDay = new Date(y, m, 0);
-                                  finPeriodo = lastDay.toISOString().split('T')[0];
-                                  finCat = m;
-                                  finYear = y;
-                                }
-                                setNewCara({
-                                  ...newCara,
-                                  inicio_periodo: v,
-                                  catorcena_inicio: m,
-                                  anio_inicio: y,
-                                  fin_periodo: finPeriodo,
-                                  catorcena_fin: finCat,
-                                  anio_fin: finYear,
-                                });
-                              }}
-                              min={minDate}
-                              max={maxDate}
-                              disabled={!canEditResumen}
-                              className={`w-full px-3 py-2 ${isDark ? 'bg-zinc-800 border-zinc-700 text-white' : 'bg-white border-gray-300 text-gray-900'} border rounded-lg text-sm focus:outline-none focus:ring-1 focus:ring-purple-500/50 ${!canEditResumen ? 'opacity-60 cursor-not-allowed' : ''}`}
-                            />
-                            <input
-                              type="date"
-                              value={newCara.fin_periodo || ''}
-                              onChange={(e) => {
-                                if (!canEditResumen) return;
-                                const v = e.target.value;
-                                if (!v) {
-                                  setNewCara({ ...newCara, fin_periodo: '', catorcena_fin: undefined, anio_fin: undefined });
-                                  return;
-                                }
-                                const [yStr, mStr] = v.split('-');
-                                const y = parseInt(yStr);
-                                const m = parseInt(mStr);
-                                setNewCara({ ...newCara, fin_periodo: v, catorcena_fin: m, anio_fin: y });
-                              }}
-                              min={newCara.inicio_periodo || minDate}
-                              max={maxDate}
-                              disabled={!canEditResumen || !newCara.inicio_periodo}
-                              className={`w-full px-3 py-2 ${isDark ? 'bg-zinc-800 border-zinc-700 text-white' : 'bg-white border-gray-300 text-gray-900'} border rounded-lg text-sm focus:outline-none focus:ring-1 focus:ring-purple-500/50 ${(!canEditResumen || !newCara.inicio_periodo) ? 'opacity-60 cursor-not-allowed' : ''}`}
-                            />
+                          <div className="grid grid-cols-3 gap-2">
+                            <div>
+                              <label className="text-[10px] text-zinc-600 block mb-1">Mes</label>
+                              <select
+                                value={newCara.catorcena_inicio && newCara.anio_inicio ? `${newCara.anio_inicio}-${newCara.catorcena_inicio}` : ''}
+                                onChange={(e) => {
+                                  if (!canEditResumen) return;
+                                  const val = e.target.value;
+                                  if (!val) {
+                                    setNewCara({ ...newCara, catorcena_inicio: undefined, anio_inicio: undefined, catorcena_fin: undefined, anio_fin: undefined, inicio_periodo: '', fin_periodo: '' });
+                                    return;
+                                  }
+                                  const [y, m] = val.split('-').map(Number);
+                                  const fechaIni = new Date(y, m - 1, 1).toISOString().split('T')[0];
+                                  const fechaFin = new Date(y, m, 0).toISOString().split('T')[0];
+                                  setNewCara({
+                                    ...newCara,
+                                    catorcena_inicio: m,
+                                    anio_inicio: y,
+                                    catorcena_fin: m,
+                                    anio_fin: y,
+                                    inicio_periodo: fechaIni,
+                                    fin_periodo: fechaFin,
+                                  });
+                                }}
+                                disabled={!canEditResumen || mesOptions.length === 0}
+                                className={`w-full px-3 py-2 ${isDark ? 'bg-zinc-800 border-zinc-700 text-white' : 'bg-white border-gray-300 text-gray-900'} border rounded-lg text-sm focus:outline-none focus:ring-1 focus:ring-purple-500/50 ${!canEditResumen ? 'opacity-60 cursor-not-allowed' : ''}`}
+                              >
+                                <option value="">Seleccionar</option>
+                                {mesOptions.map(o => (
+                                  <option key={`${o.year}-${o.month}`} value={`${o.year}-${o.month}`}>
+                                    {MESES_LABEL[o.month - 1]} {o.year}
+                                  </option>
+                                ))}
+                              </select>
+                            </div>
+                            <div>
+                              <label className="text-[10px] text-zinc-600 block mb-1">Fecha Inicio</label>
+                              <input
+                                type="date"
+                                value={newCara.inicio_periodo || ''}
+                                onChange={(e) => {
+                                  if (!canEditResumen) return;
+                                  const v = e.target.value;
+                                  if (!v) {
+                                    setNewCara({ ...newCara, inicio_periodo: '', catorcena_inicio: undefined, anio_inicio: undefined });
+                                    return;
+                                  }
+                                  const [yStr, mStr] = v.split('-');
+                                  const y = parseInt(yStr);
+                                  const m = parseInt(mStr);
+                                  const newIniVal = y * 100 + m;
+                                  const curFinVal = (newCara.anio_fin || 0) * 100 + (newCara.catorcena_fin || 0);
+                                  let finPeriodo = newCara.fin_periodo;
+                                  let finCat = newCara.catorcena_fin;
+                                  let finYear = newCara.anio_fin;
+                                  if (!finPeriodo || curFinVal < newIniVal) {
+                                    const lastDay = new Date(y, m, 0);
+                                    finPeriodo = lastDay.toISOString().split('T')[0];
+                                    finCat = m;
+                                    finYear = y;
+                                  }
+                                  setNewCara({
+                                    ...newCara,
+                                    inicio_periodo: v,
+                                    catorcena_inicio: m,
+                                    anio_inicio: y,
+                                    fin_periodo: finPeriodo,
+                                    catorcena_fin: finCat,
+                                    anio_fin: finYear,
+                                  });
+                                }}
+                                min={minDate}
+                                max={maxDate}
+                                disabled={!canEditResumen}
+                                className={`w-full px-3 py-2 ${isDark ? 'bg-zinc-800 border-zinc-700 text-white' : 'bg-white border-gray-300 text-gray-900'} border rounded-lg text-sm focus:outline-none focus:ring-1 focus:ring-purple-500/50 ${!canEditResumen ? 'opacity-60 cursor-not-allowed' : ''}`}
+                              />
+                            </div>
+                            <div>
+                              <label className="text-[10px] text-zinc-600 block mb-1">Fecha Fin</label>
+                              <input
+                                type="date"
+                                value={newCara.fin_periodo || ''}
+                                onChange={(e) => {
+                                  if (!canEditResumen) return;
+                                  const v = e.target.value;
+                                  if (!v) {
+                                    setNewCara({ ...newCara, fin_periodo: '', catorcena_fin: undefined, anio_fin: undefined });
+                                    return;
+                                  }
+                                  const [yStr, mStr] = v.split('-');
+                                  const y = parseInt(yStr);
+                                  const m = parseInt(mStr);
+                                  setNewCara({ ...newCara, fin_periodo: v, catorcena_fin: m, anio_fin: y });
+                                }}
+                                min={newCara.inicio_periodo || minDate}
+                                max={maxDate}
+                                disabled={!canEditResumen || !newCara.inicio_periodo}
+                                className={`w-full px-3 py-2 ${isDark ? 'bg-zinc-800 border-zinc-700 text-white' : 'bg-white border-gray-300 text-gray-900'} border rounded-lg text-sm focus:outline-none focus:ring-1 focus:ring-purple-500/50 ${(!canEditResumen || !newCara.inicio_periodo) ? 'opacity-60 cursor-not-allowed' : ''}`}
+                              />
+                            </div>
                           </div>
                             );
                           })()
@@ -6487,6 +6789,14 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
                   </div>
                 )}
 
+                {invalidCaras.length > 0 && (
+                  <div className="mx-5 mb-3 flex items-start gap-2 px-3 py-2 rounded-lg bg-red-500/10 border border-red-500/30 text-red-400 text-sm">
+                    <AlertTriangle className="h-4 w-4 mt-0.5 shrink-0" />
+                    <span>
+                      <strong>{invalidCaras.length} cara{invalidCaras.length > 1 ? 's' : ''}</strong> tiene{invalidCaras.length > 1 ? 'n' : ''} catorcenas fuera del rango actual. Elimínalas o ajusta el rango de catorcenas antes de actualizar.
+                    </span>
+                  </div>
+                )}
                 <div ref={caraTableRef} className={`divide-y ${isDark ? 'divide-zinc-700/30' : 'divide-gray-200'}`}>
                   {caras.length === 0 ? (
                     <div className="p-8 text-center text-zinc-500">
@@ -6754,7 +7064,9 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
                 // Helper to get group key based on field
                 const getFieldValue = (r: ReservaItem, field: GroupByFieldReservas): string => {
                   switch (field) {
-                    case 'catorcena': return `Cat ${r.catorcena}/${r.anio}`;
+                    case 'catorcena': return tipoPeriodo === 'mensual'
+                      ? `${MESES_LABEL[r.catorcena - 1] || `Mes ${r.catorcena}`} ${r.anio}`
+                      : `Cat ${r.catorcena}/${r.anio}`;
                     case 'tipo': return r.tipo;
                     case 'plaza': return r.plaza || 'Sin Plaza';
                     case 'formato': return r.formato || 'Sin Formato';

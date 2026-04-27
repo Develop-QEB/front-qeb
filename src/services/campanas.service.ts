@@ -1225,8 +1225,9 @@ async getUsuarios(): Promise<{ id: number; nombre: string }[]> {
     return response.data.data;
   },
 
-  async deleteCara(campanaId: number, caraId: number): Promise<void> {
-    const response = await api.delete<ApiResponse<void>>(`/campanas/${campanaId}/caras/${caraId}`);
+  async deleteCara(campanaId: number, caraId: number, eliminarGrupo?: boolean): Promise<void> {
+    const url = `/campanas/${campanaId}/caras/${caraId}${eliminarGrupo ? '?eliminarGrupo=true' : ''}`;
+    const response = await api.delete<ApiResponse<void>>(url);
     if (!response.data.success) {
       throw new Error(response.data.error || 'Error al eliminar cara');
     }

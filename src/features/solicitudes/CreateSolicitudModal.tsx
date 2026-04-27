@@ -313,6 +313,8 @@ interface CaraEntry {
   // RT/BF grouping
   grupo_rt_bf?: number;
   esBf?: boolean; // true if this is the BF row of a RT/BF pair
+  // Masivo grouping: same articulo+plaza+formato+tipo+nse across multiple catorcenas
+  grupo_masivo_id?: number;
 }
 
 interface Props {
@@ -1006,13 +1008,16 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
     if (!inventarioOptions) return;
     setNewCara(prev => {
       const esCircuito = prev.articulo ? !!parseCircuitoDigital(prev.articulo.ItemCode) : false;
+      // Si hay artículo seleccionado, no resetear formato/tipo auto-derivados
+      // (el usuario los puede ajustar manualmente). Solo resetear NSE inválidos.
+      const tieneArticulo = !!prev.articulo;
       let changed = false;
       const updates: Partial<typeof prev> = {};
-      if (!esCircuito && prev.formato && !inventarioOptions.formatos.includes(prev.formato)) {
+      if (!esCircuito && !tieneArticulo && prev.formato && !inventarioOptions.formatos.includes(prev.formato)) {
         updates.formato = '';
         changed = true;
       }
-      if (!esCircuito && prev.tipo && !inventarioOptions.tipos.includes(prev.tipo)) {
+      if (!esCircuito && !tieneArticulo && prev.tipo && !inventarioOptions.tipos.includes(prev.tipo)) {
         updates.tipo = '' as typeof prev.tipo;
         changed = true;
       }
@@ -1274,8 +1279,32 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
       periodsToCreate.push({ catorcenaNum, catorcenaYear, periodoInicio: periodoInicioVal, periodoFin: periodoFinVal });
     }
 
+    // Circuito Digital: unicidad por (CTO, plaza, catorcena/mes) — se permite repetir en periodos distintos
+    const circuitoCheck = newCara.articulo ? parseCircuitoDigital(newCara.articulo.ItemCode) : null;
+    if (circuitoCheck) {
+      const conflictos = caras.filter(c => {
+        if (editingCaraId && c.id === editingCaraId) return false;
+        if (c.esBf) return false;
+        if (!c.circuito) return false;
+        if (c.circuito.cto !== circuitoCheck.cto || c.circuito.plazaCode !== circuitoCheck.plazaCode) return false;
+        return periodsToCreate.some(p => p.catorcenaYear === c.catorcenaYear && p.catorcenaNum === c.catorcenaNum);
+      });
+      if (conflictos.length > 0) {
+        const periodos = [...new Set(conflictos.map(c => `${c.catorcenaNum}/${c.catorcenaYear}`))].join(', ');
+        alert(`Ya tienes el circuito ${circuitoCheck.ctoLabel} (${circuitoCheck.plazaLabel}) en ${tipoPeriodo === 'mensual' ? 'el(los) mes(es)' : 'la(s) catorcena(s)'} ${periodos}. Solo se puede incluir una vez por periodo.`);
+        return;
+      }
+    }
+
     const tieneBfPair = newCara.bonificacion > 0 && newCara.articuloBf;
     const ciudadesToUse = newCara.ciudades.length > 0 ? newCara.ciudades : filteredCiudades;
+
+    // grupo_masivo_id: identifica caras del mismo artículo+config a través de varias catorcenas
+    // Si edita una cara que ya pertenece a un grupo masivo, preservar su grupo_masivo_id;
+    // si crea/edita masivo (>1 periodo) sin grupo previo, generar uno nuevo
+    const editingCaraExistente = editingCaraId ? caras.find(c => c.id === editingCaraId) : null;
+    const grupoMasivoId = editingCaraExistente?.grupo_masivo_id
+      ?? (periodsToCreate.length > 1 ? Math.floor(Date.now() / 1000) % 2000000000 : undefined);
 
     const newCaras: CaraEntry[] = [];
     for (const [idx, period] of periodsToCreate.entries()) {
@@ -1285,6 +1314,9 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
       const grupoRtBf = tieneBfPair ? (Date.now() + idx) % 2000000000 : undefined;
 
       // RT cara (renta)
+      // Para circuitos digitales con BF separado: RT.renta = total - bonificacion
+      // (las inventarios bonificadas se restan del total del circuito)
+      const rentaRT = (circuitoInfo && grupoRtBf) ? Math.max(0, newCara.renta - newCara.bonificacion) : newCara.renta;
       newCaras.push({
         id: editingCaraId && idx === 0 ? editingCaraId : `${Date.now()}-${Math.random()}-rt-${idx}`,
         articulo: newCara.articulo!,
@@ -1292,7 +1324,7 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
         ciudades: ciudadesToUse,
         plaza: newCara.plaza || newCara.estado,
         circuito: circuitoInfo || undefined,
-        circuitoTotal: circuitoInfo ? (newCara.renta + newCara.bonificacion) : undefined,
+        circuitoTotal: circuitoInfo ? newCara.renta : undefined,
         circuitoFlujo: circuitoInfo && circuitoFlujoContra ? circuitoFlujoContra.flujo : undefined,
         circuitoContraflujo: circuitoInfo && circuitoFlujoContra ? circuitoFlujoContra.contraflujo : undefined,
         formato: newCara.formato,
@@ -1302,7 +1334,7 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
         catorcenaYear: period.catorcenaYear,
         periodoInicio: period.periodoInicio,
         periodoFin: period.periodoFin,
-        renta: newCara.renta,
+        renta: rentaRT,
         bonificacion: grupoRtBf ? 0 : newCara.bonificacion, // If BF separate, RT has 0 bonif
         tarifaPublica: newCara.tarifaPublica,
         tarifaEfectiva: tarifaToSave,
@@ -1313,6 +1345,7 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
         _originalDg: autorizacion_dg,
         _originalDcm: autorizacion_dcm,
         grupo_rt_bf: grupoRtBf,
+        grupo_masivo_id: grupoMasivoId,
       });
 
       // BF cara (bonificación) - only if articuloBf is selected
@@ -1341,6 +1374,7 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
           _originalDg: autorizacion_dg,
           _originalDcm: autorizacion_dcm,
           grupo_rt_bf: grupoRtBf,
+          grupo_masivo_id: grupoMasivoId,
           esBf: true,
         });
       }
@@ -1443,8 +1477,27 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
   // Remove cara
   const handleRemoveCara = (id: string) => {
     const cara = caras.find(c => c.id === id);
+    if (!cara) return;
+
+    // Si modoMasivo está ON y la cara pertenece a un grupo masivo, eliminar TODO el grupo
+    // (incluye sus pares RT/BF)
+    if (modoMasivo && cara.grupo_masivo_id) {
+      const grupoSize = caras.filter(c => c.grupo_masivo_id === cara.grupo_masivo_id && !c.esBf).length;
+      if (grupoSize > 1) {
+        const ok = window.confirm(
+          `Modo masivo ON: esta cara pertenece a un grupo de ${grupoSize} catorcenas.\n\n` +
+          `Aceptar = eliminar TODO el grupo masivo (RT + BF de ${grupoSize} catorcenas)\n` +
+          `Cancelar = no eliminar nada`
+        );
+        if (!ok) return;
+        setCaras(caras.filter(c => c.grupo_masivo_id !== cara.grupo_masivo_id));
+        if (editingCaraId === id) setEditingCaraId(null);
+        return;
+      }
+    }
+
     // If RT/BF pair, remove both
-    if (cara?.grupo_rt_bf) {
+    if (cara.grupo_rt_bf) {
       setCaras(caras.filter(c => !(c.grupo_rt_bf === cara.grupo_rt_bf && c.catorcenaNum === cara.catorcenaNum && c.catorcenaYear === cara.catorcenaYear)));
     } else {
       setCaras(caras.filter(c => c.id !== id));
@@ -1466,6 +1519,23 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
     const bfPair = cara.grupo_rt_bf ? caras.find(c => c.grupo_rt_bf === cara.grupo_rt_bf && c.esBf && c.catorcenaNum === cara.catorcenaNum && c.catorcenaYear === cara.catorcenaYear) : null;
 
     setEditingCaraId(cara.id);
+
+    // Si la cara pertenece a un grupo masivo y modoMasivo está ON, popular el rango completo
+    // del grupo para que al guardar la edición se propague a todas las caras del grupo
+    let periodoIni = `${cara.catorcenaYear}-${cara.catorcenaNum}`;
+    let periodoFin = '';
+    if (cara.grupo_masivo_id && modoMasivo) {
+      const grupoCaras = caras.filter(c => c.grupo_masivo_id === cara.grupo_masivo_id && !c.esBf);
+      if (grupoCaras.length > 1) {
+        const sorted = [...grupoCaras].sort((a, b) =>
+          (a.catorcenaYear * 100 + a.catorcenaNum) - (b.catorcenaYear * 100 + b.catorcenaNum)
+        );
+        periodoIni = `${sorted[0].catorcenaYear}-${sorted[0].catorcenaNum}`;
+        const last = sorted[sorted.length - 1];
+        periodoFin = `${last.catorcenaYear}-${last.catorcenaNum}`;
+      }
+    }
+
     setNewCara({
       articulo: cara.articulo,
       plaza: cara.plaza || cara.estado,
@@ -1474,8 +1544,8 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
       formato: cara.formato,
       tipo: cara.tipo as 'Tradicional' | 'Digital' | '',
       nse: cara.nse,
-      periodo: `${cara.catorcenaYear}-${cara.catorcenaNum}`,
-      periodoFinCat: '',
+      periodo: periodoIni,
+      periodoFinCat: periodoFin,
       periodoInicioCustom: tipoPeriodo === 'mensual' ? cara.periodoInicio : '',
       periodoFinCustom: tipoPeriodo === 'mensual' ? cara.periodoFin : '',
       renta: cara.renta,
@@ -1718,6 +1788,7 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
         autorizacion_dg: c.autorizacion_dg,
         autorizacion_dcm: c.autorizacion_dcm,
         grupo_rt_bf: c.grupo_rt_bf || null,
+        grupo_masivo_id: c.grupo_masivo_id || null,
       })),
     };
 
@@ -1897,6 +1968,7 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
             descuento: Number(cara.descuento) || 0,
             precioTotal: Number(cara.costo) || 0,
             grupo_rt_bf: cara.grupo_rt_bf || undefined,
+            grupo_masivo_id: (cara as any).grupo_masivo_id || undefined,
             esBf: (cara.articulo || '').toUpperCase().startsWith('BF') || (cara.articulo || '').toUpperCase().startsWith('CF'),
             autorizacion_dg: cara.autorizacion_dg as CaraEntry['autorizacion_dg'],
             autorizacion_dcm: cara.autorizacion_dcm as CaraEntry['autorizacion_dcm'],
@@ -2511,12 +2583,8 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
                       // Detectar CIRCUITO DIGITAL
                       const circuito = parseCircuitoDigital(item.ItemCode);
                       if (circuito) {
-                        // Validar unicidad: el mismo CTO+plaza solo una vez por propuesta
-                        const ya = caras.find(c => c.circuito && c.circuito.cto === circuito.cto && c.circuito.plazaCode === circuito.plazaCode && !c.esBf);
-                        if (ya && !editingCaraId) {
-                          alert(`Ya tienes el circuito ${circuito.ctoLabel} (${circuito.plazaLabel}) agregado en esta propuesta. Solo se puede incluir una vez.`);
-                          return;
-                        }
+                        // Unicidad por catorcena se valida en handleAddCara — el mismo CTO+plaza
+                        // se permite en distintas catorcenas/meses
                         try {
                           const det = await circuitosService.detalle(item.ItemCode);
                           const tarifa = getTarifaFromArticulo(item);
@@ -3231,7 +3299,19 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
                     <div className="flex justify-between">
                       <span className={`${isDark ? 'text-zinc-500' : 'text-gray-400'} text-sm`}>Fechas:</span>
                       <span className={`${isDark ? 'text-white' : 'text-gray-900'} text-sm`}>
-                        {fechaInicio && fechaFin ? `${new Date(fechaInicio).toLocaleDateString()} - ${new Date(fechaFin).toLocaleDateString()}` : '-'}
+                        {(() => {
+                          // Para mensual, derivar desde las caras (min inicio_periodo / max fin_periodo)
+                          if (tipoPeriodo === 'mensual' && caras.length > 0) {
+                            const inicios = caras.map(c => c.periodoInicio).filter(Boolean).sort();
+                            const fines = caras.map(c => c.periodoFin).filter(Boolean).sort();
+                            const ini = inicios[0];
+                            const fin = fines[fines.length - 1];
+                            if (ini && fin) {
+                              return `${new Date(ini + 'T00:00:00').toLocaleDateString()} - ${new Date(fin + 'T00:00:00').toLocaleDateString()}`;
+                            }
+                          }
+                          return fechaInicio && fechaFin ? `${new Date(fechaInicio).toLocaleDateString()} - ${new Date(fechaFin).toLocaleDateString()}` : '-';
+                        })()}
                       </span>
                     </div>
                   </div>
@@ -3265,7 +3345,7 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
                 <div className={`px-4 py-3 ${isDark ? 'bg-zinc-800/50 border-zinc-700/50' : 'bg-gray-50 border-gray-200'} border-b`}>
                   <h3 className={`text-sm font-semibold ${isDark ? 'text-white' : 'text-gray-900'} flex items-center gap-2`}>
                     <Calendar className="h-4 w-4 text-purple-400" />
-                    Desglose por Catorcenas
+                    Desglose por Periodo
                   </h3>
                 </div>
                 {groupedCaras.length === 0 ? (

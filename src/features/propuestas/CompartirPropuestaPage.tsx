@@ -386,18 +386,17 @@ export function CompartirPropuestaPage() {
         fechaFin: fechasFin.length ? fechasFin[fechasFin.length - 1] : null,
       };
     });
-  }, [filteredInventario]);
+  }, [filteredInventario, tipoPeriodo]);
 
-  // Period display
+  // Period display — usa fechas GLOBALES de cotización (no caras)
   const periodoInicio = useMemo(() => {
     if (tipoPeriodo === 'mensual') {
-      // Use earliest cara date for accurate month label
-      const carasDates = (inventario || []).filter(i => i.inicio_periodo).map(i => i.inicio_periodo!).sort();
-      const dateStr = carasDates[0] || details?.cotizacion?.fecha_inicio;
+      const dateStr = details?.cotizacion?.fecha_inicio;
       if (dateStr) {
         const parts = String(dateStr).split(/[-T]/);
         if (parts.length >= 2) return `${MESES_LABEL[parseInt(parts[1]) - 1]} ${parts[0]}`;
       }
+      return 'N/A';
     }
     if (details?.propuesta?.catorcena_inicio && details?.propuesta?.anio_inicio) {
       return `Cat ${details.propuesta.catorcena_inicio} / ${details.propuesta.anio_inicio}`;
@@ -415,13 +414,12 @@ export function CompartirPropuestaPage() {
 
   const periodoFin = useMemo(() => {
     if (tipoPeriodo === 'mensual') {
-      // Use latest cara date for accurate month label
-      const carasDates = (inventario || []).filter(i => i.inicio_periodo).map(i => i.inicio_periodo!).sort();
-      const dateStr = carasDates[carasDates.length - 1] || details?.cotizacion?.fecha_fin;
+      const dateStr = details?.cotizacion?.fecha_fin;
       if (dateStr) {
         const parts = String(dateStr).split(/[-T]/);
         if (parts.length >= 2) return `${MESES_LABEL[parseInt(parts[1]) - 1]} ${parts[0]}`;
       }
+      return 'N/A';
     }
     if (details?.propuesta?.catorcena_fin && details?.propuesta?.anio_fin) {
       return `Cat ${details.propuesta.catorcena_fin} / ${details.propuesta.anio_fin}`;
@@ -790,33 +788,46 @@ export function CompartirPropuestaPage() {
     doc.setTextColor(60, 60, 60);
     doc.text(details?.cotizacion?.nombre_campania || 'N/A', marginX + 40, y);
 
-    // Calculate catorcena range from inventory
-    if (inventario && inventario.length > 0) {
+    // Periodo: en mensual usar fechas globales de cotización; en catorcena, derivar del inventario
+    let periodoText: string | null = null;
+    if (tipoPeriodo === 'mensual') {
+      const fi = details?.cotizacion?.fecha_inicio;
+      const ff = details?.cotizacion?.fecha_fin;
+      if (fi && ff) {
+        const partsI = String(fi).split(/[-T]/);
+        const partsF = String(ff).split(/[-T]/);
+        if (partsI.length >= 2 && partsF.length >= 2) {
+          const monthI = parseInt(partsI[1]);
+          const monthF = parseInt(partsF[1]);
+          const yearI = partsI[0];
+          const yearF = partsF[0];
+          periodoText = (yearI === yearF && monthI === monthF)
+            ? `${MESES_LABEL[monthI - 1]} ${yearI}`
+            : `${MESES_LABEL[monthI - 1]} ${yearI} - ${MESES_LABEL[monthF - 1]} ${yearF}`;
+        }
+      }
+    } else if (inventario && inventario.length > 0) {
       const catorcenas = inventario
         .filter(i => i.numero_catorcena && i.anio_catorcena)
         .map(i => ({ num: i.numero_catorcena!, year: i.anio_catorcena! }));
-
       if (catorcenas.length > 0) {
         const sorted = catorcenas.sort((a, b) =>
           a.year !== b.year ? a.year - b.year : a.num - b.num
         );
         const first = sorted[0];
         const last = sorted[sorted.length - 1];
-
-        doc.setFont('helvetica', 'bold');
-        doc.setTextColor(...IMU_BLUE);
-        doc.text('Periodo:', marginX + 150, y);
-        doc.setFont('helvetica', 'normal');
-        doc.setTextColor(60, 60, 60);
-        const periodoText = tipoPeriodo === 'mensual'
-          ? (first.year === last.year && first.num === last.num
-            ? `${MESES_LABEL[first.num - 1]} ${first.year}`
-            : `${MESES_LABEL[first.num - 1]} ${first.year} - ${MESES_LABEL[last.num - 1]} ${last.year}`)
-          : (first.year === last.year && first.num === last.num
-            ? `Cat ${first.num} / ${first.year}`
-            : `Cat ${first.num} / ${first.year} - Cat ${last.num} / ${last.year}`);
-        doc.text(periodoText, marginX + 170, y);
+        periodoText = (first.year === last.year && first.num === last.num)
+          ? `Cat ${first.num} / ${first.year}`
+          : `Cat ${first.num} / ${first.year} - Cat ${last.num} / ${last.year}`;
       }
+    }
+    if (periodoText) {
+      doc.setFont('helvetica', 'bold');
+      doc.setTextColor(...IMU_BLUE);
+      doc.text('Periodo:', marginX + 150, y);
+      doc.setFont('helvetica', 'normal');
+      doc.setTextColor(60, 60, 60);
+      doc.text(periodoText, marginX + 170, y);
     }
     y += 8;
 

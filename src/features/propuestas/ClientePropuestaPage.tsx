@@ -79,7 +79,7 @@ interface PublicPropuestaData {
     anio_fin: number | null;
   };
   solicitud: { cuic: string; cliente: string; razon_social: string; unidad_negocio: string; marca_nombre: string; asesor: string; agencia: string; producto_nombre: string; categoria_nombre: string } | null;
-  cotizacion: { nombre_campania: string; fecha_inicio: string; fecha_fin: string; numero_caras: number; bonificacion: number; precio: number } | null;
+  cotizacion: { nombre_campania: string; fecha_inicio: string; fecha_fin: string; numero_caras: number; bonificacion: number; precio: number; tipo_periodo?: string } | null;
   campania: { id: number; nombre: string; status: string } | null;
   caras: { caras: number; bonificacion: number; tarifa_publica: number }[];
   inventario: InventarioReservado[];
@@ -389,7 +389,7 @@ export function ClientePropuestaPage() {
         fechaFin: fechasFin.length ? fechasFin[fechasFin.length - 1] : null,
       };
     });
-  }, [filteredInventario]);
+  }, [filteredInventario, tipoPeriodo]);
 
   const chartCiudades = useMemo(() => {
     const counts: Record<string, number> = {};

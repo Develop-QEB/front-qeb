@@ -532,13 +532,19 @@ export function OrdenesMontajeModal({ isOpen, onClose, canExport = true }: Orden
     return catorcenas;
   }, [catorcenasData, yearFin, yearInicio, catorcenaInicio]);
 
-  // Catorcena multiselect options - generated from catorcenas table (all available)
+  // Periodo multiselect options - sirve para campañas mensuales y de catorcena.
+  // Etiqueta enriquecida con rango de fechas para identificar qué mes cubre cada catorcena.
   const catorcenaOptions = useMemo(() => {
     if (!catorcenasData?.data) return [];
-
+    const MESES_ABREV = ['ene', 'feb', 'mar', 'abr', 'may', 'jun', 'jul', 'ago', 'sep', 'oct', 'nov', 'dic'];
+    const fmt = (s: string) => {
+      const m = String(s).match(/^(\d{4})-(\d{2})-(\d{2})/);
+      if (!m) return '';
+      return `${parseInt(m[3])} ${MESES_ABREV[parseInt(m[2]) - 1]}`;
+    };
     return catorcenasData.data.map((c: any) => ({
       id: `${c.numero_catorcena}-${c.a_o}`,
-      label: `Cat ${c.numero_catorcena} / ${c.a_o}`,
+      label: `Cat ${c.numero_catorcena} / ${c.a_o}${c.fecha_inicio && c.fecha_fin ? ` (${fmt(c.fecha_inicio)}–${fmt(c.fecha_fin)})` : ''}`,
       numero: c.numero_catorcena,
       year: c.a_o,
     })).sort((a: any, b: any) => {
@@ -1419,10 +1425,10 @@ export function OrdenesMontajeModal({ isOpen, onClose, canExport = true }: Orden
                       )}
                     </div>
 
-                    {/* Catorcenas */}
+                    {/* Periodos (catorcenas — sirve para mensual y catorcena) */}
                     <div>
                       <div className="flex items-center justify-between mb-2">
-                        <label className="text-xs font-medium text-zinc-400">Catorcenas ({selectedCatorcenas.length} seleccionadas)</label>
+                        <label className="text-xs font-medium text-zinc-400">Periodos ({selectedCatorcenas.length} seleccionados)</label>
                         {selectedCatorcenas.length > 0 && (
                           <button
                             onClick={() => setSelectedCatorcenas([])}
@@ -1434,7 +1440,7 @@ export function OrdenesMontajeModal({ isOpen, onClose, canExport = true }: Orden
                       </div>
                       {(fechaInicio || fechaFin) && (
                         <div className="mb-2 px-2 py-1.5 bg-amber-900/20 border border-amber-500/30 rounded-lg">
-                          <span className="text-xs text-amber-400">Limpia el rango de fechas para seleccionar catorcenas</span>
+                          <span className="text-xs text-amber-400">Limpia el rango de fechas para seleccionar periodos</span>
                         </div>
                       )}
                       <div className={`flex flex-wrap gap-1.5 max-h-[100px] overflow-y-auto p-2 bg-zinc-800/50 rounded-lg border border-zinc-700/50 ${(fechaInicio || fechaFin) ? 'opacity-50 pointer-events-none' : ''}`}>
@@ -1462,7 +1468,7 @@ export function OrdenesMontajeModal({ isOpen, onClose, canExport = true }: Orden
                           </button>
                         ))}
                         {catorcenaOptions.length === 0 && (
-                          <span className="text-xs text-zinc-500">No hay catorcenas</span>
+                          <span className="text-xs text-zinc-500">No hay periodos</span>
                         )}
                       </div>
                     </div>

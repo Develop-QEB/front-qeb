@@ -5666,14 +5666,26 @@ function TaskDetailModal({
                       <span className="text-zinc-500">Marca:</span>
                       <p className="text-white font-medium">{campana.T2_U_Marca || '-'}</p>
                     </div>
-                    {campana.catorcena_inicio_num && (
+                    {(campana.catorcena_inicio_num || campana.fecha_inicio) && (
                       <div>
                         <span className="text-zinc-500">Periodo:</span>
                         <p className="text-white font-medium">
-                          Cat {campana.catorcena_inicio_num}/{campana.catorcena_inicio_anio}
-                          {campana.catorcena_fin_num && campana.catorcena_fin_num !== campana.catorcena_inicio_num
-                            ? ` - Cat ${campana.catorcena_fin_num}/${campana.catorcena_fin_anio}`
-                            : ''}
+                          {tipoPeriodo === 'mensual' && campana.fecha_inicio && campana.fecha_fin ? (() => {
+                            const pi = String(campana.fecha_inicio).split(/[-T]/);
+                            const pf = String(campana.fecha_fin).split(/[-T]/);
+                            const mi = parseInt(pi[1]) - 1, yi = pi[0];
+                            const mf = parseInt(pf[1]) - 1, yf = pf[0];
+                            return mi === mf && yi === yf
+                              ? `${MESES_FULL[mi]} ${yi}`
+                              : `${MESES_FULL[mi]} ${yi} - ${MESES_FULL[mf]} ${yf}`;
+                          })() : (
+                            <>
+                              Cat {campana.catorcena_inicio_num}/{campana.catorcena_inicio_anio}
+                              {campana.catorcena_fin_num && campana.catorcena_fin_num !== campana.catorcena_inicio_num
+                                ? ` - Cat ${campana.catorcena_fin_num}/${campana.catorcena_fin_anio}`
+                                : ''}
+                            </>
+                          )}
                         </p>
                       </div>
                     )}

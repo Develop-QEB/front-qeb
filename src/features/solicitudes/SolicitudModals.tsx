@@ -269,10 +269,17 @@ export function ViewSolicitudModal({ isOpen, onClose, solicitudId, onEdit, onAte
   const catorcenas = catorcenasData?.data || [];
   const tipoPeriodo = (data?.cotizacion as any)?.tipo_periodo || 'catorcena';
 
-  // For monthly: use start-of-last-period to get correct fin month label
-  const maxInicioPeriodo = useMemo(() => {
+  // For monthly: usar fechas reales de las caras (min inicio_periodo / max fin_periodo)
+  // En lugar de las fechas globales de la cotización (que pueden estar desfasadas)
+  const minInicioPeriodo = useMemo(() => {
     if (tipoPeriodo !== 'mensual' || !data?.caras?.length) return null;
     const dates = data.caras.map(c => c.inicio_periodo).filter(Boolean).sort() as string[];
+    return dates.length ? dates[0] : null;
+  }, [data?.caras, tipoPeriodo]);
+
+  const maxInicioPeriodo = useMemo(() => {
+    if (tipoPeriodo !== 'mensual' || !data?.caras?.length) return null;
+    const dates = data.caras.map(c => c.fin_periodo).filter(Boolean).sort() as string[];
     return dates.length ? dates[dates.length - 1] : null;
   }, [data?.caras, tipoPeriodo]);
 
@@ -777,15 +784,15 @@ export function ViewSolicitudModal({ isOpen, onClose, solicitudId, onEdit, onAte
                     <div className="flex justify-between">
                       <span className={`${isDark ? 'text-zinc-500' : 'text-gray-400'} text-sm`}>Período</span>
                       <span className={`${isDark ? 'text-violet-300' : 'text-violet-600'} text-sm font-medium`}>
-                        {data.cotizacion ? getCatorcenaRange(data.cotizacion.fecha_inicio, maxInicioPeriodo || data.cotizacion.fecha_fin, catorcenas, tipoPeriodo) : '-'}
+                        {data.cotizacion ? getCatorcenaRange(minInicioPeriodo || data.cotizacion.fecha_inicio, maxInicioPeriodo || data.cotizacion.fecha_fin, catorcenas, tipoPeriodo) : '-'}
                       </span>
                     </div>
                     <div className="flex justify-between">
                       <span className={`${isDark ? 'text-zinc-500' : 'text-gray-400'} text-sm`}>{tipoPeriodo === 'mensual' ? 'Periodo Inicio' : 'Fecha Inicio'}</span>
                       <span className={`${isDark ? 'text-white' : 'text-gray-900'} text-sm text-right`}>
-                        <div>{data.cotizacion?.fecha_inicio ? getCatorcenaDisplay(data.cotizacion.fecha_inicio, catorcenas, tipoPeriodo) : '-'}</div>
-                        {tipoPeriodo === 'mensual' && data.cotizacion?.fecha_inicio && (
-                          <div className={`text-xs ${isDark ? 'text-zinc-400' : 'text-gray-500'}`}>{formatDayMonth(data.cotizacion.fecha_inicio)}</div>
+                        <div>{(minInicioPeriodo || data.cotizacion?.fecha_inicio) ? getCatorcenaDisplay(minInicioPeriodo || data.cotizacion!.fecha_inicio, catorcenas, tipoPeriodo) : '-'}</div>
+                        {tipoPeriodo === 'mensual' && (minInicioPeriodo || data.cotizacion?.fecha_inicio) && (
+                          <div className={`text-xs ${isDark ? 'text-zinc-400' : 'text-gray-500'}`}>{formatDayMonth(minInicioPeriodo || data.cotizacion!.fecha_inicio)}</div>
                         )}
                       </span>
                     </div>
