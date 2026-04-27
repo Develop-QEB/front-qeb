@@ -3320,6 +3320,40 @@ export function CampanasPage() {
                                                 </div>
                                                 {isGrupoExpanded && (
                                                   <div className="pl-5 py-1 space-y-0.5">
+                                                    {/* Mini galería de artes del grupo */}
+                                                    {(() => {
+                                                      const itemsConArte = grupo.items.filter(i => i.archivo != null && i.archivo !== '');
+                                                      if (itemsConArte.length === 0) return null;
+                                                      const grupoLabel = [
+                                                        (grupo.items[0] as any)?.formato,
+                                                        grupo.items[0]?.plaza,
+                                                        grupo.items[0]?.articulo,
+                                                      ].filter(Boolean).join(' · ') || grupo.key;
+                                                      return (
+                                                        <div className={`flex items-center gap-2 overflow-x-auto py-2 px-1 mb-2 ${isDark ? 'bg-zinc-900/40' : 'bg-gray-50'} rounded`}>
+                                                          {itemsConArte.map(inv => (
+                                                            <button
+                                                              key={`thumb-${inv.id}`}
+                                                              type="button"
+                                                              onClick={(e) => {
+                                                                e.stopPropagation();
+                                                                openArtGallery(campana.id, itemsConArte, `Galería de Artes - ${grupoLabel}`);
+                                                              }}
+                                                              className={`flex-shrink-0 relative rounded overflow-hidden border transition-all hover:scale-105 ${isDark ? 'border-zinc-700 hover:border-purple-500' : 'border-gray-300 hover:border-purple-500'}`}
+                                                              title={`${inv.codigo_unico || ''}${inv.plaza ? ` · ${inv.plaza}` : ''}`}
+                                                            >
+                                                              <img
+                                                                src={inv.archivo as string}
+                                                                alt={inv.codigo_unico || 'arte'}
+                                                                className="h-20 w-28 object-cover"
+                                                                loading="lazy"
+                                                                onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }}
+                                                              />
+                                                            </button>
+                                                          ))}
+                                                        </div>
+                                                      );
+                                                    })()}
                                                     {/* Resumen del grupo */}
                                                     {(() => {
                                                       // Indicaciones de programación/instalación del grupo
