@@ -260,7 +260,7 @@ const INVIAN_FILTER_FIELDS: FilterFieldConfig[] = [
   { field: 'Anunciante', label: 'Anunciante' },
   { field: 'Operacion', label: 'Operación' },
   { field: 'Vendedor', label: 'Vendedor' },
-  { field: 'Ciudad', label: 'Ciudad' },
+  { field: 'Ciudad', label: 'Plaza' },
   { field: 'Unidad', label: 'Unidad' },
 ];
 
@@ -289,7 +289,7 @@ const INVIAN_GROUPINGS: { field: INVIANGroupByField; label: string }[] = [
   { field: 'Anunciante', label: 'Anunciante' },
   { field: 'Operacion', label: 'Operación' },
   { field: 'Vendedor', label: 'Vendedor' },
-  { field: 'Ciudad', label: 'Ciudad' },
+  { field: 'Ciudad', label: 'Plaza' },
 ];
 
 // CAT Sort Fields
@@ -306,7 +306,7 @@ const CAT_SORT_FIELDS = [
 const INVIAN_SORT_FIELDS = [
   { field: 'Campania', label: 'Campaña' },
   { field: 'Anunciante', label: 'Anunciante' },
-  { field: 'Ciudad', label: 'Ciudad' },
+  { field: 'Ciudad', label: 'Plaza' },
   { field: 'PrecioPorCara', label: 'Precio/Cara' },
 ];
 
@@ -1021,7 +1021,7 @@ export function OrdenesMontajeModal({ isOpen, onClose, canExport = true }: Orden
         'Indicaciones': item.indicaciones || '',
         'Unidad': item.Unidad || '',
         'Cara': item.Cara || '',
-        'Ciudad': item.Ciudad || '',
+        'Plaza': item.Ciudad || '',
         'Tipo de Distribución': item.TipoDistribucion || '',
         'Reproducciones': item.Reproducciones || '',
       }));
@@ -1049,7 +1049,7 @@ export function OrdenesMontajeModal({ isOpen, onClose, canExport = true }: Orden
         'Indicaciones': item.indicaciones || '',
         'Unidad': item.Unidad || '',
         'Cara': item.Cara || '',
-        'Ciudad': item.Ciudad || '',
+        'Plaza': item.Ciudad || '',
         'Tipo de Distribución': item.TipoDistribucion || '',
         'Reproducciones': item.Reproducciones || '',
         'Artículo': item.numero_articulo || '',
@@ -1816,7 +1816,7 @@ export function OrdenesMontajeModal({ isOpen, onClose, canExport = true }: Orden
                     <th className="px-3 py-3 text-left text-[10px] font-semibold text-purple-300 uppercase tracking-wider">Indicaciones</th>
                     <th className="px-3 py-3 text-left text-[10px] font-semibold text-purple-300 uppercase tracking-wider">Unidad</th>
                     <th className="px-3 py-3 text-left text-[10px] font-semibold text-purple-300 uppercase tracking-wider">Cara</th>
-                    <th className="px-3 py-3 text-left text-[10px] font-semibold text-purple-300 uppercase tracking-wider">Ciudad</th>
+                    <th className="px-3 py-3 text-left text-[10px] font-semibold text-purple-300 uppercase tracking-wider">Plaza</th>
                     <th className="px-3 py-3 text-left text-[10px] font-semibold text-purple-300 uppercase tracking-wider">Tipo Dist.</th>
                   </tr>
                 </thead>

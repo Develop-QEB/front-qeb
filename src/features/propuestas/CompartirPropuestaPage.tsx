@@ -41,7 +41,9 @@ interface POIMarker {
 const MESES_LABEL = ['Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio', 'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre'];
 
 function formatInicioPeriodo(item: InventarioReservado, tipoPeriodo?: string): string {
-  if (tipoPeriodo === 'mensual' && item.inicio_periodo) {
+  // Caras circuito siempre se muestran como mes (independiente del tipoPeriodo de la propuesta)
+  const esCircuito = /^(RT|BF|CT|CF)-DIG-\d+-[A-Z]+$/i.test((item as any).articulo || '');
+  if ((esCircuito || tipoPeriodo === 'mensual') && item.inicio_periodo) {
     const parts = item.inicio_periodo.split(/[-T]/);
     if (parts.length >= 2) {
       const month = parseInt(parts[1]) - 1;
@@ -885,7 +887,7 @@ export function CompartirPropuestaPage() {
         const groupFechasFin = allGroupItems.map(i => i.fin_periodo).filter(Boolean).sort() as string[];
         const groupFechaIni = groupFechas.length ? groupFechas[0] : null;
         const groupFechaFin = groupFechasFin.length ? groupFechasFin[groupFechasFin.length - 1] : null;
-        const catHeaderLabel = groupFechaIni && groupFechaFin
+        const catHeaderLabel = tipoPeriodo === 'mensual' && groupFechaIni && groupFechaFin
           ? `${catorcena}  |  ${formatDayMonthCom(groupFechaIni)} – ${formatDayMonthCom(groupFechaFin)}`
           : catorcena;
         doc.setFillColor(...IMU_BLUE);
@@ -1407,7 +1409,7 @@ export function CompartirPropuestaPage() {
                         <span className={`px-3 py-1 rounded-lg text-xs font-medium border ${isDark ? 'bg-purple-500/30 text-purple-200 border-purple-400/30' : 'bg-purple-100 text-purple-700 border-purple-300'}`}>
                           {catGroup.catorcena}
                         </span>
-                        {catGroup.fechaInicio && catGroup.fechaFin && (
+                        {tipoPeriodo === 'mensual' && catGroup.fechaInicio && catGroup.fechaFin && (
                           <span className={`text-xs ${isDark ? 'text-zinc-400' : 'text-gray-500'}`}>
                             {formatDayMonthCom(catGroup.fechaInicio)} – {formatDayMonthCom(catGroup.fechaFin)}
                           </span>

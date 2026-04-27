@@ -18,6 +18,10 @@ export interface CircuitoDetalle {
   ctoLabel: string;
   plazaCode: string;
   total: number;
+  muebles: Record<string, number>;
+  muebleDominante: string | null;
+  flujo: number;
+  contraflujo: number;
   inventarios: Array<{
     id: number;
     codigo_unico: string;

@@ -155,7 +155,9 @@ interface ResumenCatorcenaGroup {
 const MESES_LABEL = ['Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio', 'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre'];
 
 function formatInicioPeriodo(item: InventarioReservado, tipoPeriodo?: string): string {
-  if (tipoPeriodo === 'mensual' && item.inicio_periodo) {
+  // Caras circuito siempre se muestran como mes (sin importar tipoPeriodo)
+  const esCircuito = /^(RT|BF|CT|CF)-DIG-\d+-[A-Z]+$/i.test((item as any).articulo || '');
+  if ((esCircuito || tipoPeriodo === 'mensual') && item.inicio_periodo) {
     const parts = item.inicio_periodo.split('-');
     if (parts.length >= 2) {
       const m = parseInt(parts[1]);
@@ -700,7 +702,7 @@ export function ClientePropuestaPage() {
           const p = d.split(/[-T]/);
           return p.length >= 3 ? `${parseInt(p[2])} ${cortosPdf[parseInt(p[1]) - 1] || ''}` : '';
         };
-        const catHeaderLabel = gFechaIni && gFechaFin
+        const catHeaderLabel = tipoPeriodo === 'mensual' && gFechaIni && gFechaFin
           ? `${catorcena}  |  ${fmtDM(gFechaIni)} – ${fmtDM(gFechaFin)}`
           : catorcena;
         doc.setFillColor(PDF_BLUE[0], PDF_BLUE[1], PDF_BLUE[2]);
@@ -1143,7 +1145,7 @@ export function ClientePropuestaPage() {
                       <span className="px-3 py-1 rounded-lg bg-[#0054A6]/10 text-[#0054A6] text-xs font-medium border border-[#0054A6]/20">
                         {catGroup.catorcena}
                       </span>
-                      {catGroup.fechaInicio && catGroup.fechaFin && (() => {
+                      {tipoPeriodo === 'mensual' && catGroup.fechaInicio && catGroup.fechaFin && (() => {
                         const dFrom = (catGroup.fechaInicio as string).split(/[-T]/);
                         const dTo = (catGroup.fechaFin as string).split(/[-T]/);
                         const cortos = ['Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun', 'Jul', 'Ago', 'Sep', 'Oct', 'Nov', 'Dic'];

@@ -525,7 +525,7 @@ export function ViewSolicitudModal({ isOpen, onClose, solicitudId, onEdit, onAte
         doc.setTextColor(...white);
         doc.setFontSize(8);
         doc.setFont('helvetica', 'bold');
-        const catorcenaLabel = catorcenaGroup.fechaInicio && catorcenaGroup.fechaFin
+        const catorcenaLabel = tipoPeriodo === 'mensual' && catorcenaGroup.fechaInicio && catorcenaGroup.fechaFin
           ? `${catorcenaGroup.catorcena}  |  ${formatDayMonth(catorcenaGroup.fechaInicio)} – ${formatDayMonth(catorcenaGroup.fechaFin)}`
           : catorcenaGroup.catorcena;
         doc.text(catorcenaLabel, marginX + 4, yPos + 5.5);
@@ -782,11 +782,21 @@ export function ViewSolicitudModal({ isOpen, onClose, solicitudId, onEdit, onAte
                     </div>
                     <div className="flex justify-between">
                       <span className={`${isDark ? 'text-zinc-500' : 'text-gray-400'} text-sm`}>{tipoPeriodo === 'mensual' ? 'Periodo Inicio' : 'Fecha Inicio'}</span>
-                      <span className={`${isDark ? 'text-white' : 'text-gray-900'} text-sm`}>{data.cotizacion?.fecha_inicio ? getCatorcenaDisplay(data.cotizacion.fecha_inicio, catorcenas, tipoPeriodo) : '-'}</span>
+                      <span className={`${isDark ? 'text-white' : 'text-gray-900'} text-sm text-right`}>
+                        <div>{data.cotizacion?.fecha_inicio ? getCatorcenaDisplay(data.cotizacion.fecha_inicio, catorcenas, tipoPeriodo) : '-'}</div>
+                        {tipoPeriodo === 'mensual' && data.cotizacion?.fecha_inicio && (
+                          <div className={`text-xs ${isDark ? 'text-zinc-400' : 'text-gray-500'}`}>{formatDayMonth(data.cotizacion.fecha_inicio)}</div>
+                        )}
+                      </span>
                     </div>
                     <div className="flex justify-between">
                       <span className={`${isDark ? 'text-zinc-500' : 'text-gray-400'} text-sm`}>{tipoPeriodo === 'mensual' ? 'Periodo Fin' : 'Fecha Fin'}</span>
-                      <span className={`${isDark ? 'text-white' : 'text-gray-900'} text-sm`}>{(maxInicioPeriodo || data.cotizacion?.fecha_fin) ? getCatorcenaDisplay(maxInicioPeriodo || data.cotizacion!.fecha_fin, catorcenas, tipoPeriodo) : '-'}</span>
+                      <span className={`${isDark ? 'text-white' : 'text-gray-900'} text-sm text-right`}>
+                        <div>{(maxInicioPeriodo || data.cotizacion?.fecha_fin) ? getCatorcenaDisplay(maxInicioPeriodo || data.cotizacion!.fecha_fin, catorcenas, tipoPeriodo) : '-'}</div>
+                        {tipoPeriodo === 'mensual' && (maxInicioPeriodo || data.cotizacion?.fecha_fin) && (
+                          <div className={`text-xs ${isDark ? 'text-zinc-400' : 'text-gray-500'}`}>{formatDayMonth(maxInicioPeriodo || data.cotizacion!.fecha_fin)}</div>
+                        )}
+                      </span>
                     </div>
                     {data.solicitud.descripcion && (
                       <div className={`pt-2 border-t ${isDark ? 'border-zinc-700/50' : 'border-gray-200'}`}>
@@ -898,7 +908,7 @@ export function ViewSolicitudModal({ isOpen, onClose, solicitudId, onEdit, onAte
                             <span className={`px-3 py-1 rounded-lg text-xs font-medium border ${isDark ? 'bg-violet-500/30 text-violet-200 border-violet-400/30' : 'bg-violet-100 text-violet-700 border-violet-200'}`}>
                               {catorcenaGroup.catorcena}
                             </span>
-                            {catorcenaGroup.fechaInicio && catorcenaGroup.fechaFin && (
+                            {tipoPeriodo === 'mensual' && catorcenaGroup.fechaInicio && catorcenaGroup.fechaFin && (
                               <span className={`text-xs ${isDark ? 'text-zinc-400' : 'text-gray-500'}`}>
                                 {formatDayMonth(catorcenaGroup.fechaInicio)} – {formatDayMonth(catorcenaGroup.fechaFin)}
                               </span>

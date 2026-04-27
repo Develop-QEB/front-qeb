@@ -679,6 +679,8 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
   const [newCara, setNewCara] = useState<Omit<CaraItem, 'localId'>>(EMPTY_CARA);
   const [selectedArticulo, setSelectedArticulo] = useState<SAPArticulo | null>(null);
   const [showAddCaraForm, setShowAddCaraForm] = useState(false);
+  // Modo masivo: ON = aplica al rango catorcena_inicio..catorcena_fin (crear N o editar la serie)
+  const [modoMasivoP, setModoMasivoP] = useState(false);
   const caraFormRef = useRef<HTMLDivElement>(null);
   const caraTableRef = useRef<HTMLDivElement>(null);
 
@@ -1846,7 +1848,8 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
   // Handle save cara (add or update)
   // EDIT: only updates local state + tracks in modifiedCaras (bulk save later)
   // CREATE: still persists to DB immediately (needs ID for reservas)
-  const handleSaveCara = async () => {
+  // forcedPeriod permite sobrescribir catorcena/anio/fechas para iteración masiva
+  const handleSaveCara = async (forcedPeriod?: { catorcena: number; anio: number; inicio_periodo: string; fin_periodo: string }) => {
     if (!newCara.formato || !newCara.estados) {
       alert('Por favor completa al menos el formato y estado');
       return;
@@ -1903,6 +1906,9 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
       ? (newCara.grupo_rt_bf ?? Date.now() % 2000000000)
       : null;
 
+    // Usar forcedPeriod si viene (modo masivo iterando catorcenas), si no usar newCara
+    const inicioPeriodoUsar = forcedPeriod?.inicio_periodo ?? newCara.inicio_periodo;
+    const finPeriodoUsar = forcedPeriod?.fin_periodo ?? newCara.fin_periodo;
     // RT cara data (when pair mode, bonificacion is 0 — the bonificacion count lives on the BF row's `caras`)
     const caraData: Parameters<typeof propuestasService.createCara>[1] = {
       ciudad: ciudadToSave,
@@ -1917,8 +1923,8 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
       tarifa_publica: usePairMode && (newCara.caras || 0) + (newCara.bonificacion || 0) > 0
         ? costoCalculado / ((newCara.caras || 0) + (newCara.bonificacion || 0))
         : newCara.tarifa_publica,
-      inicio_periodo: newCara.inicio_periodo,
-      fin_periodo: newCara.fin_periodo,
+      inicio_periodo: inicioPeriodoUsar,
+      fin_periodo: finPeriodoUsar,
       caras_flujo: newCara.caras_flujo,
       caras_contraflujo: newCara.caras_contraflujo,
       articulo: newCara.articulo,
@@ -1942,8 +1948,8 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
           formato: newCara.formato,
           costo: 0,
           tarifa_publica: 0,
-          inicio_periodo: newCara.inicio_periodo,
-          fin_periodo: newCara.fin_periodo,
+          inicio_periodo: inicioPeriodoUsar,
+          fin_periodo: finPeriodoUsar,
           caras_flujo: 0,
           caras_contraflujo: 0,
           articulo: newCara.articuloBf.ItemCode,
@@ -5964,7 +5970,7 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
                       </select>
                     </div>
                     <div className="space-y-1">
-                      <label className={`text-xs ${isDark ? 'text-zinc-500' : 'text-gray-400'}`}>Cat. Inicio</label>
+                      <label className={`text-xs ${isDark ? 'text-zinc-500' : 'text-gray-400'}`}>{tipoPeriodo === 'mensual' ? 'Periodo Inicio' : 'Cat. Inicio'}</label>
                       <select
                         value={catorcenaInicio || ''}
                         onChange={(e) => canEditResumen && setCatorcenaInicio(e.target.value ? parseInt(e.target.value) : undefined)}
@@ -5973,7 +5979,7 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
                       >
                         <option value="">Seleccionar</option>
                         {catorcenasInicioOptions.map(c => (
-                          <option key={c.id} value={c.numero_catorcena}>Cat. {c.numero_catorcena}</option>
+                          <option key={c.id} value={c.numero_catorcena}>{tipoPeriodo === 'mensual' ? (['Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic'][c.numero_catorcena - 1] || `Mes ${c.numero_catorcena}`) : `Cat. ${c.numero_catorcena}`}</option>
                         ))}
                       </select>
                     </div>
@@ -5992,7 +5998,7 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
                       </select>
                     </div>
                     <div className="space-y-1">
-                      <label className={`text-xs ${isDark ? 'text-zinc-500' : 'text-gray-400'}`}>Cat. Fin</label>
+                      <label className={`text-xs ${isDark ? 'text-zinc-500' : 'text-gray-400'}`}>{tipoPeriodo === 'mensual' ? 'Periodo Fin' : 'Cat. Fin'}</label>
                       <select
                         value={catorcenaFin || ''}
                         onChange={(e) => canEditResumen && setCatorcenaFin(e.target.value ? parseInt(e.target.value) : undefined)}
@@ -6001,7 +6007,7 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
                       >
                         <option value="">Seleccionar</option>
                         {catorcenasFinOptions.map(c => (
-                          <option key={c.id} value={c.numero_catorcena}>Cat. {c.numero_catorcena}</option>
+                          <option key={c.id} value={c.numero_catorcena}>{tipoPeriodo === 'mensual' ? (['Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic'][c.numero_catorcena - 1] || `Mes ${c.numero_catorcena}`) : `Cat. ${c.numero_catorcena}`}</option>
                         ))}
                       </select>
                     </div>
@@ -6198,9 +6204,27 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
                 {/* Add/Edit Cara Form */}
                 {showAddCaraForm && (
                   <div ref={caraFormRef} className={`px-5 py-4 ${isDark ? 'bg-zinc-800/50' : 'bg-gray-50/50'} border-b ${isDark ? 'border-zinc-700/50' : 'border-gray-200/50'}`}>
-                    <h4 className={`text-sm font-medium ${isDark ? 'text-white' : 'text-gray-900'} mb-4`}>
-                      {editingCaraId ? 'Editar Circuito' : 'Nuevo Circuito'}
-                    </h4>
+                    <div className="flex items-center justify-between mb-4">
+                      <h4 className={`text-sm font-medium ${isDark ? 'text-white' : 'text-gray-900'}`}>
+                        {editingCaraId ? 'Editar Circuito' : 'Nuevo Circuito'}
+                      </h4>
+                      {tipoPeriodo === 'catorcena' && (
+                        <label className={`flex items-center gap-2 text-xs cursor-pointer select-none ${isDark ? 'text-zinc-300' : 'text-gray-700'}`}>
+                          <span>Modo masivo</span>
+                          <button
+                            type="button"
+                            onClick={() => setModoMasivoP(!modoMasivoP)}
+                            className={`relative inline-flex h-5 w-9 items-center rounded-full transition-colors ${modoMasivoP ? 'bg-purple-500' : (isDark ? 'bg-zinc-700' : 'bg-gray-300')}`}
+                            title="Crea o actualiza varias caras en un rango de catorcenas"
+                          >
+                            <span className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${modoMasivoP ? 'translate-x-4' : 'translate-x-0.5'}`} />
+                          </button>
+                          <span className={`text-[10px] uppercase font-semibold ${modoMasivoP ? 'text-purple-400' : (isDark ? 'text-zinc-500' : 'text-gray-400')}`}>
+                            {modoMasivoP ? 'ON' : 'OFF'}
+                          </span>
+                        </label>
+                      )}
+                    </div>
 
                     {/* Artículo selector */}
                     <div className="mb-4">
@@ -6235,12 +6259,13 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
                                   tarifa_publica: tarifa,
                                   costo: tarifaPiso,
                                   caras: det.total,
-                                  caras_flujo: Math.ceil(det.total / 2),
-                                  caras_contraflujo: Math.floor(det.total / 2),
+                                  // Usar conteos reales del circuito (ej CTO 3 = 41 flujo + 9 contraflujo, no 25/25)
+                                  caras_flujo: det.flujo,
+                                  caras_contraflujo: det.contraflujo,
                                   bonificacion: 0,
                                   estados: circuito.plazaLabel,
                                   ciudad: '',
-                                  formato: 'DIGITAL',
+                                  formato: 'MIXTO',
                                   tipo: 'Digital',
                                 });
                                 return;
@@ -6317,8 +6342,92 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
                             </span>
                           )}
                         </label>
+                        {tipoPeriodo === 'mensual' ? (
+                          // Mensual: date inputs (calendario) — usar rango configurado en los selectores Año/Cat (estado local)
+                          (() => {
+                            // Derivar min/max desde los selectores de la propuesta (state local)
+                            // Si están seteados, usar primer día del mes inicio y último día del mes fin
+                            // Sino, fallback a propuesta.fecha_inicio/fin
+                            const minDate = (yearInicio && catorcenaInicio)
+                              ? new Date(yearInicio, catorcenaInicio - 1, 1).toISOString().split('T')[0]
+                              : (propuesta.fecha_inicio ? String(propuesta.fecha_inicio).split('T')[0] : undefined);
+                            const maxDate = (yearFin && catorcenaFin)
+                              ? new Date(yearFin, catorcenaFin, 0).toISOString().split('T')[0]
+                              : (propuesta.fecha_fin ? String(propuesta.fecha_fin).split('T')[0] : undefined);
+                            return (
+                          <div className="grid grid-cols-2 gap-2">
+                            <input
+                              type="date"
+                              value={newCara.inicio_periodo || ''}
+                              onChange={(e) => {
+                                if (!canEditResumen) return;
+                                const v = e.target.value;
+                                if (!v) {
+                                  setNewCara({ ...newCara, inicio_periodo: '', catorcena_inicio: undefined, anio_inicio: undefined });
+                                  return;
+                                }
+                                const parts = v.split('-');
+                                const y = parseInt(parts[0]);
+                                const m = parseInt(parts[1]);
+                                const newIniVal = y * 100 + m;
+                                const curFinVal = (newCara.anio_fin || 0) * 100 + (newCara.catorcena_fin || 0);
+                                let finPeriodo = newCara.fin_periodo;
+                                let finCat = newCara.catorcena_fin;
+                                let finYear = newCara.anio_fin;
+                                if (!finPeriodo || curFinVal < newIniVal) {
+                                  const lastDay = new Date(y, m, 0);
+                                  finPeriodo = lastDay.toISOString().split('T')[0];
+                                  finCat = m;
+                                  finYear = y;
+                                }
+                                setNewCara({
+                                  ...newCara,
+                                  inicio_periodo: v,
+                                  catorcena_inicio: m,
+                                  anio_inicio: y,
+                                  fin_periodo: finPeriodo,
+                                  catorcena_fin: finCat,
+                                  anio_fin: finYear,
+                                });
+                              }}
+                              min={minDate}
+                              max={maxDate}
+                              disabled={!canEditResumen}
+                              className={`w-full px-3 py-2 ${isDark ? 'bg-zinc-800' : 'bg-gray-50'} border ${isDark ? 'border-zinc-700' : 'border-gray-200'} rounded-lg text-sm ${isDark ? 'text-white' : 'text-gray-900'} focus:outline-none focus:ring-1 focus:ring-purple-500/50 ${!canEditResumen ? 'opacity-60 cursor-not-allowed' : ''}`}
+                              placeholder="Fecha inicio"
+                            />
+                            <input
+                              type="date"
+                              value={newCara.fin_periodo || ''}
+                              onChange={(e) => {
+                                if (!canEditResumen) return;
+                                const v = e.target.value;
+                                if (!v) {
+                                  setNewCara({ ...newCara, fin_periodo: '', catorcena_fin: undefined, anio_fin: undefined });
+                                  return;
+                                }
+                                const parts = v.split('-');
+                                const y = parseInt(parts[0]);
+                                const m = parseInt(parts[1]);
+                                setNewCara({
+                                  ...newCara,
+                                  fin_periodo: v,
+                                  catorcena_fin: m,
+                                  anio_fin: y,
+                                });
+                              }}
+                              min={newCara.inicio_periodo || minDate}
+                              max={maxDate}
+                              disabled={!canEditResumen || !newCara.inicio_periodo}
+                              className={`w-full px-3 py-2 ${isDark ? 'bg-zinc-800' : 'bg-gray-50'} border ${isDark ? 'border-zinc-700' : 'border-gray-200'} rounded-lg text-sm ${isDark ? 'text-white' : 'text-gray-900'} focus:outline-none focus:ring-1 focus:ring-purple-500/50 ${(!canEditResumen || !newCara.inicio_periodo) ? 'opacity-60 cursor-not-allowed' : ''}`}
+                              placeholder="Fecha fin"
+                            />
+                          </div>
+                            );
+                          })()
+                        ) : (
                         <div className="grid grid-cols-2 gap-2">
-                          {/* Catorcena/Mes Inicio */}
+                          {/* Catorcena Inicio */}
                           <select
                             value={newCara.catorcena_inicio && newCara.anio_inicio ? `${newCara.anio_inicio}-${newCara.catorcena_inicio}` : ''}
                             onChange={(e) => {
@@ -6481,18 +6590,24 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
                             )}
                           </select>
                         </div>
+                        )}
                       </div>
                     </div>
 
                     <div className="grid grid-cols-4 gap-4 mb-4">
                       <div className="space-y-1">
-                        <label className={`text-xs ${((editingCaraHasReservas && !permissions.canEditCaraFiltersOnEdit) || (editingCaraId && !permissions.canEditCaraFiltersOnEdit)) ? 'text-zinc-800' : `${isDark ? 'text-zinc-500' : 'text-gray-400'}`}`}>Estados {newCara.estados && (!editingCaraId || permissions.canEditCaraFiltersOnEdit) && <span className="text-purple-400">({newCara.estados.split(',').filter(Boolean).length})</span>}</label>
+                        <label className={`text-xs ${((editingCaraHasReservas && !permissions.canEditCaraFiltersOnEdit) || (editingCaraId && !permissions.canEditCaraFiltersOnEdit)) ? 'text-zinc-800' : `${isDark ? 'text-zinc-500' : 'text-gray-400'}`}`}>Plazas {newCara.estados && (!editingCaraId || permissions.canEditCaraFiltersOnEdit) && <span className="text-purple-400">({newCara.estados.split(',').filter(Boolean).length})</span>}</label>
                         {canEditResumen && (!editingCaraHasReservas || permissions.canEditCaraFiltersOnEdit) && (!editingCaraId || permissions.canEditCaraFiltersOnEdit) ? (
                           <MultiSelectDropdown
-                            options={['Ciudad de México / AM', ...(solicitudFilters?.estados || [])]}
+                            options={(() => {
+                              // Preferir lista de plazas del inventario si está disponible
+                              const plazas = (solicitudFilters as any)?.plazas?.map((p: any) => p.plaza) as string[] | undefined;
+                              if (plazas && plazas.length > 0) return ['Ciudad de México / AM', ...plazas];
+                              return ['Ciudad de México / AM', ...(solicitudFilters?.estados || [])];
+                            })()}
                             selected={newCara.estados ? newCara.estados.split(',').map(s => s.trim()).filter(Boolean) : []}
                             onChange={(selected) => setNewCara({ ...newCara, estados: selected.join(', '), ciudad: '' })}
-                            placeholder="Seleccionar estados..."
+                            placeholder="Seleccionar plazas..."
                           />
                         ) : (
                           <div className={`px-3 py-2 ${isDark ? 'bg-zinc-800/50' : 'bg-gray-50/50'} border ${isDark ? 'border-zinc-700/30' : 'border-gray-200/30'} rounded-lg text-sm ${isDark ? 'text-zinc-300' : 'text-gray-700'} truncate`}>
@@ -6679,10 +6794,40 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
                         Cancelar
                       </button>
                       <button
-                        onClick={handleSaveCara}
+                        onClick={async () => {
+                          // Modo masivo (catorcena): crear/actualizar varias caras (una por catorcena del rango)
+                          const isMasivoActivo = tipoPeriodo === 'catorcena' && modoMasivoP
+                            && newCara.catorcena_inicio && newCara.anio_inicio
+                            && newCara.catorcena_fin && newCara.anio_fin
+                            && (newCara.anio_inicio * 100 + newCara.catorcena_inicio) !== (newCara.anio_fin * 100 + newCara.catorcena_fin);
+                          if (!isMasivoActivo) {
+                            await handleSaveCara();
+                            return;
+                          }
+                          // Iterar catorcenas del rango
+                          const cats = (catorcenasData?.data || [])
+                            .filter(c => {
+                              const k = c.a_o * 100 + c.numero_catorcena;
+                              return k >= (newCara.anio_inicio! * 100 + newCara.catorcena_inicio!)
+                                  && k <= (newCara.anio_fin! * 100 + newCara.catorcena_fin!);
+                            })
+                            .sort((a, b) => (a.a_o * 100 + a.numero_catorcena) - (b.a_o * 100 + b.numero_catorcena));
+                          if (cats.length === 0) {
+                            await handleSaveCara();
+                            return;
+                          }
+                          for (const cat of cats) {
+                            await handleSaveCara({
+                              catorcena: cat.numero_catorcena,
+                              anio: cat.a_o,
+                              inicio_periodo: cat.fecha_inicio,
+                              fin_periodo: cat.fecha_fin,
+                            });
+                          }
+                        }}
                         className="px-4 py-2 bg-purple-500 text-white rounded-lg text-sm hover:bg-purple-600 transition-colors"
                       >
-                        {editingCaraId ? 'Actualizar' : 'Agregar'}
+                        {editingCaraId ? 'Actualizar' : 'Agregar'}{modoMasivoP && newCara.catorcena_inicio !== newCara.catorcena_fin ? ' (rango)' : ''}
                       </button>
                     </div>
                   </div>
@@ -6718,6 +6863,22 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
                             return `Periodo: ${periodo}`;
                           })();
 
+                      // Para grupos mensuales, mostrar también las fechas reales (min inicio, max fin de las caras del grupo)
+                      const fechasIni = groupData.caras.map(c => c.inicio_periodo).filter(Boolean).sort() as string[];
+                      const fechasFin = groupData.caras.map(c => c.fin_periodo).filter(Boolean).sort() as string[];
+                      const minIni = fechasIni.length ? fechasIni[0] : null;
+                      const maxFin = fechasFin.length ? fechasFin[fechasFin.length - 1] : null;
+                      const fmtDM = (s: string | null) => {
+                        if (!s) return '';
+                        const p = String(s).split(/[-T]/);
+                        if (p.length < 3) return '';
+                        const day = parseInt(p[2]).toString();
+                        const m = parseInt(p[1]) - 1;
+                        const cortos = ['Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun', 'Jul', 'Ago', 'Sep', 'Oct', 'Nov', 'Dic'];
+                        return m >= 0 && m < 12 ? `${day} ${cortos[m]}` : '';
+                      };
+                      const showRange = tipoPeriodo === 'mensual' && minIni && maxFin;
+
                       return (
                         <div key={periodo}>
                           {/* Period Header - Collapsible */}
@@ -6731,6 +6892,11 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
                             <span className="text-sm font-medium text-purple-300">
                               {catorcenaLabel}
                             </span>
+                            {showRange && (
+                              <span className={`text-xs ${isDark ? 'text-zinc-400' : 'text-gray-500'}`}>
+                                {fmtDM(minIni)} – {fmtDM(maxFin)}
+                              </span>
+                            )}
                             <span className={`text-xs ${isDark ? 'text-zinc-500' : 'text-gray-400'}`}>
                               ({groupData.caras.length} {groupData.caras.length === 1 ? 'formato' : 'formatos'})
                             </span>
