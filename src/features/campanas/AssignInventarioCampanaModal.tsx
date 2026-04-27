@@ -3121,11 +3121,11 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
       // Call API immediately
       setIsSaving(true);
       try {
-        const clienteId = campanaDetails?.cliente_id || campana?.cliente_id;
+        const clienteId = campanaDetails?.cliente_id ?? campana?.cliente_id;
         const fechaInicio = selectedCaraForSearch.inicio_periodo || campanaDetails?.fecha_inicio || new Date().toISOString();
         const fechaFin = selectedCaraForSearch.fin_periodo || campanaDetails?.fecha_fin || new Date().toISOString();
 
-        if (!clienteId) throw new Error("Cliente ID no encontrado");
+        if (clienteId === undefined || clienteId === null) throw new Error("Cliente ID no encontrado");
 
         const result = await campanasService.createReservas(campana!.id, {
           reservas: newReservas,
@@ -3215,11 +3215,11 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
       // Call API immediately
       setIsSaving(true);
       try {
-        const clienteId = campanaDetails?.cliente_id || campana?.cliente_id;
+        const clienteId = campanaDetails?.cliente_id ?? campana?.cliente_id;
         const fechaInicio = selectedCaraForSearch.inicio_periodo || campanaDetails?.fecha_inicio || new Date().toISOString();
         const fechaFin = selectedCaraForSearch.fin_periodo || campanaDetails?.fecha_fin || new Date().toISOString();
 
-        if (!clienteId) throw new Error("Cliente ID no encontrado");
+        if (clienteId === undefined || clienteId === null) throw new Error("Cliente ID no encontrado");
 
         const result = await campanasService.createReservas(campana!.id, {
           reservas: newReservas,
