@@ -244,6 +244,8 @@ export interface Propuesta {
   fecha_fin?: string | null;
   formatos?: string | null;
   cuic?: number | null;
+  campania_id?: number | null;
+  campania_status?: string | null;
 }
 
 export interface PropuestaStats {
