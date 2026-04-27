@@ -816,7 +816,7 @@ function StatusModal({ isOpen, onClose, propuesta, onStatusChange, allowedStatus
         onClose={() => setShowRechazoConfirm(false)}
         onConfirm={handleConfirmRechazo}
         title="¿Rechazar propuesta?"
-        message="Esta acción no es reversible. Al rechazar la propuesta se liberará todo el inventario reservado y quedará disponible para otras propuestas."
+        message="Esta acción no es reversible. Al rechazar la propuesta se liberará todo el inventario reservado y se eliminarán los grupos/circuitos de la propuesta."
         confirmText="Sí, rechazar"
         cancelText="Cancelar"
         variant="danger"
