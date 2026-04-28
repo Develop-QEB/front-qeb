@@ -1815,8 +1815,33 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
         tarifa_publica: c.tarifaEfectiva ?? c.tarifaPublica,
         inicio_periodo: c.periodoInicio,
         fin_periodo: c.periodoFin,
-        caras_flujo: c.esBf ? 0 : (c.circuitoFlujo ?? Math.ceil(c.renta / 2)),
-        caras_contraflujo: c.esBf ? 0 : (c.circuitoContraflujo ?? Math.floor(c.renta / 2)),
+        // Para circuito: si la renta es < total del circuito, distribuir flujo/contraflujo
+        // proporcionalmente respetando los topes del circuito
+        caras_flujo: c.esBf ? 0 : (() => {
+          if (c.circuitoFlujo != null && c.circuitoContraflujo != null) {
+            const totalCirc = c.circuitoFlujo + c.circuitoContraflujo;
+            if (totalCirc > 0 && c.renta < totalCirc) {
+              let flujoCalc = Math.round(c.renta * c.circuitoFlujo / totalCirc);
+              flujoCalc = Math.min(flujoCalc, c.circuitoFlujo);
+              let contraCalc = Math.min(c.renta - flujoCalc, c.circuitoContraflujo);
+              return c.renta - contraCalc;
+            }
+            return c.circuitoFlujo;
+          }
+          return Math.ceil(c.renta / 2);
+        })(),
+        caras_contraflujo: c.esBf ? 0 : (() => {
+          if (c.circuitoFlujo != null && c.circuitoContraflujo != null) {
+            const totalCirc = c.circuitoFlujo + c.circuitoContraflujo;
+            if (totalCirc > 0 && c.renta < totalCirc) {
+              let flujoCalc = Math.round(c.renta * c.circuitoFlujo / totalCirc);
+              flujoCalc = Math.min(flujoCalc, c.circuitoFlujo);
+              return Math.min(c.renta - flujoCalc, c.circuitoContraflujo);
+            }
+            return c.circuitoContraflujo;
+          }
+          return Math.floor(c.renta / 2);
+        })(),
         descuento: c.descuento,
         articulo: c.articulo.ItemCode,
         autorizacion_dg: c.autorizacion_dg,
