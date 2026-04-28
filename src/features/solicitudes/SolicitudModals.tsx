@@ -269,19 +269,11 @@ export function ViewSolicitudModal({ isOpen, onClose, solicitudId, onEdit, onAte
   const catorcenas = catorcenasData?.data || [];
   const tipoPeriodo = (data?.cotizacion as any)?.tipo_periodo || 'catorcena';
 
-  // For monthly: usar fechas reales de las caras (min inicio_periodo / max fin_periodo)
-  // En lugar de las fechas globales de la cotización (que pueden estar desfasadas)
-  const minInicioPeriodo = useMemo(() => {
-    if (tipoPeriodo !== 'mensual' || !data?.caras?.length) return null;
-    const dates = data.caras.map(c => c.inicio_periodo).filter(Boolean).sort() as string[];
-    return dates.length ? dates[0] : null;
-  }, [data?.caras, tipoPeriodo]);
-
-  const maxInicioPeriodo = useMemo(() => {
-    if (tipoPeriodo !== 'mensual' || !data?.caras?.length) return null;
-    const dates = data.caras.map(c => c.fin_periodo).filter(Boolean).sort() as string[];
-    return dates.length ? dates[dates.length - 1] : null;
-  }, [data?.caras, tipoPeriodo]);
+  // Usar SIEMPRE las fechas globales de la cotización (data.cotizacion.fecha_inicio/fin)
+  // No usar las fechas de las caras porque éstas son del circuito individual y no
+  // representan el rango total de la solicitud.
+  const minInicioPeriodo = null;
+  const maxInicioPeriodo = null;
 
   const groupedCaras = useMemo(() => {
     if (!data?.caras) return [];
