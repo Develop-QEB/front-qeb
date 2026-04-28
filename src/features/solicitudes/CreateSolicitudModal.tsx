@@ -1572,8 +1572,9 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
       nse: cara.nse,
       periodo: periodoIni,
       periodoFinCat: periodoFin,
-      periodoInicioCustom: tipoPeriodo === 'mensual' ? cara.periodoInicio : '',
-      periodoFinCustom: tipoPeriodo === 'mensual' ? cara.periodoFin : '',
+      // <input type="date"> espera 'YYYY-MM-DD'; truncamos por si viene como ISO completo
+      periodoInicioCustom: tipoPeriodo === 'mensual' ? String(cara.periodoInicio || '').slice(0, 10) : '',
+      periodoFinCustom: tipoPeriodo === 'mensual' ? String(cara.periodoFin || '').slice(0, 10) : '',
       renta: cara.renta,
       bonificacion: bfPair ? bfPair.renta : cara.bonificacion,
       tarifaPublica: cara.tarifaPublica,
@@ -2005,8 +2006,9 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
             nse: cara.nivel_socioeconomico ? cara.nivel_socioeconomico.split(',') : [],
             catorcenaNum: catNum,
             catorcenaYear: catYear,
-            periodoInicio: cara.inicio_periodo || '',
-            periodoFin: cara.fin_periodo || '',
+            // Truncar a YYYY-MM-DD para que <input type="date"> lo reconozca al editar
+            periodoInicio: String(cara.inicio_periodo || '').slice(0, 10),
+            periodoFin: String(cara.fin_periodo || '').slice(0, 10),
             // Convención frontend: BF guarda cantidad en renta. Backend persiste BF con
             // caras=0 y bonificacion=cantidad, así que invertimos al cargar.
             renta: ((cara.articulo || '').toUpperCase().startsWith('BF') || (cara.articulo || '').toUpperCase().startsWith('CF'))
