@@ -1654,7 +1654,9 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
           const parts = periodo.split('-');
           groups[periodo] = { caras: [], catorcenaNum: parseInt(parts[1]) || undefined, year: parseInt(parts[0]) || undefined };
         } else {
-          const catorcenaInfo = catorcenasData?.data?.find(c => c.fecha_inicio === periodo);
+          // Catorcena: comparar como YYYY-MM-DD por si el formato difiere (ISO vs date)
+          const periodoStr = String(periodo).slice(0, 10);
+          const catorcenaInfo = catorcenasData?.data?.find(c => String(c.fecha_inicio).slice(0, 10) === periodoStr);
           groups[periodo] = { caras: [], catorcenaNum: catorcenaInfo?.numero_catorcena, year: catorcenaInfo?.a_o };
         }
       }
@@ -6886,14 +6888,16 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
                         ? `${MESES_LABEL[groupData.catorcenaNum - 1]} ${groupData.year || ''}`
                         : groupData.catorcenaNum
                         ? `Cat ${groupData.catorcenaNum} / ${groupData.year || ''}`
-                        : (() => {
+                        : tipoPeriodo === 'mensual'
+                        ? (() => {
                             const parts = periodo.split('-');
                             if (parts.length >= 2) {
                               const m = parseInt(parts[1]);
                               return `${MESES_LABEL[m - 1] || periodo} ${parts[0]}`;
                             }
                             return `Periodo: ${periodo}`;
-                          })();
+                          })()
+                        : `Periodo: ${periodo.slice(0, 10)}`;
 
                       const groupFechas = groupData.caras.map(c => c.inicio_periodo).filter(Boolean).sort();
                       const groupFechasFin = groupData.caras.map(c => c.fin_periodo).filter(Boolean).sort();
