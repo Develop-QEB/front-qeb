@@ -7098,9 +7098,23 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
                         <input
                           type="number"
                           value={newCara.caras || ''}
+                          max={(() => {
+                            // Para circuito digital: max = total del circuito (renta + bonif)
+                            const c = parseCircuitoDigital(newCara.articulo || '');
+                            if (c) return (newCara.caras || 0) + (newCara.bonificacion || 0);
+                            return undefined;
+                          })()}
                           onChange={(e) => {
                             if (!canEditResumen) return;
                             const val = parseInt(e.target.value) || 0;
+                            // Para circuito digital: total fijo, bonif = total - caras
+                            const c = parseCircuitoDigital(newCara.articulo || '');
+                            if (c) {
+                              const total = (newCara.caras || 0) + (newCara.bonificacion || 0);
+                              const carasCap = Math.min(Math.max(0, val), total);
+                              setNewCara({ ...newCara, caras: carasCap, bonificacion: total - carasCap });
+                              return;
+                            }
                             const flujo = Math.ceil(val / 2);
                             const contraflujo = Math.floor(val / 2);
                             setNewCara({ ...newCara, caras: val, caras_flujo: flujo, caras_contraflujo: contraflujo });
@@ -7116,7 +7130,24 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
                         <input
                           type="number"
                           value={newCara.bonificacion || ''}
-                          onChange={(e) => canEditResumen && setNewCara({ ...newCara, bonificacion: parseInt(e.target.value) || 0 })}
+                          max={(() => {
+                            const c = parseCircuitoDigital(newCara.articulo || '');
+                            if (c) return (newCara.caras || 0) + (newCara.bonificacion || 0);
+                            return undefined;
+                          })()}
+                          onChange={(e) => {
+                            if (!canEditResumen) return;
+                            const val = parseInt(e.target.value) || 0;
+                            // Para circuito digital: total fijo, caras = total - bonif
+                            const c = parseCircuitoDigital(newCara.articulo || '');
+                            if (c) {
+                              const total = (newCara.caras || 0) + (newCara.bonificacion || 0);
+                              const bonifCap = Math.min(Math.max(0, val), total);
+                              setNewCara({ ...newCara, bonificacion: bonifCap, caras: total - bonifCap });
+                              return;
+                            }
+                            setNewCara({ ...newCara, bonificacion: val });
+                          }}
                           disabled={!canEditResumen || isNoInventoryArticle((newCara.articulo || '').toUpperCase()) || newCara.articulo?.toUpperCase().startsWith('IN')}
                           className={`w-full px-3 py-2 ${isDark ? 'bg-zinc-800' : 'bg-gray-50'} border ${isDark ? 'border-zinc-700' : 'border-gray-200'} rounded-lg text-sm ${isDark ? 'text-white' : 'text-gray-900'} focus:outline-none focus:ring-1 focus:ring-purple-500/50 ${(!canEditResumen || isNoInventoryArticle((newCara.articulo || '').toUpperCase()) || newCara.articulo?.toUpperCase().startsWith('IN')) ? 'opacity-60 cursor-not-allowed' : ''}`}
                           min="0"
