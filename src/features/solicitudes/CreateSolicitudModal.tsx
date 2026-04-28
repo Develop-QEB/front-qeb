@@ -2330,7 +2330,7 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
                 <div className="flex items-start gap-2 px-3 py-2 rounded-lg bg-red-500/10 border border-red-500/30 text-red-400 text-sm">
                   <AlertTriangle className="h-4 w-4 mt-0.5 shrink-0" />
                   <span>
-                    <strong>{invalidCaras.length} circuito{invalidCaras.length > 1 ? 's' : ''}</strong> asignado{invalidCaras.length > 1 ? 's' : ''} ya no pertenece{invalidCaras.length > 1 ? 'n' : ''} al rango de catorcenas actual. Ve a "Asignar Caras" y elimínalos o ajusta el rango.
+                    <strong>{invalidCaras.length} circuito{invalidCaras.length > 1 ? 's' : ''}</strong> asignado{invalidCaras.length > 1 ? 's' : ''} ya no pertenece{invalidCaras.length > 1 ? 'n' : ''} al rango de catorcenas actual. Ve a "Asignar Circuito" y elimínalos o ajusta el rango.
                   </span>
                 </div>
               )}
@@ -3313,7 +3313,7 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
                 <div className="flex items-start gap-2 px-3 py-2 rounded-lg bg-red-500/10 border border-red-500/30 text-red-400 text-sm">
                   <AlertTriangle className="h-4 w-4 mt-0.5 shrink-0" />
                   <span>
-                    <strong>{invalidCaras.length} circuito{invalidCaras.length > 1 ? 's' : ''}</strong> tienen catorcenas fuera del rango de campaña. Regresa a "Campaña" o "Asignar Caras" para corregirlo.
+                    <strong>{invalidCaras.length} circuito{invalidCaras.length > 1 ? 's' : ''}</strong> tienen catorcenas fuera del rango de campaña. Regresa a "Campaña" o "Asignar Circuito" para corregirlo.
                   </span>
                 </div>
               )}
