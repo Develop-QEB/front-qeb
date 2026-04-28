@@ -41,9 +41,14 @@ interface POIMarker {
 const MESES_LABEL = ['Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio', 'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre'];
 
 function formatInicioPeriodo(item: InventarioReservado, tipoPeriodo?: string): string {
-  if (tipoPeriodo === 'mensual' && item.inicio_periodo) {
-    const parts = item.inicio_periodo.split('-');
-    if (parts.length >= 2) return `${MESES_LABEL[parseInt(parts[1]) - 1]} ${parts[0]}`;
+  // Caras circuito siempre se muestran como mes (independiente del tipoPeriodo de la propuesta)
+  const esCircuito = /^(RT|BF|CT|CF)-DIG-\d+-[A-Z]+$/i.test((item as any).articulo || '');
+  if ((esCircuito || tipoPeriodo === 'mensual') && item.inicio_periodo) {
+    const parts = item.inicio_periodo.split(/[-T]/);
+    if (parts.length >= 2) {
+      const month = parseInt(parts[1]) - 1;
+      if (month >= 0 && month < 12) return `${MESES_LABEL[month]} ${parts[0]}`;
+    }
   }
   if (item.numero_catorcena && item.anio_catorcena) {
     return `Cat ${item.numero_catorcena} / ${item.anio_catorcena}`;
@@ -107,6 +112,18 @@ interface ResumenCatorcenaGroup {
   totalCaras: number;
   totalBonificadas: number;
   totalInversion: number;
+  fechaInicio: string | null;
+  fechaFin: string | null;
+}
+
+const MESES_CORTOS_COM = ['Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun', 'Jul', 'Ago', 'Sep', 'Oct', 'Nov', 'Dic'];
+function formatDayMonthCom(dateStr: string | null | undefined): string {
+  if (!dateStr) return '';
+  const parts = String(dateStr).split(/[-T]/);
+  if (parts.length < 3) return '';
+  const day = parseInt(parts[2]).toString();
+  const month = parseInt(parts[1]) - 1;
+  return month >= 0 && month < 12 ? `${day} ${MESES_CORTOS_COM[month]}` : '';
 }
 
 function applyFilters<T>(data: T[], filters: FilterCondition[]): T[] {
@@ -356,26 +373,30 @@ export function CompartirPropuestaPage() {
         tipos: [...new Set(items.map(i => i.tradicional_digital || 'N/A'))],
         plazas: [...new Set(items.map(i => i.plaza || 'N/A'))],
       }));
+      const allItems = articulos.flatMap(a => a.items);
+      const fechas = allItems.map(i => i.inicio_periodo).filter(Boolean).sort() as string[];
+      const fechasFin = allItems.map(i => i.fin_periodo).filter(Boolean).sort() as string[];
       return {
         catorcena,
         articulos,
         totalCaras: articulos.reduce((sum, a) => sum + a.totalCaras, 0),
         totalBonificadas: articulos.reduce((sum, a) => sum + (a.totalBonificadas || 0), 0),
         totalInversion: articulos.reduce((sum, a) => sum + a.totalInversion, 0),
+        fechaInicio: fechas.length ? fechas[0] : null,
+        fechaFin: fechasFin.length ? fechasFin[fechasFin.length - 1] : null,
       };
     });
-  }, [filteredInventario]);
+  }, [filteredInventario, tipoPeriodo]);
 
-  // Period display
+  // Period display — usa fechas GLOBALES de cotización (no caras)
   const periodoInicio = useMemo(() => {
     if (tipoPeriodo === 'mensual') {
-      // Use earliest cara date for accurate month label
-      const carasDates = (inventario || []).filter(i => i.inicio_periodo).map(i => i.inicio_periodo!).sort();
-      const dateStr = carasDates[0] || details?.cotizacion?.fecha_inicio;
+      const dateStr = details?.cotizacion?.fecha_inicio;
       if (dateStr) {
         const parts = String(dateStr).split(/[-T]/);
         if (parts.length >= 2) return `${MESES_LABEL[parseInt(parts[1]) - 1]} ${parts[0]}`;
       }
+      return 'N/A';
     }
     if (details?.propuesta?.catorcena_inicio && details?.propuesta?.anio_inicio) {
       return `Cat ${details.propuesta.catorcena_inicio} / ${details.propuesta.anio_inicio}`;
@@ -393,13 +414,12 @@ export function CompartirPropuestaPage() {
 
   const periodoFin = useMemo(() => {
     if (tipoPeriodo === 'mensual') {
-      // Use latest cara date for accurate month label
-      const carasDates = (inventario || []).filter(i => i.inicio_periodo).map(i => i.inicio_periodo!).sort();
-      const dateStr = carasDates[carasDates.length - 1] || details?.cotizacion?.fecha_fin;
+      const dateStr = details?.cotizacion?.fecha_fin;
       if (dateStr) {
         const parts = String(dateStr).split(/[-T]/);
         if (parts.length >= 2) return `${MESES_LABEL[parseInt(parts[1]) - 1]} ${parts[0]}`;
       }
+      return 'N/A';
     }
     if (details?.propuesta?.catorcena_fin && details?.propuesta?.anio_fin) {
       return `Cat ${details.propuesta.catorcena_fin} / ${details.propuesta.anio_fin}`;
@@ -768,33 +788,46 @@ export function CompartirPropuestaPage() {
     doc.setTextColor(60, 60, 60);
     doc.text(details?.cotizacion?.nombre_campania || 'N/A', marginX + 40, y);
 
-    // Calculate catorcena range from inventory
-    if (inventario && inventario.length > 0) {
+    // Periodo: en mensual usar fechas globales de cotización; en catorcena, derivar del inventario
+    let periodoText: string | null = null;
+    if (tipoPeriodo === 'mensual') {
+      const fi = details?.cotizacion?.fecha_inicio;
+      const ff = details?.cotizacion?.fecha_fin;
+      if (fi && ff) {
+        const partsI = String(fi).split(/[-T]/);
+        const partsF = String(ff).split(/[-T]/);
+        if (partsI.length >= 2 && partsF.length >= 2) {
+          const monthI = parseInt(partsI[1]);
+          const monthF = parseInt(partsF[1]);
+          const yearI = partsI[0];
+          const yearF = partsF[0];
+          periodoText = (yearI === yearF && monthI === monthF)
+            ? `${MESES_LABEL[monthI - 1]} ${yearI}`
+            : `${MESES_LABEL[monthI - 1]} ${yearI} - ${MESES_LABEL[monthF - 1]} ${yearF}`;
+        }
+      }
+    } else if (inventario && inventario.length > 0) {
       const catorcenas = inventario
         .filter(i => i.numero_catorcena && i.anio_catorcena)
         .map(i => ({ num: i.numero_catorcena!, year: i.anio_catorcena! }));
-
       if (catorcenas.length > 0) {
         const sorted = catorcenas.sort((a, b) =>
           a.year !== b.year ? a.year - b.year : a.num - b.num
         );
         const first = sorted[0];
         const last = sorted[sorted.length - 1];
-
-        doc.setFont('helvetica', 'bold');
-        doc.setTextColor(...IMU_BLUE);
-        doc.text('Periodo:', marginX + 150, y);
-        doc.setFont('helvetica', 'normal');
-        doc.setTextColor(60, 60, 60);
-        const periodoText = tipoPeriodo === 'mensual'
-          ? (first.year === last.year && first.num === last.num
-            ? `${MESES_LABEL[first.num - 1]} ${first.year}`
-            : `${MESES_LABEL[first.num - 1]} ${first.year} - ${MESES_LABEL[last.num - 1]} ${last.year}`)
-          : (first.year === last.year && first.num === last.num
-            ? `Cat ${first.num} / ${first.year}`
-            : `Cat ${first.num} / ${first.year} - Cat ${last.num} / ${last.year}`);
-        doc.text(periodoText, marginX + 170, y);
+        periodoText = (first.year === last.year && first.num === last.num)
+          ? `Cat ${first.num} / ${first.year}`
+          : `Cat ${first.num} / ${first.year} - Cat ${last.num} / ${last.year}`;
       }
+    }
+    if (periodoText) {
+      doc.setFont('helvetica', 'bold');
+      doc.setTextColor(...IMU_BLUE);
+      doc.text('Periodo:', marginX + 150, y);
+      doc.setFont('helvetica', 'normal');
+      doc.setTextColor(60, 60, 60);
+      doc.text(periodoText, marginX + 170, y);
     }
     y += 8;
 
@@ -860,12 +893,20 @@ export function CompartirPropuestaPage() {
 
       Object.entries(grouped).forEach(([catorcena, articulos]) => {
         // === CATORCENA HEADER (separate section) ===
+        const allGroupItems = Object.values(articulos).flat();
+        const groupFechas = allGroupItems.map(i => i.inicio_periodo).filter(Boolean).sort() as string[];
+        const groupFechasFin = allGroupItems.map(i => i.fin_periodo).filter(Boolean).sort() as string[];
+        const groupFechaIni = groupFechas.length ? groupFechas[0] : null;
+        const groupFechaFin = groupFechasFin.length ? groupFechasFin[groupFechasFin.length - 1] : null;
+        const catHeaderLabel = tipoPeriodo === 'mensual' && groupFechaIni && groupFechaFin
+          ? `${catorcena}  |  ${formatDayMonthCom(groupFechaIni)} – ${formatDayMonthCom(groupFechaFin)}`
+          : catorcena;
         doc.setFillColor(...IMU_BLUE);
         doc.roundedRect(marginX, y, pageWidth - marginX * 2, 8, 1, 1, 'F');
         doc.setFontSize(10);
         doc.setFont('helvetica', 'bold');
         doc.setTextColor(...WHITE);
-        doc.text(catorcena, marginX + 5, y + 5.5);
+        doc.text(catHeaderLabel, marginX + 5, y + 5.5);
         y += 10;
 
         Object.entries(articulos).forEach(([articulo, items]) => {
@@ -1379,6 +1420,11 @@ export function CompartirPropuestaPage() {
                         <span className={`px-3 py-1 rounded-lg text-xs font-medium border ${isDark ? 'bg-purple-500/30 text-purple-200 border-purple-400/30' : 'bg-purple-100 text-purple-700 border-purple-300'}`}>
                           {catGroup.catorcena}
                         </span>
+                        {tipoPeriodo === 'mensual' && catGroup.fechaInicio && catGroup.fechaFin && (
+                          <span className={`text-xs ${isDark ? 'text-zinc-400' : 'text-gray-500'}`}>
+                            {formatDayMonthCom(catGroup.fechaInicio)} – {formatDayMonthCom(catGroup.fechaFin)}
+                          </span>
+                        )}
                         <span className={`text-xs ${isDark ? 'text-zinc-500' : 'text-gray-400'}`}>
                           ({catGroup.articulos.length} articulo{catGroup.articulos.length > 1 ? 's' : ''})
                         </span>

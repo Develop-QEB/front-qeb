@@ -12,6 +12,7 @@ import { Header } from '../../components/layout/Header';
 import { solicitudesService } from '../../services/solicitudes.service';
 import { Solicitud, Catorcena } from '../../types';
 import { formatCurrency, formatDate } from '../../lib/utils';
+import { tablePeriodoLabel } from '../../lib/periodos';
 import { CreateSolicitudModal } from './CreateSolicitudModal';
 import { ViewSolicitudModal, StatusModal, AtenderModal } from './SolicitudModals';
 import { useAuthStore } from '../../store/authStore';
@@ -741,22 +742,6 @@ export function SolicitudesPage() {
     }) || null;
   }, [catorcenasData]);
 
-  // Group data
-  const groupedData = useMemo(() => {
-    if (!groupBy || !data?.data) return null;
-
-    const groupKey = groupBy as keyof Solicitud;
-    const groups: Record<string, Solicitud[]> = {};
-
-    data.data.forEach(item => {
-      const key = String(item[groupKey] || 'Sin asignar');
-      if (!groups[key]) groups[key] = [];
-      groups[key].push(item);
-    });
-
-    return Object.entries(groups).sort((a, b) => b[1].length - a[1].length);
-  }, [data, groupBy]);
-
   const toggleGroup = (groupName: string) => {
     setExpandedGroups(prev => {
       const next = new Set(prev);
@@ -812,6 +797,22 @@ export function SolicitudesPage() {
     }
     return result;
   }, [data?.data, advancedFilters, allSearchTerms]);
+
+  // Group data
+  const groupedData = useMemo(() => {
+    if (!groupBy || !filteredData.length) return null;
+
+    const groupKey = groupBy as keyof Solicitud;
+    const groups: Record<string, Solicitud[]> = {};
+
+    filteredData.forEach(item => {
+      const key = String(item[groupKey] || 'Sin asignar');
+      if (!groups[key]) groups[key] = [];
+      groups[key].push(item);
+    });
+
+    return Object.entries(groups).sort((a, b) => b[1].length - a[1].length);
+  }, [filteredData, groupBy]);
 
   // Compute effective stats: when advanced filters or multi-tag search are active, recalculate from filteredData
   const needsClientFilter = advancedFilters.length > 0 || allSearchTerms.length > 0;
@@ -952,33 +953,17 @@ export function SolicitudesPage() {
         <td className="px-4 py-3">
           {(() => {
             const tp = (item as any).tipo_periodo;
-            const meses = ['Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun', 'Jul', 'Ago', 'Sep', 'Oct', 'Nov', 'Dic'];
-            if (tp === 'mensual' && (item as any).periodo_fecha_inicio) {
-              const parts = String((item as any).periodo_fecha_inicio).split(/[-T]/);
-              const month = parseInt(parts[1]) - 1;
-              const year = parts[0];
-              return <span className={`${isDark ? 'text-zinc-300' : 'text-gray-700'} text-xs`}>{meses[month]} {year}</span>;
-            }
-            if ((item as any).catorcena_inicio) {
-              return <span className={`${isDark ? 'text-zinc-300' : 'text-gray-700'} text-xs`}>Cat {(item as any).catorcena_inicio} / {(item as any).anio_inicio}</span>;
-            }
-            return <span className={`${isDark ? 'text-zinc-600' : 'text-gray-400'} text-xs`}>-</span>;
+            const label = tablePeriodoLabel(tp, (item as any).periodo_fecha_inicio, (item as any).catorcena_inicio, (item as any).anio_inicio);
+            if (label === '-') return <span className={`${isDark ? 'text-zinc-600' : 'text-gray-400'} text-xs`}>-</span>;
+            return <span className={`${isDark ? 'text-zinc-300' : 'text-gray-700'} text-xs`}>{label}</span>;
           })()}
         </td>
         <td className="px-4 py-3">
           {(() => {
             const tp = (item as any).tipo_periodo;
-            const meses = ['Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun', 'Jul', 'Ago', 'Sep', 'Oct', 'Nov', 'Dic'];
-            if (tp === 'mensual' && (item as any).periodo_fecha_fin) {
-              const parts = String((item as any).periodo_fecha_fin).split(/[-T]/);
-              const month = parseInt(parts[1]) - 1;
-              const year = parts[0];
-              return <span className={`${isDark ? 'text-zinc-300' : 'text-gray-700'} text-xs`}>{meses[month]} {year}</span>;
-            }
-            if ((item as any).catorcena_fin) {
-              return <span className={`${isDark ? 'text-zinc-300' : 'text-gray-700'} text-xs`}>Cat {(item as any).catorcena_fin} / {(item as any).anio_fin}</span>;
-            }
-            return <span className={`${isDark ? 'text-zinc-600' : 'text-gray-400'} text-xs`}>-</span>;
+            const label = tablePeriodoLabel(tp, (item as any).periodo_fecha_fin, (item as any).catorcena_fin, (item as any).anio_fin);
+            if (label === '-') return <span className={`${isDark ? 'text-zinc-600' : 'text-gray-400'} text-xs`}>-</span>;
+            return <span className={`${isDark ? 'text-zinc-300' : 'text-gray-700'} text-xs`}>{label}</span>;
           })()}
         </td>
         <td className="px-4 py-3 max-w-[160px]">
@@ -1576,9 +1561,9 @@ export function SolicitudesPage() {
                         </React.Fragment>
                       ))
                     ) : (
-                      (needsClientFilter ? filteredData : data?.data)?.map((item, idx) => renderSolicitudRow(item, idx))
+                      filteredData.map((item, idx) => renderSolicitudRow(item, idx))
                     )}
-                    {(needsClientFilter ? filteredData.length === 0 : (!data?.data || data.data.length === 0)) && !groupedData && (
+                    {filteredData.length === 0 && !groupedData && (
                       <tr>
                         <td colSpan={9} className="px-4 py-12 text-center">
                           <div className="flex flex-col items-center gap-3">

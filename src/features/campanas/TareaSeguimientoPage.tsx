@@ -81,6 +81,7 @@ import { useAuthStore } from '../../store/authStore';
 import { useThemeStore } from '../../store/themeStore';
 import { getPermissions } from '../../lib/permissions';
 import { useSocketCampana, useSocketEquipos } from '../../hooks/useSocket';
+import { exportVersionarioArtes } from '../../utils/exportVersionarioArtes';
 import * as XLSX from 'xlsx';
 
 // URL base para archivos estáticos
@@ -5665,14 +5666,26 @@ function TaskDetailModal({
                       <span className="text-zinc-500">Marca:</span>
                       <p className="text-white font-medium">{campana.T2_U_Marca || '-'}</p>
                     </div>
-                    {campana.catorcena_inicio_num && (
+                    {(campana.catorcena_inicio_num || campana.fecha_inicio) && (
                       <div>
                         <span className="text-zinc-500">Periodo:</span>
                         <p className="text-white font-medium">
-                          Cat {campana.catorcena_inicio_num}/{campana.catorcena_inicio_anio}
-                          {campana.catorcena_fin_num && campana.catorcena_fin_num !== campana.catorcena_inicio_num
-                            ? ` - Cat ${campana.catorcena_fin_num}/${campana.catorcena_fin_anio}`
-                            : ''}
+                          {tipoPeriodo === 'mensual' && campana.fecha_inicio && campana.fecha_fin ? (() => {
+                            const pi = String(campana.fecha_inicio).split(/[-T]/);
+                            const pf = String(campana.fecha_fin).split(/[-T]/);
+                            const mi = parseInt(pi[1]) - 1, yi = pi[0];
+                            const mf = parseInt(pf[1]) - 1, yf = pf[0];
+                            return mi === mf && yi === yf
+                              ? `${MESES_FULL[mi]} ${yi}`
+                              : `${MESES_FULL[mi]} ${yi} - ${MESES_FULL[mf]} ${yf}`;
+                          })() : (
+                            <>
+                              Cat {campana.catorcena_inicio_num}/{campana.catorcena_inicio_anio}
+                              {campana.catorcena_fin_num && campana.catorcena_fin_num !== campana.catorcena_inicio_num
+                                ? ` - Cat ${campana.catorcena_fin_num}/${campana.catorcena_fin_anio}`
+                                : ''}
+                            </>
+                          )}
                         </p>
                       </div>
                     )}
@@ -13415,6 +13428,7 @@ export function TareaSeguimientoPage() {
   // Modal state
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
   const [isUploadArtModalOpen, setIsUploadArtModalOpen] = useState(false);
+  const [isExportingVersionarioArtes, setIsExportingVersionarioArtes] = useState(false);
   const [parentAddedArtes, setParentAddedArtes] = useState<ArteExistente[]>([]);
   const [isTaskDetailModalOpen, setIsTaskDetailModalOpen] = useState(false);
   const [selectedTask, setSelectedTask] = useState<TaskRow | null>(null);
@@ -16469,6 +16483,41 @@ export function TareaSeguimientoPage() {
             <span className="text-sm font-medium">{campana.nombre}</span>
             <Badge variant="outline" className="text-[10px]">#{campana.id}</Badge>
           </div>
+          <button
+            onClick={async () => {
+              if (isExportingVersionarioArtes) return;
+              try {
+                setIsExportingVersionarioArtes(true);
+                // Fetch on-demand para no depender del tab activo (las queries de
+                // inventario solo se hidratan cuando cambias de tab)
+                const [conArte, sinArte] = await Promise.all([
+                  campanasService.getInventarioConArte(campanaId).catch(() => [] as InventarioConArte[]),
+                  campanasService.getInventarioSinArte(campanaId).catch(() => [] as InventarioConArte[]),
+                ]);
+                const items: InventarioConArte[] = [...(conArte || []), ...(sinArte || [])];
+                if (items.length === 0) {
+                  alert('No hay inventario disponible para exportar en esta campaña.');
+                  return;
+                }
+                await exportVersionarioArtes({ campana: campana as any, items });
+              } catch (e) {
+                console.error('Error exportando versionario artes:', e);
+                alert('Error al generar el Excel de Versionario Artes. Revisa la consola.');
+              } finally {
+                setIsExportingVersionarioArtes(false);
+              }
+            }}
+            disabled={isExportingVersionarioArtes}
+            className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium bg-green-900/50 hover:bg-green-900/70 border border-green-500/30 rounded-lg transition-colors disabled:opacity-60 disabled:cursor-not-allowed"
+            title="Descargar Versionario Artes (Excel con miniaturas)"
+          >
+            {isExportingVersionarioArtes ? (
+              <Loader2 className="h-3.5 w-3.5 text-green-400 animate-spin" />
+            ) : (
+              <Download className="h-3.5 w-3.5 text-green-400" />
+            )}
+            <span className="text-green-300">{isExportingVersionarioArtes ? 'Generando...' : 'Versionario Artes'}</span>
+          </button>
         </div>
 
         {/* Re-impresión success banner */}

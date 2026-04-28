@@ -21,15 +21,10 @@ import { useThemeStore } from '../../store/themeStore';
 import { getPermissions } from '../../lib/permissions';
 import { useSocketEquipos, useSocketPropuestas } from '../../hooks/useSocket';
 import { ConfirmModal } from '../../components/ui/confirm-modal';
+import { monthLabelShort } from '../../lib/periodos';
 
-const MESES_LABEL = ['Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun', 'Jul', 'Ago', 'Sep', 'Oct', 'Nov', 'Dic'];
 function getMonthShort(dateStr: string): string {
-  const parts = String(dateStr).split(/[-T]/);
-  if (parts.length >= 2) {
-    const month = parseInt(parts[1]) - 1;
-    return month >= 0 && month < 12 ? `${MESES_LABEL[month]} ${parts[0]}` : '-';
-  }
-  return '-';
+  return monthLabelShort(dateStr) || '-';
 }
 
 // Status badge colors
@@ -821,7 +816,7 @@ function StatusModal({ isOpen, onClose, propuesta, onStatusChange, allowedStatus
         onClose={() => setShowRechazoConfirm(false)}
         onConfirm={handleConfirmRechazo}
         title="¿Rechazar propuesta?"
-        message="Esta acción no es reversible. Al rechazar la propuesta se liberará todo el inventario reservado y quedará disponible para otras propuestas."
+        message="Esta acción no es reversible. Al rechazar la propuesta se liberará todo el inventario reservado y se eliminarán los grupos/circuitos de la propuesta."
         confirmText="Sí, rechazar"
         cancelText="Cancelar"
         variant="danger"
@@ -1369,9 +1364,7 @@ export function PropuestasPage() {
 
     const groupKey = groupBy as keyof Propuesta;
     const groups: Record<string, Propuesta[]> = {};
-    const sourceData = (advancedFilters.length > 0 || allSearchTerms.length > 0) ? filteredData : data.data;
-
-    sourceData.forEach(item => {
+    filteredData.forEach(item => {
       const key = String(item[groupKey] || 'Sin asignar');
       if (!groups[key]) groups[key] = [];
       groups[key].push(item);
@@ -1424,6 +1417,7 @@ export function PropuestasPage() {
         'Descripción (Opcional)', 'Inicio o Periodo', 'Fin o Segmento', 'Arte',
         'Código de arte (Opcional)', 'Arte Url (Opcional)', 'Origen del arte (Opcional)',
         'Unidad', 'Cara', 'Ciudad', 'Tipo de Distribución', 'Reproducciones', 'Notas',
+        'Estatus', 'Catorcena',
       ];
       const rows: string[][] = [];
       const invExported = new Set<number>();
@@ -1453,6 +1447,7 @@ export function PropuestasPage() {
               '', '', '', '',
               inv.codigo_unico || '', inv.tipo_de_cara || '', inv.plaza || inv.estado || '',
               inv.tradicional_digital || inv.tipo_medio || '', '0', '',
+              info.status || '', cara.numero_catorcena ? `Cat ${String(cara.numero_catorcena).padStart(2, '0')} / ${cara.anio_catorcena || ''}` : '',
             ]);
             firstRow = false;
           }
@@ -1464,6 +1459,7 @@ export function PropuestasPage() {
             cara.articulo || '', info.vendedor || '', info.descripcion || '',
             'Catorcenas ' + (cara.anio_catorcena || ''), periodo,
             '', '', '', '', '', '', cara.ciudad || '', '', '0', '',
+            info.status || '', cara.numero_catorcena ? `Cat ${String(cara.numero_catorcena).padStart(2, '0')} / ${cara.anio_catorcena || ''}` : '',
           ]);
         }
       }
@@ -1492,8 +1488,8 @@ export function PropuestasPage() {
 
     const headers = ['ID', 'Fecha Creación', 'Marca', 'Creador', 'Campaña', 'Asignados', 'Inversión', 'Inicio', 'Fin', 'Estatus'];
     const rows = dataToExport.map((p: any) => {
-      const inicio = p.tipo_periodo === 'mensual' && p.fecha_inicio
-        ? getMonthShort(p.fecha_inicio)
+      const inicio = p.tipo_periodo === 'mensual' && (p.min_inicio_periodo || p.fecha_inicio)
+        ? getMonthShort(p.min_inicio_periodo || p.fecha_inicio)
         : p.catorcena_inicio ? `Cat ${p.catorcena_inicio} / ${p.anio_inicio}` : '-';
       const fin = p.tipo_periodo === 'mensual' && (p.max_inicio_periodo || p.fecha_fin)
         ? getMonthShort(p.max_inicio_periodo || p.fecha_fin)
@@ -1530,6 +1526,15 @@ export function PropuestasPage() {
   const renderPropuestaRow = (item: Propuesta & any, index: number) => {
     const STATUS_COLORS = getStatusColors(isDark);
     const DEFAULT_STATUS_COLOR = getDefaultStatusColor(isDark);
+    // Si la propuesta ya tiene campaña activa ligada, mostrarla y tratarla como 'Aprobada'
+    // independientemente del status real en BD. Defensa contra inconsistencias historicas
+    // (ej. propuestas en 'Atendido' o 'Abierto' con campaña ya creada).
+    const campStatusLower = String(item.campania_status || '').toLowerCase();
+    const hasActiveCampania = !!item.campania_id &&
+      !['rechazada', 'cancelada', 'inactiva', 'finalizada'].includes(campStatusLower);
+    if (hasActiveCampania && item.status !== 'Aprobada') {
+      item = { ...item, status: 'Aprobada' };
+    }
     const statusColor = STATUS_COLORS[item.status] || DEFAULT_STATUS_COLOR;
     // Bloquear todas las acciones cuando el status es "Activa" o "Aprobada" (para todos los usuarios)
     const isActiva = item.status === 'Activa';
@@ -1590,10 +1595,10 @@ export function PropuestasPage() {
           <span className={`font-medium ${isDark ? 'text-amber-400' : 'text-amber-600'}`}>{formatCurrency(item.inversion)}</span>
         </td>
         <td className="px-4 py-3">
-          {item.tipo_periodo === 'mensual' && item.fecha_inicio ? (
+          {item.tipo_periodo === 'mensual' && ((item as any).min_inicio_periodo || item.fecha_inicio) ? (
             <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-xs border ${isDark ? 'bg-cyan-500/10 text-cyan-300 border-cyan-500/20' : 'bg-cyan-50 text-cyan-700 border-cyan-200'}`}>
               <Calendar className="h-3 w-3" />
-              {getMonthShort(item.fecha_inicio)}
+              {getMonthShort((item as any).min_inicio_periodo || item.fecha_inicio)}
             </span>
           ) : item.catorcena_inicio ? (
             <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-xs border ${isDark ? 'bg-cyan-500/10 text-cyan-300 border-cyan-500/20' : 'bg-cyan-50 text-cyan-700 border-cyan-200'}`}>
@@ -2220,9 +2225,14 @@ export function PropuestasPage() {
                       {expandedGroups.has(groupName) && items.map((item, idx) => renderPropuestaRow(item, idx))}
                     </React.Fragment>
                   ))
+                ) : filteredData.length === 0 && hasLocalFilters ? (
+                  <tr>
+                    <td colSpan={11} className="px-4 py-12 text-center">
+                      <span className={`text-sm ${isDark ? 'text-zinc-500' : 'text-gray-400'}`}>No se encontraron propuestas con los filtros aplicados</span>
+                    </td>
+                  </tr>
                 ) : (
-                  // Flat view - use filtered data if advanced filters applied
-                  (hasLocalFilters ? filteredData : data.data).map((item, idx) => renderPropuestaRow(item, idx))
+                  filteredData.map((item, idx) => renderPropuestaRow(item, idx))
                 )}
               </tbody>
             </table>

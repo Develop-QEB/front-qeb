@@ -136,6 +136,21 @@ interface CatorcenaGroup {
   totalCaras: number;
   totalBonificacion: number;
   totalInversion: number;
+  fechaInicio: string | null;
+  fechaFin: string | null;
+}
+
+// Format date string "2026-04-01T..." as "01 Abr"
+const MESES_CORTOS = ['Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun', 'Jul', 'Ago', 'Sep', 'Oct', 'Nov', 'Dic'];
+function formatDayMonth(dateStr: string | null | undefined): string {
+  if (!dateStr) return '';
+  const raw = dateStr as unknown;
+  const iso = raw instanceof Date ? (raw as Date).toISOString() : String(dateStr);
+  const parts = iso.split(/[-T]/);
+  if (parts.length < 3) return '';
+  const day = parts[2].substring(0, 2).replace(/^0/, '');
+  const month = parseInt(parts[1]) - 1;
+  return month >= 0 && month < 12 ? `${day} ${MESES_CORTOS[month]}` : '';
 }
 
 function groupCarasByCatorcenaAndArticulo(caras: SolicitudCara[], catorcenas: Catorcena[], tipoPeriodo?: string): CatorcenaGroup[] {
@@ -169,6 +184,7 @@ function groupCarasByCatorcenaAndArticulo(caras: SolicitudCara[], catorcenas: Ca
     let totalCaras = 0;
     let totalBonificacion = 0;
     let totalInversion = 0;
+    const allCaras: SolicitudCara[] = [];
 
     articuloMap.forEach((carasList, articulo) => {
       const artCaras = carasList.reduce((sum, c) => sum + (Number(c.caras) || 0), 0);
@@ -186,7 +202,11 @@ function groupCarasByCatorcenaAndArticulo(caras: SolicitudCara[], catorcenas: Ca
       totalCaras += artCaras;
       totalBonificacion += artBonif;
       totalInversion += artInversion;
+      allCaras.push(...carasList);
     });
+
+    const fechas = allCaras.map(c => c.inicio_periodo).filter(Boolean).sort();
+    const fechasFin = allCaras.map(c => c.fin_periodo).filter(Boolean).sort();
 
     result.push({
       catorcena,
@@ -194,6 +214,8 @@ function groupCarasByCatorcenaAndArticulo(caras: SolicitudCara[], catorcenas: Ca
       totalCaras,
       totalBonificacion,
       totalInversion,
+      fechaInicio: fechas.length ? fechas[0] : null,
+      fechaFin: fechasFin.length ? fechasFin[fechasFin.length - 1] : null,
     });
   });
 
@@ -247,10 +269,18 @@ export function ViewSolicitudModal({ isOpen, onClose, solicitudId, onEdit, onAte
   const catorcenas = catorcenasData?.data || [];
   const tipoPeriodo = (data?.cotizacion as any)?.tipo_periodo || 'catorcena';
 
-  // For monthly: use start-of-last-period to get correct fin month label
-  const maxInicioPeriodo = useMemo(() => {
+  // Para mensual: las fechas reales de las caras (min inicio_periodo / max fin_periodo).
+  // Se usan SOLO en el detalle de "Periodo Inicio" / "Periodo Fin" (el rango exacto del
+  // grupo de circuitos del usuario). El rango "Período" arriba sigue usando fechas globales.
+  const minInicioPeriodo = useMemo(() => {
     if (tipoPeriodo !== 'mensual' || !data?.caras?.length) return null;
     const dates = data.caras.map(c => c.inicio_periodo).filter(Boolean).sort() as string[];
+    return dates.length ? dates[0] : null;
+  }, [data?.caras, tipoPeriodo]);
+
+  const maxInicioPeriodo = useMemo(() => {
+    if (tipoPeriodo !== 'mensual' || !data?.caras?.length) return null;
+    const dates = data.caras.map(c => c.fin_periodo).filter(Boolean).sort() as string[];
     return dates.length ? dates[dates.length - 1] : null;
   }, [data?.caras, tipoPeriodo]);
 
@@ -363,33 +393,47 @@ export function ViewSolicitudModal({ isOpen, onClose, solicitudId, onEdit, onAte
     doc.setFont('helvetica', 'bold');
     doc.text(String(data.cotizacion?.nombre_campania || '-').substring(0, 40), col1 + 28, yPos + 17);
 
-    // Fila 2: Período
+    // Fila 2: Período (formato condicional: catorcena=fechas exactas, mensual=mes/año)
     doc.setFont('helvetica', 'normal');
     doc.setTextColor(...textMuted);
     doc.text('Período:', col1, yPos + 24);
 
-    const fechaInicio = data.cotizacion?.fecha_inicio ? formatDate(data.cotizacion.fecha_inicio) : '-';
-    const finDateForLabel = maxInicioPeriodo || data.cotizacion?.fecha_fin;
-    const fechaFin = finDateForLabel ? formatDate(finDateForLabel) : '-';
-    const catInicio = data.cotizacion?.fecha_inicio ? getCatorcenaDisplay(data.cotizacion.fecha_inicio, catorcenas, tipoPeriodo) : '';
-    const catFin = finDateForLabel ? getCatorcenaDisplay(finDateForLabel, catorcenas, tipoPeriodo) : '';
+    if (tipoPeriodo === 'mensual') {
+      // Mensual: solo "Abril 2026 a Mayo 2026" usando fechas globales de cotización
+      const mesesFull = ['Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio', 'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre'];
+      const ml = (val: any) => {
+        const m = String(val).match(/^(\d{4})-(\d{2})/);
+        return m ? `${mesesFull[parseInt(m[2]) - 1]} ${m[1]}` : '-';
+      };
+      const labelIni = data.cotizacion?.fecha_inicio ? ml(data.cotizacion.fecha_inicio) : '-';
+      const labelFin = data.cotizacion?.fecha_fin ? ml(data.cotizacion.fecha_fin) : '-';
+      doc.setTextColor(...imuBlue);
+      doc.setFont('helvetica', 'bold');
+      doc.text(`${labelIni} a ${labelFin}`, col1 + 15, yPos + 24);
+    } else {
+      // Catorcena: fechas + cat
+      const fechaInicio = data.cotizacion?.fecha_inicio ? formatDate(data.cotizacion.fecha_inicio) : '-';
+      const fechaFin = data.cotizacion?.fecha_fin ? formatDate(data.cotizacion.fecha_fin) : '-';
+      const catInicio = data.cotizacion?.fecha_inicio ? getCatorcenaDisplay(data.cotizacion.fecha_inicio, catorcenas, tipoPeriodo) : '';
+      const catFin = data.cotizacion?.fecha_fin ? getCatorcenaDisplay(data.cotizacion.fecha_fin, catorcenas, tipoPeriodo) : '';
 
-    doc.setTextColor(...imuBlue);
-    doc.setFont('helvetica', 'bold');
-    doc.text(`${fechaInicio}`, col1 + 15, yPos + 24);
-    doc.setFont('helvetica', 'normal');
-    doc.setTextColor(...textMuted);
-    doc.text(`(${catInicio})`, col1 + 35, yPos + 24);
+      doc.setTextColor(...imuBlue);
+      doc.setFont('helvetica', 'bold');
+      doc.text(`${fechaInicio}`, col1 + 15, yPos + 24);
+      doc.setFont('helvetica', 'normal');
+      doc.setTextColor(...textMuted);
+      doc.text(`(${catInicio})`, col1 + 35, yPos + 24);
 
-    doc.setTextColor(...textDark);
-    doc.text('al', col1 + 60, yPos + 24);
+      doc.setTextColor(...textDark);
+      doc.text('al', col1 + 60, yPos + 24);
 
-    doc.setTextColor(...imuBlue);
-    doc.setFont('helvetica', 'bold');
-    doc.text(`${fechaFin}`, col1 + 67, yPos + 24);
-    doc.setFont('helvetica', 'normal');
-    doc.setTextColor(...textMuted);
-    doc.text(`(${catFin})`, col1 + 87, yPos + 24);
+      doc.setTextColor(...imuBlue);
+      doc.setFont('helvetica', 'bold');
+      doc.text(`${fechaFin}`, col1 + 67, yPos + 24);
+      doc.setFont('helvetica', 'normal');
+      doc.setTextColor(...textMuted);
+      doc.text(`(${catFin})`, col1 + 87, yPos + 24);
+    }
 
     yPos += 38;
 
@@ -503,7 +547,10 @@ export function ViewSolicitudModal({ isOpen, onClose, solicitudId, onEdit, onAte
         doc.setTextColor(...white);
         doc.setFontSize(8);
         doc.setFont('helvetica', 'bold');
-        doc.text(catorcenaGroup.catorcena, marginX + 4, yPos + 5.5);
+        const catorcenaLabel = tipoPeriodo === 'mensual' && catorcenaGroup.fechaInicio && catorcenaGroup.fechaFin
+          ? `${catorcenaGroup.catorcena}  |  ${formatDayMonth(catorcenaGroup.fechaInicio)} – ${formatDayMonth(catorcenaGroup.fechaFin)}`
+          : catorcenaGroup.catorcena;
+        doc.text(catorcenaLabel, marginX + 4, yPos + 5.5);
 
         // Subtotales en el header de catorcena
         doc.setFontSize(6);
@@ -752,16 +799,27 @@ export function ViewSolicitudModal({ isOpen, onClose, solicitudId, onEdit, onAte
                     <div className="flex justify-between">
                       <span className={`${isDark ? 'text-zinc-500' : 'text-gray-400'} text-sm`}>Período</span>
                       <span className={`${isDark ? 'text-violet-300' : 'text-violet-600'} text-sm font-medium`}>
-                        {data.cotizacion ? getCatorcenaRange(data.cotizacion.fecha_inicio, maxInicioPeriodo || data.cotizacion.fecha_fin, catorcenas, tipoPeriodo) : '-'}
+                        {/* Período: rango GLOBAL de la cotización */}
+                        {data.cotizacion ? getCatorcenaRange(data.cotizacion.fecha_inicio, data.cotizacion.fecha_fin, catorcenas, tipoPeriodo) : '-'}
                       </span>
                     </div>
                     <div className="flex justify-between">
                       <span className={`${isDark ? 'text-zinc-500' : 'text-gray-400'} text-sm`}>{tipoPeriodo === 'mensual' ? 'Periodo Inicio' : 'Fecha Inicio'}</span>
-                      <span className={`${isDark ? 'text-white' : 'text-gray-900'} text-sm`}>{data.cotizacion?.fecha_inicio ? getCatorcenaDisplay(data.cotizacion.fecha_inicio, catorcenas, tipoPeriodo) : '-'}</span>
+                      <span className={`${isDark ? 'text-white' : 'text-gray-900'} text-sm text-right`}>
+                        <div>{(minInicioPeriodo || data.cotizacion?.fecha_inicio) ? getCatorcenaDisplay(minInicioPeriodo || data.cotizacion!.fecha_inicio, catorcenas, tipoPeriodo) : '-'}</div>
+                        {tipoPeriodo === 'mensual' && (minInicioPeriodo || data.cotizacion?.fecha_inicio) && (
+                          <div className={`text-xs ${isDark ? 'text-zinc-400' : 'text-gray-500'}`}>{formatDayMonth(minInicioPeriodo || data.cotizacion!.fecha_inicio)}</div>
+                        )}
+                      </span>
                     </div>
                     <div className="flex justify-between">
                       <span className={`${isDark ? 'text-zinc-500' : 'text-gray-400'} text-sm`}>{tipoPeriodo === 'mensual' ? 'Periodo Fin' : 'Fecha Fin'}</span>
-                      <span className={`${isDark ? 'text-white' : 'text-gray-900'} text-sm`}>{(maxInicioPeriodo || data.cotizacion?.fecha_fin) ? getCatorcenaDisplay(maxInicioPeriodo || data.cotizacion!.fecha_fin, catorcenas, tipoPeriodo) : '-'}</span>
+                      <span className={`${isDark ? 'text-white' : 'text-gray-900'} text-sm text-right`}>
+                        <div>{(maxInicioPeriodo || data.cotizacion?.fecha_fin) ? getCatorcenaDisplay(maxInicioPeriodo || data.cotizacion!.fecha_fin, catorcenas, tipoPeriodo) : '-'}</div>
+                        {tipoPeriodo === 'mensual' && (maxInicioPeriodo || data.cotizacion?.fecha_fin) && (
+                          <div className={`text-xs ${isDark ? 'text-zinc-400' : 'text-gray-500'}`}>{formatDayMonth(maxInicioPeriodo || data.cotizacion!.fecha_fin)}</div>
+                        )}
+                      </span>
                     </div>
                     {data.solicitud.descripcion && (
                       <div className={`pt-2 border-t ${isDark ? 'border-zinc-700/50' : 'border-gray-200'}`}>
@@ -873,6 +931,11 @@ export function ViewSolicitudModal({ isOpen, onClose, solicitudId, onEdit, onAte
                             <span className={`px-3 py-1 rounded-lg text-xs font-medium border ${isDark ? 'bg-violet-500/30 text-violet-200 border-violet-400/30' : 'bg-violet-100 text-violet-700 border-violet-200'}`}>
                               {catorcenaGroup.catorcena}
                             </span>
+                            {tipoPeriodo === 'mensual' && catorcenaGroup.fechaInicio && catorcenaGroup.fechaFin && (
+                              <span className={`text-xs ${isDark ? 'text-zinc-400' : 'text-gray-500'}`}>
+                                {formatDayMonth(catorcenaGroup.fechaInicio)} – {formatDayMonth(catorcenaGroup.fechaFin)}
+                              </span>
+                            )}
                             <span className={`${isDark ? 'text-zinc-500' : 'text-gray-400'} text-xs`}>
                               ({catorcenaGroup.articulos.length} artículo{catorcenaGroup.articulos.length > 1 ? 's' : ''})
                             </span>

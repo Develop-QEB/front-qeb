@@ -13,6 +13,8 @@ import { solicitudesService, UserOption } from '../../services/solicitudes.servi
 import { inventariosService, InventarioDisponible } from '../../services/inventarios.service';
 import { propuestasService, ReservaModalItem, CaraUpdateData } from '../../services/propuestas.service';
 import { formatCurrency } from '../../lib/utils';
+import { parseCircuitoDigital } from '../../lib/circuitos';
+import { circuitosService } from '../../services/circuitos.service';
 import { clientesService } from '../../services/clientes.service';
 import { useEnvironmentStore, getEndpoints } from '../../store/environmentStore';
 import { useAuthStore } from '../../store/authStore';
@@ -84,6 +86,7 @@ interface CaraItem {
   _originalDg?: string;
   _originalDcm?: string;
   grupo_rt_bf?: number | null;
+  grupo_masivo_id?: number | null;
   esBf?: boolean;
   articuloBf?: SAPArticulo | null;
 }
@@ -147,19 +150,46 @@ const CODE_PLAZA_MAP: Record<string, { estado: string; ciudad: string }> = {
   gdl: { estado: 'Jalisco', ciudad: 'Guadalajara,Zapopan,Tlaquepaque' },
   ver: { estado: 'Veracruz', ciudad: 'Veracruz,Alvarado,Boca del Río' },
   pv:  { estado: 'Jalisco', ciudad: 'Puerto Vallarta' },
+  tl:  { estado: 'Estado de México', ciudad: 'Toluca' },
 };
 
 const getFormatoFromArticulo = (itemName: string, itemCode?: string): string => {
   if (!itemName) return '';
   const name = itemName.toUpperCase();
+
+  // Bajo Puente - detectar ubicación específica del nombre del artículo SAP
+  if (name.includes('BAJO PUENTE')) {
+    if (name.includes('GRAN TERRAZA')) return 'Bajo Puente Gran Terraza';
+    if (name.includes('GEOGRAFOS')) return 'Bajo Puente Circuito Geografos';
+    if (name.includes('DEL PARQUE')) return 'Bajo Puente Circuito del Parque';
+    if (name.includes('FUENTES')) return 'Bajo Puente Fuentes';
+    if (name.includes('COLORINES 1') || name.includes('COLORINES1')) return 'Bajo Puente Colorines Bloque 1';
+    if (name.includes('COLORINES 2') || name.includes('COLORINES2')) return 'Bajo Puente Colorines Bloque 2';
+    if (name.includes('COLORINES 3') || name.includes('COLORINES3')) return 'Bajo Puente Colorines Bloque 3';
+    if (name.includes('COLORINES')) return 'Bajo Puente Colorines Bloque 4';
+    return 'Bajo Puente';
+  }
+
+  // MI MACRO - sub-tipos (antes de PARABUS/MUPI para evitar falsos positivos)
+  if (name.includes('MI MACRO')) {
+    if (name.includes('VIDRIO INTERIOR')) return 'MI MACRO Vidrio Int';
+    if (name.includes('VIDRIO EXTERIOR')) return 'MI MACRO Vidrio Ext';
+    if (name.includes('MUPI')) return 'MI MACRO MUPI Int';
+    if (name.includes('PARABUS')) return 'MI MACRO Parabus';
+    if (name.includes('MODULO')) return 'MI MACRO Modulos';
+    return 'MI MACRO';
+  }
+
+  if (name.includes('PUENTE PEATONAL')) return 'Puente Peatonal';
+  if (name.includes('TOTEM')) return 'TOTEM';
   if (name.includes('KIOSCO') || name.includes('KIOSKO')) return 'Kiosco';
-  if (name.includes('PARABUS')) return 'PARABUS';
   if (name.includes('CASETA DE TAXIS')) return 'CASETA DE TAXIS';
   if (name.includes('METROPOLITANO PARALELO')) return 'METROPOLITANO PARALELO';
   if (name.includes('METROPOLITANO PERPENDICULAR')) return 'METROPOLITANO PERPENDICULAR';
   if (name.includes('COLUMNA RECARGA')) return 'COLUMNA RECARGA';
   if (name.includes('MUPI DE PIEDRA')) return 'MUPI DE PIEDRA';
   if (name.includes('MUPI')) return 'MUPI';
+  if (name.includes('PARABUS')) return 'PARABUS';
   if (name.includes('COLUMNA')) return 'COLUMNA';
   if (name.includes('BOLERO')) return 'BOLERO';
   if (itemCode) {
@@ -193,12 +223,41 @@ const getTarifaPisoFromArticulo = (articulo: SAPArticulo): number => {
 };
 
 // Multi-city auto-fill rules for specific article patterns
+// Order matters: more specific patterns BEFORE generic ones
 const MULTI_CITY_RULES: { pattern: RegExp; estado: string; ciudad: string }[] = [
-  { pattern: /\bMTY\b|\bMONTERREY\b/, estado: 'Nuevo León', ciudad: 'Monterrey,Guadalupe,San Nicolás de los Garza,Santa Catarina' },
-  { pattern: /\bVERACRUZ\b|\bVER\b/, estado: 'Veracruz', ciudad: 'Veracruz,Alvarado,Boca del Río' },
-  { pattern: /\bGD\b|\bGUADALAJARA\b/, estado: 'Jalisco', ciudad: 'Guadalajara,Zapopan,Tlaquepaque' },
   { pattern: /\bPUERTO VALLARTA\b|\bPV\b/, estado: 'Jalisco', ciudad: 'Puerto Vallarta' },
-  { pattern: /\bTOLUCA\b|\bTL\b/, estado: 'Estado de México', ciudad: 'Toluca,Metepec,San Mateo Atenco,Lerma' },
+  { pattern: /\bGD\b|\bGUADALAJARA\b|\bGDL\b/, estado: 'Jalisco', ciudad: 'GUADALAJARA,ZAPOPAN,SAN PEDRO TLAQUEPAQUE' },
+  { pattern: /\bMTY\b|\bMONTERREY\b/, estado: 'Nuevo León', ciudad: 'MONTERREY,GUADALUPE,SAN NICOLÁS DE LOS GARZA,SANTA CATARINA' },
+  { pattern: /\bBOCA DEL RIO\b/, estado: 'Veracruz', ciudad: 'BOCA DEL RIO' },
+  { pattern: /\bVERACRUZ\b|\bVER\b/, estado: 'Veracruz', ciudad: 'VERACRUZ,ALVARADO,BOCA DEL RIO' },
+  { pattern: /\bCHOLULA\b/, estado: 'Puebla', ciudad: 'SAN ANDRES CHOLULA,SAN PEDRO CHOLULA' },
+  { pattern: /\bPUEBLA\b|\bPB\b/, estado: 'Puebla', ciudad: 'PUEBLA,SAN ANDRES CHOLULA,SAN PEDRO CHOLULA' },
+  { pattern: /\bMERIDA\b|\bMR\b/, estado: 'Yucatán', ciudad: 'MÉRIDA' },
+  { pattern: /\bLEON\b|\bLEN\b/, estado: 'Guanajuato', ciudad: 'LEÓN' },
+  { pattern: /\bSALAMANCA\b/, estado: 'Guanajuato', ciudad: 'SALAMANCA' },
+  { pattern: /\bCELAYA\b/, estado: 'Guanajuato', ciudad: 'CELAYA' },
+  { pattern: /\bIRAPUATO\b/, estado: 'Guanajuato', ciudad: 'IRAPUATO' },
+  { pattern: /\bGUANAJUATO\b|\bGTO\b/, estado: 'Guanajuato', ciudad: '' },
+  { pattern: /\bOAXACA\b|\bOAX\b/, estado: 'Oaxaca de Juárez', ciudad: 'OAXACA DE JUÁREZ' },
+  { pattern: /\bAGS\b|\bAGUASCALIENTES\b/, estado: 'Aguascalientes', ciudad: 'AGUASCALIENTES' },
+  { pattern: /\bCULIACAN\b/, estado: 'Sinaloa', ciudad: 'CULIACÁN' },
+  { pattern: /\bMAZATLAN\b|\bMZ\b/, estado: 'Sinaloa', ciudad: 'MAZATLÁN' },
+  { pattern: /\bSLP\b|\bSAN LUIS POTOSI\b/, estado: 'San Luis Potosí', ciudad: 'SAN LUIS POTOSÍ' },
+  { pattern: /\bTIJUANA\b|\bTJ\b/, estado: 'Baja California', ciudad: 'TIJUANA' },
+  { pattern: /\bACAPULCO\b|\bAC\b/, estado: 'Guerrero', ciudad: 'ACAPULCO DE JUÁREZ' },
+  { pattern: /\bPACHUCA\b|\bPH\b/, estado: 'Hidalgo', ciudad: 'PACHUCA DE SOTO' },
+  { pattern: /\bTOLUCA\b|\bTL\b/, estado: 'Estado de México', ciudad: 'TOLUCA,METEPEC,LERMA,SAN MATEO ATENCO' },
+  { pattern: /\bCUERNAVACA\b|\bCV\b/, estado: 'Morelos', ciudad: 'CUERNAVACA' },
+  { pattern: /\bTAMPICO\b|\bTM\b/, estado: 'Tamaulipas', ciudad: 'TAMPICO' },
+  { pattern: /\bTORREON\b|\bTR\b/, estado: 'Coahuila', ciudad: 'TORREON' },
+  { pattern: /\bQUERETARO\b|\bQR\b/, estado: 'Querétaro', ciudad: 'QUERÉTARO' },
+  { pattern: /\bTUXTLA\b|\bTG\b/, estado: 'Chiapas', ciudad: 'TUXTLA GUTIERREZ' },
+  { pattern: /\bTABASCO\b|\bVILLAHERMOSA\b|\bTB\b/, estado: 'Tabasco', ciudad: 'VILLAHERMOSA' },
+  { pattern: /\bMORELIA\b/, estado: 'Michoacán', ciudad: 'MORELIA' },
+  { pattern: /\bCANCUN\b/, estado: 'Quintana Roo', ciudad: 'BENITO JUÁREZ' },
+  { pattern: /\bCDMX\b|\bCIUDAD DE MEXICO\b|\bDF\b|\bMEXICO\b(?!\s*(Y\s*AM|WI-?FI))|\bMX\b/, estado: 'Ciudad de México / AM', ciudad: '' },
+  { pattern: /\bNAUC\b/, estado: 'Estado de México', ciudad: 'NAUCALPAN' },
+  { pattern: /\bEM\b/, estado: 'Estado de México', ciudad: '' },
 ];
 
 // Extract city/state from article name (sorted by length to avoid false positives)
@@ -677,6 +736,8 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
   const [newCara, setNewCara] = useState<Omit<CaraItem, 'localId'>>(EMPTY_CARA);
   const [selectedArticulo, setSelectedArticulo] = useState<SAPArticulo | null>(null);
   const [showAddCaraForm, setShowAddCaraForm] = useState(false);
+  // Modo masivo: ON = aplica al rango catorcena_inicio..catorcena_fin (crear N o editar la serie)
+  const [modoMasivoP, setModoMasivoP] = useState(false);
   const caraFormRef = useRef<HTMLDivElement>(null);
   const caraTableRef = useRef<HTMLDivElement>(null);
 
@@ -752,6 +813,12 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
   const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('asc');
   const [agruparComoCompleto, setAgruparComoCompleto] = useState(true); // Group flujo+contraflujo at same location
   const [excluirCategoria, setExcluirCategoria] = useState<string>('');
+  // Reserva Masiva: solo aparece cuando la cara tiene grupo_masivo_id; cuando ON,
+  // (a) filtra inventario disponible en TODO el rango del grupo, (b) replica reserva a todas las caras
+  const [reservaMasivaP, setReservaMasivaP] = useState<boolean>(false);
+  // Eliminar Reservas Masivo: replica el delete a las reservas equivalentes
+  // (mismo codigo_unico) en otras caras del mismo grupo_masivo_id
+  const [eliminarMasivoP, setEliminarMasivoP] = useState<boolean>(false);
   const [excluirDistanciaKm, setExcluirDistanciaKm] = useState<number>(1);
 
   // Custom Confirmation Modal State
@@ -1028,33 +1095,65 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
       let cFin: number | undefined;
 
       if (!periodInitializedRef.current) {
-        // Load catorcenas from cotizacion dates using proper date comparison
-        if (cot?.fecha_inicio && catorcenasData?.data) {
-          const fechaInicioDate = new Date(cot.fecha_inicio);
-          const inicioCat = catorcenasData.data.find(c => {
-            const cInicioDate = new Date(c.fecha_inicio);
-            const cFinDate = new Date(c.fecha_fin);
-            return fechaInicioDate >= cInicioDate && fechaInicioDate <= cFinDate;
-          });
-          if (inicioCat) {
-            yInicio = inicioCat.a_o;
-            setYearInicio(yInicio);
-            cInicio = inicioCat.numero_catorcena;
-            setCatorcenaInicio(cInicio);
+        const tipoP = (cot as any)?.tipo_periodo || 'catorcena';
+        // Helper para evitar bug de timezone: parsea "2026-03-01T..." → {year:2026, month:3}
+        const parseYM = (val: any): { year: number; month: number } | null => {
+          if (!val) return null;
+          const s = val instanceof Date ? val.toISOString() : String(val);
+          const parts = s.split(/[-T]/);
+          if (parts.length < 2) return null;
+          const y = parseInt(parts[0]);
+          const m = parseInt(parts[1]);
+          if (!Number.isFinite(y) || !Number.isFinite(m) || m < 1 || m > 12) return null;
+          return { year: y, month: m };
+        };
+        // Mensual: derivar mes (1-12) desde fechas. Catorcena: buscar en tabla catorcenas.
+        if (cot?.fecha_inicio) {
+          if (tipoP === 'mensual') {
+            const ym = parseYM(cot.fecha_inicio);
+            if (ym) {
+              yInicio = ym.year;
+              cInicio = ym.month;
+              setYearInicio(yInicio);
+              setCatorcenaInicio(cInicio);
+            }
+          } else if (catorcenasData?.data) {
+            const fechaInicioDate = new Date(cot.fecha_inicio);
+            const inicioCat = catorcenasData.data.find(c => {
+              const cInicioDate = new Date(c.fecha_inicio);
+              const cFinDate = new Date(c.fecha_fin);
+              return fechaInicioDate >= cInicioDate && fechaInicioDate <= cFinDate;
+            });
+            if (inicioCat) {
+              yInicio = inicioCat.a_o;
+              setYearInicio(yInicio);
+              cInicio = inicioCat.numero_catorcena;
+              setCatorcenaInicio(cInicio);
+            }
           }
         }
-        if (cot?.fecha_fin && catorcenasData?.data) {
-          const fechaFinDate = new Date(cot.fecha_fin);
-          const finCat = catorcenasData.data.find(c => {
-            const cInicioDate = new Date(c.fecha_inicio);
-            const cFinDate = new Date(c.fecha_fin);
-            return fechaFinDate >= cInicioDate && fechaFinDate <= cFinDate;
-          });
-          if (finCat) {
-            yFin = finCat.a_o;
-            setYearFin(yFin);
-            cFin = finCat.numero_catorcena;
-            setCatorcenaFin(cFin);
+        if (cot?.fecha_fin) {
+          if (tipoP === 'mensual') {
+            const ym = parseYM(cot.fecha_fin);
+            if (ym) {
+              yFin = ym.year;
+              cFin = ym.month;
+              setYearFin(yFin);
+              setCatorcenaFin(cFin);
+            }
+          } else if (catorcenasData?.data) {
+            const fechaFinDate = new Date(cot.fecha_fin);
+            const finCat = catorcenasData.data.find(c => {
+              const cInicioDate = new Date(c.fecha_inicio);
+              const cFinDate = new Date(c.fecha_fin);
+              return fechaFinDate >= cInicioDate && fechaFinDate <= cFinDate;
+            });
+            if (finCat) {
+              yFin = finCat.a_o;
+              setYearFin(yFin);
+              cFin = finCat.numero_catorcena;
+              setCatorcenaFin(cFin);
+            }
           }
         }
         periodInitializedRef.current = true;
@@ -1080,32 +1179,50 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
       }
 
       // Set caras from solicitud
+      const tipoPCaras = (cot as any)?.tipo_periodo || 'catorcena';
       if (solicitudDetails.caras) {
         const carasWithIds: CaraItem[] = solicitudDetails.caras.map((cara, idx) => {
-          // Calculate catorcena from inicio_periodo
+          // Calculate catorcena/mes from inicio_periodo según tipo_periodo
           let catorcenaInicioCara: number | undefined;
           let anioInicioCara: number | undefined;
-          if (cara.inicio_periodo && catorcenasData?.data) {
-            const inicioPeriodoDate = new Date(cara.inicio_periodo);
-            const catInicio = catorcenasData.data.find(c => {
-              const cInicioDate = new Date(c.fecha_inicio);
-              const cFinDate = new Date(c.fecha_fin);
-              return inicioPeriodoDate >= cInicioDate && inicioPeriodoDate <= cFinDate;
-            });
-            if (catInicio) {
-              catorcenaInicioCara = catInicio.numero_catorcena;
-              anioInicioCara = catInicio.a_o;
+          if (cara.inicio_periodo) {
+            if (tipoPCaras === 'mensual') {
+              // Parse YYYY-MM directly to avoid timezone shift
+              const raw = cara.inicio_periodo as unknown;
+              const s = raw instanceof Date ? raw.toISOString() : String(raw);
+              const parts = s.split(/[-T]/);
+              const y = parseInt(parts[0]);
+              const m = parseInt(parts[1]);
+              if (Number.isFinite(y) && Number.isFinite(m) && m >= 1 && m <= 12) {
+                catorcenaInicioCara = m;
+                anioInicioCara = y;
+              }
+            } else if (catorcenasData?.data) {
+              const inicioPeriodoDate = new Date(cara.inicio_periodo);
+              const catInicio = catorcenasData.data.find(c => {
+                const cInicioDate = new Date(c.fecha_inicio);
+                const cFinDate = new Date(c.fecha_fin);
+                return inicioPeriodoDate >= cInicioDate && inicioPeriodoDate <= cFinDate;
+              });
+              if (catInicio) {
+                catorcenaInicioCara = catInicio.numero_catorcena;
+                anioInicioCara = catInicio.a_o;
+              }
             }
           }
 
           const grupoRtBfVal = cara.grupo_rt_bf != null ? Number(cara.grupo_rt_bf) : null;
           const articuloUpper = (cara.articulo || '').toUpperCase();
           const esBfRow = !!grupoRtBfVal && (articuloUpper.startsWith('BF') || articuloUpper.startsWith('CF'));
+          // Si es circuito, plaza se deriva del ItemCode (ej. RT-DIG-03-MX → "Ciudad de México / AM")
+          const circuitoLoad = parseCircuitoDigital(cara.articulo || '');
+          const plazaDerivada = circuitoLoad ? circuitoLoad.plazaLabel : '';
           return {
             localId: `cara-${cara.id || idx}-${Date.now()}`,
             id: cara.id,
             ciudad: cara.ciudad || '',
             estados: cara.estados || '',
+            plaza: plazaDerivada,
             tipo: cara.tipo || '',
             flujo: cara.flujo || '',
             bonificacion: Number(cara.bonificacion) || 0,
@@ -1116,8 +1233,9 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
             tarifa_publica: (Number(cara.caras) || 0) > 0
               ? (Number(cara.costo) || 0) / (Number(cara.caras) || 1)
               : Number(cara.tarifa_publica) || 0,
-            inicio_periodo: cara.inicio_periodo || '',
-            fin_periodo: cara.fin_periodo || '',
+            // Truncar a YYYY-MM-DD para que <input type="date"> autocomplete al editar
+            inicio_periodo: String(cara.inicio_periodo || '').slice(0, 10),
+            fin_periodo: String(cara.fin_periodo || '').slice(0, 10),
             caras_flujo: Number(cara.caras_flujo) || 0,
             caras_contraflujo: Number(cara.caras_contraflujo) || 0,
             articulo: cara.articulo || '',
@@ -1129,6 +1247,7 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
             _originalDg: cara.autorizacion_dg || 'aprobado',
             _originalDcm: cara.autorizacion_dcm || 'aprobado',
             grupo_rt_bf: grupoRtBfVal,
+            grupo_masivo_id: (cara as any).grupo_masivo_id != null ? Number((cara as any).grupo_masivo_id) : null,
             esBf: esBfRow,
           };
         });
@@ -1578,7 +1697,9 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
           const parts = periodo.split('-');
           groups[periodo] = { caras: [], catorcenaNum: parseInt(parts[1]) || undefined, year: parseInt(parts[0]) || undefined };
         } else {
-          const catorcenaInfo = catorcenasData?.data?.find(c => c.fecha_inicio === periodo);
+          // Catorcena: comparar como YYYY-MM-DD por si el formato difiere (ISO vs date)
+          const periodoStr = String(periodo).slice(0, 10);
+          const catorcenaInfo = catorcenasData?.data?.find(c => String(c.fecha_inicio).slice(0, 10) === periodoStr);
           groups[periodo] = { caras: [], catorcenaNum: catorcenaInfo?.numero_catorcena, year: catorcenaInfo?.a_o };
         }
       }
@@ -1601,40 +1722,96 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
   }, [catorcenasData, yearInicio]);
 
   const catorcenasInicioOptions = useMemo(() => {
+    // Para mensual: generar opciones de mes (1-12) en lugar de catorcenas
+    if (tipoPeriodo === 'mensual') {
+      if (!yearInicio) return [];
+      const baseMonths = Array.from({ length: 12 }, (_, i) => ({ id: yearInicio * 100 + (i + 1), a_o: yearInicio, numero_catorcena: i + 1, fecha_inicio: '', fecha_fin: '' }));
+      if (yearInicio === yearFin && catorcenaFin) return baseMonths.filter(m => m.numero_catorcena <= catorcenaFin);
+      return baseMonths;
+    }
     if (!catorcenasData?.data || !yearInicio) return [];
     const cats = catorcenasData.data.filter(c => c.a_o === yearInicio);
     if (yearInicio === yearFin && catorcenaFin) return cats.filter(c => c.numero_catorcena <= catorcenaFin);
     return cats;
-  }, [catorcenasData, yearInicio, yearFin, catorcenaFin]);
+  }, [catorcenasData, yearInicio, yearFin, catorcenaFin, tipoPeriodo]);
 
   const catorcenasFinOptions = useMemo(() => {
+    // Para mensual: generar opciones de mes (1-12)
+    if (tipoPeriodo === 'mensual') {
+      if (!yearFin) return [];
+      const baseMonths = Array.from({ length: 12 }, (_, i) => ({ id: yearFin * 100 + (i + 1), a_o: yearFin, numero_catorcena: i + 1, fecha_inicio: '', fecha_fin: '' }));
+      if (yearInicio === yearFin && catorcenaInicio) return baseMonths.filter(m => m.numero_catorcena >= catorcenaInicio);
+      return baseMonths;
+    }
     if (!catorcenasData?.data || !yearFin) return [];
     const cats = catorcenasData.data.filter(c => c.a_o === yearFin);
     if (yearInicio === yearFin && catorcenaInicio) return cats.filter(c => c.numero_catorcena >= catorcenaInicio);
     return cats;
-  }, [catorcenasData, yearFin, yearInicio, catorcenaInicio]);
+  }, [catorcenasData, yearFin, yearInicio, catorcenaInicio, tipoPeriodo]);
 
   // Available periods based on year range
   const availablePeriods = useMemo(() => {
-    if (!catorcenasData?.data || !yearInicio || !yearFin || !catorcenaInicio || !catorcenaFin) return [];
+    if (!yearInicio || !yearFin || !catorcenaInicio || !catorcenaFin) return [];
+    // Mensual: generar periodos por mes (1-12) entre yearInicio/mesInicio y yearFin/mesFin
+    if (tipoPeriodo === 'mensual') {
+      const periods: { id: number; a_o: number; numero_catorcena: number; fecha_inicio: string; fecha_fin: string }[] = [];
+      let y = yearInicio, m = catorcenaInicio;
+      while (y < yearFin || (y === yearFin && m <= catorcenaFin)) {
+        const fechaIni = new Date(y, m - 1, 1);
+        const fechaFinMes = new Date(y, m, 0);
+        periods.push({
+          id: y * 100 + m,
+          a_o: y,
+          numero_catorcena: m,
+          fecha_inicio: fechaIni.toISOString().split('T')[0],
+          fecha_fin: fechaFinMes.toISOString().split('T')[0],
+        });
+        m++;
+        if (m > 12) { m = 1; y++; }
+      }
+      return periods;
+    }
+    if (!catorcenasData?.data) return [];
     return catorcenasData.data.filter(c => {
       if (c.a_o < yearInicio || c.a_o > yearFin) return false;
       if (c.a_o === yearInicio && c.numero_catorcena < catorcenaInicio) return false;
       if (c.a_o === yearFin && c.numero_catorcena > catorcenaFin) return false;
       return true;
     });
-  }, [catorcenasData, yearInicio, yearFin, catorcenaInicio, catorcenaFin]);
+  }, [catorcenasData, yearInicio, yearFin, catorcenaInicio, catorcenaFin, tipoPeriodo]);
 
   // Detect caras whose period is outside the current availablePeriods range
   const invalidCaras = useMemo(() => {
     if (caras.length === 0) return [];
     if (!yearInicio || !yearFin || !catorcenaInicio || !catorcenaFin) return [];
     const validKeys = new Set(availablePeriods.map(p => `${p.a_o}-${p.numero_catorcena}`));
+
+    // Rango global: para verificar fechas exactas del circuito
+    let rangoIni = '';
+    let rangoFin = '';
+    if (tipoPeriodo === 'mensual') {
+      rangoIni = `${yearInicio}-${String(catorcenaInicio).padStart(2, '0')}-01`;
+      const lastDay = new Date(yearFin, catorcenaFin, 0).getDate();
+      rangoFin = `${yearFin}-${String(catorcenaFin).padStart(2, '0')}-${String(lastDay).padStart(2, '0')}`;
+    } else if (catorcenasData?.data) {
+      const ini = catorcenasData.data.find(c => c.a_o === yearInicio && c.numero_catorcena === catorcenaInicio);
+      const fin = catorcenasData.data.find(c => c.a_o === yearFin && c.numero_catorcena === catorcenaFin);
+      if (ini) rangoIni = String(ini.fecha_inicio).split('T')[0];
+      if (fin) rangoFin = String(fin.fecha_fin).split('T')[0];
+    }
+
     return caras.filter(c => {
       if (!c.anio_inicio || !c.catorcena_inicio) return false;
-      return !validKeys.has(`${c.anio_inicio}-${c.catorcena_inicio}`);
+      if (!validKeys.has(`${c.anio_inicio}-${c.catorcena_inicio}`)) return true;
+      // También verificar fechas reales del circuito vs rango global
+      if (rangoIni && rangoFin && c.inicio_periodo && c.fin_periodo) {
+        const ini = String(c.inicio_periodo).split('T')[0];
+        const fin = String(c.fin_periodo).split('T')[0];
+        if (ini < rangoIni || fin > rangoFin) return true;
+      }
+      return false;
     });
-  }, [caras, availablePeriods, yearInicio, yearFin, catorcenaInicio, catorcenaFin]);
+  }, [caras, availablePeriods, yearInicio, yearFin, catorcenaInicio, catorcenaFin, tipoPeriodo, catorcenasData]);
 
   // Toggle catorcena expansion
   const toggleCatorcena = (periodo: string) => {
@@ -1668,6 +1845,9 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
       alert('No puedes eliminar una cara que tiene reservas. Primero elimina las reservas.');
       return;
     }
+
+    // Eliminar circuito siempre actúa sobre la cara individual (NO masivo).
+    // Si su par RT/BF existe, también se elimina la pareja del MISMO periodo.
 
     // If cara belongs to RT/BF group, find its pair to delete both
     const pairCara = caraToDelete?.grupo_rt_bf
@@ -1823,8 +2003,9 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
       formato: cara.formato,
       costo: cara.costo,
       tarifa_publica: cara.tarifa_publica,
-      inicio_periodo: cara.inicio_periodo,
-      fin_periodo: cara.fin_periodo,
+      // Truncar a YYYY-MM-DD para que <input type="date"> lo reconozca
+      inicio_periodo: String(cara.inicio_periodo || '').slice(0, 10),
+      fin_periodo: String(cara.fin_periodo || '').slice(0, 10),
       caras_flujo: cara.caras_flujo,
       caras_contraflujo: cara.caras_contraflujo,
       articulo: cara.articulo,
@@ -1844,7 +2025,8 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
   // Handle save cara (add or update)
   // EDIT: only updates local state + tracks in modifiedCaras (bulk save later)
   // CREATE: still persists to DB immediately (needs ID for reservas)
-  const handleSaveCara = async () => {
+  // forcedPeriod permite sobrescribir catorcena/anio/fechas para iteración masiva
+  const handleSaveCara = async (forcedPeriod?: { catorcena: number; anio: number; inicio_periodo: string; fin_periodo: string }) => {
     if (!newCara.formato || !newCara.estados) {
       alert('Por favor completa al menos el formato y estado');
       return;
@@ -1901,6 +2083,9 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
       ? (newCara.grupo_rt_bf ?? Date.now() % 2000000000)
       : null;
 
+    // Usar forcedPeriod si viene (modo masivo iterando catorcenas), si no usar newCara
+    const inicioPeriodoUsar = forcedPeriod?.inicio_periodo ?? newCara.inicio_periodo;
+    const finPeriodoUsar = forcedPeriod?.fin_periodo ?? newCara.fin_periodo;
     // RT cara data (when pair mode, bonificacion is 0 — the bonificacion count lives on the BF row's `caras`)
     const caraData: Parameters<typeof propuestasService.createCara>[1] = {
       ciudad: ciudadToSave,
@@ -1915,8 +2100,8 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
       tarifa_publica: usePairMode && (newCara.caras || 0) + (newCara.bonificacion || 0) > 0
         ? costoCalculado / ((newCara.caras || 0) + (newCara.bonificacion || 0))
         : newCara.tarifa_publica,
-      inicio_periodo: newCara.inicio_periodo,
-      fin_periodo: newCara.fin_periodo,
+      inicio_periodo: inicioPeriodoUsar,
+      fin_periodo: finPeriodoUsar,
       caras_flujo: newCara.caras_flujo,
       caras_contraflujo: newCara.caras_contraflujo,
       articulo: newCara.articulo,
@@ -1940,8 +2125,8 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
           formato: newCara.formato,
           costo: 0,
           tarifa_publica: 0,
-          inicio_periodo: newCara.inicio_periodo,
-          fin_periodo: newCara.fin_periodo,
+          inicio_periodo: inicioPeriodoUsar,
+          fin_periodo: finPeriodoUsar,
           caras_flujo: 0,
           caras_contraflujo: 0,
           articulo: newCara.articuloBf.ItemCode,
@@ -2164,8 +2349,114 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
           setModifiedCaras(prev => {
             const next = new Map(prev);
             next.set(caraToEdit.id!, caraData);
+            // Si BF pair existe y NO cambió su artículo, también marcarlo como modificado
+            // para que el bulk save persista la nueva cantidad de bonificación
+            if (existingBfPair && existingBfPair.id && usePairMode && bfCaraData &&
+                newCara.articuloBf && newCara.articuloBf.ItemCode === existingBfPair.articulo) {
+              next.set(existingBfPair.id, bfCaraData);
+            }
             return next;
           });
+
+          // Propagación masiva: si el toggle modoMasivoP está ON y la cara pertenece
+          // a un grupo masivo, replicar los cambios NO-temporales a las demás caras
+          // del grupo (manteniendo cada cara su propio periodo y su par BF).
+          if (modoMasivoP && caraToEdit.grupo_masivo_id) {
+            const otrasCarasGrupo = caras.filter(c =>
+              c.grupo_masivo_id === caraToEdit.grupo_masivo_id &&
+              c.id !== caraToEdit.id &&
+              !c.esBf
+            );
+            if (otrasCarasGrupo.length > 0) {
+              setModifiedCaras(prev => {
+                const next = new Map(prev);
+                for (const otra of otrasCarasGrupo) {
+                  if (!otra.id) continue;
+                  // Replicamos campos NO-temporales; mantenemos periodo y grupo_rt_bf propios de cada otra cara
+                  next.set(otra.id, {
+                    ...caraData,
+                    inicio_periodo: otra.inicio_periodo,
+                    fin_periodo: otra.fin_periodo,
+                    grupo_rt_bf: otra.grupo_rt_bf ?? null,
+                  });
+                  // También su par BF si existe
+                  if (otra.grupo_rt_bf && newBfCaraItem) {
+                    const bfPair = caras.find(c =>
+                      c.localId !== otra.localId &&
+                      c.esBf &&
+                      c.grupo_rt_bf === otra.grupo_rt_bf &&
+                      c.inicio_periodo === otra.inicio_periodo &&
+                      c.fin_periodo === otra.fin_periodo
+                    );
+                    if (bfPair?.id && bfCaraData) {
+                      next.set(bfPair.id, {
+                        ...bfCaraData,
+                        inicio_periodo: otra.inicio_periodo,
+                        fin_periodo: otra.fin_periodo,
+                        grupo_rt_bf: otra.grupo_rt_bf,
+                      });
+                    }
+                  }
+                }
+                return next;
+              });
+              // Replicar cambios al estado local INMEDIATAMENTE para que se vea en UI
+              // (antes de hacer click "Guardar Todo")
+              const grupoIdsRT = new Set(otrasCarasGrupo.map(o => o.id));
+              const grupoIdsBfPares = new Set<number>();
+              for (const otra of otrasCarasGrupo) {
+                if (otra.grupo_rt_bf) {
+                  const bfPair = caras.find(c =>
+                    c.localId !== otra.localId &&
+                    c.esBf &&
+                    c.grupo_rt_bf === otra.grupo_rt_bf &&
+                    c.inicio_periodo === otra.inicio_periodo &&
+                    c.fin_periodo === otra.fin_periodo
+                  );
+                  if (bfPair?.id) grupoIdsBfPares.add(bfPair.id);
+                }
+              }
+              setCaras(prev => prev.map(c => {
+                // RT de las otras caras del grupo masivo
+                if (c.id && grupoIdsRT.has(c.id)) {
+                  return {
+                    ...c,
+                    articulo: newCara.articulo,
+                    estados: newCara.estados,
+                    ciudad: ciudadToSave,
+                    plaza: newCara.plaza || c.plaza,
+                    formato: newCara.formato,
+                    tipo: newCara.tipo,
+                    nivel_socioeconomico: newCara.nivel_socioeconomico,
+                    caras: newCara.caras,
+                    bonificacion: usePairMode ? 0 : newCara.bonificacion,
+                    tarifa_publica: usePairMode && (newCara.caras + newCara.bonificacion) > 0
+                      ? costoCalculado / (newCara.caras + newCara.bonificacion)
+                      : newCara.tarifa_publica,
+                    costo: costoCalculado,
+                    descuento: newCara.descuento,
+                    caras_flujo: newCara.caras_flujo,
+                    caras_contraflujo: newCara.caras_contraflujo,
+                  };
+                }
+                // BF pares de las otras caras del grupo masivo
+                if (c.id && grupoIdsBfPares.has(c.id)) {
+                  return {
+                    ...c,
+                    bonificacion: bfCarasCount,
+                    caras: 0,
+                    caras_flujo: 0,
+                    caras_contraflujo: 0,
+                    articulo: bfCaraData?.articulo || c.articulo,
+                    formato: newCara.formato,
+                    tipo: newCara.tipo,
+                  };
+                }
+                return c;
+              }));
+              showToast(`Cambios replicados a ${otrasCarasGrupo.length} cara(s) más del grupo masivo`, 'success');
+            }
+          }
         }
         setEditingCaraId(null);
         setTimeout(() => caraTableRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 100);
@@ -2194,10 +2485,10 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
             caras_contraflujo: 0,
             articulo: bfCaraData.articulo || '',
             descuento: 0,
-            catorcena_inicio: newCara.catorcena_inicio,
-            anio_inicio: newCara.anio_inicio,
-            catorcena_fin: newCara.catorcena_fin,
-            anio_fin: newCara.anio_fin,
+            catorcena_inicio: forcedPeriod?.catorcena ?? newCara.catorcena_inicio,
+            anio_inicio: forcedPeriod?.anio ?? newCara.anio_inicio,
+            catorcena_fin: forcedPeriod?.catorcena ?? newCara.catorcena_fin,
+            anio_fin: forcedPeriod?.anio ?? newCara.anio_fin,
             autorizacion_dg: createdBf.autorizacion_dg || 'aprobado',
             autorizacion_dcm: createdBf.autorizacion_dcm || 'aprobado',
             _originalDg: createdBf.autorizacion_dg || 'aprobado',
@@ -2215,6 +2506,13 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
           localId: `cara-${createdCara.id}`,
           bonificacion: usePairMode ? 0 : newCara.bonificacion,
           costo: costoCalculado,
+          // Sobrescribir periodos con los del forcedPeriod (si aplica) para que el UI agrupe correcto
+          inicio_periodo: inicioPeriodoUsar,
+          fin_periodo: finPeriodoUsar,
+          catorcena_inicio: forcedPeriod?.catorcena ?? newCara.catorcena_inicio,
+          anio_inicio: forcedPeriod?.anio ?? newCara.anio_inicio,
+          catorcena_fin: forcedPeriod?.catorcena ?? newCara.catorcena_fin,
+          anio_fin: forcedPeriod?.anio ?? newCara.anio_fin,
           grupo_rt_bf: grupoRtBfVal,
           esBf: false,
           autorizacion_dg: createdCara.autorizacion_dg || 'aprobado',
@@ -2356,16 +2654,22 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
         messages.push(result.message || `${carasArray.length} circuito(s) actualizados`);
       }
 
-      // Refresh data
-      queryClient.invalidateQueries({ queryKey: ['propuesta-full', propuesta.id] });
-      queryClient.invalidateQueries({ queryKey: ['propuesta-caras', propuesta.id] });
-      queryClient.invalidateQueries({ queryKey: ['propuestas'] });
-      queryClient.invalidateQueries({ queryKey: ['solicitud-full-details', propuesta.solicitud_id] });
+      // Refresh data — incluye reservas modal para que circuitos se redibujen verdes/llenos tras redistribuir
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ['propuesta-full', propuesta.id] }),
+        queryClient.invalidateQueries({ queryKey: ['propuesta-caras', propuesta.id] }),
+        queryClient.invalidateQueries({ queryKey: ['propuestas'] }),
+        queryClient.invalidateQueries({ queryKey: ['solicitud-full-details', propuesta.solicitud_id] }),
+        queryClient.invalidateQueries({ queryKey: ['propuesta-reservas-modal', propuesta.id] }),
+      ]);
 
       showToast(messages.join(' | '), 'success');
     } catch (error) {
       console.error('Error in bulk save:', error);
-      showToast(`Error al guardar: ${error instanceof Error ? error.message : 'Error desconocido'}`, 'error');
+      const axiosError = error as { response?: { data?: { error?: string; message?: string } }; message?: string };
+      const backendMsg = axiosError?.response?.data?.error || axiosError?.response?.data?.message;
+      const msg = backendMsg || (error instanceof Error ? error.message : 'Error desconocido');
+      showToast(`Error al guardar: ${msg}`, 'error');
     } finally {
       setIsSaving(false);
     }
@@ -2706,6 +3010,18 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
 
       // Translate "Ciudad de México / AM" to real states
       const estadoParam = cara.estados === 'Ciudad de México / AM' ? 'Ciudad de México,Estado de México' : cara.estados;
+
+      // Si Reserva Masiva está ON y la cara tiene grupo_masivo_id, usar rango total del grupo
+      let fechaIniSearch = cara.inicio_periodo || undefined;
+      let fechaFinSearch = cara.fin_periodo || undefined;
+      if (reservaMasivaP && cara.grupo_masivo_id) {
+        const grupo = caras.filter(c => c.grupo_masivo_id === cara.grupo_masivo_id && !c.esBf);
+        const fechasIni = grupo.map(c => c.inicio_periodo).filter(Boolean).sort();
+        const fechasFin = grupo.map(c => c.fin_periodo).filter(Boolean).sort();
+        if (fechasIni.length) fechaIniSearch = fechasIni[0];
+        if (fechasFin.length) fechaFinSearch = fechasFin[fechasFin.length - 1];
+      }
+
       const response = await inventariosService.getDisponibles({
         ciudad: ciudadFilter,
         estado: estadoParam || undefined,
@@ -2713,8 +3029,8 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
         // Don't filter by flujo in backend - get all and filter in frontend
         nse: cara.nivel_socioeconomico || undefined,
         tipo: cara.tipo || undefined,
-        fecha_inicio: cara.inicio_periodo || undefined,
-        fecha_fin: cara.fin_periodo || undefined,
+        fecha_inicio: fechaIniSearch,
+        fecha_fin: fechaFinSearch,
         solicitudCaraId: cara.id,
         excluir_categoria: excluirCategoria || undefined,
         excluir_distancia_km: excluirCategoria ? excluirDistanciaKm : undefined,
@@ -2727,6 +3043,14 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
       setIsSearching(false);
     }
   };
+
+  // Re-search cuando se prende/apaga reserva masiva
+  useEffect(() => {
+    if (viewState === 'search-inventory' && selectedCaraForSearch?.grupo_masivo_id) {
+      handleSearchInventory(selectedCaraForSearch);
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [reservaMasivaP]);
 
   // Re-search when excluirCategoria changes (if already in search view)
   useEffect(() => {
@@ -2752,6 +3076,17 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
       }
 
       const estadoParam2 = selectedCaraForSearch.estados === 'Ciudad de México / AM' ? 'Ciudad de México,Estado de México' : selectedCaraForSearch.estados;
+
+      let fechaIniSearch2 = selectedCaraForSearch.inicio_periodo || undefined;
+      let fechaFinSearch2 = selectedCaraForSearch.fin_periodo || undefined;
+      if (reservaMasivaP && selectedCaraForSearch.grupo_masivo_id) {
+        const grupo = caras.filter(c => c.grupo_masivo_id === selectedCaraForSearch.grupo_masivo_id && !c.esBf);
+        const fechasIni = grupo.map(c => c.inicio_periodo).filter(Boolean).sort();
+        const fechasFin = grupo.map(c => c.fin_periodo).filter(Boolean).sort();
+        if (fechasIni.length) fechaIniSearch2 = fechasIni[0];
+        if (fechasFin.length) fechaFinSearch2 = fechasFin[fechasFin.length - 1];
+      }
+
       const response = await inventariosService.getDisponibles({
         ciudad: ciudadFilter,
         estado: estadoParam2 || undefined,
@@ -2759,8 +3094,8 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
         // Don't filter by flujo in backend - get all and filter in frontend
         nse: selectedCaraForSearch.nivel_socioeconomico || undefined,
         tipo: selectedCaraForSearch.tipo || undefined,
-        fecha_inicio: selectedCaraForSearch.inicio_periodo || undefined,
-        fecha_fin: selectedCaraForSearch.fin_periodo || undefined,
+        fecha_inicio: fechaIniSearch2,
+        fecha_fin: fechaFinSearch2,
         solicitudCaraId: selectedCaraForSearch.id,
       });
       setInventarioDisponible(response.data || []);
@@ -3290,21 +3625,33 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
 
         if (clienteId === undefined || clienteId === null) throw new Error("Cliente ID no encontrado");
 
-        const result = await propuestasService.createReservas(propuesta.id, {
-          reservas: newReservas,
-          solicitudCaraId: selectedCaraForSearch.id!,
-          clienteId,
-          fechaInicio,
-          fechaFin,
-          agruparComoCompleto: shouldGroup,
-        });
+        // Replicar a todas las caras del grupo masivo si reservaMasivaP está ON
+        const carasObjetivo = (reservaMasivaP && selectedCaraForSearch.grupo_masivo_id)
+          ? caras.filter(c => c.grupo_masivo_id === selectedCaraForSearch.grupo_masivo_id && !c.esBf && c.id)
+          : [selectedCaraForSearch];
+
+        let totalReservasCreadas = 0;
+        for (const cTarget of carasObjetivo) {
+          const fIni = cTarget.inicio_periodo || fechaInicio;
+          const fFin = cTarget.fin_periodo || fechaFin;
+          const result = await propuestasService.createReservas(propuesta.id, {
+            reservas: newReservas,
+            solicitudCaraId: cTarget.id!,
+            clienteId,
+            fechaInicio: fIni,
+            fechaFin: fFin,
+            agruparComoCompleto: shouldGroup,
+          });
+          totalReservasCreadas += result.reservasCreadas;
+        }
 
         queryClient.invalidateQueries({ queryKey: ['propuesta-reservas-modal', propuesta.id] });
         queryClient.invalidateQueries({ queryKey: ['propuesta-inventario', propuesta.id] }); // Refresh map
         // Also refresh disponibles
         handleRefetchDisponibles();
 
-        showToast(`Se guardaron ${result.reservasCreadas} reservas exitosamente`, 'success');
+        const sufijo = carasObjetivo.length > 1 ? ` en ${carasObjetivo.length} periodos` : '';
+        showToast(`Se guardaron ${totalReservasCreadas} reservas exitosamente${sufijo}`, 'success');
         setSelectedInventory(new Set());
       } catch (error) {
         console.error('Error saving reservas:', error);
@@ -3336,17 +3683,41 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
         onCancel: () => runReservation(false)
       });
     } else if (potentialPairs.size > 0 && !showOnlyCompletos) {
-      // Hay pares pero NO está activo el filtro completos - reservar sin agrupar directamente
-      runReservation(false);
+      // Hay pares pero NO está activo el filtro completos
+      // Si reserva masiva está ON, igual confirmar (más reservas en juego)
+      if (reservaMasivaP && selectedCaraForSearch?.grupo_masivo_id) {
+        const grupoSize = caras.filter(c => c.grupo_masivo_id === selectedCaraForSearch.grupo_masivo_id && !c.esBf && c.id).length;
+        setConfirmModal({
+          isOpen: true,
+          title: 'Reserva Masiva',
+          message: `Vas a crear ${selectedInventory.size * grupoSize} reservas (${selectedInventory.size} inventario${selectedInventory.size > 1 ? 's' : ''} × ${grupoSize} periodos del grupo masivo). ¿Confirmas?`,
+          confirmText: `Reservar en ${grupoSize} periodos`,
+          onConfirm: () => runReservation(false),
+        });
+      } else {
+        runReservation(false);
+      }
     } else {
-      // Sin pares, confirmar reservación normal
-      setConfirmModal({
-        isOpen: true,
-        title: 'Confirmar Reservación',
-        message: `¿Estás seguro de reservar ${selectedInventory.size} espacios?`,
-        confirmText: 'Reservar',
-        onConfirm: () => runReservation(false),
-      });
+      // Si reserva masiva está ON, mostrar mensaje específico de masiva
+      if (reservaMasivaP && selectedCaraForSearch?.grupo_masivo_id) {
+        const grupoSize = caras.filter(c => c.grupo_masivo_id === selectedCaraForSearch.grupo_masivo_id && !c.esBf && c.id).length;
+        setConfirmModal({
+          isOpen: true,
+          title: 'Reserva Masiva',
+          message: `Vas a crear ${selectedInventory.size * grupoSize} reservas (${selectedInventory.size} inventario${selectedInventory.size > 1 ? 's' : ''} × ${grupoSize} periodos del grupo masivo). ¿Confirmas?`,
+          confirmText: `Reservar en ${grupoSize} periodos`,
+          onConfirm: () => runReservation(false),
+        });
+      } else {
+        // Sin pares, confirmar reservación normal
+        setConfirmModal({
+          isOpen: true,
+          title: 'Confirmar Reservación',
+          message: `¿Estás seguro de reservar ${selectedInventory.size} espacios?`,
+          confirmText: 'Reservar',
+          onConfirm: () => runReservation(false),
+        });
+      }
     }
   };
 
@@ -3383,20 +3754,32 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
 
         if (clienteId === undefined || clienteId === null) throw new Error("Cliente ID no encontrado");
 
-        const result = await propuestasService.createReservas(propuesta.id, {
-          reservas: newReservas,
-          solicitudCaraId: selectedCaraForSearch.id!,
-          clienteId,
-          fechaInicio,
-          fechaFin,
-          agruparComoCompleto: false, // Bonificaciones likely single
-        });
+        // Replicar bonificación a todas las caras BF del grupo masivo si reservaMasivaP está ON
+        const carasObjetivo = (reservaMasivaP && selectedCaraForSearch.grupo_masivo_id)
+          ? caras.filter(c => c.grupo_masivo_id === selectedCaraForSearch.grupo_masivo_id && c.esBf && c.id)
+          : [selectedCaraForSearch];
+
+        let totalReservasCreadas = 0;
+        for (const cTarget of carasObjetivo) {
+          const fIni = cTarget.inicio_periodo || fechaInicio;
+          const fFin = cTarget.fin_periodo || fechaFin;
+          const result = await propuestasService.createReservas(propuesta.id, {
+            reservas: newReservas,
+            solicitudCaraId: cTarget.id!,
+            clienteId,
+            fechaInicio: fIni,
+            fechaFin: fFin,
+            agruparComoCompleto: false,
+          });
+          totalReservasCreadas += result.reservasCreadas;
+        }
 
         queryClient.invalidateQueries({ queryKey: ['propuesta-reservas-modal', propuesta.id] });
         queryClient.invalidateQueries({ queryKey: ['propuesta-inventario', propuesta.id] });
         handleRefetchDisponibles();
 
-        showToast(`Se guardaron ${result.reservasCreadas} bonificaciones exitosamente`, 'success');
+        const sufijo = carasObjetivo.length > 1 ? ` en ${carasObjetivo.length} periodos` : '';
+        showToast(`Se guardaron ${totalReservasCreadas} bonificaciones exitosamente${sufijo}`, 'success');
         setSelectedInventory(new Set());
       } catch (error) {
         console.error('Error saving bonificaciones:', error);
@@ -3408,13 +3791,25 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
     };
 
     const isCT = (selectedCaraForSearch?.articulo || '').toUpperCase().startsWith('CT');
-    setConfirmModal({
-      isOpen: true,
-      title: isCT ? 'Confirmar Cortesía' : 'Confirmar Bonificación',
-      message: `¿Estás seguro de ${isCT ? 'asignar como cortesía' : 'bonificar'} ${selectedInventory.size} espacios?`,
-      confirmText: isCT ? 'Cortesía' : 'Bonificar',
-      onConfirm: runBonificacion,
-    });
+    // Si reserva masiva está ON, mostrar mensaje específico
+    if (reservaMasivaP && selectedCaraForSearch?.grupo_masivo_id) {
+      const grupoBfCount = caras.filter(c => c.grupo_masivo_id === selectedCaraForSearch.grupo_masivo_id && c.esBf && c.id).length;
+      setConfirmModal({
+        isOpen: true,
+        title: isCT ? 'Cortesía Masiva' : 'Bonificación Masiva',
+        message: `Vas a crear ${selectedInventory.size * grupoBfCount} ${isCT ? 'cortesías' : 'bonificaciones'} (${selectedInventory.size} inventario${selectedInventory.size > 1 ? 's' : ''} × ${grupoBfCount} periodos del grupo masivo). ¿Confirmas?`,
+        confirmText: `${isCT ? 'Cortesía' : 'Bonificar'} en ${grupoBfCount} periodos`,
+        onConfirm: runBonificacion,
+      });
+    } else {
+      setConfirmModal({
+        isOpen: true,
+        title: isCT ? 'Confirmar Cortesía' : 'Confirmar Bonificación',
+        message: `¿Estás seguro de ${isCT ? 'asignar como cortesía' : 'bonificar'} ${selectedInventory.size} espacios?`,
+        confirmText: isCT ? 'Cortesía' : 'Bonificar',
+        onConfirm: runBonificacion,
+      });
+    }
   };
 
   // Go back to main view
@@ -3578,7 +3973,9 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
     const hierarchy: Level0 = {};
 
     filteredReservados.forEach(r => {
-      const catorcenaKey = `Cat ${r.catorcena}/${r.anio}`;
+      const catorcenaKey = tipoPeriodo === 'mensual'
+        ? `${MESES_LABEL[r.catorcena - 1] || `Mes ${r.catorcena}`} ${r.anio}`
+        : `Cat ${r.catorcena}/${r.anio}`;
       const articuloKey = r.articulo || 'Sin Artículo';
       const plazaKey = r.plaza || 'Sin Plaza';
       const formatoKey = r.formato || 'Sin Formato';
@@ -3592,7 +3989,7 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
     });
 
     return hierarchy;
-  }, [filteredReservados]);
+  }, [filteredReservados, tipoPeriodo]);
 
   // Helper to get type breakdown for reservados tab
   const getReservadosBreakdown = (items: ReservaItem[]) => {
@@ -3784,22 +4181,44 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
       return;
     }
 
+    // Si Eliminar Masivo está ON y la cara dueña pertenece a un grupo masivo,
+    // buscar las reservas equivalentes (mismo codigo_unico) en las demás caras del grupo
+    let reservasAEliminar: typeof reservas = [reserva];
+    let masivoLabel = '';
+    if (eliminarMasivoP && reserva.solicitudCaraId) {
+      const caraDuenia = caras.find(c => c.id === reserva.solicitudCaraId);
+      if (caraDuenia?.grupo_masivo_id) {
+        const carasGrupo = caras.filter(c => c.grupo_masivo_id === caraDuenia.grupo_masivo_id && c.id);
+        const equivalentes = reservas.filter(r =>
+          r.codigo_unico === reserva.codigo_unico &&
+          carasGrupo.some(c => c.id === r.solicitudCaraId) &&
+          r.reservaId
+        );
+        if (equivalentes.length > 1) {
+          reservasAEliminar = equivalentes;
+          masivoLabel = ` (${equivalentes.length} reservas en grupo masivo)`;
+        }
+      }
+    }
+
     setConfirmModal({
       isOpen: true,
       title: 'Eliminar Reserva',
-      message: '¿Seguro que quieres eliminar esta reserva?',
+      message: `¿Seguro que quieres eliminar esta reserva${masivoLabel}?`,
       confirmText: 'Eliminar',
       isDestructive: true,
       onConfirm: async () => {
         setIsSaving(true);
         try {
-          await propuestasService.deleteReservas(propuesta.id, [reserva.reservaId!]);
+          const ids = reservasAEliminar.map(r => r.reservaId!).filter(Boolean);
+          await propuestasService.deleteReservas(propuesta.id, ids);
           queryClient.invalidateQueries({ queryKey: ['propuesta-reservas-modal', propuesta.id] });
           queryClient.invalidateQueries({ queryKey: ['propuesta-inventario', propuesta.id] });
           handleRefetchDisponibles();
 
-          setReservas(prev => prev.filter(r => r.id !== reservaId));
-          showToast('Reserva eliminada correctamente', 'success');
+          const idsLocales = new Set(reservasAEliminar.map(r => r.id));
+          setReservas(prev => prev.filter(r => !idsLocales.has(r.id)));
+          showToast(`${reservasAEliminar.length} reserva(s) eliminada(s) correctamente`, 'success');
         } catch (error) {
           console.error('Error deleting reserva:', error);
           showToast('Error al eliminar reserva', 'error');
@@ -3854,16 +4273,42 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
     const selectedReservasList = reservas.filter(r => expandedIds.has(r.id));
     if (selectedReservasList.length === 0) return;
 
+    // Si Eliminar Masivo está ON, expandir cada reserva seleccionada con sus equivalentes
+    // (mismo codigo_unico) en otras caras del grupo masivo
+    let finalSelected = selectedReservasList;
+    let masivoLabel = '';
+    if (eliminarMasivoP) {
+      const expanded = new Map<string, typeof selectedReservasList[0]>();
+      for (const r of selectedReservasList) {
+        expanded.set(r.id, r);
+        if (r.solicitudCaraId) {
+          const caraDuenia = caras.find(c => c.id === r.solicitudCaraId);
+          if (caraDuenia?.grupo_masivo_id) {
+            const carasGrupo = caras.filter(c => c.grupo_masivo_id === caraDuenia.grupo_masivo_id && c.id);
+            const equivalentes = reservas.filter(r2 =>
+              r2.codigo_unico === r.codigo_unico &&
+              carasGrupo.some(c => c.id === r2.solicitudCaraId)
+            );
+            equivalentes.forEach(eq => expanded.set(eq.id, eq));
+          }
+        }
+      }
+      finalSelected = Array.from(expanded.values());
+      const replicadas = finalSelected.length - selectedReservasList.length;
+      if (replicadas > 0) masivoLabel = ` (+ ${replicadas} replicadas en grupo masivo)`;
+    }
+
     // Separate reservas with backend IDs from those without
-    const reservasWithBackendId = selectedReservasList.filter(r => r.reservaId);
-    const reservasLocalOnly = selectedReservasList.filter(r => !r.reservaId);
+    const reservasWithBackendId = finalSelected.filter(r => r.reservaId);
+    const reservasLocalOnly = finalSelected.filter(r => !r.reservaId);
     const backendIds = reservasWithBackendId.map(r => r.reservaId!);
+    const finalIds = new Set(finalSelected.map(r => r.id));
 
     // If all are local-only (not saved to DB yet), just remove from state
     if (backendIds.length === 0) {
-      setReservas(prev => prev.filter(r => !expandedIds.has(r.id)));
+      setReservas(prev => prev.filter(r => !finalIds.has(r.id)));
       setSelectedReservados(new Set());
-      showToast(`${selectedReservasList.length} reservas eliminadas`, 'success');
+      showToast(`${finalSelected.length} reservas eliminadas${masivoLabel}`, 'success');
       return;
     }
 
@@ -3871,7 +4316,7 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
     setConfirmModal({
       isOpen: true,
       title: 'Eliminar Reservas',
-      message: `¿Seguro que quieres eliminar ${selectedReservasList.length} reserva(s)?${reservasLocalOnly.length > 0 ? ` (${reservasLocalOnly.length} pendientes + ${backendIds.length} guardadas)` : ''}`,
+      message: `¿Seguro que quieres eliminar ${finalSelected.length} reserva(s)?${masivoLabel}${reservasLocalOnly.length > 0 ? ` (${reservasLocalOnly.length} pendientes + ${backendIds.length} guardadas)` : ''}`,
       confirmText: 'Eliminar',
       isDestructive: true,
       onConfirm: async () => {
@@ -3886,9 +4331,9 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
           }
 
           // Remove all selected from local state
-          setReservas(prev => prev.filter(r => !expandedIds.has(r.id)));
+          setReservas(prev => prev.filter(r => !finalIds.has(r.id)));
           setSelectedReservados(new Set());
-          showToast(`${selectedReservasList.length} reserva(s) eliminada(s) correctamente`, 'success');
+          showToast(`${finalSelected.length} reserva(s) eliminada(s) correctamente${masivoLabel}`, 'success');
         } catch (error) {
           console.error('Error deleting reservas:', error);
           showToast('Error al eliminar reservas', 'error');
@@ -4442,6 +4887,24 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
                     )}
                   </div>
 
+                  {/* Toggle Reserva Masiva (solo si la cara tiene grupo masivo) */}
+                  {selectedCaraForSearch?.grupo_masivo_id && (() => {
+                    const grupo = caras.filter(c => c.grupo_masivo_id === selectedCaraForSearch.grupo_masivo_id && !c.esBf);
+                    return (
+                      <label className={`flex items-center gap-2 text-xs cursor-pointer select-none px-2 py-1.5 rounded-lg border ${reservaMasivaP ? 'bg-purple-500/20 border-purple-500/40 text-purple-300' : (isDark ? 'bg-zinc-800 border-zinc-700 text-zinc-300' : 'bg-gray-50 border-gray-200 text-gray-700')}`}>
+                        <span>Reserva masiva ({grupo.length} periodos)</span>
+                        <button
+                          type="button"
+                          onClick={() => setReservaMasivaP(!reservaMasivaP)}
+                          className={`relative inline-flex h-4 w-7 items-center rounded-full transition-colors ${reservaMasivaP ? 'bg-purple-500' : (isDark ? 'bg-zinc-700' : 'bg-gray-300')}`}
+                          title="Filtra inventario disponible en TODO el rango y replica cada reserva a las caras del grupo"
+                        >
+                          <span className={`inline-block h-3 w-3 transform rounded-full bg-white transition-transform ${reservaMasivaP ? 'translate-x-3.5' : 'translate-x-0.5'}`} />
+                        </button>
+                      </label>
+                    );
+                  })()}
+
                   <div className="flex-1" />
 
                   {/* Stats & Actions */}
@@ -4870,6 +5333,23 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
                         className={`w-full pl-9 pr-4 py-2 rounded-lg ${isDark ? 'bg-zinc-800' : 'bg-gray-50'} border ${isDark ? 'border-zinc-700' : 'border-gray-200'} text-sm text-white placeholder-zinc-500 focus:outline-none focus:ring-2 focus:ring-purple-500/50`}
                       />
                     </div>
+                    {/* Toggle Eliminar Masivo (visible si la cara seleccionada tiene grupo masivo) */}
+                    {selectedCaraForSearch?.grupo_masivo_id && (() => {
+                      const grupo = caras.filter(c => c.grupo_masivo_id === selectedCaraForSearch.grupo_masivo_id);
+                      return (
+                        <label className={`flex items-center gap-2 text-xs cursor-pointer select-none px-2 py-1.5 rounded-lg border ${eliminarMasivoP ? 'bg-red-500/20 border-red-500/40 text-red-300' : (isDark ? 'bg-zinc-800 border-zinc-700 text-zinc-300' : 'bg-gray-50 border-gray-200 text-gray-700')}`}>
+                          <span>Eliminar masivo ({grupo.length} periodos)</span>
+                          <button
+                            type="button"
+                            onClick={() => setEliminarMasivoP(!eliminarMasivoP)}
+                            className={`relative inline-flex h-4 w-7 items-center rounded-full transition-colors ${eliminarMasivoP ? 'bg-red-500' : (isDark ? 'bg-zinc-700' : 'bg-gray-300')}`}
+                            title="Al eliminar una reserva, replica el delete a las equivalentes (mismo inventario) en otras caras del grupo masivo"
+                          >
+                            <span className={`inline-block h-3 w-3 transform rounded-full bg-white transition-transform ${eliminarMasivoP ? 'translate-x-3.5' : 'translate-x-0.5'}`} />
+                          </button>
+                        </label>
+                      );
+                    })()}
                     {effectiveCanEdit && selectedReservados.size > 0 && (
                       <div className="flex items-center gap-2">
                         <span className="text-xs text-purple-400 px-2 py-1 bg-purple-500/20 rounded-full">
@@ -5962,7 +6442,7 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
                       </select>
                     </div>
                     <div className="space-y-1">
-                      <label className={`text-xs ${isDark ? 'text-zinc-500' : 'text-gray-400'}`}>Cat. Inicio</label>
+                      <label className={`text-xs ${isDark ? 'text-zinc-500' : 'text-gray-400'}`}>{tipoPeriodo === 'mensual' ? 'Periodo Inicio' : 'Cat. Inicio'}</label>
                       <select
                         value={catorcenaInicio || ''}
                         onChange={(e) => canEditResumen && setCatorcenaInicio(e.target.value ? parseInt(e.target.value) : undefined)}
@@ -5971,7 +6451,7 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
                       >
                         <option value="">Seleccionar</option>
                         {catorcenasInicioOptions.map(c => (
-                          <option key={c.id} value={c.numero_catorcena}>Cat. {c.numero_catorcena}</option>
+                          <option key={c.id} value={c.numero_catorcena}>{tipoPeriodo === 'mensual' ? (['Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic'][c.numero_catorcena - 1] || `Mes ${c.numero_catorcena}`) : `Cat. ${c.numero_catorcena}`}</option>
                         ))}
                       </select>
                     </div>
@@ -5990,7 +6470,7 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
                       </select>
                     </div>
                     <div className="space-y-1">
-                      <label className={`text-xs ${isDark ? 'text-zinc-500' : 'text-gray-400'}`}>Cat. Fin</label>
+                      <label className={`text-xs ${isDark ? 'text-zinc-500' : 'text-gray-400'}`}>{tipoPeriodo === 'mensual' ? 'Periodo Fin' : 'Cat. Fin'}</label>
                       <select
                         value={catorcenaFin || ''}
                         onChange={(e) => canEditResumen && setCatorcenaFin(e.target.value ? parseInt(e.target.value) : undefined)}
@@ -5999,7 +6479,7 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
                       >
                         <option value="">Seleccionar</option>
                         {catorcenasFinOptions.map(c => (
-                          <option key={c.id} value={c.numero_catorcena}>Cat. {c.numero_catorcena}</option>
+                          <option key={c.id} value={c.numero_catorcena}>{tipoPeriodo === 'mensual' ? (['Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic'][c.numero_catorcena - 1] || `Mes ${c.numero_catorcena}`) : `Cat. ${c.numero_catorcena}`}</option>
                         ))}
                       </select>
                     </div>
@@ -6196,9 +6676,52 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
                 {/* Add/Edit Cara Form */}
                 {showAddCaraForm && (
                   <div ref={caraFormRef} className={`px-5 py-4 ${isDark ? 'bg-zinc-800/50' : 'bg-gray-50/50'} border-b ${isDark ? 'border-zinc-700/50' : 'border-gray-200/50'}`}>
-                    <h4 className={`text-sm font-medium ${isDark ? 'text-white' : 'text-gray-900'} mb-4`}>
-                      {editingCaraId ? 'Editar Circuito' : 'Nuevo Circuito'}
-                    </h4>
+                    <div className="flex items-center justify-between mb-4">
+                      <h4 className={`text-sm font-medium ${isDark ? 'text-white' : 'text-gray-900'}`}>
+                        {editingCaraId ? 'Editar Circuito' : 'Nuevo Circuito'}
+                      </h4>
+                      <div className="flex items-center gap-3">
+                        {/* Toggle "Aplicar a grupo masivo" — visible al editar cara con grupo_masivo_id */}
+                        {editingCaraId && (() => {
+                          const caraEdit = caras.find(c => c.localId === editingCaraId);
+                          if (!caraEdit?.grupo_masivo_id) return null;
+                          const grupo = caras.filter(c => c.grupo_masivo_id === caraEdit.grupo_masivo_id && !c.esBf);
+                          if (grupo.length <= 1) return null;
+                          return (
+                            <label className={`flex items-center gap-2 text-xs cursor-pointer select-none ${modoMasivoP ? 'text-purple-300' : (isDark ? 'text-zinc-400' : 'text-gray-500')}`}>
+                              <span>Aplicar a grupo masivo ({grupo.length})</span>
+                              <button
+                                type="button"
+                                onClick={() => setModoMasivoP(!modoMasivoP)}
+                                className={`relative inline-flex h-5 w-9 items-center rounded-full transition-colors ${modoMasivoP ? 'bg-purple-500' : (isDark ? 'bg-zinc-700' : 'bg-gray-300')}`}
+                                title="Replica los cambios de esta cara a todas las del grupo masivo (mantiene los periodos individuales)"
+                              >
+                                <span className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${modoMasivoP ? 'translate-x-4' : 'translate-x-0.5'}`} />
+                              </button>
+                              <span className={`text-[10px] uppercase font-semibold ${modoMasivoP ? 'text-purple-400' : (isDark ? 'text-zinc-500' : 'text-gray-400')}`}>
+                                {modoMasivoP ? 'ON' : 'OFF'}
+                              </span>
+                            </label>
+                          );
+                        })()}
+                        {tipoPeriodo === 'catorcena' && !editingCaraId && (
+                          <label className={`flex items-center gap-2 text-xs cursor-pointer select-none ${isDark ? 'text-zinc-300' : 'text-gray-700'}`}>
+                            <span>Modo masivo</span>
+                            <button
+                              type="button"
+                              onClick={() => setModoMasivoP(!modoMasivoP)}
+                              className={`relative inline-flex h-5 w-9 items-center rounded-full transition-colors ${modoMasivoP ? 'bg-purple-500' : (isDark ? 'bg-zinc-700' : 'bg-gray-300')}`}
+                              title="Crea varias caras en un rango de catorcenas"
+                            >
+                              <span className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${modoMasivoP ? 'translate-x-4' : 'translate-x-0.5'}`} />
+                            </button>
+                            <span className={`text-[10px] uppercase font-semibold ${modoMasivoP ? 'text-purple-400' : (isDark ? 'text-zinc-500' : 'text-gray-400')}`}>
+                              {modoMasivoP ? 'ON' : 'OFF'}
+                            </span>
+                          </label>
+                        )}
+                      </div>
+                    </div>
 
                     {/* Artículo selector */}
                     <div className="mb-4">
@@ -6208,8 +6731,54 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
                           label="Seleccionar artículo"
                           options={articulosData || []}
                           value={selectedArticulo}
-                          onChange={(item: SAPArticulo) => {
+                          onChange={async (item: SAPArticulo) => {
                             setSelectedArticulo(item);
+                            // Detectar CIRCUITO DIGITAL
+                            const circuito = parseCircuitoDigital(item.ItemCode);
+                            if (circuito) {
+                              // Validar unicidad: el mismo CTO+plaza+catorcena/mes solo una vez
+                              // Se permite repetir en distintas catorcenas/meses
+                              if (newCara.catorcena_inicio && newCara.anio_inicio) {
+                                const ya = caras.find(c => {
+                                  if (editingCaraId && c.localId === editingCaraId) return false;
+                                  if (c.esBf) return false;
+                                  const ci = parseCircuitoDigital(c.articulo);
+                                  if (!ci || ci.cto !== circuito.cto || ci.plazaCode !== circuito.plazaCode) return false;
+                                  return c.catorcena_inicio === newCara.catorcena_inicio && c.anio_inicio === newCara.anio_inicio;
+                                });
+                                if (ya) {
+                                  alert(`Ya tienes el circuito ${circuito.ctoLabel} (${circuito.plazaLabel}) en ese ${tipoPeriodo === 'mensual' ? 'mes' : 'catorcena'}. Solo se puede incluir una vez por periodo.`);
+                                  setSelectedArticulo(null);
+                                  return;
+                                }
+                              }
+                              try {
+                                const det = await circuitosService.detalle(item.ItemCode);
+                                const tarifa = getTarifaPublicaFromArticulo(item);
+                                const tarifaPiso = getTarifaPisoFromArticulo(item);
+                                setNewCara({
+                                  ...newCara,
+                                  articulo: item.ItemCode,
+                                  tarifa_publica: tarifa,
+                                  costo: tarifaPiso,
+                                  caras: det.total,
+                                  // Usar conteos reales del circuito (ej CTO 3 = 41 flujo + 9 contraflujo, no 25/25)
+                                  caras_flujo: det.flujo,
+                                  caras_contraflujo: det.contraflujo,
+                                  bonificacion: 0,
+                                  estados: circuito.plazaLabel,
+                                  ciudad: '',
+                                  formato: 'MIXTO',
+                                  tipo: 'Digital',
+                                });
+                                return;
+                              } catch (e: any) {
+                                alert(`Error al cargar circuito: ${e?.message || e}`);
+                                setSelectedArticulo(null);
+                                return;
+                              }
+                            }
+
                             // Auto-complete all fields from article
                             const tarifa = getTarifaPublicaFromArticulo(item);
                             const tarifaPiso = getTarifaPisoFromArticulo(item);
@@ -6276,8 +6845,138 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
                             </span>
                           )}
                         </label>
+                        {tipoPeriodo === 'mensual' ? (
+                          // Mensual: dropdown Mes + date inputs (Fecha Inicio + Fecha Fin)
+                          (() => {
+                            const minDate = (yearInicio && catorcenaInicio)
+                              ? new Date(yearInicio, catorcenaInicio - 1, 1).toISOString().split('T')[0]
+                              : (propuesta.fecha_inicio ? String(propuesta.fecha_inicio).split('T')[0] : undefined);
+                            const maxDate = (yearFin && catorcenaFin)
+                              ? new Date(yearFin, catorcenaFin, 0).toISOString().split('T')[0]
+                              : (propuesta.fecha_fin ? String(propuesta.fecha_fin).split('T')[0] : undefined);
+                            // Generar lista de meses entre el rango configurado en la propuesta
+                            const mesOptions: { year: number; month: number }[] = [];
+                            if (yearInicio && catorcenaInicio && yearFin && catorcenaFin) {
+                              let y = yearInicio, m = catorcenaInicio;
+                              while (y < yearFin || (y === yearFin && m <= catorcenaFin)) {
+                                mesOptions.push({ year: y, month: m });
+                                m++;
+                                if (m > 12) { m = 1; y++; }
+                              }
+                            }
+                            return (
+                          <div className="grid grid-cols-3 gap-2">
+                            <div>
+                              <label className={`text-[10px] ${isDark ? 'text-zinc-600' : 'text-gray-400'} block mb-1`}>Mes</label>
+                              <select
+                                value={newCara.catorcena_inicio && newCara.anio_inicio ? `${newCara.anio_inicio}-${newCara.catorcena_inicio}` : ''}
+                                onChange={(e) => {
+                                  if (!canEditResumen) return;
+                                  const val = e.target.value;
+                                  if (!val) {
+                                    setNewCara({ ...newCara, catorcena_inicio: undefined, anio_inicio: undefined, catorcena_fin: undefined, anio_fin: undefined, inicio_periodo: '', fin_periodo: '' });
+                                    return;
+                                  }
+                                  const [y, m] = val.split('-').map(Number);
+                                  const fechaIni = new Date(y, m - 1, 1).toISOString().split('T')[0];
+                                  const fechaFin = new Date(y, m, 0).toISOString().split('T')[0];
+                                  setNewCara({
+                                    ...newCara,
+                                    catorcena_inicio: m,
+                                    anio_inicio: y,
+                                    catorcena_fin: m,
+                                    anio_fin: y,
+                                    inicio_periodo: fechaIni,
+                                    fin_periodo: fechaFin,
+                                  });
+                                }}
+                                disabled={!canEditResumen || mesOptions.length === 0}
+                                className={`w-full px-3 py-2 ${isDark ? 'bg-zinc-800' : 'bg-gray-50'} border ${isDark ? 'border-zinc-700' : 'border-gray-200'} rounded-lg text-sm ${isDark ? 'text-white' : 'text-gray-900'} focus:outline-none focus:ring-1 focus:ring-purple-500/50 ${!canEditResumen ? 'opacity-60 cursor-not-allowed' : ''}`}
+                              >
+                                <option value="">Seleccionar</option>
+                                {mesOptions.map(o => (
+                                  <option key={`${o.year}-${o.month}`} value={`${o.year}-${o.month}`}>
+                                    {MESES_LABEL[o.month - 1]} {o.year}
+                                  </option>
+                                ))}
+                              </select>
+                            </div>
+                            <div>
+                              <label className={`text-[10px] ${isDark ? 'text-zinc-600' : 'text-gray-400'} block mb-1`}>Fecha Inicio</label>
+                              <input
+                                type="date"
+                                value={newCara.inicio_periodo || ''}
+                                onChange={(e) => {
+                                  if (!canEditResumen) return;
+                                  const v = e.target.value;
+                                  if (!v) {
+                                    setNewCara({ ...newCara, inicio_periodo: '', catorcena_inicio: undefined, anio_inicio: undefined });
+                                    return;
+                                  }
+                                  const parts = v.split('-');
+                                  const y = parseInt(parts[0]);
+                                  const m = parseInt(parts[1]);
+                                  const newIniVal = y * 100 + m;
+                                  const curFinVal = (newCara.anio_fin || 0) * 100 + (newCara.catorcena_fin || 0);
+                                  let finPeriodo = newCara.fin_periodo;
+                                  let finCat = newCara.catorcena_fin;
+                                  let finYear = newCara.anio_fin;
+                                  if (!finPeriodo || curFinVal < newIniVal) {
+                                    const lastDay = new Date(y, m, 0);
+                                    finPeriodo = lastDay.toISOString().split('T')[0];
+                                    finCat = m;
+                                    finYear = y;
+                                  }
+                                  setNewCara({
+                                    ...newCara,
+                                    inicio_periodo: v,
+                                    catorcena_inicio: m,
+                                    anio_inicio: y,
+                                    fin_periodo: finPeriodo,
+                                    catorcena_fin: finCat,
+                                    anio_fin: finYear,
+                                  });
+                                }}
+                                min={minDate}
+                                max={maxDate}
+                                disabled={!canEditResumen}
+                                className={`w-full px-3 py-2 ${isDark ? 'bg-zinc-800' : 'bg-gray-50'} border ${isDark ? 'border-zinc-700' : 'border-gray-200'} rounded-lg text-sm ${isDark ? 'text-white' : 'text-gray-900'} focus:outline-none focus:ring-1 focus:ring-purple-500/50 ${!canEditResumen ? 'opacity-60 cursor-not-allowed' : ''}`}
+                              />
+                            </div>
+                            <div>
+                              <label className={`text-[10px] ${isDark ? 'text-zinc-600' : 'text-gray-400'} block mb-1`}>Fecha Fin</label>
+                              <input
+                                type="date"
+                                value={newCara.fin_periodo || ''}
+                                onChange={(e) => {
+                                  if (!canEditResumen) return;
+                                  const v = e.target.value;
+                                  if (!v) {
+                                    setNewCara({ ...newCara, fin_periodo: '', catorcena_fin: undefined, anio_fin: undefined });
+                                    return;
+                                  }
+                                  const parts = v.split('-');
+                                  const y = parseInt(parts[0]);
+                                  const m = parseInt(parts[1]);
+                                  setNewCara({
+                                    ...newCara,
+                                    fin_periodo: v,
+                                    catorcena_fin: m,
+                                    anio_fin: y,
+                                  });
+                                }}
+                                min={newCara.inicio_periodo || minDate}
+                                max={maxDate}
+                                disabled={!canEditResumen || !newCara.inicio_periodo}
+                                className={`w-full px-3 py-2 ${isDark ? 'bg-zinc-800' : 'bg-gray-50'} border ${isDark ? 'border-zinc-700' : 'border-gray-200'} rounded-lg text-sm ${isDark ? 'text-white' : 'text-gray-900'} focus:outline-none focus:ring-1 focus:ring-purple-500/50 ${(!canEditResumen || !newCara.inicio_periodo) ? 'opacity-60 cursor-not-allowed' : ''}`}
+                              />
+                            </div>
+                          </div>
+                            );
+                          })()
+                        ) : (
                         <div className="grid grid-cols-2 gap-2">
-                          {/* Catorcena/Mes Inicio */}
+                          {/* Catorcena Inicio */}
                           <select
                             value={newCara.catorcena_inicio && newCara.anio_inicio ? `${newCara.anio_inicio}-${newCara.catorcena_inicio}` : ''}
                             onChange={(e) => {
@@ -6440,18 +7139,24 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
                             )}
                           </select>
                         </div>
+                        )}
                       </div>
                     </div>
 
                     <div className="grid grid-cols-4 gap-4 mb-4">
                       <div className="space-y-1">
-                        <label className={`text-xs ${((editingCaraHasReservas && !permissions.canEditCaraFiltersOnEdit) || (editingCaraId && !permissions.canEditCaraFiltersOnEdit)) ? 'text-zinc-800' : `${isDark ? 'text-zinc-500' : 'text-gray-400'}`}`}>Estados {newCara.estados && (!editingCaraId || permissions.canEditCaraFiltersOnEdit) && <span className="text-purple-400">({newCara.estados.split(',').filter(Boolean).length})</span>}</label>
+                        <label className={`text-xs ${((editingCaraHasReservas && !permissions.canEditCaraFiltersOnEdit) || (editingCaraId && !permissions.canEditCaraFiltersOnEdit)) ? 'text-zinc-800' : `${isDark ? 'text-zinc-500' : 'text-gray-400'}`}`}>Plazas {newCara.estados && (!editingCaraId || permissions.canEditCaraFiltersOnEdit) && <span className="text-purple-400">({newCara.estados.split(',').filter(Boolean).length})</span>}</label>
                         {canEditResumen && (!editingCaraHasReservas || permissions.canEditCaraFiltersOnEdit) && (!editingCaraId || permissions.canEditCaraFiltersOnEdit) ? (
                           <MultiSelectDropdown
-                            options={['Ciudad de México / AM', ...(solicitudFilters?.estados || [])]}
+                            options={(() => {
+                              // Preferir lista de plazas del inventario si está disponible
+                              const plazas = (solicitudFilters as any)?.plazas?.map((p: any) => p.plaza) as string[] | undefined;
+                              if (plazas && plazas.length > 0) return ['Ciudad de México / AM', ...plazas];
+                              return ['Ciudad de México / AM', ...(solicitudFilters?.estados || [])];
+                            })()}
                             selected={newCara.estados ? newCara.estados.split(',').map(s => s.trim()).filter(Boolean) : []}
                             onChange={(selected) => setNewCara({ ...newCara, estados: selected.join(', '), ciudad: '' })}
-                            placeholder="Seleccionar estados..."
+                            placeholder="Seleccionar plazas..."
                           />
                         ) : (
                           <div className={`px-3 py-2 ${isDark ? 'bg-zinc-800/50' : 'bg-gray-50/50'} border ${isDark ? 'border-zinc-700/30' : 'border-gray-200/30'} rounded-lg text-sm ${isDark ? 'text-zinc-300' : 'text-gray-700'} truncate`}>
@@ -6527,9 +7232,32 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
                         <input
                           type="number"
                           value={newCara.caras || ''}
+                          max={(() => {
+                            // Para circuito digital: max = total del circuito (renta + bonif)
+                            const c = parseCircuitoDigital(newCara.articulo || '');
+                            if (c) return (newCara.caras || 0) + (newCara.bonificacion || 0);
+                            return undefined;
+                          })()}
                           onChange={(e) => {
                             if (!canEditResumen) return;
                             const val = parseInt(e.target.value) || 0;
+                            // Para circuito digital: total fijo, bonif = total - caras
+                            const c = parseCircuitoDigital(newCara.articulo || '');
+                            if (c) {
+                              const total = (newCara.caras || 0) + (newCara.bonificacion || 0);
+                              const carasCap = Math.min(Math.max(0, val), total);
+                              // Redistribuir flujo/contraflujo proporcionalmente al nuevo renta
+                              const curFlujo = newCara.caras_flujo || 0;
+                              const curContra = newCara.caras_contraflujo || 0;
+                              const curRenta = curFlujo + curContra;
+                              let flujoCalc = curRenta > 0
+                                ? Math.round(carasCap * curFlujo / curRenta)
+                                : Math.ceil(carasCap / 2);
+                              let contraCalc = carasCap - flujoCalc;
+                              if (contraCalc < 0) { contraCalc = 0; flujoCalc = carasCap; }
+                              setNewCara({ ...newCara, caras: carasCap, bonificacion: total - carasCap, caras_flujo: flujoCalc, caras_contraflujo: contraCalc });
+                              return;
+                            }
                             const flujo = Math.ceil(val / 2);
                             const contraflujo = Math.floor(val / 2);
                             setNewCara({ ...newCara, caras: val, caras_flujo: flujo, caras_contraflujo: contraflujo });
@@ -6545,7 +7273,34 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
                         <input
                           type="number"
                           value={newCara.bonificacion || ''}
-                          onChange={(e) => canEditResumen && setNewCara({ ...newCara, bonificacion: parseInt(e.target.value) || 0 })}
+                          max={(() => {
+                            const c = parseCircuitoDigital(newCara.articulo || '');
+                            if (c) return (newCara.caras || 0) + (newCara.bonificacion || 0);
+                            return undefined;
+                          })()}
+                          onChange={(e) => {
+                            if (!canEditResumen) return;
+                            const val = parseInt(e.target.value) || 0;
+                            // Para circuito digital: total fijo, caras = total - bonif
+                            const c = parseCircuitoDigital(newCara.articulo || '');
+                            if (c) {
+                              const total = (newCara.caras || 0) + (newCara.bonificacion || 0);
+                              const bonifCap = Math.min(Math.max(0, val), total);
+                              const carasCap = total - bonifCap;
+                              // Redistribuir flujo/contraflujo proporcionalmente al nuevo renta
+                              const curFlujo = newCara.caras_flujo || 0;
+                              const curContra = newCara.caras_contraflujo || 0;
+                              const curRenta = curFlujo + curContra;
+                              let flujoCalc = curRenta > 0
+                                ? Math.round(carasCap * curFlujo / curRenta)
+                                : Math.ceil(carasCap / 2);
+                              let contraCalc = carasCap - flujoCalc;
+                              if (contraCalc < 0) { contraCalc = 0; flujoCalc = carasCap; }
+                              setNewCara({ ...newCara, bonificacion: bonifCap, caras: carasCap, caras_flujo: flujoCalc, caras_contraflujo: contraCalc });
+                              return;
+                            }
+                            setNewCara({ ...newCara, bonificacion: val });
+                          }}
                           disabled={!canEditResumen || isNoInventoryArticle((newCara.articulo || '').toUpperCase()) || newCara.articulo?.toUpperCase().startsWith('IN')}
                           className={`w-full px-3 py-2 ${isDark ? 'bg-zinc-800' : 'bg-gray-50'} border ${isDark ? 'border-zinc-700' : 'border-gray-200'} rounded-lg text-sm ${isDark ? 'text-white' : 'text-gray-900'} focus:outline-none focus:ring-1 focus:ring-purple-500/50 ${(!canEditResumen || isNoInventoryArticle((newCara.articulo || '').toUpperCase()) || newCara.articulo?.toUpperCase().startsWith('IN')) ? 'opacity-60 cursor-not-allowed' : ''}`}
                           min="0"
@@ -6638,10 +7393,40 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
                         Cancelar
                       </button>
                       <button
-                        onClick={handleSaveCara}
+                        onClick={async () => {
+                          // Modo masivo (catorcena): crear/actualizar varias caras (una por catorcena del rango)
+                          const isMasivoActivo = tipoPeriodo === 'catorcena' && modoMasivoP
+                            && newCara.catorcena_inicio && newCara.anio_inicio
+                            && newCara.catorcena_fin && newCara.anio_fin
+                            && (newCara.anio_inicio * 100 + newCara.catorcena_inicio) !== (newCara.anio_fin * 100 + newCara.catorcena_fin);
+                          if (!isMasivoActivo) {
+                            await handleSaveCara();
+                            return;
+                          }
+                          // Iterar catorcenas del rango
+                          const cats = (catorcenasData?.data || [])
+                            .filter(c => {
+                              const k = c.a_o * 100 + c.numero_catorcena;
+                              return k >= (newCara.anio_inicio! * 100 + newCara.catorcena_inicio!)
+                                  && k <= (newCara.anio_fin! * 100 + newCara.catorcena_fin!);
+                            })
+                            .sort((a, b) => (a.a_o * 100 + a.numero_catorcena) - (b.a_o * 100 + b.numero_catorcena));
+                          if (cats.length === 0) {
+                            await handleSaveCara();
+                            return;
+                          }
+                          for (const cat of cats) {
+                            await handleSaveCara({
+                              catorcena: cat.numero_catorcena,
+                              anio: cat.a_o,
+                              inicio_periodo: cat.fecha_inicio,
+                              fin_periodo: cat.fecha_fin,
+                            });
+                          }
+                        }}
                         className="px-4 py-2 bg-purple-500 text-white rounded-lg text-sm hover:bg-purple-600 transition-colors"
                       >
-                        {editingCaraId ? 'Actualizar' : 'Agregar'}
+                        {editingCaraId ? 'Actualizar' : 'Agregar'}{modoMasivoP && newCara.catorcena_inicio !== newCara.catorcena_fin ? ' (rango)' : ''}
                       </button>
                     </div>
                   </div>
@@ -6668,14 +7453,32 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
                         ? `${MESES_LABEL[groupData.catorcenaNum - 1]} ${groupData.year || ''}`
                         : groupData.catorcenaNum
                         ? `Cat ${groupData.catorcenaNum} / ${groupData.year || ''}`
-                        : (() => {
+                        : tipoPeriodo === 'mensual'
+                        ? (() => {
                             const parts = periodo.split('-');
                             if (parts.length >= 2) {
                               const m = parseInt(parts[1]);
                               return `${MESES_LABEL[m - 1] || periodo} ${parts[0]}`;
                             }
                             return `Periodo: ${periodo}`;
-                          })();
+                          })()
+                        : `Periodo: ${periodo.slice(0, 10)}`;
+
+                      // Para grupos mensuales, mostrar también las fechas reales (min inicio, max fin de las caras del grupo)
+                      const fechasIni = groupData.caras.map(c => c.inicio_periodo).filter(Boolean).sort() as string[];
+                      const fechasFin = groupData.caras.map(c => c.fin_periodo).filter(Boolean).sort() as string[];
+                      const minIni = fechasIni.length ? fechasIni[0] : null;
+                      const maxFin = fechasFin.length ? fechasFin[fechasFin.length - 1] : null;
+                      const fmtDM = (s: string | null) => {
+                        if (!s) return '';
+                        const p = String(s).split(/[-T]/);
+                        if (p.length < 3) return '';
+                        const day = parseInt(p[2]).toString();
+                        const m = parseInt(p[1]) - 1;
+                        const cortos = ['Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun', 'Jul', 'Ago', 'Sep', 'Oct', 'Nov', 'Dic'];
+                        return m >= 0 && m < 12 ? `${day} ${cortos[m]}` : '';
+                      };
+                      const showRange = tipoPeriodo === 'mensual' && minIni && maxFin;
 
                       return (
                         <div key={periodo}>
@@ -6690,6 +7493,11 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
                             <span className="text-sm font-medium text-purple-300">
                               {catorcenaLabel}
                             </span>
+                            {showRange && (
+                              <span className={`text-xs ${isDark ? 'text-zinc-400' : 'text-gray-500'}`}>
+                                {fmtDM(minIni)} – {fmtDM(maxFin)}
+                              </span>
+                            )}
                             <span className={`text-xs ${isDark ? 'text-zinc-500' : 'text-gray-400'}`}>
                               ({groupData.caras.length} {groupData.caras.length === 1 ? 'formato' : 'formatos'})
                             </span>
@@ -6750,11 +7558,26 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
                                     </div>
                                     <div>
                                       <span className={`${isDark ? 'text-zinc-500' : 'text-gray-400'} text-xs`}>F. Inicio</span>
-                                      <p className={`${isDark ? 'text-zinc-300' : 'text-gray-700'} text-xs`}>{cara.inicio_periodo ? new Date(cara.inicio_periodo).toLocaleDateString('es-MX', { day: '2-digit', month: 'short', year: 'numeric' }) : '-'}</p>
+                                      <p className={`${isDark ? 'text-zinc-300' : 'text-gray-700'} text-xs`}>{(() => {
+                                        if (!cara.inicio_periodo) return '-';
+                                        // Parse string directo para evitar bug de timezone
+                                        const s = String(cara.inicio_periodo).split(/[-T]/);
+                                        if (s.length < 3) return String(cara.inicio_periodo);
+                                        const dia = parseInt(s[2]).toString().padStart(2, '0');
+                                        const meses = ['ene','feb','mar','abr','may','jun','jul','ago','sep','oct','nov','dic'];
+                                        return `${dia} ${meses[parseInt(s[1]) - 1] || ''} ${s[0]}`;
+                                      })()}</p>
                                     </div>
                                     <div>
                                       <span className={`${isDark ? 'text-zinc-500' : 'text-gray-400'} text-xs`}>F. Fin</span>
-                                      <p className={`${isDark ? 'text-zinc-300' : 'text-gray-700'} text-xs`}>{cara.fin_periodo ? new Date(cara.fin_periodo).toLocaleDateString('es-MX', { day: '2-digit', month: 'short', year: 'numeric' }) : '-'}</p>
+                                      <p className={`${isDark ? 'text-zinc-300' : 'text-gray-700'} text-xs`}>{(() => {
+                                        if (!cara.fin_periodo) return '-';
+                                        const s = String(cara.fin_periodo).split(/[-T]/);
+                                        if (s.length < 3) return String(cara.fin_periodo);
+                                        const dia = parseInt(s[2]).toString().padStart(2, '0');
+                                        const meses = ['ene','feb','mar','abr','may','jun','jul','ago','sep','oct','nov','dic'];
+                                        return `${dia} ${meses[parseInt(s[1]) - 1] || ''} ${s[0]}`;
+                                      })()}</p>
                                     </div>
                                     <div>
                                       <span className={`${isDark ? 'text-zinc-500' : 'text-gray-400'} text-xs`}>Caras</span>
@@ -6892,7 +7715,9 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
                 // Helper to get group key based on field
                 const getFieldValue = (r: ReservaItem, field: GroupByFieldReservas): string => {
                   switch (field) {
-                    case 'catorcena': return `Cat ${r.catorcena}/${r.anio}`;
+                    case 'catorcena': return tipoPeriodo === 'mensual'
+                      ? `${MESES_LABEL[r.catorcena - 1] || `Mes ${r.catorcena}`} ${r.anio}`
+                      : `Cat ${r.catorcena}/${r.anio}`;
                     case 'tipo': return r.tipo;
                     case 'plaza': return r.plaza || 'Sin Plaza';
                     case 'formato': return r.formato || 'Sin Formato';

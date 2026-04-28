@@ -133,6 +133,7 @@ export interface Inventario {
   orientacion: string | null;
   tarifa_piso: number | null;
   tarifa_publica: number | null;
+  cto?: string | null;
   estatus_real?: string | null;
 }
 
@@ -243,6 +244,8 @@ export interface Propuesta {
   fecha_fin?: string | null;
   formatos?: string | null;
   cuic?: number | null;
+  campania_id?: number | null;
+  campania_status?: string | null;
 }
 
 export interface PropuestaStats {

@@ -18,6 +18,8 @@ import { getPermissions } from '../../lib/permissions';
 import { useThemeStore } from '../../store/themeStore';
 import { useFormPersist } from '../../hooks/useFormPersist';
 import { uploadsService } from '../../services/uploads.service';
+import { parseCircuitoDigital, type CircuitoInfo } from '../../lib/circuitos';
+import { circuitosService } from '../../services/circuitos.service';
 
 // Tarifas now come from SAP (U_IMU_PublicPrice = tarifa publica, PriceList 11 = tarifa piso)
 
@@ -285,6 +287,11 @@ interface CaraEntry {
   articulo: SAPArticulo;
   estado: string;
   ciudades: string[];
+  plaza?: string; // display-only (derived from plaza selection); backend still uses estado+ciudades
+  circuito?: CircuitoInfo; // marcado si el artículo es un circuito digital (RT-DIG-NN-XX)
+  circuitoTotal?: number; // total de inventarios del circuito (para fijar caras)
+  circuitoFlujo?: number; // count real de inventarios tipo Flujo del circuito
+  circuitoContraflujo?: number; // count real de inventarios tipo Contraflujo del circuito
   formato: string;
   tipo: string;
   nse: string[];
@@ -306,6 +313,8 @@ interface CaraEntry {
   // RT/BF grouping
   grupo_rt_bf?: number;
   esBf?: boolean; // true if this is the BF row of a RT/BF pair
+  // Masivo grouping: same articulo+plaza+formato+tipo+nse across multiple catorcenas
+  grupo_masivo_id?: number;
 }
 
 interface Props {
@@ -627,10 +636,17 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
 
   // Caras data with full info per entry
   const [caras, setCaras] = useState<CaraEntry[]>([]);
+  // Modo masivo: ON = rango de catorcenas (crea N caras); OFF = una catorcena
+  const [modoMasivo, setModoMasivo] = useState(false);
+  // Distribución de muebles del circuito actualmente seleccionado en newCara
+  const [circuitoMuebles, setCircuitoMuebles] = useState<Record<string, number> | null>(null);
+  // Conteo real de Flujo/Contraflujo del circuito actual (para no dividir entre 2)
+  const [circuitoFlujoContra, setCircuitoFlujoContra] = useState<{ flujo: number; contraflujo: number } | null>(null);
 
   // New cara form
   const [newCara, setNewCara] = useState({
     articulo: null as SAPArticulo | null,
+    plaza: '', // UI-facing plaza; populates estado/ciudades on change
     estado: '',
     ciudades: [] as string[],
     formato: '',
@@ -911,6 +927,7 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
       setExpandedCatorcenas(new Set());
       setNewCara({
         articulo: null,
+        plaza: '',
         estado: '',
         ciudades: [],
         formato: '',
@@ -984,20 +1001,27 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
   }, [inventarioOptions, inventarioFilters]);
 
   // Clear incompatible selections when filtered options change
+  // EXCEPCIÓN: si el artículo seleccionado es un Circuito Digital, no resetear
+  //   formato (MIXTO) ni tipo (Digital), pues son valores fijos del circuito
+  //   y no aparecen en la lista de inventarioOptions.
   useEffect(() => {
     if (!inventarioOptions) return;
     setNewCara(prev => {
+      const esCircuito = prev.articulo ? !!parseCircuitoDigital(prev.articulo.ItemCode) : false;
+      // Si hay artículo seleccionado, no resetear formato/tipo auto-derivados
+      // (el usuario los puede ajustar manualmente). Solo resetear NSE inválidos.
+      const tieneArticulo = !!prev.articulo;
       let changed = false;
       const updates: Partial<typeof prev> = {};
-      if (prev.formato && !inventarioOptions.formatos.includes(prev.formato)) {
+      if (!esCircuito && !tieneArticulo && prev.formato && !inventarioOptions.formatos.includes(prev.formato)) {
         updates.formato = '';
         changed = true;
       }
-      if (prev.tipo && !inventarioOptions.tipos.includes(prev.tipo)) {
+      if (!esCircuito && !tieneArticulo && prev.tipo && !inventarioOptions.tipos.includes(prev.tipo)) {
         updates.tipo = '' as typeof prev.tipo;
         changed = true;
       }
-      if (prev.nse.length > 0) {
+      if (!esCircuito && prev.nse.length > 0) {
         const validNse = prev.nse.filter(n => inventarioOptions.nse.includes(n));
         if (validNse.length !== prev.nse.length) {
           updates.nse = validNse;
@@ -1093,17 +1117,43 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
   }, [tipoPeriodo, catorcenasData, yearInicio, yearFin, catorcenaInicio, catorcenaFin, mesInicio, mesFin]);
 
   // Detect caras whose period is outside the current availablePeriods range
+  // O cuyas fechas reales (inicio_periodo / fin_periodo) salen del rango global
+  // de la solicitud (fechaInicio / fechaFin).
   const invalidCaras = useMemo(() => {
     if (caras.length === 0) return [];
-    // Skip if period range is not configured yet (user hasn't set dates)
     const rangeConfigured = tipoPeriodo === 'mensual'
       ? (yearInicio && yearFin && mesInicio !== undefined && mesFin !== undefined)
       : (yearInicio && yearFin && catorcenaInicio && catorcenaFin);
     if (!rangeConfigured) return [];
-    // Build valid key set (may be empty if range is inconsistent, meaning all caras are invalid)
+
     const validKeys = new Set(availablePeriods.map(p => `${p.a_o}-${p.numero_catorcena}`));
-    return caras.filter(c => !validKeys.has(`${c.catorcenaYear}-${c.catorcenaNum}`));
-  }, [caras, availablePeriods, tipoPeriodo, yearInicio, yearFin, catorcenaInicio, catorcenaFin, mesInicio, mesFin]);
+
+    // Rango global: usado para verificar fechas exactas
+    let rangoIni = '';
+    let rangoFin = '';
+    if (tipoPeriodo === 'mensual' && yearInicio && yearFin && mesInicio && mesFin) {
+      rangoIni = `${yearInicio}-${String(mesInicio).padStart(2, '0')}-01`;
+      const lastDay = new Date(yearFin, mesFin, 0).getDate();
+      rangoFin = `${yearFin}-${String(mesFin).padStart(2, '0')}-${String(lastDay).padStart(2, '0')}`;
+    } else if (catorcenasData?.data && yearInicio && yearFin && catorcenaInicio && catorcenaFin) {
+      const ini = catorcenasData.data.find(c => c.a_o === yearInicio && c.numero_catorcena === catorcenaInicio);
+      const fin = catorcenasData.data.find(c => c.a_o === yearFin && c.numero_catorcena === catorcenaFin);
+      if (ini) rangoIni = String(ini.fecha_inicio).split('T')[0];
+      if (fin) rangoFin = String(fin.fecha_fin).split('T')[0];
+    }
+
+    return caras.filter(c => {
+      // Inválida si la (catorcena/mes, año) no está en el rango
+      if (!validKeys.has(`${c.catorcenaYear}-${c.catorcenaNum}`)) return true;
+      // O si las fechas reales del circuito se salen del rango global
+      if (rangoIni && rangoFin && c.periodoInicio && c.periodoFin) {
+        const ini = String(c.periodoInicio).split('T')[0];
+        const fin = String(c.periodoFin).split('T')[0];
+        if (ini < rangoIni || fin > rangoFin) return true;
+      }
+      return false;
+    });
+  }, [caras, availablePeriods, tipoPeriodo, yearInicio, yearFin, catorcenaInicio, catorcenaFin, mesInicio, mesFin, catorcenasData]);
 
   // Calculate fecha_inicio and fecha_fin from catorcenas or months
   const fechaInicio = useMemo(() => {
@@ -1128,7 +1178,10 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
 
   // Add cara entry
   const handleAddCara = async () => {
-    if (!newCara.articulo || !newCara.estado || !newCara.formato || !newCara.tipo || newCara.nse.length === 0) return;
+    // Circuitos: NSE no es requerido (los inventarios del circuito ya están fijos)
+    const esCircuitoNew = newCara.articulo ? !!parseCircuitoDigital(newCara.articulo.ItemCode) : false;
+    if (!newCara.articulo || !newCara.estado || !newCara.formato || !newCara.tipo) return;
+    if (!esCircuitoNew && newCara.nse.length === 0) return;
 
     // Validar tarifa pública: si es 0, solo CT, BF/CF e IM pueden avanzar
     const artCode = newCara.articulo.ItemCode?.toUpperCase() || '';
@@ -1154,7 +1207,7 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
     let periodoFinVal: string;
 
     if (tipoPeriodo === 'mensual') {
-      // Mensual: month from dropdown + custom dates per cara
+      // Mensual: month from dropdown + custom dates per cara (libres dentro del rango total)
       if (!newCara.periodo || !newCara.periodoInicioCustom || !newCara.periodoFinCustom) return;
       const [yearStr, mesStr] = newCara.periodo.split('-');
       catorcenaYear = parseInt(yearStr);
@@ -1197,8 +1250,10 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
       && newCara.articulo?.ItemCode === editingOriginal.articulo?.ItemCode
     );
 
+    // Circuitos Digitales: aprobado automático (pending tabulador real)
+    const esCircuito = !!(newCara.articulo && parseCircuitoDigital(newCara.articulo.ItemCode));
     // Cortesías no requieren autorización — se aprueban automáticamente
-    if (esCortesia) {
+    if (esCortesia || esCircuito) {
       autorizacion_dg = 'aprobado';
       autorizacion_dcm = 'aprobado';
     } else if (skipAuthEval && editingOriginal) {
@@ -1228,11 +1283,12 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
       }
     }
 
-    // Build list of periods to create caras for (range support)
+    // Build list of periods to create caras for (modo masivo: rango catorcena)
     const periodsToCreate: Array<{ catorcenaNum: number; catorcenaYear: number; periodoInicio: string; periodoFin: string }> = [];
+    const isMasivoActivo = tipoPeriodo === 'catorcena' && modoMasivo && newCara.periodoFinCat && newCara.periodoFinCat !== newCara.periodo;
 
-    if (tipoPeriodo === 'catorcena' && !editingCaraId && newCara.periodoFinCat && newCara.periodoFinCat !== newCara.periodo) {
-      // Range mode: create one cara per catorcena
+    if (isMasivoActivo) {
+      // Range mode (catorcena, modo masivo): crear/actualizar una cara por catorcena
       const [yearFinStr, catFinStr] = newCara.periodoFinCat.split('-');
       const yearFin = parseInt(yearFinStr);
       const catFin = parseInt(catFinStr);
@@ -1249,17 +1305,54 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
       periodsToCreate.push({ catorcenaNum, catorcenaYear, periodoInicio: periodoInicioVal, periodoFin: periodoFinVal });
     }
 
-    const grupoRtBf = newCara.bonificacion > 0 && newCara.articuloBf ? Date.now() % 2000000000 : undefined;
+    // Circuito Digital: unicidad por (CTO, plaza, catorcena/mes) — se permite repetir en periodos distintos
+    const circuitoCheck = newCara.articulo ? parseCircuitoDigital(newCara.articulo.ItemCode) : null;
+    if (circuitoCheck) {
+      const conflictos = caras.filter(c => {
+        if (editingCaraId && c.id === editingCaraId) return false;
+        if (c.esBf) return false;
+        if (!c.circuito) return false;
+        if (c.circuito.cto !== circuitoCheck.cto || c.circuito.plazaCode !== circuitoCheck.plazaCode) return false;
+        return periodsToCreate.some(p => p.catorcenaYear === c.catorcenaYear && p.catorcenaNum === c.catorcenaNum);
+      });
+      if (conflictos.length > 0) {
+        const periodos = [...new Set(conflictos.map(c => `${c.catorcenaNum}/${c.catorcenaYear}`))].join(', ');
+        alert(`Ya tienes el circuito ${circuitoCheck.ctoLabel} (${circuitoCheck.plazaLabel}) en ${tipoPeriodo === 'mensual' ? 'el(los) mes(es)' : 'la(s) catorcena(s)'} ${periodos}. Solo se puede incluir una vez por periodo.`);
+        return;
+      }
+    }
+
+    const tieneBfPair = newCara.bonificacion > 0 && newCara.articuloBf;
     const ciudadesToUse = newCara.ciudades.length > 0 ? newCara.ciudades : filteredCiudades;
+
+    // grupo_masivo_id: identifica caras del mismo artículo+config a través de varias catorcenas
+    // Si edita una cara que ya pertenece a un grupo masivo, preservar su grupo_masivo_id;
+    // si crea/edita masivo (>1 periodo) sin grupo previo, generar uno nuevo
+    const editingCaraExistente = editingCaraId ? caras.find(c => c.id === editingCaraId) : null;
+    const grupoMasivoId = editingCaraExistente?.grupo_masivo_id
+      ?? (periodsToCreate.length > 1 ? Math.floor(Date.now() / 1000) % 2000000000 : undefined);
 
     const newCaras: CaraEntry[] = [];
     for (const [idx, period] of periodsToCreate.entries()) {
-      // RT cara (renta)
+      // Detectar si es circuito digital
+      const circuitoInfo = newCara.articulo ? parseCircuitoDigital(newCara.articulo.ItemCode) : null;
+      // Cada catorcena del rango necesita su PROPIO grupoRtBf para que el RT y BF de ese mes se emparejen
+      const grupoRtBf = tieneBfPair ? (Date.now() + idx) % 2000000000 : undefined;
+
+      // RT cara (renta) — se respeta tal cual lo puso el usuario
+      // (para circuitos digitales: el form ajusta renta = total - bonif al cambiar bonif,
+      //  asi que aqui no necesitamos volver a restar)
+      const rentaRT = newCara.renta;
       newCaras.push({
-        id: editingCaraId || `${Date.now()}-${Math.random()}-rt-${idx}`,
+        id: editingCaraId && idx === 0 ? editingCaraId : `${Date.now()}-${Math.random()}-rt-${idx}`,
         articulo: newCara.articulo!,
         estado: newCara.estado,
         ciudades: ciudadesToUse,
+        plaza: newCara.plaza || newCara.estado,
+        circuito: circuitoInfo || undefined,
+        circuitoTotal: circuitoInfo ? (newCara.renta + newCara.bonificacion) : undefined,
+        circuitoFlujo: circuitoInfo && circuitoFlujoContra ? circuitoFlujoContra.flujo : undefined,
+        circuitoContraflujo: circuitoInfo && circuitoFlujoContra ? circuitoFlujoContra.contraflujo : undefined,
         formato: newCara.formato,
         tipo: newCara.tipo,
         nse: newCara.nse,
@@ -1267,7 +1360,7 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
         catorcenaYear: period.catorcenaYear,
         periodoInicio: period.periodoInicio,
         periodoFin: period.periodoFin,
-        renta: newCara.renta,
+        renta: rentaRT,
         bonificacion: grupoRtBf ? 0 : newCara.bonificacion, // If BF separate, RT has 0 bonif
         tarifaPublica: newCara.tarifaPublica,
         tarifaEfectiva: tarifaToSave,
@@ -1278,6 +1371,7 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
         _originalDg: autorizacion_dg,
         _originalDcm: autorizacion_dcm,
         grupo_rt_bf: grupoRtBf,
+        grupo_masivo_id: grupoMasivoId,
       });
 
       // BF cara (bonificación) - only if articuloBf is selected
@@ -1287,6 +1381,7 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
           articulo: newCara.articuloBf,
           estado: newCara.estado,
           ciudades: ciudadesToUse,
+          plaza: newCara.plaza || newCara.estado,
           formato: newCara.formato,
           tipo: newCara.tipo,
           nse: newCara.nse,
@@ -1305,6 +1400,7 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
           _originalDg: autorizacion_dg,
           _originalDcm: autorizacion_dcm,
           grupo_rt_bf: grupoRtBf,
+          grupo_masivo_id: grupoMasivoId,
           esBf: true,
         });
       }
@@ -1313,7 +1409,26 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
     // Add or update caras, then recalculate DG contamination from originals
     setCaras(prev => {
       let updated: CaraEntry[];
-      if (editingCaraId) {
+      if (editingCaraId && isMasivoActivo) {
+        // Edición MASIVA: reemplazar todas las caras del mismo articulo dentro del rango Cat ini-fin
+        const editingCara = prev.find(c => c.id === editingCaraId);
+        if (!editingCara) return prev;
+        const articuloCode = editingCara.articulo.ItemCode;
+        const articuloBfCode = editingCara.grupo_rt_bf
+          ? prev.find(c => c.grupo_rt_bf === editingCara.grupo_rt_bf && c.esBf)?.articulo.ItemCode
+          : null;
+        // Catorcenas del rango (year*100 + cat)
+        const rangoKeys = new Set(periodsToCreate.map(p => p.catorcenaYear * 100 + p.catorcenaNum));
+        // Quitar las viejas que matchean (RT y BF del mismo articulo en el rango)
+        updated = prev.filter(c => {
+          const key = c.catorcenaYear * 100 + c.catorcenaNum;
+          if (!rangoKeys.has(key)) return true;
+          const codeMatch = c.articulo.ItemCode === articuloCode || (articuloBfCode && c.articulo.ItemCode === articuloBfCode);
+          return !codeMatch;
+        });
+        // Agregar las nuevas (RT + BF si aplica)
+        updated.push(...newCaras);
+      } else if (editingCaraId) {
         const editingCara = prev.find(c => c.id === editingCaraId);
         // Replace RT cara
         updated = prev.map(c => c.id === editingCaraId ? newCaras[0] : c);
@@ -1368,6 +1483,7 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
   const handleClearNewCara = () => {
     setNewCara({
       articulo: null,
+      plaza: '',
       estado: '',
       ciudades: [],
       formato: '',
@@ -1387,8 +1503,27 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
   // Remove cara
   const handleRemoveCara = (id: string) => {
     const cara = caras.find(c => c.id === id);
+    if (!cara) return;
+
+    // Si modoMasivo está ON y la cara pertenece a un grupo masivo, eliminar TODO el grupo
+    // (incluye sus pares RT/BF)
+    if (modoMasivo && cara.grupo_masivo_id) {
+      const grupoSize = caras.filter(c => c.grupo_masivo_id === cara.grupo_masivo_id && !c.esBf).length;
+      if (grupoSize > 1) {
+        const ok = window.confirm(
+          `Modo masivo ON: esta cara pertenece a un grupo de ${grupoSize} catorcenas.\n\n` +
+          `Aceptar = eliminar TODO el grupo masivo (RT + BF de ${grupoSize} catorcenas)\n` +
+          `Cancelar = no eliminar nada`
+        );
+        if (!ok) return;
+        setCaras(caras.filter(c => c.grupo_masivo_id !== cara.grupo_masivo_id));
+        if (editingCaraId === id) setEditingCaraId(null);
+        return;
+      }
+    }
+
     // If RT/BF pair, remove both
-    if (cara?.grupo_rt_bf) {
+    if (cara.grupo_rt_bf) {
       setCaras(caras.filter(c => !(c.grupo_rt_bf === cara.grupo_rt_bf && c.catorcenaNum === cara.catorcenaNum && c.catorcenaYear === cara.catorcenaYear)));
     } else {
       setCaras(caras.filter(c => c.id !== id));
@@ -1410,17 +1545,36 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
     const bfPair = cara.grupo_rt_bf ? caras.find(c => c.grupo_rt_bf === cara.grupo_rt_bf && c.esBf && c.catorcenaNum === cara.catorcenaNum && c.catorcenaYear === cara.catorcenaYear) : null;
 
     setEditingCaraId(cara.id);
+
+    // Si la cara pertenece a un grupo masivo y modoMasivo está ON, popular el rango completo
+    // del grupo para que al guardar la edición se propague a todas las caras del grupo
+    let periodoIni = `${cara.catorcenaYear}-${cara.catorcenaNum}`;
+    let periodoFin = '';
+    if (cara.grupo_masivo_id && modoMasivo) {
+      const grupoCaras = caras.filter(c => c.grupo_masivo_id === cara.grupo_masivo_id && !c.esBf);
+      if (grupoCaras.length > 1) {
+        const sorted = [...grupoCaras].sort((a, b) =>
+          (a.catorcenaYear * 100 + a.catorcenaNum) - (b.catorcenaYear * 100 + b.catorcenaNum)
+        );
+        periodoIni = `${sorted[0].catorcenaYear}-${sorted[0].catorcenaNum}`;
+        const last = sorted[sorted.length - 1];
+        periodoFin = `${last.catorcenaYear}-${last.catorcenaNum}`;
+      }
+    }
+
     setNewCara({
       articulo: cara.articulo,
+      plaza: cara.plaza || cara.estado,
       estado: cara.estado,
       ciudades: cara.ciudades,
       formato: cara.formato,
       tipo: cara.tipo as 'Tradicional' | 'Digital' | '',
       nse: cara.nse,
-      periodo: `${cara.catorcenaYear}-${cara.catorcenaNum}`,
-      periodoFinCat: '',
-      periodoInicioCustom: tipoPeriodo === 'mensual' ? cara.periodoInicio : '',
-      periodoFinCustom: tipoPeriodo === 'mensual' ? cara.periodoFin : '',
+      periodo: periodoIni,
+      periodoFinCat: periodoFin,
+      // <input type="date"> espera 'YYYY-MM-DD'; truncamos por si viene como ISO completo
+      periodoInicioCustom: tipoPeriodo === 'mensual' ? String(cara.periodoInicio || '').slice(0, 10) : '',
+      periodoFinCustom: tipoPeriodo === 'mensual' ? String(cara.periodoFin || '').slice(0, 10) : '',
       renta: cara.renta,
       bonificacion: bfPair ? bfPair.renta : cara.bonificacion,
       tarifaPublica: cara.tarifaPublica,
@@ -1435,6 +1589,7 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
     setTimeout(() => circuitTableRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 100);
     setNewCara({
       articulo: null,
+      plaza: '',
       estado: '',
       ciudades: [],
       formato: '',
@@ -1451,8 +1606,15 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
     });
   };
 
-  // Helper to format date for display
+  // Helper to format date for display — parsea YYYY-MM-DD directo del string
+  // para evitar timezone shift en MX (UTC-6)
   const formatDateShort = (dateStr: string) => {
+    const m = String(dateStr).match(/^(\d{4})-(\d{2})-(\d{2})/);
+    if (m) {
+      const meses = ['ene', 'feb', 'mar', 'abr', 'may', 'jun', 'jul', 'ago', 'sep', 'oct', 'nov', 'dic'];
+      const month = parseInt(m[2]) - 1;
+      if (month >= 0 && month < 12) return `${parseInt(m[3])} ${meses[month]} ${m[1]}`;
+    }
     const d = new Date(dateStr);
     if (isNaN(d.getTime())) return dateStr;
     return d.toLocaleDateString('es-MX', { day: 'numeric', month: 'short', year: 'numeric' });
@@ -1653,13 +1815,39 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
         tarifa_publica: c.tarifaEfectiva ?? c.tarifaPublica,
         inicio_periodo: c.periodoInicio,
         fin_periodo: c.periodoFin,
-        caras_flujo: c.esBf ? 0 : Math.ceil(c.renta / 2),
-        caras_contraflujo: c.esBf ? 0 : Math.floor(c.renta / 2),
+        // Para circuito: si la renta es < total del circuito, distribuir flujo/contraflujo
+        // proporcionalmente respetando los topes del circuito
+        caras_flujo: c.esBf ? 0 : (() => {
+          if (c.circuitoFlujo != null && c.circuitoContraflujo != null) {
+            const totalCirc = c.circuitoFlujo + c.circuitoContraflujo;
+            if (totalCirc > 0 && c.renta < totalCirc) {
+              let flujoCalc = Math.round(c.renta * c.circuitoFlujo / totalCirc);
+              flujoCalc = Math.min(flujoCalc, c.circuitoFlujo);
+              let contraCalc = Math.min(c.renta - flujoCalc, c.circuitoContraflujo);
+              return c.renta - contraCalc;
+            }
+            return c.circuitoFlujo;
+          }
+          return Math.ceil(c.renta / 2);
+        })(),
+        caras_contraflujo: c.esBf ? 0 : (() => {
+          if (c.circuitoFlujo != null && c.circuitoContraflujo != null) {
+            const totalCirc = c.circuitoFlujo + c.circuitoContraflujo;
+            if (totalCirc > 0 && c.renta < totalCirc) {
+              let flujoCalc = Math.round(c.renta * c.circuitoFlujo / totalCirc);
+              flujoCalc = Math.min(flujoCalc, c.circuitoFlujo);
+              return Math.min(c.renta - flujoCalc, c.circuitoContraflujo);
+            }
+            return c.circuitoContraflujo;
+          }
+          return Math.floor(c.renta / 2);
+        })(),
         descuento: c.descuento,
         articulo: c.articulo.ItemCode,
         autorizacion_dg: c.autorizacion_dg,
         autorizacion_dcm: c.autorizacion_dcm,
         grupo_rt_bf: c.grupo_rt_bf || null,
+        grupo_masivo_id: c.grupo_masivo_id || null,
       })),
     };
 
@@ -1734,15 +1922,28 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
       setTipoPeriodo(loadedTipoPeriodo);
 
       if (cotizacion?.fecha_inicio && cotizacion?.fecha_fin) {
-        const fechaInicioDate = new Date(cotizacion.fecha_inicio);
-        const fechaFinDate = new Date(cotizacion.fecha_fin);
-
         if (loadedTipoPeriodo === 'mensual') {
-          setYearInicio(fechaInicioDate.getFullYear());
-          setYearFin(fechaFinDate.getFullYear());
-          setMesInicio(fechaInicioDate.getMonth() + 1);
-          setMesFin(fechaFinDate.getMonth() + 1);
+          // Parse YYYY-MM directo del string para evitar timezone shift en MX (UTC-6)
+          // que convierte '2026-03-01T00:00:00.000Z' en '2026-02-28' local → mes Feb (mal)
+          const parseYM = (val: any): { year: number; month: number } | null => {
+            const m = String(val).match(/^(\d{4})-(\d{2})/);
+            if (!m) return null;
+            return { year: parseInt(m[1]), month: parseInt(m[2]) };
+          };
+          const ymIni = parseYM(cotizacion.fecha_inicio);
+          const ymFin = parseYM(cotizacion.fecha_fin);
+          if (ymIni) {
+            setYearInicio(ymIni.year);
+            setMesInicio(ymIni.month);
+          }
+          if (ymFin) {
+            setYearFin(ymFin.year);
+            setMesFin(ymFin.month);
+          }
         } else {
+          const fechaInicioDate = new Date(cotizacion.fecha_inicio);
+          const fechaFinDate = new Date(cotizacion.fecha_fin);
+
           const inicioCat = catorcenasData.data.find(c => {
             const cInicio = new Date(c.fecha_inicio);
             const cFin = new Date(c.fecha_fin);
@@ -1812,25 +2013,41 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
             }
           }
 
+          // Detectar si la cara cargada es un circuito digital
+          const circuitoLoaded = parseCircuitoDigital(cara.articulo || '');
+
           return {
             id: `edit-${idx}-${Date.now()}-${Math.random()}`,
             articulo,
             estado: cara.estados || '',
             ciudades: cara.ciudad ? cara.ciudad.split(', ').map(c => c.trim()) : [],
+            plaza: circuitoLoaded ? circuitoLoaded.plazaLabel : getPlazaFromArticle(cara.articulo || '', cara.estados || cara.ciudad || ''),
+            circuito: circuitoLoaded || undefined,
+            circuitoTotal: circuitoLoaded ? (Number(cara.caras) || 0) + (Number(cara.bonificacion) || 0) : undefined,
+            circuitoFlujo: circuitoLoaded ? Number((cara as any).caras_flujo) || 0 : undefined,
+            circuitoContraflujo: circuitoLoaded ? Number((cara as any).caras_contraflujo) || 0 : undefined,
             formato: cara.formato || '',
             tipo: cara.tipo || '',
             nse: cara.nivel_socioeconomico ? cara.nivel_socioeconomico.split(',') : [],
             catorcenaNum: catNum,
             catorcenaYear: catYear,
-            periodoInicio: cara.inicio_periodo || '',
-            periodoFin: cara.fin_periodo || '',
-            renta: Number(cara.caras) || 0,
-            bonificacion: Number(cara.bonificacion) || 0,
+            // Truncar a YYYY-MM-DD para que <input type="date"> lo reconozca al editar
+            periodoInicio: String(cara.inicio_periodo || '').slice(0, 10),
+            periodoFin: String(cara.fin_periodo || '').slice(0, 10),
+            // Convención frontend: BF guarda cantidad en renta. Backend persiste BF con
+            // caras=0 y bonificacion=cantidad, así que invertimos al cargar.
+            renta: ((cara.articulo || '').toUpperCase().startsWith('BF') || (cara.articulo || '').toUpperCase().startsWith('CF'))
+              ? (Number(cara.bonificacion) || 0)
+              : (Number(cara.caras) || 0),
+            bonificacion: ((cara.articulo || '').toUpperCase().startsWith('BF') || (cara.articulo || '').toUpperCase().startsWith('CF'))
+              ? 0
+              : (Number(cara.bonificacion) || 0),
             tarifaPublica: (cara.caras || 0) > 0 ? (Number(cara.costo) || 0) / (cara.caras || 1) : Number(cara.tarifa_publica) || 0,
             tarifaEfectiva: Number(cara.tarifa_publica) || 0, // recalculated below with grupo_rt_bf
             descuento: Number(cara.descuento) || 0,
             precioTotal: Number(cara.costo) || 0,
             grupo_rt_bf: cara.grupo_rt_bf || undefined,
+            grupo_masivo_id: (cara as any).grupo_masivo_id || undefined,
             esBf: (cara.articulo || '').toUpperCase().startsWith('BF') || (cara.articulo || '').toUpperCase().startsWith('CF'),
             autorizacion_dg: cara.autorizacion_dg as CaraEntry['autorizacion_dg'],
             autorizacion_dcm: cara.autorizacion_dcm as CaraEntry['autorizacion_dcm'],
@@ -2140,7 +2357,7 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
                 <div className="flex items-start gap-2 px-3 py-2 rounded-lg bg-red-500/10 border border-red-500/30 text-red-400 text-sm">
                   <AlertTriangle className="h-4 w-4 mt-0.5 shrink-0" />
                   <span>
-                    <strong>{invalidCaras.length} circuito{invalidCaras.length > 1 ? 's' : ''}</strong> asignado{invalidCaras.length > 1 ? 's' : ''} ya no pertenece{invalidCaras.length > 1 ? 'n' : ''} al rango de catorcenas actual. Ve a "Asignar Caras" y elimínalos o ajusta el rango.
+                    <strong>{invalidCaras.length} circuito{invalidCaras.length > 1 ? 's' : ''}</strong> asignado{invalidCaras.length > 1 ? 's' : ''} ya no pertenece{invalidCaras.length > 1 ? 'n' : ''} al rango de catorcenas actual. Ve a "Asignar Circuito" y elimínalos o ajusta el rango.
                   </span>
                 </div>
               )}
@@ -2402,10 +2619,34 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
 
               {/* Add cara form */}
               <div ref={circuitFormRef} className={`p-4 ${isDark ? 'bg-zinc-800/30 border-zinc-700/50' : 'bg-gray-50 border-gray-200'} rounded-xl border`}>
-                <h3 className={`text-sm font-semibold ${isDark ? 'text-white' : 'text-gray-900'} mb-4 flex items-center gap-2`}>
-                  <Plus className="h-4 w-4 text-purple-400" />
-                  Agregar Circuito
-                </h3>
+                <div className="flex items-center justify-between mb-4">
+                  <h3 className={`text-sm font-semibold ${isDark ? 'text-white' : 'text-gray-900'} flex items-center gap-2`}>
+                    <Plus className="h-4 w-4 text-purple-400" />
+                    {editingCaraId ? 'Editar Circuito' : 'Agregar Circuito'}
+                  </h3>
+                  {/* Toggle Modo Masivo (solo catorcena) */}
+                  {tipoPeriodo === 'catorcena' && (
+                    <label className={`flex items-center gap-2 text-xs cursor-pointer select-none ${isDark ? 'text-zinc-300' : 'text-gray-700'}`}>
+                      <span>Modo masivo</span>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const next = !modoMasivo;
+                          setModoMasivo(next);
+                          // Al apagar, limpiar el cat fin
+                          if (!next) setNewCara({ ...newCara, periodoFinCat: '' });
+                        }}
+                        className={`relative inline-flex h-5 w-9 items-center rounded-full transition-colors ${modoMasivo ? 'bg-purple-500' : (isDark ? 'bg-zinc-700' : 'bg-gray-300')}`}
+                        title="Crea o actualiza varias caras en un rango de catorcenas"
+                      >
+                        <span className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${modoMasivo ? 'translate-x-4' : 'translate-x-0.5'}`} />
+                      </button>
+                      <span className={`text-[10px] uppercase font-semibold ${modoMasivo ? 'text-purple-400' : (isDark ? 'text-zinc-500' : 'text-gray-400')}`}>
+                        {modoMasivo ? 'ON' : 'OFF'}
+                      </span>
+                    </label>
+                  )}
+                </div>
 
                 {/* Row 1: Articulo SAP */}
                 <div className="mb-4">
@@ -2417,7 +2658,37 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
                     label="Seleccionar artículo"
                     options={articulosFiltrados}
                     value={newCara.articulo}
-                    onChange={(item) => {
+                    onChange={async (item) => {
+                      // Detectar CIRCUITO DIGITAL
+                      const circuito = parseCircuitoDigital(item.ItemCode);
+                      if (circuito) {
+                        // Unicidad por catorcena se valida en handleAddCara — el mismo CTO+plaza
+                        // se permite en distintas catorcenas/meses
+                        try {
+                          const det = await circuitosService.detalle(item.ItemCode);
+                          const tarifa = getTarifaFromArticulo(item);
+                          setCircuitoMuebles(det.muebles);
+                          setCircuitoFlujoContra({ flujo: det.flujo, contraflujo: det.contraflujo });
+                          setNewCara({
+                            ...newCara,
+                            articulo: item,
+                            plaza: circuito.plazaLabel,
+                            estado: circuito.plazaLabel,
+                            ciudades: [],
+                            formato: 'MIXTO',
+                            tipo: 'Digital',
+                            tarifaPublica: tarifa.tarifa_publica,
+                            renta: det.total, // fijo al tamaño del circuito
+                            bonificacion: 0,
+                            articuloBf: null,
+                          });
+                          return;
+                        } catch (e: any) {
+                          alert(`Error al cargar circuito: ${e?.message || e}`);
+                          return;
+                        }
+                      }
+
                       // Auto-set tarifa publica from ItemCode mapping
                       const tarifa = getTarifaFromArticulo(item);
                       // Auto-set estado and ciudades from ItemName (fallback to ItemCode)
@@ -2465,20 +2736,46 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
                   />
                 </div>
 
-                {/* Row 2: Estado, Ciudad (opcional), Formato, Tipo */}
+                {/* Row 2: Plaza, Ciudad (opcional), Formato, Tipo */}
                 <div className="grid grid-cols-4 gap-3 mb-4">
-                  {/* Estado */}
+                  {/* Plaza (UI); internally seleciona estado+ciudades */}
                   <div>
-                    <label className={`text-xs ${isDark ? 'text-zinc-500' : 'text-gray-500'}`}>Estado</label>
+                    <label className={`text-xs ${isDark ? 'text-zinc-500' : 'text-gray-500'}`}>Plaza</label>
                     <select
-                      value={newCara.estado}
-                      onChange={(e) => setNewCara({ ...newCara, estado: e.target.value, ciudades: [] })}
+                      disabled={!!(newCara.articulo && parseCircuitoDigital(newCara.articulo.ItemCode))}
+                      title={newCara.articulo && parseCircuitoDigital(newCara.articulo.ItemCode) ? 'Plaza fijada por el circuito digital' : undefined}
+                      value={newCara.plaza || newCara.estado}
+                      onChange={(e) => {
+                        const val = e.target.value;
+                        // Special: CDMX / AM combina 2 estados
+                        if (val === CDMX_AM_LABEL) {
+                          setNewCara({ ...newCara, plaza: val, estado: val, ciudades: [] });
+                          return;
+                        }
+                        // Buscar plaza en filtros
+                        const plazaInfo = inventarioFilters?.plazas?.find(p => p.plaza === val);
+                        if (plazaInfo) {
+                          const estadoPrim = plazaInfo.estados[0] || '';
+                          setNewCara({
+                            ...newCara,
+                            plaza: val,
+                            estado: estadoPrim,
+                            ciudades: [],
+                          });
+                        } else {
+                          // Fallback: val puede ser un estado (backward compat)
+                          setNewCara({ ...newCara, plaza: val, estado: val, ciudades: [] });
+                        }
+                      }}
                       className={`w-full px-3 py-2 ${isDark ? 'bg-zinc-800 border-zinc-700 text-white' : 'bg-gray-100 border-gray-200 text-gray-900'} border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-purple-500/50`}
                     >
                       <option value="">Seleccionar</option>
                       <option value={CDMX_AM_LABEL}>{CDMX_AM_LABEL}</option>
-                      {inventarioFilters?.estados.map(e => (
-                        <option key={e} value={e}>{e}</option>
+                      {(inventarioFilters?.plazas && inventarioFilters.plazas.length > 0
+                        ? inventarioFilters.plazas.map(p => p.plaza)
+                        : (inventarioFilters?.estados || [])
+                      ).map(p => (
+                        <option key={p} value={p}>{p}</option>
                       ))}
                     </select>
                   </div>
@@ -2506,6 +2803,10 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
                       className={`w-full px-3 py-2 ${isDark ? 'bg-zinc-800 border-zinc-700 text-white' : 'bg-gray-100 border-gray-200 text-gray-900'} border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-purple-500/50`}
                     >
                       <option value="">Seleccionar</option>
+                      {/* MIXTO disponible cuando hay un circuito */}
+                      {newCara.articulo && parseCircuitoDigital(newCara.articulo.ItemCode) && (
+                        <option value="MIXTO">MIXTO (circuito)</option>
+                      )}
                       {tipoPeriodo === 'mensual' ? (
                         FORMATOS_MENSUALES.map(f => (
                           <option key={f} value={f}>{f}</option>
@@ -2545,7 +2846,11 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
                         <label className={`text-xs ${isDark ? 'text-zinc-500' : 'text-gray-500'}`}>Mes</label>
                         <select
                           value={newCara.periodo}
-                          onChange={(e) => setNewCara({ ...newCara, periodo: e.target.value, periodoInicioCustom: '', periodoFinCustom: '' })}
+                          onChange={(e) => {
+                            const val = e.target.value;
+                            const match = availablePeriods.find(p => `${p.a_o}-${p.numero_catorcena}` === val);
+                            setNewCara({ ...newCara, periodo: val, periodoInicioCustom: match?.fecha_inicio || '', periodoFinCustom: match?.fecha_fin || '' });
+                          }}
                           disabled={availablePeriods.length === 0}
                           className={`w-full px-2 py-2 ${isDark ? 'bg-zinc-800 border-zinc-700 text-white' : 'bg-gray-100 border-gray-200 text-gray-900'} border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-purple-500/50 disabled:opacity-50`}
                         >
@@ -2585,7 +2890,7 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
                   ) : (
                     <>
                     <div>
-                      <label className={`text-xs ${isDark ? 'text-zinc-500' : 'text-gray-500'}`}>Periodo</label>
+                      <label className={`text-xs ${isDark ? 'text-zinc-500' : 'text-gray-500'}`}>{modoMasivo ? 'Cat. Inicio' : 'Periodo'}</label>
                       <select
                         value={newCara.periodo}
                         onChange={(e) => setNewCara({ ...newCara, periodo: e.target.value })}
@@ -2600,6 +2905,32 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
                         ))}
                       </select>
                     </div>
+                    {modoMasivo && (
+                      <div>
+                        <label className={`text-xs ${isDark ? 'text-zinc-500' : 'text-gray-500'}`}>Cat. Fin</label>
+                        <select
+                          value={newCara.periodoFinCat}
+                          onChange={(e) => setNewCara({ ...newCara, periodoFinCat: e.target.value })}
+                          disabled={!newCara.periodo}
+                          className={`w-full px-3 py-2 ${isDark ? 'bg-zinc-800 border-zinc-700 text-white' : 'bg-gray-100 border-gray-200 text-gray-900'} border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-purple-500/50 disabled:opacity-50`}
+                        >
+                          <option value="">Solo {newCara.periodo ? `Cat ${newCara.periodo.split('-')[1]}` : 'una'}</option>
+                          {availablePeriods
+                            .filter(p => {
+                              if (!newCara.periodo) return false;
+                              const [yStr, cStr] = newCara.periodo.split('-');
+                              const yIni = parseInt(yStr);
+                              const cIni = parseInt(cStr);
+                              return (p.a_o * 100 + p.numero_catorcena) >= (yIni * 100 + cIni);
+                            })
+                            .map(p => (
+                              <option key={`${p.a_o}-${p.numero_catorcena}-fin`} value={`${p.a_o}-${p.numero_catorcena}`}>
+                                Cat {p.numero_catorcena} / {p.a_o}
+                              </option>
+                            ))}
+                        </select>
+                      </div>
+                    )}
                     </>
                   )}
 
@@ -2615,9 +2946,16 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
                       type="number"
                       min={0}
                       value={newCara.renta || ''}
-                      onChange={(e) => setNewCara({ ...newCara, renta: parseInt(e.target.value) || 0 })}
+                      onChange={(e) => {
+                        const v = parseInt(e.target.value) || 0;
+                        // Si es circuito, renta está fijada: total = renta + bonif
+                        const circ = newCara.articulo ? parseCircuitoDigital(newCara.articulo.ItemCode) : null;
+                        if (circ) return; // no permitir cambio manual
+                        setNewCara({ ...newCara, renta: v });
+                      }}
                       placeholder='0'
-                      disabled={newCara.articulo?.ItemCode?.toUpperCase().startsWith('CT')}
+                      disabled={newCara.articulo?.ItemCode?.toUpperCase().startsWith('CT') || !!(newCara.articulo && parseCircuitoDigital(newCara.articulo.ItemCode))}
+                      title={newCara.articulo && parseCircuitoDigital(newCara.articulo.ItemCode) ? 'Circuito Digital: total fijo. Ajusta solo bonificación.' : undefined}
                       className={`w-full px-3 py-2 ${isDark ? 'bg-zinc-800 border-zinc-700 text-white' : 'bg-gray-100 border-gray-200 text-gray-900'} border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-purple-500/50 disabled:opacity-40 disabled:cursor-not-allowed`}
                     />
                   </div>
@@ -2630,9 +2968,24 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
                     <input
                       type="number"
                       min={0}
-                      max={newCara.articulo?.ItemCode?.toUpperCase().startsWith('CT') ? undefined : newCara.renta}
+                      max={(() => {
+                        const circ = newCara.articulo ? parseCircuitoDigital(newCara.articulo.ItemCode) : null;
+                        if (circ) return newCara.renta + newCara.bonificacion; // max = total del circuito
+                        return newCara.articulo?.ItemCode?.toUpperCase().startsWith('CT') ? undefined : newCara.renta;
+                      })()}
                       value={newCara.bonificacion || ''}
-                      onChange={(e) => setNewCara({ ...newCara, bonificacion: parseInt(e.target.value) || 0 })}
+                      onChange={(e) => {
+                        const v = parseInt(e.target.value) || 0;
+                        // Si es circuito: total fijo, renta = total - bonif
+                        const circ = newCara.articulo ? parseCircuitoDigital(newCara.articulo.ItemCode) : null;
+                        if (circ) {
+                          const total = newCara.renta + newCara.bonificacion;
+                          const bonifCap = Math.min(Math.max(0, v), total);
+                          setNewCara({ ...newCara, bonificacion: bonifCap, renta: total - bonifCap });
+                          return;
+                        }
+                        setNewCara({ ...newCara, bonificacion: v });
+                      }}
                       placeholder='0'
                       disabled={newCara.articulo?.ItemCode?.toUpperCase().startsWith('IM') || newCara.articulo?.ItemCode?.toUpperCase().startsWith('IN') || isEspecialArticle(newCara.articulo?.ItemCode || '')}
                       className={`w-full px-3 py-2 ${isDark ? 'bg-zinc-800 border-zinc-700 text-white' : 'bg-gray-100 border-gray-200 text-gray-900'} border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-purple-500/50 ${(newCara.articulo?.ItemCode?.toUpperCase().startsWith('IM') || newCara.articulo?.ItemCode?.toUpperCase().startsWith('IN') || isEspecialArticle(newCara.articulo?.ItemCode || '')) ? 'opacity-40 cursor-not-allowed' : ''}`}
@@ -2682,6 +3035,36 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
                     </div>
                   </div>
                 )}
+
+                {/* Preview: Circuito Digital info */}
+                {newCara.articulo && (() => {
+                  const circ = parseCircuitoDigital(newCara.articulo.ItemCode);
+                  if (!circ) return null;
+                  const total = newCara.renta + newCara.bonificacion;
+                  const muebles = circuitoMuebles
+                    ? Object.entries(circuitoMuebles).map(([m, c]) => `${m}: ${c}`).join(' · ')
+                    : '';
+                  return (
+                    <div className={`mt-4 p-3 rounded-lg border ${isDark ? 'bg-violet-500/10 border-violet-500/30' : 'bg-violet-50 border-violet-200'}`}>
+                      <div className="flex items-center justify-between mb-2">
+                        <span className={`text-xs font-semibold ${isDark ? 'text-violet-300' : 'text-violet-700'}`}>
+                          🔁 Circuito Digital · {circ.ctoLabel} · {circ.plazaLabel}
+                        </span>
+                        <span className={`text-xs ${isDark ? 'text-violet-200' : 'text-violet-700'}`}>
+                          Total: {total} caras (fijo) · Auto-reserva al crear propuesta
+                        </span>
+                      </div>
+                      {muebles && (
+                        <div className={`text-[10px] ${isDark ? 'text-violet-300' : 'text-violet-600'} mb-1`}>
+                          Mezcla: {muebles}
+                        </div>
+                      )}
+                      <div className={`text-[10px] ${isDark ? 'text-zinc-400' : 'text-gray-500'}`}>
+                        Renta: {newCara.renta} · Bonif: {newCara.bonificacion} · Autorización: aprobado automático
+                      </div>
+                    </div>
+                  );
+                })()}
 
                 {/* Artículo BF - below the grid when bonificacion > 0 */}
                 {newCara.bonificacion > 0 && !newCara.articulo?.ItemCode?.toUpperCase().startsWith('CT') && !newCara.articulo?.ItemCode?.toUpperCase().startsWith('IM') && !isEspecialArticle(newCara.articulo?.ItemCode || '') && (
@@ -2739,7 +3122,13 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
                   <button
                     type="button"
                     onClick={handleAddCara}
-                    disabled={!newCara.articulo || !newCara.estado || !newCara.formato || !newCara.tipo || newCara.nse.length === 0 || !newCara.periodo || (tipoPeriodo === 'mensual' && (!newCara.periodoInicioCustom || !newCara.periodoFinCustom))}
+                    disabled={(() => {
+                      const esCirc = newCara.articulo ? !!parseCircuitoDigital(newCara.articulo.ItemCode) : false;
+                      const baseInvalid = !newCara.articulo || !newCara.estado || !newCara.formato || !newCara.tipo || !newCara.periodo || (tipoPeriodo === 'mensual' && (!newCara.periodoInicioCustom || !newCara.periodoFinCustom));
+                      // NSE solo requerido si NO es circuito
+                      const nseInvalid = !esCirc && newCara.nse.length === 0;
+                      return baseInvalid || nseInvalid;
+                    })()}
                     className={`flex items-center gap-2 px-4 py-2 ${editingCaraId ? 'bg-amber-600 hover:bg-amber-700' : 'bg-purple-600 hover:bg-purple-700'} ${isDark ? 'disabled:bg-zinc-700 disabled:text-zinc-500' : 'disabled:bg-gray-200 disabled:text-gray-400'} text-white rounded-lg text-sm font-medium transition-colors`}
                   >
                     {editingCaraId ? <Check className="h-4 w-4" /> : <Plus className="h-4 w-4" />}
@@ -2833,8 +3222,8 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
                                           <div className="truncate font-medium">{cara.articulo.ItemCode}</div>
                                           <div className={`truncate text-[10px] ${isDark ? 'text-zinc-500' : 'text-gray-400'}`}>{cara.articulo.ItemName}</div>
                                         </td>
-                                        <td className={`px-2 py-2 text-xs ${isDark ? 'text-zinc-300' : 'text-gray-700'} max-w-[80px] truncate`} title={getPlazaFromArticle(cara.articulo?.ItemCode || '', cara.estado)}>
-                                          {getPlazaFromArticle(cara.articulo?.ItemCode || '', cara.estado)}
+                                        <td className={`px-2 py-2 text-xs ${isDark ? 'text-zinc-300' : 'text-gray-700'} max-w-[80px] truncate`} title={cara.plaza || getPlazaFromArticle(cara.articulo?.ItemCode || '', cara.estado)}>
+                                          {cara.plaza || getPlazaFromArticle(cara.articulo?.ItemCode || '', cara.estado)}
                                         </td>
                                         <td className="px-2 py-2">
                                           <span className={`text-[10px] px-1.5 py-0.5 rounded ${cara.tipo === 'Digital' ? 'bg-blue-500/20 text-blue-300' : 'bg-amber-500/20 text-amber-300'
@@ -2951,7 +3340,7 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
                 <div className="flex items-start gap-2 px-3 py-2 rounded-lg bg-red-500/10 border border-red-500/30 text-red-400 text-sm">
                   <AlertTriangle className="h-4 w-4 mt-0.5 shrink-0" />
                   <span>
-                    <strong>{invalidCaras.length} circuito{invalidCaras.length > 1 ? 's' : ''}</strong> tienen catorcenas fuera del rango de campaña. Regresa a "Campaña" o "Asignar Caras" para corregirlo.
+                    <strong>{invalidCaras.length} circuito{invalidCaras.length > 1 ? 's' : ''}</strong> tienen catorcenas fuera del rango de campaña. Regresa a "Campaña" o "Asignar Circuito" para corregirlo.
                   </span>
                 </div>
               )}
@@ -2989,7 +3378,16 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
                     <div className="flex justify-between">
                       <span className={`${isDark ? 'text-zinc-500' : 'text-gray-400'} text-sm`}>Fechas:</span>
                       <span className={`${isDark ? 'text-white' : 'text-gray-900'} text-sm`}>
-                        {fechaInicio && fechaFin ? `${new Date(fechaInicio).toLocaleDateString()} - ${new Date(fechaFin).toLocaleDateString()}` : '-'}
+                        {(() => {
+                          // Mostrar como "Mes año a Mes año" (no fechas exactas)
+                          if (!fechaInicio || !fechaFin) return '-';
+                          const mesesFull = ['Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio', 'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre'];
+                          const ini = String(fechaInicio).match(/^(\d{4})-(\d{2})/);
+                          const fin = String(fechaFin).match(/^(\d{4})-(\d{2})/);
+                          if (!ini || !fin) return '-';
+                          const ml = (ym: RegExpMatchArray) => `${mesesFull[parseInt(ym[2]) - 1]} ${ym[1]}`;
+                          return `${ml(ini)} a ${ml(fin)}`;
+                        })()}
                       </span>
                     </div>
                   </div>
@@ -3023,7 +3421,7 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
                 <div className={`px-4 py-3 ${isDark ? 'bg-zinc-800/50 border-zinc-700/50' : 'bg-gray-50 border-gray-200'} border-b`}>
                   <h3 className={`text-sm font-semibold ${isDark ? 'text-white' : 'text-gray-900'} flex items-center gap-2`}>
                     <Calendar className="h-4 w-4 text-purple-400" />
-                    Desglose por Catorcenas
+                    Desglose por Periodo
                   </h3>
                 </div>
                 {groupedCaras.length === 0 ? (

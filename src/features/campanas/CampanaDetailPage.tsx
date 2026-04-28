@@ -2210,6 +2210,13 @@ export function CampanaDetailPage() {
         </div>
 
         {/* Lista de inventario reservado */}
+        {campana?.status === 'Rechazada' ? (
+          <div className="bg-card rounded-xl border border-border p-4 md:p-6 text-center">
+            <span className={`text-xs md:text-sm ${isDark ? 'text-zinc-400' : 'text-gray-500'}`}>
+              Campaña rechazada — el inventario fue liberado y los grupos/circuitos eliminados.
+            </span>
+          </div>
+        ) : (
         <div className="bg-card rounded-xl border border-border">
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 p-3 md:p-4 border-b border-border">
             <h3 className={`text-xs md:text-sm font-semibold ${isDark ? 'text-purple-300' : 'text-purple-700'} uppercase tracking-wide`}>
@@ -3418,6 +3425,7 @@ export function CampanaDetailPage() {
             </div>
           </div>
         </div>
+        )}
 
         {/* Lista de inventario por APS */}
         <div className="bg-card rounded-xl border border-border">

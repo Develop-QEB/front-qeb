@@ -87,14 +87,22 @@ function getTagColor(name: string, isDark: boolean = true) {
 const MESES_LABEL = ['Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun', 'Jul', 'Ago', 'Sep', 'Oct', 'Nov', 'Dic'];
 const MESES_FULL = ['Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio', 'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre'];
 
+// Parsea YYYY-MM directo del string para evitar timezone shift
+// (e.g. '2026-03-01T00:00:00.000Z' en MX UTC-6 → Date.getMonth() devuelve 1=Feb por la conversión a hora local)
 function getMonthLabel(dateStr: string): string {
-  const d = new Date(dateStr);
-  return !isNaN(d.getTime()) ? `${MESES_FULL[d.getMonth()]} ${d.getFullYear()}` : '-';
+  const m = String(dateStr).match(/^(\d{4})-(\d{2})/);
+  if (!m) return '-';
+  const month = parseInt(m[2]) - 1;
+  if (month < 0 || month > 11) return '-';
+  return `${MESES_FULL[month]} ${m[1]}`;
 }
 
 function getMonthShort(dateStr: string): string {
-  const d = new Date(dateStr);
-  return !isNaN(d.getTime()) ? `${MESES_LABEL[d.getMonth()]} ${d.getFullYear()}` : '-';
+  const m = String(dateStr).match(/^(\d{4})-(\d{2})/);
+  if (!m) return '-';
+  const month = parseInt(m[2]) - 1;
+  if (month < 0 || month > 11) return '-';
+  return `${MESES_LABEL[month]} ${m[1]}`;
 }
 
 // Status Colors - colores únicos por cada tipo de status
@@ -876,6 +884,8 @@ export function CampanasPage() {
   const [campanaCaras, setCampanaCaras] = useState<Record<number, SolicitudCara[]>>({});
   const [loadingInventarios, setLoadingInventarios] = useState<Set<number>>(new Set());
   const [exportingLayout, setExportingLayout] = useState(false);
+  // Inversión (costo) por catorcena para la vista Versionario: { campanaId: { "numCat:anio": inversion } }
+  const [inversionPorCatorcena, setInversionPorCatorcena] = useState<Record<number, Record<string, number>>>({});
 
   // Add search tag on Enter/Tab
   const addSearchTag = (value: string) => {
@@ -1397,6 +1407,46 @@ export function CampanasPage() {
       });
   }, [activeView, filteredData, campanaInventarios]);
 
+  // Cargar inversión por catorcena (usando sc.costo) — usado por versionario y tabla
+  const loadingInvCatRef = useRef(false);
+  useEffect(() => {
+    if (!filteredData.length) return;
+    if (loadingInvCatRef.current) return;
+
+    const idsToLoad = filteredData
+      .filter(c => inversionPorCatorcena[c.id] === undefined)
+      .map(c => c.id);
+    if (idsToLoad.length === 0) return;
+
+    const BATCH = 50;
+    const batch = idsToLoad.slice(0, BATCH);
+    loadingInvCatRef.current = true;
+
+    campanasService.getBatchInversionesCostoPorCatorcena(batch)
+      .then(data => {
+        setInversionPorCatorcena(prev => {
+          const next = { ...prev };
+          for (const id of batch) {
+            const campData = data[id] || {};
+            const flat: Record<string, number> = {};
+            Object.entries(campData).forEach(([key, val]) => {
+              flat[key] = Number(val?.inversion || 0);
+            });
+            next[id] = flat;
+          }
+          return next;
+        });
+      })
+      .catch(() => {
+        setInversionPorCatorcena(prev => {
+          const next = { ...prev };
+          for (const id of batch) next[id] = {};
+          return next;
+        });
+      })
+      .finally(() => { loadingInvCatRef.current = false; });
+  }, [filteredData, inversionPorCatorcena]);
+
   // Agrupar campañas por catorcena para la vista alternativa (con soporte para subagrupaciones)
   const campanasPorCatorcena = useMemo(() => {
     const groups: Record<string, {
@@ -1490,31 +1540,8 @@ export function CampanasPage() {
           delete groups[key];
         }
       });
-
-      // Asegurar que todas las campañas del backend estén en algún grupo visible.
-      // El backend filtra por overlap de fechas, así que si una campaña pasa el filtro
-      // pero no tiene catorcenas_con_contenido en el rango, agregarla al grupo correspondiente.
-      const groupedIds = new Set<number>();
-      Object.values(groups).forEach(g => g.campanas.forEach(c => groupedIds.add(c.id)));
-      const ungrouped = filteredData.filter(c => !groupedIds.has(c.id));
-      if (ungrouped.length > 0) {
-        // Agregar campañas faltantes a los grupos del rango del filtro
-        for (let y = yearInicio; y <= yearFin; y++) {
-          const cStart = y === yearInicio ? catorcenaInicio : 1;
-          const cEnd = y === yearFin ? catorcenaFin : 26;
-          for (let c = cStart; c <= cEnd; c++) {
-            const key = `${y}-${String(c).padStart(2, '0')}`;
-            if (!groups[key]) {
-              groups[key] = { catorcena: { num: c, anio: y }, campanas: [] };
-            }
-            ungrouped.forEach(item => {
-              if (!groups[key].campanas.some(existing => existing.id === item.id)) {
-                groups[key].campanas.push(item);
-              }
-            });
-          }
-        }
-      }
+      // Nota: ya no forzamos campañas "ungrouped" al rango del filtro. Una campaña solo aparece
+      // en las catorcenas donde realmente tiene caras (catorcenas_con_contenido ya usa OVERLAP).
     } else if (yearInicio && yearFin) {
       Object.keys(groups).forEach(key => {
         const groupAnio = parseInt(key.split('-')[0]);
@@ -1765,12 +1792,33 @@ export function CampanasPage() {
   };
 
   // Handle export CSV with all columns
-  const handleExportCSV = () => {
+  const handleExportCSV = async () => {
     if (!filteredData.length) return;
+
+    // Garantizar que todas las campañas tengan inversión prorrateada cargada antes de exportar.
+    const missingIds = filteredData
+      .filter(c => inversionPorCatorcena[c.id] === undefined)
+      .map(c => c.id);
+    let invMap = inversionPorCatorcena;
+    if (missingIds.length > 0) {
+      try {
+        const fetched = await campanasService.getBatchInversionesCostoPorCatorcena(missingIds);
+        const merged: Record<number, Record<string, number>> = { ...invMap };
+        for (const id of missingIds) {
+          const campData = fetched[id] || {};
+          const flat: Record<string, number> = {};
+          Object.entries(campData).forEach(([k, v]) => { flat[k] = Number(v?.inversion || 0); });
+          merged[id] = flat;
+        }
+        invMap = merged;
+        setInversionPorCatorcena(merged);
+      } catch { /* si falla, usamos lo que tengamos */ }
+    }
 
     const headers = [
       'ID', 'Periodo', 'Creador', 'Campaña', 'Marca', 'Estatus', 'Actividad', 'Fecha Inicio', 'Fecha Fin', 'Inversión', 'APS'
     ];
+    const hayFiltro = !!(catorcenaInicio && catorcenaFin && yearInicio && yearFin);
     const rows = filteredData.map(c => {
       const periodStatus = getPeriodStatus(c.fecha_inicio, c.fecha_fin);
       const catIni = (c as any).tipo_periodo === 'mensual'
@@ -1779,6 +1827,16 @@ export function CampanasPage() {
       const catFin = (c as any).tipo_periodo === 'mensual'
         ? getMonthShort(c.fecha_fin)
         : (c.catorcena_fin_num && c.catorcena_fin_anio ? `Cat ${c.catorcena_fin_num} ${c.catorcena_fin_anio}` : '-');
+      // Misma lógica que la columna de inversión en la tabla:
+      // Con filtro: usar c.inversion (backend ya lo filtró por período).
+      // Sin filtro: total dinámico del batch si ya cargó, sino fallback a c.inversion.
+      let inv: number;
+      if (hayFiltro) {
+        inv = Number(c.inversion || 0);
+      } else {
+        const invData = invMap[c.id];
+        inv = invData?.['total'] !== undefined ? invData['total'] : Number(c.inversion || 0);
+      }
       return [
         c.id,
         periodStatus,
@@ -1789,7 +1847,7 @@ export function CampanasPage() {
         c.has_aps ? 'Activa' : 'Inactiva',
         catIni,
         catFin,
-        c.inversion ? formatCurrency(c.inversion) : '-',
+        inv > 0 ? formatCurrency(inv) : '-',
         c.has_aps ? 'Si' : 'No'
       ];
     });
@@ -1814,6 +1872,26 @@ export function CampanasPage() {
     setExportingLayout(true);
 
     try {
+      // Garantizar que todas las campañas visibles tengan inversión prorrateada cargada.
+      const allCampanaIds = new Set<number>();
+      campanasPorCatorcena.forEach(g => g.campanas.forEach(c => allCampanaIds.add(c.id)));
+      const missingIds = [...allCampanaIds].filter(id => inversionPorCatorcena[id] === undefined);
+      let invMap = inversionPorCatorcena;
+      if (missingIds.length > 0) {
+        try {
+          const fetched = await campanasService.getBatchInversionesCostoPorCatorcena(missingIds);
+          const merged: Record<number, Record<string, number>> = { ...invMap };
+          for (const id of missingIds) {
+            const campData = fetched[id] || {};
+            const flat: Record<string, number> = {};
+            Object.entries(campData).forEach(([k, v]) => { flat[k] = Number(v?.inversion || 0); });
+            merged[id] = flat;
+          }
+          invMap = merged;
+          setInversionPorCatorcena(merged);
+        } catch { /* si falla, usamos lo que tengamos */ }
+      }
+
       // Un solo request al backend con los mismos filtros activos
       const exportData = await campanasService.getExportLayout({
         status: (status && status !== 'Incompleta') ? status : undefined,
@@ -1848,7 +1926,8 @@ export function CampanasPage() {
       ];
 
       const rows: string[][] = [];
-      const campanaInversionExported = new Set<number>();
+      // Mostrar inversión una vez por (campaña, catorcena), usando el monto específico de esa catorcena.
+      const invExportedKey = new Set<string>();
 
       for (const { catorcena, campanas } of campanasPorCatorcena) {
         for (const campana of campanas) {
@@ -1858,9 +1937,15 @@ export function CampanasPage() {
           const aps = info?.aps_global || (campana as any).aps_global || campana.id || '';
           const cuic = info?.cuic || (campana as any).cuic || '';
           const vendedor = info?.vendedor || (campana as any).creador_nombre || '';
-          const invCampana = Number(info?.inversion || (campana as any).inversion) || 0;
-          const showInversion = !campanaInversionExported.has(campana.id);
-          if (showInversion) campanaInversionExported.add(campana.id);
+          // Inversión prorrateada específica de esta catorcena (sc.costo × días_overlap / días_totales).
+          const catKey = `${catorcena.num}:${catorcena.anio}`;
+          const invData = invMap[campana.id];
+          const invCampana = invData !== undefined
+            ? (invData[catKey] || 0)
+            : Number(info?.inversion || (campana as any).inversion) || 0;
+          const exportKey = `${campana.id}:${catKey}`;
+          const showInversion = !invExportedKey.has(exportKey);
+          if (showInversion) invExportedKey.add(exportKey);
           const invStr = showInversion && invCampana > 0 ? `$${invCampana.toLocaleString('es-MX')}` : '0';
           const descripcion = info?.descripcion || (campana as any).descripcion || '';
 
@@ -2087,7 +2172,21 @@ export function CampanasPage() {
         {/* Inversión */}
         <td className="px-4 py-3">
           <span className={`font-medium ${isDark ? 'text-amber-400' : 'text-amber-600'}`}>
-            {item.inversion ? formatCurrency(item.inversion) : '-'}
+            {(() => {
+              const hayFiltro = !!(catorcenaInicio && catorcenaFin && yearInicio && yearFin);
+              let inv: number;
+              if (hayFiltro) {
+                // Con filtro: el backend ya devuelve item.inversion filtrado por el período
+                inv = Number(item.inversion || 0);
+              } else {
+                // Sin filtro: usar total dinámico del batch (SUM real de todas las caras)
+                const invData = inversionPorCatorcena[item.id];
+                inv = invData?.['total'] !== undefined
+                  ? invData['total']
+                  : Number(item.inversion || 0);
+              }
+              return inv > 0 ? formatCurrency(inv) : '-';
+            })()}
           </span>
         </td>
         {/* APS */}
@@ -2988,10 +3087,16 @@ export function CampanasPage() {
                             ) : null;
                           })()}
                           {(() => {
-                            const invCampana = Number((campana as any).inversion) || 0;
+                            // Inversión específica de esta catorcena (sc.costo). Si el batch cargó y no hay
+                            // valor para este catKey, la campaña no tiene caras aquí → 0.
+                            const catKey = `${catorcena.num}:${catorcena.anio}`;
+                            const invData = inversionPorCatorcena[campana.id];
+                            const invCampana = invData !== undefined
+                              ? (invData[catKey] || 0)
+                              : (Number((campana as any).inversion) || 0);
                             return (
-                              <span className={`px-2 py-0.5 rounded-full text-[10px] ${isDark ? 'bg-green-500/15 text-green-300' : 'bg-green-50 text-green-700'} border border-green-500/25 flex items-center gap-1`} title="Inversión">
-                                <DollarSign className="h-3 w-3" /> {invCampana > 0 ? invCampana.toLocaleString('es-MX', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : 'Sin inversión'}
+                              <span className={`px-2 py-0.5 rounded-full text-[10px] ${isDark ? 'bg-green-500/15 text-green-300' : 'bg-green-50 text-green-700'} border border-green-500/25 flex items-center gap-1`} title="Inversión de la catorcena">
+                                <DollarSign className="h-3 w-3" /> {invCampana > 0 ? invCampana.toLocaleString() : 'Sin inversión'}
                               </span>
                             );
                           })()}
@@ -3223,6 +3328,40 @@ export function CampanasPage() {
                                                 </div>
                                                 {isGrupoExpanded && (
                                                   <div className="pl-5 py-1 space-y-0.5">
+                                                    {/* Mini galería de artes del grupo */}
+                                                    {(() => {
+                                                      const itemsConArte = grupo.items.filter(i => i.archivo != null && i.archivo !== '');
+                                                      if (itemsConArte.length === 0) return null;
+                                                      const grupoLabel = [
+                                                        (grupo.items[0] as any)?.formato,
+                                                        grupo.items[0]?.plaza,
+                                                        grupo.items[0]?.articulo,
+                                                      ].filter(Boolean).join(' · ') || grupo.key;
+                                                      return (
+                                                        <div className={`flex items-center gap-2 overflow-x-auto py-2 px-1 mb-2 ${isDark ? 'bg-zinc-900/40' : 'bg-gray-50'} rounded`}>
+                                                          {itemsConArte.map(inv => (
+                                                            <button
+                                                              key={`thumb-${inv.id}`}
+                                                              type="button"
+                                                              onClick={(e) => {
+                                                                e.stopPropagation();
+                                                                openArtGallery(campana.id, itemsConArte, `Galería de Artes - ${grupoLabel}`);
+                                                              }}
+                                                              className={`flex-shrink-0 relative rounded overflow-hidden border transition-all hover:scale-105 ${isDark ? 'border-zinc-700 hover:border-purple-500' : 'border-gray-300 hover:border-purple-500'}`}
+                                                              title={`${inv.codigo_unico || ''}${inv.plaza ? ` · ${inv.plaza}` : ''}`}
+                                                            >
+                                                              <img
+                                                                src={inv.archivo as string}
+                                                                alt={inv.codigo_unico || 'arte'}
+                                                                className="h-20 w-28 object-cover"
+                                                                loading="lazy"
+                                                                onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }}
+                                                              />
+                                                            </button>
+                                                          ))}
+                                                        </div>
+                                                      );
+                                                    })()}
                                                     {/* Resumen del grupo */}
                                                     {(() => {
                                                       // Indicaciones de programación/instalación del grupo
@@ -3348,13 +3487,22 @@ export function CampanasPage() {
                           En curso
                         </span>
                       )}
-                      {/* Inversión total de la catorcena (usa campana.inversion ya recalculada por el backend) */}
+                      {/* Inversión de la catorcena: suma de sc.costo por catorcena (específica del período) */}
                       {(() => {
-                        const totalInversion = campanas.reduce((s, c) => s + (Number((c as any).inversion) || 0), 0);
+                        const catKey = `${catorcena.num}:${catorcena.anio}`;
+                        const totalInversion = campanas.reduce((s, c) => {
+                          const invData = inversionPorCatorcena[c.id];
+                          // Si ya cargó el batch, usar valor específico de la catorcena (0 si no aplica)
+                          if (invData !== undefined) {
+                            return s + (invData[catKey] || 0);
+                          }
+                          // Solo si aún no cargó, fallback al campo guardado
+                          return s + (Number((c as any).inversion) || 0);
+                        }, 0);
 
                         return totalInversion > 0 ? (
-                          <span className={`px-2 py-0.5 rounded-full text-[10px] ${isDark ? 'bg-green-500/15 text-green-300' : 'bg-green-50 text-green-700'} border border-green-500/25 flex items-center gap-1`} title="Inversión total">
-                            <DollarSign className="h-3 w-3" /> {totalInversion.toLocaleString('es-MX', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                          <span className={`px-2 py-0.5 rounded-full text-[10px] ${isDark ? 'bg-green-500/15 text-green-300' : 'bg-green-50 text-green-700'} border border-green-500/25 flex items-center gap-1`} title="Inversión de la catorcena">
+                            <DollarSign className="h-3 w-3" /> {totalInversion.toLocaleString()}
                           </span>
                         ) : (
                           <span className={`px-2 py-0.5 rounded-full text-[10px] ${isDark ? 'bg-zinc-500/15 text-zinc-400 border-zinc-500/25' : 'bg-gray-100 text-gray-500 border-gray-300'} border flex items-center gap-1`} title="Sin inversión registrada">

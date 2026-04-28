@@ -342,8 +342,9 @@ export const propuestasService = {
     return response.data.data;
   },
 
-  async deleteCara(propuestaId: number, caraId: number): Promise<void> {
-    const response = await api.delete<ApiResponse<void>>(`/propuestas/${propuestaId}/caras/${caraId}`);
+  async deleteCara(propuestaId: number, caraId: number, eliminarGrupo?: boolean): Promise<void> {
+    const url = `/propuestas/${propuestaId}/caras/${caraId}${eliminarGrupo ? '?eliminarGrupo=true' : ''}`;
+    const response = await api.delete<ApiResponse<void>>(url);
     if (!response.data.success) {
       throw new Error(response.data.error || 'Error al eliminar cara');
     }
@@ -376,6 +377,8 @@ export interface CaraUpdateData {
   articulo?: string;
   descuento?: number;
   grupo_rt_bf?: number | null;
+  // Si true, propaga este update a todas las caras del mismo grupo_masivo_id
+  aplicarAGrupo?: boolean;
 }
 
 export interface SolicitudCara {

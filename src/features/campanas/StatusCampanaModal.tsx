@@ -319,7 +319,7 @@ export function StatusCampanaModal({ isOpen, onClose, campana, statusReadOnly = 
         onClose={() => setShowRechazoConfirm(false)}
         onConfirm={handleConfirmRechazo}
         title="¿Rechazar campaña?"
-        message="Esta acción no es reversible. Al rechazar la campaña se liberarán todas las ubicaciones reservadas y quedarán disponibles para otras campañas."
+        message="Esta acción no es reversible. Al rechazar la campaña se liberarán todas las ubicaciones reservadas y se eliminarán los grupos/circuitos. (No disponible si la campaña ya tiene APS asignado.)"
         confirmText="Sí, rechazar"
         cancelText="Cancelar"
         variant="danger"
