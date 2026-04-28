@@ -1526,15 +1526,6 @@ export function PropuestasPage() {
   const renderPropuestaRow = (item: Propuesta & any, index: number) => {
     const STATUS_COLORS = getStatusColors(isDark);
     const DEFAULT_STATUS_COLOR = getDefaultStatusColor(isDark);
-    // Si la propuesta ya tiene campaña activa ligada, mostrarla y tratarla como 'Aprobada'
-    // independientemente del status real en BD. Defensa contra inconsistencias historicas
-    // (ej. propuestas en 'Atendido' o 'Abierto' con campaña ya creada).
-    const campStatusLower = String(item.campania_status || '').toLowerCase();
-    const hasActiveCampania = !!item.campania_id &&
-      !['rechazada', 'cancelada', 'inactiva', 'finalizada'].includes(campStatusLower);
-    if (hasActiveCampania && item.status !== 'Aprobada') {
-      item = { ...item, status: 'Aprobada' };
-    }
     const statusColor = STATUS_COLORS[item.status] || DEFAULT_STATUS_COLOR;
     // Bloquear todas las acciones cuando el status es "Activa" o "Aprobada" (para todos los usuarios)
     const isActiva = item.status === 'Activa';
