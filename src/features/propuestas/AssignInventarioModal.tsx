@@ -1780,11 +1780,33 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
     if (caras.length === 0) return [];
     if (!yearInicio || !yearFin || !catorcenaInicio || !catorcenaFin) return [];
     const validKeys = new Set(availablePeriods.map(p => `${p.a_o}-${p.numero_catorcena}`));
+
+    // Rango global: para verificar fechas exactas del circuito
+    let rangoIni = '';
+    let rangoFin = '';
+    if (tipoPeriodo === 'mensual') {
+      rangoIni = `${yearInicio}-${String(catorcenaInicio).padStart(2, '0')}-01`;
+      const lastDay = new Date(yearFin, catorcenaFin, 0).getDate();
+      rangoFin = `${yearFin}-${String(catorcenaFin).padStart(2, '0')}-${String(lastDay).padStart(2, '0')}`;
+    } else if (catorcenasData?.data) {
+      const ini = catorcenasData.data.find(c => c.a_o === yearInicio && c.numero_catorcena === catorcenaInicio);
+      const fin = catorcenasData.data.find(c => c.a_o === yearFin && c.numero_catorcena === catorcenaFin);
+      if (ini) rangoIni = String(ini.fecha_inicio).split('T')[0];
+      if (fin) rangoFin = String(fin.fecha_fin).split('T')[0];
+    }
+
     return caras.filter(c => {
       if (!c.anio_inicio || !c.catorcena_inicio) return false;
-      return !validKeys.has(`${c.anio_inicio}-${c.catorcena_inicio}`);
+      if (!validKeys.has(`${c.anio_inicio}-${c.catorcena_inicio}`)) return true;
+      // También verificar fechas reales del circuito vs rango global
+      if (rangoIni && rangoFin && c.inicio_periodo && c.fin_periodo) {
+        const ini = String(c.inicio_periodo).split('T')[0];
+        const fin = String(c.fin_periodo).split('T')[0];
+        if (ini < rangoIni || fin > rangoFin) return true;
+      }
+      return false;
     });
-  }, [caras, availablePeriods, yearInicio, yearFin, catorcenaInicio, catorcenaFin]);
+  }, [caras, availablePeriods, yearInicio, yearFin, catorcenaInicio, catorcenaFin, tipoPeriodo, catorcenasData]);
 
   // Toggle catorcena expansion
   const toggleCatorcena = (periodo: string) => {
