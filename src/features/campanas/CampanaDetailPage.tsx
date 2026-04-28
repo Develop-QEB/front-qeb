@@ -2270,7 +2270,7 @@ export function CampanaDetailPage() {
           </div>
           <div className="grid grid-cols-1 lg:grid-cols-[1fr_2fr] gap-3 md:gap-4 p-3 md:p-4">
             {/* Columna izquierda: Mapa */}
-            <div className="h-[280px] sm:h-[320px] md:h-[360px] lg:h-[400px] rounded-lg overflow-hidden border border-border relative map-dark-controls">
+            <div className={`h-[280px] sm:h-[320px] md:h-[360px] lg:h-[400px] rounded-lg overflow-hidden border border-border relative ${isDark ? 'map-dark-controls' : ''}`}>
               {!isLoaded || isLoadingInventario ? (
                 <MapSkeleton />
               ) : errorInventario ? (
@@ -3500,7 +3500,7 @@ export function CampanaDetailPage() {
           </div>
           <div className="grid grid-cols-1 lg:grid-cols-[1fr_2fr] gap-3 md:gap-4 p-3 md:p-4">
             {/* Columna izquierda: Mapa */}
-            <div className="h-[280px] sm:h-[320px] md:h-[360px] lg:h-[400px] rounded-lg overflow-hidden border border-border relative map-dark-controls">
+            <div className={`h-[280px] sm:h-[320px] md:h-[360px] lg:h-[400px] rounded-lg overflow-hidden border border-border relative ${isDark ? 'map-dark-controls' : ''}`}>
               {!isLoaded || isLoadingAPS ? (
                 <MapSkeleton />
               ) : errorAPS ? (
