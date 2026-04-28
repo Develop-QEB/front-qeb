@@ -6984,11 +6984,22 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
                                     </div>
                                     <div>
                                       <span className={`${isDark ? 'text-zinc-500' : 'text-gray-400'} text-xs`}>F. Inicio</span>
-                                      <p className={`${isDark ? 'text-zinc-300' : 'text-gray-700'} text-xs`}>{cara.inicio_periodo ? new Date(cara.inicio_periodo).toLocaleDateString('es-MX', { day: '2-digit', month: 'short', year: 'numeric' }) : '-'}</p>
+                                      <p className={`${isDark ? 'text-zinc-300' : 'text-gray-700'} text-xs`}>{(() => {
+                                        // Parsea YYYY-MM-DD directo del string para evitar timezone shift en MX UTC-6
+                                        const m = String(cara.inicio_periodo || '').match(/^(\d{4})-(\d{2})-(\d{2})/);
+                                        if (!m) return '-';
+                                        const meses = ['ene','feb','mar','abr','may','jun','jul','ago','sep','oct','nov','dic'];
+                                        return `${m[3]} ${meses[parseInt(m[2]) - 1]} ${m[1]}`;
+                                      })()}</p>
                                     </div>
                                     <div>
                                       <span className={`${isDark ? 'text-zinc-500' : 'text-gray-400'} text-xs`}>F. Fin</span>
-                                      <p className={`${isDark ? 'text-zinc-300' : 'text-gray-700'} text-xs`}>{cara.fin_periodo ? new Date(cara.fin_periodo).toLocaleDateString('es-MX', { day: '2-digit', month: 'short', year: 'numeric' }) : '-'}</p>
+                                      <p className={`${isDark ? 'text-zinc-300' : 'text-gray-700'} text-xs`}>{(() => {
+                                        const m = String(cara.fin_periodo || '').match(/^(\d{4})-(\d{2})-(\d{2})/);
+                                        if (!m) return '-';
+                                        const meses = ['ene','feb','mar','abr','may','jun','jul','ago','sep','oct','nov','dic'];
+                                        return `${m[3]} ${meses[parseInt(m[2]) - 1]} ${m[1]}`;
+                                      })()}</p>
                                     </div>
                                     <div>
                                       <span className={`${isDark ? 'text-zinc-500' : 'text-gray-400'} text-xs`}>Caras</span>
