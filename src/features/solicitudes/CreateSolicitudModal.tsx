@@ -3326,17 +3326,13 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
                       <span className={`${isDark ? 'text-zinc-500' : 'text-gray-400'} text-sm`}>Fechas:</span>
                       <span className={`${isDark ? 'text-white' : 'text-gray-900'} text-sm`}>
                         {(() => {
-                          // Para mensual, derivar desde las caras (min inicio_periodo / max fin_periodo)
-                          if (tipoPeriodo === 'mensual' && caras.length > 0) {
-                            const inicios = caras.map(c => c.periodoInicio).filter(Boolean).sort();
-                            const fines = caras.map(c => c.periodoFin).filter(Boolean).sort();
-                            const ini = inicios[0];
-                            const fin = fines[fines.length - 1];
-                            if (ini && fin) {
-                              return `${new Date(ini + 'T00:00:00').toLocaleDateString()} - ${new Date(fin + 'T00:00:00').toLocaleDateString()}`;
-                            }
+                          // Usar fechas globales (fechaInicio/fechaFin computados desde
+                          // mesInicio/mesFin o catorcenas), parseando string directo para
+                          // evitar timezone shift e Invalid Date con formatos ISO completos.
+                          if (fechaInicio && fechaFin) {
+                            return `${formatDateShort(fechaInicio)} - ${formatDateShort(fechaFin)}`;
                           }
-                          return fechaInicio && fechaFin ? `${new Date(fechaInicio).toLocaleDateString()} - ${new Date(fechaFin).toLocaleDateString()}` : '-';
+                          return '-';
                         })()}
                       </span>
                     </div>
