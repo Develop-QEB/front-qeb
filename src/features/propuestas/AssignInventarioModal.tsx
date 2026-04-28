@@ -1211,11 +1211,15 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
           const grupoRtBfVal = cara.grupo_rt_bf != null ? Number(cara.grupo_rt_bf) : null;
           const articuloUpper = (cara.articulo || '').toUpperCase();
           const esBfRow = !!grupoRtBfVal && (articuloUpper.startsWith('BF') || articuloUpper.startsWith('CF'));
+          // Si es circuito, plaza se deriva del ItemCode (ej. RT-DIG-03-MX → "Ciudad de México / AM")
+          const circuitoLoad = parseCircuitoDigital(cara.articulo || '');
+          const plazaDerivada = circuitoLoad ? circuitoLoad.plazaLabel : '';
           return {
             localId: `cara-${cara.id || idx}-${Date.now()}`,
             id: cara.id,
             ciudad: cara.ciudad || '',
             estados: cara.estados || '',
+            plaza: plazaDerivada,
             tipo: cara.tipo || '',
             flujo: cara.flujo || '',
             bonificacion: Number(cara.bonificacion) || 0,
@@ -1226,8 +1230,9 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
             tarifa_publica: (Number(cara.caras) || 0) > 0
               ? (Number(cara.costo) || 0) / (Number(cara.caras) || 1)
               : Number(cara.tarifa_publica) || 0,
-            inicio_periodo: cara.inicio_periodo || '',
-            fin_periodo: cara.fin_periodo || '',
+            // Truncar a YYYY-MM-DD para que <input type="date"> autocomplete al editar
+            inicio_periodo: String(cara.inicio_periodo || '').slice(0, 10),
+            fin_periodo: String(cara.fin_periodo || '').slice(0, 10),
             caras_flujo: Number(cara.caras_flujo) || 0,
             caras_contraflujo: Number(cara.caras_contraflujo) || 0,
             articulo: cara.articulo || '',
@@ -1999,8 +2004,9 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
       formato: cara.formato,
       costo: cara.costo,
       tarifa_publica: cara.tarifa_publica,
-      inicio_periodo: cara.inicio_periodo,
-      fin_periodo: cara.fin_periodo,
+      // Truncar a YYYY-MM-DD para que <input type="date"> lo reconozca
+      inicio_periodo: String(cara.inicio_periodo || '').slice(0, 10),
+      fin_periodo: String(cara.fin_periodo || '').slice(0, 10),
       caras_flujo: cara.caras_flujo,
       caras_contraflujo: cara.caras_contraflujo,
       articulo: cara.articulo,
