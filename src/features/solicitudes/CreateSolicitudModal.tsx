@@ -1313,10 +1313,10 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
       // Cada catorcena del rango necesita su PROPIO grupoRtBf para que el RT y BF de ese mes se emparejen
       const grupoRtBf = tieneBfPair ? (Date.now() + idx) % 2000000000 : undefined;
 
-      // RT cara (renta)
-      // Para circuitos digitales con BF separado: RT.renta = total - bonificacion
-      // (las inventarios bonificadas se restan del total del circuito)
-      const rentaRT = (circuitoInfo && grupoRtBf) ? Math.max(0, newCara.renta - newCara.bonificacion) : newCara.renta;
+      // RT cara (renta) — se respeta tal cual lo puso el usuario
+      // (para circuitos digitales: el form ajusta renta = total - bonif al cambiar bonif,
+      //  asi que aqui no necesitamos volver a restar)
+      const rentaRT = newCara.renta;
       newCaras.push({
         id: editingCaraId && idx === 0 ? editingCaraId : `${Date.now()}-${Math.random()}-rt-${idx}`,
         articulo: newCara.articulo!,
@@ -1324,7 +1324,7 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
         ciudades: ciudadesToUse,
         plaza: newCara.plaza || newCara.estado,
         circuito: circuitoInfo || undefined,
-        circuitoTotal: circuitoInfo ? newCara.renta : undefined,
+        circuitoTotal: circuitoInfo ? (newCara.renta + newCara.bonificacion) : undefined,
         circuitoFlujo: circuitoInfo && circuitoFlujoContra ? circuitoFlujoContra.flujo : undefined,
         circuitoContraflujo: circuitoInfo && circuitoFlujoContra ? circuitoFlujoContra.contraflujo : undefined,
         formato: newCara.formato,
