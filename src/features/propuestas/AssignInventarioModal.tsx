@@ -1568,33 +1568,11 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
   }, [selectedCaraForSearch]);
 
   // Calculate remaining to assign for selected cara
-  // Para circuitos digitales con BF separado: el caras_flujo/contraflujo del RT es el total
-  // del circuito. Sumamos reservas de RT + BF del mismo grupo para calcular cuántas faltan.
   const remainingToAssign = useMemo(() => {
     if (!selectedCaraForSearch) return { flujo: 0, contraflujo: 0, bonificacion: 0 };
 
-    // Recolectar IDs del par RT/BF del mismo grupo (mismo periodo)
-    const idsDelGrupo = new Set<string | number>();
-    idsDelGrupo.add(selectedCaraForSearch.localId);
-    if (selectedCaraForSearch.id) idsDelGrupo.add(selectedCaraForSearch.id);
-    if (selectedCaraForSearch.grupo_rt_bf) {
-      const par = caras.find(c =>
-        c.localId !== selectedCaraForSearch.localId &&
-        c.grupo_rt_bf === selectedCaraForSearch.grupo_rt_bf &&
-        c.inicio_periodo === selectedCaraForSearch.inicio_periodo &&
-        c.fin_periodo === selectedCaraForSearch.fin_periodo
-      );
-      if (par) {
-        idsDelGrupo.add(par.localId);
-        if (par.id) idsDelGrupo.add(par.id);
-      }
-    }
-
     const caraReservas = reservas.filter(r =>
-      [...idsDelGrupo].some(id =>
-        (typeof id === 'string' && r.id.startsWith(id)) ||
-        (typeof id === 'number' && r.solicitudCaraId === id)
-      )
+      r.id.startsWith(selectedCaraForSearch.localId) || r.solicitudCaraId === selectedCaraForSearch.id
     );
     const flujoReservado = caraReservas.filter(r => r.tipo === 'Flujo').length;
     const contraflujoReservado = caraReservas.filter(r => r.tipo === 'Contraflujo').length;
@@ -1605,7 +1583,7 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
       contraflujo: adjustedCarasFlujo.contraflujo - contraflujoReservado,
       bonificacion: (selectedCaraForSearch.bonificacion || 0) - bonificacionReservado,
     };
-  }, [selectedCaraForSearch, reservas, adjustedCarasFlujo, caras]);
+  }, [selectedCaraForSearch, reservas, adjustedCarasFlujo]);
 
   // Check if cara has reservas
   const caraHasReservas = (localId: string, caraId?: number) => {
