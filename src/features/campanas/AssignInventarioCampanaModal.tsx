@@ -1037,10 +1037,31 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
       setImu(imuVal);
 
       // Set period from campaign data
-      const yInicio = campanaDetails.catorcena_inicio_anio;
-      const cInicio = campanaDetails.catorcena_inicio_num;
-      const yFin = campanaDetails.catorcena_fin_anio;
-      const cFin = campanaDetails.catorcena_fin_num;
+      // Para mensual: derivar mes desde fecha_inicio/fecha_fin (parseando YYYY-MM directo
+      // del string para evitar timezone shift en MX UTC-6).
+      // Para catorcena: usar catorcena_inicio_num/fin_num del backend.
+      let yInicio: number | undefined;
+      let cInicio: number | undefined;
+      let yFin: number | undefined;
+      let cFin: number | undefined;
+
+      if (tipoPeriodo === 'mensual') {
+        const parseYM = (val: any): { year: number; month: number } | null => {
+          if (!val) return null;
+          const m = String(val).match(/^(\d{4})-(\d{2})/);
+          if (!m) return null;
+          return { year: parseInt(m[1]), month: parseInt(m[2]) };
+        };
+        const ymIni = parseYM((campanaDetails as any).fecha_inicio);
+        const ymFin = parseYM((campanaDetails as any).fecha_fin);
+        if (ymIni) { yInicio = ymIni.year; cInicio = ymIni.month; }
+        if (ymFin) { yFin = ymFin.year; cFin = ymFin.month; }
+      } else {
+        yInicio = campanaDetails.catorcena_inicio_anio ?? undefined;
+        cInicio = campanaDetails.catorcena_inicio_num ?? undefined;
+        yFin = campanaDetails.catorcena_fin_anio ?? undefined;
+        cFin = campanaDetails.catorcena_fin_num ?? undefined;
+      }
 
       if (yInicio) setYearInicio(yInicio);
       if (cInicio) setCatorcenaInicio(cInicio);

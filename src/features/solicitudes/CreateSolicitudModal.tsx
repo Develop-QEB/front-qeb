@@ -1579,8 +1579,15 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
     });
   };
 
-  // Helper to format date for display
+  // Helper to format date for display — parsea YYYY-MM-DD directo del string
+  // para evitar timezone shift en MX (UTC-6)
   const formatDateShort = (dateStr: string) => {
+    const m = String(dateStr).match(/^(\d{4})-(\d{2})-(\d{2})/);
+    if (m) {
+      const meses = ['ene', 'feb', 'mar', 'abr', 'may', 'jun', 'jul', 'ago', 'sep', 'oct', 'nov', 'dic'];
+      const month = parseInt(m[2]) - 1;
+      if (month >= 0 && month < 12) return `${parseInt(m[3])} ${meses[month]} ${m[1]}`;
+    }
     const d = new Date(dateStr);
     if (isNaN(d.getTime())) return dateStr;
     return d.toLocaleDateString('es-MX', { day: 'numeric', month: 'short', year: 'numeric' });
@@ -1863,15 +1870,28 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
       setTipoPeriodo(loadedTipoPeriodo);
 
       if (cotizacion?.fecha_inicio && cotizacion?.fecha_fin) {
-        const fechaInicioDate = new Date(cotizacion.fecha_inicio);
-        const fechaFinDate = new Date(cotizacion.fecha_fin);
-
         if (loadedTipoPeriodo === 'mensual') {
-          setYearInicio(fechaInicioDate.getFullYear());
-          setYearFin(fechaFinDate.getFullYear());
-          setMesInicio(fechaInicioDate.getMonth() + 1);
-          setMesFin(fechaFinDate.getMonth() + 1);
+          // Parse YYYY-MM directo del string para evitar timezone shift en MX (UTC-6)
+          // que convierte '2026-03-01T00:00:00.000Z' en '2026-02-28' local → mes Feb (mal)
+          const parseYM = (val: any): { year: number; month: number } | null => {
+            const m = String(val).match(/^(\d{4})-(\d{2})/);
+            if (!m) return null;
+            return { year: parseInt(m[1]), month: parseInt(m[2]) };
+          };
+          const ymIni = parseYM(cotizacion.fecha_inicio);
+          const ymFin = parseYM(cotizacion.fecha_fin);
+          if (ymIni) {
+            setYearInicio(ymIni.year);
+            setMesInicio(ymIni.month);
+          }
+          if (ymFin) {
+            setYearFin(ymFin.year);
+            setMesFin(ymFin.month);
+          }
         } else {
+          const fechaInicioDate = new Date(cotizacion.fecha_inicio);
+          const fechaFinDate = new Date(cotizacion.fecha_fin);
+
           const inicioCat = catorcenasData.data.find(c => {
             const cInicio = new Date(c.fecha_inicio);
             const cFin = new Date(c.fecha_fin);
