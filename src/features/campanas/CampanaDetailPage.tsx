@@ -790,6 +790,29 @@ function getGroupValue(item: InventarioReservado | InventarioConAPS, field: Grou
   return String(item[field] || 'Sin asignar');
 }
 
+// Mismo formato que getGroupValue pero para SolicitudCara (gruposSinInventario),
+// asi sus claves coinciden con las de groupedInventario al hacer match/render.
+function getSCGroupValue(sc: SolicitudCara, field: GroupByField, tipoPeriodo?: string): string {
+  if (field === 'inicio_periodo') {
+    if (tipoPeriodo === 'mensual' && sc.inicio_periodo) {
+      const parts = sc.inicio_periodo.split('-');
+      if (parts.length >= 2) {
+        return `${MESES_LABEL[parseInt(parts[1]) - 1]} ${parts[0]}`;
+      }
+    }
+    if (sc.inicio_periodo) {
+      const fecha = new Date(sc.inicio_periodo);
+      return `Cat ${calcularCatorcena(fecha)} / ${fecha.getFullYear()}`;
+    }
+    return 'Sin asignar';
+  }
+  if (field === 'articulo') {
+    return sc.articulo ? sc.articulo.toUpperCase() : 'Sin asignar';
+  }
+  const val = (sc as unknown as Record<string, unknown>)[field];
+  return val ? String(val) : 'Sin asignar';
+}
+
 export function CampanaDetailPage() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
@@ -3303,8 +3326,8 @@ export function CampanaDetailPage() {
                               ) : null}
                             {/* Sin inventario que pertenecen a este grupo */}
                             {(() => {
-                              const firstField = activeGroupings[0] as keyof SolicitudCara;
-                              const matchingNoInv = gruposSinInventario.filter(sc => String(sc[firstField] ?? '') === groupKey);
+                              const firstField = activeGroupings[0];
+                              const matchingNoInv = gruposSinInventario.filter(sc => getSCGroupValue(sc, firstField, tipoPeriodo) === groupKey);
                               if (matchingNoInv.length === 0) return null;
                               return (
                                 <div className="space-y-1 mt-1">
@@ -3366,9 +3389,9 @@ export function CampanaDetailPage() {
                     })}
                     {/* Sin inventario sin grupo coincidente */}
                     {(() => {
-                      const firstField = activeGroupings[0] as keyof SolicitudCara;
+                      const firstField = activeGroupings[0];
                       const groupKeys = Object.keys(groupedInventario);
-                      const unmatchedNoInv = gruposSinInventario.filter(sc => !groupKeys.includes(String(sc[firstField] ?? '')));
+                      const unmatchedNoInv = gruposSinInventario.filter(sc => !groupKeys.includes(getSCGroupValue(sc, firstField, tipoPeriodo)));
                       if (unmatchedNoInv.length === 0) return null;
                       return unmatchedNoInv.map(sc => {
                         const noInvInfo = groupCompletenessMap.get(sc.id);
@@ -3388,7 +3411,7 @@ export function CampanaDetailPage() {
                               <span className={`text-xs font-medium ${isDark ? 'text-purple-300' : 'text-purple-700'}`}>
                                 {AVAILABLE_GROUPINGS.find(g => g.field === activeGroupings[0])?.label}:
                               </span>
-                              <span className={`text-xs ${isDark ? 'text-white' : 'text-gray-900'}`}>{String(sc[firstField] || '-')}</span>
+                              <span className={`text-xs ${isDark ? 'text-white' : 'text-gray-900'}`}>{getSCGroupValue(sc, firstField, tipoPeriodo)}</span>
                               <span className="px-1.5 py-0.5 rounded text-[9px] font-semibold bg-yellow-500/20 text-yellow-400 border border-yellow-500/30">
                                 0/{noInvInfo?.esperadas || 0}
                               </span>
