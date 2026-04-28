@@ -2376,6 +2376,73 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
             next.set(caraToEdit.id!, caraData);
             return next;
           });
+
+          // Propagación masiva: si el toggle modoMasivoP está ON y la cara pertenece
+          // a un grupo masivo, replicar los cambios NO-temporales a las demás caras
+          // del grupo (manteniendo cada cara su propio periodo y su par BF).
+          if (modoMasivoP && caraToEdit.grupo_masivo_id) {
+            const otrasCarasGrupo = caras.filter(c =>
+              c.grupo_masivo_id === caraToEdit.grupo_masivo_id &&
+              c.id !== caraToEdit.id &&
+              !c.esBf
+            );
+            if (otrasCarasGrupo.length > 0) {
+              setModifiedCaras(prev => {
+                const next = new Map(prev);
+                for (const otra of otrasCarasGrupo) {
+                  if (!otra.id) continue;
+                  // Replicamos campos NO-temporales; mantenemos periodo de la cara original
+                  next.set(otra.id, {
+                    ...caraData,
+                    inicio_periodo: otra.inicio_periodo,
+                    fin_periodo: otra.fin_periodo,
+                  });
+                  // También su par BF si existe
+                  if (otra.grupo_rt_bf && newBfCaraItem) {
+                    const bfPair = caras.find(c =>
+                      c.localId !== otra.localId &&
+                      c.esBf &&
+                      c.grupo_rt_bf === otra.grupo_rt_bf &&
+                      c.inicio_periodo === otra.inicio_periodo &&
+                      c.fin_periodo === otra.fin_periodo
+                    );
+                    if (bfPair?.id && bfCaraData) {
+                      next.set(bfPair.id, {
+                        ...bfCaraData,
+                        inicio_periodo: otra.inicio_periodo,
+                        fin_periodo: otra.fin_periodo,
+                      });
+                    }
+                  }
+                }
+                return next;
+              });
+              // Replicar cambios al estado local para reflejar en UI inmediatamente
+              setCaras(prev => prev.map(c => {
+                if (c.grupo_masivo_id === caraToEdit.grupo_masivo_id && c.id !== caraToEdit.id && !c.esBf) {
+                  return {
+                    ...c,
+                    articulo: newCara.articulo,
+                    estados: newCara.estados,
+                    ciudad: ciudadToSave,
+                    plaza: newCara.plaza || c.plaza,
+                    formato: newCara.formato,
+                    tipo: newCara.tipo,
+                    nivel_socioeconomico: newCara.nivel_socioeconomico,
+                    caras: usePairMode ? newCara.caras : newCara.caras,
+                    bonificacion: usePairMode ? 0 : newCara.bonificacion,
+                    tarifa_publica: usePairMode && (newCara.caras + newCara.bonificacion) > 0
+                      ? costoCalculado / (newCara.caras + newCara.bonificacion)
+                      : newCara.tarifa_publica,
+                    costo: costoCalculado,
+                    descuento: newCara.descuento,
+                  };
+                }
+                return c;
+              }));
+              showToast(`Cambios replicados a ${otrasCarasGrupo.length} cara(s) más del grupo masivo`, 'success');
+            }
+          }
         }
         setEditingCaraId(null);
         setTimeout(() => caraTableRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 100);
