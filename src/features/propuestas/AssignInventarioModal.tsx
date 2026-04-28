@@ -1627,28 +1627,8 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
       };
     }
 
-    // Para circuitos digitales con BF separado: caras_flujo/contraflujo del RT es el TOTAL
-    // del circuito. Sumamos reservas RT + BF del mismo grupo para calcular completos.
-    const idsDelGrupo = new Set<string | number>();
-    idsDelGrupo.add(cara.localId);
-    if (cara.id) idsDelGrupo.add(cara.id);
-    if (cara.grupo_rt_bf) {
-      const par = caras.find(c =>
-        c.localId !== cara.localId &&
-        c.grupo_rt_bf === cara.grupo_rt_bf &&
-        c.inicio_periodo === cara.inicio_periodo &&
-        c.fin_periodo === cara.fin_periodo
-      );
-      if (par) {
-        idsDelGrupo.add(par.localId);
-        if (par.id) idsDelGrupo.add(par.id);
-      }
-    }
     const caraReservas = reservas.filter(r =>
-      [...idsDelGrupo].some(id =>
-        (typeof id === 'string' && r.id.startsWith(id)) ||
-        (typeof id === 'number' && r.solicitudCaraId === id)
-      )
+      r.id.startsWith(cara.localId) || r.solicitudCaraId === cara.id
     );
     const flujoReservado = caraReservas.filter(r => r.tipo === 'Flujo').length;
     const contraflujoReservado = caraReservas.filter(r => r.tipo === 'Contraflujo').length;
