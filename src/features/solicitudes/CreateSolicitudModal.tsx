@@ -1117,17 +1117,43 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
   }, [tipoPeriodo, catorcenasData, yearInicio, yearFin, catorcenaInicio, catorcenaFin, mesInicio, mesFin]);
 
   // Detect caras whose period is outside the current availablePeriods range
+  // O cuyas fechas reales (inicio_periodo / fin_periodo) salen del rango global
+  // de la solicitud (fechaInicio / fechaFin).
   const invalidCaras = useMemo(() => {
     if (caras.length === 0) return [];
-    // Skip if period range is not configured yet (user hasn't set dates)
     const rangeConfigured = tipoPeriodo === 'mensual'
       ? (yearInicio && yearFin && mesInicio !== undefined && mesFin !== undefined)
       : (yearInicio && yearFin && catorcenaInicio && catorcenaFin);
     if (!rangeConfigured) return [];
-    // Build valid key set (may be empty if range is inconsistent, meaning all caras are invalid)
+
     const validKeys = new Set(availablePeriods.map(p => `${p.a_o}-${p.numero_catorcena}`));
-    return caras.filter(c => !validKeys.has(`${c.catorcenaYear}-${c.catorcenaNum}`));
-  }, [caras, availablePeriods, tipoPeriodo, yearInicio, yearFin, catorcenaInicio, catorcenaFin, mesInicio, mesFin]);
+
+    // Rango global: usado para verificar fechas exactas
+    let rangoIni = '';
+    let rangoFin = '';
+    if (tipoPeriodo === 'mensual' && yearInicio && yearFin && mesInicio && mesFin) {
+      rangoIni = `${yearInicio}-${String(mesInicio).padStart(2, '0')}-01`;
+      const lastDay = new Date(yearFin, mesFin, 0).getDate();
+      rangoFin = `${yearFin}-${String(mesFin).padStart(2, '0')}-${String(lastDay).padStart(2, '0')}`;
+    } else if (catorcenasData?.data && yearInicio && yearFin && catorcenaInicio && catorcenaFin) {
+      const ini = catorcenasData.data.find(c => c.a_o === yearInicio && c.numero_catorcena === catorcenaInicio);
+      const fin = catorcenasData.data.find(c => c.a_o === yearFin && c.numero_catorcena === catorcenaFin);
+      if (ini) rangoIni = String(ini.fecha_inicio).split('T')[0];
+      if (fin) rangoFin = String(fin.fecha_fin).split('T')[0];
+    }
+
+    return caras.filter(c => {
+      // Inválida si la (catorcena/mes, año) no está en el rango
+      if (!validKeys.has(`${c.catorcenaYear}-${c.catorcenaNum}`)) return true;
+      // O si las fechas reales del circuito se salen del rango global
+      if (rangoIni && rangoFin && c.periodoInicio && c.periodoFin) {
+        const ini = String(c.periodoInicio).split('T')[0];
+        const fin = String(c.periodoFin).split('T')[0];
+        if (ini < rangoIni || fin > rangoFin) return true;
+      }
+      return false;
+    });
+  }, [caras, availablePeriods, tipoPeriodo, yearInicio, yearFin, catorcenaInicio, catorcenaFin, mesInicio, mesFin, catorcenasData]);
 
   // Calculate fecha_inicio and fecha_fin from catorcenas or months
   const fechaInicio = useMemo(() => {

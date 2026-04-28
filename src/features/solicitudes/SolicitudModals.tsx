@@ -393,33 +393,47 @@ export function ViewSolicitudModal({ isOpen, onClose, solicitudId, onEdit, onAte
     doc.setFont('helvetica', 'bold');
     doc.text(String(data.cotizacion?.nombre_campania || '-').substring(0, 40), col1 + 28, yPos + 17);
 
-    // Fila 2: Período
+    // Fila 2: Período (formato condicional: catorcena=fechas exactas, mensual=mes/año)
     doc.setFont('helvetica', 'normal');
     doc.setTextColor(...textMuted);
     doc.text('Período:', col1, yPos + 24);
 
-    const fechaInicio = data.cotizacion?.fecha_inicio ? formatDate(data.cotizacion.fecha_inicio) : '-';
-    const finDateForLabel = maxInicioPeriodo || data.cotizacion?.fecha_fin;
-    const fechaFin = finDateForLabel ? formatDate(finDateForLabel) : '-';
-    const catInicio = data.cotizacion?.fecha_inicio ? getCatorcenaDisplay(data.cotizacion.fecha_inicio, catorcenas, tipoPeriodo) : '';
-    const catFin = finDateForLabel ? getCatorcenaDisplay(finDateForLabel, catorcenas, tipoPeriodo) : '';
+    if (tipoPeriodo === 'mensual') {
+      // Mensual: solo "Abril 2026 a Mayo 2026" usando fechas globales de cotización
+      const mesesFull = ['Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio', 'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre'];
+      const ml = (val: any) => {
+        const m = String(val).match(/^(\d{4})-(\d{2})/);
+        return m ? `${mesesFull[parseInt(m[2]) - 1]} ${m[1]}` : '-';
+      };
+      const labelIni = data.cotizacion?.fecha_inicio ? ml(data.cotizacion.fecha_inicio) : '-';
+      const labelFin = data.cotizacion?.fecha_fin ? ml(data.cotizacion.fecha_fin) : '-';
+      doc.setTextColor(...imuBlue);
+      doc.setFont('helvetica', 'bold');
+      doc.text(`${labelIni} a ${labelFin}`, col1 + 15, yPos + 24);
+    } else {
+      // Catorcena: fechas + cat
+      const fechaInicio = data.cotizacion?.fecha_inicio ? formatDate(data.cotizacion.fecha_inicio) : '-';
+      const fechaFin = data.cotizacion?.fecha_fin ? formatDate(data.cotizacion.fecha_fin) : '-';
+      const catInicio = data.cotizacion?.fecha_inicio ? getCatorcenaDisplay(data.cotizacion.fecha_inicio, catorcenas, tipoPeriodo) : '';
+      const catFin = data.cotizacion?.fecha_fin ? getCatorcenaDisplay(data.cotizacion.fecha_fin, catorcenas, tipoPeriodo) : '';
 
-    doc.setTextColor(...imuBlue);
-    doc.setFont('helvetica', 'bold');
-    doc.text(`${fechaInicio}`, col1 + 15, yPos + 24);
-    doc.setFont('helvetica', 'normal');
-    doc.setTextColor(...textMuted);
-    doc.text(`(${catInicio})`, col1 + 35, yPos + 24);
+      doc.setTextColor(...imuBlue);
+      doc.setFont('helvetica', 'bold');
+      doc.text(`${fechaInicio}`, col1 + 15, yPos + 24);
+      doc.setFont('helvetica', 'normal');
+      doc.setTextColor(...textMuted);
+      doc.text(`(${catInicio})`, col1 + 35, yPos + 24);
 
-    doc.setTextColor(...textDark);
-    doc.text('al', col1 + 60, yPos + 24);
+      doc.setTextColor(...textDark);
+      doc.text('al', col1 + 60, yPos + 24);
 
-    doc.setTextColor(...imuBlue);
-    doc.setFont('helvetica', 'bold');
-    doc.text(`${fechaFin}`, col1 + 67, yPos + 24);
-    doc.setFont('helvetica', 'normal');
-    doc.setTextColor(...textMuted);
-    doc.text(`(${catFin})`, col1 + 87, yPos + 24);
+      doc.setTextColor(...imuBlue);
+      doc.setFont('helvetica', 'bold');
+      doc.text(`${fechaFin}`, col1 + 67, yPos + 24);
+      doc.setFont('helvetica', 'normal');
+      doc.setTextColor(...textMuted);
+      doc.text(`(${catFin})`, col1 + 87, yPos + 24);
+    }
 
     yPos += 38;
 
