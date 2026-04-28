@@ -816,6 +816,9 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
   // Reserva Masiva: solo aparece cuando la cara tiene grupo_masivo_id; cuando ON,
   // (a) filtra inventario disponible en TODO el rango del grupo, (b) replica reserva a todas las caras
   const [reservaMasivaP, setReservaMasivaP] = useState<boolean>(false);
+  // Eliminar Reservas Masivo: replica el delete a las reservas equivalentes
+  // (mismo codigo_unico) en otras caras del mismo grupo_masivo_id
+  const [eliminarMasivoP, setEliminarMasivoP] = useState<boolean>(false);
   const [excluirDistanciaKm, setExcluirDistanciaKm] = useState<number>(1);
 
   // Custom Confirmation Modal State
@@ -1843,36 +1846,8 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
       return;
     }
 
-    // Si la cara pertenece a un grupo masivo, preguntar si elimina solo esta o todo el grupo
-    if (caraToDelete?.grupo_masivo_id) {
-      const cuantasEnGrupo = caras.filter(c => c.grupo_masivo_id === caraToDelete.grupo_masivo_id).length;
-      if (cuantasEnGrupo > 1) {
-        const eliminarGrupo = window.confirm(
-          `Esta cara forma parte de un grupo masivo de ${cuantasEnGrupo} cara(s) en distintos periodos.\n\n` +
-          `Aceptar = eliminar TODO el grupo masivo (${cuantasEnGrupo} caras + sus pares BF)\n` +
-          `Cancelar = eliminar solo esta cara`
-        );
-        if (eliminarGrupo) {
-          if (!caraToDelete.id) {
-            alert('No se puede eliminar el grupo: la cara no está guardada.');
-            return;
-          }
-          (async () => {
-            try {
-              await propuestasService.deleteCara(propuesta.id, caraToDelete.id!, true);
-              const grupo = caraToDelete.grupo_masivo_id;
-              setCaras(prev => prev.filter(c => c.grupo_masivo_id !== grupo));
-              setReservas(prev => prev.filter(r => !r.solicitudCaraId || !caras.find(c => c.id === r.solicitudCaraId && c.grupo_masivo_id === grupo)));
-              showToast(`Grupo masivo eliminado (${cuantasEnGrupo} caras)`, 'success');
-            } catch (e: any) {
-              alert('Error al eliminar el grupo masivo: ' + (e?.message || e));
-            }
-          })();
-          return;
-        }
-        // si Cancel → continúa con el flujo normal (solo esta cara)
-      }
-    }
+    // Eliminar circuito siempre actúa sobre la cara individual (NO masivo).
+    // Si su par RT/BF existe, también se elimina la pareja del MISMO periodo.
 
     // If cara belongs to RT/BF group, find its pair to delete both
     const pairCara = caraToDelete?.grupo_rt_bf
@@ -2374,6 +2349,12 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
           setModifiedCaras(prev => {
             const next = new Map(prev);
             next.set(caraToEdit.id!, caraData);
+            // Si BF pair existe y NO cambió su artículo, también marcarlo como modificado
+            // para que el bulk save persista la nueva cantidad de bonificación
+            if (existingBfPair && existingBfPair.id && usePairMode && bfCaraData &&
+                newCara.articuloBf && newCara.articuloBf.ItemCode === existingBfPair.articulo) {
+              next.set(existingBfPair.id, bfCaraData);
+            }
             return next;
           });
 
@@ -2391,11 +2372,12 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
                 const next = new Map(prev);
                 for (const otra of otrasCarasGrupo) {
                   if (!otra.id) continue;
-                  // Replicamos campos NO-temporales; mantenemos periodo de la cara original
+                  // Replicamos campos NO-temporales; mantenemos periodo y grupo_rt_bf propios de cada otra cara
                   next.set(otra.id, {
                     ...caraData,
                     inicio_periodo: otra.inicio_periodo,
                     fin_periodo: otra.fin_periodo,
+                    grupo_rt_bf: otra.grupo_rt_bf ?? null,
                   });
                   // También su par BF si existe
                   if (otra.grupo_rt_bf && newBfCaraItem) {
@@ -2411,15 +2393,32 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
                         ...bfCaraData,
                         inicio_periodo: otra.inicio_periodo,
                         fin_periodo: otra.fin_periodo,
+                        grupo_rt_bf: otra.grupo_rt_bf,
                       });
                     }
                   }
                 }
                 return next;
               });
-              // Replicar cambios al estado local para reflejar en UI inmediatamente
+              // Replicar cambios al estado local INMEDIATAMENTE para que se vea en UI
+              // (antes de hacer click "Guardar Todo")
+              const grupoIdsRT = new Set(otrasCarasGrupo.map(o => o.id));
+              const grupoIdsBfPares = new Set<number>();
+              for (const otra of otrasCarasGrupo) {
+                if (otra.grupo_rt_bf) {
+                  const bfPair = caras.find(c =>
+                    c.localId !== otra.localId &&
+                    c.esBf &&
+                    c.grupo_rt_bf === otra.grupo_rt_bf &&
+                    c.inicio_periodo === otra.inicio_periodo &&
+                    c.fin_periodo === otra.fin_periodo
+                  );
+                  if (bfPair?.id) grupoIdsBfPares.add(bfPair.id);
+                }
+              }
               setCaras(prev => prev.map(c => {
-                if (c.grupo_masivo_id === caraToEdit.grupo_masivo_id && c.id !== caraToEdit.id && !c.esBf) {
+                // RT de las otras caras del grupo masivo
+                if (c.id && grupoIdsRT.has(c.id)) {
                   return {
                     ...c,
                     articulo: newCara.articulo,
@@ -2429,13 +2428,28 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
                     formato: newCara.formato,
                     tipo: newCara.tipo,
                     nivel_socioeconomico: newCara.nivel_socioeconomico,
-                    caras: usePairMode ? newCara.caras : newCara.caras,
+                    caras: newCara.caras,
                     bonificacion: usePairMode ? 0 : newCara.bonificacion,
                     tarifa_publica: usePairMode && (newCara.caras + newCara.bonificacion) > 0
                       ? costoCalculado / (newCara.caras + newCara.bonificacion)
                       : newCara.tarifa_publica,
                     costo: costoCalculado,
                     descuento: newCara.descuento,
+                    caras_flujo: newCara.caras_flujo,
+                    caras_contraflujo: newCara.caras_contraflujo,
+                  };
+                }
+                // BF pares de las otras caras del grupo masivo
+                if (c.id && grupoIdsBfPares.has(c.id)) {
+                  return {
+                    ...c,
+                    bonificacion: bfCarasCount,
+                    caras: 0,
+                    caras_flujo: 0,
+                    caras_contraflujo: 0,
+                    articulo: bfCaraData?.articulo || c.articulo,
+                    formato: newCara.formato,
+                    tipo: newCara.tipo,
                   };
                 }
                 return c;
@@ -2640,16 +2654,22 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
         messages.push(result.message || `${carasArray.length} circuito(s) actualizados`);
       }
 
-      // Refresh data
-      queryClient.invalidateQueries({ queryKey: ['propuesta-full', propuesta.id] });
-      queryClient.invalidateQueries({ queryKey: ['propuesta-caras', propuesta.id] });
-      queryClient.invalidateQueries({ queryKey: ['propuestas'] });
-      queryClient.invalidateQueries({ queryKey: ['solicitud-full-details', propuesta.solicitud_id] });
+      // Refresh data — incluye reservas modal para que circuitos se redibujen verdes/llenos tras redistribuir
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ['propuesta-full', propuesta.id] }),
+        queryClient.invalidateQueries({ queryKey: ['propuesta-caras', propuesta.id] }),
+        queryClient.invalidateQueries({ queryKey: ['propuestas'] }),
+        queryClient.invalidateQueries({ queryKey: ['solicitud-full-details', propuesta.solicitud_id] }),
+        queryClient.invalidateQueries({ queryKey: ['propuesta-reservas-modal', propuesta.id] }),
+      ]);
 
       showToast(messages.join(' | '), 'success');
     } catch (error) {
       console.error('Error in bulk save:', error);
-      showToast(`Error al guardar: ${error instanceof Error ? error.message : 'Error desconocido'}`, 'error');
+      const axiosError = error as { response?: { data?: { error?: string; message?: string } }; message?: string };
+      const backendMsg = axiosError?.response?.data?.error || axiosError?.response?.data?.message;
+      const msg = backendMsg || (error instanceof Error ? error.message : 'Error desconocido');
+      showToast(`Error al guardar: ${msg}`, 'error');
     } finally {
       setIsSaving(false);
     }
@@ -3734,20 +3754,32 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
 
         if (clienteId === undefined || clienteId === null) throw new Error("Cliente ID no encontrado");
 
-        const result = await propuestasService.createReservas(propuesta.id, {
-          reservas: newReservas,
-          solicitudCaraId: selectedCaraForSearch.id!,
-          clienteId,
-          fechaInicio,
-          fechaFin,
-          agruparComoCompleto: false, // Bonificaciones likely single
-        });
+        // Replicar bonificación a todas las caras BF del grupo masivo si reservaMasivaP está ON
+        const carasObjetivo = (reservaMasivaP && selectedCaraForSearch.grupo_masivo_id)
+          ? caras.filter(c => c.grupo_masivo_id === selectedCaraForSearch.grupo_masivo_id && c.esBf && c.id)
+          : [selectedCaraForSearch];
+
+        let totalReservasCreadas = 0;
+        for (const cTarget of carasObjetivo) {
+          const fIni = cTarget.inicio_periodo || fechaInicio;
+          const fFin = cTarget.fin_periodo || fechaFin;
+          const result = await propuestasService.createReservas(propuesta.id, {
+            reservas: newReservas,
+            solicitudCaraId: cTarget.id!,
+            clienteId,
+            fechaInicio: fIni,
+            fechaFin: fFin,
+            agruparComoCompleto: false,
+          });
+          totalReservasCreadas += result.reservasCreadas;
+        }
 
         queryClient.invalidateQueries({ queryKey: ['propuesta-reservas-modal', propuesta.id] });
         queryClient.invalidateQueries({ queryKey: ['propuesta-inventario', propuesta.id] });
         handleRefetchDisponibles();
 
-        showToast(`Se guardaron ${result.reservasCreadas} bonificaciones exitosamente`, 'success');
+        const sufijo = carasObjetivo.length > 1 ? ` en ${carasObjetivo.length} periodos` : '';
+        showToast(`Se guardaron ${totalReservasCreadas} bonificaciones exitosamente${sufijo}`, 'success');
         setSelectedInventory(new Set());
       } catch (error) {
         console.error('Error saving bonificaciones:', error);
@@ -3759,13 +3791,25 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
     };
 
     const isCT = (selectedCaraForSearch?.articulo || '').toUpperCase().startsWith('CT');
-    setConfirmModal({
-      isOpen: true,
-      title: isCT ? 'Confirmar Cortesía' : 'Confirmar Bonificación',
-      message: `¿Estás seguro de ${isCT ? 'asignar como cortesía' : 'bonificar'} ${selectedInventory.size} espacios?`,
-      confirmText: isCT ? 'Cortesía' : 'Bonificar',
-      onConfirm: runBonificacion,
-    });
+    // Si reserva masiva está ON, mostrar mensaje específico
+    if (reservaMasivaP && selectedCaraForSearch?.grupo_masivo_id) {
+      const grupoBfCount = caras.filter(c => c.grupo_masivo_id === selectedCaraForSearch.grupo_masivo_id && c.esBf && c.id).length;
+      setConfirmModal({
+        isOpen: true,
+        title: isCT ? 'Cortesía Masiva' : 'Bonificación Masiva',
+        message: `Vas a crear ${selectedInventory.size * grupoBfCount} ${isCT ? 'cortesías' : 'bonificaciones'} (${selectedInventory.size} inventario${selectedInventory.size > 1 ? 's' : ''} × ${grupoBfCount} periodos del grupo masivo). ¿Confirmas?`,
+        confirmText: `${isCT ? 'Cortesía' : 'Bonificar'} en ${grupoBfCount} periodos`,
+        onConfirm: runBonificacion,
+      });
+    } else {
+      setConfirmModal({
+        isOpen: true,
+        title: isCT ? 'Confirmar Cortesía' : 'Confirmar Bonificación',
+        message: `¿Estás seguro de ${isCT ? 'asignar como cortesía' : 'bonificar'} ${selectedInventory.size} espacios?`,
+        confirmText: isCT ? 'Cortesía' : 'Bonificar',
+        onConfirm: runBonificacion,
+      });
+    }
   };
 
   // Go back to main view
@@ -4137,22 +4181,44 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
       return;
     }
 
+    // Si Eliminar Masivo está ON y la cara dueña pertenece a un grupo masivo,
+    // buscar las reservas equivalentes (mismo codigo_unico) en las demás caras del grupo
+    let reservasAEliminar: typeof reservas = [reserva];
+    let masivoLabel = '';
+    if (eliminarMasivoP && reserva.solicitudCaraId) {
+      const caraDuenia = caras.find(c => c.id === reserva.solicitudCaraId);
+      if (caraDuenia?.grupo_masivo_id) {
+        const carasGrupo = caras.filter(c => c.grupo_masivo_id === caraDuenia.grupo_masivo_id && c.id);
+        const equivalentes = reservas.filter(r =>
+          r.codigo_unico === reserva.codigo_unico &&
+          carasGrupo.some(c => c.id === r.solicitudCaraId) &&
+          r.reservaId
+        );
+        if (equivalentes.length > 1) {
+          reservasAEliminar = equivalentes;
+          masivoLabel = ` (${equivalentes.length} reservas en grupo masivo)`;
+        }
+      }
+    }
+
     setConfirmModal({
       isOpen: true,
       title: 'Eliminar Reserva',
-      message: '¿Seguro que quieres eliminar esta reserva?',
+      message: `¿Seguro que quieres eliminar esta reserva${masivoLabel}?`,
       confirmText: 'Eliminar',
       isDestructive: true,
       onConfirm: async () => {
         setIsSaving(true);
         try {
-          await propuestasService.deleteReservas(propuesta.id, [reserva.reservaId!]);
+          const ids = reservasAEliminar.map(r => r.reservaId!).filter(Boolean);
+          await propuestasService.deleteReservas(propuesta.id, ids);
           queryClient.invalidateQueries({ queryKey: ['propuesta-reservas-modal', propuesta.id] });
           queryClient.invalidateQueries({ queryKey: ['propuesta-inventario', propuesta.id] });
           handleRefetchDisponibles();
 
-          setReservas(prev => prev.filter(r => r.id !== reservaId));
-          showToast('Reserva eliminada correctamente', 'success');
+          const idsLocales = new Set(reservasAEliminar.map(r => r.id));
+          setReservas(prev => prev.filter(r => !idsLocales.has(r.id)));
+          showToast(`${reservasAEliminar.length} reserva(s) eliminada(s) correctamente`, 'success');
         } catch (error) {
           console.error('Error deleting reserva:', error);
           showToast('Error al eliminar reserva', 'error');
@@ -4207,16 +4273,42 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
     const selectedReservasList = reservas.filter(r => expandedIds.has(r.id));
     if (selectedReservasList.length === 0) return;
 
+    // Si Eliminar Masivo está ON, expandir cada reserva seleccionada con sus equivalentes
+    // (mismo codigo_unico) en otras caras del grupo masivo
+    let finalSelected = selectedReservasList;
+    let masivoLabel = '';
+    if (eliminarMasivoP) {
+      const expanded = new Map<string, typeof selectedReservasList[0]>();
+      for (const r of selectedReservasList) {
+        expanded.set(r.id, r);
+        if (r.solicitudCaraId) {
+          const caraDuenia = caras.find(c => c.id === r.solicitudCaraId);
+          if (caraDuenia?.grupo_masivo_id) {
+            const carasGrupo = caras.filter(c => c.grupo_masivo_id === caraDuenia.grupo_masivo_id && c.id);
+            const equivalentes = reservas.filter(r2 =>
+              r2.codigo_unico === r.codigo_unico &&
+              carasGrupo.some(c => c.id === r2.solicitudCaraId)
+            );
+            equivalentes.forEach(eq => expanded.set(eq.id, eq));
+          }
+        }
+      }
+      finalSelected = Array.from(expanded.values());
+      const replicadas = finalSelected.length - selectedReservasList.length;
+      if (replicadas > 0) masivoLabel = ` (+ ${replicadas} replicadas en grupo masivo)`;
+    }
+
     // Separate reservas with backend IDs from those without
-    const reservasWithBackendId = selectedReservasList.filter(r => r.reservaId);
-    const reservasLocalOnly = selectedReservasList.filter(r => !r.reservaId);
+    const reservasWithBackendId = finalSelected.filter(r => r.reservaId);
+    const reservasLocalOnly = finalSelected.filter(r => !r.reservaId);
     const backendIds = reservasWithBackendId.map(r => r.reservaId!);
+    const finalIds = new Set(finalSelected.map(r => r.id));
 
     // If all are local-only (not saved to DB yet), just remove from state
     if (backendIds.length === 0) {
-      setReservas(prev => prev.filter(r => !expandedIds.has(r.id)));
+      setReservas(prev => prev.filter(r => !finalIds.has(r.id)));
       setSelectedReservados(new Set());
-      showToast(`${selectedReservasList.length} reservas eliminadas`, 'success');
+      showToast(`${finalSelected.length} reservas eliminadas${masivoLabel}`, 'success');
       return;
     }
 
@@ -4224,7 +4316,7 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
     setConfirmModal({
       isOpen: true,
       title: 'Eliminar Reservas',
-      message: `¿Seguro que quieres eliminar ${selectedReservasList.length} reserva(s)?${reservasLocalOnly.length > 0 ? ` (${reservasLocalOnly.length} pendientes + ${backendIds.length} guardadas)` : ''}`,
+      message: `¿Seguro que quieres eliminar ${finalSelected.length} reserva(s)?${masivoLabel}${reservasLocalOnly.length > 0 ? ` (${reservasLocalOnly.length} pendientes + ${backendIds.length} guardadas)` : ''}`,
       confirmText: 'Eliminar',
       isDestructive: true,
       onConfirm: async () => {
@@ -4239,9 +4331,9 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
           }
 
           // Remove all selected from local state
-          setReservas(prev => prev.filter(r => !expandedIds.has(r.id)));
+          setReservas(prev => prev.filter(r => !finalIds.has(r.id)));
           setSelectedReservados(new Set());
-          showToast(`${selectedReservasList.length} reserva(s) eliminada(s) correctamente`, 'success');
+          showToast(`${finalSelected.length} reserva(s) eliminada(s) correctamente${masivoLabel}`, 'success');
         } catch (error) {
           console.error('Error deleting reservas:', error);
           showToast('Error al eliminar reservas', 'error');
@@ -5241,6 +5333,23 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
                         className={`w-full pl-9 pr-4 py-2 rounded-lg ${isDark ? 'bg-zinc-800' : 'bg-gray-50'} border ${isDark ? 'border-zinc-700' : 'border-gray-200'} text-sm text-white placeholder-zinc-500 focus:outline-none focus:ring-2 focus:ring-purple-500/50`}
                       />
                     </div>
+                    {/* Toggle Eliminar Masivo (visible si la cara seleccionada tiene grupo masivo) */}
+                    {selectedCaraForSearch?.grupo_masivo_id && (() => {
+                      const grupo = caras.filter(c => c.grupo_masivo_id === selectedCaraForSearch.grupo_masivo_id);
+                      return (
+                        <label className={`flex items-center gap-2 text-xs cursor-pointer select-none px-2 py-1.5 rounded-lg border ${eliminarMasivoP ? 'bg-red-500/20 border-red-500/40 text-red-300' : (isDark ? 'bg-zinc-800 border-zinc-700 text-zinc-300' : 'bg-gray-50 border-gray-200 text-gray-700')}`}>
+                          <span>Eliminar masivo ({grupo.length} periodos)</span>
+                          <button
+                            type="button"
+                            onClick={() => setEliminarMasivoP(!eliminarMasivoP)}
+                            className={`relative inline-flex h-4 w-7 items-center rounded-full transition-colors ${eliminarMasivoP ? 'bg-red-500' : (isDark ? 'bg-zinc-700' : 'bg-gray-300')}`}
+                            title="Al eliminar una reserva, replica el delete a las equivalentes (mismo inventario) en otras caras del grupo masivo"
+                          >
+                            <span className={`inline-block h-3 w-3 transform rounded-full bg-white transition-transform ${eliminarMasivoP ? 'translate-x-3.5' : 'translate-x-0.5'}`} />
+                          </button>
+                        </label>
+                      );
+                    })()}
                     {effectiveCanEdit && selectedReservados.size > 0 && (
                       <div className="flex items-center gap-2">
                         <span className="text-xs text-purple-400 px-2 py-1 bg-purple-500/20 rounded-full">
@@ -6571,22 +6680,47 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
                       <h4 className={`text-sm font-medium ${isDark ? 'text-white' : 'text-gray-900'}`}>
                         {editingCaraId ? 'Editar Circuito' : 'Nuevo Circuito'}
                       </h4>
-                      {tipoPeriodo === 'catorcena' && (
-                        <label className={`flex items-center gap-2 text-xs cursor-pointer select-none ${isDark ? 'text-zinc-300' : 'text-gray-700'}`}>
-                          <span>Modo masivo</span>
-                          <button
-                            type="button"
-                            onClick={() => setModoMasivoP(!modoMasivoP)}
-                            className={`relative inline-flex h-5 w-9 items-center rounded-full transition-colors ${modoMasivoP ? 'bg-purple-500' : (isDark ? 'bg-zinc-700' : 'bg-gray-300')}`}
-                            title="Crea o actualiza varias caras en un rango de catorcenas"
-                          >
-                            <span className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${modoMasivoP ? 'translate-x-4' : 'translate-x-0.5'}`} />
-                          </button>
-                          <span className={`text-[10px] uppercase font-semibold ${modoMasivoP ? 'text-purple-400' : (isDark ? 'text-zinc-500' : 'text-gray-400')}`}>
-                            {modoMasivoP ? 'ON' : 'OFF'}
-                          </span>
-                        </label>
-                      )}
+                      <div className="flex items-center gap-3">
+                        {/* Toggle "Aplicar a grupo masivo" — visible al editar cara con grupo_masivo_id */}
+                        {editingCaraId && (() => {
+                          const caraEdit = caras.find(c => c.localId === editingCaraId);
+                          if (!caraEdit?.grupo_masivo_id) return null;
+                          const grupo = caras.filter(c => c.grupo_masivo_id === caraEdit.grupo_masivo_id && !c.esBf);
+                          if (grupo.length <= 1) return null;
+                          return (
+                            <label className={`flex items-center gap-2 text-xs cursor-pointer select-none ${modoMasivoP ? 'text-purple-300' : (isDark ? 'text-zinc-400' : 'text-gray-500')}`}>
+                              <span>Aplicar a grupo masivo ({grupo.length})</span>
+                              <button
+                                type="button"
+                                onClick={() => setModoMasivoP(!modoMasivoP)}
+                                className={`relative inline-flex h-5 w-9 items-center rounded-full transition-colors ${modoMasivoP ? 'bg-purple-500' : (isDark ? 'bg-zinc-700' : 'bg-gray-300')}`}
+                                title="Replica los cambios de esta cara a todas las del grupo masivo (mantiene los periodos individuales)"
+                              >
+                                <span className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${modoMasivoP ? 'translate-x-4' : 'translate-x-0.5'}`} />
+                              </button>
+                              <span className={`text-[10px] uppercase font-semibold ${modoMasivoP ? 'text-purple-400' : (isDark ? 'text-zinc-500' : 'text-gray-400')}`}>
+                                {modoMasivoP ? 'ON' : 'OFF'}
+                              </span>
+                            </label>
+                          );
+                        })()}
+                        {tipoPeriodo === 'catorcena' && !editingCaraId && (
+                          <label className={`flex items-center gap-2 text-xs cursor-pointer select-none ${isDark ? 'text-zinc-300' : 'text-gray-700'}`}>
+                            <span>Modo masivo</span>
+                            <button
+                              type="button"
+                              onClick={() => setModoMasivoP(!modoMasivoP)}
+                              className={`relative inline-flex h-5 w-9 items-center rounded-full transition-colors ${modoMasivoP ? 'bg-purple-500' : (isDark ? 'bg-zinc-700' : 'bg-gray-300')}`}
+                              title="Crea varias caras en un rango de catorcenas"
+                            >
+                              <span className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${modoMasivoP ? 'translate-x-4' : 'translate-x-0.5'}`} />
+                            </button>
+                            <span className={`text-[10px] uppercase font-semibold ${modoMasivoP ? 'text-purple-400' : (isDark ? 'text-zinc-500' : 'text-gray-400')}`}>
+                              {modoMasivoP ? 'ON' : 'OFF'}
+                            </span>
+                          </label>
+                        )}
+                      </div>
                     </div>
 
                     {/* Artículo selector */}
@@ -7112,7 +7246,16 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
                             if (c) {
                               const total = (newCara.caras || 0) + (newCara.bonificacion || 0);
                               const carasCap = Math.min(Math.max(0, val), total);
-                              setNewCara({ ...newCara, caras: carasCap, bonificacion: total - carasCap });
+                              // Redistribuir flujo/contraflujo proporcionalmente al nuevo renta
+                              const curFlujo = newCara.caras_flujo || 0;
+                              const curContra = newCara.caras_contraflujo || 0;
+                              const curRenta = curFlujo + curContra;
+                              let flujoCalc = curRenta > 0
+                                ? Math.round(carasCap * curFlujo / curRenta)
+                                : Math.ceil(carasCap / 2);
+                              let contraCalc = carasCap - flujoCalc;
+                              if (contraCalc < 0) { contraCalc = 0; flujoCalc = carasCap; }
+                              setNewCara({ ...newCara, caras: carasCap, bonificacion: total - carasCap, caras_flujo: flujoCalc, caras_contraflujo: contraCalc });
                               return;
                             }
                             const flujo = Math.ceil(val / 2);
@@ -7143,7 +7286,17 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
                             if (c) {
                               const total = (newCara.caras || 0) + (newCara.bonificacion || 0);
                               const bonifCap = Math.min(Math.max(0, val), total);
-                              setNewCara({ ...newCara, bonificacion: bonifCap, caras: total - bonifCap });
+                              const carasCap = total - bonifCap;
+                              // Redistribuir flujo/contraflujo proporcionalmente al nuevo renta
+                              const curFlujo = newCara.caras_flujo || 0;
+                              const curContra = newCara.caras_contraflujo || 0;
+                              const curRenta = curFlujo + curContra;
+                              let flujoCalc = curRenta > 0
+                                ? Math.round(carasCap * curFlujo / curRenta)
+                                : Math.ceil(carasCap / 2);
+                              let contraCalc = carasCap - flujoCalc;
+                              if (contraCalc < 0) { contraCalc = 0; flujoCalc = carasCap; }
+                              setNewCara({ ...newCara, bonificacion: bonifCap, caras: carasCap, caras_flujo: flujoCalc, caras_contraflujo: contraCalc });
                               return;
                             }
                             setNewCara({ ...newCara, bonificacion: val });
