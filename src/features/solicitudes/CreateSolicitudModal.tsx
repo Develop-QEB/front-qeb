@@ -1981,8 +1981,14 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
             catorcenaYear: catYear,
             periodoInicio: cara.inicio_periodo || '',
             periodoFin: cara.fin_periodo || '',
-            renta: Number(cara.caras) || 0,
-            bonificacion: Number(cara.bonificacion) || 0,
+            // Convención frontend: BF guarda cantidad en renta. Backend persiste BF con
+            // caras=0 y bonificacion=cantidad, así que invertimos al cargar.
+            renta: ((cara.articulo || '').toUpperCase().startsWith('BF') || (cara.articulo || '').toUpperCase().startsWith('CF'))
+              ? (Number(cara.bonificacion) || 0)
+              : (Number(cara.caras) || 0),
+            bonificacion: ((cara.articulo || '').toUpperCase().startsWith('BF') || (cara.articulo || '').toUpperCase().startsWith('CF'))
+              ? 0
+              : (Number(cara.bonificacion) || 0),
             tarifaPublica: (cara.caras || 0) > 0 ? (Number(cara.costo) || 0) / (cara.caras || 1) : Number(cara.tarifa_publica) || 0,
             tarifaEfectiva: Number(cara.tarifa_publica) || 0, // recalculated below with grupo_rt_bf
             descuento: Number(cara.descuento) || 0,
