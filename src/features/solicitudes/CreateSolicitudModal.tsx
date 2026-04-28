@@ -2180,7 +2180,7 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
                 </label>
                 {/* SAP Database filter buttons */}
                 <div className="flex items-center gap-1.5">
-                  {(['ALL', 'CIMU', 'TEST', 'TRADE'] as const).map(db => (
+                  {(['ALL', 'CIMU', 'TRADE'] as const).map(db => (
                     <button
                       key={db}
                       type="button"
