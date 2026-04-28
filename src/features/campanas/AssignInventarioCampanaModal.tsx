@@ -1651,18 +1651,32 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
   }, [catorcenasData, yearInicio]);
 
   const catorcenasInicioOptions = useMemo(() => {
+    // Mensual: generar meses (1-12)
+    if (tipoPeriodo === 'mensual') {
+      if (!yearInicio) return [];
+      const baseMonths = Array.from({ length: 12 }, (_, i) => ({ id: yearInicio * 100 + (i + 1), a_o: yearInicio, numero_catorcena: i + 1, fecha_inicio: '', fecha_fin: '' }));
+      if (yearInicio === yearFin && catorcenaFin) return baseMonths.filter(m => m.numero_catorcena <= catorcenaFin);
+      return baseMonths;
+    }
     if (!catorcenasData?.data || !yearInicio) return [];
     const cats = catorcenasData.data.filter(c => c.a_o === yearInicio);
     if (yearInicio === yearFin && catorcenaFin) return cats.filter(c => c.numero_catorcena <= catorcenaFin);
     return cats;
-  }, [catorcenasData, yearInicio, yearFin, catorcenaFin]);
+  }, [catorcenasData, yearInicio, yearFin, catorcenaFin, tipoPeriodo]);
 
   const catorcenasFinOptions = useMemo(() => {
+    // Mensual: generar meses (1-12)
+    if (tipoPeriodo === 'mensual') {
+      if (!yearFin) return [];
+      const baseMonths = Array.from({ length: 12 }, (_, i) => ({ id: yearFin * 100 + (i + 1), a_o: yearFin, numero_catorcena: i + 1, fecha_inicio: '', fecha_fin: '' }));
+      if (yearInicio === yearFin && catorcenaInicio) return baseMonths.filter(m => m.numero_catorcena >= catorcenaInicio);
+      return baseMonths;
+    }
     if (!catorcenasData?.data || !yearFin) return [];
     const cats = catorcenasData.data.filter(c => c.a_o === yearFin);
     if (yearInicio === yearFin && catorcenaInicio) return cats.filter(c => c.numero_catorcena >= catorcenaInicio);
     return cats;
-  }, [catorcenasData, yearFin, yearInicio, catorcenaInicio]);
+  }, [catorcenasData, yearFin, yearInicio, catorcenaInicio, tipoPeriodo]);
 
   // Available periods based on year range
   const availablePeriods = useMemo(() => {
@@ -5957,7 +5971,7 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
                       </select>
                     </div>
                     <div className="space-y-1">
-                      <label className={`text-xs ${isDark ? 'text-zinc-500' : 'text-gray-500'}`}>Cat. Inicio</label>
+                      <label className={`text-xs ${isDark ? 'text-zinc-500' : 'text-gray-500'}`}>{tipoPeriodo === 'mensual' ? 'Mes Inicio' : 'Cat. Inicio'}</label>
                       <select
                         value={catorcenaInicio || ''}
                         onChange={(e) => canEditResumen && setCatorcenaInicio(e.target.value ? parseInt(e.target.value) : undefined)}
@@ -5966,7 +5980,9 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
                       >
                         <option value="">Seleccionar</option>
                         {catorcenasInicioOptions.map(c => (
-                          <option key={c.id} value={c.numero_catorcena}>Cat. {c.numero_catorcena}</option>
+                          <option key={c.id} value={c.numero_catorcena}>
+                            {tipoPeriodo === 'mensual' ? (MESES_LABEL[c.numero_catorcena - 1] || `Mes ${c.numero_catorcena}`) : `Cat. ${c.numero_catorcena}`}
+                          </option>
                         ))}
                       </select>
                     </div>
@@ -5985,7 +6001,7 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
                       </select>
                     </div>
                     <div className="space-y-1">
-                      <label className={`text-xs ${isDark ? 'text-zinc-500' : 'text-gray-500'}`}>Cat. Fin</label>
+                      <label className={`text-xs ${isDark ? 'text-zinc-500' : 'text-gray-500'}`}>{tipoPeriodo === 'mensual' ? 'Mes Fin' : 'Cat. Fin'}</label>
                       <select
                         value={catorcenaFin || ''}
                         onChange={(e) => canEditResumen && setCatorcenaFin(e.target.value ? parseInt(e.target.value) : undefined)}
@@ -5994,7 +6010,9 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
                       >
                         <option value="">Seleccionar</option>
                         {catorcenasFinOptions.map(c => (
-                          <option key={c.id} value={c.numero_catorcena}>Cat. {c.numero_catorcena}</option>
+                          <option key={c.id} value={c.numero_catorcena}>
+                            {tipoPeriodo === 'mensual' ? (MESES_LABEL[c.numero_catorcena - 1] || `Mes ${c.numero_catorcena}`) : `Cat. ${c.numero_catorcena}`}
+                          </option>
                         ))}
                       </select>
                     </div>

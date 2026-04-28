@@ -87,14 +87,22 @@ function getTagColor(name: string, isDark: boolean = true) {
 const MESES_LABEL = ['Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun', 'Jul', 'Ago', 'Sep', 'Oct', 'Nov', 'Dic'];
 const MESES_FULL = ['Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio', 'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre'];
 
+// Parsea YYYY-MM directo del string para evitar timezone shift
+// (e.g. '2026-03-01T00:00:00.000Z' en MX UTC-6 → Date.getMonth() devuelve 1=Feb por la conversión a hora local)
 function getMonthLabel(dateStr: string): string {
-  const d = new Date(dateStr);
-  return !isNaN(d.getTime()) ? `${MESES_FULL[d.getMonth()]} ${d.getFullYear()}` : '-';
+  const m = String(dateStr).match(/^(\d{4})-(\d{2})/);
+  if (!m) return '-';
+  const month = parseInt(m[2]) - 1;
+  if (month < 0 || month > 11) return '-';
+  return `${MESES_FULL[month]} ${m[1]}`;
 }
 
 function getMonthShort(dateStr: string): string {
-  const d = new Date(dateStr);
-  return !isNaN(d.getTime()) ? `${MESES_LABEL[d.getMonth()]} ${d.getFullYear()}` : '-';
+  const m = String(dateStr).match(/^(\d{4})-(\d{2})/);
+  if (!m) return '-';
+  const month = parseInt(m[2]) - 1;
+  if (month < 0 || month > 11) return '-';
+  return `${MESES_LABEL[month]} ${m[1]}`;
 }
 
 // Status Colors - colores únicos por cada tipo de status
