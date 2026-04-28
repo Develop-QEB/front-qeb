@@ -2189,7 +2189,6 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
                         sapDbFilter === db
                           ? db === 'ALL' ? 'bg-purple-600 text-white border-purple-500'
                           : db === 'CIMU' ? 'bg-blue-600 text-white border-blue-500'
-                          : db === 'TEST' ? 'bg-amber-600 text-white border-amber-500'
                           : 'bg-emerald-600 text-white border-emerald-500'
                           : isDark ? 'bg-zinc-800/60 text-zinc-400 border-zinc-700/50 hover:bg-zinc-800 hover:text-zinc-200' : 'bg-gray-50 text-gray-500 border-gray-200 hover:bg-gray-100 hover:text-gray-700'
                       }`}
