@@ -3326,13 +3326,14 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
                       <span className={`${isDark ? 'text-zinc-500' : 'text-gray-400'} text-sm`}>Fechas:</span>
                       <span className={`${isDark ? 'text-white' : 'text-gray-900'} text-sm`}>
                         {(() => {
-                          // Usar fechas globales (fechaInicio/fechaFin computados desde
-                          // mesInicio/mesFin o catorcenas), parseando string directo para
-                          // evitar timezone shift e Invalid Date con formatos ISO completos.
-                          if (fechaInicio && fechaFin) {
-                            return `${formatDateShort(fechaInicio)} - ${formatDateShort(fechaFin)}`;
-                          }
-                          return '-';
+                          // Mostrar como "Mes año a Mes año" (no fechas exactas)
+                          if (!fechaInicio || !fechaFin) return '-';
+                          const mesesFull = ['Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio', 'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre'];
+                          const ini = String(fechaInicio).match(/^(\d{4})-(\d{2})/);
+                          const fin = String(fechaFin).match(/^(\d{4})-(\d{2})/);
+                          if (!ini || !fin) return '-';
+                          const ml = (ym: RegExpMatchArray) => `${mesesFull[parseInt(ym[2]) - 1]} ${ym[1]}`;
+                          return `${ml(ini)} a ${ml(fin)}`;
                         })()}
                       </span>
                     </div>

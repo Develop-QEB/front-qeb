@@ -269,11 +269,20 @@ export function ViewSolicitudModal({ isOpen, onClose, solicitudId, onEdit, onAte
   const catorcenas = catorcenasData?.data || [];
   const tipoPeriodo = (data?.cotizacion as any)?.tipo_periodo || 'catorcena';
 
-  // Usar SIEMPRE las fechas globales de la cotización (data.cotizacion.fecha_inicio/fin)
-  // No usar las fechas de las caras porque éstas son del circuito individual y no
-  // representan el rango total de la solicitud.
-  const minInicioPeriodo = null;
-  const maxInicioPeriodo = null;
+  // Para mensual: las fechas reales de las caras (min inicio_periodo / max fin_periodo).
+  // Se usan SOLO en el detalle de "Periodo Inicio" / "Periodo Fin" (el rango exacto del
+  // grupo de circuitos del usuario). El rango "Período" arriba sigue usando fechas globales.
+  const minInicioPeriodo = useMemo(() => {
+    if (tipoPeriodo !== 'mensual' || !data?.caras?.length) return null;
+    const dates = data.caras.map(c => c.inicio_periodo).filter(Boolean).sort() as string[];
+    return dates.length ? dates[0] : null;
+  }, [data?.caras, tipoPeriodo]);
+
+  const maxInicioPeriodo = useMemo(() => {
+    if (tipoPeriodo !== 'mensual' || !data?.caras?.length) return null;
+    const dates = data.caras.map(c => c.fin_periodo).filter(Boolean).sort() as string[];
+    return dates.length ? dates[dates.length - 1] : null;
+  }, [data?.caras, tipoPeriodo]);
 
   const groupedCaras = useMemo(() => {
     if (!data?.caras) return [];
@@ -776,7 +785,8 @@ export function ViewSolicitudModal({ isOpen, onClose, solicitudId, onEdit, onAte
                     <div className="flex justify-between">
                       <span className={`${isDark ? 'text-zinc-500' : 'text-gray-400'} text-sm`}>Período</span>
                       <span className={`${isDark ? 'text-violet-300' : 'text-violet-600'} text-sm font-medium`}>
-                        {data.cotizacion ? getCatorcenaRange(minInicioPeriodo || data.cotizacion.fecha_inicio, maxInicioPeriodo || data.cotizacion.fecha_fin, catorcenas, tipoPeriodo) : '-'}
+                        {/* Período: rango GLOBAL de la cotización */}
+                        {data.cotizacion ? getCatorcenaRange(data.cotizacion.fecha_inicio, data.cotizacion.fecha_fin, catorcenas, tipoPeriodo) : '-'}
                       </span>
                     </div>
                     <div className="flex justify-between">
