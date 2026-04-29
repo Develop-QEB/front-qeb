@@ -929,16 +929,19 @@ export function CampanasPage() {
     return terms;
   }, [debouncedSearchTags, debouncedSearchInput]);
 
-  // Always fetch all campaigns (only ~500 active) and filter client-side
   const hasSearch = allSearchTerms.length > 0;
+  const needsAllData = activeGroupings.length > 0 || advancedFilters.length > 0;
+  const effectiveLimit = needsAllData ? 200 : limit;
+  const serverSearch = allSearchTerms.length === 1 ? allSearchTerms[0] : (allSearchTerms.length > 1 ? allSearchTerms.join(' ') : undefined);
 
   const { data, isLoading } = useQuery({
-    queryKey: ['campanas', status, yearInicio, yearFin, catorcenaInicio, catorcenaFin, tipoPeriodo],
+    queryKey: ['campanas', needsAllData ? 1 : page, status, yearInicio, yearFin, catorcenaInicio, catorcenaFin, tipoPeriodo, needsAllData, serverSearch],
     queryFn: () =>
       campanasService.getAll({
-        page: 1,
-        limit: 9999,
+        page: needsAllData ? 1 : page,
+        limit: effectiveLimit,
         status: (status && status !== 'Incompleta') ? status : undefined,
+        search: serverSearch,
         yearInicio,
         yearFin,
         catorcenaInicio,
@@ -2254,11 +2257,11 @@ export function CampanasPage() {
   };
 
   // Calcular paginación basada en si hay filtros locales activos
-  const hasLocalFilters = !!(hasSearch || selectedCatorcenaInicio);
-  const totalPages = hasLocalFilters ? 1 : (data?.pagination?.totalPages || 1);
-  const total = hasLocalFilters ? filteredData.length : (data?.pagination?.total ?? 0);
-  const startItem = hasLocalFilters ? (filteredData.length > 0 ? 1 : 0) : ((page - 1) * limit + 1);
-  const endItem = hasLocalFilters ? filteredData.length : Math.min(page * limit, data?.pagination?.total ?? 0);
+  const hasLocalFilters = !!(selectedCatorcenaInicio || advancedFilters.length > 0 || status === 'Incompleta');
+  const totalPages = hasLocalFilters || needsAllData ? 1 : (data?.pagination?.totalPages || 1);
+  const total = hasLocalFilters || needsAllData ? filteredData.length : (data?.pagination?.total ?? 0);
+  const startItem = hasLocalFilters || needsAllData ? (filteredData.length > 0 ? 1 : 0) : ((page - 1) * limit + 1);
+  const endItem = hasLocalFilters || needsAllData ? filteredData.length : Math.min(page * limit, data?.pagination?.total ?? 0);
 
   return (
     <div className="min-h-screen">
