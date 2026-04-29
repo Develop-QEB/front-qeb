@@ -244,6 +244,12 @@ export interface CampanaUpdateData {
   asignados?: string;
   id_asignado?: string;
   IMU?: boolean;
+  cliente_id?: number;
+  cuic?: number;
+  razon_social?: string;
+  marca_nombre?: string;
+  asesor?: string;
+  sap_database?: string;
 }
 
 export interface HistorialItem {
