@@ -1345,6 +1345,7 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
         asignadosIds: newAsignadosIds,
         imu,
       });
+      setClienteChanged(false);
 
       queryClient.invalidateQueries({ queryKey: ['campana-details', campana?.id] });
       queryClient.invalidateQueries({ queryKey: ['campanas'] });

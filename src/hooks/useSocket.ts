@@ -79,6 +79,9 @@ export const SOCKET_EVENTS = {
   TICKET_MENSAJE_NUEVO: 'ticket:mensaje:nuevo',
   TICKET_STATUS_CHANGED: 'ticket:status:changed',
   TICKET_CHAT_NUEVO: 'ticket:chat:nuevo',
+
+  // Historial de Acciones
+  HISTORIAL_NUEVA: 'historial:nueva',
 };
 
 let socketInstance: Socket | null = null;
@@ -1191,6 +1194,35 @@ export function useSocketChatNotifications(userId: number | null) {
       }
     };
   }, [userId, queryClient]);
+}
+
+/**
+ * Hook para escuchar nuevas entradas en el historial de acciones
+ */
+export function useSocketHistorialAcciones() {
+  const queryClient = useQueryClient();
+  const joinedRef = useRef<boolean>(false);
+
+  useEffect(() => {
+    const socket = getSocket();
+
+    if (!joinedRef.current) {
+      joinRoom(socket, 'join-historial');
+      joinedRef.current = true;
+    }
+
+    const handleNueva = () => {
+      queryClient.invalidateQueries({ queryKey: ['historial-acciones'], refetchType: 'active' });
+    };
+
+    socket.on(SOCKET_EVENTS.HISTORIAL_NUEVA, handleNueva);
+
+    return () => {
+      socket.off(SOCKET_EVENTS.HISTORIAL_NUEVA, handleNueva);
+      leaveRoom(socket, 'join-historial');
+      joinedRef.current = false;
+    };
+  }, [queryClient]);
 }
 
 /**
