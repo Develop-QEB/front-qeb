@@ -118,6 +118,10 @@ export interface RolePermissions {
 
   // SAP
   canCancelPostSAP: boolean;
+
+  // Historial de Acciones
+  canSeeHistorialAcciones: boolean;
+  canSeeAllHistorial: boolean;
 }
 
 // Permisos por defecto (acceso total - para Admin)
@@ -194,6 +198,9 @@ const defaultPermissions: RolePermissions = {
   canExportOrdenesMontaje: true,
 
   canCancelPostSAP: false,
+
+  canSeeHistorialAcciones: true,
+  canSeeAllHistorial: false,
 };
 
 // Permisos específicos por rol
@@ -1029,6 +1036,7 @@ const rolePermissions: Partial<Record<UserRole, Partial<RolePermissions>>> = {
     canEditClienteEnFormularios: true,
     canEditCaraFiltersOnEdit: true,
     canEditArticuloOnEdit: true,
+    canSeeAllHistorial: true,
   },
   'DEV': {
     // DEV tiene acceso total a todo
@@ -1036,6 +1044,7 @@ const rolePermissions: Partial<Record<UserRole, Partial<RolePermissions>>> = {
     canEditCaraFiltersOnEdit: true,
     canEditArticuloOnEdit: true,
     canCancelPostSAP: true,
+    canSeeAllHistorial: true,
   },
   'Gerente de Trafico': {
     // Secciones visibles
