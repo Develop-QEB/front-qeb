@@ -199,7 +199,7 @@ const defaultPermissions: RolePermissions = {
 
   canCancelPostSAP: false,
 
-  canSeeHistorialAcciones: true,
+  canSeeHistorialAcciones: false,
   canSeeAllHistorial: false,
 };
 
@@ -1044,6 +1044,7 @@ const rolePermissions: Partial<Record<UserRole, Partial<RolePermissions>>> = {
     canEditCaraFiltersOnEdit: true,
     canEditArticuloOnEdit: true,
     canCancelPostSAP: true,
+    canSeeHistorialAcciones: true,
     canSeeAllHistorial: true,
   },
   'Gerente de Trafico': {
