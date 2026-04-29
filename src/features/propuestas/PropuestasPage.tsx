@@ -1196,17 +1196,18 @@ export function PropuestasPage() {
     }),
   });
 
-  // When grouping, advanced filters, or any search terms are active, fetch ALL data
-  const needsAllData = !!groupBy || advancedFilters.length > 0 || allSearchTerms.length > 0;
-  const effectiveLimit = needsAllData ? 9999 : limit;
+  const needsAllData = !!groupBy || advancedFilters.length > 0;
+  const effectiveLimit = needsAllData ? 200 : limit;
+  const serverSearch = allSearchTerms.length > 0 ? allSearchTerms.join(' ') : undefined;
 
   const { data, isLoading } = useQuery({
-    queryKey: ['propuestas', page, status, allSearchTerms, yearInicio, yearFin, catorcenaInicio, catorcenaFin, sortBy, sortOrder, groupBy, tipoPeriodo, needsAllData],
+    queryKey: ['propuestas', needsAllData ? 1 : page, status, serverSearch, yearInicio, yearFin, catorcenaInicio, catorcenaFin, sortBy, sortOrder, groupBy, tipoPeriodo, needsAllData],
     queryFn: () =>
       propuestasService.getAll({
         page: needsAllData ? 1 : page,
         limit: effectiveLimit,
         status: status || undefined,
+        search: serverSearch,
         yearInicio,
         yearFin,
         catorcenaInicio,
