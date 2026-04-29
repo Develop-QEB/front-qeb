@@ -1158,7 +1158,7 @@ export function PropuestasPage() {
     const timer = setTimeout(() => {
       setDebouncedSearchTags(searchTags);
       setPage(1);
-    }, 300);
+    }, 500);
     return () => clearTimeout(timer);
   }, [searchTags]);
 
@@ -1166,7 +1166,7 @@ export function PropuestasPage() {
     const timer = setTimeout(() => {
       setDebouncedSearchInput(searchInput);
       setPage(1);
-    }, 300);
+    }, 500);
     return () => clearTimeout(timer);
   }, [searchInput]);
 
