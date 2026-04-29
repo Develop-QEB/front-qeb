@@ -2561,6 +2561,14 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
           asignados: asignadosStr,
           id_asignado: asignadosIdsStr,
           IMU: imu,
+          ...(clienteChanged && selectedClienteCuic ? {
+            cliente_id: selectedClienteCuic.CUIC,
+            cuic: selectedClienteCuic.CUIC,
+            razon_social: selectedClienteCuic.T0_U_RazonSocial,
+            marca_nombre: selectedClienteCuic.T2_U_Marca,
+            asesor: selectedClienteCuic.ASESOR_U_Asesor,
+            sap_database: selectedClienteCuic.sap_database,
+          } : {}),
         });
 
         setInitialValues({
@@ -2574,6 +2582,7 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
           asignadosIds: asignadosIdsStr,
           imu,
         });
+        setClienteChanged(false);
         messages.push('Campaña actualizada');
       }
 
