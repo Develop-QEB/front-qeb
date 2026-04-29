@@ -12,6 +12,7 @@ import { Campana, CampanaWithComments } from '../../types';
 import { solicitudesService, UserOption } from '../../services/solicitudes.service';
 import { inventariosService, InventarioDisponible } from '../../services/inventarios.service';
 import { campanasService, ReservaModalItem } from '../../services/campanas.service';
+import { clientesService } from '../../services/clientes.service';
 import { formatCurrency } from '../../lib/utils';
 import { monthLabelLong, monthLabelShort, dayMonthShort } from '../../lib/periodos';
 import { parseCircuitoDigital } from '../../lib/circuitos';
@@ -658,6 +659,30 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
 
   const effectiveCanEdit = permissions.canAsignarInventario;
   const canEditResumen = permissions.canEditResumenPropuesta;
+  const canEditCliente = permissions.canEditClienteEnFormularios;
+
+  // Client editing state
+  interface CuicItem {
+    CUIC: number;
+    T0_U_RazonSocial: string;
+    T0_U_Cliente: string;
+    T1_U_UnidadNegocio: string;
+    T0_U_Agencia: string;
+    ASESOR_U_IDAsesor: string;
+    ASESOR_U_Asesor: string;
+    T1_U_IDMarca: number;
+    T2_U_Marca: string;
+    T2_U_IDProducto: number;
+    T2_U_Producto: string;
+    T2_U_IDCategoria: number;
+    T2_U_Categoria: string;
+    sap_database?: string;
+  }
+  const [selectedClienteCuic, setSelectedClienteCuic] = useState<CuicItem | null>(null);
+  const [clienteSearchTerm, setClienteSearchTerm] = useState('');
+  const [showClienteDropdown, setShowClienteDropdown] = useState(false);
+  const [clienteChanged, setClienteChanged] = useState(false);
+
   const mapRef = useRef<google.maps.Map | null>(null);
   const reservadosMapRef = useRef<google.maps.Map | null>(null);
   const resumenReservasMapRef = useRef<google.maps.Map | null>(null);
@@ -1022,6 +1047,45 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
     enabled: isOpen,
   });
 
+  // Fetch CUIC data for client editing
+  const { data: cuicData, isLoading: cuicLoading } = useQuery({
+    queryKey: ['clientes-full-for-campana'],
+    queryFn: async () => {
+      const result = await clientesService.getAllFull();
+      return (result?.data || []).map((c: any) => ({
+        CUIC: c.CUIC!,
+        T0_U_RazonSocial: c.T0_U_RazonSocial || '',
+        T0_U_Cliente: c.T0_U_Cliente || '',
+        T1_U_UnidadNegocio: c.T1_U_UnidadNegocio || '',
+        T0_U_Agencia: c.T0_U_Agencia || '',
+        ASESOR_U_IDAsesor: c.ASESOR_U_IDAsesor || '',
+        ASESOR_U_Asesor: c.ASESOR_U_Asesor || '',
+        T1_U_IDMarca: c.T1_U_IDMarca || 0,
+        T2_U_Marca: c.T2_U_Marca || '',
+        T2_U_IDProducto: c.T2_U_IDProducto || 0,
+        T2_U_Producto: c.T2_U_Producto || '',
+        T2_U_IDCategoria: c.T2_U_IDCategoria || 0,
+        T2_U_Categoria: c.T2_U_Categoria || '',
+        sap_database: c.sap_database || '',
+      })) as CuicItem[];
+    },
+    enabled: isOpen && canEditCliente,
+    staleTime: 5 * 60 * 1000,
+  });
+
+  // Filtered CUIC options for client search
+  const filteredCuicOptions = useMemo(() => {
+    if (!cuicData) return [];
+    if (!clienteSearchTerm) return cuicData;
+    const term = clienteSearchTerm.toLowerCase();
+    return cuicData.filter((c: CuicItem) =>
+      String(c.CUIC).includes(term) ||
+      c.T2_U_Marca?.toLowerCase().includes(term) ||
+      c.T0_U_RazonSocial?.toLowerCase().includes(term) ||
+      c.T2_U_Producto?.toLowerCase().includes(term)
+    );
+  }, [cuicData, clienteSearchTerm]);
+
   // Initialize form from campaign details
   useEffect(() => {
     if (campanaDetails && isOpen) {
@@ -1093,6 +1157,12 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
         });
       }
       setAsignados(loadedAsignados);
+
+      // Reset client editing state on load
+      setSelectedClienteCuic(null);
+      setClienteChanged(false);
+      setClienteSearchTerm('');
+      setShowClienteDropdown(false);
 
       // Store initial values for change detection — only on first load
       if (!initialValuesSetRef.current) {
@@ -1226,9 +1296,10 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
       catorcenaInicio !== initialValues.catorcenaInicio ||
       catorcenaFin !== initialValues.catorcenaFin ||
       currentAsignadosIds !== initialValues.asignadosIds ||
-      imu !== initialValues.imu
+      imu !== initialValues.imu ||
+      clienteChanged
     );
-  }, [nombreCampania, notas, descripcion, yearInicio, yearFin, catorcenaInicio, catorcenaFin, currentAsignadosIds, imu, initialValues]);
+  }, [nombreCampania, notas, descripcion, yearInicio, yearFin, catorcenaInicio, catorcenaFin, currentAsignadosIds, imu, initialValues, clienteChanged]);
 
   // Handle update campaign
   const handleUpdateCampana = async () => {
@@ -1251,6 +1322,14 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
         asignados: asignadosStr,
         id_asignado: asignadosIdsStr,
         IMU: imu,
+        ...(clienteChanged && selectedClienteCuic ? {
+          cliente_id: selectedClienteCuic.CUIC,
+          cuic: selectedClienteCuic.CUIC,
+          razon_social: selectedClienteCuic.T0_U_RazonSocial,
+          marca_nombre: selectedClienteCuic.T2_U_Marca,
+          asesor: selectedClienteCuic.ASESOR_U_Asesor,
+          sap_database: selectedClienteCuic.sap_database,
+        } : {}),
       });
 
       // Update initial values to current values
@@ -6080,33 +6159,151 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
                   </h3>
                 </div>
                 <div className="p-5 space-y-4">
-                  {/* Client info - read only */}
-                  <div className="grid grid-cols-4 gap-4">
-                    <div className="space-y-1">
-                      <label className={`text-xs ${isDark ? 'text-zinc-500' : 'text-gray-500'}`}>CUIC</label>
-                      <div className={`px-3 py-2 rounded-lg text-sm border ${isDark ? 'bg-zinc-800/50 text-zinc-300 border-zinc-700/30' : 'bg-gray-100 text-gray-700 border-gray-200'}`}>
-                        {campanaDetails?.cuic || '-'}
+                  {/* Client info */}
+                  {canEditCliente ? (
+                    <div className="space-y-3">
+                      <div className="relative">
+                        <label className={`text-xs ${isDark ? 'text-zinc-500' : 'text-gray-400'} mb-1 block`}>Seleccionar Cliente (CUIC)</label>
+                        <button
+                          type="button"
+                          onClick={() => setShowClienteDropdown(!showClienteDropdown)}
+                          className={`w-full flex items-center justify-between gap-2 px-3 py-2.5 rounded-xl text-sm transition-all ${
+                            selectedClienteCuic
+                              ? 'bg-purple-500/20 text-purple-300 border border-purple-500/40'
+                              : `${isDark ? 'bg-zinc-800' : 'bg-gray-50'} ${isDark ? 'text-zinc-400' : 'text-gray-500'} border ${isDark ? 'border-zinc-700' : 'border-gray-200'} ${isDark ? 'hover:border-zinc-600' : 'hover:border-gray-300'}`
+                          }`}
+                        >
+                          <span className="truncate text-left flex-1">
+                            {selectedClienteCuic ? (
+                              <span>
+                                <span className="font-medium">{selectedClienteCuic.T2_U_Marca || 'Sin marca'}</span>
+                                <span className={`text-[10px] ${isDark ? 'text-zinc-500' : 'text-gray-400'} ml-2`}>{selectedClienteCuic.CUIC} | {selectedClienteCuic.T2_U_Producto || ''}</span>
+                              </span>
+                            ) : (
+                              <span>{campanaDetails?.cuic ? `${(campanaDetails as any)?.T2_U_Marca || (campanaDetails as any)?.marca_nombre || ''} (CUIC: ${campanaDetails.cuic})` : 'Seleccionar CUIC'}</span>
+                            )}
+                          </span>
+                          {selectedClienteCuic ? (
+                            <X className={`h-4 w-4 ${isDark ? 'hover:text-white' : 'hover:text-gray-900'} flex-shrink-0`} onClick={(e) => { e.stopPropagation(); setSelectedClienteCuic(null); setClienteChanged(false); }} />
+                          ) : (
+                            <ChevronDown className="h-4 w-4 flex-shrink-0" />
+                          )}
+                        </button>
+                        {showClienteDropdown && (
+                          <>
+                            <div className="fixed inset-0 z-40" onClick={() => { setShowClienteDropdown(false); setClienteSearchTerm(''); }} />
+                            <div className={`absolute top-full left-0 right-0 mt-1 z-50 w-full min-w-[350px] rounded-xl border border-purple-500/20 ${isDark ? 'bg-zinc-900' : 'bg-white'} backdrop-blur-xl shadow-2xl overflow-hidden`}>
+                              <div className={`p-2 border-b ${isDark ? 'border-zinc-800' : 'border-gray-200'}`}>
+                                <div className="relative">
+                                  <Search className={`absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 ${isDark ? 'text-zinc-500' : 'text-gray-400'}`} />
+                                  <input
+                                    type="text"
+                                    placeholder="Buscar por marca, CUIC, razón social..."
+                                    value={clienteSearchTerm}
+                                    onChange={(e) => setClienteSearchTerm(e.target.value)}
+                                    className={`w-full pl-9 pr-3 py-2 text-sm ${isDark ? 'bg-zinc-800' : 'bg-gray-50'} ${isDark ? 'border-zinc-700' : 'border-gray-200'} ${isDark ? 'text-white' : 'text-gray-900'} placeholder:${isDark ? 'text-zinc-500' : 'text-gray-400'} border rounded-lg focus:outline-none focus:ring-1 focus:ring-purple-500/50`}
+                                    autoFocus
+                                    onClick={(e) => e.stopPropagation()}
+                                  />
+                                </div>
+                              </div>
+                              <div className="max-h-72 overflow-auto">
+                                {cuicLoading ? (
+                                  <div className={`px-3 py-4 text-center ${isDark ? 'text-zinc-500' : 'text-gray-400'} text-sm`}>Cargando...</div>
+                                ) : filteredCuicOptions.length === 0 ? (
+                                  <div className={`px-3 py-4 text-center ${isDark ? 'text-zinc-500' : 'text-gray-400'} text-sm`}>No se encontraron resultados</div>
+                                ) : (
+                                  filteredCuicOptions.slice(0, 100).map((item: CuicItem, idx: number) => (
+                                    <button
+                                      key={`${item.CUIC}-${idx}`}
+                                      type="button"
+                                      onClick={() => {
+                                        setSelectedClienteCuic(item);
+                                        setClienteChanged(true);
+                                        setShowClienteDropdown(false);
+                                        setClienteSearchTerm('');
+                                      }}
+                                      className={`w-full px-3 py-2.5 text-left text-sm transition-colors border-b ${isDark ? 'border-zinc-800/50' : 'border-gray-200/50'} last:border-0 ${
+                                        selectedClienteCuic?.CUIC === item.CUIC
+                                          ? 'bg-purple-500/20 text-purple-300'
+                                          : `${isDark ? 'text-zinc-300' : 'text-gray-700'} ${isDark ? 'hover:bg-zinc-800' : 'hover:bg-gray-50'}`
+                                      }`}
+                                    >
+                                      <div className="flex items-center justify-between">
+                                        <div className={`font-medium ${isDark ? 'text-white' : 'text-gray-900'}`}>{item.T2_U_Marca || 'Sin marca'}</div>
+                                        {item.sap_database && (
+                                          <span className={`text-[10px] font-semibold px-2 py-0.5 rounded-lg border ${
+                                            item.sap_database === 'CIMU' ? isDark ? 'bg-blue-500/20 text-blue-300 border-blue-500/30' : 'bg-blue-50 text-blue-700 border-blue-200' :
+                                            item.sap_database === 'TEST' ? isDark ? 'bg-amber-500/20 text-amber-300 border-amber-500/30' : 'bg-amber-50 text-amber-700 border-amber-200' :
+                                            item.sap_database === 'TRADE' ? isDark ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500/30' : 'bg-emerald-50 text-emerald-700 border-emerald-200' :
+                                            isDark ? 'bg-zinc-500/20 text-zinc-300 border-zinc-500/30' : 'bg-gray-50 text-gray-700 border-gray-200'
+                                          }`}>{item.sap_database}</span>
+                                        )}
+                                      </div>
+                                      <div className={`text-xs ${isDark ? 'text-zinc-500' : 'text-gray-400'}`}>{item.CUIC} | {item.T2_U_Producto || 'Sin producto'} | {item.T0_U_RazonSocial || ''}</div>
+                                    </button>
+                                  ))
+                                )}
+                              </div>
+                            </div>
+                          </>
+                        )}
+                      </div>
+                      <div className="grid grid-cols-4 gap-4">
+                        <div className="space-y-1">
+                          <label className={`text-xs ${isDark ? 'text-zinc-500' : 'text-gray-400'}`}>CUIC</label>
+                          <div className={`px-3 py-2 ${isDark ? 'bg-zinc-800/50' : 'bg-gray-50/50'} rounded-lg text-sm ${isDark ? 'text-zinc-300' : 'text-gray-700'} border ${isDark ? 'border-zinc-700/30' : 'border-gray-200/30'}`}>
+                            {selectedClienteCuic ? selectedClienteCuic.CUIC : (campanaDetails?.cuic || '-')}
+                          </div>
+                        </div>
+                        <div className="space-y-1">
+                          <label className={`text-xs ${isDark ? 'text-zinc-500' : 'text-gray-400'}`}>Razón Social</label>
+                          <div className={`px-3 py-2 ${isDark ? 'bg-zinc-800/50' : 'bg-gray-50/50'} rounded-lg text-sm ${isDark ? 'text-zinc-300' : 'text-gray-700'} border ${isDark ? 'border-zinc-700/30' : 'border-gray-200/30'} truncate`}>
+                            {selectedClienteCuic ? selectedClienteCuic.T0_U_RazonSocial : ((campanaDetails as any)?.T0_U_RazonSocial || (campanaDetails as any)?.razon_social || '-')}
+                          </div>
+                        </div>
+                        <div className="space-y-1">
+                          <label className={`text-xs ${isDark ? 'text-zinc-500' : 'text-gray-400'}`}>Marca</label>
+                          <div className={`px-3 py-2 ${isDark ? 'bg-zinc-800/50' : 'bg-gray-50/50'} rounded-lg text-sm ${isDark ? 'text-zinc-300' : 'text-gray-700'} border ${isDark ? 'border-zinc-700/30' : 'border-gray-200/30'}`}>
+                            {selectedClienteCuic ? selectedClienteCuic.T2_U_Marca : ((campanaDetails as any)?.T2_U_Marca || (campanaDetails as any)?.marca_nombre || '-')}
+                          </div>
+                        </div>
+                        <div className="space-y-1">
+                          <label className={`text-xs ${isDark ? 'text-zinc-500' : 'text-gray-400'}`}>Asesor</label>
+                          <div className={`px-3 py-2 ${isDark ? 'bg-zinc-800/50' : 'bg-gray-50/50'} rounded-lg text-sm ${isDark ? 'text-zinc-300' : 'text-gray-700'} border ${isDark ? 'border-zinc-700/30' : 'border-gray-200/30'}`}>
+                            {selectedClienteCuic ? selectedClienteCuic.ASESOR_U_Asesor : ((campanaDetails as any)?.T0_U_Asesor || (campanaDetails as any)?.asesor || '-')}
+                          </div>
+                        </div>
                       </div>
                     </div>
-                    <div className="space-y-1">
-                      <label className={`text-xs ${isDark ? 'text-zinc-500' : 'text-gray-500'}`}>Razón Social</label>
-                      <div className={`px-3 py-2 rounded-lg text-sm border ${isDark ? 'bg-zinc-800/50 text-zinc-300 border-zinc-700/30' : 'bg-gray-100 text-gray-700 border-gray-200'} truncate`}>
-                        {(campanaDetails as any)?.T0_U_RazonSocial || (campanaDetails as any)?.razon_social || '-'}
+                  ) : (
+                    <div className="grid grid-cols-4 gap-4">
+                      <div className="space-y-1">
+                        <label className={`text-xs ${isDark ? 'text-zinc-500' : 'text-gray-500'}`}>CUIC</label>
+                        <div className={`px-3 py-2 rounded-lg text-sm border ${isDark ? 'bg-zinc-800/50 text-zinc-300 border-zinc-700/30' : 'bg-gray-100 text-gray-700 border-gray-200'}`}>
+                          {campanaDetails?.cuic || '-'}
+                        </div>
+                      </div>
+                      <div className="space-y-1">
+                        <label className={`text-xs ${isDark ? 'text-zinc-500' : 'text-gray-500'}`}>Razón Social</label>
+                        <div className={`px-3 py-2 rounded-lg text-sm border ${isDark ? 'bg-zinc-800/50 text-zinc-300 border-zinc-700/30' : 'bg-gray-100 text-gray-700 border-gray-200'} truncate`}>
+                          {(campanaDetails as any)?.T0_U_RazonSocial || (campanaDetails as any)?.razon_social || '-'}
+                        </div>
+                      </div>
+                      <div className="space-y-1">
+                        <label className={`text-xs ${isDark ? 'text-zinc-500' : 'text-gray-500'}`}>Marca</label>
+                        <div className={`px-3 py-2 rounded-lg text-sm border ${isDark ? 'bg-zinc-800/50 text-zinc-300 border-zinc-700/30' : 'bg-gray-100 text-gray-700 border-gray-200'}`}>
+                          {(campanaDetails as any)?.T2_U_Marca || (campanaDetails as any)?.marca_nombre || '-'}
+                        </div>
+                      </div>
+                      <div className="space-y-1">
+                        <label className={`text-xs ${isDark ? 'text-zinc-500' : 'text-gray-500'}`}>Asesor</label>
+                        <div className={`px-3 py-2 rounded-lg text-sm border ${isDark ? 'bg-zinc-800/50 text-zinc-300 border-zinc-700/30' : 'bg-gray-100 text-gray-700 border-gray-200'}`}>
+                          {(campanaDetails as any)?.T0_U_Asesor || (campanaDetails as any)?.asesor || '-'}
+                        </div>
                       </div>
                     </div>
-                    <div className="space-y-1">
-                      <label className={`text-xs ${isDark ? 'text-zinc-500' : 'text-gray-500'}`}>Marca</label>
-                      <div className={`px-3 py-2 rounded-lg text-sm border ${isDark ? 'bg-zinc-800/50 text-zinc-300 border-zinc-700/30' : 'bg-gray-100 text-gray-700 border-gray-200'}`}>
-                        {(campanaDetails as any)?.T2_U_Marca || (campanaDetails as any)?.marca_nombre || '-'}
-                      </div>
-                    </div>
-                    <div className="space-y-1">
-                      <label className={`text-xs ${isDark ? 'text-zinc-500' : 'text-gray-500'}`}>Asesor</label>
-                      <div className={`px-3 py-2 rounded-lg text-sm border ${isDark ? 'bg-zinc-800/50 text-zinc-300 border-zinc-700/30' : 'bg-gray-100 text-gray-700 border-gray-200'}`}>
-                        {(campanaDetails as any)?.T0_U_Asesor || (campanaDetails as any)?.asesor || '-'}
-                      </div>
-                    </div>
-                  </div>
+                  )}
 
                   {/* Editable fields */}
                   <div className="grid grid-cols-2 gap-4">
