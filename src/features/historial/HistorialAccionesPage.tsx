@@ -310,10 +310,7 @@ export function HistorialAccionesPage() {
 
   return (
     <div className="space-y-6">
-      <Header
-        title="Historial de Acciones"
-        subtitle={permissions.canSeeAllHistorial ? 'Registro completo de todas las acciones del sistema' : 'Registro de tus acciones en el sistema'}
-      />
+      <Header title="Historial de Acciones" />
 
       {/* Barra de acciones */}
       <div className={`rounded-xl border p-4 ${cardBg}`}>
