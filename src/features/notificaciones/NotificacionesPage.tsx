@@ -1651,7 +1651,7 @@ function ApprovalModal({
               <div className={`text-[10px] ${isDark ? 'text-zinc-500' : 'text-gray-400'}`}>Bonificación</div>
             </div>
             <div className="p-2 rounded-lg bg-purple-500/10 border border-purple-500/20 text-center">
-              <div className="text-lg font-bold text-purple-400">${totals.totalInversion.toLocaleString('es-MX', { minimumFractionDigits: 0 })}</div>
+              <div className="text-lg font-bold text-purple-400">${totals.totalInversion.toLocaleString('es-MX', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</div>
               <div className={`text-[10px] ${isDark ? 'text-zinc-500' : 'text-gray-400'}`}>Inversión</div>
             </div>
           </div>
@@ -1683,7 +1683,7 @@ function ApprovalModal({
                     {caras.length} circuito{caras.length !== 1 ? 's' : ''}
                   </span>
                   <span className={`ml-auto text-[10px] ${isDark ? 'text-zinc-500' : 'text-gray-400'}`}>
-                    {subtotalCaras} caras · ${subtotalInversion.toLocaleString('es-MX', { minimumFractionDigits: 0 })}
+                    {subtotalCaras} caras · ${subtotalInversion.toLocaleString('es-MX', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                   </span>
                 </button>
 
@@ -1721,13 +1721,13 @@ function ApprovalModal({
                           <td className="px-3 py-2.5 text-xs text-center text-emerald-400">{cara.bonificacion}</td>
                           <td className="px-3 py-2.5 text-xs text-center text-cyan-300 font-semibold">{cara.total_caras}</td>
                           <td className="px-3 py-2.5 text-xs text-right text-purple-300 font-mono">
-                            ${cara.tarifa_efectiva?.toLocaleString('es-MX', { minimumFractionDigits: 0, maximumFractionDigits: 0 }) || '0'}
+                            ${cara.tarifa_efectiva?.toLocaleString('es-MX', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) || '0'}
                           </td>
                           <td className="px-3 py-2.5 text-xs text-right text-amber-300 font-mono">
-                            ${cara.tarifa_publica?.toLocaleString('es-MX', { minimumFractionDigits: 0, maximumFractionDigits: 0 }) || '0'}
+                            ${cara.tarifa_publica?.toLocaleString('es-MX', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) || '0'}
                           </td>
                           <td className="px-3 py-2.5 text-xs text-right text-emerald-400 font-mono font-medium">
-                            ${(Number(cara.costo) || 0).toLocaleString('es-MX', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}
+                            ${(Number(cara.costo) || 0).toLocaleString('es-MX', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                           </td>
                           <td className="px-3 py-2.5 text-center">
                             <div className="flex flex-col gap-0.5 items-center">
@@ -2493,7 +2493,7 @@ function TaskDrawer({
                 <div className="grid grid-cols-2 gap-2">
                   <div>
                     <div className={`text-[10px] ${isDark ? 'text-zinc-500' : 'text-gray-400'}`}>Inversión</div>
-                    <div className={`text-sm font-bold ${isDark ? 'text-emerald-400' : 'text-emerald-600'}`}>${totalInversion.toLocaleString('es-MX', { minimumFractionDigits: 0 })}</div>
+                    <div className={`text-sm font-bold ${isDark ? 'text-emerald-400' : 'text-emerald-600'}`}>${totalInversion.toLocaleString('es-MX', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</div>
                   </div>
                   <div>
                     <div className={`text-[10px] ${isDark ? 'text-zinc-500' : 'text-gray-400'}`}>Renta</div>
