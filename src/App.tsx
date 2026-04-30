@@ -166,6 +166,7 @@ function App() {
             <Route path="/clientes" element={<ClientesPage />} />
             <Route path="/proveedores" element={<ProveedoresPage />} />
             <Route path="/inventarios" element={<InventariosRoute />} />
+            <Route path="/inventarios/analisis/:analisisId" element={<InventariosRoute />} />
             <Route path="/solicitudes" element={<SolicitudesPage />} />
             <Route path="/propuestas" element={<PropuestasPage />} />
             <Route path="/propuestas/compartir/:id" element={<CompartirPropuestaPage />} />
