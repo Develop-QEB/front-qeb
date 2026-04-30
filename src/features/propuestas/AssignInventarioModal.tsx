@@ -4,7 +4,7 @@ import { useQuery, useQueryClient, useMutation } from '@tanstack/react-query';
 import {
   X, Search, Plus, Trash2, ChevronDown, ChevronRight, ChevronUp, Users,
   FileText, MapPin, Layers, Pencil, Map as MapIcon, Package, Calendar,
-  Gift, Target, Save, ArrowLeft, Filter, Grid, LayoutGrid, Ruler, ArrowUpDown, ArrowUp, ArrowDown, Download, Eye, Funnel, Check, Upload, Monitor, AlertTriangle, Trophy, Loader2
+  Gift, Target, Save, ArrowLeft, Filter, Grid, LayoutGrid, Ruler, ArrowUpDown, ArrowUp, ArrowDown, Download, Eye, Funnel, Check, Upload, Monitor, AlertTriangle, Trophy, Loader2, Clock
 } from 'lucide-react';
 import { GoogleMap, useLoadScript, Marker } from '@react-google-maps/api';
 import { AdvancedMapComponent } from './AdvancedMapComponent';
@@ -940,6 +940,12 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
     queryFn: () => inventariosService.getCategoriasCliente(),
     enabled: isOpen,
     staleTime: 5 * 60 * 1000,
+  });
+
+  const { data: historialData } = useQuery({
+    queryKey: ['propuesta-historial', propuesta.id],
+    queryFn: () => propuestasService.getHistorial(propuesta.id),
+    enabled: isOpen && !!propuesta.id,
   });
 
   // Fetch CUIC data for client editing
@@ -8376,6 +8382,43 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
                   </div>
                 );
               })()}
+
+              {/* Historial de la Propuesta */}
+              {historialData && historialData.length > 0 && (
+                <div className={`${isDark ? 'bg-zinc-800/30 border-zinc-700/50' : 'bg-gray-50/30 border-gray-200/50'} rounded-2xl p-5 border`}>
+                  <h3 className="text-sm font-semibold text-violet-400 mb-4 flex items-center gap-2">
+                    <Clock className="h-4 w-4" />
+                    Historial
+                  </h3>
+                  <div className="space-y-3">
+                    {historialData.map((h, idx) => {
+                      let detailText = h.detalles || '';
+                      try {
+                        const obj = JSON.parse(detailText);
+                        const parts: string[] = [];
+                        if (obj.usuario) parts.push(obj.usuario);
+                        if (obj.cambios?.length) {
+                          for (const c of obj.cambios) {
+                            parts.push(`${c.label || c.campo}: ${c.antes ?? '-'} → ${c.despues ?? '-'}`);
+                          }
+                        }
+                        if (obj.motivo) parts.push(`Motivo: ${obj.motivo}`);
+                        if (parts.length) detailText = parts.join(' | ');
+                      } catch { /* plain text */ }
+                      return (
+                        <div key={idx} className="flex items-start gap-3 text-sm">
+                          <div className="w-2 h-2 rounded-full bg-violet-500 mt-1.5 shrink-0" />
+                          <span className={`${isDark ? 'text-zinc-500' : 'text-gray-400'} whitespace-nowrap shrink-0`}>
+                            {new Date(h.fecha_hora).toLocaleDateString('es-MX', { day: '2-digit', month: 'short', year: 'numeric' })}
+                          </span>
+                          <span className="px-2 py-0.5 rounded bg-violet-500/20 text-violet-300 text-xs whitespace-nowrap shrink-0">{h.accion}</span>
+                          <span className={`${isDark ? 'text-zinc-400' : 'text-gray-500'} truncate`}>{detailText}</span>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
             </>
           )}
         </div>
