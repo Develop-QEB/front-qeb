@@ -1,4 +1,4 @@
-import { useState, useCallback, useRef, useEffect, Fragment } from 'react';
+import { useState, useCallback, useRef, useEffect } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import {
   Search, X, RefreshCw, Clock, Filter, ChevronLeft, ChevronRight, ChevronDown,
@@ -264,6 +264,12 @@ function NotaModal({
   );
 }
 
+interface GroupNode {
+  key: string;
+  entries: HistorialEntry[];
+  subGroups?: GroupNode[];
+}
+
 export function HistorialAccionesPage() {
   const isDark = useThemeStore((s) => s.theme) === 'dark';
   const user = useAuthStore((s) => s.user);
@@ -274,7 +280,7 @@ export function HistorialAccionesPage() {
   const [searchInput, setSearchInput] = useState('');
   const [showNotaModal, setShowNotaModal] = useState(false);
   const [showMoreFilters, setShowMoreFilters] = useState(false);
-  const [groupMode, setGroupMode] = useState<'none' | 'etapa' | 'referencia'>('none');
+  const [groupLevels, setGroupLevels] = useState<('etapa' | 'referencia')[]>([]);
   const [collapsedGroups, setCollapsedGroups] = useState<Set<string>>(new Set());
   const [isExporting, setIsExporting] = useState(false);
 
@@ -366,25 +372,66 @@ export function HistorialAccionesPage() {
   const historial = data?.data || [];
   const pagination = data?.pagination;
 
-  const grouped = groupMode !== 'none' ? (() => {
-    const groups: Record<string, HistorialEntry[]> = {};
-    const order: string[] = [];
-    for (const entry of historial) {
-      const key = groupMode === 'referencia'
-        ? `${normalizeTipo(entry.tipo)} #${entry.ref_id}`
-        : normalizeTipo(entry.tipo);
-      if (!groups[key]) { groups[key] = []; order.push(key); }
-      groups[key].push(entry);
+  const groupNodes = groupLevels.length > 0 ? (() => {
+    function build(entries: HistorialEntry[], levels: ('etapa' | 'referencia')[]): GroupNode[] {
+      if (levels.length === 0) return [];
+      const [level, ...rest] = levels;
+      const map: Record<string, HistorialEntry[]> = {};
+      const order: string[] = [];
+      for (const entry of entries) {
+        const key = level === 'referencia'
+          ? `${normalizeTipo(entry.tipo)} #${entry.ref_id}`
+          : normalizeTipo(entry.tipo);
+        if (!map[key]) { map[key] = []; order.push(key); }
+        map[key].push(entry);
+      }
+      return order.map(k => ({
+        key: k,
+        entries: map[k],
+        subGroups: rest.length > 0 ? build(map[k], rest) : undefined,
+      }));
     }
-    return order.map(key => ({ key, entries: groups[key] }));
+    return build(historial, groupLevels);
   })() : null;
 
-  const hasActiveFilters = !!(filters.tipo || filters.accion || filters.usuario || filters.fechaDesde || filters.fechaHasta);
+  const renderGroupNodes = (nodes: GroupNode[], prefix = ''): JSX.Element[] =>
+    nodes.flatMap(node => {
+      const fullKey = prefix ? `${prefix}>${node.key}` : node.key;
+      const depth = prefix ? prefix.split('>').length : 0;
+      const isCollapsed = collapsedGroups.has(fullKey);
+      const bgColor = depth === 0
+        ? (isDark ? 'bg-purple-900/20 hover:bg-purple-900/30' : 'bg-purple-50 hover:bg-purple-100/80')
+        : (isDark ? 'bg-indigo-900/15 hover:bg-indigo-900/25' : 'bg-indigo-50/70 hover:bg-indigo-100/60');
+      return [
+        <tr
+          key={`g-${fullKey}`}
+          className={`cursor-pointer select-none transition-colors ${bgColor}`}
+          onClick={() => toggleCollapse(fullKey)}
+        >
+          <td colSpan={5} className={`py-2.5 text-sm font-semibold ${headerText}`}
+            style={{ paddingLeft: `${20 + depth * 24}px` }}>
+            <div className="flex items-center gap-2">
+              <ChevronDown className={`h-4 w-4 text-purple-500 transition-transform ${isCollapsed ? '-rotate-90' : ''}`} />
+              <Layers className="h-3.5 w-3.5 text-purple-500" />
+              {node.key}
+              <span className={`font-normal text-xs ${subText}`}>({node.entries.length})</span>
+            </div>
+          </td>
+        </tr>,
+        ...(!isCollapsed
+          ? node.subGroups
+            ? renderGroupNodes(node.subGroups, fullKey)
+            : node.entries.map(renderRow)
+          : []),
+      ];
+    });
+
+  const hasActiveFilters = !!(filters.tipo || filters.accion || filters.usuario || filters.fechaDesde || filters.fechaHasta || groupLevels.length > 0);
 
   const clearAllFilters = () => {
     setSearchInput('');
     setFilters({ page: 1, limit: 50 });
-    setGroupMode('none');
+    setGroupLevels([]);
     setCollapsedGroups(new Set());
   };
 
@@ -498,7 +545,7 @@ export function HistorialAccionesPage() {
           >
             <Filter className="h-4 w-4" />
             {hasActiveFilters && <span className="inline-flex items-center justify-center w-4 h-4 rounded-full bg-purple-500 text-white text-[10px] font-bold">
-              {[filters.accion, filters.fechaDesde, filters.fechaHasta].filter(Boolean).length + (groupMode !== 'none' ? 1 : 0)}
+              {[filters.accion, filters.fechaDesde, filters.fechaHasta].filter(Boolean).length + groupLevels.length}
             </span>}
           </button>
         </div>
@@ -533,15 +580,33 @@ export function HistorialAccionesPage() {
 
               <div>
                 <label className={`text-xs font-medium mb-1 block ${subText}`}>Agrupar por</label>
-                <select
-                  value={groupMode}
-                  onChange={(e) => { setGroupMode(e.target.value as any); setCollapsedGroups(new Set()); }}
-                  className={`rounded-lg border px-3 py-1.5 text-sm min-w-[140px] ${inputCls}`}
-                >
-                  <option value="none">Sin agrupar</option>
-                  <option value="etapa">Por etapa</option>
-                  <option value="referencia">Por referencia</option>
-                </select>
+                <div className="flex gap-1.5">
+                  {(['etapa', 'referencia'] as const).map(level => {
+                    const idx = groupLevels.indexOf(level);
+                    const active = idx !== -1;
+                    return (
+                      <button
+                        key={level}
+                        onClick={() => {
+                          setGroupLevels(prev => active ? prev.filter(l => l !== level) : [...prev, level]);
+                          setCollapsedGroups(new Set());
+                        }}
+                        className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm border transition-colors ${
+                          active
+                            ? 'border-purple-500 bg-purple-500/10 text-purple-500 font-medium'
+                            : btnSecondary
+                        }`}
+                      >
+                        {active && (
+                          <span className="inline-flex items-center justify-center w-4 h-4 rounded-full bg-purple-500 text-white text-[10px] font-bold">
+                            {idx + 1}
+                          </span>
+                        )}
+                        {level === 'etapa' ? 'Etapa' : 'Referencia'}
+                      </button>
+                    );
+                  })}
+                </div>
               </div>
 
               {hasActiveFilters && (
@@ -580,29 +645,9 @@ export function HistorialAccionesPage() {
                   </tr>
                 </thead>
                 <tbody className={`divide-y ${isDark ? 'divide-zinc-800/60' : 'divide-gray-100'}`}>
-                  {grouped ? (
-                    grouped.map(group => {
-                      const isCollapsed = collapsedGroups.has(group.key);
-                      return (
-                        <Fragment key={group.key}>
-                          <tr
-                            className={`cursor-pointer select-none transition-colors ${isDark ? 'bg-purple-900/20 hover:bg-purple-900/30' : 'bg-purple-50 hover:bg-purple-100/80'}`}
-                            onClick={() => toggleCollapse(group.key)}
-                          >
-                            <td colSpan={5} className={`px-5 py-2.5 text-sm font-semibold ${headerText}`}>
-                              <div className="flex items-center gap-2">
-                                <ChevronDown className={`h-4 w-4 text-purple-500 transition-transform ${isCollapsed ? '-rotate-90' : ''}`} />
-                                <Layers className="h-3.5 w-3.5 text-purple-500" />
-                                {group.key}
-                                <span className={`font-normal text-xs ${subText}`}>({group.entries.length})</span>
-                              </div>
-                            </td>
-                          </tr>
-                          {!isCollapsed && group.entries.map(renderRow)}
-                        </Fragment>
-                      );
-                    })
-                  ) : historial.map(renderRow)}
+                  {groupNodes
+                    ? renderGroupNodes(groupNodes)
+                    : historial.map(renderRow)}
                 </tbody>
               </table>
             </div>
