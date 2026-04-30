@@ -1,3 +1,4 @@
+import { lazy, Suspense } from 'react';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { QueryClientProvider } from '@tanstack/react-query';
 import { queryClient } from './lib/queryClient';
@@ -6,31 +7,32 @@ import { RegisterPage } from './features/auth/RegisterPage';
 import { ForgotPasswordPage } from './features/auth/ForgotPasswordPage';
 import { ProtectedRoute } from './features/auth/ProtectedRoute';
 import { MainLayout } from './components/layout/MainLayout';
-import { DashboardPage } from './features/dashboard/DashboardPage';
-import { ClientesPage } from './features/clientes/ClientesPage';
-import { ProveedoresPage } from './features/proveedores/ProveedoresPage';
-import { InventariosPage } from './features/inventarios/InventariosPage';
-import { SolicitudesPage } from './features/solicitudes/SolicitudesPage';
-import { PropuestasPage } from './features/propuestas/PropuestasPage';
-import { CompartirPropuestaPage } from './features/propuestas/CompartirPropuestaPage';
-import { ClientePropuestaPage } from './features/propuestas/ClientePropuestaPage';
-import { ClientePropuestaMapPage } from './features/propuestas/ClientePropuestaMapPage';
-import { CampanasPage } from './features/campanas/CampanasPage';
-import { CampanaDetailPage } from './features/campanas/CampanaDetailPage';
-import { TareaSeguimientoPage } from './features/campanas/TareaSeguimientoPage';
-import { NotificacionesPage } from './features/notificaciones/NotificacionesPage';
-import { CorreosPage } from './features/correos/CorreosPage';
-import { PerfilPage } from './features/perfil/PerfilPage';
-import { UsuariosAdminPage } from './features/admin/UsuariosAdminPage';
-import { ChatbotHistorialPage } from './features/admin/ChatbotHistorialPage';
-import { DevTicketsPage } from './features/tickets/DevTicketsPage';
-import { TicketsPage } from './features/tickets/TicketsPage';
-import { HistorialTicketsPage } from './features/tickets/HistorialTicketsPage';
-import { RankingTicketsPage } from './features/tickets/RankingTicketsPage';
-import { ReportesEspecialesPage } from './features/reportes-especiales/ReportesEspecialesPage';
-import { HistorialAccionesPage } from './features/historial/HistorialAccionesPage';
 import { useAuthStore } from './store/authStore';
 import { getPermissions } from './lib/permissions';
+
+const DashboardPage = lazy(() => import('./features/dashboard/DashboardPage').then(m => ({ default: m.DashboardPage })));
+const ClientesPage = lazy(() => import('./features/clientes/ClientesPage').then(m => ({ default: m.ClientesPage })));
+const ProveedoresPage = lazy(() => import('./features/proveedores/ProveedoresPage').then(m => ({ default: m.ProveedoresPage })));
+const InventariosPage = lazy(() => import('./features/inventarios/InventariosPage').then(m => ({ default: m.InventariosPage })));
+const SolicitudesPage = lazy(() => import('./features/solicitudes/SolicitudesPage').then(m => ({ default: m.SolicitudesPage })));
+const PropuestasPage = lazy(() => import('./features/propuestas/PropuestasPage').then(m => ({ default: m.PropuestasPage })));
+const CompartirPropuestaPage = lazy(() => import('./features/propuestas/CompartirPropuestaPage').then(m => ({ default: m.CompartirPropuestaPage })));
+const ClientePropuestaPage = lazy(() => import('./features/propuestas/ClientePropuestaPage').then(m => ({ default: m.ClientePropuestaPage })));
+const ClientePropuestaMapPage = lazy(() => import('./features/propuestas/ClientePropuestaMapPage').then(m => ({ default: m.ClientePropuestaMapPage })));
+const CampanasPage = lazy(() => import('./features/campanas/CampanasPage').then(m => ({ default: m.CampanasPage })));
+const CampanaDetailPage = lazy(() => import('./features/campanas/CampanaDetailPage').then(m => ({ default: m.CampanaDetailPage })));
+const TareaSeguimientoPage = lazy(() => import('./features/campanas/TareaSeguimientoPage').then(m => ({ default: m.TareaSeguimientoPage })));
+const NotificacionesPage = lazy(() => import('./features/notificaciones/NotificacionesPage').then(m => ({ default: m.NotificacionesPage })));
+const CorreosPage = lazy(() => import('./features/correos/CorreosPage').then(m => ({ default: m.CorreosPage })));
+const PerfilPage = lazy(() => import('./features/perfil/PerfilPage').then(m => ({ default: m.PerfilPage })));
+const UsuariosAdminPage = lazy(() => import('./features/admin/UsuariosAdminPage').then(m => ({ default: m.UsuariosAdminPage })));
+const ChatbotHistorialPage = lazy(() => import('./features/admin/ChatbotHistorialPage').then(m => ({ default: m.ChatbotHistorialPage })));
+const DevTicketsPage = lazy(() => import('./features/tickets/DevTicketsPage').then(m => ({ default: m.DevTicketsPage })));
+const TicketsPage = lazy(() => import('./features/tickets/TicketsPage').then(m => ({ default: m.TicketsPage })));
+const HistorialTicketsPage = lazy(() => import('./features/tickets/HistorialTicketsPage').then(m => ({ default: m.HistorialTicketsPage })));
+const RankingTicketsPage = lazy(() => import('./features/tickets/RankingTicketsPage').then(m => ({ default: m.RankingTicketsPage })));
+const ReportesEspecialesPage = lazy(() => import('./features/reportes-especiales/ReportesEspecialesPage').then(m => ({ default: m.ReportesEspecialesPage })));
+const HistorialAccionesPage = lazy(() => import('./features/historial/HistorialAccionesPage').then(m => ({ default: m.HistorialAccionesPage })));
 
 // IDs de usuarios programadores con acceso a /dev/tickets
 const DEV_USERS_IDS = [1057460, 1057462]; // Mario, Jos
@@ -172,32 +174,32 @@ function App() {
               </ProtectedRoute>
             }
           >
-            <Route path="/" element={<HomeRoute />} />
-            <Route path="/clientes" element={<ClientesPage />} />
-            <Route path="/proveedores" element={<ProveedoresPage />} />
-            <Route path="/inventarios" element={<InventariosRoute />} />
-            <Route path="/solicitudes" element={<SolicitudesPage />} />
-            <Route path="/propuestas" element={<PropuestasPage />} />
-            <Route path="/propuestas/compartir/:id" element={<CompartirPropuestaPage />} />
-            <Route path="/campanas" element={<CampanasPage />} />
-            <Route path="/campanas/detail/:id" element={<CampanaDetailPage />} />
-            <Route path="/campanas/:id/tareas" element={<GestionArtesRoute />} />
-            <Route path="/notificaciones" element={<NotificacionesPage />} />
-            <Route path="/correos" element={<CorreosPage />} />
-            <Route path="/perfil" element={<PerfilPage />} />
-            <Route path="/admin/usuarios" element={<AdminUsuariosRoute />} />
-            <Route path="/admin/chatbot" element={<AdminChatbotRoute />} />
-            <Route path="/tickets" element={<TicketsPage />} />
-            <Route path="/admin/tickets-historial" element={<HistorialTicketsRoute />} />
-            <Route path="/admin/tickets-ranking" element={<RankingTicketsRoute />} />
-            <Route path="/dev/tickets" element={<DevTicketsRoute />} />
-            <Route path="/reportes-especiales" element={<ReportesEspecialesRoute />} />
-            <Route path="/historial-acciones" element={<HistorialAccionesRoute />} />
+            <Route path="/" element={<Suspense fallback={null}><HomeRoute /></Suspense>} />
+            <Route path="/clientes" element={<Suspense fallback={null}><ClientesPage /></Suspense>} />
+            <Route path="/proveedores" element={<Suspense fallback={null}><ProveedoresPage /></Suspense>} />
+            <Route path="/inventarios" element={<Suspense fallback={null}><InventariosRoute /></Suspense>} />
+            <Route path="/solicitudes" element={<Suspense fallback={null}><SolicitudesPage /></Suspense>} />
+            <Route path="/propuestas" element={<Suspense fallback={null}><PropuestasPage /></Suspense>} />
+            <Route path="/propuestas/compartir/:id" element={<Suspense fallback={null}><CompartirPropuestaPage /></Suspense>} />
+            <Route path="/campanas" element={<Suspense fallback={null}><CampanasPage /></Suspense>} />
+            <Route path="/campanas/detail/:id" element={<Suspense fallback={null}><CampanaDetailPage /></Suspense>} />
+            <Route path="/campanas/:id/tareas" element={<Suspense fallback={null}><GestionArtesRoute /></Suspense>} />
+            <Route path="/notificaciones" element={<Suspense fallback={null}><NotificacionesPage /></Suspense>} />
+            <Route path="/correos" element={<Suspense fallback={null}><CorreosPage /></Suspense>} />
+            <Route path="/perfil" element={<Suspense fallback={null}><PerfilPage /></Suspense>} />
+            <Route path="/admin/usuarios" element={<Suspense fallback={null}><AdminUsuariosRoute /></Suspense>} />
+            <Route path="/admin/chatbot" element={<Suspense fallback={null}><AdminChatbotRoute /></Suspense>} />
+            <Route path="/tickets" element={<Suspense fallback={null}><TicketsPage /></Suspense>} />
+            <Route path="/admin/tickets-historial" element={<Suspense fallback={null}><HistorialTicketsRoute /></Suspense>} />
+            <Route path="/admin/tickets-ranking" element={<Suspense fallback={null}><RankingTicketsRoute /></Suspense>} />
+            <Route path="/dev/tickets" element={<Suspense fallback={null}><DevTicketsRoute /></Suspense>} />
+            <Route path="/reportes-especiales" element={<Suspense fallback={null}><ReportesEspecialesRoute /></Suspense>} />
+            <Route path="/historial-acciones" element={<Suspense fallback={null}><HistorialAccionesRoute /></Suspense>} />
           </Route>
 
           {/* Public route for clients - no auth required */}
-          <Route path="/cliente/propuesta/:id" element={<ClientePropuestaPage />} />
-          <Route path="/cliente/propuesta/:id/mapa" element={<ClientePropuestaMapPage />} />
+          <Route path="/cliente/propuesta/:id" element={<Suspense fallback={null}><ClientePropuestaPage /></Suspense>} />
+          <Route path="/cliente/propuesta/:id/mapa" element={<Suspense fallback={null}><ClientePropuestaMapPage /></Suspense>} />
 
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>

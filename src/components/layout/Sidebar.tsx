@@ -80,13 +80,13 @@ export function Sidebar({ collapsed, onToggle }: SidebarProps) {
     queryKey: ['tickets-unread-count'],
     queryFn: () => ticketsService.getUnreadCount(),
     enabled: !!canSeeHistorialTickets,
-    refetchInterval: 30000,
+    refetchInterval: 60000,
   });
 
   const { data: chatUnreadCount = 0 } = useQuery({
     queryKey: ['tickets-chat-unread-count'],
     queryFn: () => ticketsService.getChatUnreadCount(),
-    refetchInterval: 30000,
+    refetchInterval: 60000,
   });
 
   // Real-time: invalidar todos los unread counts cuando llega un mensaje/chat nuevo
