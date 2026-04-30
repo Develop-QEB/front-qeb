@@ -990,11 +990,21 @@ export function InventariosPage() {
 
               {/* Download CSV button */}
               <button
-                onClick={() => inventariosService.downloadCSV({ search: search || undefined, tipo: tipo || undefined, estatus: estatus || undefined, plaza: plaza || undefined })}
+                onClick={() => inventariosService.downloadCSV(
+                  selectedRows.size > 0
+                    ? { ids: Array.from(selectedRows) }
+                    : { search: search || undefined, tipo: tipo || undefined, estatus: estatus || undefined, plaza: plaza || undefined }
+                )}
+                title={selectedRows.size > 0 ? `Descargar ${selectedRows.size} seleccionados` : 'Descargar con filtros aplicados'}
                 className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-medium border transition-all ${isDark ? 'bg-zinc-800 hover:bg-zinc-700 text-zinc-300 border-zinc-700' : 'bg-white hover:bg-gray-50 text-gray-700 border-gray-300'}`}
               >
                 <Download className="h-4 w-4" />
                 Descargar CSV
+                {selectedRows.size > 0 && (
+                  <span className={`ml-1 px-1.5 rounded-full text-[10px] font-bold ${isDark ? 'bg-purple-500/30 text-purple-200' : 'bg-purple-100 text-purple-800'}`}>
+                    {selectedRows.size}
+                  </span>
+                )}
               </button>
 
               {/* Análisis de Ocupación */}

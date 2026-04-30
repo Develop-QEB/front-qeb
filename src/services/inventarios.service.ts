@@ -79,12 +79,19 @@ export const inventariosService = {
     return response.data;
   },
 
-  async downloadCSV(params: Pick<InventariosParams, 'search' | 'tipo' | 'estatus' | 'plaza'> = {}): Promise<void> {
-    const response = await api.get('/inventarios/download/csv', { params, responseType: 'blob' });
+  async downloadCSV(
+    params: Pick<InventariosParams, 'search' | 'tipo' | 'estatus' | 'plaza'> & { ids?: number[] } = {}
+  ): Promise<void> {
+    const { ids, ...filters } = params;
+    // Si hay ids, ignorar filtros y mandar solo esos
+    const queryParams = ids && ids.length > 0
+      ? { ids: ids.join(',') }
+      : filters;
+    const response = await api.get('/inventarios/download/csv', { params: queryParams, responseType: 'blob' });
     const url = URL.createObjectURL(response.data);
     const a = document.createElement('a');
     a.href = url;
-    a.download = 'inventario.csv';
+    a.download = ids && ids.length > 0 ? `inventario_seleccionados_${ids.length}.csv` : 'inventario.csv';
     a.click();
     URL.revokeObjectURL(url);
   },

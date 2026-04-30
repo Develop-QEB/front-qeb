@@ -793,6 +793,8 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
 
   // New cara form
   const [newCara, setNewCara] = useState<Omit<CaraItem, 'localId'>>(EMPTY_CARA);
+  const [tarifaPublicaInput, setTarifaPublicaInput] = useState<string>('');
+  const [tarifaPublicaFocused, setTarifaPublicaFocused] = useState(false);
   const [selectedArticulo, setSelectedArticulo] = useState<SAPArticulo | null>(null);
   // RT/BF pairing: articulo BF (bonificación) paired with the RT primary articulo
   const [articuloBf, setArticuloBf] = useState<SAPArticulo | null>(null);
@@ -1733,8 +1735,11 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
     const contraflujoReservado = caraReservas.filter(r => r.tipo === 'Contraflujo').length;
     const bonificacionReservado = caraReservas.filter(r => r.tipo === 'Bonificacion').length;
 
-    const flujoRequerido = cara.caras_flujo || 0;
-    const contraflujoRequerido = cara.caras_contraflujo || 0;
+    // Mensual = todo cuenta como Flujo. Cubre caras viejas con split 50/50 en DB.
+    const rawFlujo = cara.caras_flujo || 0;
+    const rawContra = cara.caras_contraflujo || 0;
+    const flujoRequerido = tipoPeriodo === 'mensual' ? rawFlujo + rawContra : rawFlujo;
+    const contraflujoRequerido = tipoPeriodo === 'mensual' ? 0 : rawContra;
     const bonificacionRequerido = cara.bonificacion || 0;
 
     // For migrated campaigns: if total reservas >= total required, consider complete
@@ -6928,8 +6933,8 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
 
                     {/* Artículo selector */}
                     <div className="mb-4">
-                      <label className={`text-xs mb-1 block ${(editingCaraHasReservas || editingCaraId) ? 'text-zinc-800' : 'text-zinc-500'}`}>Artículo SAP</label>
-                      {canEditResumen && !editingCaraHasReservas && !editingCaraId ? (
+                      <label className={`text-xs mb-1 block ${(editingCaraHasReservas || (editingCaraId && !permissions.canEditArticuloOnEdit)) ? 'text-zinc-800' : 'text-zinc-500'}`}>Artículo SAP</label>
+                      {canEditResumen && !editingCaraHasReservas && (!editingCaraId || permissions.canEditArticuloOnEdit) ? (
                         <SearchableSelect
                           label="Seleccionar artículo"
                           options={(articulosData || []).filter(a => {
@@ -7280,7 +7285,32 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
                               return ['Ciudad de México / AM', ...(solicitudFilters?.estados || [])];
                             })()}
                             selected={newCara.estados ? newCara.estados.split(',').map(s => s.trim()).filter(Boolean) : []}
-                            onChange={(selected) => setNewCara({ ...newCara, estados: selected.join(', '), ciudad: '' })}
+                            onChange={(selected) => {
+                              // CDMX/AM es mutuamente excluyente con CDMX y EdoMex sueltos
+                              // (CDMX/AM ya engloba ambos con sus reglas especiales).
+                              const previo = newCara.estados ? newCara.estados.split(',').map(s => s.trim()).filter(Boolean) : [];
+                              const teniaAM = previo.some(p => p.toUpperCase() === 'CIUDAD DE MÉXICO / AM');
+                              const ahoraAM = selected.some(p => p.toUpperCase() === 'CIUDAD DE MÉXICO / AM');
+                              let final = selected;
+                              if (ahoraAM && !teniaAM) {
+                                // Acaba de seleccionar /AM → quitar CDMX y EdoMex sueltos
+                                final = selected.filter(p => {
+                                  const u = p.toUpperCase();
+                                  return u !== 'CIUDAD DE MÉXICO' && u !== 'CIUDAD DE MEXICO' && u !== 'ESTADO DE MÉXICO' && u !== 'ESTADO DE MEXICO';
+                                });
+                              } else if (!ahoraAM && teniaAM) {
+                                // Acaba de seleccionar CDMX o EdoMex después de /AM → /AM ya quitado por el cambio
+                                // (no acción extra)
+                              } else if (ahoraAM) {
+                                // /AM ya estaba; si agregaron CDMX/EdoMex, quitar /AM
+                                const hasNuevoSuelto = selected.some(p => {
+                                  const u = p.toUpperCase();
+                                  return u === 'CIUDAD DE MÉXICO' || u === 'CIUDAD DE MEXICO' || u === 'ESTADO DE MÉXICO' || u === 'ESTADO DE MEXICO';
+                                });
+                                if (hasNuevoSuelto) final = selected.filter(p => p.toUpperCase() !== 'CIUDAD DE MÉXICO / AM');
+                              }
+                              setNewCara({ ...newCara, estados: final.join(', '), ciudad: '' });
+                            }}
                             placeholder="Seleccionar plazas..."
                           />
                         ) : (
@@ -7456,12 +7486,20 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
                         <input
                           type="text"
                           inputMode="decimal"
-                          value={(newCara.tarifa_publica || 0) > 0 ? (newCara.tarifa_publica || 0).toFixed(2) : ''}
+                          value={tarifaPublicaFocused
+                            ? tarifaPublicaInput
+                            : ((newCara.tarifa_publica || 0) > 0 ? (newCara.tarifa_publica || 0).toFixed(2) : '')}
+                          onFocus={() => {
+                            setTarifaPublicaInput((newCara.tarifa_publica || 0) > 0 ? String(newCara.tarifa_publica) : '');
+                            setTarifaPublicaFocused(true);
+                          }}
+                          onBlur={() => setTarifaPublicaFocused(false)}
                           onChange={(e) => {
                             if (!canEditResumen) return;
                             const cleaned = e.target.value.replace(/[^\d.]/g, '');
                             const parts = cleaned.split('.');
                             const normalized = parts.length > 1 ? `${parts[0]}.${parts.slice(1).join('').slice(0, 2)}` : cleaned;
+                            setTarifaPublicaInput(normalized);
                             setNewCara({ ...newCara, tarifa_publica: parseFloat(normalized) || 0 });
                           }}
                           placeholder="0.00"

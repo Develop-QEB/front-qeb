@@ -789,6 +789,8 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
 
   // New cara form
   const [newCara, setNewCara] = useState<Omit<CaraItem, 'localId'>>(EMPTY_CARA);
+  const [tarifaPublicaInput, setTarifaPublicaInput] = useState<string>('');
+  const [tarifaPublicaFocused, setTarifaPublicaFocused] = useState(false);
   const [selectedArticulo, setSelectedArticulo] = useState<SAPArticulo | null>(null);
   const [showAddCaraForm, setShowAddCaraForm] = useState(false);
   // Modo masivo: ON = aplica al rango catorcena_inicio..catorcena_fin (crear N o editar la serie)
@@ -1637,14 +1639,18 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
     }
   }, [filteredReservasData, mapsLoaded]);
 
-  // Show actual flujo/contraflujo from DB (updated via onChange when % changes)
+  // Show actual flujo/contraflujo from DB (updated via onChange when % changes).
+  // En mensual, todo cuenta como Flujo (regla Gran Formato) — esto cubre caras
+  // viejas que se guardaron con split 50/50 antes del fix de mensual.
   const adjustedCarasFlujo = useMemo(() => {
     if (!selectedCaraForSearch) return { flujo: 0, contraflujo: 0 };
-    return {
-      flujo: selectedCaraForSearch.caras_flujo || 0,
-      contraflujo: selectedCaraForSearch.caras_contraflujo || 0,
-    };
-  }, [selectedCaraForSearch]);
+    const flujo = selectedCaraForSearch.caras_flujo || 0;
+    const contra = selectedCaraForSearch.caras_contraflujo || 0;
+    if (tipoPeriodo === 'mensual') {
+      return { flujo: flujo + contra, contraflujo: 0 };
+    }
+    return { flujo, contraflujo: contra };
+  }, [selectedCaraForSearch, tipoPeriodo]);
 
   // Calculate remaining to assign for selected cara
   const remainingToAssign = useMemo(() => {
@@ -1691,8 +1697,12 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
     const contraflujoReservado = caraReservas.filter(r => r.tipo === 'Contraflujo').length;
     const bonificacionReservado = caraReservas.filter(r => r.tipo === 'Bonificacion').length;
 
-    const flujoRequerido = cara.caras_flujo || 0;
-    const contraflujoRequerido = cara.caras_contraflujo || 0;
+    // Mensual = todo cuenta como Flujo. Esto incluye caras viejas que se guardaron
+    // con split 50/50 (caras_flujo + caras_contraflujo > 0 ambos) antes del fix.
+    const rawFlujo = cara.caras_flujo || 0;
+    const rawContra = cara.caras_contraflujo || 0;
+    const flujoRequerido = tipoPeriodo === 'mensual' ? rawFlujo + rawContra : rawFlujo;
+    const contraflujoRequerido = tipoPeriodo === 'mensual' ? 0 : rawContra;
     const bonificacionRequerido = cara.bonificacion || 0;
 
     // Complete means EXACT match - not under, not over
@@ -2180,9 +2190,7 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
       nivel_socioeconomico: newCara.nivel_socioeconomico,
       formato: newCara.formato,
       costo: costoCalculado,
-      tarifa_publica: usePairMode && (newCara.caras || 0) + (newCara.bonificacion || 0) > 0
-        ? costoCalculado / ((newCara.caras || 0) + (newCara.bonificacion || 0))
-        : newCara.tarifa_publica,
+      tarifa_publica: newCara.tarifa_publica,
       inicio_periodo: inicioPeriodoUsar,
       fin_periodo: finPeriodoUsar,
       caras_flujo: newCara.caras_flujo,
@@ -2513,9 +2521,7 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
                     nivel_socioeconomico: newCara.nivel_socioeconomico,
                     caras: newCara.caras,
                     bonificacion: usePairMode ? 0 : newCara.bonificacion,
-                    tarifa_publica: usePairMode && (newCara.caras + newCara.bonificacion) > 0
-                      ? costoCalculado / (newCara.caras + newCara.bonificacion)
-                      : newCara.tarifa_publica,
+                    tarifa_publica: newCara.tarifa_publica,
                     costo: costoCalculado,
                     descuento: newCara.descuento,
                     caras_flujo: newCara.caras_flujo,
@@ -7423,7 +7429,26 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
                               return ['Ciudad de México / AM', ...(solicitudFilters?.estados || [])];
                             })()}
                             selected={newCara.estados ? newCara.estados.split(',').map(s => s.trim()).filter(Boolean) : []}
-                            onChange={(selected) => setNewCara({ ...newCara, estados: selected.join(', '), ciudad: '' })}
+                            onChange={(selected) => {
+                              // CDMX/AM mutuamente excluyente con CDMX y EdoMex sueltos.
+                              const previo = newCara.estados ? newCara.estados.split(',').map(s => s.trim()).filter(Boolean) : [];
+                              const teniaAM = previo.some(p => p.toUpperCase() === 'CIUDAD DE MÉXICO / AM');
+                              const ahoraAM = selected.some(p => p.toUpperCase() === 'CIUDAD DE MÉXICO / AM');
+                              let final = selected;
+                              if (ahoraAM && !teniaAM) {
+                                final = selected.filter(p => {
+                                  const u = p.toUpperCase();
+                                  return u !== 'CIUDAD DE MÉXICO' && u !== 'CIUDAD DE MEXICO' && u !== 'ESTADO DE MÉXICO' && u !== 'ESTADO DE MEXICO';
+                                });
+                              } else if (ahoraAM) {
+                                const hasNuevoSuelto = selected.some(p => {
+                                  const u = p.toUpperCase();
+                                  return u === 'CIUDAD DE MÉXICO' || u === 'CIUDAD DE MEXICO' || u === 'ESTADO DE MÉXICO' || u === 'ESTADO DE MEXICO';
+                                });
+                                if (hasNuevoSuelto) final = selected.filter(p => p.toUpperCase() !== 'CIUDAD DE MÉXICO / AM');
+                              }
+                              setNewCara({ ...newCara, estados: final.join(', '), ciudad: '' });
+                            }}
                             placeholder="Seleccionar plazas..."
                           />
                         ) : (
@@ -7602,12 +7627,20 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
                         <input
                           type="text"
                           inputMode="decimal"
-                          value={(newCara.tarifa_publica || 0) > 0 ? (newCara.tarifa_publica || 0).toFixed(2) : ''}
+                          value={tarifaPublicaFocused
+                            ? tarifaPublicaInput
+                            : ((newCara.tarifa_publica || 0) > 0 ? (newCara.tarifa_publica || 0).toFixed(2) : '')}
+                          onFocus={() => {
+                            setTarifaPublicaInput((newCara.tarifa_publica || 0) > 0 ? String(newCara.tarifa_publica) : '');
+                            setTarifaPublicaFocused(true);
+                          }}
+                          onBlur={() => setTarifaPublicaFocused(false)}
                           onChange={(e) => {
                             if (!canEditResumen) return;
                             const cleaned = e.target.value.replace(/[^\d.]/g, '');
                             const parts = cleaned.split('.');
                             const normalized = parts.length > 1 ? `${parts[0]}.${parts.slice(1).join('').slice(0, 2)}` : cleaned;
+                            setTarifaPublicaInput(normalized);
                             setNewCara({ ...newCara, tarifa_publica: parseFloat(normalized) || 0 });
                           }}
                           placeholder="0.00"

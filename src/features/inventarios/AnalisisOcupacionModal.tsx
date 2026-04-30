@@ -31,14 +31,38 @@ interface AnalisisOcupacionModalProps {
 function parseCsvCodes(text: string): string[] {
   const lines = text.split(/\r?\n/).map(l => l.trim()).filter(Boolean);
   if (lines.length === 0) return [];
-  // Si la primera línea parece header (contiene "codigo" o letras + comillas), saltarla
-  const first = lines[0].toLowerCase();
-  const startIdx = first.includes('codigo') || first.includes('código') ? 1 : 0;
+
+  // Detectar separador (coma, punto y coma o tabulación)
+  const counts: Record<string, number> = { ',': 0, ';': 0, '\t': 0 };
+  for (const ch of lines[0]) if (ch in counts) counts[ch]++;
+  const sep = (Object.entries(counts).sort((a, b) => b[1] - a[1])[0]?.[1] ?? 0) > 0
+    ? Object.entries(counts).sort((a, b) => b[1] - a[1])[0][0]
+    : ',';
+
+  const splitRow = (line: string): string[] =>
+    line.split(sep).map(c => c.replace(/^"|"$/g, '').trim());
+
+  const headerCells = splitRow(lines[0]).map(c => c.toLowerCase());
+  // Buscar la columna "código único" / "codigo unico" / "codigo"
+  const codigoIdx = headerCells.findIndex(h => h.includes('codigo') || h.includes('código'));
+  const hasHeader = codigoIdx !== -1 || headerCells[0] === 'id';
+
+  // Si encontramos header con "codigo", usar esa columna.
+  // Si el primer header es "id" y hay >1 columnas, asumir que la 2ª es el código.
+  // En cualquier otro caso, usar la primera columna.
+  let targetCol = 0;
+  if (codigoIdx !== -1) {
+    targetCol = codigoIdx;
+  } else if (headerCells[0] === 'id' && headerCells.length > 1) {
+    targetCol = 1;
+  }
+
+  const startIdx = hasHeader ? 1 : 0;
   const codes = new Set<string>();
   for (let i = startIdx; i < lines.length; i++) {
-    // Tomar solo la primera columna si hay varias
-    const first = lines[i].split(',')[0].replace(/"/g, '').trim();
-    if (first) codes.add(first);
+    const cells = splitRow(lines[i]);
+    const value = cells[targetCol]?.trim();
+    if (value) codes.add(value);
   }
   return Array.from(codes);
 }
@@ -322,7 +346,7 @@ export function AnalisisOcupacionModal({
                   <div className="flex items-center justify-between mb-2">
                     <div>
                       <h3 className={`text-sm font-semibold ${isDark ? 'text-white' : 'text-gray-900'}`}>Carga masiva por CSV</h3>
-                      <p className={`text-xs ${isDark ? 'text-zinc-500' : 'text-gray-500'}`}>Una columna con los códigos únicos. La primera fila puede ser encabezado.</p>
+                      <p className={`text-xs ${isDark ? 'text-zinc-500' : 'text-gray-500'}`}>Detecta la columna "Código Único" por el encabezado. Si no hay encabezado, usa la primera columna.</p>
                     </div>
                     <input
                       ref={csvInputRef}
