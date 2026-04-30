@@ -2,7 +2,7 @@ import { useState, useCallback, useRef, useEffect } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import {
   Search, X, RefreshCw, Clock, Filter, ChevronLeft, ChevronRight, ChevronDown,
-  StickyNote, Send, History, Layers, Download, User,
+  StickyNote, Send, History, Layers, Download, User, Eye,
 } from 'lucide-react';
 import { Header } from '../../components/layout/Header';
 import { historialService, type HistorialEntry, type HistorialFilters, type HistorialUsuario } from '../../services/historial.service';
@@ -283,6 +283,7 @@ export function HistorialAccionesPage() {
   const [groupLevels, setGroupLevels] = useState<('etapa' | 'referencia')[]>([]);
   const [collapsedGroups, setCollapsedGroups] = useState<Set<string>>(new Set());
   const [isExporting, setIsExporting] = useState(false);
+  const [detalleModal, setDetalleModal] = useState<HistorialEntry | null>(null);
 
   useSocketHistorialAcciones();
 
@@ -457,8 +458,12 @@ export function HistorialAccionesPage() {
       <td className="px-5 py-3"><TipoBadge tipo={entry.tipo} isDark={isDark} /></td>
       <td className={`px-5 py-3 text-sm font-mono ${headerText}`}>{entry.ref_id || '-'}</td>
       <td className={`px-5 py-3 text-sm ${headerText}`}>{entry.accion}</td>
-      <td className={`px-5 py-3 text-sm max-w-md truncate ${subText}`} title={entry.detalles || ''}>
-        {formatDetalles(entry.detalles)}
+      <td className="px-5 py-3 text-center">
+        {entry.detalles ? (
+          <button onClick={() => setDetalleModal(entry)} className={`p-1.5 rounded-lg transition-colors ${isDark ? 'hover:bg-zinc-700 text-zinc-400 hover:text-white' : 'hover:bg-gray-200 text-gray-400 hover:text-gray-700'}`} title="Ver detalle">
+            <Eye className="h-4 w-4" />
+          </button>
+        ) : <span className={subText}>-</span>}
       </td>
     </tr>
   );
@@ -687,6 +692,106 @@ export function HistorialAccionesPage() {
         isDark={isDark}
         isLoading={addNotaMutation.isPending}
       />
+
+      {detalleModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4" onClick={() => setDetalleModal(null)}>
+          <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" />
+          <div className={`relative w-full max-w-2xl max-h-[80vh] overflow-auto rounded-2xl border ${isDark ? 'bg-zinc-900 border-zinc-700' : 'bg-white border-gray-200'} shadow-2xl`} onClick={e => e.stopPropagation()}>
+            <div className={`sticky top-0 flex items-center justify-between px-6 py-4 border-b ${isDark ? 'border-zinc-700 bg-zinc-900' : 'border-gray-200 bg-white'}`}>
+              <div>
+                <h3 className={`text-lg font-semibold ${headerText}`}>Detalle de Acción</h3>
+                <p className={`text-xs mt-0.5 ${subText}`}>{formatFechaHora(detalleModal.fecha_hora)} · {normalizeTipo(detalleModal.tipo)} · #{detalleModal.ref_id || '-'}</p>
+              </div>
+              <button onClick={() => setDetalleModal(null)} className={`p-1.5 rounded-lg ${isDark ? 'hover:bg-zinc-700 text-zinc-400' : 'hover:bg-gray-100 text-gray-400'}`}><X className="h-5 w-5" /></button>
+            </div>
+            <div className="px-6 py-4 space-y-4">
+              <div>
+                <span className={`text-xs font-medium ${subText}`}>Acción</span>
+                <p className={`text-sm mt-1 ${headerText}`}>{detalleModal.accion}</p>
+              </div>
+              {(() => {
+                const raw = detalleModal.detalles;
+                if (!raw) return <p className={`text-sm ${subText}`}>Sin detalles</p>;
+                if (!raw.startsWith('{') && !raw.startsWith('[')) return <p className={`text-sm ${headerText}`}>{raw}</p>;
+                try {
+                  const obj = JSON.parse(raw);
+                  return (
+                    <>
+                      {obj.usuario && (
+                        <div>
+                          <span className={`text-xs font-medium ${subText}`}>Usuario</span>
+                          <p className={`text-sm mt-1 ${headerText}`}>{obj.usuario}</p>
+                        </div>
+                      )}
+                      {obj.origen && (
+                        <div>
+                          <span className={`text-xs font-medium ${subText}`}>Origen</span>
+                          <p className={`text-sm mt-1 ${headerText}`}>{obj.origen}</p>
+                        </div>
+                      )}
+                      {obj.aprobadoPor && (
+                        <div>
+                          <span className={`text-xs font-medium ${subText}`}>Aprobado por</span>
+                          <p className={`text-sm mt-1 ${headerText}`}>{obj.aprobadoPor}{obj.tipo ? ` · Tipo: ${obj.tipo}` : ''}{obj.carasAprobadas ? ` · ${obj.carasAprobadas} circuito(s)` : ''}</p>
+                        </div>
+                      )}
+                      {obj.rechazadoPor && (
+                        <div>
+                          <span className={`text-xs font-medium ${subText}`}>Rechazado por</span>
+                          <p className={`text-sm mt-1 ${headerText}`}>{obj.rechazadoPor}{obj.motivo ? ` · Motivo: ${obj.motivo}` : ''}</p>
+                        </div>
+                      )}
+                      {obj.cambios?.length > 0 && (
+                        <div>
+                          <span className={`text-xs font-medium ${subText}`}>Cambios ({obj.cambios.length})</span>
+                          <table className={`w-full mt-2 text-sm border ${isDark ? 'border-zinc-700' : 'border-gray-200'} rounded-lg overflow-hidden`}>
+                            <thead>
+                              <tr className={isDark ? 'bg-zinc-800' : 'bg-gray-50'}>
+                                <th className={`px-3 py-2 text-left text-xs font-medium ${subText}`}>Campo</th>
+                                <th className={`px-3 py-2 text-left text-xs font-medium ${subText}`}>Antes</th>
+                                <th className={`px-3 py-2 text-left text-xs font-medium ${subText}`}>Después</th>
+                              </tr>
+                            </thead>
+                            <tbody>
+                              {obj.cambios.map((c: any, i: number) => (
+                                <tr key={i} className={`border-t ${isDark ? 'border-zinc-700' : 'border-gray-200'}`}>
+                                  <td className={`px-3 py-2 font-medium ${headerText}`}>{c.label || c.campo}</td>
+                                  <td className="px-3 py-2 text-red-400">{c.antes ?? '-'}</td>
+                                  <td className="px-3 py-2 text-emerald-400">{c.despues ?? '-'}</td>
+                                </tr>
+                              ))}
+                            </tbody>
+                          </table>
+                        </div>
+                      )}
+                      {obj.cara && (
+                        <div>
+                          <span className={`text-xs font-medium ${subText}`}>Cara</span>
+                          <p className={`text-sm mt-1 ${headerText}`}>Artículo: {obj.cara.articulo} · {obj.cara.caras} caras</p>
+                        </div>
+                      )}
+                      {obj.caras?.length > 0 && (
+                        <div>
+                          <span className={`text-xs font-medium ${subText}`}>Caras ({obj.caras.length})</span>
+                          <div className="mt-1 space-y-1">
+                            {obj.caras.map((c: any, i: number) => (
+                              <p key={i} className={`text-sm ${headerText}`}>{c.articulo} — {c.formato} — {c.caras} caras</p>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+                      {obj.pendientesDg && <p className={`text-sm ${subText}`}>Pendientes DG: {obj.pendientesDg}</p>}
+                      {obj.pendientesDcm && <p className={`text-sm ${subText}`}>Pendientes DCM: {obj.pendientesDcm}</p>}
+                    </>
+                  );
+                } catch {
+                  return <p className={`text-sm ${headerText}`}>{raw}</p>;
+                }
+              })()}
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
