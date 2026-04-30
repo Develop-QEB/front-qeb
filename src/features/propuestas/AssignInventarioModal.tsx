@@ -8396,13 +8396,25 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
                       try {
                         const obj = JSON.parse(detailText);
                         const parts: string[] = [];
-                        if (obj.usuario) parts.push(obj.usuario);
-                        if (obj.cambios?.length) {
-                          for (const c of obj.cambios) {
-                            parts.push(`${c.label || c.campo}: ${c.antes ?? '-'} → ${c.despues ?? '-'}`);
+                        if (obj.aprobadoPor) {
+                          parts.push(`Aprobado por: ${obj.aprobadoPor}`);
+                          if (obj.tipo) parts.push(`Tipo: ${obj.tipo}`);
+                          if (obj.carasAprobadas != null) parts.push(`${obj.carasAprobadas} circuito(s)`);
+                        } else if (obj.rechazadoPor) {
+                          parts.push(`Rechazado por: ${obj.rechazadoPor}`);
+                          if (obj.tipo) parts.push(`Tipo: ${obj.tipo}`);
+                          if (obj.motivo) parts.push(`Motivo: ${obj.motivo}`);
+                        } else {
+                          if (obj.usuario) parts.push(obj.usuario);
+                          if (obj.cambios?.length) {
+                            for (const c of obj.cambios) {
+                              parts.push(`${c.label || c.campo}: ${c.antes ?? '-'} → ${c.despues ?? '-'}`);
+                            }
                           }
                         }
-                        if (obj.motivo) parts.push(`Motivo: ${obj.motivo}`);
+                        if (obj.motivo && !obj.rechazadoPor) parts.push(`Motivo: ${obj.motivo}`);
+                        if (obj.campaña) parts.push(`Campaña: ${obj.campaña}`);
+                        if (obj.reservas_eliminadas != null) parts.push(`${obj.reservas_eliminadas} reserva(s) eliminada(s)`);
                         if (parts.length) detailText = parts.join(' | ');
                       } catch { /* plain text */ }
                       return (
