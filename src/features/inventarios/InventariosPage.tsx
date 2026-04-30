@@ -199,10 +199,10 @@ export function InventariosPage() {
       inventariosService.getAll({ page, limit, search, tipo: tipo || undefined, estatus: estatus || undefined, plaza: plaza || undefined, cto: cto || undefined, campanaId: campanaIdNum }),
   });
 
-  const { data: tipos } = useQuery({ queryKey: ['inventarios', 'tipos'], queryFn: () => inventariosService.getTipos() });
-  const { data: plazas } = useQuery({ queryKey: ['inventarios', 'plazas'], queryFn: () => inventariosService.getPlazas() });
-  const { data: ctos } = useQuery({ queryKey: ['inventarios', 'ctos'], queryFn: () => inventariosService.getCtos() });
-  const { data: estatusList } = useQuery({ queryKey: ['inventarios', 'estatus'], queryFn: () => inventariosService.getEstatus() });
+  const { data: tipos } = useQuery({ queryKey: ['inventarios', 'tipos'], queryFn: () => inventariosService.getTipos(), staleTime: 30 * 60 * 1000 });
+  const { data: plazas } = useQuery({ queryKey: ['inventarios', 'plazas'], queryFn: () => inventariosService.getPlazas(), staleTime: 30 * 60 * 1000 });
+  const { data: ctos } = useQuery({ queryKey: ['inventarios', 'ctos'], queryFn: () => inventariosService.getCtos(), staleTime: 30 * 60 * 1000 });
+  const { data: estatusList } = useQuery({ queryKey: ['inventarios', 'estatus'], queryFn: () => inventariosService.getEstatus(), staleTime: 30 * 60 * 1000 });
 
   // Stats query — global KPIs with same filters
   const { data: statsData, isLoading: isLoadingStats } = useQuery({
