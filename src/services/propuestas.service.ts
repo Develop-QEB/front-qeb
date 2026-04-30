@@ -112,6 +112,15 @@ export interface PropuestaFullDetails {
   }[];
 }
 
+export interface HistorialEntry {
+  id: number;
+  tipo: string;
+  ref_id: number;
+  accion: string;
+  detalles: string | null;
+  fecha_hora: string;
+}
+
 export const propuestasService = {
   async getAll(params: PropuestasParams = {}): Promise<PaginatedResponse<Propuesta>> {
     const response = await api.get<PaginatedResponse<Propuesta>>('/propuestas', { params });
@@ -354,6 +363,14 @@ export const propuestasService = {
     const response = await api.get<ApiResponse<SolicitudCara[]>>(`/propuestas/${propuestaId}/caras`);
     if (!response.data.success || !response.data.data) {
       throw new Error(response.data.error || 'Error al obtener caras de propuesta');
+    }
+    return response.data.data;
+  },
+
+  async getHistorial(propuestaId: number): Promise<HistorialEntry[]> {
+    const response = await api.get<ApiResponse<HistorialEntry[]>>(`/propuestas/${propuestaId}/historial`);
+    if (!response.data.success || !response.data.data) {
+      throw new Error(response.data.error || 'Error al obtener historial');
     }
     return response.data.data;
   },

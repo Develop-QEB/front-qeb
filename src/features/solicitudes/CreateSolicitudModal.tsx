@@ -35,6 +35,8 @@ const CODE_PLAZA_MAP_SOL: Record<string, { estado: string; ciudades: string[] }>
   ver: { estado: 'Veracruz', ciudades: ['Veracruz', 'Alvarado', 'Boca del Río'] },
   pv:  { estado: 'Jalisco', ciudades: ['Puerto Vallarta'] },
   tl:  { estado: 'Estado de México', ciudades: ['Toluca'] },
+  nauc: { estado: 'Estado de México', ciudades: ['NAUCALPAN'] },
+  em:  { estado: 'Estado de México', ciudades: [] },
 };
 
 const CODE_TO_PLAZA_DISPLAY: Record<string, string> = {
@@ -52,48 +54,44 @@ const getFormatoFromArticulo = (itemName: string, itemCode?: string): string => 
   if (!itemName) return '';
   const name = itemName.toUpperCase();
 
-  // Bajo Puente - detectar ubicación específica del nombre del artículo SAP
-  if (name.includes('BAJO PUENTE')) {
-    if (name.includes('GRAN TERRAZA')) return 'Bajo Puente Gran Terraza';
-    if (name.includes('GEOGRAFOS')) return 'Bajo Puente Circuito Geografos';
-    if (name.includes('DEL PARQUE')) return 'Bajo Puente Circuito del Parque';
-    if (name.includes('FUENTES')) return 'Bajo Puente Fuentes';
-    if (name.includes('COLORINES 1') || name.includes('COLORINES1')) return 'Bajo Puente Colorines Bloque 1';
-    if (name.includes('COLORINES 2') || name.includes('COLORINES2')) return 'Bajo Puente Colorines Bloque 2';
-    if (name.includes('COLORINES 3') || name.includes('COLORINES3')) return 'Bajo Puente Colorines Bloque 3';
-    if (name.includes('COLORINES')) return 'Bajo Puente Colorines Bloque 4';
-    return 'Bajo Puente';
-  }
+  // Bajo Puente - el backend solo tiene 'BAJO PUENTE' como mueble.
+  // Los sub-tipos (Gran Terraza, Colorines, etc.) se distinguen por ciudad/ubicación, no por mueble.
+  if (name.includes('BAJO PUENTE') || name.includes('TUNEL')) return 'BAJO PUENTE';
 
-  // MI MACRO - detectar sub-tipo (antes de PARABUS/MUPI para evitar falsos positivos)
+  // MI MACRO - detectar sub-tipo y mapear a los muebles válidos del backend
+  // (los formatos del dropdown vienen de inventarios.mueble distintos)
   if (name.includes('MI MACRO')) {
-    if (name.includes('VIDRIO INTERIOR')) return 'MI MACRO Vidrio Int';
-    if (name.includes('VIDRIO EXTERIOR')) return 'MI MACRO Vidrio Ext';
-    if (name.includes('MUPI')) return 'MI MACRO MUPI Int';
-    if (name.includes('PARABUS')) return 'MI MACRO Parabus';
-    if (name.includes('MODULO')) return 'MI MACRO Modulos';
-    return 'MI MACRO';
+    const codeUp = (itemCode || '').toUpperCase();
+    // Vidrio
+    if (name.includes('VIDRIO INTERIOR') || codeUp.endsWith('-VI')) return 'VIDRIO INTERIOR';
+    if (name.includes('VIDRIO EXTERIOR') || codeUp.endsWith('-VE')) return 'VIDRIOS EXTERIOR';
+    // Parabus con Mupi (chequear ANTES de PARABUS/MUPI solos)
+    if (codeUp.endsWith('-PBMUP') || (name.includes('PARABUS') && name.includes('MUPI'))) return 'PARABUS CON MUPI';
+    if (name.includes('MUPI') || codeUp.endsWith('-MP')) return 'MUPIS';
+    if (name.includes('PARABUS') || codeUp.endsWith('-PB')) return 'PARABUS';
+    // Modulos
+    if (name.includes('MODULO A') || codeUp.endsWith('-MA')) return 'MODULO TIPO A';
+    if (name.includes('MODULO B') || codeUp.endsWith('-MB')) return 'MODULO TIPO B';
+    if (name.includes('MODULO C') || codeUp.endsWith('-MC')) return 'MODULO TIPO C';
+    if (name.includes('MODULO D') || codeUp.endsWith('-MD')) return 'MODULO TIPO D';
   }
 
   // Puente Peatonal (antes de checks genéricos)
-  if (name.includes('PUENTE PEATONAL')) return 'Puente Peatonal';
+  if (name.includes('PUENTE PEATONAL')) return 'PUENTE PEATONAL';
 
-  // Totem
-  if (name.includes('TOTEM')) return 'TOTEM';
+  // Kiosco (SAP usa "KIOSKO" con K). Backend mueble = 'KIOSCO' en mayúsculas.
+  if (name.includes('KIOSCO') || name.includes('KIOSKO')) return 'KIOSCO';
 
-  // Kiosco (SAP usa "KIOSKO" con K)
-  if (name.includes('KIOSCO') || name.includes('KIOSKO')) return 'Kiosco';
-
-  // Formatos estándar
-  if (name.includes('CASETA DE TAXIS')) return 'CASETA DE TAXIS';
-  if (name.includes('METROPOLITANO PARALELO')) return 'METROPOLITANO PARALELO';
-  if (name.includes('METROPOLITANO PERPENDICULAR')) return 'METROPOLITANO PERPENDICULAR';
-  if (name.includes('COLUMNA RECARGA')) return 'COLUMNA RECARGA';
-  if (name.includes('MUPI DE PIEDRA')) return 'MUPI DE PIEDRA';
-  if (name.includes('MUPI')) return 'MUPI';
+  // Formatos estándar — todos en MAYÚSCULAS para coincidir con muebles del backend
+  if (name.includes('PARABUS') && name.includes('MUPI')) return 'PARABUS CON MUPI';
+  if (name.includes('MUPI')) return 'MUPIS';
   if (name.includes('PARABUS')) return 'PARABUS';
+  if (name.includes('VIDRIO INTERIOR')) return 'VIDRIO INTERIOR';
+  if (name.includes('VIDRIO EXTERIOR')) return 'VIDRIOS EXTERIOR';
   if (name.includes('COLUMNA')) return 'COLUMNA';
   if (name.includes('BOLERO')) return 'BOLERO';
+  if (name.includes('UNIPOLAR')) return 'UNIPOLAR';
+  if (name.includes('MULTISERVICIO')) return 'MULTISERVICIO';
   if (itemCode) {
     for (const seg of itemCode.toLowerCase().split('-')) {
       if (CODE_FORMATO_MAP[seg]) return CODE_FORMATO_MAP[seg];
@@ -105,18 +103,33 @@ const getFormatoFromArticulo = (itemName: string, itemCode?: string): string => 
 // Mapeo formato → tipo de periodo requerido
 // CATORCENAL: PB y Columna, Digital PB y Columna
 // MENSUAL: Kioscos, Boleros, Mi Macro, Puentes Peatonales, Carteleras Digitales/Unipolares, Bajo Puentes
-// Formatos mensuales (lista fija)
+// Formatos mensuales (lista fija). Incluye los muebles del backend de Mi Macro
+// (VIDRIO INTERIOR, MUPIS, MODULO TIPO X, etc.) que retorna getFormatoFromArticulo.
 const FORMATOS_MENSUALES = [
   'Kiosco',
+  'KIOSCO',
   'BOLERO',
   'MI MACRO',
+  // Muebles backend de Mi Macro
+  'VIDRIO INTERIOR',
+  'VIDRIOS EXTERIOR',
+  'MUPIS',
+  'PARABUS',
+  'PARABUS CON MUPI',
+  'MODULO TIPO A',
+  'MODULO TIPO B',
+  'MODULO TIPO C',
+  'MODULO TIPO D',
+  // Legacy labels (compatibilidad con caras viejas)
   'MI MACRO Vidrio Int',
   'MI MACRO Vidrio Ext',
   'MI MACRO MUPI Int',
   'MI MACRO Parabus',
   'MI MACRO Modulos',
   'Puente Peatonal',
+  'PUENTE PEATONAL',
   'Bajo Puente',
+  'BAJO PUENTE',
   'Bajo Puente Gran Terraza',
   'Bajo Puente Circuito Geografos',
   'Bajo Puente Circuito del Parque',
@@ -127,6 +140,7 @@ const FORMATOS_MENSUALES = [
   'Bajo Puente Colorines Bloque 4',
   'Cartelera Digital',
   'Unipolar',
+  'UNIPOLAR',
 ];
 
 const FORMATOS_MENSUALES_SET = new Set(FORMATOS_MENSUALES);
@@ -170,9 +184,10 @@ const getTipoFromName = (itemName: string): 'Tradicional' | 'Digital' => {
 // Get tarifa publica and costo (tarifa piso) from SAP article data
 const getTarifaFromArticulo = (articulo: SAPArticulo): { costo: number; tarifa_publica: number } => {
   if (!articulo) return { costo: 0, tarifa_publica: 0 };
-  const tarifa_publica = articulo.U_IMU_PublicPrice || 0;
+  // SAP a veces devuelve U_IMU_PublicPrice como string ("30000.50") — parseFloat preserva decimales
+  const tarifa_publica = parseFloat(String(articulo.U_IMU_PublicPrice ?? 0)) || 0;
   const pl11 = articulo.ItemPrices?.find(p => p.PriceList === 11);
-  const costo = pl11?.Price || 0;
+  const costo = parseFloat(String(pl11?.Price ?? 0)) || 0;
   return { costo, tarifa_publica };
 };
 
@@ -211,7 +226,7 @@ const MULTI_CITY_RULES: { pattern: RegExp; estado: string; ciudades: string[] }[
   { pattern: /\bMORELIA\b/, estado: 'Michoacán', ciudades: ['MORELIA'] },
   { pattern: /\bCANCUN\b/, estado: 'Quintana Roo', ciudades: ['BENITO JUÁREZ'] },
   { pattern: /\bCDMX\b|\bCIUDAD DE MEXICO\b|\bDF\b|\bMEXICO\b(?!\s*(Y\s*AM|WI-?FI))|\bMX\b/, estado: 'Ciudad de México / AM', ciudades: [] },
-  { pattern: /\bNAUC\b/, estado: 'Estado de México', ciudades: ['NAUCALPAN'] },
+  { pattern: /\bNAUC\w*|\bNAUCALPAN\b/, estado: 'Estado de México', ciudades: ['NAUCALPAN'] },
   { pattern: /\bEM\b/, estado: 'Estado de México', ciudades: [] },
 ];
 
@@ -789,10 +804,15 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
     retry: 1,
   });
 
-  // Filter articulos by current tipoPeriodo
+  // Filter articulos by current tipoPeriodo. Excluir BF/CF del dropdown principal:
+  // los BF/CF solo deben aparecer en el selector de bonificación (cuando bonif > 0).
   const articulosFiltrados = useMemo(() => {
     if (!articulosData) return [];
-    return articulosData.filter(a => getRequiredPeriodoForArticulo(a.ItemName) === tipoPeriodo);
+    return articulosData.filter(a => {
+      const code = a.ItemCode.toUpperCase();
+      if (code.startsWith('BF') || code.startsWith('CF')) return false;
+      return getRequiredPeriodoForArticulo(a.ItemName) === tipoPeriodo;
+    });
   }, [articulosData, tipoPeriodo]);
 
   // Function to force refresh data
@@ -1198,6 +1218,13 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
     const needsBfArticle = newCara.bonificacion > 0 && !esCortesia && !esBonificacion && !esImpresion && !esEspecial;
     if (needsBfArticle && !newCara.articuloBf) {
       alert('Debes seleccionar el artículo de bonificación (BF) antes de guardar, o quita las caras de bonificación a 0.');
+      return;
+    }
+
+    // No permitir bonificación sin renta (la bonif es ADICIONAL a la renta).
+    // Excepción: artículos puros de bonificación (BF/CF/CT) y especiales que no requieren renta.
+    if (newCara.bonificacion > 0 && newCara.renta <= 0 && !esCortesia && !esBonificacion && !esImpresion && !esEspecial) {
+      alert('No puedes agregar bonificación sin tener al menos 1 cara de renta. Sube la renta o quita la bonificación.');
       return;
     }
 
@@ -1802,13 +1829,23 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
       archivo: archivoUrl || undefined,
       tipo_archivo: tipoArchivo || undefined,
       IMU: imu,
-      caras: caras.map(c => ({
+      caras: caras.map(c => {
+        // Si el artículo principal es BF- o CF-, tratarlo como bonificación pura
+        // (no como renta) aunque no sea par RT/BF formal.
+        const articuloUp = (c.articulo?.ItemCode || '').toUpperCase();
+        const isBonifArt = articuloUp.startsWith('BF') || articuloUp.startsWith('CF');
+        const treatAsBf = c.esBf || isBonifArt;
+        return ({
         ciudad: c.ciudades.join(', '),
-        estado: c.estado,
+        // Mandamos la plaza (ej. "GUADALAJARA") como `estado` porque el backend
+        // guarda este campo en `solicitudCaras.estados` y la UI de propuestas
+        // espera plazas (no estados). El campo `c.estado` ("Jalisco") solo se usa
+        // internamente en el form de solicitud para filtrar ciudades.
+        estado: c.plaza || c.estado,
         tipo: c.tipo,
         flujo: 'Ambos',
-        bonificacion: c.esBf ? c.renta : c.bonificacion,
-        caras: c.esBf ? 0 : c.renta,
+        bonificacion: treatAsBf ? c.renta : c.bonificacion,
+        caras: treatAsBf ? 0 : c.renta,
         nivel_socioeconomico: c.nse.join(','),
         formato: c.formato,
         costo: c.precioTotal,
@@ -1817,7 +1854,9 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
         fin_periodo: c.periodoFin,
         // Para circuito: si la renta es < total del circuito, distribuir flujo/contraflujo
         // proporcionalmente respetando los topes del circuito
-        caras_flujo: c.esBf ? 0 : (() => {
+        caras_flujo: treatAsBf ? 0 : (() => {
+          // Mensual = todo a Flujo (Gran Formato)
+          if (tipoPeriodo === 'mensual') return c.renta;
           if (c.circuitoFlujo != null && c.circuitoContraflujo != null) {
             const totalCirc = c.circuitoFlujo + c.circuitoContraflujo;
             if (totalCirc > 0 && c.renta < totalCirc) {
@@ -1830,7 +1869,9 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
           }
           return Math.ceil(c.renta / 2);
         })(),
-        caras_contraflujo: c.esBf ? 0 : (() => {
+        caras_contraflujo: treatAsBf ? 0 : (() => {
+          // Mensual = sin Contraflujo
+          if (tipoPeriodo === 'mensual') return 0;
           if (c.circuitoFlujo != null && c.circuitoContraflujo != null) {
             const totalCirc = c.circuitoFlujo + c.circuitoContraflujo;
             if (totalCirc > 0 && c.renta < totalCirc) {
@@ -1848,7 +1889,8 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
         autorizacion_dcm: c.autorizacion_dcm,
         grupo_rt_bf: c.grupo_rt_bf || null,
         grupo_masivo_id: c.grupo_masivo_id || null,
-      })),
+        });
+      }),
     };
 
     if (isEditMode) {
@@ -2390,7 +2432,7 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
                         setCaras([]);
                         // Clear articulo/formato if incompatible with new period type
                         if (newCara.articulo && getRequiredPeriodoForArticulo(newCara.articulo.ItemName) !== 'catorcena') {
-                          setNewCara(prev => ({ ...prev, articulo: null, formato: '', tipo: '', estado: '', ciudades: [], tarifaPublica: 0 }));
+                          setNewCara(prev => ({ ...prev, articulo: null, formato: '', tipo: '', plaza: '', estado: '', ciudades: [], tarifaPublica: 0 }));
                         } else if (newCara.formato && getRequiredPeriodoForFormato(newCara.formato) !== 'catorcena') {
                           setNewCara(prev => ({ ...prev, formato: '' }));
                         }
@@ -2408,7 +2450,7 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
                         setCaras([]);
                         // Clear articulo/formato if incompatible with new period type
                         if (newCara.articulo && getRequiredPeriodoForArticulo(newCara.articulo.ItemName) !== 'mensual') {
-                          setNewCara(prev => ({ ...prev, articulo: null, formato: '', tipo: '', estado: '', ciudades: [], tarifaPublica: 0 }));
+                          setNewCara(prev => ({ ...prev, articulo: null, formato: '', tipo: '', plaza: '', estado: '', ciudades: [], tarifaPublica: 0 }));
                         } else if (newCara.formato && getRequiredPeriodoForFormato(newCara.formato) !== 'mensual') {
                           setNewCara(prev => ({ ...prev, formato: '' }));
                         }
@@ -2692,6 +2734,28 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
                       const tarifa = getTarifaFromArticulo(item);
                       // Auto-set estado and ciudades from ItemName (fallback to ItemCode)
                       const ciudadEstado = getCiudadEstadoFromArticulo(item.ItemName, item.ItemCode);
+                      // Auto-set plaza: buscar el nombre de plaza dentro del ItemName (descripción SAP).
+                      // Ej: "BONIFICACION DE ESPACIOS MI MACRO GUADALAJARA MODULO C" → match "GUADALAJARA"
+                      const itemNameUpper = (item.ItemName || '').toUpperCase();
+                      const plazaPorNombre = inventarioFilters?.plazas?.find(p =>
+                        itemNameUpper.includes(p.plaza.toUpperCase())
+                      );
+                      // Si no se encuentra por nombre, fallback al segmento del ItemCode (gd, gdl, mty, mx, etc.)
+                      const plazaAutoRaw = getPlazaFromArticle(item.ItemCode);
+                      const plazaPorCodigo = inventarioFilters?.plazas?.find(p =>
+                        p.plaza.toLowerCase() === plazaAutoRaw.toLowerCase()
+                      );
+                      // Fallback: si MULTI_CITY_RULES dio un estado (ej. "Estado de México" para NAUC),
+                      // intentar match contra plazas del backend (ej. "ESTADO DE MÉXICO")
+                      const plazaPorEstado = ciudadEstado?.estado
+                        ? inventarioFilters?.plazas?.find(p =>
+                            p.plaza.toUpperCase() === ciudadEstado.estado.toUpperCase()
+                          )
+                        : null;
+                      const plazaAuto = plazaPorNombre?.plaza
+                        || plazaPorCodigo?.plaza
+                        || plazaPorEstado?.plaza
+                        || (plazaAutoRaw !== item.ItemCode ? plazaAutoRaw : '');
                       // Auto-set formato from ItemName (fallback to ItemCode)
                       const formato = getFormatoFromArticulo(item.ItemName, item.ItemCode);
                       // Auto-set tipo from ItemName
@@ -2709,13 +2773,14 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
                         tarifaPublica: isTarifaCero ? 0 : tarifa.tarifa_publica,
                         renta: isCortesia ? 0 : newCara.renta,
                         bonificacion: (isImpresion || isIntercambio || isEspecial) ? 0 : newCara.bonificacion,
+                        plaza: plazaAuto || newCara.plaza,
                         estado: ciudadEstado?.estado || newCara.estado,
                         ciudades: ciudadEstado?.ciudades && ciudadEstado.ciudades.length > 0 ? ciudadEstado.ciudades : newCara.ciudades,
                         formato: formato || newCara.formato,
                         tipo: tipo || newCara.tipo,
                       });
                     }}
-                    onClear={() => setNewCara({ ...newCara, articulo: null, tarifaPublica: 0, estado: '', ciudades: [], formato: '', tipo: '' })}
+                    onClear={() => setNewCara({ ...newCara, articulo: null, tarifaPublica: 0, plaza: '', estado: '', ciudades: [], formato: '', tipo: '' })}
                     displayKey="ItemName"
                     valueKey="ItemCode"
                     searchKeys={['ItemCode', 'ItemName']}
@@ -2807,7 +2872,11 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
                         <option value="MIXTO">MIXTO (circuito)</option>
                       )}
                       {tipoPeriodo === 'mensual' ? (
-                        FORMATOS_MENSUALES.map(f => (
+                        // Mensual: muebles reales del backend (KIOSCO, BOLERO, MODULO TIPO X, etc.)
+                        (inventarioFilters?.formatos && inventarioFilters.formatos.length > 0
+                          ? inventarioFilters.formatos
+                          : FORMATOS_MENSUALES
+                        ).map(f => (
                           <option key={f} value={f}>{f}</option>
                         ))
                       ) : (
@@ -2991,14 +3060,24 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
                     />
                   </div>
 
-                  {/* Tarifa Publica - Editable */}
+                  {/* Tarifa Publica - Editable. Display siempre con 2 decimales (6127 → 6127.00).
+                      Usa type="text" porque type="number" descarta trailing zeros del valor mostrado. */}
                   <div>
                     <label className={`text-xs ${isDark ? 'text-zinc-500' : 'text-gray-500'}`}>Tarifa Pública</label>
                     <input
-                      type="number"
-                      value={newCara.tarifaPublica || ''}
-                      onChange={(e) => setNewCara({ ...newCara, tarifaPublica: parseFloat(e.target.value) || 0 })}
-                      placeholder="0"
+                      type="text"
+                      inputMode="decimal"
+                      value={newCara.tarifaPublica > 0 ? newCara.tarifaPublica.toFixed(2) : ''}
+                      onChange={(e) => {
+                        // Permitir solo dígitos, un punto y máximo 2 decimales mientras se escribe
+                        const cleaned = e.target.value.replace(/[^\d.]/g, '');
+                        const parts = cleaned.split('.');
+                        const normalized = parts.length > 1
+                          ? `${parts[0]}.${parts.slice(1).join('').slice(0, 2)}`
+                          : cleaned;
+                        setNewCara({ ...newCara, tarifaPublica: parseFloat(normalized) || 0 });
+                      }}
+                      placeholder="0.00"
                       disabled={newCara.articulo?.ItemCode?.toUpperCase().startsWith('CT')}
                       className={`w-full px-3 py-2 ${isDark ? 'bg-zinc-800 border-zinc-700' : 'bg-gray-100 border-gray-200'} border rounded-lg text-emerald-400 text-sm font-medium focus:outline-none focus:ring-2 focus:ring-purple-500/50 disabled:opacity-40 disabled:cursor-not-allowed`}
                     />

@@ -12,6 +12,7 @@ import { Campana, CampanaWithComments } from '../../types';
 import { solicitudesService, UserOption } from '../../services/solicitudes.service';
 import { inventariosService, InventarioDisponible } from '../../services/inventarios.service';
 import { campanasService, ReservaModalItem } from '../../services/campanas.service';
+import { clientesService } from '../../services/clientes.service';
 import { formatCurrency } from '../../lib/utils';
 import { monthLabelLong, monthLabelShort, dayMonthShort } from '../../lib/periodos';
 import { parseCircuitoDigital } from '../../lib/circuitos';
@@ -156,39 +157,34 @@ const getFormatoFromArticulo = (itemName: string, itemCode?: string): string => 
   if (!itemName) return '';
   const name = itemName.toUpperCase();
 
-  if (name.includes('BAJO PUENTE')) {
-    if (name.includes('GRAN TERRAZA')) return 'Bajo Puente Gran Terraza';
-    if (name.includes('GEOGRAFOS')) return 'Bajo Puente Circuito Geografos';
-    if (name.includes('DEL PARQUE')) return 'Bajo Puente Circuito del Parque';
-    if (name.includes('FUENTES')) return 'Bajo Puente Fuentes';
-    if (name.includes('COLORINES 1') || name.includes('COLORINES1')) return 'Bajo Puente Colorines Bloque 1';
-    if (name.includes('COLORINES 2') || name.includes('COLORINES2')) return 'Bajo Puente Colorines Bloque 2';
-    if (name.includes('COLORINES 3') || name.includes('COLORINES3')) return 'Bajo Puente Colorines Bloque 3';
-    if (name.includes('COLORINES')) return 'Bajo Puente Colorines Bloque 4';
-    return 'Bajo Puente';
-  }
+  // Bajo Puente / Tunel - el backend solo tiene 'BAJO PUENTE' como mueble
+  if (name.includes('BAJO PUENTE') || name.includes('TUNEL')) return 'BAJO PUENTE';
 
+  // MI MACRO - sub-tipos mapeados a muebles válidos del backend
   if (name.includes('MI MACRO')) {
-    if (name.includes('VIDRIO INTERIOR')) return 'MI MACRO Vidrio Int';
-    if (name.includes('VIDRIO EXTERIOR')) return 'MI MACRO Vidrio Ext';
-    if (name.includes('MUPI')) return 'MI MACRO MUPI Int';
-    if (name.includes('PARABUS')) return 'MI MACRO Parabus';
-    if (name.includes('MODULO')) return 'MI MACRO Modulos';
-    return 'MI MACRO';
+    const codeUp = (itemCode || '').toUpperCase();
+    if (name.includes('VIDRIO INTERIOR') || codeUp.endsWith('-VI')) return 'VIDRIO INTERIOR';
+    if (name.includes('VIDRIO EXTERIOR') || codeUp.endsWith('-VE')) return 'VIDRIOS EXTERIOR';
+    if (codeUp.endsWith('-PBMUP') || (name.includes('PARABUS') && name.includes('MUPI'))) return 'PARABUS CON MUPI';
+    if (name.includes('MUPI') || codeUp.endsWith('-MP')) return 'MUPIS';
+    if (name.includes('PARABUS') || codeUp.endsWith('-PB')) return 'PARABUS';
+    if (name.includes('MODULO A') || codeUp.endsWith('-MA')) return 'MODULO TIPO A';
+    if (name.includes('MODULO B') || codeUp.endsWith('-MB')) return 'MODULO TIPO B';
+    if (name.includes('MODULO C') || codeUp.endsWith('-MC')) return 'MODULO TIPO C';
+    if (name.includes('MODULO D') || codeUp.endsWith('-MD')) return 'MODULO TIPO D';
   }
 
-  if (name.includes('PUENTE PEATONAL')) return 'Puente Peatonal';
-  if (name.includes('TOTEM')) return 'TOTEM';
-  if (name.includes('KIOSCO') || name.includes('KIOSKO')) return 'Kiosco';
-  if (name.includes('CASETA DE TAXIS')) return 'CASETA DE TAXIS';
-  if (name.includes('METROPOLITANO PARALELO')) return 'METROPOLITANO PARALELO';
-  if (name.includes('METROPOLITANO PERPENDICULAR')) return 'METROPOLITANO PERPENDICULAR';
-  if (name.includes('COLUMNA RECARGA')) return 'COLUMNA RECARGA';
-  if (name.includes('MUPI DE PIEDRA')) return 'MUPI DE PIEDRA';
-  if (name.includes('MUPI')) return 'MUPI';
+  if (name.includes('PUENTE PEATONAL')) return 'PUENTE PEATONAL';
+  if (name.includes('KIOSCO') || name.includes('KIOSKO')) return 'KIOSCO';
+  if (name.includes('PARABUS') && name.includes('MUPI')) return 'PARABUS CON MUPI';
+  if (name.includes('MUPI')) return 'MUPIS';
   if (name.includes('PARABUS')) return 'PARABUS';
+  if (name.includes('VIDRIO INTERIOR')) return 'VIDRIO INTERIOR';
+  if (name.includes('VIDRIO EXTERIOR')) return 'VIDRIOS EXTERIOR';
   if (name.includes('COLUMNA')) return 'COLUMNA';
   if (name.includes('BOLERO')) return 'BOLERO';
+  if (name.includes('UNIPOLAR')) return 'UNIPOLAR';
+  if (name.includes('MULTISERVICIO')) return 'MULTISERVICIO';
   if (itemCode) {
     for (const seg of itemCode.toLowerCase().split('-')) {
       if (CODE_FORMATO_MAP[seg]) return CODE_FORMATO_MAP[seg];
@@ -252,7 +248,7 @@ const MULTI_CITY_RULES: { pattern: RegExp; estado: string; ciudad: string }[] = 
   { pattern: /\bMORELIA\b/, estado: 'Michoacán', ciudad: 'MORELIA' },
   { pattern: /\bCANCUN\b/, estado: 'Quintana Roo', ciudad: 'BENITO JUÁREZ' },
   { pattern: /\bCDMX\b|\bCIUDAD DE MEXICO\b|\bDF\b|\bMEXICO\b(?!\s*(Y\s*AM|WI-?FI))|\bMX\b/, estado: 'Ciudad de México / AM', ciudad: '' },
-  { pattern: /\bNAUC\b/, estado: 'Estado de México', ciudad: 'NAUCALPAN' },
+  { pattern: /\bNAUC\w*|\bNAUCALPAN\b/, estado: 'Estado de México', ciudad: 'NAUCALPAN' },
   { pattern: /\bEM\b/, estado: 'Estado de México', ciudad: '' },
 ];
 
@@ -337,6 +333,62 @@ const FILTER_FIELDS_RESERVAS: FilterFieldConfig[] = [
   { field: 'catorcena', label: 'Periodo', type: 'number' },
   { field: 'anio', label: 'Año', type: 'number' },
 ];
+
+// Campos para filtrar inventario disponible (tabla "Buscar Disponibles")
+const FILTER_FIELDS_DISPONIBLES: FilterFieldConfig[] = [
+  { field: 'codigo_unico', label: 'Código', type: 'string' },
+  { field: 'tipo_de_cara', label: 'Cara', type: 'string' },
+  { field: 'mueble', label: 'Mueble', type: 'string' },
+  { field: 'plaza', label: 'Plaza', type: 'string' },
+  { field: 'isla', label: 'Isla', type: 'string' },
+  { field: 'mueble_isla', label: 'M. Isla', type: 'string' },
+  { field: 'sentido', label: 'Sentido', type: 'string' },
+  { field: 'nivel_socioeconomico', label: 'NSE', type: 'string' },
+  { field: 'ubicacion', label: 'Ubicación', type: 'string' },
+  { field: 'tradicional_digital', label: 'Tipo', type: 'string' },
+  { field: 'mundialista', label: 'Mundialista', type: 'string' },
+];
+
+// Tipo extendido con conector Y/O entre filtros
+interface AdvancedFilterCondition extends FilterCondition {
+  connector?: 'Y' | 'O';
+}
+
+function evalAdvancedCondition<T extends Record<string, unknown>>(item: T, filter: AdvancedFilterCondition): boolean {
+  const fieldValue = item[filter.field];
+  const filterValue = filter.value;
+  if (!filterValue) return true;
+  if (fieldValue === null || fieldValue === undefined) {
+    return filter.operator === '!=' || filter.operator === 'not_contains';
+  }
+  const strValue = String(fieldValue).toLowerCase();
+  const strFilterValue = filterValue.toLowerCase();
+  switch (filter.operator) {
+    case '=': return strValue === strFilterValue;
+    case '!=': return strValue !== strFilterValue;
+    case 'contains': return strValue.includes(strFilterValue);
+    case 'not_contains': return !strValue.includes(strFilterValue);
+    case '>': return Number(fieldValue) > Number(filterValue);
+    case '<': return Number(fieldValue) < Number(filterValue);
+    case '>=': return Number(fieldValue) >= Number(filterValue);
+    case '<=': return Number(fieldValue) <= Number(filterValue);
+    default: return true;
+  }
+}
+
+function applyAdvancedFilters<T extends Record<string, unknown>>(data: T[], filters: AdvancedFilterCondition[]): T[] {
+  if (filters.length === 0) return data;
+  return data.filter(item => {
+    let result = evalAdvancedCondition(item, filters[0]);
+    for (let i = 1; i < filters.length; i++) {
+      const val = evalAdvancedCondition(item, filters[i]);
+      const connector = filters[i].connector || 'Y';
+      if (connector === 'O') result = result || val;
+      else result = result && val;
+    }
+    return result;
+  });
+}
 
 // Operadores disponibles
 const FILTER_OPERATORS: { value: FilterOperator; label: string; forTypes: ('string' | 'number')[] }[] = [
@@ -649,7 +701,14 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
   const queryClient = useQueryClient();
   const user = useAuthStore((state) => state.user);
   const permissions = usePermissions(user?.rol);
-  const tipoPeriodo = (campana as any)?.tipo_periodo || 'catorcena';
+  // tipoPeriodo: arranca con el del prop (campañas list a veces lo trae) y se
+  // sincroniza con el detail endpoint cuando carga, que es la fuente de verdad.
+  // Crítico para que la regla "mensual = solo Flujo" se aplique al teclear caras.
+  // Tipo string (no literal union) para evitar narrowing dentro de ramas JSX que
+  // hacen el `tipoPeriodo === 'mensual'` "no overlap" después de un check previo.
+  const [tipoPeriodo, setTipoPeriodo] = useState<string>(
+    (campana as any)?.tipo_periodo === 'mensual' ? 'mensual' : 'catorcena'
+  );
 
   // Socket para actualizar usuarios en tiempo real
   useSocketEquipos();
@@ -658,6 +717,30 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
 
   const effectiveCanEdit = permissions.canAsignarInventario;
   const canEditResumen = permissions.canEditResumenPropuesta;
+  const canEditCliente = permissions.canEditClienteEnFormularios;
+
+  // Client editing state
+  interface CuicItem {
+    CUIC: number;
+    T0_U_RazonSocial: string;
+    T0_U_Cliente: string;
+    T1_U_UnidadNegocio: string;
+    T0_U_Agencia: string;
+    ASESOR_U_IDAsesor: string;
+    ASESOR_U_Asesor: string;
+    T1_U_IDMarca: number;
+    T2_U_Marca: string;
+    T2_U_IDProducto: number;
+    T2_U_Producto: string;
+    T2_U_IDCategoria: number;
+    T2_U_Categoria: string;
+    sap_database?: string;
+  }
+  const [selectedClienteCuic, setSelectedClienteCuic] = useState<CuicItem | null>(null);
+  const [clienteSearchTerm, setClienteSearchTerm] = useState('');
+  const [showClienteDropdown, setShowClienteDropdown] = useState(false);
+  const [clienteChanged, setClienteChanged] = useState(false);
+
   const mapRef = useRef<google.maps.Map | null>(null);
   const reservadosMapRef = useRef<google.maps.Map | null>(null);
   const resumenReservasMapRef = useRef<google.maps.Map | null>(null);
@@ -775,7 +858,7 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
   const [tamanoGrupo, setTamanoGrupo] = useState(10);
   const [flujoPct, setFlujoPct] = useState(50);
   const [savingPct, setSavingPct] = useState(false);
-  const [flujoFilter, setFlujoFilter] = useState<'Todos' | 'Flujo' | 'Contraflujo'>('Todos');
+  const [flujoFilter, setFlujoFilter] = useState<'Todos' | 'Flujo' | 'Contraflujo'>(tipoPeriodo === 'mensual' ? 'Flujo' : 'Todos');
   const [islaFilter, setIslaFilter] = useState<'off' | 'si' | 'no'>('off');
   const [mundialistaFilter, setMundialistaFilter] = useState<'off' | 'si' | 'no'>('off');
   const [sortColumn, setSortColumn] = useState<string>('codigo_unico');
@@ -835,6 +918,10 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
   // (mismo codigo_unico) en otras caras del mismo grupo_masivo_id
   const [eliminarMasivoC, setEliminarMasivoC] = useState<boolean>(false);
   const [loadingCaraAction, setLoadingCaraAction] = useState<{ caraId: string; action: 'edit' | 'search' } | null>(null);
+
+  // Filtros avanzados (embudo) para tabla Buscar Disponibles
+  const [disponiblesAdvFilters, setDisponiblesAdvFilters] = useState<AdvancedFilterCondition[]>([]);
+  const [showDisponiblesAdvFilters, setShowDisponiblesAdvFilters] = useState(false);
 
   // POI filter state
   const [poiFilterIds, setPoiFilterIds] = useState<Set<number> | null>(null);
@@ -959,7 +1046,11 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
       const loadedReservas: ReservaItem[] = existingReservas.map((r: ReservaModalItem) => {
         // Find the cara that matches this reserva
         const matchingCara = caras.find(c => c.id === r.solicitud_cara_id);
-        const tipo = r.estatus === 'Bonificado' ? 'Bonificacion' : (String(r.tipo_de_cara).startsWith('Flujo') ? 'Flujo' : 'Contraflujo');
+        // Mensual = todo cuenta como Flujo (regla Gran Formato), aunque el inventario
+        // físico sea Contraflujo (caso de circuitos digitales).
+        const tipo = r.estatus === 'Bonificado'
+          ? 'Bonificacion'
+          : (tipoPeriodo === 'mensual' ? 'Flujo' : (String(r.tipo_de_cara).startsWith('Flujo') ? 'Flujo' : 'Contraflujo'));
 
         return {
           id: matchingCara
@@ -1022,6 +1113,45 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
     enabled: isOpen,
   });
 
+  // Fetch CUIC data for client editing
+  const { data: cuicData, isLoading: cuicLoading } = useQuery({
+    queryKey: ['clientes-full-for-campana'],
+    queryFn: async () => {
+      const result = await clientesService.getAllFull();
+      return (result?.data || []).map((c: any) => ({
+        CUIC: c.CUIC!,
+        T0_U_RazonSocial: c.T0_U_RazonSocial || '',
+        T0_U_Cliente: c.T0_U_Cliente || '',
+        T1_U_UnidadNegocio: c.T1_U_UnidadNegocio || '',
+        T0_U_Agencia: c.T0_U_Agencia || '',
+        ASESOR_U_IDAsesor: c.ASESOR_U_IDAsesor || '',
+        ASESOR_U_Asesor: c.ASESOR_U_Asesor || '',
+        T1_U_IDMarca: c.T1_U_IDMarca || 0,
+        T2_U_Marca: c.T2_U_Marca || '',
+        T2_U_IDProducto: c.T2_U_IDProducto || 0,
+        T2_U_Producto: c.T2_U_Producto || '',
+        T2_U_IDCategoria: c.T2_U_IDCategoria || 0,
+        T2_U_Categoria: c.T2_U_Categoria || '',
+        sap_database: c.sap_database || '',
+      })) as CuicItem[];
+    },
+    enabled: isOpen && canEditCliente,
+    staleTime: 5 * 60 * 1000,
+  });
+
+  // Filtered CUIC options for client search
+  const filteredCuicOptions = useMemo(() => {
+    if (!cuicData) return [];
+    if (!clienteSearchTerm) return cuicData;
+    const term = clienteSearchTerm.toLowerCase();
+    return cuicData.filter((c: CuicItem) =>
+      String(c.CUIC).includes(term) ||
+      c.T2_U_Marca?.toLowerCase().includes(term) ||
+      c.T0_U_RazonSocial?.toLowerCase().includes(term) ||
+      c.T2_U_Producto?.toLowerCase().includes(term)
+    );
+  }, [cuicData, clienteSearchTerm]);
+
   // Initialize form from campaign details
   useEffect(() => {
     if (campanaDetails && isOpen) {
@@ -1038,6 +1168,19 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
       // Set IMU flag from solicitud (included in campanaDetails response)
       const imuVal = Boolean((campanaDetails as any).IMU);
       setImu(imuVal);
+
+      // Archivo: viene de propuesta.archivo (subido en el modal de propuestas) o
+      // solicitud.archivo como fallback. tipo_archivo solo existe en solicitud.
+      const archivoVal = (campanaDetails as any).archivo || null;
+      const tipoArchivoVal = (campanaDetails as any).tipo_archivo || null;
+      setArchivoCampana(archivoVal);
+      setTipoArchivoCampana(tipoArchivoVal);
+
+      // Sincronizar tipoPeriodo con el detail (fuente de verdad).
+      const tpDetail = (campanaDetails as any).tipo_periodo;
+      if (tpDetail === 'mensual' || tpDetail === 'catorcena') {
+        setTipoPeriodo(tpDetail);
+      }
 
       // Set period from campaign data
       // Para mensual: derivar mes desde fecha_inicio/fecha_fin (parseando YYYY-MM directo
@@ -1093,6 +1236,12 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
         });
       }
       setAsignados(loadedAsignados);
+
+      // Reset client editing state on load
+      setSelectedClienteCuic(null);
+      setClienteChanged(false);
+      setClienteSearchTerm('');
+      setShowClienteDropdown(false);
 
       // Store initial values for change detection — only on first load
       if (!initialValuesSetRef.current) {
@@ -1226,9 +1375,10 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
       catorcenaInicio !== initialValues.catorcenaInicio ||
       catorcenaFin !== initialValues.catorcenaFin ||
       currentAsignadosIds !== initialValues.asignadosIds ||
-      imu !== initialValues.imu
+      imu !== initialValues.imu ||
+      clienteChanged
     );
-  }, [nombreCampania, notas, descripcion, yearInicio, yearFin, catorcenaInicio, catorcenaFin, currentAsignadosIds, imu, initialValues]);
+  }, [nombreCampania, notas, descripcion, yearInicio, yearFin, catorcenaInicio, catorcenaFin, currentAsignadosIds, imu, initialValues, clienteChanged]);
 
   // Handle update campaign
   const handleUpdateCampana = async () => {
@@ -1251,6 +1401,14 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
         asignados: asignadosStr,
         id_asignado: asignadosIdsStr,
         IMU: imu,
+        ...(clienteChanged && selectedClienteCuic ? {
+          cliente_id: selectedClienteCuic.CUIC,
+          cuic: selectedClienteCuic.CUIC,
+          razon_social: selectedClienteCuic.T0_U_RazonSocial,
+          marca_nombre: selectedClienteCuic.T2_U_Marca,
+          asesor: selectedClienteCuic.ASESOR_U_Asesor,
+          sap_database: selectedClienteCuic.sap_database,
+        } : {}),
       });
 
       // Update initial values to current values
@@ -1266,6 +1424,7 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
         asignadosIds: newAsignadosIds,
         imu,
       });
+      setClienteChanged(false);
 
       queryClient.invalidateQueries({ queryKey: ['campana-details', campana?.id] });
       queryClient.invalidateQueries({ queryKey: ['campanas'] });
@@ -1498,13 +1657,17 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
 
   // Calculate remaining to assign for selected cara
   // Recalculate flujo/contraflujo based on editable %
+  // Mensual = todo cuenta como Flujo (regla Gran Formato), no aplicar split por %
   const adjustedCarasFlujo = useMemo(() => {
     if (!selectedCaraForSearch) return { flujo: 0, contraflujo: 0 };
     const totalRenta = (selectedCaraForSearch.caras_flujo || 0) + (selectedCaraForSearch.caras_contraflujo || 0);
+    if (tipoPeriodo === 'mensual') {
+      return { flujo: totalRenta, contraflujo: 0 };
+    }
     const flujo = Math.ceil(totalRenta * flujoPct / 100);
     const contraflujo = totalRenta - flujo;
     return { flujo, contraflujo };
-  }, [selectedCaraForSearch, flujoPct]);
+  }, [selectedCaraForSearch, flujoPct, tipoPeriodo]);
 
   const remainingToAssign = useMemo(() => {
     if (!selectedCaraForSearch) return { flujo: 0, contraflujo: 0, bonificacion: 0 };
@@ -2007,6 +2170,13 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
       !isEspecialArticle(newCara.articulo || '');
     const wantsPair = !!articuloBf && (newCara.bonificacion || 0) > 0 && articuloSupportsBf;
 
+    // No permitir bonificación sin renta (la bonif es ADICIONAL a la renta).
+    // Excepción: artículos puros BF/CF/CT/IM y especiales que no requieren renta.
+    if ((newCara.bonificacion || 0) > 0 && (newCara.caras || 0) <= 0 && articuloSupportsBf) {
+      alert('No puedes agregar bonificación sin tener al menos 1 cara de renta. Sube las caras o quita la bonificación.');
+      return;
+    }
+
     // The RT row holds 0 bonificacion when paired (BF count lives on the BF row as renta/caras)
     const rtBonificacion = wantsPair ? 0 : (newCara.bonificacion || 0);
     const costoCalculado = (newCara.caras || 0) * (newCara.tarifa_publica || 0);
@@ -2481,6 +2651,14 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
           asignados: asignadosStr,
           id_asignado: asignadosIdsStr,
           IMU: imu,
+          ...(clienteChanged && selectedClienteCuic ? {
+            cliente_id: selectedClienteCuic.CUIC,
+            cuic: selectedClienteCuic.CUIC,
+            razon_social: selectedClienteCuic.T0_U_RazonSocial,
+            marca_nombre: selectedClienteCuic.T2_U_Marca,
+            asesor: selectedClienteCuic.ASESOR_U_Asesor,
+            sap_database: selectedClienteCuic.sap_database,
+          } : {}),
         });
 
         setInitialValues({
@@ -2494,6 +2672,7 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
           asignadosIds: asignadosIdsStr,
           imu,
         });
+        setClienteChanged(false);
         messages.push('Campaña actualizada');
       }
 
@@ -2856,7 +3035,7 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
     setShowOnlyCompletos(false);
     setGroupByDistance(false);
     setSelectedInventory(new Set());
-    setFlujoFilter('Todos'); // Always start with all
+    setFlujoFilter(tipoPeriodo === 'mensual' ? 'Flujo' : 'Todos');
     setSortColumn('codigo_unico');
     setSortDirection('asc');
 
@@ -3026,9 +3205,14 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
 
     // Filter by mundialista - toggle: SI / NO / off
     if (mundialistaFilter === 'si') {
-      data = data.filter(inv => (inv as any).mueble_isla?.toUpperCase() === 'SI');
+      data = data.filter(inv => (inv as any).mundialista?.toUpperCase() === 'SI');
     } else if (mundialistaFilter === 'no') {
-      data = data.filter(inv => !(inv as any).mueble_isla || (inv as any).mueble_isla.toUpperCase() !== 'SI');
+      data = data.filter(inv => !(inv as any).mundialista || (inv as any).mundialista.toUpperCase() !== 'SI');
+    }
+
+    // Filtros avanzados (embudo)
+    if (disponiblesAdvFilters.length > 0) {
+      data = applyAdvancedFilters(data as unknown as Record<string, unknown>[], disponiblesAdvFilters) as unknown as typeof data;
     }
 
     // Apply grouping (distance or list)
@@ -3079,7 +3263,7 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
     });
 
     return data;
-  }, [inventarioDisponible, disponiblesSearchTerm, poiFilterIds, flujoFilter, showOnlyUnicos, showOnlyCompletos, showOnlyUnicosDigitales, showSpotUnico, islaFilter, mundialistaFilter, groupByDistance, groupMode, filterUnicos, filterCompletos, filterUnicosDigitales, filterSpotUnico, groupByDistanceFunc, groupByListFunc, sortColumn, sortDirection, reservas]);
+  }, [inventarioDisponible, disponiblesSearchTerm, poiFilterIds, flujoFilter, showOnlyUnicos, showOnlyCompletos, showOnlyUnicosDigitales, showSpotUnico, islaFilter, mundialistaFilter, disponiblesAdvFilters, groupByDistance, groupMode, filterUnicos, filterCompletos, filterUnicosDigitales, filterSpotUnico, groupByDistanceFunc, groupByListFunc, sortColumn, sortDirection, reservas]);
 
   // Handle POI filter from map
   const handlePOIFilter = useCallback((idsToKeep: number[]) => {
@@ -3107,7 +3291,7 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
 
   // Clear all filters
   const clearAllFilters = useCallback(() => {
-    setFlujoFilter('Todos');
+    setFlujoFilter(tipoPeriodo === 'mensual' ? 'Flujo' : 'Todos');
     setShowOnlyUnicos(false);
     setShowOnlyCompletos(false);
     setShowOnlyUnicosDigitales(false);
@@ -3117,7 +3301,7 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
     setGroupByDistance(false);
     setPoiFilterIds(null);
     setDisponiblesSearchTerm('');
-  }, []);
+  }, [tipoPeriodo]);
 
   // CSV handling functions
   const normalizeColumnName = (text: string) => {
@@ -3417,8 +3601,11 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
           }
           // If only one has space, skip this completo item entirely to maintain pairing
         } else {
-          // Regular item - reserve based on tipo_de_cara
-          const tipo = String(inv.tipo_de_cara).startsWith('Flujo') ? 'Flujo' : 'Contraflujo';
+          // Regular item - reserve based on tipo_de_cara.
+          // Mensual = todo cuenta como Flujo (regla Gran Formato).
+          const tipo: 'Flujo' | 'Contraflujo' = tipoPeriodo === 'mensual'
+            ? 'Flujo'
+            : (String(inv.tipo_de_cara).startsWith('Flujo') ? 'Flujo' : 'Contraflujo');
           const canReserve = tipo === 'Flujo'
             ? flujoCount < remainingToAssign.flujo
             : contraflujoCount < remainingToAssign.contraflujo;
@@ -3620,7 +3807,10 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
         setSelectedInventory(new Set());
       } catch (error) {
         console.error('Error saving bonificaciones:', error);
-        showToast(`Error al guardar: ${error instanceof Error ? error.message : 'Error desconocido'}`, 'error');
+        const axErr = error as { response?: { data?: { error?: string; message?: string } }; message?: string };
+        const backendMsg = axErr?.response?.data?.error || axErr?.response?.data?.message;
+        const msg = backendMsg || (error instanceof Error ? error.message : 'Error desconocido');
+        showToast(`Error al guardar: ${msg}`, 'error');
       } finally {
         setIsSaving(false);
         setConfirmModal(prev => ({ ...prev, isOpen: false }));
@@ -4312,6 +4502,9 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
           {/* Compact KPIs with progress bars */}
           <div className="px-6 py-3 border-b border-zinc-800 bg-gradient-to-r from-zinc-900 via-zinc-900/95 to-zinc-900/90">
             <div className="flex items-center gap-4">
+              {/* Si el artículo es BF/CF puro, ocultar KPI Flujo (solo bonificación aplica) */}
+              {!(selectedCaraForSearch?.articulo || '').toUpperCase().startsWith('BF') && !(selectedCaraForSearch?.articulo || '').toUpperCase().startsWith('CF') && (
+              <>
               {/* Flujo KPI */}
               <div className="flex-1 bg-zinc-800/50 rounded-xl p-3 border border-zinc-700/30">
                 <div className="flex items-center justify-between mb-1.5">
@@ -4385,27 +4578,31 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
                 );
               })()}
 
-              {/* Contraflujo KPI */}
-              <div className="flex-1 bg-zinc-800/50 rounded-xl p-3 border border-zinc-700/30">
-                <div className="flex items-center justify-between mb-1.5">
-                  <span className="text-xs text-zinc-400 flex items-center gap-1.5">
-                    <div className="w-2 h-2 rounded-full bg-blue-500" />
-                    Contraflujo
-                  </span>
-                  <span className="text-sm font-bold text-blue-400">
-                    {adjustedCarasFlujo.contraflujo - remainingToAssign.contraflujo} / {adjustedCarasFlujo.contraflujo}
-                  </span>
+              {/* Contraflujo KPI — solo en catorcena */}
+              {tipoPeriodo !== 'mensual' && (
+                <div className="flex-1 bg-zinc-800/50 rounded-xl p-3 border border-zinc-700/30">
+                  <div className="flex items-center justify-between mb-1.5">
+                    <span className="text-xs text-zinc-400 flex items-center gap-1.5">
+                      <div className="w-2 h-2 rounded-full bg-blue-500" />
+                      Contraflujo
+                    </span>
+                    <span className="text-sm font-bold text-blue-400">
+                      {adjustedCarasFlujo.contraflujo - remainingToAssign.contraflujo} / {adjustedCarasFlujo.contraflujo}
+                    </span>
+                  </div>
+                  <div className="w-full h-2 bg-zinc-700/50 rounded-full overflow-hidden">
+                    <div
+                      className="h-full bg-gradient-to-r from-blue-500 to-blue-400 rounded-full transition-all"
+                      style={{ width: `${Math.min(100, (adjustedCarasFlujo.contraflujo - remainingToAssign.contraflujo) / (adjustedCarasFlujo.contraflujo || 1) * 100)}%` }}
+                    />
+                  </div>
+                  <div className="mt-1 text-xs text-zinc-500">
+                    <span className="text-blue-400 font-medium">{remainingToAssign.contraflujo}</span> restantes
+                  </div>
                 </div>
-                <div className="w-full h-2 bg-zinc-700/50 rounded-full overflow-hidden">
-                  <div
-                    className="h-full bg-gradient-to-r from-blue-500 to-blue-400 rounded-full transition-all"
-                    style={{ width: `${Math.min(100, (adjustedCarasFlujo.contraflujo - remainingToAssign.contraflujo) / (adjustedCarasFlujo.contraflujo || 1) * 100)}%` }}
-                  />
-                </div>
-                <div className="mt-1 text-xs text-zinc-500">
-                  <span className="text-blue-400 font-medium">{remainingToAssign.contraflujo}</span> restantes
-                </div>
-              </div>
+              )}
+              </>
+              )}
 
               {/* Bonificacion/Cortesia KPI */}
               <div className="flex-1 bg-zinc-800/50 rounded-xl p-3 border border-zinc-700/30">
@@ -4477,38 +4674,47 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
               {/* Filters */}
               <div className={`px-6 py-2.5 border-b ${isDark ? 'border-zinc-800 bg-zinc-900/50' : 'border-gray-200 bg-gray-50/50'}`}>
                 <div className="flex items-center gap-2 flex-wrap">
-                  {/* Flujo Toggle */}
-                  <div className={`flex ${isDark ? 'bg-zinc-800/80 border-zinc-700/50' : 'bg-gray-100 border-gray-200'} rounded-lg p-0.5 border`}>
-                    {(['Todos', 'Flujo', 'Contraflujo'] as const).map(opt => (
-                      <button
-                        key={opt}
-                        onClick={() => setFlujoFilter(opt)}
-                        className={`px-2.5 py-1 rounded-md text-xs font-medium transition-all ${flujoFilter === opt
-                          ? 'bg-blue-500 text-white shadow'
-                          : 'text-zinc-400 hover:text-white'
-                          }`}
-                      >
-                        {opt}
-                      </button>
-                    ))}
-                  </div>
+                  {/* Flujo Toggle — para mensual solo Flujo (no Contraflujo) */}
+                  {tipoPeriodo === 'mensual' ? (
+                    <div className={`flex items-center gap-1.5 px-2.5 py-1 rounded-lg ${isDark ? 'bg-blue-500/20 border border-blue-500/30' : 'bg-blue-50 border border-blue-200'}`}>
+                      <span className="text-[10px] uppercase font-semibold text-blue-400">Flujo</span>
+                      <span className={`text-[10px] ${isDark ? 'text-zinc-500' : 'text-gray-500'}`}>(mensual)</span>
+                    </div>
+                  ) : (
+                    <div className={`flex ${isDark ? 'bg-zinc-800/80 border-zinc-700/50' : 'bg-gray-100 border-gray-200'} rounded-lg p-0.5 border`}>
+                      {(['Todos', 'Flujo', 'Contraflujo'] as const).map(opt => (
+                        <button
+                          key={opt}
+                          onClick={() => setFlujoFilter(opt)}
+                          className={`px-2.5 py-1 rounded-md text-xs font-medium transition-all ${flujoFilter === opt
+                            ? 'bg-blue-500 text-white shadow'
+                            : 'text-zinc-400 hover:text-white'
+                            }`}
+                        >
+                          {opt}
+                        </button>
+                      ))}
+                    </div>
+                  )}
 
                   <div className="w-px h-6 bg-zinc-700" />
 
-                  {/* Complete filter */}
-                  <button
-                    onClick={() => { setShowOnlyCompletos(!showOnlyCompletos); if (!showOnlyCompletos) setShowOnlyUnicos(false); }}
-                    className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-medium transition-all ${showOnlyCompletos
-                      ? 'bg-pink-500 text-white shadow'
-                      : 'bg-zinc-800/80 text-zinc-400 border border-zinc-700/50 hover:text-white'
-                      }`}
-                  >
-                    <LayoutGrid className="h-3.5 w-3.5" />
-                    Completos
-                    {showOnlyCompletos && (
-                      <X className="h-3 w-3 ml-0.5 hover:text-pink-200" onClick={(e) => { e.stopPropagation(); setShowOnlyCompletos(false); }} />
-                    )}
-                  </button>
+                  {/* Complete filter — solo aplica en catorcena (Flujo+Contraflujo). En mensual no tiene sentido. */}
+                  {tipoPeriodo !== 'mensual' && (
+                    <button
+                      onClick={() => { setShowOnlyCompletos(!showOnlyCompletos); if (!showOnlyCompletos) setShowOnlyUnicos(false); }}
+                      className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-medium transition-all ${showOnlyCompletos
+                        ? 'bg-pink-500 text-white shadow'
+                        : 'bg-zinc-800/80 text-zinc-400 border border-zinc-700/50 hover:text-white'
+                        }`}
+                    >
+                      <LayoutGrid className="h-3.5 w-3.5" />
+                      Completos
+                      {showOnlyCompletos && (
+                        <X className="h-3 w-3 ml-0.5 hover:text-pink-200" onClick={(e) => { e.stopPropagation(); setShowOnlyCompletos(false); }} />
+                      )}
+                    </button>
+                  )}
 
                   {/* Unique filter for traditional items - only show when there are traditional items */}
                   {hasTradicionalInventory && (
@@ -4599,6 +4805,131 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
                     <Trophy className="h-3.5 w-3.5" />
                     {mundialistaFilter === 'si' ? 'Mundial ✓' : mundialistaFilter === 'no' ? 'Mundial ✗' : 'Mundial'}
                   </button>
+
+                  {/* Filtros avanzados (embudo) */}
+                  <div className="relative">
+                    <button
+                      onClick={() => setShowDisponiblesAdvFilters(!showDisponiblesAdvFilters)}
+                      className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-medium transition-all ${disponiblesAdvFilters.length > 0
+                        ? 'bg-purple-600 text-white shadow'
+                        : 'bg-zinc-800/80 text-zinc-400 border border-zinc-700/50 hover:text-white'
+                        }`}
+                      title="Filtros avanzados"
+                    >
+                      <Funnel className="h-3.5 w-3.5" />
+                      Filtrar
+                      {disponiblesAdvFilters.length > 0 && (
+                        <span className="px-1.5 py-0.5 rounded text-[10px] bg-purple-800 text-white">
+                          {disponiblesAdvFilters.length}
+                        </span>
+                      )}
+                    </button>
+                    {showDisponiblesAdvFilters && (
+                      <div className="absolute left-0 top-full mt-1 z-[100] w-[540px] bg-zinc-900 border border-purple-500/30 rounded-xl shadow-2xl p-4">
+                        <div className="flex items-center justify-between mb-3">
+                          <span className="text-sm font-medium text-purple-300">Filtros avanzados</span>
+                          <button
+                            onClick={() => setShowDisponiblesAdvFilters(false)}
+                            className="text-zinc-500 hover:text-white"
+                          >
+                            <X className="h-4 w-4" />
+                          </button>
+                        </div>
+                        <div className="space-y-2 max-h-[300px] overflow-visible pr-1">
+                          {disponiblesAdvFilters.map((filter, index) => (
+                            <div key={filter.id} className="flex items-center gap-2">
+                              {index > 0 ? (
+                                <button
+                                  onClick={() => {
+                                    const updated = [...disponiblesAdvFilters];
+                                    updated[index] = { ...updated[index], connector: updated[index].connector === 'Y' ? 'O' : 'Y' };
+                                    setDisponiblesAdvFilters(updated);
+                                  }}
+                                  className={`text-[10px] font-bold w-8 rounded px-1 py-0.5 transition-colors ${filter.connector === 'O' ? 'bg-amber-500/20 text-amber-300' : 'bg-purple-500/20 text-purple-300'}`}
+                                  title={`Click para cambiar a ${filter.connector === 'Y' ? 'O' : 'Y'}`}
+                                >
+                                  {filter.connector || 'Y'}
+                                </button>
+                              ) : (<span className="w-8"></span>)}
+                              <select
+                                value={filter.field}
+                                onChange={(e) => {
+                                  const updated = [...disponiblesAdvFilters];
+                                  updated[index] = { ...updated[index], field: e.target.value };
+                                  setDisponiblesAdvFilters(updated);
+                                }}
+                                className="w-[130px] text-xs bg-zinc-800 border-zinc-700 text-white border rounded px-2 py-1.5"
+                              >
+                                {FILTER_FIELDS_DISPONIBLES.map((f) => (
+                                  <option key={f.field} value={f.field}>{f.label}</option>
+                                ))}
+                              </select>
+                              <select
+                                value={filter.operator}
+                                onChange={(e) => {
+                                  const updated = [...disponiblesAdvFilters];
+                                  updated[index] = { ...updated[index], operator: e.target.value as FilterOperator };
+                                  setDisponiblesAdvFilters(updated);
+                                }}
+                                className="w-[110px] text-xs bg-zinc-800 border-zinc-700 text-white border rounded px-2 py-1.5"
+                              >
+                                {FILTER_OPERATORS.filter(op => {
+                                  const fieldConfig = FILTER_FIELDS_DISPONIBLES.find(f => f.field === filter.field);
+                                  return fieldConfig && op.forTypes.includes(fieldConfig.type);
+                                }).map((op) => (
+                                  <option key={op.value} value={op.value}>{op.label}</option>
+                                ))}
+                              </select>
+                              <input
+                                type="text"
+                                value={filter.value}
+                                placeholder="Valor..."
+                                onChange={(e) => {
+                                  const updated = [...disponiblesAdvFilters];
+                                  updated[index] = { ...updated[index], value: e.target.value };
+                                  setDisponiblesAdvFilters(updated);
+                                }}
+                                className="flex-1 text-xs bg-zinc-800 border-zinc-700 text-white placeholder:text-zinc-500 border rounded px-2 py-1.5"
+                              />
+                              <button
+                                onClick={() => setDisponiblesAdvFilters(disponiblesAdvFilters.filter(f => f.id !== filter.id))}
+                                className="text-zinc-500 hover:text-red-400"
+                                title="Eliminar filtro"
+                              >
+                                <X className="h-4 w-4" />
+                              </button>
+                            </div>
+                          ))}
+                        </div>
+                        <div className="flex items-center justify-between mt-3 pt-3 border-t border-zinc-800/50">
+                          <button
+                            onClick={() => {
+                              const newFilter: AdvancedFilterCondition = {
+                                id: `f-${Date.now()}`,
+                                field: 'codigo_unico',
+                                operator: 'contains',
+                                value: '',
+                                connector: 'Y',
+                              };
+                              setDisponiblesAdvFilters([...disponiblesAdvFilters, newFilter]);
+                            }}
+                            className="flex items-center gap-1.5 px-2.5 py-1 text-xs rounded-lg bg-purple-500/20 text-purple-300 hover:bg-purple-500/30"
+                          >
+                            <Plus className="h-3 w-3" />
+                            Agregar filtro
+                          </button>
+                          {disponiblesAdvFilters.length > 0 && (
+                            <button
+                              onClick={() => setDisponiblesAdvFilters([])}
+                              className="text-xs text-zinc-500 hover:text-white"
+                            >
+                              Limpiar todos
+                            </button>
+                          )}
+                        </div>
+                      </div>
+                    )}
+                  </div>
 
                   {/* Grouping */}
                   <button
@@ -4931,6 +5262,18 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
                             </th>
                             <th
                               className="px-3 py-2 text-left text-xs text-zinc-400 font-medium cursor-pointer hover:text-white transition-colors"
+                              onClick={() => handleSort('sentido')}
+                            >
+                              <div className="flex items-center gap-1">
+                                Sentido
+                                {sortColumn === 'sentido' && (
+                                  sortDirection === 'asc' ? <ChevronUp className="h-3 w-3" /> : <ChevronDown className="h-3 w-3" />
+                                )}
+                                {sortColumn !== 'sentido' && <ArrowUpDown className="h-3 w-3 opacity-30" />}
+                              </div>
+                            </th>
+                            <th
+                              className="px-3 py-2 text-left text-xs text-zinc-400 font-medium cursor-pointer hover:text-white transition-colors"
                               onClick={() => handleSort('nivel_socioeconomico')}
                             >
                               <div className="flex items-center gap-1">
@@ -5034,6 +5377,7 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
                                     <td className="px-3 py-2 text-zinc-300 text-sm">{inv.plaza}</td>
                                     <td className="px-3 py-2 text-zinc-400 text-sm">{inv.isla || '-'}</td>
                                     <td className={`px-3 py-2 ${isDark ? 'text-zinc-400' : 'text-gray-500'} text-sm`}>{(inv as any).mueble_isla || '-'}</td>
+                                    <td className="px-3 py-2 text-zinc-400 text-sm">{(inv as any).sentido || '-'}</td>
                                     <td className="px-3 py-2 text-zinc-400 text-sm">{inv.nivel_socioeconomico || '-'}</td>
                                     <td className="px-3 py-2 text-zinc-400 text-sm" title={inv.ubicacion || ''}>
                                       {inv.ubicacion}
@@ -5089,6 +5433,7 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
                                 <td className="px-3 py-2 text-zinc-300 text-sm">{inv.plaza}</td>
                                 <td className="px-3 py-2 text-zinc-400 text-sm">{inv.isla || '-'}</td>
                                 <td className={`px-3 py-2 ${isDark ? 'text-zinc-400' : 'text-gray-500'} text-sm`}>{(inv as any).mueble_isla || '-'}</td>
+                                <td className="px-3 py-2 text-zinc-400 text-sm">{(inv as any).sentido || '-'}</td>
                                 <td className="px-3 py-2 text-zinc-400 text-sm">{inv.nivel_socioeconomico || '-'}</td>
                                 <td className="px-3 py-2 text-zinc-400 text-sm" title={inv.ubicacion || ''}>
                                   {inv.ubicacion}
@@ -6080,33 +6425,151 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
                   </h3>
                 </div>
                 <div className="p-5 space-y-4">
-                  {/* Client info - read only */}
-                  <div className="grid grid-cols-4 gap-4">
-                    <div className="space-y-1">
-                      <label className={`text-xs ${isDark ? 'text-zinc-500' : 'text-gray-500'}`}>CUIC</label>
-                      <div className={`px-3 py-2 rounded-lg text-sm border ${isDark ? 'bg-zinc-800/50 text-zinc-300 border-zinc-700/30' : 'bg-gray-100 text-gray-700 border-gray-200'}`}>
-                        {campanaDetails?.cuic || '-'}
+                  {/* Client info */}
+                  {canEditCliente ? (
+                    <div className="space-y-3">
+                      <div className="relative">
+                        <label className={`text-xs ${isDark ? 'text-zinc-500' : 'text-gray-400'} mb-1 block`}>Seleccionar Cliente (CUIC)</label>
+                        <button
+                          type="button"
+                          onClick={() => setShowClienteDropdown(!showClienteDropdown)}
+                          className={`w-full flex items-center justify-between gap-2 px-3 py-2.5 rounded-xl text-sm transition-all ${
+                            selectedClienteCuic
+                              ? 'bg-purple-500/20 text-purple-300 border border-purple-500/40'
+                              : `${isDark ? 'bg-zinc-800' : 'bg-gray-50'} ${isDark ? 'text-zinc-400' : 'text-gray-500'} border ${isDark ? 'border-zinc-700' : 'border-gray-200'} ${isDark ? 'hover:border-zinc-600' : 'hover:border-gray-300'}`
+                          }`}
+                        >
+                          <span className="truncate text-left flex-1">
+                            {selectedClienteCuic ? (
+                              <span>
+                                <span className="font-medium">{selectedClienteCuic.T2_U_Marca || 'Sin marca'}</span>
+                                <span className={`text-[10px] ${isDark ? 'text-zinc-500' : 'text-gray-400'} ml-2`}>{selectedClienteCuic.CUIC} | {selectedClienteCuic.T2_U_Producto || ''}</span>
+                              </span>
+                            ) : (
+                              <span>{campanaDetails?.cuic ? `${(campanaDetails as any)?.T2_U_Marca || (campanaDetails as any)?.marca_nombre || ''} (CUIC: ${campanaDetails.cuic})` : 'Seleccionar CUIC'}</span>
+                            )}
+                          </span>
+                          {selectedClienteCuic ? (
+                            <X className={`h-4 w-4 ${isDark ? 'hover:text-white' : 'hover:text-gray-900'} flex-shrink-0`} onClick={(e) => { e.stopPropagation(); setSelectedClienteCuic(null); setClienteChanged(false); }} />
+                          ) : (
+                            <ChevronDown className="h-4 w-4 flex-shrink-0" />
+                          )}
+                        </button>
+                        {showClienteDropdown && (
+                          <>
+                            <div className="fixed inset-0 z-40" onClick={() => { setShowClienteDropdown(false); setClienteSearchTerm(''); }} />
+                            <div className={`absolute top-full left-0 right-0 mt-1 z-50 w-full min-w-[350px] rounded-xl border border-purple-500/20 ${isDark ? 'bg-zinc-900' : 'bg-white'} backdrop-blur-xl shadow-2xl overflow-hidden`}>
+                              <div className={`p-2 border-b ${isDark ? 'border-zinc-800' : 'border-gray-200'}`}>
+                                <div className="relative">
+                                  <Search className={`absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 ${isDark ? 'text-zinc-500' : 'text-gray-400'}`} />
+                                  <input
+                                    type="text"
+                                    placeholder="Buscar por marca, CUIC, razón social..."
+                                    value={clienteSearchTerm}
+                                    onChange={(e) => setClienteSearchTerm(e.target.value)}
+                                    className={`w-full pl-9 pr-3 py-2 text-sm ${isDark ? 'bg-zinc-800' : 'bg-gray-50'} ${isDark ? 'border-zinc-700' : 'border-gray-200'} ${isDark ? 'text-white' : 'text-gray-900'} placeholder:${isDark ? 'text-zinc-500' : 'text-gray-400'} border rounded-lg focus:outline-none focus:ring-1 focus:ring-purple-500/50`}
+                                    autoFocus
+                                    onClick={(e) => e.stopPropagation()}
+                                  />
+                                </div>
+                              </div>
+                              <div className="max-h-72 overflow-auto">
+                                {cuicLoading ? (
+                                  <div className={`px-3 py-4 text-center ${isDark ? 'text-zinc-500' : 'text-gray-400'} text-sm`}>Cargando...</div>
+                                ) : filteredCuicOptions.length === 0 ? (
+                                  <div className={`px-3 py-4 text-center ${isDark ? 'text-zinc-500' : 'text-gray-400'} text-sm`}>No se encontraron resultados</div>
+                                ) : (
+                                  filteredCuicOptions.slice(0, 100).map((item: CuicItem, idx: number) => (
+                                    <button
+                                      key={`${item.CUIC}-${idx}`}
+                                      type="button"
+                                      onClick={() => {
+                                        setSelectedClienteCuic(item);
+                                        setClienteChanged(true);
+                                        setShowClienteDropdown(false);
+                                        setClienteSearchTerm('');
+                                      }}
+                                      className={`w-full px-3 py-2.5 text-left text-sm transition-colors border-b ${isDark ? 'border-zinc-800/50' : 'border-gray-200/50'} last:border-0 ${
+                                        selectedClienteCuic?.CUIC === item.CUIC
+                                          ? 'bg-purple-500/20 text-purple-300'
+                                          : `${isDark ? 'text-zinc-300' : 'text-gray-700'} ${isDark ? 'hover:bg-zinc-800' : 'hover:bg-gray-50'}`
+                                      }`}
+                                    >
+                                      <div className="flex items-center justify-between">
+                                        <div className={`font-medium ${isDark ? 'text-white' : 'text-gray-900'}`}>{item.T2_U_Marca || 'Sin marca'}</div>
+                                        {item.sap_database && (
+                                          <span className={`text-[10px] font-semibold px-2 py-0.5 rounded-lg border ${
+                                            item.sap_database === 'CIMU' ? isDark ? 'bg-blue-500/20 text-blue-300 border-blue-500/30' : 'bg-blue-50 text-blue-700 border-blue-200' :
+                                            item.sap_database === 'TEST' ? isDark ? 'bg-amber-500/20 text-amber-300 border-amber-500/30' : 'bg-amber-50 text-amber-700 border-amber-200' :
+                                            item.sap_database === 'TRADE' ? isDark ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500/30' : 'bg-emerald-50 text-emerald-700 border-emerald-200' :
+                                            isDark ? 'bg-zinc-500/20 text-zinc-300 border-zinc-500/30' : 'bg-gray-50 text-gray-700 border-gray-200'
+                                          }`}>{item.sap_database}</span>
+                                        )}
+                                      </div>
+                                      <div className={`text-xs ${isDark ? 'text-zinc-500' : 'text-gray-400'}`}>{item.CUIC} | {item.T2_U_Producto || 'Sin producto'} | {item.T0_U_RazonSocial || ''}</div>
+                                    </button>
+                                  ))
+                                )}
+                              </div>
+                            </div>
+                          </>
+                        )}
+                      </div>
+                      <div className="grid grid-cols-4 gap-4">
+                        <div className="space-y-1">
+                          <label className={`text-xs ${isDark ? 'text-zinc-500' : 'text-gray-400'}`}>CUIC</label>
+                          <div className={`px-3 py-2 ${isDark ? 'bg-zinc-800/50' : 'bg-gray-50/50'} rounded-lg text-sm ${isDark ? 'text-zinc-300' : 'text-gray-700'} border ${isDark ? 'border-zinc-700/30' : 'border-gray-200/30'}`}>
+                            {selectedClienteCuic ? selectedClienteCuic.CUIC : (campanaDetails?.cuic || '-')}
+                          </div>
+                        </div>
+                        <div className="space-y-1">
+                          <label className={`text-xs ${isDark ? 'text-zinc-500' : 'text-gray-400'}`}>Razón Social</label>
+                          <div className={`px-3 py-2 ${isDark ? 'bg-zinc-800/50' : 'bg-gray-50/50'} rounded-lg text-sm ${isDark ? 'text-zinc-300' : 'text-gray-700'} border ${isDark ? 'border-zinc-700/30' : 'border-gray-200/30'} truncate`}>
+                            {selectedClienteCuic ? selectedClienteCuic.T0_U_RazonSocial : ((campanaDetails as any)?.T0_U_RazonSocial || (campanaDetails as any)?.razon_social || '-')}
+                          </div>
+                        </div>
+                        <div className="space-y-1">
+                          <label className={`text-xs ${isDark ? 'text-zinc-500' : 'text-gray-400'}`}>Marca</label>
+                          <div className={`px-3 py-2 ${isDark ? 'bg-zinc-800/50' : 'bg-gray-50/50'} rounded-lg text-sm ${isDark ? 'text-zinc-300' : 'text-gray-700'} border ${isDark ? 'border-zinc-700/30' : 'border-gray-200/30'}`}>
+                            {selectedClienteCuic ? selectedClienteCuic.T2_U_Marca : ((campanaDetails as any)?.T2_U_Marca || (campanaDetails as any)?.marca_nombre || '-')}
+                          </div>
+                        </div>
+                        <div className="space-y-1">
+                          <label className={`text-xs ${isDark ? 'text-zinc-500' : 'text-gray-400'}`}>Asesor</label>
+                          <div className={`px-3 py-2 ${isDark ? 'bg-zinc-800/50' : 'bg-gray-50/50'} rounded-lg text-sm ${isDark ? 'text-zinc-300' : 'text-gray-700'} border ${isDark ? 'border-zinc-700/30' : 'border-gray-200/30'}`}>
+                            {selectedClienteCuic ? selectedClienteCuic.ASESOR_U_Asesor : ((campanaDetails as any)?.T0_U_Asesor || (campanaDetails as any)?.asesor || '-')}
+                          </div>
+                        </div>
                       </div>
                     </div>
-                    <div className="space-y-1">
-                      <label className={`text-xs ${isDark ? 'text-zinc-500' : 'text-gray-500'}`}>Razón Social</label>
-                      <div className={`px-3 py-2 rounded-lg text-sm border ${isDark ? 'bg-zinc-800/50 text-zinc-300 border-zinc-700/30' : 'bg-gray-100 text-gray-700 border-gray-200'} truncate`}>
-                        {(campanaDetails as any)?.T0_U_RazonSocial || (campanaDetails as any)?.razon_social || '-'}
+                  ) : (
+                    <div className="grid grid-cols-4 gap-4">
+                      <div className="space-y-1">
+                        <label className={`text-xs ${isDark ? 'text-zinc-500' : 'text-gray-500'}`}>CUIC</label>
+                        <div className={`px-3 py-2 rounded-lg text-sm border ${isDark ? 'bg-zinc-800/50 text-zinc-300 border-zinc-700/30' : 'bg-gray-100 text-gray-700 border-gray-200'}`}>
+                          {campanaDetails?.cuic || '-'}
+                        </div>
+                      </div>
+                      <div className="space-y-1">
+                        <label className={`text-xs ${isDark ? 'text-zinc-500' : 'text-gray-500'}`}>Razón Social</label>
+                        <div className={`px-3 py-2 rounded-lg text-sm border ${isDark ? 'bg-zinc-800/50 text-zinc-300 border-zinc-700/30' : 'bg-gray-100 text-gray-700 border-gray-200'} truncate`}>
+                          {(campanaDetails as any)?.T0_U_RazonSocial || (campanaDetails as any)?.razon_social || '-'}
+                        </div>
+                      </div>
+                      <div className="space-y-1">
+                        <label className={`text-xs ${isDark ? 'text-zinc-500' : 'text-gray-500'}`}>Marca</label>
+                        <div className={`px-3 py-2 rounded-lg text-sm border ${isDark ? 'bg-zinc-800/50 text-zinc-300 border-zinc-700/30' : 'bg-gray-100 text-gray-700 border-gray-200'}`}>
+                          {(campanaDetails as any)?.T2_U_Marca || (campanaDetails as any)?.marca_nombre || '-'}
+                        </div>
+                      </div>
+                      <div className="space-y-1">
+                        <label className={`text-xs ${isDark ? 'text-zinc-500' : 'text-gray-500'}`}>Asesor</label>
+                        <div className={`px-3 py-2 rounded-lg text-sm border ${isDark ? 'bg-zinc-800/50 text-zinc-300 border-zinc-700/30' : 'bg-gray-100 text-gray-700 border-gray-200'}`}>
+                          {(campanaDetails as any)?.T0_U_Asesor || (campanaDetails as any)?.asesor || '-'}
+                        </div>
                       </div>
                     </div>
-                    <div className="space-y-1">
-                      <label className={`text-xs ${isDark ? 'text-zinc-500' : 'text-gray-500'}`}>Marca</label>
-                      <div className={`px-3 py-2 rounded-lg text-sm border ${isDark ? 'bg-zinc-800/50 text-zinc-300 border-zinc-700/30' : 'bg-gray-100 text-gray-700 border-gray-200'}`}>
-                        {(campanaDetails as any)?.T2_U_Marca || (campanaDetails as any)?.marca_nombre || '-'}
-                      </div>
-                    </div>
-                    <div className="space-y-1">
-                      <label className={`text-xs ${isDark ? 'text-zinc-500' : 'text-gray-500'}`}>Asesor</label>
-                      <div className={`px-3 py-2 rounded-lg text-sm border ${isDark ? 'bg-zinc-800/50 text-zinc-300 border-zinc-700/30' : 'bg-gray-100 text-gray-700 border-gray-200'}`}>
-                        {(campanaDetails as any)?.T0_U_Asesor || (campanaDetails as any)?.asesor || '-'}
-                      </div>
-                    </div>
-                  </div>
+                  )}
 
                   {/* Editable fields */}
                   <div className="grid grid-cols-2 gap-4">
@@ -6469,7 +6932,11 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
                       {canEditResumen && !editingCaraHasReservas && !editingCaraId ? (
                         <SearchableSelect
                           label="Seleccionar artículo"
-                          options={articulosData || []}
+                          options={(articulosData || []).filter(a => {
+                            const code = a.ItemCode.toUpperCase();
+                            // BF/CF solo aparecen en el dropdown de bonificación, no en el principal
+                            return !code.startsWith('BF') && !code.startsWith('CF');
+                          })}
                           value={selectedArticulo}
                           onChange={async (item: SAPArticulo) => {
                             setSelectedArticulo(item);
@@ -6502,9 +6969,9 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
                                   tarifa_publica: tarifa,
                                   costo: tarifaPiso,
                                   caras: det.total,
-                                  // Usar conteos reales del circuito (no Math.ceil/floor)
-                                  caras_flujo: det.flujo,
-                                  caras_contraflujo: det.contraflujo,
+                                  // Mensual = solo Flujo. Catorcena = conteos reales del circuito.
+                                  caras_flujo: tipoPeriodo === 'mensual' ? det.total : det.flujo,
+                                  caras_contraflujo: tipoPeriodo === 'mensual' ? 0 : det.contraflujo,
                                   bonificacion: 0,
                                   estados: circuito.plazaLabel,
                                   ciudad: '',
@@ -6523,6 +6990,10 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
                             const tarifa = getTarifaPublicaFromArticulo(item);
                             const tarifaPiso = getTarifaPisoFromArticulo(item);
                             const ciudadEstado = getCiudadEstadoFromArticulo(item.ItemName, item.ItemCode);
+                            // Auto-set plaza buscando el nombre de plaza dentro del ItemName
+                            const itemNameUpper = (item.ItemName || '').toUpperCase();
+                            const plazasBackend = (solicitudFilters as any)?.plazas as { plaza: string }[] | undefined;
+                            const plazaPorNombre = plazasBackend?.find(p => itemNameUpper.includes(p.plaza.toUpperCase()));
                             const formato = getFormatoFromArticulo(item.ItemName, item.ItemCode);
                             const tipo = getTipoFromName(item.ItemName);
                             const isCortesia = item.ItemCode.toUpperCase().startsWith('CT');
@@ -6539,7 +7010,7 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
                               caras_flujo: isCortesia ? 0 : newCara.caras_flujo,
                               caras_contraflujo: isCortesia ? 0 : newCara.caras_contraflujo,
                               bonificacion: (isImpresion || isIntercambio || isEspecial) ? 0 : newCara.bonificacion,
-                              estados: ciudadEstado?.estado || newCara.estados,
+                              estados: plazaPorNombre?.plaza || ciudadEstado?.estado || newCara.estados,
                               // Si ciudadEstado existe, usar su ciudad (incluso si es vacía para CDMX)
                               ciudad: ciudadEstado ? ciudadEstado.ciudad : newCara.ciudad,
                               formato: formato || newCara.formato,
@@ -6829,8 +7300,14 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
                                 return solicitudFilters?.ciudades
                                   .filter(c => {
                                     if (!newCara.estados) return true;
-                                    const selectedEstados = newCara.estados.split(',').map(s => s.trim()).flatMap(s => s === 'Ciudad de México / AM' ? ['Ciudad de México', 'Estado de México'] : [s]);
-                                    return selectedEstados.includes(c.estado);
+                                    const selectedRaw = newCara.estados.split(',').map(s => s.trim()).filter(Boolean);
+                                    const selectedExpanded = selectedRaw.flatMap(s => s === 'Ciudad de México / AM' ? ['Ciudad de México', 'Estado de México'] : [s]);
+                                    const selectedUpper = selectedRaw.map(s => s.toUpperCase());
+                                    const matchEstado = selectedExpanded.includes(c.estado);
+                                    const matchPlaza = (c as { plaza?: string }).plaza
+                                      ? selectedUpper.includes(((c as { plaza?: string }).plaza || '').toUpperCase())
+                                      : false;
+                                    return matchEstado || matchPlaza;
                                   })
                                   .filter(c => !isAM || c.estado !== 'Estado de México' || AM_EDO_MEX_CITIES.includes(c.ciudad.toUpperCase()))
                                   .map(c => c.ciudad) || [];
@@ -6899,20 +7376,29 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
                             if (c) {
                               const total = (newCara.caras || 0) + (newCara.bonificacion || 0);
                               const carasCap = Math.min(Math.max(0, val), total);
-                              // Redistribuir flujo/contraflujo proporcionalmente al nuevo renta
-                              const curFlujo = newCara.caras_flujo || 0;
-                              const curContra = newCara.caras_contraflujo || 0;
-                              const curRenta = curFlujo + curContra;
-                              let flujoCalc = curRenta > 0
-                                ? Math.round(carasCap * curFlujo / curRenta)
-                                : Math.ceil(carasCap / 2);
-                              let contraCalc = carasCap - flujoCalc;
-                              if (contraCalc < 0) { contraCalc = 0; flujoCalc = carasCap; }
+                              // Mensual = solo Flujo. Catorcena = redistribuir proporcionalmente.
+                              let flujoCalc: number;
+                              let contraCalc: number;
+                              if (tipoPeriodo === 'mensual') {
+                                flujoCalc = carasCap;
+                                contraCalc = 0;
+                              } else {
+                                const curFlujo = newCara.caras_flujo || 0;
+                                const curContra = newCara.caras_contraflujo || 0;
+                                const curRenta = curFlujo + curContra;
+                                flujoCalc = curRenta > 0
+                                  ? Math.round(carasCap * curFlujo / curRenta)
+                                  : Math.ceil(carasCap / 2);
+                                contraCalc = carasCap - flujoCalc;
+                                if (contraCalc < 0) { contraCalc = 0; flujoCalc = carasCap; }
+                              }
                               setNewCara({ ...newCara, caras: carasCap, bonificacion: total - carasCap, caras_flujo: flujoCalc, caras_contraflujo: contraCalc });
                               return;
                             }
-                            const flujo = Math.ceil(val / 2);
-                            const contraflujo = Math.floor(val / 2);
+                            // Mensual = solo Flujo (Gran Formato).
+                            // Catorcena = split 50/50 flujo/contraflujo (ceil/floor).
+                            const flujo = tipoPeriodo === 'mensual' ? val : Math.ceil(val / 2);
+                            const contraflujo = tipoPeriodo === 'mensual' ? 0 : Math.floor(val / 2);
                             setNewCara({ ...newCara, caras: val, caras_flujo: flujo, caras_contraflujo: contraflujo });
                           }}
                           disabled={!canEditResumen || newCara.articulo?.toUpperCase().startsWith('CT')}
@@ -6939,15 +7425,22 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
                               const total = (newCara.caras || 0) + (newCara.bonificacion || 0);
                               const bonifCap = Math.min(Math.max(0, val), total);
                               const carasCap = total - bonifCap;
-                              // Redistribuir flujo/contraflujo proporcionalmente al nuevo renta
-                              const curFlujo = newCara.caras_flujo || 0;
-                              const curContra = newCara.caras_contraflujo || 0;
-                              const curRenta = curFlujo + curContra;
-                              let flujoCalc = curRenta > 0
-                                ? Math.round(carasCap * curFlujo / curRenta)
-                                : Math.ceil(carasCap / 2);
-                              let contraCalc = carasCap - flujoCalc;
-                              if (contraCalc < 0) { contraCalc = 0; flujoCalc = carasCap; }
+                              // Mensual = solo Flujo. Catorcena = redistribuir proporcionalmente.
+                              let flujoCalc: number;
+                              let contraCalc: number;
+                              if (tipoPeriodo === 'mensual') {
+                                flujoCalc = carasCap;
+                                contraCalc = 0;
+                              } else {
+                                const curFlujo = newCara.caras_flujo || 0;
+                                const curContra = newCara.caras_contraflujo || 0;
+                                const curRenta = curFlujo + curContra;
+                                flujoCalc = curRenta > 0
+                                  ? Math.round(carasCap * curFlujo / curRenta)
+                                  : Math.ceil(carasCap / 2);
+                                contraCalc = carasCap - flujoCalc;
+                                if (contraCalc < 0) { contraCalc = 0; flujoCalc = carasCap; }
+                              }
                               setNewCara({ ...newCara, bonificacion: bonifCap, caras: carasCap, caras_flujo: flujoCalc, caras_contraflujo: contraCalc });
                               return;
                             }
@@ -6961,12 +7454,19 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
                       <div className="space-y-1">
                         <label className={`text-xs ${isDark ? 'text-zinc-500' : 'text-gray-500'}`}>Tarifa Pública</label>
                         <input
-                          type="number"
-                          value={newCara.tarifa_publica || ''}
-                          onChange={(e) => canEditResumen && setNewCara({ ...newCara, tarifa_publica: parseFloat(e.target.value) || 0 })}
+                          type="text"
+                          inputMode="decimal"
+                          value={(newCara.tarifa_publica || 0) > 0 ? (newCara.tarifa_publica || 0).toFixed(2) : ''}
+                          onChange={(e) => {
+                            if (!canEditResumen) return;
+                            const cleaned = e.target.value.replace(/[^\d.]/g, '');
+                            const parts = cleaned.split('.');
+                            const normalized = parts.length > 1 ? `${parts[0]}.${parts.slice(1).join('').slice(0, 2)}` : cleaned;
+                            setNewCara({ ...newCara, tarifa_publica: parseFloat(normalized) || 0 });
+                          }}
+                          placeholder="0.00"
                           disabled={!canEditResumen || newCara.articulo?.toUpperCase().startsWith('CT')}
                           className={`w-full px-3 py-2 ${isDark ? 'bg-zinc-800 border-zinc-700 text-white' : 'bg-white border-gray-300 text-gray-900'} border rounded-lg text-sm focus:outline-none focus:ring-1 focus:ring-purple-500/50 ${(!canEditResumen || newCara.articulo?.toUpperCase().startsWith('CT')) ? 'opacity-40 cursor-not-allowed' : ''}`}
-                          min="0"
                         />
                       </div>
                       <div className="space-y-1">
@@ -7218,8 +7718,8 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
                                       </span>
                                     </div>
                                     <div>
-                                      <span className={`${isDark ? 'text-zinc-500' : 'text-gray-400'} text-xs`}>Ciudad</span>
-                                      <p className={`${isDark ? 'text-zinc-300' : 'text-gray-700'} text-xs truncate`} title={cara.ciudad || cara.estados}>{cara.ciudad || cara.estados || '-'}</p>
+                                      <span className={`${isDark ? 'text-zinc-500' : 'text-gray-400'} text-xs`}>Plaza</span>
+                                      <p className={`${isDark ? 'text-zinc-300' : 'text-gray-700'} text-xs truncate`} title={cara.plaza || cara.estados || cara.ciudad}>{cara.plaza || cara.estados || cara.ciudad || '-'}</p>
                                     </div>
                                     <div>
                                       <span className={`${isDark ? 'text-zinc-500' : 'text-gray-400'} text-xs`}>Artículo</span>
