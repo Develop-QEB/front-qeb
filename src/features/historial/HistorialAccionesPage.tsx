@@ -1,7 +1,7 @@
 import { useState, useCallback, Fragment } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import {
-  Search, X, RefreshCw, Clock, Filter, ChevronLeft, ChevronRight,
+  Search, X, RefreshCw, Clock, Filter, ChevronLeft, ChevronRight, ChevronDown,
   StickyNote, Send, History, Layers,
 } from 'lucide-react';
 import { Header } from '../../components/layout/Header';
@@ -228,6 +228,8 @@ function NotaModal({
   );
 }
 
+type GroupNode = { key: string; entries: HistorialEntry[]; subGroups?: GroupNode[] };
+
 export function HistorialAccionesPage() {
   const isDark = useThemeStore((s) => s.theme) === 'dark';
   const user = useAuthStore((s) => s.user);
@@ -238,7 +240,22 @@ export function HistorialAccionesPage() {
   const [searchInput, setSearchInput] = useState('');
   const [showNotaModal, setShowNotaModal] = useState(false);
   const [showFilters, setShowFilters] = useState(false);
-  const [groupMode, setGroupMode] = useState<'none' | 'referencia' | 'etapa'>('none');
+  const [groupLevels, setGroupLevels] = useState<('etapa' | 'referencia')[]>([]);
+  const [collapsedGroups, setCollapsedGroups] = useState<Set<string>>(new Set());
+
+  const toggleGroupLevel = (level: 'etapa' | 'referencia') => {
+    setGroupLevels(prev => prev.includes(level) ? prev.filter(l => l !== level) : [...prev, level]);
+    setCollapsedGroups(new Set());
+  };
+
+  const toggleCollapse = useCallback((key: string) => {
+    setCollapsedGroups(prev => {
+      const next = new Set(prev);
+      if (next.has(key)) next.delete(key);
+      else next.add(key);
+      return next;
+    });
+  }, []);
 
   useSocketHistorialAcciones();
 
@@ -314,18 +331,60 @@ export function HistorialAccionesPage() {
   const historial = data?.data || [];
   const pagination = data?.pagination;
 
-  const grouped = groupMode !== 'none' ? (() => {
-    const groups: Record<string, HistorialEntry[]> = {};
-    const order: string[] = [];
-    for (const entry of historial) {
-      const key = groupMode === 'referencia'
-        ? `${normalizeTipo(entry.tipo)} #${entry.ref_id}`
-        : normalizeTipo(entry.tipo);
-      if (!groups[key]) { groups[key] = []; order.push(key); }
-      groups[key].push(entry);
-    }
-    return order.map(key => ({ key, entries: groups[key] }));
+  const groupedData = groupLevels.length > 0 ? (() => {
+    const getKey = (entry: HistorialEntry, level: 'etapa' | 'referencia') =>
+      level === 'etapa' ? normalizeTipo(entry.tipo) : `${normalizeTipo(entry.tipo)} #${entry.ref_id}`;
+
+    const buildLevel = (items: HistorialEntry[], levels: ('etapa' | 'referencia')[]): GroupNode[] => {
+      const [first, ...rest] = levels;
+      const groups: Record<string, HistorialEntry[]> = {};
+      const order: string[] = [];
+      for (const entry of items) {
+        const key = getKey(entry, first);
+        if (!groups[key]) { groups[key] = []; order.push(key); }
+        groups[key].push(entry);
+      }
+      return order.map(key => ({
+        key,
+        entries: groups[key],
+        subGroups: rest.length > 0 ? buildLevel(groups[key], rest) : undefined,
+      }));
+    };
+
+    return buildLevel(historial, groupLevels);
   })() : null;
+
+  const collapseAll = () => {
+    if (!groupedData) return;
+    const keys = new Set<string>();
+    for (const g of groupedData) {
+      keys.add(g.key);
+      if (g.subGroups) {
+        for (const sg of g.subGroups) keys.add(`${g.key}::${sg.key}`);
+      }
+    }
+    setCollapsedGroups(keys);
+  };
+
+  const expandAll = () => setCollapsedGroups(new Set());
+
+  const renderEntries = (entries: HistorialEntry[]) =>
+    entries.map((entry, idx) => (
+      <tr key={entry.id} className={`transition-colors ${rowHover} ${idx % 2 === 1 ? (isDark ? 'bg-zinc-800/20' : 'bg-gray-50/50') : ''}`}>
+        <td className={`px-6 py-3.5 text-sm whitespace-nowrap ${subText}`}>
+          <div className="flex items-center gap-1.5">
+            <Clock className="h-3.5 w-3.5" />
+            {formatFechaHora(entry.fecha_hora)}
+          </div>
+        </td>
+        <td className="px-6 py-3.5"><TipoBadge tipo={entry.tipo} isDark={isDark} /></td>
+        <td className={`px-6 py-3.5 text-sm font-mono ${headerText}`}>{entry.ref_id || '-'}</td>
+        <td className={`px-6 py-3.5 text-sm ${headerText}`}>{entry.accion}</td>
+        <td className={`px-6 py-3.5 text-sm max-w-md truncate ${subText}`} title={entry.detalles || ''}>
+          {formatDetalles(entry.detalles)}
+        </td>
+      </tr>
+    ));
 
   const cardBg = isDark ? 'bg-zinc-900/50 border-zinc-800' : 'bg-white border-gray-200';
   const headerText = isDark ? 'text-white' : 'text-gray-900';
@@ -457,21 +516,50 @@ export function HistorialAccionesPage() {
 
               <div>
                 <label className={`text-xs font-medium mb-1 block ${subText}`}>Agrupar por</label>
-                <div className="flex gap-1">
-                  {([['none', 'Sin agrupar'], ['referencia', 'Referencia'], ['etapa', 'Etapa']] as const).map(([mode, label]) => (
-                    <button
-                      key={mode}
-                      onClick={() => setGroupMode(mode)}
-                      className={`px-2.5 py-1 rounded-lg text-xs font-medium border transition-colors ${
-                        groupMode === mode
-                          ? 'border-purple-500 bg-purple-500/10 text-purple-500'
-                          : isDark ? 'border-zinc-700 text-zinc-400 hover:border-zinc-600' : 'border-gray-300 text-gray-500 hover:border-gray-400'
-                      }`}
-                    >
-                      {mode !== 'none' && <Layers className="h-3 w-3 inline mr-1" />}
-                      {label}
-                    </button>
-                  ))}
+                <div className="flex items-center gap-1.5">
+                  {([['etapa', 'Etapa'], ['referencia', 'Referencia']] as const).map(([level, label]) => {
+                    const idx = groupLevels.indexOf(level);
+                    const active = idx !== -1;
+                    return (
+                      <button
+                        key={level}
+                        onClick={() => toggleGroupLevel(level)}
+                        className={`flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-medium border transition-colors ${
+                          active
+                            ? 'border-purple-500 bg-purple-500/10 text-purple-500'
+                            : isDark ? 'border-zinc-700 text-zinc-400 hover:border-zinc-600' : 'border-gray-300 text-gray-500 hover:border-gray-400'
+                        }`}
+                      >
+                        {active && <span className="inline-flex items-center justify-center w-4 h-4 rounded-full bg-purple-500 text-white text-[10px] font-bold">{idx + 1}</span>}
+                        <Layers className="h-3 w-3" />
+                        {label}
+                      </button>
+                    );
+                  })}
+                  {groupLevels.length > 0 && (
+                    <>
+                      <button
+                        onClick={() => { setGroupLevels([]); setCollapsedGroups(new Set()); }}
+                        className={`p-1 rounded-lg text-xs border ${isDark ? 'border-zinc-700 text-zinc-400 hover:border-zinc-600' : 'border-gray-300 text-gray-500 hover:border-gray-400'}`}
+                        title="Quitar agrupación"
+                      >
+                        <X className="h-3 w-3" />
+                      </button>
+                      <div className={`w-px h-5 ${isDark ? 'bg-zinc-700' : 'bg-gray-300'}`} />
+                      <button
+                        onClick={expandAll}
+                        className={`px-2 py-1 rounded-lg text-[11px] border ${isDark ? 'border-zinc-700 text-zinc-400 hover:border-zinc-600' : 'border-gray-300 text-gray-500 hover:border-gray-400'}`}
+                      >
+                        Expandir todo
+                      </button>
+                      <button
+                        onClick={collapseAll}
+                        className={`px-2 py-1 rounded-lg text-[11px] border ${isDark ? 'border-zinc-700 text-zinc-400 hover:border-zinc-600' : 'border-gray-300 text-gray-500 hover:border-gray-400'}`}
+                      >
+                        Colapsar todo
+                      </button>
+                    </>
+                  )}
                 </div>
               </div>
 
@@ -513,72 +601,57 @@ export function HistorialAccionesPage() {
                   </tr>
                 </thead>
                 <tbody className={`divide-y ${isDark ? 'divide-zinc-800/60' : 'divide-gray-100'}`}>
-                  {grouped ? (
-                    grouped.map(group => {
-                      let groupIdx = 0;
+                  {groupedData ? (
+                    groupedData.map(group => {
+                      const isCollapsed = collapsedGroups.has(group.key);
                       return (
-                      <Fragment key={group.key}>
-                        <tr className={isDark ? 'bg-purple-900/20' : 'bg-purple-50'}>
-                          <td colSpan={5} className={`px-6 py-2.5 text-sm font-semibold ${headerText}`}>
-                            <div className="flex items-center gap-2">
-                              <Layers className="h-3.5 w-3.5 text-purple-500" />
-                              {group.key}
-                              <span className={`font-normal text-xs ${subText}`}>({group.entries.length})</span>
-                            </div>
-                          </td>
-                        </tr>
-                        {group.entries.map((entry: HistorialEntry) => {
-                          const zebraClass = groupIdx++ % 2 === 1 ? (isDark ? 'bg-zinc-800/20' : 'bg-gray-50/50') : '';
-                          return (
-                          <tr key={entry.id} className={`transition-colors ${rowHover} ${zebraClass}`}>
-                            <td className={`px-6 py-3.5 text-sm whitespace-nowrap ${subText}`}>
-                              <div className="flex items-center gap-1.5">
-                                <Clock className="h-3.5 w-3.5" />
-                                {formatFechaHora(entry.fecha_hora)}
+                        <Fragment key={group.key}>
+                          <tr
+                            className={`cursor-pointer select-none transition-colors ${isDark ? 'bg-purple-900/20 hover:bg-purple-900/30' : 'bg-purple-50 hover:bg-purple-100/80'}`}
+                            onClick={() => toggleCollapse(group.key)}
+                          >
+                            <td colSpan={5} className={`px-6 py-2.5 text-sm font-semibold ${headerText}`}>
+                              <div className="flex items-center gap-2">
+                                {isCollapsed
+                                  ? <ChevronRight className="h-4 w-4 text-purple-500" />
+                                  : <ChevronDown className="h-4 w-4 text-purple-500" />}
+                                <Layers className="h-3.5 w-3.5 text-purple-500" />
+                                {group.key}
+                                <span className={`font-normal text-xs ${subText}`}>({group.entries.length})</span>
                               </div>
                             </td>
-                            <td className="px-6 py-3.5">
-                              <TipoBadge tipo={entry.tipo} isDark={isDark} />
-                            </td>
-                            <td className={`px-6 py-3.5 text-sm font-mono ${headerText}`}>
-                              {entry.ref_id || '-'}
-                            </td>
-                            <td className={`px-6 py-3.5 text-sm ${headerText}`}>
-                              {entry.accion}
-                            </td>
-                            <td className={`px-6 py-3.5 text-sm max-w-md truncate ${subText}`} title={entry.detalles || ''}>
-                              {formatDetalles(entry.detalles)}
-                            </td>
                           </tr>
-                          );
-                        })}
-                      </Fragment>
+                          {!isCollapsed && (
+                            group.subGroups ? (
+                              group.subGroups.map(sub => {
+                                const subKey = `${group.key}::${sub.key}`;
+                                const subCollapsed = collapsedGroups.has(subKey);
+                                return (
+                                  <Fragment key={subKey}>
+                                    <tr
+                                      className={`cursor-pointer select-none transition-colors ${isDark ? 'bg-zinc-800/40 hover:bg-zinc-800/60' : 'bg-gray-100/70 hover:bg-gray-100'}`}
+                                      onClick={() => toggleCollapse(subKey)}
+                                    >
+                                      <td colSpan={5} className={`pl-12 pr-6 py-2 text-sm font-medium ${headerText}`}>
+                                        <div className="flex items-center gap-2">
+                                          {subCollapsed
+                                            ? <ChevronRight className="h-3.5 w-3.5 text-purple-400" />
+                                            : <ChevronDown className="h-3.5 w-3.5 text-purple-400" />}
+                                          {sub.key}
+                                          <span className={`font-normal text-xs ${subText}`}>({sub.entries.length})</span>
+                                        </div>
+                                      </td>
+                                    </tr>
+                                    {!subCollapsed && renderEntries(sub.entries)}
+                                  </Fragment>
+                                );
+                              })
+                            ) : renderEntries(group.entries)
+                          )}
+                        </Fragment>
                       );
                     })
-                  ) : (
-                    historial.map((entry: HistorialEntry, idx: number) => (
-                      <tr key={entry.id} className={`transition-colors ${rowHover} ${idx % 2 === 1 ? (isDark ? 'bg-zinc-800/20' : 'bg-gray-50/50') : ''}`}>
-                        <td className={`px-6 py-3.5 text-sm whitespace-nowrap ${subText}`}>
-                          <div className="flex items-center gap-1.5">
-                            <Clock className="h-3.5 w-3.5" />
-                            {formatFechaHora(entry.fecha_hora)}
-                          </div>
-                        </td>
-                        <td className="px-6 py-3.5">
-                          <TipoBadge tipo={entry.tipo} isDark={isDark} />
-                        </td>
-                        <td className={`px-6 py-3.5 text-sm font-mono ${headerText}`}>
-                          {entry.ref_id || '-'}
-                        </td>
-                        <td className={`px-6 py-3.5 text-sm ${headerText}`}>
-                          {entry.accion}
-                        </td>
-                        <td className={`px-6 py-3.5 text-sm max-w-md truncate ${subText}`} title={entry.detalles || ''}>
-                          {formatDetalles(entry.detalles)}
-                        </td>
-                      </tr>
-                    ))
-                  )}
+                  ) : renderEntries(historial)}
                 </tbody>
               </table>
             </div>
