@@ -780,6 +780,40 @@ export function HistorialAccionesPage() {
                           </div>
                         </div>
                       )}
+                      {obj.campaña && (
+                        <div>
+                          <span className={`text-xs font-medium ${subText}`}>Campaña</span>
+                          <p className={`text-sm mt-1 ${headerText}`}>{obj.campaña}</p>
+                        </div>
+                      )}
+                      {obj.motivo && (
+                        <div>
+                          <span className={`text-xs font-medium ${subText}`}>Motivo</span>
+                          <p className={`text-sm mt-1 ${headerText}`}>{obj.motivo}</p>
+                        </div>
+                      )}
+                      {obj.reservas_eliminadas != null && (
+                        <div>
+                          <span className={`text-xs font-medium ${subText}`}>Reservas eliminadas</span>
+                          <p className={`text-sm mt-1 text-red-400 font-medium`}>{obj.reservas_eliminadas}</p>
+                        </div>
+                      )}
+                      {obj.circuitos_eliminados != null && (
+                        <div>
+                          <span className={`text-xs font-medium ${subText}`}>Circuitos eliminados</span>
+                          <p className={`text-sm mt-1 text-red-400 font-medium`}>{obj.circuitos_eliminados}</p>
+                        </div>
+                      )}
+                      {obj.circuitos?.length > 0 && !obj.cambios && (
+                        <div>
+                          <span className={`text-xs font-medium ${subText}`}>Circuitos afectados ({obj.circuitos.length})</span>
+                          <div className="mt-1 space-y-1">
+                            {obj.circuitos.map((c: any, i: number) => (
+                              <p key={i} className={`text-sm ${headerText}`}>{c.articulo || '-'} — {c.formato || '-'}</p>
+                            ))}
+                          </div>
+                        </div>
+                      )}
                       {obj.pendientesDg && <p className={`text-sm ${subText}`}>Pendientes DG: {obj.pendientesDg}</p>}
                       {obj.pendientesDcm && <p className={`text-sm ${subText}`}>Pendientes DCM: {obj.pendientesDcm}</p>}
                     </>
