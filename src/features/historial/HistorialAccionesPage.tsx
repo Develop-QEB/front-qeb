@@ -394,7 +394,7 @@ export function HistorialAccionesPage() {
     return build(historial, groupLevels);
   })() : null;
 
-  const renderGroupNodes = (nodes: GroupNode[], prefix = ''): JSX.Element[] =>
+  const renderGroupNodes = (nodes: GroupNode[], prefix = ''): React.JSX.Element[] =>
     nodes.flatMap(node => {
       const fullKey = prefix ? `${prefix}>${node.key}` : node.key;
       const depth = prefix ? prefix.split('>').length : 0;
