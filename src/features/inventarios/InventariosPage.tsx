@@ -1,11 +1,12 @@
-import { useState, useMemo, useRef, useCallback } from 'react';
-import { useSearchParams } from 'react-router-dom';
+import { useState, useMemo, useRef, useCallback, useEffect } from 'react';
+import { useSearchParams, useParams, useNavigate } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import {
-  Search, Map, List, History, X, Loader2, AlertCircle, Calendar as CalendarIcon,
+  Search, List, History, X, Loader2, AlertCircle, Calendar as CalendarIcon,
   Plus, Edit2, Ban, CheckCircle, Package, MapPin, ChevronDown, ChevronRight,
   Eye, EyeOff, ArrowUp, ArrowDown, ArrowUpDown, SlidersHorizontal, Monitor, Ruler,
-  Upload, Download, AlertTriangle, CheckCircle2, FileText, Activity
+  Upload, Download, AlertTriangle, CheckCircle2, FileText, Activity,
+  BarChart3, FolderOpen
 } from 'lucide-react';
 import { Header } from '../../components/layout/Header';
 import { useThemeStore } from '../../store/themeStore';
@@ -13,10 +14,13 @@ import { useAuthStore } from '../../store/authStore';
 import { inventariosService, BulkCheckResult } from '../../services/inventarios.service';
 import { campanasService } from '../../services/campanas.service';
 import { notificacionesService } from '../../services/notificaciones.service';
+import { analisisOcupacionService, AnalisisOcupacion, InventarioResumen } from '../../services/analisisOcupacion.service';
 import { Inventario } from '../../types';
 
 import { InventarioMap } from './InventarioMap';
 import { BloqueoModal, BloqueoData } from './BloqueoModal';
+import { AnalisisOcupacionModal } from './AnalisisOcupacionModal';
+import { AnalisisOcupacionListModal } from './AnalisisOcupacionListModal';
 
 const getEstatusStyles = (isDark: boolean): Record<string, { bg: string; text: string; border: string }> => ({
   Activo: { bg: isDark ? 'bg-emerald-500/20' : 'bg-emerald-50', text: isDark ? 'text-emerald-300' : 'text-emerald-700', border: 'border-emerald-500/30' },
@@ -108,6 +112,8 @@ export function InventariosPage() {
   const { user } = useAuthStore();
   const queryClient = useQueryClient();
   const [searchParams, setSearchParams] = useSearchParams();
+  const { analisisId: analisisIdParam } = useParams<{ analisisId?: string }>();
+  const navigate = useNavigate();
   const campanaIdParam = searchParams.get('campanaId');
   const campanaNombreParam = searchParams.get('campanaNombre');
   const [page, setPage] = useState(1);
@@ -152,6 +158,38 @@ export function InventariosPage() {
   const [editItemOcupado, setEditItemOcupado] = useState(false);
   const [formData, setFormData] = useState<Record<string, string>>({ ...EMPTY_FORM });
   const [saving, setSaving] = useState(false);
+  const [selectedRows, setSelectedRows] = useState<Set<number>>(new Set());
+  const [isAnalisisOpen, setIsAnalisisOpen] = useState(false);
+  const [analisisInicial, setAnalisisInicial] = useState<AnalisisOcupacion | undefined>(undefined);
+  const [analisisInicialInventarios, setAnalisisInicialInventarios] = useState<InventarioResumen[]>([]);
+  const [isAnalisisListOpen, setIsAnalisisListOpen] = useState(false);
+  const [openingAnalisis, setOpeningAnalisis] = useState(false);
+
+  useEffect(() => {
+    if (!analisisIdParam) return;
+    const id = parseInt(analisisIdParam);
+    if (Number.isNaN(id)) return;
+    let cancelled = false;
+    (async () => {
+      try {
+        const a = await analisisOcupacionService.get(id);
+        if (cancelled) return;
+        setAnalisisInicial(a);
+        setAnalisisInicialInventarios([]);
+        setIsAnalisisOpen(true);
+      } catch (err) {
+        console.error('Error abriendo análisis compartido:', err);
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [analisisIdParam]);
+
+  const handleCloseAnalisis = () => {
+    setIsAnalisisOpen(false);
+    if (analisisIdParam) {
+      navigate('/inventarios', { replace: true });
+    }
+  };
 
   const limit = 50;
   const campanaIdNum = campanaIdParam ? parseInt(campanaIdParam) : undefined;
@@ -161,10 +199,10 @@ export function InventariosPage() {
       inventariosService.getAll({ page, limit, search, tipo: tipo || undefined, estatus: estatus || undefined, plaza: plaza || undefined, cto: cto || undefined, campanaId: campanaIdNum }),
   });
 
-  const { data: tipos } = useQuery({ queryKey: ['inventarios', 'tipos'], queryFn: () => inventariosService.getTipos() });
-  const { data: plazas } = useQuery({ queryKey: ['inventarios', 'plazas'], queryFn: () => inventariosService.getPlazas() });
-  const { data: ctos } = useQuery({ queryKey: ['inventarios', 'ctos'], queryFn: () => inventariosService.getCtos() });
-  const { data: estatusList } = useQuery({ queryKey: ['inventarios', 'estatus'], queryFn: () => inventariosService.getEstatus() });
+  const { data: tipos } = useQuery({ queryKey: ['inventarios', 'tipos'], queryFn: () => inventariosService.getTipos(), staleTime: 30 * 60 * 1000 });
+  const { data: plazas } = useQuery({ queryKey: ['inventarios', 'plazas'], queryFn: () => inventariosService.getPlazas(), staleTime: 30 * 60 * 1000 });
+  const { data: ctos } = useQuery({ queryKey: ['inventarios', 'ctos'], queryFn: () => inventariosService.getCtos(), staleTime: 30 * 60 * 1000 });
+  const { data: estatusList } = useQuery({ queryKey: ['inventarios', 'estatus'], queryFn: () => inventariosService.getEstatus(), staleTime: 30 * 60 * 1000 });
 
   // Stats query — global KPIs with same filters
   const { data: statsData, isLoading: isLoadingStats } = useQuery({
@@ -317,6 +355,83 @@ export function InventariosPage() {
   const handleSort = (col: SortCol) => {
     if (sortCol === col) setSortDir(d => d === 'asc' ? 'desc' : 'asc');
     else { setSortCol(col); setSortDir('asc'); }
+  };
+
+  const visibleSelectedCount = useMemo(
+    () => sortedData.reduce((acc, item) => acc + (selectedRows.has(item.id) ? 1 : 0), 0),
+    [sortedData, selectedRows]
+  );
+  const allVisibleSelected = sortedData.length > 0 && visibleSelectedCount === sortedData.length;
+  const someVisibleSelected = visibleSelectedCount > 0 && !allVisibleSelected;
+
+  const toggleRowSelected = (id: number) => {
+    setSelectedRows(prev => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  };
+
+  const toggleAllVisible = () => {
+    setSelectedRows(prev => {
+      const next = new Set(prev);
+      if (allVisibleSelected) sortedData.forEach(item => next.delete(item.id));
+      else sortedData.forEach(item => next.add(item.id));
+      return next;
+    });
+  };
+
+  const clearSelection = () => setSelectedRows(new Set());
+
+  const inventarioToResumen = (inv: Inventario): InventarioResumen => ({
+    id: inv.id,
+    codigo_unico: inv.codigo_unico,
+    ubicacion: inv.ubicacion,
+    mueble: inv.mueble,
+    plaza: inv.plaza,
+    estado: inv.estado,
+    tipo_de_cara: inv.tipo_de_cara,
+    tradicional_digital: inv.tradicional_digital,
+  });
+
+  const openAnalisisFromSelection = async () => {
+    if (selectedRows.size === 0) return;
+    setOpeningAnalisis(true);
+    try {
+      const ids = Array.from(selectedRows);
+      const enPagina: Record<number, Inventario> = {};
+      sortedData.forEach(i => { if (selectedRows.has(i.id)) enPagina[i.id] = i; });
+      const faltantes = ids.filter(id => !(id in enPagina));
+      const fetched = await Promise.all(
+        faltantes.map(async id => {
+          try { return await inventariosService.getById(id); } catch { return null; }
+        })
+      );
+      fetched.forEach(inv => { if (inv) enPagina[inv.id] = inv; });
+      const resumenes = ids
+        .map(id => enPagina[id])
+        .filter((x): x is Inventario => !!x)
+        .map(inventarioToResumen);
+      setAnalisisInicial(undefined);
+      setAnalisisInicialInventarios(resumenes);
+      setIsAnalisisOpen(true);
+    } finally {
+      setOpeningAnalisis(false);
+    }
+  };
+
+  const openAnalisisVacio = () => {
+    setAnalisisInicial(undefined);
+    setAnalisisInicialInventarios([]);
+    setIsAnalisisOpen(true);
+  };
+
+  const openAnalisisGuardado = (a: AnalisisOcupacion) => {
+    setAnalisisInicial(a);
+    setAnalisisInicialInventarios([]);
+    setIsAnalisisListOpen(false);
+    setIsAnalisisOpen(true);
   };
 
   const SortIcon = ({ col }: { col: SortCol }) => {
@@ -882,6 +997,32 @@ export function InventariosPage() {
                 Descargar CSV
               </button>
 
+              {/* Análisis de Ocupación */}
+              <button
+                onClick={selectedRows.size > 0 ? openAnalisisFromSelection : openAnalisisVacio}
+                disabled={openingAnalisis}
+                title={selectedRows.size > 0 ? `Analizar ${selectedRows.size} seleccionados` : 'Crear análisis de ocupación'}
+                className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-medium border transition-all ${isDark ? 'bg-fuchsia-500/10 hover:bg-fuchsia-500/20 text-fuchsia-300 border-fuchsia-500/30' : 'bg-fuchsia-50 hover:bg-fuchsia-100 text-fuchsia-700 border-fuchsia-200'} disabled:opacity-50`}
+              >
+                {openingAnalisis ? <Loader2 className="h-4 w-4 animate-spin" /> : <BarChart3 className="h-4 w-4" />}
+                Análisis de Ocupación
+                {selectedRows.size > 0 && (
+                  <span className={`ml-1 px-1.5 rounded-full text-[10px] font-bold ${isDark ? 'bg-fuchsia-500/30 text-fuchsia-200' : 'bg-fuchsia-200 text-fuchsia-800'}`}>
+                    {selectedRows.size}
+                  </span>
+                )}
+              </button>
+
+              {/* Análisis Guardados */}
+              <button
+                onClick={() => setIsAnalisisListOpen(true)}
+                title="Ver análisis guardados"
+                className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-medium border transition-all ${isDark ? 'bg-zinc-800 hover:bg-zinc-700 text-zinc-300 border-zinc-700' : 'bg-white hover:bg-gray-50 text-gray-700 border-gray-300'}`}
+              >
+                <FolderOpen className="h-4 w-4" />
+                Guardados
+              </button>
+
               {/* Bulk upload button */}
               <button
                 onClick={() => setIsBulkOpen(true)}
@@ -948,10 +1089,33 @@ export function InventariosPage() {
               </div>
             ) : (
               <>
+                {selectedRows.size > 0 && (
+                  <div className={`flex items-center justify-between px-4 py-2 border-b ${isDark ? 'border-purple-500/20 bg-purple-500/10' : 'border-purple-200 bg-purple-50'}`}>
+                    <span className={`text-xs font-medium ${isDark ? 'text-purple-300' : 'text-purple-700'}`}>
+                      {selectedRows.size} {selectedRows.size === 1 ? 'fila seleccionada' : 'filas seleccionadas'}
+                    </span>
+                    <button
+                      onClick={clearSelection}
+                      className={`text-xs font-medium px-2 py-1 rounded-md transition-colors ${isDark ? 'text-purple-300 hover:bg-purple-500/20' : 'text-purple-700 hover:bg-purple-100'}`}
+                    >
+                      Limpiar selección
+                    </button>
+                  </div>
+                )}
                 <div className="overflow-x-auto">
                   <table className="w-full">
                     <thead>
                       <tr className={`border-b ${isDark ? 'border-purple-500/20 bg-gradient-to-r from-purple-900/30 via-fuchsia-900/20 to-purple-900/30' : 'border-purple-200 bg-gradient-to-r from-purple-50 via-fuchsia-50 to-purple-50'}`}>
+                        <th className="px-4 py-3 w-10">
+                          <input
+                            type="checkbox"
+                            checked={allVisibleSelected}
+                            ref={el => { if (el) el.indeterminate = someVisibleSelected; }}
+                            onChange={toggleAllVisible}
+                            className={`h-4 w-4 rounded cursor-pointer accent-purple-600 ${isDark ? 'bg-zinc-800 border-zinc-600' : 'bg-white border-gray-300'}`}
+                            title={allVisibleSelected ? 'Deseleccionar todos' : 'Seleccionar todos'}
+                          />
+                        </th>
                         {[
                           { col: 'id' as SortCol, label: 'ID', sortable: true },
                           { col: 'codigo_unico' as SortCol, label: 'Código', sortable: true },
@@ -984,8 +1148,17 @@ export function InventariosPage() {
                         const realEstatus = item.estatus_real || item.estatus;
                         const estStyle = getEstatusStyle(realEstatus);
                         const isBlocked = item.estatus === 'Bloqueado';
+                        const isSelected = selectedRows.has(item.id);
                         return (
-                          <tr key={item.id} className={`border-b ${isDark ? 'border-zinc-800/50 hover:bg-zinc-800/30' : 'border-gray-200 hover:bg-gray-50'} transition-colors ${isBlocked ? 'opacity-40' : ''}`}>
+                          <tr key={item.id} className={`border-b ${isDark ? 'border-zinc-800/50 hover:bg-zinc-800/30' : 'border-gray-200 hover:bg-gray-50'} transition-colors ${isBlocked ? 'opacity-40' : ''} ${isSelected ? (isDark ? 'bg-purple-500/10' : 'bg-purple-50/60') : ''}`}>
+                            <td className="px-4 py-3">
+                              <input
+                                type="checkbox"
+                                checked={isSelected}
+                                onChange={() => toggleRowSelected(item.id)}
+                                className={`h-4 w-4 rounded cursor-pointer accent-purple-600 ${isDark ? 'bg-zinc-800 border-zinc-600' : 'bg-white border-gray-300'}`}
+                              />
+                            </td>
                             <td className="px-4 py-3">
                               <span className={`font-mono text-xs px-2 py-1 rounded-md ${isDark ? 'bg-purple-500/10 text-purple-300' : 'bg-purple-50 text-purple-700'}`}>#{item.id}</span>
                             </td>
@@ -1946,6 +2119,22 @@ export function InventariosPage() {
           </div>
         </div>
       )}
+
+      {/* Modal de Análisis de Ocupación */}
+      <AnalisisOcupacionModal
+        open={isAnalisisOpen}
+        onClose={handleCloseAnalisis}
+        initialInventarios={analisisInicialInventarios}
+        initialAnalisis={analisisInicial}
+      />
+
+      {/* Lista de análisis guardados */}
+      <AnalisisOcupacionListModal
+        open={isAnalisisListOpen}
+        onClose={() => setIsAnalisisListOpen(false)}
+        onOpenAnalisis={openAnalisisGuardado}
+        onCreateNew={() => { setIsAnalisisListOpen(false); openAnalisisVacio(); }}
+      />
     </div>
   );
 }

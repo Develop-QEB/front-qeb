@@ -303,32 +303,32 @@ export function useSocketNotificaciones() {
 
     const handleNotificacionNueva = () => {
       console.log('[Socket] Nueva notificación');
-      queryClient.invalidateQueries({ queryKey: ['notificaciones-stats'] });
-      queryClient.invalidateQueries({ queryKey: ['notificaciones'] });
+      queryClient.invalidateQueries({ queryKey: ['notificaciones-stats'], refetchType: 'active' });
+      queryClient.invalidateQueries({ queryKey: ['notificaciones'], refetchType: 'active' });
     };
 
     const handleNotificacionLeida = () => {
       console.log('[Socket] Notificación leída');
-      queryClient.invalidateQueries({ queryKey: ['notificaciones-stats'] });
-      queryClient.invalidateQueries({ queryKey: ['notificaciones'] });
+      queryClient.invalidateQueries({ queryKey: ['notificaciones-stats'], refetchType: 'active' });
+      queryClient.invalidateQueries({ queryKey: ['notificaciones'], refetchType: 'active' });
     };
 
     const handleTareaCreada = () => {
       console.log('[Socket] Tarea creada');
-      queryClient.invalidateQueries({ queryKey: ['notificaciones-stats'] });
-      queryClient.invalidateQueries({ queryKey: ['notificaciones'] });
+      queryClient.invalidateQueries({ queryKey: ['notificaciones-stats'], refetchType: 'active' });
+      queryClient.invalidateQueries({ queryKey: ['notificaciones'], refetchType: 'active' });
     };
 
     const handleTareaActualizada = () => {
       console.log('[Socket] Tarea actualizada');
-      queryClient.invalidateQueries({ queryKey: ['notificaciones-stats'] });
-      queryClient.invalidateQueries({ queryKey: ['notificaciones'] });
+      queryClient.invalidateQueries({ queryKey: ['notificaciones-stats'], refetchType: 'active' });
+      queryClient.invalidateQueries({ queryKey: ['notificaciones'], refetchType: 'active' });
     };
 
     const handleTareaEliminada = () => {
       console.log('[Socket] Tarea eliminada');
-      queryClient.invalidateQueries({ queryKey: ['notificaciones-stats'] });
-      queryClient.invalidateQueries({ queryKey: ['notificaciones'] });
+      queryClient.invalidateQueries({ queryKey: ['notificaciones-stats'], refetchType: 'active' });
+      queryClient.invalidateQueries({ queryKey: ['notificaciones'], refetchType: 'active' });
     };
 
     socket.on(SOCKET_EVENTS.NOTIFICACION_NUEVA, handleNotificacionNueva);
@@ -787,19 +787,19 @@ export function useSocketClientes() {
 
     const handleClienteCreado = () => {
       console.log('[Socket] Cliente creado');
-      queryClient.invalidateQueries({ queryKey: ['clientes'] });
-      queryClient.invalidateQueries({ queryKey: ['clientes-stats'] });
+      queryClient.invalidateQueries({ queryKey: ['clientes'], refetchType: 'active' });
+      queryClient.invalidateQueries({ queryKey: ['clientes-stats'], refetchType: 'active' });
     };
 
     const handleClienteActualizado = () => {
       console.log('[Socket] Cliente actualizado');
-      queryClient.invalidateQueries({ queryKey: ['clientes'] });
+      queryClient.invalidateQueries({ queryKey: ['clientes'], refetchType: 'active' });
     };
 
     const handleClienteEliminado = () => {
       console.log('[Socket] Cliente eliminado');
-      queryClient.invalidateQueries({ queryKey: ['clientes'] });
-      queryClient.invalidateQueries({ queryKey: ['clientes-stats'] });
+      queryClient.invalidateQueries({ queryKey: ['clientes'], refetchType: 'active' });
+      queryClient.invalidateQueries({ queryKey: ['clientes-stats'], refetchType: 'active' });
     };
 
     socket.on(SOCKET_EVENTS.CLIENTE_CREADO, handleClienteCreado);
@@ -840,17 +840,17 @@ export function useSocketProveedores() {
 
     const handleProveedorCreado = () => {
       console.log('[Socket] Proveedor creado');
-      queryClient.invalidateQueries({ queryKey: ['proveedores'] });
+      queryClient.invalidateQueries({ queryKey: ['proveedores'], refetchType: 'active' });
     };
 
     const handleProveedorActualizado = () => {
       console.log('[Socket] Proveedor actualizado');
-      queryClient.invalidateQueries({ queryKey: ['proveedores'] });
+      queryClient.invalidateQueries({ queryKey: ['proveedores'], refetchType: 'active' });
     };
 
     const handleProveedorEliminado = () => {
       console.log('[Socket] Proveedor eliminado');
-      queryClient.invalidateQueries({ queryKey: ['proveedores'] });
+      queryClient.invalidateQueries({ queryKey: ['proveedores'], refetchType: 'active' });
     };
 
     socket.on(SOCKET_EVENTS.PROVEEDOR_CREADO, handleProveedorCreado);
@@ -891,11 +891,11 @@ export function useSocketDashboard() {
 
     const handleDashboardUpdated = () => {
       console.log('[Socket] Dashboard actualizado');
-      queryClient.invalidateQueries({ queryKey: ['dashboard'] });
-      queryClient.invalidateQueries({ queryKey: ['dashboard-stats'] });
-      queryClient.invalidateQueries({ queryKey: ['solicitudes-stats'] });
-      queryClient.invalidateQueries({ queryKey: ['campanas-stats'] });
-      queryClient.invalidateQueries({ queryKey: ['clientes-stats'] });
+      queryClient.invalidateQueries({ queryKey: ['dashboard'], refetchType: 'active' });
+      queryClient.invalidateQueries({ queryKey: ['dashboard-stats'], refetchType: 'active' });
+      queryClient.invalidateQueries({ queryKey: ['solicitudes-stats'], refetchType: 'active' });
+      queryClient.invalidateQueries({ queryKey: ['campanas-stats'], refetchType: 'active' });
+      queryClient.invalidateQueries({ queryKey: ['clientes-stats'], refetchType: 'active' });
     };
 
     socket.on(SOCKET_EVENTS.DASHBOARD_UPDATED, handleDashboardUpdated);

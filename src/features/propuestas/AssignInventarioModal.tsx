@@ -157,41 +157,34 @@ const getFormatoFromArticulo = (itemName: string, itemCode?: string): string => 
   if (!itemName) return '';
   const name = itemName.toUpperCase();
 
-  // Bajo Puente - detectar ubicación específica del nombre del artículo SAP
-  if (name.includes('BAJO PUENTE')) {
-    if (name.includes('GRAN TERRAZA')) return 'Bajo Puente Gran Terraza';
-    if (name.includes('GEOGRAFOS')) return 'Bajo Puente Circuito Geografos';
-    if (name.includes('DEL PARQUE')) return 'Bajo Puente Circuito del Parque';
-    if (name.includes('FUENTES')) return 'Bajo Puente Fuentes';
-    if (name.includes('COLORINES 1') || name.includes('COLORINES1')) return 'Bajo Puente Colorines Bloque 1';
-    if (name.includes('COLORINES 2') || name.includes('COLORINES2')) return 'Bajo Puente Colorines Bloque 2';
-    if (name.includes('COLORINES 3') || name.includes('COLORINES3')) return 'Bajo Puente Colorines Bloque 3';
-    if (name.includes('COLORINES')) return 'Bajo Puente Colorines Bloque 4';
-    return 'Bajo Puente';
-  }
+  // Bajo Puente / Tunel - el backend solo tiene 'BAJO PUENTE' como mueble
+  if (name.includes('BAJO PUENTE') || name.includes('TUNEL')) return 'BAJO PUENTE';
 
-  // MI MACRO - sub-tipos (antes de PARABUS/MUPI para evitar falsos positivos)
+  // MI MACRO - sub-tipos mapeados a muebles válidos del backend
   if (name.includes('MI MACRO')) {
-    if (name.includes('VIDRIO INTERIOR')) return 'MI MACRO Vidrio Int';
-    if (name.includes('VIDRIO EXTERIOR')) return 'MI MACRO Vidrio Ext';
-    if (name.includes('MUPI')) return 'MI MACRO MUPI Int';
-    if (name.includes('PARABUS')) return 'MI MACRO Parabus';
-    if (name.includes('MODULO')) return 'MI MACRO Modulos';
-    return 'MI MACRO';
+    const codeUp = (itemCode || '').toUpperCase();
+    if (name.includes('VIDRIO INTERIOR') || codeUp.endsWith('-VI')) return 'VIDRIO INTERIOR';
+    if (name.includes('VIDRIO EXTERIOR') || codeUp.endsWith('-VE')) return 'VIDRIOS EXTERIOR';
+    if (codeUp.endsWith('-PBMUP') || (name.includes('PARABUS') && name.includes('MUPI'))) return 'PARABUS CON MUPI';
+    if (name.includes('MUPI') || codeUp.endsWith('-MP')) return 'MUPIS';
+    if (name.includes('PARABUS') || codeUp.endsWith('-PB')) return 'PARABUS';
+    if (name.includes('MODULO A') || codeUp.endsWith('-MA')) return 'MODULO TIPO A';
+    if (name.includes('MODULO B') || codeUp.endsWith('-MB')) return 'MODULO TIPO B';
+    if (name.includes('MODULO C') || codeUp.endsWith('-MC')) return 'MODULO TIPO C';
+    if (name.includes('MODULO D') || codeUp.endsWith('-MD')) return 'MODULO TIPO D';
   }
 
-  if (name.includes('PUENTE PEATONAL')) return 'Puente Peatonal';
-  if (name.includes('TOTEM')) return 'TOTEM';
-  if (name.includes('KIOSCO') || name.includes('KIOSKO')) return 'Kiosco';
-  if (name.includes('CASETA DE TAXIS')) return 'CASETA DE TAXIS';
-  if (name.includes('METROPOLITANO PARALELO')) return 'METROPOLITANO PARALELO';
-  if (name.includes('METROPOLITANO PERPENDICULAR')) return 'METROPOLITANO PERPENDICULAR';
-  if (name.includes('COLUMNA RECARGA')) return 'COLUMNA RECARGA';
-  if (name.includes('MUPI DE PIEDRA')) return 'MUPI DE PIEDRA';
-  if (name.includes('MUPI')) return 'MUPI';
+  if (name.includes('PUENTE PEATONAL')) return 'PUENTE PEATONAL';
+  if (name.includes('KIOSCO') || name.includes('KIOSKO')) return 'KIOSCO';
+  if (name.includes('PARABUS') && name.includes('MUPI')) return 'PARABUS CON MUPI';
+  if (name.includes('MUPI')) return 'MUPIS';
   if (name.includes('PARABUS')) return 'PARABUS';
+  if (name.includes('VIDRIO INTERIOR')) return 'VIDRIO INTERIOR';
+  if (name.includes('VIDRIO EXTERIOR')) return 'VIDRIOS EXTERIOR';
   if (name.includes('COLUMNA')) return 'COLUMNA';
   if (name.includes('BOLERO')) return 'BOLERO';
+  if (name.includes('UNIPOLAR')) return 'UNIPOLAR';
+  if (name.includes('MULTISERVICIO')) return 'MULTISERVICIO';
   if (itemCode) {
     for (const seg of itemCode.toLowerCase().split('-')) {
       if (CODE_FORMATO_MAP[seg]) return CODE_FORMATO_MAP[seg];
@@ -256,7 +249,7 @@ const MULTI_CITY_RULES: { pattern: RegExp; estado: string; ciudad: string }[] = 
   { pattern: /\bMORELIA\b/, estado: 'Michoacán', ciudad: 'MORELIA' },
   { pattern: /\bCANCUN\b/, estado: 'Quintana Roo', ciudad: 'BENITO JUÁREZ' },
   { pattern: /\bCDMX\b|\bCIUDAD DE MEXICO\b|\bDF\b|\bMEXICO\b(?!\s*(Y\s*AM|WI-?FI))|\bMX\b/, estado: 'Ciudad de México / AM', ciudad: '' },
-  { pattern: /\bNAUC\b/, estado: 'Estado de México', ciudad: 'NAUCALPAN' },
+  { pattern: /\bNAUC\w*|\bNAUCALPAN\b/, estado: 'Estado de México', ciudad: 'NAUCALPAN' },
   { pattern: /\bEM\b/, estado: 'Estado de México', ciudad: '' },
 ];
 
@@ -339,6 +332,63 @@ const FILTER_FIELDS_RESERVAS: FilterFieldConfig[] = [
   { field: 'catorcena', label: 'Periodo', type: 'number' },
   { field: 'anio', label: 'Año', type: 'number' },
 ];
+
+// Campos para filtrar inventario disponible (tabla "Buscar Disponibles")
+const FILTER_FIELDS_DISPONIBLES: FilterFieldConfig[] = [
+  { field: 'codigo_unico', label: 'Código', type: 'string' },
+  { field: 'tipo_de_cara', label: 'Cara', type: 'string' },
+  { field: 'mueble', label: 'Mueble', type: 'string' },
+  { field: 'plaza', label: 'Plaza', type: 'string' },
+  { field: 'isla', label: 'Isla', type: 'string' },
+  { field: 'mueble_isla', label: 'M. Isla', type: 'string' },
+  { field: 'sentido', label: 'Sentido', type: 'string' },
+  { field: 'nivel_socioeconomico', label: 'NSE', type: 'string' },
+  { field: 'ubicacion', label: 'Ubicación', type: 'string' },
+  { field: 'tradicional_digital', label: 'Tipo', type: 'string' },
+  { field: 'mundialista', label: 'Mundialista', type: 'string' },
+];
+
+// Tipo extendido de FilterCondition con conector Y/O entre filtros (para tabla disponibles)
+interface AdvancedFilterCondition extends FilterCondition {
+  connector?: 'Y' | 'O';
+}
+
+// Aplica filtros avanzados a una colección. Conector Y (default) o O.
+function evalAdvancedCondition<T extends Record<string, unknown>>(item: T, filter: AdvancedFilterCondition): boolean {
+  const fieldValue = item[filter.field];
+  const filterValue = filter.value;
+  if (!filterValue) return true;
+  if (fieldValue === null || fieldValue === undefined) {
+    return filter.operator === '!=' || filter.operator === 'not_contains';
+  }
+  const strValue = String(fieldValue).toLowerCase();
+  const strFilterValue = filterValue.toLowerCase();
+  switch (filter.operator) {
+    case '=': return strValue === strFilterValue;
+    case '!=': return strValue !== strFilterValue;
+    case 'contains': return strValue.includes(strFilterValue);
+    case 'not_contains': return !strValue.includes(strFilterValue);
+    case '>': return Number(fieldValue) > Number(filterValue);
+    case '<': return Number(fieldValue) < Number(filterValue);
+    case '>=': return Number(fieldValue) >= Number(filterValue);
+    case '<=': return Number(fieldValue) <= Number(filterValue);
+    default: return true;
+  }
+}
+
+function applyAdvancedFilters<T extends Record<string, unknown>>(data: T[], filters: AdvancedFilterCondition[]): T[] {
+  if (filters.length === 0) return data;
+  return data.filter(item => {
+    let result = evalAdvancedCondition(item, filters[0]);
+    for (let i = 1; i < filters.length; i++) {
+      const val = evalAdvancedCondition(item, filters[i]);
+      const connector = filters[i].connector || 'Y';
+      if (connector === 'O') result = result || val;
+      else result = result && val;
+    }
+    return result;
+  });
+}
 
 // Operadores disponibles
 const FILTER_OPERATORS: { value: FilterOperator; label: string; forTypes: ('string' | 'number')[] }[] = [
@@ -646,7 +696,12 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
   const queryClient = useQueryClient();
   const user = useAuthStore((state) => state.user);
   const permissions = getPermissions(user?.rol);
-  const tipoPeriodo = (propuesta as any)?.tipo_periodo || 'catorcena';
+  // tipoPeriodo: arranca con el del prop (propuestas list a veces lo trae) y se
+  // sincroniza con cotizacion del detail endpoint cuando carga (fuente de verdad).
+  // Tipo string (no literal union) para evitar narrowing dentro de ramas JSX.
+  const [tipoPeriodo, setTipoPeriodo] = useState<string>(
+    (propuesta as any)?.tipo_periodo === 'mensual' ? 'mensual' : 'catorcena'
+  );
 
   // WebSocket para escuchar cambios en reservas en tiempo real
   useSocketPropuesta(propuesta?.id || null);
@@ -806,7 +861,7 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
   const [tamanoGrupo, setTamanoGrupo] = useState(10);
   const [flujoPct, setFlujoPct] = useState(50); // % de caras para flujo (resto para contraflujo)
   const [savingPct, setSavingPct] = useState(false); // loading para guardar % en BD
-  const [flujoFilter, setFlujoFilter] = useState<'Todos' | 'Flujo' | 'Contraflujo'>('Todos');
+  const [flujoFilter, setFlujoFilter] = useState<'Todos' | 'Flujo' | 'Contraflujo'>(tipoPeriodo === 'mensual' ? 'Flujo' : 'Todos');
   const [islaFilter, setIslaFilter] = useState<'off' | 'si' | 'no'>('off');
   const [mundialistaFilter, setMundialistaFilter] = useState<'off' | 'si' | 'no'>('off');
   const [sortColumn, setSortColumn] = useState<string>('codigo_unico');
@@ -820,6 +875,10 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
   // (mismo codigo_unico) en otras caras del mismo grupo_masivo_id
   const [eliminarMasivoP, setEliminarMasivoP] = useState<boolean>(false);
   const [excluirDistanciaKm, setExcluirDistanciaKm] = useState<number>(1);
+
+  // Filtros avanzados (embudo) para tabla Buscar Disponibles
+  const [disponiblesAdvFilters, setDisponiblesAdvFilters] = useState<AdvancedFilterCondition[]>([]);
+  const [showDisponiblesAdvFilters, setShowDisponiblesAdvFilters] = useState(false);
 
   // Custom Confirmation Modal State
   const [confirmModal, setConfirmModal] = useState<{
@@ -993,7 +1052,11 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
       const loadedReservas: ReservaItem[] = existingReservas.map((r: ReservaModalItem) => {
         // Find the cara that matches this reserva
         const matchingCara = caras.find(c => c.id === r.solicitud_cara_id);
-        const tipo = r.estatus === 'Bonificado' ? 'Bonificacion' : (String(r.tipo_de_cara).startsWith('Flujo') ? 'Flujo' : 'Contraflujo');
+        // Mensual = todo cuenta como Flujo (regla Gran Formato), aunque el inventario
+        // físico sea Contraflujo (caso de circuitos digitales).
+        const tipo = r.estatus === 'Bonificado'
+          ? 'Bonificacion'
+          : (tipoPeriodo === 'mensual' ? 'Flujo' : (String(r.tipo_de_cara).startsWith('Flujo') ? 'Flujo' : 'Contraflujo'));
 
         return {
           id: matchingCara
@@ -1085,13 +1148,20 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
       setNotas(notasVal);
       setDescripcion(descripcionVal);
 
-      // Set archivo if exists
-      setArchivoPropuesta(solicitudDetails.solicitud?.archivo || null);
-      setTipoArchivoPropuesta(solicitudDetails.solicitud?.tipo_archivo || null);
+      // Set archivo if exists. El endpoint uploadArchivo guarda en propuesta.archivo,
+      // así que preferimos ese; fallback a solicitud.archivo para retrocompatibilidad.
+      setArchivoPropuesta((solicitudDetails as any).propuesta?.archivo || solicitudDetails.solicitud?.archivo || null);
+      setTipoArchivoPropuesta((solicitudDetails as any).propuesta?.tipo_archivo || solicitudDetails.solicitud?.tipo_archivo || null);
 
       // Set IMU flag from solicitud
       const imuVal = Boolean(solicitudDetails.solicitud?.IMU);
       setImu(imuVal);
+
+      // Sincronizar tipoPeriodo con cotizacion (fuente de verdad).
+      const tpDetail = (solicitudDetails.cotizacion as any)?.tipo_periodo;
+      if (tpDetail === 'mensual' || tpDetail === 'catorcena') {
+        setTipoPeriodo(tpDetail);
+      }
 
       // Set period from cotizacion dates — only on first load, not after updates
       const cot = solicitudDetails.cotizacion;
@@ -2055,6 +2125,13 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
       return;
     }
 
+    // No permitir bonificación sin renta (la bonif es ADICIONAL a la renta).
+    // Excepción: artículos BF/CF/CT/IM y especiales que no requieren renta.
+    if ((newCara.bonificacion || 0) > 0 && (newCara.caras || 0) <= 0 && !esCortesia && !esBonificacion && !esImpresion && !isEspecialArticle(artCode)) {
+      alert('No puedes agregar bonificación sin tener al menos 1 cara de renta. Sube las caras o quita la bonificación.');
+      return;
+    }
+
     // If no ciudad selected but estado is, get all cities from that estado
     let ciudadToSave = newCara.ciudad;
     if (!ciudadToSave && newCara.estados && solicitudFilters?.ciudades) {
@@ -2992,7 +3069,7 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
     setShowOnlyCompletos(false);
     setGroupByDistance(false);
     setSelectedInventory(new Set());
-    setFlujoFilter('Todos'); // Always start with all
+    setFlujoFilter(tipoPeriodo === 'mensual' ? 'Flujo' : 'Todos');
     setSortColumn('codigo_unico');
     setSortDirection('asc');
     setExcluirCategoria('');
@@ -3176,9 +3253,14 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
 
     // Filter by mundialista - toggle: SI / NO / off
     if (mundialistaFilter === 'si') {
-      data = data.filter(inv => (inv as any).mueble_isla?.toUpperCase() === 'SI');
+      data = data.filter(inv => (inv as any).mundialista?.toUpperCase() === 'SI');
     } else if (mundialistaFilter === 'no') {
-      data = data.filter(inv => !(inv as any).mueble_isla || (inv as any).mueble_isla.toUpperCase() !== 'SI');
+      data = data.filter(inv => !(inv as any).mundialista || (inv as any).mundialista.toUpperCase() !== 'SI');
+    }
+
+    // Filtros avanzados (embudo)
+    if (disponiblesAdvFilters.length > 0) {
+      data = applyAdvancedFilters(data as unknown as Record<string, unknown>[], disponiblesAdvFilters) as unknown as typeof data;
     }
 
     // Apply grouping (distance or list)
@@ -3229,7 +3311,7 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
     });
 
     return data;
-  }, [inventarioDisponible, disponiblesSearchTerm, poiFilterIds, flujoFilter, showOnlyUnicos, showOnlyCompletos, showOnlyUnicosDigitales, showSpotUnico, islaFilter, mundialistaFilter, groupByDistance, groupMode, filterUnicos, filterCompletos, filterUnicosDigitales, filterSpotUnico, groupByDistanceFunc, groupByListFunc, sortColumn, sortDirection, reservas]);
+  }, [inventarioDisponible, disponiblesSearchTerm, poiFilterIds, flujoFilter, showOnlyUnicos, showOnlyCompletos, showOnlyUnicosDigitales, showSpotUnico, islaFilter, mundialistaFilter, disponiblesAdvFilters, groupByDistance, groupMode, filterUnicos, filterCompletos, filterUnicosDigitales, filterSpotUnico, groupByDistanceFunc, groupByListFunc, sortColumn, sortDirection, reservas]);
 
   // Check if an inventory item is selected
   const isInventorySelected = useCallback((inv: InventarioDisponible | ProcessedInventoryItem): boolean => {
@@ -3262,7 +3344,7 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
 
   // Clear all filters
   const clearAllFilters = useCallback(() => {
-    setFlujoFilter('Todos');
+    setFlujoFilter(tipoPeriodo === 'mensual' ? 'Flujo' : 'Todos');
     setShowOnlyUnicos(false);
     setShowOnlyCompletos(false);
     setShowOnlyUnicosDigitales(false);
@@ -3272,7 +3354,7 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
     setGroupByDistance(false);
     setPoiFilterIds(null);
     setDisponiblesSearchTerm('');
-  }, []);
+  }, [tipoPeriodo]);
 
   // CSV handling functions
   const normalizeColumnName = (text: string) => {
@@ -3579,8 +3661,11 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
           }
           // If only one has space, skip this completo item entirely to maintain pairing
         } else {
-          // Regular item - reserve based on tipo_de_cara
-          const tipo = String(inv.tipo_de_cara).startsWith('Flujo') ? 'Flujo' : 'Contraflujo';
+          // Regular item - reserve based on tipo_de_cara.
+          // Mensual = todo cuenta como Flujo (regla Gran Formato).
+          const tipo: 'Flujo' | 'Contraflujo' = tipoPeriodo === 'mensual'
+            ? 'Flujo'
+            : (String(inv.tipo_de_cara).startsWith('Flujo') ? 'Flujo' : 'Contraflujo');
           const canReserve = tipo === 'Flujo'
             ? flujoCount < remainingToAssign.flujo
             : contraflujoCount < remainingToAssign.contraflujo;
@@ -3789,7 +3874,11 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
         setSelectedInventory(new Set());
       } catch (error) {
         console.error('Error saving bonificaciones:', error);
-        showToast(`Error al guardar: ${error instanceof Error ? error.message : 'Error desconocido'}`, 'error');
+        // Extraer mensaje real del backend cuando es AxiosError 400
+        const axErr = error as { response?: { data?: { error?: string; message?: string } }; message?: string };
+        const backendMsg = axErr?.response?.data?.error || axErr?.response?.data?.message;
+        const msg = backendMsg || (error instanceof Error ? error.message : 'Error desconocido');
+        showToast(`Error al guardar: ${msg}`, 'error');
       } finally {
         setIsSaving(false);
         setConfirmModal(prev => ({ ...prev, isOpen: false }));
@@ -4466,6 +4555,9 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
           {/* Compact KPIs with progress bars */}
           <div className={`px-6 py-3 border-b ${isDark ? 'border-zinc-800' : 'border-gray-200'} ${isDark ? 'bg-gradient-to-r from-zinc-900 via-zinc-900/95 to-zinc-900/90' : 'bg-gradient-to-r from-gray-50 via-gray-50/95 to-gray-50/90'}`}>
             <div className="flex items-center gap-4">
+              {/* Si el artículo es BF/CF puro, ocultar KPI Flujo (solo bonificación aplica) */}
+              {!(selectedCaraForSearch?.articulo || '').toUpperCase().startsWith('BF') && !(selectedCaraForSearch?.articulo || '').toUpperCase().startsWith('CF') && (
+              <>
               {/* Flujo KPI */}
               <div className={`flex-1 ${isDark ? 'bg-zinc-800/50' : 'bg-gray-50/50'} rounded-xl p-3 border ${isDark ? 'border-zinc-700/30' : 'border-gray-200/30'}`}>
                 <div className="flex items-center justify-between mb-1.5">
@@ -4539,27 +4631,31 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
                 );
               })()}
 
-              {/* Contraflujo KPI */}
-              <div className={`flex-1 ${isDark ? 'bg-zinc-800/50' : 'bg-gray-50/50'} rounded-xl p-3 border ${isDark ? 'border-zinc-700/30' : 'border-gray-200/30'}`}>
-                <div className="flex items-center justify-between mb-1.5">
-                  <span className={`text-xs ${isDark ? 'text-zinc-400' : 'text-gray-500'} flex items-center gap-1.5`}>
-                    <div className="w-2 h-2 rounded-full bg-blue-500" />
-                    Contraflujo
-                  </span>
-                  <span className="text-sm font-bold text-blue-400">
-                    {adjustedCarasFlujo.contraflujo - remainingToAssign.contraflujo} / {adjustedCarasFlujo.contraflujo}
-                  </span>
+              {/* Contraflujo KPI — solo en catorcena (en mensual no aplica) */}
+              {tipoPeriodo !== 'mensual' && (
+                <div className={`flex-1 ${isDark ? 'bg-zinc-800/50' : 'bg-gray-50/50'} rounded-xl p-3 border ${isDark ? 'border-zinc-700/30' : 'border-gray-200/30'}`}>
+                  <div className="flex items-center justify-between mb-1.5">
+                    <span className={`text-xs ${isDark ? 'text-zinc-400' : 'text-gray-500'} flex items-center gap-1.5`}>
+                      <div className="w-2 h-2 rounded-full bg-blue-500" />
+                      Contraflujo
+                    </span>
+                    <span className="text-sm font-bold text-blue-400">
+                      {adjustedCarasFlujo.contraflujo - remainingToAssign.contraflujo} / {adjustedCarasFlujo.contraflujo}
+                    </span>
+                  </div>
+                  <div className={`w-full h-2 ${isDark ? 'bg-zinc-700/50' : 'bg-gray-200/50'} rounded-full overflow-hidden`}>
+                    <div
+                      className="h-full bg-gradient-to-r from-blue-500 to-blue-400 rounded-full transition-all"
+                      style={{ width: `${Math.min(100, (adjustedCarasFlujo.contraflujo - remainingToAssign.contraflujo) / (adjustedCarasFlujo.contraflujo || 1) * 100)}%` }}
+                    />
+                  </div>
+                  <div className={`mt-1 text-xs ${isDark ? 'text-zinc-500' : 'text-gray-400'}`}>
+                    <span className="text-blue-400 font-medium">{remainingToAssign.contraflujo}</span> restantes
+                  </div>
                 </div>
-                <div className={`w-full h-2 ${isDark ? 'bg-zinc-700/50' : 'bg-gray-200/50'} rounded-full overflow-hidden`}>
-                  <div
-                    className="h-full bg-gradient-to-r from-blue-500 to-blue-400 rounded-full transition-all"
-                    style={{ width: `${Math.min(100, (adjustedCarasFlujo.contraflujo - remainingToAssign.contraflujo) / (adjustedCarasFlujo.contraflujo || 1) * 100)}%` }}
-                  />
-                </div>
-                <div className={`mt-1 text-xs ${isDark ? 'text-zinc-500' : 'text-gray-400'}`}>
-                  <span className="text-blue-400 font-medium">{remainingToAssign.contraflujo}</span> restantes
-                </div>
-              </div>
+              )}
+              </>
+              )}
 
               {/* Bonificacion/Cortesia KPI */}
               <div className={`flex-1 ${isDark ? 'bg-zinc-800/50' : 'bg-gray-50/50'} rounded-xl p-3 border ${isDark ? 'border-zinc-700/30' : 'border-gray-200/30'}`}>
@@ -4631,38 +4727,47 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
               {/* Filters */}
               <div className={`px-6 py-2.5 border-b ${isDark ? 'border-zinc-800' : 'border-gray-200'} ${isDark ? 'bg-zinc-900/50' : 'bg-gray-50/50'}`}>
                 <div className="flex items-center gap-2 flex-wrap">
-                  {/* Flujo Toggle */}
-                  <div className={`flex ${isDark ? 'bg-zinc-800/80' : 'bg-gray-100/80'} rounded-lg p-0.5 border ${isDark ? 'border-zinc-700/50' : 'border-gray-200/50'}`}>
-                    {(['Todos', 'Flujo', 'Contraflujo'] as const).map(opt => (
-                      <button
-                        key={opt}
-                        onClick={() => setFlujoFilter(opt)}
-                        className={`px-2.5 py-1 rounded-md text-xs font-medium transition-all ${flujoFilter === opt
-                          ? 'bg-blue-500 text-white shadow'
-                          : `${isDark ? 'text-zinc-400' : 'text-gray-500'} ${isDark ? 'hover:text-white' : 'hover:text-gray-900'}`
-                          }`}
-                      >
-                        {opt}
-                      </button>
-                    ))}
-                  </div>
+                  {/* Flujo Toggle — para mensual solo Flujo (no Contraflujo) */}
+                  {tipoPeriodo === 'mensual' ? (
+                    <div className={`flex items-center gap-1.5 px-2.5 py-1 rounded-lg ${isDark ? 'bg-blue-500/20 border border-blue-500/30' : 'bg-blue-50 border border-blue-200'}`}>
+                      <span className="text-[10px] uppercase font-semibold text-blue-400">Flujo</span>
+                      <span className={`text-[10px] ${isDark ? 'text-zinc-500' : 'text-gray-500'}`}>(mensual)</span>
+                    </div>
+                  ) : (
+                    <div className={`flex ${isDark ? 'bg-zinc-800/80' : 'bg-gray-100/80'} rounded-lg p-0.5 border ${isDark ? 'border-zinc-700/50' : 'border-gray-200/50'}`}>
+                      {(['Todos', 'Flujo', 'Contraflujo'] as const).map(opt => (
+                        <button
+                          key={opt}
+                          onClick={() => setFlujoFilter(opt)}
+                          className={`px-2.5 py-1 rounded-md text-xs font-medium transition-all ${flujoFilter === opt
+                            ? 'bg-blue-500 text-white shadow'
+                            : `${isDark ? 'text-zinc-400' : 'text-gray-500'} ${isDark ? 'hover:text-white' : 'hover:text-gray-900'}`
+                            }`}
+                        >
+                          {opt}
+                        </button>
+                      ))}
+                    </div>
+                  )}
 
                   <div className={`w-px h-6 ${isDark ? 'bg-zinc-700' : 'bg-gray-200'}`} />
 
-                  {/* Complete filter */}
-                  <button
-                    onClick={() => { setShowOnlyCompletos(!showOnlyCompletos); if (!showOnlyCompletos) setShowOnlyUnicos(false); }}
-                    className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-medium transition-all ${showOnlyCompletos
-                      ? 'bg-pink-500 text-white shadow'
-                      : `${isDark ? 'bg-zinc-800/80' : 'bg-gray-100/80'} ${isDark ? 'text-zinc-400' : 'text-gray-500'} border ${isDark ? 'border-zinc-700/50' : 'border-gray-200/50'} ${isDark ? 'hover:text-white' : 'hover:text-gray-900'}`
-                      }`}
-                  >
-                    <LayoutGrid className="h-3.5 w-3.5" />
-                    Completos
-                    {showOnlyCompletos && (
-                      <X className="h-3 w-3 ml-0.5 hover:text-pink-200" onClick={(e) => { e.stopPropagation(); setShowOnlyCompletos(false); }} />
-                    )}
-                  </button>
+                  {/* Complete filter — solo aplica en catorcena (Flujo+Contraflujo). En mensual no tiene sentido. */}
+                  {tipoPeriodo !== 'mensual' && (
+                    <button
+                      onClick={() => { setShowOnlyCompletos(!showOnlyCompletos); if (!showOnlyCompletos) setShowOnlyUnicos(false); }}
+                      className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-medium transition-all ${showOnlyCompletos
+                        ? 'bg-pink-500 text-white shadow'
+                        : `${isDark ? 'bg-zinc-800/80' : 'bg-gray-100/80'} ${isDark ? 'text-zinc-400' : 'text-gray-500'} border ${isDark ? 'border-zinc-700/50' : 'border-gray-200/50'} ${isDark ? 'hover:text-white' : 'hover:text-gray-900'}`
+                        }`}
+                    >
+                      <LayoutGrid className="h-3.5 w-3.5" />
+                      Completos
+                      {showOnlyCompletos && (
+                        <X className="h-3 w-3 ml-0.5 hover:text-pink-200" onClick={(e) => { e.stopPropagation(); setShowOnlyCompletos(false); }} />
+                      )}
+                    </button>
+                  )}
 
                   {/* Unique filter for traditional items - only show when there are traditional items */}
                   {hasTradicionalInventory && (
@@ -4753,6 +4858,131 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
                     <Trophy className="h-3.5 w-3.5" />
                     {mundialistaFilter === 'si' ? 'Mundial ✓' : mundialistaFilter === 'no' ? 'Mundial ✗' : 'Mundial'}
                   </button>
+
+                  {/* Filtros avanzados (embudo) */}
+                  <div className="relative">
+                    <button
+                      onClick={() => setShowDisponiblesAdvFilters(!showDisponiblesAdvFilters)}
+                      className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-medium transition-all ${disponiblesAdvFilters.length > 0
+                        ? 'bg-purple-600 text-white shadow'
+                        : `${isDark ? 'bg-zinc-800/80' : 'bg-gray-100/80'} ${isDark ? 'text-zinc-400' : 'text-gray-500'} border ${isDark ? 'border-zinc-700/50' : 'border-gray-200/50'} ${isDark ? 'hover:text-white' : 'hover:text-gray-900'}`
+                        }`}
+                      title="Filtros avanzados"
+                    >
+                      <Funnel className="h-3.5 w-3.5" />
+                      Filtrar
+                      {disponiblesAdvFilters.length > 0 && (
+                        <span className={`px-1.5 py-0.5 rounded text-[10px] ${isDark ? 'bg-purple-800' : 'bg-purple-700 text-white'}`}>
+                          {disponiblesAdvFilters.length}
+                        </span>
+                      )}
+                    </button>
+                    {showDisponiblesAdvFilters && (
+                      <div className={`absolute left-0 top-full mt-1 z-[100] w-[540px] ${isDark ? 'bg-zinc-900 border-purple-500/30' : 'bg-white border-gray-200'} border rounded-xl shadow-2xl p-4`}>
+                        <div className="flex items-center justify-between mb-3">
+                          <span className={`text-sm font-medium ${isDark ? 'text-purple-300' : 'text-purple-700'}`}>Filtros avanzados</span>
+                          <button
+                            onClick={() => setShowDisponiblesAdvFilters(false)}
+                            className={`${isDark ? 'text-zinc-500 hover:text-white' : 'text-gray-400 hover:text-gray-900'}`}
+                          >
+                            <X className="h-4 w-4" />
+                          </button>
+                        </div>
+                        <div className="space-y-2 max-h-[300px] overflow-visible pr-1">
+                          {disponiblesAdvFilters.map((filter, index) => (
+                            <div key={filter.id} className="flex items-center gap-2">
+                              {index > 0 ? (
+                                <button
+                                  onClick={() => {
+                                    const updated = [...disponiblesAdvFilters];
+                                    updated[index] = { ...updated[index], connector: updated[index].connector === 'Y' ? 'O' : 'Y' };
+                                    setDisponiblesAdvFilters(updated);
+                                  }}
+                                  className={`text-[10px] font-bold w-8 rounded px-1 py-0.5 transition-colors ${filter.connector === 'O' ? (isDark ? 'bg-amber-500/20 text-amber-300' : 'bg-amber-100 text-amber-700') : (isDark ? 'bg-purple-500/20 text-purple-300' : 'bg-purple-100 text-purple-700')}`}
+                                  title={`Click para cambiar a ${filter.connector === 'Y' ? 'O' : 'Y'}`}
+                                >
+                                  {filter.connector || 'Y'}
+                                </button>
+                              ) : (<span className="w-8"></span>)}
+                              <select
+                                value={filter.field}
+                                onChange={(e) => {
+                                  const updated = [...disponiblesAdvFilters];
+                                  updated[index] = { ...updated[index], field: e.target.value };
+                                  setDisponiblesAdvFilters(updated);
+                                }}
+                                className={`w-[130px] text-xs ${isDark ? 'bg-zinc-800 border-zinc-700 text-white' : 'bg-gray-50 border-gray-200 text-gray-900'} border rounded px-2 py-1.5`}
+                              >
+                                {FILTER_FIELDS_DISPONIBLES.map((f) => (
+                                  <option key={f.field} value={f.field}>{f.label}</option>
+                                ))}
+                              </select>
+                              <select
+                                value={filter.operator}
+                                onChange={(e) => {
+                                  const updated = [...disponiblesAdvFilters];
+                                  updated[index] = { ...updated[index], operator: e.target.value as FilterOperator };
+                                  setDisponiblesAdvFilters(updated);
+                                }}
+                                className={`w-[110px] text-xs ${isDark ? 'bg-zinc-800 border-zinc-700 text-white' : 'bg-gray-50 border-gray-200 text-gray-900'} border rounded px-2 py-1.5`}
+                              >
+                                {FILTER_OPERATORS.filter(op => {
+                                  const fieldConfig = FILTER_FIELDS_DISPONIBLES.find(f => f.field === filter.field);
+                                  return fieldConfig && op.forTypes.includes(fieldConfig.type);
+                                }).map((op) => (
+                                  <option key={op.value} value={op.value}>{op.label}</option>
+                                ))}
+                              </select>
+                              <input
+                                type="text"
+                                value={filter.value}
+                                placeholder="Valor..."
+                                onChange={(e) => {
+                                  const updated = [...disponiblesAdvFilters];
+                                  updated[index] = { ...updated[index], value: e.target.value };
+                                  setDisponiblesAdvFilters(updated);
+                                }}
+                                className={`flex-1 text-xs ${isDark ? 'bg-zinc-800 border-zinc-700 text-white placeholder:text-zinc-500' : 'bg-gray-50 border-gray-200 text-gray-900 placeholder:text-gray-400'} border rounded px-2 py-1.5`}
+                              />
+                              <button
+                                onClick={() => setDisponiblesAdvFilters(disponiblesAdvFilters.filter(f => f.id !== filter.id))}
+                                className={`${isDark ? 'text-zinc-500 hover:text-red-400' : 'text-gray-400 hover:text-red-600'}`}
+                                title="Eliminar filtro"
+                              >
+                                <X className="h-4 w-4" />
+                              </button>
+                            </div>
+                          ))}
+                        </div>
+                        <div className="flex items-center justify-between mt-3 pt-3 border-t border-zinc-800/50">
+                          <button
+                            onClick={() => {
+                              const newFilter: AdvancedFilterCondition = {
+                                id: `f-${Date.now()}`,
+                                field: 'codigo_unico',
+                                operator: 'contains',
+                                value: '',
+                                connector: 'Y',
+                              };
+                              setDisponiblesAdvFilters([...disponiblesAdvFilters, newFilter]);
+                            }}
+                            className={`flex items-center gap-1.5 px-2.5 py-1 text-xs rounded-lg ${isDark ? 'bg-purple-500/20 text-purple-300 hover:bg-purple-500/30' : 'bg-purple-100 text-purple-700 hover:bg-purple-200'}`}
+                          >
+                            <Plus className="h-3 w-3" />
+                            Agregar filtro
+                          </button>
+                          {disponiblesAdvFilters.length > 0 && (
+                            <button
+                              onClick={() => setDisponiblesAdvFilters([])}
+                              className={`text-xs ${isDark ? 'text-zinc-500 hover:text-white' : 'text-gray-400 hover:text-gray-900'}`}
+                            >
+                              Limpiar todos
+                            </button>
+                          )}
+                        </div>
+                      </div>
+                    )}
+                  </div>
 
                   {/* Grouping */}
                   <button
@@ -5087,6 +5317,18 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
                             </th>
                             <th
                               className={`px-3 py-2 text-left text-xs ${isDark ? 'text-zinc-400' : 'text-gray-500'} font-medium cursor-pointer ${isDark ? 'hover:text-white' : 'hover:text-gray-900'} transition-colors`}
+                              onClick={() => handleSort('sentido')}
+                            >
+                              <div className="flex items-center gap-1">
+                                Sentido
+                                {sortColumn === 'sentido' && (
+                                  sortDirection === 'asc' ? <ChevronUp className="h-3 w-3" /> : <ChevronDown className="h-3 w-3" />
+                                )}
+                                {sortColumn !== 'sentido' && <ArrowUpDown className="h-3 w-3 opacity-30" />}
+                              </div>
+                            </th>
+                            <th
+                              className={`px-3 py-2 text-left text-xs ${isDark ? 'text-zinc-400' : 'text-gray-500'} font-medium cursor-pointer ${isDark ? 'hover:text-white' : 'hover:text-gray-900'} transition-colors`}
                               onClick={() => handleSort('nivel_socioeconomico')}
                             >
                               <div className="flex items-center gap-1">
@@ -5190,6 +5432,7 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
                                     <td className={`px-3 py-2 ${isDark ? 'text-zinc-300' : 'text-gray-700'} text-sm`}>{inv.plaza}</td>
                                     <td className={`px-3 py-2 ${isDark ? 'text-zinc-400' : 'text-gray-500'} text-sm`}>{inv.isla || '-'}</td>
                                     <td className={`px-3 py-2 ${isDark ? 'text-zinc-400' : 'text-gray-500'} text-sm`}>{(inv as any).mueble_isla || '-'}</td>
+                                    <td className={`px-3 py-2 ${isDark ? 'text-zinc-400' : 'text-gray-500'} text-sm`}>{(inv as any).sentido || '-'}</td>
                                     <td className={`px-3 py-2 ${isDark ? 'text-zinc-400' : 'text-gray-500'} text-sm`}>{inv.nivel_socioeconomico || '-'}</td>
                                     <td className={`px-3 py-2 ${isDark ? 'text-zinc-400' : 'text-gray-500'} text-sm`} title={inv.ubicacion || ''}>
                                       {inv.ubicacion}
@@ -5245,6 +5488,7 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
                                 <td className={`px-3 py-2 ${isDark ? 'text-zinc-300' : 'text-gray-700'} text-sm`}>{inv.plaza}</td>
                                 <td className={`px-3 py-2 ${isDark ? 'text-zinc-400' : 'text-gray-500'} text-sm`}>{inv.isla || '-'}</td>
                                 <td className={`px-3 py-2 ${isDark ? 'text-zinc-400' : 'text-gray-500'} text-sm`}>{(inv as any).mueble_isla || '-'}</td>
+                                <td className={`px-3 py-2 ${isDark ? 'text-zinc-400' : 'text-gray-500'} text-sm`}>{(inv as any).sentido || '-'}</td>
                                 <td className={`px-3 py-2 ${isDark ? 'text-zinc-400' : 'text-gray-500'} text-sm`}>{inv.nivel_socioeconomico || '-'}</td>
                                 <td className={`px-3 py-2 ${isDark ? 'text-zinc-400' : 'text-gray-500'} text-sm`} title={inv.ubicacion || ''}>
                                   {inv.ubicacion}
@@ -6745,7 +6989,11 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
                       {canEditResumen && (!editingCaraId || permissions.canEditArticuloOnEdit) ? (
                         <SearchableSelect
                           label="Seleccionar artículo"
-                          options={articulosData || []}
+                          options={(articulosData || []).filter(a => {
+                            const code = a.ItemCode.toUpperCase();
+                            // BF/CF solo aparecen en el dropdown de bonificación, no en el principal
+                            return !code.startsWith('BF') && !code.startsWith('CF');
+                          })}
                           value={selectedArticulo}
                           onChange={async (item: SAPArticulo) => {
                             setSelectedArticulo(item);
@@ -6778,9 +7026,9 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
                                   tarifa_publica: tarifa,
                                   costo: tarifaPiso,
                                   caras: det.total,
-                                  // Usar conteos reales del circuito (ej CTO 3 = 41 flujo + 9 contraflujo, no 25/25)
-                                  caras_flujo: det.flujo,
-                                  caras_contraflujo: det.contraflujo,
+                                  // Mensual = solo Flujo. Catorcena = conteos reales del circuito.
+                                  caras_flujo: tipoPeriodo === 'mensual' ? det.total : det.flujo,
+                                  caras_contraflujo: tipoPeriodo === 'mensual' ? 0 : det.contraflujo,
                                   bonificacion: 0,
                                   estados: circuito.plazaLabel,
                                   ciudad: '',
@@ -6799,6 +7047,10 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
                             const tarifa = getTarifaPublicaFromArticulo(item);
                             const tarifaPiso = getTarifaPisoFromArticulo(item);
                             const ciudadEstado = getCiudadEstadoFromArticulo(item.ItemName, item.ItemCode);
+                            // Auto-set plaza buscando el nombre de plaza dentro del ItemName
+                            const itemNameUpper = (item.ItemName || '').toUpperCase();
+                            const plazasBackend = (solicitudFilters as any)?.plazas as { plaza: string }[] | undefined;
+                            const plazaPorNombre = plazasBackend?.find(p => itemNameUpper.includes(p.plaza.toUpperCase()));
                             const formato = getFormatoFromArticulo(item.ItemName, item.ItemCode);
                             const tipo = getTipoFromName(item.ItemName);
                             const isCortesia = item.ItemCode.toUpperCase().startsWith('CT');
@@ -6815,7 +7067,7 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
                               caras_flujo: isCortesia ? 0 : newCara.caras_flujo,
                               caras_contraflujo: isCortesia ? 0 : newCara.caras_contraflujo,
                               bonificacion: (isImpresion || isIntercambio || isEspecial) ? 0 : newCara.bonificacion,
-                              estados: ciudadEstado?.estado || newCara.estados,
+                              estados: plazaPorNombre?.plaza || ciudadEstado?.estado || newCara.estados,
                               // Si ciudadEstado existe, usar su ciudad (incluso si es vacía para CDMX)
                               ciudad: ciudadEstado ? ciudadEstado.ciudad : newCara.ciudad,
                               formato: formato || newCara.formato,
@@ -7191,8 +7443,15 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
                                 return solicitudFilters?.ciudades
                                   .filter(c => {
                                     if (!newCara.estados) return true;
-                                    const selectedEstados = newCara.estados.split(',').map(s => s.trim()).flatMap(s => s === 'Ciudad de México / AM' ? ['Ciudad de México', 'Estado de México'] : [s]);
-                                    return selectedEstados.includes(c.estado);
+                                    const selectedRaw = newCara.estados.split(',').map(s => s.trim()).filter(Boolean);
+                                    const selectedExpanded = selectedRaw.flatMap(s => s === 'Ciudad de México / AM' ? ['Ciudad de México', 'Estado de México'] : [s]);
+                                    const selectedUpper = selectedRaw.map(s => s.toUpperCase());
+                                    // Match por estado (legacy) O por plaza (cuando el campo es realmente una plaza tipo "GUADALAJARA")
+                                    const matchEstado = selectedExpanded.includes(c.estado);
+                                    const matchPlaza = (c as { plaza?: string }).plaza
+                                      ? selectedUpper.includes(((c as { plaza?: string }).plaza || '').toUpperCase())
+                                      : false;
+                                    return matchEstado || matchPlaza;
                                   })
                                   .filter(c => !isAM || !c.estado.toUpperCase().includes('ESTADO DE M') || AM_EDO_MEX_CITIES.includes(c.ciudad.toUpperCase()))
                                   .map(c => c.ciudad) || [];
@@ -7262,20 +7521,29 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
                             if (c) {
                               const total = (newCara.caras || 0) + (newCara.bonificacion || 0);
                               const carasCap = Math.min(Math.max(0, val), total);
-                              // Redistribuir flujo/contraflujo proporcionalmente al nuevo renta
-                              const curFlujo = newCara.caras_flujo || 0;
-                              const curContra = newCara.caras_contraflujo || 0;
-                              const curRenta = curFlujo + curContra;
-                              let flujoCalc = curRenta > 0
-                                ? Math.round(carasCap * curFlujo / curRenta)
-                                : Math.ceil(carasCap / 2);
-                              let contraCalc = carasCap - flujoCalc;
-                              if (contraCalc < 0) { contraCalc = 0; flujoCalc = carasCap; }
+                              // Mensual = solo Flujo. Catorcena = redistribuir proporcionalmente.
+                              let flujoCalc: number;
+                              let contraCalc: number;
+                              if (tipoPeriodo === 'mensual') {
+                                flujoCalc = carasCap;
+                                contraCalc = 0;
+                              } else {
+                                const curFlujo = newCara.caras_flujo || 0;
+                                const curContra = newCara.caras_contraflujo || 0;
+                                const curRenta = curFlujo + curContra;
+                                flujoCalc = curRenta > 0
+                                  ? Math.round(carasCap * curFlujo / curRenta)
+                                  : Math.ceil(carasCap / 2);
+                                contraCalc = carasCap - flujoCalc;
+                                if (contraCalc < 0) { contraCalc = 0; flujoCalc = carasCap; }
+                              }
                               setNewCara({ ...newCara, caras: carasCap, bonificacion: total - carasCap, caras_flujo: flujoCalc, caras_contraflujo: contraCalc });
                               return;
                             }
-                            const flujo = Math.ceil(val / 2);
-                            const contraflujo = Math.floor(val / 2);
+                            // Mensual = solo Flujo (Gran Formato: kioscos, boleros, mi macro, etc).
+                            // Catorcena = split 50/50 flujo/contraflujo (ceil/floor).
+                            const flujo = tipoPeriodo === 'mensual' ? val : Math.ceil(val / 2);
+                            const contraflujo = tipoPeriodo === 'mensual' ? 0 : Math.floor(val / 2);
                             setNewCara({ ...newCara, caras: val, caras_flujo: flujo, caras_contraflujo: contraflujo });
                           }}
                           disabled={!canEditResumen || newCara.articulo?.toUpperCase().startsWith('CT')}
@@ -7303,15 +7571,22 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
                               const total = (newCara.caras || 0) + (newCara.bonificacion || 0);
                               const bonifCap = Math.min(Math.max(0, val), total);
                               const carasCap = total - bonifCap;
-                              // Redistribuir flujo/contraflujo proporcionalmente al nuevo renta
-                              const curFlujo = newCara.caras_flujo || 0;
-                              const curContra = newCara.caras_contraflujo || 0;
-                              const curRenta = curFlujo + curContra;
-                              let flujoCalc = curRenta > 0
-                                ? Math.round(carasCap * curFlujo / curRenta)
-                                : Math.ceil(carasCap / 2);
-                              let contraCalc = carasCap - flujoCalc;
-                              if (contraCalc < 0) { contraCalc = 0; flujoCalc = carasCap; }
+                              // Mensual = solo Flujo. Catorcena = redistribuir proporcionalmente.
+                              let flujoCalc: number;
+                              let contraCalc: number;
+                              if (tipoPeriodo === 'mensual') {
+                                flujoCalc = carasCap;
+                                contraCalc = 0;
+                              } else {
+                                const curFlujo = newCara.caras_flujo || 0;
+                                const curContra = newCara.caras_contraflujo || 0;
+                                const curRenta = curFlujo + curContra;
+                                flujoCalc = curRenta > 0
+                                  ? Math.round(carasCap * curFlujo / curRenta)
+                                  : Math.ceil(carasCap / 2);
+                                contraCalc = carasCap - flujoCalc;
+                                if (contraCalc < 0) { contraCalc = 0; flujoCalc = carasCap; }
+                              }
                               setNewCara({ ...newCara, bonificacion: bonifCap, caras: carasCap, caras_flujo: flujoCalc, caras_contraflujo: contraCalc });
                               return;
                             }
@@ -7325,12 +7600,19 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
                       <div className="space-y-1">
                         <label className={`text-xs ${isDark ? 'text-zinc-500' : 'text-gray-400'}`}>Tarifa Pública</label>
                         <input
-                          type="number"
-                          value={newCara.tarifa_publica || ''}
-                          onChange={(e) => canEditResumen && setNewCara({ ...newCara, tarifa_publica: parseFloat(e.target.value) || 0 })}
+                          type="text"
+                          inputMode="decimal"
+                          value={(newCara.tarifa_publica || 0) > 0 ? (newCara.tarifa_publica || 0).toFixed(2) : ''}
+                          onChange={(e) => {
+                            if (!canEditResumen) return;
+                            const cleaned = e.target.value.replace(/[^\d.]/g, '');
+                            const parts = cleaned.split('.');
+                            const normalized = parts.length > 1 ? `${parts[0]}.${parts.slice(1).join('').slice(0, 2)}` : cleaned;
+                            setNewCara({ ...newCara, tarifa_publica: parseFloat(normalized) || 0 });
+                          }}
+                          placeholder="0.00"
                           disabled={!canEditResumen || newCara.articulo?.toUpperCase().startsWith('CT')}
                           className={`w-full px-3 py-2 ${isDark ? 'bg-zinc-800' : 'bg-gray-50'} border ${isDark ? 'border-zinc-700' : 'border-gray-200'} rounded-lg text-sm ${isDark ? 'text-white' : 'text-gray-900'} focus:outline-none focus:ring-1 focus:ring-purple-500/50 ${(!canEditResumen || newCara.articulo?.toUpperCase().startsWith('CT')) ? 'opacity-40 cursor-not-allowed' : ''}`}
-                          min="0"
                         />
                       </div>
                       <div className="space-y-1">
@@ -7566,7 +7848,7 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
                                     </div>
                                     <div>
                                       <span className={`${isDark ? 'text-zinc-500' : 'text-gray-400'} text-xs`}>Plaza</span>
-                                      <p className={`${isDark ? 'text-zinc-300' : 'text-gray-700'} text-xs truncate`} title={cara.plaza || cara.ciudad || cara.estados}>{cara.plaza || cara.ciudad || cara.estados || '-'}</p>
+                                      <p className={`${isDark ? 'text-zinc-300' : 'text-gray-700'} text-xs truncate`} title={cara.plaza || cara.estados || cara.ciudad}>{cara.plaza || cara.estados || cara.ciudad || '-'}</p>
                                     </div>
                                     <div>
                                       <span className={`${isDark ? 'text-zinc-500' : 'text-gray-400'} text-xs`}>Artículo</span>

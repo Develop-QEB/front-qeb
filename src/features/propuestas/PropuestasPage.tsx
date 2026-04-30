@@ -1755,10 +1755,10 @@ export function PropuestasPage() {
           <div className={`col-span-1 rounded-2xl border ${isDark ? 'border-zinc-800/80 bg-zinc-900/50' : 'border-gray-200 bg-white'} backdrop-blur-sm p-5 flex flex-col justify-between relative overflow-hidden group`}>
             <div className="absolute bottom-0 right-0 w-24 h-24 bg-amber-500/10 rounded-full blur-2xl -mr-5 -mb-5 pointer-events-none group-hover:bg-amber-500/20 transition-all duration-500" />
             <div>
-              <p className={`${isDark ? 'text-zinc-400' : 'text-gray-500'} text-sm font-medium mb-1`}>Sin Aprobar</p>
+              <p className={`${isDark ? 'text-zinc-400' : 'text-gray-500'} text-sm font-medium mb-1`}>En Ajuste</p>
               <div className="flex items-baseline gap-2">
                 <h3 className={`text-3xl font-bold ${isDark ? 'text-amber-400' : 'text-amber-600'}`}>
-                  {((effectiveStats?.total || 0) - (effectiveStats?.byStatus['Pase a ventas'] || 0)).toLocaleString()}
+                  {((effectiveStats?.byStatus['Ajuste Cto-Cliente'] || 0) + (effectiveStats?.byStatus['Ajuste Comercial'] || 0)).toLocaleString()}
                 </h3>
                 <span className={`text-xs font-medium ${isDark ? 'text-amber-500/80' : 'text-amber-600'}`}>Atención requerida</span>
               </div>
@@ -1768,7 +1768,7 @@ export function PropuestasPage() {
             <div className={`mt-4 w-full h-1.5 ${isDark ? 'bg-zinc-800' : 'bg-gray-100'} rounded-full overflow-hidden`}>
               <div
                 className="h-full bg-gradient-to-r from-amber-500 to-orange-500"
-                style={{ width: `${Math.min(100, (((effectiveStats?.total || 0) - (effectiveStats?.byStatus['Pase a ventas'] || 0)) / (effectiveStats?.total || 1)) * 100)}%` }}
+                style={{ width: `${Math.min(100, (((effectiveStats?.byStatus['Ajuste Cto-Cliente'] || 0) + (effectiveStats?.byStatus['Ajuste Comercial'] || 0)) / (effectiveStats?.total || 1)) * 100)}%` }}
               />
             </div>
           </div>
