@@ -793,6 +793,8 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
 
   // New cara form
   const [newCara, setNewCara] = useState<Omit<CaraItem, 'localId'>>(EMPTY_CARA);
+  const [tarifaPublicaInput, setTarifaPublicaInput] = useState<string>('');
+  const [tarifaPublicaFocused, setTarifaPublicaFocused] = useState(false);
   const [selectedArticulo, setSelectedArticulo] = useState<SAPArticulo | null>(null);
   // RT/BF pairing: articulo BF (bonificación) paired with the RT primary articulo
   const [articuloBf, setArticuloBf] = useState<SAPArticulo | null>(null);
@@ -6928,8 +6930,8 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
 
                     {/* Artículo selector */}
                     <div className="mb-4">
-                      <label className={`text-xs mb-1 block ${(editingCaraHasReservas || editingCaraId) ? 'text-zinc-800' : 'text-zinc-500'}`}>Artículo SAP</label>
-                      {canEditResumen && !editingCaraHasReservas && !editingCaraId ? (
+                      <label className={`text-xs mb-1 block ${(editingCaraHasReservas || (editingCaraId && !permissions.canEditArticuloOnEdit)) ? 'text-zinc-800' : 'text-zinc-500'}`}>Artículo SAP</label>
+                      {canEditResumen && !editingCaraHasReservas && (!editingCaraId || permissions.canEditArticuloOnEdit) ? (
                         <SearchableSelect
                           label="Seleccionar artículo"
                           options={(articulosData || []).filter(a => {
@@ -7456,12 +7458,20 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
                         <input
                           type="text"
                           inputMode="decimal"
-                          value={(newCara.tarifa_publica || 0) > 0 ? (newCara.tarifa_publica || 0).toFixed(2) : ''}
+                          value={tarifaPublicaFocused
+                            ? tarifaPublicaInput
+                            : ((newCara.tarifa_publica || 0) > 0 ? (newCara.tarifa_publica || 0).toFixed(2) : '')}
+                          onFocus={() => {
+                            setTarifaPublicaInput((newCara.tarifa_publica || 0) > 0 ? String(newCara.tarifa_publica) : '');
+                            setTarifaPublicaFocused(true);
+                          }}
+                          onBlur={() => setTarifaPublicaFocused(false)}
                           onChange={(e) => {
                             if (!canEditResumen) return;
                             const cleaned = e.target.value.replace(/[^\d.]/g, '');
                             const parts = cleaned.split('.');
                             const normalized = parts.length > 1 ? `${parts[0]}.${parts.slice(1).join('').slice(0, 2)}` : cleaned;
+                            setTarifaPublicaInput(normalized);
                             setNewCara({ ...newCara, tarifa_publica: parseFloat(normalized) || 0 });
                           }}
                           placeholder="0.00"
