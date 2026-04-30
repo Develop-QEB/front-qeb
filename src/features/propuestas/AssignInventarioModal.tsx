@@ -698,7 +698,8 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
   const permissions = getPermissions(user?.rol);
   // tipoPeriodo: arranca con el del prop (propuestas list a veces lo trae) y se
   // sincroniza con cotizacion del detail endpoint cuando carga (fuente de verdad).
-  const [tipoPeriodo, setTipoPeriodo] = useState<'catorcena' | 'mensual'>(
+  // Tipo string (no literal union) para evitar narrowing dentro de ramas JSX.
+  const [tipoPeriodo, setTipoPeriodo] = useState<string>(
     (propuesta as any)?.tipo_periodo === 'mensual' ? 'mensual' : 'catorcena'
   );
 
@@ -1157,7 +1158,7 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
       setImu(imuVal);
 
       // Sincronizar tipoPeriodo con cotizacion (fuente de verdad).
-      const tpDetail = solicitudDetails.cotizacion?.tipo_periodo;
+      const tpDetail = (solicitudDetails.cotizacion as any)?.tipo_periodo;
       if (tpDetail === 'mensual' || tpDetail === 'catorcena') {
         setTipoPeriodo(tpDetail);
       }

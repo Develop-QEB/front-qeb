@@ -704,7 +704,9 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
   // tipoPeriodo: arranca con el del prop (campañas list a veces lo trae) y se
   // sincroniza con el detail endpoint cuando carga, que es la fuente de verdad.
   // Crítico para que la regla "mensual = solo Flujo" se aplique al teclear caras.
-  const [tipoPeriodo, setTipoPeriodo] = useState<'catorcena' | 'mensual'>(
+  // Tipo string (no literal union) para evitar narrowing dentro de ramas JSX que
+  // hacen el `tipoPeriodo === 'mensual'` "no overlap" después de un check previo.
+  const [tipoPeriodo, setTipoPeriodo] = useState<string>(
     (campana as any)?.tipo_periodo === 'mensual' ? 'mensual' : 'catorcena'
   );
 
