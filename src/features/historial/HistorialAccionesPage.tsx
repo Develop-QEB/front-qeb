@@ -336,7 +336,7 @@ export function HistorialAccionesPage() {
     : 'bg-white border-gray-300 text-gray-900 placeholder:text-gray-400';
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 p-6">
       <Header title="Historial de Acciones" />
 
       {/* Barra de acciones */}
@@ -504,20 +504,22 @@ export function HistorialAccionesPage() {
             <div className="overflow-x-auto">
               <table className="w-full">
                 <thead>
-                  <tr className={isDark ? 'bg-zinc-800/50' : 'bg-gray-50'}>
-                    <th className={`text-left px-4 py-3 text-xs font-medium uppercase tracking-wider ${subText}`}>Fecha/Hora</th>
-                    <th className={`text-left px-4 py-3 text-xs font-medium uppercase tracking-wider ${subText}`}>Tipo</th>
-                    <th className={`text-left px-4 py-3 text-xs font-medium uppercase tracking-wider ${subText}`}>Ref ID</th>
-                    <th className={`text-left px-4 py-3 text-xs font-medium uppercase tracking-wider ${subText}`}>Acción</th>
-                    <th className={`text-left px-4 py-3 text-xs font-medium uppercase tracking-wider ${subText}`}>Detalles</th>
+                  <tr className={isDark ? 'bg-zinc-800/70' : 'bg-gray-50'}>
+                    <th className={`text-left px-6 py-3.5 text-xs font-semibold uppercase tracking-wider ${subText}`}>Fecha/Hora</th>
+                    <th className={`text-left px-6 py-3.5 text-xs font-semibold uppercase tracking-wider ${subText}`}>Tipo</th>
+                    <th className={`text-left px-6 py-3.5 text-xs font-semibold uppercase tracking-wider ${subText}`}>Ref ID</th>
+                    <th className={`text-left px-6 py-3.5 text-xs font-semibold uppercase tracking-wider ${subText}`}>Acción</th>
+                    <th className={`text-left px-6 py-3.5 text-xs font-semibold uppercase tracking-wider ${subText}`}>Detalles</th>
                   </tr>
                 </thead>
-                <tbody className={`divide-y ${isDark ? 'divide-zinc-800' : 'divide-gray-100'}`}>
+                <tbody className={`divide-y ${isDark ? 'divide-zinc-800/60' : 'divide-gray-100'}`}>
                   {grouped ? (
-                    grouped.map(group => (
+                    grouped.map(group => {
+                      let groupIdx = 0;
+                      return (
                       <Fragment key={group.key}>
                         <tr className={isDark ? 'bg-purple-900/20' : 'bg-purple-50'}>
-                          <td colSpan={5} className={`px-4 py-2 text-sm font-semibold ${headerText}`}>
+                          <td colSpan={5} className={`px-6 py-2.5 text-sm font-semibold ${headerText}`}>
                             <div className="flex items-center gap-2">
                               <Layers className="h-3.5 w-3.5 text-purple-500" />
                               {group.key}
@@ -525,49 +527,53 @@ export function HistorialAccionesPage() {
                             </div>
                           </td>
                         </tr>
-                        {group.entries.map((entry: HistorialEntry) => (
-                          <tr key={entry.id} className={`transition-colors ${rowHover}`}>
-                            <td className={`px-4 py-3 text-sm whitespace-nowrap ${subText}`}>
+                        {group.entries.map((entry: HistorialEntry) => {
+                          const zebraClass = groupIdx++ % 2 === 1 ? (isDark ? 'bg-zinc-800/20' : 'bg-gray-50/50') : '';
+                          return (
+                          <tr key={entry.id} className={`transition-colors ${rowHover} ${zebraClass}`}>
+                            <td className={`px-6 py-3.5 text-sm whitespace-nowrap ${subText}`}>
                               <div className="flex items-center gap-1.5">
                                 <Clock className="h-3.5 w-3.5" />
                                 {formatFechaHora(entry.fecha_hora)}
                               </div>
                             </td>
-                            <td className="px-4 py-3">
+                            <td className="px-6 py-3.5">
                               <TipoBadge tipo={entry.tipo} isDark={isDark} />
                             </td>
-                            <td className={`px-4 py-3 text-sm font-mono ${headerText}`}>
+                            <td className={`px-6 py-3.5 text-sm font-mono ${headerText}`}>
                               {entry.ref_id || '-'}
                             </td>
-                            <td className={`px-4 py-3 text-sm ${headerText}`}>
+                            <td className={`px-6 py-3.5 text-sm ${headerText}`}>
                               {entry.accion}
                             </td>
-                            <td className={`px-4 py-3 text-sm max-w-md truncate ${subText}`} title={entry.detalles || ''}>
+                            <td className={`px-6 py-3.5 text-sm max-w-md truncate ${subText}`} title={entry.detalles || ''}>
                               {formatDetalles(entry.detalles)}
                             </td>
                           </tr>
-                        ))}
+                          );
+                        })}
                       </Fragment>
-                    ))
+                      );
+                    })
                   ) : (
-                    historial.map((entry: HistorialEntry) => (
-                      <tr key={entry.id} className={`transition-colors ${rowHover}`}>
-                        <td className={`px-4 py-3 text-sm whitespace-nowrap ${subText}`}>
+                    historial.map((entry: HistorialEntry, idx: number) => (
+                      <tr key={entry.id} className={`transition-colors ${rowHover} ${idx % 2 === 1 ? (isDark ? 'bg-zinc-800/20' : 'bg-gray-50/50') : ''}`}>
+                        <td className={`px-6 py-3.5 text-sm whitespace-nowrap ${subText}`}>
                           <div className="flex items-center gap-1.5">
                             <Clock className="h-3.5 w-3.5" />
                             {formatFechaHora(entry.fecha_hora)}
                           </div>
                         </td>
-                        <td className="px-4 py-3">
+                        <td className="px-6 py-3.5">
                           <TipoBadge tipo={entry.tipo} isDark={isDark} />
                         </td>
-                        <td className={`px-4 py-3 text-sm font-mono ${headerText}`}>
+                        <td className={`px-6 py-3.5 text-sm font-mono ${headerText}`}>
                           {entry.ref_id || '-'}
                         </td>
-                        <td className={`px-4 py-3 text-sm ${headerText}`}>
+                        <td className={`px-6 py-3.5 text-sm ${headerText}`}>
                           {entry.accion}
                         </td>
-                        <td className={`px-4 py-3 text-sm max-w-md truncate ${subText}`} title={entry.detalles || ''}>
+                        <td className={`px-6 py-3.5 text-sm max-w-md truncate ${subText}`} title={entry.detalles || ''}>
                           {formatDetalles(entry.detalles)}
                         </td>
                       </tr>
@@ -579,7 +585,7 @@ export function HistorialAccionesPage() {
 
             {/* Paginación */}
             {pagination && pagination.totalPages > 1 && (
-              <div className={`flex items-center justify-between px-4 py-3 border-t ${isDark ? 'border-zinc-800' : 'border-gray-200'}`}>
+              <div className={`flex items-center justify-between px-6 py-4 border-t ${isDark ? 'border-zinc-800' : 'border-gray-200'}`}>
                 <div className={`text-sm ${subText}`}>
                   Mostrando {((pagination.page - 1) * pagination.limit) + 1} - {Math.min(pagination.page * pagination.limit, pagination.total)} de {pagination.total}
                 </div>
