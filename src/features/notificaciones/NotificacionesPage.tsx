@@ -2897,7 +2897,8 @@ export function NotificacionesPage() {
     if (debouncedSearch) {
       const q = debouncedSearch.toLowerCase();
       items = items.filter(item => {
-        const fields = [item.titulo, item.descripcion, item.contenido, item.responsable, item.asignado, item.tipo, item.estatus, item.cliente, item.asesor, item.formatos];
+        const a = item as any;
+        const fields = [item.titulo, item.mensaje, item.contenido, item.responsable, item.asignado, item.tipo, item.estatus, a.cliente, a.asesor, a.formatos, a.descripcion];
         return fields.some(f => f && String(f).toLowerCase().includes(q));
       });
     }
