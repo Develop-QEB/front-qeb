@@ -540,7 +540,7 @@ function GroupSummaryInline({ items, groupField, isDark: isDarkProp }: { items: 
   const carasTotal = items.reduce((s, i) => s + (Number(i.caras_totales) || 0), 0);
   const getTarifa = (i: InventarioReservado) => Number(i.tarifa_publica_sc) || Number(i.tarifa_publica) || 0;
   const totalInversion = items.reduce((s, i) => s + getTarifa(i) * (Number(i.caras_totales) || 0), 0);
-  const tarifas = [...new Set(items.map(i => Math.round(getTarifa(i))).filter(t => t > 0))];
+  const tarifas = [...new Set(items.map(i => getTarifa(i)).filter(t => t > 0))];
   const uniformTarifa = tarifas.length === 1 ? tarifas[0] : 0;
   const showTarifa = groupField !== 'inicio_periodo';
   return (

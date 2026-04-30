@@ -25,9 +25,15 @@ export interface HistorialFilters {
   limit?: number;
   tipo?: string;
   accion?: string;
+  usuario?: string;
   search?: string;
   fechaDesde?: string;
   fechaHasta?: string;
+}
+
+export interface HistorialUsuario {
+  id: number;
+  nombre: string;
 }
 
 export const historialService = {
@@ -37,6 +43,7 @@ export const historialService = {
     if (filters.limit) params.set('limit', String(filters.limit));
     if (filters.tipo) params.set('tipo', filters.tipo);
     if (filters.accion) params.set('accion', filters.accion);
+    if (filters.usuario) params.set('usuario', filters.usuario);
     if (filters.search) params.set('search', filters.search);
     if (filters.fechaDesde) params.set('fechaDesde', filters.fechaDesde);
     if (filters.fechaHasta) params.set('fechaHasta', filters.fechaHasta);
@@ -50,8 +57,13 @@ export const historialService = {
     return data.data;
   },
 
-  async getAcciones(): Promise<string[]> {
+  async getAcciones(): Promise<{ label: string; value: string }[]> {
     const { data } = await api.get('/historial/acciones');
+    return data.data;
+  },
+
+  async getUsuarios(): Promise<HistorialUsuario[]> {
+    const { data } = await api.get('/historial/usuarios');
     return data.data;
   },
 
