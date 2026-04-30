@@ -1735,8 +1735,11 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
     const contraflujoReservado = caraReservas.filter(r => r.tipo === 'Contraflujo').length;
     const bonificacionReservado = caraReservas.filter(r => r.tipo === 'Bonificacion').length;
 
-    const flujoRequerido = cara.caras_flujo || 0;
-    const contraflujoRequerido = cara.caras_contraflujo || 0;
+    // Mensual = todo cuenta como Flujo. Cubre caras viejas con split 50/50 en DB.
+    const rawFlujo = cara.caras_flujo || 0;
+    const rawContra = cara.caras_contraflujo || 0;
+    const flujoRequerido = tipoPeriodo === 'mensual' ? rawFlujo + rawContra : rawFlujo;
+    const contraflujoRequerido = tipoPeriodo === 'mensual' ? 0 : rawContra;
     const bonificacionRequerido = cara.bonificacion || 0;
 
     // For migrated campaigns: if total reservas >= total required, consider complete
