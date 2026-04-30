@@ -388,7 +388,7 @@ export function AnalisisOcupacionModal({
                               <td className={`px-3 py-1.5 font-mono ${isDark ? 'text-white' : 'text-gray-900'}`}>{inv.codigo_unico}</td>
                               <td className={`px-3 py-1.5 ${isDark ? 'text-zinc-300' : 'text-gray-700'}`}>{inv.mueble || '-'}</td>
                               <td className={`px-3 py-1.5 ${isDark ? 'text-zinc-300' : 'text-gray-700'}`}>{inv.plaza || '-'}</td>
-                              <td className={`px-3 py-1.5 ${isDark ? 'text-zinc-400' : 'text-gray-500'} max-w-[260px] truncate`} title={inv.ubicacion}>{inv.ubicacion || '-'}</td>
+                              <td className={`px-3 py-1.5 ${isDark ? 'text-zinc-400' : 'text-gray-500'} max-w-[260px] truncate`} title={inv.ubicacion ?? undefined}>{inv.ubicacion || '-'}</td>
                               <td className="px-3 py-1.5 text-center">
                                 <button
                                   onClick={() => removeInventario(inv.id)}
@@ -643,7 +643,7 @@ function MatrizView({
             <tr key={inv.id} className={`border-b ${isDark ? 'border-zinc-800' : 'border-gray-100'}`}>
               <td className={`sticky left-0 z-10 px-3 py-2 ${isDark ? 'bg-zinc-900' : 'bg-white'} border-r ${isDark ? 'border-zinc-800' : 'border-gray-200'}`}>
                 <div className={`font-mono text-xs font-medium ${isDark ? 'text-white' : 'text-gray-900'}`}>{inv.codigo_unico}</div>
-                <div className={`text-[10px] mt-0.5 ${isDark ? 'text-zinc-500' : 'text-gray-500'} truncate max-w-[200px]`} title={inv.ubicacion}>
+                <div className={`text-[10px] mt-0.5 ${isDark ? 'text-zinc-500' : 'text-gray-500'} truncate max-w-[200px]`} title={inv.ubicacion ?? undefined}>
                   {inv.plaza || '-'} · {inv.mueble || '-'}
                 </div>
               </td>
@@ -657,6 +657,18 @@ function MatrizView({
                 const disponibleClass = isDark
                   ? 'bg-emerald-500/10 border-emerald-500/30 cursor-default'
                   : 'bg-emerald-50 border-emerald-200 cursor-default';
+                // Cuando hay 1 sola ocupación: link directo. Si tiene campaña → detalle de campaña, si no → editar propuesta
+                const single = campanas.length === 1 ? campanas[0] : null;
+                const singleHref = single
+                  ? single.campana_id
+                    ? `/campanas/detail/${single.campana_id}`
+                    : `/propuestas?viewId=${single.propuesta_id}`
+                  : null;
+                const singleLabel = single
+                  ? single.campana_id
+                    ? single.campana_nombre || `Campaña #${single.campana_id}`
+                    : `Propuesta #${single.propuesta_id}`
+                  : '';
                 const cellInner = (
                   <>
                     <div className={`flex items-center gap-1 text-[10px] font-bold uppercase tracking-wide ${
@@ -665,14 +677,14 @@ function MatrizView({
                         : isDark ? 'text-emerald-300' : 'text-emerald-700'
                     }`}>
                       {ocupado ? 'Ocupado' : 'Disponible'}
-                      {ocupado && campanas.length === 1 && <ExternalLink className="h-2.5 w-2.5 opacity-70" />}
+                      {single && <ExternalLink className="h-2.5 w-2.5 opacity-70" />}
                     </div>
                     {ocupado && campanas.length > 0 && (
                       <div
-                        className={`text-[10px] mt-1 truncate ${campanas.length === 1 ? 'underline underline-offset-2' : ''} ${isDark ? 'text-zinc-300' : 'text-gray-700'}`}
-                        title={campanas.map(c => c.campana_nombre).join(', ')}
+                        className={`text-[10px] mt-1 truncate ${single ? 'underline underline-offset-2' : ''} ${isDark ? 'text-zinc-300' : 'text-gray-700'}`}
+                        title={campanas.map(c => c.campana_nombre || `Propuesta #${c.propuesta_id}`).join(', ')}
                       >
-                        {campanas[0].campana_nombre}
+                        {singleLabel || (campanas[0].campana_nombre || `Propuesta #${campanas[0].propuesta_id}`)}
                         {campanas.length > 1 && (
                           <span className={isDark ? 'text-purple-400' : 'text-purple-600'}> +{campanas.length - 1}</span>
                         )}
@@ -683,12 +695,12 @@ function MatrizView({
 
                 return (
                   <td key={cellKeyOf(cat)} className="px-1.5 py-1.5 align-top">
-                    {ocupado && campanas.length === 1 ? (
+                    {single && singleHref ? (
                       <a
-                        href={`/campanas/detail/${campanas[0].campana_id}`}
+                        href={singleHref}
                         target="_blank"
                         rel="noopener noreferrer"
-                        title={`Abrir campaña: ${campanas[0].campana_nombre}`}
+                        title={single.campana_id ? `Abrir campaña: ${singleLabel}` : `Editar propuesta #${single.propuesta_id}`}
                         className={`block w-full text-left rounded-md p-2 border transition-all ${ocupadoClass}`}
                       >
                         {cellInner}
@@ -697,7 +709,7 @@ function MatrizView({
                       <button
                         onClick={() => ocupado && onCellClick(inv, cat, campanas)}
                         disabled={!ocupado}
-                        title={ocupado && campanas.length > 1 ? `${campanas.length} campañas — click para ver` : undefined}
+                        title={ocupado && campanas.length > 1 ? `${campanas.length} ocupaciones — click para ver` : undefined}
                         className={`w-full text-left rounded-md p-2 border transition-all ${ocupado ? ocupadoClass : disponibleClass}`}
                       >
                         {cellInner}
@@ -777,26 +789,27 @@ function CellDetailModal({
                 </div>
               </div>
               <div className="mt-3 flex items-center gap-2">
-                <a
-                  href={`/campanas/detail/${c.campana_id}`}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className={`inline-flex items-center gap-1 text-xs ${isDark ? 'text-purple-300 hover:text-purple-200' : 'text-purple-700 hover:text-purple-900'}`}
-                >
-                  <ExternalLink className="h-3 w-3" />
-                  Abrir campaña
-                </a>
-                {c.propuesta_id && (
+                {c.campana_id ? (
                   <a
-                    href={`/propuestas/${c.propuesta_id}`}
+                    href={`/campanas/detail/${c.campana_id}`}
                     target="_blank"
                     rel="noopener noreferrer"
                     className={`inline-flex items-center gap-1 text-xs ${isDark ? 'text-purple-300 hover:text-purple-200' : 'text-purple-700 hover:text-purple-900'}`}
                   >
                     <ExternalLink className="h-3 w-3" />
-                    Propuesta #{c.propuesta_id}
+                    Abrir campaña
                   </a>
-                )}
+                ) : c.propuesta_id ? (
+                  <a
+                    href={`/propuestas?viewId=${c.propuesta_id}`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className={`inline-flex items-center gap-1 text-xs ${isDark ? 'text-purple-300 hover:text-purple-200' : 'text-purple-700 hover:text-purple-900'}`}
+                  >
+                    <ExternalLink className="h-3 w-3" />
+                    Editar propuesta #{c.propuesta_id}
+                  </a>
+                ) : null}
               </div>
             </div>
           ))}

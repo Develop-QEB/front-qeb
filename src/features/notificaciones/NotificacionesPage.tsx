@@ -1391,6 +1391,12 @@ function getDirectNavigationPath(tipo: string, id: number, titulo: string, tipoT
   // Excluir tareas de Autorización/Rechazo — esas usan referencia_tipo del backend
   const isSeguimientoCampana = tipoTarea?.toLowerCase().includes('seguimiento') && tipoTarea?.toLowerCase().includes('campaña');
   const isAutorizacionOrRechazo = tipoTarea?.includes('Autorización') || tipoTarea?.includes('Rechazo') || tipoTarea?.includes('Aprobación');
+
+  // Seguimiento Campaña: siempre al detalle de campaña (el backend devuelve referencia_tipo='solicitud' por la prioridad de id_solicitud)
+  if (isSeguimientoCampana && campaniaId) {
+    return `/campanas/detail/${campaniaId}`;
+  }
+
   if (!isSeguimientoCampana && !isAutorizacionOrRechazo && (tipoTarea?.toLowerCase().includes('propuesta') || tipoTarea?.toLowerCase().includes('ajuste cto') || propuestaId)) {
     return `/propuestas?viewId=${propuestaId || id}`;
   }
