@@ -469,9 +469,10 @@ export function HistorialAccionesPage() {
   );
 
   return (
-    <div className="space-y-4 p-6">
+    <div className="min-h-screen">
       <Header title="Historial de Acciones" />
 
+      <div className="space-y-4 p-6">
       {/* Barra de filtros */}
       <div className={`rounded-xl border ${cardBg}`}>
         {/* Fila principal */}
@@ -826,6 +827,7 @@ export function HistorialAccionesPage() {
           </div>
         </div>
       )}
+      </div>
     </div>
   );
 }
