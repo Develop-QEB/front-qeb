@@ -1,8 +1,8 @@
-import { useState, useCallback } from 'react';
+import { useState, useCallback, Fragment } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import {
   Search, X, RefreshCw, Clock, Filter, ChevronLeft, ChevronRight,
-  StickyNote, Send, History,
+  StickyNote, Send, History, Layers,
 } from 'lucide-react';
 import { Header } from '../../components/layout/Header';
 import { historialService, type HistorialEntry, type HistorialFilters } from '../../services/historial.service';
@@ -164,7 +164,7 @@ function NotaModal({
       }`}>
         <div className="flex items-center justify-between mb-4">
           <h3 className={`text-lg font-semibold ${isDark ? 'text-white' : 'text-gray-900'}`}>
-            Agregar nota
+            Agregar acción
           </h3>
           <button onClick={onClose} className={`p-1.5 rounded-lg ${isDark ? 'hover:bg-zinc-800 text-zinc-400' : 'hover:bg-gray-100 text-gray-400'}`}>
             <X className="h-4 w-4" />
@@ -202,12 +202,12 @@ function NotaModal({
           </div>
 
           <div>
-            <label className={`text-xs font-medium mb-1 block ${isDark ? 'text-zinc-400' : 'text-gray-500'}`}>Nota</label>
+            <label className={`text-xs font-medium mb-1 block ${isDark ? 'text-zinc-400' : 'text-gray-500'}`}>Descripción</label>
             <textarea
               value={nota}
               onChange={(e) => setNota(e.target.value)}
               rows={3}
-              placeholder="Escribe tu nota aquí..."
+              placeholder="Describe la acción..."
               className={`w-full rounded-lg border px-3 py-2 text-sm resize-none ${
                 isDark ? 'bg-zinc-800 border-zinc-700 text-white placeholder:text-zinc-600' : 'bg-white border-gray-300 text-gray-900 placeholder:text-gray-400'
               }`}
@@ -220,7 +220,7 @@ function NotaModal({
             className="w-full flex items-center justify-center gap-2 px-4 py-2.5 rounded-lg text-sm font-medium text-white bg-purple-600 hover:bg-purple-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
           >
             <Send className="h-4 w-4" />
-            {isLoading ? 'Guardando...' : 'Agregar nota'}
+            {isLoading ? 'Guardando...' : 'Agregar acción'}
           </button>
         </div>
       </div>
@@ -238,6 +238,7 @@ export function HistorialAccionesPage() {
   const [searchInput, setSearchInput] = useState('');
   const [showNotaModal, setShowNotaModal] = useState(false);
   const [showFilters, setShowFilters] = useState(false);
+  const [groupMode, setGroupMode] = useState<'none' | 'referencia' | 'etapa'>('none');
 
   useSocketHistorialAcciones();
 
@@ -249,6 +250,11 @@ export function HistorialAccionesPage() {
   const { data: tiposRaw = [] } = useQuery({
     queryKey: ['historial-tipos'],
     queryFn: () => historialService.getTipos(),
+  });
+
+  const { data: accionesRaw = [] } = useQuery({
+    queryKey: ['historial-acciones-list'],
+    queryFn: () => historialService.getAcciones(),
   });
 
   const tiposAgrupados = (() => {
@@ -289,6 +295,14 @@ export function HistorialAccionesPage() {
     }));
   };
 
+  const handleAccionFilter = (accion: string) => {
+    setFilters(prev => ({
+      ...prev,
+      page: 1,
+      accion: accion || undefined,
+    }));
+  };
+
   const handleDateFilter = (field: 'fechaDesde' | 'fechaHasta', value: string) => {
     setFilters(prev => ({
       ...prev,
@@ -299,6 +313,19 @@ export function HistorialAccionesPage() {
 
   const historial = data?.data || [];
   const pagination = data?.pagination;
+
+  const grouped = groupMode !== 'none' ? (() => {
+    const groups: Record<string, HistorialEntry[]> = {};
+    const order: string[] = [];
+    for (const entry of historial) {
+      const key = groupMode === 'referencia'
+        ? `${normalizeTipo(entry.tipo)} #${entry.ref_id}`
+        : normalizeTipo(entry.tipo);
+      if (!groups[key]) { groups[key] = []; order.push(key); }
+      groups[key].push(entry);
+    }
+    return order.map(key => ({ key, entries: groups[key] }));
+  })() : null;
 
   const cardBg = isDark ? 'bg-zinc-900/50 border-zinc-800' : 'bg-white border-gray-200';
   const headerText = isDark ? 'text-white' : 'text-gray-900';
@@ -323,7 +350,7 @@ export function HistorialAccionesPage() {
               value={searchInput}
               onChange={(e) => setSearchInput(e.target.value)}
               onKeyDown={(e) => e.key === 'Enter' && handleSearch()}
-              placeholder="Buscar en acciones o detalles..."
+              placeholder="Buscar por cliente, acción o detalles..."
               className={`w-full rounded-lg border pl-9 pr-8 py-2 text-sm ${inputCls}`}
             />
             {searchInput && (
@@ -357,7 +384,7 @@ export function HistorialAccionesPage() {
             className="flex items-center gap-1.5 px-3 py-2 rounded-lg text-sm font-medium text-white bg-purple-600 hover:bg-purple-700 transition-colors"
           >
             <StickyNote className="h-4 w-4" />
-            Agregar nota
+            Agregar acción
           </button>
 
           <button
@@ -376,7 +403,7 @@ export function HistorialAccionesPage() {
           <div className={`mt-4 pt-4 border-t ${isDark ? 'border-zinc-800' : 'border-gray-200'}`}>
             <div className="flex flex-wrap items-end gap-4">
               <div>
-                <label className={`text-xs font-medium mb-1 block ${subText}`}>Tipo</label>
+                <label className={`text-xs font-medium mb-1 block ${subText}`}>Etapa</label>
                 <div className="flex flex-wrap gap-1.5">
                   {tiposAgrupados.map(({ label, value }) => (
                     <button
@@ -392,6 +419,20 @@ export function HistorialAccionesPage() {
                     </button>
                   ))}
                 </div>
+              </div>
+
+              <div>
+                <label className={`text-xs font-medium mb-1 block ${subText}`}>Acción</label>
+                <select
+                  value={filters.accion || ''}
+                  onChange={(e) => handleAccionFilter(e.target.value)}
+                  className={`rounded-lg border px-3 py-1.5 text-sm ${inputCls}`}
+                >
+                  <option value="">Todas</option>
+                  {accionesRaw.map(a => (
+                    <option key={a} value={a}>{a}</option>
+                  ))}
+                </select>
               </div>
 
               <div>
@@ -414,9 +455,29 @@ export function HistorialAccionesPage() {
                 />
               </div>
 
-              {(filters.tipo || filters.fechaDesde || filters.fechaHasta) && (
+              <div>
+                <label className={`text-xs font-medium mb-1 block ${subText}`}>Agrupar por</label>
+                <div className="flex gap-1">
+                  {([['none', 'Sin agrupar'], ['referencia', 'Referencia'], ['etapa', 'Etapa']] as const).map(([mode, label]) => (
+                    <button
+                      key={mode}
+                      onClick={() => setGroupMode(mode)}
+                      className={`px-2.5 py-1 rounded-lg text-xs font-medium border transition-colors ${
+                        groupMode === mode
+                          ? 'border-purple-500 bg-purple-500/10 text-purple-500'
+                          : isDark ? 'border-zinc-700 text-zinc-400 hover:border-zinc-600' : 'border-gray-300 text-gray-500 hover:border-gray-400'
+                      }`}
+                    >
+                      {mode !== 'none' && <Layers className="h-3 w-3 inline mr-1" />}
+                      {label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {(filters.tipo || filters.accion || filters.fechaDesde || filters.fechaHasta) && (
                 <button
-                  onClick={() => setFilters(prev => ({ ...prev, page: 1, tipo: undefined, fechaDesde: undefined, fechaHasta: undefined }))}
+                  onClick={() => setFilters(prev => ({ ...prev, page: 1, tipo: undefined, accion: undefined, fechaDesde: undefined, fechaHasta: undefined }))}
                   className="text-xs text-purple-500 hover:text-purple-400"
                 >
                   Limpiar filtros
@@ -452,28 +513,66 @@ export function HistorialAccionesPage() {
                   </tr>
                 </thead>
                 <tbody className={`divide-y ${isDark ? 'divide-zinc-800' : 'divide-gray-100'}`}>
-                  {historial.map((entry: HistorialEntry) => (
-                    <tr key={entry.id} className={`transition-colors ${rowHover}`}>
-                      <td className={`px-4 py-3 text-sm whitespace-nowrap ${subText}`}>
-                        <div className="flex items-center gap-1.5">
-                          <Clock className="h-3.5 w-3.5" />
-                          {formatFechaHora(entry.fecha_hora)}
-                        </div>
-                      </td>
-                      <td className="px-4 py-3">
-                        <TipoBadge tipo={entry.tipo} isDark={isDark} />
-                      </td>
-                      <td className={`px-4 py-3 text-sm font-mono ${headerText}`}>
-                        {entry.ref_id || '-'}
-                      </td>
-                      <td className={`px-4 py-3 text-sm ${headerText}`}>
-                        {entry.accion}
-                      </td>
-                      <td className={`px-4 py-3 text-sm max-w-md truncate ${subText}`} title={entry.detalles || ''}>
-                        {formatDetalles(entry.detalles)}
-                      </td>
-                    </tr>
-                  ))}
+                  {grouped ? (
+                    grouped.map(group => (
+                      <Fragment key={group.key}>
+                        <tr className={isDark ? 'bg-purple-900/20' : 'bg-purple-50'}>
+                          <td colSpan={5} className={`px-4 py-2 text-sm font-semibold ${headerText}`}>
+                            <div className="flex items-center gap-2">
+                              <Layers className="h-3.5 w-3.5 text-purple-500" />
+                              {group.key}
+                              <span className={`font-normal text-xs ${subText}`}>({group.entries.length})</span>
+                            </div>
+                          </td>
+                        </tr>
+                        {group.entries.map((entry: HistorialEntry) => (
+                          <tr key={entry.id} className={`transition-colors ${rowHover}`}>
+                            <td className={`px-4 py-3 text-sm whitespace-nowrap ${subText}`}>
+                              <div className="flex items-center gap-1.5">
+                                <Clock className="h-3.5 w-3.5" />
+                                {formatFechaHora(entry.fecha_hora)}
+                              </div>
+                            </td>
+                            <td className="px-4 py-3">
+                              <TipoBadge tipo={entry.tipo} isDark={isDark} />
+                            </td>
+                            <td className={`px-4 py-3 text-sm font-mono ${headerText}`}>
+                              {entry.ref_id || '-'}
+                            </td>
+                            <td className={`px-4 py-3 text-sm ${headerText}`}>
+                              {entry.accion}
+                            </td>
+                            <td className={`px-4 py-3 text-sm max-w-md truncate ${subText}`} title={entry.detalles || ''}>
+                              {formatDetalles(entry.detalles)}
+                            </td>
+                          </tr>
+                        ))}
+                      </Fragment>
+                    ))
+                  ) : (
+                    historial.map((entry: HistorialEntry) => (
+                      <tr key={entry.id} className={`transition-colors ${rowHover}`}>
+                        <td className={`px-4 py-3 text-sm whitespace-nowrap ${subText}`}>
+                          <div className="flex items-center gap-1.5">
+                            <Clock className="h-3.5 w-3.5" />
+                            {formatFechaHora(entry.fecha_hora)}
+                          </div>
+                        </td>
+                        <td className="px-4 py-3">
+                          <TipoBadge tipo={entry.tipo} isDark={isDark} />
+                        </td>
+                        <td className={`px-4 py-3 text-sm font-mono ${headerText}`}>
+                          {entry.ref_id || '-'}
+                        </td>
+                        <td className={`px-4 py-3 text-sm ${headerText}`}>
+                          {entry.accion}
+                        </td>
+                        <td className={`px-4 py-3 text-sm max-w-md truncate ${subText}`} title={entry.detalles || ''}>
+                          {formatDetalles(entry.detalles)}
+                        </td>
+                      </tr>
+                    ))
+                  )}
                 </tbody>
               </table>
             </div>

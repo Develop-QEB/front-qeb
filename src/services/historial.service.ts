@@ -24,6 +24,7 @@ export interface HistorialFilters {
   page?: number;
   limit?: number;
   tipo?: string;
+  accion?: string;
   search?: string;
   fechaDesde?: string;
   fechaHasta?: string;
@@ -35,6 +36,7 @@ export const historialService = {
     if (filters.page) params.set('page', String(filters.page));
     if (filters.limit) params.set('limit', String(filters.limit));
     if (filters.tipo) params.set('tipo', filters.tipo);
+    if (filters.accion) params.set('accion', filters.accion);
     if (filters.search) params.set('search', filters.search);
     if (filters.fechaDesde) params.set('fechaDesde', filters.fechaDesde);
     if (filters.fechaHasta) params.set('fechaHasta', filters.fechaHasta);
@@ -45,6 +47,11 @@ export const historialService = {
 
   async getTipos(): Promise<string[]> {
     const { data } = await api.get('/historial/tipos');
+    return data.data;
+  },
+
+  async getAcciones(): Promise<string[]> {
+    const { data } = await api.get('/historial/acciones');
     return data.data;
   },
 
