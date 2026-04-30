@@ -2808,13 +2808,12 @@ export function NotificacionesPage() {
 
   // Fetch notificaciones o tareas según contentType
   const { data, isLoading } = useQuery({
-    queryKey: ['notificaciones', contentType, filterEstatus, debouncedSearch, orderBy, orderDir],
+    queryKey: ['notificaciones', contentType, filterEstatus, orderBy, orderDir],
     queryFn: () =>
       notificacionesService.getAll({
         limit: 200,
         estatus: filterEstatus || undefined,
-        tipo: contentType === 'notificaciones' ? 'Notificación' : undefined, // Solo notificaciones o todas
-        search: debouncedSearch || undefined,
+        tipo: contentType === 'notificaciones' ? 'Notificación' : undefined,
         orderBy,
         orderDir,
       }),
@@ -2894,6 +2893,15 @@ export function NotificacionesPage() {
       });
     }
 
+    // Búsqueda local
+    if (debouncedSearch) {
+      const q = debouncedSearch.toLowerCase();
+      items = items.filter(item => {
+        const fields = [item.titulo, item.descripcion, item.contenido, item.responsable, item.asignado, item.tipo, item.estatus, item.cliente, item.asesor, item.formatos];
+        return fields.some(f => f && String(f).toLowerCase().includes(q));
+      });
+    }
+
     // Aplicar filtros avanzados
     items = applyFilters(items, filters);
 
@@ -2918,7 +2926,7 @@ export function NotificacionesPage() {
     }
 
     return items;
-  }, [data?.data, filterFecha, user?.id, contentType, filters, sortField, sortDirection]);
+  }, [data?.data, filterFecha, user?.id, contentType, filters, sortField, sortDirection, debouncedSearch]);
     const tareasConQuickFilter = useMemo(() => {
       const isDirectorUser = ['Director General', 'Director Comercial'].includes(user?.rol || '');
       const cutoff14d = new Date();
@@ -2957,8 +2965,8 @@ export function NotificacionesPage() {
 
   const filteredTareas = tareasConQuickFilter;
 
-  const countActivas = useMemo(() => baseTareas.filter(t => t.estatus !== 'Atendido').length, [baseTareas]);
-  const countAtendidas = useMemo(() => baseTareas.filter(t => t.estatus === 'Atendido').length, [baseTareas]);
+  const countActivas = useMemo(() => baseTareas.filter(t => t.estatus !== 'Atendido' && t.estatus !== 'Rechazado' && t.estatus !== 'Cancelado').length, [baseTareas]);
+  const countAtendidas = useMemo(() => baseTareas.filter(t => t.estatus === 'Atendido' || t.estatus === 'Rechazado' || t.estatus === 'Cancelado').length, [baseTareas]);
 
   // Agrupar tareas (soporta múltiples agrupaciones anidadas)
   const nestedGroups = useMemo<NestedGroup[]>(() => {
