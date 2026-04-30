@@ -7429,7 +7429,26 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
                               return ['Ciudad de México / AM', ...(solicitudFilters?.estados || [])];
                             })()}
                             selected={newCara.estados ? newCara.estados.split(',').map(s => s.trim()).filter(Boolean) : []}
-                            onChange={(selected) => setNewCara({ ...newCara, estados: selected.join(', '), ciudad: '' })}
+                            onChange={(selected) => {
+                              // CDMX/AM mutuamente excluyente con CDMX y EdoMex sueltos.
+                              const previo = newCara.estados ? newCara.estados.split(',').map(s => s.trim()).filter(Boolean) : [];
+                              const teniaAM = previo.some(p => p.toUpperCase() === 'CIUDAD DE MÉXICO / AM');
+                              const ahoraAM = selected.some(p => p.toUpperCase() === 'CIUDAD DE MÉXICO / AM');
+                              let final = selected;
+                              if (ahoraAM && !teniaAM) {
+                                final = selected.filter(p => {
+                                  const u = p.toUpperCase();
+                                  return u !== 'CIUDAD DE MÉXICO' && u !== 'CIUDAD DE MEXICO' && u !== 'ESTADO DE MÉXICO' && u !== 'ESTADO DE MEXICO';
+                                });
+                              } else if (ahoraAM) {
+                                const hasNuevoSuelto = selected.some(p => {
+                                  const u = p.toUpperCase();
+                                  return u === 'CIUDAD DE MÉXICO' || u === 'CIUDAD DE MEXICO' || u === 'ESTADO DE MÉXICO' || u === 'ESTADO DE MEXICO';
+                                });
+                                if (hasNuevoSuelto) final = selected.filter(p => p.toUpperCase() !== 'CIUDAD DE MÉXICO / AM');
+                              }
+                              setNewCara({ ...newCara, estados: final.join(', '), ciudad: '' });
+                            }}
                             placeholder="Seleccionar plazas..."
                           />
                         ) : (

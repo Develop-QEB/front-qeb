@@ -7285,7 +7285,32 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
                               return ['Ciudad de México / AM', ...(solicitudFilters?.estados || [])];
                             })()}
                             selected={newCara.estados ? newCara.estados.split(',').map(s => s.trim()).filter(Boolean) : []}
-                            onChange={(selected) => setNewCara({ ...newCara, estados: selected.join(', '), ciudad: '' })}
+                            onChange={(selected) => {
+                              // CDMX/AM es mutuamente excluyente con CDMX y EdoMex sueltos
+                              // (CDMX/AM ya engloba ambos con sus reglas especiales).
+                              const previo = newCara.estados ? newCara.estados.split(',').map(s => s.trim()).filter(Boolean) : [];
+                              const teniaAM = previo.some(p => p.toUpperCase() === 'CIUDAD DE MÉXICO / AM');
+                              const ahoraAM = selected.some(p => p.toUpperCase() === 'CIUDAD DE MÉXICO / AM');
+                              let final = selected;
+                              if (ahoraAM && !teniaAM) {
+                                // Acaba de seleccionar /AM → quitar CDMX y EdoMex sueltos
+                                final = selected.filter(p => {
+                                  const u = p.toUpperCase();
+                                  return u !== 'CIUDAD DE MÉXICO' && u !== 'CIUDAD DE MEXICO' && u !== 'ESTADO DE MÉXICO' && u !== 'ESTADO DE MEXICO';
+                                });
+                              } else if (!ahoraAM && teniaAM) {
+                                // Acaba de seleccionar CDMX o EdoMex después de /AM → /AM ya quitado por el cambio
+                                // (no acción extra)
+                              } else if (ahoraAM) {
+                                // /AM ya estaba; si agregaron CDMX/EdoMex, quitar /AM
+                                const hasNuevoSuelto = selected.some(p => {
+                                  const u = p.toUpperCase();
+                                  return u === 'CIUDAD DE MÉXICO' || u === 'CIUDAD DE MEXICO' || u === 'ESTADO DE MÉXICO' || u === 'ESTADO DE MEXICO';
+                                });
+                                if (hasNuevoSuelto) final = selected.filter(p => p.toUpperCase() !== 'CIUDAD DE MÉXICO / AM');
+                              }
+                              setNewCara({ ...newCara, estados: final.join(', '), ciudad: '' });
+                            }}
                             placeholder="Seleccionar plazas..."
                           />
                         ) : (
