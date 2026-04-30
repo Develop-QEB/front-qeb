@@ -1637,14 +1637,18 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
     }
   }, [filteredReservasData, mapsLoaded]);
 
-  // Show actual flujo/contraflujo from DB (updated via onChange when % changes)
+  // Show actual flujo/contraflujo from DB (updated via onChange when % changes).
+  // En mensual, todo cuenta como Flujo (regla Gran Formato) — esto cubre caras
+  // viejas que se guardaron con split 50/50 antes del fix de mensual.
   const adjustedCarasFlujo = useMemo(() => {
     if (!selectedCaraForSearch) return { flujo: 0, contraflujo: 0 };
-    return {
-      flujo: selectedCaraForSearch.caras_flujo || 0,
-      contraflujo: selectedCaraForSearch.caras_contraflujo || 0,
-    };
-  }, [selectedCaraForSearch]);
+    const flujo = selectedCaraForSearch.caras_flujo || 0;
+    const contra = selectedCaraForSearch.caras_contraflujo || 0;
+    if (tipoPeriodo === 'mensual') {
+      return { flujo: flujo + contra, contraflujo: 0 };
+    }
+    return { flujo, contraflujo: contra };
+  }, [selectedCaraForSearch, tipoPeriodo]);
 
   // Calculate remaining to assign for selected cara
   const remainingToAssign = useMemo(() => {
@@ -1691,8 +1695,12 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
     const contraflujoReservado = caraReservas.filter(r => r.tipo === 'Contraflujo').length;
     const bonificacionReservado = caraReservas.filter(r => r.tipo === 'Bonificacion').length;
 
-    const flujoRequerido = cara.caras_flujo || 0;
-    const contraflujoRequerido = cara.caras_contraflujo || 0;
+    // Mensual = todo cuenta como Flujo. Esto incluye caras viejas que se guardaron
+    // con split 50/50 (caras_flujo + caras_contraflujo > 0 ambos) antes del fix.
+    const rawFlujo = cara.caras_flujo || 0;
+    const rawContra = cara.caras_contraflujo || 0;
+    const flujoRequerido = tipoPeriodo === 'mensual' ? rawFlujo + rawContra : rawFlujo;
+    const contraflujoRequerido = tipoPeriodo === 'mensual' ? 0 : rawContra;
     const bonificacionRequerido = cara.bonificacion || 0;
 
     // Complete means EXACT match - not under, not over
