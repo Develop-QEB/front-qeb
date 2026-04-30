@@ -57,7 +57,7 @@ export const historialService = {
     return data.data;
   },
 
-  async getAcciones(): Promise<string[]> {
+  async getAcciones(): Promise<{ label: string; value: string }[]> {
     const { data } = await api.get('/historial/acciones');
     return data.data;
   },

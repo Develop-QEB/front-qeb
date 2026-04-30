@@ -574,7 +574,7 @@ export function HistorialAccionesPage() {
                   onChange={(e) => setFilters(prev => ({ ...prev, page: 1, accion: e.target.value || undefined }))}
                   className={`rounded-lg border px-3 py-1.5 text-sm min-w-[140px] ${inputCls}`}>
                   <option value="">Todas</option>
-                  {accionesRaw.map(a => <option key={a} value={a}>{a}</option>)}
+                  {accionesRaw.map(a => <option key={a.value} value={a.value}>{a.label}</option>)}
                 </select>
               </div>
 
