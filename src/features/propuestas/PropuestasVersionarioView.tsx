@@ -563,7 +563,7 @@ export default function PropuestasVersionarioView({ isDark, filters, advancedFil
                           )}
                           <span className={`px-2 py-0.5 rounded-full text-[10px] ${isDark ? 'bg-green-500/15 text-green-300' : 'bg-green-50 text-green-700'} border border-green-500/25 flex items-center gap-1`}>
                             <DollarSign className="h-3 w-3" />
-                            {Number(info.inversion) > 0 ? Number(info.inversion).toLocaleString() : 'Sin inversión'}
+                            {Number(info.inversion) > 0 ? Number(info.inversion).toLocaleString('es-MX', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : 'Sin inversión'}
                           </span>
                           {circuitosCount > 0 && (
                             <span className={`px-2 py-0.5 rounded-full text-[10px] ${isDark ? 'bg-blue-500/15 text-blue-300' : 'bg-blue-50 text-blue-700'} border border-blue-500/25 flex items-center gap-1`}>
@@ -646,7 +646,7 @@ export default function PropuestasVersionarioView({ isDark, filters, advancedFil
                                               )}
                                               {Number(inv.tarifa_publica_sc) > 0 && (
                                                 <span className={`text-[9px] ${isDark ? 'text-zinc-500' : 'text-gray-400'}`}>
-                                                  ${Number(inv.tarifa_publica_sc).toLocaleString('es-MX')}
+                                                  ${Number(inv.tarifa_publica_sc).toLocaleString('es-MX', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                                                 </span>
                                               )}
                                             </div>
