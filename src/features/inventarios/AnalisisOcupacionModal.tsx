@@ -3,7 +3,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   X, Upload, Trash2, Save, Share2, Loader2, AlertCircle, CheckCircle2,
   ArrowLeft, ArrowRight, BarChart3, Calendar, ChevronDown,
-  Building2, ExternalLink, Package
+  Building2, ExternalLink, Package, Download
 } from 'lucide-react';
 import { useThemeStore } from '../../store/themeStore';
 import { inventariosService } from '../../services/inventarios.service';
@@ -94,6 +94,7 @@ export function AnalisisOcupacionModal({
   const [analisisNombre, setAnalisisNombre] = useState('');
   const [savingAnalisis, setSavingAnalisis] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
+  const [isOwner, setIsOwner] = useState<boolean>(true);
 
   const [cellDetail, setCellDetail] = useState<{
     inventario: InventarioResumen;
@@ -107,12 +108,14 @@ export function AnalisisOcupacionModal({
   useEffect(() => {
     if (!open) return;
     if (initialAnalisis) {
+      const owner = initialAnalisis.is_owner !== false;
       setStep('matriz');
       setInventarios(initialAnalisis.inventarios);
       setCodigosNoEncontrados(initialAnalisis.codigosNoEncontrados);
       setCatorcenasSelected(initialAnalisis.catorcenas);
       setAnalisisId(initialAnalisis.id);
-      setAnalisisNombre(initialAnalisis.nombre);
+      setAnalisisNombre(owner ? initialAnalisis.nombre : `Copia de ${initialAnalisis.nombre}`);
+      setIsOwner(owner);
       // Construir matriz al abrir
       void buildMatrizFor(initialAnalisis.inventarios, initialAnalisis.catorcenas);
     } else {
@@ -123,6 +126,7 @@ export function AnalisisOcupacionModal({
       setMatriz(null);
       setAnalisisId(null);
       setAnalisisNombre('');
+      setIsOwner(true);
     }
     setCsvFeedback(null);
     setSaveError(null);
@@ -130,11 +134,34 @@ export function AnalisisOcupacionModal({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open, initialAnalisis?.id]);
 
+  const handleDownloadTemplate = () => {
+    const csv = 'Código Único\nEJEMPLO-001\nEJEMPLO-002\n';
+    const blob = new Blob(['﻿' + csv], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = 'template-analisis-ocupacion.csv';
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  };
+
   const handleCsvUpload = async (file: File) => {
     setCsvProcessing(true);
     setCsvFeedback(null);
     try {
-      const text = await file.text();
+      // Excel en español suele guardar CSV en Windows-1252; intentamos UTF-8 estricto
+      // y caemos a windows-1252 si encontramos bytes inválidos.
+      const buffer = await file.arrayBuffer();
+      let text: string;
+      try {
+        text = new TextDecoder('utf-8', { fatal: true }).decode(buffer);
+      } catch {
+        text = new TextDecoder('windows-1252').decode(buffer);
+      }
+      // Quita BOM residual por si acaso
+      if (text.charCodeAt(0) === 0xFEFF) text = text.slice(1);
       const codes = parseCsvCodes(text);
       if (codes.length === 0) {
         setCsvFeedback({ encontrados: 0, noEncontrados: 0 });
@@ -251,10 +278,11 @@ export function AnalisisOcupacionModal({
         catorcenas: catorcenasSelected,
         codigosNoEncontrados,
       };
-      const saved = analisisId
+      const saved = analisisId && isOwner
         ? await analisisOcupacionService.update(analisisId, payload)
         : await analisisOcupacionService.create(payload);
       setAnalisisId(saved.id);
+      setIsOwner(true);
       // Invalidar cache de la lista para que aparezca al instante en "Guardados"
       queryClient.invalidateQueries({ queryKey: ['analisis-ocupacion'] });
       onSaved?.(saved);
@@ -343,7 +371,7 @@ export function AnalisisOcupacionModal({
               <div className="space-y-4">
                 {/* CSV upload */}
                 <div className={`rounded-xl border ${isDark ? 'border-zinc-700 bg-zinc-900/50' : 'border-gray-200 bg-gray-50'} p-4`}>
-                  <div className="flex items-center justify-between mb-2">
+                  <div className="flex items-center justify-between mb-2 gap-3">
                     <div>
                       <h3 className={`text-sm font-semibold ${isDark ? 'text-white' : 'text-gray-900'}`}>Carga masiva por CSV</h3>
                       <p className={`text-xs ${isDark ? 'text-zinc-500' : 'text-gray-500'}`}>Detecta la columna "Código Único" por el encabezado. Si no hay encabezado, usa la primera columna.</p>
@@ -358,14 +386,24 @@ export function AnalisisOcupacionModal({
                         if (f) void handleCsvUpload(f);
                       }}
                     />
-                    <button
-                      onClick={() => csvInputRef.current?.click()}
-                      disabled={csvProcessing}
-                      className={`flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-medium transition-all ${isDark ? 'bg-purple-500/20 text-purple-300 border border-purple-500/30 hover:bg-purple-500/30' : 'bg-purple-50 text-purple-700 border border-purple-200 hover:bg-purple-100'} disabled:opacity-50`}
-                    >
-                      {csvProcessing ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Upload className="h-3.5 w-3.5" />}
-                      {csvProcessing ? 'Procesando...' : 'Subir CSV'}
-                    </button>
+                    <div className="flex items-center gap-2 shrink-0">
+                      <button
+                        onClick={handleDownloadTemplate}
+                        title="Descargar plantilla CSV con el formato esperado"
+                        className={`flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-medium transition-all ${isDark ? 'bg-zinc-800 text-zinc-300 border border-zinc-700 hover:bg-zinc-700' : 'bg-white text-gray-700 border border-gray-300 hover:bg-gray-100'}`}
+                      >
+                        <Download className="h-3.5 w-3.5" />
+                        Descargar template
+                      </button>
+                      <button
+                        onClick={() => csvInputRef.current?.click()}
+                        disabled={csvProcessing}
+                        className={`flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-medium transition-all ${isDark ? 'bg-purple-500/20 text-purple-300 border border-purple-500/30 hover:bg-purple-500/30' : 'bg-purple-50 text-purple-700 border border-purple-200 hover:bg-purple-100'} disabled:opacity-50`}
+                      >
+                        {csvProcessing ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Upload className="h-3.5 w-3.5" />}
+                        {csvProcessing ? 'Procesando...' : 'Subir CSV'}
+                      </button>
+                    </div>
                   </div>
                   {csvFeedback && (
                     <div className={`mt-2 text-xs flex items-center gap-3 ${isDark ? 'text-zinc-400' : 'text-gray-600'}`}>
@@ -539,13 +577,22 @@ export function AnalisisOcupacionModal({
                   placeholder="Nombre del análisis..."
                   className={`flex-1 max-w-xs px-3 py-1.5 rounded-lg border text-sm ${isDark ? 'bg-zinc-800 border-zinc-700 text-white placeholder:text-zinc-500' : 'bg-white border-gray-200 text-gray-900 placeholder:text-gray-400'} focus:outline-none focus:ring-1 focus:ring-purple-500/50`}
                 />
+                {!isOwner && (
+                  <span
+                    title="Estás viendo un análisis compartido. Al guardar se creará una copia en tu cuenta."
+                    className={`text-[10px] px-2 py-0.5 rounded-full font-medium whitespace-nowrap ${isDark ? 'bg-amber-500/15 text-amber-300 border border-amber-500/30' : 'bg-amber-50 text-amber-700 border border-amber-200'}`}
+                  >
+                    Compartido
+                  </span>
+                )}
                 <button
                   onClick={handleSave}
                   disabled={savingAnalisis}
+                  title={!isOwner ? 'Crea una copia en tu cuenta' : analisisId ? 'Actualizar análisis' : 'Guardar análisis'}
                   className={`flex items-center gap-2 px-3 py-1.5 rounded-lg text-sm font-medium ${isDark ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 hover:bg-emerald-500/30' : 'bg-emerald-50 text-emerald-700 border border-emerald-200 hover:bg-emerald-100'} disabled:opacity-50`}
                 >
                   {savingAnalisis ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Save className="h-3.5 w-3.5" />}
-                  {analisisId ? 'Actualizar' : 'Guardar'}
+                  {!isOwner ? 'Guardar copia' : analisisId ? 'Actualizar' : 'Guardar'}
                 </button>
                 <button
                   onClick={handleShare}
@@ -693,6 +740,9 @@ function MatrizView({
                     ? single.campana_nombre || `Campaña #${single.campana_id}`
                     : `Propuesta #${single.propuesta_id}`
                   : '';
+                const clienteLabel = ocupado && campanas.length > 0
+                  ? (campanas[0].cliente_nombre || 'Sin cliente')
+                  : '';
                 const cellInner = (
                   <>
                     <div className={`flex items-center gap-1 text-[10px] font-bold uppercase tracking-wide ${
@@ -704,15 +754,23 @@ function MatrizView({
                       {single && <ExternalLink className="h-2.5 w-2.5 opacity-70" />}
                     </div>
                     {ocupado && campanas.length > 0 && (
-                      <div
-                        className={`text-[10px] mt-1 truncate ${single ? 'underline underline-offset-2' : ''} ${isDark ? 'text-zinc-300' : 'text-gray-700'}`}
-                        title={campanas.map(c => c.campana_nombre || `Propuesta #${c.propuesta_id}`).join(', ')}
-                      >
-                        {singleLabel || (campanas[0].campana_nombre || `Propuesta #${campanas[0].propuesta_id}`)}
-                        {campanas.length > 1 && (
-                          <span className={isDark ? 'text-purple-400' : 'text-purple-600'}> +{campanas.length - 1}</span>
-                        )}
-                      </div>
+                      <>
+                        <div
+                          className={`text-[10px] mt-1 truncate ${single ? 'underline underline-offset-2' : ''} ${isDark ? 'text-zinc-300' : 'text-gray-700'}`}
+                          title={campanas.map(c => `${c.campana_nombre || `Propuesta #${c.propuesta_id}`} — ${c.cliente_nombre || 'Sin cliente'}`).join(', ')}
+                        >
+                          {singleLabel || (campanas[0].campana_nombre || `Propuesta #${campanas[0].propuesta_id}`)}
+                          {campanas.length > 1 && (
+                            <span className={isDark ? 'text-purple-400' : 'text-purple-600'}> +{campanas.length - 1}</span>
+                          )}
+                        </div>
+                        <div
+                          className={`text-[10px] mt-0.5 truncate ${isDark ? 'text-zinc-500' : 'text-gray-500'}`}
+                          title={clienteLabel}
+                        >
+                          {clienteLabel}
+                        </div>
+                      </>
                     )}
                   </>
                 );
