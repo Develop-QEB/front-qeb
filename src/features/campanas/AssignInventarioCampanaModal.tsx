@@ -5360,9 +5360,9 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
                                     <td className="px-3 py-2 text-zinc-300 font-mono text-xs">{inv.codigo_unico}</td>
                                     {hasDigitalInventory && (
                                       <td className="px-3 py-2 text-zinc-400 text-xs">
-                                        {inv.isCollapsedSpot ? (
+                                        {inv.tradicional_digital === 'Digital' ? (
                                           <span className="px-2 py-0.5 bg-violet-500/20 text-violet-300 rounded-full text-xs">
-                                            {inv.spots_disponibles}/{inv.total_espacios}
+                                            Sin límite
                                           </span>
                                         ) : inv.numero_espacio && inv.total_espacios ? (
                                           <span className="px-2 py-0.5 bg-orange-500/20 text-orange-300 rounded-full text-xs">
@@ -5416,9 +5416,9 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
                                 <td className="px-3 py-2 text-zinc-300 font-mono text-xs">{inv.codigo_unico}</td>
                                 {hasDigitalInventory && (
                                   <td className="px-3 py-2 text-zinc-400 text-xs">
-                                    {inv.isCollapsedSpot ? (
+                                    {inv.tradicional_digital === 'Digital' ? (
                                       <span className="px-2 py-0.5 bg-violet-500/20 text-violet-300 rounded-full text-xs">
-                                        {inv.spots_disponibles}/{inv.total_espacios}
+                                        Sin límite
                                       </span>
                                     ) : inv.numero_espacio && inv.total_espacios ? (
                                       <span className="px-2 py-0.5 bg-orange-500/20 text-orange-300 rounded-full text-xs">
@@ -6999,8 +6999,15 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
                             const itemNameUpper = (item.ItemName || '').toUpperCase();
                             const plazasBackend = (solicitudFilters as any)?.plazas as { plaza: string }[] | undefined;
                             const plazaPorNombre = plazasBackend?.find(p => itemNameUpper.includes(p.plaza.toUpperCase()));
-                            const formato = getFormatoFromArticulo(item.ItemName, item.ItemCode);
+                            const formatoBase = getFormatoFromArticulo(item.ItemName, item.ItemCode);
                             const tipo = getTipoFromName(item.ItemName);
+                            // Para artículos digitales: incluir PARABUS y MUPIS (los muebles
+                            // físicos donde corre la pantalla rotando ambos formatos).
+                            const formato = tipo === 'Digital'
+                              ? (formatoBase && formatoBase !== 'PARABUS'
+                                  ? `${formatoBase}, PARABUS, MUPIS`
+                                  : 'PARABUS, MUPIS')
+                              : formatoBase;
                             const isCortesia = item.ItemCode.toUpperCase().startsWith('CT');
                             const isIntercambio = item.ItemCode.toUpperCase().startsWith('IN');
                             const isImpresion = item.ItemCode.toUpperCase().startsWith('IM');
@@ -7785,7 +7792,15 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
                                     <div>
                                       <span className={`${isDark ? 'text-zinc-500' : 'text-gray-400'} text-xs`}>Caras</span>
                                       {esImpresion ? (
-                                        <span className="text-[10px] px-1.5 py-0.5 rounded bg-blue-500/20 text-blue-300 font-medium">Impresión</span>
+                                        <div className="flex items-center gap-1">
+                                          <p className={`${isDark ? 'text-white' : 'text-gray-900'} font-medium`}>{cara.caras || 0}</p>
+                                          <span className="text-[10px] px-1.5 py-0.5 rounded bg-blue-500/20 text-blue-300 font-medium">Impresiones</span>
+                                        </div>
+                                      ) : esEspecial ? (
+                                        <div className="flex items-center gap-1">
+                                          <p className={`${isDark ? 'text-white' : 'text-gray-900'} font-medium`}>{cara.caras || 0}</p>
+                                          <span className="text-[10px] px-1.5 py-0.5 rounded bg-purple-500/20 text-purple-300 font-medium">Ejec. Especiales</span>
+                                        </div>
                                       ) : (
                                         <div className="flex items-center gap-1">
                                           <p className={`${isDark ? 'text-white' : 'text-gray-900'} font-medium`}>{status.totalReservado}/{totalCaras}</p>
