@@ -2757,9 +2757,17 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
                         || plazaPorEstado?.plaza
                         || (plazaAutoRaw !== item.ItemCode ? plazaAutoRaw : '');
                       // Auto-set formato from ItemName (fallback to ItemCode)
-                      const formato = getFormatoFromArticulo(item.ItemName, item.ItemCode);
+                      const formatoBase = getFormatoFromArticulo(item.ItemName, item.ItemCode);
                       // Auto-set tipo from ItemName
                       const tipo = getTipoFromName(item.ItemName);
+                      // Para artículos digitales: incluir PARABUS y MUPIS (los muebles físicos
+                      // donde corre la pantalla digital rotando ambos formatos).
+                      // Si el formato detectado es otro (ej. COLUMNA), agregar MUPIS además.
+                      const formato = tipo === 'Digital'
+                        ? (formatoBase && formatoBase !== 'PARABUS'
+                            ? `${formatoBase}, PARABUS, MUPIS`
+                            : 'PARABUS, MUPIS')
+                        : formatoBase;
                       // Detect CT (cortesia) articles
                       const isCortesia = item.ItemCode.toUpperCase().startsWith('CT');
                       const isIntercambio = item.ItemCode.toUpperCase().startsWith('IN');
@@ -2860,33 +2868,36 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
 
                   {/* Formato */}
                   <div>
-                    <label className={`text-xs ${isDark ? 'text-zinc-500' : 'text-gray-500'}`}>Formato</label>
-                    <select
-                      value={newCara.formato}
-                      onChange={(e) => setNewCara({ ...newCara, formato: e.target.value })}
-                      className={`w-full px-3 py-2 ${isDark ? 'bg-zinc-800 border-zinc-700 text-white' : 'bg-gray-100 border-gray-200 text-gray-900'} border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-purple-500/50`}
-                    >
-                      <option value="">Seleccionar</option>
-                      {/* MIXTO disponible cuando hay un circuito */}
-                      {newCara.articulo && parseCircuitoDigital(newCara.articulo.ItemCode) && (
-                        <option value="MIXTO">MIXTO (circuito)</option>
-                      )}
-                      {tipoPeriodo === 'mensual' ? (
-                        // Mensual: muebles reales del backend (KIOSCO, BOLERO, MODULO TIPO X, etc.)
-                        (inventarioFilters?.formatos && inventarioFilters.formatos.length > 0
-                          ? inventarioFilters.formatos
-                          : FORMATOS_MENSUALES
-                        ).map(f => (
-                          <option key={f} value={f}>{f}</option>
-                        ))
-                      ) : (
-                        <>
-                          {filteredFormatos.map(f => (
-                            <option key={f} value={f}>{f}</option>
-                          ))}
-                        </>
-                      )}
-                    </select>
+                    <label className={`text-xs ${isDark ? 'text-zinc-500' : 'text-gray-500'}`}>
+                      Formato {newCara.formato && <span className="text-purple-400">({newCara.formato.split(',').filter(Boolean).length})</span>}
+                    </label>
+                    {(() => {
+                      // Multi-select de formatos (igual que en propuestas/campañas) para que
+                      // se puedan combinar PARABUS + MUPIS en artículos digitales.
+                      const baseOptions = newCara.articulo && parseCircuitoDigital(newCara.articulo.ItemCode)
+                        ? ['MIXTO']
+                        : [];
+                      const periodOptions = tipoPeriodo === 'mensual'
+                        ? (inventarioFilters?.formatos && inventarioFilters.formatos.length > 0
+                            ? inventarioFilters.formatos
+                            : FORMATOS_MENSUALES)
+                        : filteredFormatos;
+                      const optionsArr = [...baseOptions, ...periodOptions.filter(f => !baseOptions.includes(f))]
+                        .map(f => ({ formato: f }));
+                      const selectedArr = (newCara.formato ? newCara.formato.split(',').map(s => s.trim()).filter(Boolean) : [])
+                        .map(f => ({ formato: f }));
+                      return (
+                        <MultiSelectTags
+                          label="formato"
+                          options={optionsArr}
+                          selected={selectedArr}
+                          onChange={(items) => setNewCara({ ...newCara, formato: items.map((i: { formato: string }) => i.formato).join(', ') })}
+                          displayKey="formato"
+                          valueKey="formato"
+                          searchKey="formato"
+                        />
+                      );
+                    })()}
                   </div>
 
                   {/* Tipo (selector con autocompletado) */}

@@ -1,4 +1,5 @@
 import React, { useState, useMemo, useCallback, useEffect, useRef } from 'react';
+import { createPortal } from 'react-dom';
 import { useQuery } from '@tanstack/react-query';
 import { GoogleMap, useLoadScript, Circle, InfoWindow } from '@react-google-maps/api';
 
@@ -155,22 +156,136 @@ function GlassCard({ children, className = '', ...props }: { children: React.Rea
   );
 }
 
-// Filter Select
-function FilterSelect({ label, value, onChange, options, placeholder = 'Todos' }: {
-  label: string; value: string; onChange: (v: string) => void; options: string[]; placeholder?: string;
+// Multi Select Filter (checkbox dropdown — render en portal para evitar overflow:hidden de ancestros)
+function MultiSelectFilter({ label, values, onChange, options, placeholder = 'Todos' }: {
+  label: string; values: string[]; onChange: (v: string[]) => void; options: string[]; placeholder?: string;
 }) {
   const isDark = useThemeStore((s) => s.theme) === 'dark';
+  const [open, setOpen] = useState(false);
+  const [search, setSearch] = useState('');
+  const [menuRect, setMenuRect] = useState<{ top: number; left: number; width: number } | null>(null);
+  const triggerRef = useRef<HTMLButtonElement>(null);
+  const menuRef = useRef<HTMLDivElement>(null);
+
+  const updatePosition = useCallback(() => {
+    if (!triggerRef.current) return;
+    const r = triggerRef.current.getBoundingClientRect();
+    setMenuRect({ top: r.bottom + 4, left: r.left, width: r.width });
+  }, []);
+
+  useEffect(() => {
+    if (!open) return;
+    updatePosition();
+    const handleClickOutside = (e: MouseEvent) => {
+      const target = e.target as Node;
+      if (
+        triggerRef.current && !triggerRef.current.contains(target) &&
+        menuRef.current && !menuRef.current.contains(target)
+      ) {
+        setOpen(false);
+        setSearch('');
+      }
+    };
+    const handleScrollOrResize = () => updatePosition();
+    document.addEventListener('mousedown', handleClickOutside);
+    window.addEventListener('resize', handleScrollOrResize);
+    window.addEventListener('scroll', handleScrollOrResize, true);
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+      window.removeEventListener('resize', handleScrollOrResize);
+      window.removeEventListener('scroll', handleScrollOrResize, true);
+    };
+  }, [open, updatePosition]);
+
+  const toggle = (opt: string) => {
+    if (values.includes(opt)) onChange(values.filter((v) => v !== opt));
+    else onChange([...values, opt]);
+  };
+
+  const clearAll = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    onChange([]);
+  };
+
+  const filtered = useMemo(() => {
+    if (!search) return options;
+    const s = search.toLowerCase();
+    return options.filter((o) => o.toLowerCase().includes(s));
+  }, [options, search]);
+
+  const display = values.length === 0
+    ? placeholder
+    : values.length === 1
+      ? values[0]
+      : `${values.length} seleccionados`;
+
   return (
-    <div>
+    <div className="relative">
       <label className={`text-[10px] ${isDark ? 'text-purple-400' : 'text-purple-500'} uppercase tracking-wider mb-1 block font-medium`}>{label}</label>
-      <select
-        value={value}
-        onChange={(e) => onChange(e.target.value)}
-        className={`h-9 w-full rounded-xl border ${isDark ? 'border-purple-500/20 bg-zinc-800/50 text-white' : 'border-purple-200 bg-gray-50 text-gray-800'} px-3 text-sm focus:ring-2 focus:ring-purple-500/30 focus:border-purple-500 transition-all`}
+      <button
+        ref={triggerRef}
+        type="button"
+        onClick={() => setOpen((o) => !o)}
+        className={`h-9 w-full rounded-xl border ${isDark ? 'border-purple-500/20 bg-zinc-800/50 text-white' : 'border-purple-200 bg-gray-50 text-gray-800'} px-3 text-sm flex items-center justify-between gap-2 focus:ring-2 focus:ring-purple-500/30 focus:border-purple-500 transition-all`}
       >
-        <option value="" className={isDark ? 'bg-zinc-800' : 'bg-white'}>{placeholder}</option>
-        {options.map((opt) => (<option key={opt} value={opt} className={isDark ? 'bg-zinc-800' : 'bg-white'}>{opt}</option>))}
-      </select>
+        <span className={`truncate ${values.length === 0 ? (isDark ? 'text-zinc-400' : 'text-gray-400') : ''}`}>{display}</span>
+        <span className="flex items-center gap-1">
+          {values.length > 0 && (
+            <span
+              role="button"
+              onClick={clearAll}
+              className={`p-0.5 rounded hover:bg-purple-500/20 ${isDark ? 'text-zinc-300' : 'text-gray-500'}`}
+              aria-label="Limpiar"
+            >
+              <X className="h-3.5 w-3.5" />
+            </span>
+          )}
+          <ChevronDown className={`h-4 w-4 transition-transform ${open ? 'rotate-180' : ''}`} />
+        </span>
+      </button>
+      {open && menuRect && createPortal(
+        <div
+          ref={menuRef}
+          style={{ position: 'fixed', top: menuRect.top, left: menuRect.left, width: menuRect.width, zIndex: 9999 }}
+          className={`rounded-xl border ${isDark ? 'border-purple-500/30 bg-[#1a1025] shadow-purple-900/30' : 'border-purple-200 bg-white shadow-purple-100/40'} shadow-2xl backdrop-blur-xl`}
+        >
+          {options.length > 8 && (
+            <div className={`p-2 border-b ${isDark ? 'border-purple-500/20' : 'border-purple-100'}`}>
+              <input
+                type="text"
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                placeholder="Buscar..."
+                className={`h-7 w-full rounded-lg border ${isDark ? 'border-purple-500/20 bg-zinc-800/50 text-white placeholder:text-zinc-500' : 'border-purple-200 bg-gray-50 text-gray-800 placeholder:text-gray-400'} px-2 text-xs focus:ring-2 focus:ring-purple-500/30 focus:border-purple-500 transition-all`}
+                autoFocus
+              />
+            </div>
+          )}
+          <div className="max-h-60 overflow-y-auto py-1">
+            {filtered.length === 0 ? (
+              <div className={`px-3 py-2 text-xs ${isDark ? 'text-zinc-500' : 'text-gray-400'}`}>Sin resultados</div>
+            ) : (
+              filtered.map((opt) => {
+                const checked = values.includes(opt);
+                return (
+                  <button
+                    key={opt}
+                    type="button"
+                    onClick={() => toggle(opt)}
+                    className={`w-full px-3 py-1.5 text-left text-sm flex items-center gap-2 transition-colors ${isDark ? 'hover:bg-purple-500/10 text-white' : 'hover:bg-purple-50 text-gray-800'}`}
+                  >
+                    <span className={`flex h-4 w-4 items-center justify-center rounded border ${checked ? 'bg-purple-500 border-purple-500' : (isDark ? 'border-purple-500/40' : 'border-purple-300')}`}>
+                      {checked && <Check className="h-3 w-3 text-white" />}
+                    </span>
+                    <span className="truncate">{opt}</span>
+                  </button>
+                );
+              })
+            )}
+          </div>
+        </div>,
+        document.body
+      )}
     </div>
   );
 }
@@ -1716,7 +1831,16 @@ export function DashboardPage() {
   }, [filters.catorcena_id, filterOptions]);
 
   const handleClearFilters = () => { setFilters({}); setActiveEstatus('total'); setInventoryPage(1); setSelectedYear(null); setSelectedCatNum(null); setDateMode('catorcenal'); };
-  const hasActiveFilters = filters.estado || filters.ciudad || filters.formato || filters.nse || filters.catorcena_id || filters.fecha_inicio || filters.fecha_fin;
+  const activeFilterCount =
+    (filters.estado?.length || 0) +
+    (filters.ciudad?.length || 0) +
+    (filters.formato?.length || 0) +
+    (filters.nse?.length || 0) +
+    (filters.tipo?.length || 0) +
+    (filters.catorcena_id ? 1 : 0) +
+    (filters.fecha_inicio ? 1 : 0) +
+    (filters.fecha_fin ? 1 : 0);
+  const hasActiveFilters = activeFilterCount > 0;
 
   const handleEstatusChange = (estatus: EstatusType) => { setActiveEstatus(estatus); setInventoryPage(1); };
 
@@ -1759,7 +1883,7 @@ export function DashboardPage() {
                 {showFilters ? 'Ocultar' : 'Filtros'}
                 {hasActiveFilters && !showFilters && (
                   <span className="ml-1 h-5 w-5 rounded-full bg-pink-500 text-white text-xs flex items-center justify-center">
-                    {Object.values(filters).filter(Boolean).length}
+                    {activeFilterCount}
                   </span>
                 )}
               </Button>
@@ -1768,11 +1892,71 @@ export function DashboardPage() {
 
           {showFilters && (
             <GlassCard>
-              <div className="p-4 grid gap-4 md:grid-cols-4">
-                <FilterSelect label="Estado" value={filters.estado || ''} onChange={(v) => { setFilters(p => ({ ...p, estado: v || undefined, ciudad: undefined, formato: undefined, nse: undefined })); setInventoryPage(1); }} options={filterOptions?.estados || []} />
-                <FilterSelect label="Ciudad" value={filters.ciudad || ''} onChange={(v) => { setFilters(p => ({ ...p, ciudad: v || undefined, formato: undefined, nse: undefined })); setInventoryPage(1); }} options={[...new Set((filterOptions?.ciudades || []).filter(c => !filters.estado || c.estado === filters.estado).map(c => c.ciudad))].sort()} placeholder="Todas" />
-                <FilterSelect label="Formato" value={filters.formato || ''} onChange={(v) => { setFilters(p => ({ ...p, formato: v || undefined, nse: undefined })); setInventoryPage(1); }} options={[...new Set((filterOptions?.formatos || []).filter(f => (!filters.estado || f.estado === filters.estado) && (!filters.ciudad || f.ciudad === filters.ciudad)).map(f => f.formato))].sort()} />
-                <FilterSelect label="NSE" value={filters.nse || ''} onChange={(v) => { setFilters(p => ({ ...p, nse: v || undefined })); setInventoryPage(1); }} options={[...new Set((filterOptions?.nses || []).filter(n => (!filters.estado || n.estado === filters.estado) && (!filters.ciudad || n.ciudad === filters.ciudad)).map(n => n.nse))].sort()} />
+              <div className="p-4 grid gap-4 md:grid-cols-3 lg:grid-cols-5">
+                <MultiSelectFilter
+                  label="Estado"
+                  values={filters.estado || []}
+                  onChange={(v) => {
+                    setFilters(p => ({ ...p, estado: v.length ? v : undefined, ciudad: undefined, formato: undefined, nse: undefined }));
+                    setInventoryPage(1);
+                  }}
+                  options={filterOptions?.estados || []}
+                />
+                <MultiSelectFilter
+                  label="Plaza"
+                  placeholder="Todas"
+                  values={filters.ciudad || []}
+                  onChange={(v) => {
+                    setFilters(p => ({ ...p, ciudad: v.length ? v : undefined, formato: undefined, nse: undefined }));
+                    setInventoryPage(1);
+                  }}
+                  options={[...new Set(
+                    (filterOptions?.ciudades || [])
+                      .filter(c => !filters.estado?.length || filters.estado.includes(c.estado))
+                      .map(c => c.ciudad)
+                  )].sort()}
+                />
+                <MultiSelectFilter
+                  label="Formato"
+                  values={filters.formato || []}
+                  onChange={(v) => {
+                    setFilters(p => ({ ...p, formato: v.length ? v : undefined, nse: undefined }));
+                    setInventoryPage(1);
+                  }}
+                  options={[...new Set(
+                    (filterOptions?.formatos || [])
+                      .filter(f =>
+                        (!filters.estado?.length || filters.estado.includes(f.estado)) &&
+                        (!filters.ciudad?.length || filters.ciudad.includes(f.ciudad))
+                      )
+                      .map(f => f.formato)
+                  )].sort()}
+                />
+                <MultiSelectFilter
+                  label="Tipo de formato"
+                  values={filters.tipo || []}
+                  onChange={(v) => {
+                    setFilters(p => ({ ...p, tipo: v.length ? v : undefined }));
+                    setInventoryPage(1);
+                  }}
+                  options={filterOptions?.tipos || []}
+                />
+                <MultiSelectFilter
+                  label="NSE"
+                  values={filters.nse || []}
+                  onChange={(v) => {
+                    setFilters(p => ({ ...p, nse: v.length ? v : undefined }));
+                    setInventoryPage(1);
+                  }}
+                  options={[...new Set(
+                    (filterOptions?.nses || [])
+                      .filter(n =>
+                        (!filters.estado?.length || filters.estado.includes(n.estado)) &&
+                        (!filters.ciudad?.length || filters.ciudad.includes(n.ciudad))
+                      )
+                      .map(n => n.nse)
+                  )].sort()}
+                />
               </div>
               <div className={`px-4 pb-4 pt-0`}>
                 <div className="flex items-center gap-2 mb-3">

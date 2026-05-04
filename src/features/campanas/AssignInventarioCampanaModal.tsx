@@ -5360,9 +5360,9 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
                                     <td className="px-3 py-2 text-zinc-300 font-mono text-xs">{inv.codigo_unico}</td>
                                     {hasDigitalInventory && (
                                       <td className="px-3 py-2 text-zinc-400 text-xs">
-                                        {inv.isCollapsedSpot ? (
+                                        {inv.tradicional_digital === 'Digital' ? (
                                           <span className="px-2 py-0.5 bg-violet-500/20 text-violet-300 rounded-full text-xs">
-                                            {inv.spots_disponibles}/{inv.total_espacios}
+                                            Sin límite
                                           </span>
                                         ) : inv.numero_espacio && inv.total_espacios ? (
                                           <span className="px-2 py-0.5 bg-orange-500/20 text-orange-300 rounded-full text-xs">
@@ -5416,9 +5416,9 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
                                 <td className="px-3 py-2 text-zinc-300 font-mono text-xs">{inv.codigo_unico}</td>
                                 {hasDigitalInventory && (
                                   <td className="px-3 py-2 text-zinc-400 text-xs">
-                                    {inv.isCollapsedSpot ? (
+                                    {inv.tradicional_digital === 'Digital' ? (
                                       <span className="px-2 py-0.5 bg-violet-500/20 text-violet-300 rounded-full text-xs">
-                                        {inv.spots_disponibles}/{inv.total_espacios}
+                                        Sin límite
                                       </span>
                                     ) : inv.numero_espacio && inv.total_espacios ? (
                                       <span className="px-2 py-0.5 bg-orange-500/20 text-orange-300 rounded-full text-xs">
@@ -6933,8 +6933,8 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
 
                     {/* Artículo selector */}
                     <div className="mb-4">
-                      <label className={`text-xs mb-1 block ${(editingCaraHasReservas || (editingCaraId && !permissions.canEditArticuloOnEdit)) ? 'text-zinc-800' : 'text-zinc-500'}`}>Artículo SAP</label>
-                      {canEditResumen && !editingCaraHasReservas && (!editingCaraId || permissions.canEditArticuloOnEdit) ? (
+                      <label className={`text-xs mb-1 block ${((editingCaraHasReservas || editingCaraId) && !permissions.canEditArticuloOnEdit) ? 'text-zinc-800' : 'text-zinc-500'}`}>Artículo SAP</label>
+                      {canEditResumen && (permissions.canEditArticuloOnEdit || (!editingCaraHasReservas && !editingCaraId)) ? (
                         <SearchableSelect
                           label="Seleccionar artículo"
                           options={(articulosData || []).filter(a => {
@@ -6999,8 +6999,15 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
                             const itemNameUpper = (item.ItemName || '').toUpperCase();
                             const plazasBackend = (solicitudFilters as any)?.plazas as { plaza: string }[] | undefined;
                             const plazaPorNombre = plazasBackend?.find(p => itemNameUpper.includes(p.plaza.toUpperCase()));
-                            const formato = getFormatoFromArticulo(item.ItemName, item.ItemCode);
+                            const formatoBase = getFormatoFromArticulo(item.ItemName, item.ItemCode);
                             const tipo = getTipoFromName(item.ItemName);
+                            // Para artículos digitales: incluir PARABUS y MUPIS (los muebles
+                            // físicos donde corre la pantalla rotando ambos formatos).
+                            const formato = tipo === 'Digital'
+                              ? (formatoBase && formatoBase !== 'PARABUS'
+                                  ? `${formatoBase}, PARABUS, MUPIS`
+                                  : 'PARABUS, MUPIS')
+                              : formatoBase;
                             const isCortesia = item.ItemCode.toUpperCase().startsWith('CT');
                             const isIntercambio = item.ItemCode.toUpperCase().startsWith('IN');
                             const isImpresion = item.ItemCode.toUpperCase().startsWith('IM');
@@ -7369,12 +7376,12 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
                         )}
                       </div>
                       <div className="space-y-1">
-                        <label className={`text-xs ${(editingCaraHasReservas || editingCaraId) ? 'text-zinc-800' : 'text-zinc-500'}`}>Tipo</label>
+                        <label className={`text-xs ${((editingCaraHasReservas || editingCaraId) && !permissions.canEditArticuloOnEdit) ? 'text-zinc-800' : 'text-zinc-500'}`}>Tipo</label>
                         <select
                           value={newCara.tipo}
-                          onChange={(e) => canEditResumen && !editingCaraHasReservas && !editingCaraId && setNewCara({ ...newCara, tipo: e.target.value })}
-                          disabled={!canEditResumen || editingCaraHasReservas || !!editingCaraId}
-                          className={`w-full px-3 py-2 ${isDark ? 'bg-zinc-800 border-zinc-700 text-white' : 'bg-white border-gray-300 text-gray-900'} border rounded-lg text-sm focus:outline-none focus:ring-1 focus:ring-purple-500/50 ${(!canEditResumen || editingCaraHasReservas || editingCaraId) ? 'opacity-60 cursor-not-allowed' : ''}`}
+                          onChange={(e) => canEditResumen && (permissions.canEditArticuloOnEdit || (!editingCaraHasReservas && !editingCaraId)) && setNewCara({ ...newCara, tipo: e.target.value })}
+                          disabled={!canEditResumen || (!permissions.canEditArticuloOnEdit && (editingCaraHasReservas || !!editingCaraId))}
+                          className={`w-full px-3 py-2 ${isDark ? 'bg-zinc-800 border-zinc-700 text-white' : 'bg-white border-gray-300 text-gray-900'} border rounded-lg text-sm focus:outline-none focus:ring-1 focus:ring-purple-500/50 ${(!canEditResumen || (!permissions.canEditArticuloOnEdit && (editingCaraHasReservas || editingCaraId))) ? 'opacity-60 cursor-not-allowed' : ''}`}
                         >
                           <option value="">Seleccionar</option>
                           <option value="Tradicional">Tradicional</option>
@@ -7785,7 +7792,15 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
                                     <div>
                                       <span className={`${isDark ? 'text-zinc-500' : 'text-gray-400'} text-xs`}>Caras</span>
                                       {esImpresion ? (
-                                        <span className="text-[10px] px-1.5 py-0.5 rounded bg-blue-500/20 text-blue-300 font-medium">Impresión</span>
+                                        <div className="flex items-center gap-1">
+                                          <p className={`${isDark ? 'text-white' : 'text-gray-900'} font-medium`}>{cara.caras || 0}</p>
+                                          <span className="text-[10px] px-1.5 py-0.5 rounded bg-blue-500/20 text-blue-300 font-medium">Impresiones</span>
+                                        </div>
+                                      ) : esEspecial ? (
+                                        <div className="flex items-center gap-1">
+                                          <p className={`${isDark ? 'text-white' : 'text-gray-900'} font-medium`}>{cara.caras || 0}</p>
+                                          <span className="text-[10px] px-1.5 py-0.5 rounded bg-purple-500/20 text-purple-300 font-medium">Ejec. Especiales</span>
+                                        </div>
                                       ) : (
                                         <div className="flex items-center gap-1">
                                           <p className={`${isDark ? 'text-white' : 'text-gray-900'} font-medium`}>{status.totalReservado}/{totalCaras}</p>
