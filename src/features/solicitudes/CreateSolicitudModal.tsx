@@ -677,6 +677,8 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
     tarifaPublica: 0,
     articuloBf: null as SAPArticulo | null,
   });
+  const [tarifaPublicaInput, setTarifaPublicaInput] = useState<string>('');
+  const [tarifaPublicaFocused, setTarifaPublicaFocused] = useState(false);
 
   // File
   const [archivo, setArchivo] = useState<string | null>(null);
@@ -1849,7 +1851,7 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
         nivel_socioeconomico: c.nse.join(','),
         formato: c.formato,
         costo: c.precioTotal,
-        tarifa_publica: c.tarifaEfectiva ?? c.tarifaPublica,
+        tarifa_publica: c.tarifaPublica,
         inicio_periodo: c.periodoInicio,
         fin_periodo: c.periodoFin,
         // Para circuito: si la renta es < total del circuito, distribuir flujo/contraflujo
@@ -3078,7 +3080,14 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
                     <input
                       type="text"
                       inputMode="decimal"
-                      value={newCara.tarifaPublica > 0 ? newCara.tarifaPublica.toFixed(2) : ''}
+                      value={tarifaPublicaFocused
+                        ? tarifaPublicaInput
+                        : (newCara.tarifaPublica > 0 ? newCara.tarifaPublica.toFixed(2) : '')}
+                      onFocus={() => {
+                        setTarifaPublicaInput(newCara.tarifaPublica > 0 ? String(newCara.tarifaPublica) : '');
+                        setTarifaPublicaFocused(true);
+                      }}
+                      onBlur={() => setTarifaPublicaFocused(false)}
                       onChange={(e) => {
                         // Permitir solo dígitos, un punto y máximo 2 decimales mientras se escribe
                         const cleaned = e.target.value.replace(/[^\d.]/g, '');
@@ -3086,6 +3095,7 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
                         const normalized = parts.length > 1
                           ? `${parts[0]}.${parts.slice(1).join('').slice(0, 2)}`
                           : cleaned;
+                        setTarifaPublicaInput(normalized);
                         setNewCara({ ...newCara, tarifaPublica: parseFloat(normalized) || 0 });
                       }}
                       placeholder="0.00"
