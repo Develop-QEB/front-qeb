@@ -6933,8 +6933,8 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
 
                     {/* Artículo selector */}
                     <div className="mb-4">
-                      <label className={`text-xs mb-1 block ${(editingCaraHasReservas || (editingCaraId && !permissions.canEditArticuloOnEdit)) ? 'text-zinc-800' : 'text-zinc-500'}`}>Artículo SAP</label>
-                      {canEditResumen && !editingCaraHasReservas && (!editingCaraId || permissions.canEditArticuloOnEdit) ? (
+                      <label className={`text-xs mb-1 block ${((editingCaraHasReservas || editingCaraId) && !permissions.canEditArticuloOnEdit) ? 'text-zinc-800' : 'text-zinc-500'}`}>Artículo SAP</label>
+                      {canEditResumen && (permissions.canEditArticuloOnEdit || (!editingCaraHasReservas && !editingCaraId)) ? (
                         <SearchableSelect
                           label="Seleccionar artículo"
                           options={(articulosData || []).filter(a => {
@@ -7369,12 +7369,12 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
                         )}
                       </div>
                       <div className="space-y-1">
-                        <label className={`text-xs ${(editingCaraHasReservas || editingCaraId) ? 'text-zinc-800' : 'text-zinc-500'}`}>Tipo</label>
+                        <label className={`text-xs ${((editingCaraHasReservas || editingCaraId) && !permissions.canEditArticuloOnEdit) ? 'text-zinc-800' : 'text-zinc-500'}`}>Tipo</label>
                         <select
                           value={newCara.tipo}
-                          onChange={(e) => canEditResumen && !editingCaraHasReservas && !editingCaraId && setNewCara({ ...newCara, tipo: e.target.value })}
-                          disabled={!canEditResumen || editingCaraHasReservas || !!editingCaraId}
-                          className={`w-full px-3 py-2 ${isDark ? 'bg-zinc-800 border-zinc-700 text-white' : 'bg-white border-gray-300 text-gray-900'} border rounded-lg text-sm focus:outline-none focus:ring-1 focus:ring-purple-500/50 ${(!canEditResumen || editingCaraHasReservas || editingCaraId) ? 'opacity-60 cursor-not-allowed' : ''}`}
+                          onChange={(e) => canEditResumen && (permissions.canEditArticuloOnEdit || (!editingCaraHasReservas && !editingCaraId)) && setNewCara({ ...newCara, tipo: e.target.value })}
+                          disabled={!canEditResumen || (!permissions.canEditArticuloOnEdit && (editingCaraHasReservas || !!editingCaraId))}
+                          className={`w-full px-3 py-2 ${isDark ? 'bg-zinc-800 border-zinc-700 text-white' : 'bg-white border-gray-300 text-gray-900'} border rounded-lg text-sm focus:outline-none focus:ring-1 focus:ring-purple-500/50 ${(!canEditResumen || (!permissions.canEditArticuloOnEdit && (editingCaraHasReservas || editingCaraId))) ? 'opacity-60 cursor-not-allowed' : ''}`}
                         >
                           <option value="">Seleccionar</option>
                           <option value="Tradicional">Tradicional</option>
