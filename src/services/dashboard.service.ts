@@ -40,15 +40,17 @@ export interface FilterOptions {
   ciudades: Array<{ ciudad: string; estado: string }>;
   formatos: Array<{ formato: string; estado: string; ciudad: string }>;
   nses: Array<{ nse: string; estado: string; ciudad: string }>;
+  tipos: string[];
   catorcenas: Catorcena[];
   catorcenaActual: Catorcena | null;
 }
 
 export interface DashboardFilters {
-  estado?: string;
-  ciudad?: string;
-  formato?: string;
-  nse?: string;
+  estado?: string[];
+  ciudad?: string[];
+  formato?: string[];
+  nse?: string[];
+  tipo?: string[];
   catorcena_id?: number;
   fecha_inicio?: string;
   fecha_fin?: string;
@@ -97,14 +99,20 @@ export interface TopCliente {
   totalReservas: number;
 }
 
+function appendMulti(params: URLSearchParams, key: string, value?: string[]): void {
+  if (!value || value.length === 0) return;
+  params.append(key, value.join(','));
+}
+
 class DashboardService {
   async getStats(filters?: DashboardFilters): Promise<DashboardStats> {
     const params = new URLSearchParams();
 
-    if (filters?.estado) params.append('estado', filters.estado);
-    if (filters?.ciudad) params.append('ciudad', filters.ciudad);
-    if (filters?.formato) params.append('formato', filters.formato);
-    if (filters?.nse) params.append('nse', filters.nse);
+    appendMulti(params, 'estado', filters?.estado);
+    appendMulti(params, 'ciudad', filters?.ciudad);
+    appendMulti(params, 'formato', filters?.formato);
+    appendMulti(params, 'nse', filters?.nse);
+    appendMulti(params, 'tipo', filters?.tipo);
     if (filters?.catorcena_id) params.append('catorcena_id', filters.catorcena_id.toString());
     if (filters?.fecha_inicio) params.append('fecha_inicio', filters.fecha_inicio);
     if (filters?.fecha_fin) params.append('fecha_fin', filters.fecha_fin);
@@ -123,10 +131,11 @@ class DashboardService {
   }> {
     const params = new URLSearchParams();
 
-    if (filters?.estado) params.append('estado', filters.estado);
-    if (filters?.ciudad) params.append('ciudad', filters.ciudad);
-    if (filters?.formato) params.append('formato', filters.formato);
-    if (filters?.nse) params.append('nse', filters.nse);
+    appendMulti(params, 'estado', filters?.estado);
+    appendMulti(params, 'ciudad', filters?.ciudad);
+    appendMulti(params, 'formato', filters?.formato);
+    appendMulti(params, 'nse', filters?.nse);
+    appendMulti(params, 'tipo', filters?.tipo);
     if (filters?.catorcena_id) params.append('catorcena_id', filters.catorcena_id.toString());
     if (filters?.fecha_inicio) params.append('fecha_inicio', filters.fecha_inicio);
     if (filters?.fecha_fin) params.append('fecha_fin', filters.fecha_fin);
@@ -161,10 +170,11 @@ class DashboardService {
   async getInventoryDetail(filters?: DashboardFilters & { estatus?: string; page?: number; limit?: number; includeCoords?: boolean }): Promise<InventoryDetailResponse> {
     const params = new URLSearchParams();
 
-    if (filters?.estado) params.append('estado', filters.estado);
-    if (filters?.ciudad) params.append('ciudad', filters.ciudad);
-    if (filters?.formato) params.append('formato', filters.formato);
-    if (filters?.nse) params.append('nse', filters.nse);
+    appendMulti(params, 'estado', filters?.estado);
+    appendMulti(params, 'ciudad', filters?.ciudad);
+    appendMulti(params, 'formato', filters?.formato);
+    appendMulti(params, 'nse', filters?.nse);
+    appendMulti(params, 'tipo', filters?.tipo);
     if (filters?.catorcena_id) params.append('catorcena_id', filters.catorcena_id.toString());
     if (filters?.fecha_inicio) params.append('fecha_inicio', filters.fecha_inicio);
     if (filters?.fecha_fin) params.append('fecha_fin', filters.fecha_fin);
