@@ -2712,13 +2712,17 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
                           const tarifa = getTarifaFromArticulo(item);
                           setCircuitoMuebles(det.muebles);
                           setCircuitoFlujoContra({ flujo: det.flujo, contraflujo: det.contraflujo });
+                          // Formato como lista de los muebles reales del circuito (en lugar
+                          // del placeholder "MIXTO"). Como es multi-select, se ven varios
+                          // chips con cada formato presente en los inventarios del circuito.
+                          const formatosCircuito = Object.keys(det.muebles || {}).filter(Boolean);
                           setNewCara({
                             ...newCara,
                             articulo: item,
                             plaza: circuito.plazaLabel,
                             estado: circuito.plazaLabel,
                             ciudades: [],
-                            formato: 'MIXTO',
+                            formato: formatosCircuito.length > 0 ? formatosCircuito.join(', ') : 'MIXTO',
                             tipo: 'Digital',
                             tarifaPublica: tarifa.tarifa_publica,
                             renta: det.total, // fijo al tamaño del circuito
@@ -2816,8 +2820,6 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
                   <div>
                     <label className={`text-xs ${isDark ? 'text-zinc-500' : 'text-gray-500'}`}>Plaza</label>
                     <select
-                      disabled={!!(newCara.articulo && parseCircuitoDigital(newCara.articulo.ItemCode))}
-                      title={newCara.articulo && parseCircuitoDigital(newCara.articulo.ItemCode) ? 'Plaza fijada por el circuito digital' : undefined}
                       value={newCara.plaza || newCara.estado}
                       onChange={(e) => {
                         const val = e.target.value;
@@ -3029,14 +3031,10 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
                       value={newCara.renta || ''}
                       onChange={(e) => {
                         const v = parseInt(e.target.value) || 0;
-                        // Si es circuito, renta está fijada: total = renta + bonif
-                        const circ = newCara.articulo ? parseCircuitoDigital(newCara.articulo.ItemCode) : null;
-                        if (circ) return; // no permitir cambio manual
                         setNewCara({ ...newCara, renta: v });
                       }}
                       placeholder='0'
-                      disabled={newCara.articulo?.ItemCode?.toUpperCase().startsWith('CT') || !!(newCara.articulo && parseCircuitoDigital(newCara.articulo.ItemCode))}
-                      title={newCara.articulo && parseCircuitoDigital(newCara.articulo.ItemCode) ? 'Circuito Digital: total fijo. Ajusta solo bonificación.' : undefined}
+                      disabled={newCara.articulo?.ItemCode?.toUpperCase().startsWith('CT')}
                       className={`w-full px-3 py-2 ${isDark ? 'bg-zinc-800 border-zinc-700 text-white' : 'bg-gray-100 border-gray-200 text-gray-900'} border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-purple-500/50 disabled:opacity-40 disabled:cursor-not-allowed`}
                     />
                   </div>

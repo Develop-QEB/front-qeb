@@ -16,9 +16,20 @@
 
 export const CIRCUITO_REGEX = /^(RT|BF|CT|CF)-DIG-(\d+)-([A-Z]+)$/i;
 
+// IMPORTANTE: los valores deben coincidir EXACTAMENTE con `inventarios.plaza`
+// porque el front los usa como `value` en los <select> de plaza, y las options
+// vienen de ese campo (ej. "PUEBLA" en MAYÚSCULAS).
+// Ciudad de México es la única excepción: usa una opción especial "Ciudad de
+// México / AM" que combina CDMX + Estado de México.
 export const PLAZA_CODE_TO_LABEL: Record<string, string> = {
   MX: 'Ciudad de México / AM',
-  MTY: 'Monterrey',
+  MTY: 'MONTERREY',
+  GD: 'GUADALAJARA',
+  GDL: 'GUADALAJARA',
+  PB: 'PUEBLA',
+  MR: 'MÉRIDA',
+  MER: 'MÉRIDA',
+  TOL: 'TOLUCA',
 };
 
 export interface CircuitoInfo {
