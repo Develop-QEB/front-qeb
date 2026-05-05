@@ -2816,8 +2816,6 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
                   <div>
                     <label className={`text-xs ${isDark ? 'text-zinc-500' : 'text-gray-500'}`}>Plaza</label>
                     <select
-                      disabled={!!(newCara.articulo && parseCircuitoDigital(newCara.articulo.ItemCode))}
-                      title={newCara.articulo && parseCircuitoDigital(newCara.articulo.ItemCode) ? 'Plaza fijada por el circuito digital' : undefined}
                       value={newCara.plaza || newCara.estado}
                       onChange={(e) => {
                         const val = e.target.value;
