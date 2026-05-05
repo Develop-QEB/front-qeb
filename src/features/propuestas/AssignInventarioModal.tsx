@@ -7026,6 +7026,8 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
                                 const det = await circuitosService.detalle(item.ItemCode);
                                 const tarifa = getTarifaPublicaFromArticulo(item);
                                 const tarifaPiso = getTarifaPisoFromArticulo(item);
+                                // Formato como muebles reales del circuito (en lugar de "MIXTO").
+                                const formatosCircuito = Object.keys((det as any).muebles || {}).filter(Boolean);
                                 setNewCara({
                                   ...newCara,
                                   articulo: item.ItemCode,
@@ -7038,7 +7040,7 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
                                   bonificacion: 0,
                                   estados: circuito.plazaLabel,
                                   ciudad: '',
-                                  formato: 'MIXTO',
+                                  formato: formatosCircuito.length > 0 ? formatosCircuito.join(', ') : 'MIXTO',
                                   tipo: 'Digital',
                                 });
                                 return;
