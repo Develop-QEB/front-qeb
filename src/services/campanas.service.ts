@@ -326,8 +326,10 @@ export interface OrdenMontajeCAT {
   plaza: string | null;
   tipo: string | null; // formato
   asesor: string | null;
-  aps_especifico: number | null;
+  aps_especifico: string | null;
   aps_global: number | null;
+  tipo_periodo?: string | null;
+  sap_database?: string | null;
   cuic: number | null;
   fecha_inicio_periodo: string | null;
   fecha_fin_periodo: string | null;
@@ -381,6 +383,8 @@ export interface OrdenMontajeINVIAN {
   nombres_artes_digitales?: string | null;
   cortesia?: number | null;
   numero_articulo?: string | null;
+  cto?: string | null;
+  sap_database?: string | null;
 }
 
 export interface ComentarioRevisionArte {
