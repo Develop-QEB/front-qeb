@@ -1391,14 +1391,18 @@ export function InventariosPage() {
                         </div>
                       ) : (
                         <div className="space-y-2">
-                          {historialData.historial.map((item, index) => (
-                            <div key={`${item.reserva_id}-${index}`} className={`p-4 rounded-xl cursor-pointer ${isDark ? 'bg-zinc-800/30 border-zinc-800/50 hover:border-purple-500/30 hover:bg-zinc-800/50' : 'bg-gray-50 border-gray-200 hover:border-purple-300 hover:bg-purple-50/30'} border transition-colors`} onClick={() => window.open(`/campanas/detail/${item.campana_id}`, '_blank')}>
+                          {historialData.historial.map((item, index) => {
+                            const targetHref = item.campana_id
+                              ? `/campanas/detail/${item.campana_id}`
+                              : `/propuestas?viewId=${item.propuesta_id}`;
+                            return (
+                            <div key={`${item.reserva_id}-${index}`} className={`p-4 rounded-xl cursor-pointer ${isDark ? 'bg-zinc-800/30 border-zinc-800/50 hover:border-purple-500/30 hover:bg-zinc-800/50' : 'bg-gray-50 border-gray-200 hover:border-purple-300 hover:bg-purple-50/30'} border transition-colors`} onClick={() => window.open(targetHref, '_blank')}>
                               <div className="flex items-start justify-between gap-4">
                                 <div className="flex-1">
                                   <div className="flex items-center gap-2 mb-2 flex-wrap">
                                     <a
-                                      href={`/campanas/detail/${item.campana_id}`}
-                                      onClick={(e) => { e.preventDefault(); window.open(`/campanas/detail/${item.campana_id}`, '_blank'); }}
+                                      href={targetHref}
+                                      onClick={(e) => { e.preventDefault(); window.open(targetHref, '_blank'); }}
                                       className={`font-mono text-xs px-2 py-1 rounded-md cursor-pointer hover:underline ${isDark ? 'bg-purple-500/10 text-purple-300 hover:text-purple-200' : 'bg-purple-50 text-purple-700 hover:text-purple-900'}`}
                                     >
                                       #{item.propuesta_id || item.campana_id}
@@ -1416,10 +1420,10 @@ export function InventariosPage() {
                                     )}
                                   </div>
                                   <a
-                                    href={`/campanas/detail/${item.campana_id}`}
-                                    onClick={(e) => { e.preventDefault(); window.open(`/campanas/detail/${item.campana_id}`, '_blank'); }}
+                                    href={targetHref}
+                                    onClick={(e) => { e.preventDefault(); window.open(targetHref, '_blank'); }}
                                     className={`${isDark ? 'text-white hover:text-purple-300' : 'text-gray-900 hover:text-purple-700'} font-medium text-sm cursor-pointer hover:underline`}
-                                  >{item.campana_nombre}</a>
+                                  >{item.campana_nombre || `Propuesta #${item.propuesta_id}`}</a>
                                   {/* <p className={`text-xs ${isDark ? 'text-zinc-400' : 'text-gray-500'}`}>{item.cliente_nombre || 'Sin cliente'}</p> */}
                                   <div className={`flex items-center gap-3 mt-2 text-xs ${isDark ? 'text-zinc-500' : 'text-gray-400'} flex-wrap`}>
                                     <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-md ${isDark ? 'bg-cyan-500/10 text-cyan-300 border-cyan-500/20' : 'bg-cyan-50 text-cyan-700 border-cyan-200'} border`}>
@@ -1443,7 +1447,8 @@ export function InventariosPage() {
                                 )}
                               </div>
                             </div>
-                          ))}
+                            );
+                          })}
                         </div>
                       )}
                     </>
