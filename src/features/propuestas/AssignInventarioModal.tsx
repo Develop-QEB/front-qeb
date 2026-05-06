@@ -935,8 +935,13 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
 
   // CSV upload state
   const [csvFile, setCsvFile] = useState<File | null>(null);
-  const [csvData, setCsvData] = useState<{ codigo_unico: string; disponibilidad: 'Disponible' | 'No Disponible' }[]>([]);
+  const [csvData, setCsvData] = useState<{
+    codigo_unico: string;
+    estado: 'libre' | 'ya_reservado_para_cara' | 'ocupado' | 'no_existe';
+    mensaje: string;
+  }[]>([]);
   const [showCsvSection, setShowCsvSection] = useState(false);
+  const [isCheckingCsv, setIsCheckingCsv] = useState(false);
   const csvInputRef = useRef<HTMLInputElement>(null);
 
   // Body scroll lock when modal is open
@@ -3384,14 +3389,21 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
   const handleCsvUpload = useCallback((event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
     if (!file) return;
+    if (!selectedCaraForSearch) {
+      showToast('Primero selecciona una cara para buscar inventario', 'error');
+      return;
+    }
 
     setCsvFile(file);
     const reader = new FileReader();
 
-    reader.onload = (e) => {
+    reader.onload = async (e) => {
       const text = e.target?.result as string;
       const lines = text.split('\n').filter(line => line.trim());
-      if (lines.length < 2) return;
+      if (lines.length < 2) {
+        showToast('El CSV está vacío o no tiene datos', 'error');
+        return;
+      }
 
       // Parse headers
       const headers = lines[0].split(',').map(h => h.trim().replace(/"/g, ''));
@@ -3406,32 +3418,53 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
         return row;
       });
 
-      // Match with inventory - try multiple possible column names
-      const matched = parsedData.map(row => {
-        const codigoUnico = getValueByColumnName(row, 'codigo_unico')
-          || getValueByColumnName(row, 'codigo')
-          || getValueByColumnName(row, 'código')
-          || getValueByColumnName(row, 'código_único')
-          || getValueByColumnName(row, 'codigo_unico');
-        const code = codigoUnico?.trim() || '';
-        const exists = code !== '' && processedInventory.some(inv => inv.codigo_unico === code);
-        return {
-          codigo_unico: code || 'N/A',
-          disponibilidad: exists ? 'Disponible' as const : 'No Disponible' as const,
-        };
-      });
+      const codigos = parsedData
+        .map(row => {
+          const c = getValueByColumnName(row, 'codigo_unico')
+            || getValueByColumnName(row, 'codigo')
+            || getValueByColumnName(row, 'código')
+            || getValueByColumnName(row, 'código_único');
+          return c?.trim() || '';
+        })
+        .filter(c => c.length > 0);
 
-      setCsvData(matched);
-      setShowCsvSection(true);
+      if (codigos.length === 0) {
+        showToast('No se encontraron códigos en el CSV. Revisa que la columna se llame "codigo_unico"', 'error');
+        return;
+      }
+
+      setIsCheckingCsv(true);
+      try {
+        const fechaInicio = selectedCaraForSearch.inicio_periodo
+          || (propuesta.fecha_inicio ? String(propuesta.fecha_inicio) : new Date().toISOString());
+        const fechaFin = selectedCaraForSearch.fin_periodo
+          || (propuesta.fecha_fin ? String(propuesta.fecha_fin) : new Date().toISOString());
+        const result = await inventariosService.checkCodigos({
+          codigos,
+          solicitudCaraId: selectedCaraForSearch.id ?? null,
+          fechaInicio,
+          fechaFin,
+        });
+        setCsvData(result.codigos);
+        setShowCsvSection(true);
+      } catch (error) {
+        console.error('Error checking CSV codes:', error);
+        showToast(
+          `Error al verificar el CSV: ${error instanceof Error ? error.message : 'Error desconocido'}`,
+          'error'
+        );
+      } finally {
+        setIsCheckingCsv(false);
+      }
     };
 
     reader.readAsText(file);
-  }, [processedInventory]);
+  }, [selectedCaraForSearch, propuesta, showToast]);
 
   const handleSelectFromCsv = useCallback(() => {
-    const availableCodes = new Set(
+    const libresCodes = new Set(
       csvData
-        .filter(row => row.disponibilidad === 'Disponible')
+        .filter(row => row.estado === 'libre')
         .map(row => row.codigo_unico)
     );
 
@@ -3440,7 +3473,7 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
     // Select directly from processedInventory (what the table shows RIGHT NOW)
     const newKeys = new Set<string>();
     processedInventory.forEach(inv => {
-      if (inv.codigo_unico && availableCodes.has(inv.codigo_unico)) {
+      if (inv.codigo_unico && libresCodes.has(inv.codigo_unico)) {
         newKeys.add(getInventoryKey(inv));
       }
     });
@@ -3728,6 +3761,7 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
           : [selectedCaraForSearch];
 
         let totalReservasCreadas = 0;
+        let totalReservasOmitidas = 0;
         for (const cTarget of carasObjetivo) {
           const fIni = cTarget.inicio_periodo || fechaInicio;
           const fFin = cTarget.fin_periodo || fechaFin;
@@ -3740,6 +3774,7 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
             agruparComoCompleto: shouldGroup,
           });
           totalReservasCreadas += result.reservasCreadas;
+          totalReservasOmitidas += result.reservasOmitidas ?? 0;
         }
 
         queryClient.invalidateQueries({ queryKey: ['propuesta-reservas-modal', propuesta.id] });
@@ -3748,7 +3783,19 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
         handleRefetchDisponibles();
 
         const sufijo = carasObjetivo.length > 1 ? ` en ${carasObjetivo.length} periodos` : '';
-        showToast(`Se guardaron ${totalReservasCreadas} reservas exitosamente${sufijo}`, 'success');
+        if (totalReservasOmitidas > 0 && totalReservasCreadas === 0) {
+          showToast(
+            `No se reservó ningún espacio${sufijo}. ${totalReservasOmitidas} se omitieron porque ya estaban ocupados`,
+            'error'
+          );
+        } else if (totalReservasOmitidas > 0) {
+          showToast(
+            `Se reservaron ${totalReservasCreadas} espacios${sufijo}. ${totalReservasOmitidas} se omitieron porque ya estaban ocupados`,
+            'success'
+          );
+        } else {
+          showToast(`Se guardaron ${totalReservasCreadas} reservas exitosamente${sufijo}`, 'success');
+        }
         setSelectedInventory(new Set());
       } catch (error) {
         console.error('Error saving reservas:', error);
@@ -3857,6 +3904,7 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
           : [selectedCaraForSearch];
 
         let totalReservasCreadas = 0;
+        let totalReservasOmitidas = 0;
         for (const cTarget of carasObjetivo) {
           const fIni = cTarget.inicio_periodo || fechaInicio;
           const fFin = cTarget.fin_periodo || fechaFin;
@@ -3869,6 +3917,7 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
             agruparComoCompleto: false,
           });
           totalReservasCreadas += result.reservasCreadas;
+          totalReservasOmitidas += result.reservasOmitidas ?? 0;
         }
 
         queryClient.invalidateQueries({ queryKey: ['propuesta-reservas-modal', propuesta.id] });
@@ -3876,7 +3925,19 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
         handleRefetchDisponibles();
 
         const sufijo = carasObjetivo.length > 1 ? ` en ${carasObjetivo.length} periodos` : '';
-        showToast(`Se guardaron ${totalReservasCreadas} bonificaciones exitosamente${sufijo}`, 'success');
+        if (totalReservasOmitidas > 0 && totalReservasCreadas === 0) {
+          showToast(
+            `No se aplicó ninguna bonificación${sufijo}. ${totalReservasOmitidas} se omitieron porque ya estaban ocupadas`,
+            'error'
+          );
+        } else if (totalReservasOmitidas > 0) {
+          showToast(
+            `Se aplicaron ${totalReservasCreadas} bonificaciones${sufijo}. ${totalReservasOmitidas} se omitieron porque ya estaban ocupadas`,
+            'success'
+          );
+        } else {
+          showToast(`Se guardaron ${totalReservasCreadas} bonificaciones exitosamente${sufijo}`, 'success');
+        }
         setSelectedInventory(new Set());
       } catch (error) {
         console.error('Error saving bonificaciones:', error);
@@ -5071,13 +5132,14 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
                   />
                   <button
                     onClick={() => csvInputRef.current?.click()}
-                    className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-medium transition-all ${csvFile
+                    disabled={isCheckingCsv}
+                    className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-medium transition-all disabled:opacity-60 disabled:cursor-not-allowed ${csvFile
                       ? 'bg-orange-500 text-white shadow'
                       : `${isDark ? 'bg-zinc-800/80' : 'bg-gray-100/80'} ${isDark ? 'text-zinc-400' : 'text-gray-500'} border ${isDark ? 'border-zinc-700/50' : 'border-gray-200/50'} ${isDark ? 'hover:text-white' : 'hover:text-gray-900'} ${isDark ? 'hover:bg-zinc-700' : 'hover:bg-gray-100'}`
                       }`}
                   >
-                    <FileText className="h-3.5 w-3.5" />
-                    {csvFile ? csvFile.name.substring(0, 15) + '...' : 'Subir CSV'}
+                    <FileText className={`h-3.5 w-3.5 ${isCheckingCsv ? 'animate-pulse' : ''}`} />
+                    {isCheckingCsv ? 'Verificando...' : (csvFile ? csvFile.name.substring(0, 15) + '...' : 'Subir CSV')}
                   </button>
                   <button
                     onClick={() => {
@@ -5190,47 +5252,82 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
               </div>
 
               {/* CSV Results Panel */}
-              {showCsvSection && csvData.length > 0 && (
-                <div className={`px-6 py-3 border-b ${isDark ? 'border-zinc-800' : 'border-gray-200'} bg-orange-500/5`}>
-                  <div className="flex items-center justify-between mb-2">
-                    <div className="flex items-center gap-2">
-                      <FileText className="h-4 w-4 text-orange-400" />
-                      <span className="text-sm font-medium text-orange-300">Resultados del CSV</span>
-                      <span className={`text-xs ${isDark ? 'text-zinc-500' : 'text-gray-400'}`}>
-                        ({csvData.filter(d => d.disponibilidad === 'Disponible').length} disponibles de {csvData.length})
-                      </span>
+              {showCsvSection && csvData.length > 0 && (() => {
+                const libres = csvData.filter(d => d.estado === 'libre').length;
+                const yaReservadas = csvData.filter(d => d.estado === 'ya_reservado_para_cara').length;
+                const ocupadas = csvData.filter(d => d.estado === 'ocupado').length;
+                const noExisten = csvData.filter(d => d.estado === 'no_existe').length;
+                return (
+                  <div className={`px-6 py-3 border-b ${isDark ? 'border-zinc-800' : 'border-gray-200'} bg-orange-500/5`}>
+                    <div className="flex items-center justify-between mb-2 gap-3">
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <FileText className="h-4 w-4 text-orange-400" />
+                        <span className="text-sm font-medium text-orange-300">Resultados del CSV</span>
+                        <span className="flex items-center gap-1.5 text-xs">
+                          <span className="text-emerald-400">{libres} libres</span>
+                          {yaReservadas > 0 && (
+                            <>
+                              <span className="text-zinc-600">·</span>
+                              <span className="text-blue-400">{yaReservadas} ya reservadas</span>
+                            </>
+                          )}
+                          {ocupadas > 0 && (
+                            <>
+                              <span className="text-zinc-600">·</span>
+                              <span className="text-amber-400">{ocupadas} ocupadas</span>
+                            </>
+                          )}
+                          {noExisten > 0 && (
+                            <>
+                              <span className="text-zinc-600">·</span>
+                              <span className="text-red-400">{noExisten} no existen</span>
+                            </>
+                          )}
+                          <span className={isDark ? 'text-zinc-500' : 'text-gray-400'}>
+                            ({csvData.length} total)
+                          </span>
+                        </span>
+                      </div>
+                      <div className="flex items-center gap-2 flex-shrink-0">
+                        <button
+                          onClick={handleSelectFromCsv}
+                          disabled={libres === 0}
+                          className="flex items-center gap-1.5 px-3 py-1.5 bg-orange-500 hover:bg-orange-600 disabled:bg-zinc-700 disabled:cursor-not-allowed text-white rounded-lg text-xs font-medium transition-colors"
+                        >
+                          <Target className="h-3.5 w-3.5" />
+                          Seleccionar libres ({libres})
+                        </button>
+                        <button
+                          onClick={() => setShowCsvSection(false)}
+                          className={`p-1.5 ${isDark ? 'text-zinc-400 hover:text-white' : 'text-gray-500 hover:text-gray-900'}`}
+                        >
+                          <X className="h-4 w-4" />
+                        </button>
+                      </div>
                     </div>
-                    <div className="flex items-center gap-2">
-                      <button
-                        onClick={handleSelectFromCsv}
-                        className="flex items-center gap-1.5 px-3 py-1.5 bg-orange-500 hover:bg-orange-600 text-white rounded-lg text-xs font-medium transition-colors"
-                      >
-                        <Target className="h-3.5 w-3.5" />
-                        Seleccionar Disponibles
-                      </button>
-                      <button
-                        onClick={() => setShowCsvSection(false)}
-                        className={`p-1.5 ${isDark ? 'text-zinc-400' : 'text-gray-500'} ${isDark ? 'hover:text-white' : 'hover:text-gray-900'}`}
-                      >
-                        <X className="h-4 w-4" />
-                      </button>
+                    <div className="flex flex-wrap gap-2 max-h-32 overflow-auto">
+                      {csvData.map((item, idx) => {
+                        const styles = item.estado === 'libre'
+                          ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500/30'
+                          : item.estado === 'ya_reservado_para_cara'
+                            ? 'bg-blue-500/20 text-blue-300 border-blue-500/30'
+                            : item.estado === 'ocupado'
+                              ? 'bg-amber-500/20 text-amber-300 border-amber-500/30'
+                              : 'bg-red-500/20 text-red-300 border-red-500/30';
+                        return (
+                          <span
+                            key={idx}
+                            title={item.mensaje}
+                            className={`px-2 py-1 rounded text-xs font-mono border cursor-help ${styles}`}
+                          >
+                            {item.codigo_unico}
+                          </span>
+                        );
+                      })}
                     </div>
                   </div>
-                  <div className="flex flex-wrap gap-2 max-h-24 overflow-auto">
-                    {csvData.map((item, idx) => (
-                      <span
-                        key={idx}
-                        className={`px-2 py-1 rounded text-xs font-mono ${item.disponibilidad === 'Disponible'
-                          ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/30'
-                          : 'bg-red-500/20 text-red-300 border border-red-500/30'
-                          }`}
-                      >
-                        {item.codigo_unico}
-                      </span>
-                    ))}
-                  </div>
-                </div>
-              )}
+                );
+              })()}
 
               {/* Content - Map and Table */}
               <div className="flex-1 flex overflow-hidden">

@@ -352,6 +352,34 @@ export const inventariosService = {
     return response.data.data;
   },
 
+  // Verificar lista de códigos del CSV contra el inventario para una cara/periodo:
+  // devuelve por código su estado real (libre / ya_reservado_para_cara / ocupado / no_existe)
+  // y un mensaje en lenguaje claro listo para mostrar al usuario.
+  async checkCodigos(params: {
+    codigos: string[];
+    solicitudCaraId: number | null;
+    fechaInicio: string;
+    fechaFin: string;
+  }): Promise<{
+    codigos: Array<{
+      codigo_unico: string;
+      estado: 'libre' | 'ya_reservado_para_cara' | 'ocupado' | 'no_existe';
+      mensaje: string;
+    }>;
+  }> {
+    const response = await api.post<ApiResponse<{
+      codigos: Array<{
+        codigo_unico: string;
+        estado: 'libre' | 'ya_reservado_para_cara' | 'ocupado' | 'no_existe';
+        mensaje: string;
+      }>;
+    }>>('/inventarios/check-codigos', params);
+    if (!response.data.success || !response.data.data) {
+      throw new Error(response.data.error || 'Error al verificar códigos');
+    }
+    return response.data.data;
+  },
+
   // Obtener espacios disponibles de un inventario
   async getEspaciosDisponibles(inventarioId: number, params: {
     fecha_inicio?: string;
