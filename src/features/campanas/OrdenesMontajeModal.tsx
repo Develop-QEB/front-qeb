@@ -387,6 +387,10 @@ export function OrdenesMontajeModal({ isOpen, onClose, canExport = true }: Orden
   const [fechaFin, setFechaFin] = useState<string>('');
   const [showCatorcenaPopup, setShowCatorcenaPopup] = useState(false);
 
+  // Filtros globales (aplican en todas las pestañas)
+  const [sapDbFilter, setSapDbFilter] = useState<'todas' | 'TRADE' | 'CIMU'>('todas');
+  const [apsEspecificoFilter, setApsEspecificoFilter] = useState<'todas' | 'con' | 'sin'>('todas');
+
   // CAT filters/sort/group
   const [catFilters, setCatFilters] = useState<AdvancedFilterCondition[]>([]);
   const [catGroupings, setCatGroupings] = useState<CATGroupByField[]>([]);
@@ -564,6 +568,16 @@ export function OrdenesMontajeModal({ isOpen, onClose, canExport = true }: Orden
       return td !== 'DIGITAL';
     });
 
+    // Filtros globales: SAP DB + APS Específico
+    if (sapDbFilter !== 'todas') {
+      items = items.filter(item => (item.sap_database || '').toUpperCase() === sapDbFilter);
+    }
+    if (apsEspecificoFilter === 'con') {
+      items = items.filter(item => item.aps_especifico !== null && item.aps_especifico !== '');
+    } else if (apsEspecificoFilter === 'sin') {
+      items = items.filter(item => item.aps_especifico === null || item.aps_especifico === '');
+    }
+
     // Filter by date range if set
     if (fechaInicio || fechaFin) {
       const startDate = fechaInicio ? new Date(fechaInicio) : null;
@@ -607,7 +621,7 @@ export function OrdenesMontajeModal({ isOpen, onClose, canExport = true }: Orden
     }
 
     return items;
-  }, [catData, selectedCatorcenas, fechaInicio, fechaFin, catFilters, catSortField, catSortDirection]);
+  }, [catData, selectedCatorcenas, fechaInicio, fechaFin, catFilters, catSortField, catSortDirection, sapDbFilter, apsEspecificoFilter]);
 
   // Filtered Ocupacion Digital data (CAT only digital items)
   const filteredOcupacionDigitalData = useMemo(() => {
@@ -619,6 +633,16 @@ export function OrdenesMontajeModal({ isOpen, onClose, canExport = true }: Orden
       const td = (item.tradicional_digital || '').toUpperCase();
       return td === 'DIGITAL';
     });
+
+    // Filtros globales
+    if (sapDbFilter !== 'todas') {
+      items = items.filter(item => (item.sap_database || '').toUpperCase() === sapDbFilter);
+    }
+    if (apsEspecificoFilter === 'con') {
+      items = items.filter(item => item.aps_especifico !== null && item.aps_especifico !== '');
+    } else if (apsEspecificoFilter === 'sin') {
+      items = items.filter(item => item.aps_especifico === null || item.aps_especifico === '');
+    }
 
     // Filter by date range if set
     if (fechaInicio || fechaFin) {
@@ -665,20 +689,37 @@ export function OrdenesMontajeModal({ isOpen, onClose, canExport = true }: Orden
     }
 
     return items;
-  }, [catData, selectedCatorcenas, fechaInicio, fechaFin, catFilters, catSortField, catSortDirection]);
+  }, [catData, selectedCatorcenas, fechaInicio, fechaFin, catFilters, catSortField, catSortDirection, sapDbFilter, apsEspecificoFilter]);
 
-  // Filter Digital data (CAT without VIA PUBLICA)
+  // Filter Ocupacion UN+ data: solo gran formato (mi macro, kioscos, boleros,
+  // bajo puentes, puentes peatonales) Y solo periodos mensuales.
+  // Excluye parabus, columnas, tradicional y digital.
   const filteredDigitalData = useMemo(() => {
     if (!catData) return [];
     let items = [...catData];
 
-    // Exclude VIA PUBLICA
+    // Solo periodos mensuales
+    items = items.filter(item => (item.tipo_periodo || '').toLowerCase() === 'mensual');
+
+    // Solo gran formato (whitelist por keywords en formato/tipo)
+    const GRAN_FORMATO = ['mi macro', 'mimacro', 'kiosco', 'bolero', 'bajo puente', 'puente peatonal'];
     items = items.filter(item => {
-      const unidad = (item.unidad_negocio || '').toUpperCase();
-      return !unidad.includes('VIA PUBLICA') && !unidad.includes('VÍA PÚBLICA');
+      const f = (item.tipo || '').toLowerCase();
+      if (!f) return false;
+      return GRAN_FORMATO.some(kw => f.includes(kw));
     });
 
-    // Exclude digital items (they have their own tab)
+    // Filtros globales
+    if (sapDbFilter !== 'todas') {
+      items = items.filter(item => (item.sap_database || '').toUpperCase() === sapDbFilter);
+    }
+    if (apsEspecificoFilter === 'con') {
+      items = items.filter(item => item.aps_especifico !== null && item.aps_especifico !== '');
+    } else if (apsEspecificoFilter === 'sin') {
+      items = items.filter(item => item.aps_especifico === null || item.aps_especifico === '');
+    }
+
+    // Excluir digital (tradicional_digital === 'Digital')
     items = items.filter(item => {
       const td = (item.tradicional_digital || '').toUpperCase();
       return td !== 'DIGITAL';
@@ -730,7 +771,7 @@ export function OrdenesMontajeModal({ isOpen, onClose, canExport = true }: Orden
     }
 
     return items;
-  }, [catData, selectedCatorcenas, fechaInicio, fechaFin, catFilters, catSortField, catSortDirection]);
+  }, [catData, selectedCatorcenas, fechaInicio, fechaFin, catFilters, catSortField, catSortDirection, sapDbFilter, apsEspecificoFilter]);
 
   // Group CAT data
   const getCATGroupValue = (item: OrdenMontajeCAT, field: CATGroupByField): string => {
@@ -772,6 +813,11 @@ export function OrdenesMontajeModal({ isOpen, onClose, canExport = true }: Orden
 
     // Exclude digital items (they have their own tab)
     items = items.filter(item => !item.numero_articulo || !ALLOWED_DIGITAL_ITEM_CODES.has(item.numero_articulo));
+
+    // Filtro global SAP DB
+    if (sapDbFilter !== 'todas') {
+      items = items.filter(item => (item.sap_database || '').toUpperCase() === sapDbFilter);
+    }
 
     // Filter by date range if set
     if (fechaInicio || fechaFin) {
@@ -816,7 +862,7 @@ export function OrdenesMontajeModal({ isOpen, onClose, canExport = true }: Orden
     }
 
     return items;
-  }, [invianData, selectedCatorcenas, fechaInicio, fechaFin, invianFilters, invianSortField, invianSortDirection]);
+  }, [invianData, selectedCatorcenas, fechaInicio, fechaFin, invianFilters, invianSortField, invianSortDirection, sapDbFilter]);
 
   // Group INVIAN data
   const getINVIANGroupValue = (item: OrdenMontajeINVIAN, field: INVIANGroupByField): string => {
@@ -843,6 +889,11 @@ export function OrdenesMontajeModal({ isOpen, onClose, canExport = true }: Orden
 
     // Filter by allowed digital article codes
     items = items.filter(item => item.numero_articulo != null && ALLOWED_DIGITAL_ITEM_CODES.has(item.numero_articulo));
+
+    // Filtro global SAP DB
+    if (sapDbFilter !== 'todas') {
+      items = items.filter(item => (item.sap_database || '').toUpperCase() === sapDbFilter);
+    }
 
     // Filter by date range
     if (fechaInicio || fechaFin) {
@@ -883,7 +934,7 @@ export function OrdenesMontajeModal({ isOpen, onClose, canExport = true }: Orden
     }
 
     return items;
-  }, [invianData, selectedCatorcenas, fechaInicio, fechaFin, invianFilters, invianSortField, invianSortDirection]);
+  }, [invianData, selectedCatorcenas, fechaInicio, fechaFin, invianFilters, invianSortField, invianSortDirection, sapDbFilter]);
 
   // Group INVIAN Digital data
   const groupedINVIANDigitalData = useMemo(() => {
@@ -944,7 +995,8 @@ export function OrdenesMontajeModal({ isOpen, onClose, canExport = true }: Orden
         'Plaza': item.plaza || '',
         'Tipo': item.tipo || '',
         'Asesor Comercial': item.asesor || '',
-        'APS Global - ID QEB': item.campania_id || '',
+        'APS Global': item.aps_global || item.campania_id || '',
+        'APS Específico': item.aps_especifico || '',
         'CUIC': item.cuic || '',
         'Fecha Inicio Periodo': formatDateCSV(item.fecha_inicio_periodo),
         'Fecha Fin Periodo': formatDateCSV(item.fecha_fin_periodo),
@@ -968,7 +1020,8 @@ export function OrdenesMontajeModal({ isOpen, onClose, canExport = true }: Orden
         'Plaza': item.plaza || '',
         'Tipo': item.tipo || '',
         'Asesor': item.asesor || '',
-        'APS': item.aps_especifico || '',
+        'APS Global': item.aps_global || item.campania_id || '',
+        'APS Específico': item.aps_especifico || '',
         'Fecha Inicio': item.fecha_inicio_periodo ? formatDate(item.fecha_inicio_periodo) : '',
         'Fecha Fin': item.fecha_fin_periodo ? formatDate(item.fecha_fin_periodo) : '',
         'Cliente': item.cliente || '',
@@ -988,10 +1041,13 @@ export function OrdenesMontajeModal({ isOpen, onClose, canExport = true }: Orden
       XLSX.writeFile(wb, `orden_montaje_ocupacion_digital_${new Date().toISOString().split('T')[0]}.xlsx`);
     } else if (activeTab === 'digital' && filteredDigitalData.length > 0) {
       const wsData = filteredDigitalData.map(item => ({
+        'Mes': mesFromDate(item.fecha_inicio_periodo),
         'Plaza': item.plaza || '',
         'Tipo': item.tipo || '',
-        'Asesor': item.asesor || '',
-        'APS': item.aps_especifico || '',
+        'Asesor Comercial': item.asesor || '',
+        'APS Global': item.aps_global || item.campania_id || '',
+        'APS Específico': item.aps_especifico || '',
+        'CUIC': item.cuic || '',
         'Fecha Inicio': item.fecha_inicio_periodo ? new Date(item.fecha_inicio_periodo).toLocaleDateString() : '',
         'Fecha Fin': item.fecha_fin_periodo ? new Date(item.fecha_fin_periodo).toLocaleDateString() : '',
         'Cliente': item.cliente || '',
@@ -1220,7 +1276,7 @@ export function OrdenesMontajeModal({ isOpen, onClose, canExport = true }: Orden
   const currentSortOptions = activeTab === 'cat' || activeTab === 'digital' || activeTab === 'ocupacion-digital' ? CAT_SORT_FIELDS : INVIAN_SORT_FIELDS;
   const currentUniqueValues = activeTab === 'cat' || activeTab === 'digital' || activeTab === 'ocupacion-digital' ? getCATUniqueValues : activeTab === 'invian-digital' ? getINVIANDigitalUniqueValues : getINVIANUniqueValues;
 
-  const hasActiveFilters = currentFilters.length > 0 || currentGroupings.length > 0 || currentSortField !== null || selectedCatorcenas.length > 0 || fechaInicio || fechaFin;
+  const hasActiveFilters = currentFilters.length > 0 || currentGroupings.length > 0 || currentSortField !== null || selectedCatorcenas.length > 0 || fechaInicio || fechaFin || sapDbFilter !== 'todas' || apsEspecificoFilter !== 'todas';
 
   if (!isOpen) return null;
 
@@ -1344,7 +1400,7 @@ export function OrdenesMontajeModal({ isOpen, onClose, canExport = true }: Orden
                 Filtros
                 {hasActiveFilters && (
                   <span className="ml-1 px-1.5 py-0.5 rounded-full bg-white/20 text-[10px]">
-                    {(selectedCatorcenas.length > 0 ? 1 : 0) + (fechaInicio ? 1 : 0) + currentFilters.length + currentGroupings.length + (currentSortField ? 1 : 0)}
+                    {(selectedCatorcenas.length > 0 ? 1 : 0) + (fechaInicio ? 1 : 0) + (sapDbFilter !== 'todas' ? 1 : 0) + (apsEspecificoFilter !== 'todas' ? 1 : 0) + currentFilters.length + currentGroupings.length + (currentSortField ? 1 : 0)}
                   </span>
                 )}
               </button>
@@ -1359,6 +1415,66 @@ export function OrdenesMontajeModal({ isOpen, onClose, canExport = true }: Orden
                   </div>
 
                   <div className="p-4 space-y-4 max-h-[50vh] overflow-y-auto">
+                    {/* BDD SAP */}
+                    <div>
+                      <label className="text-xs font-medium text-zinc-400 mb-2 block">BDD SAP</label>
+                      <div className="flex gap-2">
+                        {(['todas', 'TRADE', 'CIMU'] as const).map(opt => (
+                          <button
+                            key={opt}
+                            onClick={() => setSapDbFilter(opt)}
+                            className={`flex-1 px-3 py-2 rounded-lg text-xs font-medium transition-colors ${
+                              sapDbFilter === opt
+                                ? 'bg-purple-600 text-white border border-purple-500'
+                                : 'bg-zinc-800 text-zinc-300 border border-zinc-700 hover:bg-zinc-700'
+                            }`}
+                          >
+                            {opt === 'todas' ? 'Todas' : opt}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+
+                    {/* APS Específico */}
+                    <div>
+                      <label className="text-xs font-medium text-zinc-400 mb-2 block">APS Específico</label>
+                      <div className="flex gap-2">
+                        {(['todas', 'con', 'sin'] as const).map(opt => (
+                          <button
+                            key={opt}
+                            onClick={() => setApsEspecificoFilter(opt)}
+                            className={`flex-1 px-3 py-2 rounded-lg text-xs font-medium transition-colors ${
+                              apsEspecificoFilter === opt
+                                ? 'bg-purple-600 text-white border border-purple-500'
+                                : 'bg-zinc-800 text-zinc-300 border border-zinc-700 hover:bg-zinc-700'
+                            }`}
+                          >
+                            {opt === 'todas' ? 'Todas' : opt === 'con' ? 'Con APS' : 'Sin APS'}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+
+                    {/* Quick: Catorcena Actual */}
+                    <div>
+                      <button
+                        onClick={() => {
+                          if (catorcenasData?.data) {
+                            const now = new Date();
+                            const catActual = catorcenasData.data.find((c: any) => new Date(c.fecha_inicio) <= now && new Date(c.fecha_fin) >= now);
+                            if (catActual) {
+                              setSelectedCatorcenas([`${catActual.numero_catorcena}-${catActual.a_o}`]);
+                              setFechaInicio('');
+                              setFechaFin('');
+                            }
+                          }
+                        }}
+                        className="w-full px-3 py-2 rounded-lg text-xs font-medium bg-emerald-600/20 text-emerald-300 border border-emerald-500/40 hover:bg-emerald-600/30 transition-colors"
+                      >
+                        ⏱ Aplicar catorcena actual
+                      </button>
+                    </div>
+
                     {/* Date Range */}
                     <div>
                       <div className="flex items-center justify-between mb-2">
@@ -1581,13 +1697,14 @@ export function OrdenesMontajeModal({ isOpen, onClose, canExport = true }: Orden
             </div>
           ) : activeTab === 'cat' ? (
             <div className="overflow-x-auto">
-              <table className="w-full min-w-[1400px]">
+              <table className="w-full min-w-[1600px]">
                 <thead className="sticky top-0 z-10">
                   <tr className="border-b border-purple-500/20 bg-gradient-to-r from-purple-900/40 via-fuchsia-900/30 to-purple-900/40 backdrop-blur-sm">
                     <th className="px-3 py-3 text-left text-[10px] font-semibold text-purple-300 uppercase tracking-wider">Plaza</th>
                     <th className="px-3 py-3 text-left text-[10px] font-semibold text-purple-300 uppercase tracking-wider">Tipo</th>
                     <th className="px-3 py-3 text-left text-[10px] font-semibold text-purple-300 uppercase tracking-wider">Asesor Comercial</th>
                     <th className="px-3 py-3 text-left text-[10px] font-semibold text-purple-300 uppercase tracking-wider">APS Global</th>
+                    <th className="px-3 py-3 text-left text-[10px] font-semibold text-purple-300 uppercase tracking-wider">APS Específico</th>
                     <th className="px-3 py-3 text-left text-[10px] font-semibold text-purple-300 uppercase tracking-wider">CUIC</th>
                     <th className="px-3 py-3 text-left text-[10px] font-semibold text-purple-300 uppercase tracking-wider">F. Inicio</th>
                     <th className="px-3 py-3 text-left text-[10px] font-semibold text-purple-300 uppercase tracking-wider">F. Fin</th>
@@ -1610,7 +1727,7 @@ export function OrdenesMontajeModal({ isOpen, onClose, canExport = true }: Orden
                           onClick={() => toggleGroup(groupName)}
                           className="bg-purple-500/10 border-b border-purple-500/20 cursor-pointer hover:bg-purple-500/15 transition-colors"
                         >
-                          <td colSpan={13} className="px-4 py-2">
+                          <td colSpan={14} className="px-4 py-2">
                             <div className="flex items-center gap-2">
                               {catExpandedGroups.has(groupName) ? (
                                 <ChevronDown className="h-4 w-4 text-purple-400" />
@@ -1631,18 +1748,18 @@ export function OrdenesMontajeModal({ isOpen, onClose, canExport = true }: Orden
                           </td>
                         </tr>
                         {catExpandedGroups.has(groupName) && items.map((item, idx) => (
-                          <CATRow key={`${groupName}-${idx}`} item={item} />
+                          <CATRow key={`${groupName}-${idx}`} item={item} showApsEspecifico />
                         ))}
                       </React.Fragment>
                     ))
                   ) : (
                     paginatedCATData.map((item, idx) => (
-                      <CATRow key={idx} item={item} />
+                      <CATRow key={idx} item={item} showApsEspecifico />
                     ))
                   )}
                   {filteredCATData.length === 0 && (
                     <tr>
-                      <td colSpan={13} className="px-4 py-12 text-center">
+                      <td colSpan={14} className="px-4 py-12 text-center">
                         <div className="inline-flex items-center justify-center w-16 h-16 rounded-full bg-purple-500/10 mb-4">
                           <ClipboardList className="w-8 h-8 text-purple-400" />
                         </div>
@@ -1654,7 +1771,7 @@ export function OrdenesMontajeModal({ isOpen, onClose, canExport = true }: Orden
                 {filteredCATData.length > 0 && (
                   <tfoot className="sticky bottom-0 bg-zinc-900/95 backdrop-blur-sm">
                     <tr className="border-t-2 border-purple-500/40">
-                      <td colSpan={11} className="px-3 py-3 text-right text-sm font-semibold text-purple-300">
+                      <td colSpan={12} className="px-3 py-3 text-right text-sm font-semibold text-purple-300">
                         Totales:
                       </td>
                       <td className="px-3 py-3 text-right text-sm font-bold text-white">
@@ -1674,13 +1791,14 @@ export function OrdenesMontajeModal({ isOpen, onClose, canExport = true }: Orden
             </div>
           ) : activeTab === 'ocupacion-digital' ? (
             <div className="overflow-x-auto">
-              <table className="w-full min-w-[1400px]">
+              <table className="w-full min-w-[1600px]">
                 <thead className="sticky top-0 z-10">
                   <tr className="border-b border-sky-500/20 bg-gradient-to-r from-sky-900/40 via-indigo-900/30 to-sky-900/40 backdrop-blur-sm">
                     <th className="px-3 py-3 text-left text-[10px] font-semibold text-sky-300 uppercase tracking-wider">Plaza</th>
                     <th className="px-3 py-3 text-left text-[10px] font-semibold text-sky-300 uppercase tracking-wider">Tipo</th>
                     <th className="px-3 py-3 text-left text-[10px] font-semibold text-sky-300 uppercase tracking-wider">Asesor</th>
-                    <th className="px-3 py-3 text-left text-[10px] font-semibold text-sky-300 uppercase tracking-wider">APS</th>
+                    <th className="px-3 py-3 text-left text-[10px] font-semibold text-sky-300 uppercase tracking-wider">APS Global</th>
+                    <th className="px-3 py-3 text-left text-[10px] font-semibold text-sky-300 uppercase tracking-wider">APS Específico</th>
                     <th className="px-3 py-3 text-left text-[10px] font-semibold text-sky-300 uppercase tracking-wider">F. Inicio</th>
                     <th className="px-3 py-3 text-left text-[10px] font-semibold text-sky-300 uppercase tracking-wider">F. Fin</th>
                     <th className="px-3 py-3 text-left text-[10px] font-semibold text-sky-300 uppercase tracking-wider">Cliente</th>
@@ -1703,7 +1821,7 @@ export function OrdenesMontajeModal({ isOpen, onClose, canExport = true }: Orden
                           onClick={() => toggleGroup(groupName)}
                           className="bg-sky-500/10 border-b border-sky-500/20 cursor-pointer hover:bg-sky-500/15 transition-colors"
                         >
-                          <td colSpan={15} className="px-4 py-2">
+                          <td colSpan={16} className="px-4 py-2">
                             <div className="flex items-center gap-2">
                               {catExpandedGroups.has(groupName) ? (
                                 <ChevronDown className="h-4 w-4 text-sky-400" />
@@ -1724,18 +1842,18 @@ export function OrdenesMontajeModal({ isOpen, onClose, canExport = true }: Orden
                           </td>
                         </tr>
                         {catExpandedGroups.has(groupName) && items.map((item, idx) => (
-                          <CATRow key={`${groupName}-${idx}`} item={item} />
+                          <CATRow key={`${groupName}-${idx}`} item={item} showApsEspecifico />
                         ))}
                       </React.Fragment>
                     ))
                   ) : (
                     paginatedOcupacionDigitalData.map((item, idx) => (
-                      <CATRow key={idx} item={item} />
+                      <CATRow key={idx} item={item} showApsEspecifico />
                     ))
                   )}
                   {filteredOcupacionDigitalData.length === 0 && (
                     <tr>
-                      <td colSpan={15} className="px-4 py-12 text-center">
+                      <td colSpan={16} className="px-4 py-12 text-center">
                         <div className="inline-flex items-center justify-center w-16 h-16 rounded-full bg-sky-500/10 mb-4">
                           <Monitor className="w-8 h-8 text-sky-400" />
                         </div>
@@ -1747,15 +1865,13 @@ export function OrdenesMontajeModal({ isOpen, onClose, canExport = true }: Orden
                 {filteredOcupacionDigitalData.length > 0 && (
                   <tfoot className="sticky bottom-0 bg-zinc-900/95 backdrop-blur-sm">
                     <tr className="border-t-2 border-sky-500/40">
-                      <td colSpan={11} className="px-3 py-3 text-right text-sm font-semibold text-sky-300">
+                      <td colSpan={12} className="px-3 py-3 text-right text-sm font-semibold text-sky-300">
                         Totales:
                       </td>
                       <td className="px-3 py-3 text-right text-sm font-bold text-white">
                         {ocupacionDigitalTotals.caras.toLocaleString()}
                       </td>
-                      <td className="px-3 py-3 text-right text-sm font-bold text-white">
-                        ${ocupacionDigitalTotals.tarifa.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                      </td>
+                      <td></td>
                       <td className="px-3 py-3 text-right text-sm font-bold text-emerald-400">
                         ${ocupacionDigitalTotals.monto.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                       </td>
@@ -1767,41 +1883,61 @@ export function OrdenesMontajeModal({ isOpen, onClose, canExport = true }: Orden
             </div>
           ) : activeTab === 'digital' ? (
             <div className="overflow-x-auto">
-              <table className="w-full min-w-[1400px]">
+              <table className="w-full min-w-[1700px]">
                 <thead className="sticky top-0 z-10">
                   <tr className="border-b border-orange-500/20 bg-gradient-to-r from-orange-900/40 via-amber-900/30 to-orange-900/40 backdrop-blur-sm">
+                    <th className="px-3 py-3 text-left text-[10px] font-semibold text-orange-300 uppercase tracking-wider">Mes</th>
                     <th className="px-3 py-3 text-left text-[10px] font-semibold text-orange-300 uppercase tracking-wider">Plaza</th>
                     <th className="px-3 py-3 text-left text-[10px] font-semibold text-orange-300 uppercase tracking-wider">Tipo</th>
-                    <th className="px-3 py-3 text-left text-[10px] font-semibold text-orange-300 uppercase tracking-wider">Asesor</th>
-                    <th className="px-3 py-3 text-left text-[10px] font-semibold text-orange-300 uppercase tracking-wider">APS</th>
+                    <th className="px-3 py-3 text-left text-[10px] font-semibold text-orange-300 uppercase tracking-wider">Asesor Comercial</th>
+                    <th className="px-3 py-3 text-left text-[10px] font-semibold text-orange-300 uppercase tracking-wider">APS Global</th>
+                    <th className="px-3 py-3 text-left text-[10px] font-semibold text-orange-300 uppercase tracking-wider">APS Específico</th>
+                    <th className="px-3 py-3 text-left text-[10px] font-semibold text-orange-300 uppercase tracking-wider">CUIC</th>
                     <th className="px-3 py-3 text-left text-[10px] font-semibold text-orange-300 uppercase tracking-wider">F. Inicio</th>
                     <th className="px-3 py-3 text-left text-[10px] font-semibold text-orange-300 uppercase tracking-wider">F. Fin</th>
                     <th className="px-3 py-3 text-left text-[10px] font-semibold text-orange-300 uppercase tracking-wider">Cliente</th>
                     <th className="px-3 py-3 text-left text-[10px] font-semibold text-orange-300 uppercase tracking-wider">Marca</th>
-                    <th className="px-3 py-3 text-left text-[10px] font-semibold text-orange-300 uppercase tracking-wider">U. Negocio</th>
                     <th className="px-3 py-3 text-left text-[10px] font-semibold text-orange-300 uppercase tracking-wider">Campaña</th>
+                    <th className="px-3 py-3 text-left text-[10px] font-semibold text-orange-300 uppercase tracking-wider">Nº Artículo</th>
                     <th className="px-3 py-3 text-left text-[10px] font-semibold text-orange-300 uppercase tracking-wider">Artículo</th>
-                    <th className="px-3 py-3 text-left text-[10px] font-semibold text-orange-300 uppercase tracking-wider">Negociación</th>
                     <th className="px-3 py-3 text-right text-[10px] font-semibold text-orange-300 uppercase tracking-wider">Caras</th>
                     <th className="px-3 py-3 text-right text-[10px] font-semibold text-orange-300 uppercase tracking-wider">Tarifa</th>
                     <th className="px-3 py-3 text-right text-[10px] font-semibold text-orange-300 uppercase tracking-wider">Monto Total</th>
+                    <th className="px-3 py-3 text-center text-[10px] font-semibold text-orange-300 uppercase tracking-wider">Diferencia</th>
                   </tr>
                 </thead>
                 <tbody>
                   {paginatedDigitalData.map((item, idx) => (
-                    <CATRow key={idx} item={item} />
+                    <CATRow key={idx} item={item} showApsEspecifico showMes />
                   ))}
                   {filteredDigitalData.length === 0 && (
                     <tr>
-                      <td colSpan={15} className="px-4 py-12 text-center">
+                      <td colSpan={18} className="px-4 py-12 text-center">
                         <div className="inline-flex items-center justify-center w-16 h-16 rounded-full bg-orange-500/10 mb-4">
                           <Monitor className="w-8 h-8 text-orange-400" />
                         </div>
-                        <p className="text-zinc-500">No se encontraron registros digitales</p>
+                        <p className="text-zinc-500">No se encontraron registros</p>
                       </td>
                     </tr>
                   )}
                 </tbody>
+                {filteredDigitalData.length > 0 && (
+                  <tfoot className="sticky bottom-0 bg-zinc-900/95 backdrop-blur-sm">
+                    <tr className="border-t-2 border-orange-500/40">
+                      <td colSpan={14} className="px-3 py-3 text-right text-sm font-semibold text-orange-300">
+                        Totales:
+                      </td>
+                      <td className="px-3 py-3 text-right text-sm font-bold text-white">
+                        {filteredDigitalData.reduce((sum, i) => sum + (Number(i.caras) || 0), 0).toLocaleString()}
+                      </td>
+                      <td></td>
+                      <td className="px-3 py-3 text-right text-sm font-bold text-emerald-400">
+                        ${filteredDigitalData.reduce((sum, i) => sum + (Number(i.monto_total) || 0), 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                      </td>
+                      <td></td>
+                    </tr>
+                  </tfoot>
+                )}
               </table>
             </div>
           ) : (
@@ -1823,6 +1959,9 @@ export function OrdenesMontajeModal({ isOpen, onClose, canExport = true }: Orden
                     <th className="px-3 py-3 text-left text-[10px] font-semibold text-purple-300 uppercase tracking-wider">Unidad</th>
                     <th className="px-3 py-3 text-left text-[10px] font-semibold text-purple-300 uppercase tracking-wider">Cara</th>
                     <th className="px-3 py-3 text-left text-[10px] font-semibold text-purple-300 uppercase tracking-wider">Plaza</th>
+                    {activeTab === 'invian-digital' && (
+                      <th className="px-3 py-3 text-left text-[10px] font-semibold text-purple-300 uppercase tracking-wider">CTO</th>
+                    )}
                     <th className="px-3 py-3 text-left text-[10px] font-semibold text-purple-300 uppercase tracking-wider">Tipo Dist.</th>
                   </tr>
                 </thead>
@@ -1831,6 +1970,7 @@ export function OrdenesMontajeModal({ isOpen, onClose, canExport = true }: Orden
                     const currentDataFull = activeTab === 'invian-digital' ? filteredINVIANDigitalData : filteredINVIANData;
                     const currentData = activeTab === 'invian-digital' ? paginatedINVIANDigitalData : paginatedINVIANData;
                     const currentGrouped = activeTab === 'invian-digital' ? groupedINVIANDigitalData : groupedINVIANData;
+                    const showCto = activeTab === 'invian-digital';
                     return (
                       <>
                         {currentGrouped ? (
@@ -1855,13 +1995,13 @@ export function OrdenesMontajeModal({ isOpen, onClose, canExport = true }: Orden
                                 </td>
                               </tr>
                               {invianExpandedGroups.has(groupName) && items.map((item, idx) => (
-                                <INVIANRow key={`${groupName}-${idx}`} item={item} onOpenGallery={handleOpenGallery} />
+                                <INVIANRow key={`${groupName}-${idx}`} item={item} onOpenGallery={handleOpenGallery} showCto={showCto} />
                               ))}
                             </React.Fragment>
                           ))
                         ) : (
                           currentData.map((item, idx) => (
-                            <INVIANRow key={idx} item={item} onOpenGallery={handleOpenGallery} />
+                            <INVIANRow key={idx} item={item} onOpenGallery={handleOpenGallery} showCto={showCto} />
                           ))
                         )}
                         {currentDataFull.length === 0 && (
@@ -1939,7 +2079,17 @@ export function OrdenesMontajeModal({ isOpen, onClose, canExport = true }: Orden
 }
 
 // Row components
-function CATRow({ item }: { item: OrdenMontajeCAT }) {
+const MES_LABELS = ['Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio', 'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre'];
+function mesFromDate(dateStr: string | null): string {
+  if (!dateStr) return '-';
+  const m = dateStr.match(/^(\d{4})-(\d{2})/);
+  if (m) return `${MES_LABELS[parseInt(m[2], 10) - 1]} ${m[1]}`;
+  const d = new Date(dateStr);
+  if (isNaN(d.getTime())) return '-';
+  return `${MES_LABELS[d.getMonth()]} ${d.getFullYear()}`;
+}
+
+function CATRow({ item, showApsEspecifico = false, showMes = false }: { item: OrdenMontajeCAT; showApsEspecifico?: boolean; showMes?: boolean }) {
   const isDark = useThemeStore((s) => s.theme) === 'dark';
   const getNegociacionColor = (neg: string | null) => {
     switch (neg) {
@@ -1960,6 +2110,9 @@ function CATRow({ item }: { item: OrdenMontajeCAT }) {
 
   return (
     <tr className={`border-b ${isDark ? 'border-zinc-800/50 hover:bg-zinc-800/30' : 'border-gray-200 hover:bg-gray-50'} transition-colors`}>
+      {showMes && (
+        <td className={`px-3 py-2 text-xs font-semibold ${isDark ? 'text-amber-300' : 'text-amber-700'}`}>{mesFromDate(item.fecha_inicio_periodo)}</td>
+      )}
       <td className={`px-3 py-2 text-xs ${isDark ? 'text-zinc-300' : 'text-gray-700'}`}>{item.plaza || '-'}</td>
       <td className={`px-3 py-2 text-xs ${isDark ? 'text-zinc-300' : 'text-gray-700'}`}>{item.tipo || '-'}</td>
       <td className="px-3 py-2">
@@ -1974,7 +2127,10 @@ function CATRow({ item }: { item: OrdenMontajeCAT }) {
           <span className={`text-xs ${isDark ? 'text-zinc-500' : 'text-gray-400'}`}>-</span>
         )}
       </td>
-      <td className="px-3 py-2 text-xs text-fuchsia-300 font-mono">{item.campania_id || '-'}</td>
+      <td className="px-3 py-2 text-xs text-fuchsia-300 font-mono">{(showApsEspecifico ? item.aps_global : item.campania_id) || '-'}</td>
+      {showApsEspecifico && (
+        <td className="px-3 py-2 text-xs text-fuchsia-200 font-mono">{item.aps_especifico ?? '-'}</td>
+      )}
       <td className="px-3 py-2 text-xs text-purple-300 font-mono">{item.cuic || '-'}</td>
       <td className={`px-3 py-2 text-xs ${isDark ? 'text-zinc-400' : 'text-gray-500'}`}>{formatDate(item.fecha_inicio_periodo)}</td>
       <td className={`px-3 py-2 text-xs ${isDark ? 'text-zinc-400' : 'text-gray-500'}`}>{formatDate(item.fecha_fin_periodo)}</td>
@@ -2002,7 +2158,7 @@ function CATRow({ item }: { item: OrdenMontajeCAT }) {
   );
 }
 
-function INVIANRow({ item, onOpenGallery }: { item: OrdenMontajeINVIAN; onOpenGallery: (item: OrdenMontajeINVIAN) => void }) {
+function INVIANRow({ item, onOpenGallery, showCto = false }: { item: OrdenMontajeINVIAN; onOpenGallery: (item: OrdenMontajeINVIAN) => void; showCto?: boolean }) {
   const isDark = useThemeStore((s) => s.theme) === 'dark';
   const getOperacionColor = (op: string | null) => {
     switch (op) {
@@ -2116,6 +2272,9 @@ function INVIANRow({ item, onOpenGallery }: { item: OrdenMontajeINVIAN; onOpenGa
       <td className="px-3 py-2 text-xs text-violet-300 font-mono">{item.Unidad || '-'}</td>
       <td className={`px-3 py-2 text-xs ${isDark ? 'text-zinc-300' : 'text-gray-700'}`}>{item.Cara || '-'}</td>
       <td className={`px-3 py-2 text-xs ${isDark ? 'text-zinc-300' : 'text-gray-700'}`}>{item.Ciudad || '-'}</td>
+      {showCto && (
+        <td className={`px-3 py-2 text-xs ${isDark ? 'text-zinc-300' : 'text-gray-700'} font-mono`}>{item.cto || '-'}</td>
+      )}
       <td className="px-3 py-2">
         <span className={`px-2 py-0.5 rounded-full text-[10px] border ${tipoDistColor}`}>
           {item.TipoDistribucion || '-'}
