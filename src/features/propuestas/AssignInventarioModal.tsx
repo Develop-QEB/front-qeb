@@ -3799,7 +3799,10 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
         setSelectedInventory(new Set());
       } catch (error) {
         console.error('Error saving reservas:', error);
-        showToast(`Error al guardar: ${error instanceof Error ? error.message : 'Error desconocido'}`, 'error');
+        const axErr = error as { response?: { data?: { error?: string; message?: string } }; message?: string };
+        const backendMsg = axErr?.response?.data?.error || axErr?.response?.data?.message;
+        const msg = backendMsg || (error instanceof Error ? error.message : 'Error desconocido');
+        showToast(`Error al guardar: ${msg}`, 'error');
       } finally {
         setIsSaving(false);
         setConfirmModal(prev => ({ ...prev, isOpen: false }));
@@ -8081,7 +8084,7 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
                                           if (rtPair.autorizacion_dg === 'rechazado' || rtPair.autorizacion_dcm === 'rechazado') tieneRechazado = true;
                                         }
                                       }
-                                      const bloqueado = tienePendientes || tieneRechazado;
+                                      const bloqueado = tienePendientes || tieneRechazado || hasPendingAuthorization;
 
                                       return (
                                         <button
@@ -8097,6 +8100,7 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
                                           title={
                                             tieneRechazado ? 'Cara rechazada - no se puede asignar inventario' :
                                             tienePendientes ? 'Esta cara necesita autorización antes de asignar inventario' :
+                                            hasPendingAuthorization ? 'Hay otra cara en esta propuesta pendiente de autorización. Apruébala primero.' :
                                             status.isComplete ? 'Completo - clic para modificar' : 'Buscar inventario'
                                           }
                                         >

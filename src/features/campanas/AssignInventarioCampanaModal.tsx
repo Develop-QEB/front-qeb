@@ -3732,7 +3732,10 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
         setSelectedInventory(new Set());
       } catch (error) {
         console.error('Error saving reservas:', error);
-        showToast(`Error al guardar: ${error instanceof Error ? error.message : 'Error desconocido'}`, 'error');
+        const axErr = error as { response?: { data?: { error?: string; message?: string } }; message?: string };
+        const backendMsg = axErr?.response?.data?.error || axErr?.response?.data?.message;
+        const msg = backendMsg || (error instanceof Error ? error.message : 'Error desconocido');
+        showToast(`Error al guardar: ${msg}`, 'error');
       } finally {
         setIsSaving(false);
         setConfirmModal(prev => ({ ...prev, isOpen: false }));
@@ -7955,7 +7958,7 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
                                           if (rtPair.autorizacion_dg === 'rechazado' || rtPair.autorizacion_dcm === 'rechazado') tieneRechazado = true;
                                         }
                                       }
-                                      const bloqueado = tienePendientes || tieneRechazado || caraAPSBlocked;
+                                      const bloqueado = tienePendientes || tieneRechazado || caraAPSBlocked || hasPendingAuthorization;
                                       const isLoadingThis = loadingCaraAction?.caraId === cara.localId && loadingCaraAction?.action === 'search';
 
                                       return (
@@ -7973,6 +7976,7 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
                                             caraAPSBlocked ? 'Grupo con APS asignado - no se puede modificar inventario' :
                                             tieneRechazado ? 'Cara rechazada - no se puede asignar inventario' :
                                             tienePendientes ? 'Esta cara necesita autorización antes de asignar inventario' :
+                                            hasPendingAuthorization ? 'Hay otra cara en esta campaña pendiente de autorización. Apruébala primero.' :
                                             isLoadingThis ? 'Buscando inventario...' :
                                             status.isComplete ? 'Completo - clic para modificar' : 'Buscar inventario'
                                           }
