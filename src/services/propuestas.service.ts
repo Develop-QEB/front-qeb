@@ -251,8 +251,8 @@ export const propuestasService = {
       fechaFin: string;
       agruparComoCompleto?: boolean;
     }
-  ): Promise<{ calendarioId: number; reservasCreadas: number }> {
-    const response = await api.post<ApiResponse<{ calendarioId: number; reservasCreadas: number }>>(
+  ): Promise<{ calendarioId: number; reservasCreadas: number; reservasOmitidas?: number }> {
+    const response = await api.post<ApiResponse<{ calendarioId: number; reservasCreadas: number; reservasOmitidas?: number }>>(
       `/propuestas/${propuestaId}/reservas`,
       data
     );
