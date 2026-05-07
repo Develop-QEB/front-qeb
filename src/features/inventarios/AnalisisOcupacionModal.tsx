@@ -722,9 +722,16 @@ function MatrizView({
                 const celda = matriz.celdas[inv.id]?.[cellKeyOf(cat)];
                 const ocupado = celda?.ocupado;
                 const campanas = celda?.campanas || [];
-                const ocupadoClass = isDark
-                  ? 'bg-red-500/10 border-red-500/40 hover:bg-red-500/20 cursor-pointer'
-                  : 'bg-red-50 border-red-200 hover:bg-red-100 cursor-pointer';
+                // "Reservado" = todas las ocupaciones son solo propuesta (sin campaña real).
+                // "Ocupado"   = al menos una ya es campaña.
+                const soloPropuestas = ocupado && campanas.length > 0 && campanas.every(c => !c.campana_id);
+                const ocupadoClass = soloPropuestas
+                  ? isDark
+                    ? 'bg-amber-500/10 border-amber-500/40 hover:bg-amber-500/20 cursor-pointer'
+                    : 'bg-amber-50 border-amber-200 hover:bg-amber-100 cursor-pointer'
+                  : isDark
+                    ? 'bg-red-500/10 border-red-500/40 hover:bg-red-500/20 cursor-pointer'
+                    : 'bg-red-50 border-red-200 hover:bg-red-100 cursor-pointer';
                 const disponibleClass = isDark
                   ? 'bg-emerald-500/10 border-emerald-500/30 cursor-default'
                   : 'bg-emerald-50 border-emerald-200 cursor-default';
@@ -743,14 +750,16 @@ function MatrizView({
                 const clienteLabel = ocupado && campanas.length > 0
                   ? (campanas[0].cliente_nombre || 'Sin cliente')
                   : '';
+                const statusLabel = ocupado ? (soloPropuestas ? 'Reservado' : 'Ocupado') : 'Disponible';
+                const statusTextClass = ocupado
+                  ? soloPropuestas
+                    ? isDark ? 'text-amber-300' : 'text-amber-700'
+                    : isDark ? 'text-red-300' : 'text-red-700'
+                  : isDark ? 'text-emerald-300' : 'text-emerald-700';
                 const cellInner = (
                   <>
-                    <div className={`flex items-center gap-1 text-[10px] font-bold uppercase tracking-wide ${
-                      ocupado
-                        ? isDark ? 'text-red-300' : 'text-red-700'
-                        : isDark ? 'text-emerald-300' : 'text-emerald-700'
-                    }`}>
-                      {ocupado ? 'Ocupado' : 'Disponible'}
+                    <div className={`flex items-center gap-1 text-[10px] font-bold uppercase tracking-wide ${statusTextClass}`}>
+                      {statusLabel}
                       {single && <ExternalLink className="h-2.5 w-2.5 opacity-70" />}
                     </div>
                     {ocupado && campanas.length > 0 && (

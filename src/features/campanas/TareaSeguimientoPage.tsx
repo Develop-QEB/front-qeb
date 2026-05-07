@@ -2489,6 +2489,7 @@ const TIPOS_TAREA = [
   { value: 'Instalación', label: 'Instalación', description: 'Instalación física del arte en sitio' },
   { value: 'Revisión de artes', label: 'Revisión de artes', description: 'Revisión y aprobación de artes' },
   { value: 'Impresión', label: 'Impresión', description: 'Impresión de materiales publicitarios' },
+  { value: 'Cliente imprime', label: 'Cliente imprime', description: 'El cliente imprime y entrega los artes — Operaciones recibe' },
   { value: 'Testigo', label: 'Testigo', description: 'Validación de instalación con evidencia fotográfica' },
   { value: 'Programación para Tráfico', label: 'Programación para Tráfico', description: 'Programación de artes digitales — asignada a Tráfico' },
   { value: 'Orden de Programación', label: 'Orden de Programación', description: 'Orden de programación para tráfico' },
@@ -6508,6 +6509,18 @@ function TaskDetailModal({
                   <div>
                     <span className="text-zinc-500">Asignado:</span>
                     <p className="text-white font-medium">{task.asignado || '-'}</p>
+                  </div>
+                  <div>
+                    <span className="text-zinc-500">Cliente:</span>
+                    <p className="text-white font-medium">{(campana as any)?.T0_U_Cliente || (campana as any)?.cliente_nombre || (campana as any)?.T0_U_RazonSocial || (campana as any)?.cliente_razon_social || '-'}</p>
+                  </div>
+                  <div>
+                    <span className="text-zinc-500">Campaña:</span>
+                    <p className="text-white font-medium">{campana?.nombre || '-'}</p>
+                  </div>
+                  <div>
+                    <span className="text-zinc-500">ID Campaña:</span>
+                    <p className="text-white font-medium">#{campana?.id ?? campanaId}</p>
                   </div>
                   <div>
                     <span className="text-zinc-500">Impresiones solicitadas:</span>
@@ -11215,6 +11228,13 @@ function CreateTaskModal({
     }
   }, [isOpen, tipo, user]);
 
+  // Cliente imprime arranca con asignados vacíos (el creador elige uno o más de Operaciones)
+  useEffect(() => {
+    if (isOpen && tipo === 'Cliente imprime') {
+      setSelectedAsignadosImpresion([]);
+    }
+  }, [isOpen, tipo]);
+
   const [proveedorId, setProveedorId] = useState<number | null>(null);
   const [fechaFin, setFechaFin] = useState('');
   const [estatus, setEstatus] = useState<string>('Pendiente');
@@ -11295,7 +11315,7 @@ function CreateTaskModal({
 
   // Inicializar impresiones cuando cambia el inventario seleccionado (cantidad de ubicaciones por defecto)
   useEffect(() => {
-    if (isOpen && selectedInventory.length > 0 && tipo === 'Impresión') {
+    if (isOpen && selectedInventory.length > 0 && (tipo === 'Impresión' || tipo === 'Cliente imprime')) {
       // Detectar multi-arte: si algún item tiene artes_multiples con '||'
       const hasMultiArte = selectedInventory.some(item => item.artes_multiples && item.artes_multiples.includes('||'));
       const grupos: Record<string, number> = {};
@@ -11488,17 +11508,18 @@ function CreateTaskModal({
   const filteredUsuariosImpresion = useMemo(() => {
     if (!todosUsuarios) return [];
     const selectedIds = new Set(selectedAsignadosImpresion.map(u => u.id));
-    // Solo mostrar usuarios del área Compras que no estén ya seleccionados
-    const comprasUsers = todosUsuarios.filter(u =>
-      u.area?.toLowerCase() === 'compras' && !selectedIds.has(u.id)
+    // Cliente imprime → área Operaciones; Impresión → área Compras
+    const targetArea = tipo === 'Cliente imprime' ? 'operaciones' : 'compras';
+    const filtered = todosUsuarios.filter(u =>
+      u.area?.toLowerCase() === targetArea && !selectedIds.has(u.id)
     );
-    if (!asignadoSearchImpresion.trim()) return comprasUsers;
+    if (!asignadoSearchImpresion.trim()) return filtered;
     const search = asignadoSearchImpresion.toLowerCase();
-    return comprasUsers.filter(u =>
+    return filtered.filter(u =>
       u.nombre.toLowerCase().includes(search) ||
       String(u.id).includes(search)
     );
-  }, [todosUsuarios, asignadoSearchImpresion, selectedAsignadosImpresion]);
+  }, [todosUsuarios, asignadoSearchImpresion, selectedAsignadosImpresion, tipo]);
 
   // Filtrar usuarios de Operaciones para Instalación (excluir ya seleccionados)
   const filteredUsuariosInstalacion = useMemo(() => {
@@ -11691,6 +11712,27 @@ function CreateTaskModal({
         // Guardar IDs separados por coma
         (payload as any).id_asignado = selectedAsignadosImpresion.map(u => u.id).join(', ');
         // Guardar nombres separados por coma
+        payload.asignado = selectedAsignadosImpresion.map(u => u.nombre).join(', ');
+      }
+    } else if (tipo === 'Cliente imprime') {
+      // Cliente imprime crea directamente una tarea de Recepción (el cliente entrega los artes ya impresos)
+      payload.tipo = 'Recepción';
+      payload.titulo = (titulo || '').toLowerCase().startsWith('recepción')
+        ? titulo
+        : `Recepción - ${titulo || identificador || 'Cliente imprime'}`;
+      (payload as any).fecha_fin = fechaEntrega;
+      (payload as any).fecha_creacion = new Date().toISOString();
+      (payload as any).listado_inventario = selectedIds.join(',');
+      // Total y desglose por arte (la tabla del modal de Recepción se arma desde evidencia.impresiones)
+      const totalImpresiones = Object.values(impresiones).reduce((sum, val) => sum + (val || 0), 0);
+      (payload as any).num_impresiones = totalImpresiones;
+      (payload as any).evidencia = JSON.stringify({
+        tipo: 'recepcion_normal',
+        impresiones,
+      });
+      // Asignados (área Operaciones)
+      if (selectedAsignadosImpresion.length > 0) {
+        (payload as any).id_asignado = selectedAsignadosImpresion.map(u => u.id).join(', ');
         payload.asignado = selectedAsignadosImpresion.map(u => u.nombre).join(', ');
       }
     } else if (tipo === 'Testigo') {
@@ -11912,7 +11954,7 @@ function CreateTaskModal({
         {tipo && (
           <div className="space-y-4 border-t border-border pt-4">
             {/* Campos comunes - Título para tipos que no tienen formulario propio */}
-            {tipo !== 'Revisión de artes' && tipo !== 'Impresión' && tipo !== 'Instalación' && tipo !== 'Orden de Instalación' && tipo !== 'Testigo' && tipo !== 'Programación' && tipo !== 'Programación para Tráfico' && tipo !== 'Orden de Programación' && (
+            {tipo !== 'Revisión de artes' && tipo !== 'Impresión' && tipo !== 'Cliente imprime' && tipo !== 'Instalación' && tipo !== 'Orden de Instalación' && tipo !== 'Testigo' && tipo !== 'Programación' && tipo !== 'Programación para Tráfico' && tipo !== 'Orden de Programación' && (
               <div>
                 <label className="block text-xs font-medium text-muted-foreground mb-1">Título *</label>
                 <input
@@ -12468,7 +12510,7 @@ function CreateTaskModal({
             )}
 
             {/* === FORMULARIO IMPRESIÓN === */}
-            {tipo === 'Impresión' && (
+            {(tipo === 'Impresión' || tipo === 'Cliente imprime') && (
               <>
                 {/* Lista de artes agrupados por archivo */}
                 <div>
@@ -12508,7 +12550,7 @@ function CreateTaskModal({
                       <>
                         <div className="flex items-center justify-between mb-2">
                           <label onClick={() => console.log(grupos)} className="block text-xs font-medium text-muted-foreground">
-                            Artes a imprimir ({grupos.length} {grupos.length === 1 ? 'arte' : 'artes diferentes'} - {selectedInventory.length} ubicaciones)
+                            {tipo === 'Cliente imprime' ? 'Artes a recibir' : 'Artes a imprimir'} ({grupos.length} {grupos.length === 1 ? 'arte' : 'artes diferentes'} - {selectedInventory.length} ubicaciones)
                           </label>
                           <span className="text-xs text-purple-400">
                             Total: {Object.values(impresiones).reduce((sum, val) => sum + (val || 0), 0)} impresiones
@@ -12586,30 +12628,32 @@ function CreateTaskModal({
                   })()}
                 </div>
 
-                {/* Proveedor de impresión */}
-                <div>
-                  <label className="block text-xs font-medium text-muted-foreground mb-1">Proveedor de impresión *</label>
-                  {isLoadingProveedores ? (
-                    <div className="flex items-center gap-2 py-2 text-zinc-400">
-                      <Loader2 className="h-4 w-4 animate-spin" />
-                      <span className="text-sm">Cargando proveedores...</span>
-                    </div>
-                  ) : (
-                    <select
-                      value={proveedorId || ''}
-                      onChange={(e) => setProveedorId(e.target.value ? parseInt(e.target.value) : null)}
-                      disabled={isSubmitting}
-                      className="w-full px-3 py-2 text-sm bg-background border border-border rounded-lg focus:outline-none focus:ring-1 focus:ring-purple-500 disabled:opacity-50"
-                    >
-                      <option value="">-- Seleccionar proveedor --</option>
-                      {proveedores.map((p) => (
-                        <option key={p.id} value={p.id}>
-                          {p.nombre} {p.ciudad ? `(${p.ciudad})` : ''}
-                        </option>
-                      ))}
-                    </select>
-                  )}
-                </div>
+                {/* Proveedor de impresión (solo para Impresión, no para Cliente imprime) */}
+                {tipo === 'Impresión' && (
+                  <div>
+                    <label className="block text-xs font-medium text-muted-foreground mb-1">Proveedor de impresión *</label>
+                    {isLoadingProveedores ? (
+                      <div className="flex items-center gap-2 py-2 text-zinc-400">
+                        <Loader2 className="h-4 w-4 animate-spin" />
+                        <span className="text-sm">Cargando proveedores...</span>
+                      </div>
+                    ) : (
+                      <select
+                        value={proveedorId || ''}
+                        onChange={(e) => setProveedorId(e.target.value ? parseInt(e.target.value) : null)}
+                        disabled={isSubmitting}
+                        className="w-full px-3 py-2 text-sm bg-background border border-border rounded-lg focus:outline-none focus:ring-1 focus:ring-purple-500 disabled:opacity-50"
+                      >
+                        <option value="">-- Seleccionar proveedor --</option>
+                        {proveedores.map((p) => (
+                          <option key={p.id} value={p.id}>
+                            {p.nombre} {p.ciudad ? `(${p.ciudad})` : ''}
+                          </option>
+                        ))}
+                      </select>
+                    )}
+                  </div>
+                )}
 
                 {/* Título */}
                 <div>
@@ -15557,21 +15601,21 @@ export function TareaSeguimientoPage() {
           initialTipo = 'Programación para Tráfico';
         }
       } else if (hasIMU && !hasInImpresionFlow) {
-        // Tradicionales con IMU: mostrar Impresión e Instalación
+        // Tradicionales con IMU: mostrar Impresión, Cliente imprime e Instalación
         if (permissions.canCreateOrdenInstalacion) {
-          availableTipos = ['Impresión', 'Orden de Instalación', 'Instalación'];
+          availableTipos = ['Impresión', 'Cliente imprime', 'Orden de Instalación', 'Instalación'];
           initialTipo = 'Impresión';
         } else {
-          availableTipos = ['Impresión', 'Instalación'];
+          availableTipos = ['Impresión', 'Cliente imprime', 'Instalación'];
           initialTipo = 'Impresión';
         }
       } else {
-        // Tradicionales sin IMU: Instalación (y Orden de Instalación para Tráfico)
+        // Tradicionales sin IMU: Instalación, Cliente imprime (y Orden de Instalación para Tráfico)
         if (permissions.canCreateOrdenInstalacion) {
-          availableTipos = ['Orden de Instalación', 'Instalación'];
+          availableTipos = ['Orden de Instalación', 'Instalación', 'Cliente imprime'];
           initialTipo = 'Orden de Instalación';
         } else {
-          availableTipos = ['Instalación'];
+          availableTipos = ['Instalación', 'Cliente imprime'];
           initialTipo = 'Instalación';
         }
       }
@@ -16938,6 +16982,47 @@ export function TareaSeguimientoPage() {
                       </>
                     )}
                   </button>
+                  {permissions.canApproveArteSinRevisar && (() => {
+                    const itemsSinRevisar = selectedInventoryItems.filter(item => item.estado_arte === 'sin_revisar');
+                    const hasSinRevisar = itemsSinRevisar.length > 0;
+                    return (
+                      <button
+                        onClick={() => {
+                          const reservaIds = itemsSinRevisar.flatMap(item =>
+                            item.rsv_id.split(',').map(id => parseInt(id.trim())).filter(id => !isNaN(id))
+                          );
+                          if (reservaIds.length > 0) {
+                            updateArteStatusMutation.mutate({
+                              reservaIds,
+                              status: 'Aprobado',
+                              comentario: 'Aprobación directa desde Revisar y Aprobar',
+                            });
+                          }
+                        }}
+                        disabled={!hasSinRevisar || updateArteStatusMutation.isPending}
+                        className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg transition-colors ${
+                          hasSinRevisar && !updateArteStatusMutation.isPending
+                            ? 'bg-green-600 hover:bg-green-700 text-white'
+                            : isDark ? 'bg-zinc-800 text-zinc-500 cursor-not-allowed' : 'bg-gray-200 text-gray-400 cursor-not-allowed'
+                        }`}
+                        title={hasSinRevisar
+                          ? `Aprobar ${itemsSinRevisar.length} arte(s) en estado "Sin revisar"`
+                          : 'Selecciona artes en estado "Sin revisar" para aprobar'}
+                      >
+                        {updateArteStatusMutation.isPending ? (
+                          <>
+                            <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                            Aprobando...
+                          </>
+                        ) : (
+                          <>
+                            <CheckCircle2 className="h-3.5 w-3.5" />
+                            Aprobar
+                          </>
+                        )}
+                      </button>
+                    );
+                  })()}
                   {(permissions.canCreateTareasGestionArtes || permissions.canCreateOrdenProgramacion || permissions.canCreateOrdenInstalacion) && (
                     <button
                       onClick={handleCreateTaskClick}

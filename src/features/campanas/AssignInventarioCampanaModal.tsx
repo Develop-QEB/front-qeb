@@ -3086,6 +3086,7 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
         fecha_inicio: fechaIniSearch,
         fecha_fin: fechaFinSearch,
         solicitudCaraId: cara.id,
+        excluir_mi_macro: tipoPeriodo === 'catorcena' ? 1 : undefined,
       });
       setInventarioDisponible(response.data || []);
     } catch (error) {
@@ -3142,6 +3143,7 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
         fecha_inicio: fechaIniSearch2,
         fecha_fin: fechaFinSearch2,
         solicitudCaraId: selectedCaraForSearch.id,
+        excluir_mi_macro: tipoPeriodo === 'catorcena' ? 1 : undefined,
       });
       setInventarioDisponible(response.data || []);
     } catch (error) {

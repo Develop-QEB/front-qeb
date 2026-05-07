@@ -56,6 +56,7 @@ export interface DisponiblesParams {
   solicitudCaraId?: number;
   excluir_categoria?: string;
   excluir_distancia_km?: number;
+  excluir_mi_macro?: string | number;
 }
 
 export interface InventarioDisponible extends Inventario {
