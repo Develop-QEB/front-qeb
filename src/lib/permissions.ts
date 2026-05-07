@@ -96,6 +96,7 @@ export interface RolePermissions {
   canSeeTabValidacionInstalacion: boolean;
   canCreateTareasGestionArtes: boolean; // Crear tareas en gestión de artes
   canResolveRevisionArtesTasks: boolean; // Resolver tareas de revisión de artes
+  canApproveArteSinRevisar: boolean; // Aprobar directamente artes "Sin revisar" desde tab Revisar y Aprobar
   canResolveCorreccionTasks: boolean; // Resolver tareas de corrección de artes
   canOnlyOpenImpresionTasks: boolean; // Solo puede abrir tareas de tipo Impresión (oculta botón Abrir para otros tipos)
   canOnlyOpenRecepcionTasks: boolean; // Solo puede abrir tareas de tipo Recepción, Instalación, Testigo y Programación (para Operaciones)
@@ -179,6 +180,7 @@ const defaultPermissions: RolePermissions = {
   canSeeTabValidacionInstalacion: true,
   canCreateTareasGestionArtes: true,
   canResolveRevisionArtesTasks: true,
+  canApproveArteSinRevisar: false, // Restrictivo por default: solo Diseñadores y Analistas lo activan
   canResolveCorreccionTasks: true,
   canOnlyOpenImpresionTasks: false,
   canOnlyOpenRecepcionTasks: false,
@@ -279,6 +281,7 @@ const rolePermissions: Partial<Record<UserRole, Partial<RolePermissions>>> = {
     canOnlyOpenCorreccionTasks: true,
     canOpenTasks: true,
     canCreateTareasGestionArtes: true,
+    canApproveArteSinRevisar: true,
 
     // Inventarios: oculto
     canCreateInventarios: false,
@@ -330,6 +333,7 @@ const rolePermissions: Partial<Record<UserRole, Partial<RolePermissions>>> = {
     canOnlyOpenCorreccionTasks: true, // Solo puede abrir tareas de tipo Corrección e Instalación
     canOpenTasks: true,
     canCreateTareasGestionArtes: true, // Puede crear tareas de Instalación
+    canApproveArteSinRevisar: true,
 
     // Inventarios: Oculto (ya se oculta con canSeeInventarios: false)
     canCreateInventarios: false,
@@ -788,6 +792,7 @@ const rolePermissions: Partial<Record<UserRole, Partial<RolePermissions>>> = {
     canCreateTareasGestionArtes: true, // Puede crear tareas de Revisión de artes después de subir artes
     canOnlyOpenCorreccionTasks: true, // Solo puede abrir tareas de corrección e Instalación
     canOpenTasks: true,
+    canApproveArteSinRevisar: true,
 
     canCreateInventarios: false,
     canEditInventarios: false,
@@ -1037,6 +1042,7 @@ const rolePermissions: Partial<Record<UserRole, Partial<RolePermissions>>> = {
     canEditCaraFiltersOnEdit: true,
     canEditArticuloOnEdit: true,
     canSeeAllHistorial: true,
+    canApproveArteSinRevisar: true,
   },
   'DEV': {
     // DEV tiene acceso total a todo
@@ -1046,6 +1052,7 @@ const rolePermissions: Partial<Record<UserRole, Partial<RolePermissions>>> = {
     canCancelPostSAP: true,
     canSeeHistorialAcciones: true,
     canSeeAllHistorial: true,
+    canApproveArteSinRevisar: true,
   },
   'Gerente de Trafico': {
     // Secciones visibles
@@ -1441,6 +1448,7 @@ const rolePermissions: Partial<Record<UserRole, Partial<RolePermissions>>> = {
     canSeeTabValidacionInstalacion: false,
     canCreateTareasGestionArtes: false, // No pueden crear tareas
     canResolveRevisionArtesTasks: true, // Sí pueden resolver tareas de revisión de artes
+    canApproveArteSinRevisar: true,
     cannotOpenCorreccionTasks: true, // NO pueden abrir tareas de corrección
 
     // Inventarios - oculto
