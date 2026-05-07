@@ -2000,6 +2000,13 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
         const dbIdsToRemove = new Set<number>();
         if (caraToDelete?.id) dbIdsToRemove.add(caraToDelete.id);
         if (pairCara?.id) dbIdsToRemove.add(pairCara.id);
+        // Limpiar IDs borrados de modifiedCaras para que el bulk save no intente
+        // actualizar registros que ya no existen en la BD (causa P2025).
+        setModifiedCaras(prev => {
+          const next = new Map(prev);
+          for (const id of dbIdsToRemove) next.delete(id);
+          return next;
+        });
         setCaras(prev => prev.filter(c => !idsToRemove.has(c.localId)));
         setReservas(prev => prev.filter(r =>
           ![...idsToRemove].some(id => r.id.startsWith(id)) &&
@@ -2294,6 +2301,8 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
               // Delete old BF (DB) and create new BF (DB)
               if (existingBfPair.id) {
                 try { await propuestasService.deleteCara(propuesta.id, existingBfPair.id); } catch (e) { console.error('Error deleting old BF pair:', e); }
+                const deletedBfId = existingBfPair.id;
+                setModifiedCaras(prev => { const next = new Map(prev); next.delete(deletedBfId); return next; });
               }
               bfIdToRemove = existingBfPair.id ?? null;
               bfLocalIdToRemove = existingBfPair.localId;
@@ -2342,6 +2351,8 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
             // Remove BF pair from DB
             if (existingBfPair.id) {
               try { await propuestasService.deleteCara(propuesta.id, existingBfPair.id); } catch (e) { console.error('Error deleting BF pair:', e); }
+              const deletedBfId = existingBfPair.id;
+              setModifiedCaras(prev => { const next = new Map(prev); next.delete(deletedBfId); return next; });
             }
             bfIdToRemove = existingBfPair.id ?? null;
             bfLocalIdToRemove = existingBfPair.localId;
@@ -2715,10 +2726,13 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
 
       // 2. Bulk save modified caras if any
       if (hasCaraChanges) {
-        const carasArray = Array.from(modifiedCaras.entries()).map(([caraId, data]) => ({
-          caraId,
-          data,
-        }));
+        // Defensivo: filtrar IDs huérfanos (caras borradas localmente pero aún
+        // presentes en modifiedCaras). Evita P2025 en el back si quedó algún
+        // ID colgado por algún flujo no contemplado.
+        const validIds = new Set(caras.map(c => c.id).filter((id): id is number => Boolean(id)));
+        const carasArray = Array.from(modifiedCaras.entries())
+          .filter(([caraId]) => validIds.has(caraId))
+          .map(([caraId, data]) => ({ caraId, data }));
 
         const result = await propuestasService.bulkUpdateCaras(propuesta.id, carasArray);
 
