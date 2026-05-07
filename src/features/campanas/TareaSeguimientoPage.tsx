@@ -16339,22 +16339,20 @@ export function TareaSeguimientoPage() {
           selectedInventoryIds.has(item.id) ? 'bg-purple-500/20' : ''
         }`}
       >
-        {activeEstadoProgramacionTab === 'programado' && (
-          <td className="p-2">
-            <button
-              onClick={() => toggleInventorySelection(item.id)}
-              className={`w-4 h-4 rounded border flex items-center justify-center transition-colors ${
-                selectedInventoryIds.has(item.id)
-                  ? 'bg-purple-600 border-purple-600'
-                  : 'border-purple-500/50 hover:border-purple-400'
-              }`}
-            >
-              {selectedInventoryIds.has(item.id) && (
-                <Check className="h-3 w-3 text-white" />
-              )}
-            </button>
-          </td>
-        )}
+        <td className="p-2">
+          <button
+            onClick={() => toggleInventorySelection(item.id)}
+            className={`w-4 h-4 rounded border flex items-center justify-center transition-colors ${
+              selectedInventoryIds.has(item.id)
+                ? 'bg-purple-600 border-purple-600'
+                : 'border-purple-500/50 hover:border-purple-400'
+            }`}
+          >
+            {selectedInventoryIds.has(item.id) && (
+              <Check className="h-3 w-3 text-white" />
+            )}
+          </button>
+        </td>
         <td className="p-2 text-xs font-medium text-white">{item.id}</td>
         <td className="p-2">
           {digitalSummary ? (
@@ -16527,41 +16525,6 @@ export function TareaSeguimientoPage() {
             <span className="text-sm font-medium">{campana.nombre}</span>
             <Badge variant="outline" className="text-[10px]">#{campana.id}</Badge>
           </div>
-          <button
-            onClick={async () => {
-              if (isExportingVersionarioArtes) return;
-              try {
-                setIsExportingVersionarioArtes(true);
-                // Fetch on-demand para no depender del tab activo (las queries de
-                // inventario solo se hidratan cuando cambias de tab)
-                const [conArte, sinArte] = await Promise.all([
-                  campanasService.getInventarioConArte(campanaId).catch(() => [] as InventarioConArte[]),
-                  campanasService.getInventarioSinArte(campanaId).catch(() => [] as InventarioConArte[]),
-                ]);
-                const items: InventarioConArte[] = [...(conArte || []), ...(sinArte || [])];
-                if (items.length === 0) {
-                  alert('No hay inventario disponible para exportar en esta campaña.');
-                  return;
-                }
-                await exportVersionarioArtes({ campana: campana as any, items });
-              } catch (e) {
-                console.error('Error exportando versionario artes:', e);
-                alert('Error al generar el Excel de Versionario Artes. Revisa la consola.');
-              } finally {
-                setIsExportingVersionarioArtes(false);
-              }
-            }}
-            disabled={isExportingVersionarioArtes}
-            className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium bg-green-900/50 hover:bg-green-900/70 border border-green-500/30 rounded-lg transition-colors disabled:opacity-60 disabled:cursor-not-allowed"
-            title="Descargar Versionario Artes (Excel con miniaturas)"
-          >
-            {isExportingVersionarioArtes ? (
-              <Loader2 className="h-3.5 w-3.5 text-green-400 animate-spin" />
-            ) : (
-              <Download className="h-3.5 w-3.5 text-green-400" />
-            )}
-            <span className="text-green-300">{isExportingVersionarioArtes ? 'Generando...' : 'Versionario Artes'}</span>
-          </button>
         </div>
 
         {/* Re-impresión success banner */}
@@ -17133,7 +17096,7 @@ export function TareaSeguimientoPage() {
           {activeMainTab === 'programacion' && (
             <div className="px-4 py-3 border-b border-border bg-gradient-to-r from-purple-900/10 to-transparent flex items-center justify-between">
               <div className="flex items-center gap-3">
-                {activeEstadoProgramacionTab === 'programado' && selectedInventoryIds.size > 0 ? (
+                {selectedInventoryIds.size > 0 ? (
                   <>
                     <div className={`flex items-center gap-2 px-3 py-1.5 rounded-lg border ${isDark ? 'bg-purple-500/20 border-purple-500/30' : 'bg-purple-100 border-purple-300'}`}>
                       <CheckCircle2 className={`h-4 w-4 ${isDark ? 'text-purple-400' : 'text-purple-600'}`} />
@@ -17159,8 +17122,70 @@ export function TareaSeguimientoPage() {
                   </div>
                 )}
               </div>
-              {activeEstadoProgramacionTab === 'programado' && permissions.canEditGestionArtes && permissions.canCreateTareasGestionArtes && (
-                <div className="flex items-center gap-2">
+              <div className="flex items-center gap-2">
+                {activeEstadoProgramacionTab === 'en_programacion' && (
+                  <button
+                    onClick={async () => {
+                      if (isExportingVersionarioArtes) return;
+                      if (selectedInventoryIds.size === 0) return;
+                      try {
+                        setIsExportingVersionarioArtes(true);
+                        const [conArte, sinArte] = await Promise.all([
+                          campanasService.getInventarioConArte(campanaId).catch(() => [] as InventarioConArte[]),
+                          campanasService.getInventarioSinArte(campanaId).catch(() => [] as InventarioConArte[]),
+                        ]);
+                        const allItems: InventarioConArte[] = [...(conArte || []), ...(sinArte || [])];
+                        // Misma clave que transformInventarioToRow: `${id}_${grupo}` o `${id}`
+                        const buildRowKey = (it: any) => it?.grupo ? `${it.id}_${it.grupo}` : String(it.id);
+                        const items = allItems.filter(it => selectedInventoryIds.has(buildRowKey(it)));
+                        if (items.length === 0) {
+                          alert('No se encontró inventario para los items seleccionados.');
+                          return;
+                        }
+                        // Cargar imagenes_digitales por cada reserva para soportar artes múltiples
+                        const allRsvIds = new Set<number>();
+                        for (const it of items) {
+                          String((it as any).rsv_id || (it as any).rsv_ids || '')
+                            .split(',')
+                            .map(s => parseInt(s.trim()))
+                            .filter(n => !isNaN(n))
+                            .forEach(n => allRsvIds.add(n));
+                        }
+                        const digitalFilesByReserva = new Map<number, string[]>();
+                        await Promise.all([...allRsvIds].map(async (rsvId) => {
+                          try {
+                            const imgs = await campanasService.getImagenesDigitales(campanaId, rsvId);
+                            const urls = imgs.map(im => im.archivoData || im.archivo).filter((u): u is string => !!u);
+                            if (urls.length) digitalFilesByReserva.set(rsvId, urls);
+                          } catch {/* ignorar reservas sin digitales */}
+                        }));
+                        await exportVersionarioArtes({ campana: campana as any, items, digitalFilesByReserva });
+                      } catch (e) {
+                        console.error('Error exportando versionario artes:', e);
+                        alert('Error al generar el Excel de Versionario Artes. Revisa la consola.');
+                      } finally {
+                        setIsExportingVersionarioArtes(false);
+                      }
+                    }}
+                    disabled={isExportingVersionarioArtes || selectedInventoryIds.size === 0}
+                    className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium border rounded-lg transition-colors disabled:opacity-60 disabled:cursor-not-allowed ${
+                      selectedInventoryIds.size > 0
+                        ? 'bg-green-900/50 hover:bg-green-900/70 border-green-500/30'
+                        : 'bg-zinc-800/40 border-zinc-700/40'
+                    }`}
+                    title={selectedInventoryIds.size === 0 ? 'Selecciona items con el checkbox para exportar' : 'Descargar Versionario Artes (Excel con miniaturas)'}
+                  >
+                    {isExportingVersionarioArtes ? (
+                      <Loader2 className="h-3.5 w-3.5 text-green-400 animate-spin" />
+                    ) : (
+                      <Download className={`h-3.5 w-3.5 ${selectedInventoryIds.size > 0 ? 'text-green-400' : 'text-zinc-500'}`} />
+                    )}
+                    <span className={selectedInventoryIds.size > 0 ? 'text-green-300' : 'text-zinc-500'}>
+                      {isExportingVersionarioArtes ? 'Generando...' : 'Versionario Artes'}
+                    </span>
+                  </button>
+                )}
+                {activeEstadoProgramacionTab === 'programado' && permissions.canEditGestionArtes && permissions.canCreateTareasGestionArtes && (
                   <button
                     onClick={handleCreateTaskClick}
                     disabled={selectedInventoryIds.size === 0 || isCheckingExistingTasks}
@@ -17177,8 +17202,8 @@ export function TareaSeguimientoPage() {
                     )}
                     {isCheckingExistingTasks ? 'Verificando...' : 'Crear Tarea'}
                   </button>
-                </div>
-              )}
+                )}
+              </div>
             </div>
           )}
 
@@ -18549,35 +18574,33 @@ export function TareaSeguimientoPage() {
                             <ChevronRight className="h-4 w-4 text-purple-400" />
                           )}
                           <span className="text-sm font-bold text-white">{level1Key}</span>
-                          {activeEstadoProgramacionTab === 'programado' && (
-                            <div
-                              role="checkbox"
-                              tabIndex={0}
-                              aria-checked={getAllLevel1Items().every(item => selectedInventoryIds.has(item.id)) && getAllLevel1Items().length > 0}
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                const allItems = getAllLevel1Items();
-                                const allSelected = allItems.every(item => selectedInventoryIds.has(item.id));
-                                setSelectedInventoryIds(prev => {
-                                  const next = new Set(prev);
-                                  allItems.forEach(item => {
-                                    if (allSelected) next.delete(item.id);
-                                    else next.add(item.id);
-                                  });
-                                  return next;
+                          <div
+                            role="checkbox"
+                            tabIndex={0}
+                            aria-checked={getAllLevel1Items().every(item => selectedInventoryIds.has(item.id)) && getAllLevel1Items().length > 0}
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              const allItems = getAllLevel1Items();
+                              const allSelected = allItems.every(item => selectedInventoryIds.has(item.id));
+                              setSelectedInventoryIds(prev => {
+                                const next = new Set(prev);
+                                allItems.forEach(item => {
+                                  if (allSelected) next.delete(item.id);
+                                  else next.add(item.id);
                                 });
-                              }}
-                              className={`ml-2 w-4 h-4 rounded border flex items-center justify-center transition-colors cursor-pointer ${
-                                getAllLevel1Items().every(item => selectedInventoryIds.has(item.id)) && getAllLevel1Items().length > 0
-                                  ? 'bg-purple-600 border-purple-600'
-                                  : 'border-purple-500/50 hover:border-purple-400'
-                              }`}
-                            >
-                              {getAllLevel1Items().every(item => selectedInventoryIds.has(item.id)) && getAllLevel1Items().length > 0 && (
-                                <Check className="h-3 w-3 text-white" />
-                              )}
-                            </div>
-                          )}
+                                return next;
+                              });
+                            }}
+                            className={`ml-2 w-4 h-4 rounded border flex items-center justify-center transition-colors cursor-pointer ${
+                              getAllLevel1Items().every(item => selectedInventoryIds.has(item.id)) && getAllLevel1Items().length > 0
+                                ? 'bg-purple-600 border-purple-600'
+                                : 'border-purple-500/50 hover:border-purple-400'
+                            }`}
+                          >
+                            {getAllLevel1Items().every(item => selectedInventoryIds.has(item.id)) && getAllLevel1Items().length > 0 && (
+                              <Check className="h-3 w-3 text-white" />
+                            )}
+                          </div>
                         </div>
                         <Badge className={isDark ? "bg-purple-600/40 text-purple-200 border-purple-500/30" : "bg-purple-100 text-purple-700 border-purple-300"}>
                           {level1ItemCount}
@@ -18602,35 +18625,33 @@ export function TareaSeguimientoPage() {
                                       <ChevronRight className="h-3 w-3 text-purple-400" />
                                     )}
                                     <span className="text-xs font-medium text-white">{level2Key}</span>
-                                    {activeEstadoProgramacionTab === 'programado' && (
-                                      <div
-                                        role="checkbox"
-                                        tabIndex={0}
-                                        aria-checked={getAllLevel2Items().every(item => selectedInventoryIds.has(item.id)) && getAllLevel2Items().length > 0}
-                                        onClick={(e) => {
-                                          e.stopPropagation();
-                                          const allItems = getAllLevel2Items();
-                                          const allSelected = allItems.every(item => selectedInventoryIds.has(item.id));
-                                          setSelectedInventoryIds(prev => {
-                                            const next = new Set(prev);
-                                            allItems.forEach(item => {
-                                              if (allSelected) next.delete(item.id);
-                                              else next.add(item.id);
-                                            });
-                                            return next;
+                                    <div
+                                      role="checkbox"
+                                      tabIndex={0}
+                                      aria-checked={getAllLevel2Items().every(item => selectedInventoryIds.has(item.id)) && getAllLevel2Items().length > 0}
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        const allItems = getAllLevel2Items();
+                                        const allSelected = allItems.every(item => selectedInventoryIds.has(item.id));
+                                        setSelectedInventoryIds(prev => {
+                                          const next = new Set(prev);
+                                          allItems.forEach(item => {
+                                            if (allSelected) next.delete(item.id);
+                                            else next.add(item.id);
                                           });
-                                        }}
-                                        className={`ml-2 w-3.5 h-3.5 rounded border flex items-center justify-center transition-colors cursor-pointer ${
-                                          getAllLevel2Items().every(item => selectedInventoryIds.has(item.id)) && getAllLevel2Items().length > 0
-                                            ? 'bg-purple-600 border-purple-600'
-                                            : 'border-purple-500/50 hover:border-purple-400'
-                                        }`}
-                                      >
-                                        {getAllLevel2Items().every(item => selectedInventoryIds.has(item.id)) && getAllLevel2Items().length > 0 && (
-                                          <Check className="h-2.5 w-2.5 text-white" />
-                                        )}
-                                      </div>
-                                    )}
+                                          return next;
+                                        });
+                                      }}
+                                      className={`ml-2 w-3.5 h-3.5 rounded border flex items-center justify-center transition-colors cursor-pointer ${
+                                        getAllLevel2Items().every(item => selectedInventoryIds.has(item.id)) && getAllLevel2Items().length > 0
+                                          ? 'bg-purple-600 border-purple-600'
+                                          : 'border-purple-500/50 hover:border-purple-400'
+                                      }`}
+                                    >
+                                      {getAllLevel2Items().every(item => selectedInventoryIds.has(item.id)) && getAllLevel2Items().length > 0 && (
+                                        <Check className="h-2.5 w-2.5 text-white" />
+                                      )}
+                                    </div>
                                   </div>
                                   <Badge className={isDark ? "bg-purple-500/30 text-purple-200 border-purple-500/20 text-[10px]" : "bg-purple-100 text-purple-700 border-purple-300 text-[10px]"}>
                                     {level2ItemCount}
@@ -18653,34 +18674,32 @@ export function TareaSeguimientoPage() {
                                                 <ChevronRight className="h-3 w-3 text-purple-400/70" />
                                               )}
                                               <span className="text-[11px] text-zinc-300">{level3Key}</span>
-                                              {activeEstadoProgramacionTab === 'programado' && (
-                                                <div
-                                                  role="checkbox"
-                                                  tabIndex={0}
-                                                  aria-checked={items.every(item => selectedInventoryIds.has(item.id)) && items.length > 0}
-                                                  onClick={(e) => {
-                                                    e.stopPropagation();
-                                                    const allSelected = items.every(item => selectedInventoryIds.has(item.id));
-                                                    setSelectedInventoryIds(prev => {
-                                                      const next = new Set(prev);
-                                                      items.forEach(item => {
-                                                        if (allSelected) next.delete(item.id);
-                                                        else next.add(item.id);
-                                                      });
-                                                      return next;
+                                              <div
+                                                role="checkbox"
+                                                tabIndex={0}
+                                                aria-checked={items.every(item => selectedInventoryIds.has(item.id)) && items.length > 0}
+                                                onClick={(e) => {
+                                                  e.stopPropagation();
+                                                  const allSelected = items.every(item => selectedInventoryIds.has(item.id));
+                                                  setSelectedInventoryIds(prev => {
+                                                    const next = new Set(prev);
+                                                    items.forEach(item => {
+                                                      if (allSelected) next.delete(item.id);
+                                                      else next.add(item.id);
                                                     });
-                                                  }}
-                                                  className={`ml-2 w-3 h-3 rounded border flex items-center justify-center transition-colors cursor-pointer ${
-                                                    items.every(item => selectedInventoryIds.has(item.id)) && items.length > 0
-                                                      ? 'bg-purple-600 border-purple-600'
-                                                      : 'border-purple-500/50 hover:border-purple-400'
-                                                  }`}
-                                                >
-                                                  {items.every(item => selectedInventoryIds.has(item.id)) && items.length > 0 && (
-                                                    <Check className="h-2 w-2 text-white" />
-                                                  )}
-                                                </div>
-                                              )}
+                                                    return next;
+                                                  });
+                                                }}
+                                                className={`ml-2 w-3 h-3 rounded border flex items-center justify-center transition-colors cursor-pointer ${
+                                                  items.every(item => selectedInventoryIds.has(item.id)) && items.length > 0
+                                                    ? 'bg-purple-600 border-purple-600'
+                                                    : 'border-purple-500/50 hover:border-purple-400'
+                                                }`}
+                                              >
+                                                {items.every(item => selectedInventoryIds.has(item.id)) && items.length > 0 && (
+                                                  <Check className="h-2 w-2 text-white" />
+                                                )}
+                                              </div>
                                             </div>
                                             <span className="text-[10px] text-zinc-500">{items.length}</span>
                                           </button>
@@ -18689,32 +18708,30 @@ export function TareaSeguimientoPage() {
                                               <table className="w-full text-xs">
                                                 <thead className="bg-purple-900/20">
                                                   <tr className="border-b border-border text-left">
-                                                    {activeEstadoProgramacionTab === 'programado' && (
-                                                      <th className="p-2 w-8">
-                                                        <button
-                                                          onClick={() => {
-                                                            const allSelected = items.every(item => selectedInventoryIds.has(item.id));
-                                                            setSelectedInventoryIds(prev => {
-                                                              const next = new Set(prev);
-                                                              items.forEach(item => {
-                                                                if (allSelected) next.delete(item.id);
-                                                                else next.add(item.id);
-                                                              });
-                                                              return next;
+                                                    <th className="p-2 w-8">
+                                                      <button
+                                                        onClick={() => {
+                                                          const allSelected = items.every(item => selectedInventoryIds.has(item.id));
+                                                          setSelectedInventoryIds(prev => {
+                                                            const next = new Set(prev);
+                                                            items.forEach(item => {
+                                                              if (allSelected) next.delete(item.id);
+                                                              else next.add(item.id);
                                                             });
-                                                          }}
-                                                          className={`w-4 h-4 rounded border flex items-center justify-center transition-colors ${
-                                                            items.every(item => selectedInventoryIds.has(item.id)) && items.length > 0
-                                                              ? 'bg-purple-600 border-purple-600'
-                                                              : 'border-purple-500/50 hover:border-purple-400'
-                                                          }`}
-                                                        >
-                                                          {items.every(item => selectedInventoryIds.has(item.id)) && items.length > 0 && (
-                                                            <Check className="h-3 w-3 text-white" />
-                                                          )}
-                                                        </button>
-                                                      </th>
-                                                    )}
+                                                            return next;
+                                                          });
+                                                        }}
+                                                        className={`w-4 h-4 rounded border flex items-center justify-center transition-colors ${
+                                                          items.every(item => selectedInventoryIds.has(item.id)) && items.length > 0
+                                                            ? 'bg-purple-600 border-purple-600'
+                                                            : 'border-purple-500/50 hover:border-purple-400'
+                                                        }`}
+                                                      >
+                                                        {items.every(item => selectedInventoryIds.has(item.id)) && items.length > 0 && (
+                                                          <Check className="h-3 w-3 text-white" />
+                                                        )}
+                                                      </button>
+                                                    </th>
                                                     <th className="p-2 font-medium text-purple-300">ID</th>
                                                     <th className="p-2 font-medium text-purple-300">Arte</th>
                                                     <th className="p-2 font-medium text-purple-300">Ubicación</th>
@@ -18750,32 +18767,30 @@ export function TareaSeguimientoPage() {
                 <table className="w-full text-xs">
                   <thead className="sticky top-0 bg-purple-900/20 z-10">
                     <tr className="border-b border-border text-left">
-                      {activeEstadoProgramacionTab === 'programado' && (
-                        <th className="p-2 w-8">
-                          <button
-                            onClick={() => {
-                              const allSelected = filteredProgramacionData.every(item => selectedInventoryIds.has(item.id));
-                              setSelectedInventoryIds(prev => {
-                                const next = new Set(prev);
-                                filteredProgramacionData.forEach(item => {
-                                  if (allSelected) next.delete(item.id);
-                                  else next.add(item.id);
-                                });
-                                return next;
+                      <th className="p-2 w-8">
+                        <button
+                          onClick={() => {
+                            const allSelected = filteredProgramacionData.every(item => selectedInventoryIds.has(item.id));
+                            setSelectedInventoryIds(prev => {
+                              const next = new Set(prev);
+                              filteredProgramacionData.forEach(item => {
+                                if (allSelected) next.delete(item.id);
+                                else next.add(item.id);
                               });
-                            }}
-                            className={`w-4 h-4 rounded border flex items-center justify-center transition-colors ${
-                              filteredProgramacionData.every(item => selectedInventoryIds.has(item.id)) && filteredProgramacionData.length > 0
-                                ? 'bg-purple-600 border-purple-600'
-                                : 'border-purple-500/50 hover:border-purple-400'
-                            }`}
-                          >
-                            {filteredProgramacionData.every(item => selectedInventoryIds.has(item.id)) && filteredProgramacionData.length > 0 && (
-                              <Check className="h-3 w-3 text-white" />
-                            )}
-                          </button>
-                        </th>
-                      )}
+                              return next;
+                            });
+                          }}
+                          className={`w-4 h-4 rounded border flex items-center justify-center transition-colors ${
+                            filteredProgramacionData.every(item => selectedInventoryIds.has(item.id)) && filteredProgramacionData.length > 0
+                              ? 'bg-purple-600 border-purple-600'
+                              : 'border-purple-500/50 hover:border-purple-400'
+                          }`}
+                        >
+                          {filteredProgramacionData.every(item => selectedInventoryIds.has(item.id)) && filteredProgramacionData.length > 0 && (
+                            <Check className="h-3 w-3 text-white" />
+                          )}
+                        </button>
+                      </th>
                       <th className="p-2 font-medium text-purple-300">ID</th>
                       <th className="p-2 font-medium text-purple-300">Arte</th>
                       <th className="p-2 font-medium text-purple-300">Ubicación</th>
@@ -18793,22 +18808,20 @@ export function TareaSeguimientoPage() {
                           selectedInventoryIds.has(item.id) ? 'bg-purple-500/20' : ''
                         }`}
                       >
-                        {activeEstadoProgramacionTab === 'programado' && (
-                          <td className="p-2">
-                            <button
-                              onClick={() => toggleInventorySelection(item.id)}
-                              className={`w-4 h-4 rounded border flex items-center justify-center transition-colors ${
-                                selectedInventoryIds.has(item.id)
-                                  ? 'bg-purple-600 border-purple-600'
-                                  : 'border-purple-500/50 hover:border-purple-400'
-                              }`}
-                            >
-                              {selectedInventoryIds.has(item.id) && (
-                                <Check className="h-3 w-3 text-white" />
-                              )}
-                            </button>
-                          </td>
-                        )}
+                        <td className="p-2">
+                          <button
+                            onClick={() => toggleInventorySelection(item.id)}
+                            className={`w-4 h-4 rounded border flex items-center justify-center transition-colors ${
+                              selectedInventoryIds.has(item.id)
+                                ? 'bg-purple-600 border-purple-600'
+                                : 'border-purple-500/50 hover:border-purple-400'
+                            }`}
+                          >
+                            {selectedInventoryIds.has(item.id) && (
+                              <Check className="h-3 w-3 text-white" />
+                            )}
+                          </button>
+                        </td>
                         <td className="p-2 text-zinc-300 font-mono">{item.id}</td>
                         <td className="p-2">
                           {item.archivo_arte ? (
