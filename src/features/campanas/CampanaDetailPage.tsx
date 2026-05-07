@@ -1359,39 +1359,20 @@ export function CampanaDetailPage() {
         deliveryNotes = resolved;
       }
 
-      // Para cada DN, verificar si ya existe en SAP por NumAtCard. Si existe →
-      // PATCH (actualiza el existente). Si no → POST (crear nuevo). Esto evita
-      // duplicados cuando una asesora reintenta después de un fallo a la mitad.
-      const results: Array<import('../../services/campanas.service').SAPPostResponse & { action: 'CREATE' | 'UPDATE' }> = [];
-      let updatedCount = 0;
-      let createdCount = 0;
+      // POST cada delivery note a SAP (sin lookup previo — el GET por NumAtCard
+      // a SAP tardaba ~90s porque NumAtCard no está indexado, y el lookup
+      // saturaba SAP con 502s a otras requests). La idempotencia se manejará
+      // a futuro guardando DocEntry en la BD QEB tras el POST exitoso.
+      const results: import('../../services/campanas.service').SAPPostResponse[] = [];
       for (let i = 0; i < deliveryNotes.length; i++) {
         const dn = deliveryNotes[i];
-        const numAtCard = dn.NumAtCard || campana.id?.toString() || '';
         console.log(`========== DELIVERY NOTE ${i + 1}/${deliveryNotes.length} (APS: ${dn.U_IMU_CotNum}) ==========`);
-        console.log('SAP Database:', campana.sap_database, 'NumAtCard:', numAtCard);
+        console.log('SAP Database:', campana.sap_database);
+        console.log(JSON.stringify(dn, null, 2));
+        console.log('==========================================');
 
-        // Verificar si ya existe en SAP
-        let existing: Awaited<ReturnType<typeof findExistingDeliveryNote>> = null;
-        try {
-          existing = await findExistingDeliveryNote(numAtCard, campana.sap_database);
-        } catch (e) {
-          console.warn('[SAP] No pude verificar existencia, asumo que no existe:', e);
-        }
-
-        let result: import('../../services/campanas.service').SAPPostResponse;
-        if (existing) {
-          console.log(`?? PATCH: ya existe DN DocEntry=${existing.DocEntry} DocNum=${existing.DocNum}, actualizando…`);
-          result = await patchDeliveryNoteToSAP(existing.DocEntry, dn, campana.sap_database);
-          if (result.success) updatedCount++;
-          results.push({ ...result, action: 'UPDATE' });
-        } else {
-          console.log(JSON.stringify(dn, null, 2));
-          console.log('==========================================');
-          result = await postDeliveryNoteToSAP(dn, campana.sap_database);
-          if (result.success) createdCount++;
-          results.push({ ...result, action: 'CREATE' });
-        }
+        const result = await postDeliveryNoteToSAP(dn, campana.sap_database);
+        results.push(result);
       }
 
       const allSuccess = results.every(r => r.success);
@@ -1400,12 +1381,9 @@ export function CampanaDetailPage() {
       const firstError = results.find(r => !r.success);
 
       if (allSuccess) {
-        const parts: string[] = [];
-        if (createdCount > 0) parts.push(`${createdCount} creado${createdCount > 1 ? 's' : ''}`);
-        if (updatedCount > 0) parts.push(`${updatedCount} actualizado${updatedCount > 1 ? 's' : ''}`);
         setPostSAPResult({
           success: true,
-          message: `${parts.join(' + ')} exitosamente en SAP`,
+          message: `${deliveryNotes.length} Delivery Note${deliveryNotes.length > 1 ? 's' : ''} creado${deliveryNotes.length > 1 ? 's' : ''} exitosamente en SAP`,
           data: results[results.length - 1].data,
         });
         // Guardar en DB los APS posteados y actualizar estado
