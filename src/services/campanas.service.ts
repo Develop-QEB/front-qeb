@@ -68,6 +68,11 @@ export interface SAPPostResponse {
     [key: string]: unknown;
   };
   error?: string;
+  // Detalles para el modal cuando algo falla — para que la asesora sepa qué show.
+  endpoint?: string;
+  status?: number;
+  errorType?: 'network' | 'cors' | 'parse' | 'sap-rejected' | 'http-error' | 'timeout';
+  rawResponse?: string;
 }
 
 export interface ImagenDigital {
@@ -432,6 +437,15 @@ export function buildDeliveryNote(
         ? itemsWithArticulo.reduce((s, i) => s + (Number(i.caras_totales) || 1), 0)
         : itemsWithArticulo.length;
 
+      // Para artículos de Renta (RT-...) BI espera siempre `U_dscTAsig = 'Venta'`,
+      // sin importar si el estatus de la reserva es Reservado/Apartado/Vendido —
+      // mezclar etiquetas complicaba el reporte. Para el resto (BF/CT/IM/etc)
+      // mantenemos el estatus_reserva textual.
+      const isRenta = articuloCode.startsWith('RT-') || articuloCode.startsWith('RT_');
+      const dscTAsig = isRenta
+        ? 'Venta'
+        : (firstItem.estatus_reserva === 'Vendido' ? 'Venta' : (firstItem.estatus_reserva || ''));
+
       return {
         LineNum: index.toString(),
         ItemCode: firstItem.articulo || '',
@@ -443,7 +457,7 @@ export function buildDeliveryNote(
         U_Cod_Sitio: articulosMap?.[firstItem.articulo || '']?.U_IMU_cod_sitio || 11,
         U_dscSitio: articulosMap?.[firstItem.articulo || '']?.U_IMU_dscSitio || firstItem.plaza || firstItem.estado || '',
         U_CodTAsig: (firstItem.estatus_reserva === 'Bonificado' || firstItem.estatus_reserva === 'Vendido bonificado') ? 204 : 200,
-        U_dscTAsig: firstItem.estatus_reserva === 'Vendido' ? 'Venta' : (firstItem.estatus_reserva || ''),
+        U_dscTAsig: dscTAsig,
         U_CodPer: 1746,
         U_dscPeriod: dscPeriod,
         U_FechInPer: firstItem.inicio_periodo?.split('T')[0] || '',
@@ -527,66 +541,193 @@ export async function resolveBaseEntry(
   };
 }
 
-// Función para hacer POST a SAP
+// Función para hacer POST a SAP. Maneja con cuidado los 3 modos de falla
+// reales que las asesoras reportan:
+//   1. Tunnel muerto / Cloudflare devolvió HTML 5xx (network o cors).
+//   2. SAP procesó el POST pero la respuesta llegó malformada/vacía (parse).
+//   3. SAP rechazó por validación de negocio (sap-rejected).
+// Cuando se devuelve `success: false` el caller puede usar `errorType`,
+// `endpoint`, `status`, `rawResponse` para mostrar info útil al usuario.
 export async function postDeliveryNoteToSAP(deliveryNote: SAPDeliveryNote | SAPDeliveryNoteMigrated, sapDatabase?: string | null): Promise<SAPPostResponse> {
-  try {
-    const endpoint = sapDatabase
-      ? getDeliveryNotesEndpoint(sapDatabase as SapDatabase)
-      : `${SAP_BASE_URL}/delivery-notes-test`;
+  const endpoint = sapDatabase
+    ? getDeliveryNotesEndpoint(sapDatabase as SapDatabase)
+    : `${SAP_BASE_URL}/delivery-notes-test`;
+  const envLabel = sapDatabase || 'TEST';
+  let response: Response;
 
-    const response = await fetch(endpoint, {
+  // Paso 1: hacer el fetch — si esto falla es problema de red / tunnel / CORS.
+  try {
+    response = await fetch(endpoint, {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
+      headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(deliveryNote),
     });
-
-    const data = await response.json();
-    console.log('========== SAP RESPONSE ==========');
-    console.log('Status:', response.status);
-    console.log('Endpoint:', endpoint);
-    console.log('Series:', (deliveryNote as any).Series);
-    console.log('Response data:', JSON.stringify(data, null, 2));
-    console.log('==================================');
-
-    const envLabel = sapDatabase || 'TEST';
-
-    // Extraer mensaje de error detallado de SAP
-    
-    const getDetailedError = () => {
-      if (data.details?.error?.message?.value) {
-        const sapError = data.details.error.message.value;
-        if (sapError.includes('Invalid BP code')) {
-          const cardCode = sapError.match(/'([^']+)'/)?.[1] || '';
-          return `El CardCode '${cardCode}' no existe en el ambiente ${envLabel} de SAP`;
-        }
-        if (sapError.includes('is inactive')) {
-          return `Error SAP: ${sapError}`;
-        }
-        return sapError;
-      }
-      return data.message || data.error || `Error ${response.status}: ${response.statusText}`;
-    };
-
-    if (!response.ok || data.success === false) {
-      return {
-        success: false,
-        error: getDetailedError(),
-      };
-    }
-
-    return {
-      success: true,
-      data: data,
-    };
   } catch (error) {
-    console.error('Error posting to SAP:', error);
+    const msg = error instanceof Error ? error.message : 'Error de conexión';
+    console.error('[SAP POST] Error de red:', msg, 'endpoint:', endpoint);
+    // 'Failed to fetch' suele ser CORS o tunnel caído. Distingo si puedo.
+    const isCors = msg.toLowerCase().includes('cors') || msg.toLowerCase().includes('opaque');
     return {
       success: false,
-      error: error instanceof Error ? error.message : 'Error de conexión con SAP',
+      error: msg,
+      endpoint,
+      errorType: isCors ? 'cors' : 'network',
     };
   }
+
+  // Paso 2: parsear el body como texto primero. Si SAP procesó pero el
+  // proxy/tunnel cortó la respuesta, podemos al menos saber HTTP status.
+  let rawText = '';
+  try {
+    rawText = await response.text();
+  } catch (error) {
+    console.error('[SAP POST] No pude leer body:', error);
+    return {
+      success: false,
+      error: `Respuesta de SAP ilegible (HTTP ${response.status}). Verifica en SAP si el delivery note se creó antes de reintentar.`,
+      endpoint,
+      status: response.status,
+      errorType: 'parse',
+    };
+  }
+
+  // Paso 3: intentar parsear como JSON. Si falla → respuesta no es JSON
+  // (probablemente HTML de error de Cloudflare).
+  let data: any = null;
+  try {
+    data = rawText ? JSON.parse(rawText) : null;
+  } catch {
+    console.error('[SAP POST] Body no es JSON:', rawText.slice(0, 300));
+    return {
+      success: false,
+      error: response.ok
+        ? `SAP respondió OK pero el body no es JSON. Verifica en SAP si el delivery note se creó.`
+        : `Cloudflare/proxy devolvió error HTTP ${response.status} con HTML en lugar de JSON.`,
+      endpoint,
+      status: response.status,
+      errorType: 'parse',
+      rawResponse: rawText.slice(0, 500),
+    };
+  }
+
+  console.log('========== SAP RESPONSE ==========');
+  console.log('Status:', response.status, 'Endpoint:', endpoint);
+  console.log('Series:', (deliveryNote as any).Series);
+  console.log('Response data:', JSON.stringify(data, null, 2));
+  console.log('==================================');
+
+  // Paso 4: extraer mensaje útil cuando SAP rechaza por validación.
+  const getDetailedError = () => {
+    if (data?.details?.error?.message?.value) {
+      const sapError = data.details.error.message.value;
+      if (sapError.includes('Invalid BP code')) {
+        const cardCode = sapError.match(/'([^']+)'/)?.[1] || '';
+        return `El CardCode '${cardCode}' no existe en el ambiente ${envLabel} de SAP`;
+      }
+      if (sapError.includes('is inactive')) {
+        return `Error SAP: ${sapError}`;
+      }
+      return sapError;
+    }
+    return data?.message || data?.error || `Error ${response.status}: ${response.statusText}`;
+  };
+
+  if (!response.ok || data?.success === false) {
+    return {
+      success: false,
+      error: getDetailedError(),
+      endpoint,
+      status: response.status,
+      errorType: response.ok ? 'sap-rejected' : 'http-error',
+      rawResponse: rawText.slice(0, 500),
+    };
+  }
+
+  return { success: true, data, endpoint, status: response.status };
+}
+
+// Mapa BD QEB → DB SAP (mismo que en resolveBaseEntry).
+const SAP_DB_NAME_MAP: Record<string, string> = {
+  TRADE: 'SBOIMUTRADE',
+  CIMU: 'SBOCIMU',
+  TEST: 'PB_SBOCIMU',
+};
+
+export interface ExistingDeliveryNote {
+  exists: true;
+  DocEntry: number;
+  DocNum: number;
+  NumAtCard: string;
+  DocumentLines: Array<{ LineNum: number; ItemCode: string; Quantity: number; UnitPrice: number }>;
+}
+
+// Busca si una campaña ya tiene Delivery Note en SAP. Devuelve el DN existente
+// con su DocEntry para que el caller decida POST (crear) o PATCH (actualizar).
+// 404 ⇒ null. Cualquier otro error vuela como excepción.
+export async function findExistingDeliveryNote(numAtCard: string | number, sapDatabase?: string | null): Promise<ExistingDeliveryNote | null> {
+  const db = SAP_DB_NAME_MAP[sapDatabase || 'TEST'] || 'PB_SBOCIMU';
+  const url = `${SAP_BASE_URL}/delivery-note-by-numatcard/${db}/${numAtCard}`;
+  const response = await fetch(url);
+  if (response.status === 404) return null;
+  if (!response.ok) {
+    throw new Error(`No se pudo verificar DN existente (HTTP ${response.status})`);
+  }
+  return await response.json();
+}
+
+// PATCH a un DN existente en SAP. Mismo manejo defensivo de errores que POST.
+export async function patchDeliveryNoteToSAP(docEntry: number, deliveryNote: SAPDeliveryNote | SAPDeliveryNoteMigrated, sapDatabase?: string | null): Promise<SAPPostResponse> {
+  const db = SAP_DB_NAME_MAP[sapDatabase || 'TEST'] || 'PB_SBOCIMU';
+  const endpoint = `${SAP_BASE_URL}/delivery-notes/${db}/${docEntry}`;
+
+  let response: Response;
+  try {
+    response = await fetch(endpoint, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(deliveryNote),
+    });
+  } catch (error) {
+    const msg = error instanceof Error ? error.message : 'Error de conexión';
+    return { success: false, error: msg, endpoint, errorType: 'network' };
+  }
+
+  let rawText = '';
+  try { rawText = await response.text(); } catch { /* ignore */ }
+
+  let data: any = null;
+  if (rawText) {
+    try { data = JSON.parse(rawText); } catch {
+      return {
+        success: false,
+        error: response.ok
+          ? 'PATCH respondió OK pero el body no es JSON. Verifica en SAP.'
+          : `HTTP ${response.status}: respuesta no es JSON`,
+        endpoint,
+        status: response.status,
+        errorType: 'parse',
+        rawResponse: rawText.slice(0, 500),
+      };
+    }
+  }
+
+  console.log('========== SAP PATCH RESPONSE ==========');
+  console.log('Status:', response.status, 'Endpoint:', endpoint);
+  console.log('Response data:', JSON.stringify(data, null, 2));
+  console.log('========================================');
+
+  if (!response.ok || data?.success === false) {
+    return {
+      success: false,
+      error: data?.details?.error?.message?.value || data?.error || data?.message || `HTTP ${response.status}: ${response.statusText}`,
+      endpoint,
+      status: response.status,
+      errorType: response.ok ? 'sap-rejected' : 'http-error',
+      rawResponse: rawText.slice(0, 500),
+    };
+  }
+
+  return { success: true, data: data || { DocEntry: docEntry }, endpoint, status: response.status };
 }
 
 export interface CampanasParams {

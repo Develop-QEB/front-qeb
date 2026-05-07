@@ -5,7 +5,7 @@ import { ArrowLeft, MessageSquare, Send, X, FileSpreadsheet, ListTodo, Layers, C
 import { AssignInventarioCampanaModal } from './AssignInventarioCampanaModal';
 import { GoogleMap, useLoadScript, Marker } from '@react-google-maps/api';
 import { Header } from '../../components/layout/Header';
-import { campanasService, InventarioReservado, InventarioConAPS, SolicitudCara, buildDeliveryNote, postDeliveryNoteToSAP, resolveBaseEntry, isMigratedCampaign, HistorialItem, SAPDeliveryNoteMigrated } from '../../services/campanas.service';
+import { campanasService, InventarioReservado, InventarioConAPS, SolicitudCara, buildDeliveryNote, postDeliveryNoteToSAP, patchDeliveryNoteToSAP, findExistingDeliveryNote, resolveBaseEntry, isMigratedCampaign, HistorialItem, SAPDeliveryNoteMigrated } from '../../services/campanas.service';
 import { solicitudesService } from '../../services/solicitudes.service';
 import { Catorcena } from '../../types';
 import { Badge } from '../../components/ui/badge';
@@ -904,7 +904,20 @@ export function CampanaDetailPage() {
   // Estado para POST a SAP
   const [showPostSAPModal, setShowPostSAPModal] = useState(false);
   const [postingToSAP, setPostingToSAP] = useState(false);
-  const [postSAPResult, setPostSAPResult] = useState<{ success: boolean; message: string; data?: unknown } | null>(null);
+  const [postSAPResult, setPostSAPResult] = useState<{
+    success: boolean;
+    message: string;
+    data?: unknown;
+    detail?: {
+      endpoint?: string;
+      status?: number;
+      errorType?: 'network' | 'cors' | 'parse' | 'sap-rejected' | 'http-error' | 'timeout';
+      rawResponse?: string;
+      partialSuccess?: boolean;
+      successCount?: number;
+      failedCount?: number;
+    };
+  } | null>(null);
   const [showCancelPostSAPModal, setShowCancelPostSAPModal] = useState(false);
   const [cancellingPostSAP, setCancellingPostSAP] = useState(false);
   const [cancelPostSAPResult, setCancelPostSAPResult] = useState<{ success: boolean; message: string } | null>(null);
@@ -1346,26 +1359,53 @@ export function CampanaDetailPage() {
         deliveryNotes = resolved;
       }
 
-      // POST cada delivery note a SAP
-      const results = [];
+      // Para cada DN, verificar si ya existe en SAP por NumAtCard. Si existe →
+      // PATCH (actualiza el existente). Si no → POST (crear nuevo). Esto evita
+      // duplicados cuando una asesora reintenta después de un fallo a la mitad.
+      const results: Array<import('../../services/campanas.service').SAPPostResponse & { action: 'CREATE' | 'UPDATE' }> = [];
+      let updatedCount = 0;
+      let createdCount = 0;
       for (let i = 0; i < deliveryNotes.length; i++) {
         const dn = deliveryNotes[i];
+        const numAtCard = dn.NumAtCard || campana.id?.toString() || '';
         console.log(`========== DELIVERY NOTE ${i + 1}/${deliveryNotes.length} (APS: ${dn.U_IMU_CotNum}) ==========`);
-        console.log('SAP Database:', campana.sap_database);
-        console.log(JSON.stringify(dn, null, 2));
-        console.log('==========================================');
+        console.log('SAP Database:', campana.sap_database, 'NumAtCard:', numAtCard);
 
-        const result = await postDeliveryNoteToSAP(dn, campana.sap_database);
-        results.push(result);
+        // Verificar si ya existe en SAP
+        let existing: Awaited<ReturnType<typeof findExistingDeliveryNote>> = null;
+        try {
+          existing = await findExistingDeliveryNote(numAtCard, campana.sap_database);
+        } catch (e) {
+          console.warn('[SAP] No pude verificar existencia, asumo que no existe:', e);
+        }
+
+        let result: import('../../services/campanas.service').SAPPostResponse;
+        if (existing) {
+          console.log(`?? PATCH: ya existe DN DocEntry=${existing.DocEntry} DocNum=${existing.DocNum}, actualizando…`);
+          result = await patchDeliveryNoteToSAP(existing.DocEntry, dn, campana.sap_database);
+          if (result.success) updatedCount++;
+          results.push({ ...result, action: 'UPDATE' });
+        } else {
+          console.log(JSON.stringify(dn, null, 2));
+          console.log('==========================================');
+          result = await postDeliveryNoteToSAP(dn, campana.sap_database);
+          if (result.success) createdCount++;
+          results.push({ ...result, action: 'CREATE' });
+        }
       }
 
       const allSuccess = results.every(r => r.success);
       const failedCount = results.filter(r => !r.success).length;
+      const successCount = deliveryNotes.length - failedCount;
+      const firstError = results.find(r => !r.success);
 
       if (allSuccess) {
+        const parts: string[] = [];
+        if (createdCount > 0) parts.push(`${createdCount} creado${createdCount > 1 ? 's' : ''}`);
+        if (updatedCount > 0) parts.push(`${updatedCount} actualizado${updatedCount > 1 ? 's' : ''}`);
         setPostSAPResult({
           success: true,
-          message: `${deliveryNotes.length} Delivery Note${deliveryNotes.length > 1 ? 's' : ''} creado${deliveryNotes.length > 1 ? 's' : ''} exitosamente en SAP`,
+          message: `${parts.join(' + ')} exitosamente en SAP`,
           data: results[results.length - 1].data,
         });
         // Guardar en DB los APS posteados y actualizar estado
@@ -1375,11 +1415,36 @@ export function CampanaDetailPage() {
           setPostedAPSGroups(new Set(updatedAPS));
         } catch (e) { console.error('Error marcando posted_aps:', e); }
       } else {
+        // Si hubo al menos un éxito, marcar esos APS como posted (los que el
+        // result devolvió DocNum o success=true) — evita perder estado y
+        // reduce duplicados al reintentar.
+        const partialSuccess = successCount > 0;
+        if (partialSuccess) {
+          const successfulAPS = results
+            .map((r, idx) => r.success ? deliveryNotes[idx]?.U_IMU_CotNum : null)
+            .filter(Boolean);
+          const apsNums = Array.from(new Set(itemsToPost.map(i => i.aps).filter(a => successfulAPS.includes(String(a)))));
+          if (apsNums.length > 0) {
+            try {
+              const updatedAPS = await campanasService.markPostedAPS(campana.id, apsNums);
+              setPostedAPSGroups(new Set(updatedAPS));
+            } catch (e) { console.error('Error marcando posted_aps parciales:', e); }
+          }
+        }
         setPostSAPResult({
           success: false,
           message: failedCount === deliveryNotes.length
-            ? (results[0].error || 'Error al crear Delivery Notes en SAP')
-            : `${deliveryNotes.length - failedCount} exitosos, ${failedCount} fallidos`,
+            ? (firstError?.error || 'Error al crear Delivery Notes en SAP')
+            : `${successCount} exitosos, ${failedCount} fallidos`,
+          detail: {
+            endpoint: firstError?.endpoint,
+            status: firstError?.status,
+            errorType: firstError?.errorType,
+            rawResponse: firstError?.rawResponse,
+            partialSuccess,
+            successCount,
+            failedCount,
+          },
         });
       }
     } catch (error) {
@@ -1387,6 +1452,7 @@ export function CampanaDetailPage() {
       setPostSAPResult({
         success: false,
         message: error instanceof Error ? error.message : 'Error inesperado al conectar con SAP',
+        detail: { errorType: 'network' },
       });
     } finally {
       setPostingToSAP(false);
@@ -4908,7 +4974,71 @@ export function CampanaDetailPage() {
                   <>
                     <AlertCircle className="h-16 w-16 text-red-500 mx-auto mb-4" />
                     <p className="text-lg font-medium text-red-400 mb-2">Error</p>
-                    <p className={`text-sm ${isDark ? 'text-zinc-400' : 'text-gray-500'} mb-4`}>{postSAPResult.message}</p>
+                    <p className={`text-sm ${isDark ? 'text-zinc-300' : 'text-gray-700'} mb-3 font-medium`}>{postSAPResult.message}</p>
+
+                    {postSAPResult.detail?.partialSuccess && (
+                      <div className={`mb-4 p-3 rounded-lg text-left text-xs ${isDark ? 'bg-amber-900/30 border border-amber-500/40 text-amber-200' : 'bg-amber-50 border border-amber-300 text-amber-900'}`}>
+                        <p className="font-semibold mb-1">⚠ Resultado parcial</p>
+                        <p>{postSAPResult.detail.successCount} APS sí se postearon a SAP y ya están marcados como posteados. Los {postSAPResult.detail.failedCount} fallidos puedes reintentarlos sin duplicar los exitosos.</p>
+                      </div>
+                    )}
+
+                    {postSAPResult.detail?.errorType && (
+                      <div className={`mb-3 p-3 rounded-lg text-left text-xs ${isDark ? 'bg-zinc-800/60 border border-zinc-700' : 'bg-gray-50 border border-gray-200'}`}>
+                        <p className={`font-semibold mb-2 ${isDark ? 'text-zinc-200' : 'text-gray-800'}`}>Qué pasó:</p>
+                        {postSAPResult.detail.errorType === 'network' && (
+                          <p className={`${isDark ? 'text-zinc-400' : 'text-gray-600'}`}>
+                            El navegador <b>no pudo llegar al servidor SAP</b>. Causas comunes:
+                            tunnel de Cloudflare caído, internet inestable, o la URL del relay SAP cambió.
+                            <br />
+                            <b>Qué hacer:</b> refresca la página (Ctrl+Shift+R) y reintenta. Si sigue, avisa a TI.
+                          </p>
+                        )}
+                        {postSAPResult.detail.errorType === 'cors' && (
+                          <p className={`${isDark ? 'text-zinc-400' : 'text-gray-600'}`}>
+                            El navegador <b>bloqueó la respuesta por CORS</b>. Generalmente significa que el
+                            tunnel respondió HTML de error en vez del JSON esperado.
+                            <br />
+                            <b>Qué hacer:</b> avisa a TI que verifique el tunnel.
+                          </p>
+                        )}
+                        {postSAPResult.detail.errorType === 'parse' && (
+                          <p className={`${isDark ? 'text-zinc-400' : 'text-gray-600'}`}>
+                            <b>SAP respondió pero el contenido no es JSON válido</b>. Es posible que el delivery
+                            note SÍ se haya creado en SAP, pero la respuesta llegó mal.
+                            <br />
+                            <b>Qué hacer:</b> antes de reintentar, verifica en SAP si ya existe el delivery note
+                            de esta campaña — si existe, no le des POST otra vez.
+                          </p>
+                        )}
+                        {postSAPResult.detail.errorType === 'http-error' && (
+                          <p className={`${isDark ? 'text-zinc-400' : 'text-gray-600'}`}>
+                            <b>Error HTTP {postSAPResult.detail.status}</b> del servidor SAP.
+                            {postSAPResult.detail.status === 500 && ' Error interno de SAP — generalmente un problema temporal.'}
+                            {postSAPResult.detail.status === 401 && ' Sesión SAP expirada — reintenta y debería renovar sola.'}
+                            {postSAPResult.detail.status === 502 && ' Bad Gateway — el tunnel o SAP están caídos.'}
+                            {postSAPResult.detail.status === 503 && ' Servicio SAP no disponible.'}
+                          </p>
+                        )}
+                        {postSAPResult.detail.errorType === 'sap-rejected' && (
+                          <p className={`${isDark ? 'text-zinc-400' : 'text-gray-600'}`}>
+                            <b>SAP rechazó el delivery note</b> por una validación de negocio (cliente inactivo,
+                            precio, código mal, etc). Lee el mensaje de arriba y corrige antes de reintentar.
+                          </p>
+                        )}
+                        <div className={`mt-2 pt-2 border-t ${isDark ? 'border-zinc-700' : 'border-gray-200'} text-[10px] font-mono ${isDark ? 'text-zinc-500' : 'text-gray-400'}`}>
+                          {postSAPResult.detail.endpoint && <div>endpoint: {postSAPResult.detail.endpoint}</div>}
+                          {postSAPResult.detail.status !== undefined && <div>status: {postSAPResult.detail.status}</div>}
+                          <div>tipo: {postSAPResult.detail.errorType}</div>
+                        </div>
+                        {postSAPResult.detail.rawResponse && (
+                          <details className="mt-2">
+                            <summary className={`cursor-pointer text-[10px] ${isDark ? 'text-zinc-500' : 'text-gray-500'}`}>Ver respuesta cruda</summary>
+                            <pre className={`mt-1 p-2 rounded text-[9px] overflow-auto max-h-32 ${isDark ? 'bg-zinc-950 text-zinc-400' : 'bg-white text-gray-600'}`}>{postSAPResult.detail.rawResponse}</pre>
+                          </details>
+                        )}
+                      </div>
+                    )}
                   </>
                 )}
                 <button

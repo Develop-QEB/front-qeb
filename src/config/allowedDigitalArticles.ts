@@ -78,6 +78,13 @@ export const ALLOWED_DIGITAL_ITEM_CODES = new Set([
   'RT-P1-DIG-MD',
   'RT-P1-DIG-MX',
   'RT-P1-DIG-MY',
+  'RT-PB-SEG-MY',
+  'RT-PB-SEG-MR',
+  'RT-PB-SEG-PB',
+  'RT-PB-SEG-GDL'
+  
+  
+
 ]);
 
 /**
