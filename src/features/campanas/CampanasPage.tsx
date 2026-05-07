@@ -26,6 +26,7 @@ import { useThemeStore } from '../../store/themeStore';
 import { getPermissions } from '../../lib/permissions';
 import { useSocketCampanas } from '../../hooks/useSocket';
 import { IncidenciaModal } from './IncidenciaModal';
+import { exportVersionarioArtesMulti } from '../../utils/exportVersionarioArtes';
 
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3000/api';
 const STATIC_URL = API_URL.replace(/\/api$/, '');
@@ -884,6 +885,8 @@ export function CampanasPage() {
   const [campanaCaras, setCampanaCaras] = useState<Record<number, SolicitudCara[]>>({});
   const [loadingInventarios, setLoadingInventarios] = useState<Set<number>>(new Set());
   const [exportingLayout, setExportingLayout] = useState(false);
+  const [exportingVersionarioArtes, setExportingVersionarioArtes] = useState(false);
+  const [versionarioArtesProgress, setVersionarioArtesProgress] = useState({ current: 0, total: 0 });
   // Inversión (costo) por catorcena para la vista Versionario: { campanaId: { "numCat:anio": inversion } }
   const [inversionPorCatorcena, setInversionPorCatorcena] = useState<Record<number, Record<string, number>>>({});
 
@@ -2029,6 +2032,96 @@ export function CampanasPage() {
     }
   };
 
+  const handleExportVersionarioArtes = async () => {
+    // Set único de campañas filtradas que están visibles en el Versionario.
+    const campanasMap = new Map<number, Campana>();
+    campanasPorCatorcena.forEach(g => g.campanas.forEach(c => {
+      if (!campanasMap.has(c.id)) campanasMap.set(c.id, c);
+    }));
+    const campanasUnicas = [...campanasMap.values()];
+    if (campanasUnicas.length === 0) return;
+
+    if (campanasUnicas.length > 30) {
+      const ok = window.confirm(
+        `Vas a exportar ${campanasUnicas.length} campañas. Puede tardar varios segundos. ¿Continuar?`
+      );
+      if (!ok) return;
+    }
+
+    setExportingVersionarioArtes(true);
+    setVersionarioArtesProgress({ current: 0, total: campanasUnicas.length });
+
+    try {
+      const POOL_SIZE = 5;
+      const resultados: Array<{
+        campana: Campana;
+        items: any[];
+        digitalFilesByReserva: Map<number, string[]>;
+      }> = [];
+
+      // Pool con concurrencia limitada
+      const procesarCampana = async (campana: Campana) => {
+        try {
+          const [conArte, sinArte] = await Promise.all([
+            campanasService.getInventarioConArte(campana.id).catch(() => []),
+            campanasService.getInventarioSinArte(campana.id).catch(() => []),
+          ]);
+          const items = [...(conArte || []), ...(sinArte || [])];
+
+          // Saltar fetch de digitales si no hay items que parezcan digitales.
+          const tieneDigitales = items.some(it => {
+            const t = String((it as any).tipo_medio || (it as any).tradicional_digital || '').toLowerCase();
+            return t.includes('digital');
+          });
+
+          const digitalFilesByReserva = new Map<number, string[]>();
+          if (tieneDigitales) {
+            const allRsvIds = new Set<number>();
+            for (const it of items) {
+              String((it as any).rsv_id || (it as any).rsv_ids || '')
+                .split(',')
+                .map(s => parseInt(s.trim()))
+                .filter(n => !isNaN(n))
+                .forEach(n => allRsvIds.add(n));
+            }
+            await Promise.all([...allRsvIds].map(async (rsvId) => {
+              try {
+                const imgs = await campanasService.getImagenesDigitales(campana.id, rsvId);
+                const urls = imgs.map((im: any) => im.archivoData || im.archivo).filter((u: any): u is string => !!u);
+                if (urls.length) digitalFilesByReserva.set(rsvId, urls);
+              } catch { /* ignore */ }
+            }));
+          }
+
+          resultados.push({ campana, items, digitalFilesByReserva });
+        } catch {
+          // Si falla la campaña entera, la dejamos fuera para no bloquear el export.
+        } finally {
+          setVersionarioArtesProgress(prev => ({ ...prev, current: prev.current + 1 }));
+        }
+      };
+
+      // Procesar en batches de POOL_SIZE
+      for (let i = 0; i < campanasUnicas.length; i += POOL_SIZE) {
+        const batch = campanasUnicas.slice(i, i + POOL_SIZE);
+        await Promise.all(batch.map(procesarCampana));
+      }
+
+      if (resultados.length === 0) {
+        alert('No se pudo recuperar inventario de las campañas seleccionadas.');
+        return;
+      }
+
+      await exportVersionarioArtesMulti({
+        campanas: resultados,
+        fileNameSuffix: `${resultados.length}_campanas`,
+      });
+    } finally {
+      setExportingVersionarioArtes(false);
+      setVersionarioArtesProgress({ current: 0, total: 0 });
+    }
+  };
+
   const handleOpenCampana = (id: number) => {
     navigate(`/campanas/detail/${id}`);
   };
@@ -2454,6 +2547,21 @@ export function CampanasPage() {
                 >
                   <ClipboardList className="h-4 w-4" />
                   Órdenes de Montaje
+                </button>
+              )}
+
+              {/* Versionario Artes (sólo en tab Versionario) */}
+              {activeView === 'catorcena' && permissions.canSeeOrdenesMontajeButton && (
+                <button
+                  onClick={handleExportVersionarioArtes}
+                  disabled={exportingVersionarioArtes || campanasPorCatorcena.length === 0}
+                  className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-medium ${isDark ? 'bg-purple-500/20 text-purple-300 border-purple-500/40 hover:bg-purple-500/30' : 'bg-purple-100 text-purple-700 border-purple-200 hover:bg-purple-200'} border transition-all ${exportingVersionarioArtes ? 'opacity-50 cursor-not-allowed' : ''}`}
+                  title="Descargar Excel con versionario de artes (1 fila por campaña/plaza, columnas Arte 1..N)"
+                >
+                  {exportingVersionarioArtes ? <Loader2 className="h-4 w-4 animate-spin" /> : <Image className="h-4 w-4" />}
+                  {exportingVersionarioArtes
+                    ? `Procesando ${versionarioArtesProgress.current}/${versionarioArtesProgress.total}...`
+                    : 'Versionario Artes'}
                 </button>
               )}
             </div>
