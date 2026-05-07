@@ -54,15 +54,72 @@ const fetchImage = async (url: string): Promise<FetchedImage | null> => {
 export interface VersionarioArtesExportArgs {
   campana: Campana;
   items: InventarioConArte[];
+  // Mapa opcional: rsv_id → URLs de archivos digitales (de imagenes_digitales).
+  // Cuando se pasa, las URLs se agregan a las columnas "Arte N" deduplicadas.
+  digitalFilesByReserva?: Map<number, string[]>;
 }
 
-export async function exportVersionarioArtes({ campana, items }: VersionarioArtesExportArgs): Promise<void> {
+export async function exportVersionarioArtes({ campana, items, digitalFilesByReserva }: VersionarioArtesExportArgs): Promise<void> {
   const workbook = new ExcelJS.Workbook();
   workbook.creator = 'QEB';
   workbook.created = new Date();
   const sheet = workbook.addWorksheet('Versionario Artes');
 
-  const headers = [
+  const cuic = campana.cuic ? String(campana.cuic) : '';
+  const asesor = (campana as any).T0_U_Asesor || (campana as any).asesor || '';
+  const cliente = (campana as any).T0_U_RazonSocial || (campana as any).cliente || (campana as any).T1_U_Cliente || '';
+  const marca = (campana as any).T2_U_Marca || (campana as any).marca || '';
+  const campaniaNombre = campana.nombre || campana.nombre_campania || '';
+
+  // Agrupar items por plaza (mismo criterio que ya usaba la columna "Plaza")
+  const getPlaza = (it: InventarioConArte): string => it.plaza || it.municipio || it.estado || '';
+  const byPlaza = new Map<string, InventarioConArte[]>();
+  for (const it of items) {
+    const plaza = getPlaza(it);
+    if (!byPlaza.has(plaza)) byPlaza.set(plaza, []);
+    byPlaza.get(plaza)!.push(it);
+  }
+
+  // Para cada plaza, lista deduplicada de URLs de arte (mismo archivo en varios espacios = 1 sola miniatura).
+  // Combina rsv.archivo (legacy 1 arte) con imagenes_digitales[*] (artes múltiples) cuando se pasa el mapa.
+  const getRsvIds = (it: any): number[] =>
+    String(it.rsv_id || it.rsv_ids || '')
+      .split(',')
+      .map((s: string) => parseInt(s.trim()))
+      .filter((n: number) => !isNaN(n));
+  const artesPorPlaza = new Map<string, string[]>();
+  let maxArtesUnicos = 0;
+  for (const [plaza, arr] of byPlaza) {
+    const urls: string[] = [];
+    const seen = new Set<string>();
+    const pushUrl = (u: string | null | undefined) => {
+      if (u && !seen.has(u)) {
+        seen.add(u);
+        urls.push(u);
+      }
+    };
+    for (const it of arr) {
+      // 1) rsv.archivo (legacy, 1 arte por reserva)
+      pushUrl(it.archivo);
+      // 2) artes_tradicionales (múltiples artes tradicionales) — vienen del backend
+      //    en it.artes_multiples como string separado por '||'
+      const artesMultiples: string | null | undefined = (it as any).artes_multiples;
+      if (artesMultiples) {
+        for (const u of artesMultiples.split('||')) pushUrl(u.trim());
+      }
+      // 3) imagenes_digitales (múltiples artes digitales) — pasados en el mapa
+      if (digitalFilesByReserva) {
+        for (const rsvId of getRsvIds(it)) {
+          const digitalUrls = digitalFilesByReserva.get(rsvId) || [];
+          for (const u of digitalUrls) pushUrl(u);
+        }
+      }
+    }
+    artesPorPlaza.set(plaza, urls);
+    if (urls.length > maxArtesUnicos) maxArtesUnicos = urls.length;
+  }
+
+  const baseHeaders = [
     'Plaza',
     'Tipo',
     'Asesor Comercial',
@@ -78,26 +135,16 @@ export async function exportVersionarioArtes({ campana, items }: VersionarioArte
     'Caras',
     'Tarifa',
     'Estado del Arte',
-    'Arte',
   ];
+  const arteHeaders = Array.from({ length: maxArtesUnicos }, (_, i) => `Arte ${i + 1}`);
+  const headers = [...baseHeaders, ...arteHeaders];
+
+  const baseWidths = [22, 14, 26, 14, 12, 14, 14, 30, 18, 26, 18, 18, 8, 12, 22];
   sheet.columns = [
-    { width: 22 },
-    { width: 14 },
-    { width: 26 },
-    { width: 14 },
-    { width: 12 },
-    { width: 14 },
-    { width: 14 },
-    { width: 30 },
-    { width: 18 },
-    { width: 26 },
-    { width: 18 },
-    { width: 18 },
-    { width: 8 },
-    { width: 12 },
-    { width: 16 },
-    { width: 22 },
+    ...baseWidths.map(w => ({ width: w })),
+    ...Array(maxArtesUnicos).fill(null).map(() => ({ width: 22 })),
   ];
+
   const headerRow = sheet.addRow(headers);
   headerRow.font = { bold: true, color: { argb: 'FFFFFFFF' } };
   headerRow.alignment = { vertical: 'middle', horizontal: 'center' };
@@ -107,12 +154,6 @@ export async function exportVersionarioArtes({ campana, items }: VersionarioArte
     fgColor: { argb: 'FF6B21A8' },
   };
   headerRow.height = 22;
-
-  const cuic = campana.cuic ? String(campana.cuic) : '';
-  const asesor = (campana as any).T0_U_Asesor || (campana as any).asesor || '';
-  const cliente = (campana as any).T0_U_RazonSocial || (campana as any).cliente || (campana as any).T1_U_Cliente || '';
-  const marca = (campana as any).T2_U_Marca || (campana as any).marca || '';
-  const campaniaNombre = campana.nombre || campana.nombre_campania || '';
 
   const imageCache = new Map<string, number | null>();
   const getImageId = async (url: string | null | undefined): Promise<number | null> => {
@@ -129,47 +170,83 @@ export async function exportVersionarioArtes({ campana, items }: VersionarioArte
   };
 
   const ROW_HEIGHT = 70;
-  const ARTE_COL_INDEX = headers.length - 1; // 0-based, columna "Arte" (última)
+  const ARTE_COL_START = baseHeaders.length; // 0-based, primera columna de arte
 
-  for (const it of items) {
-    const tipo = it.tipo_medio || it.tipo_de_cara_display || it.tipo_de_cara || '';
-    const plaza = it.plaza || it.municipio || it.estado || '';
-    const numeroArticulo = it.articulo || '';
-    const articuloLabel = it.articulo || '';
-    const tarifa = Number(it.tarifa_publica) || 0;
-    const arteEstado = it.arte_aprobado || (it.archivo ? 'Pendiente' : 'Sin arte');
+  // "Varios" si los valores varían dentro de la plaza, si todos iguales el valor único
+  const uniqueOrVarios = (vals: string[]): string => {
+    const set = new Set(vals.filter(v => v != null && v !== ''));
+    if (set.size === 0) return '';
+    if (set.size === 1) return [...set][0];
+    return 'Varios';
+  };
 
-    const row = sheet.addRow([
+  // Lista ordenada (alfabético por nombre de plaza) — 1 fila por plaza
+  const plazas = [...byPlaza.keys()].sort((a, b) => a.localeCompare(b));
+
+  for (const plaza of plazas) {
+    const arr = byPlaza.get(plaza)!;
+    const tipos = arr.map(it => it.tipo_medio || it.tipo_de_cara_display || it.tipo_de_cara || '');
+    const numerosArticulo = arr.map(it => it.articulo || '');
+    const articulos = arr.map(it => it.articulo || '');
+    const tarifaSum = arr.reduce((s, it) => s + (Number(it.tarifa_publica) || 0), 0);
+    const caras = arr.length;
+
+    // Resumen de estados (cuenta por estado tal como aparece en cada item)
+    const estadoCounts: Record<string, number> = {};
+    for (const it of arr) {
+      const estado = it.arte_aprobado || (it.archivo ? 'Pendiente' : 'Sin arte');
+      estadoCounts[estado] = (estadoCounts[estado] || 0) + 1;
+    }
+    const estadoResumen = Object.entries(estadoCounts)
+      .map(([k, v]) => `${v} ${k}`)
+      .join(' / ') || '—';
+
+    // Min/max de fechas dentro de la plaza
+    const inicios = arr.map(it => it.inicio_periodo).filter(Boolean) as string[];
+    const fines = arr.map(it => it.fin_periodo).filter(Boolean) as string[];
+    const minInicio = inicios.length ? inicios.slice().sort()[0] : '';
+    const maxFin = fines.length ? fines.slice().sort().reverse()[0] : '';
+
+    const rowValues: any[] = [
       plaza,
-      tipo,
+      uniqueOrVarios(tipos),
       asesor,
       campana.id,
       cuic,
-      formatDate(it.inicio_periodo),
-      formatDate(it.fin_periodo),
+      formatDate(minInicio),
+      formatDate(maxFin),
       cliente,
       marca,
       campaniaNombre,
-      numeroArticulo,
-      articuloLabel,
-      1,
-      tarifa,
-      arteEstado,
-      '',
-    ]);
+      uniqueOrVarios(numerosArticulo),
+      uniqueOrVarios(articulos),
+      caras,
+      tarifaSum,
+      estadoResumen,
+    ];
+    // Padding vacío para celdas de arte
+    for (let i = 0; i < maxArtesUnicos; i++) rowValues.push('');
+
+    const row = sheet.addRow(rowValues);
     row.height = ROW_HEIGHT;
     row.alignment = { vertical: 'middle', horizontal: 'left', wrapText: true };
+    // Tarifa con decimales (formato numérico)
+    row.getCell(14).numFmt = '#,##0.00';
 
-    if (it.archivo) {
-      const imageId = await getImageId(it.archivo);
+    // Insertar miniaturas de arte en columnas Arte 1..N (deduplicadas por URL)
+    const urls = artesPorPlaza.get(plaza) || [];
+    for (let i = 0; i < urls.length; i++) {
+      const url = urls[i];
+      const colIndex = ARTE_COL_START + i; // 0-based
+      const imageId = await getImageId(url);
       if (imageId !== null) {
         sheet.addImage(imageId, {
-          tl: { col: ARTE_COL_INDEX + 0.05, row: row.number - 1 + 0.05 },
+          tl: { col: colIndex + 0.05, row: row.number - 1 + 0.05 },
           ext: { width: 130, height: 80 },
           editAs: 'oneCell',
         });
       } else {
-        row.getCell(ARTE_COL_INDEX + 1).value = { text: 'Ver arte', hyperlink: it.archivo };
+        row.getCell(colIndex + 1).value = { text: 'Ver arte', hyperlink: url };
       }
     }
   }
