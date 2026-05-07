@@ -14094,8 +14094,8 @@ export function TareaSeguimientoPage() {
     estado_programacion?: EstadoProgramacion;
     indicaciones?: string;
   })[] => {
-    // Filtrar tareas de tipo Programación y Orden de Programación
-    const tareasProgramacion = tareasAPI.filter(t => t.tipo === 'Programación' || t.tipo === 'Orden de Programación');
+    // Filtrar tareas de tipo Programación, Programación para Tráfico y Orden de Programación
+    const tareasProgramacion = tareasAPI.filter(t => t.tipo === 'Programación' || t.tipo === 'Programación para Tráfico' || t.tipo === 'Orden de Programación');
 
     if (tareasProgramacion.length === 0) return [];
 
@@ -14589,7 +14589,7 @@ export function TareaSeguimientoPage() {
   // Mapa de rsv_id -> estado de programación (para FlowStepIcons)
   const programacionStatusMap = useMemo(() => {
     const map = new Map<string, { estado: 'en_programacion' | 'programado' }>();
-    const tareasProgramacion = tareasAPI.filter(t => t.tipo === 'Programación' || t.tipo === 'Orden de Programación');
+    const tareasProgramacion = tareasAPI.filter(t => t.tipo === 'Programación' || t.tipo === 'Programación para Tráfico' || t.tipo === 'Orden de Programación');
     tareasProgramacion.forEach(tarea => {
       const ids = (tarea.ids_reservas || '').replace(/\*/g, ',').split(',').map(id => id.trim()).filter(Boolean);
       const estado: 'en_programacion' | 'programado' = tarea.estatus === 'Completado' ? 'programado' : 'en_programacion';
