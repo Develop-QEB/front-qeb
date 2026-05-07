@@ -3128,6 +3128,9 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
         solicitudCaraId: cara.id,
         excluir_categoria: excluirCategoria || undefined,
         excluir_distancia_km: excluirCategoria ? excluirDistanciaKm : undefined,
+        // Mi Macro Periférico es mensual; si la propuesta es catorcenal,
+        // excluir esos inventarios del buscador (comparten mueble='PARABUS').
+        excluir_mi_macro: tipoPeriodo === 'catorcena' ? 1 : undefined,
       });
       setInventarioDisponible(response.data || []);
     } catch (error) {
@@ -3191,6 +3194,7 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
         fecha_inicio: fechaIniSearch2,
         fecha_fin: fechaFinSearch2,
         solicitudCaraId: selectedCaraForSearch.id,
+        excluir_mi_macro: tipoPeriodo === 'catorcena' ? 1 : undefined,
       });
       setInventarioDisponible(response.data || []);
     } catch (error) {

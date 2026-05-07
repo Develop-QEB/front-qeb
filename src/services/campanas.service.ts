@@ -422,7 +422,7 @@ export function buildDeliveryNote(
       const firstItem = itemsWithArticulo[0];
       const totalPrice = Number(firstItem.tarifa_publica_sc) || Number(firstItem.tarifa_publica) || 0;
       const dscPeriod = firstItem.numero_catorcena && firstItem.anio_catorcena
-        ? `CATORCENA ${firstItem.numero_catorcena}-${firstItem.anio_catorcena}`
+        ? `CATORCENA ${String(firstItem.numero_catorcena).padStart(2, '0')}-${firstItem.anio_catorcena}`
         : 'CATORCENA —-—';
 
       // IM (impresión) articles have no inventory rows — one row with caras_totales=N
