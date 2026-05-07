@@ -2165,6 +2165,31 @@ export function PropuestasPage() {
 
         {/* Table */}
         {activeView === 'tabla' && <div className={`rounded-2xl border backdrop-blur-xl overflow-hidden shadow-xl ${isDark ? 'border-purple-500/20 bg-gradient-to-br from-zinc-900/90 via-purple-950/20 to-zinc-900/90 shadow-purple-500/5' : 'border-gray-200 bg-white shadow-gray-200/50'}`}>
+          {/* Pagination (top) */}
+          {!groupBy && data?.pagination && totalPages > 1 && (
+            <div className={`flex items-center justify-between border-b px-4 py-3 ${isDark ? 'border-purple-500/20 bg-gradient-to-r from-purple-900/20 via-transparent to-fuchsia-900/20' : 'border-gray-200 bg-gray-50'}`}>
+              <span className={`text-sm ${isDark ? 'text-purple-300/70' : 'text-gray-500'}`}>
+                Página <span className={`font-semibold ${isDark ? 'text-purple-300' : 'text-gray-700'}`}>{page}</span> de <span className={`font-semibold ${isDark ? 'text-purple-300' : 'text-gray-700'}`}>{totalPages}</span>
+                <span className={`ml-2 ${isDark ? 'text-purple-300/50' : 'text-gray-400'}`}>({total} total)</span>
+              </span>
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={() => setPage(Math.max(1, page - 1))}
+                  disabled={page === 1}
+                  className={`px-4 py-2 rounded-lg border text-sm font-medium disabled:opacity-40 disabled:cursor-not-allowed transition-all ${isDark ? 'border-purple-500/30 bg-purple-500/10 text-purple-300 hover:bg-purple-500/20 hover:border-purple-500/50' : 'border-gray-200 bg-white text-gray-700 hover:bg-gray-50 hover:border-gray-300'}`}
+                >
+                  Anterior
+                </button>
+                <button
+                  onClick={() => setPage(Math.min(totalPages, page + 1))}
+                  disabled={page === totalPages}
+                  className={`px-4 py-2 rounded-lg border text-sm font-medium disabled:opacity-40 disabled:cursor-not-allowed transition-all ${isDark ? 'border-purple-500/30 bg-purple-500/10 text-purple-300 hover:bg-purple-500/20 hover:border-purple-500/50' : 'border-gray-200 bg-white text-gray-700 hover:bg-gray-50 hover:border-gray-300'}`}
+                >
+                  Siguiente
+                </button>
+              </div>
+            </div>
+          )}
           <div className="overflow-x-auto">
             <table className="w-full">
               <thead>
