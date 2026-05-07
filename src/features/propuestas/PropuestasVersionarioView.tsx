@@ -53,7 +53,8 @@ interface PropuestaInfo {
   cuic: string;
   vendedor: string;
   tipo_periodo: string;
-  campana_nombre: string;
+  campana_nombre: string | null;
+  nombre_campania: string | null;
   catorcena_inicio_num: number;
   catorcena_inicio_anio: number;
   catorcena_fin_num: number;
@@ -161,11 +162,12 @@ export default function PropuestasVersionarioView({ isDark, filters, advancedFil
   // Reset page when filters change
   useEffect(() => { setPage(1); }, [filters.status, filters.search, filters.yearInicio, filters.yearFin, filters.catorcenaInicio, filters.catorcenaFin, filters.tipoPeriodo]);
 
-  const { data, isLoading, isFetching } = useQuery({
+  const { data, isLoading, isFetching, error, refetch } = useQuery({
     queryKey: ['propuestas-versionario', filters, page],
     queryFn: () => propuestasService.getVersionarioData({ ...filters, page, limit }),
     refetchOnWindowFocus: false,
     staleTime: 60000,
+    retry: 1,
   });
 
   const catorcenaGroups = useMemo<CatorcenaGroup[]>(() => {
@@ -270,8 +272,12 @@ export default function PropuestasVersionarioView({ isDark, filters, advancedFil
         propuestas.push({ info, circuitos });
       }
 
-      // Sort propuestas by name
-      propuestas.sort((a, b) => (a.info.campana_nombre || '').localeCompare(b.info.campana_nombre || ''));
+      // Sort propuestas by displayed name
+      propuestas.sort((a, b) => {
+        const an = a.info.campana_nombre || a.info.nombre_campania || '';
+        const bn = b.info.campana_nombre || b.info.nombre_campania || '';
+        return an.localeCompare(bn);
+      });
 
       if (propuestas.length > 0) {
         groups.push({ key: catKey, num, anio, propuestas });
@@ -349,7 +355,7 @@ export default function PropuestasVersionarioView({ isDark, filters, advancedFil
             if (circ.inventarios.length > 0) {
               for (const inv of circ.inventarios) {
                 rows.push([
-                  info.campana_nombre || '',
+                  info.campana_nombre || info.nombre_campania || '',
                   info.anunciante || '',
                   String(info.inversion || ''),
                   '',
@@ -487,6 +493,24 @@ export default function PropuestasVersionarioView({ isDark, filters, advancedFil
             <p className={`text-sm ${isDark ? 'text-zinc-500' : 'text-gray-400'}`}>{isFetching && !isLoading ? 'Aplicando filtros...' : 'Cargando desglose...'}</p>
           </div>
         </div>
+      ) : error ? (
+        <div className="flex flex-col items-center justify-center h-64 text-center px-6">
+          <div className={`inline-flex items-center justify-center w-16 h-16 rounded-full ${isDark ? 'bg-red-500/10' : 'bg-red-50'} mb-4`}>
+            <Calendar className={`w-8 h-8 ${isDark ? 'text-red-400' : 'text-red-600'}`} />
+          </div>
+          <p className={`text-sm font-medium ${isDark ? 'text-red-300' : 'text-red-700'}`}>No se pudo cargar el desglose</p>
+          <p className={`text-xs mt-1 ${isDark ? 'text-zinc-500' : 'text-gray-400'} max-w-md`}>
+            {(error as Error)?.message || 'La consulta tardó demasiado. Aplica filtros más específicos (status, periodo o búsqueda) para reducir el conjunto de resultados.'}
+          </p>
+          <button
+            onClick={() => refetch()}
+            className={`mt-4 px-4 py-2 text-xs font-medium rounded-lg transition-all ${
+              isDark ? 'bg-purple-500/20 text-purple-300 border border-purple-500/30 hover:bg-purple-500/30' : 'bg-purple-50 text-purple-700 border border-purple-200 hover:bg-purple-100'
+            }`}
+          >
+            Reintentar
+          </button>
+        </div>
       ) : catorcenaGroups.length === 0 ? (
         <div className="flex flex-col items-center justify-center h-64 text-center">
           <div className={`inline-flex items-center justify-center w-16 h-16 rounded-full ${isDark ? 'bg-purple-500/10' : 'bg-purple-50'} mb-4`}>
@@ -551,7 +575,7 @@ export default function PropuestasVersionarioView({ isDark, filters, advancedFil
                           )}
                           <Package className={`h-4 w-4 ${isDark ? 'text-zinc-500' : 'text-gray-400'}`} />
                           <span className={`font-medium ${isDark ? 'text-white' : 'text-gray-900'} text-sm flex-1 text-left truncate`}>
-                            {info.campana_nombre || info.descripcion || `Propuesta #${info.propuesta_id}`}
+                            {info.campana_nombre || info.nombre_campania || `Propuesta #${info.propuesta_id}`}
                           </span>
                           <span className={`px-2 py-0.5 rounded-full text-[10px] ${statusColor.bg} ${statusColor.text} border ${statusColor.border}`}>
                             {info.status}
