@@ -3,7 +3,7 @@ import { Outlet } from 'react-router-dom';
 import { Sidebar } from './Sidebar';
 import { cn } from '../../lib/utils';
 import { LoadingScreen } from '../ui/LoadingScreen';
-import { QEBooh } from '../ui/Qebsillo';
+// import { QEBooh } from '../ui/Qebsillo'; // Burbuja del chatbot oculta temporalmente
 import { usePrefetch } from '../../hooks/usePrefetch';
 import { useThemeStore } from '../../store/themeStore';
 import { useAuthStore } from '../../store/authStore';
@@ -54,7 +54,7 @@ export function MainLayout() {
         <Outlet />
       </main>
 
-      <QEBooh />
+      {/* <QEBooh /> Burbuja del chatbot oculta temporalmente */}
 
       {user && user.light_theme_notified !== true && (
         <LightThemeNotificationModal />
