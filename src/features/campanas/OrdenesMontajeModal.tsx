@@ -1,6 +1,7 @@
 import React, { useState, useMemo, useRef, useEffect, useCallback } from 'react';
 import { useModalTracker } from '../../hooks/useModalTracker';
 import { useQuery } from '@tanstack/react-query';
+import { useSocketOrdenesMontaje } from '../../hooks/useSocket';
 import {
   X, Download, Filter, ChevronDown, ChevronRight, Calendar, Loader2, FileSpreadsheet,
   Monitor,
@@ -571,6 +572,9 @@ export function OrdenesMontajeModal({ isOpen, onClose, canExport = true }: Orden
     }),
     enabled: isOpen && (activeTab === 'cat' || activeTab === 'digital' || activeTab === 'ocupacion-digital'),
   });
+
+  // Refresca la columna Diferencia en tiempo real cuando alguien crea/borra reservas
+  useSocketOrdenesMontaje(isOpen);
 
   // Query for INVIAN data
   const { data: invianData, isLoading: isLoadingINVIAN } = useQuery({
