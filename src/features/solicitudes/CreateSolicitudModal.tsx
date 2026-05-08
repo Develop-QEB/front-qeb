@@ -1205,13 +1205,15 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
     if (!newCara.articulo || !newCara.estado || !newCara.formato || !newCara.tipo) return;
     if (!esCircuitoNew && newCara.nse.length === 0) return;
 
-    // Validar tarifa pública: si es 0, solo CT, BF/CF e IM pueden avanzar
+    // Validar tarifa pública: si es 0, solo CT, BF/CF, IM, IN (intercambio) y
+    // ESP/ES- pueden avanzar.
     const artCode = newCara.articulo.ItemCode?.toUpperCase() || '';
     const esCortesia = artCode.startsWith('CT');
     const esBonificacion = artCode.startsWith('BF') || artCode.startsWith('CF');
     const esImpresion = artCode.startsWith('IM');
+    const esIntercambio = artCode.startsWith('IN');
     const esEspecial = isEspecialArticle(artCode);
-    if (newCara.tarifaPublica <= 0 && !esCortesia && !esBonificacion && !esImpresion && !esEspecial) {
+    if (newCara.tarifaPublica <= 0 && !esCortesia && !esBonificacion && !esImpresion && !esIntercambio && !esEspecial) {
       alert('La tarifa pública no puede ser 0. Por favor ingresa una tarifa válida.');
       return;
     }
@@ -3047,22 +3049,10 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
                     <input
                       type="number"
                       min={0}
-                      max={(() => {
-                        const circ = newCara.articulo ? parseCircuitoDigital(newCara.articulo.ItemCode) : null;
-                        if (circ) return newCara.renta + newCara.bonificacion; // max = total del circuito
-                        return newCara.articulo?.ItemCode?.toUpperCase().startsWith('CT') ? undefined : newCara.renta;
-                      })()}
+                      max={newCara.articulo?.ItemCode?.toUpperCase().startsWith('CT') ? undefined : newCara.renta}
                       value={newCara.bonificacion || ''}
                       onChange={(e) => {
                         const v = parseInt(e.target.value) || 0;
-                        // Si es circuito: total fijo, renta = total - bonif
-                        const circ = newCara.articulo ? parseCircuitoDigital(newCara.articulo.ItemCode) : null;
-                        if (circ) {
-                          const total = newCara.renta + newCara.bonificacion;
-                          const bonifCap = Math.min(Math.max(0, v), total);
-                          setNewCara({ ...newCara, bonificacion: bonifCap, renta: total - bonifCap });
-                          return;
-                        }
                         setNewCara({ ...newCara, bonificacion: v });
                       }}
                       placeholder='0'

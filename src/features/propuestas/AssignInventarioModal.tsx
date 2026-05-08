@@ -2130,12 +2130,14 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
       return;
     }
 
-    // Validar tarifa pública: si es 0, solo CT, BF/CF e IM pueden avanzar
+    // Validar tarifa pública: si es 0, solo CT, BF/CF, IM e IN (intercambio)
+    // pueden avanzar.
     const artCode = (newCara.articulo || '').toUpperCase();
     const esCortesia = artCode.startsWith('CT');
     const esBonificacion = artCode.startsWith('BF') || artCode.startsWith('CF');
     const esImpresion = artCode.startsWith('IM');
-    if (newCara.tarifa_publica <= 0 && !esCortesia && !esBonificacion && !esImpresion) {
+    const esIntercambio = artCode.startsWith('IN');
+    if (newCara.tarifa_publica <= 0 && !esCortesia && !esBonificacion && !esImpresion && !esIntercambio) {
       alert('La tarifa pública no puede ser 0. Por favor ingresa una tarifa válida.');
       return;
     }
@@ -7659,39 +7661,9 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
                         <input
                           type="number"
                           value={newCara.caras || ''}
-                          max={(() => {
-                            // Para circuito digital: max = total del circuito (renta + bonif)
-                            const c = parseCircuitoDigital(newCara.articulo || '');
-                            if (c) return (newCara.caras || 0) + (newCara.bonificacion || 0);
-                            return undefined;
-                          })()}
                           onChange={(e) => {
                             if (!canEditResumen) return;
                             const val = parseInt(e.target.value) || 0;
-                            // Para circuito digital: total fijo, bonif = total - caras
-                            const c = parseCircuitoDigital(newCara.articulo || '');
-                            if (c) {
-                              const total = (newCara.caras || 0) + (newCara.bonificacion || 0);
-                              const carasCap = Math.min(Math.max(0, val), total);
-                              // Mensual = solo Flujo. Catorcena = redistribuir proporcionalmente.
-                              let flujoCalc: number;
-                              let contraCalc: number;
-                              if (tipoPeriodo === 'mensual') {
-                                flujoCalc = carasCap;
-                                contraCalc = 0;
-                              } else {
-                                const curFlujo = newCara.caras_flujo || 0;
-                                const curContra = newCara.caras_contraflujo || 0;
-                                const curRenta = curFlujo + curContra;
-                                flujoCalc = curRenta > 0
-                                  ? Math.round(carasCap * curFlujo / curRenta)
-                                  : Math.ceil(carasCap / 2);
-                                contraCalc = carasCap - flujoCalc;
-                                if (contraCalc < 0) { contraCalc = 0; flujoCalc = carasCap; }
-                              }
-                              setNewCara({ ...newCara, caras: carasCap, bonificacion: total - carasCap, caras_flujo: flujoCalc, caras_contraflujo: contraCalc });
-                              return;
-                            }
                             // Mensual = solo Flujo (Gran Formato: kioscos, boleros, mi macro, etc).
                             // Catorcena = split 50/50 flujo/contraflujo (ceil/floor).
                             const flujo = tipoPeriodo === 'mensual' ? val : Math.ceil(val / 2);
@@ -7709,39 +7681,9 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
                         <input
                           type="number"
                           value={newCara.bonificacion || ''}
-                          max={(() => {
-                            const c = parseCircuitoDigital(newCara.articulo || '');
-                            if (c) return (newCara.caras || 0) + (newCara.bonificacion || 0);
-                            return undefined;
-                          })()}
                           onChange={(e) => {
                             if (!canEditResumen) return;
                             const val = parseInt(e.target.value) || 0;
-                            // Para circuito digital: total fijo, caras = total - bonif
-                            const c = parseCircuitoDigital(newCara.articulo || '');
-                            if (c) {
-                              const total = (newCara.caras || 0) + (newCara.bonificacion || 0);
-                              const bonifCap = Math.min(Math.max(0, val), total);
-                              const carasCap = total - bonifCap;
-                              // Mensual = solo Flujo. Catorcena = redistribuir proporcionalmente.
-                              let flujoCalc: number;
-                              let contraCalc: number;
-                              if (tipoPeriodo === 'mensual') {
-                                flujoCalc = carasCap;
-                                contraCalc = 0;
-                              } else {
-                                const curFlujo = newCara.caras_flujo || 0;
-                                const curContra = newCara.caras_contraflujo || 0;
-                                const curRenta = curFlujo + curContra;
-                                flujoCalc = curRenta > 0
-                                  ? Math.round(carasCap * curFlujo / curRenta)
-                                  : Math.ceil(carasCap / 2);
-                                contraCalc = carasCap - flujoCalc;
-                                if (contraCalc < 0) { contraCalc = 0; flujoCalc = carasCap; }
-                              }
-                              setNewCara({ ...newCara, bonificacion: bonifCap, caras: carasCap, caras_flujo: flujoCalc, caras_contraflujo: contraCalc });
-                              return;
-                            }
                             setNewCara({ ...newCara, bonificacion: val });
                           }}
                           disabled={!canEditResumen || isNoInventoryArticle((newCara.articulo || '').toUpperCase()) || newCara.articulo?.toUpperCase().startsWith('IN')}
