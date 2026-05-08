@@ -5,7 +5,7 @@ import {
   X, Download, Filter, ChevronDown, ChevronRight, Calendar, Loader2, FileSpreadsheet,
   Monitor,
   Building2, ClipboardList, Layers, ArrowUpDown, ArrowUp, ArrowDown, Plus, Trash2, Check,
-  Image, Link2, Film, FileText, ChevronLeft, Play
+  Image, Link2, Film, FileText, ChevronLeft, Play, Search
 } from 'lucide-react';
 import { campanasService, OrdenMontajeCAT, OrdenMontajeINVIAN, ImagenDigital } from '../../services/campanas.service';
 import { ALLOWED_DIGITAL_ITEM_CODES } from '../../config/allowedDigitalArticles';
@@ -391,6 +391,70 @@ export function OrdenesMontajeModal({ isOpen, onClose, canExport = true }: Orden
   const [sapDbFilter, setSapDbFilter] = useState<'todas' | 'TRADE' | 'CIMU'>('todas');
   const [apsEspecificoFilter, setApsEspecificoFilter] = useState<'todas' | 'con' | 'sin'>('todas');
 
+  // Búsqueda de texto con tags (estilo Solicitudes/Propuestas/Campañas)
+  const [searchInput, setSearchInput] = useState('');
+  const [searchTags, setSearchTags] = useState<string[]>([]);
+  const [debouncedSearchInput, setDebouncedSearchInput] = useState('');
+  const [debouncedSearchTags, setDebouncedSearchTags] = useState<string[]>([]);
+
+  const addSearchTag = (value: string) => {
+    const trimmed = value.trim();
+    if (trimmed && !searchTags.includes(trimmed)) {
+      setSearchTags(prev => [...prev, trimmed]);
+    }
+    setSearchInput('');
+  };
+
+  const removeSearchTag = (tag: string) => {
+    setSearchTags(prev => prev.filter(t => t !== tag));
+  };
+
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setDebouncedSearchInput(searchInput);
+      setCurrentPage(1);
+    }, 500);
+    return () => clearTimeout(timer);
+  }, [searchInput]);
+
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setDebouncedSearchTags(searchTags);
+      setCurrentPage(1);
+    }, 500);
+    return () => clearTimeout(timer);
+  }, [searchTags]);
+
+  const allSearchTerms = useMemo(() => {
+    const terms = [...debouncedSearchTags];
+    if (debouncedSearchInput.trim()) terms.push(debouncedSearchInput.trim());
+    return terms.map(t => t.toLowerCase());
+  }, [debouncedSearchTags, debouncedSearchInput]);
+
+  // Cada término debe matchear (AND); cada término matchea si aparece en al menos un campo (OR sobre campos)
+  const matchesSearchCAT = useCallback((item: OrdenMontajeCAT) => {
+    if (allSearchTerms.length === 0) return true;
+    const haystack = [
+      item.plaza, item.tipo, item.asesor, item.aps_especifico, item.aps_global,
+      item.cuic, item.cliente, item.marca, item.unidad_negocio, item.campania,
+      item.numero_articulo, item.negociacion, item.tradicional_digital, item.sap_database,
+      item.campania_id, item.grupo_id,
+    ].map(v => (v == null ? '' : String(v).toLowerCase())).join(' | ');
+    return allSearchTerms.every(term => haystack.includes(term));
+  }, [allSearchTerms]);
+
+  const matchesSearchINVIAN = useCallback((item: OrdenMontajeINVIAN) => {
+    if (allSearchTerms.length === 0) return true;
+    const haystack = [
+      item.Campania, item.Anunciante, item.Operacion, item.CodigoContrato, item.Vendedor,
+      item.Descripcion, item.Arte, item.CodigoArte, item.ArteFileName, item.Unidad,
+      item.Cara, item.Ciudad, item.TipoDistribucion, item.status_campania,
+      item.tradicional_digital, item.indicaciones, item.numero_articulo, item.cto,
+      item.sap_database, item.nombres_artes_digitales,
+    ].map(v => (v == null ? '' : String(v).toLowerCase())).join(' | ');
+    return allSearchTerms.every(term => haystack.includes(term));
+  }, [allSearchTerms]);
+
   // CAT filters/sort/group
   const [catFilters, setCatFilters] = useState<AdvancedFilterCondition[]>([]);
   const [catGroupings, setCatGroupings] = useState<CATGroupByField[]>([]);
@@ -568,6 +632,11 @@ export function OrdenesMontajeModal({ isOpen, onClose, canExport = true }: Orden
       return td !== 'DIGITAL';
     });
 
+    // Búsqueda de texto
+    if (allSearchTerms.length > 0) {
+      items = items.filter(matchesSearchCAT);
+    }
+
     // Filtros globales: SAP DB + APS Específico
     if (sapDbFilter !== 'todas') {
       items = items.filter(item => (item.sap_database || '').toUpperCase() === sapDbFilter);
@@ -621,7 +690,7 @@ export function OrdenesMontajeModal({ isOpen, onClose, canExport = true }: Orden
     }
 
     return items;
-  }, [catData, selectedCatorcenas, fechaInicio, fechaFin, catFilters, catSortField, catSortDirection, sapDbFilter, apsEspecificoFilter]);
+  }, [catData, selectedCatorcenas, fechaInicio, fechaFin, catFilters, catSortField, catSortDirection, sapDbFilter, apsEspecificoFilter, allSearchTerms, matchesSearchCAT]);
 
   // Filtered Ocupacion Digital data (CAT only digital items)
   const filteredOcupacionDigitalData = useMemo(() => {
@@ -633,6 +702,11 @@ export function OrdenesMontajeModal({ isOpen, onClose, canExport = true }: Orden
       const td = (item.tradicional_digital || '').toUpperCase();
       return td === 'DIGITAL';
     });
+
+    // Búsqueda de texto
+    if (allSearchTerms.length > 0) {
+      items = items.filter(matchesSearchCAT);
+    }
 
     // Filtros globales
     if (sapDbFilter !== 'todas') {
@@ -689,7 +763,7 @@ export function OrdenesMontajeModal({ isOpen, onClose, canExport = true }: Orden
     }
 
     return items;
-  }, [catData, selectedCatorcenas, fechaInicio, fechaFin, catFilters, catSortField, catSortDirection, sapDbFilter, apsEspecificoFilter]);
+  }, [catData, selectedCatorcenas, fechaInicio, fechaFin, catFilters, catSortField, catSortDirection, sapDbFilter, apsEspecificoFilter, allSearchTerms, matchesSearchCAT]);
 
   // Filter Ocupacion UN+ data: solo gran formato (mi macro, kioscos, boleros,
   // bajo puentes, puentes peatonales) Y solo periodos mensuales.
@@ -724,6 +798,11 @@ export function OrdenesMontajeModal({ isOpen, onClose, canExport = true }: Orden
       const td = (item.tradicional_digital || '').toUpperCase();
       return td !== 'DIGITAL';
     });
+
+    // Búsqueda de texto
+    if (allSearchTerms.length > 0) {
+      items = items.filter(matchesSearchCAT);
+    }
 
     // Filter by date range if set
     if (fechaInicio || fechaFin) {
@@ -771,7 +850,7 @@ export function OrdenesMontajeModal({ isOpen, onClose, canExport = true }: Orden
     }
 
     return items;
-  }, [catData, selectedCatorcenas, fechaInicio, fechaFin, catFilters, catSortField, catSortDirection, sapDbFilter, apsEspecificoFilter]);
+  }, [catData, selectedCatorcenas, fechaInicio, fechaFin, catFilters, catSortField, catSortDirection, sapDbFilter, apsEspecificoFilter, allSearchTerms, matchesSearchCAT]);
 
   // Group CAT data
   const getCATGroupValue = (item: OrdenMontajeCAT, field: CATGroupByField): string => {
@@ -813,6 +892,11 @@ export function OrdenesMontajeModal({ isOpen, onClose, canExport = true }: Orden
 
     // Exclude digital items (they have their own tab)
     items = items.filter(item => !item.numero_articulo || !ALLOWED_DIGITAL_ITEM_CODES.has(item.numero_articulo));
+
+    // Búsqueda de texto
+    if (allSearchTerms.length > 0) {
+      items = items.filter(matchesSearchINVIAN);
+    }
 
     // Filtro global SAP DB
     if (sapDbFilter !== 'todas') {
@@ -862,7 +946,7 @@ export function OrdenesMontajeModal({ isOpen, onClose, canExport = true }: Orden
     }
 
     return items;
-  }, [invianData, selectedCatorcenas, fechaInicio, fechaFin, invianFilters, invianSortField, invianSortDirection, sapDbFilter]);
+  }, [invianData, selectedCatorcenas, fechaInicio, fechaFin, invianFilters, invianSortField, invianSortDirection, sapDbFilter, allSearchTerms, matchesSearchINVIAN]);
 
   // Group INVIAN data
   const getINVIANGroupValue = (item: OrdenMontajeINVIAN, field: INVIANGroupByField): string => {
@@ -889,6 +973,11 @@ export function OrdenesMontajeModal({ isOpen, onClose, canExport = true }: Orden
 
     // Filter by allowed digital article codes
     items = items.filter(item => item.numero_articulo != null && ALLOWED_DIGITAL_ITEM_CODES.has(item.numero_articulo));
+
+    // Búsqueda de texto
+    if (allSearchTerms.length > 0) {
+      items = items.filter(matchesSearchINVIAN);
+    }
 
     // Filtro global SAP DB
     if (sapDbFilter !== 'todas') {
@@ -934,7 +1023,7 @@ export function OrdenesMontajeModal({ isOpen, onClose, canExport = true }: Orden
     }
 
     return items;
-  }, [invianData, selectedCatorcenas, fechaInicio, fechaFin, invianFilters, invianSortField, invianSortDirection, sapDbFilter]);
+  }, [invianData, selectedCatorcenas, fechaInicio, fechaFin, invianFilters, invianSortField, invianSortDirection, sapDbFilter, allSearchTerms, matchesSearchINVIAN]);
 
   // Group INVIAN Digital data
   const groupedINVIANDigitalData = useMemo(() => {
@@ -1680,6 +1769,52 @@ export function OrdenesMontajeModal({ isOpen, onClose, canExport = true }: Orden
               >
                 <Download className="h-4 w-4" />
                 Exportar
+              </button>
+            )}
+          </div>
+        </div>
+
+        {/* Search Bar */}
+        <div className={`px-6 py-3 border-b ${isDark ? 'border-zinc-800/50 bg-zinc-900/60' : 'border-gray-200 bg-gray-50/60'}`}>
+          <div className={`relative w-full flex items-center flex-wrap gap-1.5 min-h-[44px] px-3 py-1.5 rounded-xl border ${isDark ? 'border-purple-500/20 bg-zinc-900/80 hover:border-purple-500/40' : 'border-purple-200 bg-white hover:border-gray-300'} focus-within:ring-2 focus-within:ring-purple-500/30 focus-within:border-purple-500/40 transition-all`}>
+            <Search className={`h-4 w-4 shrink-0 ${isDark ? 'text-purple-400' : 'text-purple-500'}`} />
+            {searchTags.map((tag) => (
+              <span
+                key={tag}
+                className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-xs font-medium ${isDark ? 'bg-purple-500/20 text-purple-300 border border-purple-500/30' : 'bg-purple-100 text-purple-700 border border-purple-200'}`}
+              >
+                {tag}
+                <button
+                  onClick={() => removeSearchTag(tag)}
+                  className={`rounded-full p-0.5 transition-colors ${isDark ? 'hover:bg-purple-500/30' : 'hover:bg-purple-200'}`}
+                >
+                  <X className="h-3 w-3" />
+                </button>
+              </span>
+            ))}
+            <input
+              type="text"
+              placeholder={searchTags.length === 0 ? 'Buscar por id, cliente, asesor, campaña, artículo, plaza... (Enter para agregar)' : 'Agregar filtro...'}
+              className={`flex-1 min-w-[120px] bg-transparent border-none outline-none text-sm ${isDark ? 'text-white placeholder:text-zinc-500' : 'text-gray-900 placeholder:text-gray-400'}`}
+              value={searchInput}
+              onChange={(e) => setSearchInput(e.target.value)}
+              onKeyDown={(e) => {
+                if ((e.key === 'Enter' || e.key === 'Tab') && searchInput.trim()) {
+                  e.preventDefault();
+                  addSearchTag(searchInput);
+                }
+                if (e.key === 'Backspace' && !searchInput && searchTags.length > 0) {
+                  removeSearchTag(searchTags[searchTags.length - 1]);
+                }
+              }}
+            />
+            {(searchTags.length > 0 || searchInput) && (
+              <button
+                onClick={() => { setSearchTags([]); setSearchInput(''); }}
+                className={`shrink-0 p-1 rounded-full transition-colors ${isDark ? 'text-zinc-400 hover:text-white hover:bg-zinc-700' : 'text-gray-400 hover:text-gray-600 hover:bg-gray-200'}`}
+                title="Limpiar búsqueda"
+              >
+                <X className="h-3.5 w-3.5" />
               </button>
             )}
           </div>
