@@ -1745,7 +1745,7 @@ function UploadArtModal({
         </div>
 
         {/* Content - Two columns */}
-        <div className="flex-1 overflow-hidden p-4 pt-2">
+        <div className="flex-1 min-h-0 overflow-hidden p-4 pt-2">
           {modalTab === 'fichas' ? (
             /* ===== TAB: FICHAS TÉCNICAS (Explorador de carpetas) ===== */
             <div className="h-full flex flex-col">
@@ -1857,9 +1857,9 @@ function UploadArtModal({
               )}
             </div>
           ) : (
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 h-full">
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 h-full min-h-0">
             {/* Left Column - Upload Options & Preview */}
-            <div className="flex flex-col space-y-4">
+            <div className="flex flex-col space-y-4 h-full min-h-0">
               {isDigitalInventory ? (
                 /* ===== INTERFAZ DIGITAL - WIZARD 2 PASOS ===== */
                 <>
@@ -1994,7 +1994,7 @@ function UploadArtModal({
                   ) : (
                     /* ===== PASO 2: Notas opcionales por archivo ===== */
                     <>
-                      <div className="flex-1 min-h-0 overflow-auto">
+                      <div className="overflow-y-auto pr-1" style={{ maxHeight: 'calc(90vh - 280px)' }}>
                         <label className="block text-xs font-medium text-muted-foreground mb-2">
                           Notas por archivo (opcional) — {selectedDigitalImages.size} archivo{selectedDigitalImages.size !== 1 ? 's' : ''}
                         </label>
@@ -2218,7 +2218,7 @@ function UploadArtModal({
                           Agrega una nota obligatoria para cada imagen seleccionada.
                         </p>
                       </div>
-                      <div className="flex-1 min-h-0 overflow-auto space-y-3">
+                      <div className="overflow-y-auto space-y-3 pr-1" style={{ maxHeight: 'calc(90vh - 280px)' }}>
                         {Array.from(selectedGalleryImages.entries()).map(([id, img], idx) => (
                           <div key={id} className={`flex gap-3 p-3 border border-border rounded-lg ${isDark ? 'bg-zinc-900/50' : 'bg-gray-50'}`}>
                             {/* Image preview */}
