@@ -431,27 +431,29 @@ export function OrdenesMontajeModal({ isOpen, onClose, canExport = true }: Orden
     return terms.map(t => t.toLowerCase());
   }, [debouncedSearchTags, debouncedSearchInput]);
 
-  // Cada término debe matchear (AND); cada término matchea si aparece en al menos un campo (OR sobre campos)
+  // Construye haystack con TODOS los valores escalares del objeto (string/number/bigint/boolean).
+  // Cada término debe matchear (AND); cada término matchea si aparece en cualquier campo (OR).
+  const buildHaystack = (item: Record<string, unknown>) => {
+    const parts: string[] = [];
+    for (const v of Object.values(item)) {
+      if (v == null) continue;
+      const t = typeof v;
+      if (t === 'string' || t === 'number' || t === 'bigint' || t === 'boolean') {
+        parts.push(String(v).toLowerCase());
+      }
+    }
+    return parts.join(' | ');
+  };
+
   const matchesSearchCAT = useCallback((item: OrdenMontajeCAT) => {
     if (allSearchTerms.length === 0) return true;
-    const haystack = [
-      item.plaza, item.tipo, item.asesor, item.aps_especifico, item.aps_global,
-      item.cuic, item.cliente, item.marca, item.unidad_negocio, item.campania,
-      item.numero_articulo, item.negociacion, item.tradicional_digital, item.sap_database,
-      item.campania_id, item.grupo_id,
-    ].map(v => (v == null ? '' : String(v).toLowerCase())).join(' | ');
+    const haystack = buildHaystack(item as unknown as Record<string, unknown>);
     return allSearchTerms.every(term => haystack.includes(term));
   }, [allSearchTerms]);
 
   const matchesSearchINVIAN = useCallback((item: OrdenMontajeINVIAN) => {
     if (allSearchTerms.length === 0) return true;
-    const haystack = [
-      item.Campania, item.Anunciante, item.Operacion, item.CodigoContrato, item.Vendedor,
-      item.Descripcion, item.Arte, item.CodigoArte, item.ArteFileName, item.Unidad,
-      item.Cara, item.Ciudad, item.TipoDistribucion, item.status_campania,
-      item.tradicional_digital, item.indicaciones, item.numero_articulo, item.cto,
-      item.sap_database, item.nombres_artes_digitales,
-    ].map(v => (v == null ? '' : String(v).toLowerCase())).join(' | ');
+    const haystack = buildHaystack(item as unknown as Record<string, unknown>);
     return allSearchTerms.every(term => haystack.includes(term));
   }, [allSearchTerms]);
 
