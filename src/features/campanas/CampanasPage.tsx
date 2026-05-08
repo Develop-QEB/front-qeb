@@ -2057,6 +2057,7 @@ export function CampanasPage() {
         campana: Campana;
         items: any[];
         digitalFilesByReserva: Map<number, string[]>;
+        notesByUrl: Map<string, string>;
       }> = [];
 
       // Pool con concurrencia limitada
@@ -2068,6 +2069,15 @@ export function CampanasPage() {
           ]);
           const items = [...(conArte || []), ...(sinArte || [])];
 
+          const allRsvIds = new Set<number>();
+          for (const it of items) {
+            String((it as any).rsv_id || (it as any).rsv_ids || '')
+              .split(',')
+              .map(s => parseInt(s.trim()))
+              .filter(n => !isNaN(n))
+              .forEach(n => allRsvIds.add(n));
+          }
+
           // Saltar fetch de digitales si no hay items que parezcan digitales.
           const tieneDigitales = items.some(it => {
             const t = String((it as any).tipo_medio || (it as any).tradicional_digital || '').toLowerCase();
@@ -2075,25 +2085,34 @@ export function CampanasPage() {
           });
 
           const digitalFilesByReserva = new Map<number, string[]>();
+          const notesByUrl = new Map<string, string>();
           if (tieneDigitales) {
-            const allRsvIds = new Set<number>();
-            for (const it of items) {
-              String((it as any).rsv_id || (it as any).rsv_ids || '')
-                .split(',')
-                .map(s => parseInt(s.trim()))
-                .filter(n => !isNaN(n))
-                .forEach(n => allRsvIds.add(n));
-            }
             await Promise.all([...allRsvIds].map(async (rsvId) => {
               try {
                 const imgs = await campanasService.getImagenesDigitales(campana.id, rsvId);
                 const urls = imgs.map((im: any) => im.archivoData || im.archivo).filter((u: any): u is string => !!u);
                 if (urls.length) digitalFilesByReserva.set(rsvId, urls);
+                for (const im of imgs) {
+                  const url = (im as any).archivoData || (im as any).archivo;
+                  const comentario = ((im as any).comentario || '').trim();
+                  if (url && comentario) notesByUrl.set(url, comentario);
+                }
               } catch { /* ignore */ }
             }));
           }
 
-          resultados.push({ campana, items, digitalFilesByReserva });
+          // Notas de artes tradicionales (la URL guardada coincide con `archivo` que viene en `artes_multiples`).
+          await Promise.all([...allRsvIds].map(async (rsvId) => {
+            try {
+              const artes = await campanasService.getArtesTradicionales(campana.id, rsvId);
+              for (const a of artes) {
+                const nota = ((a as any).nota || '').trim();
+                if ((a as any).archivo && nota) notesByUrl.set((a as any).archivo, nota);
+              }
+            } catch { /* ignore reservas sin artes tradicionales */ }
+          }));
+
+          resultados.push({ campana, items, digitalFilesByReserva, notesByUrl });
         } catch {
           // Si falla la campaña entera, la dejamos fuera para no bloquear el export.
         } finally {

@@ -437,14 +437,21 @@ export function buildDeliveryNote(
         ? itemsWithArticulo.reduce((s, i) => s + (Number(i.caras_totales) || 1), 0)
         : itemsWithArticulo.length;
 
-      // Para artículos de Renta (RT-...) BI espera siempre `U_dscTAsig = 'Venta'`,
-      // sin importar si el estatus de la reserva es Reservado/Apartado/Vendido —
-      // mezclar etiquetas complicaba el reporte. Para el resto (BF/CT/IM/etc)
-      // mantenemos el estatus_reserva textual.
+      // U_CodTAsig + U_dscTAsig deben ser un par válido en SAP:
+      //   200 = "Venta"        (para RT-* o reservas vendidas)
+      //   204 = "Bonificado"   (para BF/CF/CT o reservas bonificadas)
+      // SAP rechaza con -2028 si la descripción no coincide con un código
+      // existente en su tabla — por eso NO mandamos textos custom como
+      // "Vendido bonificado" o "Reservado", siempre la descripción canónica
+      // del CodTAsig que está enviando.
       const isRenta = articuloCode.startsWith('RT-') || articuloCode.startsWith('RT_');
-      const dscTAsig = isRenta
-        ? 'Venta'
-        : (firstItem.estatus_reserva === 'Vendido' ? 'Venta' : (firstItem.estatus_reserva || ''));
+      const isBonifiedEstatus =
+        firstItem.estatus_reserva === 'Bonificado' ||
+        firstItem.estatus_reserva === 'Vendido bonificado';
+      // Renta gana sobre estatus: aunque el reserva.estatus esté en
+      // "Vendido bonificado", si el artículo es RT-*, va como Venta.
+      const codTAsig = !isRenta && isBonifiedEstatus ? 204 : 200;
+      const dscTAsig = codTAsig === 204 ? 'Bonificado' : 'Venta';
 
       return {
         LineNum: index.toString(),
@@ -456,7 +463,7 @@ export function buildDeliveryNote(
         CostingCode2: '1',
         U_Cod_Sitio: articulosMap?.[firstItem.articulo || '']?.U_IMU_cod_sitio || 11,
         U_dscSitio: articulosMap?.[firstItem.articulo || '']?.U_IMU_dscSitio || firstItem.plaza || firstItem.estado || '',
-        U_CodTAsig: (firstItem.estatus_reserva === 'Bonificado' || firstItem.estatus_reserva === 'Vendido bonificado') ? 204 : 200,
+        U_CodTAsig: codTAsig,
         U_dscTAsig: dscTAsig,
         U_CodPer: 1746,
         U_dscPeriod: dscPeriod,
@@ -471,7 +478,17 @@ export function buildDeliveryNote(
       NumAtCard: campana.id?.toString() || '',
       Comments: campana.comentario_cambio_status || '',
       DocDueDate: (campana.fecha_fin || new Date().toISOString()).split('T')[0],
-      SalesPersonCode: sapDatabase === 'TRADE' ? -1 : ((campana as any).salesperson_code || -1),
+      SalesPersonCode: (() => {
+        const sp = Number((campana as any).salesperson_code) || null;
+        if (sapDatabase === 'TRADE') {
+          // SBOIMUTRADE solo tiene 5 vendedores válidos (ver /cuic-trade del
+          // SAP relay): 11, 32, 73, 116, 146 — fallback a 146 si el del
+          // cliente no está. Antes estaba hardcoded a -1 lo que tiraba -2028.
+          const tradeValid = new Set([11, 32, 73, 116, 146]);
+          return sp && tradeValid.has(sp) ? sp : 146;
+        }
+        return sp ?? -1;
+      })(),
       U_CIC: String(campana.cuic || ''),
       U_CRM_Asesor: campana.T0_U_Asesor || '',
       U_CRM_Producto: campana.T2_U_Producto || '',
