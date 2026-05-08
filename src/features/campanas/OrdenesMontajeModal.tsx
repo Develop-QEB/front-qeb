@@ -896,8 +896,18 @@ export function OrdenesMontajeModal({ isOpen, onClose, canExport = true }: Orden
     if (!invianData) return [];
     let items = [...invianData];
 
-    // Exclude digital items (they have their own tab)
-    items = items.filter(item => !item.numero_articulo || !ALLOWED_DIGITAL_ITEM_CODES.has(item.numero_articulo));
+    // Excluir digitales — usar el campo `tradicional_digital` del inventario
+    // (fuente de verdad). Antes filtrábamos por una whitelist hardcodeada de
+    // ItemCodes y se colaban los digitales nuevos que no estaban listados
+    // (ej. RT-PB-SEG-MX, BF-P2-COB-AC). Whitelist queda como fallback solo
+    // cuando `tradicional_digital` viene NULL.
+    items = items.filter(item => {
+      const td = (item.tradicional_digital || '').toUpperCase();
+      if (td === 'DIGITAL') return false;
+      if (td === 'TRADICIONAL') return true;
+      // Sin tradicional_digital definido (data sucia) → fallback a whitelist
+      return !item.numero_articulo || !ALLOWED_DIGITAL_ITEM_CODES.has(item.numero_articulo);
+    });
 
     // Búsqueda de texto
     if (allSearchTerms.length > 0) {
@@ -973,12 +983,18 @@ export function OrdenesMontajeModal({ isOpen, onClose, canExport = true }: Orden
     return Object.entries(groups).sort((a, b) => b[1].length - a[1].length);
   }, [filteredINVIANData, invianGroupings]);
 
-  // Filtered INVIAN Digital data (same as INVIAN but only allowed digital articles)
+  // Filtered INVIAN Digital data — solo digitales (inverso del filtro de VP)
   const filteredINVIANDigitalData = useMemo(() => {
     let items = invianData || [];
 
-    // Filter by allowed digital article codes
-    items = items.filter(item => item.numero_articulo != null && ALLOWED_DIGITAL_ITEM_CODES.has(item.numero_articulo));
+    // Solo digitales — usar tradicional_digital del back. Whitelist como
+    // fallback cuando tradicional_digital viene NULL (data sucia).
+    items = items.filter(item => {
+      const td = (item.tradicional_digital || '').toUpperCase();
+      if (td === 'DIGITAL') return true;
+      if (td === 'TRADICIONAL') return false;
+      return item.numero_articulo != null && ALLOWED_DIGITAL_ITEM_CODES.has(item.numero_articulo);
+    });
 
     // Búsqueda de texto
     if (allSearchTerms.length > 0) {
@@ -1160,6 +1176,11 @@ export function OrdenesMontajeModal({ isOpen, onClose, canExport = true }: Orden
       XLSX.utils.book_append_sheet(wb, ws, 'Digital');
       XLSX.writeFile(wb, `orden_montaje_digital_${new Date().toISOString().split('T')[0]}.xlsx`);
     } else if (activeTab === 'invian' && filteredINVIANData.length > 0) {
+      // Columnas alineadas con la UI: 4 columnas de arte (Arte, Código de arte,
+      // Arte Url, Origen del arte). Antes había duplicados (`Arte` con marca,
+      // `Código de arte` con rsv_id, `Origen del arte` con OrigenArte, e
+      // `Indicaciones`) — el CSV se mostraba inconsistente con lo que ven en
+      // pantalla. Ahora coincide.
       const wsData = filteredINVIANData.map(item => ({
         'Campaña': item.Campania || '',
         'Anunciante': item.Anunciante || '',
@@ -1170,12 +1191,10 @@ export function OrdenesMontajeModal({ isOpen, onClose, canExport = true }: Orden
         'Descripción (Opcional)': item.Descripcion || '',
         'Inicio o Periodo': item.InicioPeriodo || '',
         'Fin o Segmento': item.FinSegmento || '',
-        'Arte': item.Arte || '',
-        'Código de arte (Opcional)': item.CodigoArte || '',
-        'Nombre Arte': item.nombres_artes_digitales || item.ArteFileName || (item.ArteUrl === 'HAS_ARTE' ? 'Arte' : item.ArteUrl?.split('/').pop()) || '',
+        'Arte': item.nombres_archivo_data || '',
+        'Código de arte (Opcional)': item.nombres_artes_digitales || item.ArteFileName || (item.ArteUrl === 'HAS_ARTE' ? 'Arte' : item.ArteUrl?.split('/').pop()) || '',
         'Arte Url (Opcional)': item.ArteUrl === 'HAS_ARTE' ? '' : (getFileUrl(item.ArteUrl) || ''),
-        'Origen del arte (Opcional)': item.OrigenArte || '',
-        'Indicaciones': item.indicaciones || '',
+        'Origen del arte (Opcional)': item.indicaciones || '',
         'Unidad': item.Unidad || '',
         'Cara': item.Cara || '',
         'Plaza': item.Ciudad || '',
@@ -1198,12 +1217,10 @@ export function OrdenesMontajeModal({ isOpen, onClose, canExport = true }: Orden
         'Descripción (Opcional)': item.Descripcion || '',
         'Inicio o Periodo': item.InicioPeriodo || '',
         'Fin o Segmento': item.FinSegmento || '',
-        'Arte': item.Arte || '',
-        'Código de arte (Opcional)': item.CodigoArte || '',
-        'Nombre Arte': item.nombres_artes_digitales || item.ArteFileName || (item.ArteUrl === 'HAS_ARTE' ? 'Arte' : item.ArteUrl?.split('/').pop()) || '',
+        'Arte': item.nombres_archivo_data || '',
+        'Código de arte (Opcional)': item.nombres_artes_digitales || item.ArteFileName || (item.ArteUrl === 'HAS_ARTE' ? 'Arte' : item.ArteUrl?.split('/').pop()) || '',
         'Arte Url (Opcional)': item.ArteUrl === 'HAS_ARTE' ? '' : (getFileUrl(item.ArteUrl) || ''),
-        'Origen del arte (Opcional)': item.OrigenArte || '',
-        'Indicaciones': item.indicaciones || '',
+        'Origen del arte (Opcional)': item.indicaciones || '',
         'Unidad': item.Unidad || '',
         'Cara': item.Cara || '',
         'Plaza': item.Ciudad || '',
