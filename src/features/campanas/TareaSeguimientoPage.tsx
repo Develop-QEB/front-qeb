@@ -17152,14 +17152,29 @@ export function TareaSeguimientoPage() {
                             .forEach(n => allRsvIds.add(n));
                         }
                         const digitalFilesByReserva = new Map<number, string[]>();
+                        const notesByUrl = new Map<string, string>();
                         await Promise.all([...allRsvIds].map(async (rsvId) => {
                           try {
                             const imgs = await campanasService.getImagenesDigitales(campanaId, rsvId);
                             const urls = imgs.map(im => im.archivoData || im.archivo).filter((u): u is string => !!u);
                             if (urls.length) digitalFilesByReserva.set(rsvId, urls);
+                            for (const im of imgs) {
+                              const url = (im as any).archivoData || im.archivo;
+                              const comentario = (im.comentario || '').trim();
+                              if (url && comentario) notesByUrl.set(url, comentario);
+                            }
                           } catch {/* ignorar reservas sin digitales */}
                         }));
-                        await exportVersionarioArtes({ campana: campana as any, items, digitalFilesByReserva });
+                        await Promise.all([...allRsvIds].map(async (rsvId) => {
+                          try {
+                            const artes = await campanasService.getArtesTradicionales(campanaId, rsvId);
+                            for (const a of artes) {
+                              const nota = (a.nota || '').trim();
+                              if (a.archivo && nota) notesByUrl.set(a.archivo, nota);
+                            }
+                          } catch {/* ignorar reservas sin tradicionales */}
+                        }));
+                        await exportVersionarioArtes({ campana: campana as any, items, digitalFilesByReserva, notesByUrl });
                       } catch (e) {
                         console.error('Error exportando versionario artes:', e);
                         alert('Error al generar el Excel de Versionario Artes. Revisa la consola.');

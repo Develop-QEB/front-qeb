@@ -57,9 +57,12 @@ export interface VersionarioArtesExportArgs {
   // Mapa opcional: rsv_id → URLs de archivos digitales (de imagenes_digitales).
   // Cuando se pasa, las URLs se agregan a las columnas "Arte N" deduplicadas.
   digitalFilesByReserva?: Map<number, string[]>;
+  // Mapa opcional URL → nota: nota cargada al subir el arte (tradicional o digital).
+  // La clave es la misma URL que termina en artesPorPlaza.
+  notesByUrl?: Map<string, string>;
 }
 
-export async function exportVersionarioArtes({ campana, items, digitalFilesByReserva }: VersionarioArtesExportArgs): Promise<void> {
+export async function exportVersionarioArtes({ campana, items, digitalFilesByReserva, notesByUrl }: VersionarioArtesExportArgs): Promise<void> {
   const workbook = new ExcelJS.Workbook();
   workbook.creator = 'QEB';
   workbook.created = new Date();
@@ -134,12 +137,12 @@ export async function exportVersionarioArtes({ campana, items, digitalFilesByRes
     'Artículo',
     'Caras',
     'Tarifa',
-    'Estado del Arte',
+    'Notas',
   ];
   const arteHeaders = Array.from({ length: maxArtesUnicos }, (_, i) => `Arte ${i + 1}`);
   const headers = [...baseHeaders, ...arteHeaders];
 
-  const baseWidths = [22, 14, 26, 14, 12, 14, 14, 30, 18, 26, 18, 18, 8, 12, 22];
+  const baseWidths = [22, 14, 26, 14, 12, 14, 14, 30, 18, 26, 18, 18, 8, 12, 50];
   sheet.columns = [
     ...baseWidths.map(w => ({ width: w })),
     ...Array(maxArtesUnicos).fill(null).map(() => ({ width: 22 })),
@@ -180,6 +183,16 @@ export async function exportVersionarioArtes({ campana, items, digitalFilesByRes
     return 'Varios';
   };
 
+  const buildNotasText = (urls: string[]): string => {
+    if (!notesByUrl || notesByUrl.size === 0) return '';
+    const lines: string[] = [];
+    urls.forEach((url, idx) => {
+      const nota = (notesByUrl.get(url) || '').trim();
+      if (nota) lines.push(`Arte ${idx + 1}: ${nota}`);
+    });
+    return lines.join('\n');
+  };
+
   // Lista ordenada (alfabético por nombre de plaza) — 1 fila por plaza
   const plazas = [...byPlaza.keys()].sort((a, b) => a.localeCompare(b));
 
@@ -191,15 +204,8 @@ export async function exportVersionarioArtes({ campana, items, digitalFilesByRes
     const tarifaSum = arr.reduce((s, it) => s + (Number(it.tarifa_publica) || 0), 0);
     const caras = arr.length;
 
-    // Resumen de estados (cuenta por estado tal como aparece en cada item)
-    const estadoCounts: Record<string, number> = {};
-    for (const it of arr) {
-      const estado = it.arte_aprobado || (it.archivo ? 'Pendiente' : 'Sin arte');
-      estadoCounts[estado] = (estadoCounts[estado] || 0) + 1;
-    }
-    const estadoResumen = Object.entries(estadoCounts)
-      .map(([k, v]) => `${v} ${k}`)
-      .join(' / ') || '—';
+    const urls = artesPorPlaza.get(plaza) || [];
+    const notasResumen = buildNotasText(urls);
 
     // Min/max de fechas dentro de la plaza
     const inicios = arr.map(it => it.inicio_periodo).filter(Boolean) as string[];
@@ -222,7 +228,7 @@ export async function exportVersionarioArtes({ campana, items, digitalFilesByRes
       uniqueOrVarios(articulos),
       caras,
       tarifaSum,
-      estadoResumen,
+      notasResumen,
     ];
     // Padding vacío para celdas de arte
     for (let i = 0; i < maxArtesUnicos; i++) rowValues.push('');
@@ -234,7 +240,6 @@ export async function exportVersionarioArtes({ campana, items, digitalFilesByRes
     row.getCell(14).numFmt = '#,##0.00';
 
     // Insertar miniaturas de arte en columnas Arte 1..N (deduplicadas por URL)
-    const urls = artesPorPlaza.get(plaza) || [];
     for (let i = 0; i < urls.length; i++) {
       const url = urls[i];
       const colIndex = ARTE_COL_START + i; // 0-based
@@ -275,6 +280,7 @@ export interface VersionarioArtesMultiArgs {
     campana: Campana;
     items: InventarioConArte[];
     digitalFilesByReserva?: Map<number, string[]>;
+    notesByUrl?: Map<string, string>;
   }>;
   fileNameSuffix?: string;
 }
@@ -298,11 +304,12 @@ export async function exportVersionarioArtesMulti({ campanas, fileNameSuffix }: 
     plaza: string;
     items: InventarioConArte[];
     artesUrls: string[];
+    notesByUrl?: Map<string, string>;
   };
   const bloques: Bloque[] = [];
   let maxArtesUnicos = 0;
 
-  for (const { campana, items, digitalFilesByReserva } of campanas) {
+  for (const { campana, items, digitalFilesByReserva, notesByUrl } of campanas) {
     const byPlaza = new Map<string, InventarioConArte[]>();
     for (const it of items) {
       const p = getPlaza(it);
@@ -331,7 +338,7 @@ export async function exportVersionarioArtesMulti({ campanas, fileNameSuffix }: 
           }
         }
       }
-      bloques.push({ campana, plaza, items: arr, artesUrls: urls });
+      bloques.push({ campana, plaza, items: arr, artesUrls: urls, notesByUrl });
       if (urls.length > maxArtesUnicos) maxArtesUnicos = urls.length;
     }
   }
@@ -360,12 +367,12 @@ export async function exportVersionarioArtesMulti({ campanas, fileNameSuffix }: 
     'Artículo',
     'Caras',
     'Tarifa',
-    'Estado del Arte',
+    'Notas',
   ];
   const arteHeaders = Array.from({ length: maxArtesUnicos }, (_, i) => `Arte ${i + 1}`);
   const headers = [...baseHeaders, ...arteHeaders];
 
-  const baseWidths = [22, 14, 26, 14, 12, 14, 14, 30, 18, 26, 18, 18, 8, 12, 22];
+  const baseWidths = [22, 14, 26, 14, 12, 14, 14, 30, 18, 26, 18, 18, 8, 12, 50];
   sheet.columns = [
     ...baseWidths.map(w => ({ width: w })),
     ...Array(maxArtesUnicos).fill(null).map(() => ({ width: 22 })),
@@ -406,7 +413,7 @@ export async function exportVersionarioArtesMulti({ campanas, fileNameSuffix }: 
   };
 
   for (const bloque of bloques) {
-    const { campana, plaza, items: arr, artesUrls } = bloque;
+    const { campana, plaza, items: arr, artesUrls, notesByUrl } = bloque;
 
     const cuic = campana.cuic ? String(campana.cuic) : '';
     const asesor = (campana as any).T0_U_Asesor || (campana as any).asesor || '';
@@ -420,14 +427,15 @@ export async function exportVersionarioArtesMulti({ campanas, fileNameSuffix }: 
     const tarifaSum = arr.reduce((s, it) => s + (Number(it.tarifa_publica) || 0), 0);
     const caras = arr.length;
 
-    const estadoCounts: Record<string, number> = {};
-    for (const it of arr) {
-      const estado = it.arte_aprobado || (it.archivo ? 'Pendiente' : 'Sin arte');
-      estadoCounts[estado] = (estadoCounts[estado] || 0) + 1;
-    }
-    const estadoResumen = Object.entries(estadoCounts)
-      .map(([k, v]) => `${v} ${k}`)
-      .join(' / ') || '—';
+    const notasResumen = (() => {
+      if (!notesByUrl || notesByUrl.size === 0) return '';
+      const lines: string[] = [];
+      artesUrls.forEach((url, idx) => {
+        const nota = (notesByUrl.get(url) || '').trim();
+        if (nota) lines.push(`Arte ${idx + 1}: ${nota}`);
+      });
+      return lines.join('\n');
+    })();
 
     const inicios = arr.map(it => it.inicio_periodo).filter(Boolean) as string[];
     const fines = arr.map(it => it.fin_periodo).filter(Boolean) as string[];
@@ -449,7 +457,7 @@ export async function exportVersionarioArtesMulti({ campanas, fileNameSuffix }: 
       uniqueOrVarios(articulos),
       caras,
       tarifaSum,
-      estadoResumen,
+      notasResumen,
     ];
     for (let i = 0; i < maxArtesUnicos; i++) rowValues.push('');
 
