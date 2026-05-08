@@ -968,6 +968,33 @@ export function useSocketReservaProgreso(
 }
 
 /**
+ * Hook para el modal de Orden de Montaje: invalida las queries de
+ * ordenes-montaje-cat / ordenes-montaje-invian cuando se crea o elimina
+ * cualquier reserva, para que la columna Diferencia se refresque sola.
+ */
+export function useSocketOrdenesMontaje(enabled: boolean) {
+  const queryClient = useQueryClient();
+
+  useEffect(() => {
+    if (!enabled) return;
+
+    const socket = getSocket();
+    const handle = () => {
+      queryClient.invalidateQueries({ queryKey: ['ordenes-montaje-cat'] });
+      queryClient.invalidateQueries({ queryKey: ['ordenes-montaje-invian'] });
+    };
+
+    socket.on(SOCKET_EVENTS.RESERVA_CREADA, handle);
+    socket.on(SOCKET_EVENTS.RESERVA_ELIMINADA, handle);
+
+    return () => {
+      socket.off(SOCKET_EVENTS.RESERVA_CREADA, handle);
+      socket.off(SOCKET_EVENTS.RESERVA_ELIMINADA, handle);
+    };
+  }, [enabled, queryClient]);
+}
+
+/**
  * Hook para admins: escucha nuevos logs del chatbot en tiempo real
  */
 export function useSocketChatbotAdmin(onNuevoLog: () => void) {
