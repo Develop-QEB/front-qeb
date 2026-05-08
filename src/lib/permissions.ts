@@ -1041,6 +1041,7 @@ const rolePermissions: Partial<Record<UserRole, Partial<RolePermissions>>> = {
     canEditClienteEnFormularios: true,
     canEditCaraFiltersOnEdit: true,
     canEditArticuloOnEdit: true,
+    canCancelPostSAP: true,
     canSeeAllHistorial: true,
     canApproveArteSinRevisar: true,
   },
