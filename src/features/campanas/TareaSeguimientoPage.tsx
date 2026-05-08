@@ -15709,6 +15709,64 @@ export function TareaSeguimientoPage() {
     }
   }, [selectedInventoryIds, selectedInventoryItems, campanaId, calculateTaskTiposConfig, getSelectedImpresionFlowConflicts]);
 
+  const handleExportVersionarioArtesSelected = useCallback(async () => {
+    if (isExportingVersionarioArtes) return;
+    if (selectedInventoryIds.size === 0) return;
+    try {
+      setIsExportingVersionarioArtes(true);
+      const [conArte, sinArte] = await Promise.all([
+        campanasService.getInventarioConArte(campanaId).catch(() => [] as InventarioConArte[]),
+        campanasService.getInventarioSinArte(campanaId).catch(() => [] as InventarioConArte[]),
+      ]);
+      const allItems: InventarioConArte[] = [...(conArte || []), ...(sinArte || [])];
+      // Misma clave que transformInventarioToRow: `${id}_${grupo}` o `${id}`
+      const buildRowKey = (it: any) => it?.grupo ? `${it.id}_${it.grupo}` : String(it.id);
+      const items = allItems.filter(it => selectedInventoryIds.has(buildRowKey(it)));
+      if (items.length === 0) {
+        alert('No se encontró inventario para los items seleccionados.');
+        return;
+      }
+      // Cargar imagenes_digitales por cada reserva para soportar artes múltiples
+      const allRsvIds = new Set<number>();
+      for (const it of items) {
+        String((it as any).rsv_id || (it as any).rsv_ids || '')
+          .split(',')
+          .map(s => parseInt(s.trim()))
+          .filter(n => !isNaN(n))
+          .forEach(n => allRsvIds.add(n));
+      }
+      const digitalFilesByReserva = new Map<number, string[]>();
+      const notesByUrl = new Map<string, string>();
+      await Promise.all([...allRsvIds].map(async (rsvId) => {
+        try {
+          const imgs = await campanasService.getImagenesDigitales(campanaId, rsvId);
+          const urls = imgs.map(im => im.archivoData || im.archivo).filter((u): u is string => !!u);
+          if (urls.length) digitalFilesByReserva.set(rsvId, urls);
+          for (const im of imgs) {
+            const url = (im as any).archivoData || im.archivo;
+            const comentario = (im.comentario || '').trim();
+            if (url && comentario) notesByUrl.set(url, comentario);
+          }
+        } catch {/* ignorar reservas sin digitales */}
+      }));
+      await Promise.all([...allRsvIds].map(async (rsvId) => {
+        try {
+          const artes = await campanasService.getArtesTradicionales(campanaId, rsvId);
+          for (const a of artes) {
+            const nota = (a.nota || '').trim();
+            if (a.archivo && nota) notesByUrl.set(a.archivo, nota);
+          }
+        } catch {/* ignorar reservas sin tradicionales */}
+      }));
+      await exportVersionarioArtes({ campana: campana as any, items, digitalFilesByReserva, notesByUrl });
+    } catch (e) {
+      console.error('Error exportando versionario artes:', e);
+      alert('Error al generar el Excel de Versionario Artes. Revisa la consola.');
+    } finally {
+      setIsExportingVersionarioArtes(false);
+    }
+  }, [isExportingVersionarioArtes, selectedInventoryIds, campanaId, campana]);
+
   const handleCreateTask = useCallback(async (task: Partial<TaskRow> & { proveedores_id?: number; nombre_proveedores?: string; impresiones?: Record<string, number> }) => {
     if (task.tipo === 'Impresión') {
       const conflicts = getSelectedImpresionFlowConflicts();
@@ -16895,7 +16953,29 @@ export function TareaSeguimientoPage() {
                   </div>
                 )}
               </div>
-              {permissions.canEditGestionArtes && (
+              <div className="flex items-center gap-2">
+                {activeEstadoArteTab === 'aprobado' && (
+                  <button
+                    onClick={handleExportVersionarioArtesSelected}
+                    disabled={isExportingVersionarioArtes || selectedInventoryIds.size === 0}
+                    className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium border rounded-lg transition-colors disabled:opacity-60 disabled:cursor-not-allowed ${
+                      selectedInventoryIds.size > 0
+                        ? 'bg-green-900/50 hover:bg-green-900/70 border-green-500/30'
+                        : 'bg-zinc-800/40 border-zinc-700/40'
+                    }`}
+                    title={selectedInventoryIds.size === 0 ? 'Selecciona items con el checkbox para exportar' : 'Descargar Versionario Artes (Excel con miniaturas)'}
+                  >
+                    {isExportingVersionarioArtes ? (
+                      <Loader2 className="h-3.5 w-3.5 text-green-400 animate-spin" />
+                    ) : (
+                      <Download className={`h-3.5 w-3.5 ${selectedInventoryIds.size > 0 ? 'text-green-400' : 'text-zinc-500'}`} />
+                    )}
+                    <span className={selectedInventoryIds.size > 0 ? 'text-green-300' : 'text-zinc-500'}>
+                      {isExportingVersionarioArtes ? 'Generando...' : 'Versionario Artes'}
+                    </span>
+                  </button>
+                )}
+                {permissions.canEditGestionArtes && (
                 <div className="flex items-center gap-2">
                   <button
                     onClick={async () => {
@@ -17005,7 +17085,8 @@ export function TareaSeguimientoPage() {
                     </button>
                   )}
                 </div>
-              )}
+                )}
+              </div>
             </div>
           )}
 
@@ -17125,63 +17206,7 @@ export function TareaSeguimientoPage() {
               <div className="flex items-center gap-2">
                 {activeEstadoProgramacionTab === 'en_programacion' && (
                   <button
-                    onClick={async () => {
-                      if (isExportingVersionarioArtes) return;
-                      if (selectedInventoryIds.size === 0) return;
-                      try {
-                        setIsExportingVersionarioArtes(true);
-                        const [conArte, sinArte] = await Promise.all([
-                          campanasService.getInventarioConArte(campanaId).catch(() => [] as InventarioConArte[]),
-                          campanasService.getInventarioSinArte(campanaId).catch(() => [] as InventarioConArte[]),
-                        ]);
-                        const allItems: InventarioConArte[] = [...(conArte || []), ...(sinArte || [])];
-                        // Misma clave que transformInventarioToRow: `${id}_${grupo}` o `${id}`
-                        const buildRowKey = (it: any) => it?.grupo ? `${it.id}_${it.grupo}` : String(it.id);
-                        const items = allItems.filter(it => selectedInventoryIds.has(buildRowKey(it)));
-                        if (items.length === 0) {
-                          alert('No se encontró inventario para los items seleccionados.');
-                          return;
-                        }
-                        // Cargar imagenes_digitales por cada reserva para soportar artes múltiples
-                        const allRsvIds = new Set<number>();
-                        for (const it of items) {
-                          String((it as any).rsv_id || (it as any).rsv_ids || '')
-                            .split(',')
-                            .map(s => parseInt(s.trim()))
-                            .filter(n => !isNaN(n))
-                            .forEach(n => allRsvIds.add(n));
-                        }
-                        const digitalFilesByReserva = new Map<number, string[]>();
-                        const notesByUrl = new Map<string, string>();
-                        await Promise.all([...allRsvIds].map(async (rsvId) => {
-                          try {
-                            const imgs = await campanasService.getImagenesDigitales(campanaId, rsvId);
-                            const urls = imgs.map(im => im.archivoData || im.archivo).filter((u): u is string => !!u);
-                            if (urls.length) digitalFilesByReserva.set(rsvId, urls);
-                            for (const im of imgs) {
-                              const url = (im as any).archivoData || im.archivo;
-                              const comentario = (im.comentario || '').trim();
-                              if (url && comentario) notesByUrl.set(url, comentario);
-                            }
-                          } catch {/* ignorar reservas sin digitales */}
-                        }));
-                        await Promise.all([...allRsvIds].map(async (rsvId) => {
-                          try {
-                            const artes = await campanasService.getArtesTradicionales(campanaId, rsvId);
-                            for (const a of artes) {
-                              const nota = (a.nota || '').trim();
-                              if (a.archivo && nota) notesByUrl.set(a.archivo, nota);
-                            }
-                          } catch {/* ignorar reservas sin tradicionales */}
-                        }));
-                        await exportVersionarioArtes({ campana: campana as any, items, digitalFilesByReserva, notesByUrl });
-                      } catch (e) {
-                        console.error('Error exportando versionario artes:', e);
-                        alert('Error al generar el Excel de Versionario Artes. Revisa la consola.');
-                      } finally {
-                        setIsExportingVersionarioArtes(false);
-                      }
-                    }}
+                    onClick={handleExportVersionarioArtesSelected}
                     disabled={isExportingVersionarioArtes || selectedInventoryIds.size === 0}
                     className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium border rounded-lg transition-colors disabled:opacity-60 disabled:cursor-not-allowed ${
                       selectedInventoryIds.size > 0
