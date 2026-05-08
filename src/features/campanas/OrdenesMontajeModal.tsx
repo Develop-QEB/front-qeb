@@ -1195,7 +1195,7 @@ export function OrdenesMontajeModal({ isOpen, onClose, canExport = true }: Orden
         'Código de arte (Opcional)': item.nombres_artes_digitales || item.ArteFileName || (item.ArteUrl === 'HAS_ARTE' ? 'Arte' : item.ArteUrl?.split('/').pop()) || '',
         'Arte Url (Opcional)': item.ArteUrl === 'HAS_ARTE' ? '' : (getFileUrl(item.ArteUrl) || ''),
         'Origen del arte (Opcional)': item.indicaciones || '',
-        'Unidad': item.Unidad || '',
+        'Unidad': (item.Unidad || '').split('_')[0] || '',
         'Cara': item.Cara || '',
         'Plaza': item.Ciudad || '',
         'Tipo de Distribución': item.TipoDistribucion || '',
@@ -1221,7 +1221,7 @@ export function OrdenesMontajeModal({ isOpen, onClose, canExport = true }: Orden
         'Código de arte (Opcional)': item.nombres_artes_digitales || item.ArteFileName || (item.ArteUrl === 'HAS_ARTE' ? 'Arte' : item.ArteUrl?.split('/').pop()) || '',
         'Arte Url (Opcional)': item.ArteUrl === 'HAS_ARTE' ? '' : (getFileUrl(item.ArteUrl) || ''),
         'Origen del arte (Opcional)': item.indicaciones || '',
-        'Unidad': item.Unidad || '',
+        'Unidad': (item.Unidad || '').split('_')[0] || '',
         'Cara': item.Cara || '',
         'Plaza': item.Ciudad || '',
         'Tipo de Distribución': item.TipoDistribucion || '',
@@ -2433,7 +2433,9 @@ function INVIANRow({ item, onOpenGallery, showCto = false }: { item: OrdenMontaj
       <td className={`px-3 py-2 text-xs ${isDark ? 'text-zinc-300' : 'text-gray-700'} max-w-[180px] truncate`} title={item.indicaciones || ''}>
         {item.indicaciones || '-'}
       </td>
-      <td className="px-3 py-2 text-xs text-violet-300 font-mono">{item.Unidad || '-'}</td>
+      {/* Unidad: solo el código (antes del primer '_'). codigo_unico viene
+          como 'TJ1129_Flujo_Tijuana' pero solo queremos 'TJ1129'. */}
+      <td className="px-3 py-2 text-xs text-violet-300 font-mono" title={item.Unidad || ''}>{(item.Unidad || '').split('_')[0] || '-'}</td>
       <td className={`px-3 py-2 text-xs ${isDark ? 'text-zinc-300' : 'text-gray-700'}`}>{item.Cara || '-'}</td>
       <td className={`px-3 py-2 text-xs ${isDark ? 'text-zinc-300' : 'text-gray-700'}`}>{item.Ciudad || '-'}</td>
       {showCto && (
