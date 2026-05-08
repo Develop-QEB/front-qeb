@@ -478,7 +478,17 @@ export function buildDeliveryNote(
       NumAtCard: campana.id?.toString() || '',
       Comments: campana.comentario_cambio_status || '',
       DocDueDate: (campana.fecha_fin || new Date().toISOString()).split('T')[0],
-      SalesPersonCode: sapDatabase === 'TRADE' ? -1 : ((campana as any).salesperson_code || -1),
+      SalesPersonCode: (() => {
+        const sp = Number((campana as any).salesperson_code) || null;
+        if (sapDatabase === 'TRADE') {
+          // SBOIMUTRADE solo tiene 5 vendedores válidos (ver /cuic-trade del
+          // SAP relay): 11, 32, 73, 116, 146 — fallback a 146 si el del
+          // cliente no está. Antes estaba hardcoded a -1 lo que tiraba -2028.
+          const tradeValid = new Set([11, 32, 73, 116, 146]);
+          return sp && tradeValid.has(sp) ? sp : 146;
+        }
+        return sp ?? -1;
+      })(),
       U_CIC: String(campana.cuic || ''),
       U_CRM_Asesor: campana.T0_U_Asesor || '',
       U_CRM_Producto: campana.T2_U_Producto || '',
