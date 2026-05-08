@@ -15449,6 +15449,17 @@ export function TareaSeguimientoPage() {
     return filteredInventory.filter((item) => selectedInventoryIds.has(item.id));
   }, [filteredInventory, filteredImpresionesData, filteredProgramacionData, selectedInventoryIds, activeMainTab]);
 
+  // Subset de seleccionados cuyo arte está en estado 'aprobado'.
+  // Se usa para habilitar el botón Versionario Artes en el sub-tab Aprobado
+  // aun cuando la selección global incluya items de otras sub-tabs/main-tabs.
+  const selectedAprobadosIds = useMemo(() => {
+    const ids = new Set<string>();
+    selectedInventoryItems.forEach(item => {
+      if ((item as any).estado_arte === 'aprobado') ids.add(item.id);
+    });
+    return ids;
+  }, [selectedInventoryItems]);
+
   const getSelectedImpresionFlowConflicts = useCallback((): ImpresionFlowConflict[] => {
     const conflicts: ImpresionFlowConflict[] = [];
     const seen = new Set<string>();
@@ -15709,9 +15720,10 @@ export function TareaSeguimientoPage() {
     }
   }, [selectedInventoryIds, selectedInventoryItems, campanaId, calculateTaskTiposConfig, getSelectedImpresionFlowConflicts]);
 
-  const handleExportVersionarioArtesSelected = useCallback(async () => {
+  const handleExportVersionarioArtesSelected = useCallback(async (filterIds?: Set<string>) => {
     if (isExportingVersionarioArtes) return;
-    if (selectedInventoryIds.size === 0) return;
+    const idsToUse = filterIds instanceof Set && filterIds.size > 0 ? filterIds : selectedInventoryIds;
+    if (idsToUse.size === 0) return;
     try {
       setIsExportingVersionarioArtes(true);
       const [conArte, sinArte] = await Promise.all([
@@ -15721,7 +15733,7 @@ export function TareaSeguimientoPage() {
       const allItems: InventarioConArte[] = [...(conArte || []), ...(sinArte || [])];
       // Misma clave que transformInventarioToRow: `${id}_${grupo}` o `${id}`
       const buildRowKey = (it: any) => it?.grupo ? `${it.id}_${it.grupo}` : String(it.id);
-      const items = allItems.filter(it => selectedInventoryIds.has(buildRowKey(it)));
+      const items = allItems.filter(it => idsToUse.has(buildRowKey(it)));
       if (items.length === 0) {
         alert('No se encontró inventario para los items seleccionados.');
         return;
@@ -16956,21 +16968,21 @@ export function TareaSeguimientoPage() {
               <div className="flex items-center gap-2">
                 {activeEstadoArteTab === 'aprobado' && (
                   <button
-                    onClick={handleExportVersionarioArtesSelected}
-                    disabled={isExportingVersionarioArtes || selectedInventoryIds.size === 0}
+                    onClick={() => handleExportVersionarioArtesSelected(selectedAprobadosIds)}
+                    disabled={isExportingVersionarioArtes || selectedAprobadosIds.size === 0}
                     className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium border rounded-lg transition-colors disabled:opacity-60 disabled:cursor-not-allowed ${
-                      selectedInventoryIds.size > 0
+                      selectedAprobadosIds.size > 0
                         ? 'bg-green-900/50 hover:bg-green-900/70 border-green-500/30'
                         : 'bg-zinc-800/40 border-zinc-700/40'
                     }`}
-                    title={selectedInventoryIds.size === 0 ? 'Selecciona items con el checkbox para exportar' : 'Descargar Versionario Artes (Excel con miniaturas)'}
+                    title={selectedAprobadosIds.size === 0 ? 'Selecciona artes aprobados con el checkbox para exportar' : `Descargar Versionario Artes de ${selectedAprobadosIds.size} arte(s) aprobado(s)`}
                   >
                     {isExportingVersionarioArtes ? (
                       <Loader2 className="h-3.5 w-3.5 text-green-400 animate-spin" />
                     ) : (
-                      <Download className={`h-3.5 w-3.5 ${selectedInventoryIds.size > 0 ? 'text-green-400' : 'text-zinc-500'}`} />
+                      <Download className={`h-3.5 w-3.5 ${selectedAprobadosIds.size > 0 ? 'text-green-400' : 'text-zinc-500'}`} />
                     )}
-                    <span className={selectedInventoryIds.size > 0 ? 'text-green-300' : 'text-zinc-500'}>
+                    <span className={selectedAprobadosIds.size > 0 ? 'text-green-300' : 'text-zinc-500'}>
                       {isExportingVersionarioArtes ? 'Generando...' : 'Versionario Artes'}
                     </span>
                   </button>
@@ -17206,7 +17218,7 @@ export function TareaSeguimientoPage() {
               <div className="flex items-center gap-2">
                 {activeEstadoProgramacionTab === 'en_programacion' && (
                   <button
-                    onClick={handleExportVersionarioArtesSelected}
+                    onClick={() => handleExportVersionarioArtesSelected()}
                     disabled={isExportingVersionarioArtes || selectedInventoryIds.size === 0}
                     className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium border rounded-lg transition-colors disabled:opacity-60 disabled:cursor-not-allowed ${
                       selectedInventoryIds.size > 0
