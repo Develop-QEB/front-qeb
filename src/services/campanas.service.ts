@@ -386,6 +386,7 @@ export interface OrdenMontajeINVIAN {
   indicaciones?: string | null;
   num_artes_digitales?: number | null;
   nombres_artes_digitales?: string | null;
+  nombres_archivo_data?: string | null;
   cortesia?: number | null;
   numero_articulo?: string | null;
   cto?: string | null;
