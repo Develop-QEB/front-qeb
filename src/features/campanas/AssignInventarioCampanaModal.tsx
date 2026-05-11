@@ -916,6 +916,10 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
   const [isSaving, setIsSaving] = useState(false);
   // Reserva Masiva: toggle (solo aparece cuando la cara tiene grupo_masivo_id)
   const [reservaMasivaC, setReservaMasivaC] = useState<boolean>(false);
+  // Exclusión por categoría de cliente: oculta inventario disponible cerca de
+  // piezas reservadas por clientes de la categoría seleccionada.
+  const [excluirCategoria, setExcluirCategoria] = useState<string>('');
+  const [excluirDistanciaKm, setExcluirDistanciaKm] = useState<number>(1);
   // Eliminar Reservas Masivo: replica el delete a las reservas equivalentes
   // (mismo codigo_unico) en otras caras del mismo grupo_masivo_id
   const [eliminarMasivoC, setEliminarMasivoC] = useState<boolean>(false);
@@ -1118,6 +1122,14 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
     queryKey: ['inventario-filters'],
     queryFn: () => solicitudesService.getInventarioFilters(),
     enabled: isOpen,
+  });
+
+  // Categorías de cliente — solo las que tienen reservas activas.
+  const { data: categoriasCliente } = useQuery({
+    queryKey: ['categorias-cliente'],
+    queryFn: () => inventariosService.getCategoriasCliente(),
+    enabled: isOpen && viewState === 'search-inventory',
+    staleTime: 5 * 60 * 1000,
   });
 
   // Fetch CUIC data for client editing
@@ -3088,6 +3100,8 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
         fecha_fin: fechaFinSearch,
         solicitudCaraId: cara.id,
         excluir_mi_macro: tipoPeriodo === 'catorcena' ? 1 : undefined,
+        excluir_categoria: excluirCategoria || undefined,
+        excluir_distancia_km: excluirCategoria ? excluirDistanciaKm : undefined,
       });
       setInventarioDisponible(response.data || []);
     } catch (error) {
@@ -3106,6 +3120,14 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [reservaMasivaC]);
+
+  // Re-search cuando cambia exclusión por categoría o distancia
+  useEffect(() => {
+    if (viewState === 'search-inventory' && selectedCaraForSearch) {
+      handleSearchInventory(selectedCaraForSearch);
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [excluirCategoria, excluirDistanciaKm]);
 
   // Refetch disponibles with current filters
   const handleRefetchDisponibles = async () => {
@@ -3145,6 +3167,8 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
         fecha_fin: fechaFinSearch2,
         solicitudCaraId: selectedCaraForSearch.id,
         excluir_mi_macro: tipoPeriodo === 'catorcena' ? 1 : undefined,
+        excluir_categoria: excluirCategoria || undefined,
+        excluir_distancia_km: excluirCategoria ? excluirDistanciaKm : undefined,
       });
       setInventarioDisponible(response.data || []);
     } catch (error) {
@@ -5160,6 +5184,48 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
                       </label>
                     );
                   })()}
+
+                  {/* Exclusión por categoría de cliente — esconde inventario
+                      cercano a piezas reservadas por clientes de una categoría
+                      X dentro del radio elegido (Haversine en back). */}
+                  <div className={`flex items-center gap-1 px-2 py-1 rounded-lg border ${excluirCategoria ? 'bg-amber-500/15 border-amber-500/40' : 'bg-zinc-800 border-zinc-700'}`} title="Excluye inventario disponible que esté cerca de piezas reservadas por clientes de la categoría seleccionada.">
+                    <span className={`text-[10px] uppercase ${excluirCategoria ? 'text-amber-300' : 'text-zinc-500'}`}>Excluir cat.</span>
+                    <select
+                      value={excluirCategoria}
+                      onChange={(e) => setExcluirCategoria(e.target.value)}
+                      className="px-1.5 py-0.5 rounded text-xs border-0 focus:ring-1 focus:ring-amber-500/50 bg-zinc-900 text-zinc-200"
+                    >
+                      <option value="">— ninguna —</option>
+                      {(categoriasCliente || []).map(cat => (
+                        <option key={cat} value={cat}>{cat}</option>
+                      ))}
+                    </select>
+                    {excluirCategoria && (
+                      <select
+                        value={excluirDistanciaKm}
+                        onChange={(e) => setExcluirDistanciaKm(Number(e.target.value))}
+                        className="px-1.5 py-0.5 rounded text-xs border-0 focus:ring-1 focus:ring-amber-500/50 bg-zinc-900 text-amber-300"
+                        title="Distancia mínima al inventario excluido"
+                      >
+                        <option value={0.5}>500 m</option>
+                        <option value={1}>1 km</option>
+                        <option value={1.5}>1.5 km</option>
+                        <option value={2}>2 km</option>
+                        <option value={2.5}>2.5 km</option>
+                        <option value={3}>3 km</option>
+                      </select>
+                    )}
+                    {excluirCategoria && (
+                      <button
+                        type="button"
+                        onClick={() => setExcluirCategoria('')}
+                        className="p-0.5 rounded hover:bg-zinc-700 text-zinc-400"
+                        title="Quitar filtro de exclusión"
+                      >
+                        <X className="h-3 w-3" />
+                      </button>
+                    )}
+                  </div>
 
                   <div className="flex-1" />
 
