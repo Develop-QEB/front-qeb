@@ -106,56 +106,89 @@ function getMonthShort(dateStr: string): string {
   return `${MESES_LABEL[month]} ${m[1]}`;
 }
 
-// Status Colors - colores únicos por cada tipo de status
-const getStatusColors = (isDark: boolean): Record<string, { bg: string; text: string; border: string }> => ({
-  'Aprobada': { bg: isDark ? 'bg-emerald-500/20' : 'bg-emerald-50', text: isDark ? 'text-emerald-300' : 'text-emerald-700', border: 'border-emerald-500/30' },
-  'inactiva': { bg: isDark ? 'bg-zinc-500/20' : 'bg-zinc-50', text: isDark ? 'text-zinc-300' : 'text-zinc-700', border: isDark ? 'border-zinc-500/30' : 'border-zinc-300' },
-  'finalizada': { bg: isDark ? 'bg-blue-500/20' : 'bg-blue-50', text: isDark ? 'text-blue-300' : 'text-blue-700', border: 'border-blue-500/30' },
-  'por iniciar': { bg: isDark ? 'bg-amber-500/20' : 'bg-amber-50', text: isDark ? 'text-amber-300' : 'text-amber-700', border: 'border-amber-500/30' },
-  'en curso': { bg: isDark ? 'bg-cyan-500/20' : 'bg-cyan-50', text: isDark ? 'text-cyan-300' : 'text-cyan-700', border: 'border-cyan-500/30' },
-  'pendiente': { bg: isDark ? 'bg-orange-500/20' : 'bg-orange-50', text: isDark ? 'text-orange-300' : 'text-orange-700', border: 'border-orange-500/30' },
-  'cancelada': { bg: isDark ? 'bg-red-500/20' : 'bg-red-50', text: isDark ? 'text-red-300' : 'text-red-700', border: 'border-red-500/30' },
-  'pausada': { bg: isDark ? 'bg-yellow-500/20' : 'bg-yellow-50', text: isDark ? 'text-yellow-300' : 'text-yellow-700', border: 'border-yellow-500/30' },
-});
+// Status / Period / EstatusArte colors — dos mapas estáticos por tema.
+// Antes se reconstruía el objeto entero en cada llamada (y en algunos lugares
+// una vez por fila renderizada). Ahora son constantes módulo y el helper
+// solo elige cuál usar. El dark-mode toggle sigue funcionando igual.
+type StatusColor = { bg: string; text: string; border: string };
 
-const getDefaultStatusColor = (isDark: boolean) => ({ bg: isDark ? 'bg-violet-500/20' : 'bg-violet-50', text: isDark ? 'text-violet-300' : 'text-violet-700', border: 'border-violet-500/30' });
+const STATUS_COLORS_DARK: Record<string, StatusColor> = {
+  'Aprobada':    { bg: 'bg-emerald-500/20', text: 'text-emerald-300', border: 'border-emerald-500/30' },
+  'inactiva':    { bg: 'bg-zinc-500/20',    text: 'text-zinc-300',    border: 'border-zinc-500/30' },
+  'finalizada':  { bg: 'bg-blue-500/20',    text: 'text-blue-300',    border: 'border-blue-500/30' },
+  'por iniciar': { bg: 'bg-amber-500/20',   text: 'text-amber-300',   border: 'border-amber-500/30' },
+  'en curso':    { bg: 'bg-cyan-500/20',    text: 'text-cyan-300',    border: 'border-cyan-500/30' },
+  'pendiente':   { bg: 'bg-orange-500/20',  text: 'text-orange-300',  border: 'border-orange-500/30' },
+  'cancelada':   { bg: 'bg-red-500/20',     text: 'text-red-300',     border: 'border-red-500/30' },
+  'pausada':     { bg: 'bg-yellow-500/20',  text: 'text-yellow-300',  border: 'border-yellow-500/30' },
+};
 
-// Colores para estatus de artes
-const getEstatusArteColors = (isDark: boolean): Record<string, { bg: string; text: string; border: string }> => ({
-  'Carga Artes': { bg: isDark ? 'bg-zinc-500/20' : 'bg-zinc-50', text: isDark ? 'text-zinc-300' : 'text-zinc-700', border: isDark ? 'border-zinc-500/30' : 'border-zinc-300' },
-  'Revision Artes': { bg: isDark ? 'bg-amber-500/20' : 'bg-amber-50', text: isDark ? 'text-amber-300' : 'text-amber-700', border: 'border-amber-500/30' },
-  'Artes Aprobados': { bg: isDark ? 'bg-emerald-500/20' : 'bg-emerald-50', text: isDark ? 'text-emerald-300' : 'text-emerald-700', border: 'border-emerald-500/30' },
-  'En Impresion': { bg: isDark ? 'bg-cyan-500/20' : 'bg-cyan-50', text: isDark ? 'text-cyan-300' : 'text-cyan-700', border: 'border-cyan-500/30' },
-  'Artes Recibidos': { bg: isDark ? 'bg-blue-500/20' : 'bg-blue-50', text: isDark ? 'text-blue-300' : 'text-blue-700', border: 'border-blue-500/30' },
-  'Instalado': { bg: isDark ? 'bg-green-500/20' : 'bg-green-50', text: isDark ? 'text-green-300' : 'text-green-700', border: 'border-green-500/30' },
-});
+const STATUS_COLORS_LIGHT: Record<string, StatusColor> = {
+  'Aprobada':    { bg: 'bg-emerald-50', text: 'text-emerald-700', border: 'border-emerald-500/30' },
+  'inactiva':    { bg: 'bg-zinc-50',    text: 'text-zinc-700',    border: 'border-zinc-300' },
+  'finalizada':  { bg: 'bg-blue-50',    text: 'text-blue-700',    border: 'border-blue-500/30' },
+  'por iniciar': { bg: 'bg-amber-50',   text: 'text-amber-700',   border: 'border-amber-500/30' },
+  'en curso':    { bg: 'bg-cyan-50',    text: 'text-cyan-700',    border: 'border-cyan-500/30' },
+  'pendiente':   { bg: 'bg-orange-50',  text: 'text-orange-700',  border: 'border-orange-500/30' },
+  'cancelada':   { bg: 'bg-red-50',     text: 'text-red-700',     border: 'border-red-500/30' },
+  'pausada':     { bg: 'bg-yellow-50',  text: 'text-yellow-700',  border: 'border-yellow-500/30' },
+};
+
+const DEFAULT_STATUS_COLOR_DARK: StatusColor  = { bg: 'bg-violet-500/20', text: 'text-violet-300', border: 'border-violet-500/30' };
+const DEFAULT_STATUS_COLOR_LIGHT: StatusColor = { bg: 'bg-violet-50',     text: 'text-violet-700', border: 'border-violet-500/30' };
+
+const ESTATUS_ARTE_COLORS_DARK: Record<string, StatusColor> = {
+  'Carga Artes':     { bg: 'bg-zinc-500/20',    text: 'text-zinc-300',    border: 'border-zinc-500/30' },
+  'Revision Artes':  { bg: 'bg-amber-500/20',   text: 'text-amber-300',   border: 'border-amber-500/30' },
+  'Artes Aprobados': { bg: 'bg-emerald-500/20', text: 'text-emerald-300', border: 'border-emerald-500/30' },
+  'En Impresion':    { bg: 'bg-cyan-500/20',    text: 'text-cyan-300',    border: 'border-cyan-500/30' },
+  'Artes Recibidos': { bg: 'bg-blue-500/20',    text: 'text-blue-300',    border: 'border-blue-500/30' },
+  'Instalado':       { bg: 'bg-green-500/20',   text: 'text-green-300',   border: 'border-green-500/30' },
+};
+
+const ESTATUS_ARTE_COLORS_LIGHT: Record<string, StatusColor> = {
+  'Carga Artes':     { bg: 'bg-zinc-50',    text: 'text-zinc-700',    border: 'border-zinc-300' },
+  'Revision Artes':  { bg: 'bg-amber-50',   text: 'text-amber-700',   border: 'border-amber-500/30' },
+  'Artes Aprobados': { bg: 'bg-emerald-50', text: 'text-emerald-700', border: 'border-emerald-500/30' },
+  'En Impresion':    { bg: 'bg-cyan-50',    text: 'text-cyan-700',    border: 'border-cyan-500/30' },
+  'Artes Recibidos': { bg: 'bg-blue-50',    text: 'text-blue-700',    border: 'border-blue-500/30' },
+  'Instalado':       { bg: 'bg-green-50',   text: 'text-green-700',   border: 'border-green-500/30' },
+};
+
+const PERIOD_COLORS_DARK: Record<string, StatusColor> = {
+  'Pasada':   { bg: 'bg-zinc-500/20',    text: 'text-zinc-300',    border: 'border-zinc-500/30' },
+  'En curso': { bg: 'bg-emerald-500/20', text: 'text-emerald-300', border: 'border-emerald-500/30' },
+  'Futura':   { bg: 'bg-amber-500/20',   text: 'text-amber-300',   border: 'border-amber-500/30' },
+};
+
+const PERIOD_COLORS_LIGHT: Record<string, StatusColor> = {
+  'Pasada':   { bg: 'bg-zinc-50',    text: 'text-zinc-700',    border: 'border-zinc-300' },
+  'En curso': { bg: 'bg-emerald-50', text: 'text-emerald-700', border: 'border-emerald-500/30' },
+  'Futura':   { bg: 'bg-amber-50',   text: 'text-amber-700',   border: 'border-amber-500/30' },
+};
+
+// Helpers retro-compatibles: devuelven el mapa correcto sin construir nada nuevo.
+const getStatusColors = (isDark: boolean) => isDark ? STATUS_COLORS_DARK : STATUS_COLORS_LIGHT;
+const getEstatusArteColors = (isDark: boolean) => isDark ? ESTATUS_ARTE_COLORS_DARK : ESTATUS_ARTE_COLORS_LIGHT;
+const getPeriodColors = (isDark: boolean) => isDark ? PERIOD_COLORS_DARK : PERIOD_COLORS_LIGHT;
+const getDefaultStatusColor = (isDark: boolean) => isDark ? DEFAULT_STATUS_COLOR_DARK : DEFAULT_STATUS_COLOR_LIGHT;
 
 function getEstatusArteColor(estatus: string | null | undefined, isDark: boolean = true) {
-  const DEFAULT = getDefaultStatusColor(isDark);
-  if (!estatus) return DEFAULT;
-  const COLORS = getEstatusArteColors(isDark);
-  return COLORS[estatus] || DEFAULT;
+  if (!estatus) return getDefaultStatusColor(isDark);
+  const map = getEstatusArteColors(isDark);
+  return map[estatus] || getDefaultStatusColor(isDark);
 }
 
 function getStatusColor(status: string | null | undefined, isDark: boolean = true) {
-  const DEFAULT = getDefaultStatusColor(isDark);
-  const STATUS_COLORS = getStatusColors(isDark);
-  if (!status) return DEFAULT;
+  if (!status) return getDefaultStatusColor(isDark);
+  const map = getStatusColors(isDark);
   const trimmed = status.trim();
-  // Buscar match exacto primero, luego lowercase
-  if (STATUS_COLORS[trimmed]) return STATUS_COLORS[trimmed];
+  if (map[trimmed]) return map[trimmed];
   const normalized = trimmed.toLowerCase();
-  if (STATUS_COLORS[normalized]) return STATUS_COLORS[normalized];
-  // Si no, generar un color dinámico basado en el nombre
+  if (map[normalized]) return map[normalized];
+  // Si no, generar un color dinámico basado en el nombre.
   return getTagColor(status, isDark);
 }
-
-// Period badge colors
-const getPeriodColors = (isDark: boolean): Record<string, { bg: string; text: string; border: string }> => ({
-  'Pasada': { bg: isDark ? 'bg-zinc-500/20' : 'bg-zinc-50', text: isDark ? 'text-zinc-300' : 'text-zinc-700', border: isDark ? 'border-zinc-500/30' : 'border-zinc-300' },
-  'En curso': { bg: isDark ? 'bg-emerald-500/20' : 'bg-emerald-50', text: isDark ? 'text-emerald-300' : 'text-emerald-700', border: 'border-emerald-500/30' },
-  'Futura': { bg: isDark ? 'bg-amber-500/20' : 'bg-amber-50', text: isDark ? 'text-amber-300' : 'text-amber-700', border: 'border-amber-500/30' },
-});
 
 // Colores para gráficas
 const CHART_COLORS = {
@@ -816,6 +849,229 @@ function ArtGalleryModal({
   );
 }
 
+// Row component — extraído y memoizado. Antes era `renderCampanaRow` dentro
+// del componente padre: se recreaba en cada render y construía un mapa de
+// colores por fila. Ahora solo se re-renderiza si cambia `item`, `isDark`,
+// algún permiso, o la inversión total de esa campaña.
+interface CampanaRowProps {
+  item: Campana;
+  index: number;
+  isDark: boolean;
+  invTotal: number | null;
+  hayFiltroPeriodo: boolean;
+  canEditPerm: boolean;
+  canSeeGestionArtesPerm: boolean;
+  isEditDisabled: boolean;
+  onOpen: (id: number) => void;
+  onShare: (propuestaId: number) => void;
+  onEdit: (item: Campana) => void;
+  onIncidencia: (item: Campana) => void;
+  onStatus: (item: Campana) => void;
+}
+
+const CampanaRow = React.memo(function CampanaRow({
+  item,
+  index,
+  isDark,
+  invTotal,
+  hayFiltroPeriodo,
+  canEditPerm,
+  canSeeGestionArtesPerm,
+  isEditDisabled,
+  onOpen,
+  onShare,
+  onEdit,
+  onIncidencia,
+  onStatus,
+}: CampanaRowProps) {
+  const statusColor = getStatusColor(item.status, isDark);
+  const periodStatus = getPeriodStatus(item.fecha_inicio, item.fecha_fin);
+  const periodMap = getPeriodColors(isDark);
+  const periodColor = periodMap[periodStatus] || getDefaultStatusColor(isDark);
+  const isMensual = (item as any).tipo_periodo === 'mensual';
+
+  // Inversión: con filtro usa el valor que ya filtró el backend;
+  // sin filtro usa el total dinámico cargado por batch (invTotal).
+  const inv = hayFiltroPeriodo
+    ? Number(item.inversion || 0)
+    : (invTotal !== null ? invTotal : Number(item.inversion || 0));
+
+  return (
+    <tr key={`campana-${item.id}-${index}`} className={`border-b ${isDark ? 'border-zinc-800/50 hover:bg-zinc-800/30' : 'border-gray-200 hover:bg-gray-50'} transition-colors`}>
+      {/* ID */}
+      <td className="px-4 py-3">
+        <span className={`font-mono text-xs px-2 py-1 rounded-md ${isDark ? 'bg-purple-500/10 text-purple-300' : 'bg-purple-50 text-purple-700'}`}>#{item.propuesta_id || item.id}</span>
+      </td>
+      {/* Periodo */}
+      <td className="px-4 py-3">
+        <span className={`px-2 py-0.5 rounded-full text-[10px] ${periodColor.bg} ${periodColor.text} border ${periodColor.border}`}>
+          {periodStatus}
+        </span>
+      </td>
+      {/* Creador */}
+      <td className="px-4 py-3">
+        {item.creador_nombre ? (
+          <div className="flex items-center gap-1.5">
+            <div className={`w-6 h-6 rounded-full ${isDark ? 'bg-purple-500/20' : 'bg-purple-100'} flex items-center justify-center`}>
+              <User className={`h-3 w-3 ${isDark ? 'text-purple-400' : 'text-purple-600'}`} />
+            </div>
+            <span className={`${isDark ? 'text-zinc-300' : 'text-gray-700'} text-sm`}>{item.creador_nombre}</span>
+          </div>
+        ) : (
+          <span className={`${isDark ? 'text-zinc-500' : 'text-gray-400'} text-xs`}>-</span>
+        )}
+      </td>
+      {/* Campaña */}
+      <td className="px-4 py-3">
+        <span className={`font-medium ${isDark ? 'text-white' : 'text-gray-900'} text-sm`}>{item.nombre}</span>
+      </td>
+      {/* Cliente/Marca */}
+      <td className="px-4 py-3">
+        <div className="flex items-center gap-1.5">
+          <span className={`${isDark ? 'text-zinc-300' : 'text-gray-700'} text-sm max-w-[180px] truncate`} title={item.T2_U_Marca || item.cliente_nombre || item.cliente_razon_social || '-'}>
+            {item.T2_U_Marca || item.cliente_nombre || item.cliente_razon_social || '-'}
+          </span>
+          {item.sap_database && (
+            <span className={`inline-flex text-[9px] font-bold px-1.5 py-0.5 rounded-full border flex-shrink-0 ${
+              item.sap_database === 'CIMU'
+                ? (isDark ? 'bg-blue-500/20 text-blue-300' : 'bg-blue-50 text-blue-700') + ' border-blue-500/30'
+                : item.sap_database === 'TEST'
+                  ? (isDark ? 'bg-amber-500/20 text-amber-300' : 'bg-amber-50 text-amber-700') + ' border-amber-500/30'
+                  : (isDark ? 'bg-emerald-500/20 text-emerald-300' : 'bg-emerald-50 text-emerald-700') + ' border-emerald-500/30'
+            }`}>{item.sap_database}</span>
+          )}
+        </div>
+      </td>
+      {/* Status */}
+      <td className="px-4 py-3">
+        <div className="flex flex-col gap-1 items-start">
+          <button
+            onClick={() => onStatus(item)}
+            className={`px-2 py-0.5 rounded-full text-[10px] ${statusColor.bg} ${statusColor.text} border ${statusColor.border} hover:opacity-80 transition-opacity cursor-pointer`}
+          >
+            {item.status}
+          </button>
+          {item.caras_ultima_cat != null && Number(item.caras_ultima_cat) > 0 && Number(item.reservas_count_ultima_cat) < Number(item.caras_ultima_cat) && (
+            <span className={`px-1.5 py-0.5 rounded-full text-[9px] ${isDark ? 'bg-yellow-500/20 text-yellow-300' : 'bg-yellow-50 text-yellow-700'} border border-yellow-500/30`}>
+              Incompleta
+            </span>
+          )}
+        </div>
+      </td>
+      {/* Actividad */}
+      <td className="px-4 py-3">
+        {item.has_aps ? (
+          <span className={`px-2 py-0.5 rounded-full text-[10px] ${isDark ? 'bg-emerald-500/20 text-emerald-300' : 'bg-emerald-50 text-emerald-700'} border border-emerald-500/30`}>
+            Activa
+          </span>
+        ) : (
+          <span className={`px-2 py-0.5 rounded-full text-[10px] ${isDark ? 'bg-zinc-500/20 text-zinc-300' : 'bg-zinc-50 text-zinc-700'} border ${isDark ? 'border-zinc-500/30' : 'border-zinc-300'}`}>
+            Inactiva
+          </span>
+        )}
+      </td>
+      {/* Cat. Inicio */}
+      <td className="px-4 py-3">
+        {isMensual && item.fecha_inicio ? (
+          <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-md ${isDark ? 'bg-cyan-500/10 text-cyan-300' : 'bg-cyan-50 text-cyan-700'} text-xs border border-cyan-500/20`}>
+            <Calendar className="h-3 w-3" />
+            {getMonthShort(item.fecha_inicio)}
+          </span>
+        ) : item.catorcena_inicio_num && item.catorcena_inicio_anio ? (
+          <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-md ${isDark ? 'bg-cyan-500/10 text-cyan-300' : 'bg-cyan-50 text-cyan-700'} text-xs border border-cyan-500/20`}>
+            <Calendar className="h-3 w-3" />
+            Cat {item.catorcena_inicio_num} / {item.catorcena_inicio_anio}
+          </span>
+        ) : (
+          <span className={`${isDark ? 'text-zinc-500' : 'text-gray-400'} text-xs`}>-</span>
+        )}
+      </td>
+      {/* Cat. Fin */}
+      <td className="px-4 py-3">
+        {isMensual && item.fecha_fin ? (
+          <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-md ${isDark ? 'bg-amber-500/10 text-amber-300' : 'bg-amber-50 text-amber-700'} text-xs border border-amber-500/20`}>
+            <Calendar className="h-3 w-3" />
+            {getMonthShort(item.fecha_fin)}
+          </span>
+        ) : item.catorcena_fin_num && item.catorcena_fin_anio ? (
+          <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-md ${isDark ? 'bg-amber-500/10 text-amber-300' : 'bg-amber-50 text-amber-700'} text-xs border border-amber-500/20`}>
+            <Calendar className="h-3 w-3" />
+            Cat {item.catorcena_fin_num} / {item.catorcena_fin_anio}
+          </span>
+        ) : (
+          <span className={`${isDark ? 'text-zinc-500' : 'text-gray-400'} text-xs`}>-</span>
+        )}
+      </td>
+      {/* Inversión */}
+      <td className="px-4 py-3">
+        <span className={`font-medium ${isDark ? 'text-amber-400' : 'text-amber-600'}`}>
+          {inv > 0 ? formatCurrency(inv) : '-'}
+        </span>
+      </td>
+      {/* APS */}
+      <td className="px-4 py-3 text-center">
+        {item.has_aps ? (
+          <span className="inline-flex items-center justify-center w-6 h-6 rounded-full bg-emerald-500/20">
+            <Check className="h-3.5 w-3.5 text-emerald-400" />
+          </span>
+        ) : (
+          <span className={`inline-flex items-center justify-center w-6 h-6 rounded-full ${isDark ? 'bg-zinc-800' : 'bg-gray-100'}`}>
+            <Minus className={`h-3.5 w-3.5 ${isDark ? 'text-zinc-600' : 'text-gray-400'}`} />
+          </span>
+        )}
+      </td>
+      {/* Acciones */}
+      <td className="px-4 py-3">
+        <div className="flex items-center gap-1">
+          <button
+            onClick={() => onOpen(item.id)}
+            className={`p-2 rounded-lg ${isDark ? 'bg-purple-500/10 text-purple-400 hover:bg-purple-500/20 hover:text-purple-300 border-purple-500/20 hover:border-purple-500/40' : 'bg-purple-50 text-purple-600 hover:bg-purple-100 hover:text-purple-700 border-purple-200 hover:border-purple-300'} border transition-all`}
+            title="Abrir campaña"
+          >
+            <Eye className="h-3.5 w-3.5" />
+          </button>
+          {item.propuesta_id && (
+            <button
+              onClick={() => onShare(item.propuesta_id!)}
+              className={`p-2 rounded-lg ${isDark ? 'bg-cyan-500/10 text-cyan-400 hover:bg-cyan-500/20 hover:text-cyan-300 border-cyan-500/20 hover:border-cyan-500/40' : 'bg-cyan-50 text-cyan-600 hover:bg-cyan-100 hover:text-cyan-700 border-cyan-200 hover:border-cyan-300'} border transition-all`}
+              title="Compartir campaña"
+            >
+              <Share2 className="h-3.5 w-3.5" />
+            </button>
+          )}
+          {canEditPerm && (
+            <button
+              onClick={() => onEdit(item)}
+              disabled={isEditDisabled}
+              className={`p-2 rounded-lg border transition-all ${
+                isEditDisabled
+                  ? isDark
+                    ? 'bg-zinc-800/30 text-zinc-600 border-zinc-700/30 cursor-not-allowed'
+                    : 'bg-gray-100 text-gray-400 border-gray-200 cursor-not-allowed'
+                  : isDark
+                    ? 'bg-zinc-500/10 text-zinc-400 hover:bg-zinc-500/20 hover:text-zinc-300 border-zinc-500/20 hover:border-zinc-500/40'
+                    : 'bg-gray-50 text-gray-500 hover:bg-gray-100 hover:text-gray-700 border-gray-200 hover:border-gray-300'
+              }`}
+              title={isEditDisabled ? 'No editable (tiene APS o status no permite edición)' : 'Editar campaña'}
+            >
+              <Edit2 className="h-3.5 w-3.5" />
+            </button>
+          )}
+          {canSeeGestionArtesPerm && (
+            <button
+              onClick={() => onIncidencia(item)}
+              className="p-2 rounded-lg border bg-orange-500/10 text-orange-400 hover:bg-orange-500/20 hover:text-orange-300 border-orange-500/20 hover:border-orange-500/40 transition-all"
+              title="Reportar incidencia"
+            >
+              <AlertTriangle className="h-3.5 w-3.5" />
+            </button>
+          )}
+        </div>
+      </td>
+    </tr>
+  );
+});
+
 export function CampanasPage() {
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
@@ -903,26 +1159,25 @@ export function CampanasPage() {
     setSearchTags(prev => prev.filter(t => t !== tag));
   };
 
-  // Debounce search tags and input
+  // Debounce conjunto de tags + input en un solo timer. Antes había dos
+  // efectos paralelos que provocaban renders dobles si ambos cambiaban a la
+  // vez (típico al presionar Enter para crear un tag — se actualizan ambos).
   useEffect(() => {
     const timer = setTimeout(() => {
       setDebouncedSearchTags(searchTags);
-      setPage(1);
-    }, 500);
-    return () => clearTimeout(timer);
-  }, [searchTags]);
-
-  useEffect(() => {
-    const timer = setTimeout(() => {
       setDebouncedSearchInput(searchInput);
       setPage(1);
     }, 500);
     return () => clearTimeout(timer);
-  }, [searchInput]);
+  }, [searchTags, searchInput]);
 
+  // Catorcenas casi nunca cambian — staleTime alto evita refetches al
+  // navegar entre páginas que comparten esta queryKey.
   const { data: catorcenasData } = useQuery({
     queryKey: ['catorcenas'],
     queryFn: () => solicitudesService.getCatorcenas(),
+    staleTime: 1000 * 60 * 30, // 30 min
+    gcTime: 1000 * 60 * 60,    // 1 h
   });
 
   // Combine debounced tags + debounced input into all active search terms
@@ -934,11 +1189,17 @@ export function CampanasPage() {
 
   const hasSearch = allSearchTerms.length > 0;
   const needsAllData = activeGroupings.length > 0 || advancedFilters.length > 0;
-  const effectiveLimit = needsAllData ? 200 : limit;
-  const serverSearch = allSearchTerms.length === 1 ? allSearchTerms[0] : (allSearchTerms.length > 1 ? allSearchTerms.join(' ') : undefined);
+  // En vista catorcena necesitamos todas las campañas del rango para que la agrupación
+  // por catorcena sea correcta (no podemos paginar y agrupar). 200 se queda corto cuando
+  // hay muchas campañas activas en catorcenas cercanas — usar tope alto.
+  const effectiveLimit = activeView === 'catorcena' ? 5000 : (needsAllData ? 200 : limit);
+  // Tags unidos por '|' — el backend separa por ese delimitador (no espacios)
+  // y aplica AND entre tags. Soporta búsqueda por nombre de campaña,
+  // razon_social, CUIC, marca, código de inventario, etc.
+  const serverSearch = allSearchTerms.length > 0 ? allSearchTerms.join('|') : undefined;
 
   const { data, isLoading } = useQuery({
-    queryKey: ['campanas', needsAllData ? 1 : page, status, yearInicio, yearFin, catorcenaInicio, catorcenaFin, tipoPeriodo, needsAllData, serverSearch],
+    queryKey: ['campanas', needsAllData ? 1 : page, status, yearInicio, yearFin, catorcenaInicio, catorcenaFin, tipoPeriodo, needsAllData, serverSearch, effectiveLimit],
     queryFn: () =>
       campanasService.getAll({
         page: needsAllData ? 1 : page,
@@ -951,20 +1212,26 @@ export function CampanasPage() {
         catorcenaFin,
         tipoPeriodo: tipoPeriodo || undefined,
       }),
+    staleTime: 1000 * 30, // 30 s — WS invalida en cambios reales
+    placeholderData: (prev) => prev, // evita parpadeo al paginar/filtrar
   });
 
-  // Stats query — global KPIs with same filters
+  // Stats query — global KPIs with same filters.
+  // Incluimos serverSearch para que total/chart reflejen los resultados
+  // filtrados aunque estemos en la página 1 de N.
   const { data: statsData, isLoading: isLoadingStats } = useQuery({
-    queryKey: ['campanas-stats', status, yearInicio, yearFin, catorcenaInicio, catorcenaFin, tipoPeriodo],
+    queryKey: ['campanas-stats', status, yearInicio, yearFin, catorcenaInicio, catorcenaFin, tipoPeriodo, serverSearch],
     queryFn: () =>
       campanasService.getStats({
         status: (status && status !== 'Incompleta') ? status : undefined,
+        search: serverSearch,
         yearInicio,
         yearFin,
         catorcenaInicio,
         catorcenaFin,
         tipoPeriodo: tipoPeriodo || undefined,
       }),
+    staleTime: 1000 * 30,
   });
 
   // Get current catorcena
@@ -996,40 +1263,12 @@ export function CampanasPage() {
       .map(c => `Cat ${c.numero_catorcena} / ${c.a_o}`);
   }, [catorcenasData]);
 
-  // Filter data locally for search and catorcena inicio
+  // Filter data locally for catorcena inicio, "Incompleta" status, advanced
+  // filters y sort. La búsqueda (search) ya la aplicó el backend sobre todos
+  // los campos relevantes (incluye codigo_unico de inventarios via subquery),
+  // así que NO se re-filtra cliente-side.
   const filteredData = useMemo(() => {
     let items = data?.data || [];
-
-    // Client-side OR search filter for all search terms
-    if (hasSearch && items.length > 0) {
-      items = items.filter(c =>
-        allSearchTerms.some(term => {
-          const lowerTerm = term.toLowerCase();
-          return (
-            String(c.id).includes(lowerTerm) ||
-            c.nombre?.toLowerCase().includes(lowerTerm) ||
-            c.cliente_nombre?.toLowerCase().includes(lowerTerm) ||
-            c.cliente_razon_social?.toLowerCase().includes(lowerTerm) ||
-            c.status?.toLowerCase().includes(lowerTerm) ||
-            c.articulo?.toLowerCase().includes(lowerTerm) ||
-            c.T2_U_Marca?.toLowerCase().includes(lowerTerm) ||
-            c.T0_U_Cliente?.toLowerCase().includes(lowerTerm) ||
-            c.asignado?.toLowerCase().includes(lowerTerm) ||
-            c.nombre_campania?.toLowerCase().includes(lowerTerm) ||
-            c.codigos_inventario?.toLowerCase().includes(lowerTerm) ||
-            c.creador_nombre?.toLowerCase().includes(lowerTerm) ||
-            c.T0_U_Asesor?.toLowerCase().includes(lowerTerm) ||
-            String(c.propuesta_id || '').includes(lowerTerm) ||
-            String(c.cotizacion_id || '').includes(lowerTerm) ||
-            c.formatos?.toLowerCase().includes(lowerTerm) ||
-            // También buscar en los inventarios cargados (codigo_unico individual)
-            (campanaInventarios[c.id] || []).some(inv =>
-              inv.codigo_unico?.toLowerCase().includes(lowerTerm)
-            )
-          );
-        })
-      );
-    }
 
     // Filter by catorcena inicio
     if (selectedCatorcenaInicio && items.length > 0) {
@@ -1131,10 +1370,12 @@ export function CampanasPage() {
     }
 
     return items;
-  }, [data?.data, allSearchTerms, selectedCatorcenaInicio, advancedFilters, sortField, sortDirection, campanaInventarios]);
+  }, [data?.data, selectedCatorcenaInicio, status, advancedFilters, sortField, sortDirection, campanaInventarios]);
 
-  // Recalculate stats from filteredData when client-side filters are active
-  const needsClientFilter = hasSearch || advancedFilters.length > 0 || selectedCatorcenaInicio || status === 'Incompleta';
+  // Recalculate stats from filteredData when client-side filters are active.
+  // El search ya viaja al backend y stats lo recibe via queryKey, así que NO
+  // forzamos recálculo cliente cuando solo hay búsqueda activa.
+  const needsClientFilter = advancedFilters.length > 0 || selectedCatorcenaInicio || status === 'Incompleta';
   const effectiveStats = useMemo(() => {
     if (needsClientFilter && data?.data) {
       const byStatus: Record<string, number> = {};
@@ -1413,19 +1654,25 @@ export function CampanasPage() {
       });
   }, [activeView, filteredData, campanaInventarios]);
 
-  // Cargar inversión por catorcena (usando sc.costo) — usado por versionario y tabla
+  // Cargar inversión por catorcena (usando sc.costo) — usado por versionario y tabla.
+  // Patrón con refs: `loadedIdsRef` registra qué IDs ya procesamos para
+  // que el efecto no se vuelva a disparar después de cada `setInversion...`.
+  // Antes `inversionPorCatorcena` estaba en deps → cascada de re-runs hasta
+  // que ya no quedaran missing.
   const loadingInvCatRef = useRef(false);
+  const loadedInvCatIdsRef = useRef<Set<number>>(new Set());
   useEffect(() => {
     if (!filteredData.length) return;
     if (loadingInvCatRef.current) return;
 
     const idsToLoad = filteredData
-      .filter(c => inversionPorCatorcena[c.id] === undefined)
+      .filter(c => !loadedInvCatIdsRef.current.has(c.id))
       .map(c => c.id);
     if (idsToLoad.length === 0) return;
 
     const BATCH = 50;
     const batch = idsToLoad.slice(0, BATCH);
+    batch.forEach(id => loadedInvCatIdsRef.current.add(id));
     loadingInvCatRef.current = true;
 
     campanasService.getBatchInversionesCostoPorCatorcena(batch)
@@ -1444,6 +1691,8 @@ export function CampanasPage() {
         });
       })
       .catch(() => {
+        // En error, mantenemos los IDs como "procesados" para no reintentar
+        // en loop. Si quieres reintento manual, limpia loadedInvCatIdsRef.
         setInversionPorCatorcena(prev => {
           const next = { ...prev };
           for (const id of batch) next[id] = {};
@@ -1451,7 +1700,7 @@ export function CampanasPage() {
         });
       })
       .finally(() => { loadingInvCatRef.current = false; });
-  }, [filteredData, inversionPorCatorcena]);
+  }, [filteredData]);
 
   // Agrupar campañas por catorcena para la vista alternativa (con soporte para subagrupaciones)
   const campanasPorCatorcena = useMemo(() => {
@@ -1546,8 +1795,31 @@ export function CampanasPage() {
           delete groups[key];
         }
       });
-      // Nota: ya no forzamos campañas "ungrouped" al rango del filtro. Una campaña solo aparece
-      // en las catorcenas donde realmente tiene caras (catorcenas_con_contenido ya usa OVERLAP).
+
+      // Asegurar que toda campaña que pasó el filtro del backend aparezca en algún grupo
+      // del rango. El backend filtra por overlap de fechas de campaña, pero
+      // catorcenas_con_contenido se construye desde solicitudCaras (más estricto). Una campaña
+      // puede pasar el filtro y no tener caras justo en esa catorcena: igual debe verse aquí.
+      const groupedIds = new Set<number>();
+      Object.values(groups).forEach(g => g.campanas.forEach(c => groupedIds.add(c.id)));
+      const ungrouped = filteredData.filter(c => !groupedIds.has(c.id));
+      if (ungrouped.length > 0) {
+        for (let y = yearInicio; y <= yearFin; y++) {
+          const cStart = y === yearInicio ? catorcenaInicio : 1;
+          const cEnd = y === yearFin ? catorcenaFin : 26;
+          for (let c = cStart; c <= cEnd; c++) {
+            const key = `${y}-${String(c).padStart(2, '0')}`;
+            if (!groups[key]) {
+              groups[key] = { catorcena: { num: c, anio: y }, campanas: [] };
+            }
+            ungrouped.forEach(item => {
+              if (!groups[key].campanas.some(existing => existing.id === item.id)) {
+                groups[key].campanas.push(item);
+              }
+            });
+          }
+        }
+      }
     } else if (yearInicio && yearFin) {
       Object.keys(groups).forEach(key => {
         const groupAnio = parseInt(key.split('-')[0]);
@@ -1746,10 +2018,13 @@ export function CampanasPage() {
   const hasPeriodFilter = yearInicio !== undefined && yearFin !== undefined;
   const hasActiveFilters = !!(status || hasPeriodFilter || activeGroupings.length > 0 || searchTags.length > 0 || selectedCatorcenaInicio || advancedFilters.length > 0 || sortField !== null);
 
-  // Get unique values for each field (for advanced filter dropdowns)
+  // Get unique values for each field (for advanced filter dropdowns).
+  // Solo se calcula cuando el panel de filtros avanzados está abierto: evita
+  // recorrer 9 campos × N filas en cada render del padre mientras el panel
+  // está cerrado.
   const getUniqueFieldValues = useMemo(() => {
     const valuesMap: Record<string, string[]> = {};
-    if (!data?.data) return valuesMap;
+    if (!showAdvancedFilters || !data?.data) return valuesMap;
 
     CAMPANA_FILTER_FIELDS.forEach(fieldConfig => {
       const values = new Set<string>();
@@ -1762,7 +2037,7 @@ export function CampanasPage() {
       valuesMap[fieldConfig.field] = Array.from(values).sort();
     });
     return valuesMap;
-  }, [data?.data]);
+  }, [showAdvancedFilters, data?.data]);
 
   // Lista de estatus únicos para el FilterChip
   const allStatuses = useMemo(() => {
@@ -2157,214 +2432,45 @@ export function CampanasPage() {
     return disabledStatuses.includes(statusLower) || campana.has_aps === true;
   };
 
-  const renderCampanaRow = (item: Campana, index: number) => {
-    const statusColor = getStatusColor(item.status, isDark);
-    const periodStatus = getPeriodStatus(item.fecha_inicio, item.fecha_fin);
-    const PERIOD_COLORS = getPeriodColors(isDark);
-    const periodColor = PERIOD_COLORS[periodStatus] || getDefaultStatusColor(isDark);
+  // Callbacks estables para el `CampanaRow` memoizado. `useCallback` mantiene
+  // la misma identidad entre renders del padre para que React.memo no aborte.
+  const handleRowOpen = useCallback((id: number) => handleOpenCampana(id), [handleOpenCampana]);
+  const handleRowShare = useCallback((propId: number) => navigate(`/propuestas/compartir/${propId}`), [navigate]);
+  const handleRowEdit = useCallback((c: Campana) => handleEditCampana(c), [handleEditCampana]);
+  const handleRowIncidencia = useCallback((c: Campana) => {
+    setIncidenciaCampana(c);
+    setIncidenciaModalOpen(true);
+  }, []);
+  const handleRowStatus = useCallback((c: Campana) => {
+    setStatusCampana(c);
+    setStatusModalOpen(true);
+  }, []);
 
-    const isMensual = (item as any).tipo_periodo === 'mensual';
-    const catIni = isMensual && item.fecha_inicio
-      ? getMonthShort(item.fecha_inicio)
-      : item.catorcena_inicio_num && item.catorcena_inicio_anio
-        ? `Cat ${item.catorcena_inicio_num}, ${item.catorcena_inicio_anio}`
-        : '-';
-    const catFin = isMensual && item.fecha_fin
-      ? getMonthShort(item.fecha_fin)
-      : item.catorcena_fin_num && item.catorcena_fin_anio
-        ? `Cat ${item.catorcena_fin_num}, ${item.catorcena_fin_anio}`
-        : '-';
+  const hayFiltroPeriodo = !!(catorcenaInicio && catorcenaFin && yearInicio && yearFin);
 
+  // Wrapper que pasa props del row. La inversión total se extrae aquí (no
+  // dentro del row) para que `React.memo` la reciba como prop simple y
+  // detecte cuando cambia para esa campaña específica.
+  const renderRow = (item: Campana, index: number) => {
+    const invMap = inversionPorCatorcena[item.id];
+    const invTotal = invMap?.['total'] !== undefined ? invMap['total'] : null;
     return (
-      <tr key={`campana-${item.id}-${index}`} className={`border-b ${isDark ? 'border-zinc-800/50 hover:bg-zinc-800/30' : 'border-gray-200 hover:bg-gray-50'} transition-colors`}>
-        {/* ID */}
-        <td className="px-4 py-3">
-          <span className={`font-mono text-xs px-2 py-1 rounded-md ${isDark ? 'bg-purple-500/10 text-purple-300' : 'bg-purple-50 text-purple-700'}`}>#{item.propuesta_id || item.id}</span>
-        </td>
-        {/* Periodo */}
-        <td className="px-4 py-3">
-          <span className={`px-2 py-0.5 rounded-full text-[10px] ${periodColor.bg} ${periodColor.text} border ${periodColor.border}`}>
-            {periodStatus}
-          </span>
-        </td>
-        {/* Creador - Avatar style */}
-        <td className="px-4 py-3">
-          {item.creador_nombre ? (
-            <div className="flex items-center gap-1.5">
-              <div className={`w-6 h-6 rounded-full ${isDark ? 'bg-purple-500/20' : 'bg-purple-100'} flex items-center justify-center`}>
-                <User className={`h-3 w-3 ${isDark ? 'text-purple-400' : 'text-purple-600'}`} />
-              </div>
-              <span className={`${isDark ? 'text-zinc-300' : 'text-gray-700'} text-sm`}>{item.creador_nombre}</span>
-            </div>
-          ) : (
-            <span className={`${isDark ? 'text-zinc-500' : 'text-gray-400'} text-xs`}>-</span>
-          )}
-        </td>
-        {/* Campaña */}
-        <td className="px-4 py-3">
-          <span className={`font-medium ${isDark ? 'text-white' : 'text-gray-900'} text-sm`}>{item.nombre}</span>
-        </td>
-        {/* Cliente/Marca */}
-        <td className="px-4 py-3">
-          <div className="flex items-center gap-1.5">
-            <span className={`${isDark ? 'text-zinc-300' : 'text-gray-700'} text-sm max-w-[180px] truncate`} title={item.T2_U_Marca || item.cliente_nombre || item.cliente_razon_social || '-'}>
-              {item.T2_U_Marca || item.cliente_nombre || item.cliente_razon_social || '-'}
-            </span>
-            {item.sap_database && (
-              <span className={`inline-flex text-[9px] font-bold px-1.5 py-0.5 rounded-full border flex-shrink-0 ${
-                item.sap_database === 'CIMU'
-                  ? (isDark ? 'bg-blue-500/20 text-blue-300' : 'bg-blue-50 text-blue-700') + ' border-blue-500/30'
-                  : item.sap_database === 'TEST'
-                    ? (isDark ? 'bg-amber-500/20 text-amber-300' : 'bg-amber-50 text-amber-700') + ' border-amber-500/30'
-                    : (isDark ? 'bg-emerald-500/20 text-emerald-300' : 'bg-emerald-50 text-emerald-700') + ' border-emerald-500/30'
-              }`}>{item.sap_database}</span>
-            )}
-          </div>
-        </td>
-        {/* Status */}
-        <td className="px-4 py-3">
-          <div className="flex flex-col gap-1 items-start">
-            <button
-              onClick={() => {
-                setStatusCampana(item);
-                setStatusModalOpen(true);
-              }}
-              className={`px-2 py-0.5 rounded-full text-[10px] ${statusColor.bg} ${statusColor.text} border ${statusColor.border} hover:opacity-80 transition-opacity cursor-pointer`}
-            >
-              {item.status}
-            </button>
-            {item.caras_ultima_cat != null && Number(item.caras_ultima_cat) > 0 && Number(item.reservas_count_ultima_cat) < Number(item.caras_ultima_cat) && (
-              <span className={`px-1.5 py-0.5 rounded-full text-[9px] ${isDark ? 'bg-yellow-500/20 text-yellow-300' : 'bg-yellow-50 text-yellow-700'} border border-yellow-500/30`}>
-                Incompleta
-              </span>
-            )}
-          </div>
-        </td>
-        {/* Actividad */}
-        <td className="px-4 py-3">
-          {item.has_aps ? (
-            <span className={`px-2 py-0.5 rounded-full text-[10px] ${isDark ? 'bg-emerald-500/20 text-emerald-300' : 'bg-emerald-50 text-emerald-700'} border border-emerald-500/30`}>
-              Activa
-            </span>
-          ) : (
-            <span className={`px-2 py-0.5 rounded-full text-[10px] ${isDark ? 'bg-zinc-500/20 text-zinc-300' : 'bg-zinc-50 text-zinc-700'} border ${isDark ? 'border-zinc-500/30' : 'border-zinc-300'}`}>
-              Inactiva
-            </span>
-          )}
-        </td>
-        {/* Cat. Inicio / Periodo Inicio - Badge style */}
-        <td className="px-4 py-3">
-          {isMensual && item.fecha_inicio ? (
-            <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-md ${isDark ? 'bg-cyan-500/10 text-cyan-300' : 'bg-cyan-50 text-cyan-700'} text-xs border border-cyan-500/20`}>
-              <Calendar className="h-3 w-3" />
-              {getMonthShort(item.fecha_inicio)}
-            </span>
-          ) : item.catorcena_inicio_num && item.catorcena_inicio_anio ? (
-            <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-md ${isDark ? 'bg-cyan-500/10 text-cyan-300' : 'bg-cyan-50 text-cyan-700'} text-xs border border-cyan-500/20`}>
-              <Calendar className="h-3 w-3" />
-              Cat {item.catorcena_inicio_num} / {item.catorcena_inicio_anio}
-            </span>
-          ) : (
-            <span className={`${isDark ? 'text-zinc-500' : 'text-gray-400'} text-xs`}>-</span>
-          )}
-        </td>
-        {/* Cat. Fin / Periodo Fin - Badge style */}
-        <td className="px-4 py-3">
-          {isMensual && item.fecha_fin ? (
-            <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-md ${isDark ? 'bg-amber-500/10 text-amber-300' : 'bg-amber-50 text-amber-700'} text-xs border border-amber-500/20`}>
-              <Calendar className="h-3 w-3" />
-              {getMonthShort(item.fecha_fin)}
-            </span>
-          ) : item.catorcena_fin_num && item.catorcena_fin_anio ? (
-            <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-md ${isDark ? 'bg-amber-500/10 text-amber-300' : 'bg-amber-50 text-amber-700'} text-xs border border-amber-500/20`}>
-              <Calendar className="h-3 w-3" />
-              Cat {item.catorcena_fin_num} / {item.catorcena_fin_anio}
-            </span>
-          ) : (
-            <span className={`${isDark ? 'text-zinc-500' : 'text-gray-400'} text-xs`}>-</span>
-          )}
-        </td>
-        {/* Inversión */}
-        <td className="px-4 py-3">
-          <span className={`font-medium ${isDark ? 'text-amber-400' : 'text-amber-600'}`}>
-            {(() => {
-              const hayFiltro = !!(catorcenaInicio && catorcenaFin && yearInicio && yearFin);
-              let inv: number;
-              if (hayFiltro) {
-                // Con filtro: el backend ya devuelve item.inversion filtrado por el período
-                inv = Number(item.inversion || 0);
-              } else {
-                // Sin filtro: usar total dinámico del batch (SUM real de todas las caras)
-                const invData = inversionPorCatorcena[item.id];
-                inv = invData?.['total'] !== undefined
-                  ? invData['total']
-                  : Number(item.inversion || 0);
-              }
-              return inv > 0 ? formatCurrency(inv) : '-';
-            })()}
-          </span>
-        </td>
-        {/* APS */}
-        <td className="px-4 py-3 text-center">
-          {item.has_aps ? (
-            <span className="inline-flex items-center justify-center w-6 h-6 rounded-full bg-emerald-500/20">
-              <Check className="h-3.5 w-3.5 text-emerald-400" />
-            </span>
-          ) : (
-            <span className={`inline-flex items-center justify-center w-6 h-6 rounded-full ${isDark ? 'bg-zinc-800' : 'bg-gray-100'}`}>
-              <Minus className={`h-3.5 w-3.5 ${isDark ? 'text-zinc-600' : 'text-gray-400'}`} />
-            </span>
-          )}
-        </td>
-        {/* Acciones */}
-        <td className="px-4 py-3">
-          <div className="flex items-center gap-1">
-            <button
-              onClick={() => handleOpenCampana(item.id)}
-              className={`p-2 rounded-lg ${isDark ? 'bg-purple-500/10 text-purple-400 hover:bg-purple-500/20 hover:text-purple-300 border-purple-500/20 hover:border-purple-500/40' : 'bg-purple-50 text-purple-600 hover:bg-purple-100 hover:text-purple-700 border-purple-200 hover:border-purple-300'} border transition-all`}
-              title="Abrir campaña"
-            >
-              <Eye className="h-3.5 w-3.5" />
-            </button>
-            {item.propuesta_id && (
-              <button
-                onClick={() => navigate(`/propuestas/compartir/${item.propuesta_id}`)}
-                className={`p-2 rounded-lg ${isDark ? 'bg-cyan-500/10 text-cyan-400 hover:bg-cyan-500/20 hover:text-cyan-300 border-cyan-500/20 hover:border-cyan-500/40' : 'bg-cyan-50 text-cyan-600 hover:bg-cyan-100 hover:text-cyan-700 border-cyan-200 hover:border-cyan-300'} border transition-all`}
-                title="Compartir campaña"
-              >
-                <Share2 className="h-3.5 w-3.5" />
-              </button>
-            )}
-            {permissions.canEditCampanas && (
-              <button
-                onClick={() => handleEditCampana(item)}
-                disabled={isEditDisabled(item)}
-                className={`p-2 rounded-lg border transition-all ${
-                  isEditDisabled(item)
-                    ? isDark
-                      ? 'bg-zinc-800/30 text-zinc-600 border-zinc-700/30 cursor-not-allowed'
-                      : 'bg-gray-100 text-gray-400 border-gray-200 cursor-not-allowed'
-                    : isDark
-                      ? 'bg-zinc-500/10 text-zinc-400 hover:bg-zinc-500/20 hover:text-zinc-300 border-zinc-500/20 hover:border-zinc-500/40'
-                      : 'bg-gray-50 text-gray-500 hover:bg-gray-100 hover:text-gray-700 border-gray-200 hover:border-gray-300'
-                }`}
-                title={isEditDisabled(item) ? 'No editable (tiene APS o status no permite edición)' : 'Editar campaña'}
-              >
-                <Edit2 className="h-3.5 w-3.5" />
-              </button>
-            )}
-            {permissions.canSeeGestionArtes && (
-              <button
-                onClick={() => { setIncidenciaCampana(item); setIncidenciaModalOpen(true); }}
-                className="p-2 rounded-lg border bg-orange-500/10 text-orange-400 hover:bg-orange-500/20 hover:text-orange-300 border-orange-500/20 hover:border-orange-500/40 transition-all"
-                title="Reportar incidencia"
-              >
-                <AlertTriangle className="h-3.5 w-3.5" />
-              </button>
-            )}
-          </div>
-        </td>
-      </tr>
+      <CampanaRow
+        key={`campana-${item.id}-${index}`}
+        item={item}
+        index={index}
+        isDark={isDark}
+        invTotal={invTotal}
+        hayFiltroPeriodo={hayFiltroPeriodo}
+        canEditPerm={permissions.canEditCampanas}
+        canSeeGestionArtesPerm={permissions.canSeeGestionArtes}
+        isEditDisabled={isEditDisabled(item)}
+        onOpen={handleRowOpen}
+        onShare={handleRowShare}
+        onEdit={handleRowEdit}
+        onIncidencia={handleRowIncidencia}
+        onStatus={handleRowStatus}
+      />
     );
   };
 
@@ -2996,19 +3102,19 @@ export function CampanasPage() {
                                   </tr>
                                   {/* Level 2 Content */}
                                   {expandedGroups.has(`${group.name}|${subgroup.name}`) &&
-                                    subgroup.items.map((item, idx) => renderCampanaRow(item, idx))
+                                    subgroup.items.map((item, idx) => renderRow(item, idx))
                                   }
                                 </React.Fragment>
                               ))
                             ) : (
                               // No subgroups (1 level grouping)
-                              group.items.map((item, idx) => renderCampanaRow(item, idx))
+                              group.items.map((item, idx) => renderRow(item, idx))
                             )
                           )}
                         </React.Fragment>
                       ))
                     ) : (
-                      filteredData.map((item, idx) => renderCampanaRow(item, idx))
+                      filteredData.map((item, idx) => renderRow(item, idx))
                     )}
                     {filteredData.length === 0 && !groupedData && (
                       <tr>
@@ -3751,12 +3857,16 @@ export function CampanasPage() {
         />
       )}
 
-      {/* Órdenes de Montaje Modal */}
-      <OrdenesMontajeModal
-        isOpen={ordenesMontajeModalOpen}
-        onClose={() => setOrdenesMontajeModalOpen(false)}
-        canExport={permissions.canExportOrdenesMontaje}
-      />
+      {/* Órdenes de Montaje Modal — lazy-mount: igual que los demás modales
+          de esta página, sólo se monta cuando está abierto. Antes sus hooks
+          internos corrían aunque estuviera cerrado. */}
+      {ordenesMontajeModalOpen && (
+        <OrdenesMontajeModal
+          isOpen={ordenesMontajeModalOpen}
+          onClose={() => setOrdenesMontajeModalOpen(false)}
+          canExport={permissions.canExportOrdenesMontaje}
+        />
+      )}
 
       {/* Status Campana Modal */}
       {statusCampana && (

@@ -353,6 +353,31 @@ function getAvatarColor(name: string | null): string {
   return colors[index];
 }
 
+// Maps de colores estáticos para CATRow / INVIANRow — antes se reconstruían
+// dentro de cada fila via switch. Misma paleta, lookup O(1) y sin objetos
+// nuevos por render.
+type NegColorClasses = string;
+
+const NEGOCIACION_COLORS_DARK: Record<string, NegColorClasses> = {
+  BONIFICACION: 'bg-amber-500/20 text-amber-300 border-amber-500/30',
+  CORTESIA:     'bg-cyan-500/20 text-cyan-300 border-cyan-500/30',
+  INTERCAMBIO:  'bg-purple-500/20 text-purple-300 border-purple-500/30',
+  __default:    'bg-emerald-500/20 text-emerald-300 border-emerald-500/30',
+};
+const NEGOCIACION_COLORS_LIGHT: Record<string, NegColorClasses> = {
+  BONIFICACION: 'bg-amber-50 text-amber-700 border-amber-200',
+  CORTESIA:     'bg-cyan-50 text-cyan-700 border-cyan-200',
+  INTERCAMBIO:  'bg-purple-50 text-purple-700 border-purple-200',
+  __default:    'bg-emerald-50 text-emerald-700 border-emerald-200',
+};
+const getNegociacionColorCls = (neg: string | null, isDark: boolean): NegColorClasses => {
+  const map = isDark ? NEGOCIACION_COLORS_DARK : NEGOCIACION_COLORS_LIGHT;
+  return (neg && map[neg]) || map.__default;
+};
+
+// Mismos colores semánticos para operación/tipoDistribución en INVIANRow.
+const getOperacionColorCls = getNegociacionColorCls;
+
 // Format date helper
 function formatDate(dateStr: string | null): string {
   if (!dateStr) return '-';
@@ -410,21 +435,18 @@ export function OrdenesMontajeModal({ isOpen, onClose, canExport = true }: Orden
     setSearchTags(prev => prev.filter(t => t !== tag));
   };
 
+  // Debounce conjunto: un solo timer para input + tags. Antes había dos
+  // efectos paralelos que provocaban renders dobles cuando ambos cambiaban a
+  // la vez (típico al presionar Enter para crear un tag, que limpia el input
+  // y actualiza tags en el mismo render).
   useEffect(() => {
     const timer = setTimeout(() => {
       setDebouncedSearchInput(searchInput);
-      setCurrentPage(1);
-    }, 500);
-    return () => clearTimeout(timer);
-  }, [searchInput]);
-
-  useEffect(() => {
-    const timer = setTimeout(() => {
       setDebouncedSearchTags(searchTags);
       setCurrentPage(1);
     }, 500);
     return () => clearTimeout(timer);
-  }, [searchTags]);
+  }, [searchInput, searchTags]);
 
   const allSearchTerms = useMemo(() => {
     const terms = [...debouncedSearchTags];
@@ -446,17 +468,10 @@ export function OrdenesMontajeModal({ isOpen, onClose, canExport = true }: Orden
     return parts.join(' | ');
   };
 
-  const matchesSearchCAT = useCallback((item: OrdenMontajeCAT) => {
-    if (allSearchTerms.length === 0) return true;
-    const haystack = buildHaystack(item as unknown as Record<string, unknown>);
-    return allSearchTerms.every(term => haystack.includes(term));
-  }, [allSearchTerms]);
-
-  const matchesSearchINVIAN = useCallback((item: OrdenMontajeINVIAN) => {
-    if (allSearchTerms.length === 0) return true;
-    const haystack = buildHaystack(item as unknown as Record<string, unknown>);
-    return allSearchTerms.every(term => haystack.includes(term));
-  }, [allSearchTerms]);
+  // matchesSearchCAT / matchesSearchINVIAN se definen MÁS ABAJO, después de
+  // que `catData` e `invianData` están declarados (ver useQuery). Las
+  // declaraciones viven cerca de los useMemo de filtrado para mantener la
+  // proximidad de la lógica de búsqueda.
 
   // CAT filters/sort/group
   const [catFilters, setCatFilters] = useState<AdvancedFilterCondition[]>([]);
@@ -585,6 +600,40 @@ export function OrdenesMontajeModal({ isOpen, onClose, canExport = true }: Orden
     }),
     enabled: isOpen && (activeTab === 'invian' || activeTab === 'invian-digital'),
   });
+
+  // Haystack precalculado por item — antes `buildHaystack` se ejecutaba en
+  // CADA filtrado × CADA item, y los 3-5 useMemo de filtros lo recorrían cada
+  // uno. Con N=1000 items × 5 vistas = 5000 reconstrucciones por keystroke.
+  // Ahora se calcula UNA vez cuando llega `catData` (o cambia la ref) y se
+  // guarda en un Map; los `matchesSearch*` solo hacen `string.includes`.
+  // Mismos campos, misma semántica — solo cacheado.
+  const catHaystackMap = useMemo(() => {
+    const m = new Map<OrdenMontajeCAT, string>();
+    if (!catData) return m;
+    for (const item of catData) m.set(item, buildHaystack(item as unknown as Record<string, unknown>));
+    return m;
+  }, [catData]);
+
+  const invianHaystackMap = useMemo(() => {
+    const m = new Map<OrdenMontajeINVIAN, string>();
+    if (!invianData) return m;
+    for (const item of invianData) m.set(item, buildHaystack(item as unknown as Record<string, unknown>));
+    return m;
+  }, [invianData]);
+
+  const matchesSearchCAT = useCallback((item: OrdenMontajeCAT) => {
+    if (allSearchTerms.length === 0) return true;
+    // Fallback a recálculo en caliente si el item no está en el cache
+    // (defensivo: items agregados fuera del flujo normal de useQuery).
+    const haystack = catHaystackMap.get(item) ?? buildHaystack(item as unknown as Record<string, unknown>);
+    return allSearchTerms.every(term => haystack.includes(term));
+  }, [allSearchTerms, catHaystackMap]);
+
+  const matchesSearchINVIAN = useCallback((item: OrdenMontajeINVIAN) => {
+    if (allSearchTerms.length === 0) return true;
+    const haystack = invianHaystackMap.get(item) ?? buildHaystack(item as unknown as Record<string, unknown>);
+    return allSearchTerms.every(term => haystack.includes(term));
+  }, [allSearchTerms, invianHaystackMap]);
 
   const years = catorcenasData?.years || [];
 
@@ -1906,13 +1955,13 @@ export function OrdenesMontajeModal({ isOpen, onClose, canExport = true }: Orden
                           </td>
                         </tr>
                         {catExpandedGroups.has(groupName) && items.map((item, idx) => (
-                          <CATRow key={`${groupName}-${idx}`} item={item} showApsEspecifico />
+                          <CATRow key={`${groupName}-${idx}`} item={item} isDark={isDark} showApsEspecifico />
                         ))}
                       </React.Fragment>
                     ))
                   ) : (
                     paginatedCATData.map((item, idx) => (
-                      <CATRow key={idx} item={item} showApsEspecifico />
+                      <CATRow key={idx} item={item} isDark={isDark} showApsEspecifico />
                     ))
                   )}
                   {filteredCATData.length === 0 && (
@@ -2000,13 +2049,13 @@ export function OrdenesMontajeModal({ isOpen, onClose, canExport = true }: Orden
                           </td>
                         </tr>
                         {catExpandedGroups.has(groupName) && items.map((item, idx) => (
-                          <CATRow key={`${groupName}-${idx}`} item={item} showApsEspecifico />
+                          <CATRow key={`${groupName}-${idx}`} item={item} isDark={isDark} showApsEspecifico />
                         ))}
                       </React.Fragment>
                     ))
                   ) : (
                     paginatedOcupacionDigitalData.map((item, idx) => (
-                      <CATRow key={idx} item={item} showApsEspecifico />
+                      <CATRow key={idx} item={item} isDark={isDark} showApsEspecifico />
                     ))
                   )}
                   {filteredOcupacionDigitalData.length === 0 && (
@@ -2066,7 +2115,7 @@ export function OrdenesMontajeModal({ isOpen, onClose, canExport = true }: Orden
                 </thead>
                 <tbody>
                   {paginatedDigitalData.map((item, idx) => (
-                    <CATRow key={idx} item={item} showApsEspecifico showMes />
+                    <CATRow key={idx} item={item} isDark={isDark} showApsEspecifico showMes />
                   ))}
                   {filteredDigitalData.length === 0 && (
                     <tr>
@@ -2154,13 +2203,13 @@ export function OrdenesMontajeModal({ isOpen, onClose, canExport = true }: Orden
                                 </td>
                               </tr>
                               {invianExpandedGroups.has(groupName) && items.map((item, idx) => (
-                                <INVIANRow key={`${groupName}-${idx}`} item={item} onOpenGallery={handleOpenGallery} showCto={showCto} />
+                                <INVIANRow key={`${groupName}-${idx}`} item={item} isDark={isDark} onOpenGallery={handleOpenGallery} showCto={showCto} />
                               ))}
                             </React.Fragment>
                           ))
                         ) : (
                           currentData.map((item, idx) => (
-                            <INVIANRow key={idx} item={item} onOpenGallery={handleOpenGallery} showCto={showCto} />
+                            <INVIANRow key={idx} item={item} isDark={isDark} onOpenGallery={handleOpenGallery} showCto={showCto} />
                           ))
                         )}
                         {currentDataFull.length === 0 && (
@@ -2225,14 +2274,18 @@ export function OrdenesMontajeModal({ isOpen, onClose, canExport = true }: Orden
         )}
       </div>
 
-      {/* Digital Gallery Modal */}
-      <OMDigitalGalleryModal
-        isOpen={isGalleryOpen}
-        onClose={() => { setIsGalleryOpen(false); setGalleryImages([]); }}
-        imagenes={galleryImages}
-        isLoading={isGalleryLoading}
-        title={galleryTitle}
-      />
+      {/* Digital Gallery Modal — lazy-mount: solo existe en el árbol cuando
+          está abierto. Antes sus hooks (useState/useEffect del slider) corrían
+          aunque la galería estuviera cerrada. */}
+      {isGalleryOpen && (
+        <OMDigitalGalleryModal
+          isOpen={isGalleryOpen}
+          onClose={() => { setIsGalleryOpen(false); setGalleryImages([]); }}
+          imagenes={galleryImages}
+          isLoading={isGalleryLoading}
+          title={galleryTitle}
+        />
+      )}
     </div>
   );
 }
@@ -2248,17 +2301,11 @@ function mesFromDate(dateStr: string | null): string {
   return `${MES_LABELS[d.getMonth()]} ${d.getFullYear()}`;
 }
 
-function CATRow({ item, showApsEspecifico = false, showMes = false }: { item: OrdenMontajeCAT; showApsEspecifico?: boolean; showMes?: boolean }) {
-  const isDark = useThemeStore((s) => s.theme) === 'dark';
-  const getNegociacionColor = (neg: string | null) => {
-    switch (neg) {
-      case 'BONIFICACION': return isDark ? 'bg-amber-500/20 text-amber-300 border-amber-500/30' : 'bg-amber-50 text-amber-700 border-amber-200';
-      case 'CORTESIA': return isDark ? 'bg-cyan-500/20 text-cyan-300 border-cyan-500/30' : 'bg-cyan-50 text-cyan-700 border-cyan-200';
-      case 'INTERCAMBIO': return isDark ? 'bg-purple-500/20 text-purple-300 border-purple-500/30' : 'bg-purple-50 text-purple-700 border-purple-200';
-      default: return isDark ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500/30' : 'bg-emerald-50 text-emerald-700 border-emerald-200';
-    }
-  };
-  const negociacionColor = getNegociacionColor(item.negociacion);
+// Memoizado: solo se re-renderiza si cambia item, isDark o las flags de
+// visualización. Antes se redibujaban TODAS las filas en cada render del
+// padre. `isDark` ahora llega como prop para no suscribir el store por fila.
+const CATRow = React.memo(function CATRow({ item, isDark, showApsEspecifico = false, showMes = false }: { item: OrdenMontajeCAT; isDark: boolean; showApsEspecifico?: boolean; showMes?: boolean }) {
+  const negociacionColor = getNegociacionColorCls(item.negociacion, isDark);
   const negociacionLabel = (() => {
     switch (item.negociacion) {
       case 'INTERCAMBIO': return 'IN - RENTA (INTERCAMBIO)';
@@ -2315,20 +2362,14 @@ function CATRow({ item, showApsEspecifico = false, showMes = false }: { item: Or
       </td>
     </tr>
   );
-}
+});
 
-function INVIANRow({ item, onOpenGallery, showCto = false }: { item: OrdenMontajeINVIAN; onOpenGallery: (item: OrdenMontajeINVIAN) => void; showCto?: boolean }) {
-  const isDark = useThemeStore((s) => s.theme) === 'dark';
-  const getOperacionColor = (op: string | null) => {
-    switch (op) {
-      case 'BONIFICACION': return isDark ? 'bg-amber-500/20 text-amber-300 border-amber-500/30' : 'bg-amber-50 text-amber-700 border-amber-200';
-      case 'CORTESIA': return isDark ? 'bg-cyan-500/20 text-cyan-300 border-cyan-500/30' : 'bg-cyan-50 text-cyan-700 border-cyan-200';
-      case 'INTERCAMBIO': return isDark ? 'bg-purple-500/20 text-purple-300 border-purple-500/30' : 'bg-purple-50 text-purple-700 border-purple-200';
-      default: return isDark ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500/30' : 'bg-emerald-50 text-emerald-700 border-emerald-200';
-    }
-  };
-  const operacionColor = getOperacionColor(item.Operacion);
-  const tipoDistColor = getOperacionColor(item.TipoDistribucion);
+// Memoizado: misma motivación que CATRow. `onOpenGallery` se asume estable
+// (useCallback en el padre) — si no lo fuera, React.memo aún funciona pero
+// re-renderiza cuando cambia la ref.
+const INVIANRow = React.memo(function INVIANRow({ item, isDark, onOpenGallery, showCto = false }: { item: OrdenMontajeINVIAN; isDark: boolean; onOpenGallery: (item: OrdenMontajeINVIAN) => void; showCto?: boolean }) {
+  const operacionColor = getOperacionColorCls(item.Operacion, isDark);
+  const tipoDistColor = getOperacionColorCls(item.TipoDistribucion, isDark);
 
   const hasTraditionalArte = item.ArteUrl === 'HAS_ARTE';
   const arteUrl = hasTraditionalArte ? null : getFileUrl(item.ArteUrl);
@@ -2448,4 +2489,4 @@ function INVIANRow({ item, onOpenGallery, showCto = false }: { item: OrdenMontaj
       </td>
     </tr>
   );
-}
+});
