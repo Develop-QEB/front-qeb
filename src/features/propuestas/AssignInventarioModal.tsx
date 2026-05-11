@@ -3099,7 +3099,11 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
     setFlujoFilter(tipoPeriodo === 'mensual' ? 'Flujo' : 'Todos');
     setSortColumn('codigo_unico');
     setSortDirection('asc');
-    setExcluirCategoria('');
+    // No reseteamos excluirCategoria aquí: handleSearchInventory se invoca
+    // desde el useEffect que escucha cambios en excluirCategoria/distancia,
+    // así que resetearlo aquí provocaba un loop donde el dropdown se vaciaba
+    // visualmente justo después de seleccionar. El default '' del useState
+    // ya cubre la primera carga del modal.
     setCsvFile(null);
     setCsvData([]);
     setShowCsvSection(false);
@@ -5231,6 +5235,48 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
                       </label>
                     );
                   })()}
+
+                  {/* Exclusión por categoría de cliente — esconde inventario
+                      cercano a piezas reservadas por clientes de una categoría
+                      X dentro del radio elegido (Haversine en back). */}
+                  <div className={`flex items-center gap-1 px-2 py-1 rounded-lg border ${excluirCategoria ? 'bg-amber-500/15 border-amber-500/40' : (isDark ? 'bg-zinc-800 border-zinc-700' : 'bg-gray-50 border-gray-200')}`} title="Excluye inventario disponible que esté cerca de piezas reservadas por clientes de la categoría seleccionada.">
+                    <span className={`text-[10px] uppercase ${excluirCategoria ? 'text-amber-300' : (isDark ? 'text-zinc-500' : 'text-gray-500')}`}>Excluir cat.</span>
+                    <select
+                      value={excluirCategoria}
+                      onChange={(e) => setExcluirCategoria(e.target.value)}
+                      className={`px-1.5 py-0.5 rounded text-xs border-0 focus:ring-1 focus:ring-amber-500/50 ${isDark ? 'bg-zinc-900 text-zinc-200' : 'bg-white text-gray-800'}`}
+                    >
+                      <option value="">— ninguna —</option>
+                      {(categoriasCliente || []).map(cat => (
+                        <option key={cat} value={cat}>{cat}</option>
+                      ))}
+                    </select>
+                    {excluirCategoria && (
+                      <select
+                        value={excluirDistanciaKm}
+                        onChange={(e) => setExcluirDistanciaKm(Number(e.target.value))}
+                        className={`px-1.5 py-0.5 rounded text-xs border-0 focus:ring-1 focus:ring-amber-500/50 ${isDark ? 'bg-zinc-900 text-amber-300' : 'bg-white text-amber-700'}`}
+                        title="Distancia mínima al inventario excluido"
+                      >
+                        <option value={0.5}>500 m</option>
+                        <option value={1}>1 km</option>
+                        <option value={1.5}>1.5 km</option>
+                        <option value={2}>2 km</option>
+                        <option value={2.5}>2.5 km</option>
+                        <option value={3}>3 km</option>
+                      </select>
+                    )}
+                    {excluirCategoria && (
+                      <button
+                        type="button"
+                        onClick={() => setExcluirCategoria('')}
+                        className={`p-0.5 rounded ${isDark ? 'hover:bg-zinc-700 text-zinc-400' : 'hover:bg-gray-200 text-gray-500'}`}
+                        title="Quitar filtro de exclusión"
+                      >
+                        <X className="h-3 w-3" />
+                      </button>
+                    )}
+                  </div>
 
                   <div className="flex-1" />
 
