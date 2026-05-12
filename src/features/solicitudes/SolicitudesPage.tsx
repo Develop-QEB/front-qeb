@@ -466,22 +466,37 @@ function GroupHeader({
   );
 }
 
-// Status badge colors (dynamic)
-const getStatusColors = (isDark: boolean): Record<string, { bg: string; text: string; border: string }> => ({
-  'Pendiente': { bg: isDark ? 'bg-amber-500/20' : 'bg-amber-50', text: isDark ? 'text-amber-300' : 'text-amber-700', border: 'border-amber-500/30' },
-  'Aprobada': { bg: isDark ? 'bg-emerald-500/20' : 'bg-emerald-50', text: isDark ? 'text-emerald-300' : 'text-emerald-700', border: 'border-emerald-500/30' },
-  'Rechazada': { bg: isDark ? 'bg-red-500/20' : 'bg-red-50', text: isDark ? 'text-red-300' : 'text-red-700', border: 'border-red-500/30' },
-  'Atendida': { bg: isDark ? 'bg-cyan-500/20' : 'bg-cyan-50', text: isDark ? 'text-cyan-300' : 'text-cyan-700', border: 'border-cyan-500/30' },
-  'En Proceso': { bg: isDark ? 'bg-blue-500/20' : 'bg-blue-50', text: isDark ? 'text-blue-300' : 'text-blue-700', border: 'border-blue-500/30' },
-  'Cancelada': { bg: isDark ? 'bg-zinc-500/20' : 'bg-gray-50', text: isDark ? 'text-zinc-300' : 'text-gray-700', border: isDark ? 'border-zinc-500/30' : 'border-gray-300' },
-});
+// Status badge colors — two static maps, picked at render time based on theme.
+// Dark-mode toggle keeps working: the component re-renders when `isDark` changes
+// and `getStatusColor` selects the other map; no behavior change vs. the previous
+// inline-object version.
+type StatusColor = { bg: string; text: string; border: string };
 
-// Default colors for unknown status
-const getDefaultStatusColor = (isDark: boolean) => ({
-  bg: isDark ? 'bg-violet-500/20' : 'bg-violet-50',
-  text: isDark ? 'text-violet-300' : 'text-violet-700',
-  border: 'border-violet-500/30',
-});
+const STATUS_COLORS_DARK: Record<string, StatusColor> = {
+  'Pendiente': { bg: 'bg-amber-500/20', text: 'text-amber-300', border: 'border-amber-500/30' },
+  'Aprobada': { bg: 'bg-emerald-500/20', text: 'text-emerald-300', border: 'border-emerald-500/30' },
+  'Rechazada': { bg: 'bg-red-500/20', text: 'text-red-300', border: 'border-red-500/30' },
+  'Atendida': { bg: 'bg-cyan-500/20', text: 'text-cyan-300', border: 'border-cyan-500/30' },
+  'En Proceso': { bg: 'bg-blue-500/20', text: 'text-blue-300', border: 'border-blue-500/30' },
+  'Cancelada': { bg: 'bg-zinc-500/20', text: 'text-zinc-300', border: 'border-zinc-500/30' },
+};
+
+const STATUS_COLORS_LIGHT: Record<string, StatusColor> = {
+  'Pendiente': { bg: 'bg-amber-50', text: 'text-amber-700', border: 'border-amber-500/30' },
+  'Aprobada': { bg: 'bg-emerald-50', text: 'text-emerald-700', border: 'border-emerald-500/30' },
+  'Rechazada': { bg: 'bg-red-50', text: 'text-red-700', border: 'border-red-500/30' },
+  'Atendida': { bg: 'bg-cyan-50', text: 'text-cyan-700', border: 'border-cyan-500/30' },
+  'En Proceso': { bg: 'bg-blue-50', text: 'text-blue-700', border: 'border-blue-500/30' },
+  'Cancelada': { bg: 'bg-gray-50', text: 'text-gray-700', border: 'border-gray-300' },
+};
+
+const DEFAULT_STATUS_COLOR_DARK: StatusColor = { bg: 'bg-violet-500/20', text: 'text-violet-300', border: 'border-violet-500/30' };
+const DEFAULT_STATUS_COLOR_LIGHT: StatusColor = { bg: 'bg-violet-50', text: 'text-violet-700', border: 'border-violet-500/30' };
+
+const getStatusColor = (status: string, isDark: boolean): StatusColor => {
+  const map = isDark ? STATUS_COLORS_DARK : STATUS_COLORS_LIGHT;
+  return map[status] || (isDark ? DEFAULT_STATUS_COLOR_DARK : DEFAULT_STATUS_COLOR_LIGHT);
+};
 
 // Chart colors for dynamic status
 const CHART_COLORS = [
@@ -494,6 +509,202 @@ const CHART_COLORS = [
   '#06b6d4', // cyan-500
   '#3b82f6', // blue-500
 ];
+
+// Row component — extracted + memoized so re-renders of the parent
+// (typing in search, opening filters, theme changes affecting only the header,
+// etc.) don't force every row to reconcile.
+interface SolicitudRowProps {
+  item: Solicitud;
+  index: number;
+  isDark: boolean;
+  canEditPerm: boolean;
+  canAtenderPerm: boolean;
+  canDeletePerm: boolean;
+  canChangeEstadoPerm: boolean;
+  onView: (item: Solicitud) => void;
+  onEdit: (item: Solicitud) => void;
+  onAtender: (item: Solicitud) => void;
+  onStatus: (item: Solicitud) => void;
+  onDelete: (id: number) => void;
+}
+
+const SolicitudRow = React.memo(function SolicitudRow({
+  item,
+  index,
+  isDark,
+  canEditPerm,
+  canAtenderPerm,
+  canDeletePerm,
+  canChangeEstadoPerm,
+  onView,
+  onEdit,
+  onAtender,
+  onStatus,
+  onDelete,
+}: SolicitudRowProps) {
+  const statusColor = getStatusColor(item.status, isDark);
+
+  const isDesactivada = item.status === 'Desactivada';
+  const isAprobada = item.status === 'Aprobada';
+  const isAtendida = item.status === 'Atendida';
+
+  const canEdit = !isDesactivada && !isAprobada && !isAtendida;
+  const canAtender = isAprobada;
+  const canChangeStatus = !isAtendida;
+  const canDelete = !isDesactivada && !isAprobada && !isAtendida;
+
+  return (
+    <tr key={`sol-${item.id}-${index}`} className={`border-b ${isDark ? 'border-zinc-800/50 hover:bg-zinc-800/30' : 'border-gray-200 hover:bg-gray-50'} transition-colors`}>
+      <td className="px-4 py-3">
+        <span className={`font-mono text-xs px-2 py-1 rounded-md ${isDark ? 'bg-purple-500/10 text-purple-300' : 'bg-purple-50 text-purple-700'}`}>#{item.id}</span>
+      </td>
+      <td className="px-4 py-3">
+        <span className={`${isDark ? 'text-zinc-400' : 'text-gray-500'} text-sm`}>{formatDate(item.fecha)}</span>
+      </td>
+      <td className="px-4 py-3">
+        <div>
+          <div className="flex items-center gap-1.5">
+            <span className={`font-semibold ${isDark ? 'text-white' : 'text-gray-900'}`}>{item.razon_social || '-'}</span>
+            {item.sap_database && (
+              <span className={`inline-flex text-[9px] font-bold px-1.5 py-0.5 rounded-full border flex-shrink-0 ${
+                item.sap_database === 'CIMU' ? (isDark ? 'bg-blue-500/20 text-blue-300' : 'bg-blue-50 text-blue-700') + ' border-blue-500/30' :
+                item.sap_database === 'TEST' ? (isDark ? 'bg-amber-500/20 text-amber-300' : 'bg-amber-50 text-amber-700') + ' border-amber-500/30' :
+                (isDark ? 'bg-emerald-500/20 text-emerald-300' : 'bg-emerald-50 text-emerald-700') + ' border-emerald-500/30'
+              }`}>{item.sap_database}</span>
+            )}
+          </div>
+          {item.cuic && (
+            <div className={`text-xs ${isDark ? 'text-zinc-500' : 'text-gray-400'}`}>CUIC: {item.cuic}</div>
+          )}
+        </div>
+      </td>
+      <td className="px-4 py-3">
+        <span className={`max-w-[200px] truncate block ${isDark ? 'text-white' : 'text-gray-900'} text-sm`} title={item.nombre_campania || '-'}>{item.nombre_campania || '-'}</span>
+      </td>
+      <td className="px-4 py-3">
+        <span className={`${isDark ? 'text-fuchsia-300' : 'text-fuchsia-600'} text-xs`}>{item.marca_nombre || '-'}</span>
+      </td>
+      <td className="px-4 py-3">
+        <span className={`font-medium ${isDark ? 'text-emerald-400' : 'text-emerald-600'}`}>{formatCurrency(item.presupuesto)}</span>
+      </td>
+      <td className="px-4 py-3">
+        {(item as any).tipo_periodo ? (
+          <span className={`px-2 py-0.5 rounded-full text-[10px] font-medium ${
+            (item as any).tipo_periodo === 'mensual'
+              ? (isDark ? 'bg-blue-500/20 text-blue-300' : 'bg-blue-50 text-blue-700') + ' border border-blue-500/30'
+              : (isDark ? 'bg-amber-500/20 text-amber-300' : 'bg-amber-50 text-amber-700') + ' border border-amber-500/30'
+          }`}>
+            {(item as any).tipo_periodo === 'mensual' ? 'Mensual' : 'Catorcena'}
+          </span>
+        ) : <span className={`${isDark ? 'text-zinc-600' : 'text-gray-400'} text-xs`}>-</span>}
+      </td>
+      <td className="px-4 py-3">
+        {(() => {
+          const tp = (item as any).tipo_periodo;
+          const label = tablePeriodoLabel(tp, (item as any).periodo_fecha_inicio, (item as any).catorcena_inicio, (item as any).anio_inicio);
+          if (label === '-') return <span className={`${isDark ? 'text-zinc-600' : 'text-gray-400'} text-xs`}>-</span>;
+          return <span className={`${isDark ? 'text-zinc-300' : 'text-gray-700'} text-xs`}>{label}</span>;
+        })()}
+      </td>
+      <td className="px-4 py-3">
+        {(() => {
+          const tp = (item as any).tipo_periodo;
+          const label = tablePeriodoLabel(tp, (item as any).periodo_fecha_fin, (item as any).catorcena_fin, (item as any).anio_fin);
+          if (label === '-') return <span className={`${isDark ? 'text-zinc-600' : 'text-gray-400'} text-xs`}>-</span>;
+          return <span className={`${isDark ? 'text-zinc-300' : 'text-gray-700'} text-xs`}>{label}</span>;
+        })()}
+      </td>
+      <td className="px-4 py-3 max-w-[160px]">
+        <span
+          className={`${isDark ? 'text-zinc-300' : 'text-gray-700'} text-xs leading-relaxed`}
+          style={{ display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}
+          title={item.asignado || ''}
+        >
+          {item.asignado || '-'}
+        </span>
+      </td>
+      <td className="px-4 py-3">
+        <button
+          onClick={(e) => { e.stopPropagation(); if (canChangeStatus) onStatus(item); }}
+          disabled={!canChangeStatus}
+          className={`px-2 py-0.5 rounded-full text-[10px] ${statusColor.bg} ${statusColor.text} border ${statusColor.border} ${canChangeStatus ? 'hover:opacity-80 cursor-pointer' : 'opacity-60 cursor-not-allowed'} transition-opacity`}
+        >
+          {item.status}
+        </button>
+      </td>
+      <td className="px-4 py-3">
+        <div className="flex items-center gap-1">
+          {/* Ver */}
+          <button
+            onClick={(e) => { e.stopPropagation(); onView(item); }}
+            className={`p-2 rounded-lg transition-all border ${isDark ? 'bg-purple-500/10 text-purple-400 hover:bg-purple-500/20 hover:text-purple-300 border-purple-500/20 hover:border-purple-500/40' : 'bg-purple-50 text-purple-600 hover:bg-purple-100 hover:text-purple-700 border-purple-200 hover:border-purple-300'}`}
+            title="Ver detalles"
+          >
+            <Eye className="h-3.5 w-3.5" />
+          </button>
+
+          {/* Editar */}
+          {canEditPerm && (
+            <button
+              onClick={(e) => { e.stopPropagation(); onEdit(item); }}
+              disabled={!canEdit}
+              className={`p-2 rounded-lg transition-all border ${canEdit
+                ? isDark ? 'bg-zinc-500/10 text-zinc-400 hover:bg-zinc-500/20 hover:text-zinc-300 border-zinc-500/20 hover:border-zinc-500/40' : 'bg-gray-50 text-gray-500 hover:bg-gray-100 hover:text-gray-700 border-gray-200 hover:border-gray-300'
+                : `${isDark ? 'bg-zinc-800/50 text-zinc-600 border-zinc-700/30' : 'bg-gray-100 text-gray-400 border-gray-200'} cursor-not-allowed`
+                }`}
+              title={canEdit ? 'Editar solicitud' : 'No disponible'}
+            >
+              <Edit2 className="h-3.5 w-3.5" />
+            </button>
+          )}
+
+          {/* Atender */}
+          {canAtenderPerm && (
+            <button
+              onClick={(e) => { e.stopPropagation(); onAtender(item); }}
+              disabled={!canAtender}
+              className={`p-2 rounded-lg transition-all border ${canAtender
+                ? isDark ? 'bg-fuchsia-500/10 text-fuchsia-400 hover:bg-fuchsia-500/20 hover:text-fuchsia-300 border-fuchsia-500/20 hover:border-fuchsia-500/40' : 'bg-fuchsia-50 text-fuchsia-600 hover:bg-fuchsia-100 hover:text-fuchsia-700 border-fuchsia-200 hover:border-fuchsia-300'
+                : `${isDark ? 'bg-zinc-800/50 text-zinc-600 border-zinc-700/30' : 'bg-gray-100 text-gray-400 border-gray-200'} cursor-not-allowed`
+                }`}
+              title={canAtender ? 'Atender solicitud' : 'Solo disponible para solicitudes aprobadas'}
+            >
+              <PlayCircle className="h-3.5 w-3.5" />
+            </button>
+          )}
+
+          {/* Estatus/Comentarios */}
+          <button
+            onClick={(e) => { e.stopPropagation(); if (canChangeStatus) onStatus(item); }}
+            disabled={!canChangeStatus}
+            className={`p-2 rounded-lg transition-all border ${canChangeStatus
+              ? isDark ? 'bg-amber-500/10 text-amber-400 hover:bg-amber-500/20 hover:text-amber-300 border-amber-500/20 hover:border-amber-500/40' : 'bg-amber-50 text-amber-600 hover:bg-amber-100 hover:text-amber-700 border-amber-200 hover:border-amber-300'
+              : `${isDark ? 'bg-zinc-800/50 text-zinc-600 border-zinc-700/30' : 'bg-gray-100 text-gray-400 border-gray-200'} cursor-not-allowed`
+              }`}
+            title={!canChangeStatus ? 'No disponible' : canChangeEstadoPerm ? 'Ver/Cambiar estatus' : 'Ver estatus y comentarios'}
+          >
+            <MessageSquare className="h-3.5 w-3.5" />
+          </button>
+
+          {/* Eliminar */}
+          {canDeletePerm && (
+            <button
+              onClick={(e) => { e.stopPropagation(); onDelete(item.id); }}
+              disabled={!canDelete}
+              className={`p-2 rounded-lg transition-all border ${canDelete
+                ? isDark ? 'bg-red-500/10 text-red-400 hover:bg-red-500/20 hover:text-red-300 border-red-500/20 hover:border-red-500/40' : 'bg-red-50 text-red-600 hover:bg-red-100 hover:text-red-700 border-red-200 hover:border-red-300'
+                : `${isDark ? 'bg-zinc-800/50 text-zinc-600 border-zinc-700/30' : 'bg-gray-100 text-gray-400 border-gray-200'} cursor-not-allowed`
+                }`}
+              title={canDelete ? 'Eliminar solicitud' : 'No disponible'}
+            >
+              <Trash2 className="h-3.5 w-3.5" />
+            </button>
+          )}
+        </div>
+      </td>
+    </tr>
+  );
+});
 
 export function SolicitudesPage() {
   const queryClient = useQueryClient();
@@ -587,27 +798,26 @@ export function SolicitudesPage() {
     setSearchTags(prev => prev.filter(t => t !== tag));
   };
 
-  // Debounce search tags and input
+  // Debounce conjunto de search tags + input.
+  // Un solo timer en lugar de dos efectos paralelos evita renders dobles
+  // cuando ambos cambian a la vez.
   useEffect(() => {
     const timer = setTimeout(() => {
       setDebouncedSearchTags(searchTags);
-      setPage(1);
-    }, 500);
-    return () => clearTimeout(timer);
-  }, [searchTags]);
-
-  useEffect(() => {
-    const timer = setTimeout(() => {
       setDebouncedSearchInput(searchInput);
       setPage(1);
     }, 500);
     return () => clearTimeout(timer);
-  }, [searchInput]);
+  }, [searchTags, searchInput]);
 
-  // Fetch catorcenas for filter (get all years)
+  // Fetch catorcenas for filter (get all years).
+  // Catorcenas son datos casi estáticos — un staleTime alto evita refetches
+  // al regresar a la página o al re-montar el componente.
   const { data: catorcenasData } = useQuery({
     queryKey: ['catorcenas'],
     queryFn: () => solicitudesService.getCatorcenas(),
+    staleTime: 1000 * 60 * 30, // 30 min
+    gcTime: 1000 * 60 * 60,    // 1 h
   });
 
   // Combine debounced tags + debounced input into all active search terms
@@ -617,33 +827,45 @@ export function SolicitudesPage() {
     return terms;
   }, [debouncedSearchTags, debouncedSearchInput]);
 
-  // Search is always handled client-side to cover all visible fields (nombre_campania, id, etc.)
-  // Stats recalculated from filteredData via effectiveStats when search is active
+  // Server-side search: TODOS los tags viajan al backend, unidos por '|'.
+  // El backend separa por '|' (no espacios) y trata cada uno como UNA frase
+  // con LIKE (incluyendo nombre_campania via JOIN a cotización). Esto evita
+  // que palabras cortas ("y", "de") matcheen casi todos los registros y
+  // mantiene paginación correcta.
+  const searchForBackend = allSearchTerms.length > 0 ? allSearchTerms.join('|') : undefined;
 
-  // Fetch stats with all active filters
+  // Fetch stats with all active filters.
+  // staleTime corto: el WebSocket invalida la query en cambios reales, así
+  // evitamos refetches innecesarios en cada re-render del padre.
+  // Cuando search lo hace el backend, también lo mandamos a stats para que
+  // el total y el chart reflejen los resultados filtrados.
   const { data: stats } = useQuery({
-    queryKey: ['solicitudes-stats', yearInicio, yearFin, catorcenaInicio, catorcenaFin, status],
+    queryKey: ['solicitudes-stats', yearInicio, yearFin, catorcenaInicio, catorcenaFin, status, searchForBackend],
     queryFn: () => solicitudesService.getStats({
       yearInicio,
       yearFin,
       catorcenaInicio,
       catorcenaFin,
       status: status || undefined,
+      search: searchForBackend,
     }),
+    staleTime: 1000 * 30, // 30 s
   });
 
-  // When grouping, advanced filters, or any search terms are active, fetch ALL data
-  const needsAllData = !!groupBy || advancedFilters.length > 0 || allSearchTerms.length > 0;
+  // Fetch ALL data sólo cuando hay groupBy o filtros avanzados (esos siguen
+  // siendo cliente-side). Search ya va al backend con paginación normal.
+  const needsAllData = !!groupBy || advancedFilters.length > 0;
   const effectiveLimit = needsAllData ? 9999 : limit;
 
   // Fetch solicitudes
   const { data, isLoading } = useQuery({
-    queryKey: ['solicitudes', page, status, allSearchTerms, yearInicio, yearFin, catorcenaInicio, catorcenaFin, sortBy, sortOrder, groupBy, tipoPeriodo, needsAllData],
+    queryKey: ['solicitudes', page, status, searchForBackend, yearInicio, yearFin, catorcenaInicio, catorcenaFin, sortBy, sortOrder, groupBy, tipoPeriodo, needsAllData],
     queryFn: () =>
       solicitudesService.getAll({
         page: needsAllData ? 1 : page,
         limit: effectiveLimit,
         status: status || undefined,
+        search: searchForBackend,
         yearInicio,
         yearFin,
         catorcenaInicio,
@@ -653,6 +875,8 @@ export function SolicitudesPage() {
         groupBy: groupBy || undefined,
         tipoPeriodo: tipoPeriodo || undefined,
       }),
+    staleTime: 1000 * 30, // 30 s — WS invalida en cambios reales
+    placeholderData: (prev) => prev, // mantiene la tabla anterior visible al paginar/filtrar
   });
 
   // Delete mutation
@@ -757,10 +981,12 @@ export function SolicitudesPage() {
   const hasPeriodFilter = yearInicio !== undefined && yearFin !== undefined;
   const hasActiveFilters = !!(status || hasPeriodFilter || groupBy || sortBy !== 'fecha' || advancedFilters.length > 0 || searchTags.length > 0);
 
-  // Get unique values for each field (for advanced filter dropdowns)
+  // Get unique values for each field (for advanced filter dropdowns).
+  // Solo se calcula cuando el panel de filtros avanzados está abierto: evita
+  // recorrer 9 campos × N filas en cada render mientras el usuario teclea.
   const getUniqueFieldValues = useMemo(() => {
     const valuesMap: Record<string, string[]> = {};
-    if (!data?.data) return valuesMap;
+    if (!showAdvancedFilters || !data?.data) return valuesMap;
 
     SOLICITUD_FILTER_FIELDS.forEach(fieldConfig => {
       const values = new Set<string>();
@@ -773,30 +999,15 @@ export function SolicitudesPage() {
       valuesMap[fieldConfig.field] = Array.from(values).sort();
     });
     return valuesMap;
-  }, [data?.data]);
+  }, [showAdvancedFilters, data?.data]);
 
-  // Apply advanced filters and multi-tag search to data
+  // Apply advanced filters (cliente-side). El search se aplica server-side
+  // sobre los campos relevantes (incl. nombre_campania via JOIN), así que
+  // aquí ya no es necesario re-filtrar por tags.
   const filteredData = useMemo(() => {
     if (!data?.data) return [];
-    let result = applyAdvancedFilters(data.data, advancedFilters);
-    // Apply multi-term OR search client-side when there are multiple search terms
-    if (allSearchTerms.length > 0) {
-      const searchFields: (keyof Solicitud)[] = ['descripcion', 'razon_social', 'marca_nombre', 'asesor', 'producto_nombre', 'agencia', 'categoria_nombre', 'nombre_campania', 'cuic', 'status', 'asignado', 'nombre_usuario', 'unidad_negocio', 'card_code', 'formatos'];
-      result = result.filter(item =>
-        allSearchTerms.some(term => {
-          const lowerTerm = term.toLowerCase();
-          return (
-            String(item.id).includes(lowerTerm) ||
-            searchFields.some(field => {
-              const val = item[field];
-              return val != null && String(val).toLowerCase().includes(lowerTerm);
-            })
-          );
-        })
-      );
-    }
-    return result;
-  }, [data?.data, advancedFilters, allSearchTerms]);
+    return applyAdvancedFilters(data.data, advancedFilters);
+  }, [data?.data, advancedFilters]);
 
   // Group data
   const groupedData = useMemo(() => {
@@ -814,8 +1025,10 @@ export function SolicitudesPage() {
     return Object.entries(groups).sort((a, b) => b[1].length - a[1].length);
   }, [filteredData, groupBy]);
 
-  // Compute effective stats: when advanced filters or multi-tag search are active, recalculate from filteredData
-  const needsClientFilter = advancedFilters.length > 0 || allSearchTerms.length > 0;
+  // Compute effective stats: sólo cuando hay filtros avanzados (cliente-side)
+  // recalculamos stats desde filteredData. El search ya viaja en el queryKey
+  // de `solicitudes-stats`, así que `stats` del backend ya viene filtrado.
+  const needsClientFilter = advancedFilters.length > 0;
   const effectiveStats = useMemo(() => {
     if (needsClientFilter && data?.data) {
       const byStatus: Record<string, number> = {};
@@ -884,179 +1097,14 @@ export function SolicitudesPage() {
     setPage(1);
   };
 
-  const renderSolicitudRow = (item: Solicitud, index: number) => {
-    const statusColors = getStatusColors(isDark);
-    const statusColor = statusColors[item.status] || getDefaultStatusColor(isDark);
-
-    // Button enable/disable logic based on status
-    const isDesactivada = item.status === 'Desactivada';
-    const isAprobada = item.status === 'Aprobada' || item.status === 'Aprobada';
-    const isAjustar = item.status === 'Ajustar';
-    const isAtendida = item.status === 'Atendida';
-
-    // Ver: siempre activo
-    const canView = true;
-    // Editar: activo si no está Desactivada, no está Aprobada, no está Atendida
-    const canEdit = !isDesactivada && !isAprobada && !isAtendida;
-    // Atender: solo activo si está Aprobada
-    const canAtender = isAprobada;
-    // Estatus: bloqueado si está Atendida
-    const canChangeStatus = !isAtendida;
-    // Eliminar: solo si no está Desactivada, Aprobada o Atendida
-    const canDelete = !isDesactivada && !isAprobada && !isAtendida;
-
-    return (
-      <tr key={`sol-${item.id}-${index}`} className={`border-b ${isDark ? 'border-zinc-800/50 hover:bg-zinc-800/30' : 'border-gray-200 hover:bg-gray-50'} transition-colors`}>
-        <td className="px-4 py-3">
-          <span className={`font-mono text-xs px-2 py-1 rounded-md ${isDark ? 'bg-purple-500/10 text-purple-300' : 'bg-purple-50 text-purple-700'}`}>#{item.id}</span>
-        </td>
-        <td className="px-4 py-3">
-          <span className={`${isDark ? 'text-zinc-400' : 'text-gray-500'} text-sm`}>{formatDate(item.fecha)}</span>
-        </td>
-        <td className="px-4 py-3">
-          <div>
-            <div className="flex items-center gap-1.5">
-              <span className={`font-semibold ${isDark ? 'text-white' : 'text-gray-900'}`}>{item.razon_social || '-'}</span>
-              {item.sap_database && (
-                <span className={`inline-flex text-[9px] font-bold px-1.5 py-0.5 rounded-full border flex-shrink-0 ${
-                  item.sap_database === 'CIMU' ? (isDark ? 'bg-blue-500/20 text-blue-300' : 'bg-blue-50 text-blue-700') + ' border-blue-500/30' :
-                  item.sap_database === 'TEST' ? (isDark ? 'bg-amber-500/20 text-amber-300' : 'bg-amber-50 text-amber-700') + ' border-amber-500/30' :
-                  (isDark ? 'bg-emerald-500/20 text-emerald-300' : 'bg-emerald-50 text-emerald-700') + ' border-emerald-500/30'
-                }`}>{item.sap_database}</span>
-              )}
-            </div>
-            {item.cuic && (
-              <div className={`text-xs ${isDark ? 'text-zinc-500' : 'text-gray-400'}`}>CUIC: {item.cuic}</div>
-            )}
-          </div>
-        </td>
-        <td className="px-4 py-3">
-          <span className={`max-w-[200px] truncate block ${isDark ? 'text-white' : 'text-gray-900'} text-sm`} title={item.nombre_campania || '-'}>{item.nombre_campania || '-'}</span>
-        </td>
-        <td className="px-4 py-3">
-          <span className={`${isDark ? 'text-fuchsia-300' : 'text-fuchsia-600'} text-xs`}>{item.marca_nombre || '-'}</span>
-        </td>
-        <td className="px-4 py-3">
-          <span className={`font-medium ${isDark ? 'text-emerald-400' : 'text-emerald-600'}`}>{formatCurrency(item.presupuesto)}</span>
-        </td>
-        <td className="px-4 py-3">
-          {(item as any).tipo_periodo ? (
-            <span className={`px-2 py-0.5 rounded-full text-[10px] font-medium ${
-              (item as any).tipo_periodo === 'mensual'
-                ? (isDark ? 'bg-blue-500/20 text-blue-300' : 'bg-blue-50 text-blue-700') + ' border border-blue-500/30'
-                : (isDark ? 'bg-amber-500/20 text-amber-300' : 'bg-amber-50 text-amber-700') + ' border border-amber-500/30'
-            }`}>
-              {(item as any).tipo_periodo === 'mensual' ? 'Mensual' : 'Catorcena'}
-            </span>
-          ) : <span className={`${isDark ? 'text-zinc-600' : 'text-gray-400'} text-xs`}>-</span>}
-        </td>
-        <td className="px-4 py-3">
-          {(() => {
-            const tp = (item as any).tipo_periodo;
-            const label = tablePeriodoLabel(tp, (item as any).periodo_fecha_inicio, (item as any).catorcena_inicio, (item as any).anio_inicio);
-            if (label === '-') return <span className={`${isDark ? 'text-zinc-600' : 'text-gray-400'} text-xs`}>-</span>;
-            return <span className={`${isDark ? 'text-zinc-300' : 'text-gray-700'} text-xs`}>{label}</span>;
-          })()}
-        </td>
-        <td className="px-4 py-3">
-          {(() => {
-            const tp = (item as any).tipo_periodo;
-            const label = tablePeriodoLabel(tp, (item as any).periodo_fecha_fin, (item as any).catorcena_fin, (item as any).anio_fin);
-            if (label === '-') return <span className={`${isDark ? 'text-zinc-600' : 'text-gray-400'} text-xs`}>-</span>;
-            return <span className={`${isDark ? 'text-zinc-300' : 'text-gray-700'} text-xs`}>{label}</span>;
-          })()}
-        </td>
-        <td className="px-4 py-3 max-w-[160px]">
-          <span
-            className={`${isDark ? 'text-zinc-300' : 'text-gray-700'} text-xs leading-relaxed`}
-            style={{ display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}
-            title={item.asignado || ''}
-          >
-            {item.asignado || '-'}
-          </span>
-        </td>
-        <td className="px-4 py-3">
-          <button
-            onClick={(e) => { e.stopPropagation(); if (canChangeStatus) setStatusSolicitud(item); }}
-            disabled={!canChangeStatus}
-            className={`px-2 py-0.5 rounded-full text-[10px] ${statusColor.bg} ${statusColor.text} border ${statusColor.border} ${canChangeStatus ? 'hover:opacity-80 cursor-pointer' : 'opacity-60 cursor-not-allowed'} transition-opacity`}
-          >
-            {item.status}
-          </button>
-        </td>
-        <td className="px-4 py-3">
-          <div className="flex items-center gap-1">
-            {/* Ver */}
-            <button
-              onClick={(e) => { e.stopPropagation(); setViewSolicitudId(item.id); }}
-              className={`p-2 rounded-lg transition-all border ${isDark ? 'bg-purple-500/10 text-purple-400 hover:bg-purple-500/20 hover:text-purple-300 border-purple-500/20 hover:border-purple-500/40' : 'bg-purple-50 text-purple-600 hover:bg-purple-100 hover:text-purple-700 border-purple-200 hover:border-purple-300'}`}
-              title="Ver detalles"
-            >
-              <Eye className="h-3.5 w-3.5" />
-            </button>
-
-            {/* Editar */}
-            {permissions.canEditSolicitudes && (
-              <button
-                onClick={(e) => { e.stopPropagation(); setEditSolicitud(item); }}
-                disabled={!canEdit}
-                className={`p-2 rounded-lg transition-all border ${canEdit
-                  ? isDark ? 'bg-zinc-500/10 text-zinc-400 hover:bg-zinc-500/20 hover:text-zinc-300 border-zinc-500/20 hover:border-zinc-500/40' : 'bg-gray-50 text-gray-500 hover:bg-gray-100 hover:text-gray-700 border-gray-200 hover:border-gray-300'
-                  : `${isDark ? 'bg-zinc-800/50 text-zinc-600 border-zinc-700/30' : 'bg-gray-100 text-gray-400 border-gray-200'} cursor-not-allowed`
-                  }`}
-                title={canEdit ? 'Editar solicitud' : 'No disponible'}
-              >
-                <Edit2 className="h-3.5 w-3.5" />
-              </button>
-            )}
-
-            {/* Atender */}
-            {permissions.canAtenderSolicitudes && (
-              <button
-                onClick={(e) => { e.stopPropagation(); setAtenderSolicitud(item); }}
-                disabled={!canAtender}
-                className={`p-2 rounded-lg transition-all border ${canAtender
-                  ? isDark ? 'bg-fuchsia-500/10 text-fuchsia-400 hover:bg-fuchsia-500/20 hover:text-fuchsia-300 border-fuchsia-500/20 hover:border-fuchsia-500/40' : 'bg-fuchsia-50 text-fuchsia-600 hover:bg-fuchsia-100 hover:text-fuchsia-700 border-fuchsia-200 hover:border-fuchsia-300'
-                  : `${isDark ? 'bg-zinc-800/50 text-zinc-600 border-zinc-700/30' : 'bg-gray-100 text-gray-400 border-gray-200'} cursor-not-allowed`
-                  }`}
-                title={canAtender ? 'Atender solicitud' : 'Solo disponible para solicitudes aprobadas'}
-              >
-                <PlayCircle className="h-3.5 w-3.5" />
-              </button>
-            )}
-
-            {/* Estatus/Comentarios */}
-            <button
-              onClick={(e) => { e.stopPropagation(); if (canChangeStatus) setStatusSolicitud(item); }}
-              disabled={!canChangeStatus}
-              className={`p-2 rounded-lg transition-all border ${canChangeStatus
-                ? isDark ? 'bg-amber-500/10 text-amber-400 hover:bg-amber-500/20 hover:text-amber-300 border-amber-500/20 hover:border-amber-500/40' : 'bg-amber-50 text-amber-600 hover:bg-amber-100 hover:text-amber-700 border-amber-200 hover:border-amber-300'
-                : `${isDark ? 'bg-zinc-800/50 text-zinc-600 border-zinc-700/30' : 'bg-gray-100 text-gray-400 border-gray-200'} cursor-not-allowed`
-                }`}
-              title={!canChangeStatus ? 'No disponible' : permissions.canChangeEstadoSolicitud ? 'Ver/Cambiar estatus' : 'Ver estatus y comentarios'}
-            >
-              <MessageSquare className="h-3.5 w-3.5" />
-            </button>
-
-            {/* Eliminar */}
-            {permissions.canDeleteSolicitudes && (
-              <button
-                onClick={(e) => { e.stopPropagation(); setDeleteId(item.id); }}
-                disabled={!canDelete}
-                className={`p-2 rounded-lg transition-all border ${canDelete
-                  ? isDark ? 'bg-red-500/10 text-red-400 hover:bg-red-500/20 hover:text-red-300 border-red-500/20 hover:border-red-500/40' : 'bg-red-50 text-red-600 hover:bg-red-100 hover:text-red-700 border-red-200 hover:border-red-300'
-                  : `${isDark ? 'bg-zinc-800/50 text-zinc-600 border-zinc-700/30' : 'bg-gray-100 text-gray-400 border-gray-200'} cursor-not-allowed`
-                  }`}
-                title={canDelete ? 'Eliminar solicitud' : 'No disponible'}
-              >
-                <Trash2 className="h-3.5 w-3.5" />
-              </button>
-            )}
-          </div>
-        </td>
-      </tr>
-    );
-  };
+  // Stable callbacks for memoized SolicitudRow.
+  // useCallback keeps the same function identity across renders so React.memo on
+  // the row doesn't need to bail out unnecessarily.
+  const handleRowView = React.useCallback((item: Solicitud) => setViewSolicitudId(item.id), []);
+  const handleRowEdit = React.useCallback((item: Solicitud) => setEditSolicitud(item), []);
+  const handleRowAtender = React.useCallback((item: Solicitud) => setAtenderSolicitud(item), []);
+  const handleRowStatus = React.useCallback((item: Solicitud) => setStatusSolicitud(item), []);
+  const handleRowDelete = React.useCallback((id: number) => setDeleteId(id), []);
 
   const totalPages = data?.pagination?.totalPages || 1;
   const total = data?.pagination?.total ?? 0;
@@ -1582,11 +1630,43 @@ export function SolicitudesPage() {
                             onToggle={() => toggleGroup(groupName)}
                             isDark={isDark}
                           />
-                          {expandedGroups.has(groupName) && items.map((item, idx) => renderSolicitudRow(item, idx))}
+                          {expandedGroups.has(groupName) && items.map((item, idx) => (
+                            <SolicitudRow
+                              key={`sol-${item.id}-${idx}`}
+                              item={item}
+                              index={idx}
+                              isDark={isDark}
+                              canEditPerm={permissions.canEditSolicitudes}
+                              canAtenderPerm={permissions.canAtenderSolicitudes}
+                              canDeletePerm={permissions.canDeleteSolicitudes}
+                              canChangeEstadoPerm={permissions.canChangeEstadoSolicitud}
+                              onView={handleRowView}
+                              onEdit={handleRowEdit}
+                              onAtender={handleRowAtender}
+                              onStatus={handleRowStatus}
+                              onDelete={handleRowDelete}
+                            />
+                          ))}
                         </React.Fragment>
                       ))
                     ) : (
-                      filteredData.map((item, idx) => renderSolicitudRow(item, idx))
+                      filteredData.map((item, idx) => (
+                        <SolicitudRow
+                          key={`sol-${item.id}-${idx}`}
+                          item={item}
+                          index={idx}
+                          isDark={isDark}
+                          canEditPerm={permissions.canEditSolicitudes}
+                          canAtenderPerm={permissions.canAtenderSolicitudes}
+                          canDeletePerm={permissions.canDeleteSolicitudes}
+                          canChangeEstadoPerm={permissions.canChangeEstadoSolicitud}
+                          onView={handleRowView}
+                          onEdit={handleRowEdit}
+                          onAtender={handleRowAtender}
+                          onStatus={handleRowStatus}
+                          onDelete={handleRowDelete}
+                        />
+                      ))
                     )}
                     {filteredData.length === 0 && !groupedData && (
                       <tr>
@@ -1670,18 +1750,23 @@ export function SolicitudesPage() {
         </div>
       )}
 
-      {/* Create Solicitud Modal */}
-      <CreateSolicitudModal
-        isOpen={showCreateModal}
-        onClose={() => setShowCreateModal(false)}
-      />
+      {/* Create Solicitud Modal — lazy-mount: solo existe en el árbol cuando
+          showCreateModal=true. Evita que sus useQuery/useState corran en background. */}
+      {showCreateModal && (
+        <CreateSolicitudModal
+          isOpen={showCreateModal}
+          onClose={() => setShowCreateModal(false)}
+        />
+      )}
 
-      {/* Edit Solicitud Modal - using CreateSolicitudModal in edit mode */}
-      <CreateSolicitudModal
-        isOpen={!!editSolicitud}
-        onClose={() => setEditSolicitud(null)}
-        editSolicitudId={editSolicitud?.id}
-      />
+      {/* Edit Solicitud Modal — mismo patrón de lazy-mount. */}
+      {editSolicitud && (
+        <CreateSolicitudModal
+          isOpen={!!editSolicitud}
+          onClose={() => setEditSolicitud(null)}
+          editSolicitudId={editSolicitud.id}
+        />
+      )}
 
       {/* View Solicitud Modal */}
       <ViewSolicitudModal

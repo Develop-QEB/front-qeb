@@ -929,9 +929,16 @@ export function CampanaDetailPage() {
     googleMapsApiKey: GOOGLE_MAPS_API_KEY,
   });
 
+  // Todas las queries usan `campanaId` directo. Antes 4 de ellas tenían
+  // `enabled: !!campana` y se quedaban esperando a la query principal,
+  // serializando una cascada de ~1.5s. Ahora corren en paralelo desde el
+  // inicio: getById + inventario + inventario-aps + caras + historial.
+  // Si la campaña no existe (404), las dependientes también fallan rápido.
   const { data: campana, isLoading, error } = useQuery({
     queryKey: ['campana', campanaId],
     queryFn: () => campanasService.getById(campanaId),
+    staleTime: 1000 * 30, // 30 s — WS invalida en cambios reales
+    placeholderData: (prev) => prev, // evita parpadeo al refrescar
   });
 
   // Inicializar alreadyPosted y postedAPSGroups desde la DB
@@ -943,31 +950,38 @@ export function CampanaDetailPage() {
   const { data: inventarioReservado = [], isLoading: isLoadingInventario, error: errorInventario, refetch: refetchInventario } = useQuery({
     queryKey: ['campana-inventario', campanaId],
     queryFn: () => campanasService.getInventarioReservado(campanaId),
-    enabled: !!campana,
+    staleTime: 1000 * 30,
+    placeholderData: (prev) => prev,
   });
 
   const { data: inventarioConAPS = [], isLoading: isLoadingAPS, error: errorAPS, refetch: refetchAPS } = useQuery({
     queryKey: ['campana-inventario-aps', campanaId],
     queryFn: () => campanasService.getInventarioConAPS(campanaId),
-    enabled: !!campana,
+    staleTime: 1000 * 30,
+    placeholderData: (prev) => prev,
   });
 
   const { data: solicitudCaras = [] } = useQuery({
     queryKey: ['campana-caras', campanaId],
     queryFn: () => campanasService.getCaras(campanaId),
-    enabled: !!campana,
+    staleTime: 1000 * 30,
+    placeholderData: (prev) => prev,
   });
 
   const { data: historial = [], isLoading: isLoadingHistorial } = useQuery({
     queryKey: ['campana-historial', campanaId],
     queryFn: () => campanasService.getHistorial(campanaId),
-    enabled: !!campana,
+    staleTime: 1000 * 30,
+    placeholderData: (prev) => prev,
   });
 
-  // Fetch catorcenas for proper date display
+  // Catorcenas casi nunca cambian — staleTime alto evita refetches al
+  // navegar entre páginas que comparten esta queryKey.
   const { data: catorcenasData } = useQuery({
     queryKey: ['catorcenas'],
     queryFn: () => solicitudesService.getCatorcenas(),
+    staleTime: 1000 * 60 * 30, // 30 min
+    gcTime: 1000 * 60 * 60,    // 1 h
   });
   const catorcenas = catorcenasData?.data || [];
   const tipoPeriodo = (campana as any)?.tipo_periodo || 'catorcena';
@@ -985,10 +999,12 @@ export function CampanaDetailPage() {
     return { lat: 19.4326, lng: -99.1332 }; // CDMX por defecto
   }, [inventarioReservado]);
 
-  // Callback para ajustar zoom del mapa a todos los puntos
-  const onMapLoad = useCallback((map: google.maps.Map) => {
-    mapRef.current = map;
-
+  // Ajusta el zoom del mapa para que entren todos los puntos del inventario.
+  // Centraliza la lógica en una función para que `onMapLoad` (montaje) y el
+  // useEffect (cambios de inventario) compartan implementación — antes se
+  // duplicaba el cálculo y se llamaban dos veces al montar el mapa.
+  const fitMapToInventario = useCallback((map: google.maps.Map | null) => {
+    if (!map) return;
     const validItems = inventarioReservado.filter(i => i.latitud && i.longitud);
     if (validItems.length > 1) {
       const bounds = new google.maps.LatLngBounds();
@@ -999,19 +1015,15 @@ export function CampanaDetailPage() {
     }
   }, [inventarioReservado]);
 
-  // Efecto para ajustar bounds cuando cambia el inventario
+  const onMapLoad = useCallback((map: google.maps.Map) => {
+    mapRef.current = map;
+    fitMapToInventario(map);
+  }, [fitMapToInventario]);
+
+  // Re-ajustar cuando cambia el inventario (después del primer load).
   useEffect(() => {
-    if (mapRef.current && inventarioReservado.length > 1) {
-      const validItems = inventarioReservado.filter(i => i.latitud && i.longitud);
-      if (validItems.length > 1) {
-        const bounds = new google.maps.LatLngBounds();
-        validItems.forEach(item => {
-          bounds.extend({ lat: item.latitud, lng: item.longitud });
-        });
-        mapRef.current.fitBounds(bounds, 50);
-      }
-    }
-  }, [inventarioReservado]);
+    fitMapToInventario(mapRef.current);
+  }, [fitMapToInventario]);
 
   // Mapa de completitud por grupo (solicitudCaras)
   const groupCompletenessMap = useMemo(() => {
@@ -5083,8 +5095,11 @@ export function CampanaDetailPage() {
         </div>
       )}
 
-      {/* Edit Campaña Modal */}
-      {campana && (
+      {/* Edit Campaña Modal — lazy-mount completo: el componente sólo existe
+          en el árbol cuando el modal está realmente abierto. Antes vivía en
+          memoria todo el tiempo que `campana` estaba cargada, con sus hooks
+          (useState/useEffect/useQuery) ejecutando aunque estuviera cerrado. */}
+      {editModalOpen && campana && (
         <AssignInventarioCampanaModal
           isOpen={editModalOpen}
           onClose={() => setEditModalOpen(false)}

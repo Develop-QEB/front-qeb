@@ -5,7 +5,8 @@ import {
   Search, Download, Filter, ChevronDown, ChevronRight, X, SlidersHorizontal,
   ArrowUpDown, Calendar, DollarSign, FileText, Building2, MessageSquare,
   CheckCircle, Users, Send, Loader2, User, Share2, MapPinned, Wrench, Clock,
-  Pencil, Trash2, Package, MapPin, Eye, Plus, AlertTriangle, List, LayoutGrid
+  Pencil, Trash2, Package, MapPin, Eye, Plus, AlertTriangle, List, LayoutGrid,
+  Layers, Check
 } from 'lucide-react';
 import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip as RechartsTooltip } from 'recharts';
 import { Header } from '../../components/layout/Header';
@@ -14,7 +15,14 @@ import { solicitudesService, UserOption } from '../../services/solicitudes.servi
 import { Propuesta, Catorcena } from '../../types';
 import { formatCurrency, formatDate } from '../../lib/utils';
 import { AssignInventarioModal } from './AssignInventarioModal';
-import PropuestasVersionarioView from './PropuestasVersionarioView';
+import PropuestasVersionarioView, {
+  AVAILABLE_GROUPINGS as VERSIONARIO_GROUPINGS,
+  DEFAULT_GROUPINGS as VERSIONARIO_DEFAULT_GROUPINGS,
+  MAX_GROUPINGS as VERSIONARIO_MAX_GROUPINGS,
+  GROUPINGS_STORAGE_KEY as VERSIONARIO_GROUPINGS_KEY,
+  loadGroupingsFromStorage as loadVersionarioGroupings,
+  type GroupByField as VersionarioGroupByField,
+} from './PropuestasVersionarioView';
 import { UserAvatar } from '../../components/ui/user-avatar';
 import { useAuthStore } from '../../store/authStore';
 import { useThemeStore } from '../../store/themeStore';
@@ -27,23 +35,48 @@ function getMonthShort(dateStr: string): string {
   return monthLabelShort(dateStr) || '-';
 }
 
-// Status badge colors
-const getStatusColors = (isDark: boolean): Record<string, { bg: string; text: string; border: string }> => ({
-  'Abierto': { bg: isDark ? 'bg-blue-500/20' : 'bg-blue-50', text: isDark ? 'text-blue-300' : 'text-blue-700', border: 'border-blue-500/30' },
-  'Ajuste Cto-Cliente': { bg: isDark ? 'bg-orange-500/20' : 'bg-orange-50', text: isDark ? 'text-orange-300' : 'text-orange-700', border: 'border-orange-500/30' },
-  'Ajuste Comercial': { bg: isDark ? 'bg-amber-500/20' : 'bg-amber-50', text: isDark ? 'text-amber-300' : 'text-amber-700', border: 'border-amber-500/30' },
-  'Pase a ventas': { bg: isDark ? 'bg-emerald-500/20' : 'bg-emerald-50', text: isDark ? 'text-emerald-300' : 'text-emerald-700', border: 'border-emerald-500/30' },
-  'Atendido': { bg: isDark ? 'bg-cyan-500/20' : 'bg-cyan-50', text: isDark ? 'text-cyan-300' : 'text-cyan-700', border: 'border-cyan-500/30' },
-  // Legacy (datos históricos)
-  'Pendiente': { bg: isDark ? 'bg-amber-500/20' : 'bg-amber-50', text: isDark ? 'text-amber-300' : 'text-amber-700', border: 'border-amber-500/30' },
-  'Por aprobar': { bg: isDark ? 'bg-amber-500/20' : 'bg-amber-50', text: isDark ? 'text-amber-300' : 'text-amber-700', border: 'border-amber-500/30' },
-  'Activa': { bg: isDark ? 'bg-green-500/20' : 'bg-green-50', text: isDark ? 'text-green-300' : 'text-green-700', border: 'border-green-500/30' },
-  'Aprobada': { bg: isDark ? 'bg-green-500/20' : 'bg-green-50', text: isDark ? 'text-green-300' : 'text-green-700', border: 'border-green-500/30' },
-  'Rechazada': { bg: isDark ? 'bg-red-500/20' : 'bg-red-50', text: isDark ? 'text-red-300' : 'text-red-700', border: 'border-red-500/30' },
-  'Descartada': { bg: isDark ? 'bg-zinc-500/20' : 'bg-zinc-50', text: isDark ? 'text-zinc-400' : 'text-zinc-600', border: 'border-zinc-500/30' },
-});
+// Status badge colors — dos mapas estáticos. El dark-mode toggle sigue
+// funcionando porque al cambiar `isDark` el componente re-renderiza y
+// `getStatusColor` selecciona el mapa correcto. Antes se construía un objeto
+// completo por cada fila renderizada.
+type StatusColor = { bg: string; text: string; border: string };
 
-const getDefaultStatusColor = (isDark: boolean) => ({ bg: isDark ? 'bg-violet-500/20' : 'bg-violet-50', text: isDark ? 'text-violet-300' : 'text-violet-700', border: 'border-violet-500/30' });
+const STATUS_COLORS_DARK: Record<string, StatusColor> = {
+  'Abierto': { bg: 'bg-blue-500/20', text: 'text-blue-300', border: 'border-blue-500/30' },
+  'Ajuste Cto-Cliente': { bg: 'bg-orange-500/20', text: 'text-orange-300', border: 'border-orange-500/30' },
+  'Ajuste Comercial': { bg: 'bg-amber-500/20', text: 'text-amber-300', border: 'border-amber-500/30' },
+  'Pase a ventas': { bg: 'bg-emerald-500/20', text: 'text-emerald-300', border: 'border-emerald-500/30' },
+  'Atendido': { bg: 'bg-cyan-500/20', text: 'text-cyan-300', border: 'border-cyan-500/30' },
+  // Legacy (datos históricos)
+  'Pendiente': { bg: 'bg-amber-500/20', text: 'text-amber-300', border: 'border-amber-500/30' },
+  'Por aprobar': { bg: 'bg-amber-500/20', text: 'text-amber-300', border: 'border-amber-500/30' },
+  'Activa': { bg: 'bg-green-500/20', text: 'text-green-300', border: 'border-green-500/30' },
+  'Aprobada': { bg: 'bg-green-500/20', text: 'text-green-300', border: 'border-green-500/30' },
+  'Rechazada': { bg: 'bg-red-500/20', text: 'text-red-300', border: 'border-red-500/30' },
+  'Descartada': { bg: 'bg-zinc-500/20', text: 'text-zinc-400', border: 'border-zinc-500/30' },
+};
+
+const STATUS_COLORS_LIGHT: Record<string, StatusColor> = {
+  'Abierto': { bg: 'bg-blue-50', text: 'text-blue-700', border: 'border-blue-500/30' },
+  'Ajuste Cto-Cliente': { bg: 'bg-orange-50', text: 'text-orange-700', border: 'border-orange-500/30' },
+  'Ajuste Comercial': { bg: 'bg-amber-50', text: 'text-amber-700', border: 'border-amber-500/30' },
+  'Pase a ventas': { bg: 'bg-emerald-50', text: 'text-emerald-700', border: 'border-emerald-500/30' },
+  'Atendido': { bg: 'bg-cyan-50', text: 'text-cyan-700', border: 'border-cyan-500/30' },
+  'Pendiente': { bg: 'bg-amber-50', text: 'text-amber-700', border: 'border-amber-500/30' },
+  'Por aprobar': { bg: 'bg-amber-50', text: 'text-amber-700', border: 'border-amber-500/30' },
+  'Activa': { bg: 'bg-green-50', text: 'text-green-700', border: 'border-green-500/30' },
+  'Aprobada': { bg: 'bg-green-50', text: 'text-green-700', border: 'border-green-500/30' },
+  'Rechazada': { bg: 'bg-red-50', text: 'text-red-700', border: 'border-red-500/30' },
+  'Descartada': { bg: 'bg-zinc-50', text: 'text-zinc-600', border: 'border-zinc-500/30' },
+};
+
+const DEFAULT_STATUS_COLOR_DARK: StatusColor = { bg: 'bg-violet-500/20', text: 'text-violet-300', border: 'border-violet-500/30' };
+const DEFAULT_STATUS_COLOR_LIGHT: StatusColor = { bg: 'bg-violet-50', text: 'text-violet-700', border: 'border-violet-500/30' };
+
+const getStatusColor = (status: string, isDark: boolean): StatusColor => {
+  const map = isDark ? STATUS_COLORS_DARK : STATUS_COLORS_LIGHT;
+  return map[status] || (isDark ? DEFAULT_STATUS_COLOR_DARK : DEFAULT_STATUS_COLOR_LIGHT);
+};
 
 const STATUS_OPTIONS = ['Atendido', 'Abierto', 'Ajuste Cto-Cliente', 'Ajuste Comercial', 'Pase a ventas', 'Rechazada'];
 
@@ -652,9 +685,7 @@ function StatusModal({ isOpen, onClose, propuesta, onStatusChange, allowedStatus
 
   if (!isOpen || !propuesta) return null;
 
-  const STATUS_COLORS = getStatusColors(isDark);
-  const DEFAULT_STATUS_COLOR = getDefaultStatusColor(isDark);
-  const statusColor = STATUS_COLORS[propuesta.status] || DEFAULT_STATUS_COLOR;
+  const statusColor = getStatusColor(propuesta.status, isDark);
 
   return (
     <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50 p-4">
@@ -850,8 +881,9 @@ function ApproveModal({ isOpen, onClose, propuesta, onSuccess }: ApproveModalPro
   const [selectedUsers, setSelectedUsers] = useState<{ id: number; nombre: string }[]>([]);
   const [userSearch, setUserSearch] = useState('');
 
-  // WebSocket para actualizar usuarios en tiempo real
-  useSocketEquipos();
+  // NOTE: useSocketEquipos() ya lo monta PropuestasPage; no duplicar la
+  // suscripción al room aquí — antes había dos handlers escuchando los mismos
+  // eventos cuando el modal estaba abierto.
 
   // Fetch all users to identify Tráfico users for exclusion from pre-selection
   const { data: allUsers } = useQuery({
@@ -1078,6 +1110,187 @@ function ApproveModal({ isOpen, onClose, propuesta, onSuccess }: ApproveModalPro
 }
 
 
+// Row component — extraído + memoizado para evitar re-renders de toda la tabla
+// cuando solo cambia algo del padre (typing en search, abrir filtros, etc.).
+// Solo se vuelve a renderizar si cambia el `item`, `isDark`, o algún flag de
+// permisos/rol. Los callbacks llegan como refs estables vía useCallback.
+const ROLES_LOCKED_BY_ABIERTO = ['Asesor Comercial', 'Director Comercial Aeropuerto', 'Asesor Comercial Aeropuerto'];
+
+interface PropuestaRowProps {
+  item: Propuesta & any;
+  index: number;
+  isDark: boolean;
+  userRol: string;
+  canEditStatusPerm: boolean;
+  canAprobarPerm: boolean;
+  canAsignarInventarioPerm: boolean;
+  canCompartirPerm: boolean;
+  onStatus: (item: Propuesta) => void;
+  onApprove: (item: Propuesta) => void;
+  onAssign: (item: Propuesta) => void;
+  onShare: (id: number) => void;
+}
+
+const PropuestaRow = React.memo(function PropuestaRow({
+  item,
+  index,
+  isDark,
+  userRol,
+  canEditStatusPerm,
+  canAprobarPerm,
+  canAsignarInventarioPerm,
+  canCompartirPerm,
+  onStatus,
+  onApprove,
+  onAssign,
+  onShare,
+}: PropuestaRowProps) {
+  const statusColor = getStatusColor(item.status, isDark);
+  const isActiva = item.status === 'Activa';
+  const isAprobada = item.status === 'Aprobada';
+  const isLockedByAbierto = ROLES_LOCKED_BY_ABIERTO.includes(userRol) && item.status === 'Abierto';
+  const isLocked = isActiva || isLockedByAbierto || isAprobada;
+
+  return (
+    <tr key={`prop-${item.id}-${index}`} className={`border-b ${isDark ? 'border-zinc-800/50 hover:bg-zinc-800/30' : 'border-gray-200 hover:bg-gray-50'} transition-colors`}>
+      <td className="px-4 py-3">
+        <span className={`font-mono text-xs px-2 py-1 rounded-md ${isDark ? 'bg-purple-500/10 text-purple-300' : 'bg-purple-50 text-purple-700'}`}>#{item.id}</span>
+      </td>
+      <td className="px-4 py-3">
+        <span className={`${isDark ? 'text-zinc-400' : 'text-gray-500'} text-sm`}>{formatDate(item.fecha)}</span>
+      </td>
+      <td className="px-4 py-3">
+        <div className="flex items-center gap-1.5">
+          <span className={`${isDark ? 'text-white' : 'text-gray-900'} text-sm font-medium`}>{item.marca_nombre || item.articulo || '-'}</span>
+          {item.sap_database && (
+            <span className={`inline-flex text-[9px] font-bold px-1.5 py-0.5 rounded-full border flex-shrink-0 ${
+              item.sap_database === 'CIMU'
+                ? isDark ? 'bg-blue-500/20 text-blue-300 border-blue-500/30' : 'bg-blue-50 text-blue-700 border-blue-200'
+                : item.sap_database === 'TEST'
+                  ? isDark ? 'bg-amber-500/20 text-amber-300 border-amber-500/30' : 'bg-amber-50 text-amber-700 border-amber-200'
+                  : isDark ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500/30' : 'bg-emerald-50 text-emerald-700 border-emerald-200'
+            }`}>{item.sap_database}</span>
+          )}
+        </div>
+      </td>
+      <td className="px-4 py-3">
+        <div className="flex items-center gap-1.5 align-middle">
+          <div className={`w-5 h-5 rounded-full ${isDark ? 'bg-zinc-700 text-zinc-300' : 'bg-gray-200 text-gray-700'} flex items-center justify-center text-[10px]`}>
+            <User className="h-3 w-3" />
+          </div>
+          <span className={`${isDark ? 'text-zinc-300' : 'text-gray-700'} text-sm`}>{item.creador_nombre || item.usuario_nombre || '-'}</span>
+        </div>
+      </td>
+      <td className="px-4 py-3">
+        <span className={`${isDark ? 'text-white' : 'text-gray-900'} text-sm truncate max-w-[250px] block`} title={item.campana_nombre || item.nombre_campania || '-'}>{item.campana_nombre || item.nombre_campania || '-'}</span>
+      </td>
+      <td className="px-4 py-3">
+        {item.asignado ? (() => {
+          const names = item.asignado.split(',').map((n: string) => n.trim()).filter(Boolean);
+          const preview = names.slice(0, 2).join(', ') + (names.length > 2 ? ` +${names.length - 2}` : '');
+          return (
+            <span
+              className={`${isDark ? 'text-zinc-300' : 'text-gray-700'} text-xs cursor-default`}
+              title={names.join(', ')}
+            >
+              {preview}
+            </span>
+          );
+        })() : <span className={`${isDark ? 'text-zinc-500' : 'text-gray-400'} text-xs`}>Sin asignar</span>}
+      </td>
+      <td className="px-4 py-3">
+        <span className={`font-medium ${isDark ? 'text-amber-400' : 'text-amber-600'}`}>{formatCurrency(item.inversion)}</span>
+      </td>
+      <td className="px-4 py-3">
+        {item.tipo_periodo === 'mensual' && ((item as any).min_inicio_periodo || item.fecha_inicio) ? (
+          <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-xs border ${isDark ? 'bg-cyan-500/10 text-cyan-300 border-cyan-500/20' : 'bg-cyan-50 text-cyan-700 border-cyan-200'}`}>
+            <Calendar className="h-3 w-3" />
+            {getMonthShort((item as any).min_inicio_periodo || item.fecha_inicio)}
+          </span>
+        ) : item.catorcena_inicio ? (
+          <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-xs border ${isDark ? 'bg-cyan-500/10 text-cyan-300 border-cyan-500/20' : 'bg-cyan-50 text-cyan-700 border-cyan-200'}`}>
+            <Calendar className="h-3 w-3" />
+            Cat {item.catorcena_inicio} / {item.anio_inicio}
+          </span>
+        ) : (
+          <span className={`${isDark ? 'text-zinc-500' : 'text-gray-400'} text-xs`}>-</span>
+        )}
+      </td>
+      <td className="px-4 py-3">
+        {item.tipo_periodo === 'mensual' && (item.max_inicio_periodo || item.fecha_fin) ? (
+          <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-xs border ${isDark ? 'bg-amber-500/10 text-amber-300 border-amber-500/20' : 'bg-amber-50 text-amber-700 border-amber-200'}`}>
+            <Calendar className="h-3 w-3" />
+            {getMonthShort((item as any).max_inicio_periodo || item.fecha_fin)}
+          </span>
+        ) : item.catorcena_fin ? (
+          <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-xs border ${isDark ? 'bg-amber-500/10 text-amber-300 border-amber-500/20' : 'bg-amber-50 text-amber-700 border-amber-200'}`}>
+            <Calendar className="h-3 w-3" />
+            Cat {item.catorcena_fin} / {item.anio_fin}
+          </span>
+        ) : (
+          <span className={`${isDark ? 'text-zinc-500' : 'text-gray-400'} text-xs`}>-</span>
+        )}
+      </td>
+      <td className="px-4 py-3">
+        {canEditStatusPerm && !isLocked ? (
+          <button
+            onClick={() => onStatus(item)}
+            className={`px-2 py-1 rounded-full text-[10px] whitespace-nowrap ${statusColor.bg} ${statusColor.text} border ${statusColor.border} hover:opacity-80 transition-opacity cursor-pointer`}
+          >
+            {item.status}
+          </button>
+        ) : (
+          <span className={`px-2 py-1 rounded-full text-[10px] whitespace-nowrap ${statusColor.bg} ${statusColor.text} border ${statusColor.border}`}>
+            {item.status}
+          </span>
+        )}
+      </td>
+      <td className="px-4 py-3">
+        <div className="flex items-center gap-1">
+          {canAprobarPerm && (
+            <button
+              onClick={() => onApprove(item)}
+              disabled={item.status !== 'Pase a ventas' || isLocked}
+              className={`p-2 rounded-lg border transition-all ${item.status !== 'Pase a ventas' || isLocked
+                ? isDark ? 'bg-zinc-500/10 text-zinc-500 border-zinc-500/20 cursor-not-allowed opacity-50' : 'bg-gray-50 text-gray-400 border-gray-200 cursor-not-allowed opacity-50'
+                : isDark ? 'bg-emerald-500/10 text-emerald-400 hover:bg-emerald-500/20 hover:text-emerald-300 border-emerald-500/20 hover:border-emerald-500/40' : 'bg-emerald-50 text-emerald-600 hover:bg-emerald-100 hover:text-emerald-700 border-emerald-200 hover:border-emerald-300'
+                }`}
+              title={isLocked ? 'No disponible en este estatus' : (item.status !== 'Pase a ventas' ? 'Solo disponible con estatus Pase a ventas' : 'Aprobar propuesta')}
+            >
+              <CheckCircle className="h-3.5 w-3.5" />
+            </button>
+          )}
+          <button
+            onClick={() => onAssign(item)}
+            disabled={canAsignarInventarioPerm && (item.status === 'Aprobada' || isLocked)}
+            className={`p-2 rounded-lg border transition-all ${canAsignarInventarioPerm && (item.status === 'Aprobada' || isLocked)
+              ? isDark ? 'bg-zinc-500/10 text-zinc-500 border-zinc-500/20 cursor-not-allowed opacity-50' : 'bg-gray-50 text-gray-400 border-gray-200 cursor-not-allowed opacity-50'
+              : isDark ? 'bg-fuchsia-500/10 text-fuchsia-400 hover:bg-fuchsia-500/20 hover:text-fuchsia-300 border-fuchsia-500/20 hover:border-fuchsia-500/40' : 'bg-fuchsia-50 text-fuchsia-600 hover:bg-fuchsia-100 hover:text-fuchsia-700 border-fuchsia-200 hover:border-fuchsia-300'
+              }`}
+            title={canAsignarInventarioPerm ? (isLocked ? 'No disponible en este estatus' : (item.status === 'Aprobada' ? 'No disponible para propuestas aprobadas' : (item.status === 'Pase a ventas' ? 'Ver Inventario (solo lectura)' : 'Asignar a Inventario'))) : 'Ver Propuesta'}
+          >
+            {canAsignarInventarioPerm && item.status !== 'Pase a ventas' ? <MapPinned className="h-3.5 w-3.5" /> : <Eye className="h-3.5 w-3.5" />}
+          </button>
+          {canCompartirPerm && (
+            <button
+              disabled={(item.status !== 'Aprobada' && item.status !== 'Atendido' && item.status !== 'Pase a ventas') || isLocked}
+              onClick={() => !isLocked && (item.status === 'Aprobada' || item.status === 'Atendido' || item.status === 'Pase a ventas') && onShare(item.id)}
+              className={`p-2 rounded-lg border transition-all ${(item.status === 'Aprobada' || item.status === 'Atendido' || item.status === 'Pase a ventas') && !isLocked
+                ? isDark ? 'bg-cyan-500/10 text-cyan-400 hover:bg-cyan-500/20 hover:text-cyan-300 border-cyan-500/20 hover:border-cyan-500/40' : 'bg-cyan-50 text-cyan-600 hover:bg-cyan-100 hover:text-cyan-700 border-cyan-200 hover:border-cyan-300'
+                : isDark ? 'bg-zinc-500/10 text-zinc-500 border-zinc-500/20 cursor-not-allowed opacity-50' : 'bg-gray-50 text-gray-400 border-gray-200 cursor-not-allowed opacity-50'
+                }`}
+              title={isLocked ? 'No disponible en este estatus' : (item.status === 'Aprobada' || item.status === 'Atendido' || item.status === 'Pase a ventas' ? 'Compartir propuesta' : 'Solo disponible en status Aprobada o Pase a ventas')}
+            >
+              <Share2 className="h-3.5 w-3.5" />
+            </button>
+          )}
+        </div>
+      </td>
+    </tr>
+  );
+});
+
+
 export function PropuestasPage() {
   const isDark = useThemeStore((s) => s.theme) === 'dark';
   const queryClient = useQueryClient();
@@ -1112,6 +1325,23 @@ export function PropuestasPage() {
   const limit = 20;
   const [activeView, setActiveView] = useState<'tabla' | 'versionario'>('tabla');
   const [exportingLayout, setExportingLayout] = useState(false);
+  // Versionario (Desglose) grouping config — controlled here so the filter chip lives in the filters bar
+  const [versionarioGroupings, setVersionarioGroupings] = useState<VersionarioGroupByField[]>(() => loadVersionarioGroupings());
+  const [showVersionarioGroupConfig, setShowVersionarioGroupConfig] = useState(false);
+  useEffect(() => {
+    try { localStorage.setItem(VERSIONARIO_GROUPINGS_KEY, JSON.stringify(versionarioGroupings)); } catch { /* ignore */ }
+  }, [versionarioGroupings]);
+  const toggleVersionarioGrouping = (field: VersionarioGroupByField) => {
+    setVersionarioGroupings(prev => {
+      if (prev.includes(field)) {
+        if (prev.length === 1) return prev;
+        return prev.filter(f => f !== field);
+      }
+      if (prev.length < VERSIONARIO_MAX_GROUPINGS) return [...prev, field];
+      return [...prev.slice(1), field];
+    });
+  };
+  const resetVersionarioGroupings = () => setVersionarioGroupings(VERSIONARIO_DEFAULT_GROUPINGS);
 
   // Modals
   const [statusPropuesta, setStatusPropuesta] = useState<Propuesta | null>(null);
@@ -1153,26 +1383,25 @@ export function PropuestasPage() {
     setSearchTags(prev => prev.filter(t => t !== tag));
   };
 
-  // Debounce search tags and input
+  // Debounce conjunto de tags + input en un solo timer. Antes había dos
+  // efectos paralelos que provocaban renders dobles si ambos cambiaban a la
+  // vez (típico al presionar Enter para crear un tag — se actualizan ambos).
   useEffect(() => {
     const timer = setTimeout(() => {
       setDebouncedSearchTags(searchTags);
-      setPage(1);
-    }, 500);
-    return () => clearTimeout(timer);
-  }, [searchTags]);
-
-  useEffect(() => {
-    const timer = setTimeout(() => {
       setDebouncedSearchInput(searchInput);
       setPage(1);
     }, 500);
     return () => clearTimeout(timer);
-  }, [searchInput]);
+  }, [searchTags, searchInput]);
 
+  // Catorcenas son casi estáticas: staleTime alto evita refetches al navegar
+  // entre páginas que usen esta misma queryKey.
   const { data: catorcenasData } = useQuery({
     queryKey: ['catorcenas'],
     queryFn: () => solicitudesService.getCatorcenas(),
+    staleTime: 1000 * 60 * 30, // 30 min
+    gcTime: 1000 * 60 * 60,    // 1 h
   });
 
   // Combine debounced tags + debounced input into all active search terms
@@ -1182,10 +1411,18 @@ export function PropuestasPage() {
     return terms;
   }, [debouncedSearchTags, debouncedSearchInput]);
 
-  // Search is always handled client-side to cover all visible fields
+  // Search se manda al backend; el controller separa por '|' (no espacios),
+  // por lo que cada tag viaja como UNA frase. Esto evita que palabras cortas
+  // ("y", "de") generen un OR que matchee la mayoría de los registros.
+  const serverSearch = allSearchTerms.length > 0 ? allSearchTerms.join('|') : undefined;
+  const needsAllData = !!groupBy || advancedFilters.length > 0;
+  const effectiveLimit = needsAllData ? 200 : limit;
 
+  // Stats: WS invalida en cambios reales; staleTime corto evita refetches en
+  // re-renders del padre. Pasamos `search` para que total/chart reflejen los
+  // resultados filtrados aunque estemos en la página 1 de N.
   const { data: stats } = useQuery({
-    queryKey: ['propuestas-stats', status, yearInicio, yearFin, catorcenaInicio, catorcenaFin, tipoPeriodo],
+    queryKey: ['propuestas-stats', status, yearInicio, yearFin, catorcenaInicio, catorcenaFin, tipoPeriodo, serverSearch],
     queryFn: () => propuestasService.getStats({
       status: status || undefined,
       yearInicio,
@@ -1193,12 +1430,10 @@ export function PropuestasPage() {
       catorcenaInicio,
       catorcenaFin,
       tipoPeriodo: tipoPeriodo || undefined,
+      search: serverSearch,
     }),
+    staleTime: 1000 * 30,
   });
-
-  const needsAllData = !!groupBy || advancedFilters.length > 0;
-  const effectiveLimit = needsAllData ? 200 : limit;
-  const serverSearch = allSearchTerms.length > 0 ? allSearchTerms.join(' ') : undefined;
 
   const { data, isLoading } = useQuery({
     queryKey: ['propuestas', needsAllData ? 1 : page, status, serverSearch, yearInicio, yearFin, catorcenaInicio, catorcenaFin, sortBy, sortOrder, groupBy, tipoPeriodo, needsAllData],
@@ -1215,6 +1450,8 @@ export function PropuestasPage() {
         soloAtendidas: true,
         tipoPeriodo: tipoPeriodo || undefined,
       }),
+    staleTime: 1000 * 30, // 30 s — WS invalida en cambios reales
+    placeholderData: (prev) => prev, // mantiene la tabla anterior al paginar/filtrar
   });
 
   const allStatuses = STATUS_OPTIONS;
@@ -1222,10 +1459,13 @@ export function PropuestasPage() {
   const hasPeriodFilter = yearInicio !== undefined && yearFin !== undefined;
   const hasActiveFilters = !!(status || tipoPeriodo || hasPeriodFilter || groupBy || sortBy !== 'fecha' || advancedFilters.length > 0 || searchTags.length > 0);
 
-  // Get unique values for each field (for advanced filter dropdowns)
+  // Get unique values for each field (for advanced filter dropdowns).
+  // Solo se calcula cuando el panel de filtros avanzados está abierto: evita
+  // recorrer 7 campos × N filas en cada render del padre mientras el panel
+  // no es visible.
   const getUniqueFieldValues = useMemo(() => {
     const valuesMap: Record<string, string[]> = {};
-    if (!data?.data) return valuesMap;
+    if (!showAdvancedFilters || !data?.data) return valuesMap;
 
     PROPUESTA_FILTER_FIELDS.forEach(fieldConfig => {
       const values = new Set<string>();
@@ -1238,42 +1478,22 @@ export function PropuestasPage() {
       valuesMap[fieldConfig.field] = Array.from(values).sort();
     });
     return valuesMap;
-  }, [data?.data]);
+  }, [showAdvancedFilters, data?.data]);
 
-  // Apply advanced filters and multi-tag search to data
+  // Apply advanced filters (cliente-side). El search ya lo aplicó el backend
+  // sobre los campos ampliados (descripcion, marca, razon_social, cuic,
+  // asignado, articulo, campania, creador) — re-filtrar en cliente solo
+  // ocultaría resultados que el backend ya validó, además de romper la
+  // paginación al filtrar únicamente la página visible.
   const filteredData = useMemo(() => {
     if (!data?.data) return [];
-    let items = applyAdvancedFilters(data.data, advancedFilters);
+    return applyAdvancedFilters(data.data, advancedFilters);
+  }, [data?.data, advancedFilters]);
 
-    // Client-side OR search filter for all search terms
-    if (allSearchTerms.length > 0 && items.length > 0) {
-      items = items.filter(p =>
-        allSearchTerms.some(term => {
-          const lowerTerm = term.toLowerCase();
-          return (
-            String(p.id).includes(lowerTerm) ||
-            p.articulo?.toLowerCase().includes(lowerTerm) ||
-            p.descripcion?.toLowerCase().includes(lowerTerm) ||
-            p.asignado?.toLowerCase().includes(lowerTerm) ||
-            p.cliente_nombre?.toLowerCase().includes(lowerTerm) ||
-            p.nombre_comercial?.toLowerCase().includes(lowerTerm) ||
-            p.marca_nombre?.toLowerCase().includes(lowerTerm) ||
-            p.campana_nombre?.toLowerCase().includes(lowerTerm) ||
-            p.nombre_campania?.toLowerCase().includes(lowerTerm) ||
-            p.creador_nombre?.toLowerCase().includes(lowerTerm) ||
-            p.usuario_nombre?.toLowerCase().includes(lowerTerm) ||
-            p.status?.toLowerCase().includes(lowerTerm) ||
-            p.formatos?.toLowerCase().includes(lowerTerm)
-          );
-        })
-      );
-    }
-
-    return items;
-  }, [data?.data, advancedFilters, allSearchTerms]);
-
-  // Recalculate stats from filteredData when search is active
-  const needsClientFilter = allSearchTerms.length > 0 || advancedFilters.length > 0;
+  // Sólo cuando hay filtros avanzados activos necesitamos recalcular stats en
+  // cliente (el backend no soporta esos operadores Y/O custom). El search va
+  // como queryKey en `propuestas-stats`, así que `stats` ya viene filtrado.
+  const needsClientFilter = advancedFilters.length > 0;
   const effectiveStats = useMemo(() => {
     if (needsClientFilter && data?.data) {
       const byStatus: Record<string, number> = {};
@@ -1359,9 +1579,11 @@ export function PropuestasPage() {
 
   // No default catorcena filter — show all propuestas on load
 
-  // Group data
+  // Group data — solo depende de filteredData y groupBy. `advancedFilters` y
+  // `allSearchTerms` ya están reflejados en filteredData; volver a listarlos
+  // como deps los hacía redundantes.
   const groupedData = useMemo(() => {
-    if (!groupBy || !data?.data) return null;
+    if (!groupBy || filteredData.length === 0) return null;
 
     const groupKey = groupBy as keyof Propuesta;
     const groups: Record<string, Propuesta[]> = {};
@@ -1372,7 +1594,7 @@ export function PropuestasPage() {
     });
 
     return Object.entries(groups).sort((a, b) => b[1].length - a[1].length);
-  }, [data, groupBy, filteredData, advancedFilters, allSearchTerms]);
+  }, [filteredData, groupBy]);
 
   const toggleGroup = (groupName: string) => {
     setExpandedGroups(prev => {
@@ -1392,7 +1614,7 @@ export function PropuestasPage() {
     try {
       const exportData = await propuestasService.getVersionarioData({
         status: status || undefined,
-        search: debouncedSearchTags.length > 0 ? debouncedSearchTags.join(' ') : debouncedSearchInput || undefined,
+        search: debouncedSearchTags.length > 0 ? debouncedSearchTags.join('|') : debouncedSearchInput || undefined,
         yearInicio,
         yearFin,
         catorcenaInicio,
@@ -1524,159 +1746,23 @@ export function PropuestasPage() {
     URL.revokeObjectURL(link.href);
   };
 
-  const renderPropuestaRow = (item: Propuesta & any, index: number) => {
-    const STATUS_COLORS = getStatusColors(isDark);
-    const DEFAULT_STATUS_COLOR = getDefaultStatusColor(isDark);
-    const statusColor = STATUS_COLORS[item.status] || DEFAULT_STATUS_COLOR;
-    // Bloquear todas las acciones cuando el status es "Activa" o "Aprobada" (para todos los usuarios)
-    const isActiva = item.status === 'Activa';
-    const isAprobada = item.status === 'Aprobada';
-    // Roles comerciales: bloquear acciones cuando el status es "Abierto"
-    const rolesLockedByAbierto = ['Asesor Comercial', 'Director Comercial Aeropuerto', 'Asesor Comercial Aeropuerto'];
-    const isLockedByAbierto = rolesLockedByAbierto.includes(user?.rol || '') && item.status === 'Abierto';
-    const isLocked = isActiva || isLockedByAbierto || isAprobada;
-
-    return (
-      <tr key={`prop-${item.id}-${index}`} className={`border-b ${isDark ? 'border-zinc-800/50 hover:bg-zinc-800/30' : 'border-gray-200 hover:bg-gray-50'} transition-colors`}>
-        <td className="px-4 py-3">
-          <span className={`font-mono text-xs px-2 py-1 rounded-md ${isDark ? 'bg-purple-500/10 text-purple-300' : 'bg-purple-50 text-purple-700'}`}>#{item.id}</span>
-        </td>
-        <td className="px-4 py-3">
-          <span className={`${isDark ? 'text-zinc-400' : 'text-gray-500'} text-sm`}>{formatDate(item.fecha)}</span>
-        </td>
-        <td className="px-4 py-3">
-          <div className="flex items-center gap-1.5">
-            <span className={`${isDark ? 'text-white' : 'text-gray-900'} text-sm font-medium`}>{item.marca_nombre || item.articulo || '-'}</span>
-            {item.sap_database && (
-              <span className={`inline-flex text-[9px] font-bold px-1.5 py-0.5 rounded-full border flex-shrink-0 ${
-                item.sap_database === 'CIMU'
-                  ? isDark ? 'bg-blue-500/20 text-blue-300 border-blue-500/30' : 'bg-blue-50 text-blue-700 border-blue-200'
-                  : item.sap_database === 'TEST'
-                    ? isDark ? 'bg-amber-500/20 text-amber-300 border-amber-500/30' : 'bg-amber-50 text-amber-700 border-amber-200'
-                    : isDark ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500/30' : 'bg-emerald-50 text-emerald-700 border-emerald-200'
-              }`}>{item.sap_database}</span>
-            )}
-          </div>
-        </td>
-        <td className="px-4 py-3">
-          <div className="flex items-center gap-1.5 align-middle">
-            <div className={`w-5 h-5 rounded-full ${isDark ? 'bg-zinc-700 text-zinc-300' : 'bg-gray-200 text-gray-700'} flex items-center justify-center text-[10px]`}>
-              <User className="h-3 w-3" />
-            </div>
-            <span className={`${isDark ? 'text-zinc-300' : 'text-gray-700'} text-sm`}>{item.creador_nombre || item.usuario_nombre || '-'}</span>
-          </div>
-        </td>
-        <td className="px-4 py-3">
-          <span className={`${isDark ? 'text-white' : 'text-gray-900'} text-sm truncate max-w-[250px] block`} title={item.campana_nombre || item.nombre_campania || '-'}>{item.campana_nombre || item.nombre_campania || '-'}</span>
-        </td>
-        <td className="px-4 py-3">
-          {item.asignado ? (() => {
-            const names = item.asignado.split(',').map((n: string) => n.trim()).filter(Boolean);
-            const preview = names.slice(0, 2).join(', ') + (names.length > 2 ? ` +${names.length - 2}` : '');
-            return (
-              <span
-                className={`${isDark ? 'text-zinc-300' : 'text-gray-700'} text-xs cursor-default`}
-                title={names.join(', ')}
-              >
-                {preview}
-              </span>
-            );
-          })() : <span className={`${isDark ? 'text-zinc-500' : 'text-gray-400'} text-xs`}>Sin asignar</span>}
-        </td>
-        <td className="px-4 py-3">
-          <span className={`font-medium ${isDark ? 'text-amber-400' : 'text-amber-600'}`}>{formatCurrency(item.inversion)}</span>
-        </td>
-        <td className="px-4 py-3">
-          {item.tipo_periodo === 'mensual' && ((item as any).min_inicio_periodo || item.fecha_inicio) ? (
-            <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-xs border ${isDark ? 'bg-cyan-500/10 text-cyan-300 border-cyan-500/20' : 'bg-cyan-50 text-cyan-700 border-cyan-200'}`}>
-              <Calendar className="h-3 w-3" />
-              {getMonthShort((item as any).min_inicio_periodo || item.fecha_inicio)}
-            </span>
-          ) : item.catorcena_inicio ? (
-            <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-xs border ${isDark ? 'bg-cyan-500/10 text-cyan-300 border-cyan-500/20' : 'bg-cyan-50 text-cyan-700 border-cyan-200'}`}>
-              <Calendar className="h-3 w-3" />
-              Cat {item.catorcena_inicio} / {item.anio_inicio}
-            </span>
-          ) : (
-            <span className={`${isDark ? 'text-zinc-500' : 'text-gray-400'} text-xs`}>-</span>
-          )}
-        </td>
-        <td className="px-4 py-3">
-          {item.tipo_periodo === 'mensual' && (item.max_inicio_periodo || item.fecha_fin) ? (
-            <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-xs border ${isDark ? 'bg-amber-500/10 text-amber-300 border-amber-500/20' : 'bg-amber-50 text-amber-700 border-amber-200'}`}>
-              <Calendar className="h-3 w-3" />
-              {getMonthShort((item as any).max_inicio_periodo || item.fecha_fin)}
-            </span>
-          ) : item.catorcena_fin ? (
-            <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-xs border ${isDark ? 'bg-amber-500/10 text-amber-300 border-amber-500/20' : 'bg-amber-50 text-amber-700 border-amber-200'}`}>
-              <Calendar className="h-3 w-3" />
-              Cat {item.catorcena_fin} / {item.anio_fin}
-            </span>
-          ) : (
-            <span className={`${isDark ? 'text-zinc-500' : 'text-gray-400'} text-xs`}>-</span>
-          )}
-        </td>
-        <td className="px-4 py-3">
-          {permissions.canEditPropuestaStatus && !isLocked ? (
-            <button
-              onClick={() => setStatusPropuesta(item)}
-              className={`px-2 py-1 rounded-full text-[10px] whitespace-nowrap ${statusColor.bg} ${statusColor.text} border ${statusColor.border} hover:opacity-80 transition-opacity cursor-pointer`}
-            >
-              {item.status}
-            </button>
-          ) : (
-            <span className={`px-2 py-1 rounded-full text-[10px] whitespace-nowrap ${statusColor.bg} ${statusColor.text} border ${statusColor.border}`}>
-              {item.status}
-            </span>
-          )}
-        </td>
-        <td className="px-4 py-3">
-          <div className="flex items-center gap-1">
-            {permissions.canAprobarPropuesta && (
-              <button
-                onClick={() => setApprovePropuesta(item)}
-                disabled={item.status !== 'Pase a ventas' || isLocked}
-                className={`p-2 rounded-lg border transition-all ${item.status !== 'Pase a ventas' || isLocked
-                  ? isDark ? 'bg-zinc-500/10 text-zinc-500 border-zinc-500/20 cursor-not-allowed opacity-50' : 'bg-gray-50 text-gray-400 border-gray-200 cursor-not-allowed opacity-50'
-                  : isDark ? 'bg-emerald-500/10 text-emerald-400 hover:bg-emerald-500/20 hover:text-emerald-300 border-emerald-500/20 hover:border-emerald-500/40' : 'bg-emerald-50 text-emerald-600 hover:bg-emerald-100 hover:text-emerald-700 border-emerald-200 hover:border-emerald-300'
-                  }`}
-                title={isLocked ? 'No disponible en este estatus' : (item.status !== 'Pase a ventas' ? 'Solo disponible con estatus Pase a ventas' : 'Aprobar propuesta')}
-              >
-                <CheckCircle className="h-3.5 w-3.5" />
-              </button>
-            )}
-            <button
-              onClick={() => { setSelectedPropuestaForAssign(item); setShowAssignModal(true); }}
-              disabled={permissions.canAsignarInventario && (item.status === 'Aprobada' || isLocked)}
-              className={`p-2 rounded-lg border transition-all ${permissions.canAsignarInventario && (item.status === 'Aprobada' || isLocked)
-                ? isDark ? 'bg-zinc-500/10 text-zinc-500 border-zinc-500/20 cursor-not-allowed opacity-50' : 'bg-gray-50 text-gray-400 border-gray-200 cursor-not-allowed opacity-50'
-                : isDark ? 'bg-fuchsia-500/10 text-fuchsia-400 hover:bg-fuchsia-500/20 hover:text-fuchsia-300 border-fuchsia-500/20 hover:border-fuchsia-500/40' : 'bg-fuchsia-50 text-fuchsia-600 hover:bg-fuchsia-100 hover:text-fuchsia-700 border-fuchsia-200 hover:border-fuchsia-300'
-                }`}
-              title={permissions.canAsignarInventario ? (isLocked ? 'No disponible en este estatus' : (item.status === 'Aprobada' ? 'No disponible para propuestas aprobadas' : (item.status === 'Pase a ventas' ? 'Ver Inventario (solo lectura)' : 'Asignar a Inventario'))) : 'Ver Propuesta'}
-            >
-              {permissions.canAsignarInventario && item.status !== 'Pase a ventas' ? <MapPinned className="h-3.5 w-3.5" /> : <Eye className="h-3.5 w-3.5" />}
-            </button>
-            {permissions.canCompartirPropuesta && (
-              <button
-                disabled={(item.status !== 'Aprobada' && item.status !== 'Atendido' && item.status !== 'Pase a ventas') || isLocked}
-                onClick={() => !isLocked && (item.status === 'Aprobada' || item.status === 'Atendido' || item.status === 'Pase a ventas') && navigate(`/propuestas/compartir/${item.id}`)}
-                className={`p-2 rounded-lg border transition-all ${(item.status === 'Aprobada' || item.status === 'Atendido' || item.status === 'Pase a ventas') && !isLocked
-                  ? isDark ? 'bg-cyan-500/10 text-cyan-400 hover:bg-cyan-500/20 hover:text-cyan-300 border-cyan-500/20 hover:border-cyan-500/40' : 'bg-cyan-50 text-cyan-600 hover:bg-cyan-100 hover:text-cyan-700 border-cyan-200 hover:border-cyan-300'
-                  : isDark ? 'bg-zinc-500/10 text-zinc-500 border-zinc-500/20 cursor-not-allowed opacity-50' : 'bg-gray-50 text-gray-400 border-gray-200 cursor-not-allowed opacity-50'
-                  }`}
-                title={isLocked ? 'No disponible en este estatus' : (item.status === 'Aprobada' || item.status === 'Atendido' || item.status === 'Pase a ventas' ? 'Compartir propuesta' : 'Solo disponible en status Aprobada o Pase a ventas')}
-              >
-                <Share2 className="h-3.5 w-3.5" />
-              </button>
-            )}
-          </div>
-        </td>
-      </tr>
-    );
-  };
+  // Callbacks estables para el `PropuestaRow` memoizado. Mantienen identidad
+  // entre renders del padre para que `React.memo` no fuerce re-render.
+  const handleRowStatus = React.useCallback((p: Propuesta) => setStatusPropuesta(p), []);
+  const handleRowApprove = React.useCallback((p: Propuesta) => setApprovePropuesta(p), []);
+  const handleRowAssign = React.useCallback((p: Propuesta) => {
+    setSelectedPropuestaForAssign(p);
+    setShowAssignModal(true);
+  }, []);
+  const handleRowShare = React.useCallback((id: number) => {
+    navigate(`/propuestas/compartir/${id}`);
+  }, [navigate]);
 
   // Calcular paginación basada en si hay filtros locales activos
-  const hasLocalFilters = !!(allSearchTerms.length > 0 || advancedFilters.length > 0);
+  // El search ya viaja al backend, así que la paginación del servidor sigue
+  // siendo correcta. Sólo cuando hay filtros avanzados activos (cliente-side)
+  // forzamos página única con el conteo local.
+  const hasLocalFilters = advancedFilters.length > 0;
   const totalPages = hasLocalFilters ? 1 : (data?.pagination?.totalPages || 1);
   const total = hasLocalFilters ? filteredData.length : (data?.pagination?.total ?? 0);
 
@@ -1699,7 +1785,7 @@ export function PropuestasPage() {
             </div>
             <div className="mt-4 flex items-center gap-2">
               <span className={`text-xs px-2 py-1 rounded-full ${isDark ? 'bg-zinc-800/80 text-zinc-300 border-zinc-700/50' : 'bg-gray-100 text-gray-700 border-gray-200'} border`}>
-                Todas las catorcenas
+                {(status || allSearchTerms.length > 0 || advancedFilters.length > 0 || hasPeriodFilter || tipoPeriodo) ? 'Filtrado' : 'Todas las catorcenas'}
               </span>
             </div>
           </div>
@@ -2115,18 +2201,79 @@ export function PropuestasPage() {
                   {sortOrder === 'asc' ? '↑ Asc' : '↓ Desc'}
                 </button>
 
-                {/* Divider */}
+                {/* Group By — Tabla: FilterChip single. Desglose: multi-select max 4. */}
                 <div className={`h-4 w-px ${isDark ? 'bg-zinc-700/50' : 'bg-gray-200'} mx-1`} />
-
-                {/* Group By */}
-                <FilterChip
-                  label="Agrupar"
-                  options={['status', 'asignado', 'asesor', 'creador_nombre']}
-                  value={groupBy}
-                  onChange={(val) => { setGroupBy(val); setExpandedGroups(new Set()); }}
-                  onClear={() => { setGroupBy(''); setExpandedGroups(new Set()); }}
-                  isDark={isDark}
-                />
+                {activeView === 'tabla' ? (
+                  <FilterChip
+                    label="Agrupar"
+                    options={['status', 'asignado', 'asesor', 'creador_nombre']}
+                    value={groupBy}
+                    onChange={(val) => { setGroupBy(val); setExpandedGroups(new Set()); }}
+                    onClear={() => { setGroupBy(''); setExpandedGroups(new Set()); }}
+                    isDark={isDark}
+                  />
+                ) : (
+                  <div className="relative">
+                    <button
+                      onClick={() => setShowVersionarioGroupConfig(!showVersionarioGroupConfig)}
+                      className={`flex items-center gap-1.5 px-2 py-1 rounded-full text-xs transition-all border ${
+                        isDark ? 'bg-purple-500/10 text-purple-300 border-purple-500/30 hover:bg-purple-500/20' : 'bg-purple-50 text-purple-700 border-purple-200 hover:bg-purple-100'
+                      }`}
+                    >
+                      <Layers className="h-3 w-3" />
+                      Agrupar
+                      {versionarioGroupings.length > 0 && (
+                        <span className="px-1 py-0.5 rounded bg-purple-600 text-white text-[10px]">
+                          {versionarioGroupings.length}
+                        </span>
+                      )}
+                    </button>
+                    {showVersionarioGroupConfig && (
+                      <>
+                        <div className="fixed inset-0 z-10" onClick={() => setShowVersionarioGroupConfig(false)} />
+                        <div className={`absolute right-0 top-full mt-1 z-20 ${isDark ? 'bg-[#1a1025] border-purple-900/50' : 'bg-white border-purple-200'} border rounded-lg shadow-xl p-2 min-w-[240px]`}>
+                          <p className={`text-[10px] uppercase tracking-wide px-2 py-1 ${isDark ? 'text-zinc-500' : 'text-gray-400'}`}>
+                            Agrupar por (max {VERSIONARIO_MAX_GROUPINGS})
+                          </p>
+                          {VERSIONARIO_GROUPINGS.map(({ field, label }) => {
+                            const idx = versionarioGroupings.indexOf(field);
+                            const isActive = idx !== -1;
+                            const orderColors = ['text-purple-400', 'text-pink-400', 'text-cyan-400', 'text-amber-400'];
+                            return (
+                              <button
+                                key={field}
+                                onClick={() => toggleVersionarioGrouping(field)}
+                                className={`w-full flex items-center gap-2 px-2 py-1.5 text-xs rounded ${isDark ? 'hover:bg-purple-900/30' : 'hover:bg-purple-100'} transition-colors ${
+                                  isActive ? (isDark ? 'text-purple-300' : 'text-purple-700') : (isDark ? 'text-zinc-400' : 'text-gray-500')
+                                }`}
+                              >
+                                <div className={`w-4 h-4 rounded border flex items-center justify-center flex-shrink-0 ${
+                                  isActive ? 'bg-purple-600 border-purple-600' : isDark ? 'border-purple-500/50' : 'border-purple-300'
+                                }`}>
+                                  {isActive && <Check className="h-3 w-3 text-white" />}
+                                </div>
+                                <span className="flex-1 text-left">{label}</span>
+                                {isActive && (
+                                  <span className={`text-[10px] font-bold ${orderColors[idx] || 'text-purple-400'}`}>
+                                    {idx + 1}°
+                                  </span>
+                                )}
+                              </button>
+                            );
+                          })}
+                          <div className={`border-t ${isDark ? 'border-purple-900/30' : 'border-purple-200'} mt-2 pt-2`}>
+                            <button
+                              onClick={resetVersionarioGroupings}
+                              className={`w-full text-xs ${isDark ? 'text-zinc-400 hover:text-zinc-200' : 'text-gray-500 hover:text-gray-800'} py-1 text-center`}
+                            >
+                              Restaurar predeterminados
+                            </button>
+                          </div>
+                        </div>
+                      </>
+                    )}
+                  </div>
+                )}
 
                 {/* Clear All */}
                 {hasActiveFilters && (
@@ -2152,7 +2299,7 @@ export function PropuestasPage() {
             isDark={isDark}
             filters={{
               status: status || undefined,
-              search: debouncedSearchTags.length > 0 ? debouncedSearchTags.join(' ') : debouncedSearchInput || undefined,
+              search: debouncedSearchTags.length > 0 ? debouncedSearchTags.join('|') : debouncedSearchInput || undefined,
               yearInicio,
               yearFin,
               catorcenaInicio,
@@ -2160,6 +2307,7 @@ export function PropuestasPage() {
               tipoPeriodo: tipoPeriodo || undefined,
             }}
             advancedFilters={advancedFilters}
+            activeGroupings={versionarioGroupings}
           />
         )}
 
@@ -2239,7 +2387,23 @@ export function PropuestasPage() {
                         onToggle={() => toggleGroup(groupName)}
                         isDark={isDark}
                       />
-                      {expandedGroups.has(groupName) && items.map((item, idx) => renderPropuestaRow(item, idx))}
+                      {expandedGroups.has(groupName) && items.map((item, idx) => (
+                        <PropuestaRow
+                          key={`prop-${item.id}-${idx}`}
+                          item={item}
+                          index={idx}
+                          isDark={isDark}
+                          userRol={user?.rol || ''}
+                          canEditStatusPerm={permissions.canEditPropuestaStatus}
+                          canAprobarPerm={permissions.canAprobarPropuesta}
+                          canAsignarInventarioPerm={permissions.canAsignarInventario}
+                          canCompartirPerm={permissions.canCompartirPropuesta}
+                          onStatus={handleRowStatus}
+                          onApprove={handleRowApprove}
+                          onAssign={handleRowAssign}
+                          onShare={handleRowShare}
+                        />
+                      ))}
                     </React.Fragment>
                   ))
                 ) : filteredData.length === 0 && hasLocalFilters ? (
@@ -2249,7 +2413,23 @@ export function PropuestasPage() {
                     </td>
                   </tr>
                 ) : (
-                  filteredData.map((item, idx) => renderPropuestaRow(item, idx))
+                  filteredData.map((item, idx) => (
+                    <PropuestaRow
+                      key={`prop-${item.id}-${idx}`}
+                      item={item}
+                      index={idx}
+                      isDark={isDark}
+                      userRol={user?.rol || ''}
+                      canEditStatusPerm={permissions.canEditPropuestaStatus}
+                      canAprobarPerm={permissions.canAprobarPropuesta}
+                      canAsignarInventarioPerm={permissions.canAsignarInventario}
+                      canCompartirPerm={permissions.canCompartirPropuesta}
+                      onStatus={handleRowStatus}
+                      onApprove={handleRowApprove}
+                      onAssign={handleRowAssign}
+                      onShare={handleRowShare}
+                    />
+                  ))
                 )}
               </tbody>
             </table>
@@ -2283,27 +2463,33 @@ export function PropuestasPage() {
         </div>}
       </div>
 
-      {/* Modals */}
-      <StatusModal
-        isOpen={!!statusPropuesta}
-        onClose={() => setStatusPropuesta(null)}
-        propuesta={statusPropuesta}
-        onStatusChange={() => {
-          queryClient.invalidateQueries({ queryKey: ['propuestas'] });
-          queryClient.invalidateQueries({ queryKey: ['propuestas-stats'] });
-        }}
-        allowedStatuses={permissions.allowedPropuestaStatuses}
-      />
+      {/* Modals — lazy-mount: el componente solo existe en el árbol cuando
+          la propuesta seleccionada es no-nula. Evita que sus useState/useRef/
+          useEffect (y subscripciones WS) corran cuando el modal está cerrado. */}
+      {statusPropuesta && (
+        <StatusModal
+          isOpen={!!statusPropuesta}
+          onClose={() => setStatusPropuesta(null)}
+          propuesta={statusPropuesta}
+          onStatusChange={() => {
+            queryClient.invalidateQueries({ queryKey: ['propuestas'] });
+            queryClient.invalidateQueries({ queryKey: ['propuestas-stats'] });
+          }}
+          allowedStatuses={permissions.allowedPropuestaStatuses}
+        />
+      )}
 
-      <ApproveModal
-        isOpen={!!approvePropuesta}
-        onClose={() => setApprovePropuesta(null)}
-        propuesta={approvePropuesta}
-        onSuccess={() => {
-          queryClient.invalidateQueries({ queryKey: ['propuestas'] });
-          queryClient.invalidateQueries({ queryKey: ['propuestas-stats'] });
-        }}
-      />
+      {approvePropuesta && (
+        <ApproveModal
+          isOpen={!!approvePropuesta}
+          onClose={() => setApprovePropuesta(null)}
+          propuesta={approvePropuesta}
+          onSuccess={() => {
+            queryClient.invalidateQueries({ queryKey: ['propuestas'] });
+            queryClient.invalidateQueries({ queryKey: ['propuestas-stats'] });
+          }}
+        />
+      )}
 
       {selectedPropuestaForAssign && (
         <AssignInventarioModal

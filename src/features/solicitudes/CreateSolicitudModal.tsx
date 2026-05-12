@@ -1697,7 +1697,9 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
     const tarifaEfectiva = totalCarasAll > 0 ? totalPrecio / totalCarasAll : 0;
     // Regla: si el total global es impar, todas requieren autorización DG
     const totalCarasImpar = totalCarasAll > 0 && totalCarasAll % 2 !== 0;
-    return { totalRenta, totalBonificacion, totalCaras: totalRenta, totalPrecio, tarifaEfectiva, totalCarasImpar };
+    // Si TODAS las caras son puente peatonal, los labels dicen "Puentes" en vez de "Caras"
+    const allPuentePeatonal = caras.length > 0 && caras.every(c => (c.formato || '').toUpperCase().includes('PUENTE PEATONAL'));
+    return { totalRenta, totalBonificacion, totalCaras: totalRenta, totalPrecio, tarifaEfectiva, totalCarasImpar, allPuentePeatonal };
   }, [caras]);
 
   // Handle file upload
@@ -2653,7 +2655,7 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
                   </div>
                   <div className="text-center">
                     <div className="text-2xl font-bold text-blue-400">{totals.totalRenta + totals.totalBonificacion}</div>
-                    <div className={`text-xs ${isDark ? 'text-zinc-400' : 'text-gray-500'}`}>Total Caras</div>
+                    <div className={`text-xs ${isDark ? 'text-zinc-400' : 'text-gray-500'}`}>Total {totals.allPuentePeatonal ? 'Puentes' : 'Caras'}</div>
                   </div>
                   <div className="text-center">
                     <div className="text-2xl font-bold text-amber-400">{formatCurrency(totals.totalPrecio)}</div>
@@ -2906,13 +2908,16 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
                     })()}
                   </div>
 
-                  {/* Tipo (selector con autocompletado) */}
+                  {/* Tipo (selector con autocompletado).
+                      Al crear circuito el tipo queda fijo (se deriva del artículo).
+                      Solo al editar un circuito existente se puede cambiar manualmente. */}
                   <div>
                     <label className={`text-xs ${isDark ? 'text-zinc-500' : 'text-gray-500'}`}>Tipo</label>
                     <select
                       value={newCara.tipo}
-                      onChange={(e) => setNewCara({ ...newCara, tipo: e.target.value as 'Tradicional' | 'Digital' | '' })}
-                      className={`w-full px-3 py-2 ${isDark ? 'bg-zinc-800 border-zinc-700 text-white' : 'bg-gray-100 border-gray-200 text-gray-900'} border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-purple-500/50`}
+                      onChange={(e) => editingCaraId && setNewCara({ ...newCara, tipo: e.target.value as 'Tradicional' | 'Digital' | '' })}
+                      disabled={!editingCaraId}
+                      className={`w-full px-3 py-2 ${isDark ? 'bg-zinc-800 border-zinc-700 text-white' : 'bg-gray-100 border-gray-200 text-gray-900'} border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-purple-500/50 ${!editingCaraId ? 'opacity-60 cursor-not-allowed' : ''}`}
                     >
                       <option value="">Seleccionar</option>
                       {filteredTipos.map(t => (
@@ -3184,18 +3189,27 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
                 {/* Preview calculation */}
                 {newCara.renta > 0 && newCara.tarifaPublica > 0 && (
                   <div className={`mt-4 p-3 ${isDark ? 'bg-zinc-800/50 border-zinc-700/30' : 'bg-gray-50 border-gray-200'} rounded-lg border space-y-2`}>
-                    <div className="flex items-center justify-between text-xs">
-                      <span className={isDark ? 'text-zinc-400' : 'text-gray-500'}>Inversión (Tarifa Cliente):</span>
-                      <span className={isDark ? 'text-zinc-300' : 'text-gray-700'}>
-                        {newCara.renta} caras × {formatCurrency(newCara.tarifaPublica)} = <span className="text-emerald-400 font-medium">{formatCurrency(newCara.renta * newCara.tarifaPublica)}</span>
-                      </span>
-                    </div>
-                    <div className="flex items-center justify-between text-xs">
-                      <span className={isDark ? 'text-zinc-400' : 'text-gray-500'}>Caras Totales:</span>
-                      <span className={isDark ? 'text-zinc-300' : 'text-gray-700'}>
-                        {newCara.renta} caras + {newCara.bonificacion} bonif. = <span className="text-blue-400 font-medium">{newCara.renta + newCara.bonificacion} caras totales</span>
-                      </span>
-                    </div>
+                    {(() => {
+                      const isPP = (newCara.articulo?.ItemName || newCara.formato || '').toUpperCase().includes('PUENTE PEATONAL');
+                      const sing = isPP ? 'puentes' : 'caras';
+                      const cap = isPP ? 'Puentes' : 'Caras';
+                      return (
+                        <>
+                          <div className="flex items-center justify-between text-xs">
+                            <span className={isDark ? 'text-zinc-400' : 'text-gray-500'}>Inversión (Tarifa Cliente):</span>
+                            <span className={isDark ? 'text-zinc-300' : 'text-gray-700'}>
+                              {newCara.renta} {sing} × {formatCurrency(newCara.tarifaPublica)} = <span className="text-emerald-400 font-medium">{formatCurrency(newCara.renta * newCara.tarifaPublica)}</span>
+                            </span>
+                          </div>
+                          <div className="flex items-center justify-between text-xs">
+                            <span className={isDark ? 'text-zinc-400' : 'text-gray-500'}>{cap} Totales:</span>
+                            <span className={isDark ? 'text-zinc-300' : 'text-gray-700'}>
+                              {newCara.renta} {sing} + {newCara.bonificacion} bonif. = <span className="text-blue-400 font-medium">{newCara.renta + newCara.bonificacion} {sing} totales</span>
+                            </span>
+                          </div>
+                        </>
+                      );
+                    })()}
                     <div className="flex items-center justify-between text-xs">
                       <span className={isDark ? 'text-zinc-400' : 'text-gray-500'}>Tarifa Efectiva:</span>
                       <span className={isDark ? 'text-zinc-300' : 'text-gray-700'}>
@@ -3256,6 +3270,8 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
                       const groupTotal = items.reduce((acc, c) => acc + c.precioTotal, 0);
                       const groupRenta = items.filter(c => !c.esBf).reduce((acc, c) => acc + c.renta, 0);
                       const groupBonif = items.filter(c => c.esBf).reduce((acc, c) => acc + c.renta, 0) + items.reduce((acc, c) => acc + c.bonificacion, 0);
+                      const groupAllPP = items.length > 0 && items.every(i => (i.formato || '').toUpperCase().includes('PUENTE PEATONAL'));
+                      const carasHeader = groupAllPP ? 'Puentes' : 'Caras';
 
                       return (
                         <div key={key}>
@@ -3287,7 +3303,7 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
                                     <th className={`px-2 py-2 text-left text-[10px] font-semibold ${isDark ? 'text-zinc-500' : 'text-gray-500'}`}>Plaza</th>
                                     <th className={`px-2 py-2 text-left text-[10px] font-semibold ${isDark ? 'text-zinc-500' : 'text-gray-500'}`}>Tipo</th>
                                     <th className={`px-2 py-2 text-left text-[10px] font-semibold ${isDark ? 'text-zinc-500' : 'text-gray-500'}`}>Formato</th>
-                                    <th className={`px-2 py-2 text-center text-[10px] font-semibold ${isDark ? 'text-zinc-500' : 'text-gray-500'}`}>Caras</th>
+                                    <th className={`px-2 py-2 text-center text-[10px] font-semibold ${isDark ? 'text-zinc-500' : 'text-gray-500'}`}>{carasHeader}</th>
                                     <th className={`px-2 py-2 text-center text-[10px] font-semibold ${isDark ? 'text-zinc-500' : 'text-gray-500'}`}>Bonif.</th>
                                     <th className={`px-2 py-2 text-center text-[10px] font-semibold ${isDark ? 'text-zinc-500' : 'text-gray-500'}`}>Total</th>
                                     <th className={`px-2 py-2 text-right text-[10px] font-semibold ${isDark ? 'text-zinc-500' : 'text-gray-500'}`}>Tarifa Púb.</th>
@@ -3494,7 +3510,7 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
                   </div>
                   <div className="text-center">
                     <div className="text-2xl font-bold text-blue-400">{totals.totalRenta + totals.totalBonificacion}</div>
-                    <div className={`text-xs ${isDark ? 'text-zinc-400' : 'text-gray-500'}`}>Total Caras</div>
+                    <div className={`text-xs ${isDark ? 'text-zinc-400' : 'text-gray-500'}`}>Total {totals.allPuentePeatonal ? 'Puentes' : 'Caras'}</div>
                   </div>
                   <div className="text-center">
                     <div className="text-2xl font-bold text-amber-400">{formatCurrency(totals.totalPrecio)}</div>

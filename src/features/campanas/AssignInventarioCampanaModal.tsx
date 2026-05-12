@@ -916,6 +916,10 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
   const [isSaving, setIsSaving] = useState(false);
   // Reserva Masiva: toggle (solo aparece cuando la cara tiene grupo_masivo_id)
   const [reservaMasivaC, setReservaMasivaC] = useState<boolean>(false);
+  // Exclusión por categoría de cliente: oculta inventario disponible cerca de
+  // piezas reservadas por clientes de la categoría seleccionada.
+  const [excluirCategoria, setExcluirCategoria] = useState<string>('');
+  const [excluirDistanciaKm, setExcluirDistanciaKm] = useState<number>(1);
   // Eliminar Reservas Masivo: replica el delete a las reservas equivalentes
   // (mismo codigo_unico) en otras caras del mismo grupo_masivo_id
   const [eliminarMasivoC, setEliminarMasivoC] = useState<boolean>(false);
@@ -1118,6 +1122,14 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
     queryKey: ['inventario-filters'],
     queryFn: () => solicitudesService.getInventarioFilters(),
     enabled: isOpen,
+  });
+
+  // Categorías de cliente — solo las que tienen reservas activas.
+  const { data: categoriasCliente } = useQuery({
+    queryKey: ['categorias-cliente'],
+    queryFn: () => inventariosService.getCategoriasCliente(),
+    enabled: isOpen && viewState === 'search-inventory',
+    staleTime: 5 * 60 * 1000,
   });
 
   // Fetch CUIC data for client editing
@@ -3088,6 +3100,8 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
         fecha_fin: fechaFinSearch,
         solicitudCaraId: cara.id,
         excluir_mi_macro: tipoPeriodo === 'catorcena' ? 1 : undefined,
+        excluir_categoria: excluirCategoria || undefined,
+        excluir_distancia_km: excluirCategoria ? excluirDistanciaKm : undefined,
       });
       setInventarioDisponible(response.data || []);
     } catch (error) {
@@ -3106,6 +3120,14 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [reservaMasivaC]);
+
+  // Re-search cuando cambia exclusión por categoría o distancia
+  useEffect(() => {
+    if (viewState === 'search-inventory' && selectedCaraForSearch) {
+      handleSearchInventory(selectedCaraForSearch);
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [excluirCategoria, excluirDistanciaKm]);
 
   // Refetch disponibles with current filters
   const handleRefetchDisponibles = async () => {
@@ -3145,6 +3167,8 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
         fecha_fin: fechaFinSearch2,
         solicitudCaraId: selectedCaraForSearch.id,
         excluir_mi_macro: tipoPeriodo === 'catorcena' ? 1 : undefined,
+        excluir_categoria: excluirCategoria || undefined,
+        excluir_distancia_km: excluirCategoria ? excluirDistanciaKm : undefined,
       });
       setInventarioDisponible(response.data || []);
     } catch (error) {
@@ -4603,11 +4627,10 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
 
               {/* % Distribucion - only for Digital */}
               {selectedCaraForSearch?.tipo === 'Digital' && (() => {
-                const totalRentaForPct = (adjustedCarasFlujo.flujo + adjustedCarasFlujo.contraflujo) || 1;
-                const flujoYaRes = adjustedCarasFlujo.flujo - remainingToAssign.flujo;
-                const contraYaRes = adjustedCarasFlujo.contraflujo - remainingToAssign.contraflujo;
-                const minPct = Math.ceil(flujoYaRes / totalRentaForPct * 100);
-                const maxPct = Math.floor((totalRentaForPct - contraYaRes) / totalRentaForPct * 100);
+                // Digital: distribución libre 0-100 (inventarios digitales son
+                // infinitos, no hay riesgo de chocar con reservas existentes).
+                const minPct = 0;
+                const maxPct = 100;
                 return (
                 <div className="flex flex-col items-center justify-center px-2 py-1 rounded-xl bg-zinc-800/30 border border-zinc-700/20 min-w-[70px]">
                 <span className="text-[9px] text-zinc-500 mb-1">Distribución</span>
@@ -5160,6 +5183,48 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
                       </label>
                     );
                   })()}
+
+                  {/* Exclusión por categoría de cliente — esconde inventario
+                      cercano a piezas reservadas por clientes de una categoría
+                      X dentro del radio elegido (Haversine en back). */}
+                  <div className={`flex items-center gap-1 px-2 py-1 rounded-lg border ${excluirCategoria ? 'bg-amber-500/15 border-amber-500/40' : 'bg-zinc-800 border-zinc-700'}`} title="Excluye inventario disponible que esté cerca de piezas reservadas por clientes de la categoría seleccionada.">
+                    <span className={`text-[10px] uppercase ${excluirCategoria ? 'text-amber-300' : 'text-zinc-500'}`}>Excluir cat.</span>
+                    <select
+                      value={excluirCategoria}
+                      onChange={(e) => setExcluirCategoria(e.target.value)}
+                      className="px-1.5 py-0.5 rounded text-xs border-0 focus:ring-1 focus:ring-amber-500/50 bg-zinc-900 text-zinc-200"
+                    >
+                      <option value="">— ninguna —</option>
+                      {(categoriasCliente || []).map(cat => (
+                        <option key={cat} value={cat}>{cat}</option>
+                      ))}
+                    </select>
+                    {excluirCategoria && (
+                      <select
+                        value={excluirDistanciaKm}
+                        onChange={(e) => setExcluirDistanciaKm(Number(e.target.value))}
+                        className="px-1.5 py-0.5 rounded text-xs border-0 focus:ring-1 focus:ring-amber-500/50 bg-zinc-900 text-amber-300"
+                        title="Distancia mínima al inventario excluido"
+                      >
+                        <option value={0.5}>500 m</option>
+                        <option value={1}>1 km</option>
+                        <option value={1.5}>1.5 km</option>
+                        <option value={2}>2 km</option>
+                        <option value={2.5}>2.5 km</option>
+                        <option value={3}>3 km</option>
+                      </select>
+                    )}
+                    {excluirCategoria && (
+                      <button
+                        type="button"
+                        onClick={() => setExcluirCategoria('')}
+                        className="p-0.5 rounded hover:bg-zinc-700 text-zinc-400"
+                        title="Quitar filtro de exclusión"
+                      >
+                        <X className="h-3 w-3" />
+                      </button>
+                    )}
+                  </div>
 
                   <div className="flex-1" />
 
@@ -7483,12 +7548,13 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
                         )}
                       </div>
                       <div className="space-y-1">
-                        <label className={`text-xs ${((editingCaraHasReservas || editingCaraId) && !permissions.canEditArticuloOnEdit) ? 'text-zinc-800' : 'text-zinc-500'}`}>Tipo</label>
+                        {/* Tipo: bloqueado al CREAR (se deriva del artículo). Editable solo al EDITAR un circuito existente. */}
+                        <label className="text-xs text-zinc-500">Tipo</label>
                         <select
                           value={newCara.tipo}
-                          onChange={(e) => canEditResumen && (permissions.canEditArticuloOnEdit || (!editingCaraHasReservas && !editingCaraId)) && setNewCara({ ...newCara, tipo: e.target.value })}
-                          disabled={!canEditResumen || (!permissions.canEditArticuloOnEdit && (editingCaraHasReservas || !!editingCaraId))}
-                          className={`w-full px-3 py-2 ${isDark ? 'bg-zinc-800 border-zinc-700 text-white' : 'bg-white border-gray-300 text-gray-900'} border rounded-lg text-sm focus:outline-none focus:ring-1 focus:ring-purple-500/50 ${(!canEditResumen || (!permissions.canEditArticuloOnEdit && (editingCaraHasReservas || editingCaraId))) ? 'opacity-60 cursor-not-allowed' : ''}`}
+                          onChange={(e) => canEditResumen && editingCaraId && setNewCara({ ...newCara, tipo: e.target.value })}
+                          disabled={!canEditResumen || !editingCaraId}
+                          className={`w-full px-3 py-2 ${isDark ? 'bg-zinc-800 border-zinc-700 text-white' : 'bg-white border-gray-300 text-gray-900'} border rounded-lg text-sm focus:outline-none focus:ring-1 focus:ring-purple-500/50 ${(!canEditResumen || !editingCaraId) ? 'opacity-60 cursor-not-allowed' : ''}`}
                         >
                           <option value="">Seleccionar</option>
                           <option value="Tradicional">Tradicional</option>
@@ -7499,7 +7565,7 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
                     <div className="grid grid-cols-4 gap-4 mb-4">
                       <div className="space-y-1">
                         <label className={`text-xs ${isDark ? 'text-zinc-500' : 'text-gray-500'}`}>
-                          {newCara.articulo?.toUpperCase().startsWith('IM') ? 'Impresiones' : isEspecialArticle(newCara.articulo || '') ? 'Ejec. Especiales' : 'Caras en Renta'}
+                          {newCara.articulo?.toUpperCase().startsWith('IM') ? 'Impresiones' : isEspecialArticle(newCara.articulo || '') ? 'Ejec. Especiales' : (newCara.formato || '').toUpperCase().includes('PUENTE PEATONAL') ? 'Puentes en Renta' : 'Caras en Renta'}
                           {newCara.articulo?.toUpperCase().startsWith('CT') && (
                             <span className="ml-1 text-cyan-400 text-[10px]">(Cortesía)</span>
                           )}
@@ -7523,7 +7589,7 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
                         <span className="text-[10px] text-zinc-600">Flujo: {newCara.caras_flujo || 0} | Contraflujo: {newCara.caras_contraflujo || 0}</span>
                       </div>
                       <div className="space-y-1">
-                        <label className={`text-xs ${isDark ? 'text-zinc-500' : 'text-gray-500'}`}>{newCara.articulo?.toUpperCase().startsWith('CT') ? 'Cortesía' : 'Caras Bonificadas'}</label>
+                        <label className={`text-xs ${isDark ? 'text-zinc-500' : 'text-gray-500'}`}>{newCara.articulo?.toUpperCase().startsWith('CT') ? 'Cortesía' : (newCara.formato || '').toUpperCase().includes('PUENTE PEATONAL') ? 'Puentes Bonificados' : 'Caras Bonificadas'}</label>
                         <input
                           type="number"
                           value={newCara.bonificacion || ''}
@@ -7629,13 +7695,13 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
                         <div className="flex items-center justify-between text-xs">
                           <span className="text-zinc-400">Inversión (Tarifa Cliente):</span>
                           <span className="text-zinc-300">
-                            {newCara.caras} caras × {formatCurrency(newCara.tarifa_publica)} = <span className="text-emerald-400 font-medium">{formatCurrency((newCara.caras || 0) * (newCara.tarifa_publica || 0))}</span>
+                            {newCara.caras} {(newCara.formato || '').toUpperCase().includes('PUENTE PEATONAL') ? 'puentes' : 'caras'} × {formatCurrency(newCara.tarifa_publica)} = <span className="text-emerald-400 font-medium">{formatCurrency((newCara.caras || 0) * (newCara.tarifa_publica || 0))}</span>
                           </span>
                         </div>
                         <div className="flex items-center justify-between text-xs">
-                          <span className="text-zinc-400">Caras Totales:</span>
+                          <span className="text-zinc-400">{(newCara.formato || '').toUpperCase().includes('PUENTE PEATONAL') ? 'Puentes' : 'Caras'} Totales:</span>
                           <span className="text-zinc-300">
-                            {newCara.caras || 0} caras + {newCara.bonificacion || 0} bonif. = <span className="text-blue-400 font-medium">{(newCara.caras || 0) + (newCara.bonificacion || 0)} caras totales</span>
+                            {newCara.caras || 0} {(newCara.formato || '').toUpperCase().includes('PUENTE PEATONAL') ? 'puentes' : 'caras'} + {newCara.bonificacion || 0} bonif. = <span className="text-blue-400 font-medium">{(newCara.caras || 0) + (newCara.bonificacion || 0)} {(newCara.formato || '').toUpperCase().includes('PUENTE PEATONAL') ? 'puentes' : 'caras'} totales</span>
                           </span>
                         </div>
                         <div className="flex items-center justify-between text-xs">

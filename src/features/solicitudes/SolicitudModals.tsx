@@ -304,6 +304,9 @@ export function ViewSolicitudModal({ isOpen, onClose, solicitudId, onEdit, onAte
   const generatePDF = async () => {
     if (!data) return;
 
+    const allPPpdf = (data.caras?.length ?? 0) > 0 && data.caras!.every(c => (c.formato || '').toUpperCase().includes('PUENTE PEATONAL'));
+    const carasWord = allPPpdf ? 'Puentes' : 'Caras';
+
     const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
     const pageWidth = doc.internal.pageSize.getWidth();
     const pageHeight = doc.internal.pageSize.getHeight();
@@ -480,9 +483,9 @@ export function ViewSolicitudModal({ isOpen, onClose, solicitudId, onEdit, onAte
       doc.roundedRect(marginX, yPos, contentWidth, 20, 3, 3, 'F');
 
       const summaryItems = [
-        { label: 'Total de Caras', value: data.cotizacion.numero_caras?.toString() || '0' },
+        { label: `Total de ${carasWord}`, value: data.cotizacion.numero_caras?.toString() || '0' },
         { label: 'Bonificadas', value: data.cotizacion.bonificacion?.toString() || '0' },
-        { label: 'Caras Facturadas', value: ((data.cotizacion.numero_caras || 0) + (data.cotizacion.bonificacion || 0)).toString() },
+        { label: `${carasWord} Facturadas`, value: ((data.cotizacion.numero_caras || 0) + (data.cotizacion.bonificacion || 0)).toString() },
         { label: 'Inversión', value: formatCurrency(data.cotizacion.precio || 0) },
       ];
 
@@ -555,7 +558,7 @@ export function ViewSolicitudModal({ isOpen, onClose, solicitudId, onEdit, onAte
         // Subtotales en el header de catorcena
         doc.setFontSize(6);
         doc.setFont('helvetica', 'normal');
-        const catorcenaSubtotal = `Caras: ${catorcenaGroup.totalCaras} | Bonif: ${catorcenaGroup.totalBonificacion} | Inversión: $${catorcenaGroup.totalInversion.toLocaleString('es-MX')}`;
+        const catorcenaSubtotal = `${carasWord}: ${catorcenaGroup.totalCaras} | Bonif: ${catorcenaGroup.totalBonificacion} | Inversión: $${catorcenaGroup.totalInversion.toLocaleString('es-MX')}`;
         doc.text(catorcenaSubtotal, pageWidth - marginX - 4, yPos + 5.5, { align: 'right' });
         yPos += 10;
 
@@ -584,7 +587,10 @@ export function ViewSolicitudModal({ isOpen, onClose, solicitudId, onEdit, onAte
           doc.setFont('helvetica', 'bold');
           doc.text(articuloGroup.articulo, marginX + 9, yPos + 4);
           doc.setFont('helvetica', 'normal');
-          doc.text(`Caras: ${articuloGroup.totalCaras} | Inversión: $${articuloGroup.totalInversion.toLocaleString('es-MX')}`, pageWidth - marginX - 9, yPos + 4, { align: 'right' });
+          {
+            const artIsPP = (articuloGroup.articulo || '').toUpperCase().includes('PUENTE PEATONAL');
+            doc.text(`${artIsPP ? 'Puentes' : 'Caras'}: ${articuloGroup.totalCaras} | Inversión: $${articuloGroup.totalInversion.toLocaleString('es-MX')}`, pageWidth - marginX - 9, yPos + 4, { align: 'right' });
+          }
           yPos += 8;
 
           // Tabla de caras para este artículo
@@ -604,7 +610,7 @@ export function ViewSolicitudModal({ isOpen, onClose, solicitudId, onEdit, onAte
 
           autoTable(doc, {
             startY: yPos,
-            head: [['#', 'Plaza', 'Formato', 'Caras', 'Bonif.', 'Inversión']],
+            head: [['#', 'Plaza', 'Formato', carasWord, 'Bonif.', 'Inversión']],
             body: tableData,
             theme: 'plain',
             margin: { left: marginX + 5, right: marginX + 5 },
@@ -679,6 +685,7 @@ export function ViewSolicitudModal({ isOpen, onClose, solicitudId, onEdit, onAte
   const totalCaras = totalRenta + totalBonificacion;
   const totalTarifaPublica = data?.caras?.reduce((sum, c) => sum + (Number(c.tarifa_publica) || 0), 0) || 0;
   const inversion = data?.caras?.reduce((sum, c) => sum + (Number(c.costo) || 0), 0) || 0;
+  const allPuentePeatonal = (data?.caras?.length ?? 0) > 0 && (data?.caras ?? []).every(c => (c.formato || '').toUpperCase().includes('PUENTE PEATONAL'));
 
   return (
     <div className="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center z-50 p-4 isolate">
@@ -766,7 +773,7 @@ export function ViewSolicitudModal({ isOpen, onClose, solicitudId, onEdit, onAte
                 <div className="grid grid-cols-4 gap-6">
                   <div className="text-center">
                     <p className={`text-2xl font-bold ${isDark ? 'text-white' : 'text-gray-900'}`}>{totalCaras}</p>
-                    <p className={`text-xs ${isDark ? 'text-zinc-400' : 'text-gray-500'} mt-1`}>Total Caras</p>
+                    <p className={`text-xs ${isDark ? 'text-zinc-400' : 'text-gray-500'} mt-1`}>Total {allPuentePeatonal ? 'Puentes' : 'Caras'}</p>
                   </div>
                   <div className="text-center">
                     <p className={`text-2xl font-bold ${isDark ? 'text-violet-400' : 'text-violet-600'}`}>{totalRenta}</p>
