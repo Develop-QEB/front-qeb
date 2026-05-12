@@ -1,6 +1,7 @@
 import { useState, useMemo, useEffect } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { ChevronDown, ChevronRight, Calendar, Loader2, Download, Package, ClipboardList, MapPin, DollarSign, Layers } from 'lucide-react';
+import * as XLSX from 'xlsx';
 import { propuestasService } from '../../services/propuestas.service';
 
 interface AdvancedFilter {
@@ -336,6 +337,11 @@ export default function PropuestasVersionarioView({ isDark, filters, advancedFil
   const handleExportCSV = async () => {
     setIsExporting(true);
     try {
+      if (!catorcenaGroups || catorcenaGroups.length === 0) {
+        alert('No hay datos para exportar.');
+        return;
+      }
+
       const headers = [
         'Campaña', 'Anunciante', 'Inversión Campaña', 'Operación', 'Código de contrato (Opcional)',
         'Precio por cara (Opcional)', 'APS Global', 'APS Específico', 'CUIC', 'Articulo', 'Vendedor',
@@ -349,26 +355,27 @@ export default function PropuestasVersionarioView({ isDark, filters, advancedFil
 
       for (const group of catorcenaGroups) {
         const catorcenaLabel = `Cat ${group.num}/${group.anio}`;
-        for (const prop of group.propuestas) {
-          const info = prop.info;
-          for (const circ of prop.circuitos) {
-            if (circ.inventarios.length > 0) {
-              for (const inv of circ.inventarios) {
+        for (const prop of (group.propuestas || [])) {
+          const info = prop.info || ({} as typeof prop.info);
+          for (const circ of (prop.circuitos || [])) {
+            const invs = circ.inventarios || [];
+            if (invs.length > 0) {
+              for (const inv of invs) {
                 rows.push([
                   info.campana_nombre || info.nombre_campania || '',
                   info.anunciante || '',
-                  String(info.inversion || ''),
+                  String(info.inversion ?? ''),
                   '',
                   '',
-                  String(inv.tarifa_publica_sc || ''),
+                  String(inv.tarifa_publica_sc ?? ''),
                   '',
                   inv.aps_especifico ? String(inv.aps_especifico) : '',
                   info.cuic || '',
                   inv.articulo || '',
                   info.vendedor || '',
                   info.descripcion || '',
-                  `Cat ${info.catorcena_inicio_num}/${info.catorcena_inicio_anio}`,
-                  `Cat ${info.catorcena_fin_num}/${info.catorcena_fin_anio}`,
+                  `Cat ${info.catorcena_inicio_num ?? ''}/${info.catorcena_inicio_anio ?? ''}`,
+                  `Cat ${info.catorcena_fin_num ?? ''}/${info.catorcena_fin_anio ?? ''}`,
                   '',
                   '',
                   '',
@@ -387,25 +394,25 @@ export default function PropuestasVersionarioView({ isDark, filters, advancedFil
               rows.push([
                 info.campana_nombre || '',
                 info.anunciante || '',
-                String(info.inversion || ''),
+                String(info.inversion ?? ''),
                 '',
                 '',
                 '',
                 '',
                 '',
                 info.cuic || '',
-                circ.cara.articulo || '',
+                circ.cara?.articulo || '',
                 info.vendedor || '',
                 info.descripcion || '',
-                `Cat ${info.catorcena_inicio_num}/${info.catorcena_inicio_anio}`,
-                `Cat ${info.catorcena_fin_num}/${info.catorcena_fin_anio}`,
+                `Cat ${info.catorcena_inicio_num ?? ''}/${info.catorcena_inicio_anio ?? ''}`,
+                `Cat ${info.catorcena_fin_num ?? ''}/${info.catorcena_fin_anio ?? ''}`,
                 '',
                 '',
                 '',
                 '',
                 '',
                 '',
-                circ.cara.ciudad || '',
+                circ.cara?.ciudad || '',
                 '',
                 '',
                 '',
@@ -417,28 +424,22 @@ export default function PropuestasVersionarioView({ isDark, filters, advancedFil
         }
       }
 
-      const escapeCSV = (val: string) => {
-        if (val.includes(',') || val.includes('"') || val.includes('\n')) {
-          return `"${val.replace(/"/g, '""')}"`;
-        }
-        return val;
-      };
+      if (rows.length === 0) {
+        alert(`Hay ${catorcenaGroups.length} catorcena(s) pero ninguna propuesta/circuito generó filas exportables. Revisa que las propuestas tengan circuitos o inventarios.`);
+        return;
+      }
 
-      const csvContent = [
-        headers.map(escapeCSV).join(','),
-        ...rows.map(row => row.map(escapeCSV).join(',')),
-      ].join('\n');
+      // Excel: array de arrays con headers + filas. null/undefined \u2192 ''.
+      const safeCell = (val: unknown) => (val == null ? '' : String(val));
+      const sheetData = [headers, ...rows.map(r => r.map(safeCell))];
 
-      const BOM = '\uFEFF';
-      const blob = new Blob([BOM + csvContent], { type: 'text/csv;charset=utf-8;' });
-      const url = URL.createObjectURL(blob);
-      const link = document.createElement('a');
-      link.href = url;
-      link.download = `propuestas_versionario_${new Date().toISOString().slice(0, 10)}.csv`;
-      document.body.appendChild(link);
-      link.click();
-      document.body.removeChild(link);
-      URL.revokeObjectURL(url);
+      const wb = XLSX.utils.book_new();
+      const ws = XLSX.utils.aoa_to_sheet(sheetData);
+      XLSX.utils.book_append_sheet(wb, ws, 'Versionario');
+      XLSX.writeFile(wb, `propuestas_versionario_${new Date().toISOString().slice(0, 10)}.xlsx`);
+    } catch (err) {
+      console.error('Error exportando Excel versionario:', err);
+      alert(`Error exportando Excel: ${err instanceof Error ? err.message : String(err)}`);
     } finally {
       setIsExporting(false);
     }
@@ -469,7 +470,7 @@ export default function PropuestasVersionarioView({ isDark, filters, advancedFil
               }`}
             >
               {isExporting ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Download className="h-3.5 w-3.5" />}
-              {isExporting ? 'Exportando...' : 'Exportar CSV'}
+              {isExporting ? 'Exportando...' : 'Exportar Excel'}
             </button>
             <div className={`w-px h-10 ${isDark ? 'bg-zinc-800' : 'bg-gray-200'}`} />
             <div className="text-right">
