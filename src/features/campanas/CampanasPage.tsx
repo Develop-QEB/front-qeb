@@ -1655,12 +1655,12 @@ export function CampanasPage() {
   }, [activeView, filteredData, campanaInventarios]);
 
   // Cargar inversión por catorcena (usando sc.costo) — usado por versionario y tabla.
-  // Patrón con refs: `loadedIdsRef` registra qué IDs ya procesamos para
-  // que el efecto no se vuelva a disparar después de cada `setInversion...`.
-  // Antes `inversionPorCatorcena` estaba en deps → cascada de re-runs hasta
-  // que ya no quedaran missing.
+  // Patrón: `loadedIdsRef` evita reintentar IDs ya procesados. `batchTick` es
+  // un contador que se incrementa después de cada batch para disparar el
+  // siguiente automáticamente hasta que no queden IDs pendientes.
   const loadingInvCatRef = useRef(false);
   const loadedInvCatIdsRef = useRef<Set<number>>(new Set());
+  const [batchTick, setBatchTick] = useState(0);
   useEffect(() => {
     if (!filteredData.length) return;
     if (loadingInvCatRef.current) return;
@@ -1670,7 +1670,7 @@ export function CampanasPage() {
       .map(c => c.id);
     if (idsToLoad.length === 0) return;
 
-    const BATCH = 50;
+    const BATCH = 200;
     const batch = idsToLoad.slice(0, BATCH);
     batch.forEach(id => loadedInvCatIdsRef.current.add(id));
     loadingInvCatRef.current = true;
@@ -1691,16 +1691,17 @@ export function CampanasPage() {
         });
       })
       .catch(() => {
-        // En error, mantenemos los IDs como "procesados" para no reintentar
-        // en loop. Si quieres reintento manual, limpia loadedInvCatIdsRef.
         setInversionPorCatorcena(prev => {
           const next = { ...prev };
           for (const id of batch) next[id] = {};
           return next;
         });
       })
-      .finally(() => { loadingInvCatRef.current = false; });
-  }, [filteredData]);
+      .finally(() => {
+        loadingInvCatRef.current = false;
+        setBatchTick(t => t + 1);
+      });
+  }, [filteredData, batchTick]);
 
   // Agrupar campañas por catorcena para la vista alternativa (con soporte para subagrupaciones)
   const campanasPorCatorcena = useMemo(() => {
@@ -1795,31 +1796,9 @@ export function CampanasPage() {
           delete groups[key];
         }
       });
-
-      // Asegurar que toda campaña que pasó el filtro del backend aparezca en algún grupo
-      // del rango. El backend filtra por overlap de fechas de campaña, pero
-      // catorcenas_con_contenido se construye desde solicitudCaras (más estricto). Una campaña
-      // puede pasar el filtro y no tener caras justo en esa catorcena: igual debe verse aquí.
-      const groupedIds = new Set<number>();
-      Object.values(groups).forEach(g => g.campanas.forEach(c => groupedIds.add(c.id)));
-      const ungrouped = filteredData.filter(c => !groupedIds.has(c.id));
-      if (ungrouped.length > 0) {
-        for (let y = yearInicio; y <= yearFin; y++) {
-          const cStart = y === yearInicio ? catorcenaInicio : 1;
-          const cEnd = y === yearFin ? catorcenaFin : 26;
-          for (let c = cStart; c <= cEnd; c++) {
-            const key = `${y}-${String(c).padStart(2, '0')}`;
-            if (!groups[key]) {
-              groups[key] = { catorcena: { num: c, anio: y }, campanas: [] };
-            }
-            ungrouped.forEach(item => {
-              if (!groups[key].campanas.some(existing => existing.id === item.id)) {
-                groups[key].campanas.push(item);
-              }
-            });
-          }
-        }
-      }
+      // Una campaña solo aparece en las catorcenas donde tiene caras reales
+      // (catorcenas_con_contenido). Si su período toca el rango filtrado pero no tiene caras
+      // ahí, queda fuera — eso es correcto, su actividad está en otra catorcena.
     } else if (yearInicio && yearFin) {
       Object.keys(groups).forEach(key => {
         const groupAnio = parseInt(key.split('-')[0]);
@@ -3753,12 +3732,10 @@ export function CampanasPage() {
                         const catKey = `${catorcena.num}:${catorcena.anio}`;
                         const totalInversion = campanas.reduce((s, c) => {
                           const invData = inversionPorCatorcena[c.id];
-                          // Si ya cargó el batch, usar valor específico de la catorcena (0 si no aplica)
-                          if (invData !== undefined) {
-                            return s + (invData[catKey] || 0);
-                          }
-                          // Solo si aún no cargó, fallback al campo guardado
-                          return s + (Number((c as any).inversion) || 0);
+                          // Si cargó el batch, usar valor específico de la catorcena.
+                          // Si aún no carga, sumar 0 — NO usar c.inversion (es el total de
+                          // la campaña, no la porción de esta catorcena: inflaría el badge).
+                          return s + (invData?.[catKey] || 0);
                         }, 0);
 
                         return totalInversion > 0 ? (
