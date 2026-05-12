@@ -149,7 +149,7 @@ function getGroupValue(row: Row, field: GroupByField): { key: string; label: str
     }
     case 'asesor': {
       const v = (row.propuesta.vendedor || '').trim() || 'Sin asesor';
-      return { key: v, label: `Asesor: ${v}` };
+      return { key: v, label: v };
     }
     case 'propuesta': {
       const name = row.propuesta.campana_nombre || row.propuesta.nombre_campania || `Propuesta #${row.propuesta.propuesta_id}`;
