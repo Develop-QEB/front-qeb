@@ -4676,11 +4676,10 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
 
               {/* % Distribucion - only for Digital */}
               {selectedCaraForSearch?.tipo === 'Digital' && (() => {
-                const totalRentaForPct = (adjustedCarasFlujo.flujo + adjustedCarasFlujo.contraflujo) || 1;
-                const flujoYaRes = adjustedCarasFlujo.flujo - remainingToAssign.flujo;
-                const contraYaRes = adjustedCarasFlujo.contraflujo - remainingToAssign.contraflujo;
-                const minPct = Math.ceil(flujoYaRes / totalRentaForPct * 100);
-                const maxPct = Math.floor((totalRentaForPct - contraYaRes) / totalRentaForPct * 100);
+                // Digital: distribución libre 0-100 (los inventarios digitales son
+                // infinitos, no hay riesgo de chocar con reservas existentes).
+                const minPct = 0;
+                const maxPct = 100;
                 return (
                 <div className={`flex flex-col items-center justify-center px-2 py-1 rounded-xl ${isDark ? 'bg-zinc-800/30' : 'bg-gray-50/30'} border ${isDark ? 'border-zinc-700/20' : 'border-gray-200/20'} min-w-[70px]`}>
                 <span className={`text-[9px] ${isDark ? 'text-zinc-500' : 'text-gray-400'} mb-1`}>Distribución</span>
@@ -7683,12 +7682,13 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
                         )}
                       </div>
                       <div className="space-y-1">
-                        <label className={`text-xs ${((editingCaraHasReservas || editingCaraId) && !permissions.canEditArticuloOnEdit) ? 'text-zinc-800' : `${isDark ? 'text-zinc-500' : 'text-gray-400'}`}`}>Tipo</label>
+                        {/* Tipo: bloqueado al CREAR (se deriva del artículo). Editable solo al EDITAR un circuito existente. */}
+                        <label className={`text-xs ${isDark ? 'text-zinc-500' : 'text-gray-400'}`}>Tipo</label>
                         <select
                           value={newCara.tipo}
-                          onChange={(e) => canEditResumen && (permissions.canEditArticuloOnEdit || (!editingCaraHasReservas && !editingCaraId)) && setNewCara({ ...newCara, tipo: e.target.value })}
-                          disabled={!canEditResumen || (!permissions.canEditArticuloOnEdit && (editingCaraHasReservas || !!editingCaraId))}
-                          className={`w-full px-3 py-2 ${isDark ? 'bg-zinc-800' : 'bg-gray-50'} border ${isDark ? 'border-zinc-700' : 'border-gray-200'} rounded-lg text-sm ${isDark ? 'text-white' : 'text-gray-900'} focus:outline-none focus:ring-1 focus:ring-purple-500/50 ${(!canEditResumen || (!permissions.canEditArticuloOnEdit && (editingCaraHasReservas || editingCaraId))) ? 'opacity-60 cursor-not-allowed' : ''}`}
+                          onChange={(e) => canEditResumen && editingCaraId && setNewCara({ ...newCara, tipo: e.target.value })}
+                          disabled={!canEditResumen || !editingCaraId}
+                          className={`w-full px-3 py-2 ${isDark ? 'bg-zinc-800' : 'bg-gray-50'} border ${isDark ? 'border-zinc-700' : 'border-gray-200'} rounded-lg text-sm ${isDark ? 'text-white' : 'text-gray-900'} focus:outline-none focus:ring-1 focus:ring-purple-500/50 ${(!canEditResumen || !editingCaraId) ? 'opacity-60 cursor-not-allowed' : ''}`}
                         >
                           <option value="">Seleccionar</option>
                           <option value="Tradicional">Tradicional</option>
@@ -7699,7 +7699,7 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
                     <div className="grid grid-cols-4 gap-4 mb-4">
                       <div className="space-y-1">
                         <label className={`text-xs ${isDark ? 'text-zinc-500' : 'text-gray-400'}`}>
-                          {isEspecialArticle((newCara.articulo || '').toUpperCase()) ? 'Ejec. Especiales' : newCara.articulo?.toUpperCase().startsWith('IM') ? 'Impresiones' : 'Caras en Renta'}
+                          {isEspecialArticle((newCara.articulo || '').toUpperCase()) ? 'Ejec. Especiales' : newCara.articulo?.toUpperCase().startsWith('IM') ? 'Impresiones' : (newCara.formato || '').toUpperCase().includes('PUENTE PEATONAL') ? 'Puentes en Renta' : 'Caras en Renta'}
                           {newCara.articulo?.toUpperCase().startsWith('CT') && (
                             <span className="ml-1 text-cyan-400 text-[10px]">(Cortesía)</span>
                           )}
@@ -7723,7 +7723,7 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
                         <span className={`text-[10px] ${isDark ? 'text-zinc-600' : 'text-gray-400'}`}>Flujo: {newCara.caras_flujo || 0} | Contraflujo: {newCara.caras_contraflujo || 0}</span>
                       </div>
                       <div className="space-y-1">
-                        <label className={`text-xs ${isDark ? 'text-zinc-500' : 'text-gray-400'}`}>{newCara.articulo?.toUpperCase().startsWith('CT') ? 'Cortesía' : 'Caras Bonificadas'}</label>
+                        <label className={`text-xs ${isDark ? 'text-zinc-500' : 'text-gray-400'}`}>{newCara.articulo?.toUpperCase().startsWith('CT') ? 'Cortesía' : (newCara.formato || '').toUpperCase().includes('PUENTE PEATONAL') ? 'Puentes Bonificados' : 'Caras Bonificadas'}</label>
                         <input
                           type="number"
                           value={newCara.bonificacion || ''}
@@ -7813,13 +7813,13 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
                         <div className="flex items-center justify-between text-xs">
                           <span className={`${isDark ? 'text-zinc-400' : 'text-gray-500'}`}>Inversión (Tarifa Cliente):</span>
                           <span className={`${isDark ? 'text-zinc-300' : 'text-gray-700'}`}>
-                            {newCara.caras} caras × {formatCurrency(newCara.tarifa_publica)} = <span className="text-emerald-400 font-medium">{formatCurrency((newCara.caras || 0) * (newCara.tarifa_publica || 0))}</span>
+                            {newCara.caras} {(newCara.formato || '').toUpperCase().includes('PUENTE PEATONAL') ? 'puentes' : 'caras'} × {formatCurrency(newCara.tarifa_publica)} = <span className="text-emerald-400 font-medium">{formatCurrency((newCara.caras || 0) * (newCara.tarifa_publica || 0))}</span>
                           </span>
                         </div>
                         <div className="flex items-center justify-between text-xs">
-                          <span className={`${isDark ? 'text-zinc-400' : 'text-gray-500'}`}>Caras Totales:</span>
+                          <span className={`${isDark ? 'text-zinc-400' : 'text-gray-500'}`}>{(newCara.formato || '').toUpperCase().includes('PUENTE PEATONAL') ? 'Puentes' : 'Caras'} Totales:</span>
                           <span className={`${isDark ? 'text-zinc-300' : 'text-gray-700'}`}>
-                            {newCara.caras || 0} caras + {newCara.bonificacion || 0} bonif. = <span className="text-blue-400 font-medium">{(newCara.caras || 0) + (newCara.bonificacion || 0)} caras totales</span>
+                            {newCara.caras || 0} {(newCara.formato || '').toUpperCase().includes('PUENTE PEATONAL') ? 'puentes' : 'caras'} + {newCara.bonificacion || 0} bonif. = <span className="text-blue-400 font-medium">{(newCara.caras || 0) + (newCara.bonificacion || 0)} {(newCara.formato || '').toUpperCase().includes('PUENTE PEATONAL') ? 'puentes' : 'caras'} totales</span>
                           </span>
                         </div>
                         <div className="flex items-center justify-between text-xs">
@@ -8026,7 +8026,7 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
                                       })()}</p>
                                     </div>
                                     <div>
-                                      <span className={`${isDark ? 'text-zinc-500' : 'text-gray-400'} text-xs`}>Caras</span>
+                                      <span className={`${isDark ? 'text-zinc-500' : 'text-gray-400'} text-xs`}>{(cara.formato || '').toUpperCase().includes('PUENTE PEATONAL') ? 'Puentes' : 'Caras'}</span>
                                       {esImpresion ? (
                                         <div className="flex items-center gap-1">
                                           <p className={`${isDark ? 'text-white' : 'text-gray-900'} font-medium`}>{cara.caras || 0}</p>
@@ -8103,12 +8103,15 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
                                                 ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20 hover:bg-emerald-500/20'
                                                 : 'bg-purple-500/10 text-purple-400 border-purple-500/20 hover:bg-purple-500/20'
                                           }`}
-                                          title={
-                                            tieneRechazado ? 'Cara rechazada - no se puede asignar inventario' :
-                                            tienePendientes ? 'Esta cara necesita autorización antes de asignar inventario' :
-                                            hasPendingAuthorization ? 'Hay otra cara en esta propuesta pendiente de autorización. Apruébala primero.' :
-                                            status.isComplete ? 'Completo - clic para modificar' : 'Buscar inventario'
-                                          }
+                                          title={(() => {
+                                            const isPP = (cara.formato || '').toUpperCase().includes('PUENTE PEATONAL');
+                                            const noun = isPP ? 'puente' : 'cara';
+                                            const nounCap = isPP ? 'Puente' : 'Cara';
+                                            if (tieneRechazado) return `${nounCap} rechazado - no se puede asignar inventario`;
+                                            if (tienePendientes) return `Este ${noun} necesita autorización antes de asignar inventario`;
+                                            if (hasPendingAuthorization) return `Hay otro ${noun} en esta propuesta pendiente de autorización. Apruébalo primero.`;
+                                            return status.isComplete ? 'Completo - clic para modificar' : 'Buscar inventario';
+                                          })()}
                                         >
                                           <Search className="h-4 w-4" />
                                         </button>

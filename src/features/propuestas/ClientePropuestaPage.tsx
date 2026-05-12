@@ -1408,7 +1408,7 @@ export function ClientePropuestaPage() {
                         <p><strong>Tipo:</strong> {selectedMarker.tipo_de_cara || 'N/A'}</p>
                         <p><strong>Formato:</strong> {selectedMarker.mueble || 'N/A'}</p>
                         <p><strong>Ubicacion:</strong> {selectedMarker.ubicacion || 'N/A'}</p>
-                        <p><strong>Caras:</strong> {selectedMarker.caras_totales}</p>
+                        <p><strong>{(selectedMarker.mueble || '').toUpperCase().includes('PUENTE PEATONAL') ? 'Puentes' : 'Caras'}:</strong> {selectedMarker.caras_totales}</p>
                         <p><strong>Tarifa:</strong> {formatCurrency(selectedMarker.tarifa_publica || 0)}</p>
                         {selectedMarker.numero_catorcena && (
                           <p><strong>Periodo:</strong> {tipoPeriodo === 'mensual' && selectedMarker.inicio_periodo ? (() => { const parts = selectedMarker.inicio_periodo.split('-'); return parts.length >= 2 ? `${MESES_LABEL[parseInt(parts[1]) - 1]} ${parts[0]}` : `Cat ${selectedMarker.numero_catorcena} / ${selectedMarker.anio_catorcena}`; })() : `Cat ${selectedMarker.numero_catorcena} / ${selectedMarker.anio_catorcena}`}</p>
