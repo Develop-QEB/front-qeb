@@ -269,7 +269,7 @@ export default function PropuestasVersionarioView({ isDark, filters, advancedFil
   const [expandedCircuitInventories, setExpandedCircuitInventories] = useState<Set<string>>(new Set());
   const [isExporting, setIsExporting] = useState(false);
   // Sin paginación — el back recibe limit alto para devolver todo de una.
-  const limit = 5000;
+  const limit = 1000;
 
   // Use default grouping if parent didn't provide any (defensive)
   const effectiveGroupings = activeGroupings.length > 0 ? activeGroupings : DEFAULT_GROUPINGS;
