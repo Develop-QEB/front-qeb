@@ -1192,7 +1192,7 @@ export function CampanasPage() {
   // En vista catorcena necesitamos todas las campañas del rango para que la agrupación
   // por catorcena sea correcta (no podemos paginar y agrupar). 200 se queda corto cuando
   // hay muchas campañas activas en catorcenas cercanas — usar tope alto.
-  const effectiveLimit = activeView === 'catorcena' ? 5000 : (needsAllData ? 200 : limit);
+  const effectiveLimit = activeView === 'catorcena' ? 50000 : (needsAllData ? 200 : limit);
   // Tags unidos por '|' — el backend separa por ese delimitador (no espacios)
   // y aplica AND entre tags. Soporta búsqueda por nombre de campaña,
   // razon_social, CUIC, marca, código de inventario, etc.
@@ -1757,33 +1757,11 @@ export function CampanasPage() {
             }
             groups[key].campanas.push(item);
           }
-        } else {
-          // Sin dato de catorcenas reales: expandir por rango de fechas (fallback)
-          const startNum = item.catorcena_inicio_num;
-          const startAnio = item.catorcena_inicio_anio;
-          const endNum = item.catorcena_fin_num || startNum;
-          const endAnio = item.catorcena_fin_anio || startAnio;
-
-          const startIdx = catorcenasList.findIndex(c => c.num === startNum && c.anio === startAnio);
-          const endIdx = catorcenasList.findIndex(c => c.num === endNum && c.anio === endAnio);
-
-          if (startIdx >= 0 && endIdx >= 0) {
-            for (let i = startIdx; i <= endIdx; i++) {
-              const { num, anio } = catorcenasList[i];
-              const key = `${anio}-${String(num).padStart(2, '0')}`;
-              if (!groups[key]) {
-                groups[key] = { catorcena: { num, anio }, campanas: [] };
-              }
-              groups[key].campanas.push(item);
-            }
-          } else {
-            const key = `${startAnio}-${String(startNum).padStart(2, '0')}`;
-            if (!groups[key]) {
-              groups[key] = { catorcena: { num: startNum, anio: startAnio }, campanas: [] };
-            }
-            groups[key].campanas.push(item);
-          }
         }
+        // Si catorcenas_con_contenido es null, la campaña no tiene caras reservadas en
+        // ninguna catorcena → no aparece en la vista Versionario. El filtro de catorcena del
+        // backend usa el mismo criterio (EXISTS solicitudCaras), así que sin/con filtro
+        // muestran los mismos conjuntos.
       }
     });
 
