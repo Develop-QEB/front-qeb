@@ -423,13 +423,36 @@ export function buildDeliveryNote(
     // Dentro de cada APS, agrupar por artículo para las DocumentLines
     const uniqueArticulos = [...new Set(itemsForAPS.map(item => item.articulo))];
 
+    // Detectar tipo de período una vez por DN. Mensual usa otra tabla de IDs
+    // en SAP (MES 01-2026 = 2882, ..., MES 12-2026 = 2893). Catorcena sigue
+    // con 1746 como antes (hardcoded como hoy hasta tener la tabla completa).
+    const tipoPeriodoCamp = (campana as { tipo_periodo?: string | null }).tipo_periodo || 'catorcena';
+    const esMensual = tipoPeriodoCamp === 'mensual';
+
+    // Mapeo MES → ID SAP, solo 2026 por ahora.
+    const MES_ID_SAP: Record<number, Record<number, number>> = {
+      2026: { 1: 2882, 2: 2883, 3: 2884, 4: 2885, 5: 2886, 6: 2887, 7: 2888, 8: 2889, 9: 2890, 10: 2891, 11: 2892, 12: 2893 },
+    };
+
     const documentLines: SAPDocumentLine[] = uniqueArticulos.map((articulo, index) => {
       const itemsWithArticulo = itemsForAPS.filter(item => item.articulo === articulo);
       const firstItem = itemsWithArticulo[0];
       const totalPrice = Number(firstItem.tarifa_publica_sc) || Number(firstItem.tarifa_publica) || 0;
-      const dscPeriod = firstItem.numero_catorcena && firstItem.anio_catorcena
-        ? `CATORCENA ${String(firstItem.numero_catorcena).padStart(2, '0')}-${firstItem.anio_catorcena}`
-        : 'CATORCENA —-—';
+
+      // Período: mensual ("MES NN-YYYY" + ID por mes) vs catorcena ("CATORCENA NN-YYYY" + 1746).
+      let dscPeriod: string;
+      let codPer = 1746;
+      if (esMensual && firstItem.inicio_periodo) {
+        const fIni = new Date(firstItem.inicio_periodo);
+        const mes = fIni.getUTCMonth() + 1;
+        const anio = fIni.getUTCFullYear();
+        dscPeriod = `MES ${String(mes).padStart(2, '0')}-${anio}`;
+        codPer = MES_ID_SAP[anio]?.[mes] ?? 1746;
+      } else {
+        dscPeriod = firstItem.numero_catorcena && firstItem.anio_catorcena
+          ? `CATORCENA ${String(firstItem.numero_catorcena).padStart(2, '0')}-${firstItem.anio_catorcena}`
+          : 'CATORCENA —-—';
+      }
 
       // IM (impresión) articles have no inventory rows — one row with caras_totales=N
       const articuloCode = (firstItem.articulo || '').toUpperCase();
@@ -466,7 +489,7 @@ export function buildDeliveryNote(
         U_dscSitio: articulosMap?.[firstItem.articulo || '']?.U_IMU_dscSitio || firstItem.plaza || firstItem.estado || '',
         U_CodTAsig: codTAsig,
         U_dscTAsig: dscTAsig,
-        U_CodPer: 1746,
+        U_CodPer: codPer,
         U_dscPeriod: dscPeriod,
         U_FechInPer: firstItem.inicio_periodo?.split('T')[0] || '',
         U_FechFinPer: firstItem.fin_periodo?.split('T')[0] || '',
