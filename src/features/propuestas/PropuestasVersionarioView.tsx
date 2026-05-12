@@ -394,16 +394,23 @@ export default function PropuestasVersionarioView({ isDark, filters, advancedFil
       rows.push({ propuesta: p, cara: null, inventarios: [] });
     }
 
-    // Range filter on catorcena
+    // Range filter on catorcena. En lite mode (sin caras/inv) usa
+    // catorcena_inicio de la propuesta como fallback — antes excluía TODO.
     let filteredRows = rows;
     if (filters.yearInicio && filters.yearFin && filters.catorcenaInicio && filters.catorcenaFin) {
       const rangeStart = filters.yearInicio * 100 + filters.catorcenaInicio;
       const rangeEnd = filters.yearFin * 100 + filters.catorcenaFin;
       filteredRows = rows.filter(r => {
         const ref = r.cara || r.inventarios[0];
-        if (!ref) return false;
-        const num = (ref as { numero_catorcena: number }).numero_catorcena || 0;
-        const anio = (ref as { anio_catorcena: number }).anio_catorcena || 0;
+        let num: number;
+        let anio: number;
+        if (ref) {
+          num = (ref as { numero_catorcena: number }).numero_catorcena || 0;
+          anio = (ref as { anio_catorcena: number }).anio_catorcena || 0;
+        } else {
+          num = r.propuesta.catorcena_inicio_num || 0;
+          anio = r.propuesta.catorcena_inicio_anio || 0;
+        }
         const val = anio * 100 + num;
         return val >= rangeStart && val <= rangeEnd;
       });
@@ -512,11 +519,15 @@ export default function PropuestasVersionarioView({ isDark, filters, advancedFil
   const handleExportCSV = async () => {
     setIsExporting(true);
     try {
-      if (!groupTree || groupTree.length === 0) {
-        alert('No hay datos para exportar.');
+      if (!data?.propuestasInfo || data.propuestasInfo.length === 0) {
+        alert('No hay propuestas para exportar.');
         return;
       }
 
+      // Patrón "como campañas": exporta lo que ya está cargado. Si una
+      // propuesta NO tiene detalle cacheado (no se ha expandido), se exporta
+      // 1 fila con datos básicos. Si fue expandida, 1 fila por inventario.
+      // Sin auto-fetch masivo — el usuario expande lo que necesite.
       const headers = [
         'Campaña', 'Anunciante', 'Inversión Campaña', 'Operación', 'Código de contrato (Opcional)',
         'Precio por cara (Opcional)', 'APS Global', 'APS Específico', 'CUIC', 'Articulo', 'Vendedor',
@@ -525,55 +536,55 @@ export default function PropuestasVersionarioView({ isDark, filters, advancedFil
         'Unidad', 'Cara', 'Ciudad', 'Tipo de Distribución', 'Reproducciones', 'Notas',
         'Estatus',
       ];
-
       const rows: string[][] = [];
-
-      // Walk leaves and emit one row per inventory item
-      const walk = (nodes: GroupNode[]) => {
-        for (const n of nodes) {
-          if (n.children.length > 0) {
-            walk(n.children);
-          } else if (n.inventarios && n.inventarios.length > 0) {
-            for (const inv of n.inventarios) {
-              const info = inv as InventarioItem;
-              // Need PropuestaInfo here; we kept it on row-level but not on node. Look it up from data.propuestasInfo.
-              const propuesta = data?.propuestasInfo.find(p => p.propuesta_id === inv.propuesta_id);
-              if (!propuesta) continue;
-              rows.push([
-                propuesta.campana_nombre || propuesta.nombre_campania || '',
-                propuesta.anunciante || '',
-                String(propuesta.inversion ?? ''),
-                '',
-                '',
-                String(info.tarifa_publica_sc ?? ''),
-                '',
-                info.aps_especifico ? String(info.aps_especifico) : '',
-                propuesta.cuic || '',
-                info.articulo || '',
-                propuesta.vendedor || '',
-                propuesta.descripcion || '',
-                `Cat ${propuesta.catorcena_inicio_num ?? ''}/${propuesta.catorcena_inicio_anio ?? ''}`,
-                `Cat ${propuesta.catorcena_fin_num ?? ''}/${propuesta.catorcena_fin_anio ?? ''}`,
-                '',
-                '',
-                '',
-                '',
-                info.codigo_unico || '',
-                info.tipo_de_cara || '',
-                info.plaza || '',
-                info.tradicional_digital || '',
-                '',
-                '',
-                propuesta.status || '',
-              ]);
-            }
+      for (const propuesta of data.propuestasInfo) {
+        const det = propuestaDetails.get(propuesta.propuesta_id);
+        const invs = det?.invs || [];
+        const baseInicio = `Cat ${propuesta.catorcena_inicio_num ?? ''}/${propuesta.catorcena_inicio_anio ?? ''}`;
+        const baseFin = `Cat ${propuesta.catorcena_fin_num ?? ''}/${propuesta.catorcena_fin_anio ?? ''}`;
+        if (invs.length === 0) {
+          rows.push([
+            propuesta.campana_nombre || propuesta.nombre_campania || '',
+            propuesta.anunciante || '',
+            String(propuesta.inversion ?? ''),
+            '', '', '', '', '',
+            propuesta.cuic || '',
+            '',
+            propuesta.vendedor || '',
+            propuesta.descripcion || '',
+            baseInicio, baseFin,
+            '', '', '', '', '', '', '', '', '', '',
+            propuesta.status || '',
+          ]);
+        } else {
+          for (const inv of invs) {
+            rows.push([
+              propuesta.campana_nombre || propuesta.nombre_campania || '',
+              propuesta.anunciante || '',
+              String(propuesta.inversion ?? ''),
+              '', '',
+              String(inv.tarifa_publica_sc ?? ''),
+              '',
+              inv.aps_especifico ? String(inv.aps_especifico) : '',
+              propuesta.cuic || '',
+              inv.articulo || '',
+              propuesta.vendedor || '',
+              propuesta.descripcion || '',
+              baseInicio, baseFin,
+              '', '', '', '',
+              inv.codigo_unico || '',
+              inv.tipo_de_cara || '',
+              inv.plaza || '',
+              inv.tradicional_digital || '',
+              '', '',
+              propuesta.status || '',
+            ]);
           }
         }
-      };
-      walk(groupTree);
+      }
 
       if (rows.length === 0) {
-        alert('No hay filas exportables. Revisa que las propuestas tengan circuitos o inventarios.');
+        alert('No hay propuestas para exportar.');
         return;
       }
 
