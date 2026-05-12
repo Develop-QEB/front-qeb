@@ -1757,11 +1757,35 @@ export function CampanasPage() {
             }
             groups[key].campanas.push(item);
           }
+        } else {
+          // Sin caras reservadas: la campaña existe pero está incompleta. La distribuimos
+          // por su rango de fechas para que aparezca en cada catorcena que cubre. La
+          // inversión por catorcena queda en 0 (sin caras = sin costo), así que no infla.
+          const startNum = item.catorcena_inicio_num;
+          const startAnio = item.catorcena_inicio_anio;
+          const endNum = item.catorcena_fin_num || startNum;
+          const endAnio = item.catorcena_fin_anio || startAnio;
+
+          const startIdx = catorcenasList.findIndex(c => c.num === startNum && c.anio === startAnio);
+          const endIdx = catorcenasList.findIndex(c => c.num === endNum && c.anio === endAnio);
+
+          if (startIdx >= 0 && endIdx >= 0) {
+            for (let i = startIdx; i <= endIdx; i++) {
+              const { num, anio } = catorcenasList[i];
+              const key = `${anio}-${String(num).padStart(2, '0')}`;
+              if (!groups[key]) {
+                groups[key] = { catorcena: { num, anio }, campanas: [] };
+              }
+              groups[key].campanas.push(item);
+            }
+          } else {
+            const key = `${startAnio}-${String(startNum).padStart(2, '0')}`;
+            if (!groups[key]) {
+              groups[key] = { catorcena: { num: startNum, anio: startAnio }, campanas: [] };
+            }
+            groups[key].campanas.push(item);
+          }
         }
-        // Si catorcenas_con_contenido es null, la campaña no tiene caras reservadas en
-        // ninguna catorcena → no aparece en la vista Versionario. El filtro de catorcena del
-        // backend usa el mismo criterio (EXISTS solicitudCaras), así que sin/con filtro
-        // muestran los mismos conjuntos.
       }
     });
 
