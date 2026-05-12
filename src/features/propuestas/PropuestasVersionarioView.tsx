@@ -1,6 +1,6 @@
-import { useState, useMemo, useEffect } from 'react';
+import { useState, useMemo, useEffect, type ReactElement } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { ChevronDown, ChevronRight, Calendar, Loader2, Download, Package, ClipboardList, MapPin, DollarSign, Layers } from 'lucide-react';
+import { ChevronDown, ChevronRight, Calendar, Loader2, Download, Package, ClipboardList, MapPin, DollarSign, User, Briefcase, Hash, BadgeCheck, Clock, CalendarDays } from 'lucide-react';
 import * as XLSX from 'xlsx';
 import { propuestasService } from '../../services/propuestas.service';
 
@@ -23,6 +23,7 @@ interface PropuestasVersionarioViewProps {
     tipoPeriodo?: string;
   };
   advancedFilters?: AdvancedFilter[];
+  activeGroupings: GroupByField[];
 }
 
 interface InventarioItem {
@@ -76,21 +77,125 @@ interface CaraInfo {
   anio_catorcena: number;
 }
 
-interface CatorcenaGroup {
-  key: string;
-  num: number;
-  anio: number;
-  propuestas: PropuestaGroupItem[];
+// === Grouping (filtro Agrupar) ===
+export type GroupByField = 'catorcena' | 'asesor' | 'propuesta' | 'circuito' | 'anunciante' | 'cuic' | 'estatus' | 'tipo_periodo' | 'anio';
+
+export interface GroupConfig {
+  field: GroupByField;
+  label: string;
 }
 
-interface PropuestaGroupItem {
-  info: PropuestaInfo;
-  circuitos: CircuitoGroupItem[];
+export const AVAILABLE_GROUPINGS: GroupConfig[] = [
+  { field: 'catorcena', label: 'Catorcena' },
+  { field: 'asesor', label: 'Asesor' },
+  { field: 'propuesta', label: 'Propuesta' },
+  { field: 'circuito', label: 'Circuito' },
+  { field: 'anunciante', label: 'Anunciante' },
+  { field: 'cuic', label: 'CUIC' },
+  { field: 'estatus', label: 'Estatus' },
+  { field: 'tipo_periodo', label: 'Tipo de Periodo' },
+  { field: 'anio', label: 'Año' },
+];
+
+export const DEFAULT_GROUPINGS: GroupByField[] = ['catorcena', 'asesor', 'propuesta', 'circuito'];
+export const MAX_GROUPINGS = 4;
+export const GROUPINGS_STORAGE_KEY = 'propuestas-versionario-groupings-v1';
+
+export function loadGroupingsFromStorage(): GroupByField[] {
+  try {
+    const raw = localStorage.getItem(GROUPINGS_STORAGE_KEY);
+    if (!raw) return DEFAULT_GROUPINGS;
+    const parsed = JSON.parse(raw);
+    if (!Array.isArray(parsed)) return DEFAULT_GROUPINGS;
+    const valid = parsed.filter((f: unknown): f is GroupByField =>
+      typeof f === 'string' && AVAILABLE_GROUPINGS.some(g => g.field === f),
+    );
+    if (valid.length === 0) return DEFAULT_GROUPINGS;
+    return valid.slice(0, MAX_GROUPINGS);
+  } catch {
+    return DEFAULT_GROUPINGS;
+  }
 }
 
-interface CircuitoGroupItem {
-  cara: CaraInfo;
+interface Row {
+  propuesta: PropuestaInfo;
+  cara: CaraInfo | null;
   inventarios: InventarioItem[];
+}
+
+interface GroupNode {
+  field: GroupByField;
+  key: string;
+  fullKey: string;
+  label: string;
+  meta?: {
+    propuesta?: PropuestaInfo;
+    cara?: CaraInfo;
+    catorcena?: { num: number; anio: number };
+  };
+  children: GroupNode[];
+  inventarios?: InventarioItem[];
+  inversion: number;
+  propuestaIds: Set<number>;
+}
+
+function getGroupValue(row: Row, field: GroupByField): { key: string; label: string; meta?: GroupNode['meta'] } {
+  switch (field) {
+    case 'catorcena': {
+      const ref = row.cara || row.inventarios[0];
+      const num = ref ? (ref as { numero_catorcena: number }).numero_catorcena : 0;
+      const anio = ref ? (ref as { anio_catorcena: number }).anio_catorcena : 0;
+      return { key: `${num}-${anio}`, label: `Cat ${num} / ${anio}`, meta: { catorcena: { num, anio } } };
+    }
+    case 'asesor': {
+      const v = (row.propuesta.vendedor || '').trim() || 'Sin asesor';
+      return { key: v, label: `Asesor: ${v}` };
+    }
+    case 'propuesta': {
+      const name = row.propuesta.campana_nombre || row.propuesta.nombre_campania || `Propuesta #${row.propuesta.propuesta_id}`;
+      return { key: String(row.propuesta.propuesta_id), label: name, meta: { propuesta: row.propuesta } };
+    }
+    case 'circuito': {
+      if (!row.cara) return { key: 'sin-circuito', label: 'Sin circuito' };
+      const lbl = [row.cara.articulo, row.cara.formato, row.cara.ciudad].filter(Boolean).join(' · ') || `Circuito #${row.cara.sc_id}`;
+      return { key: String(row.cara.sc_id), label: lbl, meta: { cara: row.cara } };
+    }
+    case 'anunciante': {
+      const v = (row.propuesta.anunciante || '').trim() || 'Sin anunciante';
+      return { key: v, label: `Anunciante: ${v}` };
+    }
+    case 'cuic': {
+      const v = (row.propuesta.cuic || '').trim() || 'Sin CUIC';
+      return { key: v, label: `CUIC: ${v}` };
+    }
+    case 'estatus': {
+      const v = (row.propuesta.status || '').trim() || 'Sin estatus';
+      return { key: v, label: `Estatus: ${v}` };
+    }
+    case 'tipo_periodo': {
+      const v = (row.propuesta.tipo_periodo || '').trim() || 'Sin tipo';
+      return { key: v, label: `Tipo: ${v}` };
+    }
+    case 'anio': {
+      const ref = row.cara || row.inventarios[0];
+      const anio = ref ? (ref as { anio_catorcena: number }).anio_catorcena : 0;
+      return { key: String(anio), label: `Año ${anio}` };
+    }
+  }
+}
+
+function getFieldIcon(field: GroupByField) {
+  switch (field) {
+    case 'catorcena': return Calendar;
+    case 'asesor': return User;
+    case 'propuesta': return Package;
+    case 'circuito': return ClipboardList;
+    case 'anunciante': return Briefcase;
+    case 'cuic': return Hash;
+    case 'estatus': return BadgeCheck;
+    case 'tipo_periodo': return Clock;
+    case 'anio': return CalendarDays;
+  }
 }
 
 // Status colors for propuestas
@@ -152,13 +257,15 @@ function matchesAdvancedFilters(item: Record<string, unknown>, filters: Advanced
   return result;
 }
 
-export default function PropuestasVersionarioView({ isDark, filters, advancedFilters = [] }: PropuestasVersionarioViewProps) {
-  const [expandedCatorcenas, setExpandedCatorcenas] = useState<Set<string>>(new Set());
-  const [expandedPropuestas, setExpandedPropuestas] = useState<Set<number>>(new Set());
-  const [expandedCircuitos, setExpandedCircuitos] = useState<Set<string>>(new Set());
+export default function PropuestasVersionarioView({ isDark, filters, advancedFilters = [], activeGroupings }: PropuestasVersionarioViewProps) {
+  const [expandedNodes, setExpandedNodes] = useState<Set<string>>(new Set());
+  const [expandedCircuitInventories, setExpandedCircuitInventories] = useState<Set<string>>(new Set());
   const [isExporting, setIsExporting] = useState(false);
   const [page, setPage] = useState(1);
   const limit = 50;
+
+  // Use default grouping if parent didn't provide any (defensive)
+  const effectiveGroupings = activeGroupings.length > 0 ? activeGroupings : DEFAULT_GROUPINGS;
 
   // Reset page when filters change
   useEffect(() => { setPage(1); }, [filters.status, filters.search, filters.yearInicio, filters.yearFin, filters.catorcenaInicio, filters.catorcenaFin, filters.tipoPeriodo]);
@@ -171,173 +278,167 @@ export default function PropuestasVersionarioView({ isDark, filters, advancedFil
     retry: 1,
   });
 
-  const catorcenaGroups = useMemo<CatorcenaGroup[]>(() => {
+  // Build flat rows then group them recursively according to activeGroupings
+  const groupTree = useMemo<GroupNode[]>(() => {
     if (!data) return [];
 
     const { inventarios, propuestasInfo, carasInfo } = data;
 
-    // Build a map: propuesta_id -> PropuestaInfo
     const propuestaMap = new Map<number, PropuestaInfo>();
-    for (const p of propuestasInfo) {
-      propuestaMap.set(p.propuesta_id, p);
-    }
+    for (const p of propuestasInfo) propuestaMap.set(p.propuesta_id, p);
 
-    // Build a map: catorcena key -> propuesta_id -> sc_id -> inventarios
-    const catorcenaMap = new Map<string, Map<number, Map<number, InventarioItem[]>>>();
-
+    // inventarios indexed by (propuesta_id, sc_id)
+    const invByKey = new Map<string, InventarioItem[]>();
     for (const inv of inventarios) {
-      const catKey = `${inv.numero_catorcena}-${inv.anio_catorcena}`;
-      if (!catorcenaMap.has(catKey)) catorcenaMap.set(catKey, new Map());
-      const propMap = catorcenaMap.get(catKey)!;
-      if (!propMap.has(inv.propuesta_id)) propMap.set(inv.propuesta_id, new Map());
-      const scMap = propMap.get(inv.propuesta_id)!;
-      const scId = inv.solicitud_caras_id || 0;
-      if (!scMap.has(scId)) scMap.set(scId, []);
-      scMap.get(scId)!.push(inv);
+      const k = `${inv.propuesta_id}-${inv.solicitud_caras_id || 0}`;
+      if (!invByKey.has(k)) invByKey.set(k, []);
+      invByKey.get(k)!.push(inv);
     }
 
-    // Build a map: catorcena key -> propuesta_id -> sc_id -> CaraInfo
-    const caraMap = new Map<string, Map<number, Map<number, CaraInfo>>>();
-    for (const c of carasInfo) {
-      const catKey = `${c.numero_catorcena}-${c.anio_catorcena}`;
-      if (!caraMap.has(catKey)) caraMap.set(catKey, new Map());
-      const propMap = caraMap.get(catKey)!;
-      if (!propMap.has(c.propuesta_id)) propMap.set(c.propuesta_id, new Map());
-      propMap.get(c.propuesta_id)!.set(c.sc_id, c);
+    const isAllowed = (info: PropuestaInfo) =>
+      advancedFilters.length === 0 || matchesAdvancedFilters(info as unknown as Record<string, unknown>, advancedFilters);
+
+    const rows: Row[] = [];
+    const seenKeys = new Set<string>();
+
+    for (const cara of carasInfo) {
+      const propuesta = propuestaMap.get(cara.propuesta_id);
+      if (!propuesta || !isAllowed(propuesta)) continue;
+      const k = `${cara.propuesta_id}-${cara.sc_id}`;
+      seenKeys.add(k);
+      const invs = invByKey.get(k) || [];
+      rows.push({ propuesta, cara, inventarios: invs });
     }
 
-    // Collect all catorcena keys from both inventarios and carasInfo
-    const allCatKeys = new Set<string>();
-    catorcenaMap.forEach((_, k) => allCatKeys.add(k));
-    caraMap.forEach((_, k) => allCatKeys.add(k));
-
-    // Build groups
-    const groups: CatorcenaGroup[] = [];
-    for (const catKey of allCatKeys) {
-      const [numStr, anioStr] = catKey.split('-');
-      const num = parseInt(numStr, 10);
-      const anio = parseInt(anioStr, 10);
-      if (isNaN(num) || isNaN(anio)) continue;
-
-      // Gather all propuesta_ids for this catorcena from both maps
-      const propIdsFromInv = catorcenaMap.get(catKey);
-      const propIdsFromCaras = caraMap.get(catKey);
-      const allPropIds = new Set<number>();
-      if (propIdsFromInv) propIdsFromInv.forEach((_, pid) => allPropIds.add(pid));
-      if (propIdsFromCaras) propIdsFromCaras.forEach((_, pid) => allPropIds.add(pid));
-
-      const propuestas: PropuestaGroupItem[] = [];
-      for (const pid of allPropIds) {
-        const info = propuestaMap.get(pid);
-        if (!info) continue;
-        if (advancedFilters.length > 0 && !matchesAdvancedFilters(info as unknown as Record<string, unknown>, advancedFilters)) continue;
-
-        // Build circuitos from carasInfo
-        const carasForProp = propIdsFromCaras?.get(pid);
-        const invForProp = propIdsFromInv?.get(pid);
-
-        // Collect all sc_ids from both sources
-        const allScIds = new Set<number>();
-        if (carasForProp) carasForProp.forEach((_, scId) => allScIds.add(scId));
-        if (invForProp) invForProp.forEach((_, scId) => allScIds.add(scId));
-
-        const circuitos: CircuitoGroupItem[] = [];
-        for (const scId of allScIds) {
-          const cara = carasForProp?.get(scId);
-          const invItems = invForProp?.get(scId) || [];
-
-          if (cara) {
-            circuitos.push({ cara, inventarios: invItems });
-          } else if (invItems.length > 0) {
-            // Build a synthetic cara from inventory data
-            const firstInv = invItems[0];
-            circuitos.push({
-              cara: {
-                propuesta_id: pid,
-                sc_id: scId,
-                articulo: firstInv.articulo || '',
-                ciudad: firstInv.plaza || '',
-                formato: firstInv.formato || '',
-                caras_solicitadas: 0,
-                bonificacion: 0,
-                caras_esperadas: invItems.length,
-                reservas_count: invItems.filter(i => i.estatus_reserva === 'reservado').length,
-                numero_catorcena: num,
-                anio_catorcena: anio,
-              },
-              inventarios: invItems,
-            });
-          }
-        }
-
-        propuestas.push({ info, circuitos });
-      }
-
-      // Sort propuestas by displayed name
-      propuestas.sort((a, b) => {
-        const an = a.info.campana_nombre || a.info.nombre_campania || '';
-        const bn = b.info.campana_nombre || b.info.nombre_campania || '';
-        return an.localeCompare(bn);
-      });
-
-      if (propuestas.length > 0) {
-        groups.push({ key: catKey, num, anio, propuestas });
-      }
+    for (const [k, invs] of invByKey) {
+      if (seenKeys.has(k)) continue;
+      const [pidStr, scStr] = k.split('-');
+      const pid = parseInt(pidStr, 10);
+      const scId = parseInt(scStr, 10);
+      const propuesta = propuestaMap.get(pid);
+      if (!propuesta || !isAllowed(propuesta)) continue;
+      const firstInv = invs[0];
+      const cara: CaraInfo = {
+        propuesta_id: pid,
+        sc_id: scId,
+        articulo: firstInv.articulo || '',
+        ciudad: firstInv.plaza || '',
+        formato: firstInv.formato || '',
+        caras_solicitadas: 0,
+        bonificacion: 0,
+        caras_esperadas: invs.length,
+        reservas_count: invs.filter(i => i.estatus_reserva === 'reservado').length,
+        numero_catorcena: firstInv.numero_catorcena,
+        anio_catorcena: firstInv.anio_catorcena,
+      };
+      rows.push({ propuesta, cara, inventarios: invs });
     }
 
-    // Sort groups by year then catorcena number
-    groups.sort((a, b) => a.anio !== b.anio ? a.anio - b.anio : a.num - b.num);
-
-    // Filtrar catorcenas fuera del rango seleccionado
+    // Range filter on catorcena
+    let filteredRows = rows;
     if (filters.yearInicio && filters.yearFin && filters.catorcenaInicio && filters.catorcenaFin) {
       const rangeStart = filters.yearInicio * 100 + filters.catorcenaInicio;
       const rangeEnd = filters.yearFin * 100 + filters.catorcenaFin;
-      return groups.filter(g => {
-        const val = g.anio * 100 + g.num;
+      filteredRows = rows.filter(r => {
+        const ref = r.cara || r.inventarios[0];
+        if (!ref) return false;
+        const num = (ref as { numero_catorcena: number }).numero_catorcena || 0;
+        const anio = (ref as { anio_catorcena: number }).anio_catorcena || 0;
+        const val = anio * 100 + num;
         return val >= rangeStart && val <= rangeEnd;
       });
     }
 
-    return groups;
-  }, [data, filters.yearInicio, filters.yearFin, filters.catorcenaInicio, filters.catorcenaFin, advancedFilters]);
+    function buildTree(currentRows: Row[], levels: GroupByField[], parentKey: string): GroupNode[] {
+      if (levels.length === 0) return [];
+      const [head, ...rest] = levels;
+      const buckets = new Map<string, { value: { key: string; label: string; meta?: GroupNode['meta'] }; rows: Row[] }>();
 
-  // Toggle helpers
-  const toggleCatorcena = (key: string) => {
-    setExpandedCatorcenas(prev => {
+      for (const r of currentRows) {
+        const v = getGroupValue(r, head);
+        if (!buckets.has(v.key)) buckets.set(v.key, { value: v, rows: [] });
+        buckets.get(v.key)!.rows.push(r);
+      }
+
+      const nodes: GroupNode[] = [];
+      buckets.forEach(({ value, rows: bucketRows }) => {
+        const fullKey = `${parentKey}/${head}:${value.key}`;
+        const propuestaIds = new Set<number>();
+        const propInversionSeen = new Set<number>();
+        let inversion = 0;
+        for (const r of bucketRows) {
+          propuestaIds.add(r.propuesta.propuesta_id);
+          if (!propInversionSeen.has(r.propuesta.propuesta_id)) {
+            propInversionSeen.add(r.propuesta.propuesta_id);
+            inversion += Number(r.propuesta.inversion) || 0;
+          }
+        }
+        const node: GroupNode = {
+          field: head,
+          key: value.key,
+          fullKey,
+          label: value.label,
+          meta: value.meta,
+          children: rest.length > 0 ? buildTree(bucketRows, rest, fullKey) : [],
+          inversion,
+          propuestaIds,
+        };
+        if (rest.length === 0) {
+          node.inventarios = bucketRows.flatMap(r => r.inventarios);
+        }
+        nodes.push(node);
+      });
+
+      // Sort: catorcena/anio numeric, everything else by label
+      nodes.sort((a, b) => {
+        if (head === 'catorcena' && a.meta?.catorcena && b.meta?.catorcena) {
+          if (a.meta.catorcena.anio !== b.meta.catorcena.anio) return a.meta.catorcena.anio - b.meta.catorcena.anio;
+          return a.meta.catorcena.num - b.meta.catorcena.num;
+        }
+        if (head === 'anio') return Number(a.key) - Number(b.key);
+        return a.label.localeCompare(b.label);
+      });
+
+      return nodes;
+    }
+
+    return buildTree(filteredRows, effectiveGroupings, '');
+  }, [data, filters.yearInicio, filters.yearFin, filters.catorcenaInicio, filters.catorcenaFin, advancedFilters, effectiveGroupings]);
+
+  const toggleNode = (key: string) => {
+    setExpandedNodes(prev => {
       const next = new Set(prev);
       if (next.has(key)) next.delete(key); else next.add(key);
       return next;
     });
   };
 
-  const togglePropuesta = (id: number) => {
-    setExpandedPropuestas(prev => {
-      const next = new Set(prev);
-      if (next.has(id)) next.delete(id); else next.add(id);
-      return next;
-    });
-  };
-
-  const toggleCircuito = (key: string) => {
-    setExpandedCircuitos(prev => {
+  const toggleCircuitInventory = (key: string) => {
+    setExpandedCircuitInventories(prev => {
       const next = new Set(prev);
       if (next.has(key)) next.delete(key); else next.add(key);
       return next;
     });
   };
 
-  // Count totals
+  // Total propuestas (unique) across the tree
   const totalPropuestas = useMemo(() => {
     const ids = new Set<number>();
-    catorcenaGroups.forEach(g => g.propuestas.forEach(p => ids.add(p.info.propuesta_id)));
+    const walk = (nodes: GroupNode[]) => {
+      for (const n of nodes) {
+        n.propuestaIds.forEach(id => ids.add(id));
+        if (n.children.length > 0) walk(n.children);
+      }
+    };
+    walk(groupTree);
     return ids.size;
-  }, [catorcenaGroups]);
+  }, [groupTree]);
 
   // CSV Export
   const handleExportCSV = async () => {
     setIsExporting(true);
     try {
-      if (!catorcenaGroups || catorcenaGroups.length === 0) {
+      if (!groupTree || groupTree.length === 0) {
         alert('No hay datos para exportar.');
         return;
       }
@@ -348,88 +449,60 @@ export default function PropuestasVersionarioView({ isDark, filters, advancedFil
         'Descripción (Opcional)', 'Inicio o Periodo', 'Fin o Segmento', 'Arte',
         'Código de arte (Opcional)', 'Arte Url (Opcional)', 'Origen del arte (Opcional)',
         'Unidad', 'Cara', 'Ciudad', 'Tipo de Distribución', 'Reproducciones', 'Notas',
-        'Estatus', 'Catorcena',
+        'Estatus',
       ];
 
       const rows: string[][] = [];
 
-      for (const group of catorcenaGroups) {
-        const catorcenaLabel = `Cat ${group.num}/${group.anio}`;
-        for (const prop of (group.propuestas || [])) {
-          const info = prop.info || ({} as typeof prop.info);
-          for (const circ of (prop.circuitos || [])) {
-            const invs = circ.inventarios || [];
-            if (invs.length > 0) {
-              for (const inv of invs) {
-                rows.push([
-                  info.campana_nombre || info.nombre_campania || '',
-                  info.anunciante || '',
-                  String(info.inversion ?? ''),
-                  '',
-                  '',
-                  String(inv.tarifa_publica_sc ?? ''),
-                  '',
-                  inv.aps_especifico ? String(inv.aps_especifico) : '',
-                  info.cuic || '',
-                  inv.articulo || '',
-                  info.vendedor || '',
-                  info.descripcion || '',
-                  `Cat ${info.catorcena_inicio_num ?? ''}/${info.catorcena_inicio_anio ?? ''}`,
-                  `Cat ${info.catorcena_fin_num ?? ''}/${info.catorcena_fin_anio ?? ''}`,
-                  '',
-                  '',
-                  '',
-                  '',
-                  inv.codigo_unico || '',
-                  inv.tipo_de_cara || '',
-                  inv.plaza || '',
-                  inv.tradicional_digital || '',
-                  '',
-                  '',
-                  info.status || '',
-                  catorcenaLabel,
-                ]);
-              }
-            } else {
+      // Walk leaves and emit one row per inventory item
+      const walk = (nodes: GroupNode[]) => {
+        for (const n of nodes) {
+          if (n.children.length > 0) {
+            walk(n.children);
+          } else if (n.inventarios && n.inventarios.length > 0) {
+            for (const inv of n.inventarios) {
+              const info = inv as InventarioItem;
+              // Need PropuestaInfo here; we kept it on row-level but not on node. Look it up from data.propuestasInfo.
+              const propuesta = data?.propuestasInfo.find(p => p.propuesta_id === inv.propuesta_id);
+              if (!propuesta) continue;
               rows.push([
-                info.campana_nombre || '',
-                info.anunciante || '',
-                String(info.inversion ?? ''),
+                propuesta.campana_nombre || propuesta.nombre_campania || '',
+                propuesta.anunciante || '',
+                String(propuesta.inversion ?? ''),
+                '',
+                '',
+                String(info.tarifa_publica_sc ?? ''),
+                '',
+                info.aps_especifico ? String(info.aps_especifico) : '',
+                propuesta.cuic || '',
+                info.articulo || '',
+                propuesta.vendedor || '',
+                propuesta.descripcion || '',
+                `Cat ${propuesta.catorcena_inicio_num ?? ''}/${propuesta.catorcena_inicio_anio ?? ''}`,
+                `Cat ${propuesta.catorcena_fin_num ?? ''}/${propuesta.catorcena_fin_anio ?? ''}`,
                 '',
                 '',
                 '',
                 '',
-                '',
-                info.cuic || '',
-                circ.cara?.articulo || '',
-                info.vendedor || '',
-                info.descripcion || '',
-                `Cat ${info.catorcena_inicio_num ?? ''}/${info.catorcena_inicio_anio ?? ''}`,
-                `Cat ${info.catorcena_fin_num ?? ''}/${info.catorcena_fin_anio ?? ''}`,
+                info.codigo_unico || '',
+                info.tipo_de_cara || '',
+                info.plaza || '',
+                info.tradicional_digital || '',
                 '',
                 '',
-                '',
-                '',
-                '',
-                '',
-                circ.cara?.ciudad || '',
-                '',
-                '',
-                '',
-                info.status || '',
-                catorcenaLabel,
+                propuesta.status || '',
               ]);
             }
           }
         }
-      }
+      };
+      walk(groupTree);
 
       if (rows.length === 0) {
-        alert(`Hay ${catorcenaGroups.length} catorcena(s) pero ninguna propuesta/circuito generó filas exportables. Revisa que las propuestas tengan circuitos o inventarios.`);
+        alert('No hay filas exportables. Revisa que las propuestas tengan circuitos o inventarios.');
         return;
       }
 
-      // Excel: array de arrays con headers + filas. null/undefined \u2192 ''.
       const safeCell = (val: unknown) => (val == null ? '' : String(val));
       const sheetData = [headers, ...rows.map(r => r.map(safeCell))];
 
@@ -445,6 +518,137 @@ export default function PropuestasVersionarioView({ isDark, filters, advancedFil
     }
   };
 
+  // Top-level count for header
+  const topLevelLabel = effectiveGroupings[0]
+    ? AVAILABLE_GROUPINGS.find(g => g.field === effectiveGroupings[0])?.label || effectiveGroupings[0]
+    : 'Grupos';
+
+  // Recursive renderer
+  const renderNode = (node: GroupNode, depth: number): ReactElement => {
+    const isExpanded = expandedNodes.has(node.fullKey);
+    const isLeaf = node.children.length === 0;
+    const Icon = getFieldIcon(node.field);
+    const hasInventarios = !!(node.inventarios && node.inventarios.length > 0);
+
+    // Visual treatment per depth
+    const headerBg = depth === 0
+      ? (isDark ? 'bg-zinc-800/30 hover:bg-zinc-800/50' : 'bg-gray-50 hover:bg-gray-100')
+      : depth === 1
+        ? (isDark ? 'bg-indigo-900/10 hover:bg-indigo-900/20' : 'bg-indigo-50/50 hover:bg-indigo-50')
+        : depth === 2
+          ? (isDark ? 'hover:bg-zinc-800/30' : 'hover:bg-gray-50')
+          : (isDark ? 'hover:bg-zinc-800/20' : 'hover:bg-gray-50');
+
+    const iconColor = depth === 0
+      ? (isDark ? 'text-purple-400' : 'text-purple-600')
+      : depth === 1
+        ? (isDark ? 'text-indigo-400' : 'text-indigo-600')
+        : (isDark ? 'text-zinc-400' : 'text-gray-500');
+
+    const paddingLeft = 20 + depth * 16;
+
+    // Build status badge for propuesta nodes
+    let statusBadge: ReactElement | null = null;
+    if (node.field === 'propuesta' && node.meta?.propuesta) {
+      const sc = getStatusColor(node.meta.propuesta.status, isDark);
+      statusBadge = (
+        <span className={`px-2 py-0.5 rounded-full text-[10px] ${sc.bg} ${sc.text} border ${sc.border}`}>
+          {node.meta.propuesta.status}
+        </span>
+      );
+    }
+
+    return (
+      <div key={node.fullKey} className={depth === 0 ? 'group' : `border-t ${isDark ? 'border-zinc-800/30' : 'border-gray-200'}`}>
+        <button
+          onClick={() => toggleNode(node.fullKey)}
+          style={{ paddingLeft }}
+          className={`w-full flex items-center gap-3 pr-5 py-${depth === 0 ? '4' : '3'} transition-all ${headerBg}`}
+        >
+          {isExpanded ? (
+            <ChevronDown className={`h-${depth === 0 ? '5' : '4'} w-${depth === 0 ? '5' : '4'} ${iconColor}`} />
+          ) : (
+            <ChevronRight className={`h-${depth === 0 ? '5' : '4'} w-${depth === 0 ? '5' : '4'} ${iconColor}`} />
+          )}
+          <Icon className={`h-${depth === 0 ? '5' : '4'} w-${depth === 0 ? '5' : '4'} ${iconColor}`} />
+          <span className={`font-${depth <= 1 ? 'semibold' : 'medium'} ${isDark ? 'text-white' : 'text-gray-900'} text-sm flex-1 text-left truncate`}>
+            {node.label}
+          </span>
+          {statusBadge}
+          {node.meta?.propuesta?.anunciante && node.field === 'propuesta' && (
+            <span className={`px-2 py-0.5 rounded-full text-[10px] ${isDark ? 'bg-cyan-500/15 text-cyan-300' : 'bg-cyan-50 text-cyan-700'} border border-cyan-500/25`}>
+              {node.meta.propuesta.anunciante}
+            </span>
+          )}
+          <span className={`px-2 py-0.5 rounded-full text-[10px] ${isDark ? 'bg-purple-500/15 text-purple-300' : 'bg-purple-50 text-purple-700'} border border-purple-500/25`}>
+            {node.propuestaIds.size} prop{node.propuestaIds.size !== 1 ? 's' : ''}
+          </span>
+          {node.inversion > 0 && (
+            <span className={`px-2 py-0.5 rounded-full text-[10px] ${isDark ? 'bg-green-500/15 text-green-300' : 'bg-green-50 text-green-700'} border border-green-500/25 flex items-center gap-1`}>
+              <DollarSign className="h-3 w-3" /> {node.inversion.toLocaleString()}
+            </span>
+          )}
+          {node.field === 'circuito' && node.meta?.cara && (
+            <span className={`px-1.5 py-0.5 rounded text-[9px] font-medium border ${
+              node.meta.cara.caras_esperadas > 0 && node.meta.cara.reservas_count >= node.meta.cara.caras_esperadas
+                ? isDark ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500/30' : 'bg-emerald-50 text-emerald-700 border-emerald-200'
+                : isDark ? 'bg-amber-500/20 text-amber-300 border-amber-500/30' : 'bg-amber-50 text-amber-700 border-amber-200'
+            }`}>
+              {node.meta.cara.reservas_count || 0}/{node.meta.cara.caras_esperadas || 0}
+            </span>
+          )}
+        </button>
+
+        {isExpanded && (
+          <div className={isDark ? 'bg-zinc-900/30' : 'bg-white'}>
+            {isLeaf ? (
+              // Leaf: show inventarios for this group
+              hasInventarios ? (
+                <div style={{ paddingLeft: paddingLeft + 32 }} className="py-2 pr-5 space-y-0.5">
+                  {node.inventarios!.map((inv, idx) => (
+                    <div key={`${node.fullKey}-${inv.codigo_unico}-${idx}`} className={`flex items-center gap-2 text-[10px] ${isDark ? 'text-zinc-500' : 'text-gray-400'} py-0.5 flex-wrap`}>
+                      <MapPin className={`h-2.5 w-2.5 ${isDark ? 'text-zinc-600' : 'text-gray-400'}`} />
+                      <span className={`${isDark ? 'text-zinc-400' : 'text-gray-500'} font-mono`}>{inv.codigo_unico}</span>
+                      <span className={isDark ? 'text-zinc-600' : 'text-gray-300'}>|</span>
+                      <span>{inv.tipo_de_cara || 'Sin tipo'}</span>
+                      <span className={isDark ? 'text-zinc-600' : 'text-gray-300'}>|</span>
+                      <span>{inv.plaza || 'Sin plaza'}</span>
+                      {inv.estatus_reserva && (
+                        <>
+                          <span className={isDark ? 'text-zinc-600' : 'text-gray-300'}>|</span>
+                          <span className={`px-1.5 py-0.5 rounded text-[9px] ${
+                            inv.estatus_reserva === 'reservado'
+                              ? isDark ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500/30' : 'bg-emerald-50 text-emerald-700 border-emerald-200'
+                              : isDark ? 'bg-zinc-500/20 text-zinc-400 border-zinc-500/30' : 'bg-gray-100 text-gray-500 border-gray-300'
+                          } border`}>
+                            {inv.estatus_reserva}
+                          </span>
+                        </>
+                      )}
+                      {Number(inv.tarifa_publica_sc) > 0 && (
+                        <span className={`text-[9px] ${isDark ? 'text-zinc-500' : 'text-gray-400'}`}>
+                          ${Number(inv.tarifa_publica_sc).toLocaleString('es-MX', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                        </span>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <p style={{ paddingLeft: paddingLeft + 32 }} className={`text-sm py-2 ${isDark ? 'text-zinc-500' : 'text-gray-400'}`}>Sin inventarios</p>
+              )
+            ) : (
+              node.children.map(child => renderNode(child, depth + 1))
+            )}
+          </div>
+        )}
+      </div>
+    );
+  };
+
+  // Suppress unused var warnings (kept for potential future use)
+  void expandedCircuitInventories;
+  void toggleCircuitInventory;
+
   return (
     <div className={`rounded-2xl border ${isDark ? 'border-zinc-800/80 bg-zinc-900/50' : 'border-gray-200 bg-white'} backdrop-blur-sm overflow-hidden`}>
       {/* Header */}
@@ -456,15 +660,15 @@ export default function PropuestasVersionarioView({ isDark, filters, advancedFil
             </div>
             <div>
               <h3 className={`text-sm font-semibold ${isDark ? 'text-white' : 'text-gray-900'}`}>Versionario de Propuestas</h3>
-              <p className={`text-xs ${isDark ? 'text-zinc-500' : 'text-gray-400'}`}>Propuestas desglosadas por catorcena</p>
+              <p className={`text-xs ${isDark ? 'text-zinc-500' : 'text-gray-400'}`}>Propuestas desglosadas — agrupado por {effectiveGroupings.map(f => AVAILABLE_GROUPINGS.find(g => g.field === f)?.label).filter(Boolean).join(' › ')}</p>
             </div>
           </div>
           <div className="flex items-center gap-3">
             <button
               onClick={handleExportCSV}
-              disabled={isExporting || catorcenaGroups.length === 0}
+              disabled={isExporting || groupTree.length === 0}
               className={`flex items-center gap-2 px-3 py-2 rounded-xl text-xs font-medium transition-all ${
-                isExporting || catorcenaGroups.length === 0
+                isExporting || groupTree.length === 0
                   ? isDark ? 'bg-zinc-800/30 text-zinc-600 cursor-not-allowed' : 'bg-gray-100 text-gray-300 cursor-not-allowed'
                   : isDark ? 'bg-zinc-800 text-zinc-300 hover:bg-zinc-700 border border-zinc-700/50' : 'bg-gray-100 text-gray-600 hover:bg-gray-200 border border-gray-200'
               }`}
@@ -474,8 +678,8 @@ export default function PropuestasVersionarioView({ isDark, filters, advancedFil
             </button>
             <div className={`w-px h-10 ${isDark ? 'bg-zinc-800' : 'bg-gray-200'}`} />
             <div className="text-right">
-              <p className={`text-2xl font-bold ${isDark ? 'text-white' : 'text-gray-900'}`}>{catorcenaGroups.length}</p>
-              <p className={`text-[10px] ${isDark ? 'text-zinc-500' : 'text-gray-400'} uppercase tracking-wide`}>Catorcenas</p>
+              <p className={`text-2xl font-bold ${isDark ? 'text-white' : 'text-gray-900'}`}>{groupTree.length}</p>
+              <p className={`text-[10px] ${isDark ? 'text-zinc-500' : 'text-gray-400'} uppercase tracking-wide`}>{topLevelLabel}</p>
             </div>
             <div className={`w-px h-10 ${isDark ? 'bg-zinc-800' : 'bg-gray-200'}`} />
             <div className="text-right">
@@ -512,7 +716,7 @@ export default function PropuestasVersionarioView({ isDark, filters, advancedFil
             Reintentar
           </button>
         </div>
-      ) : catorcenaGroups.length === 0 ? (
+      ) : groupTree.length === 0 ? (
         <div className="flex flex-col items-center justify-center h-64 text-center">
           <div className={`inline-flex items-center justify-center w-16 h-16 rounded-full ${isDark ? 'bg-purple-500/10' : 'bg-purple-50'} mb-4`}>
             <Calendar className={`w-8 h-8 ${isDark ? 'text-purple-400' : 'text-purple-600'}`} />
@@ -521,177 +725,7 @@ export default function PropuestasVersionarioView({ isDark, filters, advancedFil
         </div>
       ) : (
         <div className={`divide-y ${isDark ? 'divide-zinc-800/30' : 'divide-gray-200'}`}>
-          {catorcenaGroups.map(group => (
-            <div key={group.key} className="group">
-              {/* Catorcena Header */}
-              <button
-                onClick={() => toggleCatorcena(group.key)}
-                className={`w-full flex items-center gap-3 px-5 py-4 transition-all ${
-                  isDark ? 'bg-zinc-800/30 hover:bg-zinc-800/50' : 'bg-gray-50 hover:bg-gray-100'
-                }`}
-              >
-                {expandedCatorcenas.has(group.key) ? (
-                  <ChevronDown className={`h-5 w-5 ${isDark ? 'text-purple-400' : 'text-purple-600'}`} />
-                ) : (
-                  <ChevronRight className={`h-5 w-5 ${isDark ? 'text-purple-400' : 'text-purple-600'}`} />
-                )}
-                <Calendar className={`h-5 w-5 ${isDark ? 'text-purple-400' : 'text-purple-600'}`} />
-                <span className={`font-semibold ${isDark ? 'text-white' : 'text-gray-900'} text-sm`}>
-                  Cat {group.num} / {group.anio}
-                </span>
-                <span className={`px-2.5 py-1 rounded-full text-xs ${isDark ? 'bg-purple-500/20 text-purple-300 border-purple-500/30' : 'bg-purple-100 text-purple-700 border-purple-200'} border`}>
-                  {group.propuestas.length} propuesta{group.propuestas.length !== 1 ? 's' : ''}
-                </span>
-                {/* Total investment for catorcena */}
-                {(() => {
-                  const totalInversion = group.propuestas.reduce((s, p) => s + (Number(p.info.inversion) || 0), 0);
-                  return totalInversion > 0 ? (
-                    <span className={`px-2 py-0.5 rounded-full text-[10px] ${isDark ? 'bg-green-500/15 text-green-300' : 'bg-green-50 text-green-700'} border border-green-500/25 flex items-center gap-1`}>
-                      <DollarSign className="h-3 w-3" /> {totalInversion.toLocaleString()}
-                    </span>
-                  ) : null;
-                })()}
-              </button>
-
-              {/* Catorcena Content - Propuestas */}
-              {expandedCatorcenas.has(group.key) && (
-                <div className={isDark ? 'bg-zinc-900/50' : 'bg-white'}>
-                  {group.propuestas.map(prop => {
-                    const info = prop.info;
-                    const statusColor = getStatusColor(info.status, isDark);
-                    const isExpanded = expandedPropuestas.has(info.propuesta_id);
-                    const circuitosCount = prop.circuitos.length;
-
-                    return (
-                      <div key={info.propuesta_id} className={`border-t ${isDark ? 'border-zinc-800/30' : 'border-gray-200'}`}>
-                        {/* Propuesta Row */}
-                        <button
-                          onClick={() => togglePropuesta(info.propuesta_id)}
-                          className={`w-full flex items-center gap-3 px-6 py-3 ${isDark ? 'hover:bg-zinc-800/30' : 'hover:bg-gray-50'} transition-all`}
-                        >
-                          {isExpanded ? (
-                            <ChevronDown className={`h-4 w-4 ${isDark ? 'text-zinc-400' : 'text-gray-500'}`} />
-                          ) : (
-                            <ChevronRight className={`h-4 w-4 ${isDark ? 'text-zinc-400' : 'text-gray-500'}`} />
-                          )}
-                          <Package className={`h-4 w-4 ${isDark ? 'text-zinc-500' : 'text-gray-400'}`} />
-                          <span className={`font-medium ${isDark ? 'text-white' : 'text-gray-900'} text-sm flex-1 text-left truncate`}>
-                            {info.campana_nombre || info.nombre_campania || `Propuesta #${info.propuesta_id}`}
-                          </span>
-                          <span className={`px-2 py-0.5 rounded-full text-[10px] ${statusColor.bg} ${statusColor.text} border ${statusColor.border}`}>
-                            {info.status}
-                          </span>
-                          {info.anunciante && (
-                            <span className={`px-2 py-0.5 rounded-full text-[10px] ${isDark ? 'bg-cyan-500/15 text-cyan-300' : 'bg-cyan-50 text-cyan-700'} border border-cyan-500/25`}>
-                              {info.anunciante}
-                            </span>
-                          )}
-                          <span className={`px-2 py-0.5 rounded-full text-[10px] ${isDark ? 'bg-green-500/15 text-green-300' : 'bg-green-50 text-green-700'} border border-green-500/25 flex items-center gap-1`}>
-                            <DollarSign className="h-3 w-3" />
-                            {Number(info.inversion) > 0 ? Number(info.inversion).toLocaleString('es-MX', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : 'Sin inversión'}
-                          </span>
-                          {circuitosCount > 0 && (
-                            <span className={`px-2 py-0.5 rounded-full text-[10px] ${isDark ? 'bg-blue-500/15 text-blue-300' : 'bg-blue-50 text-blue-700'} border border-blue-500/25 flex items-center gap-1`}>
-                              <Layers className="h-3 w-3" /> {circuitosCount} circuito{circuitosCount !== 1 ? 's' : ''}
-                            </span>
-                          )}
-                        </button>
-
-                        {/* Propuesta Expanded - Circuitos */}
-                        {isExpanded && (
-                          <div className={`${isDark ? 'bg-zinc-950/50' : 'bg-gray-50'} px-8 py-3`}>
-                            {prop.circuitos.length === 0 ? (
-                              <p className={`text-sm ${isDark ? 'text-zinc-500' : 'text-gray-400'}`}>Sin circuitos asignados</p>
-                            ) : (
-                              <div className="space-y-1">
-                                {prop.circuitos.map(circ => {
-                                  const circKey = `${info.propuesta_id}-${circ.cara.sc_id}`;
-                                  const isCircExpanded = expandedCircuitos.has(circKey);
-                                  const hasInventarios = circ.inventarios.length > 0;
-                                  const reserved = circ.cara.reservas_count || 0;
-                                  const expected = circ.cara.caras_esperadas || 0;
-                                  const counterFull = expected > 0 && reserved >= expected;
-
-                                  return (
-                                    <div key={circKey} className={`border-l-2 ${isDark ? 'border-zinc-700' : 'border-gray-300'} pl-2`}>
-                                      <div
-                                        onClick={() => hasInventarios && toggleCircuito(circKey)}
-                                        className={`w-full flex items-center gap-2 py-1.5 text-left ${hasInventarios ? (isDark ? 'hover:bg-zinc-800/30 cursor-pointer' : 'hover:bg-gray-100 cursor-pointer') : ''} rounded px-1 flex-wrap`}
-                                      >
-                                        {hasInventarios ? (
-                                          isCircExpanded ? (
-                                            <ChevronDown className={`h-3 w-3 ${isDark ? 'text-zinc-500' : 'text-gray-400'}`} />
-                                          ) : (
-                                            <ChevronRight className={`h-3 w-3 ${isDark ? 'text-zinc-500' : 'text-gray-400'}`} />
-                                          )
-                                        ) : (
-                                          <span className="w-3" />
-                                        )}
-                                        <ClipboardList className={`h-3 w-3 ${isDark ? 'text-purple-400' : 'text-purple-600'}`} />
-                                        <span className={`text-[11px] ${isDark ? 'text-zinc-300' : 'text-gray-700'}`}>
-                                          {[circ.cara.articulo, circ.cara.formato, circ.cara.ciudad].filter(Boolean).join(' · ') || `Circuito #${circ.cara.sc_id}`}
-                                        </span>
-                                        {/* Reserved/Expected counter badge */}
-                                        {expected > 0 && (
-                                          <span className={`px-1.5 py-0.5 rounded text-[9px] font-medium border flex items-center gap-1 ${
-                                            counterFull
-                                              ? isDark ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500/30' : 'bg-emerald-50 text-emerald-700 border-emerald-200'
-                                              : isDark ? 'bg-amber-500/20 text-amber-300 border-amber-500/30' : 'bg-amber-50 text-amber-700 border-amber-200'
-                                          }`}>
-                                            {reserved}/{expected}
-                                          </span>
-                                        )}
-                                        {circ.cara.bonificacion > 0 && (
-                                          <span className={`px-1.5 py-0.5 rounded text-[9px] ${isDark ? 'bg-amber-500/15 text-amber-300' : 'bg-amber-50 text-amber-700'} border border-amber-500/25`}>
-                                            Bonif: {circ.cara.bonificacion}
-                                          </span>
-                                        )}
-                                      </div>
-
-                                      {/* Circuito Expanded - Inventory Items */}
-                                      {isCircExpanded && hasInventarios && (
-                                        <div className="pl-5 py-1 space-y-0.5">
-                                          {circ.inventarios.map((inv, idx) => (
-                                            <div key={`${inv.codigo_unico}-${idx}`} className={`flex items-center gap-2 text-[10px] ${isDark ? 'text-zinc-500' : 'text-gray-400'} py-0.5 flex-wrap`}>
-                                              <MapPin className={`h-2.5 w-2.5 ${isDark ? 'text-zinc-600' : 'text-gray-400'}`} />
-                                              <span className={`${isDark ? 'text-zinc-400' : 'text-gray-500'} font-mono`}>{inv.codigo_unico}</span>
-                                              <span className={isDark ? 'text-zinc-600' : 'text-gray-300'}>|</span>
-                                              <span>{inv.tipo_de_cara || 'Sin tipo'}</span>
-                                              <span className={isDark ? 'text-zinc-600' : 'text-gray-300'}>|</span>
-                                              <span>{inv.plaza || 'Sin plaza'}</span>
-                                              <span className={isDark ? 'text-zinc-600' : 'text-gray-300'}>|</span>
-                                              {inv.estatus_reserva && (
-                                                <span className={`px-1.5 py-0.5 rounded text-[9px] ${
-                                                  inv.estatus_reserva === 'reservado'
-                                                    ? isDark ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500/30' : 'bg-emerald-50 text-emerald-700 border-emerald-200'
-                                                    : isDark ? 'bg-zinc-500/20 text-zinc-400 border-zinc-500/30' : 'bg-gray-100 text-gray-500 border-gray-300'
-                                                } border`}>
-                                                  {inv.estatus_reserva}
-                                                </span>
-                                              )}
-                                              {Number(inv.tarifa_publica_sc) > 0 && (
-                                                <span className={`text-[9px] ${isDark ? 'text-zinc-500' : 'text-gray-400'}`}>
-                                                  ${Number(inv.tarifa_publica_sc).toLocaleString('es-MX', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                                                </span>
-                                              )}
-                                            </div>
-                                          ))}
-                                        </div>
-                                      )}
-                                    </div>
-                                  );
-                                })}
-                              </div>
-                            )}
-                          </div>
-                        )}
-                      </div>
-                    );
-                  })}
-                </div>
-              )}
-            </div>
-          ))}
+          {groupTree.map(node => renderNode(node, 0))}
         </div>
       )}
 
@@ -699,8 +733,8 @@ export default function PropuestasVersionarioView({ isDark, filters, advancedFil
       {!isLoading && (
         <div className={`flex items-center justify-between px-5 py-3 border-t ${isDark ? 'border-zinc-800/50 bg-zinc-900/30 text-zinc-500' : 'border-gray-200 bg-gray-50 text-gray-400'} text-xs`}>
           <span>
-            {catorcenaGroups.length > 0
-              ? `${catorcenaGroups.length} catorcena${catorcenaGroups.length !== 1 ? 's' : ''} · ${totalPropuestas} propuesta${totalPropuestas !== 1 ? 's' : ''}`
+            {groupTree.length > 0
+              ? `${groupTree.length} ${topLevelLabel.toLowerCase()}${groupTree.length !== 1 ? 's' : ''} · ${totalPropuestas} propuesta${totalPropuestas !== 1 ? 's' : ''}`
               : 'Sin resultados'}
             {data?.total != null && data.total > limit && ` (página ${page} de ${Math.ceil(data.total / limit)}, ${data.total} total)`}
           </span>

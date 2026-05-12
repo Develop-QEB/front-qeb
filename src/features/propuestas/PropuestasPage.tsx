@@ -5,7 +5,8 @@ import {
   Search, Download, Filter, ChevronDown, ChevronRight, X, SlidersHorizontal,
   ArrowUpDown, Calendar, DollarSign, FileText, Building2, MessageSquare,
   CheckCircle, Users, Send, Loader2, User, Share2, MapPinned, Wrench, Clock,
-  Pencil, Trash2, Package, MapPin, Eye, Plus, AlertTriangle, List, LayoutGrid
+  Pencil, Trash2, Package, MapPin, Eye, Plus, AlertTriangle, List, LayoutGrid,
+  Layers, Check
 } from 'lucide-react';
 import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip as RechartsTooltip } from 'recharts';
 import { Header } from '../../components/layout/Header';
@@ -14,7 +15,14 @@ import { solicitudesService, UserOption } from '../../services/solicitudes.servi
 import { Propuesta, Catorcena } from '../../types';
 import { formatCurrency, formatDate } from '../../lib/utils';
 import { AssignInventarioModal } from './AssignInventarioModal';
-import PropuestasVersionarioView from './PropuestasVersionarioView';
+import PropuestasVersionarioView, {
+  AVAILABLE_GROUPINGS as VERSIONARIO_GROUPINGS,
+  DEFAULT_GROUPINGS as VERSIONARIO_DEFAULT_GROUPINGS,
+  MAX_GROUPINGS as VERSIONARIO_MAX_GROUPINGS,
+  GROUPINGS_STORAGE_KEY as VERSIONARIO_GROUPINGS_KEY,
+  loadGroupingsFromStorage as loadVersionarioGroupings,
+  type GroupByField as VersionarioGroupByField,
+} from './PropuestasVersionarioView';
 import { UserAvatar } from '../../components/ui/user-avatar';
 import { useAuthStore } from '../../store/authStore';
 import { useThemeStore } from '../../store/themeStore';
@@ -1317,6 +1325,23 @@ export function PropuestasPage() {
   const limit = 20;
   const [activeView, setActiveView] = useState<'tabla' | 'versionario'>('tabla');
   const [exportingLayout, setExportingLayout] = useState(false);
+  // Versionario (Desglose) grouping config — controlled here so the filter chip lives in the filters bar
+  const [versionarioGroupings, setVersionarioGroupings] = useState<VersionarioGroupByField[]>(() => loadVersionarioGroupings());
+  const [showVersionarioGroupConfig, setShowVersionarioGroupConfig] = useState(false);
+  useEffect(() => {
+    try { localStorage.setItem(VERSIONARIO_GROUPINGS_KEY, JSON.stringify(versionarioGroupings)); } catch { /* ignore */ }
+  }, [versionarioGroupings]);
+  const toggleVersionarioGrouping = (field: VersionarioGroupByField) => {
+    setVersionarioGroupings(prev => {
+      if (prev.includes(field)) {
+        if (prev.length === 1) return prev;
+        return prev.filter(f => f !== field);
+      }
+      if (prev.length < VERSIONARIO_MAX_GROUPINGS) return [...prev, field];
+      return [...prev.slice(1), field];
+    });
+  };
+  const resetVersionarioGroupings = () => setVersionarioGroupings(VERSIONARIO_DEFAULT_GROUPINGS);
 
   // Modals
   const [statusPropuesta, setStatusPropuesta] = useState<Propuesta | null>(null);
@@ -2176,18 +2201,79 @@ export function PropuestasPage() {
                   {sortOrder === 'asc' ? '↑ Asc' : '↓ Desc'}
                 </button>
 
-                {/* Divider */}
+                {/* Group By — Tabla: FilterChip single. Desglose: multi-select max 4. */}
                 <div className={`h-4 w-px ${isDark ? 'bg-zinc-700/50' : 'bg-gray-200'} mx-1`} />
-
-                {/* Group By */}
-                <FilterChip
-                  label="Agrupar"
-                  options={['status', 'asignado', 'asesor', 'creador_nombre']}
-                  value={groupBy}
-                  onChange={(val) => { setGroupBy(val); setExpandedGroups(new Set()); }}
-                  onClear={() => { setGroupBy(''); setExpandedGroups(new Set()); }}
-                  isDark={isDark}
-                />
+                {activeView === 'tabla' ? (
+                  <FilterChip
+                    label="Agrupar"
+                    options={['status', 'asignado', 'asesor', 'creador_nombre']}
+                    value={groupBy}
+                    onChange={(val) => { setGroupBy(val); setExpandedGroups(new Set()); }}
+                    onClear={() => { setGroupBy(''); setExpandedGroups(new Set()); }}
+                    isDark={isDark}
+                  />
+                ) : (
+                  <div className="relative">
+                    <button
+                      onClick={() => setShowVersionarioGroupConfig(!showVersionarioGroupConfig)}
+                      className={`flex items-center gap-1.5 px-2 py-1 rounded-full text-xs transition-all border ${
+                        isDark ? 'bg-purple-500/10 text-purple-300 border-purple-500/30 hover:bg-purple-500/20' : 'bg-purple-50 text-purple-700 border-purple-200 hover:bg-purple-100'
+                      }`}
+                    >
+                      <Layers className="h-3 w-3" />
+                      Agrupar
+                      {versionarioGroupings.length > 0 && (
+                        <span className="px-1 py-0.5 rounded bg-purple-600 text-white text-[10px]">
+                          {versionarioGroupings.length}
+                        </span>
+                      )}
+                    </button>
+                    {showVersionarioGroupConfig && (
+                      <>
+                        <div className="fixed inset-0 z-10" onClick={() => setShowVersionarioGroupConfig(false)} />
+                        <div className={`absolute right-0 top-full mt-1 z-20 ${isDark ? 'bg-[#1a1025] border-purple-900/50' : 'bg-white border-purple-200'} border rounded-lg shadow-xl p-2 min-w-[240px]`}>
+                          <p className={`text-[10px] uppercase tracking-wide px-2 py-1 ${isDark ? 'text-zinc-500' : 'text-gray-400'}`}>
+                            Agrupar por (max {VERSIONARIO_MAX_GROUPINGS})
+                          </p>
+                          {VERSIONARIO_GROUPINGS.map(({ field, label }) => {
+                            const idx = versionarioGroupings.indexOf(field);
+                            const isActive = idx !== -1;
+                            const orderColors = ['text-purple-400', 'text-pink-400', 'text-cyan-400', 'text-amber-400'];
+                            return (
+                              <button
+                                key={field}
+                                onClick={() => toggleVersionarioGrouping(field)}
+                                className={`w-full flex items-center gap-2 px-2 py-1.5 text-xs rounded ${isDark ? 'hover:bg-purple-900/30' : 'hover:bg-purple-100'} transition-colors ${
+                                  isActive ? (isDark ? 'text-purple-300' : 'text-purple-700') : (isDark ? 'text-zinc-400' : 'text-gray-500')
+                                }`}
+                              >
+                                <div className={`w-4 h-4 rounded border flex items-center justify-center flex-shrink-0 ${
+                                  isActive ? 'bg-purple-600 border-purple-600' : isDark ? 'border-purple-500/50' : 'border-purple-300'
+                                }`}>
+                                  {isActive && <Check className="h-3 w-3 text-white" />}
+                                </div>
+                                <span className="flex-1 text-left">{label}</span>
+                                {isActive && (
+                                  <span className={`text-[10px] font-bold ${orderColors[idx] || 'text-purple-400'}`}>
+                                    {idx + 1}°
+                                  </span>
+                                )}
+                              </button>
+                            );
+                          })}
+                          <div className={`border-t ${isDark ? 'border-purple-900/30' : 'border-purple-200'} mt-2 pt-2`}>
+                            <button
+                              onClick={resetVersionarioGroupings}
+                              className={`w-full text-xs ${isDark ? 'text-zinc-400 hover:text-zinc-200' : 'text-gray-500 hover:text-gray-800'} py-1 text-center`}
+                            >
+                              Restaurar predeterminados
+                            </button>
+                          </div>
+                        </div>
+                      </>
+                    )}
+                  </div>
+                )}
 
                 {/* Clear All */}
                 {hasActiveFilters && (
@@ -2221,6 +2307,7 @@ export function PropuestasPage() {
               tipoPeriodo: tipoPeriodo || undefined,
             }}
             advancedFilters={advancedFilters}
+            activeGroupings={versionarioGroupings}
           />
         )}
 
