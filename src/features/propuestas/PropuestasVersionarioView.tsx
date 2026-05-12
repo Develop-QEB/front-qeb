@@ -1,4 +1,4 @@
-import { useState, useMemo, useEffect, type ReactElement } from 'react';
+import { useState, useMemo, type ReactElement } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { ChevronDown, ChevronRight, Calendar, Loader2, Download, Package, ClipboardList, MapPin, DollarSign, User, Briefcase, Hash, BadgeCheck, Clock, CalendarDays } from 'lucide-react';
 import * as XLSX from 'xlsx';
@@ -44,6 +44,7 @@ interface InventarioItem {
   anio_catorcena: number;
   solicitud_caras_id: number;
   aps_especifico?: number | null;
+  caras_totales?: number; // viene del back; reservas en este grupo de inv
 }
 
 interface PropuestaInfo {
@@ -143,8 +144,13 @@ function getGroupValue(row: Row, field: GroupByField): { key: string; label: str
   switch (field) {
     case 'catorcena': {
       const ref = row.cara || row.inventarios[0];
-      const num = ref ? (ref as { numero_catorcena: number }).numero_catorcena : 0;
-      const anio = ref ? (ref as { anio_catorcena: number }).anio_catorcena : 0;
+      let num = ref ? (ref as { numero_catorcena: number }).numero_catorcena : 0;
+      let anio = ref ? (ref as { anio_catorcena: number }).anio_catorcena : 0;
+      // Propuestas vacías (sin cara ni inventario): usar catorcena_inicio de la propuesta.
+      if (!num && !anio && row.propuesta) {
+        num = row.propuesta.catorcena_inicio_num || 0;
+        anio = row.propuesta.catorcena_inicio_anio || 0;
+      }
       return { key: `${num}-${anio}`, label: `Cat ${num} / ${anio}`, meta: { catorcena: { num, anio } } };
     }
     case 'asesor': {
@@ -178,7 +184,8 @@ function getGroupValue(row: Row, field: GroupByField): { key: string; label: str
     }
     case 'anio': {
       const ref = row.cara || row.inventarios[0];
-      const anio = ref ? (ref as { anio_catorcena: number }).anio_catorcena : 0;
+      let anio = ref ? (ref as { anio_catorcena: number }).anio_catorcena : 0;
+      if (!anio && row.propuesta) anio = row.propuesta.catorcena_inicio_anio || 0;
       return { key: String(anio), label: `Año ${anio}` };
     }
   }
@@ -261,18 +268,15 @@ export default function PropuestasVersionarioView({ isDark, filters, advancedFil
   const [expandedNodes, setExpandedNodes] = useState<Set<string>>(new Set());
   const [expandedCircuitInventories, setExpandedCircuitInventories] = useState<Set<string>>(new Set());
   const [isExporting, setIsExporting] = useState(false);
-  const [page, setPage] = useState(1);
-  const limit = 50;
+  // Sin paginación — el back recibe limit alto para devolver todo de una.
+  const limit = 5000;
 
   // Use default grouping if parent didn't provide any (defensive)
   const effectiveGroupings = activeGroupings.length > 0 ? activeGroupings : DEFAULT_GROUPINGS;
 
-  // Reset page when filters change
-  useEffect(() => { setPage(1); }, [filters.status, filters.search, filters.yearInicio, filters.yearFin, filters.catorcenaInicio, filters.catorcenaFin, filters.tipoPeriodo]);
-
   const { data, isLoading, isFetching, error, refetch } = useQuery({
-    queryKey: ['propuestas-versionario', filters, page],
-    queryFn: () => propuestasService.getVersionarioData({ ...filters, page, limit }),
+    queryKey: ['propuestas-versionario', filters],
+    queryFn: () => propuestasService.getVersionarioData({ ...filters, page: 1, limit }),
     refetchOnWindowFocus: false,
     staleTime: 60000,
     retry: 1,
@@ -334,6 +338,20 @@ export default function PropuestasVersionarioView({ isDark, filters, advancedFil
       rows.push({ propuesta, cara, inventarios: invs });
     }
 
+    // 3er pase: propuestas SIN caras NI inventarios. Las incluimos como filas
+    // vacías para que el footer del desglose cuadre con el KPI de stats.
+    const propIdsConContenido = new Set<number>();
+    for (const c of carasInfo) propIdsConContenido.add(c.propuesta_id);
+    for (const k of invByKey.keys()) {
+      const pidStr = k.split('-')[0];
+      propIdsConContenido.add(parseInt(pidStr, 10));
+    }
+    for (const p of propuestasInfo) {
+      if (propIdsConContenido.has(p.propuesta_id)) continue;
+      if (!isAllowed(p)) continue;
+      rows.push({ propuesta: p, cara: null, inventarios: [] });
+    }
+
     // Range filter on catorcena
     let filteredRows = rows;
     if (filters.yearInicio && filters.yearFin && filters.catorcenaInicio && filters.catorcenaFin) {
@@ -364,13 +382,15 @@ export default function PropuestasVersionarioView({ isDark, filters, advancedFil
       buckets.forEach(({ value, rows: bucketRows }) => {
         const fullKey = `${parentKey}/${head}:${value.key}`;
         const propuestaIds = new Set<number>();
-        const propInversionSeen = new Set<number>();
+        // Inversión por bucket: sumar el slice de inventarios que CAEN en este
+        // bucket — no `propuesta.inversion` completa (esa cubre todas las cats).
         let inversion = 0;
         for (const r of bucketRows) {
           propuestaIds.add(r.propuesta.propuesta_id);
-          if (!propInversionSeen.has(r.propuesta.propuesta_id)) {
-            propInversionSeen.add(r.propuesta.propuesta_id);
-            inversion += Number(r.propuesta.inversion) || 0;
+          for (const inv of r.inventarios) {
+            const tarifa = Number(inv.tarifa_publica_sc) || 0;
+            const cant = Number(inv.caras_totales) || 1;
+            inversion += tarifa * cant;
           }
         }
         const node: GroupNode = {
@@ -729,42 +749,12 @@ export default function PropuestasVersionarioView({ isDark, filters, advancedFil
         </div>
       )}
 
-      {/* Footer with pagination */}
+      {/* Footer — sin paginación, solo contador */}
       {!isLoading && (
-        <div className={`flex items-center justify-between px-5 py-3 border-t ${isDark ? 'border-zinc-800/50 bg-zinc-900/30 text-zinc-500' : 'border-gray-200 bg-gray-50 text-gray-400'} text-xs`}>
-          <span>
-            {groupTree.length > 0
-              ? `${groupTree.length} ${topLevelLabel.toLowerCase()}${groupTree.length !== 1 ? 's' : ''} · ${totalPropuestas} propuesta${totalPropuestas !== 1 ? 's' : ''}`
-              : 'Sin resultados'}
-            {data?.total != null && data.total > limit && ` (página ${page} de ${Math.ceil(data.total / limit)}, ${data.total} total)`}
-          </span>
-          {data?.total != null && data.total > limit && (
-            <div className="flex items-center gap-2">
-              <button
-                onClick={() => setPage(p => Math.max(1, p - 1))}
-                disabled={page <= 1 || isFetching}
-                className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-all ${
-                  page <= 1 || isFetching
-                    ? isDark ? 'bg-zinc-800/30 text-zinc-600 cursor-not-allowed' : 'bg-gray-100 text-gray-300 cursor-not-allowed'
-                    : isDark ? 'bg-zinc-800 text-zinc-300 hover:bg-zinc-700' : 'bg-gray-200 text-gray-600 hover:bg-gray-300'
-                }`}
-              >
-                Anterior
-              </button>
-              <span className={`text-xs ${isDark ? 'text-zinc-400' : 'text-gray-500'}`}>{page} / {Math.ceil(data.total / limit)}</span>
-              <button
-                onClick={() => setPage(p => p + 1)}
-                disabled={page >= Math.ceil((data?.total || 0) / limit) || isFetching}
-                className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-all ${
-                  page >= Math.ceil((data?.total || 0) / limit) || isFetching
-                    ? isDark ? 'bg-zinc-800/30 text-zinc-600 cursor-not-allowed' : 'bg-gray-100 text-gray-300 cursor-not-allowed'
-                    : isDark ? 'bg-zinc-800 text-zinc-300 hover:bg-zinc-700' : 'bg-gray-200 text-gray-600 hover:bg-gray-300'
-                }`}
-              >
-                Siguiente
-              </button>
-            </div>
-          )}
+        <div className={`px-5 py-3 border-t ${isDark ? 'border-zinc-800/50 bg-zinc-900/30 text-zinc-500' : 'border-gray-200 bg-gray-50 text-gray-400'} text-xs`}>
+          {groupTree.length > 0
+            ? `${groupTree.length} ${topLevelLabel.toLowerCase()}${groupTree.length !== 1 ? 's' : ''} · ${totalPropuestas} propuesta${totalPropuestas !== 1 ? 's' : ''}`
+            : 'Sin resultados'}
         </div>
       )}
     </div>
