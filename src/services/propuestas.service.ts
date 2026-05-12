@@ -127,7 +127,7 @@ export const propuestasService = {
     return response.data;
   },
 
-  async getVersionarioData(params: Omit<PropuestasParams, 'soloAtendidas'> & { page?: number; limit?: number; lite?: boolean; propuestaIds?: string } = {}): Promise<{
+  async getVersionarioData(params: Omit<PropuestasParams, 'soloAtendidas'> & { page?: number; limit?: number; lite?: boolean; propuestaIds?: string; exportLayout?: boolean } = {}): Promise<{
     inventarios: any[];
     propuestasInfo: any[];
     carasInfo: any[];
@@ -135,7 +135,9 @@ export const propuestasService = {
     page: number;
     limit: number;
   }> {
-    const response = await api.get<ApiResponse<any>>('/propuestas/versionario', { params, timeout: 60000 });
+    // exportLayout puede tardar (back hace batches internos), por eso timeout extendido.
+    const timeout = params.exportLayout ? 180000 : 60000;
+    const response = await api.get<ApiResponse<any>>('/propuestas/versionario', { params, timeout });
     return response.data.data;
   },
 

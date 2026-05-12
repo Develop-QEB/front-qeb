@@ -302,13 +302,14 @@ export default function PropuestasVersionarioView({ isDark, filters, advancedFil
   // Use default grouping if parent didn't provide any (defensive)
   const effectiveGroupings = activeGroupings.length > 0 ? activeGroupings : DEFAULT_GROUPINGS;
 
+  // Cuando hay filtro de catorcena, el back devuelve inv/caras filtrados a ese
+  // rango (mucho menos data → manejable). Sin filtro: lite=true para no
+  // reventar el back con 270k reservas.
+  const hasCatFilter = !!(filters.yearInicio && filters.yearFin && filters.catorcenaInicio && filters.catorcenaFin);
+
   const { data, isLoading, isFetching, error, refetch } = useQuery({
     queryKey: ['propuestas-versionario', filters],
-    // Modo ligero: solo trae propuestasInfo (sin inventarios ni caras detalladas).
-    // Esto evita queries pesadas que saturan el back y la conexión a Hostinger.
-    // Trade-off: la inversión por catorcena es la inversión TOTAL de la propuesta
-    // (no el slice real), y no hay listas de inventarios al expandir.
-    queryFn: () => propuestasService.getVersionarioData({ ...filters, page: 1, limit, lite: true }),
+    queryFn: () => propuestasService.getVersionarioData({ ...filters, page: 1, limit, lite: !hasCatFilter }),
     refetchOnWindowFocus: false,
     staleTime: 60000,
     retry: 1,
@@ -344,9 +345,14 @@ export default function PropuestasVersionarioView({ isDark, filters, advancedFil
     const isAllowed = (info: PropuestaInfo) =>
       advancedFilters.length === 0 || matchesAdvancedFilters(info as unknown as Record<string, unknown>, advancedFilters);
 
+    const hasRangeFilter = !!(filters.yearInicio && filters.yearFin && filters.catorcenaInicio && filters.catorcenaFin);
+
     const rows: Row[] = [];
     const seenKeys = new Set<string>();
 
+    // 1er pase: caras (sc) en el rango. Incluye las que no tienen reserva
+    // todavía — para que el jefe vea las propuestas con circuitos planeados
+    // aunque no estén asignadas a inventario aún.
     for (const cara of carasInfo) {
       const propuesta = propuestaMap.get(cara.propuesta_id);
       if (!propuesta || !isAllowed(propuesta)) continue;
@@ -380,22 +386,26 @@ export default function PropuestasVersionarioView({ isDark, filters, advancedFil
       rows.push({ propuesta, cara, inventarios: invs });
     }
 
-    // 3er pase: propuestas SIN caras NI inventarios. Las incluimos como filas
-    // vacías para que el footer del desglose cuadre con el KPI de stats.
-    const propIdsConContenido = new Set<number>();
-    for (const c of carasInfo) propIdsConContenido.add(c.propuesta_id);
-    for (const k of invByKey.keys()) {
-      const pidStr = k.split('-')[0];
-      propIdsConContenido.add(parseInt(pidStr, 10));
-    }
-    for (const p of propuestasInfo) {
-      if (propIdsConContenido.has(p.propuesta_id)) continue;
-      if (!isAllowed(p)) continue;
-      rows.push({ propuesta: p, cara: null, inventarios: [] });
+    // 3er pase: propuestas SIN caras NI inventarios. Solo aplica cuando NO
+    // hay filtro de rango (porque con filtro, propuestas sin inv en el rango
+    // NO deben contar — alineación con el export).
+    if (!hasRangeFilter) {
+      const propIdsConContenido = new Set<number>();
+      for (const c of carasInfo) propIdsConContenido.add(c.propuesta_id);
+      for (const k of invByKey.keys()) {
+        const pidStr = k.split('-')[0];
+        propIdsConContenido.add(parseInt(pidStr, 10));
+      }
+      for (const p of propuestasInfo) {
+        if (propIdsConContenido.has(p.propuesta_id)) continue;
+        if (!isAllowed(p)) continue;
+        rows.push({ propuesta: p, cara: null, inventarios: [] });
+      }
     }
 
-    // Range filter on catorcena. En lite mode (sin caras/inv) usa
-    // catorcena_inicio de la propuesta como fallback — antes excluía TODO.
+    // Range filter on catorcena. Match exacto: la cara/inv debe estar en el
+    // rango, o (lite mode) catorcena_inicio de la propuesta debe estar en el
+    // rango. Las propuestas que solo "pasan" por el rango no se incluyen.
     let filteredRows = rows;
     if (filters.yearInicio && filters.yearFin && filters.catorcenaInicio && filters.catorcenaFin) {
       const rangeStart = filters.yearInicio * 100 + filters.catorcenaInicio;
@@ -431,15 +441,21 @@ export default function PropuestasVersionarioView({ isDark, filters, advancedFil
       buckets.forEach(({ value, rows: bucketRows }) => {
         const fullKey = `${parentKey}/${head}:${value.key}`;
         const propuestaIds = new Set<number>();
-        // Modo ligero: no hay inventarios, así que la inversión por bucket =
-        // suma de `propuesta.inversion` (una vez por propuesta única).
-        // Trade-off conocido: si filtras una sola catorcena de una propuesta
-        // que abarca varias, suma la inversión total de la propuesta entera.
+        // Inversión por bucket: si hay inv data (modo full con filtro o expand
+        // lazy), sumar slice real (tarifa_publica_sc × caras_totales). Si solo
+        // hay lite data (sin filtro), usar propuesta.inversion una vez.
         const propInversionSeen = new Set<number>();
         let inversion = 0;
+        const bucketHasInv = bucketRows.some(r => r.inventarios.length > 0);
         for (const r of bucketRows) {
           propuestaIds.add(r.propuesta.propuesta_id);
-          if (!propInversionSeen.has(r.propuesta.propuesta_id)) {
+          if (bucketHasInv) {
+            for (const inv of r.inventarios) {
+              const tarifa = Number(inv.tarifa_publica_sc) || 0;
+              const cant = Number((inv as any).caras_totales) || 1;
+              inversion += tarifa * cant;
+            }
+          } else if (!propInversionSeen.has(r.propuesta.propuesta_id)) {
             propInversionSeen.add(r.propuesta.propuesta_id);
             inversion += Number(r.propuesta.inversion) || 0;
           }
@@ -524,10 +540,49 @@ export default function PropuestasVersionarioView({ isDark, filters, advancedFil
         return;
       }
 
-      // Patrón "como campañas": exporta lo que ya está cargado. Si una
-      // propuesta NO tiene detalle cacheado (no se ha expandido), se exporta
-      // 1 fila con datos básicos. Si fue expandida, 1 fila por inventario.
-      // Sin auto-fetch masivo — el usuario expande lo que necesite.
+      // Patrón estilo campañas: una sola request al back con exportLayout=true.
+      // El back hace batches internos (30 a la vez) y devuelve toda la data.
+      const fullData = await propuestasService.getVersionarioData({
+        ...filters,
+        exportLayout: true,
+      });
+
+      // Si hay filtro de rango de catorcenas, descartar inventarios FUERA
+      // del rango. El back trae todas las propuestas que tocan el rango con
+      // TODOS sus inv (cat 1-26), pero el usuario quiere solo las del rango.
+      const hasRange = !!(filters.yearInicio && filters.yearFin && filters.catorcenaInicio && filters.catorcenaFin);
+      const rangeStart = hasRange ? filters.yearInicio! * 100 + filters.catorcenaInicio! : -Infinity;
+      const rangeEnd = hasRange ? filters.yearFin! * 100 + filters.catorcenaFin! : Infinity;
+      const invInRange = (inv: InventarioItem) => {
+        if (!hasRange) return true;
+        const val = (inv.anio_catorcena || 0) * 100 + (inv.numero_catorcena || 0);
+        return val >= rangeStart && val <= rangeEnd;
+      };
+      // Filtrar propuestas a las que cuya catorcena_inicio cae en el rango,
+      // O que tienen al menos un inv en el rango.
+      const allInv = ((fullData.inventarios as InventarioItem[]) || []).filter(invInRange);
+
+      // Indexar por propuesta_id
+      const invsByPid = new Map<number, InventarioItem[]>();
+      for (const inv of allInv) {
+        if (!invsByPid.has(inv.propuesta_id)) invsByPid.set(inv.propuesta_id, []);
+        invsByPid.get(inv.propuesta_id)!.push(inv);
+      }
+      // Indexar caras también para incluir propuestas con caras sin reserva
+      const carasInfoArr: CaraInfo[] = (fullData.carasInfo as CaraInfo[]) || [];
+      const carasByPidExp = new Map<number, CaraInfo[]>();
+      for (const c of carasInfoArr) {
+        if (!carasByPidExp.has(c.propuesta_id)) carasByPidExp.set(c.propuesta_id, []);
+        carasByPidExp.get(c.propuesta_id)!.push(c);
+      }
+      const loadedDetails = new Map<number, { caras: CaraInfo[]; invs: InventarioItem[] }>();
+      for (const p of (fullData.propuestasInfo || [])) {
+        loadedDetails.set(p.propuesta_id, {
+          caras: [],
+          invs: invsByPid.get(p.propuesta_id) || [],
+        });
+      }
+
       const headers = [
         'Campaña', 'Anunciante', 'Inversión Campaña', 'Operación', 'Código de contrato (Opcional)',
         'Precio por cara (Opcional)', 'APS Global', 'APS Específico', 'CUIC', 'Articulo', 'Vendedor',
@@ -537,49 +592,78 @@ export default function PropuestasVersionarioView({ isDark, filters, advancedFil
         'Estatus',
       ];
       const rows: string[][] = [];
-      for (const propuesta of data.propuestasInfo) {
-        const det = propuestaDetails.get(propuesta.propuesta_id);
+      // Filtrar propuestas: si hay filtro de rango, incluir las que tienen
+      // al menos UN CIRCUITO (inv) o UNA CARA en el rango. Las caras sin
+      // reserva aún salen como 1 fila básica (sin inv).
+      const allExportPropuestas: PropuestaInfo[] = (fullData.propuestasInfo as PropuestaInfo[]) || [];
+      const exportPropuestas = hasRange
+        ? allExportPropuestas.filter(p =>
+            (invsByPid.get(p.propuesta_id) || []).length > 0 ||
+            (carasByPidExp.get(p.propuesta_id) || []).length > 0
+          )
+        : allExportPropuestas;
+      for (const propuesta of exportPropuestas) {
+        const det = loadedDetails.get(propuesta.propuesta_id);
         const invs = det?.invs || [];
-        const baseInicio = `Cat ${propuesta.catorcena_inicio_num ?? ''}/${propuesta.catorcena_inicio_anio ?? ''}`;
-        const baseFin = `Cat ${propuesta.catorcena_fin_num ?? ''}/${propuesta.catorcena_fin_anio ?? ''}`;
+        const apsGlobal = String(propuesta.propuesta_id);
         if (invs.length === 0) {
+          // Propuesta con caras en el rango pero sin reservas: 1 fila básica.
+          const caras = carasByPidExp.get(propuesta.propuesta_id) || [];
+          const firstCara = caras[0];
+          const invCat = firstCara
+            ? `Cat ${firstCara.numero_catorcena ?? ''}/${firstCara.anio_catorcena ?? ''}`
+            : `Cat ${propuesta.catorcena_inicio_num ?? ''}/${propuesta.catorcena_inicio_anio ?? ''}`;
           rows.push([
             propuesta.campana_nombre || propuesta.nombre_campania || '',
             propuesta.anunciante || '',
             String(propuesta.inversion ?? ''),
-            '', '', '', '', '',
+            '', '', '', apsGlobal, '',
             propuesta.cuic || '',
-            '',
+            firstCara?.articulo || '',
             propuesta.vendedor || '',
             propuesta.descripcion || '',
-            baseInicio, baseFin,
-            '', '', '', '', '', '', '', '', '', '',
+            invCat, invCat,
+            '', '', '', '', '', '',
+            firstCara?.ciudad || '',
+            '', '', '',
             propuesta.status || '',
           ]);
-        } else {
-          for (const inv of invs) {
-            rows.push([
-              propuesta.campana_nombre || propuesta.nombre_campania || '',
-              propuesta.anunciante || '',
-              String(propuesta.inversion ?? ''),
-              '', '',
-              String(inv.tarifa_publica_sc ?? ''),
-              '',
-              inv.aps_especifico ? String(inv.aps_especifico) : '',
-              propuesta.cuic || '',
-              inv.articulo || '',
-              propuesta.vendedor || '',
-              propuesta.descripcion || '',
-              baseInicio, baseFin,
-              '', '', '', '',
-              inv.codigo_unico || '',
-              inv.tipo_de_cara || '',
-              inv.plaza || '',
-              inv.tradicional_digital || '',
-              '', '',
-              propuesta.status || '',
-            ]);
-          }
+          continue;
+        }
+        for (const inv of invs) {
+          const invAny = inv as InventarioItem & { estatus_reserva?: string; cortesia?: number };
+          const operacion = invAny.cortesia
+            ? 'CORTESIA'
+            : (invAny.estatus_reserva === 'Bonificado' || invAny.estatus_reserva === 'Vendido bonificado')
+              ? 'BONIFICACION'
+              : 'RENTA';
+          const arteStatus = invAny.estatus_reserva === 'Arte Aprobado' ? 'Aprobado' : 'Pendiente';
+          // Inicio/Fin = la catorcena específica del INV (no el rango total
+          // de la propuesta), para que el export solo refleje cat 10.
+          const invCat = `Cat ${inv.numero_catorcena ?? ''}/${inv.anio_catorcena ?? ''}`;
+          rows.push([
+            propuesta.campana_nombre || propuesta.nombre_campania || '',
+            propuesta.anunciante || '',
+            String(propuesta.inversion ?? ''),
+            operacion,
+            '',
+            String(inv.tarifa_publica_sc ?? ''),
+            apsGlobal,
+            inv.aps_especifico ? String(inv.aps_especifico) : '',
+            propuesta.cuic || '',
+            inv.articulo || '',
+            propuesta.vendedor || '',
+            propuesta.descripcion || '',
+            invCat, invCat,
+            arteStatus,
+            '', '', '',
+            inv.codigo_unico || '',
+            inv.tipo_de_cara || '',
+            inv.plaza || '',
+            inv.tradicional_digital || '',
+            '', '',
+            propuesta.status || '',
+          ]);
         }
       }
 
