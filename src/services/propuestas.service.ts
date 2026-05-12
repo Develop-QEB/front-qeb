@@ -127,7 +127,7 @@ export const propuestasService = {
     return response.data;
   },
 
-  async getVersionarioData(params: Omit<PropuestasParams, 'soloAtendidas'> & { page?: number; limit?: number } = {}): Promise<{
+  async getVersionarioData(params: Omit<PropuestasParams, 'soloAtendidas'> & { page?: number; limit?: number; lite?: boolean; propuestaIds?: string } = {}): Promise<{
     inventarios: any[];
     propuestasInfo: any[];
     carasInfo: any[];

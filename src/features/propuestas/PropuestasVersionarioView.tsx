@@ -271,12 +271,44 @@ export default function PropuestasVersionarioView({ isDark, filters, advancedFil
   // Sin paginación — el back recibe limit alto para devolver todo de una.
   const limit = 1000;
 
+  // Lazy-load detalle (caras + inventarios) por propuesta cuando se expande.
+  const [propuestaDetails, setPropuestaDetails] = useState<Map<number, { caras: CaraInfo[]; invs: InventarioItem[] }>>(new Map());
+  const [loadingDetails, setLoadingDetails] = useState<Set<number>>(new Set());
+
+  const loadPropuestaDetail = async (pid: number) => {
+    if (propuestaDetails.has(pid) || loadingDetails.has(pid)) return;
+    setLoadingDetails(prev => new Set(prev).add(pid));
+    try {
+      const detail = await propuestasService.getVersionarioData({ propuestaIds: String(pid), lite: false });
+      setPropuestaDetails(prev => {
+        const next = new Map(prev);
+        next.set(pid, {
+          caras: (detail.carasInfo || []) as CaraInfo[],
+          invs: (detail.inventarios || []) as InventarioItem[],
+        });
+        return next;
+      });
+    } catch (err) {
+      console.error('Error cargando detalle de propuesta', pid, err);
+    } finally {
+      setLoadingDetails(prev => {
+        const next = new Set(prev);
+        next.delete(pid);
+        return next;
+      });
+    }
+  };
+
   // Use default grouping if parent didn't provide any (defensive)
   const effectiveGroupings = activeGroupings.length > 0 ? activeGroupings : DEFAULT_GROUPINGS;
 
   const { data, isLoading, isFetching, error, refetch } = useQuery({
     queryKey: ['propuestas-versionario', filters],
-    queryFn: () => propuestasService.getVersionarioData({ ...filters, page: 1, limit }),
+    // Modo ligero: solo trae propuestasInfo (sin inventarios ni caras detalladas).
+    // Esto evita queries pesadas que saturan el back y la conexión a Hostinger.
+    // Trade-off: la inversión por catorcena es la inversión TOTAL de la propuesta
+    // (no el slice real), y no hay listas de inventarios al expandir.
+    queryFn: () => propuestasService.getVersionarioData({ ...filters, page: 1, limit, lite: true }),
     refetchOnWindowFocus: false,
     staleTime: 60000,
     retry: 1,
@@ -286,7 +318,17 @@ export default function PropuestasVersionarioView({ isDark, filters, advancedFil
   const groupTree = useMemo<GroupNode[]>(() => {
     if (!data) return [];
 
-    const { inventarios, propuestasInfo, carasInfo } = data;
+    const { inventarios: liteInv, propuestasInfo, carasInfo: liteCaras } = data;
+
+    // Mezclar detalles lazy-loaded por propuesta con los datos lite.
+    const extraCaras: CaraInfo[] = [];
+    const extraInv: InventarioItem[] = [];
+    propuestaDetails.forEach(d => {
+      extraCaras.push(...d.caras);
+      extraInv.push(...d.invs);
+    });
+    const inventarios: InventarioItem[] = [...liteInv, ...extraInv];
+    const carasInfo: CaraInfo[] = [...liteCaras, ...extraCaras];
 
     const propuestaMap = new Map<number, PropuestaInfo>();
     for (const p of propuestasInfo) propuestaMap.set(p.propuesta_id, p);
@@ -382,15 +424,17 @@ export default function PropuestasVersionarioView({ isDark, filters, advancedFil
       buckets.forEach(({ value, rows: bucketRows }) => {
         const fullKey = `${parentKey}/${head}:${value.key}`;
         const propuestaIds = new Set<number>();
-        // Inversión por bucket: sumar el slice de inventarios que CAEN en este
-        // bucket — no `propuesta.inversion` completa (esa cubre todas las cats).
+        // Modo ligero: no hay inventarios, así que la inversión por bucket =
+        // suma de `propuesta.inversion` (una vez por propuesta única).
+        // Trade-off conocido: si filtras una sola catorcena de una propuesta
+        // que abarca varias, suma la inversión total de la propuesta entera.
+        const propInversionSeen = new Set<number>();
         let inversion = 0;
         for (const r of bucketRows) {
           propuestaIds.add(r.propuesta.propuesta_id);
-          for (const inv of r.inventarios) {
-            const tarifa = Number(inv.tarifa_publica_sc) || 0;
-            const cant = Number(inv.caras_totales) || 1;
-            inversion += tarifa * cant;
+          if (!propInversionSeen.has(r.propuesta.propuesta_id)) {
+            propInversionSeen.add(r.propuesta.propuesta_id);
+            inversion += Number(r.propuesta.inversion) || 0;
           }
         }
         const node: GroupNode = {
@@ -423,12 +467,22 @@ export default function PropuestasVersionarioView({ isDark, filters, advancedFil
     }
 
     return buildTree(filteredRows, effectiveGroupings, '');
-  }, [data, filters.yearInicio, filters.yearFin, filters.catorcenaInicio, filters.catorcenaFin, advancedFilters, effectiveGroupings]);
+  }, [data, filters.yearInicio, filters.yearFin, filters.catorcenaInicio, filters.catorcenaFin, advancedFilters, effectiveGroupings, propuestaDetails]);
 
-  const toggleNode = (key: string) => {
+  // Al expandir un nodo de nivel "propuesta", lazy-load su detalle (caras+inv)
+  // si todavía no se ha cargado. Igual que la UX de versionario de campañas.
+  const toggleNode = (key: string, node?: GroupNode) => {
     setExpandedNodes(prev => {
       const next = new Set(prev);
-      if (next.has(key)) next.delete(key); else next.add(key);
+      if (next.has(key)) {
+        next.delete(key);
+      } else {
+        next.add(key);
+        // Si expandimos y es nodo propuesta, gatillar lazy-load
+        if (node && node.field === 'propuesta' && node.propuestaIds.size > 0) {
+          node.propuestaIds.forEach(pid => { loadPropuestaDetail(pid); });
+        }
+      }
       return next;
     });
   };
@@ -581,7 +635,7 @@ export default function PropuestasVersionarioView({ isDark, filters, advancedFil
     return (
       <div key={node.fullKey} className={depth === 0 ? 'group' : `border-t ${isDark ? 'border-zinc-800/30' : 'border-gray-200'}`}>
         <button
-          onClick={() => toggleNode(node.fullKey)}
+          onClick={() => toggleNode(node.fullKey, node)}
           style={{ paddingLeft }}
           className={`w-full flex items-center gap-3 pr-5 py-${depth === 0 ? '4' : '3'} transition-all ${headerBg}`}
         >
