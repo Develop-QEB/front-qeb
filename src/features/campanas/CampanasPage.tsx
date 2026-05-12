@@ -1192,7 +1192,7 @@ export function CampanasPage() {
   // En vista catorcena necesitamos todas las campañas del rango para que la agrupación
   // por catorcena sea correcta (no podemos paginar y agrupar). 200 se queda corto cuando
   // hay muchas campañas activas en catorcenas cercanas — usar tope alto.
-  const effectiveLimit = activeView === 'catorcena' ? 5000 : (needsAllData ? 200 : limit);
+  const effectiveLimit = activeView === 'catorcena' ? 50000 : (needsAllData ? 200 : limit);
   // Tags unidos por '|' — el backend separa por ese delimitador (no espacios)
   // y aplica AND entre tags. Soporta búsqueda por nombre de campaña,
   // razon_social, CUIC, marca, código de inventario, etc.
@@ -1758,7 +1758,9 @@ export function CampanasPage() {
             groups[key].campanas.push(item);
           }
         } else {
-          // Sin dato de catorcenas reales: expandir por rango de fechas (fallback)
+          // Sin caras reservadas: la campaña existe pero está incompleta. La distribuimos
+          // por su rango de fechas para que aparezca en cada catorcena que cubre. La
+          // inversión por catorcena queda en 0 (sin caras = sin costo), así que no infla.
           const startNum = item.catorcena_inicio_num;
           const startAnio = item.catorcena_inicio_anio;
           const endNum = item.catorcena_fin_num || startNum;
