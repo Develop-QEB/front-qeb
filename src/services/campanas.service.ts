@@ -423,13 +423,19 @@ export function buildDeliveryNote(
     // Dentro de cada APS, agrupar por artículo para las DocumentLines
     const uniqueArticulos = [...new Set(itemsForAPS.map(item => item.articulo))];
 
-    // Detectar tipo de período una vez por DN. Mensual usa otra tabla de IDs
-    // en SAP (MES 01-2026 = 2882, ..., MES 12-2026 = 2893). Catorcena sigue
-    // con 1746 como antes (hardcoded como hoy hasta tener la tabla completa).
+    // Detectar tipo de período una vez por DN. Ambos (catorcena y mensual)
+    // tienen su tabla de IDs SAP — fallback a 1746 si llega un año sin mapeo.
     const tipoPeriodoCamp = (campana as { tipo_periodo?: string | null }).tipo_periodo || 'catorcena';
     const esMensual = tipoPeriodoCamp === 'mensual';
 
-    // Mapeo MES → ID SAP, solo 2026 por ahora.
+    // Mapeo CATORCENA → ID SAP (solo 2026 por ahora).
+    // Patrón: cat 01-2026 = 2856, ..., cat 26-2026 = 2881.
+    const CAT_ID_SAP: Record<number, Record<number, number>> = {
+      2026: Object.fromEntries(Array.from({ length: 26 }, (_, i) => [i + 1, 2856 + i])),
+    };
+
+    // Mapeo MES → ID SAP (solo 2026 por ahora).
+    // Patrón: mes 01-2026 = 2882, ..., mes 12-2026 = 2893.
     const MES_ID_SAP: Record<number, Record<number, number>> = {
       2026: { 1: 2882, 2: 2883, 3: 2884, 4: 2885, 5: 2886, 6: 2887, 7: 2888, 8: 2889, 9: 2890, 10: 2891, 11: 2892, 12: 2893 },
     };
@@ -439,7 +445,7 @@ export function buildDeliveryNote(
       const firstItem = itemsWithArticulo[0];
       const totalPrice = Number(firstItem.tarifa_publica_sc) || Number(firstItem.tarifa_publica) || 0;
 
-      // Período: mensual ("MES NN-YYYY" + ID por mes) vs catorcena ("CATORCENA NN-YYYY" + 1746).
+      // Período: mensual ("MES NN-YYYY" + ID por mes) vs catorcena ("CATORCENA NN-YYYY" + ID por cat).
       let dscPeriod: string;
       let codPer = 1746;
       if (esMensual && firstItem.inicio_periodo) {
@@ -448,10 +454,13 @@ export function buildDeliveryNote(
         const anio = fIni.getUTCFullYear();
         dscPeriod = `MES ${String(mes).padStart(2, '0')}-${anio}`;
         codPer = MES_ID_SAP[anio]?.[mes] ?? 1746;
+      } else if (firstItem.numero_catorcena && firstItem.anio_catorcena) {
+        const cat = Number(firstItem.numero_catorcena);
+        const anio = Number(firstItem.anio_catorcena);
+        dscPeriod = `CATORCENA ${String(cat).padStart(2, '0')}-${anio}`;
+        codPer = CAT_ID_SAP[anio]?.[cat] ?? 1746;
       } else {
-        dscPeriod = firstItem.numero_catorcena && firstItem.anio_catorcena
-          ? `CATORCENA ${String(firstItem.numero_catorcena).padStart(2, '0')}-${firstItem.anio_catorcena}`
-          : 'CATORCENA —-—';
+        dscPeriod = 'CATORCENA —-—';
       }
 
       // IM (impresión) articles have no inventory rows — one row with caras_totales=N
