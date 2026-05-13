@@ -729,10 +729,27 @@ function calcularCatorcena(fecha: Date): number {
   return Math.ceil(diaDelAnio / 14);
 }
 
-// Helper para formatear inicio_periodo como "Cat X / YYYY" o "Mes YYYY"
-function formatInicioPeriodo(item: InventarioReservado | InventarioConAPS, tipoPeriodo?: string): string {
-  if (tipoPeriodo === 'mensual' && item.inicio_periodo) {
-    const parts = item.inicio_periodo.split('-');
+// Helper para formatear inicio_periodo como "Cat X / YYYY" o "Mes YYYY".
+// Detecta mensual por flag explícito O por duración del período (>14 días).
+// Esto evita el caso donde tipoPeriodo no llega o llega mal y un período
+// mensual se etiqueta como "Cat 8" basándose solo en el inicio.
+function formatInicioPeriodo(
+  item: InventarioReservado | InventarioConAPS & { fin_periodo?: string | null },
+  tipoPeriodo?: string,
+): string {
+  const itemAny = item as InventarioReservado & { fin_periodo?: string | null };
+  let isMensual = tipoPeriodo === 'mensual';
+  if (!isMensual && itemAny.inicio_periodo && itemAny.fin_periodo) {
+    const ini = new Date(itemAny.inicio_periodo).getTime();
+    const fin = new Date(itemAny.fin_periodo).getTime();
+    if (!isNaN(ini) && !isNaN(fin)) {
+      const diffDays = (fin - ini) / (1000 * 60 * 60 * 24);
+      if (diffDays > 14) isMensual = true; // catorcena = 14 días, mensual ~30
+    }
+  }
+
+  if (isMensual && itemAny.inicio_periodo) {
+    const parts = String(itemAny.inicio_periodo).split('-');
     if (parts.length >= 2) {
       return `${MESES_LABEL[parseInt(parts[1]) - 1]} ${parts[0]}`;
     }
@@ -794,8 +811,15 @@ function getGroupValue(item: InventarioReservado | InventarioConAPS, field: Grou
 // asi sus claves coinciden con las de groupedInventario al hacer match/render.
 function getSCGroupValue(sc: SolicitudCara, field: GroupByField, tipoPeriodo?: string): string {
   if (field === 'inicio_periodo') {
-    if (tipoPeriodo === 'mensual' && sc.inicio_periodo) {
-      const parts = sc.inicio_periodo.split('-');
+    // Detectar mensual por flag o por duración del período (>14 días).
+    let isMensual = tipoPeriodo === 'mensual';
+    if (!isMensual && sc.inicio_periodo && sc.fin_periodo) {
+      const ini = new Date(sc.inicio_periodo).getTime();
+      const fin = new Date(sc.fin_periodo).getTime();
+      if (!isNaN(ini) && !isNaN(fin) && (fin - ini) / 86400000 > 14) isMensual = true;
+    }
+    if (isMensual && sc.inicio_periodo) {
+      const parts = String(sc.inicio_periodo).split('-');
       if (parts.length >= 2) {
         return `${MESES_LABEL[parseInt(parts[1]) - 1]} ${parts[0]}`;
       }

@@ -1,6 +1,6 @@
 import { useState, useMemo, type ReactElement } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { ChevronDown, ChevronRight, Calendar, Loader2, Download, Package, ClipboardList, MapPin, DollarSign, User, Briefcase, Hash, BadgeCheck, Clock, CalendarDays } from 'lucide-react';
+import { ChevronDown, ChevronRight, Calendar, Loader2, Download, Package, ClipboardList, MapPin, DollarSign, User, Briefcase, Hash, BadgeCheck, Clock, CalendarDays, Layers, Gift } from 'lucide-react';
 import * as XLSX from 'xlsx';
 import { propuestasService } from '../../services/propuestas.service';
 
@@ -64,12 +64,28 @@ interface PropuestaInfo {
   catorcena_fin_anio: number;
 }
 
+// Resumen ligero por (propuesta, catorcena) que viene del back. Permite
+// mostrar Circuitos/Caras/Bonif/Tarifa/Inversión a nivel propuesta antes de
+// expandir, ya filtrados por la catorcena del bucket. Lo trae siempre el back
+// (lite y full).
+interface ResumenCatorcena {
+  propuesta_id: number;
+  numero_catorcena: number;
+  anio_catorcena: number;
+  circuitos_count: number;
+  caras_total: number;
+  bonif_total: number;
+  tarifa_representativa: number;
+  inversion_catorcena: number;
+}
+
 interface CaraInfo {
   propuesta_id: number;
   sc_id: number;
   articulo: string;
   ciudad: string;
   formato: string;
+  tarifa_publica: number;
   caras_solicitadas: number;
   bonificacion: number;
   caras_esperadas: number;
@@ -138,6 +154,11 @@ interface GroupNode {
   inventarios?: InventarioItem[];
   inversion: number;
   propuestaIds: Set<number>;
+  scIds: Set<number>;
+  circuitosCount: number;
+  totalCarasEsperadas: number;
+  totalBonif: number;
+  tarifaRepresentativa: number;
 }
 
 function getGroupValue(row: Row, field: GroupByField): { key: string; label: string; meta?: GroupNode['meta'] } {
@@ -163,7 +184,10 @@ function getGroupValue(row: Row, field: GroupByField): { key: string; label: str
     }
     case 'circuito': {
       if (!row.cara) return { key: 'sin-circuito', label: 'Sin circuito' };
-      const lbl = [row.cara.articulo, row.cara.formato, row.cara.ciudad].filter(Boolean).join(' · ') || `Circuito #${row.cara.sc_id}`;
+      // Plaza viene del inventario (sc.ciudad no es plaza). Fallback a ciudad si
+      // todavía no hay inv cargado (modo lite).
+      const plaza = row.inventarios[0]?.plaza || row.cara.ciudad || '';
+      const lbl = [plaza, row.cara.formato, row.cara.articulo].filter(Boolean).join(' · ') || `Circuito #${row.cara.sc_id}`;
       return { key: String(row.cara.sc_id), label: lbl, meta: { cara: row.cara } };
     }
     case 'anunciante': {
@@ -320,6 +344,7 @@ export default function PropuestasVersionarioView({ isDark, filters, advancedFil
     if (!data) return [];
 
     const { inventarios: liteInv, propuestasInfo, carasInfo: liteCaras } = data;
+    const resumenArr: ResumenCatorcena[] = (data as { resumenPorCatorcena?: ResumenCatorcena[] }).resumenPorCatorcena || [];
 
     // Mezclar detalles lazy-loaded por propuesta con los datos lite.
     const extraCaras: CaraInfo[] = [];
@@ -333,6 +358,15 @@ export default function PropuestasVersionarioView({ isDark, filters, advancedFil
 
     const propuestaMap = new Map<number, PropuestaInfo>();
     for (const p of propuestasInfo) propuestaMap.set(p.propuesta_id, p);
+
+    // Index resumen por "pid-num-anio" para lookup O(1) en buildTree.
+    const resumenMap = new Map<string, ResumenCatorcena>();
+    for (const r of resumenArr) {
+      const num = Number(r.numero_catorcena) || 0;
+      const anio = Number(r.anio_catorcena) || 0;
+      if (!num || !anio) continue;
+      resumenMap.set(`${r.propuesta_id}-${num}-${anio}`, r);
+    }
 
     // inventarios indexed by (propuesta_id, sc_id)
     const invByKey = new Map<string, InventarioItem[]>();
@@ -376,6 +410,7 @@ export default function PropuestasVersionarioView({ isDark, filters, advancedFil
         articulo: firstInv.articulo || '',
         ciudad: firstInv.plaza || '',
         formato: firstInv.formato || '',
+        tarifa_publica: Number(firstInv.tarifa_publica_sc) || 0,
         caras_solicitadas: 0,
         bonificacion: 0,
         caras_esperadas: invs.length,
@@ -386,18 +421,51 @@ export default function PropuestasVersionarioView({ isDark, filters, advancedFil
       rows.push({ propuesta, cara, inventarios: invs });
     }
 
-    // 3er pase: propuestas SIN caras NI inventarios. Solo aplica cuando NO
-    // hay filtro de rango (porque con filtro, propuestas sin inv en el rango
-    // NO deben contar — alineación con el export).
-    if (!hasRangeFilter) {
+    // 3er pase: completar filas que los pasos previos no generaron.
+    //
+    // (a) En modo lite (sin filtro), carasInfo/invs llegan vacíos: construimos
+    //     filas sintéticas por (propuesta, catorcena) usando `resumenPorCatorcena`
+    //     para que cada propuesta aparezca en CADA catorcena donde tiene caras
+    //     (no solo en su catorcena_inicio).
+    // (b) Incompletas — propuestas sin caras todavía — se agregan como fila
+    //     cara=null y caen en su catorcena_inicio via fallback de getGroupValue.
+    //
+    // Aplicamos en ambos modos (con y sin filtro) para que sin filtro y con
+    // filtro Cat X muestren los mismos conjuntos.
+    {
       const propIdsConContenido = new Set<number>();
       for (const c of carasInfo) propIdsConContenido.add(c.propuesta_id);
       for (const k of invByKey.keys()) {
-        const pidStr = k.split('-')[0];
-        propIdsConContenido.add(parseInt(pidStr, 10));
+        propIdsConContenido.add(parseInt(k.split('-')[0], 10));
+      }
+      const propIdsEnResumen = new Set<number>();
+      for (const res of resumenArr) {
+        const propuesta = propuestaMap.get(res.propuesta_id);
+        if (!propuesta || !isAllowed(propuesta)) continue;
+        if (propIdsConContenido.has(res.propuesta_id)) continue;
+        const num = Number(res.numero_catorcena) || 0;
+        const anio = Number(res.anio_catorcena) || 0;
+        if (!num || !anio) continue;
+        propIdsEnResumen.add(res.propuesta_id);
+        const syntheticCara: CaraInfo = {
+          propuesta_id: res.propuesta_id,
+          sc_id: -(res.propuesta_id * 100000 + anio * 100 + num),
+          articulo: '',
+          ciudad: '',
+          formato: '',
+          tarifa_publica: Number(res.tarifa_representativa) || 0,
+          caras_solicitadas: 0,
+          bonificacion: Number(res.bonif_total) || 0,
+          caras_esperadas: Number(res.caras_total) || 0,
+          reservas_count: 0,
+          numero_catorcena: num,
+          anio_catorcena: anio,
+        };
+        rows.push({ propuesta, cara: syntheticCara, inventarios: [] });
       }
       for (const p of propuestasInfo) {
         if (propIdsConContenido.has(p.propuesta_id)) continue;
+        if (propIdsEnResumen.has(p.propuesta_id)) continue;
         if (!isAllowed(p)) continue;
         rows.push({ propuesta: p, cara: null, inventarios: [] });
       }
@@ -426,7 +494,7 @@ export default function PropuestasVersionarioView({ isDark, filters, advancedFil
       });
     }
 
-    function buildTree(currentRows: Row[], levels: GroupByField[], parentKey: string): GroupNode[] {
+    function buildTree(currentRows: Row[], levels: GroupByField[], parentKey: string, catContext: { num: number; anio: number } | null): GroupNode[] {
       if (levels.length === 0) return [];
       const [head, ...rest] = levels;
       const buckets = new Map<string, { value: { key: string; label: string; meta?: GroupNode['meta'] }; rows: Row[] }>();
@@ -441,23 +509,73 @@ export default function PropuestasVersionarioView({ isDark, filters, advancedFil
       buckets.forEach(({ value, rows: bucketRows }) => {
         const fullKey = `${parentKey}/${head}:${value.key}`;
         const propuestaIds = new Set<number>();
-        // Inversión por bucket: si hay inv data (modo full con filtro o expand
-        // lazy), sumar slice real (tarifa_publica_sc × caras_totales). Si solo
-        // hay lite data (sin filtro), usar propuesta.inversion una vez.
+        // El bucket de catorcena fija num/anio para sus descendientes; los
+        // niveles anidados heredan el contexto del padre.
+        const bucketCatContext = head === 'catorcena' && value.meta?.catorcena
+          ? { num: value.meta.catorcena.num, anio: value.meta.catorcena.anio }
+          : catContext;
+        // Inversión por bucket:
+        // - En el bucket de catorcena (head === 'catorcena') SIEMPRE usar
+        //   `resumen.inversion_catorcena` (SUM sc.costo por catorcena). Esto
+        //   garantiza que sin filtro (lite, sin invs) y con filtro (full, con
+        //   invs) muestren la MISMA cifra al nivel de catorcena. Las dos
+        //   fórmulas anteriores divergían cuando había caras planeadas no
+        //   reservadas todavía.
+        // - En niveles más profundos con inv real cargada, usar tarifa × caras
+        //   reservadas (refleja lo efectivamente reservado).
+        // - Sin contexto de catorcena (usuario quitó catorcena del grouping)
+        //   usar propuesta.inversion como total.
         const propInversionSeen = new Set<number>();
         let inversion = 0;
         const bucketHasInv = bucketRows.some(r => r.inventarios.length > 0);
+        const useResumenInversion = head === 'catorcena' || !bucketHasInv;
+        const scIds = new Set<number>();
+        let totalCarasEsperadas = 0;
+        let totalBonif = 0;
+        let tarifaRepresentativa = 0;
+        const seenScForAgg = new Set<number>();
         for (const r of bucketRows) {
           propuestaIds.add(r.propuesta.propuesta_id);
-          if (bucketHasInv) {
+          if (useResumenInversion) {
+            if (!propInversionSeen.has(r.propuesta.propuesta_id)) {
+              propInversionSeen.add(r.propuesta.propuesta_id);
+              if (bucketCatContext) {
+                const res = resumenMap.get(`${r.propuesta.propuesta_id}-${bucketCatContext.num}-${bucketCatContext.anio}`);
+                inversion += res ? Number(res.inversion_catorcena) || 0 : 0;
+              } else {
+                inversion += Number(r.propuesta.inversion) || 0;
+              }
+            }
+          } else {
             for (const inv of r.inventarios) {
               const tarifa = Number(inv.tarifa_publica_sc) || 0;
               const cant = Number((inv as any).caras_totales) || 1;
               inversion += tarifa * cant;
             }
-          } else if (!propInversionSeen.has(r.propuesta.propuesta_id)) {
-            propInversionSeen.add(r.propuesta.propuesta_id);
-            inversion += Number(r.propuesta.inversion) || 0;
+          }
+          // Agregaciones por cara (sc) — únicas por sc_id dentro del bucket.
+          if (r.cara && !seenScForAgg.has(r.cara.sc_id)) {
+            seenScForAgg.add(r.cara.sc_id);
+            scIds.add(r.cara.sc_id);
+            totalCarasEsperadas += Number(r.cara.caras_esperadas) || 0;
+            totalBonif += Number(r.cara.bonificacion) || 0;
+            const t = Number(r.cara.tarifa_publica) || 0;
+            if (t > 0 && tarifaRepresentativa === 0) tarifaRepresentativa = t;
+          }
+        }
+        let circuitosCount = scIds.size;
+        // Fallback para el bucket de propuesta sin caras detalladas (modo
+        // lite): usar el resumen específico de la catorcena del path. Sin
+        // catContext (usuario quitó catorcena del grouping) no rellenamos para
+        // evitar mostrar totales engañosos.
+        if (head === 'propuesta' && scIds.size === 0 && bucketCatContext && propuestaIds.size === 1) {
+          const pid = bucketRows[0].propuesta.propuesta_id;
+          const res = resumenMap.get(`${pid}-${bucketCatContext.num}-${bucketCatContext.anio}`);
+          if (res) {
+            circuitosCount = Number(res.circuitos_count) || 0;
+            totalCarasEsperadas = Number(res.caras_total) || 0;
+            totalBonif = Number(res.bonif_total) || 0;
+            if (tarifaRepresentativa === 0) tarifaRepresentativa = Number(res.tarifa_representativa) || 0;
           }
         }
         const node: GroupNode = {
@@ -466,9 +584,14 @@ export default function PropuestasVersionarioView({ isDark, filters, advancedFil
           fullKey,
           label: value.label,
           meta: value.meta,
-          children: rest.length > 0 ? buildTree(bucketRows, rest, fullKey) : [],
+          children: rest.length > 0 ? buildTree(bucketRows, rest, fullKey, bucketCatContext) : [],
           inversion,
           propuestaIds,
+          scIds,
+          circuitosCount,
+          totalCarasEsperadas,
+          totalBonif,
+          tarifaRepresentativa,
         };
         if (rest.length === 0) {
           node.inventarios = bucketRows.flatMap(r => r.inventarios);
@@ -489,7 +612,7 @@ export default function PropuestasVersionarioView({ isDark, filters, advancedFil
       return nodes;
     }
 
-    return buildTree(filteredRows, effectiveGroupings, '');
+    return buildTree(filteredRows, effectiveGroupings, '', null);
   }, [data, filters.yearInicio, filters.yearFin, filters.catorcenaInicio, filters.catorcenaFin, advancedFilters, effectiveGroupings, propuestaDetails]);
 
   // Al expandir un nodo de nivel "propuesta", lazy-load su detalle (caras+inv)
@@ -752,6 +875,26 @@ export default function PropuestasVersionarioView({ isDark, filters, advancedFil
           <span className={`px-2 py-0.5 rounded-full text-[10px] ${isDark ? 'bg-purple-500/15 text-purple-300' : 'bg-purple-50 text-purple-700'} border border-purple-500/25`}>
             {node.propuestaIds.size} prop{node.propuestaIds.size !== 1 ? 's' : ''}
           </span>
+          {node.field === 'propuesta' && node.circuitosCount > 0 && (
+            <span className={`px-2 py-0.5 rounded-full text-[10px] ${isDark ? 'bg-blue-500/15 text-blue-300' : 'bg-blue-50 text-blue-700'} border border-blue-500/25 flex items-center gap-1`} title="Circuitos (caras)">
+              <Layers className="h-3 w-3" /> Circuitos {node.circuitosCount}
+            </span>
+          )}
+          {node.field === 'propuesta' && node.totalBonif > 0 && (
+            <span className={`px-2 py-0.5 rounded-full text-[10px] ${isDark ? 'bg-amber-500/15 text-amber-300' : 'bg-amber-50 text-amber-700'} border border-amber-500/25 flex items-center gap-1`} title="Bonificación">
+              <Gift className="h-3 w-3" /> {node.totalBonif}
+            </span>
+          )}
+          {node.field === 'propuesta' && (node.totalCarasEsperadas - node.totalBonif) > 0 && (
+            <span className={`px-2 py-0.5 rounded-full text-[10px] ${isDark ? 'bg-cyan-500/15 text-cyan-300' : 'bg-cyan-50 text-cyan-700'} border border-cyan-500/25 flex items-center gap-1`} title="Caras rentadas sin bonificación">
+              <MapPin className="h-3 w-3" /> {node.totalCarasEsperadas - node.totalBonif}
+            </span>
+          )}
+          {node.field === 'propuesta' && node.tarifaRepresentativa > 0 && (
+            <span className={`px-2 py-0.5 rounded-full text-[10px] ${isDark ? 'bg-blue-500/15 text-blue-300' : 'bg-blue-50 text-blue-700'} border border-blue-500/25`} title="Tarifa pública (precio por cara)">
+              Tarifa: ${node.tarifaRepresentativa.toLocaleString()}
+            </span>
+          )}
           {node.inversion > 0 && (
             <span className={`px-2 py-0.5 rounded-full text-[10px] ${isDark ? 'bg-green-500/15 text-green-300' : 'bg-green-50 text-green-700'} border border-green-500/25 flex items-center gap-1`}>
               <DollarSign className="h-3 w-3" /> {node.inversion.toLocaleString()}

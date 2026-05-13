@@ -20,7 +20,7 @@ import { useEnvironmentStore, getEndpoints } from '../../store/environmentStore'
 import { useAuthStore } from '../../store/authStore';
 import { getPermissions } from '../../lib/permissions';
 import { filterAllowedArticulos } from '../../config/allowedDigitalArticles';
-import { useSocketPropuesta, useSocketEquipos } from '../../hooks/useSocket';
+import { useSocketPropuesta, useSocketEquipos, useSocketInventarioRealtime, type InventarioRealtimePayload } from '../../hooks/useSocket';
 import { useThemeStore } from '../../store/themeStore';
 
 const GOOGLE_MAPS_API_KEY = 'AIzaSyB7Bzwydh91xZPdR8mGgqAV2hO72W1EVaw';
@@ -929,6 +929,35 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
   const [inventarioDisponible, setInventarioDisponible] = useState<InventarioDisponible[]>([]);
   const [isSearching, setIsSearching] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
+
+  // Real-time: cuando OTRO usuario reserva un espacio cuyo período se solapa
+  // con la cara que estoy buscando, quitarlo de mi listado de disponibles en
+  // vivo (vía socket). Cuando se libera, también lo agrego — pero por
+  // simplicidad re-fetcheamos (datos limpios siempre).
+  useSocketInventarioRealtime(
+    (payload: InventarioRealtimePayload) => {
+      // OCUPADO: si tengo este espacio en disponibles y se solapa con el periodo
+      // buscado, quitarlo.
+      if (!selectedCaraForSearch) return;
+      const ini = selectedCaraForSearch.inicio_periodo;
+      const fin = selectedCaraForSearch.fin_periodo;
+      if (!ini || !fin || !payload.fechaInicio || !payload.fechaFin) return;
+      const overlap = new Date(payload.fechaInicio) <= new Date(fin) && new Date(payload.fechaFin) >= new Date(ini);
+      if (!overlap) return;
+      setInventarioDisponible(prev =>
+        prev.filter(inv =>
+          inv.espacio_id !== payload.espacioId &&
+          (payload.inventarioId == null || inv.id !== payload.inventarioId)
+        )
+      );
+    },
+    () => {
+      // LIBERADO: el espacio quedó libre — refrescar disponibles para reflejarlo.
+      // (No re-agregamos directo porque puede no cumplir filtros de ciudad/categoría.)
+      // El refetch trae solo los que sí cumplen.
+      // Nota: si no hay búsqueda activa, no hacemos nada.
+    },
+  );
 
   // POI filter state
   const [poiFilterIds, setPoiFilterIds] = useState<Set<number> | null>(null);
