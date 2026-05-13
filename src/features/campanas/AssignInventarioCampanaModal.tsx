@@ -1497,30 +1497,74 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
     }
   };
 
-  // Calculate KPIs for caras
+  // Índices O(1) para evitar caras.find() y catorcenasData.data.find()
+  // dentro de loops grandes (perf con muchas catorcenas).
+  const carasByLocalId = useMemo(() => {
+    const map = new Map<string, CaraItem>();
+    caras.forEach(c => map.set(c.localId, c));
+    return map;
+  }, [caras]);
+
+  const carasByDbId = useMemo(() => {
+    const map = new Map<number, CaraItem>();
+    caras.forEach(c => { if (c.id != null) map.set(c.id, c); });
+    return map;
+  }, [caras]);
+
+  const catorcenasByYearNum = useMemo(() => {
+    const map = new Map<string, { id: number; a_o: number; numero_catorcena: number; fecha_inicio: string; fecha_fin: string }>();
+    catorcenasData?.data?.forEach((c: any) => map.set(`${c.a_o}-${c.numero_catorcena}`, c));
+    return map;
+  }, [catorcenasData]);
+
+  const catorcenasByFechaInicio = useMemo(() => {
+    const map = new Map<string, { numero_catorcena: number; a_o: number }>();
+    catorcenasData?.data?.forEach((c: any) => map.set(String(c.fecha_inicio).slice(0, 10), c));
+    return map;
+  }, [catorcenasData]);
+
+  // Calculate KPIs for caras (single pass — antes hacía 6 .filter sobre caras)
   const carasKPIs = useMemo(() => {
-    const totalRenta = caras.filter(c => !isNoInventoryArticle(c.articulo || '')).reduce((acc, c) => acc + (c.caras || 0), 0);
-    const totalImpresiones = caras.filter(c => (c.articulo || '').toUpperCase().startsWith('IM')).reduce((acc, c) => acc + (c.caras || 0), 0);
-    const totalEspeciales = caras.filter(c => isEspecialArticle(c.articulo || '')).reduce((acc, c) => acc + (c.caras || 0), 0);
-    const totalBonificacion = caras.filter(c => !(c.articulo || '').toUpperCase().startsWith('CT') && !isNoInventoryArticle(c.articulo || '')).reduce((acc, c) => acc + (c.bonificacion || 0), 0);
-    const totalCortesia = caras.filter(c => (c.articulo || '').toUpperCase().startsWith('CT')).reduce((acc, c) => acc + (c.bonificacion || 0), 0);
-    const totalInversion = caras.reduce((acc, c) => acc + (Number(c.costo) || 0), 0);
+    let totalRenta = 0, totalImpresiones = 0, totalEspeciales = 0;
+    let totalBonificacion = 0, totalCortesia = 0, totalInversion = 0;
+    for (const c of caras) {
+      const art = (c.articulo || '').toUpperCase();
+      const caras_n = c.caras || 0;
+      const bonif = c.bonificacion || 0;
+      const noInv = isNoInventoryArticle(c.articulo || '');
+      const esp = isEspecialArticle(c.articulo || '');
+      const ct = art.startsWith('CT');
+      const im = art.startsWith('IM');
+      if (!noInv) totalRenta += caras_n;
+      if (im) totalImpresiones += caras_n;
+      if (esp) totalEspeciales += caras_n;
+      if (!ct && !noInv) totalBonificacion += bonif;
+      if (ct) totalCortesia += bonif;
+      totalInversion += Number(c.costo) || 0;
+    }
     return { totalRenta, totalImpresiones, totalEspeciales, totalBonificacion, totalCortesia, totalInversion };
   }, [caras]);
 
-  // Pre-compute reservas indexed by cara for O(1) lookup instead of O(n) per cara
+  // Pre-compute reservas indexed by cara for O(1) lookup instead of O(n) per cara.
+  // Antes: O(reservas × caras). Ahora: O(reservas) via carasByDbId, con fallback
+  // sólo para reservas locales sin solicitudCaraId (raro).
   const reservasByCara = useMemo(() => {
     const map = new Map<string, ReservaItem[]>();
-    reservas.forEach(r => {
-      const caraMatch = caras.find(c => r.id.startsWith(c.localId) || r.solicitudCaraId === c.id);
-      if (caraMatch) {
-        const key = caraMatch.localId;
-        if (!map.has(key)) map.set(key, []);
-        map.get(key)!.push(r);
+    for (const r of reservas) {
+      let cara: CaraItem | undefined;
+      if (r.solicitudCaraId != null) cara = carasByDbId.get(r.solicitudCaraId);
+      if (!cara) {
+        for (const c of caras) {
+          if (r.id.startsWith(c.localId)) { cara = c; break; }
+        }
       }
-    });
+      if (cara) {
+        const arr = map.get(cara.localId);
+        if (arr) arr.push(r); else map.set(cara.localId, [r]);
+      }
+    }
     return map;
-  }, [reservas, caras]);
+  }, [reservas, caras, carasByDbId]);
 
   // Pre-compute RT pair map for O(1) lookup
   const rtPairMap = useMemo(() => {
@@ -1534,14 +1578,28 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
     return map;
   }, [caras]);
 
-  // Merge all reservas by grupo_completo_id (for display)
+  // Índice por grupo_completo_id en una sola pasada (antes O(R²)).
+  const reservasByGrupoCompleto = useMemo(() => {
+    const map = new Map<number, ReservaItem[]>();
+    for (const r of reservas) {
+      if (r.grupo_completo_id != null) {
+        const arr = map.get(r.grupo_completo_id);
+        if (arr) arr.push(r); else map.set(r.grupo_completo_id, [r]);
+      }
+    }
+    return map;
+  }, [reservas]);
+
+  // Merge all reservas by grupo_completo_id (for display) — O(R) usando el índice.
   const reservasMerged = useMemo(() => {
     const result: ReservaItem[] = [];
     const processedGrupos = new Set<number>();
 
-    reservas.forEach(r => {
-      if (r.grupo_completo_id && !processedGrupos.has(r.grupo_completo_id)) {
-        const groupReservas = reservas.filter(res => res.grupo_completo_id === r.grupo_completo_id);
+    for (const r of reservas) {
+      if (r.grupo_completo_id != null) {
+        if (processedGrupos.has(r.grupo_completo_id)) continue;
+        processedGrupos.add(r.grupo_completo_id);
+        const groupReservas = reservasByGrupoCompleto.get(r.grupo_completo_id) || [];
         if (groupReservas.length >= 2) {
           const baseCode = r.codigo_unico?.replace(/_Flujo|_Contraflujo/gi, '') || '';
           result.push({
@@ -1550,60 +1608,63 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
             codigo_unico: `${baseCode}_Completo`,
             tipo: 'Flujo' as const,
           });
-          processedGrupos.add(r.grupo_completo_id);
         } else {
           result.push(r);
-          processedGrupos.add(r.grupo_completo_id);
         }
-      } else if (!r.grupo_completo_id) {
+      } else {
         result.push(r);
       }
-    });
+    }
 
     return result;
-  }, [reservas]);
+  }, [reservas, reservasByGrupoCompleto]);
 
-  // Calculate KPIs for reservas (including completo count)
+  // Calculate KPIs for reservas (including completo count) — single pass O(R)
+  // usando reservasByGrupoCompleto y carasByDbId (antes O(R² + R×C)).
   const reservasKPIs = useMemo(() => {
-    const flujo = reservas.filter(r => r.tipo === 'Flujo').length;
-    const contraflujo = reservas.filter(r => r.tipo === 'Contraflujo').length;
-    const bonificadas = reservas.filter(r => r.tipo === 'Bonificacion').length;
-    const renta = flujo + contraflujo; // Non-bonificadas
-    const total = reservas.length;
-
-    // Count completo items (merged pairs)
-    const processedGrupos = new Set<number>();
+    let flujo = 0, contraflujo = 0, bonificadas = 0;
+    let dineroTotal = 0, digitales = 0;
+    const seenGrupos = new Set<number>();
     let completos = 0;
-    reservas.forEach(r => {
-      if (r.grupo_completo_id && !processedGrupos.has(r.grupo_completo_id)) {
-        const groupReservas = reservas.filter(res => res.grupo_completo_id === r.grupo_completo_id);
-        if (groupReservas.length >= 2) {
-          completos++;
-        }
-        processedGrupos.add(r.grupo_completo_id);
-      }
-    });
 
-    // Calculate money: sum tarifa_publica for each non-bonificada reserva
-    let dineroTotal = 0;
-    let digitales = 0;
-    reservas.forEach(reserva => {
-      // Find the cara this reserva belongs to
-      const cara = caras.find(c => reserva.id.startsWith(c.localId));
+    for (const r of reservas) {
+      // Tipos
+      if (r.tipo === 'Flujo') flujo++;
+      else if (r.tipo === 'Contraflujo') contraflujo++;
+      else if (r.tipo === 'Bonificacion') bonificadas++;
+
+      // Completos (sin re-iterar reservas)
+      if (r.grupo_completo_id != null && !seenGrupos.has(r.grupo_completo_id)) {
+        seenGrupos.add(r.grupo_completo_id);
+        const groupReservas = reservasByGrupoCompleto.get(r.grupo_completo_id);
+        if (groupReservas && groupReservas.length >= 2) completos++;
+      }
+
+      // Dinero y digitales (O(1) lookup vía solicitudCaraId / fallback startsWith)
+      let cara: CaraItem | undefined;
+      if (r.solicitudCaraId != null) cara = carasByDbId.get(r.solicitudCaraId);
+      if (!cara) {
+        for (const c of caras) {
+          if (r.id.startsWith(c.localId)) { cara = c; break; }
+        }
+      }
       if (cara) {
-        // Only count money for non-bonificadas
-        if (reserva.tipo !== 'Bonificacion') {
-          dineroTotal += (cara.tarifa_publica || 0);
-        }
-        // Count digital types
-        if (cara.tipo?.toLowerCase().includes('digital')) {
-          digitales++;
-        }
+        if (r.tipo !== 'Bonificacion') dineroTotal += (cara.tarifa_publica || 0);
+        if (cara.tipo?.toLowerCase().includes('digital')) digitales++;
       }
-    });
+    }
 
-    return { flujo, contraflujo, bonificadas, renta, total, dineroTotal, digitales, completos };
-  }, [reservas, caras]);
+    return {
+      flujo,
+      contraflujo,
+      bonificadas,
+      renta: flujo + contraflujo,
+      total: reservas.length,
+      dineroTotal,
+      digitales,
+      completos,
+    };
+  }, [reservas, caras, carasByDbId, reservasByGrupoCompleto]);
 
   // ============ ADVANCED FILTER FUNCTIONS FOR RESERVAS ============
   // Obtener valores únicos para cada campo
@@ -1677,6 +1738,82 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
 
     return data;
   }, [reservasMerged, filtersReservas, sortFieldReservas, sortDirectionReservas]);
+
+  // Grouping multi-nivel precomputado en una sola pasada (antes era recursivo en
+  // cada render con O(N×L) y un .filter() de getTypeBreakdown por nodo). Esto
+  // construye, en O(N×L):
+  //   - grouped: el árbol que el JSX consume
+  //   - flatBySubKey: items flat por path (groupKey, "groupKey-subKey", ...)
+  //   - breakdownBySubKey: {flujo, contraflujo, bonificacion, total} por path
+  type GroupedData = Record<string, ReservaItem[] | Record<string, ReservaItem[] | Record<string, ReservaItem[]>>>;
+  const reservasGroupingData = useMemo(() => {
+    const fields = activeGroupingsReservas;
+    const grouped: GroupedData = {};
+    const flatBySubKey = new Map<string, ReservaItem[]>();
+    const breakdownBySubKey = new Map<string, { flujo: number; contraflujo: number; bonificacion: number; total: number }>();
+
+    if (fields.length === 0) {
+      return { grouped, groupKeys: [] as string[], flatBySubKey, breakdownBySubKey };
+    }
+
+    const getKey = (r: ReservaItem, field: GroupByFieldReservas): string => {
+      switch (field) {
+        case 'catorcena': return tipoPeriodo === 'mensual'
+          ? `${MESES_LABEL[r.catorcena - 1] || `Mes ${r.catorcena}`} ${r.anio}`
+          : `Cat ${r.catorcena}/${r.anio}`;
+        case 'tipo': return r.tipo;
+        case 'plaza': return r.plaza || 'Sin Plaza';
+        case 'formato': return r.formato || 'Sin Formato';
+        case 'grupo': return r.grupo_completo_id ? `Grupo ${r.grupo_completo_id}` : 'Sin Grupo';
+        case 'articulo': return r.articulo || 'Sin Artículo';
+        default: return 'Otros';
+      }
+    };
+
+    const pushFlat = (path: string, r: ReservaItem) => {
+      let arr = flatBySubKey.get(path);
+      if (!arr) { arr = []; flatBySubKey.set(path, arr); }
+      arr.push(r);
+      let b = breakdownBySubKey.get(path);
+      if (!b) { b = { flujo: 0, contraflujo: 0, bonificacion: 0, total: 0 }; breakdownBySubKey.set(path, b); }
+      b.total++;
+      if (r.tipo === 'Flujo') b.flujo++;
+      else if (r.tipo === 'Contraflujo') b.contraflujo++;
+      else if (r.tipo === 'Bonificacion') b.bonificacion++;
+    };
+
+    for (const r of filteredReservasData) {
+      const k1 = getKey(r, fields[0]);
+      pushFlat(k1, r);
+      if (fields.length === 1) {
+        let arr = grouped[k1] as ReservaItem[] | undefined;
+        if (!arr) { arr = []; grouped[k1] = arr; }
+        arr.push(r);
+        continue;
+      }
+      const k2 = getKey(r, fields[1]);
+      const path2 = `${k1}-${k2}`;
+      pushFlat(path2, r);
+      let level1 = grouped[k1] as Record<string, ReservaItem[] | Record<string, ReservaItem[]>> | undefined;
+      if (!level1) { level1 = {}; grouped[k1] = level1; }
+      if (fields.length === 2) {
+        let arr = level1[k2] as ReservaItem[] | undefined;
+        if (!arr) { arr = []; level1[k2] = arr; }
+        arr.push(r);
+        continue;
+      }
+      const k3 = getKey(r, fields[2]);
+      const path3 = `${path2}-${k3}`;
+      pushFlat(path3, r);
+      let level2 = level1[k2] as Record<string, ReservaItem[]> | undefined;
+      if (!level2) { level2 = {}; level1[k2] = level2; }
+      let arr3 = level2[k3];
+      if (!arr3) { arr3 = []; level2[k3] = arr3; }
+      arr3.push(r);
+    }
+
+    return { grouped, groupKeys: Object.keys(grouped).sort(), flatBySubKey, breakdownBySubKey };
+  }, [filteredReservasData, activeGroupingsReservas, tipoPeriodo]);
   // ============ END ADVANCED FILTER FUNCTIONS ============
 
   // Effect to re-fit map bounds when filtered reservas change (for "Resumen de Reservas" map)
@@ -1841,15 +1978,14 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
     );
   }, [caras]);
 
-  // Group caras by catorcena period with catorcena info
+  // Group caras by catorcena period with catorcena info — O(C) usando catorcenasByFechaInicio.
   const carasGroupedByCatorcena = useMemo(() => {
     const groups: Record<string, { caras: CaraItem[]; catorcenaNum?: number; year?: number }> = {};
-    caras.forEach(cara => {
+    for (const cara of caras) {
       let periodo = cara.inicio_periodo || 'Sin periodo';
       let parsedMonth: number | undefined;
       let parsedYear: number | undefined;
       if (tipoPeriodo === 'mensual' && cara.inicio_periodo) {
-        // Parse date string directly to avoid timezone shifts
         const parts = cara.inicio_periodo.split('-');
         if (parts.length >= 2) {
           parsedYear = parseInt(parts[0]);
@@ -1864,16 +2000,15 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
           const parts = periodo.split('-');
           groups[periodo] = { caras: [], catorcenaNum: parseInt(parts[1]) || undefined, year: parseInt(parts[0]) || undefined };
         } else {
-          // Catorcena: comparar como YYYY-MM-DD por si el formato difiere (ISO vs date)
           const periodoStr = String(periodo).slice(0, 10);
-          const catorcenaInfo = catorcenasData?.data?.find(c => String(c.fecha_inicio).slice(0, 10) === periodoStr);
+          const catorcenaInfo = catorcenasByFechaInicio.get(periodoStr);
           groups[periodo] = { caras: [], catorcenaNum: catorcenaInfo?.numero_catorcena, year: catorcenaInfo?.a_o };
         }
       }
       groups[periodo].caras.push(cara);
-    });
+    }
     return Object.entries(groups).sort((a, b) => a[0].localeCompare(b[0]));
-  }, [caras, catorcenasData, tipoPeriodo]);
+  }, [caras, catorcenasByFechaInicio, tipoPeriodo]);
 
   // Years options (filtered like EditSolicitudModal)
   const yearInicioOptions = useMemo(() => {
@@ -1960,9 +2095,9 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
       rangoIni = `${yearInicio}-${String(catorcenaInicio).padStart(2, '0')}-01`;
       const lastDay = new Date(yearFin, catorcenaFin, 0).getDate();
       rangoFin = `${yearFin}-${String(catorcenaFin).padStart(2, '0')}-${String(lastDay).padStart(2, '0')}`;
-    } else if (catorcenasData?.data) {
-      const ini = catorcenasData.data.find(c => c.a_o === yearInicio && c.numero_catorcena === catorcenaInicio);
-      const fin = catorcenasData.data.find(c => c.a_o === yearFin && c.numero_catorcena === catorcenaFin);
+    } else {
+      const ini = catorcenasByYearNum.get(`${yearInicio}-${catorcenaInicio}`);
+      const fin = catorcenasByYearNum.get(`${yearFin}-${catorcenaFin}`);
       if (ini) rangoIni = String(ini.fecha_inicio).split('T')[0];
       if (fin) rangoFin = String(fin.fecha_fin).split('T')[0];
     }
@@ -1978,7 +2113,7 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
       }
       return false;
     });
-  }, [caras, availablePeriods, yearInicio, yearFin, catorcenaInicio, catorcenaFin, tipoPeriodo, catorcenasData]);
+  }, [caras, availablePeriods, yearInicio, yearFin, catorcenaInicio, catorcenaFin, tipoPeriodo, catorcenasByYearNum]);
 
   // Toggle catorcena expansion
   const toggleCatorcena = (periodo: string) => {
@@ -8071,66 +8206,17 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
 
               {/* Section 3: Reservas Summary with Map and Selection - ADVANCED FILTERS */}
               {reservas.length > 0 && (() => {
-                // Use filtered data from useMemo
+                // Use filtered+grouped data from useMemo (perf: precomputado fuera del render)
                 const filteredReservas = filteredReservasData;
+                const groupedReservas = reservasGroupingData.grouped;
+                const groupKeys = reservasGroupingData.groupKeys;
+                const flatBySubKey = reservasGroupingData.flatBySubKey;
+                const breakdownBySubKey = reservasGroupingData.breakdownBySubKey;
 
-                // Helper to get group key based on field
-                const getFieldValue = (r: ReservaItem, field: GroupByFieldReservas): string => {
-                  switch (field) {
-                    case 'catorcena': return tipoPeriodo === 'mensual'
-                      ? `${MESES_LABEL[r.catorcena - 1] || `Mes ${r.catorcena}`} ${r.anio}`
-                      : `Cat ${r.catorcena}/${r.anio}`;
-                    case 'tipo': return r.tipo;
-                    case 'plaza': return r.plaza || 'Sin Plaza';
-                    case 'formato': return r.formato || 'Sin Formato';
-                    case 'grupo': return r.grupo_completo_id ? `Grupo ${r.grupo_completo_id}` : 'Sin Grupo';
-                    case 'articulo': return r.articulo || 'Sin Artículo';
-                    default: return 'Otros';
-                  }
-                };
-
-                // Multi-level grouping
-                type GroupedData = Record<string, ReservaItem[] | Record<string, ReservaItem[] | Record<string, ReservaItem[]>>>;
-                const groupData = (items: ReservaItem[], fields: GroupByFieldReservas[]): GroupedData => {
-                  if (fields.length === 0) return {};
-                  const [firstField, ...restFields] = fields;
-                  const grouped: GroupedData = {};
-                  items.forEach(item => {
-                    const key = getFieldValue(item, firstField);
-                    if (!grouped[key]) grouped[key] = restFields.length > 0 ? {} : [];
-                    if (restFields.length > 0) {
-                      const subGrouped = groupData([item], restFields);
-                      Object.entries(subGrouped).forEach(([subKey, subItems]) => {
-                        const target = grouped[key] as Record<string, ReservaItem[] | Record<string, ReservaItem[]>>;
-                        if (!target[subKey]) target[subKey] = Array.isArray(subItems) ? [] : {};
-                        if (Array.isArray(subItems)) {
-                          (target[subKey] as ReservaItem[]).push(...subItems);
-                        } else {
-                          Object.entries(subItems).forEach(([thirdKey, thirdItems]) => {
-                            const thirdTarget = target[subKey] as Record<string, ReservaItem[]>;
-                            if (!thirdTarget[thirdKey]) thirdTarget[thirdKey] = [];
-                            thirdTarget[thirdKey].push(...(thirdItems as ReservaItem[]));
-                          });
-                        }
-                      });
-                    } else {
-                      (grouped[key] as ReservaItem[]).push(item);
-                    }
-                  });
-                  return grouped;
-                };
-
-                const groupedReservas = groupData(filteredReservas, activeGroupingsReservas);
-                const groupKeys = Object.keys(groupedReservas).sort();
-
-                // Count items recursively
-                const countItems = (data: unknown): number => {
-                  if (Array.isArray(data)) return data.length;
-                  if (typeof data === 'object' && data !== null) {
-                    return Object.values(data).reduce((sum, v) => sum + countItems(v), 0);
-                  }
-                  return 0;
-                };
+                // Helpers que ahora son simples lookups O(1) en los mapas precomputados.
+                const flattenForKey = (path: string): ReservaItem[] => flatBySubKey.get(path) || [];
+                const countForKey = (path: string): number => (flatBySubKey.get(path)?.length) || 0;
+                const breakdownForKey = (path: string) => breakdownBySubKey.get(path) || { flujo: 0, contraflujo: 0, bonificacion: 0, total: 0 };
 
                 // Toggle functions
                 const toggleAllMapReservas = () => {
@@ -8173,26 +8259,9 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
                   });
                 };
 
-                // Flatten all items for a group
-                const flattenItems = (data: unknown): ReservaItem[] => {
-                  if (Array.isArray(data)) return data;
-                  if (typeof data === 'object' && data !== null) {
-                    return Object.values(data).flatMap(v => flattenItems(v));
-                  }
-                  return [];
-                };
-
-                // Get type breakdown for a group of items
-                const getTypeBreakdown = (items: ReservaItem[]) => {
-                  const flujo = items.filter(r => r.tipo === 'Flujo').length;
-                  const contraflujo = items.filter(r => r.tipo === 'Contraflujo').length;
-                  const bonificacion = items.filter(r => r.tipo === 'Bonificacion').length;
-                  return { flujo, contraflujo, bonificacion, total: items.length };
-                };
-
-                // Render type breakdown badges
-                const TypeBreakdownBadges = ({ items }: { items: ReservaItem[] }) => {
-                  const breakdown = getTypeBreakdown(items);
+                // Render type breakdown badges (usa breakdown precomputado por path)
+                const TypeBreakdownBadges = ({ path }: { path: string }) => {
+                  const breakdown = breakdownForKey(path);
                   return (
                     <div className="flex items-center gap-1">
                       {breakdown.flujo > 0 && (
@@ -8456,8 +8525,9 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
                           {groupKeys.map(groupKey => {
                             const groupData = groupedReservas[groupKey];
                             const isLevel1Array = Array.isArray(groupData);
-                            const level1Items = flattenItems(groupData);
-                            const totalItems = countItems(groupData);
+                            const level1Items = flattenForKey(groupKey);
+                            const totalItems = countForKey(groupKey);
+                            void totalItems;
                             const allSelected = level1Items.every(r => selectedMapReservas.has(r.id));
                             const someSelected = level1Items.some(r => selectedMapReservas.has(r.id));
                             const isExpanded = expandedReservasGroups.has(groupKey);
@@ -8481,7 +8551,7 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
                                     {AVAILABLE_GROUPINGS_RESERVAS.find(g => g.field === activeGroupingsReservas[0])?.label}:
                                   </span>
                                   <span className="text-sm font-medium text-white flex-1 text-left truncate">{groupKey}</span>
-                                  <TypeBreakdownBadges items={level1Items} />
+                                  <TypeBreakdownBadges path={groupKey} />
                                 </button>
                                 {isExpanded && (
                                   <div className="bg-zinc-900/40 border-l-2 border-purple-500/30 ml-3">
@@ -8511,7 +8581,7 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
                                       // Level 2 groups
                                       Object.entries(groupData as Record<string, ReservaItem[] | Record<string, ReservaItem[]>>).map(([subKey, subData]) => {
                                         const subFullKey = `${groupKey}-${subKey}`;
-                                        const subItems = flattenItems(subData);
+                                        const subItems = flattenForKey(subFullKey);
                                         const isSubExpanded = expandedReservasGroups.has(subFullKey);
                                         const allSubSelected = subItems.every(r => selectedMapReservas.has(r.id));
                                         const someSubSelected = subItems.some(r => selectedMapReservas.has(r.id));
@@ -8536,7 +8606,7 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
                                                 {AVAILABLE_GROUPINGS_RESERVAS.find(g => g.field === activeGroupingsReservas[1])?.label}:
                                               </span>
                                               <span className="text-[11px] text-white flex-1 text-left truncate">{subKey}</span>
-                                              <TypeBreakdownBadges items={subItems} />
+                                              <TypeBreakdownBadges path={subFullKey} />
                                             </button>
                                             {isSubExpanded && (
                                               <div className="ml-2 border-l border-cyan-500/20">
@@ -8575,7 +8645,7 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
                                                             {AVAILABLE_GROUPINGS_RESERVAS.find(g => g.field === activeGroupingsReservas[2])?.label}:
                                                           </span>
                                                           <span className="text-[11px] text-white flex-1 text-left truncate">{thirdKey}</span>
-                                                          <TypeBreakdownBadges items={thirdItems} />
+                                                          <TypeBreakdownBadges path={thirdFullKey} />
                                                         </button>
                                                         {isThirdExpanded && thirdItems.map(reserva => (
                                                           <label
@@ -8663,32 +8733,46 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
                                 }
                               }}
                             >
-                              {filteredReservas.map(reserva => {
-                                if (!reserva.latitud || !reserva.longitud) return null;
-                                const isSelected = selectedMapReservas.has(reserva.id);
-                                const hasSelection = selectedMapReservas.size > 0;
-                                const isCompleto = reserva.codigo_unico?.includes('_Completo');
-
-                                return (
-                                  <Marker
-                                    key={reserva.id}
-                                    position={{ lat: reserva.latitud, lng: reserva.longitud }}
-                                    onClick={() => toggleSingleMapReserva(reserva.id)}
-                                    icon={{
-                                      path: google.maps.SymbolPath.CIRCLE,
-                                      scale: isSelected ? 12 : (hasSelection ? 6 : 8),
-                                      fillColor: isCompleto ? '#a855f7' :
-                                        reserva.tipo === 'Flujo' ? '#3b82f6' :
-                                        reserva.tipo === 'Contraflujo' ? '#06b6d4' : '#10b981',
-                                      fillOpacity: isSelected ? 1 : (hasSelection ? 0.3 : 0.9),
-                                      strokeColor: isSelected ? '#fff' : (hasSelection ? 'transparent' : '#fff'),
-                                      strokeWeight: isSelected ? 3 : 2,
-                                    }}
-                                    zIndex={isSelected ? 1000 : 1}
-                                  />
-                                );
-                              })}
+                              {(() => {
+                                // Umbral: con muchas reservas el Marker legacy de Google Maps
+                                // bloquea el main thread. Por arriba del límite solo dibujamos
+                                // los seleccionados (el usuario selecciona desde la lista izq).
+                                const MARKERS_LIMIT = 500;
+                                const tooMany = filteredReservas.length > MARKERS_LIMIT;
+                                const source = tooMany
+                                  ? filteredReservas.filter(r => selectedMapReservas.has(r.id))
+                                  : filteredReservas;
+                                return source.map(reserva => {
+                                  if (!reserva.latitud || !reserva.longitud) return null;
+                                  const isSelected = selectedMapReservas.has(reserva.id);
+                                  const hasSelection = selectedMapReservas.size > 0;
+                                  const isCompleto = reserva.codigo_unico?.includes('_Completo');
+                                  return (
+                                    <Marker
+                                      key={reserva.id}
+                                      position={{ lat: reserva.latitud, lng: reserva.longitud }}
+                                      onClick={() => toggleSingleMapReserva(reserva.id)}
+                                      icon={{
+                                        path: google.maps.SymbolPath.CIRCLE,
+                                        scale: isSelected ? 12 : (hasSelection ? 6 : 8),
+                                        fillColor: isCompleto ? '#a855f7' :
+                                          reserva.tipo === 'Flujo' ? '#3b82f6' :
+                                          reserva.tipo === 'Contraflujo' ? '#06b6d4' : '#10b981',
+                                        fillOpacity: isSelected ? 1 : (hasSelection ? 0.3 : 0.9),
+                                        strokeColor: isSelected ? '#fff' : (hasSelection ? 'transparent' : '#fff'),
+                                        strokeWeight: isSelected ? 3 : 2,
+                                      }}
+                                      zIndex={isSelected ? 1000 : 1}
+                                    />
+                                  );
+                                });
+                              })()}
                             </GoogleMap>
+                            {filteredReservas.length > 500 && (
+                              <div className={`absolute top-3 left-3 z-10 ${isDark ? 'bg-zinc-900/95 border-amber-500/40 text-amber-300' : 'bg-white/95 border-amber-300 text-amber-700'} border rounded-lg px-3 py-2 text-[11px] max-w-[260px] shadow-lg`}>
+                                <strong>Mapa optimizado:</strong> {filteredReservas.length} reservas. Solo se dibujan las seleccionadas ({selectedMapReservas.size}) para no trabar la página. Selecciona desde la lista para verlas en el mapa.
+                              </div>
+                            )}
 
                             {/* Map Legend */}
                             <div className={`absolute bottom-3 right-3 z-10 ${isDark ? 'bg-zinc-900/95 border-zinc-700' : 'bg-white/95 border-gray-200'} border rounded-lg p-2.5 text-xs max-w-[180px]`}>
