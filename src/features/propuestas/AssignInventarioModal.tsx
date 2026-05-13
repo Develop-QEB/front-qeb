@@ -119,6 +119,13 @@ const isNoInventoryArticle = (itemCode: string, itemName?: string): boolean => {
   return isImpresionArticle(itemCode, itemName) || isEspecialArticle(itemCode, itemName);
 };
 
+// Artículos que son 100% bonificación (BF/CF/CT/IN). El KPI de bonificación
+// se divide en 2 (Flujo / Contraflujo) sin tocar BD; reservas siguen como tipo='Bonificacion'.
+const isBonifSplitArticle = (articulo?: string | null): boolean => {
+  const a = (articulo || '').toUpperCase();
+  return a.startsWith('BF') || a.startsWith('CF') || a.startsWith('CT') || a.startsWith('IN');
+};
+
 // Tarifa publica now comes from SAP (U_IMU_PublicPrice field on each article)
 
 // Ciudad -> Estado mapping for auto-selection
@@ -292,6 +299,7 @@ interface ReservaItem {
   inventario_id: number;
   codigo_unico: string;
   tipo: 'Flujo' | 'Contraflujo' | 'Bonificacion';
+  tipoCaraFisica?: 'Flujo' | 'Contraflujo'; // Dirección física del inventario (para split bonif. en BF/CT/IN)
   catorcena: number;
   anio: number;
   latitud: number;
@@ -1101,6 +1109,7 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
           inventario_id: r.inventario_id,
           codigo_unico: r.codigo_unico || `INV-${r.inventario_id}`,
           tipo: tipo as 'Flujo' | 'Contraflujo' | 'Bonificacion',
+          tipoCaraFisica: String(r.tipo_de_cara).startsWith('Flujo') ? 'Flujo' : 'Contraflujo',
           catorcena: matchingCara?.catorcena_inicio || catorcenaInicio || 1,
           anio: matchingCara?.anio_inicio || yearInicio || new Date().getFullYear(),
           latitud: Number(r.latitud) || 0,
@@ -1424,6 +1433,19 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
     }
     setIsUpdatingPropuesta(true);
     try {
+      // Si el usuario cambió de cliente, resolver el cliente.id real (PK) desde
+      // CUIC + sap_database antes de mandar al back. SAPCuicItem solo tiene CUIC.
+      let resolvedClienteId: number | null = null;
+      if (clienteChanged && selectedClienteCuic) {
+        try {
+          const resolved = await clientesService.resolveByCuic(selectedClienteCuic.CUIC, (selectedClienteCuic as any).sap_database || null);
+          resolvedClienteId = resolved.id;
+        } catch (err) {
+          alert(`No se pudo resolver cliente para CUIC ${selectedClienteCuic.CUIC}.`);
+          setIsUpdatingPropuesta(false);
+          return;
+        }
+      }
       // Update propuesta data (include client fields if changed)
       await propuestasService.updatePropuesta(propuesta.id, {
         nombre_campania: nombreCampania,
@@ -1434,8 +1456,8 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
         year_fin: yearFin,
         catorcena_fin: catorcenaFin,
         IMU: imu,
-        ...(clienteChanged && selectedClienteCuic ? {
-          cliente_id: selectedClienteCuic.CUIC,
+        ...(clienteChanged && selectedClienteCuic && resolvedClienteId ? {
+          cliente_id: resolvedClienteId,
           cuic: selectedClienteCuic.CUIC,
           razon_social: selectedClienteCuic.T0_U_RazonSocial,
           unidad_negocio: selectedClienteCuic.T1_U_UnidadNegocio,
@@ -1686,9 +1708,27 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
     return { flujo, contraflujo: contra };
   }, [selectedCaraForSearch, tipoPeriodo]);
 
+  // Para BF/CF/CT/IN: split visual del KPI bonificación en Flujo/Contraflujo (50/50).
+  // No toca BD — caras_flujo/caras_contraflujo siguen en 0; total = bonificacion.
+  const bonifSplit = useMemo(() => {
+    if (!selectedCaraForSearch || !isBonifSplitArticle(selectedCaraForSearch.articulo)) {
+      return { targetFlujo: 0, targetContra: 0, reservadoFlujo: 0, reservadoContra: 0 };
+    }
+    const total = selectedCaraForSearch.bonificacion || 0;
+    const targetFlujo = Math.ceil(total / 2);
+    const targetContra = Math.floor(total / 2);
+    const caraReservas = reservas.filter(r =>
+      r.id.startsWith(selectedCaraForSearch.localId) || r.solicitudCaraId === selectedCaraForSearch.id
+    );
+    const bonifs = caraReservas.filter(r => r.tipo === 'Bonificacion');
+    const reservadoFlujo = bonifs.filter(r => r.tipoCaraFisica === 'Flujo').length;
+    const reservadoContra = bonifs.filter(r => r.tipoCaraFisica === 'Contraflujo').length;
+    return { targetFlujo, targetContra, reservadoFlujo, reservadoContra };
+  }, [selectedCaraForSearch, reservas]);
+
   // Calculate remaining to assign for selected cara
   const remainingToAssign = useMemo(() => {
-    if (!selectedCaraForSearch) return { flujo: 0, contraflujo: 0, bonificacion: 0 };
+    if (!selectedCaraForSearch) return { flujo: 0, contraflujo: 0, bonificacion: 0, bonifFlujo: 0, bonifContra: 0 };
 
     const caraReservas = reservas.filter(r =>
       r.id.startsWith(selectedCaraForSearch.localId) || r.solicitudCaraId === selectedCaraForSearch.id
@@ -1701,8 +1741,10 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
       flujo: adjustedCarasFlujo.flujo - flujoReservado,
       contraflujo: adjustedCarasFlujo.contraflujo - contraflujoReservado,
       bonificacion: (selectedCaraForSearch.bonificacion || 0) - bonificacionReservado,
+      bonifFlujo: bonifSplit.targetFlujo - bonifSplit.reservadoFlujo,
+      bonifContra: bonifSplit.targetContra - bonifSplit.reservadoContra,
     };
-  }, [selectedCaraForSearch, reservas, adjustedCarasFlujo]);
+  }, [selectedCaraForSearch, reservas, adjustedCarasFlujo, bonifSplit]);
 
   // Check if cara has reservas
   const caraHasReservas = (localId: string, caraId?: number) => {
@@ -1739,10 +1781,26 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
     const contraflujoRequerido = tipoPeriodo === 'mensual' ? 0 : rawContra;
     const bonificacionRequerido = cara.bonificacion || 0;
 
+    // BF/CF/CT/IN: la bonificación se valida con split 50/50 (front-only).
+    // Total real reservado se sigue contando como tipo='Bonificacion' en BD; el split físico
+    // viene de tipoCaraFisica derivado de inventario.tipo_de_cara.
+    const isSplitBonif = isBonifSplitArticle(cara.articulo);
+    const bonifTargetFlujo = isSplitBonif ? Math.ceil(bonificacionRequerido / 2) : 0;
+    const bonifTargetContra = isSplitBonif ? Math.floor(bonificacionRequerido / 2) : 0;
+    const bonifReservadoFlujo = isSplitBonif
+      ? caraReservas.filter(r => r.tipo === 'Bonificacion' && r.tipoCaraFisica === 'Flujo').length
+      : 0;
+    const bonifReservadoContra = isSplitBonif
+      ? caraReservas.filter(r => r.tipo === 'Bonificacion' && r.tipoCaraFisica === 'Contraflujo').length
+      : 0;
+
     // Complete means EXACT match - not under, not over
     const flujoCompleto = flujoReservado === flujoRequerido;
     const contraflujoCompleto = contraflujoReservado === contraflujoRequerido;
-    const bonificacionCompleto = bonificacionReservado === bonificacionRequerido;
+    // Para BF/CF/CT/IN: bonificación completa solo si AMBOS lados del split coinciden con su target.
+    const bonificacionCompleto = isSplitBonif
+      ? (bonifReservadoFlujo === bonifTargetFlujo && bonifReservadoContra === bonifTargetContra)
+      : bonificacionReservado === bonificacionRequerido;
 
     const totalRequerido = flujoRequerido + contraflujoRequerido + bonificacionRequerido;
     const totalReservado = flujoReservado + contraflujoReservado + bonificacionReservado;
@@ -1754,7 +1812,9 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
     const totalDiff = totalReservado - totalRequerido;
 
     // Check if needs attention (has differences)
-    const needsAttention = flujoDiff !== 0 || contraflujoDiff !== 0 || bonificacionDiff !== 0;
+    const splitNeedsAttention = isSplitBonif
+      && (bonifReservadoFlujo !== bonifTargetFlujo || bonifReservadoContra !== bonifTargetContra);
+    const needsAttention = flujoDiff !== 0 || contraflujoDiff !== 0 || bonificacionDiff !== 0 || splitNeedsAttention;
 
     return {
       flujoReservado,
@@ -2706,6 +2766,18 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
 
       // 1. Save propuesta summary changes if any
       if (hasPropuestaChanges) {
+        // Resolver cliente.id real desde CUIC + sap_database (SAPCuicItem solo trae CUIC).
+        let resolvedClienteIdBulk: number | null = null;
+        if (clienteChanged && selectedClienteCuic) {
+          try {
+            const resolved = await clientesService.resolveByCuic(selectedClienteCuic.CUIC, (selectedClienteCuic as any).sap_database || null);
+            resolvedClienteIdBulk = resolved.id;
+          } catch (err) {
+            showToast(`No se pudo resolver cliente para CUIC ${selectedClienteCuic.CUIC}`, 'error');
+            setIsSaving(false);
+            return;
+          }
+        }
         await propuestasService.updatePropuesta(propuesta.id, {
           nombre_campania: nombreCampania,
           notas,
@@ -2715,8 +2787,8 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
           year_fin: yearFin,
           catorcena_fin: catorcenaFin,
           IMU: imu,
-          ...(clienteChanged && selectedClienteCuic ? {
-            cliente_id: selectedClienteCuic.CUIC,
+          ...(clienteChanged && selectedClienteCuic && resolvedClienteIdBulk ? {
+            cliente_id: resolvedClienteIdBulk,
             cuic: selectedClienteCuic.CUIC,
             razon_social: selectedClienteCuic.T0_U_RazonSocial,
             unidad_negocio: selectedClienteCuic.T1_U_UnidadNegocio,
@@ -3929,6 +4001,27 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
       return;
     }
 
+    // BF/CF/CT/IN: validar que la selección respete el split 50/50 (front-only).
+    // Cuenta caras seleccionadas por tipo_de_cara físico y compara contra bonifFlujo/bonifContra restantes.
+    if (isBonifSplitArticle(selectedCaraForSearch.articulo)) {
+      const selectedItems = Array.from(selectedInventory)
+        .map(invKey => processedInventory.find(i => getInventoryKey(i) === invKey))
+        .filter(Boolean) as typeof processedInventory;
+      const selFlujo = selectedItems.filter(i => String(i.tipo_de_cara).startsWith('Flujo')).length;
+      const selContra = selectedItems.filter(i => String(i.tipo_de_cara).startsWith('Contraflujo')).length;
+      const reasons: string[] = [];
+      if (selFlujo > remainingToAssign.bonifFlujo) {
+        reasons.push(`Seleccionaste ${selFlujo} de Flujo pero solo caben ${remainingToAssign.bonifFlujo} en Bonif. Flujo`);
+      }
+      if (selContra > remainingToAssign.bonifContra) {
+        reasons.push(`Seleccionaste ${selContra} de Contraflujo pero solo caben ${remainingToAssign.bonifContra} en Bonif. Contraflujo`);
+      }
+      if (reasons.length > 0) {
+        showToast(reasons.join('. '), 'error');
+        return;
+      }
+    }
+
     const runBonificacion = async () => {
       const newReservas: { inventario_id: number; espacio_id?: number; tipo: string; latitud: number; longitud: number }[] = [];
       selectedInventory.forEach(invKey => {
@@ -4678,8 +4771,10 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
           {/* Compact KPIs with progress bars */}
           <div className={`px-6 py-3 border-b ${isDark ? 'border-zinc-800' : 'border-gray-200'} ${isDark ? 'bg-gradient-to-r from-zinc-900 via-zinc-900/95 to-zinc-900/90' : 'bg-gradient-to-r from-gray-50 via-gray-50/95 to-gray-50/90'}`}>
             <div className="flex items-center gap-4">
-              {/* Si el artículo es BF/CF puro, ocultar KPI Flujo (solo bonificación aplica) */}
-              {!(selectedCaraForSearch?.articulo || '').toUpperCase().startsWith('BF') && !(selectedCaraForSearch?.articulo || '').toUpperCase().startsWith('CF') && (
+              {/* Si el artículo es BF/CF/CT/IN, el KPI normal de Flujo/Contraflujo se oculta:
+                  esos artículos son 100% bonificación, y el KPI bonificación se renderiza más abajo
+                  dividido en 2 (Bonif. Flujo / Bonif. Contraflujo). */}
+              {!isBonifSplitArticle(selectedCaraForSearch?.articulo) && (
               <>
               {/* Flujo KPI */}
               <div className={`flex-1 ${isDark ? 'bg-zinc-800/50' : 'bg-gray-50/50'} rounded-xl p-3 border ${isDark ? 'border-zinc-700/30' : 'border-gray-200/30'}`}>
@@ -4779,27 +4874,92 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
               </>
               )}
 
-              {/* Bonificacion/Cortesia KPI */}
-              <div className={`flex-1 ${isDark ? 'bg-zinc-800/50' : 'bg-gray-50/50'} rounded-xl p-3 border ${isDark ? 'border-zinc-700/30' : 'border-gray-200/30'}`}>
-                <div className="flex items-center justify-between mb-1.5">
-                  <span className={`text-xs ${isDark ? 'text-zinc-400' : 'text-gray-500'} flex items-center gap-1.5`}>
-                    <div className={`w-2 h-2 rounded-full ${(selectedCaraForSearch?.articulo || '').toUpperCase().startsWith('CT') ? 'bg-cyan-500' : 'bg-emerald-500'}`} />
-                    {(selectedCaraForSearch?.articulo || '').toUpperCase().startsWith('CT') ? 'Cortesía' : 'Bonificación'}
-                  </span>
-                  <span className={`text-sm font-bold ${(selectedCaraForSearch?.articulo || '').toUpperCase().startsWith('CT') ? 'text-cyan-400' : 'text-emerald-400'}`}>
-                    {(selectedCaraForSearch?.bonificacion || 0) - remainingToAssign.bonificacion} / {selectedCaraForSearch?.bonificacion || 0}
-                  </span>
+              {/* Bonificación/Cortesía KPI — para BF/CF/CT/IN se divide en 2 KPIs (Bonif. Flujo / Bonif. Contraflujo).
+                  El total y el botón de reservar siguen creando reservas con tipo='Bonificacion' en BD.
+                  Para artículos no-split (ej. RT/DIG con bonificación opcional) se muestra el KPI único como antes. */}
+              {isBonifSplitArticle(selectedCaraForSearch?.articulo) ? (
+                <>
+                  {(() => {
+                    const isCT = (selectedCaraForSearch?.articulo || '').toUpperCase().startsWith('CT');
+                    const label = isCT ? 'Cortesía' : 'Bonificación';
+                    const dotColor = isCT ? 'bg-cyan-500' : 'bg-emerald-500';
+                    const textColor = isCT ? 'text-cyan-400' : 'text-emerald-400';
+                    const gradientFrom = isCT ? 'from-cyan-500' : 'from-emerald-500';
+                    const gradientTo = isCT ? 'to-cyan-400' : 'to-emerald-400';
+                    const reservadoFlujo = bonifSplit.reservadoFlujo;
+                    const reservadoContra = bonifSplit.reservadoContra;
+                    const targetFlujo = bonifSplit.targetFlujo;
+                    const targetContra = bonifSplit.targetContra;
+                    return (
+                      <>
+                        {/* Bonif. Flujo */}
+                        <div className={`flex-1 ${isDark ? 'bg-zinc-800/50' : 'bg-gray-50/50'} rounded-xl p-3 border ${isDark ? 'border-zinc-700/30' : 'border-gray-200/30'}`}>
+                          <div className="flex items-center justify-between mb-1.5">
+                            <span className={`text-xs ${isDark ? 'text-zinc-400' : 'text-gray-500'} flex items-center gap-1.5`}>
+                              <div className={`w-2 h-2 rounded-full ${dotColor}`} />
+                              {label} Flujo
+                            </span>
+                            <span className={`text-sm font-bold ${textColor}`}>
+                              {reservadoFlujo} / {targetFlujo}
+                            </span>
+                          </div>
+                          <div className={`w-full h-2 ${isDark ? 'bg-zinc-700/50' : 'bg-gray-200/50'} rounded-full overflow-hidden`}>
+                            <div
+                              className={`h-full bg-gradient-to-r ${gradientFrom} ${gradientTo} rounded-full transition-all`}
+                              style={{ width: `${Math.min(100, reservadoFlujo / (targetFlujo || 1) * 100)}%` }}
+                            />
+                          </div>
+                          <div className={`mt-1 text-xs ${isDark ? 'text-zinc-500' : 'text-gray-400'}`}>
+                            <span className={`${textColor} font-medium`}>{Math.max(0, targetFlujo - reservadoFlujo)}</span> restantes
+                          </div>
+                        </div>
+                        {/* Bonif. Contraflujo */}
+                        <div className={`flex-1 ${isDark ? 'bg-zinc-800/50' : 'bg-gray-50/50'} rounded-xl p-3 border ${isDark ? 'border-zinc-700/30' : 'border-gray-200/30'}`}>
+                          <div className="flex items-center justify-between mb-1.5">
+                            <span className={`text-xs ${isDark ? 'text-zinc-400' : 'text-gray-500'} flex items-center gap-1.5`}>
+                              <div className={`w-2 h-2 rounded-full ${dotColor}`} />
+                              {label} Contraflujo
+                            </span>
+                            <span className={`text-sm font-bold ${textColor}`}>
+                              {reservadoContra} / {targetContra}
+                            </span>
+                          </div>
+                          <div className={`w-full h-2 ${isDark ? 'bg-zinc-700/50' : 'bg-gray-200/50'} rounded-full overflow-hidden`}>
+                            <div
+                              className={`h-full bg-gradient-to-r ${gradientFrom} ${gradientTo} rounded-full transition-all`}
+                              style={{ width: `${Math.min(100, reservadoContra / (targetContra || 1) * 100)}%` }}
+                            />
+                          </div>
+                          <div className={`mt-1 text-xs ${isDark ? 'text-zinc-500' : 'text-gray-400'}`}>
+                            <span className={`${textColor} font-medium`}>{Math.max(0, targetContra - reservadoContra)}</span> restantes
+                          </div>
+                        </div>
+                      </>
+                    );
+                  })()}
+                </>
+              ) : (
+                <div className={`flex-1 ${isDark ? 'bg-zinc-800/50' : 'bg-gray-50/50'} rounded-xl p-3 border ${isDark ? 'border-zinc-700/30' : 'border-gray-200/30'}`}>
+                  <div className="flex items-center justify-between mb-1.5">
+                    <span className={`text-xs ${isDark ? 'text-zinc-400' : 'text-gray-500'} flex items-center gap-1.5`}>
+                      <div className={`w-2 h-2 rounded-full ${(selectedCaraForSearch?.articulo || '').toUpperCase().startsWith('CT') ? 'bg-cyan-500' : 'bg-emerald-500'}`} />
+                      {(selectedCaraForSearch?.articulo || '').toUpperCase().startsWith('CT') ? 'Cortesía' : 'Bonificación'}
+                    </span>
+                    <span className={`text-sm font-bold ${(selectedCaraForSearch?.articulo || '').toUpperCase().startsWith('CT') ? 'text-cyan-400' : 'text-emerald-400'}`}>
+                      {(selectedCaraForSearch?.bonificacion || 0) - remainingToAssign.bonificacion} / {selectedCaraForSearch?.bonificacion || 0}
+                    </span>
+                  </div>
+                  <div className={`w-full h-2 ${isDark ? 'bg-zinc-700/50' : 'bg-gray-200/50'} rounded-full overflow-hidden`}>
+                    <div
+                      className={`h-full bg-gradient-to-r ${(selectedCaraForSearch?.articulo || '').toUpperCase().startsWith('CT') ? 'from-cyan-500 to-cyan-400' : 'from-emerald-500 to-emerald-400'} rounded-full transition-all`}
+                      style={{ width: `${Math.min(100, ((selectedCaraForSearch?.bonificacion || 0) - remainingToAssign.bonificacion) / (selectedCaraForSearch?.bonificacion || 1) * 100)}%` }}
+                    />
+                  </div>
+                  <div className={`mt-1 text-xs ${isDark ? 'text-zinc-500' : 'text-gray-400'}`}>
+                    <span className={`${(selectedCaraForSearch?.articulo || '').toUpperCase().startsWith('CT') ? 'text-cyan-400' : 'text-emerald-400'} font-medium`}>{remainingToAssign.bonificacion}</span> restantes
+                  </div>
                 </div>
-                <div className={`w-full h-2 ${isDark ? 'bg-zinc-700/50' : 'bg-gray-200/50'} rounded-full overflow-hidden`}>
-                  <div
-                    className={`h-full bg-gradient-to-r ${(selectedCaraForSearch?.articulo || '').toUpperCase().startsWith('CT') ? 'from-cyan-500 to-cyan-400' : 'from-emerald-500 to-emerald-400'} rounded-full transition-all`}
-                    style={{ width: `${Math.min(100, ((selectedCaraForSearch?.bonificacion || 0) - remainingToAssign.bonificacion) / (selectedCaraForSearch?.bonificacion || 1) * 100)}%` }}
-                  />
-                </div>
-                <div className={`mt-1 text-xs ${isDark ? 'text-zinc-500' : 'text-gray-400'}`}>
-                  <span className={`${(selectedCaraForSearch?.articulo || '').toUpperCase().startsWith('CT') ? 'text-cyan-400' : 'text-emerald-400'} font-medium`}>{remainingToAssign.bonificacion}</span> restantes
-                </div>
-              </div>
+              )}
 
               {/* Selection count */}
               <div className="flex flex-col items-center justify-center px-4 py-2 rounded-xl bg-purple-500/10 border border-purple-500/30 min-w-[100px]">
@@ -5704,6 +5864,8 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
                   {/* Action buttons */}
                   <div className={`p-4 border-t ${isDark ? 'border-zinc-800' : 'border-gray-200'} ${isDark ? 'bg-zinc-900' : 'bg-white'}/50 space-y-3`}>
                     <div className="flex items-center gap-3">
+                      {/* Para BF/CF/CT/IN se oculta "Reservar" — solo aplica el botón de Bonificación/Cortesía */}
+                      {!isBonifSplitArticle(selectedCaraForSearch?.articulo) && (
                       <button
                         onClick={handleReservar}
                         disabled={isSaving || selectedInventory.size === 0 || (remainingToAssign.flujo <= 0 && remainingToAssign.contraflujo <= 0)}
@@ -5721,6 +5883,7 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
                           </>
                         )}
                       </button>
+                      )}
                       {!isNoInventoryArticle((selectedCaraForSearch?.articulo || '').toUpperCase()) && <button
                         onClick={handleReserveAsBonificacion}
                         disabled={isSaving || selectedInventory.size === 0 || remainingToAssign.bonificacion <= 0}
