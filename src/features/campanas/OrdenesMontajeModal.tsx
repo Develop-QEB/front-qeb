@@ -1151,6 +1151,7 @@ export function OrdenesMontajeModal({ isOpen, onClose, canExport = true }: Orden
         if (isNaN(d.getTime())) return dateStr;
         return `${String(d.getDate()).padStart(2, '0')}/${String(d.getMonth() + 1).padStart(2, '0')}/${d.getFullYear()}`;
       };
+      const carasKeyCAT = filteredCATData.length > 0 && filteredCATData.every(i => (i.tipo || '').toUpperCase().includes('PUENTE PEATONAL')) ? 'Suma de Puentes' : 'Suma de Caras';
       const wsData = filteredCATData.map(item => ({
         'Plaza': item.plaza || '',
         'Tipo': item.tipo || '',
@@ -1165,7 +1166,7 @@ export function OrdenesMontajeModal({ isOpen, onClose, canExport = true }: Orden
         'Campaña': item.campania || '',
         'Número de artículo': item.numero_articulo || '',
         'Articulo': negociacionLabel(item.negociacion),
-        'Suma de Caras': Number(item.caras) || 0,
+        [carasKeyCAT]: Number(item.caras) || 0,
         'Suma de Tarifa': Number(item.tarifa) || 0,
         'Suma de Monto Total': Number(item.monto_total) || 0,
         'Diferencia': (() => { const d = Number(item.delta_caras) || 0; if (d === 0) return '✓'; return d > 0 ? `+${d}` : `${d}`; })(),
@@ -1176,6 +1177,7 @@ export function OrdenesMontajeModal({ isOpen, onClose, canExport = true }: Orden
       XLSX.utils.book_append_sheet(wb, ws, 'Orden Montaje CAT');
       XLSX.writeFile(wb, `orden_montaje_ocupacion_vp_${new Date().toISOString().split('T')[0]}.xlsx`);
     } else if (activeTab === 'ocupacion-digital' && filteredOcupacionDigitalData.length > 0) {
+      const carasKeyOD = filteredOcupacionDigitalData.every(i => (i.tipo || '').toUpperCase().includes('PUENTE PEATONAL')) ? 'Puentes' : 'Caras';
       const wsData = filteredOcupacionDigitalData.map(item => ({
         'Plaza': item.plaza || '',
         'Tipo': item.tipo || '',
@@ -1190,7 +1192,7 @@ export function OrdenesMontajeModal({ isOpen, onClose, canExport = true }: Orden
         'Campaña': item.campania || '',
         'Artículo': item.numero_articulo || '',
         'Negociación': item.negociacion || '',
-        'Caras': Number(item.caras) || 0,
+        [carasKeyOD]: Number(item.caras) || 0,
         'Tarifa': Number(item.tarifa) || 0,
         'Monto Total': Number(item.monto_total) || 0,
         'Diferencia': (() => { const d = Number(item.delta_caras) || 0; if (d === 0) return '✓'; return d > 0 ? `+${d}` : `${d}`; })(),
@@ -1200,6 +1202,7 @@ export function OrdenesMontajeModal({ isOpen, onClose, canExport = true }: Orden
       XLSX.utils.book_append_sheet(wb, ws, 'Ocupacion Digital');
       XLSX.writeFile(wb, `orden_montaje_ocupacion_digital_${new Date().toISOString().split('T')[0]}.xlsx`);
     } else if (activeTab === 'digital' && filteredDigitalData.length > 0) {
+      const carasKeyDig = filteredDigitalData.every(i => (i.tipo || '').toUpperCase().includes('PUENTE PEATONAL')) ? 'Puentes' : 'Caras';
       const wsData = filteredDigitalData.map(item => ({
         'Mes': mesFromDate(item.fecha_inicio_periodo),
         'Plaza': item.plaza || '',
@@ -1216,7 +1219,7 @@ export function OrdenesMontajeModal({ isOpen, onClose, canExport = true }: Orden
         'Campaña': item.campania || '',
         'No. Artículo': item.numero_articulo || '',
         'Negociación': item.negociacion || '',
-        'Caras': item.caras || 0,
+        [carasKeyDig]: item.caras || 0,
         'Tarifa': Number(item.tarifa) || 0,
         'Monto Total': Number(item.monto_total) || 0,
       }));
@@ -1920,7 +1923,7 @@ export function OrdenesMontajeModal({ isOpen, onClose, canExport = true }: Orden
                     <th className="px-3 py-3 text-left text-[10px] font-semibold text-purple-300 uppercase tracking-wider">Campaña</th>
                     <th className="px-3 py-3 text-left text-[10px] font-semibold text-purple-300 uppercase tracking-wider">Nº Artículo</th>
                     <th className="px-3 py-3 text-left text-[10px] font-semibold text-purple-300 uppercase tracking-wider">Artículo</th>
-                    <th className="px-3 py-3 text-right text-[10px] font-semibold text-purple-300 uppercase tracking-wider">Caras</th>
+                    <th className="px-3 py-3 text-right text-[10px] font-semibold text-purple-300 uppercase tracking-wider">{filteredCATData.length > 0 && filteredCATData.every(i => (i.tipo || '').toUpperCase().includes('PUENTE PEATONAL')) ? 'Puentes' : 'Caras'}</th>
                     <th className="px-3 py-3 text-right text-[10px] font-semibold text-purple-300 uppercase tracking-wider">Tarifa</th>
                     <th className="px-3 py-3 text-right text-[10px] font-semibold text-purple-300 uppercase tracking-wider">Monto Total</th>
                     <th className="px-3 py-3 text-center text-[10px] font-semibold text-purple-300 uppercase tracking-wider">Diferencia</th>
@@ -2014,7 +2017,7 @@ export function OrdenesMontajeModal({ isOpen, onClose, canExport = true }: Orden
                     <th className="px-3 py-3 text-left text-[10px] font-semibold text-sky-300 uppercase tracking-wider">Campaña</th>
                     <th className="px-3 py-3 text-left text-[10px] font-semibold text-sky-300 uppercase tracking-wider">Artículo</th>
                     <th className="px-3 py-3 text-left text-[10px] font-semibold text-sky-300 uppercase tracking-wider">Negociación</th>
-                    <th className="px-3 py-3 text-right text-[10px] font-semibold text-sky-300 uppercase tracking-wider">Caras</th>
+                    <th className="px-3 py-3 text-right text-[10px] font-semibold text-sky-300 uppercase tracking-wider">{filteredOcupacionDigitalData.length > 0 && filteredOcupacionDigitalData.every(i => (i.tipo || '').toUpperCase().includes('PUENTE PEATONAL')) ? 'Puentes' : 'Caras'}</th>
                     <th className="px-3 py-3 text-right text-[10px] font-semibold text-sky-300 uppercase tracking-wider">Tarifa</th>
                     <th className="px-3 py-3 text-right text-[10px] font-semibold text-sky-300 uppercase tracking-wider">Monto Total</th>
                     <th className="px-3 py-3 text-center text-[10px] font-semibold text-sky-300 uppercase tracking-wider">Diferencia</th>
@@ -2107,7 +2110,7 @@ export function OrdenesMontajeModal({ isOpen, onClose, canExport = true }: Orden
                     <th className="px-3 py-3 text-left text-[10px] font-semibold text-orange-300 uppercase tracking-wider">Campaña</th>
                     <th className="px-3 py-3 text-left text-[10px] font-semibold text-orange-300 uppercase tracking-wider">Nº Artículo</th>
                     <th className="px-3 py-3 text-left text-[10px] font-semibold text-orange-300 uppercase tracking-wider">Artículo</th>
-                    <th className="px-3 py-3 text-right text-[10px] font-semibold text-orange-300 uppercase tracking-wider">Caras</th>
+                    <th className="px-3 py-3 text-right text-[10px] font-semibold text-orange-300 uppercase tracking-wider">{filteredDigitalData.length > 0 && filteredDigitalData.every(i => (i.tipo || '').toUpperCase().includes('PUENTE PEATONAL')) ? 'Puentes' : 'Caras'}</th>
                     <th className="px-3 py-3 text-right text-[10px] font-semibold text-orange-300 uppercase tracking-wider">Tarifa</th>
                     <th className="px-3 py-3 text-right text-[10px] font-semibold text-orange-300 uppercase tracking-wider">Monto Total</th>
                     <th className="px-3 py-3 text-center text-[10px] font-semibold text-orange-300 uppercase tracking-wider">Diferencia</th>

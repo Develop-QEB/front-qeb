@@ -729,8 +729,10 @@ export function ClientePropuestaPage() {
           doc.text(`Renta: ${groupCaras}${groupBonif > 0 ? `  |  Bonif: ${groupBonif}` : ''}  |  Tarifa: ${formatCurrency(groupTarifaUnit)}  |  Inversion: ${formatCurrency(groupTarifa)}`, pageWidth - marginX - 10, y + 4, { align: 'right' });
           y += 8;
 
+          // Si todos los items del grupo son puente peatonal, usar "Puentes"
+          const groupAllPP = items.length > 0 && items.every(i => (i.mueble || '').toUpperCase().includes('PUENTE PEATONAL'));
           autoTable(doc, {
-            head: [['Ciudad', 'Ubicacion', 'Formato', 'Caras', 'Latitud', 'Longitud', 'Periodo']],
+            head: [['Ciudad', 'Ubicacion', 'Formato', groupAllPP ? 'Puentes' : 'Caras', 'Latitud', 'Longitud', 'Periodo']],
             body: items.map(i => [
               i.plaza || '-',
               (i.ubicacion || '-').substring(0, 50),
@@ -1242,7 +1244,7 @@ export function ClientePropuestaPage() {
                                         <th className="px-3 py-2 w-8"></th>
                                         <th className="px-3 py-2 text-left text-xs font-semibold text-[#0054A6]">Plaza</th>
                                         <th className="px-3 py-2 text-left text-xs font-semibold text-[#0054A6]">Formato</th>
-                                        <th className="px-3 py-2 text-center text-xs font-semibold text-[#0054A6]">Caras</th>
+                                        <th className="px-3 py-2 text-center text-xs font-semibold text-[#0054A6]">{artGroup.items.every(i => (i.mueble || '').toUpperCase().includes('PUENTE PEATONAL')) ? 'Puentes' : 'Caras'}</th>
                                         <th className="px-3 py-2 text-right text-xs font-semibold text-[#0054A6]">Lat</th>
                                         <th className="px-3 py-2 text-right text-xs font-semibold text-[#0054A6]">Long</th>
                                         <th className="px-3 py-2 text-right text-xs font-semibold text-amber-600">Tarifa</th>

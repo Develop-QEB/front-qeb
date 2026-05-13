@@ -1529,7 +1529,7 @@ export function CompartirPropuestaPage() {
                                         <th className={`px-3 py-2 text-left text-xs font-semibold ${isDark ? 'text-purple-200' : 'text-purple-700'}`}>Codigo</th>
                                         <th className={`px-3 py-2 text-left text-xs font-semibold ${isDark ? 'text-purple-200' : 'text-purple-700'}`}>Plaza</th>
                                         <th className={`px-3 py-2 text-left text-xs font-semibold ${isDark ? 'text-purple-200' : 'text-purple-700'}`}>Formato</th>
-                                        <th className={`px-3 py-2 text-center text-xs font-semibold ${isDark ? 'text-purple-200' : 'text-purple-700'}`}>Caras</th>
+                                        <th className={`px-3 py-2 text-center text-xs font-semibold ${isDark ? 'text-purple-200' : 'text-purple-700'}`}>{artGroup.items.every(i => (i.mueble || '').toUpperCase().includes('PUENTE PEATONAL')) ? 'Puentes' : 'Caras'}</th>
                                         <th className={`px-3 py-2 text-right text-xs font-semibold ${isDark ? 'text-purple-200' : 'text-purple-700'}`}>Lat</th>
                                         <th className={`px-3 py-2 text-right text-xs font-semibold ${isDark ? 'text-purple-200' : 'text-purple-700'}`}>Long</th>
                                         <th className={`px-3 py-2 text-right text-xs font-semibold ${isDark ? 'text-amber-300' : 'text-amber-700'}`}>Tarifa</th>
