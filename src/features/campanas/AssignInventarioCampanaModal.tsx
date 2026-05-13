@@ -21,7 +21,7 @@ import { useEnvironmentStore, getEndpoints } from '../../store/environmentStore'
 import { useAuthStore } from '../../store/authStore';
 import { usePermissions } from '../../lib/permissions';
 import { filterAllowedArticulos } from '../../config/allowedDigitalArticles';
-import { useSocketEquipos, useSocketCampana } from '../../hooks/useSocket';
+import { useSocketEquipos, useSocketCampana, useSocketInventarioRealtime, type InventarioRealtimePayload } from '../../hooks/useSocket';
 import { useThemeStore } from '../../store/themeStore';
 
 const GOOGLE_MAPS_API_KEY = 'AIzaSyB7Bzwydh91xZPdR8mGgqAV2hO72W1EVaw';
@@ -914,6 +914,28 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
   const [inventarioDisponible, setInventarioDisponible] = useState<InventarioDisponible[]>([]);
   const [isSearching, setIsSearching] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
+
+  // Real-time: cuando OTRO usuario reserva un espacio cuyo período se solapa
+  // con la cara que estoy buscando, lo quito de mi listado en vivo.
+  useSocketInventarioRealtime(
+    (payload: InventarioRealtimePayload) => {
+      if (!selectedCaraForSearch) return;
+      const ini = selectedCaraForSearch.inicio_periodo;
+      const fin = selectedCaraForSearch.fin_periodo;
+      if (!ini || !fin || !payload.fechaInicio || !payload.fechaFin) return;
+      const overlap = new Date(payload.fechaInicio) <= new Date(fin) && new Date(payload.fechaFin) >= new Date(ini);
+      if (!overlap) return;
+      setInventarioDisponible(prev =>
+        prev.filter(inv =>
+          inv.espacio_id !== payload.espacioId &&
+          (payload.inventarioId == null || inv.id !== payload.inventarioId)
+        )
+      );
+    },
+    () => {
+      // LIBERADO: no agregamos directo (requeriría refetch que conoce filtros).
+    },
+  );
   // Reserva Masiva: toggle (solo aparece cuando la cara tiene grupo_masivo_id)
   const [reservaMasivaC, setReservaMasivaC] = useState<boolean>(false);
   // Exclusión por categoría de cliente: oculta inventario disponible cerca de

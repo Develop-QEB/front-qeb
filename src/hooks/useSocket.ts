@@ -24,6 +24,9 @@ export const SOCKET_EVENTS = {
   INVENTARIO_ACTUALIZADO: 'inventario:actualizado',
   INVENTARIO_CREADO: 'inventario:creado',
   INVENTARIO_ELIMINADO: 'inventario:eliminado',
+  // Real-time: buscadores de inventario marcan/quitan espacios ocupados en vivo.
+  INVENTARIO_OCUPADO: 'inventario:ocupado',
+  INVENTARIO_LIBERADO: 'inventario:liberado',
 
   // Reservas y Propuestas
   RESERVA_CREADA: 'reserva:creada',
@@ -452,6 +455,43 @@ export function useSocketPropuesta(propuestaId: number | null) {
   }, []);
 
   return { emit };
+}
+
+/**
+ * Hook para escuchar eventos de "inventario ocupado/liberado" en tiempo real.
+ * Lo usan los buscadores de inventario (AssignInventarioModal/...) para
+ * quitar/agregar espacios de su listado en vivo cuando otro usuario reserva.
+ *
+ * El callback recibe { espacioId, inventarioId, fechaInicio, fechaFin } y el
+ * tipo de evento ('ocupado' o 'liberado'). Si el periodo no se solapa con el
+ * filtrado, el caller decide si lo ignora.
+ */
+export interface InventarioRealtimePayload {
+  espacioId: number;
+  inventarioId: number | null;
+  fechaInicio: string | null;
+  fechaFin: string | null;
+}
+export function useSocketInventarioRealtime(
+  onOcupado: (data: InventarioRealtimePayload) => void,
+  onLiberado: (data: InventarioRealtimePayload) => void,
+) {
+  const ocupadoRef = useRef(onOcupado);
+  const liberadoRef = useRef(onLiberado);
+  ocupadoRef.current = onOcupado;
+  liberadoRef.current = onLiberado;
+
+  useEffect(() => {
+    const socket = getSocket();
+    const handleOcupado = (d: InventarioRealtimePayload) => ocupadoRef.current(d);
+    const handleLiberado = (d: InventarioRealtimePayload) => liberadoRef.current(d);
+    socket.on(SOCKET_EVENTS.INVENTARIO_OCUPADO, handleOcupado);
+    socket.on(SOCKET_EVENTS.INVENTARIO_LIBERADO, handleLiberado);
+    return () => {
+      socket.off(SOCKET_EVENTS.INVENTARIO_OCUPADO, handleOcupado);
+      socket.off(SOCKET_EVENTS.INVENTARIO_LIBERADO, handleLiberado);
+    };
+  }, []);
 }
 
 /**
