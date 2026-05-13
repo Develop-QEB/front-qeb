@@ -421,18 +421,51 @@ export default function PropuestasVersionarioView({ isDark, filters, advancedFil
       rows.push({ propuesta, cara, inventarios: invs });
     }
 
-    // 3er pase: propuestas SIN caras NI inventarios. Solo aplica cuando NO
-    // hay filtro de rango (porque con filtro, propuestas sin inv en el rango
-    // NO deben contar — alineación con el export).
-    if (!hasRangeFilter) {
+    // 3er pase: completar filas que los pasos previos no generaron.
+    //
+    // (a) En modo lite (sin filtro), carasInfo/invs llegan vacíos: construimos
+    //     filas sintéticas por (propuesta, catorcena) usando `resumenPorCatorcena`
+    //     para que cada propuesta aparezca en CADA catorcena donde tiene caras
+    //     (no solo en su catorcena_inicio).
+    // (b) Incompletas — propuestas sin caras todavía — se agregan como fila
+    //     cara=null y caen en su catorcena_inicio via fallback de getGroupValue.
+    //
+    // Aplicamos en ambos modos (con y sin filtro) para que sin filtro y con
+    // filtro Cat X muestren los mismos conjuntos.
+    {
       const propIdsConContenido = new Set<number>();
       for (const c of carasInfo) propIdsConContenido.add(c.propuesta_id);
       for (const k of invByKey.keys()) {
-        const pidStr = k.split('-')[0];
-        propIdsConContenido.add(parseInt(pidStr, 10));
+        propIdsConContenido.add(parseInt(k.split('-')[0], 10));
+      }
+      const propIdsEnResumen = new Set<number>();
+      for (const res of resumenArr) {
+        const propuesta = propuestaMap.get(res.propuesta_id);
+        if (!propuesta || !isAllowed(propuesta)) continue;
+        if (propIdsConContenido.has(res.propuesta_id)) continue;
+        const num = Number(res.numero_catorcena) || 0;
+        const anio = Number(res.anio_catorcena) || 0;
+        if (!num || !anio) continue;
+        propIdsEnResumen.add(res.propuesta_id);
+        const syntheticCara: CaraInfo = {
+          propuesta_id: res.propuesta_id,
+          sc_id: -(res.propuesta_id * 100000 + anio * 100 + num),
+          articulo: '',
+          ciudad: '',
+          formato: '',
+          tarifa_publica: Number(res.tarifa_representativa) || 0,
+          caras_solicitadas: 0,
+          bonificacion: Number(res.bonif_total) || 0,
+          caras_esperadas: Number(res.caras_total) || 0,
+          reservas_count: 0,
+          numero_catorcena: num,
+          anio_catorcena: anio,
+        };
+        rows.push({ propuesta, cara: syntheticCara, inventarios: [] });
       }
       for (const p of propuestasInfo) {
         if (propIdsConContenido.has(p.propuesta_id)) continue;
+        if (propIdsEnResumen.has(p.propuesta_id)) continue;
         if (!isAllowed(p)) continue;
         rows.push({ propuesta: p, cara: null, inventarios: [] });
       }
@@ -481,14 +514,21 @@ export default function PropuestasVersionarioView({ isDark, filters, advancedFil
         const bucketCatContext = head === 'catorcena' && value.meta?.catorcena
           ? { num: value.meta.catorcena.num, anio: value.meta.catorcena.anio }
           : catContext;
-        // Inversión por bucket: si hay inv data (modo full con filtro o expand
-        // lazy), sumar slice real (tarifa_publica_sc × caras_totales). Sino,
-        // dentro de un bucket de catorcena, sumar inversion_catorcena del
-        // resumen por (pid, num, anio). Fuera de catorcena (raro: usuario
-        // quitó catorcena del grouping), usar propuesta.inversion como total.
+        // Inversión por bucket:
+        // - En el bucket de catorcena (head === 'catorcena') SIEMPRE usar
+        //   `resumen.inversion_catorcena` (SUM sc.costo por catorcena). Esto
+        //   garantiza que sin filtro (lite, sin invs) y con filtro (full, con
+        //   invs) muestren la MISMA cifra al nivel de catorcena. Las dos
+        //   fórmulas anteriores divergían cuando había caras planeadas no
+        //   reservadas todavía.
+        // - En niveles más profundos con inv real cargada, usar tarifa × caras
+        //   reservadas (refleja lo efectivamente reservado).
+        // - Sin contexto de catorcena (usuario quitó catorcena del grouping)
+        //   usar propuesta.inversion como total.
         const propInversionSeen = new Set<number>();
         let inversion = 0;
         const bucketHasInv = bucketRows.some(r => r.inventarios.length > 0);
+        const useResumenInversion = head === 'catorcena' || !bucketHasInv;
         const scIds = new Set<number>();
         let totalCarasEsperadas = 0;
         let totalBonif = 0;
@@ -496,19 +536,21 @@ export default function PropuestasVersionarioView({ isDark, filters, advancedFil
         const seenScForAgg = new Set<number>();
         for (const r of bucketRows) {
           propuestaIds.add(r.propuesta.propuesta_id);
-          if (bucketHasInv) {
+          if (useResumenInversion) {
+            if (!propInversionSeen.has(r.propuesta.propuesta_id)) {
+              propInversionSeen.add(r.propuesta.propuesta_id);
+              if (bucketCatContext) {
+                const res = resumenMap.get(`${r.propuesta.propuesta_id}-${bucketCatContext.num}-${bucketCatContext.anio}`);
+                inversion += res ? Number(res.inversion_catorcena) || 0 : 0;
+              } else {
+                inversion += Number(r.propuesta.inversion) || 0;
+              }
+            }
+          } else {
             for (const inv of r.inventarios) {
               const tarifa = Number(inv.tarifa_publica_sc) || 0;
               const cant = Number((inv as any).caras_totales) || 1;
               inversion += tarifa * cant;
-            }
-          } else if (!propInversionSeen.has(r.propuesta.propuesta_id)) {
-            propInversionSeen.add(r.propuesta.propuesta_id);
-            if (bucketCatContext) {
-              const res = resumenMap.get(`${r.propuesta.propuesta_id}-${bucketCatContext.num}-${bucketCatContext.anio}`);
-              inversion += res ? Number(res.inversion_catorcena) || 0 : 0;
-            } else {
-              inversion += Number(r.propuesta.inversion) || 0;
             }
           }
           // Agregaciones por cara (sc) — únicas por sc_id dentro del bucket.
