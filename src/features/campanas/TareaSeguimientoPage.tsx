@@ -11199,15 +11199,17 @@ function CreateTaskModal({
     }
   }, [isOpen, initialTipo]);
 
-  // Pre-llenar asignados con usuarios de Mercadotecnia (de mi equipo) para Revisión de artes
+  // Pre-llenar asignados con diseñadores de mi equipo para Revisión de artes.
+  // Filtramos por puesto (Diseñador / Coordinador de Diseño) en vez de por
+  // área porque en la DB los diseñadores tienen area="Dirección de
+  // Mercadotecnia" (no coincide con un match exacto a 'mercadotecnia').
   useEffect(() => {
     if (isOpen && tipo === 'Revisión de artes' && usuariosConArea) {
-      // Filtrar usuarios del área de Mercadotecnia
-      const mercadotecniaUsers = usuariosConArea.filter(u =>
-        u.area?.toLowerCase() === 'mercadotecnia'
-      );
-      // Pre-seleccionar todos
-      setSelectedAsignadosRevision(mercadotecniaUsers.map(u => ({ id: u.id, nombre: u.nombre })));
+      const disenadores = usuariosConArea.filter(u => {
+        const p = (u.puesto || '').toLowerCase();
+        return p.includes('diseñ') || p.includes('disen');
+      });
+      setSelectedAsignadosRevision(disenadores.map(u => ({ id: u.id, nombre: u.nombre })));
     }
   }, [isOpen, tipo, usuariosConArea]);
 
@@ -11488,17 +11490,18 @@ function CreateTaskModal({
     );
   }, [usuarios, asignadoSearch]);
 
-  // Filtrar usuarios de Mercadotecnia para Revisión de artes (excluyendo ya seleccionados)
+  // Filtrar diseñadores (puesto contiene "Diseñ") de mi equipo para Revisión
+  // de artes, excluyendo ya seleccionados.
   const filteredUsuariosRevision = useMemo(() => {
     if (!usuariosConArea) return [];
     const selectedIds = new Set(selectedAsignadosRevision.map(u => u.id));
-    // Solo mostrar usuarios del área Mercadotecnia que no estén ya seleccionados
-    const mercadotecniaUsers = usuariosConArea.filter(u =>
-      u.area?.toLowerCase() === 'mercadotecnia' && !selectedIds.has(u.id)
-    );
-    if (!asignadoSearchRevision.trim()) return mercadotecniaUsers;
+    const disenadores = usuariosConArea.filter(u => {
+      const p = (u.puesto || '').toLowerCase();
+      return (p.includes('diseñ') || p.includes('disen')) && !selectedIds.has(u.id);
+    });
+    if (!asignadoSearchRevision.trim()) return disenadores;
     const search = asignadoSearchRevision.toLowerCase();
-    return mercadotecniaUsers.filter(u =>
+    return disenadores.filter(u =>
       u.nombre.toLowerCase().includes(search) ||
       String(u.id).includes(search)
     );
@@ -11606,6 +11609,14 @@ function CreateTaskModal({
   }, [todosUsuarios, analistaSearchReImpresion, selectedAnalistasReImpresion]);
 
   const handleSubmit = () => {
+    // Validación: Revisión de artes requiere al menos un diseñador asignado.
+    // Si el creador no tiene compañeros de equipo con puesto de Diseño, el
+    // pre-llenado queda vacío — alertamos para que elija manualmente en vez
+    // de mandar vacío (lo que antes caía en fallback al creador en el back).
+    if (tipo === 'Revisión de artes' && selectedAsignadosRevision.length === 0) {
+      alert('No se encontraron diseñadores en tus equipos. Selecciona manualmente al menos un asignado antes de crear la tarea.');
+      return;
+    }
     const payload: Partial<TaskRow> & { proveedores_id?: number; nombre_proveedores?: string; impresiones?: Record<number, number> } = {
       titulo,
       descripcion,
@@ -11627,7 +11638,7 @@ function CreateTaskModal({
       // Asignados múltiples para Revisión de artes
       if (selectedAsignadosRevision.length > 0) {
         // Guardar IDs separados por coma
-        (payload as any).id_asignado = selectedAsignadosRevision.map(u => u.id).join(', ');
+        (payload as any).id_asignado = selectedAsignadosRevision.map(u => u.id).join(',');
         // Guardar nombres separados por coma
         payload.asignado = selectedAsignadosRevision.map(u => u.nombre).join(', ');
       }
@@ -11661,7 +11672,7 @@ function CreateTaskModal({
       // Asignados múltiples para Instalación (área Operaciones)
       if (selectedAsignadosInstalacion.length > 0) {
         // Guardar IDs separados por coma
-        (payload as any).id_asignado = selectedAsignadosInstalacion.map(u => u.id).join(', ');
+        (payload as any).id_asignado = selectedAsignadosInstalacion.map(u => u.id).join(',');
         // Guardar nombres separados por coma
         payload.asignado = selectedAsignadosInstalacion.map(u => u.nombre).join(', ');
       }
@@ -11690,7 +11701,7 @@ function CreateTaskModal({
       });
       // Asignados múltiples para Orden de Instalación (área Operaciones)
       if (selectedAsignadosInstalacion.length > 0) {
-        (payload as any).id_asignado = selectedAsignadosInstalacion.map(u => u.id).join(', ');
+        (payload as any).id_asignado = selectedAsignadosInstalacion.map(u => u.id).join(',');
         payload.asignado = selectedAsignadosInstalacion.map(u => u.nombre).join(', ');
       }
     } else if (tipo === 'Impresión') {
@@ -11710,7 +11721,7 @@ function CreateTaskModal({
       // Asignados múltiples para Impresión (área Compras)
       if (selectedAsignadosImpresion.length > 0) {
         // Guardar IDs separados por coma
-        (payload as any).id_asignado = selectedAsignadosImpresion.map(u => u.id).join(', ');
+        (payload as any).id_asignado = selectedAsignadosImpresion.map(u => u.id).join(',');
         // Guardar nombres separados por coma
         payload.asignado = selectedAsignadosImpresion.map(u => u.nombre).join(', ');
       }
@@ -11732,7 +11743,7 @@ function CreateTaskModal({
       });
       // Asignados (área Operaciones)
       if (selectedAsignadosImpresion.length > 0) {
-        (payload as any).id_asignado = selectedAsignadosImpresion.map(u => u.id).join(', ');
+        (payload as any).id_asignado = selectedAsignadosImpresion.map(u => u.id).join(',');
         payload.asignado = selectedAsignadosImpresion.map(u => u.nombre).join(', ');
       }
     } else if (tipo === 'Testigo') {
@@ -11743,7 +11754,7 @@ function CreateTaskModal({
       // Asignados múltiples para Testigo (área Operaciones)
       if (selectedAsignadosTestigo.length > 0) {
         // Guardar IDs separados por coma
-        (payload as any).id_asignado = selectedAsignadosTestigo.map(u => u.id).join(', ');
+        (payload as any).id_asignado = selectedAsignadosTestigo.map(u => u.id).join(',');
         // Guardar nombres separados por coma
         payload.asignado = selectedAsignadosTestigo.map(u => u.nombre).join(', ');
       }
@@ -11754,7 +11765,7 @@ function CreateTaskModal({
       (payload as any).fecha_creacion = new Date().toISOString();
       (payload as any).listado_inventario = selectedIds.join(',');
       if (selectedAnalistasReImpresion.length > 0) {
-        (payload as any).id_asignado = selectedAnalistasReImpresion.map(u => u.id).join(', ');
+        (payload as any).id_asignado = selectedAnalistasReImpresion.map(u => u.id).join(',');
         payload.asignado = selectedAnalistasReImpresion.map(u => u.nombre).join(', ');
       }
     } else if (tipo === 'Programación para Tráfico') {
@@ -11772,7 +11783,7 @@ function CreateTaskModal({
       });
       // Asignados múltiples para Programación para Tráfico (área Tráfico)
       if (selectedAsignadosProgramacion.length > 0) {
-        (payload as any).id_asignado = selectedAsignadosProgramacion.map(u => u.id).join(', ');
+        (payload as any).id_asignado = selectedAsignadosProgramacion.map(u => u.id).join(',');
         payload.asignado = selectedAsignadosProgramacion.map(u => u.nombre).join(', ');
       }
     } else if (tipo === 'Programación') {
@@ -11790,7 +11801,7 @@ function CreateTaskModal({
       });
       // Asignados múltiples para Programación (área Operaciones)
       if (selectedAsignadosProgramacion.length > 0) {
-        (payload as any).id_asignado = selectedAsignadosProgramacion.map(u => u.id).join(', ');
+        (payload as any).id_asignado = selectedAsignadosProgramacion.map(u => u.id).join(',');
         payload.asignado = selectedAsignadosProgramacion.map(u => u.nombre).join(', ');
       }
     } else if (tipo === 'Orden de Programación') {
@@ -11808,7 +11819,7 @@ function CreateTaskModal({
       });
       // Asignados múltiples para Orden de Programación (área Operaciones)
       if (selectedAsignadosProgramacion.length > 0) {
-        (payload as any).id_asignado = selectedAsignadosProgramacion.map(u => u.id).join(', ');
+        (payload as any).id_asignado = selectedAsignadosProgramacion.map(u => u.id).join(',');
         payload.asignado = selectedAsignadosProgramacion.map(u => u.nombre).join(', ');
       }
     } else if (proveedorId && selectedProveedor) {

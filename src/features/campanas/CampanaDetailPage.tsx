@@ -1,6 +1,6 @@
 import { useParams, useNavigate } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { useState, useRef, useEffect, useMemo, useCallback } from 'react';
+import { useState, useRef, useEffect, useMemo, useCallback, memo } from 'react';
 import { ArrowLeft, MessageSquare, Send, X, FileSpreadsheet, ListTodo, Layers, ChevronDown, ChevronRight, Check, Minus, Filter, Plus, Trash2, ArrowUpDown, ArrowUp, ArrowDown, Download, Upload, Loader2, CheckCircle, AlertCircle, AlertTriangle, Package, MapPinOff, RefreshCw, MessageSquareOff, ServerCrash, WifiOff, History, Edit2, XCircle } from 'lucide-react';
 import { AssignInventarioCampanaModal } from './AssignInventarioCampanaModal';
 import { GoogleMap, useLoadScript, Marker } from '@react-google-maps/api';
@@ -837,6 +837,35 @@ function getSCGroupValue(sc: SolicitudCara, field: GroupByField, tipoPeriodo?: s
   return val ? String(val) : 'Sin asignar';
 }
 
+// Marker memoizado: evita que cada Marker se vuelva a pintar cuando el componente
+// padre se re-renderiza por estados no relacionados (selección, agrupación, filtros).
+// Solo se re-pinta si cambia su posición, su estado de selección o sus iconos.
+interface MapMarkerProps {
+  rsvId: string;
+  lat: number;
+  lng: number;
+  title: string;
+  isSelected: boolean;
+  iconSelected: google.maps.Symbol;
+  iconUnselected: google.maps.Symbol;
+  onClick: (rsvId: string) => void;
+}
+const MapMarker = memo(function MapMarker({
+  rsvId, lat, lng, title, isSelected, iconSelected, iconUnselected, onClick,
+}: MapMarkerProps) {
+  const position = useMemo(() => ({ lat, lng }), [lat, lng]);
+  const handleClick = useCallback(() => onClick(rsvId), [onClick, rsvId]);
+  return (
+    <Marker
+      position={position}
+      title={title}
+      onClick={handleClick}
+      icon={isSelected ? iconSelected : iconUnselected}
+      zIndex={isSelected ? 1000 : 1}
+    />
+  );
+});
+
 export function CampanaDetailPage() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
@@ -953,6 +982,53 @@ export function CampanaDetailPage() {
     googleMapsApiKey: GOOGLE_MAPS_API_KEY,
   });
 
+  const mapRefAPS = useRef<google.maps.Map | null>(null);
+
+  // Opciones de GoogleMap estables: solo cambian con el tema.
+  // Antes el objeto literal se recreaba en cada render y forzaba al mapa a
+  // reaplicar opciones (causa de parte del parpadeo al hacer click).
+  const mapOptions = useMemo<google.maps.MapOptions>(() => ({
+    styles: isDark ? DARK_MAP_STYLES : [],
+    disableDefaultUI: true,
+    zoomControl: true,
+  }), [isDark]);
+
+  // Iconos de Marker estables. Si el objeto cambia de referencia,
+  // @react-google-maps llama a setIcon en cada Marker y eso re-pinta.
+  // Se necesitan `google.maps` cargado para usar SymbolPath.
+  const iconReservadoSelected = useMemo<google.maps.Symbol | null>(() => isLoaded ? {
+    path: google.maps.SymbolPath.CIRCLE,
+    scale: 12,
+    fillColor: '#facc15',
+    fillOpacity: 1,
+    strokeColor: '#fef08a',
+    strokeWeight: 3,
+  } : null, [isLoaded]);
+  const iconReservadoUnselected = useMemo<google.maps.Symbol | null>(() => isLoaded ? {
+    path: google.maps.SymbolPath.CIRCLE,
+    scale: 8,
+    fillColor: '#ec4899',
+    fillOpacity: 1,
+    strokeColor: '#ffffff',
+    strokeWeight: 2,
+  } : null, [isLoaded]);
+  const iconAPSSelected = useMemo<google.maps.Symbol | null>(() => isLoaded ? {
+    path: google.maps.SymbolPath.CIRCLE,
+    scale: 12,
+    fillColor: '#facc15',
+    fillOpacity: 1,
+    strokeColor: '#fef08a',
+    strokeWeight: 3,
+  } : null, [isLoaded]);
+  const iconAPSUnselected = useMemo<google.maps.Symbol | null>(() => isLoaded ? {
+    path: google.maps.SymbolPath.CIRCLE,
+    scale: 8,
+    fillColor: '#22d3ee',
+    fillOpacity: 1,
+    strokeColor: '#ffffff',
+    strokeWeight: 2,
+  } : null, [isLoaded]);
+
   // Todas las queries usan `campanaId` directo. Antes 4 de ellas tenían
   // `enabled: !!campana` y se quedaban esperando a la query principal,
   // serializando una cascada de ~1.5s. Ahora corren en paralelo desde el
@@ -1048,6 +1124,37 @@ export function CampanaDetailPage() {
   useEffect(() => {
     fitMapToInventario(mapRef.current);
   }, [fitMapToInventario]);
+
+  // Equivalentes para el mapa de Inventario con APS.
+  // Antes el `center` y `onLoad` se creaban en JSX como objeto/función literal en
+  // cada render, lo que forzaba a GoogleMap a re-evaluar y a re-pintar todos
+  // los markers (origen del parpadeo en la pestaña con APS).
+  const mapCenterAPS = useMemo(() => {
+    const valid = inventarioConAPS.find(i => i.latitud && i.longitud);
+    if (valid) return { lat: valid.latitud, lng: valid.longitud };
+    return { lat: 19.4326, lng: -99.1332 };
+  }, [inventarioConAPS]);
+
+  const fitMapToInventarioAPS = useCallback((map: google.maps.Map | null) => {
+    if (!map) return;
+    const validItems = inventarioConAPS.filter(i => i.latitud && i.longitud);
+    if (validItems.length > 1) {
+      const bounds = new google.maps.LatLngBounds();
+      validItems.forEach(item => {
+        bounds.extend({ lat: item.latitud, lng: item.longitud });
+      });
+      map.fitBounds(bounds, 50);
+    }
+  }, [inventarioConAPS]);
+
+  const onMapLoadAPS = useCallback((map: google.maps.Map) => {
+    mapRefAPS.current = map;
+    fitMapToInventarioAPS(map);
+  }, [fitMapToInventarioAPS]);
+
+  useEffect(() => {
+    fitMapToInventarioAPS(mapRefAPS.current);
+  }, [fitMapToInventarioAPS]);
 
   // Mapa de completitud por grupo (solicitudCaras)
   const groupCompletenessMap = useMemo(() => {
@@ -1187,36 +1294,48 @@ export function CampanaDetailPage() {
     return data;
   }, [inventarioConAPS, filtersAPS, sortFieldAPS, sortDirectionAPS]);
 
-  // Obtener valores únicos para cada campo (inventario reservado)
-  const getUniqueValuesReservado = useMemo(() => {
-    const valuesMap: Record<string, string[]> = {};
-    FILTER_FIELDS.forEach(fieldConfig => {
-      const values = new Set<string>();
-      inventarioReservado.forEach(item => {
-        const val = item[fieldConfig.field as keyof InventarioReservado];
-        if (val !== null && val !== undefined && val !== '') {
-          values.add(String(val));
-        }
-      });
-      valuesMap[fieldConfig.field] = Array.from(values).sort();
+  // Valores únicos por campo: cálculo perezoso con cache por campo.
+  // Antes se iteraban TODOS los campos × inventario en cada render (~30 × N).
+  // Ahora solo se computa el campo solicitado y se memoiza hasta que cambie el
+  // dataset.
+  const uniqueValuesReservadoCache = useRef<{ data: InventarioReservado[]; map: Map<string, string[]> }>({ data: inventarioReservado, map: new Map() });
+  if (uniqueValuesReservadoCache.current.data !== inventarioReservado) {
+    uniqueValuesReservadoCache.current = { data: inventarioReservado, map: new Map() };
+  }
+  const getUniqueValuesReservado = useCallback((field: string): string[] => {
+    const cache = uniqueValuesReservadoCache.current.map;
+    const cached = cache.get(field);
+    if (cached) return cached;
+    const values = new Set<string>();
+    inventarioReservado.forEach(item => {
+      const val = item[field as keyof InventarioReservado];
+      if (val !== null && val !== undefined && val !== '') {
+        values.add(String(val));
+      }
     });
-    return valuesMap;
+    const sorted = Array.from(values).sort();
+    cache.set(field, sorted);
+    return sorted;
   }, [inventarioReservado]);
 
-  // Obtener valores únicos para cada campo (inventario con APS)
-  const getUniqueValuesAPS = useMemo(() => {
-    const valuesMap: Record<string, string[]> = {};
-    FILTER_FIELDS_APS.forEach(fieldConfig => {
-      const values = new Set<string>();
-      inventarioConAPS.forEach(item => {
-        const val = item[fieldConfig.field as keyof InventarioConAPS];
-        if (val !== null && val !== undefined && val !== '') {
-          values.add(String(val));
-        }
-      });
-      valuesMap[fieldConfig.field] = Array.from(values).sort();
+  const uniqueValuesAPSCache = useRef<{ data: InventarioConAPS[]; map: Map<string, string[]> }>({ data: inventarioConAPS, map: new Map() });
+  if (uniqueValuesAPSCache.current.data !== inventarioConAPS) {
+    uniqueValuesAPSCache.current = { data: inventarioConAPS, map: new Map() };
+  }
+  const getUniqueValuesAPS = useCallback((field: string): string[] => {
+    const cache = uniqueValuesAPSCache.current.map;
+    const cached = cache.get(field);
+    if (cached) return cached;
+    const values = new Set<string>();
+    inventarioConAPS.forEach(item => {
+      const val = item[field as keyof InventarioConAPS];
+      if (val !== null && val !== undefined && val !== '') {
+        values.add(String(val));
+      }
     });
-    return valuesMap;
+    const sorted = Array.from(values).sort();
+    cache.set(field, sorted);
+    return sorted;
   }, [inventarioConAPS]);
 
   // Funciones para manejar filtros (inventario reservado)
@@ -1561,8 +1680,9 @@ export function CampanaDetailPage() {
     });
   };
 
-  // Toggle selección de item
-  const toggleItemSelection = (rsvId: string) => {
+  // Toggle selección de item — useCallback con set-form para mantener referencia
+  // estable y permitir que MapMarker (React.memo) haga bail-out.
+  const toggleItemSelection = useCallback((rsvId: string) => {
     setSelectedItems(prev => {
       const next = new Set(prev);
       if (next.has(rsvId)) {
@@ -1572,7 +1692,17 @@ export function CampanaDetailPage() {
       }
       return next;
     });
-  };
+  }, []);
+
+  // Click handler para markers del mapa de inventario reservado.
+  // Toggle + scroll a la fila correspondiente en la tabla.
+  const handleMarkerClickReservado = useCallback((rsvId: string) => {
+    toggleItemSelection(rsvId);
+    const row = document.getElementById(`row-${rsvId}`);
+    if (row) {
+      row.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    }
+  }, [toggleItemSelection]);
 
   // Seleccionar/deseleccionar todos (excluye items de grupos incompletos o con exceso)
   const selectableItems = useMemo(() => {
@@ -1639,8 +1769,8 @@ export function CampanaDetailPage() {
     });
   };
 
-  // Toggle selección de item (con APS)
-  const toggleItemSelectionAPS = (rsvId: string) => {
+  // Toggle selección de item (con APS) — referencia estable para MapMarker memo.
+  const toggleItemSelectionAPS = useCallback((rsvId: string) => {
     setSelectedItemsAPS(prev => {
       const next = new Set(prev);
       if (next.has(rsvId)) {
@@ -1650,7 +1780,16 @@ export function CampanaDetailPage() {
       }
       return next;
     });
-  };
+  }, []);
+
+  // Click handler para markers del mapa con APS.
+  const handleMarkerClickAPS = useCallback((rsvId: string) => {
+    toggleItemSelectionAPS(rsvId);
+    const row = document.getElementById(`row-aps-${rsvId}`);
+    if (row) {
+      row.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    }
+  }, [toggleItemSelectionAPS]);
 
   // Seleccionar/deseleccionar todos (con APS)
   const toggleSelectAllAPS = () => {
@@ -2386,36 +2525,21 @@ export function CampanaDetailPage() {
                   center={mapCenter}
                   zoom={12}
                   onLoad={onMapLoad}
-                  options={{
-                    styles: isDark ? DARK_MAP_STYLES : [],
-                    disableDefaultUI: true,
-                    zoomControl: true,
-                  }}
+                  options={mapOptions}
                 >
-                  {inventarioReservado.map((item) => {
-                    const isSelected = selectedItems.has(item.rsv_ids);
-                    return item.latitud && item.longitud && (
-                      <Marker
+                  {iconReservadoSelected && iconReservadoUnselected && inventarioReservado.map((item) => {
+                    if (!item.latitud || !item.longitud) return null;
+                    return (
+                      <MapMarker
                         key={item.rsv_ids}
-                        position={{ lat: item.latitud, lng: item.longitud }}
+                        rsvId={item.rsv_ids}
+                        lat={item.latitud}
+                        lng={item.longitud}
                         title={item.codigo_unico}
-                        onClick={() => {
-                          toggleItemSelection(item.rsv_ids);
-                          // Scroll a la fila en la tabla
-                          const row = document.getElementById(`row-${item.rsv_ids}`);
-                          if (row) {
-                            row.scrollIntoView({ behavior: 'smooth', block: 'center' });
-                          }
-                        }}
-                        icon={{
-                          path: google.maps.SymbolPath.CIRCLE,
-                          scale: isSelected ? 12 : 8,
-                          fillColor: isSelected ? '#facc15' : '#ec4899',
-                          fillOpacity: 1,
-                          strokeColor: isSelected ? '#fef08a' : '#ffffff',
-                          strokeWeight: isSelected ? 3 : 2,
-                        }}
-                        zIndex={isSelected ? 1000 : 1}
+                        isSelected={selectedItems.has(item.rsv_ids)}
+                        iconSelected={iconReservadoSelected}
+                        iconUnselected={iconReservadoUnselected}
+                        onClick={handleMarkerClickReservado}
                       />
                     );
                   })}
@@ -2525,7 +2649,7 @@ export function CampanaDetailPage() {
                                   >
                                     {(() => {
                                       const draft = filterDraftReservado[filter.id] ?? filter.value;
-                                      const opts = getUniqueValuesReservado[filter.field]?.filter(val => val.toLowerCase().includes(draft.toLowerCase())) ?? [];
+                                      const opts = getUniqueValuesReservado(filter.field).filter(val => val.toLowerCase().includes(draft.toLowerCase()));
                                       return (
                                         <>
                                           {opts.map((val) => (
@@ -2784,6 +2908,7 @@ export function CampanaDetailPage() {
                               className={`flex items-center gap-2 px-3 py-2 cursor-pointer ${isDark ? 'bg-purple-900/20 hover:bg-purple-900/30' : 'bg-purple-50 hover:bg-purple-100'} transition-colors`}
                               onClick={() => toggleGroup(periodKey)}
                             >
+                              <div className="w-4 h-4 rounded border opacity-40 cursor-not-allowed border-yellow-500/30 shrink-0" title="Grupo incompleto — sin inventario para seleccionar" />
                               {isPeriodExpanded ? <ChevronDown className="h-4 w-4 text-purple-400 shrink-0" /> : <ChevronRight className="h-4 w-4 text-purple-400 shrink-0" />}
                               <span className={`text-xs font-medium ${isDark ? 'text-purple-300' : 'text-purple-700'}`}>Inicio Periodo:</span>
                               <span className={`text-xs ${isDark ? 'text-white' : 'text-gray-900'}`}>{periodo}</span>
@@ -2830,6 +2955,7 @@ export function CampanaDetailPage() {
                                         className={`flex items-center gap-2 px-2 py-1.5 cursor-pointer ${isDark ? 'bg-purple-900/10 hover:bg-purple-900/20' : 'bg-purple-50/50 hover:bg-purple-50'} transition-colors`}
                                         onClick={() => toggleGroup(sinInvKey)}
                                       >
+                                        <div className="w-3.5 h-3.5 rounded border opacity-40 cursor-not-allowed border-yellow-500/30 shrink-0" title="Grupo incompleto — sin inventario para seleccionar" />
                                         {isSinInvExpanded ? <ChevronDown className="h-3 w-3 text-pink-400 shrink-0" /> : <ChevronRight className="h-3 w-3 text-pink-400 shrink-0" />}
                                         <span className="text-[10px] font-medium text-pink-300">Artículo:</span>
                                         <span className={`text-[10px] ${isDark ? 'text-white' : 'text-gray-900'}`}>{sc.articulo || '-'}</span>
@@ -2958,32 +3084,56 @@ export function CampanaDetailPage() {
                       </table>
                     )}
 
-                    {/* Grupos sin inventario - integrados en el mismo formato */}
+                    {/* Grupos sin inventario - integrados en el mismo formato.
+                        Header con caras/tarifa/inversión + meta bar Plaza/Formato. */}
                     {gruposSinInventario.length > 0 && (
                       <div className="space-y-2 p-2">
                         {gruposSinInventario.map((sc: SolicitudCara) => {
                           const info = groupCompletenessMap.get(sc.id);
                           const groupKey = `noinv_${sc.id}`;
                           const isExpanded = expandedGroups.has(groupKey);
+                          const tarifaNum = Number(sc.tarifa_publica) || 0;
+                          const esperadas = info?.esperadas || 0;
                           return (
                             <div key={groupKey} className={`border ${isDark ? 'border-purple-900/30' : 'border-purple-200'} rounded-lg overflow-hidden`}>
                               <div
                                 className={`flex items-center gap-2 px-3 py-2 cursor-pointer ${isDark ? 'bg-purple-900/20 hover:bg-purple-900/30' : 'bg-purple-50 hover:bg-purple-100'} transition-colors`}
                                 onClick={() => toggleGroup(groupKey)}
                               >
+                                <div className="w-4 h-4 rounded border opacity-40 cursor-not-allowed border-yellow-500/30 shrink-0" title="Grupo incompleto — sin inventario para seleccionar" />
                                 {isExpanded ? (
                                   <ChevronDown className="h-4 w-4 text-purple-400 shrink-0" />
                                 ) : (
                                   <ChevronRight className="h-4 w-4 text-purple-400 shrink-0" />
                                 )}
+                                <span className="text-xs font-medium text-pink-300">Artículo:</span>
                                 <span className={`text-xs ${isDark ? 'text-white' : 'text-gray-900'}`}>{sc.articulo || '-'}</span>
-                                {sc.ciudad && <span className={`text-xs ${isDark ? 'text-zinc-400' : 'text-gray-500'}`}>{sc.ciudad}</span>}
-                                {sc.formato && <span className={`text-xs ${isDark ? 'text-zinc-400' : 'text-gray-500'}`}>· {sc.formato}</span>}
-                                <span className="px-1.5 py-0.5 rounded text-[9px] font-semibold bg-yellow-500/20 text-yellow-400 border border-yellow-500/30">
-                                  0/{info?.esperadas || 0}
+                                <div className="flex items-center gap-2 text-[10px] ml-2 shrink-0">
+                                  <span className={isDark ? 'text-zinc-400' : 'text-gray-500'}>Caras: <span className={`font-medium ${isDark ? 'text-white' : 'text-gray-900'}`}>{esperadas}</span></span>
+                                  <span className={isDark ? 'text-zinc-400' : 'text-gray-500'}>Tarifa: <span className="text-amber-400 font-medium">{tarifaNum > 0 ? fmtMoney(tarifaNum) : '$0'}</span></span>
+                                  <span className={isDark ? 'text-zinc-400' : 'text-gray-500'}>Inv: <span className="text-emerald-400 font-medium">{fmtMoney(tarifaNum * esperadas)}</span></span>
+                                </div>
+                                <span className="px-1.5 py-0.5 rounded text-[9px] font-semibold bg-yellow-500/20 text-yellow-400 border border-yellow-500/30 ml-1">
+                                  0/{esperadas}
                                 </span>
                                 <span className="ml-auto text-[10px] text-muted-foreground shrink-0">0 items</span>
                               </div>
+                              {(sc.ciudad || sc.formato) && (
+                                <div className={`flex flex-wrap gap-x-3 gap-y-1 px-2 py-1.5 border-b ${isDark ? 'border-purple-900/10' : 'border-purple-100'}`}>
+                                  {sc.ciudad && (
+                                    <div className="flex items-center gap-1">
+                                      <span className={`text-[10px] ${isDark ? 'text-zinc-500' : 'text-gray-400'}`}>Plaza:</span>
+                                      <span className={`px-1.5 py-0.5 rounded text-[10px] ${isDark ? 'bg-zinc-800 text-zinc-300' : 'bg-gray-100 text-gray-700'}`}>{sc.ciudad}</span>
+                                    </div>
+                                  )}
+                                  {sc.formato && (
+                                    <div className="flex items-center gap-1">
+                                      <span className={`text-[10px] ${isDark ? 'text-zinc-500' : 'text-gray-400'}`}>Formato:</span>
+                                      <span className={`px-1.5 py-0.5 rounded text-[10px] ${isDark ? 'bg-zinc-800 text-zinc-300' : 'bg-gray-100 text-gray-700'}`}>{sc.formato}</span>
+                                    </div>
+                                  )}
+                                </div>
+                              )}
                               {isExpanded && (
                                 <div className="px-2 py-1">
                                   <table className="w-full text-xs">
@@ -3415,12 +3565,15 @@ export function CampanaDetailPage() {
                                     const noInvInfo = groupCompletenessMap.get(sc.id);
                                     const sinInvKey = `noinv_${sc.id}`;
                                     const isSinInvExpanded = expandedGroups.has(sinInvKey);
+                                    const tarifaNum = Number(sc.tarifa_publica) || 0;
+                                    const esperadas = noInvInfo?.esperadas || 0;
                                     return (
                                       <div key={sinInvKey} className={`border ${isDark ? 'border-purple-900/20' : 'border-purple-100'} rounded-lg overflow-hidden ml-2`}>
                                         <div
                                           className={`flex items-center gap-2 px-2 py-1.5 cursor-pointer ${isDark ? 'bg-purple-900/10 hover:bg-purple-900/20' : 'bg-purple-50/50 hover:bg-purple-50'} transition-colors`}
                                           onClick={() => toggleGroup(sinInvKey)}
                                         >
+                                          <div className="w-3.5 h-3.5 rounded border opacity-40 cursor-not-allowed border-yellow-500/30 shrink-0" title="Grupo incompleto — sin inventario para seleccionar" />
                                           {isSinInvExpanded ? (
                                             <ChevronDown className="h-3 w-3 text-pink-400 shrink-0" />
                                           ) : (
@@ -3428,13 +3581,32 @@ export function CampanaDetailPage() {
                                           )}
                                           <span className="text-[10px] font-medium text-pink-300">Artículo:</span>
                                           <span className={`text-[10px] ${isDark ? 'text-white' : 'text-gray-900'}`}>{sc.articulo || '-'}</span>
-                                          {sc.ciudad && <span className={`text-[10px] ${isDark ? 'text-zinc-400' : 'text-gray-500'}`}>{sc.ciudad}</span>}
-                                          {sc.formato && <span className={`text-[10px] ${isDark ? 'text-zinc-400' : 'text-gray-500'}`}>· {sc.formato}</span>}
-                                          <span className="px-1.5 py-0.5 rounded text-[9px] font-semibold bg-yellow-500/20 text-yellow-400 border border-yellow-500/30">
-                                            0/{noInvInfo?.esperadas || 0}
+                                          <div className="flex items-center gap-2 text-[10px] ml-2 shrink-0">
+                                            <span className={isDark ? 'text-zinc-400' : 'text-gray-500'}>Caras: <span className={`font-medium ${isDark ? 'text-white' : 'text-gray-900'}`}>{esperadas}</span></span>
+                                            <span className={isDark ? 'text-zinc-400' : 'text-gray-500'}>Tarifa: <span className="text-amber-400 font-medium">{tarifaNum > 0 ? fmtMoney(tarifaNum) : '$0'}</span></span>
+                                            <span className={isDark ? 'text-zinc-400' : 'text-gray-500'}>Inv: <span className="text-emerald-400 font-medium">{fmtMoney(tarifaNum * esperadas)}</span></span>
+                                          </div>
+                                          <span className="px-1.5 py-0.5 rounded text-[9px] font-semibold bg-yellow-500/20 text-yellow-400 border border-yellow-500/30 ml-1">
+                                            0/{esperadas}
                                           </span>
                                           <span className="ml-auto text-[10px] text-muted-foreground shrink-0">0</span>
                                         </div>
+                                        {(sc.ciudad || sc.formato) && (
+                                          <div className={`flex flex-wrap gap-x-3 gap-y-1 px-2 py-1.5 border-b ${isDark ? 'border-purple-900/10' : 'border-purple-100'}`}>
+                                            {sc.ciudad && (
+                                              <div className="flex items-center gap-1">
+                                                <span className={`text-[10px] ${isDark ? 'text-zinc-500' : 'text-gray-400'}`}>Plaza:</span>
+                                                <span className={`px-1.5 py-0.5 rounded text-[10px] ${isDark ? 'bg-zinc-800 text-zinc-300' : 'bg-gray-100 text-gray-700'}`}>{sc.ciudad}</span>
+                                              </div>
+                                            )}
+                                            {sc.formato && (
+                                              <div className="flex items-center gap-1">
+                                                <span className={`text-[10px] ${isDark ? 'text-zinc-500' : 'text-gray-400'}`}>Formato:</span>
+                                                <span className={`px-1.5 py-0.5 rounded text-[10px] ${isDark ? 'bg-zinc-800 text-zinc-300' : 'bg-gray-100 text-gray-700'}`}>{sc.formato}</span>
+                                              </div>
+                                            )}
+                                          </div>
+                                        )}
                                         {isSinInvExpanded && (
                                           <div>
                                             <table className="w-full text-xs">
@@ -3467,55 +3639,147 @@ export function CampanaDetailPage() {
                         </div>
                       );
                     })}
-                    {/* Sin inventario sin grupo coincidente */}
+                    {/* Sin inventario sin grupo coincidente: agrupar por período
+                        para que NO aparezcan filas top-level separadas (una por
+                        cada circuito incompleto). Antes Cat 17 / 2026 podía salir
+                        4 veces; ahora sale UNA vez con todos los circuitos dentro. */}
                     {(() => {
                       const firstField = activeGroupings[0];
                       const groupKeys = Object.keys(groupedInventario);
                       const unmatchedNoInv = gruposSinInventario.filter(sc => !groupKeys.includes(getSCGroupValue(sc, firstField, tipoPeriodo)));
                       if (unmatchedNoInv.length === 0) return null;
-                      return unmatchedNoInv.map(sc => {
-                        const noInvInfo = groupCompletenessMap.get(sc.id);
-                        const sinInvKey = `noinv_${sc.id}`;
-                        const isSinInvExpanded = expandedGroups.has(sinInvKey);
+                      const firstFieldLabel = AVAILABLE_GROUPINGS.find(g => g.field === firstField)?.label || firstField;
+                      // Agrupar SCs por el primer campo de agrupación activo.
+                      const byField = unmatchedNoInv.reduce((acc, sc) => {
+                        const key = getSCGroupValue(sc, firstField, tipoPeriodo);
+                        if (!acc[key]) acc[key] = [];
+                        acc[key].push(sc);
+                        return acc;
+                      }, {} as Record<string, SolicitudCara[]>);
+                      return Object.entries(byField).map(([groupValue, scItems]) => {
+                        const periodGroupKey = `noinv_unmatched_${firstField}_${groupValue}`;
+                        const isPeriodExpanded = expandedGroups.has(periodGroupKey);
+                        const totalEsperadas = scItems.reduce((s, sc) => s + (groupCompletenessMap.get(sc.id)?.esperadas || 0), 0);
+                        const totalInversion = scItems.reduce((s, sc) => {
+                          const esp = groupCompletenessMap.get(sc.id)?.esperadas || 0;
+                          return s + (Number(sc.tarifa_publica) || 0) * esp;
+                        }, 0);
                         return (
-                          <div key={sinInvKey} className={`border ${isDark ? 'border-purple-900/30' : 'border-purple-200'} rounded-lg overflow-hidden`}>
+                          <div key={periodGroupKey} className={`border ${isDark ? 'border-purple-900/30' : 'border-purple-200'} rounded-lg overflow-hidden`}>
                             <div
                               className={`flex items-center gap-2 px-3 py-2 cursor-pointer ${isDark ? 'bg-purple-900/20 hover:bg-purple-900/30' : 'bg-purple-50 hover:bg-purple-100'} transition-colors`}
-                              onClick={() => toggleGroup(sinInvKey)}
+                              onClick={() => toggleGroup(periodGroupKey)}
                             >
-                              {isSinInvExpanded ? (
+                              <div className="w-4 h-4 rounded border opacity-40 cursor-not-allowed border-yellow-500/30 shrink-0" title="Grupo incompleto — sin inventario para seleccionar" />
+                              {isPeriodExpanded ? (
                                 <ChevronDown className="h-4 w-4 text-purple-400 shrink-0" />
                               ) : (
                                 <ChevronRight className="h-4 w-4 text-purple-400 shrink-0" />
                               )}
-                              <span className={`text-xs font-medium ${isDark ? 'text-purple-300' : 'text-purple-700'}`}>
-                                {AVAILABLE_GROUPINGS.find(g => g.field === activeGroupings[0])?.label}:
+                              <span className={`text-xs font-medium ${isDark ? 'text-purple-300' : 'text-purple-700'}`}>{firstFieldLabel}:</span>
+                              <span className={`text-xs ${isDark ? 'text-white' : 'text-gray-900'}`}>{groupValue}</span>
+                              <div className="flex items-center gap-2 text-[10px] ml-2 shrink-0">
+                                <span className={isDark ? 'text-zinc-400' : 'text-gray-500'}>Caras: <span className={`font-medium ${isDark ? 'text-white' : 'text-gray-900'}`}>{totalEsperadas}</span></span>
+                                <span className={isDark ? 'text-zinc-400' : 'text-gray-500'}>Inv: <span className="text-emerald-400 font-medium">{fmtMoney(totalInversion)}</span></span>
+                              </div>
+                              <span className="flex items-center gap-1 ml-1">
+                                <AlertTriangle className="h-3 w-3 text-yellow-400 shrink-0" />
+                                <span className="px-1.5 py-0.5 rounded text-[9px] font-semibold bg-yellow-500/20 text-yellow-400 border border-yellow-500/30">Incompleto</span>
                               </span>
-                              <span className={`text-xs ${isDark ? 'text-white' : 'text-gray-900'}`}>{getSCGroupValue(sc, firstField, tipoPeriodo)}</span>
-                              <span className="px-1.5 py-0.5 rounded text-[9px] font-semibold bg-yellow-500/20 text-yellow-400 border border-yellow-500/30">
-                                0/{noInvInfo?.esperadas || 0}
-                              </span>
-                              <span className="ml-auto text-[10px] text-muted-foreground shrink-0">0 items</span>
+                              <span className="ml-auto text-[10px] text-muted-foreground shrink-0">{scItems.length} items</span>
                             </div>
-                            {isSinInvExpanded && (
-                              <div className="px-2 py-1">
-                                <table className="w-full text-xs">
-                                  <thead>
-                                    <tr className="border-b border-border/30 text-left">
-                                      <th className="p-1.5 w-8"></th>
-                                      {visibleColumnsReservado.map(col => (
-                                        <th key={col.field} className={`p-1.5 text-[10px] font-medium ${isDark ? 'text-purple-300' : 'text-purple-700'}`}>{col.label}</th>
-                                      ))}
-                                    </tr>
-                                  </thead>
-                                  <tbody>
-                                    <tr>
-                                      <td colSpan={visibleColumnsReservado.length + 1} className={`p-4 text-center text-xs ${isDark ? 'text-zinc-500' : 'text-gray-400'}`}>
-                                        Sin inventario asignado
-                                      </td>
-                                    </tr>
-                                  </tbody>
-                                </table>
+                            {isPeriodExpanded && (
+                              <div className="px-2 py-1 space-y-1">
+                                {/* Meta: Plaza / Formato agregadas */}
+                                {(() => {
+                                  const plazas = [...new Set(scItems.map(sc => sc.ciudad).filter(Boolean))] as string[];
+                                  const formatos = [...new Set(scItems.map(sc => sc.formato).filter(Boolean))] as string[];
+                                  if (!plazas.length && !formatos.length) return null;
+                                  return (
+                                    <div className={`flex flex-wrap gap-x-3 gap-y-1 px-2 py-1.5 mb-1 border-b ${isDark ? 'border-purple-900/10' : 'border-purple-100'}`}>
+                                      {plazas.length > 0 && (
+                                        <div className="flex items-center gap-1">
+                                          <span className={`text-[10px] ${isDark ? 'text-zinc-500' : 'text-gray-400'}`}>Plaza:</span>
+                                          {plazas.slice(0, 3).map(p => <span key={p} className={`px-1.5 py-0.5 rounded text-[10px] ${isDark ? 'bg-zinc-800 text-zinc-300' : 'bg-gray-100 text-gray-700'}`}>{p}</span>)}
+                                          {plazas.length > 3 && <span className={`text-[10px] ${isDark ? 'text-zinc-500' : 'text-gray-400'}`}>+{plazas.length - 3}</span>}
+                                        </div>
+                                      )}
+                                      {formatos.length > 0 && (
+                                        <div className="flex items-center gap-1">
+                                          <span className={`text-[10px] ${isDark ? 'text-zinc-500' : 'text-gray-400'}`}>Formato:</span>
+                                          {formatos.slice(0, 3).map(f => <span key={f} className={`px-1.5 py-0.5 rounded text-[10px] ${isDark ? 'bg-zinc-800 text-zinc-300' : 'bg-gray-100 text-gray-700'}`}>{f}</span>)}
+                                          {formatos.length > 3 && <span className={`text-[10px] ${isDark ? 'text-zinc-500' : 'text-gray-400'}`}>+{formatos.length - 3}</span>}
+                                        </div>
+                                      )}
+                                    </div>
+                                  );
+                                })()}
+                                {scItems.map(sc => {
+                                  const noInvInfo = groupCompletenessMap.get(sc.id);
+                                  const sinInvKey = `noinv_${sc.id}`;
+                                  const isSinInvExpanded = expandedGroups.has(sinInvKey);
+                                  const tarifaNum = Number(sc.tarifa_publica) || 0;
+                                  const esperadas = noInvInfo?.esperadas || 0;
+                                  return (
+                                    <div key={sinInvKey} className={`border ${isDark ? 'border-purple-900/20' : 'border-purple-100'} rounded-lg overflow-hidden ml-2`}>
+                                      <div
+                                        className={`flex items-center gap-2 px-2 py-1.5 cursor-pointer ${isDark ? 'bg-purple-900/10 hover:bg-purple-900/20' : 'bg-purple-50/50 hover:bg-purple-50'} transition-colors`}
+                                        onClick={() => toggleGroup(sinInvKey)}
+                                      >
+                                        <div className="w-3.5 h-3.5 rounded border opacity-40 cursor-not-allowed border-yellow-500/30 shrink-0" title="Grupo incompleto — sin inventario para seleccionar" />
+                                        {isSinInvExpanded ? <ChevronDown className="h-3 w-3 text-pink-400 shrink-0" /> : <ChevronRight className="h-3 w-3 text-pink-400 shrink-0" />}
+                                        <span className="text-[10px] font-medium text-pink-300">Artículo:</span>
+                                        <span className={`text-[10px] ${isDark ? 'text-white' : 'text-gray-900'}`}>{sc.articulo || '-'}</span>
+                                        <div className="flex items-center gap-2 text-[10px] ml-2 shrink-0">
+                                          <span className={isDark ? 'text-zinc-400' : 'text-gray-500'}>Caras: <span className={`font-medium ${isDark ? 'text-white' : 'text-gray-900'}`}>{esperadas}</span></span>
+                                          <span className={isDark ? 'text-zinc-400' : 'text-gray-500'}>Tarifa: <span className="text-amber-400 font-medium">{tarifaNum > 0 ? fmtMoney(tarifaNum) : '$0'}</span></span>
+                                          <span className={isDark ? 'text-zinc-400' : 'text-gray-500'}>Inv: <span className="text-emerald-400 font-medium">{fmtMoney(tarifaNum * esperadas)}</span></span>
+                                        </div>
+                                        <span className="px-1.5 py-0.5 rounded text-[9px] font-semibold bg-yellow-500/20 text-yellow-400 border border-yellow-500/30 ml-1">
+                                          0/{esperadas}
+                                        </span>
+                                        <span className="ml-auto text-[10px] text-muted-foreground shrink-0">0</span>
+                                      </div>
+                                      {(sc.ciudad || sc.formato) && (
+                                        <div className={`flex flex-wrap gap-x-3 gap-y-1 px-2 py-1.5 border-b ${isDark ? 'border-purple-900/10' : 'border-purple-100'}`}>
+                                          {sc.ciudad && (
+                                            <div className="flex items-center gap-1">
+                                              <span className={`text-[10px] ${isDark ? 'text-zinc-500' : 'text-gray-400'}`}>Plaza:</span>
+                                              <span className={`px-1.5 py-0.5 rounded text-[10px] ${isDark ? 'bg-zinc-800 text-zinc-300' : 'bg-gray-100 text-gray-700'}`}>{sc.ciudad}</span>
+                                            </div>
+                                          )}
+                                          {sc.formato && (
+                                            <div className="flex items-center gap-1">
+                                              <span className={`text-[10px] ${isDark ? 'text-zinc-500' : 'text-gray-400'}`}>Formato:</span>
+                                              <span className={`px-1.5 py-0.5 rounded text-[10px] ${isDark ? 'bg-zinc-800 text-zinc-300' : 'bg-gray-100 text-gray-700'}`}>{sc.formato}</span>
+                                            </div>
+                                          )}
+                                        </div>
+                                      )}
+                                      {isSinInvExpanded && (
+                                        <div>
+                                          <table className="w-full text-xs">
+                                            <thead>
+                                              <tr className="border-b border-border/30 text-left">
+                                                <th className="p-1.5 w-8"></th>
+                                                {visibleColumnsReservado.map(col => (
+                                                  <th key={col.field} className={`p-1.5 text-[10px] font-medium ${isDark ? 'text-purple-300' : 'text-purple-700'}`}>{col.label}</th>
+                                                ))}
+                                              </tr>
+                                            </thead>
+                                            <tbody>
+                                              <tr>
+                                                <td colSpan={visibleColumnsReservado.length + 1} className={`p-4 text-center text-xs ${isDark ? 'text-zinc-500' : 'text-gray-400'}`}>
+                                                  Sin inventario asignado
+                                                </td>
+                                              </tr>
+                                            </tbody>
+                                          </table>
+                                        </div>
+                                      )}
+                                    </div>
+                                  );
+                                })}
                               </div>
                             )}
                           </div>
@@ -3613,55 +3877,25 @@ export function CampanaDetailPage() {
               ) : (
                 <GoogleMap
                   mapContainerClassName="w-full h-full"
-                  center={
-                    inventarioConAPS.length > 0
-                      ? {
-                          lat: inventarioConAPS.filter(i => i.latitud && i.longitud)[0]?.latitud || 19.4326,
-                          lng: inventarioConAPS.filter(i => i.latitud && i.longitud)[0]?.longitud || -99.1332
-                        }
-                      : { lat: 19.4326, lng: -99.1332 }
-                  }
+                  center={mapCenterAPS}
                   zoom={12}
-                  onLoad={(map) => {
-                    const validItems = inventarioConAPS.filter(i => i.latitud && i.longitud);
-                    if (validItems.length > 1) {
-                      const bounds = new google.maps.LatLngBounds();
-                      validItems.forEach(item => {
-                        bounds.extend({ lat: item.latitud, lng: item.longitud });
-                      });
-                      map.fitBounds(bounds, 50);
-                    }
-                  }}
-                  options={{
-                    styles: isDark ? DARK_MAP_STYLES : [],
-                    disableDefaultUI: true,
-                    zoomControl: true,
-                  }}
+                  onLoad={onMapLoadAPS}
+                  options={mapOptions}
                 >
-                  {inventarioConAPS.map((item) => {
-                    const isSelected = selectedItemsAPS.has(String(item.rsv_ids));
-                    return item.latitud && item.longitud && (
-                      <Marker
-                        key={`aps-${item.rsv_ids}`}
-                        position={{ lat: item.latitud, lng: item.longitud }}
+                  {iconAPSSelected && iconAPSUnselected && inventarioConAPS.map((item) => {
+                    if (!item.latitud || !item.longitud) return null;
+                    const rsvId = String(item.rsv_ids);
+                    return (
+                      <MapMarker
+                        key={`aps-${rsvId}`}
+                        rsvId={rsvId}
+                        lat={item.latitud}
+                        lng={item.longitud}
                         title={`${item.codigo_unico} - APS: ${item.aps}`}
-                        onClick={() => {
-                          toggleItemSelectionAPS(String(item.rsv_ids));
-                          // Scroll a la fila en la tabla
-                          const row = document.getElementById(`row-aps-${item.rsv_ids}`);
-                          if (row) {
-                            row.scrollIntoView({ behavior: 'smooth', block: 'center' });
-                          }
-                        }}
-                        icon={{
-                          path: google.maps.SymbolPath.CIRCLE,
-                          scale: isSelected ? 12 : 8,
-                          fillColor: isSelected ? '#facc15' : '#22d3ee',
-                          fillOpacity: 1,
-                          strokeColor: isSelected ? '#fef08a' : '#ffffff',
-                          strokeWeight: isSelected ? 3 : 2,
-                        }}
-                        zIndex={isSelected ? 1000 : 1}
+                        isSelected={selectedItemsAPS.has(rsvId)}
+                        iconSelected={iconAPSSelected}
+                        iconUnselected={iconAPSUnselected}
+                        onClick={handleMarkerClickAPS}
                       />
                     );
                   })}
@@ -3771,7 +4005,7 @@ export function CampanaDetailPage() {
                                   >
                                     {(() => {
                                       const draft = filterDraftAPS[filter.id] ?? filter.value;
-                                      const opts = getUniqueValuesAPS[filter.field]?.filter(val => val.toLowerCase().includes(draft.toLowerCase())) ?? [];
+                                      const opts = getUniqueValuesAPS(filter.field).filter(val => val.toLowerCase().includes(draft.toLowerCase()));
                                       return (
                                         <>
                                           {opts.map((val) => (
