@@ -226,6 +226,24 @@ interface OrdenesMontajeModalProps {
 
 type TabType = 'cat' | 'ocupacion-digital' | 'digital' | 'invian' | 'invian-digital';
 
+// Limpia el nombre de un arte quitando el prefijo de Digital Ocean Spaces
+// (formato: "<timestamp>-<hash>-<nombreReal>.<ext>") y la extensión.
+// Ejemplo: "1778275777548-tdu7x4pm-Bankaool_Abuela.png" -> "Bankaool_Abuela".
+// Soporta múltiples nombres separados por coma.
+const cleanArteName = (raw?: string | null): string => {
+  if (!raw) return '';
+  return String(raw)
+    .split(',')
+    .map(s => {
+      const trimmed = s.trim();
+      if (!trimmed) return '';
+      const noPrefix = trimmed.replace(/^\d+-[a-z0-9]+-/i, '');
+      return noPrefix.replace(/\.[a-z0-9]+$/i, '');
+    })
+    .filter(Boolean)
+    .join(', ');
+};
+
 // Status options for filter
 const STATUS_OPTIONS = ['Aprobada', 'inactiva', 'finalizada', 'por iniciar', 'en curso'];
 
@@ -1243,8 +1261,10 @@ export function OrdenesMontajeModal({ isOpen, onClose, canExport = true }: Orden
         'Descripción (Opcional)': item.Descripcion || '',
         'Inicio o Periodo': item.InicioPeriodo || '',
         'Fin o Segmento': item.FinSegmento || '',
-        'Arte': item.nombres_archivo_data || '',
-        'Código de arte (Opcional)': item.nombres_artes_digitales || item.ArteFileName || (item.ArteUrl === 'HAS_ARTE' ? 'Arte' : item.ArteUrl?.split('/').pop()) || '',
+        // Arte = nombre limpio del arte (sin prefix de DO Spaces, sin extensión).
+        // Antes salía en "Código de arte"; ahora "Código de arte" va vacío.
+        'Arte': cleanArteName(item.nombres_artes_digitales || item.ArteFileName || (item.ArteUrl === 'HAS_ARTE' ? '' : item.ArteUrl?.split('/').pop()) || ''),
+        'Código de arte (Opcional)': '',
         'Arte Url (Opcional)': item.ArteUrl === 'HAS_ARTE' ? '' : (getFileUrl(item.ArteUrl) || ''),
         'Origen del arte (Opcional)': item.indicaciones || '',
         'Unidad': (item.Unidad || '').split('_')[0] || '',
@@ -1269,8 +1289,10 @@ export function OrdenesMontajeModal({ isOpen, onClose, canExport = true }: Orden
         'Descripción (Opcional)': item.Descripcion || '',
         'Inicio o Periodo': item.InicioPeriodo || '',
         'Fin o Segmento': item.FinSegmento || '',
-        'Arte': item.nombres_archivo_data || '',
-        'Código de arte (Opcional)': item.nombres_artes_digitales || item.ArteFileName || (item.ArteUrl === 'HAS_ARTE' ? 'Arte' : item.ArteUrl?.split('/').pop()) || '',
+        // Arte = nombre limpio del arte (sin prefix de DO Spaces, sin extensión).
+        // Antes salía en "Código de arte"; ahora "Código de arte" va vacío.
+        'Arte': cleanArteName(item.nombres_artes_digitales || item.ArteFileName || (item.ArteUrl === 'HAS_ARTE' ? '' : item.ArteUrl?.split('/').pop()) || ''),
+        'Código de arte (Opcional)': '',
         'Arte Url (Opcional)': item.ArteUrl === 'HAS_ARTE' ? '' : (getFileUrl(item.ArteUrl) || ''),
         'Origen del arte (Opcional)': item.indicaciones || '',
         'Unidad': (item.Unidad || '').split('_')[0] || '',
@@ -2404,14 +2426,19 @@ const INVIANRow = React.memo(function INVIANRow({ item, isDark, onOpenGallery, s
       </td>
       <td className="px-3 py-2 text-xs text-purple-300">{item.InicioPeriodo || '-'}</td>
       <td className="px-3 py-2 text-xs text-purple-300">{item.FinSegmento || '-'}</td>
-      {/* Arte: filename de imagenes_digitales.archivo_data (solo lo que va
-          después del último '/') */}
-      <td className={`px-3 py-2 text-xs ${isDark ? 'text-zinc-300' : 'text-gray-700'} max-w-[180px] truncate`} title={item.nombres_archivo_data || ''}>
-        {item.nombres_archivo_data || '-'}
-      </td>
-      {/* Código de arte (Opcional) — antes "Nombre Arte" */}
-      <td className={`px-3 py-2 text-xs ${isDark ? 'text-zinc-300' : 'text-gray-700'} max-w-[150px] truncate`} title={fileName || ''}>
-        {fileName || '-'}
+      {/* Arte = nombre limpio del arte (sin prefix DO Spaces, sin extensión).
+          Antes salía en "Código de arte"; ahora ese campo va vacío. */}
+      {(() => {
+        const clean = cleanArteName(fileName);
+        return (
+          <td className={`px-3 py-2 text-xs ${isDark ? 'text-zinc-300' : 'text-gray-700'} max-w-[180px] truncate`} title={clean}>
+            {clean || '-'}
+          </td>
+        );
+      })()}
+      {/* Código de arte (Opcional) — intencionalmente vacío */}
+      <td className={`px-3 py-2 text-xs ${isDark ? 'text-zinc-500' : 'text-gray-400'} max-w-[150px] truncate`}>
+        -
       </td>
       {/* Artes */}
       <td className="px-3 py-2 text-xs">
