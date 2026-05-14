@@ -11,7 +11,6 @@ export const MAINTENANCE_MESSAGE =
 export const isUserAllowedDuringMaintenance = (rol: string | undefined | null): boolean => {
   const cleaned = (rol ?? '').trim();
   if (!cleaned) return false;
-  if (cleaned === 'Administrador') return true;
   if (cleaned === 'DEV') return true;
   return cleaned.toLowerCase().includes('rafico');
 };
