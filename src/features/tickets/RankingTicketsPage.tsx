@@ -1,11 +1,15 @@
+import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { Loader2, ArrowLeft } from 'lucide-react';
+import { Loader2, ArrowLeft, Trophy, ShieldAlert } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { Header } from '../../components/layout/Header';
 import { ticketsService } from '../../services/tickets.service';
 import { useThemeStore } from '../../store/themeStore';
 import { useSocketTicketRankings } from '../../hooks/useSocket';
 import { UserAvatar } from '../../components/ui/user-avatar';
+import { AuditoriaReservasTab } from './AuditoriaReservasTab';
+
+type MainTab = 'rankings' | 'auditoria';
 
 function RankingCard({
   title,
@@ -73,12 +77,14 @@ function RankingCard({
 export function RankingTicketsPage() {
   const isDark = useThemeStore((s) => s.theme) === 'dark';
   const navigate = useNavigate();
+  const [mainTab, setMainTab] = useState<MainTab>('rankings');
 
   useSocketTicketRankings();
 
   const { data: rankings, isLoading } = useQuery({
     queryKey: ['ticket-rankings'],
     queryFn: () => ticketsService.getRankings(),
+    enabled: mainTab === 'rankings',
   });
 
   return (
@@ -103,7 +109,7 @@ export function RankingTicketsPage() {
               </p>
             </div>
           </div>
-          {rankings && (
+          {mainTab === 'rankings' && rankings && (
             <div className="flex gap-3">
               <div className={`px-4 py-2 rounded-xl ${isDark ? 'bg-purple-500/10 border-purple-500/20' : 'bg-purple-50 border-purple-200'} border`}>
                 <span className={`text-sm font-medium ${isDark ? 'text-purple-300' : 'text-purple-600'}`}>
@@ -119,8 +125,37 @@ export function RankingTicketsPage() {
           )}
         </div>
 
-        {/* Empleado del mes */}
-        {rankings?.empleadoDelMes && (() => {
+        {/* Tabs principales */}
+        <div className={`inline-flex p-1 rounded-xl ${isDark ? 'bg-zinc-900/60 border border-zinc-700/30' : 'bg-gray-100 border border-gray-200'}`}>
+          <button
+            onClick={() => setMainTab('rankings')}
+            className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all ${
+              mainTab === 'rankings'
+                ? (isDark ? 'bg-purple-500/20 text-purple-300 border border-purple-500/40' : 'bg-white text-purple-700 border border-purple-300 shadow-sm')
+                : (isDark ? 'text-zinc-400 hover:text-zinc-200' : 'text-gray-500 hover:text-gray-700')
+            }`}
+          >
+            <Trophy className="h-4 w-4" />
+            Rankings
+          </button>
+          <button
+            onClick={() => setMainTab('auditoria')}
+            className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all ${
+              mainTab === 'auditoria'
+                ? (isDark ? 'bg-red-500/20 text-red-300 border border-red-500/40' : 'bg-white text-red-700 border border-red-300 shadow-sm')
+                : (isDark ? 'text-zinc-400 hover:text-zinc-200' : 'text-gray-500 hover:text-gray-700')
+            }`}
+          >
+            <ShieldAlert className="h-4 w-4" />
+            Auditoría Reservas
+          </button>
+        </div>
+
+        {/* Contenido tab Auditoría */}
+        {mainTab === 'auditoria' && <AuditoriaReservasTab isDark={isDark} />}
+
+        {/* Empleado del mes (solo tab rankings) */}
+        {mainTab === 'rankings' && rankings?.empleadoDelMes && (() => {
           const emp = rankings.empleadoDelMes;
           const nombre = emp.nombre;
           const count = emp.count;
@@ -230,7 +265,7 @@ export function RankingTicketsPage() {
           );
         })()}
 
-        {isLoading ? (
+        {mainTab === 'rankings' && (isLoading ? (
           <div className="flex justify-center py-20">
             <Loader2 className={`h-10 w-10 ${isDark ? 'text-purple-400' : 'text-purple-600'} animate-spin`} />
           </div>
@@ -357,7 +392,7 @@ export function RankingTicketsPage() {
               </div>
             </div>
           </div>
-        ) : null}
+        ) : null)}
       </main>
     </div>
   );

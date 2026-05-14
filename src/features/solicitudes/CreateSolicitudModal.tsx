@@ -1808,8 +1808,21 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
       }
     }
 
+    // Resolver cliente.id real desde el CUIC + sap_database. El SAPCuicItem
+    // solo trae CUIC (que puede duplicarse entre filas de cliente), por eso
+    // hacemos lookup local para mandar el cliente.id correcto al back.
+    let resolvedClienteId: number;
+    try {
+      const resolved = await clientesService.resolveByCuic(selectedCuic.CUIC, (selectedCuic as any).sap_database || null);
+      resolvedClienteId = resolved.id;
+    } catch (err) {
+      showToast(`No se pudo resolver cliente para CUIC ${selectedCuic.CUIC}. Verifica que exista en la tabla de clientes local.`, 'error');
+      isSubmittingRef.current = false;
+      return;
+    }
+
     const data = {
-      cliente_id: selectedCuic.CUIC,
+      cliente_id: resolvedClienteId,
       cuic: selectedCuic.CUIC,
       razon_social: selectedCuic.T0_U_RazonSocial,
       unidad_negocio: selectedCuic.T1_U_UnidadNegocio,
@@ -3027,7 +3040,7 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
                   {/* Renta */}
                   <div>
                     <label className={`text-xs ${isDark ? 'text-zinc-500' : 'text-gray-500'}`}>
-                      {newCara.articulo?.ItemCode?.toUpperCase().startsWith('IM') ? 'Impresiones' : isEspecialArticle(newCara.articulo?.ItemCode || '') ? 'Ejec. Especiales' : 'Renta'}
+                      {newCara.articulo?.ItemCode?.toUpperCase().startsWith('IM') ? 'Impresiones' : newCara.articulo?.ItemCode?.toUpperCase().startsWith('IN') ? 'Intercambio' : isEspecialArticle(newCara.articulo?.ItemCode || '') ? 'Ejec. Especiales' : 'Renta'}
                       {newCara.articulo?.ItemCode?.toUpperCase().startsWith('CT') && (
                         <span className="ml-1 text-cyan-400 text-[10px]">(Cortesía)</span>
                       )}

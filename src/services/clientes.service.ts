@@ -87,6 +87,22 @@ export const clientesService = {
     return response.data.data;
   },
 
+  /**
+   * Resuelve un `cliente.id` (PK local) a partir del CUIC + sap_database opcional.
+   * Necesario antes de mandar `cliente_id` al back: si el front mandara CUIC, el
+   * back podría asociar al cliente equivocado cuando hay duplicados de CUIC.
+   * Lanza si no encuentra ninguno.
+   */
+  async resolveByCuic(cuic: number, sapDatabase?: string | null): Promise<{ id: number; CUIC: number; sap_database: string | null; T0_U_RazonSocial: string | null; T0_U_Cliente: string | null; card_code: string | null; salesperson_code: number | null }> {
+    const response = await api.get<ApiResponse<{ id: number; CUIC: number; sap_database: string | null; T0_U_RazonSocial: string | null; T0_U_Cliente: string | null; card_code: string | null; salesperson_code: number | null }>>(`/clientes/resolve`, {
+      params: { cuic, ...(sapDatabase ? { sap_database: sapDatabase } : {}) },
+    });
+    if (!response.data.success || !response.data.data) {
+      throw new Error(response.data.error || 'No se pudo resolver cliente por CUIC');
+    }
+    return response.data.data;
+  },
+
   async create(cliente: Partial<Cliente>): Promise<Cliente> {
     const response = await api.post<ApiResponse<Cliente>>('/clientes', cliente);
     if (!response.data.success || !response.data.data) {

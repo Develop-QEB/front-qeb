@@ -66,10 +66,14 @@ function formatDetalles(detalles: string | null): string {
         parts.push(`${c.label || c.campo}: ${c.antes} → ${c.despues}`);
       }
     }
-    if (obj.cara) parts.push(`Artículo: ${obj.cara.articulo}, ${obj.cara.caras} caras`);
+    if (obj.cara) {
+      const noun = (obj.cara.formato || '').toUpperCase().includes('PUENTE PEATONAL') ? 'puentes' : 'caras';
+      parts.push(`Artículo: ${obj.cara.articulo}, ${obj.cara.caras} ${noun}`);
+    }
     if (obj.caras?.length) {
       const c = obj.caras[0];
-      parts.push(`${c.articulo} — ${c.formato} — ${c.caras} caras`);
+      const noun = (c.formato || '').toUpperCase().includes('PUENTE PEATONAL') ? 'puentes' : 'caras';
+      parts.push(`${c.articulo} — ${c.formato} — ${c.caras} ${noun}`);
     }
     if (obj.pendientesDg) parts.push(`Pendientes DG: ${obj.pendientesDg}`);
     if (obj.pendientesDcm) parts.push(`Pendientes DCM: ${obj.pendientesDcm}`);
@@ -765,22 +769,35 @@ export function HistorialAccionesPage() {
                           </table>
                         </div>
                       )}
-                      {obj.cara && (
-                        <div>
-                          <span className={`text-xs font-medium ${subText}`}>Cara</span>
-                          <p className={`text-sm mt-1 ${headerText}`}>Artículo: {obj.cara.articulo} · {obj.cara.caras} caras</p>
-                        </div>
-                      )}
-                      {obj.caras?.length > 0 && (
-                        <div>
-                          <span className={`text-xs font-medium ${subText}`}>Caras ({obj.caras.length})</span>
-                          <div className="mt-1 space-y-1">
-                            {obj.caras.map((c: any, i: number) => (
-                              <p key={i} className={`text-sm ${headerText}`}>{c.articulo} — {c.formato} — {c.caras} caras</p>
-                            ))}
+                      {obj.cara && (() => {
+                        const isPP = (obj.cara.formato || '').toUpperCase().includes('PUENTE PEATONAL');
+                        const cap = isPP ? 'Puente' : 'Cara';
+                        const noun = isPP ? 'puentes' : 'caras';
+                        return (
+                          <div>
+                            <span className={`text-xs font-medium ${subText}`}>{cap}</span>
+                            <p className={`text-sm mt-1 ${headerText}`}>Artículo: {obj.cara.articulo} · {obj.cara.caras} {noun}</p>
                           </div>
-                        </div>
-                      )}
+                        );
+                      })()}
+                      {obj.caras?.length > 0 && (() => {
+                        const allPP = obj.caras.every((c: any) => (c.formato || '').toUpperCase().includes('PUENTE PEATONAL'));
+                        const groupLabel = allPP ? 'Puentes' : 'Caras';
+                        return (
+                          <div>
+                            <span className={`text-xs font-medium ${subText}`}>{groupLabel} ({obj.caras.length})</span>
+                            <div className="mt-1 space-y-1">
+                              {obj.caras.map((c: any, i: number) => {
+                                const isPP = (c.formato || '').toUpperCase().includes('PUENTE PEATONAL');
+                                const noun = isPP ? 'puentes' : 'caras';
+                                return (
+                                  <p key={i} className={`text-sm ${headerText}`}>{c.articulo} — {c.formato} — {c.caras} {noun}</p>
+                                );
+                              })}
+                            </div>
+                          </div>
+                        );
+                      })()}
                       {obj.campaña && (
                         <div>
                           <span className={`text-xs font-medium ${subText}`}>Campaña</span>

@@ -1502,7 +1502,7 @@ export function CompartirPropuestaPage() {
                                   </span>
                                 </div>
                                 <div className="flex items-center gap-3 text-xs">
-                                  <span className={isDark ? 'text-zinc-400' : 'text-gray-500'}>Renta: <span className={`font-medium ${isDark ? 'text-white' : 'text-gray-900'}`}>{artGroup.totalCaras}</span></span>
+                                  <span className={isDark ? 'text-zinc-400' : 'text-gray-500'}>{(artGroup.articulo || '').toUpperCase().startsWith('IN') ? 'Intercambio' : 'Renta'}: <span className={`font-medium ${isDark ? 'text-white' : 'text-gray-900'}`}>{artGroup.totalCaras}</span></span>
                                   {artGroup.totalBonificadas > 0 && <span className={isDark ? 'text-cyan-400' : 'text-cyan-600'}>Bonif: <span className="font-medium">{artGroup.totalBonificadas}</span></span>}
                                   <span className={isDark ? 'text-amber-300' : 'text-amber-600'}>Tarifa: <span className="font-medium">{formatCurrency(artGroup.items[0]?.tarifa_publica || 0)}</span></span>
                                   <span className={isDark ? 'text-emerald-400' : 'text-emerald-600'}>{formatCurrency(artGroup.totalInversion)}</span>
@@ -1529,7 +1529,7 @@ export function CompartirPropuestaPage() {
                                         <th className={`px-3 py-2 text-left text-xs font-semibold ${isDark ? 'text-purple-200' : 'text-purple-700'}`}>Codigo</th>
                                         <th className={`px-3 py-2 text-left text-xs font-semibold ${isDark ? 'text-purple-200' : 'text-purple-700'}`}>Plaza</th>
                                         <th className={`px-3 py-2 text-left text-xs font-semibold ${isDark ? 'text-purple-200' : 'text-purple-700'}`}>Formato</th>
-                                        <th className={`px-3 py-2 text-center text-xs font-semibold ${isDark ? 'text-purple-200' : 'text-purple-700'}`}>Caras</th>
+                                        <th className={`px-3 py-2 text-center text-xs font-semibold ${isDark ? 'text-purple-200' : 'text-purple-700'}`}>{artGroup.items.every(i => (i.mueble || '').toUpperCase().includes('PUENTE PEATONAL')) ? 'Puentes' : 'Caras'}</th>
                                         <th className={`px-3 py-2 text-right text-xs font-semibold ${isDark ? 'text-purple-200' : 'text-purple-700'}`}>Lat</th>
                                         <th className={`px-3 py-2 text-right text-xs font-semibold ${isDark ? 'text-purple-200' : 'text-purple-700'}`}>Long</th>
                                         <th className={`px-3 py-2 text-right text-xs font-semibold ${isDark ? 'text-amber-300' : 'text-amber-700'}`}>Tarifa</th>
