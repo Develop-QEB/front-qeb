@@ -48,6 +48,7 @@ export interface CampanaEnCelda {
   fin_periodo: string;
   numero_catorcena: number;
   anio_catorcena: number;
+  articulo: string | null;
 }
 
 export interface CeldaOcupacion {
@@ -132,6 +133,7 @@ export const analisisOcupacionService = {
               fin_periodo: h.fin_periodo,
               numero_catorcena: h.numero_catorcena,
               anio_catorcena: h.anio_catorcena,
+              articulo: h.articulo ?? null,
             });
           }
         } catch {
