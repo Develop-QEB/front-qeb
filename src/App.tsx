@@ -7,6 +7,7 @@ import { RegisterPage } from './features/auth/RegisterPage';
 import { ForgotPasswordPage } from './features/auth/ForgotPasswordPage';
 import { ProtectedRoute } from './features/auth/ProtectedRoute';
 import { MainLayout } from './components/layout/MainLayout';
+import { MaintenanceOverlay } from './components/MaintenanceOverlay';
 import { useAuthStore } from './store/authStore';
 import { getPermissions } from './lib/permissions';
 
@@ -161,6 +162,7 @@ function DevTicketsRoute() {
 function App() {
   return (
     <QueryClientProvider client={queryClient}>
+      <MaintenanceOverlay />
       <BrowserRouter>
         <Routes>
           <Route path="/login" element={<LoginPage />} />

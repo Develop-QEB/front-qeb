@@ -1,5 +1,6 @@
 import axios, { AxiosError, InternalAxiosRequestConfig } from 'axios';
 import { useAuthStore } from '../store/authStore';
+import { useMaintenanceStore } from '../store/maintenanceStore';
 
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3000/api';
 
@@ -42,6 +43,15 @@ api.interceptors.response.use(
   (response) => response,
   async (error: AxiosError) => {
     const originalRequest = error.config as InternalAxiosRequestConfig & { _retry?: boolean };
+
+    // Modo mantenimiento — overlay global no cerrable.
+    if (error.response?.status === 503) {
+      const body = error.response.data as { code?: string; error?: string } | undefined;
+      if (body?.code === 'MAINTENANCE') {
+        useMaintenanceStore.getState().setMaintenance(body.error || null);
+        return Promise.reject(error);
+      }
+    }
 
     // Skip auth pages
     const isAuthPage = window.location.pathname === '/login' || window.location.pathname === '/register';
