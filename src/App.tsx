@@ -8,6 +8,7 @@ import { ForgotPasswordPage } from './features/auth/ForgotPasswordPage';
 import { ProtectedRoute } from './features/auth/ProtectedRoute';
 import { MainLayout } from './components/layout/MainLayout';
 import { MaintenanceOverlay } from './components/MaintenanceOverlay';
+import { useMaintenanceCheck } from './hooks/useMaintenanceCheck';
 import { useAuthStore } from './store/authStore';
 import { getPermissions } from './lib/permissions';
 
@@ -159,10 +160,16 @@ function DevTicketsRoute() {
   return <DevTicketsPage />;
 }
  
+// Wrapper que activa el polling de mantenimiento y monta el overlay.
+function MaintenanceWatcher() {
+  useMaintenanceCheck();
+  return <MaintenanceOverlay />;
+}
+
 function App() {
   return (
     <QueryClientProvider client={queryClient}>
-      <MaintenanceOverlay />
+      <MaintenanceWatcher />
       <BrowserRouter>
         <Routes>
           <Route path="/login" element={<LoginPage />} />
