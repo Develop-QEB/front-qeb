@@ -1227,7 +1227,7 @@ export function ClientePropuestaPage() {
                                 </span>
                               </div>
                               <div className="flex items-center gap-3 text-xs">
-                                <span className="text-gray-400">Renta: <span className="text-gray-700 font-medium">{artGroup.totalCaras}</span></span>
+                                <span className="text-gray-400">{(artGroup.articulo || '').toUpperCase().startsWith('IN') ? 'Intercambio' : 'Renta'}: <span className="text-gray-700 font-medium">{artGroup.totalCaras}</span></span>
                                 {artGroup.totalBonificadas > 0 && <span className="text-cyan-600">Bonif: <span className="font-medium">{artGroup.totalBonificadas}</span></span>}
                                 <span className="text-amber-600">Tarifa: <span className="font-medium">{formatCurrency(artGroup.items[0]?.tarifa_publica || 0)}</span></span>
                                 <span className="text-[#7AB800]">{formatCurrency(artGroup.totalInversion)}</span>

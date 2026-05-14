@@ -1009,7 +1009,7 @@ export function ViewSolicitudModal({ isOpen, onClose, solicitudId, onEdit, onAte
                                               <th className={`px-3 py-2 text-left text-xs font-semibold ${isDark ? 'text-violet-200' : 'text-violet-700'}`}>Tipo</th>
                                               <th className={`px-3 py-2 text-left text-xs font-semibold ${isDark ? 'text-violet-200' : 'text-violet-700'}`}>Inicio</th>
                                               <th className={`px-3 py-2 text-left text-xs font-semibold ${isDark ? 'text-violet-200' : 'text-violet-700'}`}>Fin</th>
-                                              <th className={`px-3 py-2 text-center text-xs font-semibold ${isDark ? 'text-violet-200' : 'text-violet-700'}`}>Renta</th>
+                                              <th className={`px-3 py-2 text-center text-xs font-semibold ${isDark ? 'text-violet-200' : 'text-violet-700'}`}>{(articuloGroup.articulo || '').toUpperCase().startsWith('IN') ? 'Intercambio' : 'Renta'}</th>
                                               <th className={`px-3 py-2 text-center text-xs font-semibold ${isDark ? 'text-violet-200' : 'text-violet-700'}`}>Bonif</th>
                                               <th className={`px-3 py-2 text-center text-xs font-semibold ${isDark ? 'text-white' : 'text-gray-900'}`}>Total</th>
                                               <th className={`px-3 py-2 text-right text-xs font-semibold ${isDark ? 'text-amber-300' : 'text-amber-700'}`}>Tarifa Púb.</th>

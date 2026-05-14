@@ -1502,7 +1502,7 @@ export function CompartirPropuestaPage() {
                                   </span>
                                 </div>
                                 <div className="flex items-center gap-3 text-xs">
-                                  <span className={isDark ? 'text-zinc-400' : 'text-gray-500'}>Renta: <span className={`font-medium ${isDark ? 'text-white' : 'text-gray-900'}`}>{artGroup.totalCaras}</span></span>
+                                  <span className={isDark ? 'text-zinc-400' : 'text-gray-500'}>{(artGroup.articulo || '').toUpperCase().startsWith('IN') ? 'Intercambio' : 'Renta'}: <span className={`font-medium ${isDark ? 'text-white' : 'text-gray-900'}`}>{artGroup.totalCaras}</span></span>
                                   {artGroup.totalBonificadas > 0 && <span className={isDark ? 'text-cyan-400' : 'text-cyan-600'}>Bonif: <span className="font-medium">{artGroup.totalBonificadas}</span></span>}
                                   <span className={isDark ? 'text-amber-300' : 'text-amber-600'}>Tarifa: <span className="font-medium">{formatCurrency(artGroup.items[0]?.tarifa_publica || 0)}</span></span>
                                   <span className={isDark ? 'text-emerald-400' : 'text-emerald-600'}>{formatCurrency(artGroup.totalInversion)}</span>
