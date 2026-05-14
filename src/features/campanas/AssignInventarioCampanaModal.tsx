@@ -3335,7 +3335,14 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
         excluir_categoria: excluirCategoria || undefined,
         excluir_distancia_km: excluirCategoria ? excluirDistanciaKm : undefined,
       });
-      setInventarioDisponible(response.data || []);
+      // CDMX/AM no incluye TOLUCA — el AM real son solo ciertos municipios de Edomex.
+      // El back filtra por estado="Ciudad de México,Estado de México" y se cuela Toluca
+      // porque vive en Edomex. Filtramos aquí para no traerlo en CDMX/AM.
+      const isAM = cara.estados === 'Ciudad de México / AM';
+      const data = (response.data || []).filter(inv =>
+        !isAM || (inv.municipio || '').toUpperCase() !== 'TOLUCA'
+      );
+      setInventarioDisponible(data);
     } catch (error) {
       console.error('Error fetching disponibles:', error);
       setInventarioDisponible([]);
@@ -3402,7 +3409,12 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
         excluir_categoria: excluirCategoria || undefined,
         excluir_distancia_km: excluirCategoria ? excluirDistanciaKm : undefined,
       });
-      setInventarioDisponible(response.data || []);
+      // CDMX/AM no incluye TOLUCA — filtrar Toluca cuando la cara es AM.
+      const isAM2 = selectedCaraForSearch.estados === 'Ciudad de México / AM';
+      const data2 = (response.data || []).filter(inv =>
+        !isAM2 || (inv.municipio || '').toUpperCase() !== 'TOLUCA'
+      );
+      setInventarioDisponible(data2);
     } catch (error) {
       console.error('Error fetching disponibles:', error);
     } finally {

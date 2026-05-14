@@ -3255,7 +3255,14 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
         // excluir esos inventarios del buscador (comparten mueble='PARABUS').
         excluir_mi_macro: tipoPeriodo === 'catorcena' ? 1 : undefined,
       });
-      setInventarioDisponible(response.data || []);
+      // CDMX/AM no incluye TOLUCA — el AM real son solo ciertos municipios de Edomex.
+      // El back filtra por estado="Ciudad de México,Estado de México" y se cuela Toluca
+      // porque vive en Edomex. Filtramos aquí para no traerlo en CDMX/AM.
+      const isAM = cara.estados === 'Ciudad de México / AM';
+      const data = (response.data || []).filter(inv =>
+        !isAM || (inv.municipio || '').toUpperCase() !== 'TOLUCA'
+      );
+      setInventarioDisponible(data);
     } catch (error) {
       console.error('Error fetching disponibles:', error);
       setInventarioDisponible([]);
@@ -3319,7 +3326,12 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
         solicitudCaraId: selectedCaraForSearch.id,
         excluir_mi_macro: tipoPeriodo === 'catorcena' ? 1 : undefined,
       });
-      setInventarioDisponible(response.data || []);
+      // CDMX/AM no incluye TOLUCA — filtrar Toluca cuando la cara es AM.
+      const isAM2 = selectedCaraForSearch.estados === 'Ciudad de México / AM';
+      const data2 = (response.data || []).filter(inv =>
+        !isAM2 || (inv.municipio || '').toUpperCase() !== 'TOLUCA'
+      );
+      setInventarioDisponible(data2);
     } catch (error) {
       console.error('Error fetching disponibles:', error);
     } finally {
