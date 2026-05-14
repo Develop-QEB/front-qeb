@@ -13475,7 +13475,7 @@ function SummaryCards({ stats, activeTab }: { stats: SummaryStats; activeTab: Ma
   const cards = useMemo(() => {
     if (activeTab === 'versionario') {
       return [
-        { label: 'Inventario sin Artes', value: stats.sinArte, icon: Image, color: 'amber' },
+        { label: 'Circuitos sin Artes', value: stats.sinArte, icon: Image, color: 'amber' },
       ];
     }
     if (activeTab === 'atender') {
@@ -15727,13 +15727,48 @@ export function TareaSeguimientoPage() {
       allItems = inventoryTestigosData;
     }
 
+    // Para el tab "atender" (Revisar y Aprobar) los KPIs se cuentan por TAREA
+    // (no por inventario): un rechazo que abarcaba 100 inventarios debe contar
+    // como 1 y no como 100. Para los demás tabs (versionario / testigo) los
+    // contadores siguen siendo por inventario porque ahí sí tiene sentido
+    // (cuánto inventario sin arte, cuántos testigos validados, etc.).
+    const isRevision = (t: { tipo?: string }) => t.tipo === 'Revisión de artes' || t.tipo === 'Revision de artes';
+    const isCorreccion = (t: { tipo?: string }) => t.tipo === 'Corrección' || t.tipo === 'Correccion';
+    const revisionActivas = tasks.filter(isRevision).length;
+    const revisionAtendidas = completedTasks.filter(isRevision).length;
+    const correccionTotales = tasks.filter(isCorreccion).length + completedTasks.filter(isCorreccion).length;
+
+    const isAtenderTab = activeMainTab === 'atender';
+
+    // En el tab "versionario" (Subir Artes) contamos por CIRCUITO/GRUPO en vez
+    // de por inventario individual: un circuito con 50 inventarios sin arte
+    // cuenta como 1 (no como 50). Items sin grupo se cuentan como uno propio.
+    const circuitosSinArte = new Set<string>();
+    if (activeMainTab === 'versionario') {
+      allItems.forEach(i => {
+        if (!i.archivo_arte) {
+          circuitosSinArte.add(i.grupo_id || `item-${i.id}`);
+        }
+      });
+    }
+
     return {
       totalInventario: allItems.length,
-      sinArte: activeMainTab === 'versionario' ? allItems.filter(i => !i.archivo_arte).length : allItems.filter(i => i.estado_arte === 'sin_revisar' || i.estado_arte === 'en_revision').length,
-      enRevision: allItems.filter(i => i.estado_arte === 'en_revision').length,
-      aprobados: allItems.filter(i => i.estado_arte === 'aprobado').length,
-      rechazados: allItems.filter(i => i.estado_arte === 'rechazado').length,
-      tareasActivas: tasks.filter(t => t.estatus?.toLowerCase() === 'pendiente' || t.estatus?.toLowerCase() === 'en_progreso' || t.estatus?.toLowerCase() === 'en progreso').length,
+      sinArte: activeMainTab === 'versionario'
+        ? circuitosSinArte.size
+        : isAtenderTab
+          ? revisionActivas
+          : allItems.filter(i => i.estado_arte === 'sin_revisar' || i.estado_arte === 'en_revision').length,
+      enRevision: isAtenderTab
+        ? revisionActivas
+        : allItems.filter(i => i.estado_arte === 'en_revision').length,
+      aprobados: isAtenderTab
+        ? revisionAtendidas
+        : allItems.filter(i => i.estado_arte === 'aprobado').length,
+      rechazados: isAtenderTab
+        ? correccionTotales
+        : allItems.filter(i => i.estado_arte === 'rechazado').length,
+      tareasActivas: tasks.length,
       tareasCompletadas: completedTasks.length,
     };
   }, [inventorySinArteData, inventoryArteData, inventoryProgramacionData, inventoryImpresionesData, inventoryTestigosData, activeMainTab, tasks, completedTasks]);
