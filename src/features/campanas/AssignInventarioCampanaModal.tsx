@@ -119,11 +119,13 @@ const isNoInventoryArticle = (itemCode: string, itemName?: string): boolean => {
   return isImpresionArticle(itemCode, itemName) || isEspecialArticle(itemCode, itemName);
 };
 
-// Artículos que son 100% bonificación (BF/CF/CT/IN). El KPI de bonificación
+// Artículos que son 100% bonificación (BF/CF/CT). El KPI de bonificación
 // se divide en 2 (Flujo / Contraflujo) sin tocar BD; reservas siguen como tipo='Bonificacion'.
+// NOTA: IN (Intercambio) NO entra aquí — en todo el flujo (caras, KPIs, autorización,
+// SAP) se cuenta como Renta con tarifa flexible, no como bonificación.
 const isBonifSplitArticle = (articulo?: string | null): boolean => {
   const a = (articulo || '').toUpperCase();
-  return a.startsWith('BF') || a.startsWith('CF') || a.startsWith('CT') || a.startsWith('IN');
+  return a.startsWith('BF') || a.startsWith('CF') || a.startsWith('CT');
 };
 
 // Tarifas from SAP (U_IMU_PublicPrice = tarifa publica, PriceList 11 = tarifa piso)
