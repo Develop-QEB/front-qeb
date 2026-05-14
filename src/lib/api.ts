@@ -1,6 +1,5 @@
 import axios, { AxiosError, InternalAxiosRequestConfig } from 'axios';
 import { useAuthStore } from '../store/authStore';
-import { useMaintenanceStore } from '../store/maintenanceStore';
 
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3000/api';
 
@@ -43,24 +42,6 @@ api.interceptors.response.use(
   (response) => response,
   async (error: AxiosError) => {
     const originalRequest = error.config as InternalAxiosRequestConfig & { _retry?: boolean };
-
-    // Modo mantenimiento — overlay global no cerrable.
-    // Cualquier 503 dispara el modal (sea MAINTENANCE explícito o caída de back).
-    if (error.response?.status === 503) {
-      const raw = error.response.data;
-      let body: { code?: string; error?: string } = {};
-      if (typeof raw === 'string') {
-        try { body = JSON.parse(raw); } catch { body = { error: raw }; }
-      } else if (raw && typeof raw === 'object') {
-        body = raw as { code?: string; error?: string };
-      }
-      const motivo = body.code === 'MAINTENANCE'
-        ? (body.error || 'QEB en mantenimiento.')
-        : 'QEB en mantenimiento. Acceso temporalmente restringido.';
-      useMaintenanceStore.getState().setMaintenance(motivo);
-      console.warn('[QEB] Modo mantenimiento activado por respuesta 503', { code: body.code });
-      return Promise.reject(error);
-    }
 
     // Skip auth pages
     const isAuthPage = window.location.pathname === '/login' || window.location.pathname === '/register';
