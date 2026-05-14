@@ -7888,7 +7888,7 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
                     <div className="grid grid-cols-4 gap-4 mb-4">
                       <div className="space-y-1">
                         <label className={`text-xs ${isDark ? 'text-zinc-500' : 'text-gray-500'}`}>
-                          {newCara.articulo?.toUpperCase().startsWith('IM') ? 'Impresiones' : isEspecialArticle(newCara.articulo || '') ? 'Ejec. Especiales' : (newCara.formato || '').toUpperCase().includes('PUENTE PEATONAL') ? 'Puentes en Renta' : 'Caras en Renta'}
+                          {newCara.articulo?.toUpperCase().startsWith('IM') ? 'Impresiones' : newCara.articulo?.toUpperCase().startsWith('IN') ? 'Intercambio' : isEspecialArticle(newCara.articulo || '') ? 'Ejec. Especiales' : (newCara.formato || '').toUpperCase().includes('PUENTE PEATONAL') ? 'Puentes en Renta' : 'Caras en Renta'}
                           {newCara.articulo?.toUpperCase().startsWith('CT') && (
                             <span className="ml-1 text-cyan-400 text-[10px]">(Cortesía)</span>
                           )}
