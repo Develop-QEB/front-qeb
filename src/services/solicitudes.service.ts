@@ -27,6 +27,7 @@ export interface UserOption {
   nombre: string;
   area: string;
   puesto: string;
+  user_role?: string;
 }
 
 export interface PlazaInfo {

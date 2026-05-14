@@ -1279,6 +1279,15 @@ function isGestionArtesTarea(tipo?: string | null): boolean {
   return !!tipo && GESTION_ARTES_TIPOS.includes(tipo);
 }
 
+// Notificaciones tipo='Notificación' que en realidad pertenecen al flujo de
+// Gestión de Artes (las que crea el backend al aprobar/rechazar arte).
+// Las identificamos por el título porque su `tipo` es genérico.
+function isArtesNotification(titulo?: string | null): boolean {
+  if (!titulo) return false;
+  const lower = titulo.toLowerCase();
+  return lower.startsWith('artes aprobados') || lower.startsWith('artes rechazados');
+}
+
 // Función para verificar si hay navegación disponible
 function hasNavigationRoute(tarea: Notificacion): boolean {
   // Tareas de Ajuste Inventario Bloqueado no tienen navegación
@@ -1308,6 +1317,11 @@ function hasNavigationRoute(tarea: Notificacion): boolean {
 function getNavigationLabel(tipo: string, tipoTarea?: string, campaniaId?: number | null, propuestaId?: string | null, idSolicitud?: string | null, titulo?: string): string {
   if (tipoTarea === 'Mención en Ticket') {
     return 'Ver Ticket';
+  }
+  // Notificaciones de artes aprobados/rechazados → Ver Gestión de Artes
+  // (tienen tipo='Notificación' pero pertenecen al flujo de Gestión de Artes)
+  if (isArtesNotification(titulo)) {
+    return 'Ver Gestión de Artes';
   }
   // Tareas de Gestión de Artes → Ver Gestión de Artes
   if (isGestionArtesTarea(tipoTarea)) {
@@ -1385,6 +1399,12 @@ function getDirectNavigationPath(tipo: string, id: number, titulo: string, tipoT
   // Tareas de Gestión de Artes → Gestión de Artes con auto-open del modal (prioridad sobre propuesta)
   if (isGestionArtesTarea(tipoTarea) && campaniaId) {
     return `/campanas/${campaniaId}/tareas?taskId=${tareaId || id}`;
+  }
+
+  // Notificaciones de "Artes aprobados/rechazados" (tipo='Notificación') →
+  // ir directo a Gestión de Artes de la campaña.
+  if (isArtesNotification(titulo) && campaniaId) {
+    return `/campanas/${campaniaId}/tareas`;
   }
 
   // Si es tarea de propuesta (ajuste cto, etc.) o tiene id_propuesta, ir al detalle de propuesta

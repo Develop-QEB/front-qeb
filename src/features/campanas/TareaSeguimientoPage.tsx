@@ -52,6 +52,7 @@ import {
   Folder,
   FolderOpen,
   AlertTriangle,
+  ImageOff,
 } from 'lucide-react';
 import { Header } from '../../components/layout/Header';
 import { campanasService, InventarioConArte, InventarioConAPS, TareaCampana, ArteExistente, DigitalFileSummary, TradicionalFileSummary, FichasTecnicasNode } from '../../services/campanas.service';
@@ -88,6 +89,16 @@ import * as XLSX from 'xlsx';
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3000/api';
 const STATIC_URL = API_URL.replace(/\/api$/, '');
 
+// Google Drive: transforma URLs de "compartir" (HTML) en URL directa al thumbnail.
+// Soporta: /file/d/{ID}/view, /file/d/{ID}/preview, /open?id=, /uc?id=.
+const extractDriveFileId = (url: string): string | null => {
+  const m1 = url.match(/drive\.google\.com\/file\/d\/([^/?#]+)/);
+  if (m1) return m1[1];
+  const m2 = url.match(/[?&]id=([^&#]+)/);
+  if (m2) return m2[1];
+  return null;
+};
+
 // Helper para normalizar URLs de imágenes
 // Siempre extrae el path y usa STATIC_URL para evitar problemas de CORS y URLs hardcodeadas
 const getImageUrl = (url: string | undefined | null): string | null => {
@@ -108,14 +119,22 @@ const getImageUrl = (url: string | undefined | null): string | null => {
 
   // Si es una URL completa (http:// o https://), extraer solo el path
   if (url.startsWith('http://') || url.startsWith('https://')) {
+    // Google Drive: las URLs de compartir devuelven HTML, no la imagen.
+    // Hay que convertirlas al endpoint de thumbnail para que un <img> las cargue.
+    if (/(^|\.)drive\.google\.com/.test(url)) {
+      const id = extractDriveFileId(url);
+      if (id) return `https://drive.google.com/thumbnail?id=${id}&sz=w1000`;
+    }
     try {
       const urlObj = new URL(url);
       const path = urlObj.pathname;
-      // Asegurarse de que el path empiece con /uploads
-      if (path.includes('/uploads')) {
+      // Solo reescribir si el path EMPIEZA con /uploads (archivo del backend).
+      // includes('/uploads') reescribía URLs externas tipo /wp-content/uploads/...
+      // y las rompía mandándolas al backend local.
+      if (path.startsWith('/uploads')) {
         return `${STATIC_URL}${path}`;
       }
-      // Si no tiene /uploads, podría ser una URL externa válida
+      // URL externa válida: pasa tal cual.
       return url;
     } catch {
       // Si falla el parseo, intentar extraer el path manualmente
@@ -141,6 +160,68 @@ const getImageUrl = (url: string | undefined | null): string | null => {
   return `${STATIC_URL}/${url}`;
 };
 
+// Miniatura de arte: aplica getImageUrl, evita bloqueos por Referer y muestra
+// placeholder cuando la imagen no carga (en vez del icono roto del navegador).
+function ArteImg({
+  src,
+  alt,
+  className,
+  onClick,
+  title,
+}: {
+  src?: string | null;
+  alt?: string;
+  className?: string;
+  onClick?: React.MouseEventHandler<HTMLElement>;
+  title?: string;
+}) {
+  const [errored, setErrored] = useState(false);
+  useEffect(() => { setErrored(false); }, [src]);
+  // Carpetas de Drive: no son imágenes, mostramos icono de carpeta.
+  // No agregamos onClick propio — dejamos que el click burbujee al padre
+  // (botón de galería, etc.) para que el ítem se pueda seleccionar igual
+  // que cualquier otro arte.
+  // w-full/h-full + min-h fuerzan que el área clickable cubra todo el
+  // contenedor padre, no solo el icono.
+  const isDriveFolder = typeof src === 'string' && /drive\.google\.com\/drive\/folders\//.test(src);
+  if (isDriveFolder) {
+    return (
+      <div
+        className={`${className || ''} w-full h-full min-h-full flex items-center justify-center bg-zinc-800/60 text-amber-400`}
+        aria-label={alt || 'Carpeta de Drive'}
+        onClick={onClick}
+        title={title || 'Carpeta de Drive'}
+      >
+        <Folder className="w-1/3 h-1/3 max-w-20 max-h-20 min-w-4 min-h-4" />
+      </div>
+    );
+  }
+  const resolved = getImageUrl(src);
+  if (!resolved || errored) {
+    return (
+      <div
+        className={`${className || ''} w-full h-full min-h-full flex items-center justify-center bg-zinc-800/60 text-zinc-500`}
+        aria-label={alt || 'Sin imagen'}
+        onClick={onClick}
+        title={title}
+      >
+        <ImageOff className="w-1/3 h-1/3 max-w-20 max-h-20 min-w-4 min-h-4" />
+      </div>
+    );
+  }
+  return (
+    <img
+      src={resolved}
+      alt={alt || ''}
+      className={className}
+      referrerPolicy="no-referrer"
+      onError={() => setErrored(true)}
+      onClick={onClick}
+      title={title}
+    />
+  );
+}
+
 // ============================================================================
 // TYPES
 // ============================================================================
@@ -151,7 +232,7 @@ type TasksTab = 'tradicionales' | 'completadas' | 'calendario';
 type CalendarView = 'month' | 'week' | 'day' | 'list';
 
 // Opciones de agrupación
-type GroupByField = 'none' | 'catorcena' | 'ciudad' | 'plaza' | 'mueble' | 'tipo_medio' | 'aps' | 'grupo' | 'estado_arte' | 'estado_tarea';
+type GroupByField = 'none' | 'catorcena' | 'ciudad' | 'plaza' | 'mueble' | 'tipo_medio' | 'tipo_cara' | 'aps' | 'grupo' | 'estado_arte' | 'estado_tarea';
 type SortField = 'codigo_unico' | 'catorcena' | 'ciudad' | 'plaza' | 'mueble' | 'tipo_medio' | 'aps';
 type SortDirection = 'asc' | 'desc';
 
@@ -232,6 +313,8 @@ interface TaskRow {
   fecha_fin: string;
   creador: string;
   asignado: string;
+  id_asignado?: string;       // IDs de asignados, comma-separated si son varios
+  id_responsable?: number;    // ID del creador/responsable
   descripcion: string;
   titulo: string;
   contenido?: string;
@@ -347,6 +430,7 @@ const GROUPING_OPTIONS_INVENTARIO: { field: GroupByField; label: string }[] = [
   { field: 'plaza', label: 'Plaza' },
   { field: 'mueble', label: 'Formato' },
   { field: 'tipo_medio', label: 'Tipo Medio' },
+  { field: 'tipo_cara', label: 'Tipo Cara (Flujo/Contraflujo)' },
 ];
 
 // ============================================================================
@@ -579,6 +663,12 @@ function getGroupKeyForField(item: InventoryRow, field: GroupByField, tipoPeriod
       return item.mueble || 'Sin formato';
     case 'tipo_medio':
       return item.tipo_medio || 'Sin tipo';
+    case 'tipo_cara': {
+      const tc = (item.tipo_de_cara || '').trim().toLowerCase();
+      if (tc.startsWith('contraflujo')) return 'Contraflujo';
+      if (tc.startsWith('flujo')) return 'Flujo';
+      return 'Otro';
+    }
     default:
       return 'Sin agrupar';
   }
@@ -913,11 +1003,16 @@ function DigitalGalleryModal({
                     style={{ minHeight: '200px' }}
                   />
                 ) : (
-                  <img
+                  <ArteImg
                     key={currentImage?.id}
-                    src={getImageUrl(currentImage?.archivoData || currentImage?.archivo) || ''}
+                    src={currentImage?.archivoData || currentImage?.archivo}
                     alt={`Imagen ${currentIndex + 1}`}
-                    className="max-w-full max-h-full object-contain"
+                    className="max-w-full max-h-full object-contain cursor-pointer"
+                    onClick={
+                      currentImage?.archivo && /drive\.google\.com\/drive\/folders\//.test(currentImage.archivo)
+                        ? () => window.open(currentImage.archivo, '_blank', 'noopener,noreferrer')
+                        : undefined
+                    }
                   />
                 )}
 
@@ -951,7 +1046,13 @@ function DigitalGalleryModal({
                   {imagenes.map((img, index) => (
                     <button
                       key={img.id}
-                      onClick={() => setCurrentIndex(index)}
+                      onClick={() => {
+                        if (img.archivo && /drive\.google\.com\/drive\/folders\//.test(img.archivo)) {
+                          window.open(img.archivo, '_blank', 'noopener,noreferrer');
+                        } else {
+                          setCurrentIndex(index);
+                        }
+                      }}
                       className={`relative flex-shrink-0 w-16 h-16 rounded overflow-hidden border-2 transition-all ${
                         index === currentIndex
                           ? 'border-cyan-400 ring-2 ring-cyan-400/30'
@@ -963,8 +1064,8 @@ function DigitalGalleryModal({
                           <Play className="h-6 w-6 text-cyan-400" />
                         </div>
                       ) : (
-                        <img
-                          src={getImageUrl(img.archivoData || img.archivo) || ''}
+                        <ArteImg
+                          src={img.archivoData || img.archivo}
                           alt={`Thumbnail ${index + 1}`}
                           className="w-full h-full object-cover"
                         />
@@ -1061,11 +1162,16 @@ function TradicionalGalleryModal({
             <>
               {/* Main viewer */}
               <div className="flex-1 relative bg-black rounded-lg flex items-center justify-center min-h-[300px]">
-                <img
+                <ArteImg
                   key={currentImage?.id}
-                  src={getImageUrl(currentImage?.archivo) || ''}
+                  src={currentImage?.archivo}
                   alt={`Arte ${currentIndex + 1}`}
-                  className="max-w-full max-h-[400px] object-contain"
+                  className="max-w-full max-h-[400px] object-contain cursor-pointer"
+                  onClick={
+                    currentImage?.archivo && /drive\.google\.com\/drive\/folders\//.test(currentImage.archivo)
+                      ? () => window.open(currentImage.archivo, '_blank', 'noopener,noreferrer')
+                      : undefined
+                  }
                 />
 
                 {/* Navigation arrows */}
@@ -1106,15 +1212,21 @@ function TradicionalGalleryModal({
                   {imagenes.map((img, index) => (
                     <button
                       key={img.id || index}
-                      onClick={() => setCurrentIndex(index)}
+                      onClick={() => {
+                        if (img.archivo && /drive\.google\.com\/drive\/folders\//.test(img.archivo)) {
+                          window.open(img.archivo, '_blank', 'noopener,noreferrer');
+                        } else {
+                          setCurrentIndex(index);
+                        }
+                      }}
                       className={`relative flex-shrink-0 w-16 h-16 rounded overflow-hidden border-2 transition-all ${
                         index === currentIndex
                           ? 'border-orange-400 ring-2 ring-orange-400/30'
                           : 'border-transparent hover:border-orange-400/50'
                       }`}
                     >
-                      <img
-                        src={getImageUrl(img.archivo) || ''}
+                      <ArteImg
+                        src={img.archivo}
                         alt={`Thumbnail ${index + 1}`}
                         className="w-full h-full object-cover"
                       />
@@ -1612,13 +1724,14 @@ function UploadArtModal({
   };
 
   const addUrlImage = (url: string) => {
-    if (!url.trim()) return;
+    const trimmed = url.trim();
+    if (!trimmed) return;
     const id = `url-${Date.now()}`;
     // Add to library (not selected) — persists in parent
     onAddedArtesChange([...addedArtes, {
       id,
-      nombre: url.split('/').pop() || 'URL image',
-      url,
+      nombre: trimmed.split('/').pop() || 'URL image',
+      url: trimmed,
       usos: 0,
     }]);
   };
@@ -1922,8 +2035,8 @@ function UploadArtModal({
                                         <Play className="h-5 w-5 text-cyan-400" />
                                       </div>
                                     ) : (
-                                      <img
-                                        src={getImageUrl(art.url) || ''}
+                                      <ArteImg
+                                        src={art.url}
                                         alt={art.nombre}
                                         className="w-full h-full object-cover"
                                       />
@@ -2012,8 +2125,8 @@ function UploadArtModal({
                                         <Play className="h-5 w-5 text-cyan-400" />
                                       </div>
                                     ) : (
-                                      <img
-                                        src={getImageUrl(img.url) || ''}
+                                      <ArteImg
+                                        src={img.url}
                                         alt={fileName}
                                         className="w-full h-full object-cover"
                                       />
@@ -2111,8 +2224,8 @@ function UploadArtModal({
                                     }`}
                                     title={art.nombre}
                                   >
-                                    <img
-                                      src={getImageUrl(art.url) || ''}
+                                    <ArteImg
+                                      src={art.url}
                                       alt={art.nombre}
                                       className="w-full h-full object-cover"
                                     />
@@ -2193,8 +2306,8 @@ function UploadArtModal({
                           <div className="flex gap-2 overflow-x-auto py-1">
                             {Array.from(selectedGalleryImages.entries()).map(([id, img]) => (
                               <div key={id} className="relative flex-shrink-0 w-14 h-14 rounded-lg overflow-hidden border border-purple-400/50">
-                                <img
-                                  src={img.preview || getImageUrl(img.url) || ''}
+                                <ArteImg
+                                  src={img.preview || img.url}
                                   alt=""
                                   className="w-full h-full object-cover"
                                 />
@@ -2223,8 +2336,8 @@ function UploadArtModal({
                           <div key={id} className={`flex gap-3 p-3 border border-border rounded-lg ${isDark ? 'bg-zinc-900/50' : 'bg-gray-50'}`}>
                             {/* Image preview */}
                             <div className={`flex-shrink-0 w-20 h-20 rounded-lg overflow-hidden ${isDark ? 'bg-zinc-800' : 'bg-gray-200'}`}>
-                              <img
-                                src={img.preview || getImageUrl(img.url) || ''}
+                              <ArteImg
+                                src={img.preview || img.url}
                                 alt={`Arte ${idx + 1}`}
                                 className="w-full h-full object-cover"
                               />
@@ -3258,7 +3371,7 @@ function TestigoTaskView({
                                 }}
                                 className="w-14 h-10 rounded overflow-hidden bg-zinc-800 border border-zinc-700 hover:border-purple-400/50 transition-colors"
                               >
-                                <img src={getImageUrl(item.archivo_arte) || ''} alt="Arte" className="w-full h-full object-cover" />
+                                <ArteImg src={item.archivo_arte} alt="Arte" className="w-full h-full object-cover" />
                               </button>
                             ) : (
                               <div className="w-14 h-10 rounded bg-zinc-800 border border-zinc-700 flex items-center justify-center">
@@ -3342,7 +3455,7 @@ function TestigoTaskView({
                           }}
                           className="w-16 h-12 rounded overflow-hidden bg-zinc-800 border border-zinc-700 hover:border-purple-400/50 transition-colors"
                         >
-                          <img src={getImageUrl(item.archivo_arte) || ''} alt="Arte" className="w-full h-full object-cover" />
+                          <ArteImg src={item.archivo_arte} alt="Arte" className="w-full h-full object-cover" />
                         </button>
                       ) : (
                         <div className="w-16 h-12 rounded bg-zinc-800 border border-zinc-700 flex items-center justify-center">
@@ -3386,8 +3499,8 @@ function TestigoTaskView({
               <div className="mt-2">
                 {existingFile.match(/\.(jpg|jpeg|png|gif|webp)$/i) ? (
                   <a href={getImageUrl(existingFile) || '#'} target="_blank" rel="noopener noreferrer">
-                    <img
-                      src={getImageUrl(existingFile) || ''}
+                    <ArteImg
+                      src={existingFile}
                       alt="Evidencia testigo"
                       className="max-w-full max-h-[200px] rounded border border-border cursor-pointer hover:opacity-80 transition-opacity"
                     />
@@ -3531,7 +3644,7 @@ function TaskDetailModal({
   onUpdateArteDigital: (reservaIds: number[], files: { file: File; spot: number }[], deleteArchivos?: string[]) => Promise<void>;
   onUpdateArteTradicional: (reservaIds: number[], archivos: { archivo: string; nota: string; spot: number }[]) => Promise<void>;
   onTaskComplete: (taskId: string, observaciones?: string, archivoTestigo?: string) => Promise<void>;
-  onSendToReview: (reservaIds: number[], responsableOriginal: string) => Promise<void>;
+  onSendToReview: (reservaIds: number[], asignadoNombres: string, asignadoIds?: string) => Promise<void>;
   onCreateRecepcion: (tareaImpresionId: string, asignadoNombre?: string, asignadoId?: string, guiaPdfUrl?: string) => Promise<void>;
   onCreateRecepcionFaltante: (
     faltantes: { arte: string; solicitadas: number; recibidas: number; faltantes: number }[],
@@ -3952,6 +4065,9 @@ function TaskDetailModal({
   const [editSelectedImages, setEditSelectedImages] = useState<Map<string, { url: string; source: 'existing' | 'upload' | 'url'; preview?: string }>>(new Map());
   const [editImageNotes, setEditImageNotes] = useState<Map<string, string>>(new Map());
   const [isEditUploadingFile, setIsEditUploadingFile] = useState(false);
+  const [editLink, setEditLink] = useState('');
+  const [isUpdatingTradicional, setIsUpdatingTradicional] = useState(false);
+  const [isUpdatingDigital, setIsUpdatingDigital] = useState(false);
 
   // Estados para wizard digital en Editar tab (biblioteca + selección + notas)
   const [digitalEditWizardStep, setDigitalEditWizardStep] = useState<1 | 2>(1);
@@ -4224,6 +4340,12 @@ function TaskDetailModal({
         case 'mueble': return item.mueble || 'Sin mueble';
         case 'ciudad': return item.ciudad || 'Sin ciudad';
         case 'tipo_medio': return item.tradicional_digital || 'Sin tipo';
+        case 'tipo_cara': {
+          const tc = (item.tipo_de_cara || '').trim().toLowerCase();
+          if (tc.startsWith('contraflujo')) return 'Contraflujo';
+          if (tc.startsWith('flujo')) return 'Flujo';
+          return 'Otro';
+        }
         default: return 'Otros';
       }
     };
@@ -4737,12 +4859,26 @@ function TaskDetailModal({
         return;
       }
 
-      // El responsable de la tarea de corrección es quien rechazó,
-      // debemos crear la nueva tarea de revisión asignada a él
-      const responsableRevision = task.responsable || task.creador || '';
+      // La Corrección guarda en `contenido` (JSON) los diseñadores originales de
+      // la Revisión que la generó. Los recuperamos para re-asignar la nueva
+      // Revisión a esos mismos diseñadores (no al analista que corrigió).
+      let asignadoNombres = '';
+      let asignadoIds: string | undefined;
+      try {
+        const parsed = task.contenido ? JSON.parse(task.contenido) : null;
+        if (parsed && parsed.original_asignado) {
+          asignadoNombres = parsed.original_asignado;
+          asignadoIds = parsed.original_id_asignado || undefined;
+        }
+      } catch { /* contenido no es JSON o está vacío */ }
+      // Fallback legacy: si la Corrección no tiene contenido JSON (tareas viejas),
+      // usar el responsable de la Corrección (comportamiento previo).
+      if (!asignadoNombres) {
+        asignadoNombres = task.responsable || task.creador || '';
+      }
 
       // Enviar a revisión (cambia estado a Pendiente y crea nueva tarea)
-      await onSendToReview(reservaIds, responsableRevision);
+      await onSendToReview(reservaIds, asignadoNombres, asignadoIds);
 
       // Marcar la tarea de corrección como completada
       if (task.id) {
@@ -4981,6 +5117,7 @@ function TaskDetailModal({
 
     if (archivos.length === 0) return;
 
+    setIsUpdatingDigital(true);
     try {
       await campanasService.assignArteDigital(campanaId, reservaIds, archivos);
       setSelectedArteIds(new Set());
@@ -4990,6 +5127,8 @@ function TaskDetailModal({
       setDigitalEditAddedArtes([]);
     } catch (error) {
       console.error('Error al actualizar artes digitales:', error);
+    } finally {
+      setIsUpdatingDigital(false);
     }
   };
 
@@ -5002,6 +5141,17 @@ function TaskDetailModal({
       } else {
         next.set(id, { url, source: 'existing' });
       }
+      return next;
+    });
+  };
+
+  const addEditUrlImage = (url: string) => {
+    const trimmed = url.trim();
+    if (!trimmed) return;
+    const id = `url-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+    setEditSelectedImages(prev => {
+      const next = new Map(prev);
+      next.set(id, { url: trimmed, source: 'url' });
       return next;
     });
   };
@@ -5046,6 +5196,7 @@ function TaskDetailModal({
       spot: idx + 1,
     })).filter(a => a.archivo);
     if (archivos.length === 0) return;
+    setIsUpdatingTradicional(true);
     try {
       await onUpdateArteTradicional(reservaIds, archivos);
       setSelectedArteIds(new Set());
@@ -5054,6 +5205,8 @@ function TaskDetailModal({
       setEditWizardStep(1);
     } catch (error) {
       console.error('Error al actualizar artes tradicionales:', error);
+    } finally {
+      setIsUpdatingTradicional(false);
     }
   };
 
@@ -5972,8 +6125,8 @@ function TaskDetailModal({
                           {/* Preview de imagen */}
                           <div className="w-24 h-20 bg-zinc-800 rounded-lg overflow-hidden flex-shrink-0 border border-zinc-700">
                             {primerItem?.archivo_arte ? (
-                              <img
-                                src={getImageUrl(primerItem.archivo_arte) || ''}
+                              <ArteImg
+                                src={primerItem.archivo_arte}
                                 alt="Arte"
                                 className="w-full h-full object-cover"
                               />
@@ -6228,13 +6381,10 @@ function TaskDetailModal({
                                                           <td className="px-3 py-2">
                                                             {item.archivo_arte && item.archivo_arte !== 'sin_arte' ? (
                                                               <div className="w-12 h-9 bg-zinc-800 rounded overflow-hidden border border-zinc-700">
-                                                                <img
-                                                                  src={getImageUrl(item.archivo_arte) || ''}
+                                                                <ArteImg
+                                                                  src={item.archivo_arte}
                                                                   alt="Arte"
                                                                   className="w-full h-full object-cover"
-                                                                  onError={(e) => {
-                                                                    (e.target as HTMLImageElement).style.display = 'none';
-                                                                  }}
                                                                 />
                                                               </div>
                                                             ) : (
@@ -6441,13 +6591,10 @@ function TaskDetailModal({
                                                           <td className="px-3 py-2">
                                                             {item.archivo_arte && item.archivo_arte !== 'sin_arte' ? (
                                                               <div className="w-12 h-9 bg-zinc-800 rounded overflow-hidden border border-zinc-700">
-                                                                <img
-                                                                  src={getImageUrl(item.archivo_arte) || ''}
+                                                                <ArteImg
+                                                                  src={item.archivo_arte}
                                                                   alt="Arte"
                                                                   className="w-full h-full object-cover"
-                                                                  onError={(e) => {
-                                                                    (e.target as HTMLImageElement).style.display = 'none';
-                                                                  }}
                                                                 />
                                                               </div>
                                                             ) : (
@@ -6566,8 +6713,8 @@ function TaskDetailModal({
                                 {/* Preview de imagen */}
                                 <div className="w-20 h-16 bg-zinc-800 rounded-lg overflow-hidden flex-shrink-0 border border-zinc-700">
                                   {faltante.arte ? (
-                                    <img
-                                      src={getImageUrl(faltante.arte) || faltante.arte}
+                                    <ArteImg
+                                      src={faltante.arte}
                                       alt="Arte"
                                       className="w-full h-full object-cover"
                                     />
@@ -6786,8 +6933,8 @@ function TaskDetailModal({
                             {/* Preview de imagen */}
                             <div className="w-20 h-16 bg-zinc-800 rounded-lg overflow-hidden flex-shrink-0 border border-zinc-700">
                               {grupo.archivo ? (
-                                <img
-                                  src={getImageUrl(grupo.archivo) || ''}
+                                <ArteImg
+                                  src={grupo.archivo}
                                   alt="Arte"
                                   className="w-full h-full object-cover"
                                 />
@@ -7184,7 +7331,7 @@ function TaskDetailModal({
                             <div key={idx} className="flex gap-3 p-2 border rounded-lg bg-purple-900/10 border-purple-500/20">
                               <div className="flex-shrink-0 w-16 h-12 bg-zinc-800 rounded overflow-hidden cursor-pointer" onClick={() => fileUrl && window.open(fileUrl, '_blank')}>
                                 {fileUrl ? (
-                                  <img src={fileUrl} alt={displayLabel} className="w-full h-full object-cover" onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }} />
+                                  <ArteImg src={fileUrl} alt={displayLabel} className="w-full h-full object-cover" />
                                 ) : (
                                   <div className="w-full h-full flex items-center justify-center">
                                     <Image className="h-4 w-4 text-zinc-600" />
@@ -7319,7 +7466,7 @@ function TaskDetailModal({
                                         }}
                                         className="w-14 h-10 rounded overflow-hidden bg-zinc-800 border border-zinc-700 hover:border-purple-400/50 transition-colors"
                                       >
-                                        <img src={getImageUrl(item.archivo_arte) || ''} alt="Arte" className="w-full h-full object-cover" />
+                                        <ArteImg src={item.archivo_arte} alt="Arte" className="w-full h-full object-cover" />
                                       </button>
                                     ) : (
                                       <div className="w-14 h-10 rounded bg-zinc-800 border border-zinc-700 flex items-center justify-center">
@@ -7403,7 +7550,7 @@ function TaskDetailModal({
                                   }}
                                   className="w-16 h-12 rounded overflow-hidden bg-zinc-800 border border-zinc-700 hover:border-purple-400/50 transition-colors"
                                 >
-                                  <img src={getImageUrl(item.archivo_arte) || ''} alt="Arte" className="w-full h-full object-cover" />
+                                  <ArteImg src={item.archivo_arte} alt="Arte" className="w-full h-full object-cover" />
                                 </button>
                               ) : (
                                 <div className="w-16 h-12 rounded bg-zinc-800 border border-zinc-700 flex items-center justify-center">
@@ -9049,7 +9196,7 @@ function TaskDetailModal({
                                       <Play className="h-6 w-6 text-teal-400" />
                                     </div>
                                   ) : fileUrl ? (
-                                    <img src={fileUrl} alt={fileName} className="w-full h-full object-cover" onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }} />
+                                    <ArteImg src={fileUrl} alt={fileName} className="w-full h-full object-cover" />
                                   ) : (
                                     <div className="w-full h-full flex items-center justify-center">
                                       <Image className="h-6 w-6 text-zinc-600" />
@@ -9251,7 +9398,7 @@ function TaskDetailModal({
                                 </button>
                               ) : item.archivo_arte ? (
                                 <div className="w-10 h-8 rounded overflow-hidden bg-zinc-800">
-                                  <img src={getImageUrl(item.archivo_arte) || ''} alt="" className="w-full h-full object-cover" />
+                                  <ArteImg src={item.archivo_arte} alt="" className="w-full h-full object-cover" />
                                 </div>
                               ) : (
                                 <div className="w-10 h-8 rounded bg-zinc-800 flex items-center justify-center">
@@ -9521,7 +9668,7 @@ function TaskDetailModal({
                                         }}
                                         className="w-14 h-10 rounded overflow-hidden bg-zinc-800 border border-zinc-700 hover:border-purple-400/50 transition-colors"
                                       >
-                                        <img src={getImageUrl(item.archivo_arte) || ''} alt="Arte" className="w-full h-full object-cover" />
+                                        <ArteImg src={item.archivo_arte} alt="Arte" className="w-full h-full object-cover" />
                                       </button>
                                     ) : (
                                       <div className="w-14 h-10 rounded bg-zinc-800 border border-zinc-700 flex items-center justify-center">
@@ -9608,7 +9755,7 @@ function TaskDetailModal({
                                   }}
                                   className="w-16 h-12 rounded overflow-hidden bg-zinc-800 border border-zinc-700 hover:border-purple-400/50 transition-colors"
                                 >
-                                  <img src={getImageUrl(item.archivo_arte) || ''} alt="Arte" className="w-full h-full object-cover" />
+                                  <ArteImg src={item.archivo_arte} alt="Arte" className="w-full h-full object-cover" />
                                 </button>
                               ) : (
                                 <div className="w-16 h-12 rounded bg-zinc-800 border border-zinc-700 flex items-center justify-center">
@@ -9774,7 +9921,7 @@ function TaskDetailModal({
                                       </button>
                                     ) : item.archivo_arte ? (
                                       <div className="w-12 h-9 rounded overflow-hidden bg-zinc-800 border border-zinc-700">
-                                        <img src={getImageUrl(item.archivo_arte) || ''} alt="Arte" className="w-full h-full object-cover" />
+                                        <ArteImg src={item.archivo_arte} alt="Arte" className="w-full h-full object-cover" />
                                       </div>
                                     ) : (
                                       <div className="w-12 h-9 rounded bg-zinc-800 border border-zinc-700 flex items-center justify-center">
@@ -9867,7 +10014,7 @@ function TaskDetailModal({
                                 </button>
                               ) : item.archivo_arte ? (
                                 <div className="w-14 h-10 rounded overflow-hidden bg-zinc-800 border border-zinc-700">
-                                  <img src={getImageUrl(item.archivo_arte) || ''} alt="Arte" className="w-full h-full object-cover" />
+                                  <ArteImg src={item.archivo_arte} alt="Arte" className="w-full h-full object-cover" />
                                 </div>
                               ) : (
                                 <div className="w-14 h-10 rounded bg-zinc-800 border border-zinc-700 flex items-center justify-center">
@@ -9958,7 +10105,7 @@ function TaskDetailModal({
                                           <Play className="h-5 w-5 text-cyan-400" />
                                         </div>
                                       ) : (
-                                        <img src={getImageUrl(art.url) || ''} alt={art.nombre} className="w-full h-full object-cover" />
+                                        <ArteImg src={art.url} alt={art.nombre} className="w-full h-full object-cover" />
                                       )}
                                       {isSelected && (
                                         <div className="absolute inset-0 bg-cyan-600/30 flex items-center justify-center">
@@ -10025,7 +10172,7 @@ function TaskDetailModal({
                                       <Play className="h-3 w-3 text-cyan-400" />
                                     </div>
                                   ) : (
-                                    <img src={getImageUrl(img.url) || img.preview || ''} alt="" className="w-full h-full object-cover" />
+                                    <ArteImg src={img.url || img.preview} alt="" className="w-full h-full object-cover" />
                                   )}
                                   <button
                                     onClick={() => toggleDigitalEditGalleryImage(id, '', false)}
@@ -10069,7 +10216,7 @@ function TaskDetailModal({
                                       <Play className="h-6 w-6 text-cyan-400" />
                                     </div>
                                   ) : (
-                                    <img src={getImageUrl(img.url) || img.preview || ''} alt="" className="w-full h-full object-cover" />
+                                    <ArteImg src={img.url || img.preview} alt="" className="w-full h-full object-cover" />
                                   )}
                                 </div>
                                 <div className="flex-1 min-w-0">
@@ -10105,14 +10252,14 @@ function TaskDetailModal({
                           </button>
                           <button
                             onClick={handleUpdateDigitalFromLibrary}
-                            disabled={selectedDigitalEditImages.size === 0 || isUpdating || selectedArteIds.size === 0}
+                            disabled={selectedDigitalEditImages.size === 0 || isUpdating || isUpdatingDigital || selectedArteIds.size === 0}
                             className={`px-4 py-2 text-xs font-medium rounded-lg transition-colors flex items-center gap-2 ${
-                              selectedDigitalEditImages.size > 0 && !isUpdating && selectedArteIds.size > 0
+                              selectedDigitalEditImages.size > 0 && !isUpdating && !isUpdatingDigital && selectedArteIds.size > 0
                                 ? 'bg-cyan-600 hover:bg-cyan-700 text-white'
                                 : 'bg-zinc-800 text-zinc-500 cursor-not-allowed'
                             }`}
                           >
-                            {isUpdating ? (
+                            {isUpdating || isUpdatingDigital ? (
                               <>
                                 <Loader2 className="h-3.5 w-3.5 animate-spin" />
                                 Actualizando...
@@ -10182,7 +10329,7 @@ function TaskDetailModal({
                                       }`}
                                       title={art.nombre}
                                     >
-                                      <img src={getImageUrl(art.url) || ''} alt={art.nombre} className="w-full h-full object-cover" />
+                                      <ArteImg src={art.url} alt={art.nombre} className="w-full h-full object-cover" />
                                       {isSelected && (
                                         <div className="absolute inset-0 bg-orange-600/30 flex items-center justify-center">
                                           <Check className="h-4 w-4 text-white" />
@@ -10220,6 +10367,23 @@ function TaskDetailModal({
                                 <span className="text-orange-300">Subir archivo</span>
                               </div>
                             </label>
+                            <div className="flex-1 flex gap-1">
+                              <input
+                                type="url"
+                                value={editLink}
+                                onChange={(e) => setEditLink(e.target.value)}
+                                placeholder="URL de imagen..."
+                                className="flex-1 px-2 py-1.5 text-[10px] bg-background border border-border rounded-lg focus:outline-none focus:ring-1 focus:ring-orange-500"
+                              />
+                              <button
+                                type="button"
+                                onClick={() => { addEditUrlImage(editLink); setEditLink(''); }}
+                                disabled={!editLink.trim()}
+                                className="px-2 py-1.5 text-[10px] bg-orange-600 hover:bg-orange-700 text-white rounded-lg disabled:opacity-50 transition-colors"
+                              >
+                                +
+                              </button>
+                            </div>
                           </div>
                         </div>
 
@@ -10233,7 +10397,7 @@ function TaskDetailModal({
                               {Array.from(editSelectedImages.entries()).map(([id, img]) => (
                                 <div key={id} className="relative w-12 h-12 rounded overflow-hidden border border-orange-500/50">
                                   {img.url ? (
-                                    <img src={getImageUrl(img.url) || img.preview || ''} alt="" className="w-full h-full object-cover" />
+                                    <ArteImg src={img.url || img.preview} alt="" className="w-full h-full object-cover" />
                                   ) : img.preview ? (
                                     <>
                                       <img src={img.preview} alt="" className="w-full h-full object-cover opacity-50" />
@@ -10277,7 +10441,7 @@ function TaskDetailModal({
                             <div key={id} className="bg-zinc-900/50 rounded-lg p-3 border border-border">
                               <div className="flex gap-3">
                                 <div className="flex-shrink-0 w-16 h-16 rounded overflow-hidden bg-zinc-800">
-                                  <img src={getImageUrl(img.url) || img.preview || ''} alt="" className="w-full h-full object-cover" />
+                                  <ArteImg src={img.url || img.preview} alt="" className="w-full h-full object-cover" />
                                 </div>
                                 <div className="flex-1 min-w-0">
                                   <p className="text-xs text-zinc-400 mb-1">Imagen {idx + 1}</p>
@@ -10321,14 +10485,14 @@ function TaskDetailModal({
                           </button>
                           <button
                             onClick={handleUpdateTradicional}
-                            disabled={!editAllNotesReady || isUpdating || selectedArteIds.size === 0}
+                            disabled={!editAllNotesReady || isUpdating || isUpdatingTradicional || selectedArteIds.size === 0}
                             className={`px-4 py-2 text-xs font-medium rounded-lg transition-colors flex items-center gap-2 ${
-                              editAllNotesReady && !isUpdating && selectedArteIds.size > 0
+                              editAllNotesReady && !isUpdating && !isUpdatingTradicional && selectedArteIds.size > 0
                                 ? 'bg-orange-600 hover:bg-orange-700 text-white'
                                 : 'bg-zinc-800 text-zinc-500 cursor-not-allowed'
                             }`}
                           >
-                            {isUpdating ? (
+                            {isUpdating || isUpdatingTradicional ? (
                               <>
                                 <Loader2 className="h-3.5 w-3.5 animate-spin" />
                                 Actualizando...
@@ -10412,7 +10576,7 @@ function TaskDetailModal({
                                   <span className="text-orange-300 text-[10px]">{tradSummary.total} artes</span>
                                 </button>
                               ) : item.archivo_arte ? (
-                                <img src={getImageUrl(item.archivo_arte) || ''} alt={item.codigo_unico} className="w-full h-full object-cover" />
+                                <ArteImg src={item.archivo_arte} alt={item.codigo_unico} className="w-full h-full object-cover" />
                               ) : (
                                 <div className="w-full h-full flex items-center justify-center">
                                   <Image className="h-8 w-8 text-zinc-600" />
@@ -10638,8 +10802,8 @@ function TaskDetailModal({
                                           }}
                                           className="w-20 h-16 rounded overflow-hidden bg-zinc-700 border border-zinc-600 hover:border-orange-400/50 transition-colors"
                                         >
-                                          <img
-                                            src={getImageUrl(item.archivo_arte) || ''}
+                                          <ArteImg
+                                            src={item.archivo_arte}
                                             alt="Arte"
                                             className="w-full h-full object-cover"
                                           />
@@ -10735,8 +10899,8 @@ function TaskDetailModal({
                                       }}
                                       className="w-32 h-24 rounded-lg overflow-hidden bg-zinc-700 border border-zinc-600 hover:border-orange-400/50 transition-colors"
                                     >
-                                      <img
-                                        src={getImageUrl(representativeItem.archivo_arte) || ''}
+                                      <ArteImg
+                                        src={representativeItem.archivo_arte}
                                         alt="Arte"
                                         className="w-full h-full object-cover"
                                       />
@@ -11171,7 +11335,8 @@ function CreateTaskModal({
   });
   const usuarios = usuariosData || [];
 
-  // Query para usuarios con área (filtrado por equipo) - para Revisión de artes
+  // Query para usuarios con área (filtrado por equipo) - para Revisión de artes.
+  // Solo aparecen miembros de los equipos del usuario actual.
   const { data: usuariosConArea } = useQuery({
     queryKey: ['solicitudes-users', 'team-filtered-revision-artes'],
     queryFn: () => solicitudesService.getUsers(undefined, true),
@@ -11635,7 +11800,10 @@ function CreateTaskModal({
       (payload as any).fecha_creacion = new Date().toISOString();
       (payload as any).contenido = identificador; // El identificador es el contenido
       (payload as any).listado_inventario = selectedIds.join(','); // Lista de IDs de inventario
-      // Asignados múltiples para Revisión de artes
+      // Asignados múltiples para Revisión de artes.
+      // IDs van separados por coma SIN espacio porque el backend hace exact-token
+      // match (startsWith "id,", endsWith ",id", contains ",id,"). Con espacio
+      // intermedio el match falla y el asignado no ve la tarea en su bandeja.
       if (selectedAsignadosRevision.length > 0) {
         // Guardar IDs separados por coma
         (payload as any).id_asignado = selectedAsignadosRevision.map(u => u.id).join(',');
@@ -12573,8 +12741,8 @@ function CreateTaskModal({
                               {/* Preview de imagen */}
                               <div className="w-14 h-14 bg-zinc-800 rounded-lg overflow-hidden flex-shrink-0 relative">
                                 {grupo.archivo ? (
-                                  <img
-                                    src={getImageUrl(grupo.archivo) || ''}
+                                  <ArteImg
+                                    src={grupo.archivo}
                                     alt="Arte"
                                     className="w-full h-full object-cover"
                                   />
@@ -14999,6 +15167,8 @@ export function TareaSeguimientoPage() {
         fecha_fin: t.fecha_fin?.split('T')[0] || '',
         creador: t.responsable_nombre || t.responsable || '',
         asignado: t.asignado || '',
+        id_asignado: t.id_asignado || undefined,
+        id_responsable: t.id_responsable,
         descripcion: t.descripcion || '',
         titulo: t.titulo || '',
         contenido: t.contenido || undefined,
@@ -15030,6 +15200,8 @@ export function TareaSeguimientoPage() {
         fecha_fin: t.fecha_fin?.split('T')[0] || '',
         creador: t.responsable_nombre || t.responsable || '',
         asignado: t.asignado || '',
+        id_asignado: t.id_asignado || undefined,
+        id_responsable: t.id_responsable,
         descripcion: t.descripcion || '',
         titulo: t.titulo || '',
         contenido: t.contenido || undefined,
@@ -16283,8 +16455,8 @@ export function TareaSeguimientoPage() {
             </div>
           </button>
         ) : item.archivo_arte ? (
-          <img
-            src={getImageUrl(item.archivo_arte) || ''}
+          <ArteImg
+            src={item.archivo_arte}
             alt="Arte"
             className="w-10 h-10 object-cover rounded cursor-pointer hover:opacity-80"
             onClick={() => {
@@ -16496,8 +16668,8 @@ export function TareaSeguimientoPage() {
       <td className="p-2 text-xs text-zinc-300">{item.arte_aprobado || 'Sin revisar'}</td>
       <td className="p-2">
         {item.archivo_arte ? (
-          <img
-            src={getImageUrl(item.archivo_arte) || ''}
+          <ArteImg
+            src={item.archivo_arte}
             alt="Arte"
             className="w-10 h-10 object-cover rounded cursor-pointer hover:opacity-80"
             onClick={() => window.open(getImageUrl(item.archivo_arte) || '', '_blank')}
@@ -17938,8 +18110,8 @@ export function TareaSeguimientoPage() {
                                   </button>
                                   <div className="w-12 h-10 bg-zinc-800 rounded overflow-hidden flex-shrink-0">
                                     {arteGrupo.archivo ? (
-                                      <img
-                                        src={getImageUrl(arteGrupo.archivo) || ''}
+                                      <ArteImg
+                                        src={arteGrupo.archivo}
                                         alt="Arte"
                                         className="w-full h-full object-cover"
                                       />
@@ -18098,8 +18270,8 @@ export function TareaSeguimientoPage() {
                             <div key={arteKey} className="flex items-center gap-3 p-2 border-b border-border/30 last:border-0">
                               <div className="w-12 h-10 bg-zinc-800 rounded overflow-hidden flex-shrink-0">
                                 {arteGrupo.archivo ? (
-                                  <img
-                                    src={getImageUrl(arteGrupo.archivo) || ''}
+                                  <ArteImg
+                                    src={arteGrupo.archivo}
                                     alt="Arte"
                                     className="w-full h-full object-cover"
                                   />
@@ -18889,8 +19061,8 @@ export function TareaSeguimientoPage() {
                         <td className="p-2">
                           {item.archivo_arte ? (
                             <div className="w-12 h-10 bg-zinc-800 rounded overflow-hidden">
-                              <img
-                                src={getImageUrl(item.archivo_arte) || ''}
+                              <ArteImg
+                                src={item.archivo_arte}
                                 alt="Arte"
                                 className="w-full h-full object-cover"
                               />
@@ -19911,14 +20083,23 @@ export function TareaSeguimientoPage() {
         onReject={async (reservaIds, comentario, imagenRechazoUrl) => {
           // Primero actualizar el estado a Rechazado
           await updateArteStatusMutation.mutateAsync({ reservaIds, status: 'Rechazado', comentario });
-          // Después de rechazar exitosamente, crear tarea de corrección para el creador original
+          // Después de rechazar exitosamente, crear tarea de corrección para el creador original (analista).
+          // Guardamos los diseñadores originales (asignados de la Revisión) en `contenido` como JSON
+          // para que cuando el analista finalice la Corrección y mande de vuelta a revisión, se le
+          // pueda re-asignar a esos mismos diseñadores.
           if (selectedTask && selectedTask.creador) {
             const tareaData: Parameters<typeof createTareaMutation.mutateAsync>[0] = {
               titulo: `Corrección de artes - Rechazo`,
               descripcion: (comentario || 'Sin motivo especificado').substring(0, 255),
               tipo: 'Correccion',
               asignado: selectedTask.creador,
+              id_asignado: selectedTask.id_responsable ? String(selectedTask.id_responsable) : undefined,
               ids_reservas: reservaIds.join(','),
+              contenido: JSON.stringify({
+                original_revision_id: selectedTask.id,
+                original_id_asignado: selectedTask.id_asignado || '',
+                original_asignado: selectedTask.asignado || '',
+              }),
             };
             if (imagenRechazoUrl) {
               tareaData.evidencia = JSON.stringify({ tipo: 'correccion_rechazo', imagenRechazo: imagenRechazoUrl });
@@ -19930,7 +20111,8 @@ export function TareaSeguimientoPage() {
           // Establecer estado a Pendiente (no Rechazado) y crear tarea de corrección
           updateArteStatusMutation.mutateAsync({ reservaIds, status: 'Pendiente', comentario: instrucciones })
             .then(() => {
-              // Crear tarea de corrección para el creador original
+              // Crear tarea de corrección para el creador original (analista).
+              // Igual que onReject: guardamos los diseñadores originales para re-asignar en el resend.
               if (selectedTask && selectedTask.creador) {
                 createTareaMutation.mutate({
                   titulo: `Corrección de artes - Ajustes necesarios`,
@@ -19941,7 +20123,13 @@ ${instrucciones || 'Sin instrucciones especificadas'}
 Por favor realiza los ajustes indicados y vuelve a enviar a revisión.`,
                   tipo: 'Correccion',
                   asignado: selectedTask.creador,
+                  id_asignado: selectedTask.id_responsable ? String(selectedTask.id_responsable) : undefined,
                   ids_reservas: reservaIds.join(','),
+                  contenido: JSON.stringify({
+                    original_revision_id: selectedTask.id,
+                    original_id_asignado: selectedTask.id_asignado || '',
+                    original_asignado: selectedTask.asignado || '',
+                  }),
                 });
               }
             });
@@ -19999,15 +20187,18 @@ Por favor realiza los ajustes indicados y vuelve a enviar a revisión.`,
             }
           });
         }}
-        onSendToReview={async (reservaIds, responsableOriginal) => {
+        onSendToReview={async (reservaIds, asignadoNombres, asignadoIds) => {
           // Cambiar estado de artes a Pendiente (para que vuelvan a revisión)
           await updateArteStatusMutation.mutateAsync({ reservaIds, status: 'Pendiente', comentario: 'Arte corregido y enviado a revisión' });
-          // Crear nueva tarea de Revisión de artes asignada al revisor original
+          // Crear nueva tarea de Revisión de artes asignada a los diseñadores originales.
+          // `asignadoIds` viene como string comma-separated con los IDs reales para
+          // que el filtro de Mis Tareas / Notificaciones pueda matchear via idAsignadoMatch.
           await createTareaMutation.mutateAsync({
             titulo: `Revisión de artes - Corrección enviada`,
             descripcion: `Los artes han sido corregidos y están listos para revisión.`,
             tipo: 'Revisión de artes',
-            asignado: responsableOriginal,
+            asignado: asignadoNombres,
+            id_asignado: asignadoIds || undefined,
             ids_reservas: reservaIds.join(','),
           });
         }}
