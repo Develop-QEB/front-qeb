@@ -33,6 +33,7 @@ const HistorialTicketsPage = lazy(() => import('./features/tickets/HistorialTick
 const RankingTicketsPage = lazy(() => import('./features/tickets/RankingTicketsPage').then(m => ({ default: m.RankingTicketsPage })));
 const ReportesEspecialesPage = lazy(() => import('./features/reportes-especiales/ReportesEspecialesPage').then(m => ({ default: m.ReportesEspecialesPage })));
 const HistorialAccionesPage = lazy(() => import('./features/historial/HistorialAccionesPage').then(m => ({ default: m.HistorialAccionesPage })));
+const MaintenancePage = lazy(() => import('./features/maintenance/MaintenancePage').then(m => ({ default: m.MaintenancePage })));
 
 // IDs de usuarios programadores con acceso a /dev/tickets
 const DEV_USERS_IDS = [1057460, 1057462]; // Mario, Jos
@@ -166,6 +167,17 @@ function App() {
           <Route path="/login" element={<LoginPage />} />
           <Route path="/register" element={<RegisterPage />} />
           <Route path="/forgot-password" element={<ForgotPasswordPage />} />
+
+          <Route
+            path="/mantenimiento"
+            element={
+              <ProtectedRoute>
+                <Suspense fallback={null}>
+                  <MaintenancePage />
+                </Suspense>
+              </ProtectedRoute>
+            }
+          />
 
           <Route
             element={
