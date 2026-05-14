@@ -1,24 +1,30 @@
 import { useEffect } from 'react';
+import { useLocation } from 'react-router-dom';
 import { Wrench } from 'lucide-react';
 import { useMaintenanceStore } from '../store/maintenanceStore';
 import { useAuthStore } from '../store/authStore';
+
+// Rutas donde NO queremos mostrar el modal — el user ya está fuera o en flujo de auth.
+const SKIP_PATHS = ['/login', '/register', '/forgot-password'];
 
 // Overlay full-screen NO cerrable que aparece cuando el back devuelve
 // 503/MAINTENANCE. Bloquea toda interacción con la app.
 export function MaintenanceOverlay() {
   const { isInMaintenance, motivo, clear } = useMaintenanceStore();
   const logout = useAuthStore(s => s.logout);
+  const location = useLocation();
+  const inAuthPage = SKIP_PATHS.includes(location.pathname);
 
-  // Bloquea scroll del body cuando el overlay está activo.
+  // Bloquea scroll del body cuando el overlay está activo (no en auth pages).
   useEffect(() => {
-    if (isInMaintenance) {
+    if (isInMaintenance && !inAuthPage) {
       const prev = document.body.style.overflow;
       document.body.style.overflow = 'hidden';
       return () => { document.body.style.overflow = prev; };
     }
-  }, [isInMaintenance]);
+  }, [isInMaintenance, inAuthPage]);
 
-  if (!isInMaintenance) return null;
+  if (!isInMaintenance || inAuthPage) return null;
 
   const handleLogout = () => {
     clear();

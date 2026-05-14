@@ -169,8 +169,8 @@ function MaintenanceWatcher() {
 function App() {
   return (
     <QueryClientProvider client={queryClient}>
-      <MaintenanceWatcher />
       <BrowserRouter>
+        <MaintenanceWatcher />
         <Routes>
           <Route path="/login" element={<LoginPage />} />
           <Route path="/register" element={<RegisterPage />} />
