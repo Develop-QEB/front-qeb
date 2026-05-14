@@ -176,27 +176,34 @@ export function AnalisisOcupacionModal({
         ...check.ocupados.map(o => o.id).filter((x): x is number => x !== null),
       ];
 
-      // Fetch full data en paralelo
-      const fetched = await Promise.all(
-        idsEncontrados.map(async id => {
-          try {
-            const inv = await inventariosService.getById(id);
-            return {
-              id: inv.id,
-              codigo_unico: inv.codigo_unico,
-              ubicacion: inv.ubicacion,
-              mueble: inv.mueble,
-              plaza: inv.plaza,
-              estado: inv.estado,
-              tipo_de_cara: inv.tipo_de_cara,
-              tradicional_digital: inv.tradicional_digital,
-            } as InventarioResumen;
-          } catch {
-            return null;
-          }
-        })
-      );
-      const found = fetched.filter((x): x is InventarioResumen => x !== null);
+      // Fetch full data en lotes para no saturar la red ni el servidor.
+      // Con miles de IDs, Promise.all en paralelo provoca timeouts silenciosos
+      // que se traducen en `null` y se filtran fuera, perdiendo registros.
+      const CHUNK_SIZE = 50;
+      const found: InventarioResumen[] = [];
+      for (let i = 0; i < idsEncontrados.length; i += CHUNK_SIZE) {
+        const chunk = idsEncontrados.slice(i, i + CHUNK_SIZE);
+        const part = await Promise.all(
+          chunk.map(async id => {
+            try {
+              const inv = await inventariosService.getById(id);
+              return {
+                id: inv.id,
+                codigo_unico: inv.codigo_unico,
+                ubicacion: inv.ubicacion,
+                mueble: inv.mueble,
+                plaza: inv.plaza,
+                estado: inv.estado,
+                tipo_de_cara: inv.tipo_de_cara,
+                tradicional_digital: inv.tradicional_digital,
+              } as InventarioResumen;
+            } catch {
+              return null;
+            }
+          })
+        );
+        for (const item of part) if (item) found.push(item);
+      }
 
       // Combinar sin duplicados
       setInventarios(prev => {
