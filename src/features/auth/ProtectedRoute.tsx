@@ -1,6 +1,7 @@
 import { Navigate, useLocation } from 'react-router-dom';
 import { useAuthStore } from '../../store/authStore';
 import { Spinner } from '../../components/ui/spinner';
+import { MAINTENANCE_MODE, isUserAllowedDuringMaintenance } from '../../config/maintenance';
 
 interface ProtectedRouteProps {
   children: React.ReactNode;
@@ -8,6 +9,7 @@ interface ProtectedRouteProps {
 
 export function ProtectedRoute({ children }: ProtectedRouteProps) {
   const isAuthenticated = useAuthStore((state) => state.isAuthenticated);
+  const user = useAuthStore((state) => state.user);
   const hasHydrated = useAuthStore((state) => state._hasHydrated);
   const location = useLocation();
 
@@ -22,6 +24,15 @@ export function ProtectedRoute({ children }: ProtectedRouteProps) {
 
   if (!isAuthenticated) {
     return <Navigate to="/login" state={{ from: location }} replace />;
+  }
+
+  if (
+    MAINTENANCE_MODE &&
+    location.pathname !== '/mantenimiento' &&
+    user &&
+    !isUserAllowedDuringMaintenance(user.rol)
+  ) {
+    return <Navigate to="/mantenimiento" replace />;
   }
 
   return <>{children}</>;

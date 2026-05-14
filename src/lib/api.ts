@@ -43,6 +43,19 @@ api.interceptors.response.use(
   async (error: AxiosError) => {
     const originalRequest = error.config as InternalAxiosRequestConfig & { _retry?: boolean };
 
+    // Modo mantenimiento programado: el back devuelve 503 con code=MAINTENANCE
+    // para roles no permitidos. Forzamos navegacion full a /mantenimiento
+    // para cortar la sesion de uso (queries en vuelo, polling, etc.).
+    const data = error.response?.data as { code?: string } | undefined;
+    if (
+      error.response?.status === 503 &&
+      data?.code === 'MAINTENANCE' &&
+      window.location.pathname !== '/mantenimiento'
+    ) {
+      window.location.href = '/mantenimiento';
+      return Promise.reject(error);
+    }
+
     // Skip auth pages
     const isAuthPage = window.location.pathname === '/login' || window.location.pathname === '/register';
     if (isAuthPage) return Promise.reject(error);

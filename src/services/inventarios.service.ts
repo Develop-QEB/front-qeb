@@ -226,6 +226,7 @@ export const inventariosService = {
       inicio_periodo: string;
       fin_periodo: string;
       tipo_medio: string;
+      articulo: string | null;
       propuesta_id: number;
       campana_id: number;
       campana_nombre: string;
@@ -260,6 +261,7 @@ export const inventariosService = {
         inicio_periodo: string;
         fin_periodo: string;
         tipo_medio: string;
+        articulo: string | null;
         propuesta_id: number;
         campana_id: number;
         campana_nombre: string;

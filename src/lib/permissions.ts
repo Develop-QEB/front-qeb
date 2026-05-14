@@ -7,6 +7,7 @@ export type UserRole =
   | 'Asesor Analista'
   | 'Director General'
   | 'Director Comercial'
+  | 'Gerente Comercial'
   | 'Jefe Digital Comercial'
   | 'Especialista de BI'
   | 'Director de Desarrollo Digital'
@@ -401,6 +402,65 @@ const rolePermissions: Partial<Record<UserRole, Partial<RolePermissions>>> = {
   },
   'Director Comercial': {
     // Solo lectura - permisos pendientes de definición
+    canSeeDashboard: true,
+    canSeeClientes: true,
+    canSeeProveedores: false,
+    canSeeSolicitudes: true,
+    canSeePropuestas: true,
+    canSeeCampanas: true,
+    canSeeInventarios: false,
+    canSeeAdminUsuarios: false,
+
+    canCreateClientes: false,
+    canEditClientes: false,
+    canDeleteClientes: false,
+
+    canCreateProveedores: false,
+    canEditProveedores: false,
+    canDeleteProveedores: false,
+
+    canCreateSolicitudes: false,
+    canEditSolicitudes: false,
+    canDeleteSolicitudes: false,
+    canAtenderSolicitudes: false,
+    canChangeEstadoSolicitud: false,
+
+    canEditPropuestaStatus: false,
+    allowedPropuestaStatuses: [],
+    canAprobarPropuesta: false,
+    canAsignarInventario: false,
+    canEditResumenPropuesta: false,
+    canCompartirPropuesta: false,
+    canBuscarInventarioEnModal: false,
+
+    canEditCampanas: false,
+    canEditDetalleCampana: false,
+    canDeleteDetalleCampana: false,
+    canSeeGestionArtes: true,
+    canEditGestionArtes: false,
+    canResolveProduccionTasks: false,
+    canSeeOrdenesMontajeButton: false,
+
+    canSeeTabProgramacion: true,
+    canSeeTabImpresiones: true,
+    canSeeTabSubirArtes: false,
+    canSeeTabRevisarAprobar: true,
+    canSeeTabTestigos: true,
+    canSeeTabValidacionInstalacion: true,
+    canCreateTareasGestionArtes: false,
+    canResolveRevisionArtesTasks: false,
+    canOpenTasks: false,
+
+    canCreateInventarios: false,
+    canEditInventarios: false,
+    canDeleteInventarios: false,
+
+    canExportOrdenesMontaje: false,
+  },
+  // Gerente Comercial: mismos permisos que Director Comercial PERO no recibe
+  // tareas de autorización DCM (se filtra explícitamente en
+  // back/services/autorizacion.service.ts para que no le lleguen).
+  'Gerente Comercial': {
     canSeeDashboard: true,
     canSeeClientes: true,
     canSeeProveedores: false,

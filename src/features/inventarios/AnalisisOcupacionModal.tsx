@@ -3,7 +3,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   X, Upload, Trash2, Save, Share2, Loader2, AlertCircle, CheckCircle2,
   ArrowLeft, ArrowRight, BarChart3, Calendar, ChevronDown,
-  Building2, ExternalLink, Package, Download
+  ExternalLink, Download
 } from 'lucide-react';
 import { useThemeStore } from '../../store/themeStore';
 import { inventariosService } from '../../services/inventarios.service';
@@ -14,7 +14,6 @@ import {
   CatorcenaRef,
   InventarioResumen,
   MatrizOcupacion,
-  CampanaEnCelda,
   cellKeyOf,
 } from '../../services/analisisOcupacion.service';
 
@@ -95,12 +94,6 @@ export function AnalisisOcupacionModal({
   const [savingAnalisis, setSavingAnalisis] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
   const [isOwner, setIsOwner] = useState<boolean>(true);
-
-  const [cellDetail, setCellDetail] = useState<{
-    inventario: InventarioResumen;
-    catorcena: CatorcenaRef;
-    campanas: CampanaEnCelda[];
-  } | null>(null);
 
   const [shareCopied, setShareCopied] = useState(false);
 
@@ -561,7 +554,6 @@ export function AnalisisOcupacionModal({
                 matriz={matriz}
                 building={building}
                 isDark={isDark}
-                onCellClick={(inv, cat, campanas) => setCellDetail({ inventario: inv, catorcena: cat, campanas })}
               />
             )}
           </div>
@@ -659,16 +651,6 @@ export function AnalisisOcupacionModal({
         </div>
       </div>
 
-      {/* Detail modal */}
-      {cellDetail && (
-        <CellDetailModal
-          inventario={cellDetail.inventario}
-          catorcena={cellDetail.catorcena}
-          campanas={cellDetail.campanas}
-          onClose={() => setCellDetail(null)}
-          isDark={isDark}
-        />
-      )}
     </>
   );
 }
@@ -678,12 +660,10 @@ function MatrizView({
   matriz,
   building,
   isDark,
-  onCellClick,
 }: {
   matriz: MatrizOcupacion | null;
   building: boolean;
   isDark: boolean;
-  onCellClick: (inv: InventarioResumen, cat: CatorcenaRef, campanas: CampanaEnCelda[]) => void;
 }) {
   if (building || !matriz) {
     return (
@@ -722,90 +702,94 @@ function MatrizView({
                 const celda = matriz.celdas[inv.id]?.[cellKeyOf(cat)];
                 const ocupado = celda?.ocupado;
                 const campanas = celda?.campanas || [];
-                // "Reservado" = todas las ocupaciones son solo propuesta (sin campaña real).
-                // "Ocupado"   = al menos una ya es campaña.
-                const soloPropuestas = ocupado && campanas.length > 0 && campanas.every(c => !c.campana_id);
-                const ocupadoClass = soloPropuestas
-                  ? isDark
-                    ? 'bg-amber-500/10 border-amber-500/40 hover:bg-amber-500/20 cursor-pointer'
-                    : 'bg-amber-50 border-amber-200 hover:bg-amber-100 cursor-pointer'
-                  : isDark
-                    ? 'bg-red-500/10 border-red-500/40 hover:bg-red-500/20 cursor-pointer'
-                    : 'bg-red-50 border-red-200 hover:bg-red-100 cursor-pointer';
-                const disponibleClass = isDark
-                  ? 'bg-emerald-500/10 border-emerald-500/30 cursor-default'
-                  : 'bg-emerald-50 border-emerald-200 cursor-default';
-                // Cuando hay 1 sola ocupación: link directo. Si tiene campaña → detalle de campaña, si no → editar propuesta
-                const single = campanas.length === 1 ? campanas[0] : null;
-                const singleHref = single
-                  ? single.campana_id
-                    ? `/campanas/detail/${single.campana_id}`
-                    : `/propuestas?viewId=${single.propuesta_id}`
-                  : null;
-                const singleLabel = single
-                  ? single.campana_id
-                    ? single.campana_nombre || `Campaña #${single.campana_id}`
-                    : `Propuesta #${single.propuesta_id}`
-                  : '';
-                const clienteLabel = ocupado && campanas.length > 0
-                  ? (campanas[0].cliente_nombre || 'Sin cliente')
-                  : '';
-                const statusLabel = ocupado ? (soloPropuestas ? 'Reservado' : 'Ocupado') : 'Disponible';
-                const statusTextClass = ocupado
-                  ? soloPropuestas
-                    ? isDark ? 'text-amber-300' : 'text-amber-700'
-                    : isDark ? 'text-red-300' : 'text-red-700'
-                  : isDark ? 'text-emerald-300' : 'text-emerald-700';
-                const cellInner = (
-                  <>
-                    <div className={`flex items-center gap-1 text-[10px] font-bold uppercase tracking-wide ${statusTextClass}`}>
-                      {statusLabel}
-                      {single && <ExternalLink className="h-2.5 w-2.5 opacity-70" />}
-                    </div>
-                    {ocupado && campanas.length > 0 && (
-                      <>
-                        <div
-                          className={`text-[10px] mt-1 truncate ${single ? 'underline underline-offset-2' : ''} ${isDark ? 'text-zinc-300' : 'text-gray-700'}`}
-                          title={campanas.map(c => `${c.campana_nombre || `Propuesta #${c.propuesta_id}`} — ${c.cliente_nombre || 'Sin cliente'}`).join(', ')}
-                        >
-                          {singleLabel || (campanas[0].campana_nombre || `Propuesta #${campanas[0].propuesta_id}`)}
-                          {campanas.length > 1 && (
-                            <span className={isDark ? 'text-purple-400' : 'text-purple-600'}> +{campanas.length - 1}</span>
-                          )}
+
+                if (!ocupado || campanas.length === 0) {
+                  const disponibleClass = isDark
+                    ? 'bg-emerald-500/10 border-emerald-500/30'
+                    : 'bg-emerald-50 border-emerald-200';
+                  return (
+                    <td key={cellKeyOf(cat)} className="px-1.5 py-1.5 align-top">
+                      <div className={`w-full rounded-md p-2 border ${disponibleClass}`}>
+                        <div className={`flex items-center gap-1 text-[10px] font-bold uppercase tracking-wide ${isDark ? 'text-emerald-300' : 'text-emerald-700'}`}>
+                          Disponible
                         </div>
-                        <div
-                          className={`text-[10px] mt-0.5 truncate ${isDark ? 'text-zinc-500' : 'text-gray-500'}`}
-                          title={clienteLabel}
-                        >
-                          {clienteLabel}
-                        </div>
-                      </>
-                    )}
-                  </>
-                );
+                      </div>
+                    </td>
+                  );
+                }
 
                 return (
                   <td key={cellKeyOf(cat)} className="px-1.5 py-1.5 align-top">
-                    {single && singleHref ? (
-                      <a
-                        href={singleHref}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        title={single.campana_id ? `Abrir campaña: ${singleLabel}` : `Editar propuesta #${single.propuesta_id}`}
-                        className={`block w-full text-left rounded-md p-2 border transition-all ${ocupadoClass}`}
-                      >
-                        {cellInner}
-                      </a>
-                    ) : (
-                      <button
-                        onClick={() => ocupado && onCellClick(inv, cat, campanas)}
-                        disabled={!ocupado}
-                        title={ocupado && campanas.length > 1 ? `${campanas.length} ocupaciones — click para ver` : undefined}
-                        className={`w-full text-left rounded-md p-2 border transition-all ${ocupado ? ocupadoClass : disponibleClass}`}
-                      >
-                        {cellInner}
-                      </button>
-                    )}
+                    <div className="flex flex-col gap-1.5">
+                      {campanas.map(c => {
+                        const esPropuesta = !c.campana_id;
+                        const cardClass = esPropuesta
+                          ? isDark
+                            ? 'bg-amber-500/10 border-amber-500/40 hover:bg-amber-500/20'
+                            : 'bg-amber-50 border-amber-200 hover:bg-amber-100'
+                          : isDark
+                            ? 'bg-red-500/10 border-red-500/40 hover:bg-red-500/20'
+                            : 'bg-red-50 border-red-200 hover:bg-red-100';
+                        const statusLabel = esPropuesta ? 'Reservado' : 'Ocupado';
+                        const statusTextClass = esPropuesta
+                          ? isDark ? 'text-amber-300' : 'text-amber-700'
+                          : isDark ? 'text-red-300' : 'text-red-700';
+                        const href = esPropuesta
+                          ? `/propuestas?viewId=${c.propuesta_id}`
+                          : `/campanas/detail/${c.campana_id}`;
+                        const label = esPropuesta
+                          ? `Propuesta #${c.propuesta_id}`
+                          : c.campana_nombre || `Campaña #${c.campana_id}`;
+                        const clienteLabel = c.cliente_nombre || 'Sin cliente';
+                        const fmt = (d: string) => new Date(d).toLocaleDateString('es-MX', { day: '2-digit', month: 'short' });
+                        const rangoLabel = c.inicio_periodo && c.fin_periodo
+                          ? `${fmt(c.inicio_periodo)} – ${fmt(c.fin_periodo)}`
+                          : '';
+                        return (
+                          <a
+                            key={c.reserva_id}
+                            href={href}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            title={esPropuesta ? `Editar propuesta #${c.propuesta_id}` : `Abrir campaña: ${label}`}
+                            className={`block w-full text-left rounded-md p-2 border transition-all cursor-pointer ${cardClass}`}
+                          >
+                            <div className={`flex items-center gap-1 text-[10px] font-bold uppercase tracking-wide ${statusTextClass}`}>
+                              {statusLabel}
+                              <ExternalLink className="h-2.5 w-2.5 opacity-70" />
+                            </div>
+                            <div
+                              className={`text-[10px] mt-1 truncate underline underline-offset-2 ${isDark ? 'text-zinc-300' : 'text-gray-700'}`}
+                              title={label}
+                            >
+                              {label}
+                            </div>
+                            <div
+                              className={`text-[10px] mt-0.5 truncate ${isDark ? 'text-zinc-500' : 'text-gray-500'}`}
+                              title={clienteLabel}
+                            >
+                              {clienteLabel}
+                            </div>
+                            {c.articulo && (
+                              <div
+                                className={`text-[10px] mt-0.5 truncate font-mono ${isDark ? 'text-purple-300' : 'text-purple-700'}`}
+                                title={`Artículo SAP: ${c.articulo}`}
+                              >
+                                {c.articulo}
+                              </div>
+                            )}
+                            {rangoLabel && (
+                              <div
+                                className={`text-[10px] mt-0.5 truncate font-mono ${isDark ? 'text-zinc-400' : 'text-gray-600'}`}
+                                title={`Reserva #${c.reserva_id} · ${rangoLabel}`}
+                              >
+                                {rangoLabel} · #{c.reserva_id}
+                              </div>
+                            )}
+                          </a>
+                        );
+                      })}
+                    </div>
                   </td>
                 );
               })}
@@ -817,95 +801,3 @@ function MatrizView({
   );
 }
 
-// ===== Cell Detail Modal =====
-function CellDetailModal({
-  inventario,
-  catorcena,
-  campanas,
-  onClose,
-  isDark,
-}: {
-  inventario: InventarioResumen;
-  catorcena: CatorcenaRef;
-  campanas: CampanaEnCelda[];
-  onClose: () => void;
-  isDark: boolean;
-}) {
-  return (
-    <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-[60] p-4" onClick={onClose}>
-      <div
-        className={`${isDark ? 'bg-zinc-900' : 'bg-white'} rounded-2xl border ${isDark ? 'border-purple-500/20' : 'border-purple-200'} w-full max-w-2xl max-h-[85vh] overflow-hidden flex flex-col shadow-2xl shadow-purple-500/10`}
-        onClick={e => e.stopPropagation()}
-      >
-        <div className={`p-5 border-b ${isDark ? 'border-purple-500/20 bg-gradient-to-r from-purple-900/20 to-fuchsia-900/10' : 'border-purple-200 bg-gradient-to-r from-purple-50 to-fuchsia-50'} flex items-center justify-between`}>
-          <div className="flex items-center gap-3">
-            <div className={`w-10 h-10 rounded-xl ${isDark ? 'bg-purple-500/20' : 'bg-purple-50'} flex items-center justify-center`}>
-              <Building2 className={`h-5 w-5 ${isDark ? 'text-purple-400' : 'text-purple-600'}`} />
-            </div>
-            <div>
-              <h3 className={`text-base font-semibold ${isDark ? 'text-white' : 'text-gray-900'}`}>
-                {inventario.codigo_unico} · C{catorcena.numero}-{catorcena.anio}
-              </h3>
-              <p className={`text-xs ${isDark ? 'text-purple-300/60' : 'text-purple-500'}`}>
-                {campanas.length} {campanas.length === 1 ? 'campaña' : 'campañas'} ocupando este periodo
-              </p>
-            </div>
-          </div>
-          <button onClick={onClose} className={`p-2 rounded-lg ${isDark ? 'hover:bg-zinc-800 text-zinc-400 hover:text-white' : 'hover:bg-gray-100 text-gray-500 hover:text-gray-900'}`}>
-            <X className="h-5 w-5" />
-          </button>
-        </div>
-        <div className="flex-1 overflow-y-auto p-4 space-y-3">
-          {campanas.map(c => (
-            <div key={c.reserva_id} className={`rounded-xl border ${isDark ? 'border-zinc-700 bg-zinc-800/50' : 'border-gray-200 bg-white'} p-4`}>
-              <div className="flex items-start justify-between gap-3 mb-2">
-                <div>
-                  <h4 className={`text-sm font-semibold ${isDark ? 'text-white' : 'text-gray-900'}`}>{c.campana_nombre || '-'}</h4>
-                  <p className={`text-xs ${isDark ? 'text-zinc-400' : 'text-gray-500'}`}>{c.cliente_nombre || 'Sin cliente'}</p>
-                </div>
-                <span className={`px-2 py-0.5 rounded-full text-[10px] font-medium ${
-                  c.reserva_estatus === 'Aprobada'
-                    ? isDark ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/30' : 'bg-emerald-50 text-emerald-700 border border-emerald-200'
-                    : isDark ? 'bg-amber-500/20 text-amber-300 border border-amber-500/30' : 'bg-amber-50 text-amber-700 border border-amber-200'
-                }`}>{c.reserva_estatus}</span>
-              </div>
-              <div className={`grid grid-cols-2 gap-2 text-xs ${isDark ? 'text-zinc-400' : 'text-gray-600'}`}>
-                <div className="flex items-center gap-1.5">
-                  <Calendar className="h-3 w-3" />
-                  {new Date(c.inicio_periodo).toLocaleDateString('es-MX')} – {new Date(c.fin_periodo).toLocaleDateString('es-MX')}
-                </div>
-                <div className="flex items-center gap-1.5">
-                  <Package className="h-3 w-3" />
-                  Reserva #{c.reserva_id}
-                </div>
-              </div>
-              <div className="mt-3 flex items-center gap-2">
-                {c.campana_id ? (
-                  <a
-                    href={`/campanas/detail/${c.campana_id}`}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className={`inline-flex items-center gap-1 text-xs ${isDark ? 'text-purple-300 hover:text-purple-200' : 'text-purple-700 hover:text-purple-900'}`}
-                  >
-                    <ExternalLink className="h-3 w-3" />
-                    Abrir campaña
-                  </a>
-                ) : c.propuesta_id ? (
-                  <a
-                    href={`/propuestas?viewId=${c.propuesta_id}`}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className={`inline-flex items-center gap-1 text-xs ${isDark ? 'text-purple-300 hover:text-purple-200' : 'text-purple-700 hover:text-purple-900'}`}
-                  >
-                    <ExternalLink className="h-3 w-3" />
-                    Editar propuesta #{c.propuesta_id}
-                  </a>
-                ) : null}
-              </div>
-            </div>
-          ))}
-        </div>
-      </div>
-    </div>
-  );
-}

@@ -85,6 +85,48 @@ import { useSocketCampana, useSocketEquipos } from '../../hooks/useSocket';
 import { exportVersionarioArtes } from '../../utils/exportVersionarioArtes';
 import * as XLSX from 'xlsx';
 
+// Convierte URLs en texto plano a <a> clickables. Mantiene el texto restante
+// como string para no escapar el contenido. Usado en la bitácora de comentarios
+// y donde se necesite render seguro de texto con enlaces.
+function renderTextWithLinks(text: string): React.ReactNode[] {
+  if (!text) return [];
+  // Regex conservador: http(s)://... hasta el primer whitespace o caracter no-URL.
+  const urlRegex = /(https?:\/\/[^\s<>"']+)/g;
+  const parts: React.ReactNode[] = [];
+  let lastIndex = 0;
+  let match: RegExpExecArray | null;
+  let key = 0;
+  while ((match = urlRegex.exec(text)) !== null) {
+    if (match.index > lastIndex) {
+      parts.push(text.slice(lastIndex, match.index));
+    }
+    // Limpia signos de puntuación finales (ej. "https://x.com/foo." -> "https://x.com/foo")
+    let url = match[0];
+    let trailing = '';
+    while (url.length > 0 && /[.,;:!?)\]}]/.test(url[url.length - 1])) {
+      trailing = url[url.length - 1] + trailing;
+      url = url.slice(0, -1);
+    }
+    parts.push(
+      <a
+        key={`u${key++}`}
+        href={url}
+        target="_blank"
+        rel="noopener noreferrer"
+        className="text-purple-400 hover:text-purple-300 underline break-all"
+      >
+        {url}
+      </a>
+    );
+    if (trailing) parts.push(trailing);
+    lastIndex = match.index + match[0].length;
+  }
+  if (lastIndex < text.length) {
+    parts.push(text.slice(lastIndex));
+  }
+  return parts;
+}
+
 // URL base para archivos estáticos
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3000/api';
 const STATIC_URL = API_URL.replace(/\/api$/, '');
@@ -2933,7 +2975,7 @@ function CommentsSection({ campanaId, tareaId }: { campanaId: number; tareaId: s
                     </button>
                   )}
                 </div>
-                <p className="text-sm text-zinc-300 mt-1 break-words">{c.contenido}</p>
+                <p className="text-sm text-zinc-300 mt-1 break-words whitespace-pre-wrap">{renderTextWithLinks(c.contenido)}</p>
               </div>
             </div>
           ))
@@ -13433,7 +13475,7 @@ function SummaryCards({ stats, activeTab }: { stats: SummaryStats; activeTab: Ma
   const cards = useMemo(() => {
     if (activeTab === 'versionario') {
       return [
-        { label: 'Inventario sin Artes', value: stats.sinArte, icon: Image, color: 'amber' },
+        { label: 'Circuitos sin Artes', value: stats.sinArte, icon: Image, color: 'amber' },
       ];
     }
     if (activeTab === 'atender') {
@@ -15685,13 +15727,48 @@ export function TareaSeguimientoPage() {
       allItems = inventoryTestigosData;
     }
 
+    // Para el tab "atender" (Revisar y Aprobar) los KPIs se cuentan por TAREA
+    // (no por inventario): un rechazo que abarcaba 100 inventarios debe contar
+    // como 1 y no como 100. Para los demás tabs (versionario / testigo) los
+    // contadores siguen siendo por inventario porque ahí sí tiene sentido
+    // (cuánto inventario sin arte, cuántos testigos validados, etc.).
+    const isRevision = (t: { tipo?: string }) => t.tipo === 'Revisión de artes' || t.tipo === 'Revision de artes';
+    const isCorreccion = (t: { tipo?: string }) => t.tipo === 'Corrección' || t.tipo === 'Correccion';
+    const revisionActivas = tasks.filter(isRevision).length;
+    const revisionAtendidas = completedTasks.filter(isRevision).length;
+    const correccionTotales = tasks.filter(isCorreccion).length + completedTasks.filter(isCorreccion).length;
+
+    const isAtenderTab = activeMainTab === 'atender';
+
+    // En el tab "versionario" (Subir Artes) contamos por CIRCUITO/GRUPO en vez
+    // de por inventario individual: un circuito con 50 inventarios sin arte
+    // cuenta como 1 (no como 50). Items sin grupo se cuentan como uno propio.
+    const circuitosSinArte = new Set<string>();
+    if (activeMainTab === 'versionario') {
+      allItems.forEach(i => {
+        if (!i.archivo_arte) {
+          circuitosSinArte.add(i.grupo_id || `item-${i.id}`);
+        }
+      });
+    }
+
     return {
       totalInventario: allItems.length,
-      sinArte: activeMainTab === 'versionario' ? allItems.filter(i => !i.archivo_arte).length : allItems.filter(i => i.estado_arte === 'sin_revisar' || i.estado_arte === 'en_revision').length,
-      enRevision: allItems.filter(i => i.estado_arte === 'en_revision').length,
-      aprobados: allItems.filter(i => i.estado_arte === 'aprobado').length,
-      rechazados: allItems.filter(i => i.estado_arte === 'rechazado').length,
-      tareasActivas: tasks.filter(t => t.estatus?.toLowerCase() === 'pendiente' || t.estatus?.toLowerCase() === 'en_progreso' || t.estatus?.toLowerCase() === 'en progreso').length,
+      sinArte: activeMainTab === 'versionario'
+        ? circuitosSinArte.size
+        : isAtenderTab
+          ? revisionActivas
+          : allItems.filter(i => i.estado_arte === 'sin_revisar' || i.estado_arte === 'en_revision').length,
+      enRevision: isAtenderTab
+        ? revisionActivas
+        : allItems.filter(i => i.estado_arte === 'en_revision').length,
+      aprobados: isAtenderTab
+        ? revisionAtendidas
+        : allItems.filter(i => i.estado_arte === 'aprobado').length,
+      rechazados: isAtenderTab
+        ? correccionTotales
+        : allItems.filter(i => i.estado_arte === 'rechazado').length,
+      tareasActivas: tasks.length,
       tareasCompletadas: completedTasks.length,
     };
   }, [inventorySinArteData, inventoryArteData, inventoryProgramacionData, inventoryImpresionesData, inventoryTestigosData, activeMainTab, tasks, completedTasks]);
