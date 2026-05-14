@@ -85,6 +85,48 @@ import { useSocketCampana, useSocketEquipos } from '../../hooks/useSocket';
 import { exportVersionarioArtes } from '../../utils/exportVersionarioArtes';
 import * as XLSX from 'xlsx';
 
+// Convierte URLs en texto plano a <a> clickables. Mantiene el texto restante
+// como string para no escapar el contenido. Usado en la bitácora de comentarios
+// y donde se necesite render seguro de texto con enlaces.
+function renderTextWithLinks(text: string): React.ReactNode[] {
+  if (!text) return [];
+  // Regex conservador: http(s)://... hasta el primer whitespace o caracter no-URL.
+  const urlRegex = /(https?:\/\/[^\s<>"']+)/g;
+  const parts: React.ReactNode[] = [];
+  let lastIndex = 0;
+  let match: RegExpExecArray | null;
+  let key = 0;
+  while ((match = urlRegex.exec(text)) !== null) {
+    if (match.index > lastIndex) {
+      parts.push(text.slice(lastIndex, match.index));
+    }
+    // Limpia signos de puntuación finales (ej. "https://x.com/foo." -> "https://x.com/foo")
+    let url = match[0];
+    let trailing = '';
+    while (url.length > 0 && /[.,;:!?)\]}]/.test(url[url.length - 1])) {
+      trailing = url[url.length - 1] + trailing;
+      url = url.slice(0, -1);
+    }
+    parts.push(
+      <a
+        key={`u${key++}`}
+        href={url}
+        target="_blank"
+        rel="noopener noreferrer"
+        className="text-purple-400 hover:text-purple-300 underline break-all"
+      >
+        {url}
+      </a>
+    );
+    if (trailing) parts.push(trailing);
+    lastIndex = match.index + match[0].length;
+  }
+  if (lastIndex < text.length) {
+    parts.push(text.slice(lastIndex));
+  }
+  return parts;
+}
+
 // URL base para archivos estáticos
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3000/api';
 const STATIC_URL = API_URL.replace(/\/api$/, '');
@@ -2933,7 +2975,7 @@ function CommentsSection({ campanaId, tareaId }: { campanaId: number; tareaId: s
                     </button>
                   )}
                 </div>
-                <p className="text-sm text-zinc-300 mt-1 break-words">{c.contenido}</p>
+                <p className="text-sm text-zinc-300 mt-1 break-words whitespace-pre-wrap">{renderTextWithLinks(c.contenido)}</p>
               </div>
             </div>
           ))
