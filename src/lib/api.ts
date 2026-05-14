@@ -45,12 +45,21 @@ api.interceptors.response.use(
     const originalRequest = error.config as InternalAxiosRequestConfig & { _retry?: boolean };
 
     // Modo mantenimiento — overlay global no cerrable.
+    // Cualquier 503 dispara el modal (sea MAINTENANCE explícito o caída de back).
     if (error.response?.status === 503) {
-      const body = error.response.data as { code?: string; error?: string } | undefined;
-      if (body?.code === 'MAINTENANCE') {
-        useMaintenanceStore.getState().setMaintenance(body.error || null);
-        return Promise.reject(error);
+      const raw = error.response.data;
+      let body: { code?: string; error?: string } = {};
+      if (typeof raw === 'string') {
+        try { body = JSON.parse(raw); } catch { body = { error: raw }; }
+      } else if (raw && typeof raw === 'object') {
+        body = raw as { code?: string; error?: string };
       }
+      const motivo = body.code === 'MAINTENANCE'
+        ? (body.error || 'QEB en mantenimiento.')
+        : 'QEB en mantenimiento. Acceso temporalmente restringido.';
+      useMaintenanceStore.getState().setMaintenance(motivo);
+      console.warn('[QEB] Modo mantenimiento activado por respuesta 503', { code: body.code });
+      return Promise.reject(error);
     }
 
     // Skip auth pages
