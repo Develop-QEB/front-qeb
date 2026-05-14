@@ -167,8 +167,11 @@ export function CompartirPropuestaPage() {
   const [filterPeriodo, setFilterPeriodo] = useState('');
   const [sortField, setSortField] = useState<string>('');
   const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('asc');
-  const [selectedItems, setSelectedItems] = useState<Set<number>>(new Set());
+  const [selectedItems, setSelectedItems] = useState<Set<string>>(new Set());
   const [selectedCatorcenas, setSelectedCatorcenas] = useState<Set<string>>(new Set());
+
+  // rsv_ids es único por fila (id de inventario se repite entre catorcenas), úsalo como llave de selección
+  const itemKey = (i: InventarioReservado): string => i.rsv_ids;
 
   // Filter states
   const [filters, setFilters] = useState<FilterCondition[]>([]);
@@ -532,7 +535,7 @@ export function CompartirPropuestaPage() {
   const handleDownloadKMLSelected = () => {
     if (!inventario || selectedItems.size === 0) return;
 
-    const itemsToExport = inventario.filter(i => selectedItems.has(i.id));
+    const itemsToExport = inventario.filter(i => selectedItems.has(itemKey(i)));
 
     const placemarks = itemsToExport
       .filter(i => i.latitud && i.longitud)
@@ -621,29 +624,29 @@ export function CompartirPropuestaPage() {
     mapRef.current.fitBounds(bounds, 50);
 
     // Also select these items
-    setSelectedItems(new Set(items.map(i => i.id)));
+    setSelectedItems(new Set(items.map(itemKey)));
   };
 
   // Toggle item selection
-  const toggleItemSelection = (id: number) => {
+  const toggleItemSelection = (key: string) => {
     setSelectedItems(prev => {
       const next = new Set(prev);
-      if (next.has(id)) next.delete(id);
-      else next.add(id);
+      if (next.has(key)) next.delete(key);
+      else next.add(key);
       return next;
     });
   };
 
   // Toggle select all in a group
   const toggleGroupSelection = (items: InventarioReservado[]) => {
-    const groupIds = items.map(i => i.id);
-    const allSelected = groupIds.every(id => selectedItems.has(id));
+    const groupKeys = items.map(itemKey);
+    const allSelected = groupKeys.every(key => selectedItems.has(key));
     setSelectedItems(prev => {
       const next = new Set(prev);
       if (allSelected) {
-        groupIds.forEach(id => next.delete(id));
+        groupKeys.forEach(key => next.delete(key));
       } else {
-        groupIds.forEach(id => next.add(id));
+        groupKeys.forEach(key => next.add(key));
       }
       return next;
     });
@@ -655,7 +658,7 @@ export function CompartirPropuestaPage() {
     if (selectedItems.size === inventario.length) {
       setSelectedItems(new Set());
     } else {
-      setSelectedItems(new Set(inventario.map(i => i.id)));
+      setSelectedItems(new Set(inventario.map(itemKey)));
     }
   };
 
@@ -1394,9 +1397,9 @@ export function CompartirPropuestaPage() {
           <div className={`divide-y ${isDark ? 'divide-purple-500/10' : 'divide-gray-200'}`}>
             {resumenCaras.map((catGroup) => {
               const catItems = catGroup.articulos.flatMap(a => a.items);
-              const catIds = catItems.map(i => i.id);
-              const allCatSelected = catIds.length > 0 && catIds.every(id => selectedItems.has(id));
-              const someCatSelected = catIds.some(id => selectedItems.has(id));
+              const catKeys = catItems.map(itemKey);
+              const allCatSelected = catKeys.length > 0 && catKeys.every(k => selectedItems.has(k));
+              const someCatSelected = catKeys.some(k => selectedItems.has(k));
 
               return (
                 <div key={catGroup.catorcena}>
@@ -1461,9 +1464,9 @@ export function CompartirPropuestaPage() {
                     <div className={`pl-6 border-l-2 ml-5 ${isDark ? 'border-purple-500/20' : 'border-gray-200'}`}>
                       {catGroup.articulos.map((artGroup) => {
                         const artKey = `${catGroup.catorcena}|${artGroup.articulo}`;
-                        const artIds = artGroup.items.map(i => i.id);
-                        const allArtSelected = artIds.length > 0 && artIds.every(id => selectedItems.has(id));
-                        const someArtSelected = artIds.some(id => selectedItems.has(id));
+                        const artKeys = artGroup.items.map(itemKey);
+                        const allArtSelected = artKeys.length > 0 && artKeys.every(k => selectedItems.has(k));
+                        const someArtSelected = artKeys.some(k => selectedItems.has(k));
 
                         return (
                           <div key={artKey} className={`border-b last:border-b-0 ${isDark ? 'border-purple-500/10' : 'border-gray-200'}`}>
@@ -1539,10 +1542,12 @@ export function CompartirPropuestaPage() {
                                     <tbody className={`divide-y ${isDark ? 'divide-purple-500/10' : 'divide-gray-100'}`}>
                                       {artGroup.items.map((item, idx) => {
                                         const inv = (Number(item.tarifa_publica) || 0) * (Number(item.caras_renta) || 0);
+                                        const key = itemKey(item);
+                                        const isSelected = selectedItems.has(key);
                                         return (
-                                          <tr key={idx} onClick={() => toggleItemSelection(item.id)} className={`cursor-pointer transition-colors ${selectedItems.has(item.id) ? 'bg-purple-500/10' : 'hover:bg-purple-500/5'}`}>
+                                          <tr key={idx} onClick={() => toggleItemSelection(key)} className={`cursor-pointer transition-colors ${isSelected ? 'bg-purple-500/10' : 'hover:bg-purple-500/5'}`}>
                                             <td className="px-3 py-2" onClick={(e) => e.stopPropagation()}>
-                                              <input type="checkbox" checked={selectedItems.has(item.id)} onChange={() => toggleItemSelection(item.id)} className="checkbox-purple" />
+                                              <input type="checkbox" checked={isSelected} onChange={() => toggleItemSelection(key)} className="checkbox-purple" />
                                             </td>
                                             <td className={`px-3 py-2 font-mono text-xs ${isDark ? 'text-blue-300' : 'text-blue-600'}`}>{item.codigo_unico}</td>
                                             <td className={`px-3 py-2 text-xs ${isDark ? 'text-zinc-300' : 'text-gray-700'}`}>{item.plaza || '-'}</td>
@@ -1646,29 +1651,31 @@ export function CompartirPropuestaPage() {
                 }}
               >
                 {catorcenaFilteredInventario
-                  .filter((item) => selectedItems.size === 0 || selectedItems.has(item.id))
-                  .map((item) => (
-                  item.latitud && item.longitud && (
+                  .filter((item) => selectedItems.size === 0 || selectedItems.has(itemKey(item)))
+                  .map((item) => {
+                    const key = itemKey(item);
+                    const isSelected = selectedItems.has(key);
+                    return item.latitud && item.longitud && (
                     <Marker
-                      key={item.id}
+                      key={key}
                       position={{ lat: item.latitud, lng: item.longitud }}
                       onClick={() => {
                         setSelectedMarker(item);
-                        toggleItemSelection(item.id);
+                        toggleItemSelection(key);
                       }}
                       icon={{
                         path: google.maps.SymbolPath.CIRCLE,
-                        scale: selectedItems.has(item.id) ? 10 : 7,
-                        fillColor: selectedItems.has(item.id)
+                        scale: isSelected ? 10 : 7,
+                        fillColor: isSelected
                           ? '#22c55e' // Verde si está seleccionado
                           : String(item.tipo_de_cara).startsWith('Flujo') ? '#ef4444' : String(item.tipo_de_cara).startsWith('Contraflujo') ? '#3b82f6' : '#a855f7',
-                        fillOpacity: selectedItems.has(item.id) ? 1 : 0.9,
-                        strokeColor: selectedItems.has(item.id) ? '#fff' : '#fff',
-                        strokeWeight: selectedItems.has(item.id) ? 3 : 1.5,
+                        fillOpacity: isSelected ? 1 : 0.9,
+                        strokeColor: '#fff',
+                        strokeWeight: isSelected ? 3 : 1.5,
                       }}
                     />
-                  )
-                ))}
+                  );
+                })}
                 {selectedMarker && (
                   <InfoWindow
                     position={{ lat: selectedMarker.latitud, lng: selectedMarker.longitud }}
