@@ -1856,6 +1856,20 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
     );
   }, [caras]);
 
+  // Saved-pending lock: existe alguna cara YA GUARDADA en BD (id != null) con
+  // autorización original pendiente y que NO ha sido modificada localmente.
+  // Las caras agregadas localmente (sin id) o las modificadas en la sesion no
+  // entran aqui — el usuario puede seguir construyendo hasta dar Guardar.
+  // Una vez guardado, si hay pendientes reales, se congela la edicion de
+  // todos los demas circuitos y el boton "+ Agregar Circuito".
+  const hasSavedPendingAuth = useMemo(() => {
+    return caras.some(c =>
+      c.id != null &&
+      !modifiedCaras.has(c.id) &&
+      (c._originalDg === 'pendiente' || c._originalDcm === 'pendiente')
+    );
+  }, [caras, modifiedCaras]);
+
   // Group caras by catorcena period with catorcena info
   const carasGroupedByCatorcena = useMemo(() => {
     const groups: Record<string, { caras: CaraItem[]; catorcenaNum?: number; year?: number }> = {};
@@ -7300,8 +7314,13 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
                     </span>
                     {effectiveCanEdit && canEditResumen && (
                       <button
-                        onClick={() => { setShowAddCaraForm(true); setEditingCaraId(null); setNewCara(EMPTY_CARA); setSelectedArticulo(null); }}
-                        className={`flex items-center gap-1.5 px-3 py-1.5 border rounded-lg transition-colors ${isDark ? 'bg-purple-500/20 text-purple-300 border-purple-500/40 hover:bg-purple-500/30' : 'bg-purple-100 text-purple-700 border-purple-200 hover:bg-purple-200'}`}
+                        onClick={() => { if (hasSavedPendingAuth) return; setShowAddCaraForm(true); setEditingCaraId(null); setNewCara(EMPTY_CARA); setSelectedArticulo(null); }}
+                        disabled={hasSavedPendingAuth}
+                        className={`flex items-center gap-1.5 px-3 py-1.5 border rounded-lg transition-colors ${hasSavedPendingAuth
+                          ? (isDark ? 'bg-zinc-500/10 text-zinc-500 border-zinc-500/20 cursor-not-allowed' : 'bg-gray-100 text-gray-400 border-gray-200 cursor-not-allowed')
+                          : (isDark ? 'bg-purple-500/20 text-purple-300 border-purple-500/40 hover:bg-purple-500/30' : 'bg-purple-100 text-purple-700 border-purple-200 hover:bg-purple-200')
+                        }`}
+                        title={hasSavedPendingAuth ? 'Hay circuitos pendientes de autorizacion guardados. Espera la aprobacion para agregar mas.' : 'Agregar Circuito'}
                       >
                         <Plus className="h-3.5 w-3.5" />
                         Agregar Circuito
@@ -8323,24 +8342,22 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
                                         </button>
                                       );
                                     })()}
-                                    {effectiveCanEdit && (() => {
-                                      const caraAuthPendienteSaved = caras.some(c => !modifiedCaras.has(c.id!) && ((c._originalDg || c.autorizacion_dg) === 'pendiente' || (c._originalDcm || c.autorizacion_dcm) === 'pendiente'));
-                                      return (
+                                    {effectiveCanEdit && (
                                       <>
                                         <button
-                                          onClick={(e) => { e.stopPropagation(); if (!caraAuthPendienteSaved) handleEditCara(cara); }}
-                                          disabled={caraAuthPendienteSaved}
-                                          className={`p-2 rounded-lg border transition-colors ${caraAuthPendienteSaved
+                                          onClick={(e) => { e.stopPropagation(); if (!hasSavedPendingAuth) handleEditCara(cara); }}
+                                          disabled={hasSavedPendingAuth}
+                                          className={`p-2 rounded-lg border transition-colors ${hasSavedPendingAuth
                                             ? `bg-zinc-500/10 ${isDark ? 'text-zinc-500' : 'text-gray-400'} border-zinc-500/20 cursor-not-allowed`
                                             : 'bg-amber-500/10 text-amber-400 border-amber-500/20 hover:bg-amber-500/20'
                                           }`}
-                                          title={caraAuthPendienteSaved ? 'Autorización pendiente - no se puede editar' : 'Editar'}
+                                          title={hasSavedPendingAuth ? 'Hay circuitos pendientes de autorizacion - no se pueden editar otros' : 'Editar'}
                                         >
                                           <Pencil className="h-4 w-4" />
                                         </button>
                                         {canEditResumen && (() => {
                                             const reservaBlocked = hasReservas && !permissions.canDeleteCaraConReservas;
-                                            const isDisabled = reservaBlocked || caraAuthPendienteSaved;
+                                            const isDisabled = reservaBlocked || hasSavedPendingAuth;
                                             return (
                                           <button
                                             onClick={(e) => { e.stopPropagation(); if (!isDisabled) handleDeleteCara(cara.localId); }}
@@ -8349,15 +8366,14 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
                                               ? `bg-zinc-500/10 ${isDark ? 'text-zinc-500' : 'text-gray-400'} border-zinc-500/20 cursor-not-allowed`
                                               : 'bg-red-500/10 text-red-400 border-red-500/20 hover:bg-red-500/20'
                                               }`}
-                                            title={caraAuthPendienteSaved ? 'Autorización pendiente' : reservaBlocked ? 'No se puede eliminar (tiene reservas)' : 'Eliminar'}
+                                            title={hasSavedPendingAuth ? 'Hay circuitos pendientes de autorizacion - no se pueden eliminar otros' : reservaBlocked ? 'No se puede eliminar (tiene reservas)' : 'Eliminar'}
                                           >
                                             <Trash2 className="h-4 w-4" />
                                           </button>
                                             );
                                         })()}
                                       </>
-                                      );
-                                    })()}
+                                    )}
                                   </div>
                                 </div>
 
