@@ -366,7 +366,7 @@ export function AnalisisOcupacionModal({
           </div>
 
           {/* Body */}
-          <div className="flex-1 overflow-auto p-5">
+          <div className={`flex-1 p-5 min-h-0 ${step === 'matriz' ? 'overflow-hidden flex flex-col' : 'overflow-auto'}`}>
             {step === 'select' && (
               <div className="space-y-4">
                 {/* CSV upload */}
@@ -674,7 +674,7 @@ function MatrizView({
 }) {
   if (building || !matriz) {
     return (
-      <div className="flex flex-col items-center justify-center py-20 gap-3">
+      <div className="flex-1 flex flex-col items-center justify-center py-20 gap-3">
         <Loader2 className="h-8 w-8 animate-spin text-purple-500" />
         <p className={`text-sm ${isDark ? 'text-zinc-400' : 'text-gray-500'}`}>Construyendo matriz de ocupación...</p>
       </div>
@@ -682,7 +682,7 @@ function MatrizView({
   }
 
   return (
-    <div className="overflow-auto">
+    <div className="flex-1 overflow-auto min-h-0">
       <table className="w-full border-collapse text-xs">
         <thead>
           <tr>
