@@ -354,6 +354,7 @@ export interface OrdenMontajeCAT {
   catorcena_numero: number | null;
   catorcena_year: number | null;
   tradicional_digital: string | null;
+  posted?: boolean;
 }
 
 export interface OrdenMontajeINVIAN {
@@ -391,6 +392,7 @@ export interface OrdenMontajeINVIAN {
   numero_articulo?: string | null;
   cto?: string | null;
   sap_database?: string | null;
+  posted?: boolean;
 }
 
 export interface ComentarioRevisionArte {

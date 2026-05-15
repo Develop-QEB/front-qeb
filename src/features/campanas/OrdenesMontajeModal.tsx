@@ -434,6 +434,7 @@ export function OrdenesMontajeModal({ isOpen, onClose, canExport = true }: Orden
   // Filtros globales (aplican en todas las pestañas)
   const [sapDbFilter, setSapDbFilter] = useState<'todas' | 'TRADE' | 'CIMU'>('todas');
   const [apsEspecificoFilter, setApsEspecificoFilter] = useState<'todas' | 'con' | 'sin'>('todas');
+  const [postFilter, setPostFilter] = useState<'todas' | 'con' | 'sin'>('todas');
 
   // Búsqueda de texto con tags (estilo Solicitudes/Propuestas/Campañas)
   const [searchInput, setSearchInput] = useState('');
@@ -719,6 +720,11 @@ export function OrdenesMontajeModal({ isOpen, onClose, canExport = true }: Orden
     } else if (apsEspecificoFilter === 'sin') {
       items = items.filter(item => item.aps_especifico === null || item.aps_especifico === '');
     }
+    if (postFilter === 'con') {
+      items = items.filter(item => item.posted === true);
+    } else if (postFilter === 'sin') {
+      items = items.filter(item => item.posted !== true);
+    }
 
     // Filter by date range if set
     if (fechaInicio || fechaFin) {
@@ -763,7 +769,7 @@ export function OrdenesMontajeModal({ isOpen, onClose, canExport = true }: Orden
     }
 
     return items;
-  }, [catData, selectedCatorcenas, fechaInicio, fechaFin, catFilters, catSortField, catSortDirection, sapDbFilter, apsEspecificoFilter, allSearchTerms, matchesSearchCAT]);
+  }, [catData, selectedCatorcenas, fechaInicio, fechaFin, catFilters, catSortField, catSortDirection, sapDbFilter, apsEspecificoFilter, postFilter, allSearchTerms, matchesSearchCAT]);
 
   // Filtered Ocupacion Digital data (CAT only digital items)
   const filteredOcupacionDigitalData = useMemo(() => {
@@ -789,6 +795,11 @@ export function OrdenesMontajeModal({ isOpen, onClose, canExport = true }: Orden
       items = items.filter(item => item.aps_especifico !== null && item.aps_especifico !== '');
     } else if (apsEspecificoFilter === 'sin') {
       items = items.filter(item => item.aps_especifico === null || item.aps_especifico === '');
+    }
+    if (postFilter === 'con') {
+      items = items.filter(item => item.posted === true);
+    } else if (postFilter === 'sin') {
+      items = items.filter(item => item.posted !== true);
     }
 
     // Filter by date range if set
@@ -836,7 +847,7 @@ export function OrdenesMontajeModal({ isOpen, onClose, canExport = true }: Orden
     }
 
     return items;
-  }, [catData, selectedCatorcenas, fechaInicio, fechaFin, catFilters, catSortField, catSortDirection, sapDbFilter, apsEspecificoFilter, allSearchTerms, matchesSearchCAT]);
+  }, [catData, selectedCatorcenas, fechaInicio, fechaFin, catFilters, catSortField, catSortDirection, sapDbFilter, apsEspecificoFilter, postFilter, allSearchTerms, matchesSearchCAT]);
 
   // Filter Ocupacion UN+ data: solo gran formato (mi macro, kioscos, boleros,
   // bajo puentes, puentes peatonales) Y solo periodos mensuales.
@@ -864,6 +875,11 @@ export function OrdenesMontajeModal({ isOpen, onClose, canExport = true }: Orden
       items = items.filter(item => item.aps_especifico !== null && item.aps_especifico !== '');
     } else if (apsEspecificoFilter === 'sin') {
       items = items.filter(item => item.aps_especifico === null || item.aps_especifico === '');
+    }
+    if (postFilter === 'con') {
+      items = items.filter(item => item.posted === true);
+    } else if (postFilter === 'sin') {
+      items = items.filter(item => item.posted !== true);
     }
 
     // Excluir digital (tradicional_digital === 'Digital')
@@ -923,7 +939,7 @@ export function OrdenesMontajeModal({ isOpen, onClose, canExport = true }: Orden
     }
 
     return items;
-  }, [catData, selectedCatorcenas, fechaInicio, fechaFin, catFilters, catSortField, catSortDirection, sapDbFilter, apsEspecificoFilter, allSearchTerms, matchesSearchCAT]);
+  }, [catData, selectedCatorcenas, fechaInicio, fechaFin, catFilters, catSortField, catSortDirection, sapDbFilter, apsEspecificoFilter, postFilter, allSearchTerms, matchesSearchCAT]);
 
   // Group CAT data
   const getCATGroupValue = (item: OrdenMontajeCAT, field: CATGroupByField): string => {
@@ -985,6 +1001,11 @@ export function OrdenesMontajeModal({ isOpen, onClose, canExport = true }: Orden
     if (sapDbFilter !== 'todas') {
       items = items.filter(item => (item.sap_database || '').toUpperCase() === sapDbFilter);
     }
+    if (postFilter === 'con') {
+      items = items.filter(item => item.posted === true);
+    } else if (postFilter === 'sin') {
+      items = items.filter(item => item.posted !== true);
+    }
 
     // Filter by date range if set
     if (fechaInicio || fechaFin) {
@@ -1029,7 +1050,7 @@ export function OrdenesMontajeModal({ isOpen, onClose, canExport = true }: Orden
     }
 
     return items;
-  }, [invianData, selectedCatorcenas, fechaInicio, fechaFin, invianFilters, invianSortField, invianSortDirection, sapDbFilter, allSearchTerms, matchesSearchINVIAN]);
+  }, [invianData, selectedCatorcenas, fechaInicio, fechaFin, invianFilters, invianSortField, invianSortDirection, sapDbFilter, postFilter, allSearchTerms, matchesSearchINVIAN]);
 
   // Group INVIAN data
   const getINVIANGroupValue = (item: OrdenMontajeINVIAN, field: INVIANGroupByField): string => {
@@ -1072,6 +1093,11 @@ export function OrdenesMontajeModal({ isOpen, onClose, canExport = true }: Orden
     if (sapDbFilter !== 'todas') {
       items = items.filter(item => (item.sap_database || '').toUpperCase() === sapDbFilter);
     }
+    if (postFilter === 'con') {
+      items = items.filter(item => item.posted === true);
+    } else if (postFilter === 'sin') {
+      items = items.filter(item => item.posted !== true);
+    }
 
     // Filter by date range
     if (fechaInicio || fechaFin) {
@@ -1112,7 +1138,7 @@ export function OrdenesMontajeModal({ isOpen, onClose, canExport = true }: Orden
     }
 
     return items;
-  }, [invianData, selectedCatorcenas, fechaInicio, fechaFin, invianFilters, invianSortField, invianSortDirection, sapDbFilter, allSearchTerms, matchesSearchINVIAN]);
+  }, [invianData, selectedCatorcenas, fechaInicio, fechaFin, invianFilters, invianSortField, invianSortDirection, sapDbFilter, postFilter, allSearchTerms, matchesSearchINVIAN]);
 
   // Group INVIAN Digital data
   const groupedINVIANDigitalData = useMemo(() => {
@@ -1251,57 +1277,70 @@ export function OrdenesMontajeModal({ isOpen, onClose, canExport = true }: Orden
       // `Código de arte` con rsv_id, `Origen del arte` con OrigenArte, e
       // `Indicaciones`) — el CSV se mostraba inconsistente con lo que ven en
       // pantalla. Ahora coincide.
-      const wsData = filteredINVIANData.map(item => ({
-        'Campaña': item.Campania || '',
-        'Anunciante': item.Anunciante || '',
-        'Operación': item.Operacion || '',
-        'Código de contrato (Opcional)': item.CodigoContrato || '',
-        'Precio por cara (Opcional)': Number(item.PrecioPorCara) || 0,
-        'Vendedor': item.Vendedor || '',
-        'Descripción (Opcional)': item.Descripcion || '',
-        'Inicio o Periodo': item.InicioPeriodo || '',
-        'Fin o Segmento': item.FinSegmento || '',
-        // Arte = nombre limpio del arte (sin prefix de DO Spaces, sin extensión).
-        // Antes salía en "Código de arte"; ahora "Código de arte" va vacío.
-        'Arte': cleanArteName(item.nombres_artes_digitales || item.ArteFileName || (item.ArteUrl === 'HAS_ARTE' ? '' : item.ArteUrl?.split('/').pop()) || ''),
-        'Código de arte (Opcional)': '',
-        'Arte Url (Opcional)': item.ArteUrl === 'HAS_ARTE' ? '' : (getFileUrl(item.ArteUrl) || ''),
-        'Origen del arte (Opcional)': item.indicaciones || '',
-        'Unidad': (item.Unidad || '').split('_')[0] || '',
-        'Cara': item.Cara || '',
-        'Plaza': item.Ciudad || '',
-        'Tipo de Distribución': item.TipoDistribucion || '',
-        'Reproducciones': item.Reproducciones || '',
-      }));
+      const wsData = filteredINVIANData.map(item => {
+        // Plaza derivada: última parte del codigo_unico (ej. 'AC3033_Contraflujo2_Acapulco de Juárez' → 'Acapulco de Juárez').
+        const cuParts = (item.Unidad || '').split('_');
+        const plazaDerivada = (cuParts.length > 1 ? cuParts[cuParts.length - 1] : '') || item.Ciudad || '';
+        return {
+          'Campaña': item.Campania || '',
+          'Anunciante': item.Anunciante || '',
+          'Operación': item.Operacion || '',
+          'Código de contrato (Opcional)': item.CodigoContrato || '',
+          'Precio por cara (Opcional)': Number(item.PrecioPorCara) || 0,
+          'Vendedor': item.Vendedor || '',
+          'Descripción (Opcional)': item.Descripcion || '',
+          'Inicio o Periodo': item.InicioPeriodo || '',
+          'Fin o Segmento': item.FinSegmento || '',
+          // Arte = nombre limpio del arte (sin prefix de DO Spaces, sin extensión).
+          // Antes salía en "Código de arte"; ahora "Código de arte" va vacío.
+          'Arte': cleanArteName(item.nombres_artes_digitales || item.ArteFileName || (item.ArteUrl === 'HAS_ARTE' ? '' : item.ArteUrl?.split('/').pop()) || ''),
+          'Código de arte (Opcional)': '',
+          'Arte Url (Opcional)': item.ArteUrl === 'HAS_ARTE' ? '' : (getFileUrl(item.ArteUrl) || ''),
+          'Origen del arte (Opcional)': item.indicaciones || '',
+          'Unidad': (item.Unidad || '').split('_')[0] || '',
+          'Cara': item.Cara || '',
+          'Plaza': plazaDerivada,
+          'Código Único': item.Unidad || '',
+          'Tipo Inventario': item.tradicional_digital || '',
+          'Tipo de Distribución': item.TipoDistribucion || '',
+          'Reproducciones': item.Reproducciones || '',
+        };
+      });
 
       const ws = XLSX.utils.json_to_sheet(wsData);
       const wb = XLSX.utils.book_new();
       XLSX.utils.book_append_sheet(wb, ws, 'Orden Montaje INVIAN');
       XLSX.writeFile(wb, `orden_montaje_invian_${new Date().toISOString().split('T')[0]}.xlsx`);
     } else if (activeTab === 'invian-digital' && filteredINVIANDigitalData.length > 0) {
-      const wsData = filteredINVIANDigitalData.map(item => ({
-        'Campaña': item.Campania || '',
-        'Anunciante': item.Anunciante || '',
-        'Operación': item.Operacion || '',
-        'Código de contrato (Opcional)': item.CodigoContrato || '',
-        'Precio por cara (Opcional)': Number(item.PrecioPorCara) || 0,
-        'Vendedor': item.Vendedor || '',
-        'Descripción (Opcional)': item.Descripcion || '',
-        'Inicio o Periodo': item.InicioPeriodo || '',
-        'Fin o Segmento': item.FinSegmento || '',
-        // Arte = nombre limpio del arte (sin prefix de DO Spaces, sin extensión).
-        // Antes salía en "Código de arte"; ahora "Código de arte" va vacío.
-        'Arte': cleanArteName(item.nombres_artes_digitales || item.ArteFileName || (item.ArteUrl === 'HAS_ARTE' ? '' : item.ArteUrl?.split('/').pop()) || ''),
-        'Código de arte (Opcional)': '',
-        'Arte Url (Opcional)': item.ArteUrl === 'HAS_ARTE' ? '' : (getFileUrl(item.ArteUrl) || ''),
-        'Origen del arte (Opcional)': item.indicaciones || '',
-        'Unidad': (item.Unidad || '').split('_')[0] || '',
-        'Cara': item.Cara || '',
-        'Plaza': item.Ciudad || '',
-        'Tipo de Distribución': item.TipoDistribucion || '',
-        'Reproducciones': item.Reproducciones || '',
-        'Artículo': item.numero_articulo || '',
-      }));
+      const wsData = filteredINVIANDigitalData.map(item => {
+        const cuParts = (item.Unidad || '').split('_');
+        const plazaDerivada = (cuParts.length > 1 ? cuParts[cuParts.length - 1] : '') || item.Ciudad || '';
+        return {
+          'Campaña': item.Campania || '',
+          'Anunciante': item.Anunciante || '',
+          'Operación': item.Operacion || '',
+          'Código de contrato (Opcional)': item.CodigoContrato || '',
+          'Precio por cara (Opcional)': Number(item.PrecioPorCara) || 0,
+          'Vendedor': item.Vendedor || '',
+          'Descripción (Opcional)': item.Descripcion || '',
+          'Inicio o Periodo': item.InicioPeriodo || '',
+          'Fin o Segmento': item.FinSegmento || '',
+          // Arte = nombre limpio del arte (sin prefix de DO Spaces, sin extensión).
+          // Antes salía en "Código de arte"; ahora "Código de arte" va vacío.
+          'Arte': cleanArteName(item.nombres_artes_digitales || item.ArteFileName || (item.ArteUrl === 'HAS_ARTE' ? '' : item.ArteUrl?.split('/').pop()) || ''),
+          'Código de arte (Opcional)': '',
+          'Arte Url (Opcional)': item.ArteUrl === 'HAS_ARTE' ? '' : (getFileUrl(item.ArteUrl) || ''),
+          'Origen del arte (Opcional)': item.indicaciones || '',
+          'Unidad': (item.Unidad || '').split('_')[0] || '',
+          'Cara': item.Cara || '',
+          'Plaza': plazaDerivada,
+          'Código Único': item.Unidad || '',
+          'Tipo Inventario': item.tradicional_digital || '',
+          'Tipo de Distribución': item.TipoDistribucion || '',
+          'Reproducciones': item.Reproducciones || '',
+          'Artículo': item.numero_articulo || '',
+        };
+      });
 
       const ws = XLSX.utils.json_to_sheet(wsData);
       const wb = XLSX.utils.book_new();
@@ -1462,13 +1501,20 @@ export function OrdenesMontajeModal({ isOpen, onClose, canExport = true }: Orden
   const currentSortOptions = activeTab === 'cat' || activeTab === 'digital' || activeTab === 'ocupacion-digital' ? CAT_SORT_FIELDS : INVIAN_SORT_FIELDS;
   const currentUniqueValues = activeTab === 'cat' || activeTab === 'digital' || activeTab === 'ocupacion-digital' ? getCATUniqueValues : activeTab === 'invian-digital' ? getINVIANDigitalUniqueValues : getINVIANUniqueValues;
 
-  const hasActiveFilters = currentFilters.length > 0 || currentGroupings.length > 0 || currentSortField !== null || selectedCatorcenas.length > 0 || fechaInicio || fechaFin || sapDbFilter !== 'todas' || apsEspecificoFilter !== 'todas';
+  const hasActiveFilters = currentFilters.length > 0 || currentGroupings.length > 0 || currentSortField !== null || selectedCatorcenas.length > 0 || fechaInicio || fechaFin || sapDbFilter !== 'todas' || apsEspecificoFilter !== 'todas' || postFilter !== 'todas';
 
   if (!isOpen) return null;
 
   const isLoading = activeTab === 'cat' || activeTab === 'digital' || activeTab === 'ocupacion-digital' ? isLoadingCAT : isLoadingINVIAN;
   const dataCount = activeTab === 'cat' ? filteredCATData.length : activeTab === 'ocupacion-digital' ? filteredOcupacionDigitalData.length : activeTab === 'digital' ? filteredDigitalData.length : activeTab === 'invian-digital' ? filteredINVIANDigitalData.length : filteredINVIANData.length;
-  const totalCount = activeTab === 'cat' ? (catData?.length || 0) : activeTab === 'ocupacion-digital' ? filteredOcupacionDigitalData.length : activeTab === 'digital' ? filteredDigitalData.length : activeTab === 'invian-digital' ? filteredINVIANDigitalData.length : (invianData?.length || 0);
+  // Ocupación VP: total = registros NO digitales del endpoint CAT (los digitales
+  // viven en la pestaña Ocupación Digital y confundía verlos restados del total).
+  const totalCount = activeTab === 'cat'
+    ? (catData?.filter(i => (i.tradicional_digital || '').toUpperCase() !== 'DIGITAL').length || 0)
+    : activeTab === 'ocupacion-digital' ? filteredOcupacionDigitalData.length
+    : activeTab === 'digital' ? filteredDigitalData.length
+    : activeTab === 'invian-digital' ? filteredINVIANDigitalData.length
+    : (invianData?.length || 0);
 
   const totalPages = Math.max(1, Math.ceil(dataCount / PAGE_SIZE));
   const safeCurrentPage = Math.min(currentPage, totalPages);
@@ -1586,7 +1632,7 @@ export function OrdenesMontajeModal({ isOpen, onClose, canExport = true }: Orden
                 Filtros
                 {hasActiveFilters && (
                   <span className="ml-1 px-1.5 py-0.5 rounded-full bg-white/20 text-[10px]">
-                    {(selectedCatorcenas.length > 0 ? 1 : 0) + (fechaInicio ? 1 : 0) + (sapDbFilter !== 'todas' ? 1 : 0) + (apsEspecificoFilter !== 'todas' ? 1 : 0) + currentFilters.length + currentGroupings.length + (currentSortField ? 1 : 0)}
+                    {(selectedCatorcenas.length > 0 ? 1 : 0) + (fechaInicio ? 1 : 0) + (sapDbFilter !== 'todas' ? 1 : 0) + (apsEspecificoFilter !== 'todas' ? 1 : 0) + (postFilter !== 'todas' ? 1 : 0) + currentFilters.length + currentGroupings.length + (currentSortField ? 1 : 0)}
                   </span>
                 )}
               </button>
@@ -1636,6 +1682,26 @@ export function OrdenesMontajeModal({ isOpen, onClose, canExport = true }: Orden
                             }`}
                           >
                             {opt === 'todas' ? 'Todas' : opt === 'con' ? 'Con APS' : 'Sin APS'}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+
+                    {/* POST a SAP */}
+                    <div>
+                      <label className="text-xs font-medium text-zinc-400 mb-2 block">POST a SAP</label>
+                      <div className="flex gap-2">
+                        {(['todas', 'con', 'sin'] as const).map(opt => (
+                          <button
+                            key={opt}
+                            onClick={() => setPostFilter(opt)}
+                            className={`flex-1 px-3 py-2 rounded-lg text-xs font-medium transition-colors ${
+                              postFilter === opt
+                                ? 'bg-purple-600 text-white border border-purple-500'
+                                : 'bg-zinc-800 text-zinc-300 border border-zinc-700 hover:bg-zinc-700'
+                            }`}
+                          >
+                            {opt === 'todas' ? 'Todas' : opt === 'con' ? 'Con POST' : 'Sin POST'}
                           </button>
                         ))}
                       </div>
@@ -1854,7 +1920,7 @@ export function OrdenesMontajeModal({ isOpen, onClose, canExport = true }: Orden
 
             {/* Count */}
             <span className="px-3 py-1.5 rounded-lg bg-zinc-800 text-zinc-300 text-xs font-medium border border-zinc-700">
-              {dataCount}{dataCount !== totalCount && ` / ${totalCount}`}
+              {dataCount}{dataCount !== totalCount && ` / ${totalCount}`} filas
             </span>
 
             {/* Export */}
@@ -2192,6 +2258,8 @@ export function OrdenesMontajeModal({ isOpen, onClose, canExport = true }: Orden
                     <th className="px-3 py-3 text-left text-[10px] font-semibold text-purple-300 uppercase tracking-wider">Unidad</th>
                     <th className="px-3 py-3 text-left text-[10px] font-semibold text-purple-300 uppercase tracking-wider">Cara</th>
                     <th className="px-3 py-3 text-left text-[10px] font-semibold text-purple-300 uppercase tracking-wider">Plaza</th>
+                    <th className="px-3 py-3 text-left text-[10px] font-semibold text-purple-300 uppercase tracking-wider">Código Único</th>
+                    <th className="px-3 py-3 text-left text-[10px] font-semibold text-purple-300 uppercase tracking-wider">Tipo Inventario</th>
                     {activeTab === 'invian-digital' && (
                       <th className="px-3 py-3 text-left text-[10px] font-semibold text-purple-300 uppercase tracking-wider">CTO</th>
                     )}
@@ -2204,6 +2272,9 @@ export function OrdenesMontajeModal({ isOpen, onClose, canExport = true }: Orden
                     const currentData = activeTab === 'invian-digital' ? paginatedINVIANDigitalData : paginatedINVIANData;
                     const currentGrouped = activeTab === 'invian-digital' ? groupedINVIANDigitalData : groupedINVIANData;
                     const showCto = activeTab === 'invian-digital';
+                    const showCodigoUnico = true;
+                    const showTipoInventario = true;
+                    const invianColSpan = 16 + (showCto ? 1 : 0) + (showCodigoUnico ? 1 : 0) + (showTipoInventario ? 1 : 0);
                     return (
                       <>
                         {currentGrouped ? (
@@ -2213,7 +2284,7 @@ export function OrdenesMontajeModal({ isOpen, onClose, canExport = true }: Orden
                                 onClick={() => toggleGroup(groupName)}
                                 className="bg-cyan-500/10 border-b border-cyan-500/20 cursor-pointer hover:bg-cyan-500/15 transition-colors"
                               >
-                                <td colSpan={16} className="px-4 py-2">
+                                <td colSpan={invianColSpan} className="px-4 py-2">
                                   <div className="flex items-center gap-2">
                                     {invianExpandedGroups.has(groupName) ? (
                                       <ChevronDown className="h-4 w-4 text-cyan-400" />
@@ -2228,18 +2299,18 @@ export function OrdenesMontajeModal({ isOpen, onClose, canExport = true }: Orden
                                 </td>
                               </tr>
                               {invianExpandedGroups.has(groupName) && items.map((item, idx) => (
-                                <INVIANRow key={`${groupName}-${idx}`} item={item} isDark={isDark} onOpenGallery={handleOpenGallery} showCto={showCto} />
+                                <INVIANRow key={`${groupName}-${idx}`} item={item} isDark={isDark} onOpenGallery={handleOpenGallery} showCto={showCto} showCodigoUnico={showCodigoUnico} showTipoInventario={showTipoInventario} />
                               ))}
                             </React.Fragment>
                           ))
                         ) : (
                           currentData.map((item, idx) => (
-                            <INVIANRow key={idx} item={item} isDark={isDark} onOpenGallery={handleOpenGallery} showCto={showCto} />
+                            <INVIANRow key={idx} item={item} isDark={isDark} onOpenGallery={handleOpenGallery} showCto={showCto} showCodigoUnico={showCodigoUnico} showTipoInventario={showTipoInventario} />
                           ))
                         )}
                         {currentDataFull.length === 0 && (
                           <tr>
-                            <td colSpan={16} className="px-4 py-12 text-center">
+                            <td colSpan={invianColSpan} className="px-4 py-12 text-center">
                               <div className="inline-flex items-center justify-center w-16 h-16 rounded-full bg-purple-500/10 mb-4">
                                 <FileSpreadsheet className="w-8 h-8 text-purple-400" />
                               </div>
@@ -2392,7 +2463,7 @@ const CATRow = React.memo(function CATRow({ item, isDark, showApsEspecifico = fa
 // Memoizado: misma motivación que CATRow. `onOpenGallery` se asume estable
 // (useCallback en el padre) — si no lo fuera, React.memo aún funciona pero
 // re-renderiza cuando cambia la ref.
-const INVIANRow = React.memo(function INVIANRow({ item, isDark, onOpenGallery, showCto = false }: { item: OrdenMontajeINVIAN; isDark: boolean; onOpenGallery: (item: OrdenMontajeINVIAN) => void; showCto?: boolean }) {
+const INVIANRow = React.memo(function INVIANRow({ item, isDark, onOpenGallery, showCto = false, showCodigoUnico = false, showTipoInventario = false }: { item: OrdenMontajeINVIAN; isDark: boolean; onOpenGallery: (item: OrdenMontajeINVIAN) => void; showCto?: boolean; showCodigoUnico?: boolean; showTipoInventario?: boolean }) {
   const operacionColor = getOperacionColorCls(item.Operacion, isDark);
   const tipoDistColor = getOperacionColorCls(item.TipoDistribucion, isDark);
 
@@ -2508,7 +2579,25 @@ const INVIANRow = React.memo(function INVIANRow({ item, isDark, onOpenGallery, s
           como 'TJ1129_Flujo_Tijuana' pero solo queremos 'TJ1129'. */}
       <td className="px-3 py-2 text-xs text-violet-300 font-mono" title={item.Unidad || ''}>{(item.Unidad || '').split('_')[0] || '-'}</td>
       <td className={`px-3 py-2 text-xs ${isDark ? 'text-zinc-300' : 'text-gray-700'}`}>{item.Cara || '-'}</td>
-      <td className={`px-3 py-2 text-xs ${isDark ? 'text-zinc-300' : 'text-gray-700'}`}>{item.Ciudad || '-'}</td>
+      {/* Plaza: derivar la ciudad capitalizada del codigo_unico
+          (ej. 'AC3033_Contraflujo2_Acapulco de Juárez' → 'Acapulco de Juárez').
+          item.Ciudad viene de inv.plaza en MAYÚSCULAS, menos legible. */}
+      <td className={`px-3 py-2 text-xs ${isDark ? 'text-zinc-300' : 'text-gray-700'}`}>
+        {(() => {
+          if (showCodigoUnico && item.Unidad) {
+            const parts = item.Unidad.split('_');
+            const ciudad = parts[parts.length - 1];
+            if (ciudad) return ciudad;
+          }
+          return item.Ciudad || '-';
+        })()}
+      </td>
+      {showCodigoUnico && (
+        <td className="px-3 py-2 text-xs text-violet-300 font-mono" title={item.Unidad || ''}>{item.Unidad || '-'}</td>
+      )}
+      {showTipoInventario && (
+        <td className={`px-3 py-2 text-xs ${isDark ? 'text-zinc-300' : 'text-gray-700'}`}>{item.tradicional_digital || '-'}</td>
+      )}
       {showCto && (
         <td className={`px-3 py-2 text-xs ${isDark ? 'text-zinc-300' : 'text-gray-700'} font-mono`}>{item.cto || '-'}</td>
       )}
