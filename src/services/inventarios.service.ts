@@ -223,6 +223,8 @@ export const inventariosService = {
       fecha_reserva: string;
       instalado: number;
       APS: number | null;
+      grupo_completo_id: number | null;
+      posted: number;
       inicio_periodo: string;
       fin_periodo: string;
       tipo_medio: string;

@@ -49,6 +49,9 @@ export interface CampanaEnCelda {
   numero_catorcena: number;
   anio_catorcena: number;
   articulo: string | null;
+  aps: number | null;
+  grupo_completo_id: number | null;
+  posted: boolean;
 }
 
 export interface CeldaOcupacion {
@@ -134,6 +137,9 @@ export const analisisOcupacionService = {
               numero_catorcena: h.numero_catorcena,
               anio_catorcena: h.anio_catorcena,
               articulo: h.articulo ?? null,
+              aps: h.APS ?? null,
+              grupo_completo_id: h.grupo_completo_id ?? null,
+              posted: Boolean(h.posted),
             });
           }
         } catch {
