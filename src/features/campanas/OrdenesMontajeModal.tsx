@@ -244,6 +244,22 @@ const cleanArteName = (raw?: string | null): string => {
     .join(', ');
 };
 
+// Extrae la ciudad del codigo_unico de inventarios.
+// Formato esperado: 'CODIGO_SENTIDO_CIUDAD' (ej. 'AC3033_Contraflujo2_Acapulco de Juárez').
+// Casos especiales en la data: separador con coma en lugar de _ (ej. '21061_Flujo,Monterrey'
+// o '21061_Contraflujo ,Monterrey'). Se toma el último segmento por '_', y si tiene coma,
+// el último segmento por ',', con trim final.
+const extractCiudadFromCodigoUnico = (codigoUnico?: string | null): string => {
+  if (!codigoUnico) return '';
+  const parts = String(codigoUnico).split('_');
+  let last = parts[parts.length - 1] || '';
+  if (last.includes(',')) {
+    const commaParts = last.split(',');
+    last = commaParts[commaParts.length - 1];
+  }
+  return last.trim();
+};
+
 // Status options for filter
 const STATUS_OPTIONS = ['Aprobada', 'inactiva', 'finalizada', 'por iniciar', 'en curso'];
 
@@ -1278,9 +1294,7 @@ export function OrdenesMontajeModal({ isOpen, onClose, canExport = true }: Orden
       // `Indicaciones`) — el CSV se mostraba inconsistente con lo que ven en
       // pantalla. Ahora coincide.
       const wsData = filteredINVIANData.map(item => {
-        // Plaza derivada: última parte del codigo_unico (ej. 'AC3033_Contraflujo2_Acapulco de Juárez' → 'Acapulco de Juárez').
-        const cuParts = (item.Unidad || '').split('_');
-        const plazaDerivada = (cuParts.length > 1 ? cuParts[cuParts.length - 1] : '') || item.Ciudad || '';
+        const plazaDerivada = extractCiudadFromCodigoUnico(item.Unidad) || item.Ciudad || '';
         return {
           'Campaña': item.Campania || '',
           'Anunciante': item.Anunciante || '',
@@ -1313,8 +1327,7 @@ export function OrdenesMontajeModal({ isOpen, onClose, canExport = true }: Orden
       XLSX.writeFile(wb, `orden_montaje_invian_${new Date().toISOString().split('T')[0]}.xlsx`);
     } else if (activeTab === 'invian-digital' && filteredINVIANDigitalData.length > 0) {
       const wsData = filteredINVIANDigitalData.map(item => {
-        const cuParts = (item.Unidad || '').split('_');
-        const plazaDerivada = (cuParts.length > 1 ? cuParts[cuParts.length - 1] : '') || item.Ciudad || '';
+        const plazaDerivada = extractCiudadFromCodigoUnico(item.Unidad) || item.Ciudad || '';
         return {
           'Campaña': item.Campania || '',
           'Anunciante': item.Anunciante || '',
@@ -2579,18 +2592,9 @@ const INVIANRow = React.memo(function INVIANRow({ item, isDark, onOpenGallery, s
           como 'TJ1129_Flujo_Tijuana' pero solo queremos 'TJ1129'. */}
       <td className="px-3 py-2 text-xs text-violet-300 font-mono" title={item.Unidad || ''}>{(item.Unidad || '').split('_')[0] || '-'}</td>
       <td className={`px-3 py-2 text-xs ${isDark ? 'text-zinc-300' : 'text-gray-700'}`}>{item.Cara || '-'}</td>
-      {/* Plaza: derivar la ciudad capitalizada del codigo_unico
-          (ej. 'AC3033_Contraflujo2_Acapulco de Juárez' → 'Acapulco de Juárez').
-          item.Ciudad viene de inv.plaza en MAYÚSCULAS, menos legible. */}
+      {/* Plaza: derivar la ciudad capitalizada del codigo_unico. */}
       <td className={`px-3 py-2 text-xs ${isDark ? 'text-zinc-300' : 'text-gray-700'}`}>
-        {(() => {
-          if (showCodigoUnico && item.Unidad) {
-            const parts = item.Unidad.split('_');
-            const ciudad = parts[parts.length - 1];
-            if (ciudad) return ciudad;
-          }
-          return item.Ciudad || '-';
-        })()}
+        {(showCodigoUnico ? extractCiudadFromCodigoUnico(item.Unidad) : '') || item.Ciudad || '-'}
       </td>
       {showCodigoUnico && (
         <td className="px-3 py-2 text-xs text-violet-300 font-mono" title={item.Unidad || ''}>{item.Unidad || '-'}</td>
