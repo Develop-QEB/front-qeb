@@ -1,7 +1,7 @@
 // Modo mantenimiento programado.
 // true  -> usuarios fuera del whitelist son enviados a /mantenimiento.
 // false -> comportamiento normal, no se redirige a nadie.
-export const MAINTENANCE_MODE = true;
+export const MAINTENANCE_MODE = false;
 
 export const MAINTENANCE_TITLE = 'QEB esta en mantenimiento programado';
 
