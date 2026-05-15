@@ -83,6 +83,18 @@ export const notificacionesService = {
     }
   },
 
+  // Bulk update de estatus: una sola request al back en lugar de N paralelas.
+  async bulkUpdateEstatus(ids: number[], estatus: string): Promise<{ affected: number }> {
+    const response = await api.patch<ApiResponse<{ affected: number }>>(
+      '/notificaciones/bulk-estatus',
+      { ids, estatus }
+    );
+    if (!response.data.success || !response.data.data) {
+      throw new Error(response.data.error || 'Error en bulk update');
+    }
+    return response.data.data;
+  },
+
   async delete(id: number): Promise<void> {
     const response = await api.delete<ApiResponse<null>>(`/notificaciones/${id}`);
     if (!response.data.success) {
