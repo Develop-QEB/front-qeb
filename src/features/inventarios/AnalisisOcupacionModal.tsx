@@ -6,8 +6,11 @@ import {
   ExternalLink, Download, Filter, Search
 } from 'lucide-react';
 import { useThemeStore } from '../../store/themeStore';
+import { useAuthStore } from '../../store/authStore';
 import { inventariosService } from '../../services/inventarios.service';
 import { solicitudesService } from '../../services/solicitudes.service';
+import { propuestasService } from '../../services/propuestas.service';
+import { campanasService } from '../../services/campanas.service';
 import {
   analisisOcupacionService,
   AnalisisOcupacion,
@@ -432,6 +435,7 @@ export function AnalisisOcupacionModal({
                       Aún no hay inventarios. Selecciona en la tabla o sube un CSV.
                     </div>
                   ) : (
+                    
                     <div className={`rounded-lg border ${isDark ? 'border-zinc-700' : 'border-gray-200'} overflow-hidden max-h-72 overflow-y-auto`}>
                       <table className="w-full text-xs">
                         <thead className={`${isDark ? 'bg-zinc-800/80 text-zinc-400' : 'bg-gray-50 text-gray-500'} sticky top-0`}>
@@ -562,6 +566,7 @@ export function AnalisisOcupacionModal({
                 matriz={matriz}
                 building={building}
                 isDark={isDark}
+                onRefresh={() => buildMatrizFor(inventarios, catorcenasSelected)}
               />
             )}
           </div>
@@ -682,17 +687,56 @@ function MatrizView({
   matriz,
   building,
   isDark,
+  onRefresh,
 }: {
   matriz: MatrizOcupacion | null;
   building: boolean;
   isDark: boolean;
+  onRefresh: () => Promise<void> | void;
 }) {
+  const userRole = useAuthStore(s => s.user?.rol);
+  const canRelease = userRole === 'DEV'
+    || userRole === 'Gerente de Trafico'
+    || userRole === 'Coordinador de trafico'
+    || userRole === 'Especialista de trafico'
+    || userRole === 'Auxiliar de trafico';
+
   const [showDuplicados, setShowDuplicados] = useState(false);
   const [soloDuplicados, setSoloDuplicados] = useState(false);
   const [campanaFilter, setCampanaFilter] = useState<Set<string>>(new Set());
   const [filterOpen, setFilterOpen] = useState(false);
   const [filterSearch, setFilterSearch] = useState('');
   const filterRef = useRef<HTMLDivElement>(null);
+
+  const [confirmRelease, setConfirmRelease] = useState<{
+    card: CampanaEnCelda;
+    inventario: InventarioResumen;
+    catorcena: CatorcenaRef;
+  } | null>(null);
+  const [releasing, setReleasing] = useState(false);
+  const [releaseError, setReleaseError] = useState<string | null>(null);
+
+  const handleConfirmRelease = async () => {
+    if (!confirmRelease || !canRelease) return;
+    setReleasing(true);
+    setReleaseError(null);
+    try {
+      const { card } = confirmRelease;
+      if (card.campana_id) {
+        await campanasService.deleteReservas(card.campana_id, [card.reserva_id]);
+      } else if (card.propuesta_id) {
+        await propuestasService.deleteReservas(card.propuesta_id, [card.reserva_id]);
+      } else {
+        throw new Error('La reserva no tiene campaña ni propuesta asociada');
+      }
+      setConfirmRelease(null);
+      await onRefresh();
+    } catch (err) {
+      setReleaseError(err instanceof Error ? err.message : 'Error al liberar la reserva');
+    } finally {
+      setReleasing(false);
+    }
+  };
 
   useEffect(() => {
     if (!filterOpen) return;
@@ -1139,47 +1183,66 @@ function MatrizView({
                           ? `${fmt(c.inicio_periodo)} – ${fmt(c.fin_periodo)}`
                           : '';
                         return (
-                          <a
-                            key={c.reserva_id}
-                            href={href}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            title={esPropuesta ? `Editar propuesta #${c.propuesta_id}` : `Abrir campaña: ${label}`}
-                            className={`block w-full text-left rounded-md p-2 border transition-all cursor-pointer ${cardClass}`}
-                          >
-                            <div className={`flex items-center gap-1 text-[10px] font-bold uppercase tracking-wide ${statusTextClass}`}>
-                              {statusLabel}
-                              <ExternalLink className="h-2.5 w-2.5 opacity-70" />
-                            </div>
-                            <div
-                              className={`text-[10px] mt-1 truncate underline underline-offset-2 ${isDark ? 'text-zinc-300' : 'text-gray-700'}`}
-                              title={label}
+                          <div key={c.reserva_id} className="relative group/card">
+                            <a
+                              href={href}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              title={esPropuesta ? `Editar propuesta #${c.propuesta_id}` : `Abrir campaña: ${label}`}
+                              className={`block w-full text-left rounded-md p-2 ${canRelease ? 'pr-7' : ''} border transition-all cursor-pointer ${cardClass}`}
                             >
-                              {label}
-                            </div>
-                            <div
-                              className={`text-[10px] mt-0.5 truncate ${isDark ? 'text-zinc-500' : 'text-gray-500'}`}
-                              title={clienteLabel}
-                            >
-                              {clienteLabel}
-                            </div>
-                            {c.articulo && (
-                              <div
-                                className={`text-[10px] mt-0.5 truncate font-mono ${isDark ? 'text-purple-300' : 'text-purple-700'}`}
-                                title={`Artículo SAP: ${c.articulo}`}
-                              >
-                                {c.articulo}
+                              <div className={`flex items-center gap-1 text-[10px] font-bold uppercase tracking-wide ${statusTextClass}`}>
+                                {statusLabel}
+                                <ExternalLink className="h-2.5 w-2.5 opacity-70" />
                               </div>
-                            )}
-                            {rangoLabel && (
                               <div
-                                className={`text-[10px] mt-0.5 truncate font-mono ${isDark ? 'text-zinc-400' : 'text-gray-600'}`}
-                                title={`Reserva #${c.reserva_id} · ${rangoLabel}`}
+                                className={`text-[10px] mt-1 truncate underline underline-offset-2 ${isDark ? 'text-zinc-300' : 'text-gray-700'}`}
+                                title={label}
                               >
-                                {rangoLabel} · #{c.reserva_id}
+                                {label}
                               </div>
+                              <div
+                                className={`text-[10px] mt-0.5 truncate ${isDark ? 'text-zinc-500' : 'text-gray-500'}`}
+                                title={clienteLabel}
+                              >
+                                {clienteLabel}
+                              </div>
+                              {c.articulo && (
+                                <div
+                                  className={`text-[10px] mt-0.5 truncate font-mono ${isDark ? 'text-purple-300' : 'text-purple-700'}`}
+                                  title={`Artículo SAP: ${c.articulo}`}
+                                >
+                                  {c.articulo}
+                                </div>
+                              )}
+                              {rangoLabel && (
+                                <div
+                                  className={`text-[10px] mt-0.5 truncate font-mono ${isDark ? 'text-zinc-400' : 'text-gray-600'}`}
+                                  title={`Reserva #${c.reserva_id} · ${rangoLabel}`}
+                                >
+                                  {rangoLabel} · #{c.reserva_id}
+                                </div>
+                              )}
+                            </a>
+                            {canRelease && (
+                              <button
+                                type="button"
+                                onClick={e => {
+                                  e.preventDefault();
+                                  e.stopPropagation();
+                                  setConfirmRelease({ card: c, inventario: inv, catorcena: cat });
+                                }}
+                                title="Liberar reserva (eliminar de la BD)"
+                                className={`absolute top-1 right-1 p-1 rounded transition-all opacity-0 group-hover/card:opacity-100 focus:opacity-100 ${
+                                  isDark
+                                    ? 'text-zinc-400 hover:text-red-300 hover:bg-red-500/20'
+                                    : 'text-gray-500 hover:text-red-600 hover:bg-red-100'
+                                }`}
+                              >
+                                <Trash2 className="h-3 w-3" />
+                              </button>
                             )}
-                          </a>
+                          </div>
                         );
                       })}
                     </div>
@@ -1191,6 +1254,81 @@ function MatrizView({
         </tbody>
       </table>
       </div>
+
+      {confirmRelease && (
+        <div
+          className="fixed inset-0 bg-black/70 z-[60] flex items-center justify-center p-4"
+          onClick={() => !releasing && setConfirmRelease(null)}
+        >
+          <div
+            className={`rounded-2xl border ${isDark ? 'bg-zinc-900 border-red-500/30' : 'bg-white border-red-200'} w-full max-w-md shadow-2xl`}
+            onClick={e => e.stopPropagation()}
+          >
+            <div className={`p-5 border-b ${isDark ? 'border-zinc-800' : 'border-gray-200'}`}>
+              <div className="flex items-start gap-3">
+                <div className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 ${isDark ? 'bg-red-500/20' : 'bg-red-50'}`}>
+                  <AlertCircle className={`h-5 w-5 ${isDark ? 'text-red-300' : 'text-red-600'}`} />
+                </div>
+                <div className="flex-1 min-w-0">
+                  <h3 className={`text-base font-semibold ${isDark ? 'text-white' : 'text-gray-900'}`}>
+                    ¿Liberar esta reserva?
+                  </h3>
+                  <p className={`text-xs mt-1 ${isDark ? 'text-zinc-400' : 'text-gray-500'}`}>
+                    Se eliminará la reserva de la base de datos. Esta acción no se puede deshacer.
+                  </p>
+                </div>
+              </div>
+            </div>
+            <div className={`p-5 space-y-2 text-xs ${isDark ? 'text-zinc-300' : 'text-gray-700'}`}>
+              {(() => {
+                const { card, inventario, catorcena } = confirmRelease;
+                const esPropuesta = !card.campana_id;
+                const fmt = (d: string) => new Date(d).toLocaleDateString('es-MX', { day: '2-digit', month: 'short', year: 'numeric' });
+                const rango = card.inicio_periodo && card.fin_periodo
+                  ? `${fmt(card.inicio_periodo)} – ${fmt(card.fin_periodo)}`
+                  : '';
+                const rows: { k: string; v: string }[] = [
+                  { k: esPropuesta ? 'Propuesta' : 'Campaña', v: esPropuesta ? `#${card.propuesta_id}` : (card.campana_nombre || `#${card.campana_id}`) },
+                  { k: 'Cliente', v: card.cliente_nombre || 'Sin cliente' },
+                  { k: 'Inventario', v: inventario.codigo_unico || `#${inventario.id}` },
+                  { k: 'Catorcena', v: `C${catorcena.numero}-${catorcena.anio}` },
+                ];
+                if (rango) rows.push({ k: 'Periodo', v: rango });
+                if (card.articulo) rows.push({ k: 'Artículo', v: card.articulo });
+                rows.push({ k: 'Reserva', v: `#${card.reserva_id}` });
+                return rows.map(r => (
+                  <div key={r.k} className="flex items-start gap-2">
+                    <span className={`min-w-[80px] ${isDark ? 'text-zinc-500' : 'text-gray-500'}`}>{r.k}:</span>
+                    <span className="flex-1 font-medium break-words">{r.v}</span>
+                  </div>
+                ));
+              })()}
+              {releaseError && (
+                <div className={`mt-3 px-3 py-2 rounded-lg text-xs ${isDark ? 'bg-red-500/15 text-red-300 border border-red-500/30' : 'bg-red-50 text-red-700 border border-red-200'}`}>
+                  {releaseError}
+                </div>
+              )}
+            </div>
+            <div className={`p-4 border-t ${isDark ? 'border-zinc-800 bg-zinc-900/50' : 'border-gray-200 bg-gray-50'} flex items-center justify-end gap-2`}>
+              <button
+                onClick={() => setConfirmRelease(null)}
+                disabled={releasing}
+                className={`px-3 py-1.5 rounded-lg text-sm ${isDark ? 'text-zinc-300 hover:bg-zinc-800' : 'text-gray-700 hover:bg-gray-100'} disabled:opacity-50`}
+              >
+                Cancelar
+              </button>
+              <button
+                onClick={handleConfirmRelease}
+                disabled={releasing}
+                className={`flex items-center gap-2 px-3 py-1.5 rounded-lg text-sm font-medium ${isDark ? 'bg-red-500/20 text-red-300 border border-red-500/40 hover:bg-red-500/30' : 'bg-red-600 text-white hover:bg-red-700'} disabled:opacity-50`}
+              >
+                {releasing ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Trash2 className="h-3.5 w-3.5" />}
+                {releasing ? 'Liberando...' : 'Sí, liberar'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
