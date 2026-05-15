@@ -328,10 +328,14 @@ function TareaRow({
   tarea,
   onSelect,
   showBorder = true,
+  selected,
+  onToggleSelection,
 }: {
   tarea: Notificacion;
   onSelect: () => void;
   showBorder?: boolean;
+  selected?: boolean;
+  onToggleSelection?: (id: number) => void;
 }) {
   const isDark = useThemeStore((s) => s.theme) === 'dark';
   const statusConfig = getStatusConfig(tarea.estatus);
@@ -362,6 +366,17 @@ function TareaRow({
       onClick={onSelect}
       className={`group flex items-center gap-4 px-4 py-3 cursor-pointer transition-all ${isDark ? 'hover:bg-zinc-800/50' : 'hover:bg-gray-100'} ${showBorder ? `border-b ${isDark ? 'border-zinc-800/60' : 'border-gray-200'}` : ''} ${isCompleted || isCancelado || isRechazado ? 'opacity-60' : ''}`}
     >
+      {/* Checkbox de selección masiva */}
+      {onToggleSelection && (
+        <input
+          type="checkbox"
+          checked={!!selected}
+          onClick={(e) => e.stopPropagation()}
+          onChange={(e) => { e.stopPropagation(); onToggleSelection(tarea.id); }}
+          className="w-4 h-4 accent-purple-500 cursor-pointer flex-shrink-0"
+        />
+      )}
+
       {/* Indicador de estado visual */}
       {!isAuthTask && (
         <div className={`w-1 h-8 rounded-full ${authBadge ? authBadge.bg : statusConfig.bg} ${isCompleted ? 'bg-emerald-500/40' : ''}`} />
@@ -556,11 +571,15 @@ function NestedSection({
   level = 0,
   groupByList,
   onSelectTarea,
+  selectedIds,
+  onToggleSelection,
 }: {
   group: NestedGroup;
   level?: number;
   groupByList: GroupByType[];
   onSelectTarea: (tarea: Notificacion) => void;
+  selectedIds?: Set<number>;
+  onToggleSelection?: (id: number) => void;
 }) {
   const isDark = useThemeStore((s) => s.theme) === 'dark';
   const [open, setOpen] = useState(true);
@@ -588,6 +607,8 @@ function NestedSection({
                 tarea={tarea}
                 onSelect={() => onSelectTarea(tarea)}
                 showBorder={idx !== group.tareas.length - 1}
+                selected={selectedIds?.has(tarea.id)}
+                onToggleSelection={onToggleSelection}
               />
             ))}
       </div>
@@ -636,6 +657,8 @@ function NestedSection({
                   level={level + 1}
                   groupByList={groupByList}
                   onSelectTarea={onSelectTarea}
+                  selectedIds={selectedIds}
+                  onToggleSelection={onToggleSelection}
                 />
               ))}
             </div>
@@ -647,6 +670,8 @@ function NestedSection({
                 tarea={tarea}
                 onSelect={() => onSelectTarea(tarea)}
                 showBorder={idx !== group.tareas.length - 1}
+                selected={selectedIds?.has(tarea.id)}
+                onToggleSelection={onToggleSelection}
               />
             ))
           )}
@@ -2857,6 +2882,33 @@ export function NotificacionesPage() {
     },
   });
 
+  // ====== Selección múltiple (checkboxes para acciones masivas) ======
+  // Se mantiene por tab (notificaciones / tareas). Al cambiar de tab se limpia.
+  const [selectedTareaIds, setSelectedTareaIds] = useState<Set<number>>(new Set());
+  useEffect(() => { setSelectedTareaIds(new Set()); }, [contentType]);
+  const toggleTareaSelection = useCallback((id: number) => {
+    setSelectedTareaIds(prev => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id); else next.add(id);
+      return next;
+    });
+  }, []);
+
+  // Mutación masiva: 1 sola request al back que hace UPDATE con WHERE id IN (...).
+  // 'Atendido' = leído, 'Pendiente' = no leído. El back emite NOTIFICACION_LEIDA
+  // por WebSocket para que el badge de la campana y la lista refresquen en vivo
+  // sin esperar al fetch local.
+  const bulkUpdateEstatusMutation = useMutation({
+    mutationFn: async ({ ids, estatus }: { ids: number[]; estatus: 'Atendido' | 'Pendiente' }) => {
+      await notificacionesService.bulkUpdateEstatus(ids, estatus);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['notificaciones'] });
+      queryClient.invalidateQueries({ queryKey: ['notificaciones-stats'] });
+      setSelectedTareaIds(new Set());
+    },
+  });
+
   // Mutation para actualizar tarea (fecha_fin)
   const updateTareaMutation = useMutation({
     mutationFn: ({ id, fecha_fin }: { id: number; fecha_fin: string }) =>
@@ -2991,6 +3043,26 @@ export function NotificacionesPage() {
     }, [baseTareas, quickFilter, user?.rol]);
 
   const filteredTareas = tareasConQuickFilter;
+
+  // Selección masiva: master checkbox que marca/desmarca todas las visibles.
+  const allFilteredIds = useMemo(() => filteredTareas.map(t => t.id), [filteredTareas]);
+  const allFilteredSelected = allFilteredIds.length > 0 && allFilteredIds.every(id => selectedTareaIds.has(id));
+  const someFilteredSelected = !allFilteredSelected && allFilteredIds.some(id => selectedTareaIds.has(id));
+  const toggleAllFilteredSelection = useCallback(() => {
+    if (allFilteredSelected) {
+      setSelectedTareaIds(prev => {
+        const next = new Set(prev);
+        allFilteredIds.forEach(id => next.delete(id));
+        return next;
+      });
+    } else {
+      setSelectedTareaIds(prev => {
+        const next = new Set(prev);
+        allFilteredIds.forEach(id => next.add(id));
+        return next;
+      });
+    }
+  }, [allFilteredIds, allFilteredSelected]);
 
   const countActivas = useMemo(() => baseTareas.filter(t => t.estatus !== 'Atendido' && t.estatus !== 'Rechazado' && t.estatus !== 'Cancelado').length, [baseTareas]);
   const countAtendidas = useMemo(() => baseTareas.filter(t => t.estatus === 'Atendido' || t.estatus === 'Rechazado' || t.estatus === 'Cancelado').length, [baseTareas]);
@@ -3497,11 +3569,53 @@ export function NotificacionesPage() {
           <TableroView tareas={filteredTareas} onSelectTarea={handleSelectTarea} />
         ) : view === 'lista' ? (
           <div className="space-y-3">
-            <div className="flex items-center justify-between">
-              <span className={`text-sm ${isDark ? 'text-zinc-500' : 'text-gray-400'}`}>
-                {filteredTareas.length} {contentType === 'notificaciones' ? 'notificación' : 'tarea'}{filteredTareas.length !== 1 ? (contentType === 'notificaciones' ? 'es' : 's') : ''}
-                {activeGroupings.length > 0 && <span className={isDark ? 'text-zinc-600' : 'text-gray-400'}> · {activeGroupings.length} agrupación{activeGroupings.length > 1 ? 'es' : ''}</span>}
-              </span>
+            <div className="flex items-center justify-between gap-3">
+              <div className="flex items-center gap-3">
+                {filteredTareas.length > 0 && contentType === 'notificaciones' && (
+                  <label className="flex items-center gap-2 cursor-pointer select-none">
+                    <input
+                      type="checkbox"
+                      checked={allFilteredSelected}
+                      ref={el => { if (el) el.indeterminate = someFilteredSelected; }}
+                      onChange={toggleAllFilteredSelection}
+                      className="w-4 h-4 accent-purple-500 cursor-pointer"
+                      title={allFilteredSelected ? 'Quitar selección' : 'Seleccionar todas'}
+                    />
+                    <span className={`text-xs ${isDark ? 'text-zinc-500' : 'text-gray-500'}`}>
+                      {selectedTareaIds.size > 0 ? `${selectedTareaIds.size} seleccionada${selectedTareaIds.size === 1 ? '' : 's'}` : 'Seleccionar'}
+                    </span>
+                  </label>
+                )}
+                <span className={`text-sm ${isDark ? 'text-zinc-500' : 'text-gray-400'}`}>
+                  {filteredTareas.length} {contentType === 'notificaciones' ? 'notificación' : 'tarea'}{filteredTareas.length !== 1 ? (contentType === 'notificaciones' ? 'es' : 's') : ''}
+                  {activeGroupings.length > 0 && <span className={isDark ? 'text-zinc-600' : 'text-gray-400'}> · {activeGroupings.length} agrupación{activeGroupings.length > 1 ? 'es' : ''}</span>}
+                </span>
+              </div>
+              {contentType === 'notificaciones' && selectedTareaIds.size > 0 && (
+                <div className="flex items-center gap-2">
+                  <button
+                    onClick={() => bulkUpdateEstatusMutation.mutate({ ids: Array.from(selectedTareaIds), estatus: 'Atendido' })}
+                    disabled={bulkUpdateEstatusMutation.isPending}
+                    className="px-3 py-1.5 text-xs font-medium bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg disabled:opacity-50 transition-colors"
+                  >
+                    Marcar como leídas
+                  </button>
+                  <button
+                    onClick={() => bulkUpdateEstatusMutation.mutate({ ids: Array.from(selectedTareaIds), estatus: 'Pendiente' })}
+                    disabled={bulkUpdateEstatusMutation.isPending}
+                    className="px-3 py-1.5 text-xs font-medium bg-amber-600 hover:bg-amber-700 text-white rounded-lg disabled:opacity-50 transition-colors"
+                  >
+                    Marcar como no leídas
+                  </button>
+                  <button
+                    onClick={() => setSelectedTareaIds(new Set())}
+                    disabled={bulkUpdateEstatusMutation.isPending}
+                    className={`px-2 py-1.5 text-xs ${isDark ? 'text-zinc-400 hover:text-zinc-200' : 'text-gray-600 hover:text-gray-900'} disabled:opacity-50`}
+                  >
+                    Cancelar
+                  </button>
+                </div>
+              )}
             </div>
 
             {activeGroupings.length > 0 ? (
@@ -3513,6 +3627,8 @@ export function NotificacionesPage() {
                     group={group}
                     groupByList={activeGroupings}
                     onSelectTarea={handleSelectTarea}
+                    selectedIds={contentType === 'notificaciones' ? selectedTareaIds : undefined}
+                    onToggleSelection={contentType === 'notificaciones' ? toggleTareaSelection : undefined}
                   />
                 ))}
               </div>
@@ -3548,6 +3664,20 @@ export function NotificacionesPage() {
                     >
                       {/* Layout móvil y desktop */}
                       <div className="flex items-start gap-3 px-4 py-3">
+                        {/* Checkbox de selección masiva — solo en tab Notificaciones,
+                            porque en Mis Tareas 'estatus=Atendido' significa tarea
+                            completada, no solo "leída". */}
+                        {contentType === 'notificaciones' && (
+                          <div className="pt-1.5">
+                            <input
+                              type="checkbox"
+                              checked={selectedTareaIds.has(tarea.id)}
+                              onClick={(e) => e.stopPropagation()}
+                              onChange={(e) => { e.stopPropagation(); toggleTareaSelection(tarea.id); }}
+                              className="w-4 h-4 accent-purple-500 cursor-pointer"
+                            />
+                          </div>
+                        )}
                         {/* Indicador de estado + icono (oculto para auth) */}
                         {!isAuthTaskInline && (
                           <div className="flex items-center gap-2 pt-0.5">

@@ -2041,6 +2041,17 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
     );
   }, [caras]);
 
+  // Saved-pending lock: existe alguna cara YA GUARDADA en BD (id != null) con
+  // autorización original pendiente y que NO ha sido modificada localmente.
+  // Solo dispara el bloqueo cuando hay pendientes reales en BD, no locales.
+  const hasSavedPendingAuth = useMemo(() => {
+    return caras.some(c =>
+      c.id != null &&
+      !modifiedCaras.has(c.id) &&
+      (c._originalDg === 'pendiente' || c._originalDcm === 'pendiente')
+    );
+  }, [caras, modifiedCaras]);
+
   // Group caras by catorcena period with catorcena info — O(C) usando catorcenasByFechaInicio.
   const carasGroupedByCatorcena = useMemo(() => {
     const groups: Record<string, { caras: CaraItem[]; catorcenaNum?: number; year?: number }> = {};
@@ -8332,10 +8343,9 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
                                       );
                                     })()}
                                     {effectiveCanEdit && (() => {
-                                      const caraAuthPendienteSaved = caras.some(c => !modifiedCaras.has(c.id!) && ((c._originalDg || c.autorizacion_dg) === 'pendiente' || (c._originalDcm || c.autorizacion_dcm) === 'pendiente'));
-                                      const editBlocked = caraAuthPendienteSaved || caraAPSBlocked;
+                                      const editBlocked = hasSavedPendingAuth || caraAPSBlocked;
                                       const isLoadingThis = loadingCaraAction?.caraId === cara.localId && loadingCaraAction?.action === 'edit';
-                                      const blockReason = caraAPSBlocked ? 'Grupo con APS asignado - no se puede editar' : caraAuthPendienteSaved ? 'Autorización pendiente - no se puede editar' : isLoadingThis ? 'Cargando editor...' : 'Editar';
+                                      const blockReason = caraAPSBlocked ? 'Grupo con APS asignado - no se puede editar' : hasSavedPendingAuth ? 'Hay circuitos pendientes de autorizacion - no se pueden editar otros' : isLoadingThis ? 'Cargando editor...' : 'Editar';
                                       return (
                                       <>
                                         <button
@@ -8351,7 +8361,7 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
                                         </button>
                                         {canEditResumen && (() => {
                                           const reservaBlocked = hasReservas && !permissions.canDeleteCaraConReservas;
-                                          const isDisabled = reservaBlocked || caraAuthPendienteSaved || caraAPSBlocked || !!loadingCaraAction;
+                                          const isDisabled = reservaBlocked || hasSavedPendingAuth || caraAPSBlocked || !!loadingCaraAction;
                                           return (
                                           <button
                                             onClick={(e) => { e.stopPropagation(); if (!isDisabled) handleDeleteCara(cara.localId); }}
@@ -8360,7 +8370,7 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
                                               ? 'bg-zinc-500/10 text-zinc-500 border-zinc-500/20 cursor-not-allowed'
                                               : 'bg-red-500/10 text-red-400 border-red-500/20 hover:bg-red-500/20'
                                               }`}
-                                            title={caraAPSBlocked ? 'Grupo con APS asignado - no se puede eliminar' : caraAuthPendienteSaved ? 'Autorización pendiente' : reservaBlocked ? 'No se puede eliminar (tiene reservas)' : 'Eliminar'}
+                                            title={caraAPSBlocked ? 'Grupo con APS asignado - no se puede eliminar' : hasSavedPendingAuth ? 'Hay circuitos pendientes de autorizacion - no se pueden eliminar otros' : reservaBlocked ? 'No se puede eliminar (tiene reservas)' : 'Eliminar'}
                                           >
                                             <Trash2 className="h-4 w-4" />
                                           </button>

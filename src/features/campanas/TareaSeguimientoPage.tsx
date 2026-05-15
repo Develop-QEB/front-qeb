@@ -390,14 +390,16 @@ interface CalendarEvent {
 }
 
 // Tipos para el sistema de decisiones de revisión de artes
-type DecisionArte = 'aprobar' | 'rechazar' | null;
+type DecisionArte = 'aprobar' | 'rechazar' | 'pendiente' | null;
 
 interface ArteDecision {
   decision: DecisionArte;
   motivoRechazo?: string; // Usado para rechazo (obligatorio)
   comentarioAprobacion?: string; // Usado para aprobación (opcional)
-  imagenRechazoFile?: File; // Archivo local antes de subir (opcional)
+  imagenRechazoFile?: File; // Archivo local antes de subir (opcional, solo rechazo)
   imagenRechazoPreview?: string; // URL.createObjectURL para preview
+  motivoPendiente?: string; // Usado para pendiente (obligatorio)
+  urlPendiente?: string; // URL/enlace adjunto al motivo pendiente (opcional)
 }
 
 type DecisionesState = Record<string, ArteDecision>;
@@ -3652,6 +3654,7 @@ function TaskDetailModal({
   isLoadingArtes,
   onApprove,
   onReject,
+  onPendiente,
   onCorrect,
   onUpdateArte,
   onUpdateArteDigital,
@@ -3681,6 +3684,7 @@ function TaskDetailModal({
   isLoadingArtes: boolean;
   onApprove: (reservaIds: number[], comentario?: string) => Promise<void>;
   onReject: (reservaIds: number[], comentario: string, imagenRechazoUrl?: string) => Promise<void>;
+  onPendiente: (reservaIds: number[], motivo: string, urlReferencia?: string) => Promise<void>;
   onCorrect: (reservaIds: number[], instrucciones: string) => void;
   onUpdateArte: (reservaIds: number[], archivo: string) => void;
   onUpdateArteDigital: (reservaIds: number[], files: { file: File; spot: number }[], deleteArchivos?: string[]) => Promise<void>;
@@ -4750,7 +4754,7 @@ function TaskDetailModal({
   const handleDecisionChange = (key: string, decision: string) => {
     setDecisiones(prev => {
       const prevDecision = prev[key];
-      // Si cambia de rechazar a otra cosa, revocar y limpiar preview de imagen
+      // Si cambia de rechazar a otra cosa, revocar preview de imagen
       if (prevDecision?.decision === 'rechazar' && decision !== 'rechazar' && prevDecision.imagenRechazoPreview) {
         URL.revokeObjectURL(prevDecision.imagenRechazoPreview);
       }
@@ -4762,6 +4766,8 @@ function TaskDetailModal({
           comentarioAprobacion: decision !== 'aprobar' ? undefined : prevDecision?.comentarioAprobacion,
           imagenRechazoFile: decision !== 'rechazar' ? undefined : prevDecision?.imagenRechazoFile,
           imagenRechazoPreview: decision !== 'rechazar' ? undefined : prevDecision?.imagenRechazoPreview,
+          motivoPendiente: decision !== 'pendiente' ? undefined : prevDecision?.motivoPendiente,
+          urlPendiente: decision !== 'pendiente' ? undefined : prevDecision?.urlPendiente,
         }
       };
     });
@@ -4800,6 +4806,21 @@ function TaskDetailModal({
     });
   };
 
+  // Handlers para el flujo "Pendiente" (paralelo a rechazo pero con URL adjunto).
+  const handleMotivoPendienteChange = (key: string, motivo: string) => {
+    setDecisiones(prev => ({
+      ...prev,
+      [key]: { ...prev[key], motivoPendiente: motivo }
+    }));
+  };
+
+  const handleUrlPendienteChange = (key: string, url: string) => {
+    setDecisiones(prev => ({
+      ...prev,
+      [key]: { ...prev[key], urlPendiente: url }
+    }));
+  };
+
   const validarDecisiones = (): boolean => {
     const errors: string[] = [];
     Object.keys(groupedInventory).forEach(key => {
@@ -4808,6 +4829,8 @@ function TaskDetailModal({
         errors.push(`Falta seleccionar acción para: ${key}`);
       } else if (decision.decision === 'rechazar' && !decision.motivoRechazo?.trim()) {
         errors.push(`Falta motivo de rechazo para: ${key}`);
+      } else if (decision.decision === 'pendiente' && !decision.motivoPendiente?.trim()) {
+        errors.push(`Falta motivo de pendiente para: ${key}`);
       }
     });
     setValidationErrors(errors);
@@ -4821,6 +4844,7 @@ function TaskDetailModal({
     try {
       const aprobados: { ids: number[]; comentario: string; items: InventoryRow[] }[] = [];
       const rechazados: { ids: number[]; motivo: string; items: InventoryRow[]; imagenFile?: File }[] = [];
+      const pendientes: { ids: number[]; motivo: string; items: InventoryRow[]; url?: string }[] = [];
 
       Object.entries(groupedInventory).forEach(([key, items]) => {
         const d = decisiones[key];
@@ -4833,6 +4857,9 @@ function TaskDetailModal({
         }
         if (d?.decision === 'rechazar') {
           rechazados.push({ ids, motivo: d.motivoRechazo || '', items, imagenFile: d.imagenRechazoFile });
+        }
+        if (d?.decision === 'pendiente') {
+          pendientes.push({ ids, motivo: d.motivoPendiente || '', items, url: d.urlPendiente?.trim() || undefined });
         }
       });
 
@@ -4867,6 +4894,17 @@ function TaskDetailModal({
         }
 
         await onReject(todosIds, descripcion, imagenRechazoUrl);
+      }
+
+      // Marcar como Pendiente y crear tarea de corrección con todos los pendientes.
+      // Mismo flujo que rechazo pero textualmente "Pendiente" (no Rechazado) en
+      // todos los lados y con URL adjunta opcional en vez de imagen.
+      if (pendientes.length > 0) {
+        const todosIds = pendientes.flatMap(p => p.ids);
+        const descripcion = pendientes.map(p => p.motivo).join(' | ');
+        // Toma el primer URL no vacío (igual que rechazo toma la primera imagen)
+        const urlReferencia = pendientes.find(p => p.url)?.url;
+        await onPendiente(todosIds, descripcion, urlReferencia);
       }
 
       // Marcar la tarea como completada (Atendido)
@@ -10722,11 +10760,14 @@ function TaskDetailModal({
                                   ? 'border-amber-500/50 text-amber-400'
                                   : decisiones[groupKey]?.decision === 'aprobar'
                                   ? 'border-green-500/50 text-green-400'
+                                  : decisiones[groupKey]?.decision === 'pendiente'
+                                  ? 'border-orange-500/50 text-orange-400'
                                   : 'border-red-500/50 text-red-400'
                               }`}
                             >
                               <option value="">-- Seleccionar acción --</option>
                               <option value="aprobar">✓ Aprobar</option>
+                              <option value="pendiente">⌛ Pendiente</option>
                               <option value="rechazar">✗ Rechazar</option>
                             </select>
                           </div>
@@ -10787,6 +10828,33 @@ function TaskDetailModal({
                                     className="text-xs text-zinc-400 file:mr-2 file:py-1 file:px-3 file:rounded-md file:border-0 file:text-xs file:bg-red-500/20 file:text-red-300 hover:file:bg-red-500/30"
                                   />
                                 )}
+                              </div>
+                            </div>
+                          )}
+                          {/* Textarea para motivo de Pendiente (obligatorio) + URL adjunta opcional */}
+                          {decisiones[groupKey]?.decision === 'pendiente' && (
+                            <div className="mt-2 space-y-2">
+                              <textarea
+                                placeholder="Escribe el motivo del pendiente (obligatorio)"
+                                value={decisiones[groupKey]?.motivoPendiente || ''}
+                                onChange={(e) => handleMotivoPendienteChange(groupKey, e.target.value)}
+                                className={`w-full px-3 py-2 text-sm rounded-lg bg-zinc-800 border resize-none ${
+                                  !decisiones[groupKey]?.motivoPendiente?.trim()
+                                    ? 'border-orange-500/50'
+                                    : 'border-zinc-700'
+                                }`}
+                                rows={2}
+                              />
+                              {/* Input de URL/enlace adjunto (opcional) */}
+                              <div>
+                                <label className="text-xs text-zinc-400 mb-1 block">Adjuntar enlace (opcional)</label>
+                                <input
+                                  type="url"
+                                  placeholder="https://..."
+                                  value={decisiones[groupKey]?.urlPendiente || ''}
+                                  onChange={(e) => handleUrlPendienteChange(groupKey, e.target.value)}
+                                  className="w-full px-3 py-2 text-sm rounded-lg bg-zinc-800 border border-orange-500/30 focus:border-orange-500 focus:outline-none"
+                                />
                               </div>
                             </div>
                           )}
@@ -20180,6 +20248,33 @@ export function TareaSeguimientoPage() {
             };
             if (imagenRechazoUrl) {
               tareaData.evidencia = JSON.stringify({ tipo: 'correccion_rechazo', imagenRechazo: imagenRechazoUrl });
+            }
+            await createTareaMutation.mutateAsync(tareaData);
+          }
+        }}
+        onPendiente={async (reservaIds, motivo, urlReferencia) => {
+          // Flujo "Pendiente": espejo de Rechazo pero textualmente "Pendiente"
+          // (no Rechazado) en todos los lados y con URL adjunta opcional en
+          // vez de imagen. Misma rotación de roles en la Revisión + creación
+          // de Corrección + notificación al creador original.
+          await updateArteStatusMutation.mutateAsync({ reservaIds, status: 'Pendiente', comentario: motivo });
+          if (selectedTask && selectedTask.creador) {
+            const tareaData: Parameters<typeof createTareaMutation.mutateAsync>[0] = {
+              titulo: `Corrección de artes - Pendiente`,
+              descripcion: (motivo || 'Sin motivo especificado').substring(0, 255),
+              tipo: 'Correccion',
+              asignado: selectedTask.creador,
+              id_asignado: selectedTask.id_responsable ? String(selectedTask.id_responsable) : undefined,
+              ids_reservas: reservaIds.join(','),
+              contenido: JSON.stringify({
+                original_revision_id: selectedTask.id,
+                original_id_asignado: selectedTask.id_asignado || '',
+                original_asignado: selectedTask.asignado || '',
+                origen_decision: 'pendiente',
+              }),
+            };
+            if (urlReferencia) {
+              tareaData.evidencia = JSON.stringify({ tipo: 'correccion_pendiente', urlReferencia });
             }
             await createTareaMutation.mutateAsync(tareaData);
           }

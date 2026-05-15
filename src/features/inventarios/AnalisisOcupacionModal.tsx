@@ -1,9 +1,9 @@
-import { useState, useEffect, useRef, useCallback } from 'react';
+import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   X, Upload, Trash2, Save, Share2, Loader2, AlertCircle, CheckCircle2,
   ArrowLeft, ArrowRight, BarChart3, Calendar, ChevronDown,
-  ExternalLink, Download
+  ExternalLink, Download, Filter, Search
 } from 'lucide-react';
 import { useThemeStore } from '../../store/themeStore';
 import { inventariosService } from '../../services/inventarios.service';
@@ -11,6 +11,7 @@ import { solicitudesService } from '../../services/solicitudes.service';
 import {
   analisisOcupacionService,
   AnalisisOcupacion,
+  CampanaEnCelda,
   CatorcenaRef,
   InventarioResumen,
   MatrizOcupacion,
@@ -366,7 +367,7 @@ export function AnalisisOcupacionModal({
           </div>
 
           {/* Body */}
-          <div className="flex-1 overflow-auto p-5">
+          <div className={`flex-1 p-5 min-h-0 ${step === 'matriz' ? 'overflow-hidden flex flex-col' : 'overflow-auto'}`}>
             {step === 'select' && (
               <div className="space-y-4">
                 {/* CSV upload */}
@@ -663,6 +664,20 @@ export function AnalisisOcupacionModal({
 }
 
 // ===== Matrix View =====
+interface CampanaDuplicada {
+  campana_id: number;
+  nombre: string;
+  cliente: string;
+  propuestas: number[];
+  ocurrencias: number;
+  celdasConRepeticion: number; // # de celdas donde aparece >1 vez (mismo inventario+catorcena)
+}
+
+const labelForCampana = (c: CampanaEnCelda): string => {
+  if (c.campana_id) return c.campana_nombre || `Campaña #${c.campana_id}`;
+  return `Propuesta #${c.propuesta_id}`;
+};
+
 function MatrizView({
   matriz,
   building,
@@ -672,9 +687,162 @@ function MatrizView({
   building: boolean;
   isDark: boolean;
 }) {
+  const [showDuplicados, setShowDuplicados] = useState(false);
+  const [soloDuplicados, setSoloDuplicados] = useState(false);
+  const [campanaFilter, setCampanaFilter] = useState<Set<string>>(new Set());
+  const [filterOpen, setFilterOpen] = useState(false);
+  const [filterSearch, setFilterSearch] = useState('');
+  const filterRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!filterOpen) return;
+    const handler = (e: MouseEvent) => {
+      if (filterRef.current && !filterRef.current.contains(e.target as Node)) {
+        setFilterOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+  }, [filterOpen]);
+
+  const allCampanas = useMemo(() => {
+    if (!matriz) return [] as { label: string; cliente: string }[];
+    const map = new Map<string, { label: string; cliente: string }>();
+    for (const invCeldas of Object.values(matriz.celdas)) {
+      for (const celda of Object.values(invCeldas)) {
+        for (const c of celda.campanas) {
+          const label = labelForCampana(c);
+          if (!map.has(label)) {
+            map.set(label, { label, cliente: c.cliente_nombre || 'Sin cliente' });
+          }
+        }
+      }
+    }
+    return Array.from(map.values()).sort((a, b) => a.label.localeCompare(b.label));
+  }, [matriz]);
+
+  const filteredOptions = useMemo(() => {
+    const q = filterSearch.trim().toLowerCase();
+    if (!q) return allCampanas;
+    return allCampanas.filter(o =>
+      o.label.toLowerCase().includes(q) || o.cliente.toLowerCase().includes(q)
+    );
+  }, [allCampanas, filterSearch]);
+
+  const isFiltered = campanaFilter.size > 0;
+
+  const toggleCampana = (label: string) => {
+    setCampanaFilter(prev => {
+      const next = new Set(prev);
+      if (next.has(label)) next.delete(label);
+      else next.add(label);
+      return next;
+    });
+  };
+  const clearFilter = () => setCampanaFilter(new Set());
+  const selectAllVisible = () =>
+    setCampanaFilter(prev => {
+      const next = new Set(prev);
+      filteredOptions.forEach(o => next.add(o.label));
+      return next;
+    });
+
+
+  const duplicados = useMemo<CampanaDuplicada[]>(() => {
+    if (!matriz) return [];
+    const map = new Map<number, {
+      nombre: string;
+      cliente: string;
+      propuestas: Set<number>;
+      ocurrencias: number;
+      celdasConRepeticion: number;
+    }>();
+    for (const invCeldas of Object.values(matriz.celdas)) {
+      for (const celda of Object.values(invCeldas)) {
+        // contar ocurrencias por campana_id dentro de esta celda
+        const cellCounts = new Map<number, number>();
+        for (const c of celda.campanas) {
+          if (!c.campana_id) continue;
+          cellCounts.set(c.campana_id, (cellCounts.get(c.campana_id) || 0) + 1);
+        }
+        for (const c of celda.campanas) {
+          if (!c.campana_id) continue; // ignorar propuestas sin campaña confirmada
+          const entry = map.get(c.campana_id);
+          if (entry) {
+            if (c.propuesta_id) entry.propuestas.add(c.propuesta_id);
+            entry.ocurrencias += 1;
+          } else {
+            const propuestas = new Set<number>();
+            if (c.propuesta_id) propuestas.add(c.propuesta_id);
+            map.set(c.campana_id, {
+              nombre: c.campana_nombre || `Campaña #${c.campana_id}`,
+              cliente: c.cliente_nombre || 'Sin cliente',
+              propuestas,
+              ocurrencias: 1,
+              celdasConRepeticion: 0,
+            });
+          }
+        }
+        // marcar las celdas que tienen >1 card de la misma campaña
+        for (const [cid, count] of cellCounts) {
+          if (count > 1) {
+            const entry = map.get(cid);
+            if (entry) entry.celdasConRepeticion += 1;
+          }
+        }
+      }
+    }
+    return Array.from(map.entries())
+      .filter(([, v]) => v.propuestas.size > 1 || v.celdasConRepeticion > 0)
+      .map(([campana_id, v]) => ({
+        campana_id,
+        nombre: v.nombre,
+        cliente: v.cliente,
+        propuestas: Array.from(v.propuestas).sort((a, b) => a - b),
+        ocurrencias: v.ocurrencias,
+        celdasConRepeticion: v.celdasConRepeticion,
+      }))
+      .sort((a, b) =>
+        (b.celdasConRepeticion - a.celdasConRepeticion) ||
+        (b.propuestas.length - a.propuestas.length)
+      );
+  }, [matriz]);
+
+  const duplicadoIds = useMemo(
+    () => new Set(duplicados.map(d => d.campana_id)),
+    [duplicados]
+  );
+
+  const isCampanaDuplicada = (c: CampanaEnCelda) =>
+    !!c.campana_id && duplicadoIds.has(c.campana_id);
+
+  const cardPasaFiltros = (c: CampanaEnCelda) => {
+    if (isFiltered && !campanaFilter.has(labelForCampana(c))) return false;
+    if (soloDuplicados && !isCampanaDuplicada(c)) return false;
+    return true;
+  };
+
+  const inventariosFiltrados = useMemo(() => {
+    if (!matriz) return [] as InventarioResumen[];
+    if (!isFiltered && !soloDuplicados) return matriz.inventarios;
+    return matriz.inventarios.filter(inv => {
+      const invCeldas = matriz.celdas[inv.id];
+      if (!invCeldas) return false;
+      for (const celda of Object.values(invCeldas)) {
+        for (const c of celda.campanas) {
+          if (isFiltered && !campanaFilter.has(labelForCampana(c))) continue;
+          if (soloDuplicados && !isCampanaDuplicada(c)) continue;
+          return true;
+        }
+      }
+      return false;
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [matriz, campanaFilter, isFiltered, soloDuplicados, duplicadoIds]);
+
   if (building || !matriz) {
     return (
-      <div className="flex flex-col items-center justify-center py-20 gap-3">
+      <div className="flex-1 flex flex-col items-center justify-center py-20 gap-3">
         <Loader2 className="h-8 w-8 animate-spin text-purple-500" />
         <p className={`text-sm ${isDark ? 'text-zinc-400' : 'text-gray-500'}`}>Construyendo matriz de ocupación...</p>
       </div>
@@ -682,8 +850,198 @@ function MatrizView({
   }
 
   return (
-    <div className="overflow-auto">
-      <table className="w-full border-collapse text-xs">
+    <div className="flex-1 flex flex-col min-h-0 gap-2">
+      <div className="flex items-center gap-2 flex-wrap">
+        <div ref={filterRef} className="relative">
+          <button
+            onClick={() => setFilterOpen(o => !o)}
+            className={`flex items-center gap-2 px-3 py-1.5 rounded-lg border text-xs font-medium transition-all ${
+              isFiltered
+                ? isDark
+                  ? 'bg-purple-500/20 text-purple-200 border-purple-500/40 hover:bg-purple-500/30'
+                  : 'bg-purple-50 text-purple-700 border-purple-300 hover:bg-purple-100'
+                : isDark
+                  ? 'bg-zinc-800 text-zinc-300 border-zinc-700 hover:bg-zinc-700'
+                  : 'bg-white text-gray-700 border-gray-300 hover:bg-gray-50'
+            }`}
+            title="Filtrar campañas en la matriz"
+          >
+            <Filter className="h-3.5 w-3.5" />
+            <span>
+              {isFiltered
+                ? `${campanaFilter.size} de ${allCampanas.length} campañas`
+                : `Filtrar campañas (${allCampanas.length})`}
+            </span>
+            {isFiltered && (
+              <span
+                role="button"
+                onClick={e => { e.stopPropagation(); clearFilter(); }}
+                className={`flex items-center justify-center rounded-full p-0.5 ${isDark ? 'hover:bg-purple-500/40' : 'hover:bg-purple-200'}`}
+                title="Limpiar filtro"
+              >
+                <X className="h-3 w-3" />
+              </span>
+            )}
+            <ChevronDown className={`h-3.5 w-3.5 transition-transform ${filterOpen ? 'rotate-180' : ''}`} />
+          </button>
+          {filterOpen && (
+            <div
+              className={`absolute z-30 mt-1 left-0 w-80 rounded-lg border shadow-xl ${
+                isDark ? 'bg-zinc-900 border-zinc-700' : 'bg-white border-gray-200'
+              }`}
+            >
+              <div className={`p-2 border-b ${isDark ? 'border-zinc-800' : 'border-gray-100'}`}>
+                <div className={`flex items-center gap-2 px-2 py-1 rounded-md border ${isDark ? 'bg-zinc-800 border-zinc-700' : 'bg-gray-50 border-gray-200'}`}>
+                  <Search className={`h-3.5 w-3.5 ${isDark ? 'text-zinc-500' : 'text-gray-400'}`} />
+                  <input
+                    autoFocus
+                    type="text"
+                    value={filterSearch}
+                    onChange={e => setFilterSearch(e.target.value)}
+                    placeholder="Buscar campaña o cliente..."
+                    className={`flex-1 bg-transparent text-xs outline-none ${isDark ? 'text-white placeholder:text-zinc-500' : 'text-gray-900 placeholder:text-gray-400'}`}
+                  />
+                  {filterSearch && (
+                    <button onClick={() => setFilterSearch('')} className={isDark ? 'text-zinc-500 hover:text-zinc-300' : 'text-gray-400 hover:text-gray-600'}>
+                      <X className="h-3 w-3" />
+                    </button>
+                  )}
+                </div>
+                <div className="flex items-center justify-between mt-2 text-[10px]">
+                  <button
+                    onClick={selectAllVisible}
+                    disabled={filteredOptions.length === 0}
+                    className={`px-2 py-0.5 rounded ${isDark ? 'text-purple-300 hover:bg-purple-500/15' : 'text-purple-700 hover:bg-purple-50'} disabled:opacity-40 disabled:cursor-not-allowed`}
+                  >
+                    Seleccionar {filterSearch ? 'visibles' : 'todas'}
+                  </button>
+                  <button
+                    onClick={clearFilter}
+                    disabled={!isFiltered}
+                    className={`px-2 py-0.5 rounded ${isDark ? 'text-zinc-400 hover:bg-zinc-800' : 'text-gray-600 hover:bg-gray-100'} disabled:opacity-40 disabled:cursor-not-allowed`}
+                  >
+                    Limpiar
+                  </button>
+                </div>
+              </div>
+              <div className="max-h-64 overflow-y-auto py-1">
+                {filteredOptions.length === 0 ? (
+                  <div className={`px-3 py-4 text-center text-xs ${isDark ? 'text-zinc-500' : 'text-gray-400'}`}>
+                    Sin coincidencias
+                  </div>
+                ) : (
+                  filteredOptions.map(opt => {
+                    const selected = campanaFilter.has(opt.label);
+                    return (
+                      <label
+                        key={opt.label}
+                        className={`flex items-center gap-2 px-3 py-1.5 cursor-pointer text-xs ${
+                          isDark ? 'hover:bg-zinc-800' : 'hover:bg-gray-50'
+                        }`}
+                      >
+                        <input
+                          type="checkbox"
+                          checked={selected}
+                          onChange={() => toggleCampana(opt.label)}
+                          className="accent-purple-500 h-3.5 w-3.5 shrink-0"
+                        />
+                        <div className="flex-1 min-w-0">
+                          <div className={`truncate ${isDark ? 'text-zinc-200' : 'text-gray-800'}`} title={opt.label}>
+                            {opt.label}
+                          </div>
+                          <div className={`text-[10px] truncate ${isDark ? 'text-zinc-500' : 'text-gray-500'}`} title={opt.cliente}>
+                            {opt.cliente}
+                          </div>
+                        </div>
+                      </label>
+                    );
+                  })
+                )}
+              </div>
+            </div>
+          )}
+        </div>
+        {(isFiltered || soloDuplicados) && (
+          <span className={`text-[11px] ${isDark ? 'text-zinc-400' : 'text-gray-500'}`}>
+            Mostrando {inventariosFiltrados.length} de {matriz.inventarios.length} inventarios
+          </span>
+        )}
+      </div>
+      {duplicados.length > 0 && (
+        <div className={`rounded-lg border ${isDark ? 'border-amber-500/30 bg-amber-500/5' : 'border-amber-200 bg-amber-50'} text-xs`}>
+          <div className="flex items-stretch">
+            <button
+              onClick={() => setShowDuplicados(s => !s)}
+              className={`flex-1 flex items-center gap-2 px-3 py-2 ${isDark ? 'text-amber-300 hover:bg-amber-500/10' : 'text-amber-700 hover:bg-amber-100/50'} rounded-l-lg transition-colors`}
+              title="Campañas con varios propuesta_id o repetidas en la misma celda"
+            >
+              <AlertCircle className="h-3.5 w-3.5" />
+              <span className="font-semibold">
+                {duplicados.length} {duplicados.length === 1 ? 'campaña duplicada' : 'campañas duplicadas'}
+              </span>
+              <span className={`${isDark ? 'text-amber-400/70' : 'text-amber-600/80'}`}>
+                (multi-propuesta o repetida en misma celda)
+              </span>
+              <ChevronDown className={`h-3.5 w-3.5 ml-auto transition-transform ${showDuplicados ? 'rotate-180' : ''}`} />
+            </button>
+            <button
+              onClick={() => setSoloDuplicados(s => !s)}
+              title="Mostrar solo filas/cards de campañas duplicadas"
+              className={`flex items-center gap-1.5 px-3 py-2 border-l text-xs font-medium rounded-r-lg transition-colors ${
+                soloDuplicados
+                  ? isDark
+                    ? 'bg-amber-500/30 border-amber-500/40 text-amber-100'
+                    : 'bg-amber-200 border-amber-300 text-amber-900'
+                  : isDark
+                    ? 'border-amber-500/30 text-amber-300 hover:bg-amber-500/10'
+                    : 'border-amber-200 text-amber-700 hover:bg-amber-100/60'
+              }`}
+            >
+              {soloDuplicados ? <CheckCircle2 className="h-3.5 w-3.5" /> : <Filter className="h-3.5 w-3.5" />}
+              Solo duplicadas
+            </button>
+          </div>
+          {showDuplicados && (
+            <div className={`px-3 pb-2 pt-1 max-h-44 overflow-y-auto border-t ${isDark ? 'border-amber-500/20' : 'border-amber-200/60'}`}>
+              <ul className="space-y-1">
+                {duplicados.map(d => {
+                  const tags: { label: string; titleAttr: string }[] = [];
+                  if (d.propuestas.length > 1) {
+                    tags.push({
+                      label: `${d.propuestas.length} propuestas`,
+                      titleAttr: `propuestas: ${d.propuestas.map(p => `#${p}`).join(', ')}`,
+                    });
+                  }
+                  if (d.celdasConRepeticion > 0) {
+                    tags.push({
+                      label: `${d.celdasConRepeticion} ${d.celdasConRepeticion === 1 ? 'celda repetida' : 'celdas repetidas'}`,
+                      titleAttr: 'Misma campaña aparece más de una vez en la misma celda (inventario × catorcena)',
+                    });
+                  }
+                  return (
+                    <li key={d.campana_id} className={`flex flex-wrap items-center gap-x-2 gap-y-0.5 ${isDark ? 'text-zinc-300' : 'text-gray-700'}`}>
+                      <span className="font-medium">{d.nombre}</span>
+                      <span className={isDark ? 'text-zinc-500' : 'text-gray-500'}>· {d.cliente}</span>
+                      <span className={isDark ? 'text-zinc-500' : 'text-gray-500'}>· {d.ocurrencias} {d.ocurrencias === 1 ? 'card' : 'cards'}</span>
+                      {tags.map(t => (
+                        <span
+                          key={t.label}
+                          title={t.titleAttr}
+                          className={`px-1.5 py-0.5 rounded-full text-[10px] font-medium border ${isDark ? 'bg-amber-500/15 text-amber-300 border-amber-500/30' : 'bg-white text-amber-700 border-amber-200'}`}
+                        >
+                          {t.label}
+                        </span>
+                      ))}
+                    </li>
+                  );
+                })}
+              </ul>
+            </div>
+          )}
+        </div>
+      )}
+      <div className="flex-1 overflow-auto min-h-0">
+        <table className="w-full border-collapse text-xs">
         <thead>
           <tr>
             <th className={`sticky left-0 top-0 z-20 px-3 py-2 text-left text-xs font-semibold border-b ${isDark ? 'border-purple-500/30 bg-zinc-900 text-purple-300' : 'border-purple-200 bg-white text-purple-700'} min-w-[200px]`}>
@@ -697,7 +1055,17 @@ function MatrizView({
           </tr>
         </thead>
         <tbody>
-          {matriz.inventarios.map(inv => (
+          {inventariosFiltrados.length === 0 && (
+            <tr>
+              <td
+                colSpan={matriz.catorcenas.length + 1}
+                className={`px-3 py-8 text-center text-xs ${isDark ? 'text-zinc-500' : 'text-gray-400'}`}
+              >
+                Ningún inventario tiene las campañas seleccionadas.
+              </td>
+            </tr>
+          )}
+          {inventariosFiltrados.map(inv => (
             <tr key={inv.id} className={`border-b ${isDark ? 'border-zinc-800' : 'border-gray-100'}`}>
               <td className={`sticky left-0 z-10 px-3 py-2 ${isDark ? 'bg-zinc-900' : 'bg-white'} border-r ${isDark ? 'border-zinc-800' : 'border-gray-200'}`}>
                 <div className={`font-mono text-xs font-medium ${isDark ? 'text-white' : 'text-gray-900'}`}>{inv.codigo_unico}</div>
@@ -708,9 +1076,13 @@ function MatrizView({
               {matriz.catorcenas.map(cat => {
                 const celda = matriz.celdas[inv.id]?.[cellKeyOf(cat)];
                 const ocupado = celda?.ocupado;
-                const campanas = celda?.campanas || [];
+                const todasCampanas = celda?.campanas || [];
+                const algunFiltroActivo = isFiltered || soloDuplicados;
+                const campanas = algunFiltroActivo
+                  ? todasCampanas.filter(cardPasaFiltros)
+                  : todasCampanas;
 
-                if (!ocupado || campanas.length === 0) {
+                if (!ocupado || todasCampanas.length === 0) {
                   const disponibleClass = isDark
                     ? 'bg-emerald-500/10 border-emerald-500/30'
                     : 'bg-emerald-50 border-emerald-200';
@@ -720,6 +1092,20 @@ function MatrizView({
                         <div className={`flex items-center gap-1 text-[10px] font-bold uppercase tracking-wide ${isDark ? 'text-emerald-300' : 'text-emerald-700'}`}>
                           Disponible
                         </div>
+                      </div>
+                    </td>
+                  );
+                }
+
+                if (campanas.length === 0) {
+                  const oculto = todasCampanas.length;
+                  return (
+                    <td key={cellKeyOf(cat)} className="px-1.5 py-1.5 align-top">
+                      <div
+                        className={`w-full rounded-md p-2 border border-dashed text-center ${isDark ? 'border-zinc-700 text-zinc-600' : 'border-gray-300 text-gray-400'}`}
+                        title={`${oculto} campaña(s) ocultas por el filtro`}
+                      >
+                        <span className="text-[10px] font-medium">— {oculto} oculto{oculto > 1 ? 's' : ''}</span>
                       </div>
                     </td>
                   );
@@ -804,6 +1190,7 @@ function MatrizView({
           ))}
         </tbody>
       </table>
+      </div>
     </div>
   );
 }
