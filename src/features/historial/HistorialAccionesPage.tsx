@@ -206,21 +206,38 @@ function NotaModal({
   isOpen, onClose, onSubmit, tipos, isDark, isLoading,
 }: {
   isOpen: boolean; onClose: () => void;
-  onSubmit: (data: { tipo: string; nota: string; ref_id?: number }) => void;
+  onSubmit: (data: { tipo: string; nota: string; ref_id?: number; fecha_entrega?: string; recordar_dias_antes?: number }) => void;
   tipos: { label: string; value: string }[]; isDark: boolean; isLoading: boolean;
 }) {
   const [tipo, setTipo] = useState('Nota');
   const [nota, setNota] = useState('');
   const [refId, setRefId] = useState('');
+  const [fechaEntrega, setFechaEntrega] = useState('');
+  const [activarRecordatorio, setActivarRecordatorio] = useState(false);
+  const [diasAntes, setDiasAntes] = useState('1');
 
   if (!isOpen) return null;
 
   const handleSubmit = () => {
     if (!nota.trim()) return;
-    onSubmit({ tipo, nota: nota.trim(), ref_id: refId ? parseInt(refId) : undefined });
+    onSubmit({
+      tipo,
+      nota: nota.trim(),
+      ref_id: refId ? parseInt(refId) : undefined,
+      fecha_entrega: fechaEntrega || undefined,
+      recordar_dias_antes: fechaEntrega && activarRecordatorio
+        ? Math.max(0, parseInt(diasAntes || '0', 10) || 0)
+        : undefined,
+    });
     setNota('');
     setRefId('');
+    setFechaEntrega('');
+    setActivarRecordatorio(false);
+    setDiasAntes('1');
   };
+
+  // Fecha minima (hoy) para no permitir programar al pasado
+  const minDate = new Date().toISOString().slice(0, 10);
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center">
@@ -257,6 +274,37 @@ function NotaModal({
               placeholder="Describe la acción..."
               className={`w-full rounded-lg border px-3 py-2 text-sm resize-none ${isDark ? 'bg-zinc-800 border-zinc-700 text-white placeholder:text-zinc-600' : 'bg-white border-gray-300 text-gray-900 placeholder:text-gray-400'}`} />
           </div>
+          <div className={`pt-3 border-t ${isDark ? 'border-zinc-800' : 'border-gray-200'}`}>
+            <label className={`text-xs font-medium mb-1 block ${isDark ? 'text-zinc-400' : 'text-gray-500'}`}>
+              Fecha de entrega / actividad (opcional)
+            </label>
+            <input type="date" value={fechaEntrega} min={minDate} onChange={(e) => setFechaEntrega(e.target.value)}
+              className={`w-full rounded-lg border px-3 py-2 text-sm ${isDark ? 'bg-zinc-800 border-zinc-700 text-white' : 'bg-white border-gray-300 text-gray-900'}`} />
+            <p className={`text-[10px] mt-1 ${isDark ? 'text-zinc-500' : 'text-gray-400'}`}>
+              Deja vacio si no es una actividad programada a futuro.
+            </p>
+          </div>
+          {fechaEntrega && (
+            <div className={`rounded-lg p-3 ${isDark ? 'bg-zinc-800/50 border border-zinc-700' : 'bg-gray-50 border border-gray-200'}`}>
+              <label className="flex items-center gap-2 cursor-pointer mb-2">
+                <input type="checkbox" checked={activarRecordatorio} onChange={(e) => setActivarRecordatorio(e.target.checked)}
+                  className="h-4 w-4 rounded accent-purple-600" />
+                <span className={`text-xs font-medium ${isDark ? 'text-zinc-300' : 'text-gray-700'}`}>
+                  Activar recordatorio
+                </span>
+              </label>
+              {activarRecordatorio && (
+                <div className="flex items-center gap-2 mt-2">
+                  <span className={`text-xs ${isDark ? 'text-zinc-400' : 'text-gray-500'}`}>Recordar</span>
+                  <input type="number" min="0" max="365" value={diasAntes} onChange={(e) => setDiasAntes(e.target.value)}
+                    className={`w-16 rounded-lg border px-2 py-1 text-sm text-center ${isDark ? 'bg-zinc-900 border-zinc-700 text-white' : 'bg-white border-gray-300 text-gray-900'}`} />
+                  <span className={`text-xs ${isDark ? 'text-zinc-400' : 'text-gray-500'}`}>
+                    día(s) antes de la fecha de entrega
+                  </span>
+                </div>
+              )}
+            </div>
+          )}
           <button onClick={handleSubmit} disabled={!nota.trim() || isLoading}
             className="w-full flex items-center justify-center gap-2 px-4 py-2.5 rounded-lg text-sm font-medium text-white bg-purple-600 hover:bg-purple-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors">
             <Send className="h-4 w-4" />

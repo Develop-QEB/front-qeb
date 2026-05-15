@@ -67,7 +67,13 @@ export const historialService = {
     return data.data;
   },
 
-  async addNota(input: { ref_id?: number; tipo: string; nota: string }): Promise<HistorialEntry> {
+  async addNota(input: {
+    ref_id?: number;
+    tipo: string;
+    nota: string;
+    fecha_entrega?: string;
+    recordar_dias_antes?: number;
+  }): Promise<HistorialEntry> {
     const { data } = await api.post('/historial/notas', input);
     return data.data;
   },

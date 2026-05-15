@@ -1,6 +1,7 @@
 import { useEffect, useRef, useCallback } from 'react';
 import { io, Socket } from 'socket.io-client';
 import { useQueryClient } from '@tanstack/react-query';
+import { showRecordatorioNotification } from '../utils/desktopNotifications';
 
 const SOCKET_URL = import.meta.env.VITE_API_URL?.replace('/api', '') || 'http://localhost:3000';
 
@@ -304,10 +305,29 @@ export function useSocketNotificaciones() {
   useEffect(() => {
     const socket = getSocket();
 
-    const handleNotificacionNueva = () => {
-      console.log('[Socket] Nueva notificación');
+    const handleNotificacionNueva = (payload?: {
+      tipo?: string;
+      titulo?: string;
+      descripcion?: string;
+      tarea_id?: number;
+      historial_id?: number;
+      fecha_entrega?: string;
+    }) => {
+      console.log('[Socket] Nueva notificación', payload);
       queryClient.invalidateQueries({ queryKey: ['notificaciones-stats'], refetchType: 'active' });
       queryClient.invalidateQueries({ queryKey: ['notificaciones'], refetchType: 'active' });
+      // Si el evento corresponde a un Recordatorio del historial, mostrar
+      // notificacion nativa del navegador (Notification API). El payload puede
+      // estar vacio para otros tipos de notificacion; en ese caso no se dispara.
+      if (payload && payload.tipo === 'Recordatorio') {
+        showRecordatorioNotification({
+          titulo: payload.titulo || 'Recordatorio QEB',
+          descripcion: payload.descripcion,
+          tareaId: payload.tarea_id,
+          historial_id: payload.historial_id,
+          fecha_entrega: payload.fecha_entrega,
+        });
+      }
     };
 
     const handleNotificacionLeida = () => {
