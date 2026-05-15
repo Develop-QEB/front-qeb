@@ -25,6 +25,16 @@ export function MainLayout() {
     return () => { cancelled = true; };
   }, [prefetchAllAsync]);
 
+  // Pedir permiso para notificaciones de escritorio una vez que el usuario esta
+  // autenticado. Idempotente: solo se muestra el prompt si todavia no se ha
+  // pedido y el navegador no lo tiene granted/denied permanente.
+  useEffect(() => {
+    if (!user) return;
+    import('../../utils/desktopNotifications').then(({ requestNotificationPermission }) => {
+      requestNotificationPermission().catch(() => { /* ignore */ });
+    });
+  }, [user]);
+
   const handleLoadingFinished = useCallback(() => {
     setInitialLoading(false);
   }, []);
