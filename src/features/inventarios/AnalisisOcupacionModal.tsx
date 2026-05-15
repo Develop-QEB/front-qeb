@@ -718,6 +718,14 @@ function MatrizView({
 
   const handleConfirmRelease = async () => {
     if (!confirmRelease || !canRelease) return;
+    if (confirmRelease.card.aps && confirmRelease.card.aps > 0) {
+      setReleaseError(
+        confirmRelease.card.posted
+          ? 'Esta reserva tiene POST y no se puede eliminar'
+          : 'Esta reserva tiene APS asignado y no se puede eliminar'
+      );
+      return;
+    }
     setReleasing(true);
     setReleaseError(null);
     try {
@@ -1224,24 +1232,37 @@ function MatrizView({
                                 </div>
                               )}
                             </a>
-                            {canRelease && (
-                              <button
-                                type="button"
-                                onClick={e => {
-                                  e.preventDefault();
-                                  e.stopPropagation();
-                                  setConfirmRelease({ card: c, inventario: inv, catorcena: cat });
-                                }}
-                                title="Liberar reserva (eliminar de la BD)"
-                                className={`absolute top-1 right-1 p-1 rounded transition-all opacity-0 group-hover/card:opacity-100 focus:opacity-100 ${
-                                  isDark
-                                    ? 'text-zinc-400 hover:text-red-300 hover:bg-red-500/20'
-                                    : 'text-gray-500 hover:text-red-600 hover:bg-red-100'
-                                }`}
-                              >
-                                <Trash2 className="h-3 w-3" />
-                              </button>
-                            )}
+                            {canRelease && (() => {
+                              const tieneAPS = !!(c.aps && c.aps > 0);
+                              const bloqueado = tieneAPS;
+                              const tooltipBloqueo = c.posted
+                                ? 'Tiene POST, no se puede eliminar'
+                                : 'Tiene APS asignado, no se puede eliminar';
+                              return (
+                                <button
+                                  type="button"
+                                  disabled={bloqueado}
+                                  onClick={e => {
+                                    e.preventDefault();
+                                    e.stopPropagation();
+                                    if (bloqueado) return;
+                                    setConfirmRelease({ card: c, inventario: inv, catorcena: cat });
+                                  }}
+                                  title={bloqueado ? tooltipBloqueo : 'Liberar reserva (eliminar de la BD)'}
+                                  className={`absolute top-1 right-1 p-1 rounded transition-all ${
+                                    bloqueado
+                                      ? `opacity-100 cursor-not-allowed ${isDark ? 'text-zinc-600' : 'text-gray-300'}`
+                                      : `opacity-0 group-hover/card:opacity-100 focus:opacity-100 ${
+                                          isDark
+                                            ? 'text-zinc-400 hover:text-red-300 hover:bg-red-500/20'
+                                            : 'text-gray-500 hover:text-red-600 hover:bg-red-100'
+                                        }`
+                                  }`}
+                                >
+                                  <Trash2 className="h-3 w-3" />
+                                </button>
+                              );
+                            })()}
                           </div>
                         );
                       })}
