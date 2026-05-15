@@ -670,6 +670,7 @@ interface CampanaDuplicada {
   cliente: string;
   propuestas: number[];
   ocurrencias: number;
+  celdasConRepeticion: number; // # de celdas donde aparece >1 vez (mismo inventario+catorcena)
 }
 
 const labelForCampana = (c: CampanaEnCelda): string => {
@@ -687,6 +688,7 @@ function MatrizView({
   isDark: boolean;
 }) {
   const [showDuplicados, setShowDuplicados] = useState(false);
+  const [soloDuplicados, setSoloDuplicados] = useState(false);
   const [campanaFilter, setCampanaFilter] = useState<Set<string>>(new Set());
   const [filterOpen, setFilterOpen] = useState(false);
   const [filterSearch, setFilterSearch] = useState('');
@@ -745,20 +747,6 @@ function MatrizView({
       return next;
     });
 
-  const inventariosFiltrados = useMemo(() => {
-    if (!matriz) return [] as InventarioResumen[];
-    if (!isFiltered) return matriz.inventarios;
-    return matriz.inventarios.filter(inv => {
-      const invCeldas = matriz.celdas[inv.id];
-      if (!invCeldas) return false;
-      for (const celda of Object.values(invCeldas)) {
-        for (const c of celda.campanas) {
-          if (campanaFilter.has(labelForCampana(c))) return true;
-        }
-      }
-      return false;
-    });
-  }, [matriz, campanaFilter, isFiltered]);
 
   const duplicados = useMemo<CampanaDuplicada[]>(() => {
     if (!matriz) return [];
@@ -767,9 +755,16 @@ function MatrizView({
       cliente: string;
       propuestas: Set<number>;
       ocurrencias: number;
+      celdasConRepeticion: number;
     }>();
     for (const invCeldas of Object.values(matriz.celdas)) {
       for (const celda of Object.values(invCeldas)) {
+        // contar ocurrencias por campana_id dentro de esta celda
+        const cellCounts = new Map<number, number>();
+        for (const c of celda.campanas) {
+          if (!c.campana_id) continue;
+          cellCounts.set(c.campana_id, (cellCounts.get(c.campana_id) || 0) + 1);
+        }
         for (const c of celda.campanas) {
           if (!c.campana_id) continue; // ignorar propuestas sin campaña confirmada
           const entry = map.get(c.campana_id);
@@ -784,22 +779,66 @@ function MatrizView({
               cliente: c.cliente_nombre || 'Sin cliente',
               propuestas,
               ocurrencias: 1,
+              celdasConRepeticion: 0,
             });
+          }
+        }
+        // marcar las celdas que tienen >1 card de la misma campaña
+        for (const [cid, count] of cellCounts) {
+          if (count > 1) {
+            const entry = map.get(cid);
+            if (entry) entry.celdasConRepeticion += 1;
           }
         }
       }
     }
     return Array.from(map.entries())
-      .filter(([, v]) => v.propuestas.size > 1)
+      .filter(([, v]) => v.propuestas.size > 1 || v.celdasConRepeticion > 0)
       .map(([campana_id, v]) => ({
         campana_id,
         nombre: v.nombre,
         cliente: v.cliente,
         propuestas: Array.from(v.propuestas).sort((a, b) => a - b),
         ocurrencias: v.ocurrencias,
+        celdasConRepeticion: v.celdasConRepeticion,
       }))
-      .sort((a, b) => b.propuestas.length - a.propuestas.length);
+      .sort((a, b) =>
+        (b.celdasConRepeticion - a.celdasConRepeticion) ||
+        (b.propuestas.length - a.propuestas.length)
+      );
   }, [matriz]);
+
+  const duplicadoIds = useMemo(
+    () => new Set(duplicados.map(d => d.campana_id)),
+    [duplicados]
+  );
+
+  const isCampanaDuplicada = (c: CampanaEnCelda) =>
+    !!c.campana_id && duplicadoIds.has(c.campana_id);
+
+  const cardPasaFiltros = (c: CampanaEnCelda) => {
+    if (isFiltered && !campanaFilter.has(labelForCampana(c))) return false;
+    if (soloDuplicados && !isCampanaDuplicada(c)) return false;
+    return true;
+  };
+
+  const inventariosFiltrados = useMemo(() => {
+    if (!matriz) return [] as InventarioResumen[];
+    if (!isFiltered && !soloDuplicados) return matriz.inventarios;
+    return matriz.inventarios.filter(inv => {
+      const invCeldas = matriz.celdas[inv.id];
+      if (!invCeldas) return false;
+      for (const celda of Object.values(invCeldas)) {
+        for (const c of celda.campanas) {
+          if (isFiltered && !campanaFilter.has(labelForCampana(c))) continue;
+          if (soloDuplicados && !isCampanaDuplicada(c)) continue;
+          return true;
+        }
+      }
+      return false;
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [matriz, campanaFilter, isFiltered, soloDuplicados, duplicadoIds]);
 
   if (building || !matriz) {
     return (
@@ -922,7 +961,7 @@ function MatrizView({
             </div>
           )}
         </div>
-        {isFiltered && (
+        {(isFiltered || soloDuplicados) && (
           <span className={`text-[11px] ${isDark ? 'text-zinc-400' : 'text-gray-500'}`}>
             Mostrando {inventariosFiltrados.length} de {matriz.inventarios.length} inventarios
           </span>
@@ -930,33 +969,72 @@ function MatrizView({
       </div>
       {duplicados.length > 0 && (
         <div className={`rounded-lg border ${isDark ? 'border-amber-500/30 bg-amber-500/5' : 'border-amber-200 bg-amber-50'} text-xs`}>
-          <button
-            onClick={() => setShowDuplicados(s => !s)}
-            className={`w-full flex items-center gap-2 px-3 py-2 ${isDark ? 'text-amber-300 hover:bg-amber-500/10' : 'text-amber-700 hover:bg-amber-100/50'} rounded-lg transition-colors`}
-            title="Campañas que aparecen con más de un propuesta_id distinto"
-          >
-            <AlertCircle className="h-3.5 w-3.5" />
-            <span className="font-semibold">
-              {duplicados.length} {duplicados.length === 1 ? 'campaña duplicada' : 'campañas duplicadas'}
-            </span>
-            <span className={`${isDark ? 'text-amber-400/70' : 'text-amber-600/80'}`}>
-              (misma campaña con distinto propuesta_id)
-            </span>
-            <ChevronDown className={`h-3.5 w-3.5 ml-auto transition-transform ${showDuplicados ? 'rotate-180' : ''}`} />
-          </button>
+          <div className="flex items-stretch">
+            <button
+              onClick={() => setShowDuplicados(s => !s)}
+              className={`flex-1 flex items-center gap-2 px-3 py-2 ${isDark ? 'text-amber-300 hover:bg-amber-500/10' : 'text-amber-700 hover:bg-amber-100/50'} rounded-l-lg transition-colors`}
+              title="Campañas con varios propuesta_id o repetidas en la misma celda"
+            >
+              <AlertCircle className="h-3.5 w-3.5" />
+              <span className="font-semibold">
+                {duplicados.length} {duplicados.length === 1 ? 'campaña duplicada' : 'campañas duplicadas'}
+              </span>
+              <span className={`${isDark ? 'text-amber-400/70' : 'text-amber-600/80'}`}>
+                (multi-propuesta o repetida en misma celda)
+              </span>
+              <ChevronDown className={`h-3.5 w-3.5 ml-auto transition-transform ${showDuplicados ? 'rotate-180' : ''}`} />
+            </button>
+            <button
+              onClick={() => setSoloDuplicados(s => !s)}
+              title="Mostrar solo filas/cards de campañas duplicadas"
+              className={`flex items-center gap-1.5 px-3 py-2 border-l text-xs font-medium rounded-r-lg transition-colors ${
+                soloDuplicados
+                  ? isDark
+                    ? 'bg-amber-500/30 border-amber-500/40 text-amber-100'
+                    : 'bg-amber-200 border-amber-300 text-amber-900'
+                  : isDark
+                    ? 'border-amber-500/30 text-amber-300 hover:bg-amber-500/10'
+                    : 'border-amber-200 text-amber-700 hover:bg-amber-100/60'
+              }`}
+            >
+              {soloDuplicados ? <CheckCircle2 className="h-3.5 w-3.5" /> : <Filter className="h-3.5 w-3.5" />}
+              Solo duplicadas
+            </button>
+          </div>
           {showDuplicados && (
-            <div className={`px-3 pb-2 pt-1 max-h-40 overflow-y-auto border-t ${isDark ? 'border-amber-500/20' : 'border-amber-200/60'}`}>
+            <div className={`px-3 pb-2 pt-1 max-h-44 overflow-y-auto border-t ${isDark ? 'border-amber-500/20' : 'border-amber-200/60'}`}>
               <ul className="space-y-1">
-                {duplicados.map(d => (
-                  <li key={d.campana_id} className={`flex flex-wrap items-center gap-x-2 gap-y-0.5 ${isDark ? 'text-zinc-300' : 'text-gray-700'}`}>
-                    <span className="font-medium">{d.nombre}</span>
-                    <span className={isDark ? 'text-zinc-500' : 'text-gray-500'}>· {d.cliente}</span>
-                    <span className={isDark ? 'text-zinc-500' : 'text-gray-500'}>· {d.ocurrencias} {d.ocurrencias === 1 ? 'celda' : 'celdas'}</span>
-                    <span className={`font-mono ${isDark ? 'text-amber-300' : 'text-amber-700'}`}>
-                      propuestas: {d.propuestas.map(p => `#${p}`).join(', ')}
-                    </span>
-                  </li>
-                ))}
+                {duplicados.map(d => {
+                  const tags: { label: string; titleAttr: string }[] = [];
+                  if (d.propuestas.length > 1) {
+                    tags.push({
+                      label: `${d.propuestas.length} propuestas`,
+                      titleAttr: `propuestas: ${d.propuestas.map(p => `#${p}`).join(', ')}`,
+                    });
+                  }
+                  if (d.celdasConRepeticion > 0) {
+                    tags.push({
+                      label: `${d.celdasConRepeticion} ${d.celdasConRepeticion === 1 ? 'celda repetida' : 'celdas repetidas'}`,
+                      titleAttr: 'Misma campaña aparece más de una vez en la misma celda (inventario × catorcena)',
+                    });
+                  }
+                  return (
+                    <li key={d.campana_id} className={`flex flex-wrap items-center gap-x-2 gap-y-0.5 ${isDark ? 'text-zinc-300' : 'text-gray-700'}`}>
+                      <span className="font-medium">{d.nombre}</span>
+                      <span className={isDark ? 'text-zinc-500' : 'text-gray-500'}>· {d.cliente}</span>
+                      <span className={isDark ? 'text-zinc-500' : 'text-gray-500'}>· {d.ocurrencias} {d.ocurrencias === 1 ? 'card' : 'cards'}</span>
+                      {tags.map(t => (
+                        <span
+                          key={t.label}
+                          title={t.titleAttr}
+                          className={`px-1.5 py-0.5 rounded-full text-[10px] font-medium border ${isDark ? 'bg-amber-500/15 text-amber-300 border-amber-500/30' : 'bg-white text-amber-700 border-amber-200'}`}
+                        >
+                          {t.label}
+                        </span>
+                      ))}
+                    </li>
+                  );
+                })}
               </ul>
             </div>
           )}
@@ -999,8 +1077,9 @@ function MatrizView({
                 const celda = matriz.celdas[inv.id]?.[cellKeyOf(cat)];
                 const ocupado = celda?.ocupado;
                 const todasCampanas = celda?.campanas || [];
-                const campanas = isFiltered
-                  ? todasCampanas.filter(c => campanaFilter.has(labelForCampana(c)))
+                const algunFiltroActivo = isFiltered || soloDuplicados;
+                const campanas = algunFiltroActivo
+                  ? todasCampanas.filter(cardPasaFiltros)
                   : todasCampanas;
 
                 if (!ocupado || todasCampanas.length === 0) {
