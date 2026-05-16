@@ -11,8 +11,9 @@ import { propuestasService, InventarioReservado, PropuestaFullDetails } from '..
 import { formatCurrency, formatDate } from '../../lib/utils';
 import { useThemeStore } from '../../store/themeStore';
 
-const GOOGLE_MAPS_API_KEY = 'AIzaSyB7Bzwydh91xZPdR8mGgqAV2hO72W1EVaw';
-const LIBRARIES: ('places' | 'geometry')[] = ['places', 'geometry'];
+// Config UNICA de Google Maps (mismo id/key/libraries en toda la app) para
+// que el script se inyecte una sola vez. Ver src/config/googleMaps.ts.
+import { GOOGLE_MAPS_LOADER_OPTIONS } from '../../config/googleMaps';
 
 // Purple Brand Colors for Compartir
 const PURPLE_PRIMARY = '#8B5CF6';
@@ -184,10 +185,7 @@ export function CompartirPropuestaPage() {
   const [selectedMarker, setSelectedMarker] = useState<InventarioReservado | null>(null);
 
   // Google Maps
-  const { isLoaded } = useLoadScript({
-    googleMapsApiKey: GOOGLE_MAPS_API_KEY,
-    libraries: LIBRARIES,
-  });
+  const { isLoaded } = useLoadScript(GOOGLE_MAPS_LOADER_OPTIONS);
 
   // Queries
   const { data: details, isLoading: loadingDetails } = useQuery({

@@ -10,8 +10,9 @@ import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContaine
 import { formatCurrency, formatDate } from '../../lib/utils';
 import { useThemeStore } from '../../store/themeStore';
 
-const GOOGLE_MAPS_API_KEY = 'AIzaSyB7Bzwydh91xZPdR8mGgqAV2hO72W1EVaw';
-const LIBRARIES: ('places' | 'geometry')[] = ['places', 'geometry'];
+// Config UNICA de Google Maps (mismo id/key/libraries en toda la app) para
+// que el script se inyecte una sola vez. Ver src/config/googleMaps.ts.
+import { GOOGLE_MAPS_LOADER_OPTIONS } from '../../config/googleMaps';
 
 // IMU Color Palette
 const IMU_BLUE = '#0054A6';
@@ -246,10 +247,7 @@ export function ClientePropuestaPage() {
   const [showFilters, setShowFilters] = useState(initialFilters.length > 0);
   const [selectedItems, setSelectedItems] = useState<Set<number>>(new Set());
 
-  const { isLoaded } = useLoadScript({
-    googleMapsApiKey: GOOGLE_MAPS_API_KEY,
-    libraries: LIBRARIES,
-  });
+  const { isLoaded } = useLoadScript(GOOGLE_MAPS_LOADER_OPTIONS);
 
   const { data, isLoading, error } = useQuery({
     queryKey: ['public-propuesta', propuestaId],
