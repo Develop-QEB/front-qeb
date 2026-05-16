@@ -7,6 +7,7 @@ import {
   Gift, Target, Save, ArrowLeft, Filter, Grid, LayoutGrid, Ruler, ArrowUpDown, ArrowUp, ArrowDown, Download, Eye, Funnel, Check, Upload, Monitor, AlertTriangle, Trophy, Loader2, Clock
 } from 'lucide-react';
 import { GoogleMap, useLoadScript, Marker } from '@react-google-maps/api';
+import { GOOGLE_MAPS_LOADER_OPTIONS } from '../../config/googleMaps';
 import { AdvancedMapComponent } from './AdvancedMapComponent';
 import { Propuesta } from '../../types';
 import { solicitudesService, UserOption } from '../../services/solicitudes.service';
@@ -23,7 +24,7 @@ import { filterAllowedArticulos } from '../../config/allowedDigitalArticles';
 import { useSocketPropuesta, useSocketEquipos, useSocketInventarioRealtime, type InventarioRealtimePayload } from '../../hooks/useSocket';
 import { useThemeStore } from '../../store/themeStore';
 
-const GOOGLE_MAPS_API_KEY = 'AIzaSyB7Bzwydh91xZPdR8mGgqAV2hO72W1EVaw';
+// GOOGLE_MAPS_API_KEY / LIBRARIES centralizados en src/config/googleMaps.ts.
 
 // Static URL for files
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3000/api';
@@ -696,7 +697,7 @@ function SearchableSelect({
   );
 }
 
-const LIBRARIES: ('places' | 'geometry')[] = ['places', 'geometry'];
+// LIBRARIES movido a src/config/googleMaps.ts (GOOGLE_MAPS_LIBRARIES).
 
 const MESES_LABEL = ['Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio', 'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre'];
 
@@ -728,11 +729,8 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
   const reservadosMapRef = useRef<google.maps.Map | null>(null);
   const resumenReservasMapRef = useRef<google.maps.Map | null>(null);
 
-  // Load Google Maps with required libraries
-  const { isLoaded: mapsLoaded } = useLoadScript({
-    googleMapsApiKey: GOOGLE_MAPS_API_KEY,
-    libraries: LIBRARIES,
-  });
+  // Load Google Maps con la configuracion UNICA compartida (mismo id/key/libraries).
+  const { isLoaded: mapsLoaded } = useLoadScript(GOOGLE_MAPS_LOADER_OPTIONS);
 
   // View state
   const [viewState, setViewState] = useState<ViewState>('main');

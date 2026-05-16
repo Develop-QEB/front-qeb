@@ -4,6 +4,7 @@ import { useState, useRef, useEffect, useMemo, useCallback, memo } from 'react';
 import { ArrowLeft, MessageSquare, Send, X, FileSpreadsheet, ListTodo, Layers, ChevronDown, ChevronRight, Check, Minus, Filter, Plus, Trash2, ArrowUpDown, ArrowUp, ArrowDown, Download, Upload, Loader2, CheckCircle, AlertCircle, AlertTriangle, Package, MapPinOff, RefreshCw, MessageSquareOff, ServerCrash, WifiOff, History, Edit2, XCircle } from 'lucide-react';
 import { AssignInventarioCampanaModal } from './AssignInventarioCampanaModal';
 import { GoogleMap, useLoadScript, Marker } from '@react-google-maps/api';
+import { GOOGLE_MAPS_LOADER_OPTIONS } from '../../config/googleMaps';
 import { Header } from '../../components/layout/Header';
 import { campanasService, InventarioReservado, InventarioConAPS, SolicitudCara, buildDeliveryNote, postDeliveryNoteToSAP, patchDeliveryNoteToSAP, findExistingDeliveryNote, resolveBaseEntry, isMigratedCampaign, HistorialItem, SAPDeliveryNoteMigrated } from '../../services/campanas.service';
 import { solicitudesService } from '../../services/solicitudes.service';
@@ -383,7 +384,10 @@ function MapErrorState({ onRetry }: { onRetry?: () => void }) {
   );
 }
 
-const GOOGLE_MAPS_API_KEY = 'AIzaSyB7Bzwydh91xZPdR8mGgqAV2hO72W1EVaw';
+// GOOGLE_MAPS_API_KEY centralizado en src/config/googleMaps.ts.
+// Este componente DEBE usar la misma config que AssignInventarioCampanaModal
+// (mismo id/key/libraries); si no, Google Maps se carga dos veces y la
+// pantalla se traba/pone morada al reservar.
 
 type GroupByField = 'inicio_periodo' | 'articulo' | 'plaza' | 'tipo_de_cara' | 'estatus_reserva' | 'aps';
 
@@ -978,9 +982,7 @@ export function CampanaDetailPage() {
   const [previewDeliveryNote, setPreviewDeliveryNote] = useState<any>(null);
   const [postedAPSGroups, setPostedAPSGroups] = useState<Set<number>>(new Set());
 
-  const { isLoaded } = useLoadScript({
-    googleMapsApiKey: GOOGLE_MAPS_API_KEY,
-  });
+  const { isLoaded } = useLoadScript(GOOGLE_MAPS_LOADER_OPTIONS);
 
   const mapRefAPS = useRef<google.maps.Map | null>(null);
 

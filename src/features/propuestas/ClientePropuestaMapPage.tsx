@@ -5,8 +5,9 @@ import { Map as MapIcon, Loader2, ExternalLink, Copy, Check } from 'lucide-react
 import { GoogleMap, useLoadScript, Marker, Circle, Autocomplete, InfoWindow } from '@react-google-maps/api';
 import { formatCurrency } from '../../lib/utils';
 
-const GOOGLE_MAPS_API_KEY = 'AIzaSyB7Bzwydh91xZPdR8mGgqAV2hO72W1EVaw';
-const LIBRARIES: ('places' | 'geometry')[] = ['places', 'geometry'];
+// Config UNICA de Google Maps (mismo id/key/libraries en toda la app) para
+// que el script se inyecte una sola vez. Ver src/config/googleMaps.ts.
+import { GOOGLE_MAPS_LOADER_OPTIONS } from '../../config/googleMaps';
 
 const IMU_BLUE = '#0054A6';
 const IMU_GREEN = '#7AB800';
@@ -103,10 +104,7 @@ export function ClientePropuestaMapPage() {
   const [poiSearch, setPoiSearch] = useState('');
   const [copied, setCopied] = useState(false);
 
-  const { isLoaded } = useLoadScript({
-    googleMapsApiKey: GOOGLE_MAPS_API_KEY,
-    libraries: LIBRARIES,
-  });
+  const { isLoaded } = useLoadScript(GOOGLE_MAPS_LOADER_OPTIONS);
 
   const { data, isLoading, error } = useQuery({
     queryKey: ['public-propuesta', propuestaId],

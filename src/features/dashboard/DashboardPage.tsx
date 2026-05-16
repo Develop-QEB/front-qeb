@@ -2,6 +2,7 @@ import React, { useState, useMemo, useCallback, useEffect, useRef } from 'react'
 import { createPortal } from 'react-dom';
 import { useQuery } from '@tanstack/react-query';
 import { GoogleMap, useLoadScript, Circle, InfoWindow } from '@react-google-maps/api';
+import { GOOGLE_MAPS_LOADER_OPTIONS } from '../../config/googleMaps';
 
 import { useSocketDashboard } from '../../hooks/useSocket';
 import { MarkerClusterer, SuperClusterAlgorithm } from '@googlemaps/markerclusterer';
@@ -58,7 +59,8 @@ import {
 } from 'recharts';
 
 // Google Maps API Key
-const GOOGLE_MAPS_API_KEY = 'AIzaSyB7Bzwydh91xZPdR8mGgqAV2hO72W1EVaw';
+// GOOGLE_MAPS_API_KEY centralizado en src/config/googleMaps.ts
+// (config unica para que Google Maps se cargue una sola vez en toda la app).
 
 // Dark map styles for Google Maps
 const DARK_MAP_STYLES = [
@@ -376,7 +378,7 @@ function GoogleMapsChart({
   onSelectPlaza: (p: string | null) => void;
   selectedInventoryIds: Set<number>;
 }) {
-  const { isLoaded } = useLoadScript({ googleMapsApiKey: GOOGLE_MAPS_API_KEY });
+  const { isLoaded } = useLoadScript(GOOGLE_MAPS_LOADER_OPTIONS);
   const theme = useThemeStore((s) => s.theme);
   const isDark = theme === 'dark';
   const center = useMemo(() => ({ lat: 23.6345, lng: -102.5528 }), []);
