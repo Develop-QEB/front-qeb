@@ -1,8 +1,9 @@
 import { Link } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
-import { Bell, FlaskConical, Settings } from 'lucide-react';
+import { Bell, FlaskConical, Settings, Bot } from 'lucide-react';
 import { useAuthStore } from '../../store/authStore';
 import { useThemeStore } from '../../store/themeStore';
+import { useChatStore } from '../../store/chatStore';
 import { notificacionesService } from '../../services/notificaciones.service';
 import { UserAvatar } from '../ui/user-avatar';
 import { useSocketNotificaciones } from '../../hooks/useSocket';
@@ -18,6 +19,7 @@ interface HeaderProps {
 export function Header({ title, badgeCount }: HeaderProps) {
   const user = useAuthStore((state) => state.user);
   const isDark = useThemeStore((s) => s.theme) === 'dark';
+  const toggleChat = useChatStore((s) => s.toggle);
   useSocketNotificaciones();
 
   const { data: notifData } = useQuery({
@@ -77,6 +79,15 @@ export function Header({ title, badgeCount }: HeaderProps) {
 
         {/* Theme Toggle */}
         <ThemeToggle />
+
+        {/* QEBooh - asistente IA */}
+        <button
+          onClick={toggleChat}
+          className={`relative p-2 rounded-full transition-colors ${isDark ? 'hover:bg-purple-900/30' : 'hover:bg-purple-50'}`}
+          title="QEBooh - Asistente IA"
+        >
+          <Bot className={`h-5 w-5 ${isDark ? 'text-zinc-500 hover:text-purple-300' : 'text-gray-400 hover:text-purple-600'}`} />
+        </button>
 
         {/* Admin - Configuración de usuarios (solo Administrador) */}
         {['Administrador', 'DEV'].includes(user?.rol || '') && (
