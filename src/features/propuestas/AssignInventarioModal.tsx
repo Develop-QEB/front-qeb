@@ -1789,6 +1789,11 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
     // Total real reservado se sigue contando como tipo='Bonificacion' en BD; el split físico
     // viene de tipoCaraFisica derivado de inventario.tipo_de_cara.
     const isSplitBonif = isBonifSplitArticle(cara.articulo);
+    // Digital bonif-split (CT-DIG/BF-DIG): el split flujo/contraflujo es cosmético —
+    // espacios digitales "infinitos" y el % se elige libre con flujoPct (front-only,
+    // NO se guarda en BD). Por eso la vista anterior no puede saber el ratio usado.
+    // En digital validamos solo el TOTAL de bonificación, no el ratio.
+    const esBonifSplitDigital = isSplitBonif && cara.tipo === 'Digital';
     const bonifTargetFlujo = isSplitBonif ? Math.ceil(bonificacionRequerido / 2) : 0;
     const bonifTargetContra = isSplitBonif ? Math.floor(bonificacionRequerido / 2) : 0;
     const bonifReservadoFlujo = isSplitBonif
@@ -1801,9 +1806,12 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
     // Complete means EXACT match - not under, not over
     const flujoCompleto = flujoReservado === flujoRequerido;
     const contraflujoCompleto = contraflujoReservado === contraflujoRequerido;
-    // Para BF/CF/CT/IN: bonificación completa solo si AMBOS lados del split coinciden con su target.
+    // Para BF/CF/CT/IN: bonificación completa solo si AMBOS lados del split coinciden
+    // con su target. EXCEPTO digital: ahí el ratio es libre, solo importa el total.
     const bonificacionCompleto = isSplitBonif
-      ? (bonifReservadoFlujo === bonifTargetFlujo && bonifReservadoContra === bonifTargetContra)
+      ? (esBonifSplitDigital
+          ? bonificacionReservado === bonificacionRequerido
+          : (bonifReservadoFlujo === bonifTargetFlujo && bonifReservadoContra === bonifTargetContra))
       : bonificacionReservado === bonificacionRequerido;
 
     const totalRequerido = flujoRequerido + contraflujoRequerido + bonificacionRequerido;
@@ -1816,7 +1824,7 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
     const totalDiff = totalReservado - totalRequerido;
 
     // Check if needs attention (has differences)
-    const splitNeedsAttention = isSplitBonif
+    const splitNeedsAttention = isSplitBonif && !esBonifSplitDigital
       && (bonifReservadoFlujo !== bonifTargetFlujo || bonifReservadoContra !== bonifTargetContra);
     const needsAttention = flujoDiff !== 0 || contraflujoDiff !== 0 || bonificacionDiff !== 0 || splitNeedsAttention;
 
