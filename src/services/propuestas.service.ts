@@ -12,6 +12,10 @@ export interface PropuestasParams {
   catorcenaFin?: number;
   soloAtendidas?: boolean;
   tipoPeriodo?: string;
+  cambioEstatusDesde?: string;
+  cambioEstatusHasta?: string;
+  creacionDesde?: string;
+  creacionHasta?: string;
 }
 
 export interface PropuestaStats {
