@@ -1628,7 +1628,7 @@ export function OrdenesMontajeModal({ isOpen, onClose, canExport = true }: Orden
               }`}
             >
               <FileSpreadsheet className="h-4 w-4" />
-              INVIAN VP
+              Inventario VP
             </button>
             <button
               onClick={() => { setActiveTab('invian-digital'); setCurrentPage(1); }}
@@ -1639,7 +1639,7 @@ export function OrdenesMontajeModal({ isOpen, onClose, canExport = true }: Orden
               }`}
             >
               <Monitor className="h-4 w-4" />
-              INVIAN Digital
+              Inventario Digital
             </button>
           </div>
 
