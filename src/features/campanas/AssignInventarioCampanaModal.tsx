@@ -1969,6 +1969,10 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
     // Total real reservado se sigue contando como tipo='Bonificacion' en BD; el split físico
     // viene de tipoCaraFisica derivado de inventario.tipo_de_cara.
     const isSplitBonif = isBonifSplitArticle(cara.articulo);
+    // Digital bonif-split (CT-DIG/BF-DIG): el split flujo/contraflujo es cosmético —
+    // espacios digitales "infinitos" y el % se elige libre con flujoPct (front-only,
+    // NO se guarda en BD). En digital validamos solo el TOTAL, no el ratio.
+    const esBonifSplitDigital = isSplitBonif && cara.tipo === 'Digital';
     const bonifTargetFlujo = isSplitBonif ? Math.ceil(bonificacionRequerido / 2) : 0;
     const bonifTargetContra = isSplitBonif ? Math.floor(bonificacionRequerido / 2) : 0;
     const bonifReservadoFlujo = isSplitBonif
@@ -1990,7 +1994,9 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
     // Para BF/CF/CT/IN: bonificación completa si AMBOS lados del split coinciden con su target,
     // O si totalMatch (campañas migradas sin tipoCaraFisica preciso).
     const bonificacionCompleto = isSplitBonif
-      ? ((bonifReservadoFlujo === bonifTargetFlujo && bonifReservadoContra === bonifTargetContra) || totalMatch)
+      ? (esBonifSplitDigital
+          ? (bonificacionReservado === bonificacionRequerido || totalMatch)
+          : ((bonifReservadoFlujo === bonifTargetFlujo && bonifReservadoContra === bonifTargetContra) || totalMatch))
       : (bonificacionReservado === bonificacionRequerido || totalMatch);
 
     const totalRequerido = flujoRequerido + contraflujoRequerido + bonificacionRequerido;
@@ -2003,7 +2009,7 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
     const totalDiff = totalReservado - totalRequerido;
 
     // Check if needs attention (has differences)
-    const splitNeedsAttention = isSplitBonif
+    const splitNeedsAttention = isSplitBonif && !esBonifSplitDigital
       && !totalMatch
       && (bonifReservadoFlujo !== bonifTargetFlujo || bonifReservadoContra !== bonifTargetContra);
     const needsAttention = flujoDiff !== 0 || contraflujoDiff !== 0 || bonificacionDiff !== 0 || splitNeedsAttention;
