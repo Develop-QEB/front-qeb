@@ -1708,15 +1708,19 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
     return { flujo, contraflujo: contra };
   }, [selectedCaraForSearch, tipoPeriodo]);
 
-  // Para BF/CF/CT/IN: split visual del KPI bonificación en Flujo/Contraflujo (50/50).
+  // Para BF/CF/CT: split visual del KPI bonificación en Flujo/Contraflujo.
   // No toca BD — caras_flujo/caras_contraflujo siguen en 0; total = bonificacion.
+  // Tradicional: 50/50 fijo. Digital: respeta flujoPct (el input % front-only),
+  // porque los digitales son "infinitos" y la distribución es libre.
   const bonifSplit = useMemo(() => {
     if (!selectedCaraForSearch || !isBonifSplitArticle(selectedCaraForSearch.articulo)) {
       return { targetFlujo: 0, targetContra: 0, reservadoFlujo: 0, reservadoContra: 0 };
     }
     const total = selectedCaraForSearch.bonificacion || 0;
-    const targetFlujo = Math.ceil(total / 2);
-    const targetContra = Math.floor(total / 2);
+    const esDigital = selectedCaraForSearch.tipo === 'Digital';
+    const pct = esDigital ? flujoPct : 50;
+    const targetFlujo = Math.ceil(total * pct / 100);
+    const targetContra = total - targetFlujo;
     const caraReservas = reservas.filter(r =>
       r.id.startsWith(selectedCaraForSearch.localId) || r.solicitudCaraId === selectedCaraForSearch.id
     );
@@ -1724,7 +1728,7 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
     const reservadoFlujo = bonifs.filter(r => r.tipoCaraFisica === 'Flujo').length;
     const reservadoContra = bonifs.filter(r => r.tipoCaraFisica === 'Contraflujo').length;
     return { targetFlujo, targetContra, reservadoFlujo, reservadoContra };
-  }, [selectedCaraForSearch, reservas]);
+  }, [selectedCaraForSearch, reservas, flujoPct]);
 
   // Calculate remaining to assign for selected cara
   const remainingToAssign = useMemo(() => {
@@ -4900,7 +4904,32 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
               </>
               )}
 
-              {/* Bonificación/Cortesía KPI — para BF/CF/CT/IN se divide en 2 KPIs (Bonif. Flujo / Bonif. Contraflujo).
+              {/* % Distribución para bonif DIGITAL (CT-DIG / BF-DIG / etc).
+                  Front-only: solo mueve flujoPct local que alimenta bonifSplit.
+                  NO escribe caras_flujo/caras_contraflujo en BD (regla Balance Flujos:
+                  la bonificación se queda como total en BD, el split es visual). */}
+              {isBonifSplitArticle(selectedCaraForSearch?.articulo) && selectedCaraForSearch?.tipo === 'Digital' && (
+                <div className={`flex flex-col items-center justify-center px-2 py-1 rounded-xl ${isDark ? 'bg-zinc-800/30' : 'bg-gray-50/30'} border ${isDark ? 'border-zinc-700/20' : 'border-gray-200/20'} min-w-[70px]`}>
+                  <span className={`text-[9px] ${isDark ? 'text-zinc-500' : 'text-gray-400'} mb-1`}>Distribución</span>
+                  <div className="flex items-center gap-1">
+                    <input
+                      type="number"
+                      min={0}
+                      max={100}
+                      value={flujoPct}
+                      onChange={(e) => {
+                        const v = Math.max(0, Math.min(100, parseInt(e.target.value) || 0));
+                        setFlujoPct(v);
+                      }}
+                      className={`w-10 text-center text-xs font-bold ${isDark ? 'bg-zinc-800 border-zinc-700 text-cyan-400' : 'bg-white border-gray-200 text-cyan-600'} border rounded px-1 py-0.5 focus:outline-none focus:ring-1 focus:ring-cyan-500/50`}
+                    />
+                    <span className={`text-[10px] ${isDark ? 'text-zinc-500' : 'text-gray-400'}`}>%</span>
+                  </div>
+                  <span className={`text-[9px] ${isDark ? 'text-zinc-600' : 'text-gray-300'} mt-0.5`}>{flujoPct}/{100 - flujoPct}</span>
+                </div>
+              )}
+
+              {/* Bonificación/Cortesía KPI — para BF/CF/CT se divide en 2 KPIs (Bonif. Flujo / Bonif. Contraflujo).
                   El total y el botón de reservar siguen creando reservas con tipo='Bonificacion' en BD.
                   Para artículos no-split (ej. RT/DIG con bonificación opcional) se muestra el KPI único como antes. */}
               {isBonifSplitArticle(selectedCaraForSearch?.articulo) ? (
