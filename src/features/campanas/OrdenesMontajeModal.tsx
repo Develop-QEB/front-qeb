@@ -1022,6 +1022,13 @@ export function OrdenesMontajeModal({ isOpen, onClose, canExport = true }: Orden
     } else if (postFilter === 'sin') {
       items = items.filter(item => item.posted !== true);
     }
+    // Filtro APS: en INVIAN la APS vive en CodigoContrato (back: rsv.APS AS rsv_aps).
+    // "sin APS" = null o 0 (mismo criterio que el back: APS IS NULL OR APS = 0).
+    if (apsEspecificoFilter === 'con') {
+      items = items.filter(item => item.CodigoContrato != null && item.CodigoContrato !== 0);
+    } else if (apsEspecificoFilter === 'sin') {
+      items = items.filter(item => item.CodigoContrato == null || item.CodigoContrato === 0);
+    }
 
     // Filter by date range if set
     if (fechaInicio || fechaFin) {
@@ -1066,7 +1073,7 @@ export function OrdenesMontajeModal({ isOpen, onClose, canExport = true }: Orden
     }
 
     return items;
-  }, [invianData, selectedCatorcenas, fechaInicio, fechaFin, invianFilters, invianSortField, invianSortDirection, sapDbFilter, postFilter, allSearchTerms, matchesSearchINVIAN]);
+  }, [invianData, selectedCatorcenas, fechaInicio, fechaFin, invianFilters, invianSortField, invianSortDirection, sapDbFilter, apsEspecificoFilter, postFilter, allSearchTerms, matchesSearchINVIAN]);
 
   // Group INVIAN data
   const getINVIANGroupValue = (item: OrdenMontajeINVIAN, field: INVIANGroupByField): string => {
@@ -1114,6 +1121,13 @@ export function OrdenesMontajeModal({ isOpen, onClose, canExport = true }: Orden
     } else if (postFilter === 'sin') {
       items = items.filter(item => item.posted !== true);
     }
+    // Filtro APS: en INVIAN la APS vive en CodigoContrato (back: rsv.APS AS rsv_aps).
+    // "sin APS" = null o 0 (mismo criterio que el back: APS IS NULL OR APS = 0).
+    if (apsEspecificoFilter === 'con') {
+      items = items.filter(item => item.CodigoContrato != null && item.CodigoContrato !== 0);
+    } else if (apsEspecificoFilter === 'sin') {
+      items = items.filter(item => item.CodigoContrato == null || item.CodigoContrato === 0);
+    }
 
     // Filter by date range
     if (fechaInicio || fechaFin) {
@@ -1154,7 +1168,7 @@ export function OrdenesMontajeModal({ isOpen, onClose, canExport = true }: Orden
     }
 
     return items;
-  }, [invianData, selectedCatorcenas, fechaInicio, fechaFin, invianFilters, invianSortField, invianSortDirection, sapDbFilter, postFilter, allSearchTerms, matchesSearchINVIAN]);
+  }, [invianData, selectedCatorcenas, fechaInicio, fechaFin, invianFilters, invianSortField, invianSortDirection, sapDbFilter, apsEspecificoFilter, postFilter, allSearchTerms, matchesSearchINVIAN]);
 
   // Group INVIAN Digital data
   const groupedINVIANDigitalData = useMemo(() => {
