@@ -275,7 +275,7 @@ export function QEBooh() {
   return (
     <>
       {isOpen && (
-        <div className={`fixed bottom-24 right-6 z-50 w-[600px] max-h-[780px] rounded-2xl shadow-2xl border flex flex-col overflow-hidden ${
+        <div className={`fixed bottom-6 right-6 z-50 w-[600px] max-w-[calc(100vw-3rem)] h-[780px] max-h-[calc(100vh-5rem)] rounded-2xl shadow-2xl border flex flex-col overflow-hidden ${
           isDark ? 'bg-zinc-900 border-purple-500/20' : 'bg-white border-gray-200'
         }`}>
           {/* Header */}
