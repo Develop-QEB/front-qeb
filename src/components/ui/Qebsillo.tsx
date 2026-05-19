@@ -1,8 +1,9 @@
 import { useState, useRef, useEffect, useCallback, useMemo } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
-import { MessageCircle, X, Send, Loader2, Bot, Trash2, ExternalLink } from 'lucide-react';
+import { X, Send, Loader2, Bot, Trash2, ExternalLink } from 'lucide-react';
 import { chatbotService } from '../../services/chatbot.service';
 import { useThemeStore } from '../../store/themeStore';
+import { useChatStore } from '../../store/chatStore';
 import { useModalStore } from '../../store/modalStore';
 import { useAuthStore } from '../../store/authStore';
 import { getPermissions, RolePermissions } from '../../lib/permissions';
@@ -195,7 +196,8 @@ function RichText({ text, onNavigate, isDark }: { text: string; onNavigate: (rou
 export function QEBooh() {
   const navigate = useNavigate();
   const location = useLocation();
-  const [isOpen, setIsOpen] = useState(false);
+  const isOpen = useChatStore(s => s.isOpen);
+  const closeChat = useChatStore(s => s.close);
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState('');
   const [isLoading, setIsLoading] = useState(false);
@@ -218,7 +220,7 @@ export function QEBooh() {
   useEffect(() => { scrollToBottom(); }, [messages, scrollToBottom]);
   useEffect(() => { if (isOpen && inputRef.current) inputRef.current.focus(); }, [isOpen]);
 
-  const handleNavigate = (route: string) => { navigate(route); setIsOpen(false); };
+  const handleNavigate = (route: string) => { navigate(route); closeChat(); };
 
   const handleSend = async (text?: string) => {
     const msg = (text || input).trim();
@@ -268,17 +270,12 @@ export function QEBooh() {
     );
   };
 
+  if (!isOpen) return null;
+
   return (
     <>
-      <button onClick={() => setIsOpen(!isOpen)}
-        className={`fixed bottom-6 right-6 z-50 w-14 h-14 rounded-full shadow-2xl flex items-center justify-center transition-all hover:scale-110 active:scale-95 ${
-          isOpen ? 'bg-zinc-700 hover:bg-zinc-600' : 'bg-gradient-to-r from-purple-600 to-fuchsia-600 hover:from-purple-500 hover:to-fuchsia-500'
-        }`} title="QEBooh">
-        {isOpen ? <X className="h-6 w-6 text-white" /> : <MessageCircle className="h-6 w-6 text-white" />}
-      </button>
-
       {isOpen && (
-        <div className={`fixed bottom-24 right-6 z-50 w-[600px] max-h-[780px] rounded-2xl shadow-2xl border flex flex-col overflow-hidden ${
+        <div className={`fixed bottom-6 right-6 z-50 w-[460px] max-w-[calc(100vw-3rem)] h-[620px] max-h-[calc(100vh-7rem)] rounded-2xl shadow-2xl border flex flex-col overflow-hidden ${
           isDark ? 'bg-zinc-900 border-purple-500/20' : 'bg-white border-gray-200'
         }`}>
           {/* Header */}
@@ -292,15 +289,20 @@ export function QEBooh() {
                 </span>
               </div>
             </div>
-            {messages.length > 0 && (
-              <button onClick={() => setMessages([])} className="p-1.5 rounded-lg hover:bg-white/20 transition-colors" title="Limpiar conversacion">
-                <Trash2 className="h-3.5 w-3.5 text-white/70" />
+            <div className="flex items-center gap-1">
+              {messages.length > 0 && (
+                <button onClick={() => setMessages([])} className="p-1.5 rounded-lg hover:bg-white/20 transition-colors" title="Limpiar conversacion">
+                  <Trash2 className="h-3.5 w-3.5 text-white/70" />
+                </button>
+              )}
+              <button onClick={closeChat} className="p-1.5 rounded-lg hover:bg-white/20 transition-colors" title="Cerrar">
+                <X className="h-4 w-4 text-white/80" />
               </button>
-            )}
+            </div>
           </div>
 
           {/* Messages */}
-          <div className="flex-1 overflow-y-auto p-4 space-y-3 min-h-[440px]">
+          <div className="flex-1 overflow-y-auto p-4 space-y-3 min-h-0">
             {messages.length === 0 && (
               <div className="flex flex-col items-center justify-center h-full text-center py-8">
                 <Bot className={`h-12 w-12 mb-3 ${isDark ? 'text-purple-400/30' : 'text-purple-300'}`} />

@@ -14,6 +14,10 @@ export interface SolicitudesParams {
   sortOrder?: 'asc' | 'desc';
   groupBy?: string;
   tipoPeriodo?: string;
+  cambioEstatusDesde?: string;
+  cambioEstatusHasta?: string;
+  creacionDesde?: string;
+  creacionHasta?: string;
 }
 
 export interface CatorcenasResponse {

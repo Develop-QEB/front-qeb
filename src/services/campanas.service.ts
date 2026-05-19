@@ -785,6 +785,10 @@ export interface CampanasParams {
   catorcenaInicio?: number;
   catorcenaFin?: number;
   tipoPeriodo?: string;
+  cambioEstatusDesde?: string;
+  cambioEstatusHasta?: string;
+  creacionDesde?: string;
+  creacionHasta?: string;
 }
 
 export const campanasService = {

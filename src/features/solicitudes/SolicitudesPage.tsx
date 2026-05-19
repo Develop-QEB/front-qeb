@@ -19,6 +19,7 @@ import { useAuthStore } from '../../store/authStore';
 import { useThemeStore } from '../../store/themeStore';
 import { getPermissions } from '../../lib/permissions';
 import { useSocketSolicitudes } from '../../hooks/useSocket';
+import { HistorialFilterPopover, type HistorialFilterValues } from '../../components/HistorialFilterPopover';
 
 // Filter Chip Component with Search - same as ClientesPage
 function FilterChip({
@@ -725,6 +726,7 @@ export function SolicitudesPage() {
   const [yearFin, setYearFin] = useState<number | undefined>(undefined);
   const [catorcenaInicio, setCatorcenaInicio] = useState<number | undefined>(undefined);
   const [catorcenaFin, setCatorcenaFin] = useState<number | undefined>(undefined);
+  const [historialFilter, setHistorialFilter] = useState<HistorialFilterValues>({});
   const [tipoPeriodo, setTipoPeriodo] = useState('');
   const [sortBy, setSortBy] = useState('fecha');
   const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('desc');
@@ -859,7 +861,7 @@ export function SolicitudesPage() {
 
   // Fetch solicitudes
   const { data, isLoading } = useQuery({
-    queryKey: ['solicitudes', page, status, searchForBackend, yearInicio, yearFin, catorcenaInicio, catorcenaFin, sortBy, sortOrder, groupBy, tipoPeriodo, needsAllData],
+    queryKey: ['solicitudes', page, status, searchForBackend, yearInicio, yearFin, catorcenaInicio, catorcenaFin, sortBy, sortOrder, groupBy, tipoPeriodo, needsAllData, historialFilter],
     queryFn: () =>
       solicitudesService.getAll({
         page: needsAllData ? 1 : page,
@@ -874,6 +876,7 @@ export function SolicitudesPage() {
         sortOrder,
         groupBy: groupBy || undefined,
         tipoPeriodo: tipoPeriodo || undefined,
+        ...historialFilter,
       }),
     staleTime: 1000 * 30, // 30 s — WS invalida en cambios reales
     placeholderData: (prev) => prev, // mantiene la tabla anterior visible al paginar/filtrar
@@ -1087,6 +1090,7 @@ export function SolicitudesPage() {
     setYearFin(undefined);
     setCatorcenaInicio(undefined);
     setCatorcenaFin(undefined);
+    setHistorialFilter({});
     setSortBy('fecha');
     setSortOrder('desc');
     setGroupBy('');
@@ -1501,6 +1505,14 @@ export function SolicitudesPage() {
                     setCatorcenaFin(undefined);
                     setPage(1);
                   }}
+                />
+
+                {/* Historial Filter (cambios de estatus / creacion por fecha) */}
+                <HistorialFilterPopover
+                  values={historialFilter}
+                  isDark={isDark}
+                  onApply={(v) => { setHistorialFilter(v); setPage(1); }}
+                  onClear={() => { setHistorialFilter({}); setPage(1); }}
                 />
 
                 <div className={`h-4 w-px ${isDark ? 'bg-zinc-700' : 'bg-gray-200'} mx-1`} />

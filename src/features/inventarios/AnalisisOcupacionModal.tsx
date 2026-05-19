@@ -79,6 +79,11 @@ export function AnalisisOcupacionModal({
 }: AnalisisOcupacionModalProps) {
   const isDark = useThemeStore(s => s.theme) === 'dark';
   const queryClient = useQueryClient();
+  const userRole = useAuthStore(s => s.user?.rol);
+  // Selección múltiple (botón oculto): solo DEV.
+  const canBulkSelect = userRole === 'DEV';
+
+  const [selectionMode, setSelectionMode] = useState(false);
 
   const [step, setStep] = useState<Step>('select');
   const [inventarios, setInventarios] = useState<InventarioResumen[]>([]);
@@ -174,7 +179,7 @@ export function AnalisisOcupacionModal({
         return;
       }
 
-      const check = await inventariosService.bulkCheck(nuevosCodigos);
+      const check = await inventariosService.bulkCheck(nuevosCodigos, true);
       const idsEncontrados: number[] = [
         ...check.sobreescribibles.map(s => s.id).filter((x): x is number => x !== null),
         ...check.ocupados.map(o => o.id).filter((x): x is number => x !== null),
@@ -329,7 +334,13 @@ export function AnalisisOcupacionModal({
           {/* Header */}
           <div className={`p-5 border-b ${isDark ? 'border-purple-500/20 bg-gradient-to-r from-purple-900/20 via-fuchsia-900/10 to-purple-900/20' : 'border-purple-200 bg-gradient-to-r from-purple-50 via-fuchsia-50 to-purple-50'} flex items-center justify-between`}>
             <div className="flex items-center gap-3">
-              <div className={`w-10 h-10 rounded-xl ${isDark ? 'bg-purple-500/20' : 'bg-purple-50'} flex items-center justify-center`}>
+              <div
+                className={`w-10 h-10 rounded-xl ${isDark ? 'bg-purple-500/20' : 'bg-purple-50'} flex items-center justify-center`}
+                onClick={() => {
+                  if (step !== 'matriz' || !canBulkSelect) return;
+                  setSelectionMode(s => !s);
+                }}
+              >
                 <BarChart3 className={`h-5 w-5 ${isDark ? 'text-purple-400' : 'text-purple-600'}`} />
               </div>
               <div>
@@ -567,6 +578,7 @@ export function AnalisisOcupacionModal({
                 building={building}
                 isDark={isDark}
                 onRefresh={() => buildMatrizFor(inventarios, catorcenasSelected)}
+                selectionMode={selectionMode}
               />
             )}
           </div>
@@ -688,11 +700,13 @@ function MatrizView({
   building,
   isDark,
   onRefresh,
+  selectionMode,
 }: {
   matriz: MatrizOcupacion | null;
   building: boolean;
   isDark: boolean;
   onRefresh: () => Promise<void> | void;
+  selectionMode: boolean;
 }) {
   const userRole = useAuthStore(s => s.user?.rol);
   const canRelease = userRole === 'DEV'
@@ -715,6 +729,22 @@ function MatrizView({
   } | null>(null);
   const [releasing, setReleasing] = useState(false);
   const [releaseError, setReleaseError] = useState<string | null>(null);
+
+  // Selección múltiple (por reserva_id)
+  const [selectedReservas, setSelectedReservas] = useState<Set<number>>(new Set());
+  const [confirmBulkOpen, setConfirmBulkOpen] = useState(false);
+  const [bulkReleasing, setBulkReleasing] = useState(false);
+  const [bulkError, setBulkError] = useState<string | null>(null);
+
+  const toggleReservaSelected = (reservaId: number) => {
+    setSelectedReservas(prev => {
+      const next = new Set(prev);
+      if (next.has(reservaId)) next.delete(reservaId);
+      else next.add(reservaId);
+      return next;
+    });
+  };
+  const clearSelection = () => setSelectedReservas(new Set());
 
   const handleConfirmRelease = async () => {
     if (!confirmRelease || !canRelease) return;
@@ -746,6 +776,77 @@ function MatrizView({
     }
   };
 
+  // Lookup de las cards actualmente seleccionadas (resolviendo reserva_id contra la matriz)
+  const selectedCards = useMemo(() => {
+    if (!matriz || selectedReservas.size === 0) return [] as { card: CampanaEnCelda; inventarioId: number }[];
+    const out: { card: CampanaEnCelda; inventarioId: number }[] = [];
+    for (const [invIdStr, invCeldas] of Object.entries(matriz.celdas)) {
+      for (const celda of Object.values(invCeldas)) {
+        for (const c of celda.campanas) {
+          if (selectedReservas.has(c.reserva_id)) {
+            out.push({ card: c, inventarioId: Number(invIdStr) });
+          }
+        }
+      }
+    }
+    return out;
+  }, [matriz, selectedReservas]);
+
+  const handleBulkRelease = async () => {
+    if (!canRelease || selectedCards.length === 0) return;
+    setBulkReleasing(true);
+    setBulkError(null);
+    try {
+      // Agrupar por campana_id y propuesta_id para minimizar requests
+      const byCampana = new Map<number, number[]>();
+      const byPropuesta = new Map<number, number[]>();
+      for (const { card } of selectedCards) {
+        if (card.aps && card.aps > 0) continue; // defensivo: nunca debería entrar aquí
+        if (card.campana_id) {
+          const list = byCampana.get(card.campana_id) || [];
+          list.push(card.reserva_id);
+          byCampana.set(card.campana_id, list);
+        } else if (card.propuesta_id) {
+          const list = byPropuesta.get(card.propuesta_id) || [];
+          list.push(card.reserva_id);
+          byPropuesta.set(card.propuesta_id, list);
+        }
+      }
+
+      const errores: string[] = [];
+      for (const [campanaId, reservaIds] of byCampana) {
+        try {
+          await campanasService.deleteReservas(campanaId, reservaIds);
+        } catch (err) {
+          const axiosErr = err as { response?: { data?: { error?: string } } };
+          const msg = axiosErr?.response?.data?.error || (err instanceof Error ? err.message : 'error');
+          errores.push(`Campaña #${campanaId}: ${msg}`);
+        }
+      }
+      for (const [propuestaId, reservaIds] of byPropuesta) {
+        try {
+          await propuestasService.deleteReservas(propuestaId, reservaIds);
+        } catch (err) {
+          const axiosErr = err as { response?: { data?: { error?: string } } };
+          const msg = axiosErr?.response?.data?.error || (err instanceof Error ? err.message : 'error');
+          errores.push(`Propuesta #${propuestaId}: ${msg}`);
+        }
+      }
+
+      await onRefresh();
+
+      if (errores.length === 0) {
+        setConfirmBulkOpen(false);
+        clearSelection();
+      } else {
+        setBulkError(errores.join(' · '));
+        clearSelection(); // los IDs viejos ya no aplican
+      }
+    } finally {
+      setBulkReleasing(false);
+    }
+  };
+
   useEffect(() => {
     if (!filterOpen) return;
     const handler = (e: MouseEvent) => {
@@ -756,6 +857,11 @@ function MatrizView({
     document.addEventListener('mousedown', handler);
     return () => document.removeEventListener('mousedown', handler);
   }, [filterOpen]);
+
+  // Si se apaga el modo selección desde fuera, limpia la selección actual
+  useEffect(() => {
+    if (!selectionMode) setSelectedReservas(new Set());
+  }, [selectionMode]);
 
   const allCampanas = useMemo(() => {
     if (!matriz) return [] as { label: string; cliente: string }[];
@@ -892,6 +998,37 @@ function MatrizView({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [matriz, campanaFilter, isFiltered, soloDuplicados, duplicadoIds]);
 
+  // Cards visibles y liberables (sin APS, dentro de los filtros activos)
+  const selectableCards = useMemo(() => {
+    if (!matriz) return [] as CampanaEnCelda[];
+    const out: CampanaEnCelda[] = [];
+    for (const inv of inventariosFiltrados) {
+      const invCeldas = matriz.celdas[inv.id];
+      if (!invCeldas) continue;
+      for (const celda of Object.values(invCeldas)) {
+        for (const c of celda.campanas) {
+          if (c.aps && c.aps > 0) continue;
+          if (isFiltered && !campanaFilter.has(labelForCampana(c))) continue;
+          if (soloDuplicados && !isCampanaDuplicada(c)) continue;
+          out.push(c);
+        }
+      }
+    }
+    return out;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [matriz, inventariosFiltrados, campanaFilter, isFiltered, soloDuplicados, duplicadoIds]);
+
+  const allSelectableSelected = selectableCards.length > 0
+    && selectableCards.every(c => selectedReservas.has(c.reserva_id));
+
+  const toggleSelectAll = () => {
+    if (allSelectableSelected) {
+      clearSelection();
+    } else {
+      setSelectedReservas(new Set(selectableCards.map(c => c.reserva_id)));
+    }
+  };
+
   if (building || !matriz) {
     return (
       <div className="flex-1 flex flex-col items-center justify-center py-20 gap-3">
@@ -1018,6 +1155,52 @@ function MatrizView({
             Mostrando {inventariosFiltrados.length} de {matriz.inventarios.length} inventarios
           </span>
         )}
+        {canRelease && selectionMode && (
+          <div className={`ml-auto flex items-center gap-2 px-3 py-1.5 rounded-lg border text-xs ${
+            isDark
+              ? 'bg-purple-500/20 border-purple-500/40 text-purple-200'
+              : 'bg-purple-50 border-purple-300 text-purple-800'
+          }`}>
+            <button
+              onClick={toggleSelectAll}
+              disabled={selectableCards.length === 0}
+              className={`flex items-center gap-1 px-2 py-0.5 rounded font-medium ${
+                isDark ? 'hover:bg-purple-500/30 disabled:opacity-40' : 'hover:bg-purple-100 disabled:opacity-40'
+              }`}
+              title={allSelectableSelected ? 'Deseleccionar todas' : 'Seleccionar todas las visibles y liberables'}
+            >
+              {allSelectableSelected
+                ? 'Deseleccionar todas'
+                : `Seleccionar todas (${selectableCards.length})`}
+            </button>
+            {selectedReservas.size > 0 && (
+              <>
+                <span className={`${isDark ? 'text-purple-300/50' : 'text-purple-400'}`}>·</span>
+                <span className="font-semibold">
+                  {selectedReservas.size} {selectedReservas.size === 1 ? 'seleccionada' : 'seleccionadas'}
+                </span>
+                <button
+                  onClick={() => setConfirmBulkOpen(true)}
+                  className={`flex items-center gap-1.5 px-2 py-0.5 rounded font-medium ${
+                    isDark ? 'bg-red-500/30 text-red-200 hover:bg-red-500/40' : 'bg-red-600 text-white hover:bg-red-700'
+                  }`}
+                >
+                  <Trash2 className="h-3 w-3" />
+                  Liberar
+                </button>
+                <button
+                  onClick={clearSelection}
+                  className={`flex items-center gap-1 px-1.5 py-0.5 rounded ${
+                    isDark ? 'hover:bg-purple-500/30' : 'hover:bg-purple-100'
+                  }`}
+                  title="Limpiar selección"
+                >
+                  <X className="h-3 w-3" />
+                </button>
+              </>
+            )}
+          </div>
+        )}
       </div>
       {duplicados.length > 0 && (
         <div className={`rounded-lg border ${isDark ? 'border-amber-500/30 bg-amber-500/5' : 'border-amber-200 bg-amber-50'} text-xs`}>
@@ -1120,7 +1303,12 @@ function MatrizView({
           {inventariosFiltrados.map(inv => (
             <tr key={inv.id} className={`border-b ${isDark ? 'border-zinc-800' : 'border-gray-100'}`}>
               <td className={`sticky left-0 z-10 px-3 py-2 ${isDark ? 'bg-zinc-900' : 'bg-white'} border-r ${isDark ? 'border-zinc-800' : 'border-gray-200'}`}>
-                <div className={`font-mono text-xs font-medium ${isDark ? 'text-white' : 'text-gray-900'}`}>{inv.codigo_unico}</div>
+                <div className="flex items-center gap-1.5">
+                  <span className={`font-mono text-xs font-medium ${isDark ? 'text-white' : 'text-gray-900'}`}>{inv.codigo_unico}</span>
+                  <span className={`shrink-0 px-1.5 py-0.5 rounded-full text-[9px] font-medium border ${inv.tradicional_digital === 'Digital' ? (isDark ? 'bg-cyan-500/20 text-cyan-300 border-cyan-500/30' : 'bg-cyan-50 text-cyan-700 border-cyan-200') : (isDark ? 'bg-pink-500/20 text-pink-300 border-pink-500/30' : 'bg-pink-50 text-pink-700 border-pink-200')}`}>
+                    {inv.tradicional_digital || 'Tradicional'}
+                  </span>
+                </div>
                 <div className={`text-[10px] mt-0.5 ${isDark ? 'text-zinc-500' : 'text-gray-500'} truncate max-w-[200px]`} title={inv.ubicacion || undefined}>
                   {inv.plaza || '-'} · {inv.mueble || '-'}
                 </div>
@@ -1190,14 +1378,23 @@ function MatrizView({
                         const rangoLabel = c.inicio_periodo && c.fin_periodo
                           ? `${fmt(c.inicio_periodo)} – ${fmt(c.fin_periodo)}`
                           : '';
+                        const tieneAPSLocal = !!(c.aps && c.aps > 0);
+                        const bloqueadoLocal = tieneAPSLocal;
+                        const seleccionable = canRelease && !bloqueadoLocal;
+                        const isSelected = selectionMode && selectedReservas.has(c.reserva_id);
+                        const selectionRing = isSelected
+                          ? (isDark ? 'ring-2 ring-purple-400 ring-offset-1 ring-offset-zinc-900' : 'ring-2 ring-purple-500 ring-offset-1 ring-offset-white')
+                          : '';
+                        const padLeft = selectionMode && seleccionable ? 'pl-7' : '';
+                        const padRight = canRelease ? 'pr-7' : '';
                         return (
-                          <div key={c.reserva_id} className="relative group/card">
+                          <div key={c.reserva_id} className={`relative group/card rounded-md ${selectionRing}`}>
                             <a
                               href={href}
                               target="_blank"
                               rel="noopener noreferrer"
                               title={esPropuesta ? `Editar propuesta #${c.propuesta_id}` : `Abrir campaña: ${label}`}
-                              className={`block w-full text-left rounded-md p-2 ${canRelease ? 'pr-7' : ''} border transition-all cursor-pointer ${cardClass}`}
+                              className={`block w-full text-left rounded-md p-2 ${padLeft} ${padRight} border transition-all cursor-pointer ${cardClass}`}
                             >
                               <div className={`flex items-center gap-1 text-[10px] font-bold uppercase tracking-wide ${statusTextClass}`}>
                                 {statusLabel}
@@ -1232,25 +1429,33 @@ function MatrizView({
                                 </div>
                               )}
                             </a>
+                            {seleccionable && selectionMode && (
+                              <input
+                                type="checkbox"
+                                checked={isSelected}
+                                onChange={() => toggleReservaSelected(c.reserva_id)}
+                                onClick={e => e.stopPropagation()}
+                                title="Seleccionar para liberación en lote"
+                                className="absolute top-1.5 left-1.5 h-3.5 w-3.5 cursor-pointer accent-purple-500"
+                              />
+                            )}
                             {canRelease && (() => {
-                              const tieneAPS = !!(c.aps && c.aps > 0);
-                              const bloqueado = tieneAPS;
                               const tooltipBloqueo = c.posted
                                 ? 'Tiene POST, no se puede eliminar'
                                 : 'Tiene APS asignado, no se puede eliminar';
                               return (
                                 <button
                                   type="button"
-                                  disabled={bloqueado}
+                                  disabled={bloqueadoLocal}
                                   onClick={e => {
                                     e.preventDefault();
                                     e.stopPropagation();
-                                    if (bloqueado) return;
+                                    if (bloqueadoLocal) return;
                                     setConfirmRelease({ card: c, inventario: inv, catorcena: cat });
                                   }}
-                                  title={bloqueado ? tooltipBloqueo : 'Liberar reserva (eliminar de la BD)'}
+                                  title={bloqueadoLocal ? tooltipBloqueo : 'Liberar reserva (eliminar de la BD)'}
                                   className={`absolute top-1 right-1 p-1 rounded transition-all ${
-                                    bloqueado
+                                    bloqueadoLocal
                                       ? `opacity-100 cursor-not-allowed ${isDark ? 'text-zinc-600' : 'text-gray-300'}`
                                       : `opacity-0 group-hover/card:opacity-100 focus:opacity-100 ${
                                           isDark
@@ -1345,6 +1550,80 @@ function MatrizView({
               >
                 {releasing ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Trash2 className="h-3.5 w-3.5" />}
                 {releasing ? 'Liberando...' : 'Sí, liberar'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {confirmBulkOpen && (
+        <div
+          className="fixed inset-0 bg-black/70 z-[60] flex items-center justify-center p-4"
+          onClick={() => !bulkReleasing && setConfirmBulkOpen(false)}
+        >
+          <div
+            className={`rounded-2xl border ${isDark ? 'bg-zinc-900 border-red-500/30' : 'bg-white border-red-200'} w-full max-w-lg shadow-2xl flex flex-col max-h-[80vh]`}
+            onClick={e => e.stopPropagation()}
+          >
+            <div className={`p-5 border-b ${isDark ? 'border-zinc-800' : 'border-gray-200'}`}>
+              <div className="flex items-start gap-3">
+                <div className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 ${isDark ? 'bg-red-500/20' : 'bg-red-50'}`}>
+                  <AlertCircle className={`h-5 w-5 ${isDark ? 'text-red-300' : 'text-red-600'}`} />
+                </div>
+                <div className="flex-1 min-w-0">
+                  <h3 className={`text-base font-semibold ${isDark ? 'text-white' : 'text-gray-900'}`}>
+                    ¿Liberar {selectedCards.length} {selectedCards.length === 1 ? 'reserva' : 'reservas'}?
+                  </h3>
+                  <p className={`text-xs mt-1 ${isDark ? 'text-zinc-400' : 'text-gray-500'}`}>
+                    Se eliminarán de la base de datos. Esta acción no se puede deshacer.
+                  </p>
+                </div>
+              </div>
+            </div>
+            <div className={`p-5 overflow-y-auto text-xs ${isDark ? 'text-zinc-300' : 'text-gray-700'}`}>
+              <ul className="space-y-1.5">
+                {selectedCards.slice(0, 15).map(({ card }) => {
+                  const esP = !card.campana_id;
+                  const nombre = esP ? `Propuesta #${card.propuesta_id}` : (card.campana_nombre || `Campaña #${card.campana_id}`);
+                  return (
+                    <li key={card.reserva_id} className="flex items-start gap-2">
+                      <span className={`shrink-0 inline-block w-1.5 h-1.5 mt-1.5 rounded-full ${esP ? 'bg-amber-400' : 'bg-red-400'}`} />
+                      <div className="flex-1 min-w-0">
+                        <div className="truncate font-medium">{nombre}</div>
+                        <div className={`text-[10px] truncate ${isDark ? 'text-zinc-500' : 'text-gray-500'}`}>
+                          {card.cliente_nombre || 'Sin cliente'} · C{card.numero_catorcena}-{card.anio_catorcena} · #{card.reserva_id}
+                        </div>
+                      </div>
+                    </li>
+                  );
+                })}
+                {selectedCards.length > 15 && (
+                  <li className={`text-[11px] italic ${isDark ? 'text-zinc-500' : 'text-gray-500'}`}>
+                    … y {selectedCards.length - 15} más
+                  </li>
+                )}
+              </ul>
+              {bulkError && (
+                <div className={`mt-3 px-3 py-2 rounded-lg text-xs whitespace-pre-line ${isDark ? 'bg-red-500/15 text-red-300 border border-red-500/30' : 'bg-red-50 text-red-700 border border-red-200'}`}>
+                  {bulkError}
+                </div>
+              )}
+            </div>
+            <div className={`p-4 border-t ${isDark ? 'border-zinc-800 bg-zinc-900/50' : 'border-gray-200 bg-gray-50'} flex items-center justify-end gap-2`}>
+              <button
+                onClick={() => setConfirmBulkOpen(false)}
+                disabled={bulkReleasing}
+                className={`px-3 py-1.5 rounded-lg text-sm ${isDark ? 'text-zinc-300 hover:bg-zinc-800' : 'text-gray-700 hover:bg-gray-100'} disabled:opacity-50`}
+              >
+                Cancelar
+              </button>
+              <button
+                onClick={handleBulkRelease}
+                disabled={bulkReleasing || selectedCards.length === 0}
+                className={`flex items-center gap-2 px-3 py-1.5 rounded-lg text-sm font-medium ${isDark ? 'bg-red-500/20 text-red-300 border border-red-500/40 hover:bg-red-500/30' : 'bg-red-600 text-white hover:bg-red-700'} disabled:opacity-50`}
+              >
+                {bulkReleasing ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Trash2 className="h-3.5 w-3.5" />}
+                {bulkReleasing ? 'Liberando...' : `Sí, liberar ${selectedCards.length}`}
               </button>
             </div>
           </div>

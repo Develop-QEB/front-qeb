@@ -306,8 +306,10 @@ export const inventariosService = {
   },
 
   // Bulk check inventarios against DB
-  async bulkCheck(codigos: string[]): Promise<BulkCheckResult> {
-    const response = await api.post<ApiResponse<BulkCheckResult>>('/inventarios/bulk-check', { codigos });
+  // `expandir`: devuelve TODOS los inventarios por codigo_unico (p.ej. cara
+  // Tradicional + Digital). Por defecto se conserva uno (compat. importación CSV).
+  async bulkCheck(codigos: string[], expandir = false): Promise<BulkCheckResult> {
+    const response = await api.post<ApiResponse<BulkCheckResult>>('/inventarios/bulk-check', { codigos, expandir });
     if (!response.data.success || !response.data.data) {
       throw new Error(response.data.error || 'Error al verificar inventarios');
     }

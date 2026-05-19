@@ -28,6 +28,7 @@ import { useAuthStore } from '../../store/authStore';
 import { useThemeStore } from '../../store/themeStore';
 import { getPermissions } from '../../lib/permissions';
 import { useSocketEquipos, useSocketPropuestas } from '../../hooks/useSocket';
+import { HistorialFilterPopover, type HistorialFilterValues } from '../../components/HistorialFilterPopover';
 import { ConfirmModal } from '../../components/ui/confirm-modal';
 import { monthLabelShort } from '../../lib/periodos';
 
@@ -1313,6 +1314,7 @@ export function PropuestasPage() {
   const [yearFin, setYearFin] = useState<number | undefined>(undefined);
   const [catorcenaInicio, setCatorcenaInicio] = useState<number | undefined>(undefined);
   const [catorcenaFin, setCatorcenaFin] = useState<number | undefined>(undefined);
+  const [historialFilter, setHistorialFilter] = useState<HistorialFilterValues>({});
   const [sortBy, setSortBy] = useState('fecha');
   const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('desc');
   const [groupBy, setGroupBy] = useState('');
@@ -1436,7 +1438,7 @@ export function PropuestasPage() {
   });
 
   const { data, isLoading } = useQuery({
-    queryKey: ['propuestas', needsAllData ? 1 : page, status, serverSearch, yearInicio, yearFin, catorcenaInicio, catorcenaFin, sortBy, sortOrder, groupBy, tipoPeriodo, needsAllData],
+    queryKey: ['propuestas', needsAllData ? 1 : page, status, serverSearch, yearInicio, yearFin, catorcenaInicio, catorcenaFin, sortBy, sortOrder, groupBy, tipoPeriodo, needsAllData, historialFilter],
     queryFn: () =>
       propuestasService.getAll({
         page: needsAllData ? 1 : page,
@@ -1449,6 +1451,7 @@ export function PropuestasPage() {
         catorcenaFin,
         soloAtendidas: true,
         tipoPeriodo: tipoPeriodo || undefined,
+        ...historialFilter,
       }),
     staleTime: 1000 * 30, // 30 s — WS invalida en cambios reales
     placeholderData: (prev) => prev, // mantiene la tabla anterior al paginar/filtrar
@@ -1538,6 +1541,7 @@ export function PropuestasPage() {
     setYearFin(undefined);
     setCatorcenaInicio(undefined);
     setCatorcenaFin(undefined);
+    setHistorialFilter({});
     setSortBy('fecha');
     setSortOrder('desc');
     setGroupBy('');
@@ -2176,6 +2180,14 @@ export function PropuestasPage() {
                     setCatorcenaFin(undefined);
                     setPage(1);
                   }}
+                />
+
+                {/* Historial Filter (cambios de estatus / creacion por fecha) */}
+                <HistorialFilterPopover
+                  values={historialFilter}
+                  isDark={isDark}
+                  onApply={(v) => { setHistorialFilter(v); setPage(1); }}
+                  onClear={() => { setHistorialFilter({}); setPage(1); }}
                 />
 
                 {/* Divider */}

@@ -25,6 +25,7 @@ import { useAuthStore } from '../../store/authStore';
 import { useThemeStore } from '../../store/themeStore';
 import { getPermissions } from '../../lib/permissions';
 import { useSocketCampanas } from '../../hooks/useSocket';
+import { HistorialFilterPopover, type HistorialFilterValues } from '../../components/HistorialFilterPopover';
 import { IncidenciaModal } from './IncidenciaModal';
 import { exportVersionarioArtesMulti } from '../../utils/exportVersionarioArtes';
 
@@ -1102,6 +1103,7 @@ export function CampanasPage() {
   const [yearFin, setYearFin] = useState<number | undefined>(undefined);
   const [catorcenaInicio, setCatorcenaInicio] = useState<number | undefined>(undefined);
   const [catorcenaFin, setCatorcenaFin] = useState<number | undefined>(undefined);
+  const [historialFilter, setHistorialFilter] = useState<HistorialFilterValues>({});
   // Estados para filtros/ordenamiento/agrupación con popups
   const [sortField, setSortField] = useState<string | null>(null);
   const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('desc');
@@ -1199,7 +1201,7 @@ export function CampanasPage() {
   const serverSearch = allSearchTerms.length > 0 ? allSearchTerms.join('|') : undefined;
 
   const { data, isLoading } = useQuery({
-    queryKey: ['campanas', needsAllData ? 1 : page, status, yearInicio, yearFin, catorcenaInicio, catorcenaFin, tipoPeriodo, needsAllData, serverSearch, effectiveLimit],
+    queryKey: ['campanas', needsAllData ? 1 : page, status, yearInicio, yearFin, catorcenaInicio, catorcenaFin, tipoPeriodo, needsAllData, serverSearch, effectiveLimit, historialFilter],
     queryFn: () =>
       campanasService.getAll({
         page: needsAllData ? 1 : page,
@@ -1211,6 +1213,7 @@ export function CampanasPage() {
         catorcenaInicio,
         catorcenaFin,
         tipoPeriodo: tipoPeriodo || undefined,
+        ...historialFilter,
       }),
     staleTime: 1000 * 30, // 30 s — WS invalida en cambios reales
     placeholderData: (prev) => prev, // evita parpadeo al paginar/filtrar
@@ -2044,6 +2047,7 @@ export function CampanasPage() {
     setYearFin(undefined);
     setCatorcenaInicio(undefined);
     setCatorcenaFin(undefined);
+    setHistorialFilter({});
     setSelectedCatorcenaInicio('');
     setSortField(null);
     setSortDirection('desc');
@@ -2881,6 +2885,14 @@ export function CampanasPage() {
                     setPage(1);
                   }}
                   isDark={isDark}
+                />
+
+                {/* Historial Filter (cambios de estatus / creacion por fecha) */}
+                <HistorialFilterPopover
+                  values={historialFilter}
+                  isDark={isDark}
+                  onApply={(v) => { setHistorialFilter(v); setPage(1); }}
+                  onClear={() => { setHistorialFilter({}); setPage(1); }}
                 />
 
                 {/* Divider */}

@@ -21,6 +21,7 @@ import { InventarioMap } from './InventarioMap';
 import { BloqueoModal, BloqueoData } from './BloqueoModal';
 import { AnalisisOcupacionModal } from './AnalisisOcupacionModal';
 import { AnalisisOcupacionListModal } from './AnalisisOcupacionListModal';
+import { ReorganizarOcupacionModal } from './ReorganizarOcupacionModal';
 
 const getEstatusStyles = (isDark: boolean): Record<string, { bg: string; text: string; border: string }> => ({
   Activo: { bg: isDark ? 'bg-emerald-500/20' : 'bg-emerald-50', text: isDark ? 'text-emerald-300' : 'text-emerald-700', border: 'border-emerald-500/30' },
@@ -164,6 +165,8 @@ export function InventariosPage() {
   const [analisisInicialInventarios, setAnalisisInicialInventarios] = useState<InventarioResumen[]>([]);
   const [isAnalisisListOpen, setIsAnalisisListOpen] = useState(false);
   const [openingAnalisis, setOpeningAnalisis] = useState(false);
+  const [isReorganizarOpen, setIsReorganizarOpen] = useState(false);
+  const isDev = user?.rol === 'DEV';
 
   useEffect(() => {
     if (!analisisIdParam) return;
@@ -1032,6 +1035,18 @@ export function InventariosPage() {
                 <FolderOpen className="h-4 w-4" />
                 Guardados
               </button>
+
+              {/* Revisar por Campaña (DEV) */}
+              {isDev && (
+                <button
+                  onClick={() => setIsReorganizarOpen(true)}
+                  title="Revisar y reorganizar ocupación por campaña (DEV)"
+                  className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-medium border transition-all ${isDark ? 'bg-cyan-500/10 hover:bg-cyan-500/20 text-cyan-300 border-cyan-500/30' : 'bg-cyan-50 hover:bg-cyan-100 text-cyan-700 border-cyan-200'}`}
+                >
+                  <Activity className="h-4 w-4" />
+                  Revisar por Campaña
+                </button>
+              )}
 
               {/* Bulk upload button */}
               <button
@@ -2150,6 +2165,14 @@ export function InventariosPage() {
         onOpenAnalisis={openAnalisisGuardado}
         onCreateNew={() => { setIsAnalisisListOpen(false); openAnalisisVacio(); }}
       />
+
+      {/* Reorganizar Ocupación (DEV) */}
+      {isDev && (
+        <ReorganizarOcupacionModal
+          open={isReorganizarOpen}
+          onClose={() => setIsReorganizarOpen(false)}
+        />
+      )}
     </div>
   );
 }
