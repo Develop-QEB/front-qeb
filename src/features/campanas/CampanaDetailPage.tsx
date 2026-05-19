@@ -796,6 +796,53 @@ function formatArticulo(item: InventarioReservado | InventarioConAPS): string {
   return parts.length > 0 ? parts.join(' | ') : 'Sin asignar';
 }
 
+// Formatea el campo `detalles` del historial. Si viene como JSON estructurado
+// (ej. {"usuario":"...","cambios":[{"label":"Estado","antes":"Pendiente","despues":"Aprobada"}]})
+// lo convierte a texto legible. Si es texto plano lo devuelve tal cual.
+// Mismo criterio que HistorialAccionesPage.formatDetalles.
+function formatHistorialDetalles(detalles: string | null | undefined): string {
+  if (!detalles) return '';
+  const s = String(detalles);
+  if (!s.startsWith('{') && !s.startsWith('[')) return s;
+  try {
+    const obj = JSON.parse(s);
+    const parts: string[] = [];
+    if (obj.aprobadoPor) {
+      parts.push(`Aprobado por: ${obj.aprobadoPor}`);
+      if (obj.tipo) parts.push(`Tipo: ${obj.tipo}`);
+      if (obj.carasAprobadas) parts.push(`${obj.carasAprobadas} circuito(s)`);
+      return parts.join(' | ');
+    }
+    if (obj.rechazadoPor) {
+      parts.push(`Rechazado por: ${obj.rechazadoPor}`);
+      if (obj.tipo) parts.push(`Tipo: ${obj.tipo}`);
+      if (obj.motivo) parts.push(`Motivo: ${obj.motivo}`);
+      return parts.join(' | ');
+    }
+    if (obj.usuario) parts.push(obj.usuario);
+    if (obj.origen) parts.push(`Origen: ${obj.origen}`);
+    if (Array.isArray(obj.cambios) && obj.cambios.length) {
+      for (const c of obj.cambios) {
+        parts.push(`${c.label || c.campo}: ${c.antes} → ${c.despues}`);
+      }
+    }
+    if (obj.cara) {
+      const noun = (obj.cara.formato || '').toUpperCase().includes('PUENTE PEATONAL') ? 'puentes' : 'caras';
+      parts.push(`Artículo: ${obj.cara.articulo}, ${obj.cara.caras} ${noun}`);
+    }
+    if (Array.isArray(obj.caras) && obj.caras.length) {
+      const c = obj.caras[0];
+      const noun = (c.formato || '').toUpperCase().includes('PUENTE PEATONAL') ? 'puentes' : 'caras';
+      parts.push(`${c.articulo} — ${c.formato} — ${c.caras} ${noun}`);
+    }
+    if (obj.pendientesDg) parts.push(`Pendientes DG: ${obj.pendientesDg}`);
+    if (obj.pendientesDcm) parts.push(`Pendientes DCM: ${obj.pendientesDcm}`);
+    return parts.length > 0 ? parts.join(' | ') : s;
+  } catch {
+    return s;
+  }
+}
+
 // Helper para obtener el valor de agrupación formateado
 function getGroupValue(item: InventarioReservado | InventarioConAPS, field: GroupByField, tipoPeriodo?: string): string {
   if (field === 'inicio_periodo') {
@@ -2436,11 +2483,14 @@ export function CampanaDetailPage() {
                             </p>
                           )}
                         </div>
-                      ) : item.detalles && !isAuthEntry ? (
-                        <p className={`text-xs truncate ${isDark ? 'text-zinc-500' : 'text-gray-400'}`} title={item.detalles}>
-                          {item.detalles}
-                        </p>
-                      ) : null}
+                      ) : item.detalles && !isAuthEntry ? (() => {
+                        const txt = formatHistorialDetalles(item.detalles);
+                        return txt ? (
+                          <p className={`text-xs truncate ${isDark ? 'text-zinc-500' : 'text-gray-400'}`} title={txt}>
+                            {txt}
+                          </p>
+                        ) : null;
+                      })() : null}
                     </div>
                     <div className="text-right flex-shrink-0">
                       <span className={`text-xs block ${isDark ? 'text-zinc-500' : 'text-gray-400'}`}>{fecha}</span>
