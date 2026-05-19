@@ -275,7 +275,7 @@ export function QEBooh() {
   return (
     <>
       {isOpen && (
-        <div className={`fixed bottom-6 right-6 z-50 w-[600px] max-w-[calc(100vw-3rem)] h-[780px] max-h-[calc(100vh-5rem)] rounded-2xl shadow-2xl border flex flex-col overflow-hidden ${
+        <div className={`fixed bottom-6 right-6 z-50 w-[460px] max-w-[calc(100vw-3rem)] h-[620px] max-h-[calc(100vh-7rem)] rounded-2xl shadow-2xl border flex flex-col overflow-hidden ${
           isDark ? 'bg-zinc-900 border-purple-500/20' : 'bg-white border-gray-200'
         }`}>
           {/* Header */}
@@ -302,7 +302,7 @@ export function QEBooh() {
           </div>
 
           {/* Messages */}
-          <div className="flex-1 overflow-y-auto p-4 space-y-3 min-h-[440px]">
+          <div className="flex-1 overflow-y-auto p-4 space-y-3 min-h-0">
             {messages.length === 0 && (
               <div className="flex flex-col items-center justify-center h-full text-center py-8">
                 <Bot className={`h-12 w-12 mb-3 ${isDark ? 'text-purple-400/30' : 'text-purple-300'}`} />
