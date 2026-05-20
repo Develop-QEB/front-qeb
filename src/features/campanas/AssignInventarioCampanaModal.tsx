@@ -121,6 +121,15 @@ const isNoInventoryArticle = (itemCode: string, itemName?: string): boolean => {
   return isImpresionArticle(itemCode, itemName) || isEspecialArticle(itemCode, itemName);
 };
 
+// "Gestion QTO" — artículos para Querétaro/Celaya (sufijo `-QR`, ej. `RT-P1-COB-QR`).
+// Comportamiento: la reserva de inventario es OPCIONAL — pase a ventas funciona
+// con o sin reservas y la cara se ve siempre "completa" (verde). La UI de reservar
+// sigue ACTIVA (a diferencia de IM/ESP que la bloquean) — el usuario puede
+// reservar si quiere, pero no es requisito.
+const isQuretaroArticle = (itemCode: string): boolean => {
+  return (itemCode || '').toUpperCase().endsWith('-QR');
+};
+
 // Artículos que son 100% bonificación (BF/CF/CT). El KPI de bonificación
 // se divide en 2 (Flujo / Contraflujo) sin tocar BD; reservas siguen como tipo='Bonificacion'.
 // NOTA: IN (Intercambio) NO entra aquí — en todo el flujo (caras, KPIs, autorización,
@@ -2024,6 +2033,10 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
       && (bonifReservadoFlujo !== bonifTargetFlujo || bonifReservadoContra !== bonifTargetContra);
     const needsAttention = flujoDiff !== 0 || contraflujoDiff !== 0 || bonificacionDiff !== 0 || splitNeedsAttention;
 
+    // QR (Gestión QTO): reservar es opcional. Siempre se considera completa para
+    // pase a ventas. Verde con o sin reservas.
+    const esQr = !!(cara.articulo && isQuretaroArticle(cara.articulo));
+    const allComplete = flujoCompleto && contraflujoCompleto && bonificacionCompleto;
     return {
       flujoReservado,
       contraflujoReservado,
@@ -2031,17 +2044,17 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
       flujoRequerido,
       contraflujoRequerido,
       bonificacionRequerido,
-      flujoCompleto,
-      contraflujoCompleto,
-      bonificacionCompleto,
-      isComplete: flujoCompleto && contraflujoCompleto && bonificacionCompleto,
+      flujoCompleto: esQr ? true : flujoCompleto,
+      contraflujoCompleto: esQr ? true : contraflujoCompleto,
+      bonificacionCompleto: esQr ? true : bonificacionCompleto,
+      isComplete: esQr ? true : allComplete,
       totalReservado,
       totalRequerido,
       flujoDiff,
       contraflujoDiff,
       bonificacionDiff,
       totalDiff,
-      needsAttention,
+      needsAttention: esQr ? false : needsAttention,
     };
   };
 

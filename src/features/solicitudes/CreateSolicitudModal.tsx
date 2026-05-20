@@ -167,6 +167,13 @@ const isNoInventoryArticle = (itemCode: string): boolean => {
   return itemCode.toUpperCase().startsWith('IM') || isEspecialArticle(itemCode);
 };
 
+// "Gestion QTO" — artículos para Querétaro/Celaya (sufijo `-QR`).
+// Reservar es OPCIONAL — pase a ventas funciona con o sin reservas.
+// La UI de reservar sigue activa (a diferencia de IM/ESP).
+const isQuretaroArticle = (itemCode: string): boolean => {
+  return (itemCode || '').toUpperCase().endsWith('-QR');
+};
+
 const getRequiredPeriodoForArticulo = (itemName: string): 'catorcena' | 'mensual' => {
   if (!itemName) return 'catorcena';
   const name = itemName.toUpperCase();

@@ -604,9 +604,12 @@ function StatusModal({ isOpen, onClose, propuesta, onStatusChange, allowedStatus
   const reservasIncompletas = useMemo(() => {
     if (!caras || !reservas) return false;
     return caras.some(cara => {
-      // Artículos de impresión (IM) o ejecución especial (ESP/ES-) no requieren reservas — siempre completos
+      // Artículos sin requisito de reservas — siempre completos:
+      // - IM (Impresión) y ESP/ES- (Ejecución Especial): nunca requieren inventario.
+      // - sufijo "-QR" (Gestión QTO, Querétaro/Celaya sin inventario disponible):
+      //   reservar es OPCIONAL — pase a ventas funciona con o sin reservas.
       const articulo = ((cara as any).articulo || '').toUpperCase();
-      if (articulo.startsWith('IM') || articulo.startsWith('ESP') || articulo.startsWith('ES-')) return false;
+      if (articulo.startsWith('IM') || articulo.startsWith('ESP') || articulo.startsWith('ES-') || articulo.endsWith('-QR')) return false;
 
       const caraReservas = (reservas as any[]).filter(r => r.solicitud_cara_id === cara.id);
       // Bonificacion is determined by estatus='Bonificado', not by tipo_de_cara
