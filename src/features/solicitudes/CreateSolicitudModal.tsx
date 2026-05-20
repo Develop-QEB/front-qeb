@@ -37,13 +37,22 @@ const CODE_PLAZA_MAP_SOL: Record<string, { estado: string; ciudades: string[] }>
   tl:  { estado: 'Estado de México', ciudades: ['Toluca'] },
   nauc: { estado: 'Estado de México', ciudades: ['NAUCALPAN'] },
   em:  { estado: 'Estado de México', ciudades: [] },
+  mr:  { estado: 'Yucatán', ciudades: ['Mérida'] },
+  mer: { estado: 'Yucatán', ciudades: ['Mérida'] },
 };
 
 const CODE_TO_PLAZA_DISPLAY: Record<string, string> = {
   mx: 'Ciudad de México / AM', mty: 'Monterrey',
   gd: 'Guadalajara', gdl: 'Guadalajara',
   ver: 'Veracruz', pv: 'Puerto Vallarta', tl: 'Toluca',
+  mr: 'Mérida', mer: 'Mérida',
 };
+
+// Quita acentos para comparar plazas/ciudades sin que falle por "MÉRIDA" vs "MERIDA",
+// "LEÓN" vs "LEON", etc. (las plazas en `inventarios.plaza` traen acentos pero los
+// nombres en ItemName de SAP suelen venir sin acentos, y viceversa).
+const stripAccents = (s: string): string =>
+  s.normalize('NFD').replace(/[̀-ͯ]/g, '');
 const getPlazaFromArticle = (articulo: string, fallback?: string): string => {
   const segs = (articulo || '').toLowerCase().split('-');
   for (const seg of segs) { if (CODE_TO_PLAZA_DISPLAY[seg]) return CODE_TO_PLAZA_DISPLAY[seg]; }
@@ -233,7 +242,9 @@ const MULTI_CITY_RULES: { pattern: RegExp; estado: string; ciudades: string[] }[
 // Extract city from article name and return estado/ciudades
 const getCiudadEstadoFromArticulo = (itemName: string, itemCode?: string): { estado: string; ciudades: string[] } | null => {
   if (!itemName) return null;
-  const name = itemName.toUpperCase();
+  // Sin acentos: las reglas regex usan "MERIDA"/"LEON"/etc. sin tilde, pero los
+  // ItemName de SAP pueden traer "MÉRIDA"/"LEÓN". Normalizamos para que matcheen.
+  const name = stripAccents(itemName.toUpperCase());
 
   // Check multi-city rules (order matters)
   for (const rule of MULTI_CITY_RULES) {
@@ -2759,14 +2770,16 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
                       const ciudadEstado = getCiudadEstadoFromArticulo(item.ItemName, item.ItemCode);
                       // Auto-set plaza: buscar el nombre de plaza dentro del ItemName (descripción SAP).
                       // Ej: "BONIFICACION DE ESPACIOS MI MACRO GUADALAJARA MODULO C" → match "GUADALAJARA"
-                      const itemNameUpper = (item.ItemName || '').toUpperCase();
+                      // Comparamos SIN ACENTOS porque las plazas en BD pueden traer tilde
+                      // (ej. "MÉRIDA") pero los ItemName de SAP vienen sin acento.
+                      const itemNameNorm = stripAccents((item.ItemName || '').toUpperCase());
                       const plazaPorNombre = inventarioFilters?.plazas?.find(p =>
-                        itemNameUpper.includes(p.plaza.toUpperCase())
+                        itemNameNorm.includes(stripAccents(p.plaza.toUpperCase()))
                       );
-                      // Si no se encuentra por nombre, fallback al segmento del ItemCode (gd, gdl, mty, mx, etc.)
+                      // Si no se encuentra por nombre, fallback al segmento del ItemCode (gd, gdl, mty, mx, mr, etc.)
                       const plazaAutoRaw = getPlazaFromArticle(item.ItemCode);
                       const plazaPorCodigo = inventarioFilters?.plazas?.find(p =>
-                        p.plaza.toLowerCase() === plazaAutoRaw.toLowerCase()
+                        stripAccents(p.plaza.toLowerCase()) === stripAccents(plazaAutoRaw.toLowerCase())
                       );
                       // Fallback: si MULTI_CITY_RULES dio un estado (ej. "Estado de México" para NAUC),
                       // intentar match contra plazas del backend (ej. "ESTADO DE MÉXICO")
