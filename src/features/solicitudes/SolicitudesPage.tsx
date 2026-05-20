@@ -4,7 +4,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import {
   Search, Download, Trash2, FileText,
   Filter, ChevronDown, ChevronRight, X, Layers, SlidersHorizontal,
-  ArrowUpDown, Calendar, Clock, Plus, Eye, Edit2, PlayCircle, MessageSquare
+  ArrowUpDown, Calendar, Clock, Plus, Eye, EyeOff, Edit2, PlayCircle, MessageSquare
 } from 'lucide-react';
 import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip as RechartsTooltip, Legend } from 'recharts';
 
@@ -732,6 +732,7 @@ export function SolicitudesPage() {
   const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('desc');
   const [groupBy, setGroupBy] = useState('');
   const [showFilters, setShowFilters] = useState(false);
+  const [hideRechazadas, setHideRechazadas] = useState(false);
   const [advancedFilters, setAdvancedFilters] = useState<AdvancedFilterCondition[]>([]);
   const [showAdvancedFilters, setShowAdvancedFilters] = useState(false);
   const [comboboxOpen, setComboboxOpen] = useState<string | null>(null);
@@ -842,7 +843,7 @@ export function SolicitudesPage() {
   // Cuando search lo hace el backend, también lo mandamos a stats para que
   // el total y el chart reflejen los resultados filtrados.
   const { data: stats } = useQuery({
-    queryKey: ['solicitudes-stats', yearInicio, yearFin, catorcenaInicio, catorcenaFin, status, searchForBackend],
+    queryKey: ['solicitudes-stats', yearInicio, yearFin, catorcenaInicio, catorcenaFin, status, searchForBackend, hideRechazadas],
     queryFn: () => solicitudesService.getStats({
       yearInicio,
       yearFin,
@@ -850,6 +851,7 @@ export function SolicitudesPage() {
       catorcenaFin,
       status: status || undefined,
       search: searchForBackend,
+      excludeRechazadas: hideRechazadas,
     }),
     staleTime: 1000 * 30, // 30 s
   });
@@ -861,7 +863,7 @@ export function SolicitudesPage() {
 
   // Fetch solicitudes
   const { data, isLoading } = useQuery({
-    queryKey: ['solicitudes', page, status, searchForBackend, yearInicio, yearFin, catorcenaInicio, catorcenaFin, sortBy, sortOrder, groupBy, tipoPeriodo, needsAllData, historialFilter],
+    queryKey: ['solicitudes', page, status, searchForBackend, yearInicio, yearFin, catorcenaInicio, catorcenaFin, sortBy, sortOrder, groupBy, tipoPeriodo, needsAllData, historialFilter, hideRechazadas],
     queryFn: () =>
       solicitudesService.getAll({
         page: needsAllData ? 1 : page,
@@ -876,6 +878,7 @@ export function SolicitudesPage() {
         sortOrder,
         groupBy: groupBy || undefined,
         tipoPeriodo: tipoPeriodo || undefined,
+        excludeRechazadas: hideRechazadas,
         ...historialFilter,
       }),
     staleTime: 1000 * 30, // 30 s — WS invalida en cambios reales
@@ -982,7 +985,7 @@ export function SolicitudesPage() {
   };
 
   const hasPeriodFilter = yearInicio !== undefined && yearFin !== undefined;
-  const hasActiveFilters = !!(status || hasPeriodFilter || groupBy || sortBy !== 'fecha' || advancedFilters.length > 0 || searchTags.length > 0);
+  const hasActiveFilters = !!(status || hasPeriodFilter || groupBy || sortBy !== 'fecha' || advancedFilters.length > 0 || searchTags.length > 0 || hideRechazadas);
 
   // Get unique values for each field (for advanced filter dropdowns).
   // Solo se calcula cuando el panel de filtros avanzados está abierto: evita
@@ -1098,6 +1101,7 @@ export function SolicitudesPage() {
     setAdvancedFilters([]);
     setSearchTags([]);
     setSearchInput('');
+    setHideRechazadas(false);
     setPage(1);
   };
 
@@ -1554,6 +1558,19 @@ export function SolicitudesPage() {
                   onClear={() => { setGroupBy(''); setExpandedGroups(new Set()); setPage(1); }}
                   isDark={isDark}
                 />
+
+                <button
+                  onClick={() => { setHideRechazadas(v => !v); setPage(1); }}
+                  className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium border transition-all ${
+                    hideRechazadas
+                      ? (isDark ? 'bg-red-500/20 text-red-300 border-red-500/40' : 'bg-red-50 text-red-700 border-red-200')
+                      : (isDark ? 'bg-zinc-800/50 text-zinc-400 border-zinc-700/50 hover:bg-zinc-800' : 'bg-gray-100 text-gray-500 border-gray-200 hover:bg-gray-200')
+                  }`}
+                  title={hideRechazadas ? 'Mostrar rechazadas' : 'Ocultar rechazadas'}
+                >
+                  <EyeOff className="h-3 w-3" />
+                  Ocultar Rechazadas
+                </button>
 
                 {hasActiveFilters && (
                   <button

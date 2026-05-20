@@ -21,6 +21,7 @@ interface PropuestasVersionarioViewProps {
     catorcenaInicio?: number;
     catorcenaFin?: number;
     tipoPeriodo?: string;
+    excludeRechazadas?: boolean;
   };
   advancedFilters?: AdvancedFilter[];
   activeGroupings: GroupByField[];
