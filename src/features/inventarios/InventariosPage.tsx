@@ -118,7 +118,10 @@ export function InventariosPage() {
   const campanaIdParam = searchParams.get('campanaId');
   const campanaNombreParam = searchParams.get('campanaNombre');
   const [page, setPage] = useState(1);
-  const [search, setSearch] = useState('');
+  const [searchTags, setSearchTags] = useState<string[]>([]);
+  const [searchInput, setSearchInput] = useState('');
+  const [debouncedSearchTags, setDebouncedSearchTags] = useState<string[]>([]);
+  const [debouncedSearchInput, setDebouncedSearchInput] = useState('');
   const [tipo, setTipo] = useState('');
   const [estatus, setEstatus] = useState('');
   const [plaza, setPlaza] = useState('');
@@ -196,10 +199,44 @@ export function InventariosPage() {
 
   const limit = 50;
   const campanaIdNum = campanaIdParam ? parseInt(campanaIdParam) : undefined;
+
+  // Add search tag on Enter/Tab
+  const addSearchTag = (value: string) => {
+    const trimmed = value.trim();
+    if (trimmed && !searchTags.includes(trimmed)) {
+      setSearchTags(prev => [...prev, trimmed]);
+    }
+    setSearchInput('');
+  };
+
+  const removeSearchTag = (tag: string) => {
+    setSearchTags(prev => prev.filter(t => t !== tag));
+  };
+
+  // Debounce conjunto de tags + input. Un solo timer evita renders dobles
+  // cuando ambos cambian a la vez (típico al presionar Enter para crear tag).
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setDebouncedSearchTags(searchTags);
+      setDebouncedSearchInput(searchInput);
+      setPage(1);
+    }, 500);
+    return () => clearTimeout(timer);
+  }, [searchTags, searchInput]);
+
+  // Combina tags + input debounced. Backend usa OR entre todos los términos
+  // (semántica natural para "muéstrame estos N inventarios específicos").
+  const allSearchTerms = useMemo(() => {
+    const terms = [...debouncedSearchTags];
+    if (debouncedSearchInput.trim()) terms.push(debouncedSearchInput.trim());
+    return terms;
+  }, [debouncedSearchTags, debouncedSearchInput]);
+  const serverSearch = allSearchTerms.length > 0 ? allSearchTerms.join('|') : undefined;
+
   const { data, isLoading } = useQuery({
-    queryKey: ['inventarios', page, search, tipo, estatus, plaza, cto, campanaIdNum],
+    queryKey: ['inventarios', page, serverSearch, tipo, estatus, plaza, cto, campanaIdNum],
     queryFn: () =>
-      inventariosService.getAll({ page, limit, search, tipo: tipo || undefined, estatus: estatus || undefined, plaza: plaza || undefined, cto: cto || undefined, campanaId: campanaIdNum }),
+      inventariosService.getAll({ page, limit, search: serverSearch, tipo: tipo || undefined, estatus: estatus || undefined, plaza: plaza || undefined, cto: cto || undefined, campanaId: campanaIdNum }),
   });
 
   const { data: tipos } = useQuery({ queryKey: ['inventarios', 'tipos'], queryFn: () => inventariosService.getTipos(), staleTime: 30 * 60 * 1000 });
@@ -209,10 +246,10 @@ export function InventariosPage() {
 
   // Stats query — global KPIs with same filters
   const { data: statsData, isLoading: isLoadingStats } = useQuery({
-    queryKey: ['inventarios-stats', search, tipo, estatus, plaza, campanaIdNum],
+    queryKey: ['inventarios-stats', serverSearch, tipo, estatus, plaza, campanaIdNum],
     queryFn: () =>
       inventariosService.getStats({
-        search: search || undefined,
+        search: serverSearch,
         tipo: tipo || undefined,
         estatus: estatus || undefined,
         plaza: plaza || undefined,
@@ -767,7 +804,7 @@ export function InventariosPage() {
 
   const totalPages = data?.pagination?.totalPages || 1;
   const totalItems = data?.pagination?.total || 0;
-  const hasActiveFilters = !!(tipo || plaza || cto || estatus || search || campanaIdParam);
+  const hasActiveFilters = !!(tipo || plaza || cto || estatus || searchTags.length > 0 || searchInput || campanaIdParam);
 
   // Form fields for create/edit
   const FORM_FIELDS: { key: string; label: string; type?: string; options?: string[]; span?: number }[] = [
@@ -950,16 +987,48 @@ export function InventariosPage() {
         <div className={`rounded-2xl border ${isDark ? 'border-purple-500/20 bg-gradient-to-br from-zinc-900/90 via-purple-950/20 to-zinc-900/90' : 'border-purple-200 bg-white'} backdrop-blur-xl p-4 relative z-30`}>
           <div className="flex flex-col gap-4">
             <div className="flex flex-col lg:flex-row items-start lg:items-center gap-4">
-              {/* Search */}
-              <div className="relative flex-1 w-full lg:max-w-xl">
-                <Search className={`absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 ${isDark ? 'text-purple-400' : 'text-purple-500'}`} />
+              {/* Search with Tags */}
+              <div className={`relative flex-1 w-full lg:max-w-xl flex items-center flex-wrap gap-1.5 min-h-[48px] px-3 py-1.5 rounded-xl border ${isDark ? 'border-purple-500/20 bg-zinc-900/80 hover:border-purple-500/40' : 'border-purple-200 bg-gray-50 hover:border-purple-300'} focus-within:ring-2 focus-within:ring-purple-500/30 focus-within:border-purple-500/40 transition-all`}>
+                <Search className={`h-4 w-4 shrink-0 ${isDark ? 'text-purple-400' : 'text-purple-500'}`} />
+                {searchTags.map((tag) => (
+                  <span
+                    key={tag}
+                    className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-xs font-medium ${isDark ? 'bg-purple-500/20 text-purple-300 border border-purple-500/30' : 'bg-purple-100 text-purple-700 border border-purple-200'}`}
+                  >
+                    {tag}
+                    <button
+                      onClick={() => removeSearchTag(tag)}
+                      className={`rounded-full p-0.5 transition-colors ${isDark ? 'hover:bg-purple-500/30' : 'hover:bg-purple-200'}`}
+                    >
+                      <X className="h-3 w-3" />
+                    </button>
+                  </span>
+                ))}
                 <input
-                  type="search"
-                  placeholder="Buscar por código, ubicación, municipio..."
-                  className={`w-full pl-11 pr-4 py-3 rounded-xl border ${isDark ? 'border-purple-500/20 hover:border-purple-500/40' : 'border-purple-200 hover:border-purple-300'} ${isDark ? 'bg-zinc-900/80 text-white placeholder:text-zinc-500' : 'bg-gray-50 text-gray-900 placeholder:text-gray-400'} text-sm focus:outline-none focus:ring-2 focus:ring-purple-500/30 focus:border-purple-500/40 transition-all`}
-                  value={search}
-                  onChange={(e) => { setSearch(e.target.value); setPage(1); }}
+                  type="text"
+                  placeholder={searchTags.length === 0 ? 'Buscar código, ubicación, municipio... (Enter para agregar)' : 'Agregar otro código...'}
+                  className={`flex-1 min-w-[120px] bg-transparent border-none outline-none text-sm ${isDark ? 'text-white placeholder:text-zinc-500' : 'text-gray-900 placeholder:text-gray-400'}`}
+                  value={searchInput}
+                  onChange={(e) => setSearchInput(e.target.value)}
+                  onKeyDown={(e) => {
+                    if ((e.key === 'Enter' || e.key === 'Tab') && searchInput.trim()) {
+                      e.preventDefault();
+                      addSearchTag(searchInput);
+                    }
+                    if (e.key === 'Backspace' && !searchInput && searchTags.length > 0) {
+                      removeSearchTag(searchTags[searchTags.length - 1]);
+                    }
+                  }}
                 />
+                {searchTags.length > 0 && (
+                  <button
+                    onClick={() => { setSearchTags([]); setSearchInput(''); }}
+                    className={`shrink-0 p-1 rounded-full transition-colors ${isDark ? 'text-zinc-400 hover:text-white hover:bg-zinc-700' : 'text-gray-400 hover:text-gray-600 hover:bg-gray-200'}`}
+                    title="Limpiar búsqueda"
+                  >
+                    <X className="h-3.5 w-3.5" />
+                  </button>
+                )}
               </div>
 
               {/* Filter Toggle */}
@@ -996,7 +1065,7 @@ export function InventariosPage() {
                 onClick={() => inventariosService.downloadCSV(
                   selectedRows.size > 0
                     ? { ids: Array.from(selectedRows) }
-                    : { search: search || undefined, tipo: tipo || undefined, estatus: estatus || undefined, plaza: plaza || undefined }
+                    : { search: serverSearch, tipo: tipo || undefined, estatus: estatus || undefined, plaza: plaza || undefined }
                 )}
                 title={selectedRows.size > 0 ? `Descargar ${selectedRows.size} seleccionados` : 'Descargar con filtros aplicados'}
                 className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-medium border transition-all ${isDark ? 'bg-zinc-800 hover:bg-zinc-700 text-zinc-300 border-zinc-700' : 'bg-white hover:bg-gray-50 text-gray-700 border-gray-300'}`}
@@ -1077,7 +1146,7 @@ export function InventariosPage() {
 
                 {hasActiveFilters && (
                   <button
-                    onClick={() => { setSearch(''); setTipo(''); setPlaza(''); setCto(''); setEstatus(''); setPage(1); }}
+                    onClick={() => { setSearchTags([]); setSearchInput(''); setTipo(''); setPlaza(''); setCto(''); setEstatus(''); setPage(1); }}
                     className={`flex items-center gap-1 px-2 py-1 rounded-full text-xs ${isDark ? 'bg-red-500/10 text-red-400 border-red-500/30 hover:bg-red-500/20' : 'bg-red-50 text-red-600 border-red-200 hover:bg-red-100'} border transition-all`}
                   >
                     <X className="h-3 w-3" /> Limpiar todo
