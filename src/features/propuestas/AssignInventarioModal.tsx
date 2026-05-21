@@ -1729,15 +1729,15 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
 
   // Para BF/CF/CT: split visual del KPI bonificación en Flujo/Contraflujo.
   // No toca BD — caras_flujo/caras_contraflujo siguen en 0; total = bonificacion.
-  // Tradicional: 50/50 fijo. Digital: respeta flujoPct (el input % front-only),
-  // porque los digitales son "infinitos" y la distribución es libre.
+  // Mismo comportamiento para Tradicional y Digital: respeta flujoPct (el input
+  // % front-only). La distribución es libre y la validación cuenta solo el TOTAL,
+  // no el ratio.
   const bonifSplit = useMemo(() => {
     if (!selectedCaraForSearch || !isBonifSplitArticle(selectedCaraForSearch.articulo)) {
       return { targetFlujo: 0, targetContra: 0, reservadoFlujo: 0, reservadoContra: 0 };
     }
     const total = selectedCaraForSearch.bonificacion || 0;
-    const esDigital = selectedCaraForSearch.tipo === 'Digital';
-    const pct = esDigital ? flujoPct : 50;
+    const pct = flujoPct;
     const targetFlujo = Math.ceil(total * pct / 100);
     const targetContra = total - targetFlujo;
     const caraReservas = reservas.filter(r =>
@@ -1804,17 +1804,15 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
     const contraflujoRequerido = tipoPeriodo === 'mensual' ? 0 : rawContra;
     const bonificacionRequerido = cara.bonificacion || 0;
 
-    // BF/CF/CT/IN: la bonificación se valida con split 50/50 (front-only).
-    // Total real reservado se sigue contando como tipo='Bonificacion' en BD; el split físico
-    // viene de tipoCaraFisica derivado de inventario.tipo_de_cara.
+    // BF/CF/CT/IN: la bonificación se valida solo por TOTAL (no por ratio).
+    // El split flujo/contraflujo es cosmético — el % se elige libre con flujoPct
+    // (front-only, NO se guarda en BD). Aplica igual a Tradicional y Digital:
+    // la vista no puede saber el ratio físico real una vez reservado, así que
+    // la completitud cuenta el total de reservas tipo='Bonificacion'.
     const isSplitBonif = isBonifSplitArticle(cara.articulo);
-    // Digital bonif-split (CT-DIG/BF-DIG): el split flujo/contraflujo es cosmético —
-    // espacios digitales "infinitos" y el % se elige libre con flujoPct (front-only,
-    // NO se guarda en BD). Por eso la vista anterior no puede saber el ratio usado.
-    // En digital validamos solo el TOTAL de bonificación, no el ratio.
-    const esBonifSplitDigital = isSplitBonif && cara.tipo === 'Digital';
-    const bonifTargetFlujo = isSplitBonif ? Math.ceil(bonificacionRequerido / 2) : 0;
-    const bonifTargetContra = isSplitBonif ? Math.floor(bonificacionRequerido / 2) : 0;
+    const esBonifSplitDigital = isSplitBonif; // alias histórico — ahora vale para todos los tipos bonif-split
+    const bonifTargetFlujo = isSplitBonif ? Math.ceil(bonificacionRequerido * flujoPct / 100) : 0;
+    const bonifTargetContra = isSplitBonif ? bonificacionRequerido - bonifTargetFlujo : 0;
     const bonifReservadoFlujo = isSplitBonif
       ? caraReservas.filter(r => r.tipo === 'Bonificacion' && r.tipoCaraFisica === 'Flujo').length
       : 0;
@@ -3417,9 +3415,12 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
       data = data.filter(inv => poiFilterIds.has(inv.id));
     }
 
-    // Filter by flujo (only if not "Todos") - skip if completos is active
+    // Filter by flujo (only if not "Todos") - skip if completos is active.
+    // Usa startsWith para incluir variantes "Flujo2" y "Contraflujo2" (mismas
+    // direcciones físicas, solo cara extra del mismo mueble). Antes con `===`
+    // estricto las variantes salían en "Todos" pero NO al filtrar Flujo/Contraflujo.
     if (flujoFilter && flujoFilter !== 'Todos' && !showOnlyCompletos) {
-      data = data.filter(inv => inv.tipo_de_cara === flujoFilter);
+      data = data.filter(inv => String(inv.tipo_de_cara || '').startsWith(flujoFilter));
     }
 
     // Apply complete filter (merges pairs into single rows)
@@ -4860,10 +4861,13 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
                 </div>
               </div>
 
-              {/* % Distribucion - only for Digital */}
-              {selectedCaraForSearch?.tipo === 'Digital' && (() => {
-                // Digital: distribución libre 0-100 (los inventarios digitales son
-                // infinitos, no hay riesgo de chocar con reservas existentes).
+              {/* % Distribucion — para TODOS los tipos (Tradicional + Digital).
+                  Cambiar el % actualiza caras_flujo / caras_contraflujo en BD para
+                  que el target del KPI refleje la distribución elegida. */}
+              {!!selectedCaraForSearch && (() => {
+                // Distribución libre 0-100 (el usuario puede elegir cómo split
+                // entre Flujo y Contraflujo; en Tradicional las reservas reales
+                // siguen su propio conteo, esto solo cambia el target esperado).
                 const minPct = 0;
                 const maxPct = 100;
                 return (
@@ -4936,11 +4940,12 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
               </>
               )}
 
-              {/* % Distribución para bonif DIGITAL (CT-DIG / BF-DIG / etc).
+              {/* % Distribución para BF/CF/CT (todos los tipos — Tradicional y Digital).
                   Front-only: solo mueve flujoPct local que alimenta bonifSplit.
                   NO escribe caras_flujo/caras_contraflujo en BD (regla Balance Flujos:
-                  la bonificación se queda como total en BD, el split es visual). */}
-              {isBonifSplitArticle(selectedCaraForSearch?.articulo) && selectedCaraForSearch?.tipo === 'Digital' && (
+                  la bonificación se queda como total en BD, el split es visual).
+                  La validación de completitud cuenta solo el TOTAL de bonif, no el ratio. */}
+              {isBonifSplitArticle(selectedCaraForSearch?.articulo) && (
                 <div className={`flex flex-col items-center justify-center px-2 py-1 rounded-xl ${isDark ? 'bg-zinc-800/30' : 'bg-gray-50/30'} border ${isDark ? 'border-zinc-700/20' : 'border-gray-200/20'} min-w-[70px]`}>
                   <span className={`text-[9px] ${isDark ? 'text-zinc-500' : 'text-gray-400'} mb-1`}>Distribución</span>
                   <div className="flex items-center gap-1">
@@ -7968,13 +7973,19 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
                         )}
                       </div>
                       <div className="space-y-1">
-                        {/* Tipo: bloqueado al CREAR (se deriva del artículo). Editable solo al EDITAR un circuito existente. */}
+                        {/* Tipo: SIEMPRE deshabilitado.
+                            - Al CREAR: el valor lo deriva el artículo (Digital/Tradicional) y no
+                              se debe permitir overrride manual.
+                            - Al EDITAR: el tipo lo trae de BD; cambiarlo en circuitos digitales
+                              rompe el flujo (RT-DIG/BF-DIG/CT-DIG son Digital por definición), y
+                              en caras normales no hay razón válida para cambiarlo manualmente
+                              (era fuente del bug 70739 — caras Digital se volvían Tradicional). */}
                         <label className={`text-xs ${isDark ? 'text-zinc-500' : 'text-gray-400'}`}>Tipo</label>
                         <select
                           value={newCara.tipo}
-                          onChange={(e) => canEditResumen && editingCaraId && setNewCara({ ...newCara, tipo: e.target.value })}
-                          disabled={!canEditResumen || !editingCaraId}
-                          className={`w-full px-3 py-2 ${isDark ? 'bg-zinc-800' : 'bg-gray-50'} border ${isDark ? 'border-zinc-700' : 'border-gray-200'} rounded-lg text-sm ${isDark ? 'text-white' : 'text-gray-900'} focus:outline-none focus:ring-1 focus:ring-purple-500/50 ${(!canEditResumen || !editingCaraId) ? 'opacity-60 cursor-not-allowed' : ''}`}
+                          disabled
+                          title="El tipo lo determina el artículo y no se puede cambiar manualmente"
+                          className={`w-full px-3 py-2 ${isDark ? 'bg-zinc-800' : 'bg-gray-50'} border ${isDark ? 'border-zinc-700' : 'border-gray-200'} rounded-lg text-sm ${isDark ? 'text-white' : 'text-gray-900'} focus:outline-none focus:ring-1 focus:ring-purple-500/50 opacity-60 cursor-not-allowed`}
                         >
                           <option value="">Seleccionar</option>
                           <option value="Tradicional">Tradicional</option>

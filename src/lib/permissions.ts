@@ -1247,8 +1247,8 @@ const rolePermissions: Partial<Record<UserRole, Partial<RolePermissions>>> = {
     canEditInventarios: false,
     canDeleteInventarios: false,
 
-    // Órdenes de Montaje - solo visualización
-    canExportOrdenesMontaje: false,
+    // Órdenes de Montaje - exportable
+    canExportOrdenesMontaje: true,
   },
   'Especialista de trafico': {
     // Secciones visibles
@@ -1316,8 +1316,8 @@ const rolePermissions: Partial<Record<UserRole, Partial<RolePermissions>>> = {
     canEditInventarios: false,
     canDeleteInventarios: false,
 
-    // Órdenes de Montaje - solo visualización
-    canExportOrdenesMontaje: false,
+    // Órdenes de Montaje - exportable
+    canExportOrdenesMontaje: true,
   },
   'Auxiliar de trafico': {
     // Secciones visibles
@@ -1385,8 +1385,8 @@ const rolePermissions: Partial<Record<UserRole, Partial<RolePermissions>>> = {
     canEditInventarios: false,
     canDeleteInventarios: false,
 
-    // Órdenes de Montaje - solo visualización
-    canExportOrdenesMontaje: false,
+    // Órdenes de Montaje - exportable
+    canExportOrdenesMontaje: true,
   },
   'Coordinador de Diseño': {
     // Secciones visibles
@@ -1450,8 +1450,8 @@ const rolePermissions: Partial<Record<UserRole, Partial<RolePermissions>>> = {
     canEditInventarios: false,
     canDeleteInventarios: false,
 
-    // Órdenes de Montaje
-    canExportOrdenesMontaje: false,
+    // Órdenes de Montaje - exportable
+    canExportOrdenesMontaje: true,
   },
   'Diseñadores': {
     // Secciones visibles

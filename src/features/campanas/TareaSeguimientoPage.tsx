@@ -396,10 +396,13 @@ interface ArteDecision {
   decision: DecisionArte;
   motivoRechazo?: string; // Usado para rechazo (obligatorio)
   comentarioAprobacion?: string; // Usado para aprobación (opcional)
-  imagenRechazoFile?: File; // Archivo local antes de subir (opcional, solo rechazo)
-  imagenRechazoPreview?: string; // URL.createObjectURL para preview
+  imagenRechazoFile?: File; // Archivo local antes de subir (opcional, rechazo)
+  imagenRechazoPreview?: string; // URL.createObjectURL para preview (rechazo)
+  urlRechazo?: string; // URL/enlace adjunto al motivo rechazo (opcional, rechazo)
   motivoPendiente?: string; // Usado para pendiente (obligatorio)
   urlPendiente?: string; // URL/enlace adjunto al motivo pendiente (opcional)
+  imagenPendienteFile?: File; // Archivo local antes de subir (opcional, pendiente)
+  imagenPendientePreview?: string; // URL.createObjectURL para preview (pendiente)
 }
 
 type DecisionesState = Record<string, ArteDecision>;
@@ -3683,8 +3686,8 @@ function TaskDetailModal({
   artesExistentes: ArteExistente[];
   isLoadingArtes: boolean;
   onApprove: (reservaIds: number[], comentario?: string) => Promise<void>;
-  onReject: (reservaIds: number[], comentario: string, imagenRechazoUrl?: string) => Promise<void>;
-  onPendiente: (reservaIds: number[], motivo: string, urlReferencia?: string) => Promise<void>;
+  onReject: (reservaIds: number[], comentario: string, imagenRechazoUrl?: string, urlReferencia?: string) => Promise<void>;
+  onPendiente: (reservaIds: number[], motivo: string, urlReferencia?: string, imagenPendienteUrl?: string) => Promise<void>;
   onCorrect: (reservaIds: number[], instrucciones: string) => void;
   onUpdateArte: (reservaIds: number[], archivo: string) => void;
   onUpdateArteDigital: (reservaIds: number[], files: { file: File; spot: number }[], deleteArchivos?: string[]) => Promise<void>;
@@ -4754,9 +4757,12 @@ function TaskDetailModal({
   const handleDecisionChange = (key: string, decision: string) => {
     setDecisiones(prev => {
       const prevDecision = prev[key];
-      // Si cambia de rechazar a otra cosa, revocar preview de imagen
+      // Si cambia de rechazar/pendiente a otra cosa, revocar preview de imagen
       if (prevDecision?.decision === 'rechazar' && decision !== 'rechazar' && prevDecision.imagenRechazoPreview) {
         URL.revokeObjectURL(prevDecision.imagenRechazoPreview);
+      }
+      if (prevDecision?.decision === 'pendiente' && decision !== 'pendiente' && prevDecision.imagenPendientePreview) {
+        URL.revokeObjectURL(prevDecision.imagenPendientePreview);
       }
       return {
         ...prev,
@@ -4766,8 +4772,11 @@ function TaskDetailModal({
           comentarioAprobacion: decision !== 'aprobar' ? undefined : prevDecision?.comentarioAprobacion,
           imagenRechazoFile: decision !== 'rechazar' ? undefined : prevDecision?.imagenRechazoFile,
           imagenRechazoPreview: decision !== 'rechazar' ? undefined : prevDecision?.imagenRechazoPreview,
+          urlRechazo: decision !== 'rechazar' ? undefined : prevDecision?.urlRechazo,
           motivoPendiente: decision !== 'pendiente' ? undefined : prevDecision?.motivoPendiente,
           urlPendiente: decision !== 'pendiente' ? undefined : prevDecision?.urlPendiente,
+          imagenPendienteFile: decision !== 'pendiente' ? undefined : prevDecision?.imagenPendienteFile,
+          imagenPendientePreview: decision !== 'pendiente' ? undefined : prevDecision?.imagenPendientePreview,
         }
       };
     });
@@ -4806,7 +4815,14 @@ function TaskDetailModal({
     });
   };
 
-  // Handlers para el flujo "Pendiente" (paralelo a rechazo pero con URL adjunto).
+  const handleUrlRechazoChange = (key: string, url: string) => {
+    setDecisiones(prev => ({
+      ...prev,
+      [key]: { ...prev[key], urlRechazo: url }
+    }));
+  };
+
+  // Handlers para el flujo "Pendiente" (mismo modelo que rechazo: motivo + URL + archivo).
   const handleMotivoPendienteChange = (key: string, motivo: string) => {
     setDecisiones(prev => ({
       ...prev,
@@ -4819,6 +4835,23 @@ function TaskDetailModal({
       ...prev,
       [key]: { ...prev[key], urlPendiente: url }
     }));
+  };
+
+  const handleImagenPendienteChange = (key: string, file: File | null) => {
+    setDecisiones(prev => {
+      const prevDecision = prev[key];
+      if (prevDecision?.imagenPendientePreview) {
+        URL.revokeObjectURL(prevDecision.imagenPendientePreview);
+      }
+      return {
+        ...prev,
+        [key]: {
+          ...prevDecision,
+          imagenPendienteFile: file || undefined,
+          imagenPendientePreview: file ? URL.createObjectURL(file) : undefined,
+        }
+      };
+    });
   };
 
   const validarDecisiones = (): boolean => {
@@ -4843,8 +4876,8 @@ function TaskDetailModal({
 
     try {
       const aprobados: { ids: number[]; comentario: string; items: InventoryRow[] }[] = [];
-      const rechazados: { ids: number[]; motivo: string; items: InventoryRow[]; imagenFile?: File }[] = [];
-      const pendientes: { ids: number[]; motivo: string; items: InventoryRow[]; url?: string }[] = [];
+      const rechazados: { ids: number[]; motivo: string; items: InventoryRow[]; imagenFile?: File; url?: string }[] = [];
+      const pendientes: { ids: number[]; motivo: string; items: InventoryRow[]; url?: string; imagenFile?: File }[] = [];
 
       Object.entries(groupedInventory).forEach(([key, items]) => {
         const d = decisiones[key];
@@ -4856,10 +4889,22 @@ function TaskDetailModal({
           aprobados.push({ ids, comentario: d.comentarioAprobacion || '', items });
         }
         if (d?.decision === 'rechazar') {
-          rechazados.push({ ids, motivo: d.motivoRechazo || '', items, imagenFile: d.imagenRechazoFile });
+          rechazados.push({
+            ids,
+            motivo: d.motivoRechazo || '',
+            items,
+            imagenFile: d.imagenRechazoFile,
+            url: d.urlRechazo?.trim() || undefined,
+          });
         }
         if (d?.decision === 'pendiente') {
-          pendientes.push({ ids, motivo: d.motivoPendiente || '', items, url: d.urlPendiente?.trim() || undefined });
+          pendientes.push({
+            ids,
+            motivo: d.motivoPendiente || '',
+            items,
+            url: d.urlPendiente?.trim() || undefined,
+            imagenFile: d.imagenPendienteFile,
+          });
         }
       });
 
@@ -4877,11 +4922,9 @@ function TaskDetailModal({
       // Rechazar y crear tarea de corrección con todos los rechazados
       if (rechazados.length > 0) {
         const todosIds = rechazados.flatMap(r => r.ids);
-        // Solo guardar el motivo de rechazo (sin códigos de inventario para no exceder VARCHAR(255))
-        // Los códigos ya están en el inventario asociado a la tarea
         const descripcion = rechazados.map(r => r.motivo).join(' | ');
 
-        // Subir imagen de rechazo si existe (usar la primera que encuentre)
+        // Subir imagen si existe (primera que encuentre) y tomar la primera URL
         let imagenRechazoUrl: string | undefined;
         const rechazoConImagen = rechazados.find(r => r.imagenFile);
         if (rechazoConImagen?.imagenFile) {
@@ -4892,19 +4935,30 @@ function TaskDetailModal({
             console.warn('No se pudo subir la imagen de rechazo, continuando sin imagen:', err);
           }
         }
+        const urlRechazoRef = rechazados.find(r => r.url)?.url;
 
-        await onReject(todosIds, descripcion, imagenRechazoUrl);
+        await onReject(todosIds, descripcion, imagenRechazoUrl, urlRechazoRef);
       }
 
       // Marcar como Pendiente y crear tarea de corrección con todos los pendientes.
-      // Mismo flujo que rechazo pero textualmente "Pendiente" (no Rechazado) en
-      // todos los lados y con URL adjunta opcional en vez de imagen.
+      // Mismo modelo que rechazo: motivo + enlace + imagen (todos opcionales menos motivo).
       if (pendientes.length > 0) {
         const todosIds = pendientes.flatMap(p => p.ids);
         const descripcion = pendientes.map(p => p.motivo).join(' | ');
-        // Toma el primer URL no vacío (igual que rechazo toma la primera imagen)
         const urlReferencia = pendientes.find(p => p.url)?.url;
-        await onPendiente(todosIds, descripcion, urlReferencia);
+
+        let imagenPendienteUrl: string | undefined;
+        const pendienteConImagen = pendientes.find(p => p.imagenFile);
+        if (pendienteConImagen?.imagenFile) {
+          try {
+            const uploaded = await campanasService.uploadArteFile(pendienteConImagen.imagenFile);
+            imagenPendienteUrl = uploaded.url;
+          } catch (err) {
+            console.warn('No se pudo subir la imagen del pendiente, continuando sin imagen:', err);
+          }
+        }
+
+        await onPendiente(todosIds, descripcion, urlReferencia, imagenPendienteUrl);
       }
 
       // Marcar la tarea como completada (Atendido)
@@ -9585,27 +9639,41 @@ function TaskDetailModal({
                             <p className="text-white text-sm bg-zinc-800/50 rounded p-2 border-l-2 border-red-500">
                               {motivoRechazo || 'Sin motivo especificado'}
                             </p>
-                            {/* Imagen de referencia del rechazo (si existe en evidencia) */}
+                            {/* Imagen de referencia + Enlace adjunto (si existen en evidencia, sea rechazo o pendiente) */}
                             {(() => {
                               try {
                                 const evidenciaData = task.evidencia ? JSON.parse(task.evidencia) : null;
-                                if (evidenciaData?.imagenRechazo) {
-                                  const imgUrl = getImageUrl(evidenciaData.imagenRechazo);
-                                  if (imgUrl) {
-                                    return (
+                                if (!evidenciaData) return null;
+                                const imagenRaw = evidenciaData.imagenRechazo || evidenciaData.imagenPendiente;
+                                const imgUrl = imagenRaw ? getImageUrl(imagenRaw) : null;
+                                const urlRef = typeof evidenciaData.urlReferencia === 'string' && evidenciaData.urlReferencia.trim()
+                                  ? evidenciaData.urlReferencia.trim()
+                                  : null;
+                                if (!imgUrl && !urlRef) return null;
+                                return (
+                                  <div className="space-y-2">
+                                    {imgUrl && (
                                       <div>
                                         <span className="text-zinc-400 text-xs uppercase tracking-wide">Imagen de referencia:</span>
                                         <a href={imgUrl} target="_blank" rel="noopener noreferrer" className="block mt-1">
                                           <img
                                             src={imgUrl}
-                                            alt="Referencia del rechazo"
+                                            alt="Referencia"
                                             className="max-h-48 rounded-lg border border-red-500/30 hover:border-red-500/60 transition-colors cursor-pointer"
                                           />
                                         </a>
                                       </div>
-                                    );
-                                  }
-                                }
+                                    )}
+                                    {urlRef && (
+                                      <div>
+                                        <span className="text-zinc-400 text-xs uppercase tracking-wide">Enlace adjunto:</span>
+                                        <a href={urlRef} target="_blank" rel="noopener noreferrer" className="block mt-1 text-sm text-purple-300 hover:text-purple-200 underline break-all">
+                                          {urlRef}
+                                        </a>
+                                      </div>
+                                    )}
+                                  </div>
+                                );
                               } catch { /* evidencia no es JSON válido, ignorar */ }
                               return null;
                             })()}
@@ -10783,7 +10851,7 @@ function TaskDetailModal({
                               />
                             </div>
                           )}
-                          {/* Textarea para motivo de rechazo (obligatorio) + imagen opcional */}
+                          {/* Textarea para motivo de rechazo (obligatorio) + enlace opcional + imagen opcional */}
                           {decisiones[groupKey]?.decision === 'rechazar' && (
                             <div className="mt-2 space-y-2">
                               <textarea
@@ -10797,7 +10865,18 @@ function TaskDetailModal({
                                 }`}
                                 rows={2}
                               />
-                              {/* Input de imagen de referencia (opcional) */}
+                              {/* Enlace adjunto (opcional) */}
+                              <div>
+                                <label className="text-xs text-zinc-400 mb-1 block">Adjuntar enlace (opcional)</label>
+                                <input
+                                  type="url"
+                                  placeholder="https://..."
+                                  value={decisiones[groupKey]?.urlRechazo || ''}
+                                  onChange={(e) => handleUrlRechazoChange(groupKey, e.target.value)}
+                                  className="w-full px-3 py-2 text-sm rounded-lg bg-zinc-800 border border-red-500/30 focus:border-red-500 focus:outline-none"
+                                />
+                              </div>
+                              {/* Imagen de referencia (opcional) */}
                               <div>
                                 <label className="text-xs text-zinc-400 mb-1 block">Imagen de referencia (opcional)</label>
                                 {decisiones[groupKey]?.imagenRechazoPreview ? (
@@ -10831,7 +10910,7 @@ function TaskDetailModal({
                               </div>
                             </div>
                           )}
-                          {/* Textarea para motivo de Pendiente (obligatorio) + URL adjunta opcional */}
+                          {/* Textarea para motivo de Pendiente (obligatorio) + enlace opcional + imagen opcional */}
                           {decisiones[groupKey]?.decision === 'pendiente' && (
                             <div className="mt-2 space-y-2">
                               <textarea
@@ -10845,7 +10924,7 @@ function TaskDetailModal({
                                 }`}
                                 rows={2}
                               />
-                              {/* Input de URL/enlace adjunto (opcional) */}
+                              {/* Enlace adjunto (opcional) */}
                               <div>
                                 <label className="text-xs text-zinc-400 mb-1 block">Adjuntar enlace (opcional)</label>
                                 <input
@@ -10855,6 +10934,38 @@ function TaskDetailModal({
                                   onChange={(e) => handleUrlPendienteChange(groupKey, e.target.value)}
                                   className="w-full px-3 py-2 text-sm rounded-lg bg-zinc-800 border border-orange-500/30 focus:border-orange-500 focus:outline-none"
                                 />
+                              </div>
+                              {/* Imagen de referencia (opcional) */}
+                              <div>
+                                <label className="text-xs text-zinc-400 mb-1 block">Imagen de referencia (opcional)</label>
+                                {decisiones[groupKey]?.imagenPendientePreview ? (
+                                  <div className="relative inline-block">
+                                    <img
+                                      src={decisiones[groupKey]?.imagenPendientePreview}
+                                      alt="Preview pendiente"
+                                      className="h-24 rounded-lg border border-orange-500/30 object-cover"
+                                    />
+                                    <button
+                                      type="button"
+                                      onClick={() => handleImagenPendienteChange(groupKey, null)}
+                                      className="absolute -top-2 -right-2 bg-orange-600 hover:bg-orange-500 text-white rounded-full p-0.5"
+                                      title="Quitar imagen"
+                                    >
+                                      <X className="h-3 w-3" />
+                                    </button>
+                                  </div>
+                                ) : (
+                                  <input
+                                    type="file"
+                                    accept="image/jpeg,image/png,image/gif,image/webp"
+                                    onChange={(e) => {
+                                      const file = e.target.files?.[0] || null;
+                                      if (file) handleImagenPendienteChange(groupKey, file);
+                                      e.target.value = '';
+                                    }}
+                                    className="text-xs text-zinc-400 file:mr-2 file:py-1 file:px-3 file:rounded-md file:border-0 file:text-xs file:bg-orange-500/20 file:text-orange-300 hover:file:bg-orange-500/30"
+                                  />
+                                )}
                               </div>
                             </div>
                           )}
@@ -20225,7 +20336,7 @@ export function TareaSeguimientoPage() {
         onApprove={async (reservaIds, comentario) => {
           await updateArteStatusMutation.mutateAsync({ reservaIds, status: 'Aprobado', comentario });
         }}
-        onReject={async (reservaIds, comentario, imagenRechazoUrl) => {
+        onReject={async (reservaIds, comentario, imagenRechazoUrl, urlReferencia) => {
           // Primero actualizar el estado a Rechazado
           await updateArteStatusMutation.mutateAsync({ reservaIds, status: 'Rechazado', comentario });
           // Después de rechazar exitosamente, crear tarea de corrección para el creador original (analista).
@@ -20246,16 +20357,19 @@ export function TareaSeguimientoPage() {
                 original_asignado: selectedTask.asignado || '',
               }),
             };
-            if (imagenRechazoUrl) {
-              tareaData.evidencia = JSON.stringify({ tipo: 'correccion_rechazo', imagenRechazo: imagenRechazoUrl });
+            if (imagenRechazoUrl || urlReferencia) {
+              tareaData.evidencia = JSON.stringify({
+                tipo: 'correccion_rechazo',
+                ...(imagenRechazoUrl ? { imagenRechazo: imagenRechazoUrl } : {}),
+                ...(urlReferencia ? { urlReferencia } : {}),
+              });
             }
             await createTareaMutation.mutateAsync(tareaData);
           }
         }}
-        onPendiente={async (reservaIds, motivo, urlReferencia) => {
-          // Flujo "Pendiente": espejo de Rechazo pero textualmente "Pendiente"
-          // (no Rechazado) en todos los lados y con URL adjunta opcional en
-          // vez de imagen. Misma rotación de roles en la Revisión + creación
+        onPendiente={async (reservaIds, motivo, urlReferencia, imagenPendienteUrl) => {
+          // Flujo "Pendiente": mismo modelo que Rechazo. Motivo + enlace opcional
+          // + imagen opcional. Misma rotación de roles en la Revisión + creación
           // de Corrección + notificación al creador original.
           await updateArteStatusMutation.mutateAsync({ reservaIds, status: 'Pendiente', comentario: motivo });
           if (selectedTask && selectedTask.creador) {
@@ -20273,8 +20387,12 @@ export function TareaSeguimientoPage() {
                 origen_decision: 'pendiente',
               }),
             };
-            if (urlReferencia) {
-              tareaData.evidencia = JSON.stringify({ tipo: 'correccion_pendiente', urlReferencia });
+            if (urlReferencia || imagenPendienteUrl) {
+              tareaData.evidencia = JSON.stringify({
+                tipo: 'correccion_pendiente',
+                ...(urlReferencia ? { urlReferencia } : {}),
+                ...(imagenPendienteUrl ? { imagenPendiente: imagenPendienteUrl } : {}),
+              });
             }
             await createTareaMutation.mutateAsync(tareaData);
           }
