@@ -1499,7 +1499,7 @@ function ApprovalModal({
 
   const fetchPropuestaBySolicitud = async (solicitudId: string) => {
     const response = await fetch(`${import.meta.env.VITE_API_URL}/propuestas?solicitudId=${solicitudId}`, {
-      headers: { 'Authorization': `Bearer ${localStorage.getItem('token')}` }
+      headers: { 'Authorization': `Bearer ${localStorage.getItem('accessToken')}` }
     });
     const data = await response.json();
     if (data.success && data.data && data.data.length > 0) {
@@ -2042,7 +2042,7 @@ function TaskDrawer({
 
   const fetchPropuestaBySolicitud = async (solicitudId: string) => {
     const response = await fetch(`${import.meta.env.VITE_API_URL}/propuestas?solicitudId=${solicitudId}`, {
-      headers: { 'Authorization': `Bearer ${localStorage.getItem('token')}` }
+      headers: { 'Authorization': `Bearer ${localStorage.getItem('accessToken')}` }
     });
     const data = await response.json();
     if (data.success && data.data && data.data.length > 0) {
