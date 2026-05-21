@@ -3415,9 +3415,12 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
       data = data.filter(inv => poiFilterIds.has(inv.id));
     }
 
-    // Filter by flujo (only if not "Todos") - skip if completos is active
+    // Filter by flujo (only if not "Todos") - skip if completos is active.
+    // Usa startsWith para incluir variantes "Flujo2" y "Contraflujo2" (mismas
+    // direcciones físicas, solo cara extra del mismo mueble). Antes con `===`
+    // estricto las variantes salían en "Todos" pero NO al filtrar Flujo/Contraflujo.
     if (flujoFilter && flujoFilter !== 'Todos' && !showOnlyCompletos) {
-      data = data.filter(inv => inv.tipo_de_cara === flujoFilter);
+      data = data.filter(inv => String(inv.tipo_de_cara || '').startsWith(flujoFilter));
     }
 
     // Apply complete filter (merges pairs into single rows)
@@ -7970,18 +7973,30 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
                         )}
                       </div>
                       <div className="space-y-1">
-                        {/* Tipo: bloqueado al CREAR (se deriva del artículo). Editable solo al EDITAR un circuito existente. */}
+                        {/* Tipo: bloqueado al CREAR (se deriva del artículo). Editable solo
+                            al EDITAR caras NO-circuito. En circuitos digitales el tipo está
+                            fijado por el artículo (RT-DIG/BF-DIG/CT-DIG → Digital) y no se
+                            debe poder cambiar a Tradicional. */}
+                        {(() => {
+                          const esCircuitoActual = !!parseCircuitoDigital(newCara.articulo || '');
+                          const disabledTipo = !canEditResumen || !editingCaraId || esCircuitoActual;
+                          return (
+                        <>
                         <label className={`text-xs ${isDark ? 'text-zinc-500' : 'text-gray-400'}`}>Tipo</label>
                         <select
                           value={newCara.tipo}
-                          onChange={(e) => canEditResumen && editingCaraId && setNewCara({ ...newCara, tipo: e.target.value })}
-                          disabled={!canEditResumen || !editingCaraId}
-                          className={`w-full px-3 py-2 ${isDark ? 'bg-zinc-800' : 'bg-gray-50'} border ${isDark ? 'border-zinc-700' : 'border-gray-200'} rounded-lg text-sm ${isDark ? 'text-white' : 'text-gray-900'} focus:outline-none focus:ring-1 focus:ring-purple-500/50 ${(!canEditResumen || !editingCaraId) ? 'opacity-60 cursor-not-allowed' : ''}`}
+                          onChange={(e) => !disabledTipo && setNewCara({ ...newCara, tipo: e.target.value })}
+                          disabled={disabledTipo}
+                          title={esCircuitoActual ? 'El tipo de un circuito digital lo determina el artículo y no se puede cambiar' : undefined}
+                          className={`w-full px-3 py-2 ${isDark ? 'bg-zinc-800' : 'bg-gray-50'} border ${isDark ? 'border-zinc-700' : 'border-gray-200'} rounded-lg text-sm ${isDark ? 'text-white' : 'text-gray-900'} focus:outline-none focus:ring-1 focus:ring-purple-500/50 ${disabledTipo ? 'opacity-60 cursor-not-allowed' : ''}`}
                         >
                           <option value="">Seleccionar</option>
                           <option value="Tradicional">Tradicional</option>
                           <option value="Digital">Digital</option>
                         </select>
+                        </>
+                          );
+                        })()}
                       </div>
                     </div>
                     <div className="grid grid-cols-4 gap-4 mb-4">
