@@ -336,7 +336,7 @@ interface InventoryRow {
   longitud?: number; // Para mapa
   articulo?: string; // ItemCode de SAP (ej: RT-P1-COB-GD)
   // Para Atender arte
-  estado_arte?: 'sin_revisar' | 'en_revision' | 'aprobado' | 'rechazado';
+  estado_arte?: 'sin_revisar' | 'en_revision' | 'aprobado' | 'rechazado' | 'pendiente';
   estado_tarea?: 'sin_atender' | 'en_progreso' | 'atendido';
   archivo_arte?: string;
   artes_multiples?: string; // Multiple arts separated by '||'
@@ -939,7 +939,7 @@ function TreeNode({
 // Upload Art Modal Types
 type UploadOption = 'file' | 'existing' | 'link';
 type TaskDetailTab = 'resumen' | 'editar' | 'atender';
-type GroupByArte = 'inventario' | 'ciudad' | 'grupo';
+type GroupByArte = 'inventario' | 'ciudad' | 'grupo' | 'tipo_cara';
 
 // Tipo para archivos digitales con posición de spot
 interface DigitalFile {
@@ -4550,6 +4550,17 @@ function TaskDetailModal({
           const archivoKeyGrupo = item.archivo_arte || 'sin_arte';
           key = `${grupoKey}|||${archivoKeyGrupo}`;
           break;
+        case 'tipo_cara': {
+          // Agrupar por Tipo de Cara (Flujo / Contraflujo / Bonificacion / etc) + archivo.
+          // Normalizamos: si comienza con "Flujo" agrupa todos en "Flujo", igual con "Contraflujo".
+          const tcRaw = (item.tipo_de_cara || 'Sin tipo').toString();
+          const tcKey = tcRaw.toLowerCase().startsWith('contraflujo') ? 'Contraflujo'
+                      : tcRaw.toLowerCase().startsWith('flujo') ? 'Flujo'
+                      : tcRaw;
+          const archivoKeyTC = item.archivo_arte || 'sin_arte';
+          key = `${tcKey}|||${archivoKeyTC}`;
+          break;
+        }
         default:
           key = item.id;
       }
@@ -10782,7 +10793,12 @@ function TaskDetailModal({
               {/* Toolbar de agrupación */}
               <div className="flex flex-wrap items-center justify-between gap-2">
                 <div className="flex flex-wrap gap-2">
-                  {(['inventario', 'ciudad', 'grupo'] as const).map((g) => (
+                  {([
+                    { value: 'inventario' as const, label: 'Por Inventario' },
+                    { value: 'ciudad' as const, label: 'Por Ciudad' },
+                    { value: 'grupo' as const, label: 'Por Grupo' },
+                    { value: 'tipo_cara' as const, label: 'Por Tipo Cara' },
+                  ]).map(({ value: g, label }) => (
                     <button
                       key={g}
                       onClick={() => setGroupBy(g)}
@@ -10792,7 +10808,7 @@ function TaskDetailModal({
                           : 'bg-zinc-800 text-zinc-400 hover:bg-zinc-700'
                       }`}
                     >
-                      Por {g.charAt(0).toUpperCase() + g.slice(1)}
+                      {label}
                     </button>
                   ))}
                 </div>
@@ -11143,7 +11159,7 @@ function TaskDetailModal({
                                     {items.length} ubicacion{items.length !== 1 ? 'es' : ''} {isDigital ? 'con estos archivos' : 'con esta imagen'}
                                   </p>
                                   <p className="text-xs text-zinc-400 mb-2">
-                                    {groupBy === 'ciudad' ? 'Ciudad' : 'Grupo'}: <span className="text-purple-300 font-medium">{groupKey.split('|||')[0]}</span>
+                                    {groupBy === 'ciudad' ? 'Ciudad' : groupBy === 'tipo_cara' ? 'Tipo Cara' : 'Grupo'}: <span className="text-purple-300 font-medium">{groupKey.split('|||')[0]}</span>
                                   </p>
                                   {/* Estados resumidos */}
                                   <div className="flex flex-wrap gap-2">
@@ -13810,7 +13826,7 @@ export function TareaSeguimientoPage() {
   const [sortDirectionAtender, setSortDirectionAtender] = useState<'asc' | 'desc'>('asc');
   const [showSortAtender, setShowSortAtender] = useState(false);
   const [expandedGroupsAtender, setExpandedGroupsAtender] = useState<Set<string>>(new Set());
-  const [activeEstadoArteTab, setActiveEstadoArteTab] = useState<'sin_revisar' | 'en_revision' | 'aprobado' | 'rechazado'>('sin_revisar');
+  const [activeEstadoArteTab, setActiveEstadoArteTab] = useState<'sin_revisar' | 'en_revision' | 'aprobado' | 'rechazado' | 'pendiente'>('sin_revisar');
   const [hasAutoSelectedEstadoArteTab, setHasAutoSelectedEstadoArteTab] = useState(false);
 
   // --- Programación (digital) ---
@@ -14053,19 +14069,20 @@ export function TareaSeguimientoPage() {
       en_revision: 0,
       aprobado: 0,
       rechazado: 0,
+      pendiente: 0,
     };
 
     inventarioArteAPI.forEach(item => {
       const arteAprobadoLower = (item.arte_aprobado || '').toLowerCase();
       if (arteAprobadoLower === 'aprobado') counts.aprobado++;
       else if (arteAprobadoLower === 'rechazado') counts.rechazado++;
+      else if (arteAprobadoLower === 'pendiente') counts.pendiente++;
       else if (arteAprobadoLower === 'en revision' || arteAprobadoLower === 'en revisión') counts.en_revision++;
-      // 'Pendiente' o vacío = sin_revisar
       else counts.sin_revisar++;
     });
 
     // Seleccionar el primer tab con contenido (de izquierda a derecha)
-    const tabOrder: Array<'sin_revisar' | 'en_revision' | 'aprobado' | 'rechazado'> = ['sin_revisar', 'en_revision', 'aprobado', 'rechazado'];
+    const tabOrder: Array<'sin_revisar' | 'en_revision' | 'aprobado' | 'rechazado' | 'pendiente'> = ['sin_revisar', 'en_revision', 'aprobado', 'rechazado', 'pendiente'];
     for (const tab of tabOrder) {
       if (counts[tab] > 0) {
         setActiveEstadoArteTab(tab);
@@ -14389,9 +14406,9 @@ export function TareaSeguimientoPage() {
   }, []);
 
   // Helper function to transform InventarioConArte to InventoryRow
-  const transformInventarioToRow = useCallback((item: InventarioConArte, defaultArteStatus: 'sin_revisar' | 'en_revision' | 'aprobado' | 'rechazado' = 'sin_revisar', tareasActivas: number[] = []): InventoryRow => {
+  const transformInventarioToRow = useCallback((item: InventarioConArte, defaultArteStatus: 'sin_revisar' | 'en_revision' | 'aprobado' | 'rechazado' | 'pendiente' = 'sin_revisar', tareasActivas: number[] = []): InventoryRow => {
     // Mapear arte_aprobado a estado_arte
-    let estadoArte: 'sin_revisar' | 'en_revision' | 'aprobado' | 'rechazado' = defaultArteStatus;
+    let estadoArte: 'sin_revisar' | 'en_revision' | 'aprobado' | 'rechazado' | 'pendiente' = defaultArteStatus;
     const arteAprobadoLower = (item.arte_aprobado || '').toLowerCase();
 
     // Verificar si este item está en alguna tarea activa
@@ -14400,11 +14417,13 @@ export function TareaSeguimientoPage() {
 
     if (arteAprobadoLower === 'aprobado') estadoArte = 'aprobado';
     else if (arteAprobadoLower === 'rechazado') estadoArte = 'rechazado';
+    // 'Pendiente' (tercer caso de decision) es un estado propio, no Sin Revisar.
+    else if (arteAprobadoLower === 'pendiente') estadoArte = 'pendiente';
     else if (arteAprobadoLower === 'en revision' || arteAprobadoLower === 'en revisión') estadoArte = 'en_revision';
     // Si tiene tarea activa asignada, es "en_revision"
     else if (tieneTaskActiva) estadoArte = 'en_revision';
-    // 'Pendiente' o sin estado = sin_revisar (esperando que se cree una tarea)
-    else if (arteAprobadoLower === 'pendiente' || arteAprobadoLower === '') estadoArte = 'sin_revisar';
+    // sin estado = sin_revisar (esperando que se cree una tarea)
+    else if (arteAprobadoLower === '') estadoArte = 'sin_revisar';
     // Si no tiene ninguno de los estados anteriores, se queda con defaultArteStatus (sin_revisar)
 
     // Mapear tarea/estatus a estado_tarea
@@ -15307,11 +15326,16 @@ export function TareaSeguimientoPage() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // Auto-switch si el tab activo fue ocultado por tipo de inventario
+  // Auto-switch si el tab activo no es visible para el rol o fue ocultado por tipo de inventario.
+  // Cubre tambien el caso del default 'versionario' (Subir Artes) cuando el rol no lo tiene
+  // permitido (ej. Diseno, que solo tiene canSeeTabRevisarAprobar).
   useEffect(() => {
     const needsSwitch =
-      (activeMainTab === 'programacion' && !shouldShowProgramacionTab) ||
-      (activeMainTab === 'impresiones' && !shouldShowImpresionesTab);
+      (activeMainTab === 'versionario' && !permissions.canSeeTabSubirArtes) ||
+      (activeMainTab === 'atender' && !permissions.canSeeTabRevisarAprobar) ||
+      (activeMainTab === 'programacion' && (!permissions.canSeeTabProgramacion || !shouldShowProgramacionTab)) ||
+      (activeMainTab === 'impresiones' && (!permissions.canSeeTabImpresiones || !shouldShowImpresionesTab)) ||
+      (activeMainTab === 'testigo' && !permissions.canSeeTabValidacionInstalacion);
 
     if (needsSwitch) {
       // Redirigir al primer tab disponible según permisos
@@ -17288,6 +17312,7 @@ export function TareaSeguimientoPage() {
                     { key: 'en_revision' as const, label: 'En Revisión', count: filteredByFormat.filter(i => i.estado_arte === 'en_revision').length },
                     { key: 'aprobado' as const, label: 'Aprobado', count: filteredByFormat.filter(i => i.estado_arte === 'aprobado').length },
                     { key: 'rechazado' as const, label: 'Rechazado', count: filteredByFormat.filter(i => i.estado_arte === 'rechazado').length },
+                    { key: 'pendiente' as const, label: 'Pendiente', count: filteredByFormat.filter(i => i.estado_arte === 'pendiente').length },
                   ];
                 })().map(tab => (
                   <button
