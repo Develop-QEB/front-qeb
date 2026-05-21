@@ -3,7 +3,7 @@ import { useQuery } from '@tanstack/react-query';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import {
   Search, Download, Filter, ChevronDown, ChevronRight, ChevronLeft, X, Layers,
-  Calendar, Clock, Eye, EyeOff, Megaphone, Edit2, Check, Minus, ArrowUpDown, User,
+  Calendar, Clock, Eye, Megaphone, Edit2, Check, Minus, ArrowUpDown, User,
   List, LayoutGrid, Building2, MapPin, Loader2, Package, ClipboardList, Plus, Trash2,
   ArrowUp, ArrowDown, Lock, SlidersHorizontal, Upload, Printer, Monitor, Camera, Share2,
   Image, FileText, DollarSign, Hash, Gift, AlertTriangle, Film, Play
@@ -1113,7 +1113,6 @@ export function CampanasPage() {
 
   // Estados para filtros expandibles
   const [showFilters, setShowFilters] = useState(false);
-  const [hideRechazadas, setHideRechazadas] = useState(false);
   const [showAdvancedFilters, setShowAdvancedFilters] = useState(false);
   const [comboboxOpen, setComboboxOpen] = useState<string | null>(null);
   const [selectedCatorcenaInicio, setSelectedCatorcenaInicio] = useState('');
@@ -1202,7 +1201,7 @@ export function CampanasPage() {
   const serverSearch = allSearchTerms.length > 0 ? allSearchTerms.join('|') : undefined;
 
   const { data, isLoading } = useQuery({
-    queryKey: ['campanas', needsAllData ? 1 : page, status, yearInicio, yearFin, catorcenaInicio, catorcenaFin, tipoPeriodo, needsAllData, serverSearch, effectiveLimit, historialFilter, hideRechazadas],
+    queryKey: ['campanas', needsAllData ? 1 : page, status, yearInicio, yearFin, catorcenaInicio, catorcenaFin, tipoPeriodo, needsAllData, serverSearch, effectiveLimit, historialFilter],
     queryFn: () =>
       campanasService.getAll({
         page: needsAllData ? 1 : page,
@@ -1214,7 +1213,7 @@ export function CampanasPage() {
         catorcenaInicio,
         catorcenaFin,
         tipoPeriodo: tipoPeriodo || undefined,
-        excludeRechazadas: hideRechazadas,
+        excludeRechazadas: true,
         ...historialFilter,
       }),
     staleTime: 1000 * 30, // 30 s — WS invalida en cambios reales
@@ -1225,7 +1224,7 @@ export function CampanasPage() {
   // Incluimos serverSearch para que total/chart reflejen los resultados
   // filtrados aunque estemos en la página 1 de N.
   const { data: statsData, isLoading: isLoadingStats } = useQuery({
-    queryKey: ['campanas-stats', status, yearInicio, yearFin, catorcenaInicio, catorcenaFin, tipoPeriodo, serverSearch, hideRechazadas],
+    queryKey: ['campanas-stats', status, yearInicio, yearFin, catorcenaInicio, catorcenaFin, tipoPeriodo, serverSearch],
     queryFn: () =>
       campanasService.getStats({
         status: (status && status !== 'Incompleta') ? status : undefined,
@@ -1235,7 +1234,7 @@ export function CampanasPage() {
         catorcenaInicio,
         catorcenaFin,
         tipoPeriodo: tipoPeriodo || undefined,
-        excludeRechazadas: hideRechazadas,
+        excludeRechazadas: true,
       }),
     staleTime: 1000 * 30,
   });
@@ -2003,7 +2002,7 @@ export function CampanasPage() {
   };
 
   const hasPeriodFilter = yearInicio !== undefined && yearFin !== undefined;
-  const hasActiveFilters = !!(status || hasPeriodFilter || activeGroupings.length > 0 || searchTags.length > 0 || selectedCatorcenaInicio || advancedFilters.length > 0 || sortField !== null || hideRechazadas);
+  const hasActiveFilters = !!(status || hasPeriodFilter || activeGroupings.length > 0 || searchTags.length > 0 || selectedCatorcenaInicio || advancedFilters.length > 0 || sortField !== null);
 
   // Get unique values for each field (for advanced filter dropdowns).
   // Solo se calcula cuando el panel de filtros avanzados está abierto: evita
@@ -2057,7 +2056,6 @@ export function CampanasPage() {
     setActiveGroupings([]);
     setExpandedGroups(new Set());
     setAdvancedFilters([]);
-    setHideRechazadas(false);
     setPage(1);
   };
 
@@ -2170,7 +2168,7 @@ export function CampanasPage() {
         catorcenaInicio,
         catorcenaFin,
         tipoPeriodo: tipoPeriodo || undefined,
-        excludeRechazadas: hideRechazadas,
+        excludeRechazadas: true,
       });
 
       const { inventarios: allInventarios, campaignInfo, campaignsWithInventory } = exportData;
@@ -2935,19 +2933,6 @@ export function CampanasPage() {
                   onClear={() => { setActiveGroupings([]); setExpandedGroups(new Set()); }}
                   isDark={isDark}
                 />
-
-                <button
-                  onClick={() => { setHideRechazadas(v => !v); setPage(1); }}
-                  className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium border transition-all ${
-                    hideRechazadas
-                      ? (isDark ? 'bg-red-500/20 text-red-300 border-red-500/40' : 'bg-red-50 text-red-700 border-red-200')
-                      : (isDark ? 'bg-zinc-800/50 text-zinc-400 border-zinc-700/50 hover:bg-zinc-800' : 'bg-gray-100 text-gray-500 border-gray-200 hover:bg-gray-200')
-                  }`}
-                  title={hideRechazadas ? 'Mostrar rechazadas' : 'Ocultar rechazadas'}
-                >
-                  <EyeOff className="h-3 w-3" />
-                  Ocultar Rechazadas
-                </button>
 
                 {/* Clear All */}
                 {hasActiveFilters && (

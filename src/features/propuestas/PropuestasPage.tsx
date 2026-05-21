@@ -5,7 +5,7 @@ import {
   Search, Download, Filter, ChevronDown, ChevronRight, X, SlidersHorizontal,
   ArrowUpDown, Calendar, DollarSign, FileText, Building2, MessageSquare,
   CheckCircle, Users, Send, Loader2, User, Share2, MapPinned, Wrench, Clock,
-  Pencil, Trash2, Package, MapPin, Eye, EyeOff, Plus, AlertTriangle, List, LayoutGrid,
+  Pencil, Trash2, Package, MapPin, Eye, Plus, AlertTriangle, List, LayoutGrid,
   Layers, Check
 } from 'lucide-react';
 import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip as RechartsTooltip } from 'recharts';
@@ -1322,7 +1322,6 @@ export function PropuestasPage() {
   const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('desc');
   const [groupBy, setGroupBy] = useState('');
   const [showFilters, setShowFilters] = useState(false);
-  const [hideRechazadas, setHideRechazadas] = useState(false);
   const [advancedFilters, setAdvancedFilters] = useState<AdvancedFilterCondition[]>([]);
   const [showAdvancedFilters, setShowAdvancedFilters] = useState(false);
   const [comboboxOpen, setComboboxOpen] = useState<string | null>(null);
@@ -1428,7 +1427,7 @@ export function PropuestasPage() {
   // re-renders del padre. Pasamos `search` para que total/chart reflejen los
   // resultados filtrados aunque estemos en la página 1 de N.
   const { data: stats } = useQuery({
-    queryKey: ['propuestas-stats', status, yearInicio, yearFin, catorcenaInicio, catorcenaFin, tipoPeriodo, serverSearch, hideRechazadas],
+    queryKey: ['propuestas-stats', status, yearInicio, yearFin, catorcenaInicio, catorcenaFin, tipoPeriodo, serverSearch],
     queryFn: () => propuestasService.getStats({
       status: status || undefined,
       yearInicio,
@@ -1437,13 +1436,13 @@ export function PropuestasPage() {
       catorcenaFin,
       tipoPeriodo: tipoPeriodo || undefined,
       search: serverSearch,
-      excludeRechazadas: hideRechazadas,
+      excludeRechazadas: true,
     }),
     staleTime: 1000 * 30,
   });
 
   const { data, isLoading } = useQuery({
-    queryKey: ['propuestas', needsAllData ? 1 : page, status, serverSearch, yearInicio, yearFin, catorcenaInicio, catorcenaFin, sortBy, sortOrder, groupBy, tipoPeriodo, needsAllData, historialFilter, hideRechazadas],
+    queryKey: ['propuestas', needsAllData ? 1 : page, status, serverSearch, yearInicio, yearFin, catorcenaInicio, catorcenaFin, sortBy, sortOrder, groupBy, tipoPeriodo, needsAllData, historialFilter],
     queryFn: () =>
       propuestasService.getAll({
         page: needsAllData ? 1 : page,
@@ -1456,7 +1455,7 @@ export function PropuestasPage() {
         catorcenaFin,
         soloAtendidas: true,
         tipoPeriodo: tipoPeriodo || undefined,
-        excludeRechazadas: hideRechazadas,
+        excludeRechazadas: true,
         ...historialFilter,
       }),
     staleTime: 1000 * 30, // 30 s — WS invalida en cambios reales
@@ -1466,7 +1465,7 @@ export function PropuestasPage() {
   const allStatuses = STATUS_OPTIONS;
 
   const hasPeriodFilter = yearInicio !== undefined && yearFin !== undefined;
-  const hasActiveFilters = !!(status || tipoPeriodo || hasPeriodFilter || groupBy || sortBy !== 'fecha' || advancedFilters.length > 0 || searchTags.length > 0 || hideRechazadas);
+  const hasActiveFilters = !!(status || tipoPeriodo || hasPeriodFilter || groupBy || sortBy !== 'fecha' || advancedFilters.length > 0 || searchTags.length > 0);
 
   // Get unique values for each field (for advanced filter dropdowns).
   // Solo se calcula cuando el panel de filtros avanzados está abierto: evita
@@ -1555,7 +1554,6 @@ export function PropuestasPage() {
     setAdvancedFilters([]);
     setSearchTags([]);
     setSearchInput('');
-    setHideRechazadas(false);
     setPage(1);
   };
 
@@ -1631,7 +1629,7 @@ export function PropuestasPage() {
         catorcenaInicio,
         catorcenaFin,
         tipoPeriodo: tipoPeriodo || undefined,
-        excludeRechazadas: hideRechazadas,
+        excludeRechazadas: true,
         page: 1,
         limit: 100,
       });
@@ -2295,19 +2293,6 @@ export function PropuestasPage() {
                   </div>
                 )}
 
-                <button
-                  onClick={() => { setHideRechazadas(v => !v); setPage(1); }}
-                  className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium border transition-all ${
-                    hideRechazadas
-                      ? (isDark ? 'bg-red-500/20 text-red-300 border-red-500/40' : 'bg-red-50 text-red-700 border-red-200')
-                      : (isDark ? 'bg-zinc-800/50 text-zinc-400 border-zinc-700/50 hover:bg-zinc-800' : 'bg-gray-100 text-gray-500 border-gray-200 hover:bg-gray-200')
-                  }`}
-                  title={hideRechazadas ? 'Mostrar rechazadas' : 'Ocultar rechazadas'}
-                >
-                  <EyeOff className="h-3 w-3" />
-                  Ocultar Rechazadas
-                </button>
-
                 {/* Clear All */}
                 {hasActiveFilters && (
                   <>
@@ -2338,7 +2323,7 @@ export function PropuestasPage() {
               catorcenaInicio,
               catorcenaFin,
               tipoPeriodo: tipoPeriodo || undefined,
-              excludeRechazadas: hideRechazadas,
+              excludeRechazadas: true,
             }}
             advancedFilters={advancedFilters}
             activeGroupings={versionarioGroupings}
