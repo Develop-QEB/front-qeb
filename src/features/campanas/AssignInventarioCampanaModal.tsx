@@ -121,6 +121,15 @@ const isNoInventoryArticle = (itemCode: string, itemName?: string): boolean => {
   return isImpresionArticle(itemCode, itemName) || isEspecialArticle(itemCode, itemName);
 };
 
+// "Gestion QTO" — artículos para Querétaro/Celaya (sufijo `-QR`, ej. `RT-P1-COB-QR`).
+// Comportamiento: la reserva de inventario es OPCIONAL — pase a ventas funciona
+// con o sin reservas y la cara se ve siempre "completa" (verde). La UI de reservar
+// sigue ACTIVA (a diferencia de IM/ESP que la bloquean) — el usuario puede
+// reservar si quiere, pero no es requisito.
+const isQuretaroArticle = (itemCode: string): boolean => {
+  return (itemCode || '').toUpperCase().endsWith('-QR');
+};
+
 // Artículos que son 100% bonificación (BF/CF/CT). El KPI de bonificación
 // se divide en 2 (Flujo / Contraflujo) sin tocar BD; reservas siguen como tipo='Bonificacion'.
 // NOTA: IN (Intercambio) NO entra aquí — en todo el flujo (caras, KPIs, autorización,
@@ -161,7 +170,15 @@ const CODE_PLAZA_MAP: Record<string, { estado: string; ciudad: string }> = {
   ver: { estado: 'Veracruz', ciudad: 'Veracruz,Alvarado,Boca del Río' },
   pv:  { estado: 'Jalisco', ciudad: 'Puerto Vallarta' },
   tl:  { estado: 'Estado de México', ciudad: 'Toluca' },
+  mr:  { estado: 'Yucatán', ciudad: 'Mérida' },
+  mer: { estado: 'Yucatán', ciudad: 'Mérida' },
 };
+
+// Quita acentos para comparar plazas/ciudades sin que falle por "MÉRIDA" vs "MERIDA",
+// "LEÓN" vs "LEON", etc. (las plazas en `inventarios.plaza` traen acentos pero los
+// nombres en ItemName de SAP suelen venir sin acentos, y viceversa).
+const stripAccents = (s: string): string =>
+  s.normalize('NFD').replace(/[̀-ͯ]/g, '');
 
 // Formato auto-detection from article name + optional code fallback
 const getFormatoFromArticulo = (itemName: string, itemCode?: string): string => {
@@ -266,7 +283,9 @@ const MULTI_CITY_RULES: { pattern: RegExp; estado: string; ciudad: string }[] = 
 // Extract city/state from article name (sorted by length to avoid false positives) + optional code fallback
 const getCiudadEstadoFromArticulo = (itemName: string, itemCode?: string): { estado: string; ciudad: string } | null => {
   if (!itemName) return null;
-  const name = itemName.toUpperCase();
+  // Sin acentos: las reglas regex usan "MERIDA"/"LEON"/etc. sin tilde, pero los
+  // ItemName de SAP pueden traer "MÉRIDA"/"LEÓN". Normalizamos para que matcheen.
+  const name = stripAccents(itemName.toUpperCase());
 
   // Check multi-city rules first
   for (const rule of MULTI_CITY_RULES) {
@@ -2014,6 +2033,10 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
       && (bonifReservadoFlujo !== bonifTargetFlujo || bonifReservadoContra !== bonifTargetContra);
     const needsAttention = flujoDiff !== 0 || contraflujoDiff !== 0 || bonificacionDiff !== 0 || splitNeedsAttention;
 
+    // QR (Gestión QTO): reservar es opcional. Siempre se considera completa para
+    // pase a ventas. Verde con o sin reservas.
+    const esQr = !!(cara.articulo && isQuretaroArticle(cara.articulo));
+    const allComplete = flujoCompleto && contraflujoCompleto && bonificacionCompleto;
     return {
       flujoReservado,
       contraflujoReservado,
@@ -2021,17 +2044,17 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
       flujoRequerido,
       contraflujoRequerido,
       bonificacionRequerido,
-      flujoCompleto,
-      contraflujoCompleto,
-      bonificacionCompleto,
-      isComplete: flujoCompleto && contraflujoCompleto && bonificacionCompleto,
+      flujoCompleto: esQr ? true : flujoCompleto,
+      contraflujoCompleto: esQr ? true : contraflujoCompleto,
+      bonificacionCompleto: esQr ? true : bonificacionCompleto,
+      isComplete: esQr ? true : allComplete,
       totalReservado,
       totalRequerido,
       flujoDiff,
       contraflujoDiff,
       bonificacionDiff,
       totalDiff,
-      needsAttention,
+      needsAttention: esQr ? false : needsAttention,
     };
   };
 
@@ -7548,10 +7571,12 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
                             const tarifa = getTarifaPublicaFromArticulo(item);
                             const tarifaPiso = getTarifaPisoFromArticulo(item);
                             const ciudadEstado = getCiudadEstadoFromArticulo(item.ItemName, item.ItemCode);
-                            // Auto-set plaza buscando el nombre de plaza dentro del ItemName
-                            const itemNameUpper = (item.ItemName || '').toUpperCase();
+                            // Auto-set plaza buscando el nombre de plaza dentro del ItemName.
+                            // Comparamos SIN ACENTOS porque las plazas en BD pueden traer
+                            // tilde (ej. "MÉRIDA") pero los ItemName de SAP vienen sin acento.
+                            const itemNameNorm = stripAccents((item.ItemName || '').toUpperCase());
                             const plazasBackend = (solicitudFilters as any)?.plazas as { plaza: string }[] | undefined;
-                            const plazaPorNombre = plazasBackend?.find(p => itemNameUpper.includes(p.plaza.toUpperCase()));
+                            const plazaPorNombre = plazasBackend?.find(p => itemNameNorm.includes(stripAccents(p.plaza.toUpperCase())));
                             const formatoBase = getFormatoFromArticulo(item.ItemName, item.ItemCode);
                             const tipo = getTipoFromName(item.ItemName);
                             // Para artículos digitales: incluir PARABUS y MUPIS (los muebles

@@ -850,6 +850,7 @@ export function SolicitudesPage() {
       catorcenaFin,
       status: status || undefined,
       search: searchForBackend,
+      excludeRechazadas: true,
     }),
     staleTime: 1000 * 30, // 30 s
   });
@@ -876,6 +877,7 @@ export function SolicitudesPage() {
         sortOrder,
         groupBy: groupBy || undefined,
         tipoPeriodo: tipoPeriodo || undefined,
+        excludeRechazadas: true,
         ...historialFilter,
       }),
     staleTime: 1000 * 30, // 30 s — WS invalida en cambios reales
@@ -1165,13 +1167,13 @@ export function SolicitudesPage() {
                 </div>
 
                 {/* Legend / List */}
-                <div className="flex-1 flex flex-wrap gap-2 content-center pl-4 h-full overflow-y-auto custom-scrollbar">
+                <div className="flex-1 grid grid-cols-2 sm:grid-cols-3 gap-2 pl-4 h-full overflow-y-auto custom-scrollbar auto-rows-min content-start">
                   {chartData.map((item, i) => (
-                    <div key={i} className={`flex items-center gap-2 p-2 rounded-lg ${isDark ? 'bg-zinc-800/30 border-zinc-800/50' : 'bg-gray-50 border-gray-200'} border min-w-[120px]`}>
-                      <div className="w-2 h-8 rounded-full" style={{ backgroundColor: item.color }} />
-                      <div>
+                    <div key={i} className={`flex items-center gap-2 p-2 rounded-lg ${isDark ? 'bg-zinc-800/30 border-zinc-800/50' : 'bg-gray-50 border-gray-200'} border min-w-0`}>
+                      <div className="w-2 h-8 rounded-full flex-shrink-0" style={{ backgroundColor: item.color }} />
+                      <div className="min-w-0">
                         <div className={`text-sm font-bold ${isDark ? 'text-white' : 'text-gray-900'}`}>{item.value}</div>
-                        <div className={`text-[10px] ${isDark ? 'text-zinc-400' : 'text-gray-500'} uppercase tracking-wide truncate max-w-[80px]`} title={item.label}>{item.label}</div>
+                        <div className={`text-[10px] ${isDark ? 'text-zinc-400' : 'text-gray-500'} uppercase tracking-wide truncate`} title={item.label}>{item.label}</div>
                       </div>
                     </div>
                   ))}

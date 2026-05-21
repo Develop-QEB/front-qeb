@@ -16,6 +16,7 @@ export interface PropuestasParams {
   cambioEstatusHasta?: string;
   creacionDesde?: string;
   creacionHasta?: string;
+  excludeRechazadas?: boolean;
 }
 
 export interface PropuestaStats {

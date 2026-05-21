@@ -1213,6 +1213,7 @@ export function CampanasPage() {
         catorcenaInicio,
         catorcenaFin,
         tipoPeriodo: tipoPeriodo || undefined,
+        excludeRechazadas: true,
         ...historialFilter,
       }),
     staleTime: 1000 * 30, // 30 s — WS invalida en cambios reales
@@ -1233,6 +1234,7 @@ export function CampanasPage() {
         catorcenaInicio,
         catorcenaFin,
         tipoPeriodo: tipoPeriodo || undefined,
+        excludeRechazadas: true,
       }),
     staleTime: 1000 * 30,
   });
@@ -2166,6 +2168,7 @@ export function CampanasPage() {
         catorcenaInicio,
         catorcenaFin,
         tipoPeriodo: tipoPeriodo || undefined,
+        excludeRechazadas: true,
       });
 
       const { inventarios: allInventarios, campaignInfo, campaignsWithInventory } = exportData;
@@ -2528,13 +2531,13 @@ export function CampanasPage() {
                   </ResponsiveContainer>
                 </div>
                 {/* Legend / List */}
-                <div className="flex-1 flex flex-wrap gap-2 content-center pl-4 h-full overflow-y-auto scrollbar-thin">
+                <div className="flex-1 grid grid-cols-2 sm:grid-cols-3 gap-2 pl-4 h-full overflow-y-auto scrollbar-thin auto-rows-min content-start">
                   {statusChartData.map((item, i) => (
-                    <div key={i} className={`flex items-center gap-2 p-2 rounded-lg ${isDark ? 'bg-zinc-800/30 border-zinc-800/50' : 'bg-gray-50 border-gray-200'} border min-w-[100px]`}>
-                      <div className="w-2 h-8 rounded-full" style={{ backgroundColor: item.color }} />
-                      <div>
+                    <div key={i} className={`flex items-center gap-2 p-2 rounded-lg ${isDark ? 'bg-zinc-800/30 border-zinc-800/50' : 'bg-gray-50 border-gray-200'} border min-w-0`}>
+                      <div className="w-2 h-8 rounded-full flex-shrink-0" style={{ backgroundColor: item.color }} />
+                      <div className="min-w-0">
                         <div className={`text-sm font-bold ${isDark ? 'text-white' : 'text-gray-900'}`}>{item.value}</div>
-                        <div className={`text-[10px] ${isDark ? 'text-zinc-400' : 'text-gray-500'} uppercase tracking-wide truncate max-w-[70px]`} title={item.name}>{item.name}</div>
+                        <div className={`text-[10px] ${isDark ? 'text-zinc-400' : 'text-gray-500'} uppercase tracking-wide truncate`} title={item.name}>{item.name}</div>
                       </div>
                     </div>
                   ))}

@@ -18,6 +18,7 @@ export interface SolicitudesParams {
   cambioEstatusHasta?: string;
   creacionDesde?: string;
   creacionHasta?: string;
+  excludeRechazadas?: boolean;
 }
 
 export interface CatorcenasResponse {
@@ -136,7 +137,7 @@ export const solicitudesService = {
     }
   },
 
-  async getStats(params: { yearInicio?: number; yearFin?: number; catorcenaInicio?: number; catorcenaFin?: number; status?: string; search?: string } = {}): Promise<SolicitudStats> {
+  async getStats(params: { yearInicio?: number; yearFin?: number; catorcenaInicio?: number; catorcenaFin?: number; status?: string; search?: string; excludeRechazadas?: boolean } = {}): Promise<SolicitudStats> {
     const response = await api.get<ApiResponse<SolicitudStats>>('/solicitudes/stats', { params });
     if (!response.data.success || !response.data.data) {
       throw new Error(response.data.error || 'Error al obtener estadisticas');

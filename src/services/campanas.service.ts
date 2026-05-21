@@ -789,6 +789,7 @@ export interface CampanasParams {
   cambioEstatusHasta?: string;
   creacionDesde?: string;
   creacionHasta?: string;
+  excludeRechazadas?: boolean;
 }
 
 export const campanasService = {
@@ -840,6 +841,7 @@ export const campanasService = {
     catorcenaInicio?: number;
     catorcenaFin?: number;
     tipoPeriodo?: string;
+    excludeRechazadas?: boolean;
   }): Promise<CampanaStats> {
     const response = await api.get<ApiResponse<CampanaStats>>('/campanas/stats', { params });
     if (!response.data.success || !response.data.data) {
