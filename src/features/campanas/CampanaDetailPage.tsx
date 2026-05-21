@@ -1148,21 +1148,25 @@ export function CampanaDetailPage() {
     return { lat: 19.4326, lng: -99.1332 }; // CDMX por defecto
   }, [inventarioReservado]);
 
-  // Ajusta el zoom del mapa para que entren todos los puntos del inventario.
-  // Centraliza la lógica en una función para que `onMapLoad` (montaje) y el
-  // useEffect (cambios de inventario) compartan implementación — antes se
-  // duplicaba el cálculo y se llamaban dos veces al montar el mapa.
+  // Ajusta el zoom del mapa para que entren los puntos SELECCIONADOS del inventario.
+  // El mapa sólo dibuja los seleccionados (ver render de Markers), por lo que el
+  // fitBounds también se calcula sobre la selección — si no hay nada seleccionado
+  // se deja la vista actual (no se centra en CDMX por defecto al re-seleccionar).
   const fitMapToInventario = useCallback((map: google.maps.Map | null) => {
     if (!map) return;
-    const validItems = inventarioReservado.filter(i => i.latitud && i.longitud);
-    if (validItems.length > 1) {
-      const bounds = new google.maps.LatLngBounds();
-      validItems.forEach(item => {
-        bounds.extend({ lat: item.latitud, lng: item.longitud });
-      });
-      map.fitBounds(bounds, 50); // 50px padding
+    const validItems = inventarioReservado.filter(i => i.latitud && i.longitud && selectedItems.has(i.rsv_ids));
+    if (validItems.length === 0) return;
+    if (validItems.length === 1) {
+      map.setCenter({ lat: validItems[0].latitud, lng: validItems[0].longitud });
+      map.setZoom(15);
+      return;
     }
-  }, [inventarioReservado]);
+    const bounds = new google.maps.LatLngBounds();
+    validItems.forEach(item => {
+      bounds.extend({ lat: item.latitud, lng: item.longitud });
+    });
+    map.fitBounds(bounds, 50); // 50px padding
+  }, [inventarioReservado, selectedItems]);
 
   const onMapLoad = useCallback((map: google.maps.Map) => {
     mapRef.current = map;
@@ -1186,15 +1190,19 @@ export function CampanaDetailPage() {
 
   const fitMapToInventarioAPS = useCallback((map: google.maps.Map | null) => {
     if (!map) return;
-    const validItems = inventarioConAPS.filter(i => i.latitud && i.longitud);
-    if (validItems.length > 1) {
-      const bounds = new google.maps.LatLngBounds();
-      validItems.forEach(item => {
-        bounds.extend({ lat: item.latitud, lng: item.longitud });
-      });
-      map.fitBounds(bounds, 50);
+    const validItems = inventarioConAPS.filter(i => i.latitud && i.longitud && selectedItemsAPS.has(String(i.rsv_ids)));
+    if (validItems.length === 0) return;
+    if (validItems.length === 1) {
+      map.setCenter({ lat: validItems[0].latitud, lng: validItems[0].longitud });
+      map.setZoom(15);
+      return;
     }
-  }, [inventarioConAPS]);
+    const bounds = new google.maps.LatLngBounds();
+    validItems.forEach(item => {
+      bounds.extend({ lat: item.latitud, lng: item.longitud });
+    });
+    map.fitBounds(bounds, 50);
+  }, [inventarioConAPS, selectedItemsAPS]);
 
   const onMapLoadAPS = useCallback((map: google.maps.Map) => {
     mapRefAPS.current = map;
@@ -2572,30 +2580,39 @@ export function CampanaDetailPage() {
               ) : inventarioReservado.filter(i => i.latitud && i.longitud).length === 0 ? (
                 <MapEmptyState />
               ) : (
-                <GoogleMap
-                  mapContainerClassName="w-full h-full"
-                  center={mapCenter}
-                  zoom={12}
-                  onLoad={onMapLoad}
-                  options={mapOptions}
-                >
-                  {iconReservadoSelected && iconReservadoUnselected && inventarioReservado.map((item) => {
-                    if (!item.latitud || !item.longitud) return null;
-                    return (
-                      <MapMarker
-                        key={item.rsv_ids}
-                        rsvId={item.rsv_ids}
-                        lat={item.latitud}
-                        lng={item.longitud}
-                        title={item.codigo_unico}
-                        isSelected={selectedItems.has(item.rsv_ids)}
-                        iconSelected={iconReservadoSelected}
-                        iconUnselected={iconReservadoUnselected}
-                        onClick={handleMarkerClickReservado}
-                      />
-                    );
-                  })}
-                </GoogleMap>
+                <>
+                  <GoogleMap
+                    mapContainerClassName="w-full h-full"
+                    center={mapCenter}
+                    zoom={12}
+                    onLoad={onMapLoad}
+                    options={mapOptions}
+                  >
+                    {iconReservadoSelected && iconReservadoUnselected && inventarioReservado
+                      .filter(item => selectedItems.has(item.rsv_ids))
+                      .map((item) => {
+                        if (!item.latitud || !item.longitud) return null;
+                        return (
+                          <MapMarker
+                            key={item.rsv_ids}
+                            rsvId={item.rsv_ids}
+                            lat={item.latitud}
+                            lng={item.longitud}
+                            title={item.codigo_unico}
+                            isSelected={true}
+                            iconSelected={iconReservadoSelected}
+                            iconUnselected={iconReservadoUnselected}
+                            onClick={handleMarkerClickReservado}
+                          />
+                        );
+                      })}
+                  </GoogleMap>
+                  {selectedItems.size === 0 && (
+                    <div className={`absolute top-3 left-3 z-10 ${isDark ? 'bg-zinc-900/95 border-purple-500/40 text-purple-300' : 'bg-white/95 border-purple-300 text-purple-700'} border rounded-lg px-3 py-2 text-[11px] max-w-[240px] shadow-lg pointer-events-none`}>
+                      Selecciona items desde la lista para verlos en el mapa.
+                    </div>
+                  )}
+                </>
               )}
             </div>
             {/* Columna derecha: Tabla */}
@@ -3927,31 +3944,40 @@ export function CampanaDetailPage() {
               ) : inventarioConAPS.filter(i => i.latitud && i.longitud).length === 0 ? (
                 <MapEmptyState />
               ) : (
-                <GoogleMap
-                  mapContainerClassName="w-full h-full"
-                  center={mapCenterAPS}
-                  zoom={12}
-                  onLoad={onMapLoadAPS}
-                  options={mapOptions}
-                >
-                  {iconAPSSelected && iconAPSUnselected && inventarioConAPS.map((item) => {
-                    if (!item.latitud || !item.longitud) return null;
-                    const rsvId = String(item.rsv_ids);
-                    return (
-                      <MapMarker
-                        key={`aps-${rsvId}`}
-                        rsvId={rsvId}
-                        lat={item.latitud}
-                        lng={item.longitud}
-                        title={`${item.codigo_unico} - APS: ${item.aps}`}
-                        isSelected={selectedItemsAPS.has(rsvId)}
-                        iconSelected={iconAPSSelected}
-                        iconUnselected={iconAPSUnselected}
-                        onClick={handleMarkerClickAPS}
-                      />
-                    );
-                  })}
-                </GoogleMap>
+                <>
+                  <GoogleMap
+                    mapContainerClassName="w-full h-full"
+                    center={mapCenterAPS}
+                    zoom={12}
+                    onLoad={onMapLoadAPS}
+                    options={mapOptions}
+                  >
+                    {iconAPSSelected && iconAPSUnselected && inventarioConAPS
+                      .filter(item => selectedItemsAPS.has(String(item.rsv_ids)))
+                      .map((item) => {
+                        if (!item.latitud || !item.longitud) return null;
+                        const rsvId = String(item.rsv_ids);
+                        return (
+                          <MapMarker
+                            key={`aps-${rsvId}`}
+                            rsvId={rsvId}
+                            lat={item.latitud}
+                            lng={item.longitud}
+                            title={`${item.codigo_unico} - APS: ${item.aps}`}
+                            isSelected={true}
+                            iconSelected={iconAPSSelected}
+                            iconUnselected={iconAPSUnselected}
+                            onClick={handleMarkerClickAPS}
+                          />
+                        );
+                      })}
+                  </GoogleMap>
+                  {selectedItemsAPS.size === 0 && (
+                    <div className={`absolute top-3 left-3 z-10 ${isDark ? 'bg-zinc-900/95 border-cyan-500/40 text-cyan-300' : 'bg-white/95 border-cyan-300 text-cyan-700'} border rounded-lg px-3 py-2 text-[11px] max-w-[240px] shadow-lg pointer-events-none`}>
+                      Selecciona items desde la lista para verlos en el mapa.
+                    </div>
+                  )}
+                </>
               )}
             </div>
             {/* Columna derecha: Tabla */}
