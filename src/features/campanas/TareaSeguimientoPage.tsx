@@ -82,6 +82,7 @@ import { useAuthStore } from '../../store/authStore';
 import { useThemeStore } from '../../store/themeStore';
 import { getPermissions } from '../../lib/permissions';
 import { useSocketCampana, useSocketEquipos } from '../../hooks/useSocket';
+import { LinkPreview } from '../../components/ui/LinkPreview';
 import { exportVersionarioArtes } from '../../utils/exportVersionarioArtes';
 import * as XLSX from 'xlsx';
 
@@ -9678,9 +9679,9 @@ function TaskDetailModal({
                                     {urlRef && (
                                       <div>
                                         <span className="text-zinc-400 text-xs uppercase tracking-wide">Enlace adjunto:</span>
-                                        <a href={urlRef} target="_blank" rel="noopener noreferrer" className="block mt-1 text-sm text-purple-300 hover:text-purple-200 underline break-all">
-                                          {urlRef}
-                                        </a>
+                                        <div className="mt-1 max-w-md">
+                                          <LinkPreview url={urlRef} isDark={true} />
+                                        </div>
                                       </div>
                                     )}
                                   </div>
