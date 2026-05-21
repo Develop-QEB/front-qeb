@@ -7960,30 +7960,24 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
                         )}
                       </div>
                       <div className="space-y-1">
-                        {/* Tipo: bloqueado al CREAR (se deriva del artículo). Editable solo
-                            al EDITAR caras NO-circuito. En circuitos digitales el tipo está
-                            fijado por el artículo (RT-DIG/BF-DIG/CT-DIG → Digital) y no se
-                            debe poder cambiar a Tradicional. */}
-                        {(() => {
-                          const esCircuitoActual = !!parseCircuitoDigital(newCara.articulo || '');
-                          const disabledTipo = !canEditResumen || !editingCaraId || esCircuitoActual;
-                          return (
-                        <>
+                        {/* Tipo: SIEMPRE deshabilitado.
+                            - Al CREAR: el valor lo deriva el artículo (Digital/Tradicional) y no
+                              se debe permitir override manual.
+                            - Al EDITAR: el tipo lo trae de BD; cambiarlo en circuitos digitales
+                              rompe el flujo (RT-DIG/BF-DIG/CT-DIG son Digital por definición), y
+                              en caras normales no hay razón válida para cambiarlo manualmente
+                              (era fuente del bug 70739 — caras Digital se volvían Tradicional). */}
                         <label className="text-xs text-zinc-500">Tipo</label>
                         <select
                           value={newCara.tipo}
-                          onChange={(e) => !disabledTipo && setNewCara({ ...newCara, tipo: e.target.value })}
-                          disabled={disabledTipo}
-                          title={esCircuitoActual ? 'El tipo de un circuito digital lo determina el artículo y no se puede cambiar' : undefined}
-                          className={`w-full px-3 py-2 ${isDark ? 'bg-zinc-800 border-zinc-700 text-white' : 'bg-white border-gray-300 text-gray-900'} border rounded-lg text-sm focus:outline-none focus:ring-1 focus:ring-purple-500/50 ${disabledTipo ? 'opacity-60 cursor-not-allowed' : ''}`}
+                          disabled
+                          title="El tipo lo determina el artículo y no se puede cambiar manualmente"
+                          className={`w-full px-3 py-2 ${isDark ? 'bg-zinc-800 border-zinc-700 text-white' : 'bg-white border-gray-300 text-gray-900'} border rounded-lg text-sm focus:outline-none focus:ring-1 focus:ring-purple-500/50 opacity-60 cursor-not-allowed`}
                         >
                           <option value="">Seleccionar</option>
                           <option value="Tradicional">Tradicional</option>
                           <option value="Digital">Digital</option>
                         </select>
-                        </>
-                          );
-                        })()}
                       </div>
                     </div>
                     <div className="grid grid-cols-4 gap-4 mb-4">
