@@ -465,12 +465,15 @@ export function buildDeliveryNote(
         dscPeriod = 'CATORCENA —-—';
       }
 
-      // IM (impresión) articles have no inventory rows — one row with caras_totales=N
+      // Quantity = suma de caras_totales de cada item (no usar .length).
+      // - IM (impresión): caras_totales = sc.caras del SC (total contratado).
+      // - RT/BF/CT/etc: caras_totales = count de reservas en el grupo.
+      //   Para grupos completos (Flujo + Contraflujo unidos en 1 fila) viene 2,
+      //   para caras individuales viene 1. Antes usábamos .length que ignoraba
+      //   el grupo completo y mandaba menos caras a SAP (bug campaña 80357:
+      //   120 caras en QEB → 118 en SAP por 2 muebles completos).
       const articuloCode = (firstItem.articulo || '').toUpperCase();
-      const isImpresionLine = articuloCode.startsWith('IM');
-      const quantity = isImpresionLine
-        ? itemsWithArticulo.reduce((s, i) => s + (Number(i.caras_totales) || 1), 0)
-        : itemsWithArticulo.length;
+      const quantity = itemsWithArticulo.reduce((s, i) => s + (Number(i.caras_totales) || 1), 0);
 
       // U_CodTAsig + U_dscTAsig deben ser un par válido en SAP:
       //   200 = "Venta"        (para RT-* o reservas vendidas)
