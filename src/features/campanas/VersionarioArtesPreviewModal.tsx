@@ -129,25 +129,6 @@ export function VersionarioArtesPreviewModal({ isOpen, onClose, preview, isLoadi
             {!isLoading && (
               <span>{filteredRows.length} mostradas{search ? ` (filtrado de ${totalFilas})` : ''}</span>
             )}
-            {totalPages > 1 && (
-              <div className="flex items-center gap-1">
-                <button
-                  onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
-                  disabled={safePage === 1}
-                  className={`px-2 py-1 rounded text-xs ${safePage === 1 ? 'opacity-40 cursor-not-allowed' : isDark ? 'hover:bg-zinc-800' : 'hover:bg-gray-200'}`}
-                >
-                  Anterior
-                </button>
-                <span className="px-2">{safePage} / {totalPages}</span>
-                <button
-                  onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
-                  disabled={safePage === totalPages}
-                  className={`px-2 py-1 rounded text-xs ${safePage === totalPages ? 'opacity-40 cursor-not-allowed' : isDark ? 'hover:bg-zinc-800' : 'hover:bg-gray-200'}`}
-                >
-                  Siguiente
-                </button>
-              </div>
-            )}
           </div>
         </div>
 
@@ -191,20 +172,21 @@ export function VersionarioArtesPreviewModal({ isOpen, onClose, preview, isLoadi
               <p>No hay datos para mostrar.</p>
             </div>
           ) : (
-            <table className="w-full text-xs">
-              <thead className={`sticky top-0 z-10 ${isDark ? 'bg-purple-900/40 text-purple-200' : 'bg-purple-100 text-purple-800'}`}>
-                <tr>
+            <div className="overflow-x-auto">
+            <table className="w-full min-w-[1600px] text-xs">
+              <thead className="sticky top-0 z-10">
+                <tr className="border-b border-purple-500/20 bg-gradient-to-r from-purple-900/40 via-fuchsia-900/30 to-purple-900/40 backdrop-blur-sm">
                   {preview?.headers.map(h => (
-                    <th key={h} className="p-2 font-semibold text-left whitespace-nowrap border-b border-purple-500/30">{h}</th>
+                    <th key={h} className="px-3 py-3 text-left text-[10px] font-semibold text-purple-300 uppercase tracking-wider whitespace-nowrap">{h}</th>
                   ))}
                   {Array.from({ length: arteCols }).map((_, i) => (
-                    <th key={`arte-${i}`} className="p-2 font-semibold text-left whitespace-nowrap border-b border-purple-500/30">Arte {i + 1}</th>
+                    <th key={`arte-${i}`} className="px-3 py-3 text-left text-[10px] font-semibold text-purple-300 uppercase tracking-wider whitespace-nowrap">Arte {i + 1}</th>
                   ))}
                 </tr>
               </thead>
               <tbody>
                 {paginated.map((r, idx) => (
-                  <tr key={`${r.apsQebId}-${r.plaza}-${idx}`} className={`border-b ${isDark ? 'border-zinc-800 hover:bg-purple-900/10' : 'border-gray-100 hover:bg-purple-50'}`}>
+                  <tr key={`${r.apsQebId}-${r.plaza}-${idx}`} className={`border-b ${isDark ? 'border-zinc-800/50 hover:bg-purple-900/10' : 'border-gray-100 hover:bg-purple-50'}`}>
                     <td className="p-2 whitespace-nowrap">{r.plaza}</td>
                     <td className="p-2 whitespace-nowrap">{r.tipo}</td>
                     <td className="p-2 whitespace-nowrap">{r.asesor}</td>
@@ -230,14 +212,35 @@ export function VersionarioArtesPreviewModal({ isOpen, onClose, preview, isLoadi
                 ))}
               </tbody>
             </table>
+            </div>
           )}
         </div>
 
-        {/* Footer */}
-        <div className="flex items-center justify-between p-4 border-t border-border flex-shrink-0">
+        {/* Footer con paginacion + acciones */}
+        <div className="flex items-center justify-between gap-4 p-4 border-t border-border flex-shrink-0 flex-wrap">
           <button onClick={onClose} className={`px-4 py-2 text-sm rounded-lg transition-colors ${isDark ? 'text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800' : 'text-gray-600 hover:text-gray-800 hover:bg-gray-100'}`}>
             Cerrar
           </button>
+          {/* Paginacion centrada */}
+          {totalPages > 1 && (
+            <div className={`flex items-center gap-2 text-xs ${isDark ? 'text-zinc-400' : 'text-gray-600'}`}>
+              <button
+                onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
+                disabled={safePage === 1}
+                className={`px-3 py-1.5 rounded-lg border transition-colors ${safePage === 1 ? 'opacity-40 cursor-not-allowed' : isDark ? 'border-zinc-700 hover:bg-zinc-800 hover:border-purple-500/50' : 'border-gray-300 hover:bg-gray-100'}`}
+              >
+                ← Anterior
+              </button>
+              <span className="px-3 font-medium">Página {safePage} de {totalPages}</span>
+              <button
+                onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
+                disabled={safePage === totalPages}
+                className={`px-3 py-1.5 rounded-lg border transition-colors ${safePage === totalPages ? 'opacity-40 cursor-not-allowed' : isDark ? 'border-zinc-700 hover:bg-zinc-800 hover:border-purple-500/50' : 'border-gray-300 hover:bg-gray-100'}`}
+              >
+                Siguiente →
+              </button>
+            </div>
+          )}
           <button
             onClick={onDownload}
             disabled={isLoading || isDownloading || totalFilas === 0}

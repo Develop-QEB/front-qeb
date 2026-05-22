@@ -1,4 +1,5 @@
 import React, { useState, useMemo, useEffect, useCallback, useRef } from 'react';
+import { flushSync } from 'react-dom';
 import { useQuery } from '@tanstack/react-query';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import {
@@ -2511,7 +2512,11 @@ export function CampanasPage() {
   // el fetch faltante en paralelo antes de generar el Excel.
   const handleDownloadVersionarioFromPreview = async () => {
     if (!versionarioRawData || versionarioRawData.length === 0) return;
-    setVersionarioDownloading(true);
+    // Guard: si ya estamos descargando, ignorar clicks subsecuentes.
+    if (versionarioDownloading) return;
+    // flushSync para que el boton cambie a "Generando..." al instante
+    // (sin esto el render se aplaza hasta que se complete el primer batch).
+    flushSync(() => setVersionarioDownloading(true));
     try {
       // Completar notas + archivos digitales en pool de 15 campañas paralelas.
       const POOL = 15;
