@@ -1,5 +1,5 @@
 import { useMemo, useState, useEffect } from 'react';
-import { X, Download, Search, Image as ImageIcon } from 'lucide-react';
+import { X, Download, Search, Image as ImageIcon, Film } from 'lucide-react';
 import { useThemeStore } from '../../store/themeStore';
 import type { VersionarioArtesPreview, VersionarioArtesPreviewRow } from '../../utils/exportVersionarioArtes';
 
@@ -20,14 +20,60 @@ interface Props {
 
 const PAGE_SIZE = 25;
 
-// Miniatura de arte que usa el proxy del backend para evitar CORS.
+// Detecta si un URL apunta a un archivo de video (no se puede previsualizar
+// como imagen). Cubre las extensiones comunes que se suben para artes digitales.
+const isVideoUrl = (url: string): boolean => {
+  if (!url) return false;
+  const u = url.split('?')[0].toLowerCase();
+  return /\.(mp4|mov|avi|webm|mkv|m4v|wmv|flv)$/.test(u);
+};
+
+// Extrae nombre limpio del archivo desde la URL (quita el prefijo timestamp-random-).
+const extractFileName = (url: string): string => {
+  if (!url) return '';
+  try {
+    const last = decodeURIComponent(url.split('?')[0].split('/').pop() || '');
+    return last.replace(/^\d{10,}-[a-z0-9]+-/i, '') || last;
+  } catch {
+    return url.split('/').pop() || '';
+  }
+};
+
+// Miniatura de arte. Si es video, muestra etiqueta "Video subido + nombre"
+// en lugar de intentar previsualizar.
 function ArteThumb({ url }: { url: string }) {
   const [errored, setErrored] = useState(false);
   const isDark = useThemeStore(s => s.theme) === 'dark';
-  // Para previews evitamos descargar binarios y usamos directo la url
-  // (las miniaturas son pequenas y casi siempre cargan por CORS publico
-  // de Spaces; si falla mostramos icono).
-  if (errored || !url) {
+
+  if (!url) {
+    return (
+      <div className={`w-16 h-12 rounded flex items-center justify-center ${isDark ? 'bg-zinc-800 border border-zinc-700' : 'bg-gray-100 border border-gray-200'}`}>
+        <ImageIcon className={`h-4 w-4 ${isDark ? 'text-zinc-600' : 'text-gray-400'}`} />
+      </div>
+    );
+  }
+
+  // Video → etiqueta + nombre (no se previsualiza)
+  if (isVideoUrl(url)) {
+    const name = extractFileName(url);
+    return (
+      <button
+        type="button"
+        onClick={() => window.open(url, '_blank', 'noopener,noreferrer')}
+        className={`flex flex-col items-start gap-1 px-2 py-1 rounded border max-w-[180px] text-left transition-colors ${isDark ? 'bg-cyan-500/10 border-cyan-500/30 hover:bg-cyan-500/20' : 'bg-cyan-50 border-cyan-200 hover:bg-cyan-100'}`}
+        title={`Video subido: ${name}\nClick para abrir`}
+      >
+        <span className={`inline-flex items-center gap-1 text-[10px] font-semibold ${isDark ? 'text-cyan-300' : 'text-cyan-700'}`}>
+          <Film className="h-3 w-3" />
+          Video subido
+        </span>
+        <span className={`text-[10px] break-all leading-tight ${isDark ? 'text-zinc-300' : 'text-gray-700'}`}>{name}</span>
+      </button>
+    );
+  }
+
+  // Imagen → miniatura normal; si falla la carga mostramos icono fallback
+  if (errored) {
     return (
       <div className={`w-16 h-12 rounded flex items-center justify-center ${isDark ? 'bg-zinc-800 border border-zinc-700' : 'bg-gray-100 border border-gray-200'}`}>
         <ImageIcon className={`h-4 w-4 ${isDark ? 'text-zinc-600' : 'text-gray-400'}`} />

@@ -50,6 +50,15 @@ const extractArteName = (url: string): string => {
   }
 };
 
+// Detecta si una URL apunta a un archivo de video (no se puede previsualizar
+// como imagen en Excel ni en el modal). En esos casos mostramos "Video subido"
+// con el nombre del archivo en vez de la miniatura.
+const isVideoUrl = (url: string | null | undefined): boolean => {
+  if (!url) return false;
+  const u = url.split('?')[0].toLowerCase();
+  return /\.(mp4|mov|avi|webm|mkv|m4v|wmv|flv)$/.test(u);
+};
+
 // "Arte 1: nombre.png\nArte 2: otro.png" — un nombre por linea.
 const buildNombresArtesText = (urls: string[]): string => {
   if (!urls || urls.length === 0) return '';
@@ -284,6 +293,12 @@ export async function exportVersionarioArtes({ campana, items, digitalFilesByRes
     for (let i = 0; i < urls.length; i++) {
       const url = urls[i];
       const colIndex = ARTE_COL_START + i; // 0-based
+      // Si es video no se puede embed → texto "Video subido: nombre"
+      if (isVideoUrl(url)) {
+        const name = extractArteName(url);
+        row.getCell(colIndex + 1).value = { text: `Video subido: ${name}`, hyperlink: url };
+        continue;
+      }
       const imageId = await getImageId(url);
       if (imageId !== null) {
         sheet.addImage(imageId, {
@@ -801,6 +816,12 @@ export async function exportVersionarioArtesMulti({ campanas, fileNameSuffix }: 
     for (let i = 0; i < artesUrls.length; i++) {
       const url = artesUrls[i];
       const colIndex = ARTE_COL_START + i;
+      // Video → "Video subido: nombre" (no se puede embed en Excel)
+      if (isVideoUrl(url)) {
+        const name = extractArteName(url);
+        row.getCell(colIndex + 1).value = { text: `Video subido: ${name}`, hyperlink: url };
+        continue;
+      }
       const imageId = await getImageId(url);
       if (imageId !== null) {
         sheet.addImage(imageId, {
