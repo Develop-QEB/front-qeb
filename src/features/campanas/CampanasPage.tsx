@@ -901,7 +901,7 @@ const CampanaRow = React.memo(function CampanaRow({
     <tr key={`campana-${item.id}-${index}`} className={`border-b ${isDark ? 'border-zinc-800/50 hover:bg-zinc-800/30' : 'border-gray-200 hover:bg-gray-50'} transition-colors`}>
       {/* ID */}
       <td className="px-4 py-3">
-        <span className={`font-mono text-xs px-2 py-1 rounded-md ${isDark ? 'bg-purple-500/10 text-purple-300' : 'bg-purple-50 text-purple-700'}`}>#{item.propuesta_id || item.id}</span>
+        <span className={`font-mono text-xs px-2 py-1 rounded-md ${isDark ? 'bg-purple-500/10 text-purple-300' : 'bg-purple-50 text-purple-700'}`}>#{item.id}</span>
       </td>
       {/* Periodo */}
       <td className="px-4 py-3">
