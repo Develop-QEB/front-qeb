@@ -92,7 +92,13 @@ export async function exportVersionarioArtes({ campana, items, digitalFilesByRes
 
   const cuic = campana.cuic ? String(campana.cuic) : '';
   const asesor = (campana as any).T0_U_Asesor || (campana as any).asesor || '';
-  const cliente = (campana as any).T0_U_RazonSocial || (campana as any).cliente || (campana as any).T1_U_Cliente || '';
+  const cliente = (campana as any).cliente_razon_social
+    || (campana as any).cliente_nombre
+    || (campana as any).T0_U_RazonSocial
+    || (campana as any).T0_U_Cliente
+    || (campana as any).T1_U_Cliente
+    || (campana as any).cliente
+    || '';
   const marca = (campana as any).T2_U_Marca || (campana as any).marca || '';
   const campaniaNombre = campana.nombre || campana.nombre_campania || '';
 
@@ -465,7 +471,13 @@ export function buildVersionarioArtesPreview({ campanas }: { campanas: Versionar
 
       const cuic = campana.cuic ? String(campana.cuic) : '';
       const asesor = (campana as any).T0_U_Asesor || (campana as any).asesor || '';
-      const cliente = (campana as any).T0_U_RazonSocial || (campana as any).cliente || (campana as any).T1_U_Cliente || '';
+      const cliente = (campana as any).cliente_razon_social
+    || (campana as any).cliente_nombre
+    || (campana as any).T0_U_RazonSocial
+    || (campana as any).T0_U_Cliente
+    || (campana as any).T1_U_Cliente
+    || (campana as any).cliente
+    || '';
       const marca = (campana as any).T2_U_Marca || (campana as any).marca || '';
       const campaniaNombre = campana.nombre || campana.nombre_campania || '';
 
@@ -676,7 +688,13 @@ export async function exportVersionarioArtesMulti({ campanas, fileNameSuffix }: 
 
     const cuic = campana.cuic ? String(campana.cuic) : '';
     const asesor = (campana as any).T0_U_Asesor || (campana as any).asesor || '';
-    const cliente = (campana as any).T0_U_RazonSocial || (campana as any).cliente || (campana as any).T1_U_Cliente || '';
+    const cliente = (campana as any).cliente_razon_social
+    || (campana as any).cliente_nombre
+    || (campana as any).T0_U_RazonSocial
+    || (campana as any).T0_U_Cliente
+    || (campana as any).T1_U_Cliente
+    || (campana as any).cliente
+    || '';
     const marca = (campana as any).T2_U_Marca || (campana as any).marca || '';
     const campaniaNombre = campana.nombre || campana.nombre_campania || '';
 
