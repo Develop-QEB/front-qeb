@@ -46,7 +46,13 @@ const HISTORIAL_TICKETS_EMAILS = [
 ];
 
 // Obtener la primera ruta disponible según permisos del usuario
-function getFirstAvailableRoute(permissions: ReturnType<typeof getPermissions>): string {
+// Roles que aterrizan directamente en /notificaciones (tab "Mis Tareas") al
+// loguearse, en vez del Dashboard. Aplica solo a directores que se interesan
+// principalmente en su bandeja de tareas pendientes.
+const ROLES_LAND_ON_TAREAS = ['Director General', 'Director Comercial'];
+
+function getFirstAvailableRoute(permissions: ReturnType<typeof getPermissions>, rol?: string): string {
+  if (rol && ROLES_LAND_ON_TAREAS.includes(rol)) return '/notificaciones';
   if (permissions.canSeeDashboard) return '/';
   if (permissions.canSeeSolicitudes) return '/solicitudes';
   if (permissions.canSeePropuestas) return '/propuestas';
@@ -62,12 +68,16 @@ function HomeRoute() {
   const user = useAuthStore((state) => state.user);
   const permissions = getPermissions(user?.rol);
 
+  // Directores: redirigir a /notificaciones (Mis Tareas es el tab default).
+  if (user?.rol && ROLES_LAND_ON_TAREAS.includes(user.rol)) {
+    return <Navigate to="/notificaciones" replace />;
+  }
   // Si puede ver Dashboard, mostrarlo
   if (permissions.canSeeDashboard) {
     return <DashboardPage />;
   }
   // Si no, redirigir a la primera ruta disponible
-  return <Navigate to={getFirstAvailableRoute(permissions)} replace />;
+  return <Navigate to={getFirstAvailableRoute(permissions, user?.rol)} replace />;
 }
 
 // Componente para proteger ruta de Inventarios
@@ -76,7 +86,7 @@ function InventariosRoute() {
   const permissions = getPermissions(user?.rol);
 
   if (!user || !permissions.canSeeInventarios) {
-    return <Navigate to={getFirstAvailableRoute(permissions)} replace />;
+    return <Navigate to={getFirstAvailableRoute(permissions, user?.rol)} replace />;
   }
   return <InventariosPage />;
 }
@@ -87,7 +97,7 @@ function AdminUsuariosRoute() {
   const permissions = getPermissions(user?.rol);
 
   if (!user || !permissions.canSeeAdminUsuarios) {
-    return <Navigate to={getFirstAvailableRoute(permissions)} replace />;
+    return <Navigate to={getFirstAvailableRoute(permissions, user?.rol)} replace />;
   }
   return <UsuariosAdminPage />;
 }
@@ -97,7 +107,7 @@ function AdminChatbotRoute() {
   const permissions = getPermissions(user?.rol);
 
   if (!user || !permissions.canSeeAdminUsuarios) {
-    return <Navigate to={getFirstAvailableRoute(permissions)} replace />;
+    return <Navigate to={getFirstAvailableRoute(permissions, user?.rol)} replace />;
   }
   return <ChatbotHistorialPage />;
 }
@@ -144,7 +154,7 @@ function HistorialAccionesRoute() {
   const user = useAuthStore((state) => state.user);
   const permissions = getPermissions(user?.rol);
   if (!user || !permissions.canSeeHistorialAcciones) {
-    return <Navigate to={getFirstAvailableRoute(permissions)} replace />;
+    return <Navigate to={getFirstAvailableRoute(permissions, user?.rol)} replace />;
   }
   return <HistorialAccionesPage />;
 }
