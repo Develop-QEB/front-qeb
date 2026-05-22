@@ -481,10 +481,9 @@ export function buildVersionarioArtesPreview({ campanas }: { campanas: Versionar
 
   return {
     headers: [
-      'Plaza', 'Tipo', 'Asesor Comercial', 'APS Global - ID QEB', 'CUIC',
+      'Plaza', 'Tipo', 'Asesor Comercial', 'APS Global - ID QEB',
       'Fecha Inicio Periodo', 'Fecha Fin Periodo', 'Cliente Comercial',
-      'Marca', 'Campaña', 'Número de artículo', 'Artículo', 'Caras', 'Tarifa',
-      'Estatus', 'Notas', 'Nombre Arte',
+      'Marca', 'Campaña', 'Caras', 'Estatus', 'Notas', 'Nombre Arte',
     ],
     arteCols: maxArtesUnicos,
     rows,
