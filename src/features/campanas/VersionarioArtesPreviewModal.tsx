@@ -1,4 +1,4 @@
-import { useMemo, useState, useEffect } from 'react';
+import { useMemo, useState, useEffect, useRef } from 'react';
 import { X, Download, Search, Image as ImageIcon, AlertCircle } from 'lucide-react';
 import { useThemeStore } from '../../store/themeStore';
 import { buildVersionarioArtesPreview } from '../../utils/exportVersionarioArtes';
@@ -73,9 +73,18 @@ export function VersionarioArtesPreviewModal({ isOpen, onClose, campanas, cache,
   const isDark = useThemeStore(s => s.theme) === 'dark';
   const [currentPage, setCurrentPage] = useState(1);
   const [search, setSearch] = useState('');
+  // Dedupe de ids ya solicitados: evita disparar el mismo fetch dos veces
+  // y elimina la posibilidad de loop por re-render del prop `cache`.
+  const requestedRef = useRef<Set<number>>(new Set());
 
-  // Reset paginacion/search al cerrar/abrir
-  useEffect(() => { if (!isOpen) { setCurrentPage(1); setSearch(''); } }, [isOpen]);
+  // Reset paginacion/search + dedupe set al cerrar/abrir
+  useEffect(() => {
+    if (!isOpen) {
+      setCurrentPage(1);
+      setSearch('');
+      requestedRef.current = new Set();
+    }
+  }, [isOpen]);
 
   // Estado agregado de carga global (para el header)
   const loadedCount = useMemo(() => {
@@ -98,16 +107,23 @@ export function VersionarioArtesPreviewModal({ isOpen, onClose, campanas, cache,
     return campanas.slice(start, start + PAGE_SIZE_CAMPANAS);
   }, [campanas, safePage]);
 
-  // Pide fetch de las campañas visibles que aun esten pending
+  // Pide fetch de las campañas visibles que aun esten pending y NO hayan sido
+  // solicitadas ya en esta sesion. Importante: NO depender de `cache` aqui
+  // para no re-disparar cada vez que cache cambia (cambia con cada fetch).
   useEffect(() => {
     if (!isOpen) return;
     const pendingIds: number[] = [];
     for (const c of visibleCampanas) {
+      if (requestedRef.current.has(c.id)) continue;
       const e = cache.get(c.id);
-      if (e && e.status === 'pending') pendingIds.push(c.id);
+      if (e && e.status === 'pending') {
+        pendingIds.push(c.id);
+        requestedRef.current.add(c.id);
+      }
     }
     if (pendingIds.length > 0) onFetchIds(pendingIds);
-  }, [isOpen, visibleCampanas, cache, onFetchIds]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isOpen, visibleCampanas, onFetchIds]);
 
   // Calculamos arteCols a partir SOLO de lo cargado (para el header dinamico)
   const arteColsLoaded = useMemo(() => {
