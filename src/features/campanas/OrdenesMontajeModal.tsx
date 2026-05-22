@@ -1323,8 +1323,7 @@ export function OrdenesMontajeModal({ isOpen, onClose, canExport = true }: Orden
           // Antes salía en "Código de arte"; ahora "Código de arte" va vacío.
           'Arte': cleanArteName(item.nombres_artes_digitales || item.ArteFileName || (item.ArteUrl === 'HAS_ARTE' ? '' : item.ArteUrl?.split('/').pop()) || ''),
           'Código de arte (Opcional)': '',
-          'Arte Url (Opcional)': item.ArteUrl === 'HAS_ARTE' ? '' : (getFileUrl(item.ArteUrl) || ''),
-          'Origen del arte (Opcional)': item.indicaciones || '',
+          'Origen del arte (Opcional)': item.ArteUrl === 'HAS_ARTE' ? '' : (getFileUrl(item.ArteUrl) || ''),
           'Unidad': (item.Unidad || '').split('_')[0] || '',
           'Cara': item.Cara || '',
           'Plaza': plazaDerivada,
@@ -1356,8 +1355,7 @@ export function OrdenesMontajeModal({ isOpen, onClose, canExport = true }: Orden
           // Antes salía en "Código de arte"; ahora "Código de arte" va vacío.
           'Arte': cleanArteName(item.nombres_artes_digitales || item.ArteFileName || (item.ArteUrl === 'HAS_ARTE' ? '' : item.ArteUrl?.split('/').pop()) || ''),
           'Código de arte (Opcional)': '',
-          'Arte Url (Opcional)': item.ArteUrl === 'HAS_ARTE' ? '' : (getFileUrl(item.ArteUrl) || ''),
-          'Origen del arte (Opcional)': item.indicaciones || '',
+          'Origen del arte (Opcional)': item.ArteUrl === 'HAS_ARTE' ? '' : (getFileUrl(item.ArteUrl) || ''),
           'Unidad': (item.Unidad || '').split('_')[0] || '',
           'Cara': item.Cara || '',
           'Plaza': plazaDerivada,
@@ -2280,7 +2278,6 @@ export function OrdenesMontajeModal({ isOpen, onClose, canExport = true }: Orden
                     <th className="px-3 py-3 text-left text-[10px] font-semibold text-purple-300 uppercase tracking-wider">Fin/Segmento</th>
                     <th className="px-3 py-3 text-left text-[10px] font-semibold text-purple-300 uppercase tracking-wider">Arte</th>
                     <th className="px-3 py-3 text-left text-[10px] font-semibold text-purple-300 uppercase tracking-wider">Código de arte (Opcional)</th>
-                    <th className="px-3 py-3 text-left text-[10px] font-semibold text-purple-300 uppercase tracking-wider">Arte Url (Opcional)</th>
                     <th className="px-3 py-3 text-left text-[10px] font-semibold text-purple-300 uppercase tracking-wider">Origen del arte (Opcional)</th>
                     <th className="px-3 py-3 text-left text-[10px] font-semibold text-purple-300 uppercase tracking-wider">Unidad</th>
                     <th className="px-3 py-3 text-left text-[10px] font-semibold text-purple-300 uppercase tracking-wider">Cara</th>
@@ -2301,7 +2298,7 @@ export function OrdenesMontajeModal({ isOpen, onClose, canExport = true }: Orden
                     const showCto = activeTab === 'invian-digital';
                     const showCodigoUnico = true;
                     const showTipoInventario = true;
-                    const invianColSpan = 16 + (showCto ? 1 : 0) + (showCodigoUnico ? 1 : 0) + (showTipoInventario ? 1 : 0);
+                    const invianColSpan = 15 + (showCto ? 1 : 0) + (showCodigoUnico ? 1 : 0) + (showTipoInventario ? 1 : 0);
                     return (
                       <>
                         {currentGrouped ? (
@@ -2597,10 +2594,6 @@ const INVIANRow = React.memo(function INVIANRow({ item, isDark, onOpenGallery, s
           }
           return <span className={isDark ? 'text-zinc-500' : 'text-gray-400'}>-</span>;
         })()}
-      </td>
-      {/* Indicaciones */}
-      <td className={`px-3 py-2 text-xs ${isDark ? 'text-zinc-300' : 'text-gray-700'} max-w-[180px] truncate`} title={item.indicaciones || ''}>
-        {item.indicaciones || '-'}
       </td>
       {/* Unidad: solo el código (antes del primer '_'). codigo_unico viene
           como 'TJ1129_Flujo_Tijuana' pero solo queremos 'TJ1129'. */}
