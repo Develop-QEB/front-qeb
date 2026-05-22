@@ -262,6 +262,23 @@ const CAMPANA_FILTER_FIELDS: FilterFieldConfig[] = [
   { field: 'creador_nombre', label: 'Creador', type: 'string' },
   { field: 'T0_U_Asesor', label: 'Asesor', type: 'string' },
   { field: 'codigos_inventario', label: 'Código Inventario', type: 'string' },
+  // Etapa del gestor de artes: filtra campañas que tengan AL MENOS UN circuito
+  // con ese estatus_arte. Evaluado contra inventarios cargados en el cliente
+  // (campanaInventarios). Valores expuestos en getUniqueFieldValues.
+  { field: 'etapa', label: 'Etapa', type: 'string' },
+];
+
+// Etapas (estatus_arte computado en back) que pueden filtrarse.
+// Mapping label visible -> valor real de estatus_arte.
+const ETAPA_VALUES: { label: string; value: string }[] = [
+  { label: 'Carga de Artes', value: 'Carga Artes' },
+  { label: 'En Revisión', value: 'Revision Artes' },
+  { label: 'Artes Aprobados', value: 'Artes Aprobados' },
+  { label: 'En Impresión', value: 'En Impresion' },
+  { label: 'Artes Recibidos', value: 'Artes Recibidos' },
+  { label: 'Instalado', value: 'Instalado' },
+  { label: 'Impresión (IM)', value: 'Impresión' },
+  { label: 'Programado', value: '__programado__' }, // pseudo-valor: items con indicaciones_programacion
 ];
 
 const FILTER_OPERATORS: { value: FilterOperator; label: string }[] = [
@@ -1310,6 +1327,33 @@ export function CampanasPage() {
 
     // Helper inline: evalúa condición extendida para codigos_inventario
     function evalFilterWithInventario(item: Campana, filter: AdvancedFilterCondition): boolean {
+      // Filtro por etapa del gestor de artes (estatus_arte de los inventarios).
+      // El valor del filtro es el label visible (ej. "En Revisión"); lo mapeamos
+      // al estatus_arte real ("Revision Artes"). Operadores soportados: = / !=.
+      if (filter.field === 'etapa') {
+        if (!filter.value) return true;
+        const mapped = ETAPA_VALUES.find(e => e.label === filter.value)?.value;
+        if (!mapped) return true; // valor desconocido, no filtra
+        const invItems = campanaInventarios[item.id] || [];
+        if (invItems.length === 0) {
+          // Sin inventarios cargados → asumimos Carga Artes
+          const matchesEmpty = mapped === 'Carga Artes';
+          return filter.operator === '!=' ? !matchesEmpty : matchesEmpty;
+        }
+        const matchFn = (inv: any): boolean => {
+          if (mapped === '__programado__') {
+            const ip = inv.indicaciones_programacion;
+            return !!(ip && String(ip).trim());
+          }
+          return inv.estatus_arte === mapped;
+        };
+        const someMatch = invItems.some(matchFn);
+        if (filter.operator === '!=' || filter.operator === 'not_contains') {
+          // Negativo: la campaña debe tener cero items en esa etapa
+          return !someMatch;
+        }
+        return someMatch;
+      }
       // Para filtros de codigos_inventario, también buscar en inventarios cargados
       if (filter.field === 'codigos_inventario' && filter.value) {
         const baseResult = evalCondition(item, filter);
@@ -2013,6 +2057,11 @@ export function CampanasPage() {
     if (!showAdvancedFilters || !data?.data) return valuesMap;
 
     CAMPANA_FILTER_FIELDS.forEach(fieldConfig => {
+      // 'etapa' tiene un set fijo de valores (estatus_arte computado).
+      if (fieldConfig.field === 'etapa') {
+        valuesMap[fieldConfig.field] = ETAPA_VALUES.map(e => e.label);
+        return;
+      }
       const values = new Set<string>();
       data.data.forEach(item => {
         const val = item[fieldConfig.field as keyof Campana];

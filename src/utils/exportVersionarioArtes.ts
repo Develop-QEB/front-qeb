@@ -34,6 +34,28 @@ const dataUrlToBuffer = (dataUrl: string): FetchedImage | null => {
   return { buffer, ext: detectExt(mime) };
 };
 
+// Extrae nombre legible de arte desde la URL de Spaces.
+// Spaces patron: ${folder}/${timestamp}-${random}-${sanitizedFilename}
+// Ej.: /artes/1775568848792-3s97habp-imagotipo-negro.png -> "imagotipo-negro.png"
+const extractArteName = (url: string): string => {
+  if (!url) return '';
+  try {
+    const path = url.split('?')[0]; // sin querystring
+    const last = decodeURIComponent(path.split('/').pop() || '');
+    // Patron timestamp-random-rest: \d{10,}-[a-z0-9]+-
+    const stripped = last.replace(/^\d{10,}-[a-z0-9]+-/i, '');
+    return stripped || last;
+  } catch {
+    return url.split('/').pop() || '';
+  }
+};
+
+// "Arte 1: nombre.png\nArte 2: otro.png" — un nombre por linea.
+const buildNombresArtesText = (urls: string[]): string => {
+  if (!urls || urls.length === 0) return '';
+  return urls.map((u, idx) => `Arte ${idx + 1}: ${extractArteName(u)}`).join('\n');
+};
+
 const fetchImage = async (url: string): Promise<FetchedImage | null> => {
   if (!url) return null;
   if (url.startsWith('data:')) return dataUrlToBuffer(url);
@@ -138,11 +160,12 @@ export async function exportVersionarioArtes({ campana, items, digitalFilesByRes
     'Caras',
     'Tarifa',
     'Notas',
+    'Nombre Arte',
   ];
   const arteHeaders = Array.from({ length: maxArtesUnicos }, (_, i) => `Arte ${i + 1}`);
   const headers = [...baseHeaders, ...arteHeaders];
 
-  const baseWidths = [22, 14, 26, 14, 12, 14, 14, 30, 18, 26, 18, 18, 8, 12, 50];
+  const baseWidths = [22, 14, 26, 14, 12, 14, 14, 30, 18, 26, 18, 18, 8, 12, 50, 40];
   sheet.columns = [
     ...baseWidths.map(w => ({ width: w })),
     ...Array(maxArtesUnicos).fill(null).map(() => ({ width: 22 })),
@@ -237,6 +260,7 @@ export async function exportVersionarioArtes({ campana, items, digitalFilesByRes
       caras,
       tarifaDisplay,
       notasResumen,
+      buildNombresArtesText(urls),
     ];
     // Padding vacío para celdas de arte
     for (let i = 0; i < maxArtesUnicos; i++) rowValues.push('');
@@ -378,11 +402,12 @@ export async function exportVersionarioArtesMulti({ campanas, fileNameSuffix }: 
     'Caras',
     'Tarifa',
     'Notas',
+    'Nombre Arte',
   ];
   const arteHeaders = Array.from({ length: maxArtesUnicos }, (_, i) => `Arte ${i + 1}`);
   const headers = [...baseHeaders, ...arteHeaders];
 
-  const baseWidths = [22, 14, 26, 14, 12, 14, 14, 30, 18, 26, 18, 18, 8, 12, 50];
+  const baseWidths = [22, 14, 26, 14, 12, 14, 14, 30, 18, 26, 18, 18, 8, 12, 50, 40];
   sheet.columns = [
     ...baseWidths.map(w => ({ width: w })),
     ...Array(maxArtesUnicos).fill(null).map(() => ({ width: 22 })),
@@ -473,6 +498,7 @@ export async function exportVersionarioArtesMulti({ campanas, fileNameSuffix }: 
       caras,
       tarifaDisplay,
       notasResumen,
+      buildNombresArtesText(artesUrls),
     ];
     for (let i = 0; i < maxArtesUnicos; i++) rowValues.push('');
 
