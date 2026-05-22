@@ -245,7 +245,7 @@ export async function exportVersionarioArtes({ campana, items, digitalFilesByRes
 
     const urls = artesPorPlaza.get(plaza) || [];
     const notasResumen = buildNotasText(urls);
-    const estatusDisplay = uniqueOrVarios(arr.map(it => mapItemToEstatus(it)));
+    const { text: estatusDisplay } = buildEstatusCircuito(arr);
 
     // Min/max de fechas dentro de la plaza
     const inicios = arr.map(it => it.inicio_periodo).filter(Boolean) as string[];
@@ -347,42 +347,93 @@ export interface VersionarioArtesPreviewRow {
   articulo: string;
   caras: number; // total de caras del circuito
   tarifa: number | string;
-  estatus: string;
+  estatus: string; // "Instaladas" | "1 Subir Artes, 2 Instaladas" | etc.
+  estatusBreakdown: EstatusBreakdownItem[]; // desglose para renderizar badges
   notas: string;
   nombreArte: string;
   artesUrls: string[];
 }
 
-// Mapea un item de inventario al label de estatus que corresponde a la
-// tab/sub-tab donde vive en el Gestor de Artes. Considera todas las
-// etapas del ciclo: Carga → Revision → Aprobado/Rechazado → Programado
-// → Impresion → Recepcion → Instalado.
+// Determina el estatus jerarquico de un item: nivel + label.
+// Cada item se asigna al nivel MAS ALTO al que ha llegado. Niveles:
+//   1 - Subir Artes        (label: "Subir Artes")
+//   2 - Revisar y Aprobar  (sub-tabs: Sin Revisar / En Revision / Aprobado / Rechazado / Pendiente)
+//   3 - Programacion       (label: "En Programacion")
+//   4 - Impresiones        (sub-tabs: En Impresion / Pendiente de Recepcion / Recibido)
+//   5 - Validar Instalacion (sub-tabs: Por Instalar / Instaladas / Testigo)
 //
-// Prioridad: estado terminal primero (Instalado), luego tarea activa
-// (Programación/Impresión/Recepción), luego decision de arte (Aprobado/
-// Rechazado/Pendiente/En Revisión), y al final el estado inicial
-// (Sin Revisar si tiene archivo subido, Carga de Artes si no).
-const mapItemToEstatus = (item: any): string => {
-  // 1) Instalado (tab Validar Instalación)
-  if (item.instalado === true || item.instalado === 1) return 'Instalado';
-
-  // 2) Tarea activa: refleja la sub-tab actual de las main tabs
-  //    Programación / Impresiones (sub: Orden, En Impresión, Recepción)
+// Prioridad descendente: chequea nivel 5 → 4 → 3 → 2 → 1.
+const getItemLevelStatus = (item: any): { level: number; label: string } => {
   const tarea = String(item.tarea || '').toLowerCase();
-  if (tarea.includes('recepc')) return 'Artes Recibidos';
-  if (tarea.includes('impres')) return 'En Impresión';
-  if (tarea.includes('program')) return 'Programado';
+  const status = String(item.status_mostrar || item.estatus || '').toLowerCase();
 
-  // 3) Decisión del arte (sub-tabs de Revisar y Aprobar)
+  // Nivel 5: Validar Instalacion
+  if (item.testigo_status === 'validado' || tarea.includes('testigo')) {
+    return { level: 5, label: 'Testigo' };
+  }
+  if (item.instalado === true || item.instalado === 1) {
+    return { level: 5, label: 'Instaladas' };
+  }
+  if (tarea.includes('instalac')) {
+    return { level: 5, label: 'Por Instalar' };
+  }
+
+  // Nivel 4: Impresiones
+  if (tarea.includes('recepc')) {
+    // Si la tarea de recepcion ya esta atendida → Recibido. Si no, Pendiente.
+    if (status.includes('atendido') || status.includes('completado')) {
+      return { level: 4, label: 'Recibido' };
+    }
+    return { level: 4, label: 'Pendiente de Recepción' };
+  }
+  if (tarea.includes('impres')) {
+    return { level: 4, label: 'En Impresión' };
+  }
+
+  // Nivel 3: Programacion
+  if (tarea.includes('program')) {
+    return { level: 3, label: 'En Programación' };
+  }
+
+  // Nivel 2: Revisar y Aprobar
   const v = String(item.arte_aprobado || '').toLowerCase().trim();
-  if (v === 'aprobado') return 'Aprobado';
-  if (v === 'rechazado') return 'Rechazado';
-  if (v === 'pendiente') return 'Pendiente';
-  if (v === 'en revision' || v === 'en revisión') return 'En Revisión';
+  if (v === 'aprobado') return { level: 2, label: 'Aprobado' };
+  if (v === 'rechazado') return { level: 2, label: 'Rechazado' };
+  if (v === 'pendiente') return { level: 2, label: 'Pendiente' };
+  if (v === 'en revision' || v === 'en revisión') return { level: 2, label: 'En Revisión' };
+  if (item.archivo) return { level: 2, label: 'Sin Revisar' };
 
-  // 4) Estados iniciales (tab Subir Artes)
-  if (item.archivo) return 'Sin Revisar';
-  return 'Carga de Artes';
+  // Nivel 1: Subir Artes
+  return { level: 1, label: 'Subir Artes' };
+};
+
+// Construye el display de Estatus para un circuito.
+// Recibe los items del circuito y devuelve un string del tipo:
+//   - "Instaladas"                                      (todos iguales)
+//   - "1 Subir Artes, 1 Recibido, 2 Instaladas"         (mixto)
+// Tambien expone el desglose estructurado para renderizar badges en el modal.
+export interface EstatusBreakdownItem { label: string; count: number; level: number; }
+
+const buildEstatusCircuito = (arr: any[]): { text: string; breakdown: EstatusBreakdownItem[] } => {
+  if (!arr || arr.length === 0) return { text: '', breakdown: [] };
+  const counts = new Map<string, { count: number; level: number }>();
+  for (const item of arr) {
+    const { level, label } = getItemLevelStatus(item);
+    const cur = counts.get(label);
+    if (cur) counts.set(label, { count: cur.count + 1, level });
+    else counts.set(label, { count: 1, level });
+  }
+  // Ordenar por nivel descendente (mas alto primero)
+  const breakdown: EstatusBreakdownItem[] = [...counts.entries()]
+    .map(([label, { count, level }]) => ({ label, count, level }))
+    .sort((a, b) => b.level - a.level);
+  if (breakdown.length === 1) {
+    // Un solo estatus → solo el label (sin conteo redundante)
+    return { text: breakdown[0].label, breakdown };
+  }
+  // Mixto: "N Label, M Label, ..."
+  const text = breakdown.map(b => `${b.count} ${b.label}`).join(', ');
+  return { text, breakdown };
 };
 
 // APS Global - ID QEB: del campo APS de cada inventario (no del id de campana).
@@ -510,8 +561,7 @@ export function buildVersionarioArtesPreview({ campanas }: { campanas: Versionar
       const minInicio = inicios.length ? inicios.slice().sort()[0] : '';
       const maxFin = fines.length ? fines.slice().sort().reverse()[0] : '';
 
-      const estatusList = arr.map(it => mapItemToEstatus(it));
-      const estatusDisplay = uniqueOrVarios(estatusList);
+      const { text: estatusText, breakdown: estatusBreakdown } = buildEstatusCircuito(arr);
 
       rows.push({
         idCampana: campana.id,
@@ -529,7 +579,8 @@ export function buildVersionarioArtesPreview({ campanas }: { campanas: Versionar
         articulo: uniqueOrVarios(articulos),
         caras,
         tarifa: tarifaDisplay,
-        estatus: estatusDisplay,
+        estatus: estatusText,
+        estatusBreakdown,
         notas: notasResumen,
         nombreArte: buildNombresArtesText(urls),
         artesUrls: urls,
@@ -723,7 +774,7 @@ export async function exportVersionarioArtesMulti({ campanas, fileNameSuffix }: 
     const fines = arr.map(it => it.fin_periodo).filter(Boolean) as string[];
     const minInicio = inicios.length ? inicios.slice().sort()[0] : '';
     const maxFin = fines.length ? fines.slice().sort().reverse()[0] : '';
-    const estatusDisplay = uniqueOrVarios(arr.map(it => mapItemToEstatus(it)));
+    const { text: estatusDisplay } = buildEstatusCircuito(arr);
 
     const rowValues: any[] = [
       campana.id,

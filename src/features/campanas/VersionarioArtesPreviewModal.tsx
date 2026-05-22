@@ -200,21 +200,40 @@ export function VersionarioArtesPreviewModal({ isOpen, onClose, preview, isLoadi
                     <td className="p-2 text-right">{r.caras}</td>
                     <td className="p-2 whitespace-nowrap">
                       {(() => {
-                        const e = r.estatus || '';
-                        const lower = e.toLowerCase();
-                        let cls = isDark ? 'bg-zinc-700/40 text-zinc-300' : 'bg-gray-200 text-gray-700';
-                        if (lower === 'aprobado') cls = isDark ? 'bg-green-500/20 text-green-300 border border-green-500/30' : 'bg-green-100 text-green-700 border border-green-200';
-                        else if (lower === 'rechazado') cls = isDark ? 'bg-red-500/20 text-red-300 border border-red-500/30' : 'bg-red-100 text-red-700 border border-red-200';
-                        else if (lower === 'en revisión' || lower === 'en revision') cls = isDark ? 'bg-yellow-500/20 text-yellow-300 border border-yellow-500/30' : 'bg-yellow-100 text-yellow-700 border border-yellow-200';
-                        else if (lower === 'pendiente') cls = isDark ? 'bg-orange-500/20 text-orange-300 border border-orange-500/30' : 'bg-orange-100 text-orange-700 border border-orange-200';
-                        else if (lower === 'sin revisar') cls = isDark ? 'bg-zinc-500/20 text-zinc-300 border border-zinc-500/30' : 'bg-gray-100 text-gray-600 border border-gray-200';
-                        else if (lower === 'carga de artes') cls = isDark ? 'bg-zinc-600/40 text-zinc-200 border border-zinc-500/30' : 'bg-gray-100 text-gray-700 border border-gray-200';
-                        else if (lower === 'programado') cls = isDark ? 'bg-cyan-500/20 text-cyan-300 border border-cyan-500/30' : 'bg-cyan-100 text-cyan-700 border border-cyan-200';
-                        else if (lower === 'en impresión' || lower === 'en impresion') cls = isDark ? 'bg-blue-500/20 text-blue-300 border border-blue-500/30' : 'bg-blue-100 text-blue-700 border border-blue-200';
-                        else if (lower === 'artes recibidos') cls = isDark ? 'bg-indigo-500/20 text-indigo-300 border border-indigo-500/30' : 'bg-indigo-100 text-indigo-700 border border-indigo-200';
-                        else if (lower === 'instalado') cls = isDark ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/30' : 'bg-emerald-100 text-emerald-700 border border-emerald-200';
-                        else if (lower === 'varios') cls = isDark ? 'bg-purple-500/20 text-purple-300 border border-purple-500/30' : 'bg-purple-100 text-purple-700 border border-purple-200';
-                        return <span className={`px-2 py-0.5 rounded text-[10px] font-medium ${cls}`}>{e || '-'}</span>;
+                        const items = r.estatusBreakdown || [];
+                        if (items.length === 0) return <span className="text-zinc-600">-</span>;
+                        const getCls = (label: string): string => {
+                          const lower = label.toLowerCase();
+                          if (lower === 'subir artes') return isDark ? 'bg-zinc-600/40 text-zinc-200 border border-zinc-500/30' : 'bg-gray-100 text-gray-700 border border-gray-200';
+                          if (lower === 'sin revisar') return isDark ? 'bg-zinc-500/20 text-zinc-300 border border-zinc-500/30' : 'bg-gray-100 text-gray-600 border border-gray-200';
+                          if (lower === 'en revisión') return isDark ? 'bg-yellow-500/20 text-yellow-300 border border-yellow-500/30' : 'bg-yellow-100 text-yellow-700 border border-yellow-200';
+                          if (lower === 'aprobado') return isDark ? 'bg-green-500/20 text-green-300 border border-green-500/30' : 'bg-green-100 text-green-700 border border-green-200';
+                          if (lower === 'rechazado') return isDark ? 'bg-red-500/20 text-red-300 border border-red-500/30' : 'bg-red-100 text-red-700 border border-red-200';
+                          if (lower === 'pendiente') return isDark ? 'bg-orange-500/20 text-orange-300 border border-orange-500/30' : 'bg-orange-100 text-orange-700 border border-orange-200';
+                          if (lower === 'en programación') return isDark ? 'bg-cyan-500/20 text-cyan-300 border border-cyan-500/30' : 'bg-cyan-100 text-cyan-700 border border-cyan-200';
+                          if (lower === 'en impresión') return isDark ? 'bg-blue-500/20 text-blue-300 border border-blue-500/30' : 'bg-blue-100 text-blue-700 border border-blue-200';
+                          if (lower === 'pendiente de recepción') return isDark ? 'bg-indigo-500/20 text-indigo-300 border border-indigo-500/30' : 'bg-indigo-100 text-indigo-700 border border-indigo-200';
+                          if (lower === 'recibido') return isDark ? 'bg-indigo-500/30 text-indigo-200 border border-indigo-500/40' : 'bg-indigo-200 text-indigo-800 border border-indigo-300';
+                          if (lower === 'por instalar') return isDark ? 'bg-emerald-500/10 text-emerald-300 border border-emerald-500/20' : 'bg-emerald-50 text-emerald-700 border border-emerald-200';
+                          if (lower === 'instaladas') return isDark ? 'bg-emerald-500/30 text-emerald-200 border border-emerald-500/40' : 'bg-emerald-100 text-emerald-700 border border-emerald-200';
+                          if (lower === 'testigo') return isDark ? 'bg-emerald-600/40 text-emerald-100 border border-emerald-500/50' : 'bg-emerald-200 text-emerald-800 border border-emerald-300';
+                          return isDark ? 'bg-zinc-700/40 text-zinc-300' : 'bg-gray-200 text-gray-700';
+                        };
+                        // Si solo hay 1 estatus → mostramos solo el label (sin conteo redundante)
+                        if (items.length === 1) {
+                          const it = items[0];
+                          return <span className={`px-2 py-0.5 rounded text-[10px] font-medium ${getCls(it.label)}`}>{it.label}</span>;
+                        }
+                        // Mixto → varios badges con su conteo, en orden por nivel descendente
+                        return (
+                          <div className="flex flex-wrap gap-1">
+                            {items.map(it => (
+                              <span key={it.label} className={`px-2 py-0.5 rounded text-[10px] font-medium ${getCls(it.label)}`}>
+                                {it.count} {it.label}
+                              </span>
+                            ))}
+                          </div>
+                        );
                       })()}
                     </td>
                     <td className="p-2 max-w-[260px] whitespace-pre-wrap text-[11px]">{r.notas || '-'}</td>
