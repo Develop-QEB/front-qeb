@@ -246,7 +246,7 @@ export async function exportVersionarioArtes({ campana, items, digitalFilesByRes
       plaza,
       uniqueOrVarios(tipos),
       asesor,
-      campana.id,
+      computeApsDisplay(arr),
       formatDate(minInicio),
       formatDate(maxFin),
       cliente,
@@ -364,6 +364,20 @@ const mapItemToEstatus = (item: any): string => {
   return 'Carga de Artes';
 };
 
+// APS Global - ID QEB: del campo APS de cada inventario (no del id de campana).
+// Si todos los inventarios de la plaza tienen el mismo APS lo devuelve numerico,
+// si difieren devuelve "Varios", si no hay devuelve ''.
+const computeApsDisplay = (arr: any[]): number | string => {
+  const apsList = arr.map(it => String(it.APS ?? '')).filter(v => v !== '' && v !== 'null');
+  const set = new Set(apsList);
+  if (set.size === 0) return '';
+  if (set.size === 1) {
+    const n = Number([...set][0]);
+    return Number.isFinite(n) ? n : [...set][0];
+  }
+  return 'Varios';
+};
+
 
 export interface VersionarioArtesPreview {
   headers: string[];           // headers base (sin contar Arte 1..N)
@@ -460,7 +474,7 @@ export function buildVersionarioArtesPreview({ campanas }: { campanas: Versionar
         plaza,
         tipo: uniqueOrVarios(tipos),
         asesor,
-        apsQebId: campana.id,
+        apsQebId: computeApsDisplay(arr),
         cuic,
         fechaInicio: formatDate(minInicio),
         fechaFin: formatDate(maxFin),
@@ -655,7 +669,7 @@ export async function exportVersionarioArtesMulti({ campanas, fileNameSuffix }: 
       plaza,
       uniqueOrVarios(tipos),
       asesor,
-      campana.id,
+      computeApsDisplay(arr),
       formatDate(minInicio),
       formatDate(maxFin),
       cliente,
