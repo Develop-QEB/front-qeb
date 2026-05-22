@@ -168,7 +168,7 @@ export async function exportVersionarioArtes({ campana, items, digitalFilesByRes
     'Plaza',
     'Tipo',
     'Asesor Comercial',
-    'APS Global - ID QEB',
+    'APS QEB',
     'Fecha Inicio Periodo',
     'Fecha Fin Periodo',
     'Cliente Comercial',
@@ -605,7 +605,7 @@ export function buildVersionarioArtesPreview({ campanas }: { campanas: Versionar
 
   return {
     headers: [
-      'ID Campaña', 'Plaza', 'Tipo', 'Asesor Comercial', 'APS Global - ID QEB',
+      'ID Campaña', 'Plaza', 'Tipo', 'Asesor Comercial', 'APS QEB',
       'Fecha Inicio Periodo', 'Fecha Fin Periodo', 'Cliente Comercial',
       'Marca', 'Campaña', 'Caras', 'Estatus', 'Notas', 'Nombre Arte',
     ],
@@ -695,7 +695,7 @@ export async function exportVersionarioArtesMulti({ campanas, fileNameSuffix }: 
     'Plaza',
     'Tipo',
     'Asesor Comercial',
-    'APS Global - ID QEB',
+    'APS QEB',
     'Fecha Inicio Periodo',
     'Fecha Fin Periodo',
     'Cliente Comercial',
