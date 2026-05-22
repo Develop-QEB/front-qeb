@@ -2430,12 +2430,12 @@ export function CampanasPage() {
     const campanasUnicas = [...campanasMap.values()];
     if (campanasUnicas.length === 0) return;
 
-    if (campanasUnicas.length > 30) {
-      const ok = window.confirm(
-        `Vas a exportar ${campanasUnicas.length} campañas. Puede tardar varios segundos. ¿Continuar?`
-      );
-      if (!ok) return;
-    }
+    // Abrir el modal preview de inmediato con loader; la data se carga en bg.
+    // (Antes habia un window.confirm si eran >30 campañas — quitado: el progreso
+    // se ve dentro del modal y el usuario puede cerrarlo si se arrepiente.)
+    setVersionarioRawData(null);
+    setVersionarioPreview(null);
+    setVersionarioPreviewOpen(true);
 
     setExportingVersionarioArtes(true);
     setVersionarioArtesProgress({ current: 0, total: campanasUnicas.length });
