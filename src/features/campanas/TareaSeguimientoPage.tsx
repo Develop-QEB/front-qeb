@@ -337,7 +337,7 @@ interface InventoryRow {
   longitud?: number; // Para mapa
   articulo?: string; // ItemCode de SAP (ej: RT-P1-COB-GD)
   // Para Atender arte
-  estado_arte?: 'sin_revisar' | 'en_revision' | 'aprobado' | 'rechazado' | 'pendiente';
+  estado_arte?: 'sin_revisar' | 'en_revision' | 'aprobado' | 'rechazado';
   estado_tarea?: 'sin_atender' | 'en_progreso' | 'atendido';
   archivo_arte?: string;
   artes_multiples?: string; // Multiple arts separated by '||'
@@ -13827,7 +13827,7 @@ export function TareaSeguimientoPage() {
   const [sortDirectionAtender, setSortDirectionAtender] = useState<'asc' | 'desc'>('asc');
   const [showSortAtender, setShowSortAtender] = useState(false);
   const [expandedGroupsAtender, setExpandedGroupsAtender] = useState<Set<string>>(new Set());
-  const [activeEstadoArteTab, setActiveEstadoArteTab] = useState<'sin_revisar' | 'en_revision' | 'aprobado' | 'rechazado' | 'pendiente'>('sin_revisar');
+  const [activeEstadoArteTab, setActiveEstadoArteTab] = useState<'sin_revisar' | 'en_revision' | 'aprobado' | 'rechazado'>('sin_revisar');
   const [hasAutoSelectedEstadoArteTab, setHasAutoSelectedEstadoArteTab] = useState(false);
 
   // --- Programación (digital) ---
@@ -14064,26 +14064,29 @@ export function TareaSeguimientoPage() {
     if (hasAutoSelectedEstadoArteTab) return;
     if (!isFetchedConArte || inventarioArteAPI.length === 0) return;
 
-    // Contar items por estado
+    // Contar items por estado. 'Pendiente' en arte_aprobado se considera
+    // 'sin_revisar' visualmente: el back lo usa como default y para varios
+    // flujos internos (correcciones reenviadas, etc.); no se muestra como
+    // subtab propia porque mezclaría artes reales pendientes con recién
+    // subidos. La decisión "Pendiente" del analista sigue activando el
+    // flujo de Corrección a nivel back, solo que el arte vive en sin_revisar.
     const counts = {
       sin_revisar: 0,
       en_revision: 0,
       aprobado: 0,
       rechazado: 0,
-      pendiente: 0,
     };
 
     inventarioArteAPI.forEach(item => {
       const arteAprobadoLower = (item.arte_aprobado || '').toLowerCase();
       if (arteAprobadoLower === 'aprobado') counts.aprobado++;
       else if (arteAprobadoLower === 'rechazado') counts.rechazado++;
-      else if (arteAprobadoLower === 'pendiente') counts.pendiente++;
       else if (arteAprobadoLower === 'en revision' || arteAprobadoLower === 'en revisión') counts.en_revision++;
       else counts.sin_revisar++;
     });
 
     // Seleccionar el primer tab con contenido (de izquierda a derecha)
-    const tabOrder: Array<'sin_revisar' | 'en_revision' | 'aprobado' | 'rechazado' | 'pendiente'> = ['sin_revisar', 'en_revision', 'aprobado', 'rechazado', 'pendiente'];
+    const tabOrder: Array<'sin_revisar' | 'en_revision' | 'aprobado' | 'rechazado'> = ['sin_revisar', 'en_revision', 'aprobado', 'rechazado'];
     for (const tab of tabOrder) {
       if (counts[tab] > 0) {
         setActiveEstadoArteTab(tab);
@@ -14407,9 +14410,9 @@ export function TareaSeguimientoPage() {
   }, []);
 
   // Helper function to transform InventarioConArte to InventoryRow
-  const transformInventarioToRow = useCallback((item: InventarioConArte, defaultArteStatus: 'sin_revisar' | 'en_revision' | 'aprobado' | 'rechazado' | 'pendiente' = 'sin_revisar', tareasActivas: number[] = []): InventoryRow => {
+  const transformInventarioToRow = useCallback((item: InventarioConArte, defaultArteStatus: 'sin_revisar' | 'en_revision' | 'aprobado' | 'rechazado' = 'sin_revisar', tareasActivas: number[] = []): InventoryRow => {
     // Mapear arte_aprobado a estado_arte
-    let estadoArte: 'sin_revisar' | 'en_revision' | 'aprobado' | 'rechazado' | 'pendiente' = defaultArteStatus;
+    let estadoArte: 'sin_revisar' | 'en_revision' | 'aprobado' | 'rechazado' = defaultArteStatus;
     const arteAprobadoLower = (item.arte_aprobado || '').toLowerCase();
 
     // Verificar si este item está en alguna tarea activa
@@ -14418,13 +14421,13 @@ export function TareaSeguimientoPage() {
 
     if (arteAprobadoLower === 'aprobado') estadoArte = 'aprobado';
     else if (arteAprobadoLower === 'rechazado') estadoArte = 'rechazado';
-    // 'Pendiente' (tercer caso de decision) es un estado propio, no Sin Revisar.
-    else if (arteAprobadoLower === 'pendiente') estadoArte = 'pendiente';
     else if (arteAprobadoLower === 'en revision' || arteAprobadoLower === 'en revisión') estadoArte = 'en_revision';
     // Si tiene tarea activa asignada, es "en_revision"
     else if (tieneTaskActiva) estadoArte = 'en_revision';
-    // sin estado = sin_revisar (esperando que se cree una tarea)
-    else if (arteAprobadoLower === '') estadoArte = 'sin_revisar';
+    // 'Pendiente' o sin estado = sin_revisar (es el default del back para artes
+    // recién subidos y para varios flujos internos como reenvío post-corrección;
+    // no se muestra como subtab propia porque se mezclaría con esos casos).
+    else if (arteAprobadoLower === 'pendiente' || arteAprobadoLower === '') estadoArte = 'sin_revisar';
     // Si no tiene ninguno de los estados anteriores, se queda con defaultArteStatus (sin_revisar)
 
     // Mapear tarea/estatus a estado_tarea
@@ -17313,7 +17316,6 @@ export function TareaSeguimientoPage() {
                     { key: 'en_revision' as const, label: 'En Revisión', count: filteredByFormat.filter(i => i.estado_arte === 'en_revision').length },
                     { key: 'aprobado' as const, label: 'Aprobado', count: filteredByFormat.filter(i => i.estado_arte === 'aprobado').length },
                     { key: 'rechazado' as const, label: 'Rechazado', count: filteredByFormat.filter(i => i.estado_arte === 'rechazado').length },
-                    { key: 'pendiente' as const, label: 'Pendiente', count: filteredByFormat.filter(i => i.estado_arte === 'pendiente').length },
                   ];
                 })().map(tab => (
                   <button
