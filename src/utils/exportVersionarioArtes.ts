@@ -201,8 +201,16 @@ export async function exportVersionarioArtes({ campana, items, digitalFilesByRes
     const tipos = arr.map(it => it.tipo_medio || it.tipo_de_cara_display || it.tipo_de_cara || '');
     const numerosArticulo = arr.map(it => it.articulo || '');
     const articulos = arr.map(it => it.articulo || '');
-    const tarifaSum = arr.reduce((s, it) => s + (Number(it.tarifa_publica) || 0), 0);
-    const caras = arr.length;
+    // Tarifa: si todas las caras de la plaza tienen la misma tarifa, mostrar
+    // ese valor numérico. Si difieren, mostrar "Varios". El back ya entrega
+    // sc.tarifa_publica (la negociada), no inv.tarifa_publica (catálogo en 0).
+    const tarifasUnicas = Array.from(new Set(arr.map(it => Number(it.tarifa_publica) || 0).filter(t => t > 0)));
+    const tarifaDisplay: number | string = tarifasUnicas.length === 1
+      ? tarifasUnicas[0]
+      : tarifasUnicas.length === 0 ? 0 : 'Varios';
+    // Caras: contar inventarios únicos (espacios físicos), no filas
+    // (cada fila era inventario × catorcena → inflaba el número).
+    const caras = new Set(arr.map(it => it.id)).size;
 
     const urls = artesPorPlaza.get(plaza) || [];
     const notasResumen = buildNotasText(urls);
@@ -227,7 +235,7 @@ export async function exportVersionarioArtes({ campana, items, digitalFilesByRes
       uniqueOrVarios(numerosArticulo),
       uniqueOrVarios(articulos),
       caras,
-      tarifaSum,
+      tarifaDisplay,
       notasResumen,
     ];
     // Padding vacío para celdas de arte
@@ -236,8 +244,10 @@ export async function exportVersionarioArtes({ campana, items, digitalFilesByRes
     const row = sheet.addRow(rowValues);
     row.height = ROW_HEIGHT;
     row.alignment = { vertical: 'middle', horizontal: 'left', wrapText: true };
-    // Tarifa con decimales (formato numérico)
-    row.getCell(14).numFmt = '#,##0.00';
+    // Tarifa con decimales solo cuando sea numérica (cuando es "Varios" se queda como texto)
+    if (typeof tarifaDisplay === 'number') {
+      row.getCell(14).numFmt = '#,##0.00';
+    }
 
     // Insertar miniaturas de arte en columnas Arte 1..N (deduplicadas por URL)
     for (let i = 0; i < urls.length; i++) {
@@ -424,8 +434,13 @@ export async function exportVersionarioArtesMulti({ campanas, fileNameSuffix }: 
     const tipos = arr.map(it => it.tipo_medio || it.tipo_de_cara_display || it.tipo_de_cara || '');
     const numerosArticulo = arr.map(it => it.articulo || '');
     const articulos = arr.map(it => it.articulo || '');
-    const tarifaSum = arr.reduce((s, it) => s + (Number(it.tarifa_publica) || 0), 0);
-    const caras = arr.length;
+    // Tarifa: único valor o "Varios" (no suma de filas, eso inflaría).
+    const tarifasUnicas = Array.from(new Set(arr.map(it => Number(it.tarifa_publica) || 0).filter(t => t > 0)));
+    const tarifaDisplay: number | string = tarifasUnicas.length === 1
+      ? tarifasUnicas[0]
+      : tarifasUnicas.length === 0 ? 0 : 'Varios';
+    // Caras: inventarios únicos, no filas (cada fila era inventario × catorcena).
+    const caras = new Set(arr.map(it => it.id)).size;
 
     const notasResumen = (() => {
       if (!notesByUrl || notesByUrl.size === 0) return '';
@@ -456,7 +471,7 @@ export async function exportVersionarioArtesMulti({ campanas, fileNameSuffix }: 
       uniqueOrVarios(numerosArticulo),
       uniqueOrVarios(articulos),
       caras,
-      tarifaSum,
+      tarifaDisplay,
       notasResumen,
     ];
     for (let i = 0; i < maxArtesUnicos; i++) rowValues.push('');
@@ -464,7 +479,9 @@ export async function exportVersionarioArtesMulti({ campanas, fileNameSuffix }: 
     const row = sheet.addRow(rowValues);
     row.height = ROW_HEIGHT;
     row.alignment = { vertical: 'middle', horizontal: 'left', wrapText: true };
-    row.getCell(14).numFmt = '#,##0.00';
+    if (typeof tarifaDisplay === 'number') {
+      row.getCell(14).numFmt = '#,##0.00';
+    }
 
     for (let i = 0; i < artesUrls.length; i++) {
       const url = artesUrls[i];
