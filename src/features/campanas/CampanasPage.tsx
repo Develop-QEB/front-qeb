@@ -20,6 +20,9 @@ type ViewType = 'tabla' | 'catorcena';
 import { formatDate, formatCurrency } from '../../lib/utils';
 import { AssignInventarioCampanaModal } from './AssignInventarioCampanaModal';
 import { OrdenesMontajeModal } from './OrdenesMontajeModal';
+import { VersionarioArtesPreviewModal } from './VersionarioArtesPreviewModal';
+import { buildVersionarioArtesPreview } from '../../utils/exportVersionarioArtes';
+import type { VersionarioArtesPreview, VersionarioArtesMultiArgs } from '../../utils/exportVersionarioArtes';
 import { StatusCampanaModal } from './StatusCampanaModal';
 import { useAuthStore } from '../../store/authStore';
 import { useThemeStore } from '../../store/themeStore';
@@ -1182,6 +1185,12 @@ export function CampanasPage() {
   const [exportingLayout, setExportingLayout] = useState(false);
   const [exportingVersionarioArtes, setExportingVersionarioArtes] = useState(false);
   const [versionarioArtesProgress, setVersionarioArtesProgress] = useState({ current: 0, total: 0 });
+  // Preview del Versionario Artes (modal con tabla paginada antes de descargar)
+  const [versionarioPreviewOpen, setVersionarioPreviewOpen] = useState(false);
+  const [versionarioPreview, setVersionarioPreview] = useState<VersionarioArtesPreview | null>(null);
+  // Datos crudos en cache para que "Descargar Excel" no vuelva a fetchear
+  const [versionarioRawData, setVersionarioRawData] = useState<VersionarioArtesMultiArgs['campanas'] | null>(null);
+  const [versionarioDownloading, setVersionarioDownloading] = useState(false);
   // Inversión (costo) por catorcena para la vista Versionario: { campanaId: { "numCat:anio": inversion } }
   const [inversionPorCatorcena, setInversionPorCatorcena] = useState<Record<number, Record<string, number>>>({});
 
@@ -2511,13 +2520,29 @@ export function CampanasPage() {
         return;
       }
 
-      await exportVersionarioArtesMulti({
-        campanas: resultados,
-        fileNameSuffix: `${resultados.length}_campanas`,
-      });
+      // En vez de exportar directo, abrimos el modal preview con las filas armadas.
+      // El usuario revisa, filtra y desde ahi pulsa "Descargar Excel".
+      const preview = buildVersionarioArtesPreview({ campanas: resultados });
+      setVersionarioRawData(resultados);
+      setVersionarioPreview(preview);
+      setVersionarioPreviewOpen(true);
     } finally {
       setExportingVersionarioArtes(false);
       setVersionarioArtesProgress({ current: 0, total: 0 });
+    }
+  };
+
+  // Disparado desde el modal preview cuando el usuario confirma descarga.
+  const handleDownloadVersionarioFromPreview = async () => {
+    if (!versionarioRawData || versionarioRawData.length === 0) return;
+    setVersionarioDownloading(true);
+    try {
+      await exportVersionarioArtesMulti({
+        campanas: versionarioRawData,
+        fileNameSuffix: `${versionarioRawData.length}_campanas`,
+      });
+    } finally {
+      setVersionarioDownloading(false);
     }
   };
 
@@ -4017,6 +4042,19 @@ export function CampanasPage() {
           isOpen={ordenesMontajeModalOpen}
           onClose={() => setOrdenesMontajeModalOpen(false)}
           canExport={permissions.canExportOrdenesMontaje}
+        />
+      )}
+
+      {/* Versionario Artes Preview Modal (lazy-mount) */}
+      {versionarioPreviewOpen && (
+        <VersionarioArtesPreviewModal
+          isOpen={versionarioPreviewOpen}
+          onClose={() => setVersionarioPreviewOpen(false)}
+          preview={versionarioPreview}
+          isLoading={exportingVersionarioArtes}
+          isDownloading={versionarioDownloading}
+          loadingProgress={versionarioArtesProgress}
+          onDownload={handleDownloadVersionarioFromPreview}
         />
       )}
 

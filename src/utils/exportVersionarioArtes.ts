@@ -319,6 +319,148 @@ export interface VersionarioArtesMultiArgs {
   fileNameSuffix?: string;
 }
 
+// Fila lista para mostrar como preview (mismas columnas que se exportan).
+export interface VersionarioArtesPreviewRow {
+  plaza: string;
+  tipo: string;
+  asesor: string;
+  apsQebId: number | string;
+  cuic: string;
+  fechaInicio: string;
+  fechaFin: string;
+  cliente: string;
+  marca: string;
+  campania: string;
+  numeroArticulo: string;
+  articulo: string;
+  caras: number;
+  tarifa: number | string;
+  notas: string;
+  nombreArte: string;
+  artesUrls: string[]; // urls deduplicadas, cada una se renderiza como thumbnail
+}
+
+export interface VersionarioArtesPreview {
+  headers: string[];           // headers base (sin contar Arte 1..N)
+  arteCols: number;            // numero de columnas Arte X (max de artes por fila)
+  rows: VersionarioArtesPreviewRow[];
+}
+
+// Construye las filas preview (sin escribir Excel). Usado por el modal preview
+// y por el exporter para garantizar mismas columnas en preview y descarga.
+export function buildVersionarioArtesPreview({ campanas }: { campanas: VersionarioArtesMultiArgs['campanas'] }): VersionarioArtesPreview {
+  const getPlaza = (it: InventarioConArte): string => it.plaza || it.municipio || it.estado || '';
+  const getRsvIds = (it: any): number[] =>
+    String(it.rsv_id || it.rsv_ids || '')
+      .split(',')
+      .map((s: string) => parseInt(s.trim()))
+      .filter((n: number) => !isNaN(n));
+
+  const uniqueOrVarios = (vals: string[]): string => {
+    const set = new Set(vals.filter(v => v != null && v !== ''));
+    if (set.size === 0) return '';
+    if (set.size === 1) return [...set][0];
+    return 'Varios';
+  };
+
+  const rows: VersionarioArtesPreviewRow[] = [];
+  let maxArtesUnicos = 0;
+
+  for (const { campana, items, digitalFilesByReserva, notesByUrl } of campanas) {
+    const byPlaza = new Map<string, InventarioConArte[]>();
+    for (const it of items) {
+      const p = getPlaza(it);
+      if (!byPlaza.has(p)) byPlaza.set(p, []);
+      byPlaza.get(p)!.push(it);
+    }
+    for (const [plaza, arr] of byPlaza) {
+      const urls: string[] = [];
+      const seen = new Set<string>();
+      const pushUrl = (u: string | null | undefined) => {
+        if (u && !seen.has(u)) {
+          seen.add(u);
+          urls.push(u);
+        }
+      };
+      for (const it of arr) {
+        pushUrl(it.archivo);
+        const artesMultiples: string | null | undefined = (it as any).artes_multiples;
+        if (artesMultiples) {
+          for (const u of artesMultiples.split('||')) pushUrl(u.trim());
+        }
+        if (digitalFilesByReserva) {
+          for (const rsvId of getRsvIds(it)) {
+            const digitalUrls = digitalFilesByReserva.get(rsvId) || [];
+            for (const u of digitalUrls) pushUrl(u);
+          }
+        }
+      }
+      if (urls.length > maxArtesUnicos) maxArtesUnicos = urls.length;
+
+      const cuic = campana.cuic ? String(campana.cuic) : '';
+      const asesor = (campana as any).T0_U_Asesor || (campana as any).asesor || '';
+      const cliente = (campana as any).T0_U_RazonSocial || (campana as any).cliente || (campana as any).T1_U_Cliente || '';
+      const marca = (campana as any).T2_U_Marca || (campana as any).marca || '';
+      const campaniaNombre = campana.nombre || campana.nombre_campania || '';
+
+      const tipos = arr.map(it => it.tipo_medio || it.tipo_de_cara_display || it.tipo_de_cara || '');
+      const numerosArticulo = arr.map(it => it.articulo || '');
+      const articulos = arr.map(it => it.articulo || '');
+      const tarifasUnicas = Array.from(new Set(arr.map(it => Number(it.tarifa_publica) || 0).filter(t => t > 0)));
+      const tarifaDisplay: number | string = tarifasUnicas.length === 1
+        ? tarifasUnicas[0]
+        : tarifasUnicas.length === 0 ? 0 : 'Varios';
+      const caras = new Set(arr.map(it => it.id)).size;
+
+      const notasResumen = (() => {
+        if (!notesByUrl || notesByUrl.size === 0) return '';
+        const lines: string[] = [];
+        urls.forEach((url, idx) => {
+          const nota = (notesByUrl.get(url) || '').trim();
+          if (nota) lines.push(`Arte ${idx + 1}: ${nota}`);
+        });
+        return lines.join('\n');
+      })();
+
+      const inicios = arr.map(it => it.inicio_periodo).filter(Boolean) as string[];
+      const fines = arr.map(it => it.fin_periodo).filter(Boolean) as string[];
+      const minInicio = inicios.length ? inicios.slice().sort()[0] : '';
+      const maxFin = fines.length ? fines.slice().sort().reverse()[0] : '';
+
+      rows.push({
+        plaza,
+        tipo: uniqueOrVarios(tipos),
+        asesor,
+        apsQebId: campana.id,
+        cuic,
+        fechaInicio: formatDate(minInicio),
+        fechaFin: formatDate(maxFin),
+        cliente,
+        marca,
+        campania: campaniaNombre,
+        numeroArticulo: uniqueOrVarios(numerosArticulo),
+        articulo: uniqueOrVarios(articulos),
+        caras,
+        tarifa: tarifaDisplay,
+        notas: notasResumen,
+        nombreArte: buildNombresArtesText(urls),
+        artesUrls: urls,
+      });
+    }
+  }
+
+  return {
+    headers: [
+      'Plaza', 'Tipo', 'Asesor Comercial', 'APS Global - ID QEB', 'CUIC',
+      'Fecha Inicio Periodo', 'Fecha Fin Periodo', 'Cliente Comercial',
+      'Marca', 'Campaña', 'Número de artículo', 'Artículo', 'Caras', 'Tarifa',
+      'Notas', 'Nombre Arte',
+    ],
+    arteCols: maxArtesUnicos,
+    rows,
+  };
+}
+
 export async function exportVersionarioArtesMulti({ campanas, fileNameSuffix }: VersionarioArtesMultiArgs): Promise<void> {
   const workbook = new ExcelJS.Workbook();
   workbook.creator = 'QEB';
