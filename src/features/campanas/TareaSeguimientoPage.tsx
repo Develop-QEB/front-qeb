@@ -85,6 +85,7 @@ import { useSocketCampana, useSocketEquipos } from '../../hooks/useSocket';
 import { LinkPreview } from '../../components/ui/LinkPreview';
 import { exportVersionarioArtes } from '../../utils/exportVersionarioArtes';
 import * as XLSX from 'xlsx';
+import { CargaCsvModal } from './CargaCsvModal';
 
 // Convierte URLs en texto plano a <a> clickables. Mantiene el texto restante
 // como string para no escapar el contenido. Usado en la bitácora de comentarios
@@ -13977,6 +13978,9 @@ export function TareaSeguimientoPage() {
   // Modal state
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
   const [isUploadArtModalOpen, setIsUploadArtModalOpen] = useState(false);
+  // Modal de carga CSV (paso 1: cotejo). Al darle siguiente abre UploadArtModal
+  // con SOLO los items que matchearon, y deselecciona los no-matched.
+  const [isCargaCsvModalOpen, setIsCargaCsvModalOpen] = useState(false);
   const [isExportingVersionarioArtes, setIsExportingVersionarioArtes] = useState(false);
   const [parentAddedArtes, setParentAddedArtes] = useState<ArteExistente[]>([]);
   const [isTaskDetailModalOpen, setIsTaskDetailModalOpen] = useState(false);
@@ -17422,18 +17426,36 @@ export function TareaSeguimientoPage() {
                 )}
               </div>
               {permissions.canEditGestionArtes && (
-                <button
-                  onClick={() => setIsUploadArtModalOpen(true)}
-                  disabled={selectedInventoryIds.size === 0}
-                  className={`flex items-center gap-2 px-4 py-2 text-sm font-medium rounded-lg transition-all ${
-                    selectedInventoryIds.size > 0
-                      ? 'bg-gradient-to-r from-purple-600 to-purple-700 hover:from-purple-500 hover:to-purple-600 text-white shadow-lg shadow-purple-500/25'
-                      : isDark ? 'bg-zinc-800 text-zinc-500 cursor-not-allowed' : 'bg-gray-200 text-gray-400 cursor-not-allowed'
-                  }`}
-                >
-                  <Upload className="h-4 w-4" />
-                  Asignar Arte
-                </button>
+                <div className="flex items-center gap-2">
+                  {/* Boton alterno: cargar CSV → modal con cotejo → UploadArtModal con solo los matches */}
+                  <button
+                    onClick={() => setIsCargaCsvModalOpen(true)}
+                    disabled={selectedInventoryIds.size === 0}
+                    className={`flex items-center gap-2 px-4 py-2 text-sm font-medium rounded-lg transition-all border ${
+                      selectedInventoryIds.size > 0
+                        ? isDark
+                          ? 'bg-zinc-800 hover:bg-zinc-700 text-purple-300 border-purple-500/40'
+                          : 'bg-white hover:bg-purple-50 text-purple-700 border-purple-300'
+                        : isDark ? 'bg-zinc-800 text-zinc-500 border-zinc-700 cursor-not-allowed' : 'bg-gray-200 text-gray-400 border-gray-200 cursor-not-allowed'
+                    }`}
+                    title="Cotejar selección contra un CSV/XLSX antes de subir artes"
+                  >
+                    <FileSpreadsheet className="h-4 w-4" />
+                    Cargar CSV
+                  </button>
+                  <button
+                    onClick={() => setIsUploadArtModalOpen(true)}
+                    disabled={selectedInventoryIds.size === 0}
+                    className={`flex items-center gap-2 px-4 py-2 text-sm font-medium rounded-lg transition-all ${
+                      selectedInventoryIds.size > 0
+                        ? 'bg-gradient-to-r from-purple-600 to-purple-700 hover:from-purple-500 hover:to-purple-600 text-white shadow-lg shadow-purple-500/25'
+                        : isDark ? 'bg-zinc-800 text-zinc-500 cursor-not-allowed' : 'bg-gray-200 text-gray-400 cursor-not-allowed'
+                    }`}
+                  >
+                    <Upload className="h-4 w-4" />
+                    Asignar Arte
+                  </button>
+                </div>
               )}
             </div>
           )}
@@ -20393,6 +20415,31 @@ export function TareaSeguimientoPage() {
           </div>
         </div>
       )}
+
+      {/* Carga CSV Modal — paso 1 del flujo alterno. Al confirmar matches, deselecciona
+          los no-matched y abre UploadArtModal con solo los items que matchearon. */}
+      <CargaCsvModal
+        isOpen={isCargaCsvModalOpen}
+        onClose={() => setIsCargaCsvModalOpen(false)}
+        selectedInventory={selectedInventoryItems.map(it => ({
+          id: it.id,
+          codigo_unico: it.codigo_unico,
+          tipo_de_cara: it.tipo_de_cara,
+          ubicacion: it.ubicacion,
+          ciudad: it.ciudad,
+          articulo: it.articulo,
+          catorcena: it.catorcena,
+          anio: it.anio,
+        }))}
+        onContinue={(matchedIds) => {
+          // Deja solo los matched en la seleccion; los no-matched quedan sin tocar
+          // (se quitan del set, pero no se afecta su estado en el sistema).
+          setSelectedInventoryIds(new Set(matchedIds));
+          setIsCargaCsvModalOpen(false);
+          // Encadena con el flujo actual de subir artes
+          setIsUploadArtModalOpen(true);
+        }}
+      />
 
       {/* Upload Art Modal */}
       <UploadArtModal
