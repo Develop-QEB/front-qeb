@@ -154,12 +154,37 @@ export function VersionarioArtesPreviewModal({ isOpen, onClose, preview, isLoadi
         {/* Tabla */}
         <div className="flex-1 overflow-auto">
           {isLoading ? (
-            <div className="h-full flex flex-col items-center justify-center text-sm text-muted-foreground gap-3 p-8">
-              <div className="h-3 w-3 rounded-full bg-purple-500 animate-pulse" />
-              <p>Cargando inventarios y artes...</p>
-              {loadingProgress && loadingProgress.total > 0 && (
-                <p className="text-xs">{loadingProgress.current} de {loadingProgress.total} campañas</p>
-              )}
+            <div className="h-full flex flex-col items-center justify-center gap-5 p-8">
+              {/* Logo QEB con animate-pulse — mismo patron que LoadingScreen */}
+              <img
+                src={isDark ? '/images/logo-bco.png' : '/images/logo-ooh.png'}
+                alt="QEB"
+                className="h-12 w-auto animate-[pulse_2s_ease-in-out_infinite]"
+              />
+              {/* Progress bar morada (replica de LoadingScreen) */}
+              <div className={`w-64 h-1 rounded-full overflow-hidden ${isDark ? 'bg-purple-900/30' : 'bg-purple-100'}`}>
+                <div
+                  className="h-full bg-gradient-to-r from-purple-600 via-pink-500 to-purple-600 rounded-full animate-[loadingbar_1.5s_ease-in-out_infinite]"
+                  style={{ backgroundSize: '200% 100%' }}
+                />
+              </div>
+              <div className="text-center space-y-1">
+                <p className={`text-sm animate-pulse ${isDark ? 'text-zinc-400' : 'text-gray-500'}`}>
+                  Cargando inventarios y artes...
+                </p>
+                {loadingProgress && loadingProgress.total > 0 && (
+                  <p className={`text-xs ${isDark ? 'text-zinc-500' : 'text-gray-400'}`}>
+                    {loadingProgress.current} de {loadingProgress.total} campañas
+                  </p>
+                )}
+              </div>
+              <style>{`
+                @keyframes loadingbar {
+                  0% { width: 0%; margin-left: 0%; }
+                  50% { width: 70%; margin-left: 15%; }
+                  100% { width: 0%; margin-left: 100%; }
+                }
+              `}</style>
             </div>
           ) : preview && totalFilas === 0 ? (
             <div className="h-full flex items-center justify-center text-sm text-muted-foreground p-8">
