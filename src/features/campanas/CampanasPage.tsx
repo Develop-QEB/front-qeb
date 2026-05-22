@@ -21,8 +21,8 @@ import { formatDate, formatCurrency } from '../../lib/utils';
 import { AssignInventarioCampanaModal } from './AssignInventarioCampanaModal';
 import { OrdenesMontajeModal } from './OrdenesMontajeModal';
 import { VersionarioArtesPreviewModal } from './VersionarioArtesPreviewModal';
-import { buildVersionarioArtesPreview } from '../../utils/exportVersionarioArtes';
-import type { VersionarioArtesPreview, VersionarioArtesMultiArgs } from '../../utils/exportVersionarioArtes';
+import type { VersionarioCacheEntry } from './VersionarioArtesPreviewModal';
+import type { VersionarioArtesMultiArgs } from '../../utils/exportVersionarioArtes';
 import { StatusCampanaModal } from './StatusCampanaModal';
 import { useAuthStore } from '../../store/authStore';
 import { useThemeStore } from '../../store/themeStore';
@@ -1187,12 +1187,15 @@ export function CampanasPage() {
   const [versionarioArtesProgress, setVersionarioArtesProgress] = useState({ current: 0, total: 0 });
   // Flag para cancelar la carga si el usuario cierra el modal en medio.
   const versionarioCancelledRef = useRef(false);
-  // Preview del Versionario Artes (modal con tabla paginada antes de descargar)
+  // Preview del Versionario Artes — lazy-loading por campaña.
+  // El modal abre instantaneo; solo fetcheamos las campañas que el usuario ve
+  // en la pagina activa (paginacion = 25 campañas/pagina).
   const [versionarioPreviewOpen, setVersionarioPreviewOpen] = useState(false);
-  const [versionarioPreview, setVersionarioPreview] = useState<VersionarioArtesPreview | null>(null);
-  // Datos crudos en cache para que "Descargar Excel" no vuelva a fetchear
-  const [versionarioRawData, setVersionarioRawData] = useState<VersionarioArtesMultiArgs['campanas'] | null>(null);
+  const [versionarioCampanasList, setVersionarioCampanasList] = useState<Campana[]>([]);
+  const [versionarioCache, setVersionarioCache] = useState<Map<number, VersionarioCacheEntry>>(new Map());
   const [versionarioDownloading, setVersionarioDownloading] = useState(false);
+  // Ids con fetch en curso (evita disparar el mismo fetch dos veces desde useEffects).
+  const versionarioFetchingRef = useRef<Set<number>>(new Set());
   // Inversión (costo) por catorcena para la vista Versionario: { campanaId: { "numCat:anio": inversion } }
   const [inversionPorCatorcena, setInversionPorCatorcena] = useState<Record<number, Record<string, number>>>({});
 
@@ -2423,6 +2426,102 @@ export function CampanasPage() {
     }
   };
 
+  // Fetch de una campaña: inventarios con/sin arte + archivos digitales + notas.
+  // Devuelve un CacheEntry listo para guardar en versionarioCache.
+  const fetchOneVersionarioCampana = useCallback(async (campana: Campana): Promise<VersionarioCacheEntry> => {
+    try {
+      const [conArte, sinArte] = await Promise.all([
+        campanasService.getInventarioConArte(campana.id).catch(() => []),
+        campanasService.getInventarioSinArte(campana.id).catch(() => []),
+      ]);
+      const items = [...(conArte || []), ...(sinArte || [])];
+
+      const allRsvIds = new Set<number>();
+      for (const it of items) {
+        String((it as any).rsv_id || (it as any).rsv_ids || '')
+          .split(',').map(s => parseInt(s.trim())).filter(n => !isNaN(n))
+          .forEach(n => allRsvIds.add(n));
+      }
+
+      const tieneDigitales = items.some(it => {
+        const t = String((it as any).tipo_medio || (it as any).tradicional_digital || '').toLowerCase();
+        return t.includes('digital');
+      });
+
+      const digitalFilesByReserva = new Map<number, string[]>();
+      const notesByUrl = new Map<string, string>();
+      if (tieneDigitales) {
+        await Promise.all([...allRsvIds].map(async (rsvId) => {
+          try {
+            const imgs = await campanasService.getImagenesDigitales(campana.id, rsvId);
+            const urls = imgs.map((im: any) => im.archivoData || im.archivo).filter((u: any): u is string => !!u);
+            if (urls.length) digitalFilesByReserva.set(rsvId, urls);
+            for (const im of imgs) {
+              const url = (im as any).archivoData || (im as any).archivo;
+              const comentario = ((im as any).comentario || '').trim();
+              if (url && comentario) notesByUrl.set(url, comentario);
+            }
+          } catch { /* ignore */ }
+        }));
+      }
+
+      await Promise.all([...allRsvIds].map(async (rsvId) => {
+        try {
+          const artes = await campanasService.getArtesTradicionales(campana.id, rsvId);
+          for (const a of artes) {
+            const nota = ((a as any).nota || '').trim();
+            if ((a as any).archivo && nota) notesByUrl.set((a as any).archivo, nota);
+          }
+        } catch { /* ignore */ }
+      }));
+
+      return { campana, status: 'loaded', items, digitalFilesByReserva, notesByUrl };
+    } catch {
+      return { campana, status: 'error' };
+    }
+  }, []);
+
+  // Recibe ids que el modal necesita ver y dispara fetch para los pending.
+  // Idempotente: ya en curso o ya cargados se ignoran.
+  const handleFetchVersionarioIds = useCallback(async (ids: number[]) => {
+    if (ids.length === 0) return;
+    // Identificar las que requieren fetch
+    const toFetch: Campana[] = [];
+    setVersionarioCache(prev => {
+      const next = new Map(prev);
+      for (const id of ids) {
+        if (versionarioFetchingRef.current.has(id)) continue;
+        const e = next.get(id);
+        if (e && e.status === 'pending') {
+          versionarioFetchingRef.current.add(id);
+          next.set(id, { ...e, status: 'loading' });
+          toFetch.push(e.campana);
+        }
+      }
+      return next;
+    });
+    if (toFetch.length === 0) return;
+
+    // Fetch en pool de 10 (paralelismo balanceado)
+    const POOL = 10;
+    for (let i = 0; i < toFetch.length; i += POOL) {
+      if (versionarioCancelledRef.current) break;
+      const batch = toFetch.slice(i, i + POOL);
+      const results = await Promise.all(batch.map(c => fetchOneVersionarioCampana(c)));
+      if (versionarioCancelledRef.current) break;
+      setVersionarioCache(prev => {
+        const next = new Map(prev);
+        for (const r of results) {
+          next.set(r.campana.id, r);
+          versionarioFetchingRef.current.delete(r.campana.id);
+        }
+        return next;
+      });
+    }
+    // Cleanup de ids que pudieron quedar marcados (cancelado mid-flight)
+    for (const c of toFetch) versionarioFetchingRef.current.delete(c.id);
+  }, [fetchOneVersionarioCampana]);
+
   const handleExportVersionarioArtes = async () => {
     // Set único de campañas filtradas que están visibles en el Versionario.
     const campanasMap = new Map<number, Campana>();
@@ -2432,123 +2531,61 @@ export function CampanasPage() {
     const campanasUnicas = [...campanasMap.values()];
     if (campanasUnicas.length === 0) return;
 
-    // Abrir el modal preview de inmediato con loader; la data se carga en bg.
-    // (Antes habia un window.confirm si eran >30 campañas — quitado: el progreso
-    // se ve dentro del modal y el usuario puede cerrarlo si se arrepiente.)
+    // Modal abre INSTANTANEO con todas las campañas en estado 'pending'.
+    // El modal pide fetch solo de las campañas visibles en su pagina actual.
     versionarioCancelledRef.current = false;
-    setVersionarioRawData(null);
-    setVersionarioPreview(null);
+    versionarioFetchingRef.current = new Set();
+    const initialCache = new Map<number, VersionarioCacheEntry>();
+    for (const c of campanasUnicas) initialCache.set(c.id, { campana: c, status: 'pending' });
+    setVersionarioCampanasList(campanasUnicas);
+    setVersionarioCache(initialCache);
     setVersionarioPreviewOpen(true);
-
-    setExportingVersionarioArtes(true);
     setVersionarioArtesProgress({ current: 0, total: campanasUnicas.length });
-
-    try {
-      const POOL_SIZE = 5;
-      const resultados: Array<{
-        campana: Campana;
-        items: any[];
-        digitalFilesByReserva: Map<number, string[]>;
-        notesByUrl: Map<string, string>;
-      }> = [];
-
-      // Pool con concurrencia limitada
-      const procesarCampana = async (campana: Campana) => {
-        try {
-          const [conArte, sinArte] = await Promise.all([
-            campanasService.getInventarioConArte(campana.id).catch(() => []),
-            campanasService.getInventarioSinArte(campana.id).catch(() => []),
-          ]);
-          const items = [...(conArte || []), ...(sinArte || [])];
-
-          const allRsvIds = new Set<number>();
-          for (const it of items) {
-            String((it as any).rsv_id || (it as any).rsv_ids || '')
-              .split(',')
-              .map(s => parseInt(s.trim()))
-              .filter(n => !isNaN(n))
-              .forEach(n => allRsvIds.add(n));
-          }
-
-          // Saltar fetch de digitales si no hay items que parezcan digitales.
-          const tieneDigitales = items.some(it => {
-            const t = String((it as any).tipo_medio || (it as any).tradicional_digital || '').toLowerCase();
-            return t.includes('digital');
-          });
-
-          const digitalFilesByReserva = new Map<number, string[]>();
-          const notesByUrl = new Map<string, string>();
-          if (tieneDigitales) {
-            await Promise.all([...allRsvIds].map(async (rsvId) => {
-              try {
-                const imgs = await campanasService.getImagenesDigitales(campana.id, rsvId);
-                const urls = imgs.map((im: any) => im.archivoData || im.archivo).filter((u: any): u is string => !!u);
-                if (urls.length) digitalFilesByReserva.set(rsvId, urls);
-                for (const im of imgs) {
-                  const url = (im as any).archivoData || (im as any).archivo;
-                  const comentario = ((im as any).comentario || '').trim();
-                  if (url && comentario) notesByUrl.set(url, comentario);
-                }
-              } catch { /* ignore */ }
-            }));
-          }
-
-          // Notas de artes tradicionales (la URL guardada coincide con `archivo` que viene en `artes_multiples`).
-          await Promise.all([...allRsvIds].map(async (rsvId) => {
-            try {
-              const artes = await campanasService.getArtesTradicionales(campana.id, rsvId);
-              for (const a of artes) {
-                const nota = ((a as any).nota || '').trim();
-                if ((a as any).archivo && nota) notesByUrl.set((a as any).archivo, nota);
-              }
-            } catch { /* ignore reservas sin artes tradicionales */ }
-          }));
-
-          resultados.push({ campana, items, digitalFilesByReserva, notesByUrl });
-        } catch {
-          // Si falla la campaña entera, la dejamos fuera para no bloquear el export.
-        } finally {
-          setVersionarioArtesProgress(prev => ({ ...prev, current: prev.current + 1 }));
-        }
-      };
-
-      // Procesar en batches de POOL_SIZE. Si el usuario cierra el modal,
-      // versionarioCancelledRef.current === true y abortamos el loop.
-      for (let i = 0; i < campanasUnicas.length; i += POOL_SIZE) {
-        if (versionarioCancelledRef.current) break;
-        const batch = campanasUnicas.slice(i, i + POOL_SIZE);
-        await Promise.all(batch.map(procesarCampana));
-      }
-
-      // Si fue cancelado, no abrimos preview ni mostramos error.
-      if (versionarioCancelledRef.current) return;
-
-      if (resultados.length === 0) {
-        alert('No se pudo recuperar inventario de las campañas seleccionadas.');
-        return;
-      }
-
-      // En vez de exportar directo, abrimos el modal preview con las filas armadas.
-      // El usuario revisa, filtra y desde ahi pulsa "Descargar Excel".
-      const preview = buildVersionarioArtesPreview({ campanas: resultados });
-      setVersionarioRawData(resultados);
-      setVersionarioPreview(preview);
-      // Si el usuario lo cerro mientras procesabamos los ultimos, no lo reabrimos.
-      if (!versionarioCancelledRef.current) setVersionarioPreviewOpen(true);
-    } finally {
-      setExportingVersionarioArtes(false);
-      setVersionarioArtesProgress({ current: 0, total: 0 });
-    }
   };
 
   // Disparado desde el modal preview cuando el usuario confirma descarga.
+  // Si quedan campañas pendientes/loading, las fetcheamos primero (con progreso
+  // en el boton "Generando Excel..."), luego construimos VersionarioArtesMultiArgs
+  // y llamamos al exporter.
   const handleDownloadVersionarioFromPreview = async () => {
-    if (!versionarioRawData || versionarioRawData.length === 0) return;
+    if (versionarioCampanasList.length === 0) return;
     setVersionarioDownloading(true);
     try {
+      // Asegurar todas las campañas cargadas
+      const pendingIds = versionarioCampanasList
+        .filter(c => {
+          const e = versionarioCache.get(c.id);
+          return !e || e.status !== 'loaded';
+        })
+        .map(c => c.id);
+      if (pendingIds.length > 0) {
+        await handleFetchVersionarioIds(pendingIds);
+      }
+      // Recolectar resultados de cache (solo loaded)
+      // Esperamos un microtask para asegurar que el state ya se aplico
+      // (handleFetchVersionarioIds hace setVersionarioCache; lo leemos del state actualizado).
+      // Truco: usar setVersionarioCache para obtener la copia mas fresca.
+      let finalCache: Map<number, VersionarioCacheEntry> = versionarioCache;
+      setVersionarioCache(prev => { finalCache = prev; return prev; });
+      const resultados: VersionarioArtesMultiArgs['campanas'] = [];
+      for (const c of versionarioCampanasList) {
+        const e = finalCache.get(c.id);
+        if (e && e.status === 'loaded' && e.items) {
+          resultados.push({
+            campana: e.campana,
+            items: e.items,
+            digitalFilesByReserva: e.digitalFilesByReserva,
+            notesByUrl: e.notesByUrl,
+          });
+        }
+      }
+      if (resultados.length === 0) {
+        alert('No se pudo recuperar inventario de las campañas.');
+        return;
+      }
       await exportVersionarioArtesMulti({
-        campanas: versionarioRawData,
-        fileNameSuffix: `${versionarioRawData.length}_campanas`,
+        campanas: resultados,
+        fileNameSuffix: `${resultados.length}_campanas`,
       });
     } finally {
       setVersionarioDownloading(false);
@@ -4054,22 +4091,21 @@ export function CampanasPage() {
         />
       )}
 
-      {/* Versionario Artes Preview Modal (lazy-mount) */}
+      {/* Versionario Artes Preview Modal (lazy-mount + lazy-load por campaña) */}
       {versionarioPreviewOpen && (
         <VersionarioArtesPreviewModal
           isOpen={versionarioPreviewOpen}
           onClose={() => {
-            // Cancela la carga en background si aun corre, y limpia estado.
+            // Cancela cualquier fetch en curso y limpia estado.
             versionarioCancelledRef.current = true;
             setVersionarioPreviewOpen(false);
-            setExportingVersionarioArtes(false);
             setVersionarioArtesProgress({ current: 0, total: 0 });
           }}
-          preview={versionarioPreview}
-          isLoading={exportingVersionarioArtes}
-          isDownloading={versionarioDownloading}
-          loadingProgress={versionarioArtesProgress}
+          campanas={versionarioCampanasList}
+          cache={versionarioCache}
+          onFetchIds={handleFetchVersionarioIds}
           onDownload={handleDownloadVersionarioFromPreview}
+          isDownloading={versionarioDownloading}
         />
       )}
 

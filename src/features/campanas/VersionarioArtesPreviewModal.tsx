@@ -1,32 +1,49 @@
 import { useMemo, useState, useEffect } from 'react';
-import { X, Download, Search, Image as ImageIcon } from 'lucide-react';
+import { X, Download, Search, Image as ImageIcon, AlertCircle } from 'lucide-react';
 import { useThemeStore } from '../../store/themeStore';
-import type { VersionarioArtesPreview, VersionarioArtesPreviewRow } from '../../utils/exportVersionarioArtes';
+import { buildVersionarioArtesPreview } from '../../utils/exportVersionarioArtes';
+import type { VersionarioArtesPreviewRow } from '../../utils/exportVersionarioArtes';
+import type { Campana } from '../../types';
+import type { InventarioConArte } from '../../services/campanas.service';
 
 // =====================================================================
 // VersionarioArtesPreviewModal — Preview tabular del Excel "Versionario Artes"
-// antes de descargar. Mismas columnas que el export, con paginacion y busqueda.
+// con lazy-load por campaña: solo fetcheamos los inventarios de las campañas
+// visibles en la pagina actual. Las demas quedan como placeholder hasta que
+// el usuario navegue a su pagina.
 // =====================================================================
+
+export interface VersionarioCacheEntry {
+  campana: Campana;
+  status: 'pending' | 'loading' | 'loaded' | 'error';
+  items?: InventarioConArte[];
+  digitalFilesByReserva?: Map<number, string[]>;
+  notesByUrl?: Map<string, string>;
+}
 
 interface Props {
   isOpen: boolean;
   onClose: () => void;
-  preview: VersionarioArtesPreview | null;
-  isLoading: boolean;
-  isDownloading: boolean;
-  loadingProgress?: { current: number; total: number };
+  campanas: Campana[]; // todas las campañas (orden estable)
+  cache: Map<number, VersionarioCacheEntry>;
+  onFetchIds: (ids: number[]) => void; // pide fetch de campañas pending
   onDownload: () => void;
+  isDownloading: boolean;
 }
 
-const PAGE_SIZE = 25;
+const PAGE_SIZE_CAMPANAS = 25; // campañas por pagina
 
-// Miniatura de arte que usa el proxy del backend para evitar CORS.
+const HEADERS = [
+  'Plaza', 'Tipo', 'Asesor Comercial', 'APS Global - ID QEB', 'CUIC',
+  'Fecha Inicio Periodo', 'Fecha Fin Periodo', 'Cliente Comercial',
+  'Marca', 'Campaña', 'Número de artículo', 'Artículo', 'Caras', 'Tarifa',
+  'Notas', 'Nombre Arte',
+];
+
+// Miniatura de arte; si la imagen no carga muestra placeholder.
 function ArteThumb({ url }: { url: string }) {
   const [errored, setErrored] = useState(false);
   const isDark = useThemeStore(s => s.theme) === 'dark';
-  // Para previews evitamos descargar binarios y usamos directo la url
-  // (las miniaturas son pequenas y casi siempre cargan por CORS publico
-  // de Spaces; si falla mostramos icono).
   if (errored || !url) {
     return (
       <div className={`w-16 h-12 rounded flex items-center justify-center ${isDark ? 'bg-zinc-800 border border-zinc-700' : 'bg-gray-100 border border-gray-200'}`}>
@@ -41,18 +58,18 @@ function ArteThumb({ url }: { url: string }) {
       className="w-16 h-12 rounded overflow-hidden border border-zinc-700 hover:border-purple-400/60 transition-colors bg-zinc-800"
       title="Abrir arte en nueva pestaña"
     >
-      <img
-        src={url}
-        alt="arte"
-        loading="lazy"
-        onError={() => setErrored(true)}
-        className="w-full h-full object-cover"
-      />
+      <img src={url} alt="arte" loading="lazy" onError={() => setErrored(true)} className="w-full h-full object-cover" />
     </button>
   );
 }
 
-export function VersionarioArtesPreviewModal({ isOpen, onClose, preview, isLoading, isDownloading, loadingProgress, onDownload }: Props) {
+// Tipo de fila renderizable: o es una fila de datos real, o es un placeholder
+// de una campaña que aun no se cargo.
+type DisplayRow =
+  | { kind: 'data'; row: VersionarioArtesPreviewRow }
+  | { kind: 'placeholder'; campana: Campana; status: 'pending' | 'loading' | 'error' };
+
+export function VersionarioArtesPreviewModal({ isOpen, onClose, campanas, cache, onFetchIds, onDownload, isDownloading }: Props) {
   const isDark = useThemeStore(s => s.theme) === 'dark';
   const [currentPage, setCurrentPage] = useState(1);
   const [search, setSearch] = useState('');
@@ -60,29 +77,96 @@ export function VersionarioArtesPreviewModal({ isOpen, onClose, preview, isLoadi
   // Reset paginacion/search al cerrar/abrir
   useEffect(() => { if (!isOpen) { setCurrentPage(1); setSearch(''); } }, [isOpen]);
 
-  // Filas filtradas por busqueda libre (todas las columnas de texto)
-  const filteredRows: VersionarioArtesPreviewRow[] = useMemo(() => {
-    if (!preview) return [];
-    const q = search.trim().toLowerCase();
-    if (!q) return preview.rows;
-    return preview.rows.filter(r => {
-      const haystack = [r.plaza, r.tipo, r.asesor, r.cuic, r.cliente, r.marca, r.campania, r.numeroArticulo, r.articulo, r.notas, r.nombreArte, String(r.apsQebId)]
-        .join(' | ').toLowerCase();
-      return haystack.includes(q);
-    });
-  }, [preview, search]);
+  // Estado agregado de carga global (para el header)
+  const loadedCount = useMemo(() => {
+    let n = 0;
+    for (const c of campanas) {
+      const e = cache.get(c.id);
+      if (e && e.status === 'loaded') n++;
+    }
+    return n;
+  }, [campanas, cache]);
+  const allLoaded = loadedCount === campanas.length && campanas.length > 0;
 
-  const totalPages = Math.max(1, Math.ceil(filteredRows.length / PAGE_SIZE));
+  // Total de paginas (basadas en campañas — granularidad estable)
+  const totalPages = Math.max(1, Math.ceil(campanas.length / PAGE_SIZE_CAMPANAS));
   const safePage = Math.min(currentPage, totalPages);
-  const paginated = filteredRows.slice((safePage - 1) * PAGE_SIZE, safePage * PAGE_SIZE);
 
-  // Cuando cambia el filtro, reset a pagina 1
-  useEffect(() => { setCurrentPage(1); }, [search]);
+  // Campañas visibles en la pagina actual
+  const visibleCampanas = useMemo(() => {
+    const start = (safePage - 1) * PAGE_SIZE_CAMPANAS;
+    return campanas.slice(start, start + PAGE_SIZE_CAMPANAS);
+  }, [campanas, safePage]);
+
+  // Pide fetch de las campañas visibles que aun esten pending
+  useEffect(() => {
+    if (!isOpen) return;
+    const pendingIds: number[] = [];
+    for (const c of visibleCampanas) {
+      const e = cache.get(c.id);
+      if (e && e.status === 'pending') pendingIds.push(c.id);
+    }
+    if (pendingIds.length > 0) onFetchIds(pendingIds);
+  }, [isOpen, visibleCampanas, cache, onFetchIds]);
+
+  // Calculamos arteCols a partir SOLO de lo cargado (para el header dinamico)
+  const arteColsLoaded = useMemo(() => {
+    let max = 0;
+    for (const c of campanas) {
+      const e = cache.get(c.id);
+      if (e && e.status === 'loaded' && e.items) {
+        const { arteCols } = buildVersionarioArtesPreview({
+          campanas: [{ campana: e.campana, items: e.items, digitalFilesByReserva: e.digitalFilesByReserva, notesByUrl: e.notesByUrl }],
+        });
+        if (arteCols > max) max = arteCols;
+      }
+    }
+    return max;
+  }, [campanas, cache]);
+
+  // Filas a mostrar en la pagina visible (data o placeholder).
+  // Para cada campaña visible:
+  // - loaded: 1+ filas reales (por plaza)
+  // - pending/loading/error: 1 placeholder
+  const displayRows: DisplayRow[] = useMemo(() => {
+    const out: DisplayRow[] = [];
+    for (const c of visibleCampanas) {
+      const e = cache.get(c.id);
+      if (e && e.status === 'loaded' && e.items) {
+        const { rows } = buildVersionarioArtesPreview({
+          campanas: [{ campana: e.campana, items: e.items, digitalFilesByReserva: e.digitalFilesByReserva, notesByUrl: e.notesByUrl }],
+        });
+        if (rows.length === 0) {
+          out.push({ kind: 'placeholder', campana: c, status: 'pending' });
+        } else {
+          for (const r of rows) out.push({ kind: 'data', row: r });
+        }
+      } else {
+        const st: 'pending' | 'loading' | 'error' = e?.status === 'loading' ? 'loading'
+          : e?.status === 'error' ? 'error' : 'pending';
+        out.push({ kind: 'placeholder', campana: c, status: st });
+      }
+    }
+    return out;
+  }, [visibleCampanas, cache]);
+
+  // Aplicamos search SOLO a las filas de datos (placeholders no se ocultan)
+  const filteredRows: DisplayRow[] = useMemo(() => {
+    const q = search.trim().toLowerCase();
+    if (!q) return displayRows;
+    return displayRows.filter(r => {
+      if (r.kind === 'placeholder') {
+        // Permitir matchear placeholders por nombre/id de campaña
+        const hay = [r.campana.nombre, r.campana.nombre_campania, String(r.campana.id)].filter(Boolean).join(' | ').toLowerCase();
+        return hay.includes(q);
+      }
+      const row = r.row;
+      const hay = [row.plaza, row.tipo, row.asesor, row.cuic, row.cliente, row.marca, row.campania, row.numeroArticulo, row.articulo, row.notas, row.nombreArte, String(row.apsQebId)].join(' | ').toLowerCase();
+      return hay.includes(q);
+    });
+  }, [displayRows, search]);
 
   if (!isOpen) return null;
-
-  const arteCols = preview?.arteCols || 0;
-  const totalFilas = preview?.rows.length || 0;
 
   return (
     <div className="fixed inset-0 z-[80] flex items-center justify-center">
@@ -97,9 +181,7 @@ export function VersionarioArtesPreviewModal({ isOpen, onClose, preview, isLoadi
             <div>
               <h3 className={`text-lg font-semibold ${isDark ? 'text-white' : 'text-gray-900'}`}>Versionario Artes — Preview</h3>
               <p className={`text-xs ${isDark ? 'text-zinc-400' : 'text-gray-500'}`}>
-                {isLoading
-                  ? `Cargando datos${loadingProgress ? ` ${loadingProgress.current}/${loadingProgress.total}` : ''}...`
-                  : `${totalFilas} fila(s) listas para descargar`}
+                {campanas.length} campañas en total • {loadedCount} cargada(s) {!allLoaded && '• las demás se cargan al navegar por las páginas'}
               </p>
             </div>
           </div>
@@ -126,9 +208,7 @@ export function VersionarioArtesPreviewModal({ isOpen, onClose, preview, isLoadi
             )}
           </div>
           <div className="flex items-center gap-3 text-xs text-muted-foreground">
-            {!isLoading && (
-              <span>{filteredRows.length} mostradas{search ? ` (filtrado de ${totalFilas})` : ''}</span>
-            )}
+            <span>Página {safePage} de {totalPages} (de {campanas.length} campañas)</span>
             {totalPages > 1 && (
               <div className="flex items-center gap-1">
                 <button
@@ -138,7 +218,6 @@ export function VersionarioArtesPreviewModal({ isOpen, onClose, preview, isLoadi
                 >
                   Anterior
                 </button>
-                <span className="px-2">{safePage} / {totalPages}</span>
                 <button
                   onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
                   disabled={safePage === totalPages}
@@ -153,40 +232,7 @@ export function VersionarioArtesPreviewModal({ isOpen, onClose, preview, isLoadi
 
         {/* Tabla */}
         <div className="flex-1 overflow-auto">
-          {isLoading ? (
-            <div className="h-full flex flex-col items-center justify-center gap-5 p-8">
-              {/* Logo QEB con animate-pulse — mismo patron que LoadingScreen */}
-              <img
-                src={isDark ? '/images/logo-bco.png' : '/images/logo-ooh.png'}
-                alt="QEB"
-                className="h-12 w-auto animate-[pulse_2s_ease-in-out_infinite]"
-              />
-              {/* Progress bar morada (replica de LoadingScreen) */}
-              <div className={`w-64 h-1 rounded-full overflow-hidden ${isDark ? 'bg-purple-900/30' : 'bg-purple-100'}`}>
-                <div
-                  className="h-full bg-gradient-to-r from-purple-600 via-pink-500 to-purple-600 rounded-full animate-[loadingbar_1.5s_ease-in-out_infinite]"
-                  style={{ backgroundSize: '200% 100%' }}
-                />
-              </div>
-              <div className="text-center space-y-1">
-                <p className={`text-sm animate-pulse ${isDark ? 'text-zinc-400' : 'text-gray-500'}`}>
-                  Cargando inventarios y artes...
-                </p>
-                {loadingProgress && loadingProgress.total > 0 && (
-                  <p className={`text-xs ${isDark ? 'text-zinc-500' : 'text-gray-400'}`}>
-                    {loadingProgress.current} de {loadingProgress.total} campañas
-                  </p>
-                )}
-              </div>
-              <style>{`
-                @keyframes loadingbar {
-                  0% { width: 0%; margin-left: 0%; }
-                  50% { width: 70%; margin-left: 15%; }
-                  100% { width: 0%; margin-left: 100%; }
-                }
-              `}</style>
-            </div>
-          ) : preview && totalFilas === 0 ? (
+          {campanas.length === 0 ? (
             <div className="h-full flex items-center justify-center text-sm text-muted-foreground p-8">
               <p>No hay datos para mostrar.</p>
             </div>
@@ -194,40 +240,67 @@ export function VersionarioArtesPreviewModal({ isOpen, onClose, preview, isLoadi
             <table className="w-full text-xs">
               <thead className={`sticky top-0 z-10 ${isDark ? 'bg-purple-900/40 text-purple-200' : 'bg-purple-100 text-purple-800'}`}>
                 <tr>
-                  {preview?.headers.map(h => (
+                  {HEADERS.map(h => (
                     <th key={h} className="p-2 font-semibold text-left whitespace-nowrap border-b border-purple-500/30">{h}</th>
                   ))}
-                  {Array.from({ length: arteCols }).map((_, i) => (
+                  {Array.from({ length: arteColsLoaded }).map((_, i) => (
                     <th key={`arte-${i}`} className="p-2 font-semibold text-left whitespace-nowrap border-b border-purple-500/30">Arte {i + 1}</th>
                   ))}
                 </tr>
               </thead>
               <tbody>
-                {paginated.map((r, idx) => (
-                  <tr key={`${r.apsQebId}-${r.plaza}-${idx}`} className={`border-b ${isDark ? 'border-zinc-800 hover:bg-purple-900/10' : 'border-gray-100 hover:bg-purple-50'}`}>
-                    <td className="p-2 whitespace-nowrap">{r.plaza}</td>
-                    <td className="p-2 whitespace-nowrap">{r.tipo}</td>
-                    <td className="p-2 whitespace-nowrap">{r.asesor}</td>
-                    <td className="p-2 whitespace-nowrap">{r.apsQebId}</td>
-                    <td className="p-2 whitespace-nowrap">{r.cuic}</td>
-                    <td className="p-2 whitespace-nowrap">{r.fechaInicio}</td>
-                    <td className="p-2 whitespace-nowrap">{r.fechaFin}</td>
-                    <td className="p-2 whitespace-nowrap max-w-[180px] truncate" title={r.cliente}>{r.cliente}</td>
-                    <td className="p-2 whitespace-nowrap">{r.marca}</td>
-                    <td className="p-2 whitespace-nowrap max-w-[200px] truncate" title={r.campania}>{r.campania}</td>
-                    <td className="p-2 whitespace-nowrap">{r.numeroArticulo}</td>
-                    <td className="p-2 whitespace-nowrap">{r.articulo}</td>
-                    <td className="p-2 text-right">{r.caras}</td>
-                    <td className="p-2 text-right">{typeof r.tarifa === 'number' ? r.tarifa.toLocaleString('es-MX', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : r.tarifa}</td>
-                    <td className="p-2 max-w-[260px] whitespace-pre-wrap text-[11px]">{r.notas || '-'}</td>
-                    <td className="p-2 max-w-[260px] whitespace-pre-wrap text-[11px]">{r.nombreArte || '-'}</td>
-                    {Array.from({ length: arteCols }).map((_, i) => (
-                      <td key={`a-${idx}-${i}`} className="p-2">
-                        {r.artesUrls[i] ? <ArteThumb url={r.artesUrls[i]} /> : <span className="text-zinc-600">-</span>}
-                      </td>
-                    ))}
-                  </tr>
-                ))}
+                {filteredRows.map((dr, idx) => {
+                  if (dr.kind === 'placeholder') {
+                    return (
+                      <tr key={`ph-${dr.campana.id}`} className={`border-b ${isDark ? 'border-zinc-800' : 'border-gray-100'}`}>
+                        <td colSpan={HEADERS.length + Math.max(arteColsLoaded, 1)} className={`p-2 text-xs ${isDark ? 'text-zinc-500' : 'text-gray-500'}`}>
+                          {dr.status === 'error' ? (
+                            <span className="inline-flex items-center gap-1.5 text-red-400">
+                              <AlertCircle className="h-3.5 w-3.5" />
+                              Error al cargar — APS {dr.campana.id} {dr.campana.nombre ? `• ${dr.campana.nombre}` : ''}
+                            </span>
+                          ) : dr.status === 'loading' ? (
+                            <span className="inline-flex items-center gap-2">
+                              <span className="h-2 w-2 rounded-full bg-purple-400 animate-pulse" />
+                              Cargando APS {dr.campana.id} {dr.campana.nombre ? `• ${dr.campana.nombre}` : ''}...
+                            </span>
+                          ) : (
+                            <span className="inline-flex items-center gap-2 opacity-60">
+                              <span className="h-2 w-2 rounded-full bg-zinc-500" />
+                              Pendiente: APS {dr.campana.id} {dr.campana.nombre ? `• ${dr.campana.nombre}` : ''}
+                            </span>
+                          )}
+                        </td>
+                      </tr>
+                    );
+                  }
+                  const r = dr.row;
+                  return (
+                    <tr key={`${r.apsQebId}-${r.plaza}-${idx}`} className={`border-b ${isDark ? 'border-zinc-800 hover:bg-purple-900/10' : 'border-gray-100 hover:bg-purple-50'}`}>
+                      <td className="p-2 whitespace-nowrap">{r.plaza}</td>
+                      <td className="p-2 whitespace-nowrap">{r.tipo}</td>
+                      <td className="p-2 whitespace-nowrap">{r.asesor}</td>
+                      <td className="p-2 whitespace-nowrap">{r.apsQebId}</td>
+                      <td className="p-2 whitespace-nowrap">{r.cuic}</td>
+                      <td className="p-2 whitespace-nowrap">{r.fechaInicio}</td>
+                      <td className="p-2 whitespace-nowrap">{r.fechaFin}</td>
+                      <td className="p-2 whitespace-nowrap max-w-[180px] truncate" title={r.cliente}>{r.cliente}</td>
+                      <td className="p-2 whitespace-nowrap">{r.marca}</td>
+                      <td className="p-2 whitespace-nowrap max-w-[200px] truncate" title={r.campania}>{r.campania}</td>
+                      <td className="p-2 whitespace-nowrap">{r.numeroArticulo}</td>
+                      <td className="p-2 whitespace-nowrap">{r.articulo}</td>
+                      <td className="p-2 text-right">{r.caras}</td>
+                      <td className="p-2 text-right">{typeof r.tarifa === 'number' ? r.tarifa.toLocaleString('es-MX', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : r.tarifa}</td>
+                      <td className="p-2 max-w-[260px] whitespace-pre-wrap text-[11px]">{r.notas || '-'}</td>
+                      <td className="p-2 max-w-[260px] whitespace-pre-wrap text-[11px]">{r.nombreArte || '-'}</td>
+                      {Array.from({ length: arteColsLoaded }).map((_, i) => (
+                        <td key={`a-${idx}-${i}`} className="p-2">
+                          {r.artesUrls[i] ? <ArteThumb url={r.artesUrls[i]} /> : <span className="text-zinc-600">-</span>}
+                        </td>
+                      ))}
+                    </tr>
+                  );
+                })}
               </tbody>
             </table>
           )}
@@ -238,18 +311,25 @@ export function VersionarioArtesPreviewModal({ isOpen, onClose, preview, isLoadi
           <button onClick={onClose} className={`px-4 py-2 text-sm rounded-lg transition-colors ${isDark ? 'text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800' : 'text-gray-600 hover:text-gray-800 hover:bg-gray-100'}`}>
             Cerrar
           </button>
-          <button
-            onClick={onDownload}
-            disabled={isLoading || isDownloading || totalFilas === 0}
-            className={`flex items-center gap-2 px-4 py-2 text-sm font-medium rounded-lg transition-all ${
-              !isLoading && !isDownloading && totalFilas > 0
-                ? 'bg-gradient-to-r from-purple-600 to-purple-700 hover:from-purple-500 hover:to-purple-600 text-white shadow-lg shadow-purple-500/25'
-                : isDark ? 'bg-zinc-800 text-zinc-500 cursor-not-allowed' : 'bg-gray-200 text-gray-400 cursor-not-allowed'
-            }`}
-          >
-            <Download className="h-4 w-4" />
-            {isDownloading ? 'Generando Excel...' : 'Descargar Excel'}
-          </button>
+          <div className="flex items-center gap-3">
+            {!allLoaded && !isDownloading && (
+              <span className={`text-xs ${isDark ? 'text-zinc-500' : 'text-gray-500'}`}>
+                Al descargar se cargarán las {campanas.length - loadedCount} campañas restantes
+              </span>
+            )}
+            <button
+              onClick={onDownload}
+              disabled={isDownloading || campanas.length === 0}
+              className={`flex items-center gap-2 px-4 py-2 text-sm font-medium rounded-lg transition-all ${
+                !isDownloading && campanas.length > 0
+                  ? 'bg-gradient-to-r from-purple-600 to-purple-700 hover:from-purple-500 hover:to-purple-600 text-white shadow-lg shadow-purple-500/25'
+                  : isDark ? 'bg-zinc-800 text-zinc-500 cursor-not-allowed' : 'bg-gray-200 text-gray-400 cursor-not-allowed'
+              }`}
+            >
+              <Download className="h-4 w-4" />
+              {isDownloading ? 'Generando Excel...' : 'Descargar Excel'}
+            </button>
+          </div>
         </div>
       </div>
     </div>
