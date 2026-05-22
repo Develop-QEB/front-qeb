@@ -2433,6 +2433,32 @@ export function CampanasPage() {
     const campanasUnicas = [...campanasMap.values()];
     if (campanasUnicas.length === 0) return;
 
+    // Rangos de fecha de las catorcenas actualmente filtradas (lo que el
+    // usuario ve en la vista Versionario). Si el usuario filtro a Cat 15,
+    // solo dejamos circuitos cuyo inicio_periodo cae en Cat 15. Sin filtro
+    // → todos los circuitos pasan.
+    const activeCatRanges: Array<{ inicio: string; fin: string }> = [];
+    const seenCat = new Set<string>();
+    for (const g of campanasPorCatorcena) {
+      const cat = g.catorcena as { num: number; anio: number };
+      const key = `${cat.num}-${cat.anio}`;
+      if (seenCat.has(key)) continue;
+      seenCat.add(key);
+      const c = catorcenasData?.data.find(x => x.numero_catorcena === cat.num && x.a_o === cat.anio);
+      if (c?.fecha_inicio && c?.fecha_fin) {
+        activeCatRanges.push({ inicio: c.fecha_inicio, fin: c.fecha_fin });
+      }
+    }
+    const itemDentroDeRango = (item: any): boolean => {
+      if (activeCatRanges.length === 0) return true; // sin filtro
+      const inicio = String(item.inicio_periodo || '').slice(0, 10);
+      const fin = String(item.fin_periodo || inicio || '').slice(0, 10);
+      if (!inicio) return false;
+      return activeCatRanges.some(r =>
+        inicio <= String(r.fin).slice(0, 10) && fin >= String(r.inicio).slice(0, 10)
+      );
+    };
+
     // Abrir el modal preview de inmediato con loader; la data se carga en bg.
     // (Antes habia un window.confirm si eran >30 campañas — quitado: el progreso
     // se ve dentro del modal y el usuario puede cerrarlo si se arrepiente.)
@@ -2462,9 +2488,15 @@ export function CampanasPage() {
         try {
           const [conArte, sinArte] = await Promise.all([
             campanasService.getInventarioConArte(campana.id).catch(() => []),
-            campanasService.getInventarioSinArte(campana.id).catch(() => []),
+            // includeWithoutAps: true → tambien trae items sin APS asignado.
+            // SOLO afecta esta llamada del versionario; otros callers siguen
+            // pidiendo el endpoint sin flag (excluyendo sin-APS como antes).
+            campanasService.getInventarioSinArte(campana.id, { includeWithoutAps: true }).catch(() => []),
           ]);
-          const items = [...(conArte || []), ...(sinArte || [])];
+          const allItems = [...(conArte || []), ...(sinArte || [])];
+          // Filtrar circuitos por catorcena activa (lo que el usuario filtro
+          // en la vista Versionario). Si no hay filtro, pasan todos.
+          const items = allItems.filter(it => itemDentroDeRango(it));
           resultados.push({
             campana,
             items,

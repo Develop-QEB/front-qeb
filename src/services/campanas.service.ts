@@ -972,8 +972,11 @@ export const campanasService = {
   // NUEVOS ENDPOINTS PARA GESTION DE ARTES
   // ============================================================================
 
-  async getInventarioSinArte(id: number): Promise<InventarioConArte[]> {
-    const response = await api.get<ApiResponse<InventarioConArte[]>>(`/campanas/${id}/inventario-sin-arte`);
+  // includeWithoutAps=true incluye tambien items que aun no tienen APS asignado
+  // (usado por el preview de Versionario Artes para que se vean circuitos pendientes).
+  async getInventarioSinArte(id: number, opts?: { includeWithoutAps?: boolean }): Promise<InventarioConArte[]> {
+    const params = opts?.includeWithoutAps ? { includeWithoutAps: 'true' } : undefined;
+    const response = await api.get<ApiResponse<InventarioConArte[]>>(`/campanas/${id}/inventario-sin-arte`, { params });
     if (!response.data.success || !response.data.data) {
       throw new Error(response.data.error || 'Error al obtener inventario sin arte');
     }
