@@ -365,6 +365,10 @@ export interface OrdenMontajeINVIAN {
   Anunciante: string | null;
   Operacion: string | null;
   CodigoContrato: number | null;
+  // idquote (APS Global) y campania_id — no se renderizan en la tabla, pero
+  // entran al haystack del buscador para poder filtrar por id de campania.
+  idquote?: number | null;
+  campania_id?: number | null;
   PrecioPorCara: number | null;
   Vendedor: string | null;
   Descripcion: string | null;
