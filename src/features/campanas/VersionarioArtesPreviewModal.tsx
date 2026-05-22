@@ -66,7 +66,7 @@ export function VersionarioArtesPreviewModal({ isOpen, onClose, preview, isLoadi
     const q = search.trim().toLowerCase();
     if (!q) return preview.rows;
     return preview.rows.filter(r => {
-      const haystack = [r.plaza, r.tipo, r.asesor, r.cuic, r.cliente, r.marca, r.campania, r.numeroArticulo, r.articulo, r.notas, r.nombreArte, String(r.apsQebId)]
+      const haystack = [r.plaza, r.tipo, r.asesor, r.cuic, r.cliente, r.marca, r.campania, r.numeroArticulo, r.articulo, r.estatus, r.notas, r.nombreArte, String(r.apsQebId)]
         .join(' | ').toLowerCase();
       return haystack.includes(q);
     });
@@ -201,6 +201,20 @@ export function VersionarioArtesPreviewModal({ isOpen, onClose, preview, isLoadi
                     <td className="p-2 whitespace-nowrap">{r.articulo}</td>
                     <td className="p-2 text-right">{r.caras}</td>
                     <td className="p-2 text-right">{typeof r.tarifa === 'number' ? r.tarifa.toLocaleString('es-MX', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : r.tarifa}</td>
+                    <td className="p-2 whitespace-nowrap">
+                      {(() => {
+                        const e = r.estatus || '';
+                        const lower = e.toLowerCase();
+                        let cls = isDark ? 'bg-zinc-700/40 text-zinc-300' : 'bg-gray-200 text-gray-700';
+                        if (lower === 'aprobado') cls = isDark ? 'bg-green-500/20 text-green-300 border border-green-500/30' : 'bg-green-100 text-green-700 border border-green-200';
+                        else if (lower === 'rechazado') cls = isDark ? 'bg-red-500/20 text-red-300 border border-red-500/30' : 'bg-red-100 text-red-700 border border-red-200';
+                        else if (lower === 'en revisión' || lower === 'en revision') cls = isDark ? 'bg-yellow-500/20 text-yellow-300 border border-yellow-500/30' : 'bg-yellow-100 text-yellow-700 border border-yellow-200';
+                        else if (lower === 'pendiente') cls = isDark ? 'bg-orange-500/20 text-orange-300 border border-orange-500/30' : 'bg-orange-100 text-orange-700 border border-orange-200';
+                        else if (lower === 'sin revisar') cls = isDark ? 'bg-zinc-500/20 text-zinc-300 border border-zinc-500/30' : 'bg-gray-100 text-gray-600 border border-gray-200';
+                        else if (lower === 'varios') cls = isDark ? 'bg-purple-500/20 text-purple-300 border border-purple-500/30' : 'bg-purple-100 text-purple-700 border border-purple-200';
+                        return <span className={`px-2 py-0.5 rounded text-[10px] font-medium ${cls}`}>{e || '-'}</span>;
+                      })()}
+                    </td>
                     <td className="p-2 max-w-[260px] whitespace-pre-wrap text-[11px]">{r.notas || '-'}</td>
                     <td className="p-2 max-w-[260px] whitespace-pre-wrap text-[11px]">{r.nombreArte || '-'}</td>
                     {Array.from({ length: arteCols }).map((_, i) => (

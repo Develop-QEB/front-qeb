@@ -159,13 +159,14 @@ export async function exportVersionarioArtes({ campana, items, digitalFilesByRes
     'Artículo',
     'Caras',
     'Tarifa',
+    'Estatus',
     'Notas',
     'Nombre Arte',
   ];
   const arteHeaders = Array.from({ length: maxArtesUnicos }, (_, i) => `Arte ${i + 1}`);
   const headers = [...baseHeaders, ...arteHeaders];
 
-  const baseWidths = [22, 14, 26, 14, 12, 14, 14, 30, 18, 26, 18, 18, 8, 12, 50, 40];
+  const baseWidths = [22, 14, 26, 14, 12, 14, 14, 30, 18, 26, 18, 18, 8, 12, 18, 50, 40];
   sheet.columns = [
     ...baseWidths.map(w => ({ width: w })),
     ...Array(maxArtesUnicos).fill(null).map(() => ({ width: 22 })),
@@ -237,6 +238,7 @@ export async function exportVersionarioArtes({ campana, items, digitalFilesByRes
 
     const urls = artesPorPlaza.get(plaza) || [];
     const notasResumen = buildNotasText(urls);
+    const estatusDisplay = uniqueOrVarios(arr.map(it => mapArteAprobadoToEstatus((it as any).arte_aprobado)));
 
     // Min/max de fechas dentro de la plaza
     const inicios = arr.map(it => it.inicio_periodo).filter(Boolean) as string[];
@@ -259,6 +261,7 @@ export async function exportVersionarioArtes({ campana, items, digitalFilesByRes
       uniqueOrVarios(articulos),
       caras,
       tarifaDisplay,
+      estatusDisplay,
       notasResumen,
       buildNombresArtesText(urls),
     ];
@@ -335,10 +338,23 @@ export interface VersionarioArtesPreviewRow {
   articulo: string;
   caras: number;
   tarifa: number | string;
+  estatus: string; // Sin Revisar / En Revision / Aprobado / Rechazado / Pendiente / Varios
   notas: string;
   nombreArte: string;
   artesUrls: string[]; // urls deduplicadas, cada una se renderiza como thumbnail
 }
+
+// Mapea arte_aprobado (raw) al label visible que se usa en las sub-tabs
+// del Gestor de Artes. Igual logica que transformInventarioToRow en
+// TareaSeguimientoPage para mantener consistencia.
+const mapArteAprobadoToEstatus = (arteAprobadoRaw: unknown): string => {
+  const v = String(arteAprobadoRaw || '').toLowerCase().trim();
+  if (v === 'aprobado') return 'Aprobado';
+  if (v === 'rechazado') return 'Rechazado';
+  if (v === 'en revision' || v === 'en revisión') return 'En Revisión';
+  if (v === 'pendiente') return 'Pendiente';
+  return 'Sin Revisar';
+};
 
 export interface VersionarioArtesPreview {
   headers: string[];           // headers base (sin contar Arte 1..N)
@@ -427,6 +443,10 @@ export function buildVersionarioArtesPreview({ campanas }: { campanas: Versionar
       const minInicio = inicios.length ? inicios.slice().sort()[0] : '';
       const maxFin = fines.length ? fines.slice().sort().reverse()[0] : '';
 
+      // Estatus del arte: unico valor o "Varios" si difieren entre los items de la plaza.
+      const estatusList = arr.map(it => mapArteAprobadoToEstatus((it as any).arte_aprobado));
+      const estatusDisplay = uniqueOrVarios(estatusList);
+
       rows.push({
         plaza,
         tipo: uniqueOrVarios(tipos),
@@ -442,6 +462,7 @@ export function buildVersionarioArtesPreview({ campanas }: { campanas: Versionar
         articulo: uniqueOrVarios(articulos),
         caras,
         tarifa: tarifaDisplay,
+        estatus: estatusDisplay,
         notas: notasResumen,
         nombreArte: buildNombresArtesText(urls),
         artesUrls: urls,
@@ -454,7 +475,7 @@ export function buildVersionarioArtesPreview({ campanas }: { campanas: Versionar
       'Plaza', 'Tipo', 'Asesor Comercial', 'APS Global - ID QEB', 'CUIC',
       'Fecha Inicio Periodo', 'Fecha Fin Periodo', 'Cliente Comercial',
       'Marca', 'Campaña', 'Número de artículo', 'Artículo', 'Caras', 'Tarifa',
-      'Notas', 'Nombre Arte',
+      'Estatus', 'Notas', 'Nombre Arte',
     ],
     arteCols: maxArtesUnicos,
     rows,
@@ -543,13 +564,14 @@ export async function exportVersionarioArtesMulti({ campanas, fileNameSuffix }: 
     'Artículo',
     'Caras',
     'Tarifa',
+    'Estatus',
     'Notas',
     'Nombre Arte',
   ];
   const arteHeaders = Array.from({ length: maxArtesUnicos }, (_, i) => `Arte ${i + 1}`);
   const headers = [...baseHeaders, ...arteHeaders];
 
-  const baseWidths = [22, 14, 26, 14, 12, 14, 14, 30, 18, 26, 18, 18, 8, 12, 50, 40];
+  const baseWidths = [22, 14, 26, 14, 12, 14, 14, 30, 18, 26, 18, 18, 8, 12, 18, 50, 40];
   sheet.columns = [
     ...baseWidths.map(w => ({ width: w })),
     ...Array(maxArtesUnicos).fill(null).map(() => ({ width: 22 })),
@@ -623,6 +645,7 @@ export async function exportVersionarioArtesMulti({ campanas, fileNameSuffix }: 
     const fines = arr.map(it => it.fin_periodo).filter(Boolean) as string[];
     const minInicio = inicios.length ? inicios.slice().sort()[0] : '';
     const maxFin = fines.length ? fines.slice().sort().reverse()[0] : '';
+    const estatusDisplay = uniqueOrVarios(arr.map(it => mapArteAprobadoToEstatus((it as any).arte_aprobado)));
 
     const rowValues: any[] = [
       plaza,
@@ -639,6 +662,7 @@ export async function exportVersionarioArtesMulti({ campanas, fileNameSuffix }: 
       uniqueOrVarios(articulos),
       caras,
       tarifaDisplay,
+      estatusDisplay,
       notasResumen,
       buildNombresArtesText(artesUrls),
     ];
