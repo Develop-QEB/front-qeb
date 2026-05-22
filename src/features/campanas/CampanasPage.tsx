@@ -2444,7 +2444,9 @@ export function CampanasPage() {
     setVersionarioArtesProgress({ current: 0, total: campanasUnicas.length });
 
     try {
-      const POOL_SIZE = 5;
+      // POOL_SIZE alto: cada campaña SOLO hace 2 calls (con/sin arte) en preview,
+      // asi que podemos paralelizar mas sin saturar el server.
+      const POOL_SIZE = 15;
       const resultados: Array<{
         campana: Campana;
         items: any[];
@@ -2452,7 +2454,9 @@ export function CampanasPage() {
         notesByUrl: Map<string, string>;
       }> = [];
 
-      // Pool con concurrencia limitada
+      // Modo "lightweight" para el preview: solo inventarios, sin notas ni
+      // urls de artes digitales (esos requieren 1 call por reserva — muy
+      // lento). Se completan al darle "Descargar Excel".
       const procesarCampana = async (campana: Campana) => {
         try {
           const [conArte, sinArte] = await Promise.all([
@@ -2460,51 +2464,12 @@ export function CampanasPage() {
             campanasService.getInventarioSinArte(campana.id).catch(() => []),
           ]);
           const items = [...(conArte || []), ...(sinArte || [])];
-
-          const allRsvIds = new Set<number>();
-          for (const it of items) {
-            String((it as any).rsv_id || (it as any).rsv_ids || '')
-              .split(',')
-              .map(s => parseInt(s.trim()))
-              .filter(n => !isNaN(n))
-              .forEach(n => allRsvIds.add(n));
-          }
-
-          // Saltar fetch de digitales si no hay items que parezcan digitales.
-          const tieneDigitales = items.some(it => {
-            const t = String((it as any).tipo_medio || (it as any).tradicional_digital || '').toLowerCase();
-            return t.includes('digital');
+          resultados.push({
+            campana,
+            items,
+            digitalFilesByReserva: new Map(),  // se llenara al descargar
+            notesByUrl: new Map(),              // se llenara al descargar
           });
-
-          const digitalFilesByReserva = new Map<number, string[]>();
-          const notesByUrl = new Map<string, string>();
-          if (tieneDigitales) {
-            await Promise.all([...allRsvIds].map(async (rsvId) => {
-              try {
-                const imgs = await campanasService.getImagenesDigitales(campana.id, rsvId);
-                const urls = imgs.map((im: any) => im.archivoData || im.archivo).filter((u: any): u is string => !!u);
-                if (urls.length) digitalFilesByReserva.set(rsvId, urls);
-                for (const im of imgs) {
-                  const url = (im as any).archivoData || (im as any).archivo;
-                  const comentario = ((im as any).comentario || '').trim();
-                  if (url && comentario) notesByUrl.set(url, comentario);
-                }
-              } catch { /* ignore */ }
-            }));
-          }
-
-          // Notas de artes tradicionales (la URL guardada coincide con `archivo` que viene en `artes_multiples`).
-          await Promise.all([...allRsvIds].map(async (rsvId) => {
-            try {
-              const artes = await campanasService.getArtesTradicionales(campana.id, rsvId);
-              for (const a of artes) {
-                const nota = ((a as any).nota || '').trim();
-                if ((a as any).archivo && nota) notesByUrl.set((a as any).archivo, nota);
-              }
-            } catch { /* ignore reservas sin artes tradicionales */ }
-          }));
-
-          resultados.push({ campana, items, digitalFilesByReserva, notesByUrl });
         } catch {
           // Si falla la campaña entera, la dejamos fuera para no bloquear el export.
         } finally {
@@ -2542,13 +2507,61 @@ export function CampanasPage() {
   };
 
   // Disparado desde el modal preview cuando el usuario confirma descarga.
+  // El preview es "lightweight" (sin notas ni urls digitales). Aqui completamos
+  // el fetch faltante en paralelo antes de generar el Excel.
   const handleDownloadVersionarioFromPreview = async () => {
     if (!versionarioRawData || versionarioRawData.length === 0) return;
     setVersionarioDownloading(true);
     try {
+      // Completar notas + archivos digitales en pool de 15 campañas paralelas.
+      const POOL = 15;
+      const enriquecidas: typeof versionarioRawData = [];
+      for (let i = 0; i < versionarioRawData.length; i += POOL) {
+        const batch = versionarioRawData.slice(i, i + POOL);
+        const completed = await Promise.all(batch.map(async (entry) => {
+          const { campana, items } = entry;
+          const allRsvIds = new Set<number>();
+          for (const it of items) {
+            String((it as any).rsv_id || (it as any).rsv_ids || '')
+              .split(',').map(s => parseInt(s.trim())).filter(n => !isNaN(n))
+              .forEach(n => allRsvIds.add(n));
+          }
+          const tieneDigitales = items.some((it: any) => {
+            const t = String(it.tipo_medio || it.tradicional_digital || '').toLowerCase();
+            return t.includes('digital');
+          });
+          const digitalFilesByReserva = new Map<number, string[]>();
+          const notesByUrl = new Map<string, string>();
+          if (tieneDigitales) {
+            await Promise.all([...allRsvIds].map(async (rsvId) => {
+              try {
+                const imgs = await campanasService.getImagenesDigitales(campana.id, rsvId);
+                const urls = imgs.map((im: any) => im.archivoData || im.archivo).filter((u: any): u is string => !!u);
+                if (urls.length) digitalFilesByReserva.set(rsvId, urls);
+                for (const im of imgs) {
+                  const url = (im as any).archivoData || (im as any).archivo;
+                  const comentario = ((im as any).comentario || '').trim();
+                  if (url && comentario) notesByUrl.set(url, comentario);
+                }
+              } catch { /* ignore */ }
+            }));
+          }
+          await Promise.all([...allRsvIds].map(async (rsvId) => {
+            try {
+              const artes = await campanasService.getArtesTradicionales(campana.id, rsvId);
+              for (const a of artes) {
+                const nota = ((a as any).nota || '').trim();
+                if ((a as any).archivo && nota) notesByUrl.set((a as any).archivo, nota);
+              }
+            } catch { /* ignore */ }
+          }));
+          return { campana, items, digitalFilesByReserva, notesByUrl };
+        }));
+        enriquecidas.push(...completed);
+      }
       await exportVersionarioArtesMulti({
-        campanas: versionarioRawData,
-        fileNameSuffix: `${versionarioRawData.length}_campanas`,
+        campanas: enriquecidas,
+        fileNameSuffix: `${enriquecidas.length}_campanas`,
       });
     } finally {
       setVersionarioDownloading(false);
