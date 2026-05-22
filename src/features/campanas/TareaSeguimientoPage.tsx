@@ -13822,6 +13822,22 @@ export function TareaSeguimientoPage() {
   // Inventory state
   const [selectedInventoryIds, setSelectedInventoryIds] = useState<Set<string>>(new Set());
   const [inventorySearch, setInventorySearch] = useState('');
+  // Tags de busqueda guardados con Enter (chips). Cada tag es un filtro adicional
+  // que se combina con AND. La busqueda activa final = [...tags, buffer actual].
+  const [inventorySearchTags, setInventorySearchTags] = useState<string[]>([]);
+  const addInventorySearchTag = useCallback((raw: string) => {
+    const t = raw.trim();
+    if (!t) return;
+    setInventorySearchTags(prev => prev.includes(t) ? prev : [...prev, t]);
+    setInventorySearch('');
+  }, []);
+  const removeInventorySearchTag = useCallback((t: string) => {
+    setInventorySearchTags(prev => prev.filter(x => x !== t));
+  }, []);
+  const clearInventorySearch = useCallback(() => {
+    setInventorySearchTags([]);
+    setInventorySearch('');
+  }, []);
   const [expandedNodes, setExpandedNodes] = useState<Set<string>>(new Set(['all']));
 
   // Grouping, Filtering, Sorting state
@@ -15121,8 +15137,10 @@ export function TareaSeguimientoPage() {
   const filteredAtenderData = useMemo(() => {
     let data = applyFilters(inventoryArteData, filtersAtender);
 
-    // Filtrar por estado_arte según el tab activo (solo si no hay búsqueda)
-    if (!inventorySearch) {
+    // Filtrar por estado_arte según el tab activo (solo si no hay búsqueda activa).
+    // Considera tanto el buffer (`inventorySearch`) como los tags guardados.
+    const hasActiveSearch = !!inventorySearch || inventorySearchTags.length > 0;
+    if (!hasActiveSearch) {
       data = data.filter(item => item.estado_arte === activeEstadoArteTab);
     }
 
@@ -15150,7 +15168,7 @@ export function TareaSeguimientoPage() {
       });
     }
     return data;
-  }, [inventoryArteData, filtersAtender, sortFieldAtender, sortDirectionAtender, activeEstadoArteTab, inventorySearch, soloReimpresion, reimpresionRsvIds]);
+  }, [inventoryArteData, filtersAtender, sortFieldAtender, sortDirectionAtender, activeEstadoArteTab, inventorySearch, inventorySearchTags, soloReimpresion, reimpresionRsvIds]);
 
   // Datos filtrados y ordenados para Programación (programacion)
   const filteredProgramacionData = useMemo(() => {
@@ -15581,19 +15599,19 @@ export function TareaSeguimientoPage() {
       data = data.filter((item) => item.tradicional_digital === formatFilter);
     }
 
-    // Filter by search
-    if (inventorySearch) {
-      const search = inventorySearch.toLowerCase();
-      data = data.filter(
-        (item) =>
-          item.id.toLowerCase().includes(search) ||
-          item.rsv_id.toLowerCase().includes(search) ||
-          item.codigo_unico.toLowerCase().includes(search) ||
-          item.plaza.toLowerCase().includes(search) ||
-          item.mueble.toLowerCase().includes(search) ||
-          item.ubicacion.toLowerCase().includes(search) ||
-          item.ciudad.toLowerCase().includes(search)
-      );
+    // Filter by search (chips guardados con Enter + buffer actual).
+    // Cada termino actua como filtro AND (todos deben matchear).
+    const searchTerms = [...inventorySearchTags];
+    if (inventorySearch.trim()) searchTerms.push(inventorySearch.trim());
+    if (searchTerms.length > 0) {
+      const lowered = searchTerms.map(t => t.toLowerCase());
+      data = data.filter((item) => {
+        const haystack = [
+          item.id, item.rsv_id, item.codigo_unico,
+          item.plaza, item.mueble, item.ubicacion, item.ciudad,
+        ].map(v => String(v || '').toLowerCase()).join(' | ');
+        return lowered.every(term => haystack.includes(term));
+      });
     }
 
     // Apply sorting
@@ -15639,7 +15657,7 @@ export function TareaSeguimientoPage() {
     });
 
     return data;
-  }, [filteredVersionarioData, filteredAtenderData, filteredProgramacionData, filteredTestigoData, inventorySearch, activeFormat, activeMainTab, sortField, sortDirection]);
+  }, [filteredVersionarioData, filteredAtenderData, filteredProgramacionData, filteredTestigoData, inventorySearch, inventorySearchTags, activeFormat, activeMainTab, sortField, sortDirection]);
 
   const filteredTasks = useMemo(() => {
     // Primero aplicar filtros avanzados
@@ -17230,6 +17248,57 @@ export function TareaSeguimientoPage() {
             </div>
           </div>
 
+          {/* Search bar compartida (visible en todas las main tabs y sub-tabs).
+              Filtra por id, rsv_id, codigo_unico, plaza, mueble, ubicacion, ciudad.
+              Acepta texto libre + chips (Enter agrega tag, combinacion AND). */}
+          <div className="px-4 py-2 border-b border-border flex items-center gap-3">
+            <div className={`relative flex items-center flex-wrap gap-1 min-h-[32px] px-2 py-1 rounded-lg border flex-1 max-w-2xl ${isDark ? 'bg-zinc-800 border-zinc-700 focus-within:border-purple-500' : 'bg-white border-gray-300 focus-within:border-purple-500'}`}>
+              <Search className={`h-3.5 w-3.5 shrink-0 ${isDark ? 'text-zinc-500' : 'text-gray-400'}`} />
+              {inventorySearchTags.map((tag) => (
+                <span
+                  key={tag}
+                  className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-medium ${isDark ? 'bg-purple-500/20 text-purple-300 border border-purple-500/30' : 'bg-purple-100 text-purple-700 border border-purple-200'}`}
+                >
+                  {tag}
+                  <button
+                    type="button"
+                    onClick={() => removeInventorySearchTag(tag)}
+                    className={`rounded-full p-0.5 ${isDark ? 'hover:bg-purple-500/30' : 'hover:bg-purple-200'}`}
+                    title="Quitar"
+                  >
+                    <X className="h-2.5 w-2.5" />
+                  </button>
+                </span>
+              ))}
+              <input
+                type="text"
+                placeholder={inventorySearchTags.length === 0 ? 'Buscar por ID, codigo unico, plaza, ubicacion... (Enter para guardar)' : 'Agregar otro termino...'}
+                value={inventorySearch}
+                onChange={(e) => setInventorySearch(e.target.value)}
+                onKeyDown={(e) => {
+                  if ((e.key === 'Enter' || e.key === 'Tab') && inventorySearch.trim()) {
+                    e.preventDefault();
+                    addInventorySearchTag(inventorySearch);
+                  }
+                  if (e.key === 'Backspace' && !inventorySearch && inventorySearchTags.length > 0) {
+                    removeInventorySearchTag(inventorySearchTags[inventorySearchTags.length - 1]);
+                  }
+                }}
+                className={`flex-1 min-w-[120px] bg-transparent border-none outline-none text-xs ${isDark ? 'text-white placeholder:text-zinc-500' : 'text-gray-900 placeholder:text-gray-400'}`}
+              />
+              {(inventorySearch || inventorySearchTags.length > 0) && (
+                <button
+                  type="button"
+                  onClick={clearInventorySearch}
+                  className={`shrink-0 p-0.5 rounded ${isDark ? 'text-zinc-500 hover:text-zinc-300 hover:bg-zinc-700' : 'text-gray-400 hover:text-gray-600 hover:bg-gray-100'}`}
+                  title="Limpiar"
+                >
+                  <X className="h-3 w-3" />
+                </button>
+              )}
+            </div>
+          </div>
+
           {/* Sub-tabs: Formato - Solo mostrar si hay elementos y no estamos en Programación (que es solo digital) */}
           {activeMainTab !== 'programacion' && !(activeMainTab === 'impresiones' && activeEstadoImpresionTab === 'orden_impresion') && (formatCounts.tradicional > 0 || formatCounts.digital > 0) && (
             <div className="px-4 py-2 border-b border-border bg-purple-900/5">
@@ -17383,24 +17452,7 @@ export function TareaSeguimientoPage() {
                 <span className="text-xs text-zinc-400">
                   {filteredAtenderData.filter(i => i.tradicional_digital === (activeFormat === 'tradicional' ? 'Tradicional' : 'Digital')).length} de {inventoryArteData.filter(i => i.tradicional_digital === (activeFormat === 'tradicional' ? 'Tradicional' : 'Digital')).length} artes
                 </span>
-                <div className="relative">
-                  <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-zinc-500" />
-                  <input
-                    type="text"
-                    placeholder="Buscar por ID, código, plaza..."
-                    value={inventorySearch}
-                    onChange={(e) => setInventorySearch(e.target.value)}
-                    className={`pl-8 pr-3 py-1.5 text-xs border rounded-lg focus:outline-none focus:border-purple-500 w-64 ${isDark ? 'bg-zinc-800 border-zinc-700 text-white placeholder:text-zinc-500' : 'bg-white border-gray-300 text-gray-900 placeholder:text-gray-400'}`}
-                  />
-                  {inventorySearch && (
-                    <button
-                      onClick={() => setInventorySearch('')}
-                      className="absolute right-2 top-1/2 -translate-y-1/2 text-zinc-500 hover:text-zinc-300"
-                    >
-                      <X className="h-3.5 w-3.5" />
-                    </button>
-                  )}
-                </div>
+                {/* Search bar removida (movida arriba como compartida) */}
                 {reimpresionRsvIds.size > 0 && (
                   <button
                     onClick={() => setSoloReimpresion(v => !v)}
@@ -17642,24 +17694,7 @@ export function TareaSeguimientoPage() {
                 <span className="text-xs text-zinc-400">
                   {filteredProgramacionData.length} de {inventoryProgramacionData.length} artes digitales
                 </span>
-                <div className="relative">
-                  <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-zinc-500" />
-                  <input
-                    type="text"
-                    placeholder="Buscar por ID, código, plaza..."
-                    value={inventorySearch}
-                    onChange={(e) => setInventorySearch(e.target.value)}
-                    className={`pl-8 pr-3 py-1.5 text-xs border rounded-lg focus:outline-none focus:border-purple-500 w-64 ${isDark ? 'bg-zinc-800 border-zinc-700 text-white placeholder:text-zinc-500' : 'bg-white border-gray-300 text-gray-900 placeholder:text-gray-400'}`}
-                  />
-                  {inventorySearch && (
-                    <button
-                      onClick={() => setInventorySearch('')}
-                      className="absolute right-2 top-1/2 -translate-y-1/2 text-zinc-500 hover:text-zinc-300"
-                    >
-                      <X className="h-3.5 w-3.5" />
-                    </button>
-                  )}
-                </div>
+                {/* Search bar removida (movida arriba como compartida) */}
               </div>
               <FilterToolbar
                 filters={filtersProgramacion}
@@ -17805,24 +17840,7 @@ export function TareaSeguimientoPage() {
             <div className="px-4 py-2 border-b border-border flex items-center justify-between">
               <div className="flex items-center gap-3">
                 <span className="text-xs text-zinc-400">{filteredTestigoData.length} de {inventoryTestigosData.length} instalaciones</span>
-                <div className="relative">
-                  <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-zinc-500" />
-                  <input
-                    type="text"
-                    placeholder="Buscar por ID, código, plaza..."
-                    value={inventorySearch}
-                    onChange={(e) => setInventorySearch(e.target.value)}
-                    className={`pl-8 pr-3 py-1.5 text-xs border rounded-lg focus:outline-none focus:border-purple-500 w-64 ${isDark ? 'bg-zinc-800 border-zinc-700 text-white placeholder:text-zinc-500' : 'bg-white border-gray-300 text-gray-900 placeholder:text-gray-400'}`}
-                  />
-                  {inventorySearch && (
-                    <button
-                      onClick={() => setInventorySearch('')}
-                      className="absolute right-2 top-1/2 -translate-y-1/2 text-zinc-500 hover:text-zinc-300"
-                    >
-                      <X className="h-3.5 w-3.5" />
-                    </button>
-                  )}
-                </div>
+                {/* Search bar removida (movida arriba como compartida) */}
               </div>
               <FilterToolbar
                 filters={filtersTestigo}
