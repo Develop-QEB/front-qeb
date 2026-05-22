@@ -211,6 +211,11 @@ export function VersionarioArtesPreviewModal({ isOpen, onClose, preview, isLoadi
                         else if (lower === 'en revisión' || lower === 'en revision') cls = isDark ? 'bg-yellow-500/20 text-yellow-300 border border-yellow-500/30' : 'bg-yellow-100 text-yellow-700 border border-yellow-200';
                         else if (lower === 'pendiente') cls = isDark ? 'bg-orange-500/20 text-orange-300 border border-orange-500/30' : 'bg-orange-100 text-orange-700 border border-orange-200';
                         else if (lower === 'sin revisar') cls = isDark ? 'bg-zinc-500/20 text-zinc-300 border border-zinc-500/30' : 'bg-gray-100 text-gray-600 border border-gray-200';
+                        else if (lower === 'carga de artes') cls = isDark ? 'bg-zinc-600/40 text-zinc-200 border border-zinc-500/30' : 'bg-gray-100 text-gray-700 border border-gray-200';
+                        else if (lower === 'programado') cls = isDark ? 'bg-cyan-500/20 text-cyan-300 border border-cyan-500/30' : 'bg-cyan-100 text-cyan-700 border border-cyan-200';
+                        else if (lower === 'en impresión' || lower === 'en impresion') cls = isDark ? 'bg-blue-500/20 text-blue-300 border border-blue-500/30' : 'bg-blue-100 text-blue-700 border border-blue-200';
+                        else if (lower === 'artes recibidos') cls = isDark ? 'bg-indigo-500/20 text-indigo-300 border border-indigo-500/30' : 'bg-indigo-100 text-indigo-700 border border-indigo-200';
+                        else if (lower === 'instalado') cls = isDark ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/30' : 'bg-emerald-100 text-emerald-700 border border-emerald-200';
                         else if (lower === 'varios') cls = isDark ? 'bg-purple-500/20 text-purple-300 border border-purple-500/30' : 'bg-purple-100 text-purple-700 border border-purple-200';
                         return <span className={`px-2 py-0.5 rounded text-[10px] font-medium ${cls}`}>{e || '-'}</span>;
                       })()}

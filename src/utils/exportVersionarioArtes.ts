@@ -238,7 +238,7 @@ export async function exportVersionarioArtes({ campana, items, digitalFilesByRes
 
     const urls = artesPorPlaza.get(plaza) || [];
     const notasResumen = buildNotasText(urls);
-    const estatusDisplay = uniqueOrVarios(arr.map(it => mapArteAprobadoToEstatus((it as any).arte_aprobado)));
+    const estatusDisplay = uniqueOrVarios(arr.map(it => mapItemToEstatus(it)));
 
     // Min/max de fechas dentro de la plaza
     const inicios = arr.map(it => it.inicio_periodo).filter(Boolean) as string[];
@@ -344,17 +344,38 @@ export interface VersionarioArtesPreviewRow {
   artesUrls: string[]; // urls deduplicadas, cada una se renderiza como thumbnail
 }
 
-// Mapea arte_aprobado (raw) al label visible que se usa en las sub-tabs
-// del Gestor de Artes. Igual logica que transformInventarioToRow en
-// TareaSeguimientoPage para mantener consistencia.
-const mapArteAprobadoToEstatus = (arteAprobadoRaw: unknown): string => {
-  const v = String(arteAprobadoRaw || '').toLowerCase().trim();
+// Mapea un item de inventario al label de estatus que corresponde a la
+// tab/sub-tab donde vive en el Gestor de Artes. Considera todas las
+// etapas del ciclo: Carga → Revision → Aprobado/Rechazado → Programado
+// → Impresion → Recepcion → Instalado.
+//
+// Prioridad: estado terminal primero (Instalado), luego tarea activa
+// (Programación/Impresión/Recepción), luego decision de arte (Aprobado/
+// Rechazado/Pendiente/En Revisión), y al final el estado inicial
+// (Sin Revisar si tiene archivo subido, Carga de Artes si no).
+const mapItemToEstatus = (item: any): string => {
+  // 1) Instalado (tab Validar Instalación)
+  if (item.instalado === true || item.instalado === 1) return 'Instalado';
+
+  // 2) Tarea activa: refleja la sub-tab actual de las main tabs
+  //    Programación / Impresiones (sub: Orden, En Impresión, Recepción)
+  const tarea = String(item.tarea || '').toLowerCase();
+  if (tarea.includes('recepc')) return 'Artes Recibidos';
+  if (tarea.includes('impres')) return 'En Impresión';
+  if (tarea.includes('program')) return 'Programado';
+
+  // 3) Decisión del arte (sub-tabs de Revisar y Aprobar)
+  const v = String(item.arte_aprobado || '').toLowerCase().trim();
   if (v === 'aprobado') return 'Aprobado';
   if (v === 'rechazado') return 'Rechazado';
-  if (v === 'en revision' || v === 'en revisión') return 'En Revisión';
   if (v === 'pendiente') return 'Pendiente';
-  return 'Sin Revisar';
+  if (v === 'en revision' || v === 'en revisión') return 'En Revisión';
+
+  // 4) Estados iniciales (tab Subir Artes)
+  if (item.archivo) return 'Sin Revisar';
+  return 'Carga de Artes';
 };
+
 
 export interface VersionarioArtesPreview {
   headers: string[];           // headers base (sin contar Arte 1..N)
@@ -444,7 +465,7 @@ export function buildVersionarioArtesPreview({ campanas }: { campanas: Versionar
       const maxFin = fines.length ? fines.slice().sort().reverse()[0] : '';
 
       // Estatus del arte: unico valor o "Varios" si difieren entre los items de la plaza.
-      const estatusList = arr.map(it => mapArteAprobadoToEstatus((it as any).arte_aprobado));
+      const estatusList = arr.map(it => mapItemToEstatus(it));
       const estatusDisplay = uniqueOrVarios(estatusList);
 
       rows.push({
@@ -645,7 +666,7 @@ export async function exportVersionarioArtesMulti({ campanas, fileNameSuffix }: 
     const fines = arr.map(it => it.fin_periodo).filter(Boolean) as string[];
     const minInicio = inicios.length ? inicios.slice().sort()[0] : '';
     const maxFin = fines.length ? fines.slice().sort().reverse()[0] : '';
-    const estatusDisplay = uniqueOrVarios(arr.map(it => mapArteAprobadoToEstatus((it as any).arte_aprobado)));
+    const estatusDisplay = uniqueOrVarios(arr.map(it => mapItemToEstatus(it)));
 
     const rowValues: any[] = [
       plaza,
