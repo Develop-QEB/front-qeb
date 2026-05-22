@@ -149,16 +149,12 @@ export async function exportVersionarioArtes({ campana, items, digitalFilesByRes
     'Tipo',
     'Asesor Comercial',
     'APS Global - ID QEB',
-    'CUIC',
     'Fecha Inicio Periodo',
     'Fecha Fin Periodo',
     'Cliente Comercial',
     'Marca',
     'Campaña',
-    'Número de artículo',
-    'Artículo',
     'Caras',
-    'Tarifa',
     'Estatus',
     'Notas',
     'Nombre Arte',
@@ -166,7 +162,7 @@ export async function exportVersionarioArtes({ campana, items, digitalFilesByRes
   const arteHeaders = Array.from({ length: maxArtesUnicos }, (_, i) => `Arte ${i + 1}`);
   const headers = [...baseHeaders, ...arteHeaders];
 
-  const baseWidths = [22, 14, 26, 14, 12, 14, 14, 30, 18, 26, 18, 18, 8, 12, 18, 50, 40];
+  const baseWidths = [22, 14, 26, 14, 14, 14, 30, 18, 26, 8, 18, 50, 40];
   sheet.columns = [
     ...baseWidths.map(w => ({ width: w })),
     ...Array(maxArtesUnicos).fill(null).map(() => ({ width: 22 })),
@@ -251,16 +247,12 @@ export async function exportVersionarioArtes({ campana, items, digitalFilesByRes
       uniqueOrVarios(tipos),
       asesor,
       campana.id,
-      cuic,
       formatDate(minInicio),
       formatDate(maxFin),
       cliente,
       marca,
       campaniaNombre,
-      uniqueOrVarios(numerosArticulo),
-      uniqueOrVarios(articulos),
       caras,
-      tarifaDisplay,
       estatusDisplay,
       notasResumen,
       buildNombresArtesText(urls),
@@ -271,10 +263,6 @@ export async function exportVersionarioArtes({ campana, items, digitalFilesByRes
     const row = sheet.addRow(rowValues);
     row.height = ROW_HEIGHT;
     row.alignment = { vertical: 'middle', horizontal: 'left', wrapText: true };
-    // Tarifa con decimales solo cuando sea numérica (cuando es "Varios" se queda como texto)
-    if (typeof tarifaDisplay === 'number') {
-      row.getCell(14).numFmt = '#,##0.00';
-    }
 
     // Insertar miniaturas de arte en columnas Arte 1..N (deduplicadas por URL)
     for (let i = 0; i < urls.length; i++) {
@@ -575,16 +563,12 @@ export async function exportVersionarioArtesMulti({ campanas, fileNameSuffix }: 
     'Tipo',
     'Asesor Comercial',
     'APS Global - ID QEB',
-    'CUIC',
     'Fecha Inicio Periodo',
     'Fecha Fin Periodo',
     'Cliente Comercial',
     'Marca',
     'Campaña',
-    'Número de artículo',
-    'Artículo',
     'Caras',
-    'Tarifa',
     'Estatus',
     'Notas',
     'Nombre Arte',
@@ -592,7 +576,7 @@ export async function exportVersionarioArtesMulti({ campanas, fileNameSuffix }: 
   const arteHeaders = Array.from({ length: maxArtesUnicos }, (_, i) => `Arte ${i + 1}`);
   const headers = [...baseHeaders, ...arteHeaders];
 
-  const baseWidths = [22, 14, 26, 14, 12, 14, 14, 30, 18, 26, 18, 18, 8, 12, 18, 50, 40];
+  const baseWidths = [22, 14, 26, 14, 14, 14, 30, 18, 26, 8, 18, 50, 40];
   sheet.columns = [
     ...baseWidths.map(w => ({ width: w })),
     ...Array(maxArtesUnicos).fill(null).map(() => ({ width: 22 })),
@@ -673,16 +657,12 @@ export async function exportVersionarioArtesMulti({ campanas, fileNameSuffix }: 
       uniqueOrVarios(tipos),
       asesor,
       campana.id,
-      cuic,
       formatDate(minInicio),
       formatDate(maxFin),
       cliente,
       marca,
       campaniaNombre,
-      uniqueOrVarios(numerosArticulo),
-      uniqueOrVarios(articulos),
       caras,
-      tarifaDisplay,
       estatusDisplay,
       notasResumen,
       buildNombresArtesText(artesUrls),
@@ -692,9 +672,6 @@ export async function exportVersionarioArtesMulti({ campanas, fileNameSuffix }: 
     const row = sheet.addRow(rowValues);
     row.height = ROW_HEIGHT;
     row.alignment = { vertical: 'middle', horizontal: 'left', wrapText: true };
-    if (typeof tarifaDisplay === 'number') {
-      row.getCell(14).numFmt = '#,##0.00';
-    }
 
     for (let i = 0; i < artesUrls.length; i++) {
       const url = artesUrls[i];

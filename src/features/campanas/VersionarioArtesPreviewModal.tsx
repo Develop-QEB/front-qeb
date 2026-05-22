@@ -66,7 +66,7 @@ export function VersionarioArtesPreviewModal({ isOpen, onClose, preview, isLoadi
     const q = search.trim().toLowerCase();
     if (!q) return preview.rows;
     return preview.rows.filter(r => {
-      const haystack = [r.plaza, r.tipo, r.asesor, r.cuic, r.cliente, r.marca, r.campania, r.numeroArticulo, r.articulo, r.estatus, r.notas, r.nombreArte, String(r.apsQebId)]
+      const haystack = [r.plaza, r.tipo, r.asesor, r.cliente, r.marca, r.campania, r.estatus, r.notas, r.nombreArte, String(r.apsQebId)]
         .join(' | ').toLowerCase();
       return haystack.includes(q);
     });
@@ -191,16 +191,12 @@ export function VersionarioArtesPreviewModal({ isOpen, onClose, preview, isLoadi
                     <td className="p-2 whitespace-nowrap">{r.tipo}</td>
                     <td className="p-2 whitespace-nowrap">{r.asesor}</td>
                     <td className="p-2 whitespace-nowrap">{r.apsQebId}</td>
-                    <td className="p-2 whitespace-nowrap">{r.cuic}</td>
                     <td className="p-2 whitespace-nowrap">{r.fechaInicio}</td>
                     <td className="p-2 whitespace-nowrap">{r.fechaFin}</td>
                     <td className="p-2 whitespace-nowrap max-w-[180px] truncate" title={r.cliente}>{r.cliente}</td>
                     <td className="p-2 whitespace-nowrap">{r.marca}</td>
                     <td className="p-2 whitespace-nowrap max-w-[200px] truncate" title={r.campania}>{r.campania}</td>
-                    <td className="p-2 whitespace-nowrap">{r.numeroArticulo}</td>
-                    <td className="p-2 whitespace-nowrap">{r.articulo}</td>
                     <td className="p-2 text-right">{r.caras}</td>
-                    <td className="p-2 text-right">{typeof r.tarifa === 'number' ? r.tarifa.toLocaleString('es-MX', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : r.tarifa}</td>
                     <td className="p-2 whitespace-nowrap">
                       {(() => {
                         const e = r.estatus || '';
