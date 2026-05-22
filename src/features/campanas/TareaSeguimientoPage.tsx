@@ -16748,6 +16748,10 @@ export function TareaSeguimientoPage() {
           </button>
         </td>
       )}
+      {/* Nueva columna Codigo Unico (formato 27024_Contraflujo_Ciudad de Mexico) */}
+      <td className="p-2 text-zinc-300 font-mono text-[10px] whitespace-nowrap">
+        {item.codigo_unico || '-'}
+      </td>
       <td className="p-2 text-xs font-medium text-white">
         <div className="flex items-center gap-1.5">
           {item.id}
@@ -18191,6 +18195,7 @@ export function TareaSeguimientoPage() {
                           </button>
                         </th>
                         {[
+                          { field: 'codigo_unico', label: 'Código Único' },
                           { field: 'articulo', label: 'Artículo' },
                           { field: 'mueble', label: 'Formato' },
                           { field: 'caras_totales', label: 'Impresiones' },
@@ -18225,6 +18230,10 @@ export function TareaSeguimientoPage() {
                                 <Check className="h-3 w-3 text-white" />
                               )}
                             </button>
+                          </td>
+                          {/* Nueva columna: Codigo Unico (formato 27024_Contraflujo_Ciudad de Mexico) */}
+                          <td className="p-2 text-zinc-300 font-mono text-[10px] whitespace-nowrap">
+                            {item.codigo_unico || '-'}
                           </td>
                           <td className="p-2">
                             <span className="px-1.5 py-0.5 rounded text-[10px] font-medium bg-blue-500/20 text-blue-300">
@@ -19107,6 +19116,7 @@ export function TareaSeguimientoPage() {
                           )}
                         </button>
                       </th>
+                      <th className="p-2 font-medium text-purple-300">Código Único</th>
                       <th className="p-2 font-medium text-purple-300">ID</th>
                       <th className="p-2 font-medium text-purple-300">Arte Aprobado</th>
                       <th className="p-2 font-medium text-purple-300">Archivo</th>
@@ -19363,6 +19373,7 @@ export function TareaSeguimientoPage() {
                           )}
                         </button>
                       </th>
+                      <th className="p-2 font-medium text-purple-300">Código Único</th>
                       <th className="p-2 font-medium text-purple-300">ID</th>
                       <th className="p-2 font-medium text-purple-300">Arte</th>
                       <th className="p-2 font-medium text-purple-300">Ubicación</th>
@@ -19393,6 +19404,10 @@ export function TareaSeguimientoPage() {
                               <Check className="h-3 w-3 text-white" />
                             )}
                           </button>
+                        </td>
+                        {/* Nueva columna Codigo Unico */}
+                        <td className="p-2 text-zinc-300 font-mono text-[10px] whitespace-nowrap">
+                          {item.codigo_unico || '-'}
                         </td>
                         <td className="p-2 text-zinc-300 font-mono">{item.id}</td>
                         <td className="p-2">
@@ -19793,6 +19808,7 @@ export function TareaSeguimientoPage() {
                           )}
                         </button>
                       </th>
+                      <th className="p-2 font-medium text-purple-300">Código Único</th>
                       <th className="p-2 font-medium text-purple-300">ID</th>
                       <th className="p-2 font-medium text-purple-300">Arte Aprobado</th>
                       <th className="p-2 font-medium text-purple-300">Archivo</th>
