@@ -498,7 +498,7 @@ export async function exportVersionarioArtesMulti({ campanas, fileNameSuffix }: 
       caras,
       tarifaDisplay,
       notasResumen,
-      buildNombresArtesText(urls),
+      buildNombresArtesText(artesUrls),
     ];
     for (let i = 0; i < maxArtesUnicos; i++) rowValues.push('');
 
