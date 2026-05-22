@@ -1088,6 +1088,28 @@ function DigitalGalleryModal({
                 </div>
               </div>
 
+              {/* Nombre Archivo + Nota (digital) */}
+              {(currentImage?.archivo || (currentImage as any)?.nota) && (
+                <div className="mt-3 p-3 bg-cyan-500/10 border border-cyan-500/30 rounded-lg space-y-2">
+                  {currentImage?.archivo && (() => {
+                    const last = decodeURIComponent((currentImage.archivo.split('?')[0].split('/').pop() || ''));
+                    const clean = last.replace(/^\d{10,}-[a-z0-9]+-/i, '') || last;
+                    return (
+                      <div>
+                        <p className="text-xs font-medium text-cyan-300 mb-1">Nombre Archivo:</p>
+                        <p className="text-sm text-zinc-300 break-all">{clean}</p>
+                      </div>
+                    );
+                  })()}
+                  {(currentImage as any)?.nota && (
+                    <div>
+                      <p className="text-xs font-medium text-cyan-300 mb-1">Nota:</p>
+                      <p className="text-sm text-zinc-300 whitespace-pre-wrap">{(currentImage as any).nota}</p>
+                    </div>
+                  )}
+                </div>
+              )}
+
               {/* Thumbnails */}
               {imagenes.length > 1 && (
                 <div className="mt-3 flex gap-2 overflow-x-auto py-2 px-1">
@@ -1246,11 +1268,26 @@ function TradicionalGalleryModal({
                 </div>
               </div>
 
-              {/* Nota de la imagen actual */}
-              {currentImage?.nota && (
-                <div className="mt-3 p-3 bg-orange-500/10 border border-orange-500/30 rounded-lg">
-                  <p className="text-xs font-medium text-orange-300 mb-1">Nota:</p>
-                  <p className="text-sm text-zinc-300 whitespace-pre-wrap">{currentImage.nota}</p>
+              {/* Nombre Archivo + Nota de la imagen actual */}
+              {(currentImage?.archivo || currentImage?.nota) && (
+                <div className="mt-3 p-3 bg-orange-500/10 border border-orange-500/30 rounded-lg space-y-2">
+                  {currentImage?.archivo && (() => {
+                    // Extrae nombre legible: quita prefijo timestamp-random- de la URL de Spaces
+                    const last = decodeURIComponent((currentImage.archivo.split('?')[0].split('/').pop() || ''));
+                    const clean = last.replace(/^\d{10,}-[a-z0-9]+-/i, '') || last;
+                    return (
+                      <div>
+                        <p className="text-xs font-medium text-orange-300 mb-1">Nombre Archivo:</p>
+                        <p className="text-sm text-zinc-300 break-all">{clean}</p>
+                      </div>
+                    );
+                  })()}
+                  {currentImage?.nota && (
+                    <div>
+                      <p className="text-xs font-medium text-orange-300 mb-1">Nota:</p>
+                      <p className="text-sm text-zinc-300 whitespace-pre-wrap">{currentImage.nota}</p>
+                    </div>
+                  )}
                 </div>
               )}
 
@@ -16818,18 +16855,8 @@ export function TareaSeguimientoPage() {
       <td className="p-2 text-xs text-zinc-300">{item.mueble}</td>
       <td className="p-2 text-xs text-zinc-300">{item.plaza}</td>
       <td className="p-2 text-xs text-zinc-300">{item.ciudad}</td>
-      <td className="p-2 text-xs text-blue-400 max-w-[150px] truncate" title={isDigital && digitalSummary ? getDigitalSummaryText() : item.archivo_arte}>
-        {isDigital && digitalSummary ? (
-          <span className="text-blue-300">{getDigitalSummaryText()}</span>
-        ) : item.archivo_arte ? (
-          <a href={getImageUrl(item.archivo_arte) || '#'} target="_blank" rel="noopener noreferrer" className="hover:underline">
-            {item.archivo_arte.split('/').pop()}
-          </a>
-        ) : '-'}
-      </td>
-      <td className="p-2 text-xs text-orange-300 max-w-[120px] truncate" title={tradSummary?.firstNota || ''}>
-        {tradSummary?.firstNota || <span className="text-zinc-600">-</span>}
-      </td>
+      {/* Columnas "Nombre Archivo" y "Notas" removidas:
+          ahora se muestran dentro del modal de galeria al abrir el arte. */}
       {!hideInstalado && (
         <td className="p-2 text-center">
           {item.estado_tarea === 'atendido' ? (
@@ -18850,8 +18877,6 @@ export function TareaSeguimientoPage() {
                                                     <th className="p-2 font-medium text-purple-300">Formato</th>
                                                     <th className="p-2 font-medium text-purple-300">Plaza</th>
                                                     <th className="p-2 font-medium text-purple-300">Ciudad</th>
-                                                    <th className="p-2 font-medium text-purple-300">Nombre Archivo</th>
-                                                    <th className="p-2 font-medium text-purple-300">Notas</th>
                                                     <th className="p-2 font-medium text-purple-300">Estado Instalación</th>
                                                   </tr>
                                                 </thead>
@@ -19125,8 +19150,6 @@ export function TareaSeguimientoPage() {
                       <th className="p-2 font-medium text-purple-300">Formato</th>
                       <th className="p-2 font-medium text-purple-300">Plaza</th>
                       <th className="p-2 font-medium text-purple-300">Ciudad</th>
-                      <th className="p-2 font-medium text-purple-300">Nombre Archivo</th>
-                      <th className="p-2 font-medium text-purple-300">Notas</th>
                       <th className="p-2 font-medium text-purple-300">Estado Instalación</th>
                     </tr>
                   </thead>
@@ -19754,7 +19777,6 @@ export function TareaSeguimientoPage() {
                                                     <th className="p-2 font-medium text-purple-300">Formato</th>
                                                     <th className="p-2 font-medium text-purple-300">Plaza</th>
                                                     <th className="p-2 font-medium text-purple-300">Ciudad</th>
-                                                    <th className="p-2 font-medium text-purple-300">Nombre Archivo</th>
                                                     <th className="p-2 font-medium text-purple-300">Estado Instalación</th>
                                                   </tr>
                                                 </thead>
@@ -19817,7 +19839,6 @@ export function TareaSeguimientoPage() {
                       <th className="p-2 font-medium text-purple-300">Formato</th>
                       <th className="p-2 font-medium text-purple-300">Plaza</th>
                       <th className="p-2 font-medium text-purple-300">Ciudad</th>
-                      <th className="p-2 font-medium text-purple-300">Nombre Archivo</th>
                       <th className="p-2 font-medium text-purple-300">Estado Instalación</th>
                     </tr>
                   </thead>
