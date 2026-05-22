@@ -66,7 +66,7 @@ export function VersionarioArtesPreviewModal({ isOpen, onClose, preview, isLoadi
     const q = search.trim().toLowerCase();
     if (!q) return preview.rows;
     return preview.rows.filter(r => {
-      const haystack = [r.plaza, r.tipo, r.asesor, r.cliente, r.marca, r.campania, r.estatus, r.notas, r.nombreArte, String(r.apsQebId)]
+      const haystack = [String(r.idCampana), r.plaza, r.tipo, r.asesor, r.cliente, r.marca, r.campania, r.estatus, r.notas, r.nombreArte, String(r.apsQebId)]
         .join(' | ').toLowerCase();
       return haystack.includes(q);
     });
@@ -186,7 +186,8 @@ export function VersionarioArtesPreviewModal({ isOpen, onClose, preview, isLoadi
               </thead>
               <tbody>
                 {paginated.map((r, idx) => (
-                  <tr key={`${r.apsQebId}-${r.plaza}-${idx}`} className={`border-b ${isDark ? 'border-zinc-800/50 hover:bg-purple-900/10' : 'border-gray-100 hover:bg-purple-50'}`}>
+                  <tr key={`${r.idCampana}-${r.apsQebId}-${r.plaza}-${idx}`} className={`border-b ${isDark ? 'border-zinc-800/50 hover:bg-purple-900/10' : 'border-gray-100 hover:bg-purple-50'}`}>
+                    <td className="p-2 whitespace-nowrap">{r.idCampana}</td>
                     <td className="p-2 whitespace-nowrap">{r.plaza}</td>
                     <td className="p-2 whitespace-nowrap">{r.tipo}</td>
                     <td className="p-2 whitespace-nowrap">{r.asesor}</td>

@@ -96,17 +96,21 @@ export async function exportVersionarioArtes({ campana, items, digitalFilesByRes
   const marca = (campana as any).T2_U_Marca || (campana as any).marca || '';
   const campaniaNombre = campana.nombre || campana.nombre_campania || '';
 
-  // Agrupar items por plaza (mismo criterio que ya usaba la columna "Plaza")
+  // Agrupar items por CIRCUITO (solicitudCaras.id) — antes era por plaza.
+  // Cada circuito = 1 fila. Granularidad de "Ocupacion BP".
   const getPlaza = (it: InventarioConArte): string => it.plaza || it.municipio || it.estado || '';
+  const getCircuitoKey = (it: any): string => {
+    const k = it.solicitudCarasId ?? it.grupo ?? null;
+    if (k != null && k !== '') return String(k);
+    return String(it.id || it.codigo_unico || Math.random());
+  };
   const byPlaza = new Map<string, InventarioConArte[]>();
   for (const it of items) {
-    const plaza = getPlaza(it);
-    if (!byPlaza.has(plaza)) byPlaza.set(plaza, []);
-    byPlaza.get(plaza)!.push(it);
+    const k = getCircuitoKey(it);
+    if (!byPlaza.has(k)) byPlaza.set(k, []);
+    byPlaza.get(k)!.push(it);
   }
 
-  // Para cada plaza, lista deduplicada de URLs de arte (mismo archivo en varios espacios = 1 sola miniatura).
-  // Combina rsv.archivo (legacy 1 arte) con imagenes_digitales[*] (artes múltiples) cuando se pasa el mapa.
   const getRsvIds = (it: any): number[] =>
     String(it.rsv_id || it.rsv_ids || '')
       .split(',')
@@ -145,6 +149,7 @@ export async function exportVersionarioArtes({ campana, items, digitalFilesByRes
   }
 
   const baseHeaders = [
+    'ID Campaña',
     'Plaza',
     'Tipo',
     'Asesor Comercial',
@@ -162,7 +167,7 @@ export async function exportVersionarioArtes({ campana, items, digitalFilesByRes
   const arteHeaders = Array.from({ length: maxArtesUnicos }, (_, i) => `Arte ${i + 1}`);
   const headers = [...baseHeaders, ...arteHeaders];
 
-  const baseWidths = [22, 14, 26, 14, 14, 14, 30, 18, 26, 8, 18, 50, 40];
+  const baseWidths = [12, 22, 14, 26, 14, 14, 14, 30, 18, 26, 8, 18, 50, 40];
   sheet.columns = [
     ...baseWidths.map(w => ({ width: w })),
     ...Array(maxArtesUnicos).fill(null).map(() => ({ width: 22 })),
@@ -242,8 +247,13 @@ export async function exportVersionarioArtes({ campana, items, digitalFilesByRes
     const minInicio = inicios.length ? inicios.slice().sort()[0] : '';
     const maxFin = fines.length ? fines.slice().sort().reverse()[0] : '';
 
+    // Plaza display: como ahora la `plaza` del loop es la key del circuito,
+    // sacamos el nombre real de la plaza desde los items del circuito.
+    const plazaDisplay = uniqueOrVarios(arr.map(it => getPlaza(it)));
+
     const rowValues: any[] = [
-      plaza,
+      campana.id,
+      plazaDisplay,
       uniqueOrVarios(tipos),
       asesor,
       computeApsDisplay(arr),
@@ -311,11 +321,16 @@ export interface VersionarioArtesMultiArgs {
 }
 
 // Fila lista para mostrar como preview (mismas columnas que se exportan).
+// Granularidad: 1 fila por CIRCUITO (= solicitudCaras.id), no por plaza.
+// Un circuito vive dentro de una campaña y representa un grupo de caras del
+// mismo formato/articulo, mismo periodo y mismo APS. Es la misma granularidad
+// que muestra "Ocupacion BP" en el modal de Ordenes de Montaje.
 export interface VersionarioArtesPreviewRow {
+  idCampana: number | string; // ID de la campaña (APS Global - ID QEB era ambiguo)
   plaza: string;
   tipo: string;
   asesor: string;
-  apsQebId: number | string;
+  apsQebId: number | string; // APS asignado al circuito
   cuic: string;
   fechaInicio: string;
   fechaFin: string;
@@ -324,12 +339,12 @@ export interface VersionarioArtesPreviewRow {
   campania: string;
   numeroArticulo: string;
   articulo: string;
-  caras: number;
+  caras: number; // total de caras del circuito
   tarifa: number | string;
-  estatus: string; // Sin Revisar / En Revision / Aprobado / Rechazado / Pendiente / Varios
+  estatus: string;
   notas: string;
   nombreArte: string;
-  artesUrls: string[]; // urls deduplicadas, cada una se renderiza como thumbnail
+  artesUrls: string[];
 }
 
 // Mapea un item de inventario al label de estatus que corresponde a la
@@ -407,14 +422,24 @@ export function buildVersionarioArtesPreview({ campanas }: { campanas: Versionar
   const rows: VersionarioArtesPreviewRow[] = [];
   let maxArtesUnicos = 0;
 
+  // Helper: id del circuito (solicitudCaras) — back lo expone como `grupo` o
+  // `solicitudCarasId` segun el endpoint. Fallback al codigo unico si por
+  // alguna razon no viene seteado.
+  const getCircuitoKey = (it: any): string => {
+    const k = it.solicitudCarasId ?? it.grupo ?? null;
+    if (k != null && k !== '') return String(k);
+    return String(it.id || it.codigo_unico || Math.random());
+  };
+
   for (const { campana, items, digitalFilesByReserva, notesByUrl } of campanas) {
-    const byPlaza = new Map<string, InventarioConArte[]>();
+    // Agrupar por CIRCUITO (no por plaza). 1 fila por solicitudCaras.id
+    const byCircuito = new Map<string, InventarioConArte[]>();
     for (const it of items) {
-      const p = getPlaza(it);
-      if (!byPlaza.has(p)) byPlaza.set(p, []);
-      byPlaza.get(p)!.push(it);
+      const k = getCircuitoKey(it);
+      if (!byCircuito.has(k)) byCircuito.set(k, []);
+      byCircuito.get(k)!.push(it);
     }
-    for (const [plaza, arr] of byPlaza) {
+    for (const [, arr] of byCircuito) {
       const urls: string[] = [];
       const seen = new Set<string>();
       const pushUrl = (u: string | null | undefined) => {
@@ -444,6 +469,11 @@ export function buildVersionarioArtesPreview({ campanas }: { campanas: Versionar
       const marca = (campana as any).T2_U_Marca || (campana as any).marca || '';
       const campaniaNombre = campana.nombre || campana.nombre_campania || '';
 
+      // Por circuito normalmente plaza/tipo/articulo/asesor/etc. son uniformes,
+      // pero igual usamos uniqueOrVarios por defensa.
+      const plazas = arr.map(it => getPlaza(it));
+      const plazaDisplay = uniqueOrVarios(plazas);
+
       const tipos = arr.map(it => it.tipo_medio || it.tipo_de_cara_display || it.tipo_de_cara || '');
       const numerosArticulo = arr.map(it => it.articulo || '');
       const articulos = arr.map(it => it.articulo || '');
@@ -468,12 +498,12 @@ export function buildVersionarioArtesPreview({ campanas }: { campanas: Versionar
       const minInicio = inicios.length ? inicios.slice().sort()[0] : '';
       const maxFin = fines.length ? fines.slice().sort().reverse()[0] : '';
 
-      // Estatus del arte: unico valor o "Varios" si difieren entre los items de la plaza.
       const estatusList = arr.map(it => mapItemToEstatus(it));
       const estatusDisplay = uniqueOrVarios(estatusList);
 
       rows.push({
-        plaza,
+        idCampana: campana.id,
+        plaza: plazaDisplay,
         tipo: uniqueOrVarios(tipos),
         asesor,
         apsQebId: computeApsDisplay(arr),
@@ -497,7 +527,7 @@ export function buildVersionarioArtesPreview({ campanas }: { campanas: Versionar
 
   return {
     headers: [
-      'Plaza', 'Tipo', 'Asesor Comercial', 'APS Global - ID QEB',
+      'ID Campaña', 'Plaza', 'Tipo', 'Asesor Comercial', 'APS Global - ID QEB',
       'Fecha Inicio Periodo', 'Fecha Fin Periodo', 'Cliente Comercial',
       'Marca', 'Campaña', 'Caras', 'Estatus', 'Notas', 'Nombre Arte',
     ],
@@ -530,14 +560,23 @@ export async function exportVersionarioArtesMulti({ campanas, fileNameSuffix }: 
   const bloques: Bloque[] = [];
   let maxArtesUnicos = 0;
 
+  // Agrupar por CIRCUITO (no por plaza). 1 fila por circuito.
+  const getCircuitoKey = (it: any): string => {
+    const k = it.solicitudCarasId ?? it.grupo ?? null;
+    if (k != null && k !== '') return String(k);
+    return String(it.id || it.codigo_unico || Math.random());
+  };
   for (const { campana, items, digitalFilesByReserva, notesByUrl } of campanas) {
-    const byPlaza = new Map<string, InventarioConArte[]>();
+    const byCircuito = new Map<string, InventarioConArte[]>();
     for (const it of items) {
-      const p = getPlaza(it);
-      if (!byPlaza.has(p)) byPlaza.set(p, []);
-      byPlaza.get(p)!.push(it);
+      const k = getCircuitoKey(it);
+      if (!byCircuito.has(k)) byCircuito.set(k, []);
+      byCircuito.get(k)!.push(it);
     }
-    for (const [plaza, arr] of byPlaza) {
+    for (const [, arr] of byCircuito) {
+      // Plaza display: inline porque uniqueOrVarios se define mas abajo
+      const plazaSet = new Set(arr.map(it => getPlaza(it)).filter(v => v != null && v !== ''));
+      const plaza = plazaSet.size === 0 ? '' : plazaSet.size === 1 ? [...plazaSet][0] : 'Varios';
       const urls: string[] = [];
       const seen = new Set<string>();
       const pushUrl = (u: string | null | undefined) => {
@@ -574,6 +613,7 @@ export async function exportVersionarioArtesMulti({ campanas, fileNameSuffix }: 
   });
 
   const baseHeaders = [
+    'ID Campaña',
     'Plaza',
     'Tipo',
     'Asesor Comercial',
@@ -591,7 +631,7 @@ export async function exportVersionarioArtesMulti({ campanas, fileNameSuffix }: 
   const arteHeaders = Array.from({ length: maxArtesUnicos }, (_, i) => `Arte ${i + 1}`);
   const headers = [...baseHeaders, ...arteHeaders];
 
-  const baseWidths = [22, 14, 26, 14, 14, 14, 30, 18, 26, 8, 18, 50, 40];
+  const baseWidths = [12, 22, 14, 26, 14, 14, 14, 30, 18, 26, 8, 18, 50, 40];
   sheet.columns = [
     ...baseWidths.map(w => ({ width: w })),
     ...Array(maxArtesUnicos).fill(null).map(() => ({ width: 22 })),
@@ -668,6 +708,7 @@ export async function exportVersionarioArtesMulti({ campanas, fileNameSuffix }: 
     const estatusDisplay = uniqueOrVarios(arr.map(it => mapItemToEstatus(it)));
 
     const rowValues: any[] = [
+      campana.id,
       plaza,
       uniqueOrVarios(tipos),
       asesor,
