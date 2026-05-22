@@ -210,6 +210,9 @@ export interface InventarioConArte {
   grupo_completo_id: number | null;
   grupo: number | null;
   artes_multiples: string | null;
+  // JSON string con [{archivo, nota, spot}] por reserva. Permite mostrar
+  // varios artes (spots) por reserva con sus notas en la galería del Versionario.
+  artes_detalle?: string | null;
 }
 
 export interface SolicitudCara {

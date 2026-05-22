@@ -61,6 +61,8 @@ interface ImagenDigitalView {
   tipo: 'image' | 'video';
   estado: string;
   codigoUnico?: string;
+  nota?: string;
+  nombreArchivo?: string;
 }
 
 // Colors for dynamic tags
@@ -817,9 +819,27 @@ function ArtGalleryModal({
 
                 {/* Position indicator */}
                 <div className="absolute top-2 right-2 px-2 py-1 bg-black/60 rounded text-xs text-white">
-                  {currentIndex + 1} de {imagenes.length}
+                  Spot {currentImage?.spot ?? currentIndex + 1} · {currentIndex + 1} de {imagenes.length}
                 </div>
               </div>
+
+              {/* Metadatos del arte actual: nombre de archivo + nota */}
+              {currentImage && (currentImage.nombreArchivo || currentImage.nota) && (
+                <div className={`mt-3 px-3 py-2 rounded-lg border ${isDark ? 'bg-zinc-800/60 border-zinc-700' : 'bg-gray-50 border-gray-200'} space-y-1`}>
+                  {currentImage.nombreArchivo && (
+                    <div className={`text-xs ${isDark ? 'text-zinc-400' : 'text-gray-500'}`}>
+                      <span className={`font-medium ${isDark ? 'text-zinc-300' : 'text-gray-700'}`}>Archivo:</span>{' '}
+                      <span className="break-all">{currentImage.nombreArchivo}</span>
+                    </div>
+                  )}
+                  {currentImage.nota && (
+                    <div className={`text-xs ${isDark ? 'text-zinc-400' : 'text-gray-500'}`}>
+                      <span className={`font-medium ${isDark ? 'text-zinc-300' : 'text-gray-700'}`}>Nota:</span>{' '}
+                      <span className="whitespace-pre-wrap">{currentImage.nota}</span>
+                    </div>
+                  )}
+                </div>
+              )}
 
               {/* Thumbnails */}
               {imagenes.length > 1 && (
@@ -1967,18 +1987,66 @@ export function CampanasPage() {
   // Handler para abrir galería de artes en versionario
   const openArtGallery = useCallback((_campanaId: number, items: InventarioConAPS[], title: string) => {
     setArtGalleryTitle(title);
-    // Construir galería directamente desde el campo archivo de cada item
-    const images: ImagenDigitalView[] = items
-      .filter(item => item.archivo != null && item.archivo !== '' && item.archivo !== 'sin_arte')
-      .map((item, idx) => ({
-        id: item.id || idx,
-        archivo: item.archivo!,
-        archivoData: undefined,
-        spot: idx + 1,
-        tipo: item.archivo!.match(/\.(mp4|mov|avi|webm|mkv|wmv)$/i) ? 'video' as const : 'image' as const,
-        estado: (item as any).estatus_arte || '',
-        codigoUnico: item.codigo_unico,
-      }));
+
+    const getNombreArchivo = (url: string): string => {
+      try {
+        const last = url.split('/').pop() || url;
+        // El backend prefija con timestamp+random (ej. "1779417112969-18ry9vbs-Chanel_Botella.png").
+        // Quitar el prefijo "timestamp-randomhash-" si está presente para mostrar nombre legible.
+        const cleaned = last.replace(/^\d{10,}-[a-z0-9]+-/i, '');
+        return decodeURIComponent(cleaned);
+      } catch {
+        return url;
+      }
+    };
+
+    const isVideo = (u: string) => /\.(mp4|mov|avi|webm|mkv|wmv)$/i.test(u);
+
+    // Construir galería: si el item trae artes_detalle (JSON con varios spots),
+    // generamos una entrada por arte; si no, hacemos fallback al campo archivo único.
+    const images: ImagenDigitalView[] = [];
+    items.forEach((item, idx) => {
+      let detalle: Array<{ archivo: string; nota?: string; spot?: number }> | null = null;
+      const raw = (item as any).artes_detalle as string | null | undefined;
+      if (raw) {
+        try {
+          const parsed = JSON.parse(raw);
+          if (Array.isArray(parsed)) detalle = parsed;
+        } catch { /* JSON inválido, caer al fallback */ }
+      }
+
+      if (detalle && detalle.length > 0) {
+        // Ordenar por spot ascendente para que aparezcan Spot 1, Spot 2, ...
+        detalle.sort((a, b) => (Number(a.spot) || 0) - (Number(b.spot) || 0));
+        detalle.forEach((a, i) => {
+          if (!a.archivo) return;
+          images.push({
+            id: (item.id || idx) * 100 + i,
+            archivo: a.archivo,
+            archivoData: undefined,
+            spot: Number(a.spot) || i + 1,
+            tipo: isVideo(a.archivo) ? 'video' : 'image',
+            estado: (item as any).estatus_arte || '',
+            codigoUnico: item.codigo_unico,
+            nota: (a.nota || '').trim() || undefined,
+            nombreArchivo: getNombreArchivo(a.archivo),
+          });
+        });
+      } else if (item.archivo && item.archivo !== '' && item.archivo !== 'sin_arte') {
+        // Fallback al comportamiento anterior si no hay artes_detalle.
+        images.push({
+          id: item.id || idx,
+          archivo: item.archivo,
+          archivoData: undefined,
+          spot: idx + 1,
+          tipo: isVideo(item.archivo) ? 'video' : 'image',
+          estado: (item as any).estatus_arte || '',
+          codigoUnico: item.codigo_unico,
+          nombreArchivo: getNombreArchivo(item.archivo),
+        });
+      }
+    });
+
     setArtGalleryImages(images);
     setIsArtGalleryOpen(true);
   }, []);
@@ -3637,22 +3705,40 @@ export function CampanasPage() {
                                                     {/* Mini galería de artes del grupo (deduplicada por URL del arte).
                                                         Si N ubicaciones comparten el mismo archivo, solo se muestra UNA
                                                         miniatura con un badge "×N" para no inundar la UI con copias
-                                                        identicas (ej. campanas con 100 ubicaciones y un mismo arte). */}
+                                                        identicas (ej. campanas con 100 ubicaciones y un mismo arte).
+                                                        Si una reserva tiene varios artes (artes_detalle con spot 1, 2, ...),
+                                                        cada uno aparece como miniatura independiente. */}
                                                     {(() => {
-                                                      const itemsConArte = grupo.items.filter(i => i.archivo != null && i.archivo !== '');
+                                                      const itemsConArte = grupo.items.filter(i => {
+                                                        if (i.archivo != null && i.archivo !== '') return true;
+                                                        const raw = (i as any).artes_detalle;
+                                                        return typeof raw === 'string' && raw.length > 2;
+                                                      });
                                                       if (itemsConArte.length === 0) return null;
                                                       const grupoLabel = [
                                                         (grupo.items[0] as any)?.formato,
                                                         grupo.items[0]?.plaza,
                                                         grupo.items[0]?.articulo,
                                                       ].filter(Boolean).join(' · ') || grupo.key;
-                                                      // Agrupar items por URL del archivo
+                                                      // Expandir cada item en sus artes (uno por spot) y agrupar por URL.
                                                       const porArchivo = new Map<string, typeof itemsConArte>();
                                                       for (const inv of itemsConArte) {
-                                                        const url = inv.archivo as string;
-                                                        const arr = porArchivo.get(url) || [];
-                                                        arr.push(inv);
-                                                        porArchivo.set(url, arr);
+                                                        const urls = new Set<string>();
+                                                        const raw = (inv as any).artes_detalle as string | null | undefined;
+                                                        if (raw) {
+                                                          try {
+                                                            const parsed = JSON.parse(raw);
+                                                            if (Array.isArray(parsed)) {
+                                                              parsed.forEach((a: any) => { if (a?.archivo) urls.add(String(a.archivo)); });
+                                                            }
+                                                          } catch { /* ignore */ }
+                                                        }
+                                                        if (urls.size === 0 && inv.archivo) urls.add(String(inv.archivo));
+                                                        for (const url of urls) {
+                                                          const arr = porArchivo.get(url) || [];
+                                                          arr.push(inv);
+                                                          porArchivo.set(url, arr);
+                                                        }
                                                       }
                                                       const artesUnicos = Array.from(porArchivo.entries()).map(([url, items]) => ({ url, items, count: items.length }));
                                                       return (
