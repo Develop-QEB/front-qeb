@@ -2703,6 +2703,8 @@ function FilterToolbar({
   const groupBtnRef = useRef<HTMLButtonElement>(null);
   const sortBtnRef = useRef<HTMLButtonElement>(null);
   const [dropdownPos, setDropdownPos] = useState<{ top: number; right: number } | null>(null);
+  // Combobox state: id del filtro cuyo dropdown de valores esta abierto.
+  const [valueComboboxOpen, setValueComboboxOpen] = useState<string | null>(null);
 
   // Función para cerrar un dropdown específico al hacer clic fuera
   const closeOtherDropdowns = (keep: 'filters' | 'grouping' | 'sort') => {
@@ -2774,10 +2776,43 @@ function FilterToolbar({
                   <select value={filter.operator} onChange={(e) => updateFilter(filter.id, { operator: e.target.value as FilterOperator })} className="w-[90px] text-xs bg-background border border-border rounded px-2 py-1.5">
                     {FILTER_OPERATORS.filter(op => { const fc = filterFields.find(f => f.field === filter.field); return fc && op.forTypes.includes(fc.type); }).map((op) => <option key={op.value} value={op.value}>{op.label}</option>)}
                   </select>
-                  <select value={filter.value} onChange={(e) => updateFilter(filter.id, { value: e.target.value })} className="flex-1 text-xs bg-background border border-border rounded px-2 py-1.5">
-                    <option value="">Seleccionar...</option>
-                    {uniqueValues[filter.field]?.map((val) => <option key={val} value={val}>{val}</option>)}
-                  </select>
+                  {/* Combobox: input libre + dropdown de opciones que matchean.
+                      Permite escribir texto cualquiera (no esta restringido al listado).
+                      Pattern identico al de filtros avanzados de Campañas/Solicitudes. */}
+                  <div className="flex-1 relative">
+                    <input
+                      type="text"
+                      value={filter.value}
+                      onChange={(e) => updateFilter(filter.id, { value: e.target.value })}
+                      onFocus={() => setValueComboboxOpen(filter.id)}
+                      onBlur={() => setTimeout(() => setValueComboboxOpen(null), 200)}
+                      placeholder="Escribe o elige una opción..."
+                      className="w-full text-xs bg-background border border-border rounded px-2 py-1.5 placeholder:text-muted-foreground"
+                    />
+                    {valueComboboxOpen === filter.id && (() => {
+                      const allOptions = uniqueValues[filter.field] || [];
+                      const q = (filter.value || '').toLowerCase();
+                      const filtered = q
+                        ? allOptions.filter(val => val.toLowerCase().includes(q))
+                        : allOptions;
+                      if (filtered.length === 0) return null;
+                      return (
+                        <div className={`absolute left-0 top-full mt-1 w-full max-h-[200px] overflow-y-auto z-[300] rounded border shadow-xl ${isDark ? 'bg-zinc-800 border-zinc-600' : 'bg-white border-gray-200'}`}>
+                          {filtered.slice(0, 50).map((val) => (
+                            <button
+                              key={val}
+                              type="button"
+                              onMouseDown={(e) => e.preventDefault()}
+                              onClick={() => { updateFilter(filter.id, { value: val }); setValueComboboxOpen(null); }}
+                              className={`w-full text-left px-2 py-1.5 text-xs cursor-pointer transition-colors ${isDark ? 'text-white hover:bg-purple-600/40' : 'text-gray-900 hover:bg-purple-50'} ${filter.value === val ? (isDark ? 'bg-purple-600/30 font-medium' : 'bg-purple-100 font-medium') : ''}`}
+                            >
+                              {val}
+                            </button>
+                          ))}
+                        </div>
+                      );
+                    })()}
+                  </div>
                   <button onClick={() => removeFilter(filter.id)} className="text-red-400 hover:text-red-300 p-0.5"><Trash2 className="h-3 w-3" /></button>
                 </div>
               ))}
