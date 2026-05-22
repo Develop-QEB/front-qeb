@@ -365,8 +365,9 @@ const mapItemToEstatus = (item: any): string => {
 };
 
 // APS Global - ID QEB: del campo APS de cada inventario (no del id de campana).
-// Si todos los inventarios de la plaza tienen el mismo APS lo devuelve numerico,
-// si difieren devuelve "Varios", si no hay devuelve ''.
+// Si todos los inventarios de la plaza tienen el mismo APS lo devuelve numerico.
+// Si tienen varios, los devuelve separados por coma (ej: "81330, 81335, 81340").
+// Vacio si no hay APS asignado.
 const computeApsDisplay = (arr: any[]): number | string => {
   const apsList = arr.map(it => String(it.APS ?? '')).filter(v => v !== '' && v !== 'null');
   const set = new Set(apsList);
@@ -375,7 +376,8 @@ const computeApsDisplay = (arr: any[]): number | string => {
     const n = Number([...set][0]);
     return Number.isFinite(n) ? n : [...set][0];
   }
-  return 'Varios';
+  // Varios → lista ordenada y separada por coma
+  return [...set].sort((a, b) => Number(a) - Number(b)).join(', ');
 };
 
 
