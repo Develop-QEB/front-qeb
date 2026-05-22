@@ -2401,7 +2401,7 @@ export function CampanaDetailPage() {
             <div className="space-y-0">
               <InfoItem label="Asignado" value={campana.asignado} type="user" />
               <InfoItem label="Contacto" value={(campana as any).creador_nombre || campana.contacto} type="user" />
-              <InfoItem label="APS Global" value={campana.solicitud_id ? `#${campana.solicitud_id}` : null} type="id" />
+              <InfoItem label="APS Global" value={campana.id ? `#${campana.id}` : null} type="id" />
               <InfoItem label="Actualizado" value={campana.updated_at} type="date" />
             </div>
 

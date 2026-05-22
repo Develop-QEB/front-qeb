@@ -901,7 +901,7 @@ const CampanaRow = React.memo(function CampanaRow({
     <tr key={`campana-${item.id}-${index}`} className={`border-b ${isDark ? 'border-zinc-800/50 hover:bg-zinc-800/30' : 'border-gray-200 hover:bg-gray-50'} transition-colors`}>
       {/* ID */}
       <td className="px-4 py-3">
-        <span className={`font-mono text-xs px-2 py-1 rounded-md ${isDark ? 'bg-purple-500/10 text-purple-300' : 'bg-purple-50 text-purple-700'}`}>#{item.propuesta_id || item.id}</span>
+        <span className={`font-mono text-xs px-2 py-1 rounded-md ${isDark ? 'bg-purple-500/10 text-purple-300' : 'bg-purple-50 text-purple-700'}`}>#{item.id}</span>
       </td>
       {/* Periodo */}
       <td className="px-4 py-3">
@@ -3585,7 +3585,10 @@ export function CampanasPage() {
                                                 </div>
                                                 {isGrupoExpanded && (
                                                   <div className="pl-5 py-1 space-y-0.5">
-                                                    {/* Mini galería de artes del grupo */}
+                                                    {/* Mini galería de artes del grupo (deduplicada por URL del arte).
+                                                        Si N ubicaciones comparten el mismo archivo, solo se muestra UNA
+                                                        miniatura con un badge "×N" para no inundar la UI con copias
+                                                        identicas (ej. campanas con 100 ubicaciones y un mismo arte). */}
                                                     {(() => {
                                                       const itemsConArte = grupo.items.filter(i => i.archivo != null && i.archivo !== '');
                                                       if (itemsConArte.length === 0) return null;
@@ -3594,28 +3597,48 @@ export function CampanasPage() {
                                                         grupo.items[0]?.plaza,
                                                         grupo.items[0]?.articulo,
                                                       ].filter(Boolean).join(' · ') || grupo.key;
+                                                      // Agrupar items por URL del archivo
+                                                      const porArchivo = new Map<string, typeof itemsConArte>();
+                                                      for (const inv of itemsConArte) {
+                                                        const url = inv.archivo as string;
+                                                        const arr = porArchivo.get(url) || [];
+                                                        arr.push(inv);
+                                                        porArchivo.set(url, arr);
+                                                      }
+                                                      const artesUnicos = Array.from(porArchivo.entries()).map(([url, items]) => ({ url, items, count: items.length }));
                                                       return (
                                                         <div className={`flex items-center gap-2 overflow-x-auto py-2 px-1 mb-2 ${isDark ? 'bg-zinc-900/40' : 'bg-gray-50'} rounded`}>
-                                                          {itemsConArte.map(inv => (
-                                                            <button
-                                                              key={`thumb-${inv.id}`}
-                                                              type="button"
-                                                              onClick={(e) => {
-                                                                e.stopPropagation();
-                                                                openArtGallery(campana.id, itemsConArte, `Galería de Artes - ${grupoLabel}`);
-                                                              }}
-                                                              className={`flex-shrink-0 relative rounded overflow-hidden border transition-all hover:scale-105 ${isDark ? 'border-zinc-700 hover:border-purple-500' : 'border-gray-300 hover:border-purple-500'}`}
-                                                              title={`${inv.codigo_unico || ''}${inv.plaza ? ` · ${inv.plaza}` : ''}`}
-                                                            >
-                                                              <img
-                                                                src={inv.archivo as string}
-                                                                alt={inv.codigo_unico || 'arte'}
-                                                                className="h-20 w-28 object-cover"
-                                                                loading="lazy"
-                                                                onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }}
-                                                              />
-                                                            </button>
-                                                          ))}
+                                                          {artesUnicos.map(({ url, items, count }) => {
+                                                            const first = items[0];
+                                                            const tip = count > 1
+                                                              ? `${count} ubicaciones con este arte`
+                                                              : `${first.codigo_unico || ''}${first.plaza ? ` · ${first.plaza}` : ''}`;
+                                                            return (
+                                                              <button
+                                                                key={`thumb-${url}`}
+                                                                type="button"
+                                                                onClick={(e) => {
+                                                                  e.stopPropagation();
+                                                                  openArtGallery(campana.id, itemsConArte, `Galería de Artes - ${grupoLabel}`);
+                                                                }}
+                                                                className={`flex-shrink-0 relative rounded overflow-hidden border transition-all hover:scale-105 ${isDark ? 'border-zinc-700 hover:border-purple-500' : 'border-gray-300 hover:border-purple-500'}`}
+                                                                title={tip}
+                                                              >
+                                                                <img
+                                                                  src={url}
+                                                                  alt={first.codigo_unico || 'arte'}
+                                                                  className="h-20 w-28 object-cover"
+                                                                  loading="lazy"
+                                                                  onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }}
+                                                                />
+                                                                {count > 1 && (
+                                                                  <span className="absolute top-1 right-1 px-1.5 py-0.5 rounded-md text-[10px] font-bold bg-purple-600/90 text-white shadow">
+                                                                    ×{count}
+                                                                  </span>
+                                                                )}
+                                                              </button>
+                                                            );
+                                                          })}
                                                         </div>
                                                       );
                                                     })()}

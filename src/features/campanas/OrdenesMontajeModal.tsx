@@ -1230,7 +1230,7 @@ export function OrdenesMontajeModal({ isOpen, onClose, canExport = true }: Orden
         'Plaza': item.plaza || '',
         'Tipo': item.tipo || '',
         'Asesor Comercial': item.asesor || '',
-        'APS Global': item.aps_global || item.campania_id || '',
+        'APS Global': item.campania_id || item.aps_global || '',
         'APS Específico': item.aps_especifico || '',
         'CUIC': item.cuic || '',
         'Fecha Inicio Periodo': formatDateCSV(item.fecha_inicio_periodo),
@@ -1256,7 +1256,7 @@ export function OrdenesMontajeModal({ isOpen, onClose, canExport = true }: Orden
         'Plaza': item.plaza || '',
         'Tipo': item.tipo || '',
         'Asesor': item.asesor || '',
-        'APS Global': item.aps_global || item.campania_id || '',
+        'APS Global': item.campania_id || item.aps_global || '',
         'APS Específico': item.aps_especifico || '',
         'Fecha Inicio': item.fecha_inicio_periodo ? formatDate(item.fecha_inicio_periodo) : '',
         'Fecha Fin': item.fecha_fin_periodo ? formatDate(item.fecha_fin_periodo) : '',
@@ -1282,7 +1282,7 @@ export function OrdenesMontajeModal({ isOpen, onClose, canExport = true }: Orden
         'Plaza': item.plaza || '',
         'Tipo': item.tipo || '',
         'Asesor Comercial': item.asesor || '',
-        'APS Global': item.aps_global || item.campania_id || '',
+        'APS Global': item.campania_id || item.aps_global || '',
         'APS Específico': item.aps_especifico || '',
         'CUIC': item.cuic || '',
         'Fecha Inicio': item.fecha_inicio_periodo ? new Date(item.fecha_inicio_periodo).toLocaleDateString() : '',
@@ -2456,7 +2456,7 @@ const CATRow = React.memo(function CATRow({ item, isDark, showApsEspecifico = fa
           <span className={`text-xs ${isDark ? 'text-zinc-500' : 'text-gray-400'}`}>-</span>
         )}
       </td>
-      <td className="px-3 py-2 text-xs text-fuchsia-300 font-mono">{(showApsEspecifico ? item.aps_global : item.campania_id) || '-'}</td>
+      <td className="px-3 py-2 text-xs text-fuchsia-300 font-mono">{item.campania_id || item.aps_global || '-'}</td>
       {showApsEspecifico && (
         <td className="px-3 py-2 text-xs text-fuchsia-200 font-mono">{item.aps_especifico ?? '-'}</td>
       )}
