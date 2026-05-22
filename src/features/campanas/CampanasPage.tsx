@@ -1185,6 +1185,8 @@ export function CampanasPage() {
   const [exportingLayout, setExportingLayout] = useState(false);
   const [exportingVersionarioArtes, setExportingVersionarioArtes] = useState(false);
   const [versionarioArtesProgress, setVersionarioArtesProgress] = useState({ current: 0, total: 0 });
+  // Flag para cancelar la carga si el usuario cierra el modal en medio.
+  const versionarioCancelledRef = useRef(false);
   // Preview del Versionario Artes (modal con tabla paginada antes de descargar)
   const [versionarioPreviewOpen, setVersionarioPreviewOpen] = useState(false);
   const [versionarioPreview, setVersionarioPreview] = useState<VersionarioArtesPreview | null>(null);
@@ -2433,6 +2435,7 @@ export function CampanasPage() {
     // Abrir el modal preview de inmediato con loader; la data se carga en bg.
     // (Antes habia un window.confirm si eran >30 campañas — quitado: el progreso
     // se ve dentro del modal y el usuario puede cerrarlo si se arrepiente.)
+    versionarioCancelledRef.current = false;
     setVersionarioRawData(null);
     setVersionarioPreview(null);
     setVersionarioPreviewOpen(true);
@@ -2509,11 +2512,16 @@ export function CampanasPage() {
         }
       };
 
-      // Procesar en batches de POOL_SIZE
+      // Procesar en batches de POOL_SIZE. Si el usuario cierra el modal,
+      // versionarioCancelledRef.current === true y abortamos el loop.
       for (let i = 0; i < campanasUnicas.length; i += POOL_SIZE) {
+        if (versionarioCancelledRef.current) break;
         const batch = campanasUnicas.slice(i, i + POOL_SIZE);
         await Promise.all(batch.map(procesarCampana));
       }
+
+      // Si fue cancelado, no abrimos preview ni mostramos error.
+      if (versionarioCancelledRef.current) return;
 
       if (resultados.length === 0) {
         alert('No se pudo recuperar inventario de las campañas seleccionadas.');
@@ -2525,7 +2533,8 @@ export function CampanasPage() {
       const preview = buildVersionarioArtesPreview({ campanas: resultados });
       setVersionarioRawData(resultados);
       setVersionarioPreview(preview);
-      setVersionarioPreviewOpen(true);
+      // Si el usuario lo cerro mientras procesabamos los ultimos, no lo reabrimos.
+      if (!versionarioCancelledRef.current) setVersionarioPreviewOpen(true);
     } finally {
       setExportingVersionarioArtes(false);
       setVersionarioArtesProgress({ current: 0, total: 0 });
@@ -4049,7 +4058,13 @@ export function CampanasPage() {
       {versionarioPreviewOpen && (
         <VersionarioArtesPreviewModal
           isOpen={versionarioPreviewOpen}
-          onClose={() => setVersionarioPreviewOpen(false)}
+          onClose={() => {
+            // Cancela la carga en background si aun corre, y limpia estado.
+            versionarioCancelledRef.current = true;
+            setVersionarioPreviewOpen(false);
+            setExportingVersionarioArtes(false);
+            setVersionarioArtesProgress({ current: 0, total: 0 });
+          }}
           preview={versionarioPreview}
           isLoading={exportingVersionarioArtes}
           isDownloading={versionarioDownloading}
