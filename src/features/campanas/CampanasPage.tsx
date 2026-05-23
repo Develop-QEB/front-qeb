@@ -1,4 +1,5 @@
 import React, { useState, useMemo, useEffect, useCallback, useRef } from 'react';
+import { flushSync } from 'react-dom';
 import { useQuery } from '@tanstack/react-query';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import {
@@ -20,6 +21,9 @@ type ViewType = 'tabla' | 'catorcena';
 import { formatDate, formatCurrency } from '../../lib/utils';
 import { AssignInventarioCampanaModal } from './AssignInventarioCampanaModal';
 import { OrdenesMontajeModal } from './OrdenesMontajeModal';
+import { VersionarioArtesPreviewModal } from './VersionarioArtesPreviewModal';
+import { buildVersionarioArtesPreview } from '../../utils/exportVersionarioArtes';
+import type { VersionarioArtesPreview, VersionarioArtesMultiArgs } from '../../utils/exportVersionarioArtes';
 import { StatusCampanaModal } from './StatusCampanaModal';
 import { useAuthStore } from '../../store/authStore';
 import { useThemeStore } from '../../store/themeStore';
@@ -61,6 +65,8 @@ interface ImagenDigitalView {
   tipo: 'image' | 'video';
   estado: string;
   codigoUnico?: string;
+  nota?: string;
+  nombreArchivo?: string;
 }
 
 // Colors for dynamic tags
@@ -817,9 +823,27 @@ function ArtGalleryModal({
 
                 {/* Position indicator */}
                 <div className="absolute top-2 right-2 px-2 py-1 bg-black/60 rounded text-xs text-white">
-                  {currentIndex + 1} de {imagenes.length}
+                  Spot {currentImage?.spot ?? currentIndex + 1} · {currentIndex + 1} de {imagenes.length}
                 </div>
               </div>
+
+              {/* Metadatos del arte actual: nombre de archivo + nota */}
+              {currentImage && (currentImage.nombreArchivo || currentImage.nota) && (
+                <div className={`mt-3 px-3 py-2 rounded-lg border ${isDark ? 'bg-zinc-800/60 border-zinc-700' : 'bg-gray-50 border-gray-200'} space-y-1`}>
+                  {currentImage.nombreArchivo && (
+                    <div className={`text-xs ${isDark ? 'text-zinc-400' : 'text-gray-500'}`}>
+                      <span className={`font-medium ${isDark ? 'text-zinc-300' : 'text-gray-700'}`}>Archivo:</span>{' '}
+                      <span className="break-all">{currentImage.nombreArchivo}</span>
+                    </div>
+                  )}
+                  {currentImage.nota && (
+                    <div className={`text-xs ${isDark ? 'text-zinc-400' : 'text-gray-500'}`}>
+                      <span className={`font-medium ${isDark ? 'text-zinc-300' : 'text-gray-700'}`}>Nota:</span>{' '}
+                      <span className="whitespace-pre-wrap">{currentImage.nota}</span>
+                    </div>
+                  )}
+                </div>
+              )}
 
               {/* Thumbnails */}
               {imagenes.length > 1 && (
@@ -1162,6 +1186,14 @@ export function CampanasPage() {
   const [exportingLayout, setExportingLayout] = useState(false);
   const [exportingVersionarioArtes, setExportingVersionarioArtes] = useState(false);
   const [versionarioArtesProgress, setVersionarioArtesProgress] = useState({ current: 0, total: 0 });
+  // Flag para cancelar la carga si el usuario cierra el modal en medio.
+  const versionarioCancelledRef = useRef(false);
+  // Preview del Versionario Artes (modal con tabla paginada antes de descargar)
+  const [versionarioPreviewOpen, setVersionarioPreviewOpen] = useState(false);
+  const [versionarioPreview, setVersionarioPreview] = useState<VersionarioArtesPreview | null>(null);
+  // Datos crudos en cache para que "Descargar Excel" no vuelva a fetchear
+  const [versionarioRawData, setVersionarioRawData] = useState<VersionarioArtesMultiArgs['campanas'] | null>(null);
+  const [versionarioDownloading, setVersionarioDownloading] = useState(false);
   // Inversión (costo) por catorcena para la vista Versionario: { campanaId: { "numCat:anio": inversion } }
   const [inversionPorCatorcena, setInversionPorCatorcena] = useState<Record<number, Record<string, number>>>({});
 
@@ -1967,18 +1999,66 @@ export function CampanasPage() {
   // Handler para abrir galería de artes en versionario
   const openArtGallery = useCallback((_campanaId: number, items: InventarioConAPS[], title: string) => {
     setArtGalleryTitle(title);
-    // Construir galería directamente desde el campo archivo de cada item
-    const images: ImagenDigitalView[] = items
-      .filter(item => item.archivo != null && item.archivo !== '' && item.archivo !== 'sin_arte')
-      .map((item, idx) => ({
-        id: item.id || idx,
-        archivo: item.archivo!,
-        archivoData: undefined,
-        spot: idx + 1,
-        tipo: item.archivo!.match(/\.(mp4|mov|avi|webm|mkv|wmv)$/i) ? 'video' as const : 'image' as const,
-        estado: (item as any).estatus_arte || '',
-        codigoUnico: item.codigo_unico,
-      }));
+
+    const getNombreArchivo = (url: string): string => {
+      try {
+        const last = url.split('/').pop() || url;
+        // El backend prefija con timestamp+random (ej. "1779417112969-18ry9vbs-Chanel_Botella.png").
+        // Quitar el prefijo "timestamp-randomhash-" si está presente para mostrar nombre legible.
+        const cleaned = last.replace(/^\d{10,}-[a-z0-9]+-/i, '');
+        return decodeURIComponent(cleaned);
+      } catch {
+        return url;
+      }
+    };
+
+    const isVideo = (u: string) => /\.(mp4|mov|avi|webm|mkv|wmv)$/i.test(u);
+
+    // Construir galería: si el item trae artes_detalle (JSON con varios spots),
+    // generamos una entrada por arte; si no, hacemos fallback al campo archivo único.
+    const images: ImagenDigitalView[] = [];
+    items.forEach((item, idx) => {
+      let detalle: Array<{ archivo: string; nota?: string; spot?: number }> | null = null;
+      const raw = (item as any).artes_detalle as string | null | undefined;
+      if (raw) {
+        try {
+          const parsed = JSON.parse(raw);
+          if (Array.isArray(parsed)) detalle = parsed;
+        } catch { /* JSON inválido, caer al fallback */ }
+      }
+
+      if (detalle && detalle.length > 0) {
+        // Ordenar por spot ascendente para que aparezcan Spot 1, Spot 2, ...
+        detalle.sort((a, b) => (Number(a.spot) || 0) - (Number(b.spot) || 0));
+        detalle.forEach((a, i) => {
+          if (!a.archivo) return;
+          images.push({
+            id: (item.id || idx) * 100 + i,
+            archivo: a.archivo,
+            archivoData: undefined,
+            spot: Number(a.spot) || i + 1,
+            tipo: isVideo(a.archivo) ? 'video' : 'image',
+            estado: (item as any).estatus_arte || '',
+            codigoUnico: item.codigo_unico,
+            nota: (a.nota || '').trim() || undefined,
+            nombreArchivo: getNombreArchivo(a.archivo),
+          });
+        });
+      } else if (item.archivo && item.archivo !== '' && item.archivo !== 'sin_arte') {
+        // Fallback al comportamiento anterior si no hay artes_detalle.
+        images.push({
+          id: item.id || idx,
+          archivo: item.archivo,
+          archivoData: undefined,
+          spot: idx + 1,
+          tipo: isVideo(item.archivo) ? 'video' : 'image',
+          estado: (item as any).estatus_arte || '',
+          codigoUnico: item.codigo_unico,
+          nombreArchivo: getNombreArchivo(item.archivo),
+        });
+      }
+    });
+
     setArtGalleryImages(images);
     setIsArtGalleryOpen(true);
   }, []);
@@ -2353,18 +2433,47 @@ export function CampanasPage() {
     const campanasUnicas = [...campanasMap.values()];
     if (campanasUnicas.length === 0) return;
 
-    if (campanasUnicas.length > 30) {
-      const ok = window.confirm(
-        `Vas a exportar ${campanasUnicas.length} campañas. Puede tardar varios segundos. ¿Continuar?`
-      );
-      if (!ok) return;
+    // Rangos de fecha de las catorcenas actualmente filtradas (lo que el
+    // usuario ve en la vista Versionario). Si el usuario filtro a Cat 15,
+    // solo dejamos circuitos cuyo inicio_periodo cae en Cat 15. Sin filtro
+    // → todos los circuitos pasan.
+    const activeCatRanges: Array<{ inicio: string; fin: string }> = [];
+    const seenCat = new Set<string>();
+    for (const g of campanasPorCatorcena) {
+      const cat = g.catorcena as { num: number; anio: number };
+      const key = `${cat.num}-${cat.anio}`;
+      if (seenCat.has(key)) continue;
+      seenCat.add(key);
+      const c = catorcenasData?.data.find(x => x.numero_catorcena === cat.num && x.a_o === cat.anio);
+      if (c?.fecha_inicio && c?.fecha_fin) {
+        activeCatRanges.push({ inicio: c.fecha_inicio, fin: c.fecha_fin });
+      }
     }
+    const itemDentroDeRango = (item: any): boolean => {
+      if (activeCatRanges.length === 0) return true; // sin filtro
+      const inicio = String(item.inicio_periodo || '').slice(0, 10);
+      const fin = String(item.fin_periodo || inicio || '').slice(0, 10);
+      if (!inicio) return false;
+      return activeCatRanges.some(r =>
+        inicio <= String(r.fin).slice(0, 10) && fin >= String(r.inicio).slice(0, 10)
+      );
+    };
+
+    // Abrir el modal preview de inmediato con loader; la data se carga en bg.
+    // (Antes habia un window.confirm si eran >30 campañas — quitado: el progreso
+    // se ve dentro del modal y el usuario puede cerrarlo si se arrepiente.)
+    versionarioCancelledRef.current = false;
+    setVersionarioRawData(null);
+    setVersionarioPreview(null);
+    setVersionarioPreviewOpen(true);
 
     setExportingVersionarioArtes(true);
     setVersionarioArtesProgress({ current: 0, total: campanasUnicas.length });
 
     try {
-      const POOL_SIZE = 5;
+      // POOL_SIZE alto: cada campaña SOLO hace 2 calls (con/sin arte) en preview,
+      // asi que podemos paralelizar mas sin saturar el server.
+      const POOL_SIZE = 15;
       const resultados: Array<{
         campana: Campana;
         items: any[];
@@ -2372,30 +2481,92 @@ export function CampanasPage() {
         notesByUrl: Map<string, string>;
       }> = [];
 
-      // Pool con concurrencia limitada
+      // Modo "lightweight" para el preview: solo inventarios, sin notas ni
+      // urls de artes digitales (esos requieren 1 call por reserva — muy
+      // lento). Se completan al darle "Descargar Excel".
       const procesarCampana = async (campana: Campana) => {
         try {
           const [conArte, sinArte] = await Promise.all([
             campanasService.getInventarioConArte(campana.id).catch(() => []),
-            campanasService.getInventarioSinArte(campana.id).catch(() => []),
+            // includeWithoutAps: true → tambien trae items sin APS asignado.
+            // SOLO afecta esta llamada del versionario; otros callers siguen
+            // pidiendo el endpoint sin flag (excluyendo sin-APS como antes).
+            campanasService.getInventarioSinArte(campana.id, { includeWithoutAps: true }).catch(() => []),
           ]);
-          const items = [...(conArte || []), ...(sinArte || [])];
+          const allItems = [...(conArte || []), ...(sinArte || [])];
+          // Filtrar circuitos por catorcena activa (lo que el usuario filtro
+          // en la vista Versionario). Si no hay filtro, pasan todos.
+          const items = allItems.filter(it => itemDentroDeRango(it));
+          resultados.push({
+            campana,
+            items,
+            digitalFilesByReserva: new Map(),  // se llenara al descargar
+            notesByUrl: new Map(),              // se llenara al descargar
+          });
+        } catch {
+          // Si falla la campaña entera, la dejamos fuera para no bloquear el export.
+        } finally {
+          setVersionarioArtesProgress(prev => ({ ...prev, current: prev.current + 1 }));
+        }
+      };
 
+      // Procesar en batches de POOL_SIZE. Si el usuario cierra el modal,
+      // versionarioCancelledRef.current === true y abortamos el loop.
+      for (let i = 0; i < campanasUnicas.length; i += POOL_SIZE) {
+        if (versionarioCancelledRef.current) break;
+        const batch = campanasUnicas.slice(i, i + POOL_SIZE);
+        await Promise.all(batch.map(procesarCampana));
+      }
+
+      // Si fue cancelado, no abrimos preview ni mostramos error.
+      if (versionarioCancelledRef.current) return;
+
+      if (resultados.length === 0) {
+        alert('No se pudo recuperar inventario de las campañas seleccionadas.');
+        return;
+      }
+
+      // En vez de exportar directo, abrimos el modal preview con las filas armadas.
+      // El usuario revisa, filtra y desde ahi pulsa "Descargar Excel".
+      const preview = buildVersionarioArtesPreview({ campanas: resultados });
+      setVersionarioRawData(resultados);
+      setVersionarioPreview(preview);
+      // Si el usuario lo cerro mientras procesabamos los ultimos, no lo reabrimos.
+      if (!versionarioCancelledRef.current) setVersionarioPreviewOpen(true);
+    } finally {
+      setExportingVersionarioArtes(false);
+      setVersionarioArtesProgress({ current: 0, total: 0 });
+    }
+  };
+
+  // Disparado desde el modal preview cuando el usuario confirma descarga.
+  // El preview es "lightweight" (sin notas ni urls digitales). Aqui completamos
+  // el fetch faltante en paralelo antes de generar el Excel.
+  const handleDownloadVersionarioFromPreview = async () => {
+    if (!versionarioRawData || versionarioRawData.length === 0) return;
+    // Guard: si ya estamos descargando, ignorar clicks subsecuentes.
+    if (versionarioDownloading) return;
+    // flushSync para que el boton cambie a "Generando..." al instante
+    // (sin esto el render se aplaza hasta que se complete el primer batch).
+    flushSync(() => setVersionarioDownloading(true));
+    try {
+      // Completar notas + archivos digitales en pool de 15 campañas paralelas.
+      const POOL = 15;
+      const enriquecidas: typeof versionarioRawData = [];
+      for (let i = 0; i < versionarioRawData.length; i += POOL) {
+        const batch = versionarioRawData.slice(i, i + POOL);
+        const completed = await Promise.all(batch.map(async (entry) => {
+          const { campana, items } = entry;
           const allRsvIds = new Set<number>();
           for (const it of items) {
             String((it as any).rsv_id || (it as any).rsv_ids || '')
-              .split(',')
-              .map(s => parseInt(s.trim()))
-              .filter(n => !isNaN(n))
+              .split(',').map(s => parseInt(s.trim())).filter(n => !isNaN(n))
               .forEach(n => allRsvIds.add(n));
           }
-
-          // Saltar fetch de digitales si no hay items que parezcan digitales.
-          const tieneDigitales = items.some(it => {
-            const t = String((it as any).tipo_medio || (it as any).tradicional_digital || '').toLowerCase();
+          const tieneDigitales = items.some((it: any) => {
+            const t = String(it.tipo_medio || it.tradicional_digital || '').toLowerCase();
             return t.includes('digital');
           });
-
           const digitalFilesByReserva = new Map<number, string[]>();
           const notesByUrl = new Map<string, string>();
           if (tieneDigitales) {
@@ -2412,8 +2583,6 @@ export function CampanasPage() {
               } catch { /* ignore */ }
             }));
           }
-
-          // Notas de artes tradicionales (la URL guardada coincide con `archivo` que viene en `artes_multiples`).
           await Promise.all([...allRsvIds].map(async (rsvId) => {
             try {
               const artes = await campanasService.getArtesTradicionales(campana.id, rsvId);
@@ -2421,35 +2590,18 @@ export function CampanasPage() {
                 const nota = ((a as any).nota || '').trim();
                 if ((a as any).archivo && nota) notesByUrl.set((a as any).archivo, nota);
               }
-            } catch { /* ignore reservas sin artes tradicionales */ }
+            } catch { /* ignore */ }
           }));
-
-          resultados.push({ campana, items, digitalFilesByReserva, notesByUrl });
-        } catch {
-          // Si falla la campaña entera, la dejamos fuera para no bloquear el export.
-        } finally {
-          setVersionarioArtesProgress(prev => ({ ...prev, current: prev.current + 1 }));
-        }
-      };
-
-      // Procesar en batches de POOL_SIZE
-      for (let i = 0; i < campanasUnicas.length; i += POOL_SIZE) {
-        const batch = campanasUnicas.slice(i, i + POOL_SIZE);
-        await Promise.all(batch.map(procesarCampana));
+          return { campana, items, digitalFilesByReserva, notesByUrl };
+        }));
+        enriquecidas.push(...completed);
       }
-
-      if (resultados.length === 0) {
-        alert('No se pudo recuperar inventario de las campañas seleccionadas.');
-        return;
-      }
-
       await exportVersionarioArtesMulti({
-        campanas: resultados,
-        fileNameSuffix: `${resultados.length}_campanas`,
+        campanas: enriquecidas,
+        fileNameSuffix: `${enriquecidas.length}_campanas`,
       });
     } finally {
-      setExportingVersionarioArtes(false);
-      setVersionarioArtesProgress({ current: 0, total: 0 });
+      setVersionarioDownloading(false);
     }
   };
 
@@ -3637,22 +3789,40 @@ export function CampanasPage() {
                                                     {/* Mini galería de artes del grupo (deduplicada por URL del arte).
                                                         Si N ubicaciones comparten el mismo archivo, solo se muestra UNA
                                                         miniatura con un badge "×N" para no inundar la UI con copias
-                                                        identicas (ej. campanas con 100 ubicaciones y un mismo arte). */}
+                                                        identicas (ej. campanas con 100 ubicaciones y un mismo arte).
+                                                        Si una reserva tiene varios artes (artes_detalle con spot 1, 2, ...),
+                                                        cada uno aparece como miniatura independiente. */}
                                                     {(() => {
-                                                      const itemsConArte = grupo.items.filter(i => i.archivo != null && i.archivo !== '');
+                                                      const itemsConArte = grupo.items.filter(i => {
+                                                        if (i.archivo != null && i.archivo !== '') return true;
+                                                        const raw = (i as any).artes_detalle;
+                                                        return typeof raw === 'string' && raw.length > 2;
+                                                      });
                                                       if (itemsConArte.length === 0) return null;
                                                       const grupoLabel = [
                                                         (grupo.items[0] as any)?.formato,
                                                         grupo.items[0]?.plaza,
                                                         grupo.items[0]?.articulo,
                                                       ].filter(Boolean).join(' · ') || grupo.key;
-                                                      // Agrupar items por URL del archivo
+                                                      // Expandir cada item en sus artes (uno por spot) y agrupar por URL.
                                                       const porArchivo = new Map<string, typeof itemsConArte>();
                                                       for (const inv of itemsConArte) {
-                                                        const url = inv.archivo as string;
-                                                        const arr = porArchivo.get(url) || [];
-                                                        arr.push(inv);
-                                                        porArchivo.set(url, arr);
+                                                        const urls = new Set<string>();
+                                                        const raw = (inv as any).artes_detalle as string | null | undefined;
+                                                        if (raw) {
+                                                          try {
+                                                            const parsed = JSON.parse(raw);
+                                                            if (Array.isArray(parsed)) {
+                                                              parsed.forEach((a: any) => { if (a?.archivo) urls.add(String(a.archivo)); });
+                                                            }
+                                                          } catch { /* ignore */ }
+                                                        }
+                                                        if (urls.size === 0 && inv.archivo) urls.add(String(inv.archivo));
+                                                        for (const url of urls) {
+                                                          const arr = porArchivo.get(url) || [];
+                                                          arr.push(inv);
+                                                          porArchivo.set(url, arr);
+                                                        }
                                                       }
                                                       const artesUnicos = Array.from(porArchivo.entries()).map(([url, items]) => ({ url, items, count: items.length }));
                                                       return (
@@ -3931,6 +4101,25 @@ export function CampanasPage() {
           isOpen={ordenesMontajeModalOpen}
           onClose={() => setOrdenesMontajeModalOpen(false)}
           canExport={permissions.canExportOrdenesMontaje}
+        />
+      )}
+
+      {/* Versionario Artes Preview Modal (lazy-mount) */}
+      {versionarioPreviewOpen && (
+        <VersionarioArtesPreviewModal
+          isOpen={versionarioPreviewOpen}
+          onClose={() => {
+            // Cancela la carga en background si aun corre, y limpia estado.
+            versionarioCancelledRef.current = true;
+            setVersionarioPreviewOpen(false);
+            setExportingVersionarioArtes(false);
+            setVersionarioArtesProgress({ current: 0, total: 0 });
+          }}
+          preview={versionarioPreview}
+          isLoading={exportingVersionarioArtes}
+          isDownloading={versionarioDownloading}
+          loadingProgress={versionarioArtesProgress}
+          onDownload={handleDownloadVersionarioFromPreview}
         />
       )}
 

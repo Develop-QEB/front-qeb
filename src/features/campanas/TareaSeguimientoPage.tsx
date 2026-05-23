@@ -85,6 +85,7 @@ import { useSocketCampana, useSocketEquipos } from '../../hooks/useSocket';
 import { LinkPreview } from '../../components/ui/LinkPreview';
 import { exportVersionarioArtes } from '../../utils/exportVersionarioArtes';
 import * as XLSX from 'xlsx';
+import { CargaCsvModal } from './CargaCsvModal';
 
 // Convierte URLs en texto plano a <a> clickables. Mantiene el texto restante
 // como string para no escapar el contenido. Usado en la bitácora de comentarios
@@ -1088,6 +1089,28 @@ function DigitalGalleryModal({
                 </div>
               </div>
 
+              {/* Nombre Archivo + Nota (digital) */}
+              {(currentImage?.archivo || (currentImage as any)?.nota) && (
+                <div className="mt-3 p-3 bg-cyan-500/10 border border-cyan-500/30 rounded-lg space-y-2">
+                  {currentImage?.archivo && (() => {
+                    const last = decodeURIComponent((currentImage.archivo.split('?')[0].split('/').pop() || ''));
+                    const clean = last.replace(/^\d{10,}-[a-z0-9]+-/i, '') || last;
+                    return (
+                      <div>
+                        <p className="text-xs font-medium text-cyan-300 mb-1">Nombre Archivo:</p>
+                        <p className="text-sm text-zinc-300 break-all">{clean}</p>
+                      </div>
+                    );
+                  })()}
+                  {(currentImage as any)?.nota && (
+                    <div>
+                      <p className="text-xs font-medium text-cyan-300 mb-1">Nota:</p>
+                      <p className="text-sm text-zinc-300 whitespace-pre-wrap">{(currentImage as any).nota}</p>
+                    </div>
+                  )}
+                </div>
+              )}
+
               {/* Thumbnails */}
               {imagenes.length > 1 && (
                 <div className="mt-3 flex gap-2 overflow-x-auto py-2 px-1">
@@ -1246,11 +1269,26 @@ function TradicionalGalleryModal({
                 </div>
               </div>
 
-              {/* Nota de la imagen actual */}
-              {currentImage?.nota && (
-                <div className="mt-3 p-3 bg-orange-500/10 border border-orange-500/30 rounded-lg">
-                  <p className="text-xs font-medium text-orange-300 mb-1">Nota:</p>
-                  <p className="text-sm text-zinc-300 whitespace-pre-wrap">{currentImage.nota}</p>
+              {/* Nombre Archivo + Nota de la imagen actual */}
+              {(currentImage?.archivo || currentImage?.nota) && (
+                <div className="mt-3 p-3 bg-orange-500/10 border border-orange-500/30 rounded-lg space-y-2">
+                  {currentImage?.archivo && (() => {
+                    // Extrae nombre legible: quita prefijo timestamp-random- de la URL de Spaces
+                    const last = decodeURIComponent((currentImage.archivo.split('?')[0].split('/').pop() || ''));
+                    const clean = last.replace(/^\d{10,}-[a-z0-9]+-/i, '') || last;
+                    return (
+                      <div>
+                        <p className="text-xs font-medium text-orange-300 mb-1">Nombre Archivo:</p>
+                        <p className="text-sm text-zinc-300 break-all">{clean}</p>
+                      </div>
+                    );
+                  })()}
+                  {currentImage?.nota && (
+                    <div>
+                      <p className="text-xs font-medium text-orange-300 mb-1">Nota:</p>
+                      <p className="text-sm text-zinc-300 whitespace-pre-wrap">{currentImage.nota}</p>
+                    </div>
+                  )}
                 </div>
               )}
 
@@ -2703,6 +2741,8 @@ function FilterToolbar({
   const groupBtnRef = useRef<HTMLButtonElement>(null);
   const sortBtnRef = useRef<HTMLButtonElement>(null);
   const [dropdownPos, setDropdownPos] = useState<{ top: number; right: number } | null>(null);
+  // Combobox state: id del filtro cuyo dropdown de valores esta abierto.
+  const [valueComboboxOpen, setValueComboboxOpen] = useState<string | null>(null);
 
   // Función para cerrar un dropdown específico al hacer clic fuera
   const closeOtherDropdowns = (keep: 'filters' | 'grouping' | 'sort') => {
@@ -2774,10 +2814,43 @@ function FilterToolbar({
                   <select value={filter.operator} onChange={(e) => updateFilter(filter.id, { operator: e.target.value as FilterOperator })} className="w-[90px] text-xs bg-background border border-border rounded px-2 py-1.5">
                     {FILTER_OPERATORS.filter(op => { const fc = filterFields.find(f => f.field === filter.field); return fc && op.forTypes.includes(fc.type); }).map((op) => <option key={op.value} value={op.value}>{op.label}</option>)}
                   </select>
-                  <select value={filter.value} onChange={(e) => updateFilter(filter.id, { value: e.target.value })} className="flex-1 text-xs bg-background border border-border rounded px-2 py-1.5">
-                    <option value="">Seleccionar...</option>
-                    {uniqueValues[filter.field]?.map((val) => <option key={val} value={val}>{val}</option>)}
-                  </select>
+                  {/* Combobox: input libre + dropdown de opciones que matchean.
+                      Permite escribir texto cualquiera (no esta restringido al listado).
+                      Pattern identico al de filtros avanzados de Campañas/Solicitudes. */}
+                  <div className="flex-1 relative">
+                    <input
+                      type="text"
+                      value={filter.value}
+                      onChange={(e) => updateFilter(filter.id, { value: e.target.value })}
+                      onFocus={() => setValueComboboxOpen(filter.id)}
+                      onBlur={() => setTimeout(() => setValueComboboxOpen(null), 200)}
+                      placeholder="Escribe o elige una opción..."
+                      className="w-full text-xs bg-background border border-border rounded px-2 py-1.5 placeholder:text-muted-foreground"
+                    />
+                    {valueComboboxOpen === filter.id && (() => {
+                      const allOptions = uniqueValues[filter.field] || [];
+                      const q = (filter.value || '').toLowerCase();
+                      const filtered = q
+                        ? allOptions.filter(val => val.toLowerCase().includes(q))
+                        : allOptions;
+                      if (filtered.length === 0) return null;
+                      return (
+                        <div className={`absolute left-0 top-full mt-1 w-full max-h-[200px] overflow-y-auto z-[300] rounded border shadow-xl ${isDark ? 'bg-zinc-800 border-zinc-600' : 'bg-white border-gray-200'}`}>
+                          {filtered.slice(0, 50).map((val) => (
+                            <button
+                              key={val}
+                              type="button"
+                              onMouseDown={(e) => e.preventDefault()}
+                              onClick={() => { updateFilter(filter.id, { value: val }); setValueComboboxOpen(null); }}
+                              className={`w-full text-left px-2 py-1.5 text-xs cursor-pointer transition-colors ${isDark ? 'text-white hover:bg-purple-600/40' : 'text-gray-900 hover:bg-purple-50'} ${filter.value === val ? (isDark ? 'bg-purple-600/30 font-medium' : 'bg-purple-100 font-medium') : ''}`}
+                            >
+                              {val}
+                            </button>
+                          ))}
+                        </div>
+                      );
+                    })()}
+                  </div>
                   <button onClick={() => removeFilter(filter.id)} className="text-red-400 hover:text-red-300 p-0.5"><Trash2 className="h-3 w-3" /></button>
                 </div>
               ))}
@@ -13787,6 +13860,22 @@ export function TareaSeguimientoPage() {
   // Inventory state
   const [selectedInventoryIds, setSelectedInventoryIds] = useState<Set<string>>(new Set());
   const [inventorySearch, setInventorySearch] = useState('');
+  // Tags de busqueda guardados con Enter (chips). Cada tag es un filtro adicional
+  // que se combina con AND. La busqueda activa final = [...tags, buffer actual].
+  const [inventorySearchTags, setInventorySearchTags] = useState<string[]>([]);
+  const addInventorySearchTag = useCallback((raw: string) => {
+    const t = raw.trim();
+    if (!t) return;
+    setInventorySearchTags(prev => prev.includes(t) ? prev : [...prev, t]);
+    setInventorySearch('');
+  }, []);
+  const removeInventorySearchTag = useCallback((t: string) => {
+    setInventorySearchTags(prev => prev.filter(x => x !== t));
+  }, []);
+  const clearInventorySearch = useCallback(() => {
+    setInventorySearchTags([]);
+    setInventorySearch('');
+  }, []);
   const [expandedNodes, setExpandedNodes] = useState<Set<string>>(new Set(['all']));
 
   // Grouping, Filtering, Sorting state
@@ -13889,6 +13978,9 @@ export function TareaSeguimientoPage() {
   // Modal state
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
   const [isUploadArtModalOpen, setIsUploadArtModalOpen] = useState(false);
+  // Modal de carga CSV (paso 1: cotejo). Al darle siguiente abre UploadArtModal
+  // con SOLO los items que matchearon, y deselecciona los no-matched.
+  const [isCargaCsvModalOpen, setIsCargaCsvModalOpen] = useState(false);
   const [isExportingVersionarioArtes, setIsExportingVersionarioArtes] = useState(false);
   const [parentAddedArtes, setParentAddedArtes] = useState<ArteExistente[]>([]);
   const [isTaskDetailModalOpen, setIsTaskDetailModalOpen] = useState(false);
@@ -15086,8 +15178,10 @@ export function TareaSeguimientoPage() {
   const filteredAtenderData = useMemo(() => {
     let data = applyFilters(inventoryArteData, filtersAtender);
 
-    // Filtrar por estado_arte según el tab activo (solo si no hay búsqueda)
-    if (!inventorySearch) {
+    // Filtrar por estado_arte según el tab activo (solo si no hay búsqueda activa).
+    // Considera tanto el buffer (`inventorySearch`) como los tags guardados.
+    const hasActiveSearch = !!inventorySearch || inventorySearchTags.length > 0;
+    if (!hasActiveSearch) {
       data = data.filter(item => item.estado_arte === activeEstadoArteTab);
     }
 
@@ -15115,7 +15209,7 @@ export function TareaSeguimientoPage() {
       });
     }
     return data;
-  }, [inventoryArteData, filtersAtender, sortFieldAtender, sortDirectionAtender, activeEstadoArteTab, inventorySearch, soloReimpresion, reimpresionRsvIds]);
+  }, [inventoryArteData, filtersAtender, sortFieldAtender, sortDirectionAtender, activeEstadoArteTab, inventorySearch, inventorySearchTags, soloReimpresion, reimpresionRsvIds]);
 
   // Datos filtrados y ordenados para Programación (programacion)
   const filteredProgramacionData = useMemo(() => {
@@ -15546,19 +15640,19 @@ export function TareaSeguimientoPage() {
       data = data.filter((item) => item.tradicional_digital === formatFilter);
     }
 
-    // Filter by search
-    if (inventorySearch) {
-      const search = inventorySearch.toLowerCase();
-      data = data.filter(
-        (item) =>
-          item.id.toLowerCase().includes(search) ||
-          item.rsv_id.toLowerCase().includes(search) ||
-          item.codigo_unico.toLowerCase().includes(search) ||
-          item.plaza.toLowerCase().includes(search) ||
-          item.mueble.toLowerCase().includes(search) ||
-          item.ubicacion.toLowerCase().includes(search) ||
-          item.ciudad.toLowerCase().includes(search)
-      );
+    // Filter by search (chips guardados con Enter + buffer actual).
+    // Cada termino actua como filtro AND (todos deben matchear).
+    const searchTerms = [...inventorySearchTags];
+    if (inventorySearch.trim()) searchTerms.push(inventorySearch.trim());
+    if (searchTerms.length > 0) {
+      const lowered = searchTerms.map(t => t.toLowerCase());
+      data = data.filter((item) => {
+        const haystack = [
+          item.id, item.rsv_id, item.codigo_unico,
+          item.plaza, item.mueble, item.ubicacion, item.ciudad,
+        ].map(v => String(v || '').toLowerCase()).join(' | ');
+        return lowered.every(term => haystack.includes(term));
+      });
     }
 
     // Apply sorting
@@ -15604,7 +15698,7 @@ export function TareaSeguimientoPage() {
     });
 
     return data;
-  }, [filteredVersionarioData, filteredAtenderData, filteredProgramacionData, filteredTestigoData, inventorySearch, activeFormat, activeMainTab, sortField, sortDirection]);
+  }, [filteredVersionarioData, filteredAtenderData, filteredProgramacionData, filteredTestigoData, inventorySearch, inventorySearchTags, activeFormat, activeMainTab, sortField, sortDirection]);
 
   const filteredTasks = useMemo(() => {
     // Primero aplicar filtros avanzados
@@ -16695,6 +16789,10 @@ export function TareaSeguimientoPage() {
           </button>
         </td>
       )}
+      {/* Nueva columna Codigo Unico (formato 27024_Contraflujo_Ciudad de Mexico) */}
+      <td className="p-2 text-zinc-300 font-mono text-[10px] whitespace-nowrap">
+        {item.codigo_unico || '-'}
+      </td>
       <td className="p-2 text-xs font-medium text-white">
         <div className="flex items-center gap-1.5">
           {item.id}
@@ -16761,18 +16859,8 @@ export function TareaSeguimientoPage() {
       <td className="p-2 text-xs text-zinc-300">{item.mueble}</td>
       <td className="p-2 text-xs text-zinc-300">{item.plaza}</td>
       <td className="p-2 text-xs text-zinc-300">{item.ciudad}</td>
-      <td className="p-2 text-xs text-blue-400 max-w-[150px] truncate" title={isDigital && digitalSummary ? getDigitalSummaryText() : item.archivo_arte}>
-        {isDigital && digitalSummary ? (
-          <span className="text-blue-300">{getDigitalSummaryText()}</span>
-        ) : item.archivo_arte ? (
-          <a href={getImageUrl(item.archivo_arte) || '#'} target="_blank" rel="noopener noreferrer" className="hover:underline">
-            {item.archivo_arte.split('/').pop()}
-          </a>
-        ) : '-'}
-      </td>
-      <td className="p-2 text-xs text-orange-300 max-w-[120px] truncate" title={tradSummary?.firstNota || ''}>
-        {tradSummary?.firstNota || <span className="text-zinc-600">-</span>}
-      </td>
+      {/* Columnas "Nombre Archivo" y "Notas" removidas:
+          ahora se muestran dentro del modal de galeria al abrir el arte. */}
       {!hideInstalado && (
         <td className="p-2 text-center">
           {item.estado_tarea === 'atendido' ? (
@@ -17195,6 +17283,57 @@ export function TareaSeguimientoPage() {
             </div>
           </div>
 
+          {/* Search bar compartida (visible en todas las main tabs y sub-tabs).
+              Filtra por id, rsv_id, codigo_unico, plaza, mueble, ubicacion, ciudad.
+              Acepta texto libre + chips (Enter agrega tag, combinacion AND). */}
+          <div className="px-4 py-2 border-b border-border flex items-center gap-3">
+            <div className={`relative flex items-center flex-wrap gap-1 min-h-[32px] px-2 py-1 rounded-lg border flex-1 max-w-2xl ${isDark ? 'bg-zinc-800 border-zinc-700 focus-within:border-purple-500' : 'bg-white border-gray-300 focus-within:border-purple-500'}`}>
+              <Search className={`h-3.5 w-3.5 shrink-0 ${isDark ? 'text-zinc-500' : 'text-gray-400'}`} />
+              {inventorySearchTags.map((tag) => (
+                <span
+                  key={tag}
+                  className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-medium ${isDark ? 'bg-purple-500/20 text-purple-300 border border-purple-500/30' : 'bg-purple-100 text-purple-700 border border-purple-200'}`}
+                >
+                  {tag}
+                  <button
+                    type="button"
+                    onClick={() => removeInventorySearchTag(tag)}
+                    className={`rounded-full p-0.5 ${isDark ? 'hover:bg-purple-500/30' : 'hover:bg-purple-200'}`}
+                    title="Quitar"
+                  >
+                    <X className="h-2.5 w-2.5" />
+                  </button>
+                </span>
+              ))}
+              <input
+                type="text"
+                placeholder={inventorySearchTags.length === 0 ? 'Buscar por ID, codigo unico, plaza, ubicacion... (Enter para guardar)' : 'Agregar otro termino...'}
+                value={inventorySearch}
+                onChange={(e) => setInventorySearch(e.target.value)}
+                onKeyDown={(e) => {
+                  if ((e.key === 'Enter' || e.key === 'Tab') && inventorySearch.trim()) {
+                    e.preventDefault();
+                    addInventorySearchTag(inventorySearch);
+                  }
+                  if (e.key === 'Backspace' && !inventorySearch && inventorySearchTags.length > 0) {
+                    removeInventorySearchTag(inventorySearchTags[inventorySearchTags.length - 1]);
+                  }
+                }}
+                className={`flex-1 min-w-[120px] bg-transparent border-none outline-none text-xs ${isDark ? 'text-white placeholder:text-zinc-500' : 'text-gray-900 placeholder:text-gray-400'}`}
+              />
+              {(inventorySearch || inventorySearchTags.length > 0) && (
+                <button
+                  type="button"
+                  onClick={clearInventorySearch}
+                  className={`shrink-0 p-0.5 rounded ${isDark ? 'text-zinc-500 hover:text-zinc-300 hover:bg-zinc-700' : 'text-gray-400 hover:text-gray-600 hover:bg-gray-100'}`}
+                  title="Limpiar"
+                >
+                  <X className="h-3 w-3" />
+                </button>
+              )}
+            </div>
+          </div>
+
           {/* Sub-tabs: Formato - Solo mostrar si hay elementos y no estamos en Programación (que es solo digital) */}
           {activeMainTab !== 'programacion' && !(activeMainTab === 'impresiones' && activeEstadoImpresionTab === 'orden_impresion') && (formatCounts.tradicional > 0 || formatCounts.digital > 0) && (
             <div className="px-4 py-2 border-b border-border bg-purple-900/5">
@@ -17287,18 +17426,36 @@ export function TareaSeguimientoPage() {
                 )}
               </div>
               {permissions.canEditGestionArtes && (
-                <button
-                  onClick={() => setIsUploadArtModalOpen(true)}
-                  disabled={selectedInventoryIds.size === 0}
-                  className={`flex items-center gap-2 px-4 py-2 text-sm font-medium rounded-lg transition-all ${
-                    selectedInventoryIds.size > 0
-                      ? 'bg-gradient-to-r from-purple-600 to-purple-700 hover:from-purple-500 hover:to-purple-600 text-white shadow-lg shadow-purple-500/25'
-                      : isDark ? 'bg-zinc-800 text-zinc-500 cursor-not-allowed' : 'bg-gray-200 text-gray-400 cursor-not-allowed'
-                  }`}
-                >
-                  <Upload className="h-4 w-4" />
-                  Asignar Arte
-                </button>
+                <div className="flex items-center gap-2">
+                  {/* Boton alterno: cargar CSV → modal con cotejo → UploadArtModal con solo los matches */}
+                  <button
+                    onClick={() => setIsCargaCsvModalOpen(true)}
+                    disabled={selectedInventoryIds.size === 0}
+                    className={`flex items-center gap-2 px-4 py-2 text-sm font-medium rounded-lg transition-all border ${
+                      selectedInventoryIds.size > 0
+                        ? isDark
+                          ? 'bg-zinc-800 hover:bg-zinc-700 text-purple-300 border-purple-500/40'
+                          : 'bg-white hover:bg-purple-50 text-purple-700 border-purple-300'
+                        : isDark ? 'bg-zinc-800 text-zinc-500 border-zinc-700 cursor-not-allowed' : 'bg-gray-200 text-gray-400 border-gray-200 cursor-not-allowed'
+                    }`}
+                    title="Cotejar selección contra un CSV/XLSX antes de subir artes"
+                  >
+                    <FileSpreadsheet className="h-4 w-4" />
+                    Cargar CSV
+                  </button>
+                  <button
+                    onClick={() => setIsUploadArtModalOpen(true)}
+                    disabled={selectedInventoryIds.size === 0}
+                    className={`flex items-center gap-2 px-4 py-2 text-sm font-medium rounded-lg transition-all ${
+                      selectedInventoryIds.size > 0
+                        ? 'bg-gradient-to-r from-purple-600 to-purple-700 hover:from-purple-500 hover:to-purple-600 text-white shadow-lg shadow-purple-500/25'
+                        : isDark ? 'bg-zinc-800 text-zinc-500 cursor-not-allowed' : 'bg-gray-200 text-gray-400 cursor-not-allowed'
+                    }`}
+                  >
+                    <Upload className="h-4 w-4" />
+                    Asignar Arte
+                  </button>
+                </div>
               )}
             </div>
           )}
@@ -17348,24 +17505,7 @@ export function TareaSeguimientoPage() {
                 <span className="text-xs text-zinc-400">
                   {filteredAtenderData.filter(i => i.tradicional_digital === (activeFormat === 'tradicional' ? 'Tradicional' : 'Digital')).length} de {inventoryArteData.filter(i => i.tradicional_digital === (activeFormat === 'tradicional' ? 'Tradicional' : 'Digital')).length} artes
                 </span>
-                <div className="relative">
-                  <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-zinc-500" />
-                  <input
-                    type="text"
-                    placeholder="Buscar por ID, código, plaza..."
-                    value={inventorySearch}
-                    onChange={(e) => setInventorySearch(e.target.value)}
-                    className={`pl-8 pr-3 py-1.5 text-xs border rounded-lg focus:outline-none focus:border-purple-500 w-64 ${isDark ? 'bg-zinc-800 border-zinc-700 text-white placeholder:text-zinc-500' : 'bg-white border-gray-300 text-gray-900 placeholder:text-gray-400'}`}
-                  />
-                  {inventorySearch && (
-                    <button
-                      onClick={() => setInventorySearch('')}
-                      className="absolute right-2 top-1/2 -translate-y-1/2 text-zinc-500 hover:text-zinc-300"
-                    >
-                      <X className="h-3.5 w-3.5" />
-                    </button>
-                  )}
-                </div>
+                {/* Search bar removida (movida arriba como compartida) */}
                 {reimpresionRsvIds.size > 0 && (
                   <button
                     onClick={() => setSoloReimpresion(v => !v)}
@@ -17607,24 +17747,7 @@ export function TareaSeguimientoPage() {
                 <span className="text-xs text-zinc-400">
                   {filteredProgramacionData.length} de {inventoryProgramacionData.length} artes digitales
                 </span>
-                <div className="relative">
-                  <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-zinc-500" />
-                  <input
-                    type="text"
-                    placeholder="Buscar por ID, código, plaza..."
-                    value={inventorySearch}
-                    onChange={(e) => setInventorySearch(e.target.value)}
-                    className={`pl-8 pr-3 py-1.5 text-xs border rounded-lg focus:outline-none focus:border-purple-500 w-64 ${isDark ? 'bg-zinc-800 border-zinc-700 text-white placeholder:text-zinc-500' : 'bg-white border-gray-300 text-gray-900 placeholder:text-gray-400'}`}
-                  />
-                  {inventorySearch && (
-                    <button
-                      onClick={() => setInventorySearch('')}
-                      className="absolute right-2 top-1/2 -translate-y-1/2 text-zinc-500 hover:text-zinc-300"
-                    >
-                      <X className="h-3.5 w-3.5" />
-                    </button>
-                  )}
-                </div>
+                {/* Search bar removida (movida arriba como compartida) */}
               </div>
               <FilterToolbar
                 filters={filtersProgramacion}
@@ -17770,24 +17893,7 @@ export function TareaSeguimientoPage() {
             <div className="px-4 py-2 border-b border-border flex items-center justify-between">
               <div className="flex items-center gap-3">
                 <span className="text-xs text-zinc-400">{filteredTestigoData.length} de {inventoryTestigosData.length} instalaciones</span>
-                <div className="relative">
-                  <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-zinc-500" />
-                  <input
-                    type="text"
-                    placeholder="Buscar por ID, código, plaza..."
-                    value={inventorySearch}
-                    onChange={(e) => setInventorySearch(e.target.value)}
-                    className={`pl-8 pr-3 py-1.5 text-xs border rounded-lg focus:outline-none focus:border-purple-500 w-64 ${isDark ? 'bg-zinc-800 border-zinc-700 text-white placeholder:text-zinc-500' : 'bg-white border-gray-300 text-gray-900 placeholder:text-gray-400'}`}
-                  />
-                  {inventorySearch && (
-                    <button
-                      onClick={() => setInventorySearch('')}
-                      className="absolute right-2 top-1/2 -translate-y-1/2 text-zinc-500 hover:text-zinc-300"
-                    >
-                      <X className="h-3.5 w-3.5" />
-                    </button>
-                  )}
-                </div>
+                {/* Search bar removida (movida arriba como compartida) */}
               </div>
               <FilterToolbar
                 filters={filtersTestigo}
@@ -18138,6 +18244,7 @@ export function TareaSeguimientoPage() {
                           </button>
                         </th>
                         {[
+                          { field: 'codigo_unico', label: 'Código Único' },
                           { field: 'articulo', label: 'Artículo' },
                           { field: 'mueble', label: 'Formato' },
                           { field: 'caras_totales', label: 'Impresiones' },
@@ -18172,6 +18279,10 @@ export function TareaSeguimientoPage() {
                                 <Check className="h-3 w-3 text-white" />
                               )}
                             </button>
+                          </td>
+                          {/* Nueva columna: Codigo Unico (formato 27024_Contraflujo_Ciudad de Mexico) */}
+                          <td className="p-2 text-zinc-300 font-mono text-[10px] whitespace-nowrap">
+                            {item.codigo_unico || '-'}
                           </td>
                           <td className="p-2">
                             <span className="px-1.5 py-0.5 rounded text-[10px] font-medium bg-blue-500/20 text-blue-300">
@@ -18788,8 +18899,6 @@ export function TareaSeguimientoPage() {
                                                     <th className="p-2 font-medium text-purple-300">Formato</th>
                                                     <th className="p-2 font-medium text-purple-300">Plaza</th>
                                                     <th className="p-2 font-medium text-purple-300">Ciudad</th>
-                                                    <th className="p-2 font-medium text-purple-300">Nombre Archivo</th>
-                                                    <th className="p-2 font-medium text-purple-300">Notas</th>
                                                     <th className="p-2 font-medium text-purple-300">Estado Instalación</th>
                                                   </tr>
                                                 </thead>
@@ -19054,6 +19163,7 @@ export function TareaSeguimientoPage() {
                           )}
                         </button>
                       </th>
+                      <th className="p-2 font-medium text-purple-300">Código Único</th>
                       <th className="p-2 font-medium text-purple-300">ID</th>
                       <th className="p-2 font-medium text-purple-300">Arte Aprobado</th>
                       <th className="p-2 font-medium text-purple-300">Archivo</th>
@@ -19062,8 +19172,6 @@ export function TareaSeguimientoPage() {
                       <th className="p-2 font-medium text-purple-300">Formato</th>
                       <th className="p-2 font-medium text-purple-300">Plaza</th>
                       <th className="p-2 font-medium text-purple-300">Ciudad</th>
-                      <th className="p-2 font-medium text-purple-300">Nombre Archivo</th>
-                      <th className="p-2 font-medium text-purple-300">Notas</th>
                       <th className="p-2 font-medium text-purple-300">Estado Instalación</th>
                     </tr>
                   </thead>
@@ -19310,6 +19418,7 @@ export function TareaSeguimientoPage() {
                           )}
                         </button>
                       </th>
+                      <th className="p-2 font-medium text-purple-300">Código Único</th>
                       <th className="p-2 font-medium text-purple-300">ID</th>
                       <th className="p-2 font-medium text-purple-300">Arte</th>
                       <th className="p-2 font-medium text-purple-300">Ubicación</th>
@@ -19340,6 +19449,10 @@ export function TareaSeguimientoPage() {
                               <Check className="h-3 w-3 text-white" />
                             )}
                           </button>
+                        </td>
+                        {/* Nueva columna Codigo Unico */}
+                        <td className="p-2 text-zinc-300 font-mono text-[10px] whitespace-nowrap">
+                          {item.codigo_unico || '-'}
                         </td>
                         <td className="p-2 text-zinc-300 font-mono">{item.id}</td>
                         <td className="p-2">
@@ -19686,7 +19799,6 @@ export function TareaSeguimientoPage() {
                                                     <th className="p-2 font-medium text-purple-300">Formato</th>
                                                     <th className="p-2 font-medium text-purple-300">Plaza</th>
                                                     <th className="p-2 font-medium text-purple-300">Ciudad</th>
-                                                    <th className="p-2 font-medium text-purple-300">Nombre Archivo</th>
                                                     <th className="p-2 font-medium text-purple-300">Estado Instalación</th>
                                                   </tr>
                                                 </thead>
@@ -19740,6 +19852,7 @@ export function TareaSeguimientoPage() {
                           )}
                         </button>
                       </th>
+                      <th className="p-2 font-medium text-purple-300">Código Único</th>
                       <th className="p-2 font-medium text-purple-300">ID</th>
                       <th className="p-2 font-medium text-purple-300">Arte Aprobado</th>
                       <th className="p-2 font-medium text-purple-300">Archivo</th>
@@ -19748,7 +19861,6 @@ export function TareaSeguimientoPage() {
                       <th className="p-2 font-medium text-purple-300">Formato</th>
                       <th className="p-2 font-medium text-purple-300">Plaza</th>
                       <th className="p-2 font-medium text-purple-300">Ciudad</th>
-                      <th className="p-2 font-medium text-purple-300">Nombre Archivo</th>
                       <th className="p-2 font-medium text-purple-300">Estado Instalación</th>
                     </tr>
                   </thead>
@@ -20303,6 +20415,31 @@ export function TareaSeguimientoPage() {
           </div>
         </div>
       )}
+
+      {/* Carga CSV Modal — paso 1 del flujo alterno. Al confirmar matches, deselecciona
+          los no-matched y abre UploadArtModal con solo los items que matchearon. */}
+      <CargaCsvModal
+        isOpen={isCargaCsvModalOpen}
+        onClose={() => setIsCargaCsvModalOpen(false)}
+        selectedInventory={selectedInventoryItems.map(it => ({
+          id: it.id,
+          codigo_unico: it.codigo_unico,
+          tipo_de_cara: it.tipo_de_cara,
+          ubicacion: it.ubicacion,
+          ciudad: it.ciudad,
+          articulo: it.articulo,
+          catorcena: it.catorcena,
+          anio: it.anio,
+        }))}
+        onContinue={(matchedIds) => {
+          // Deja solo los matched en la seleccion; los no-matched quedan sin tocar
+          // (se quitan del set, pero no se afecta su estado en el sistema).
+          setSelectedInventoryIds(new Set(matchedIds));
+          setIsCargaCsvModalOpen(false);
+          // Encadena con el flujo actual de subir artes
+          setIsUploadArtModalOpen(true);
+        }}
+      />
 
       {/* Upload Art Modal */}
       <UploadArtModal

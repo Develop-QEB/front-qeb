@@ -210,6 +210,9 @@ export interface InventarioConArte {
   grupo_completo_id: number | null;
   grupo: number | null;
   artes_multiples: string | null;
+  // JSON string con [{archivo, nota, spot}] por reserva. Permite mostrar
+  // varios artes (spots) por reserva con sus notas en la galería del Versionario.
+  artes_detalle?: string | null;
 }
 
 export interface SolicitudCara {
@@ -362,6 +365,10 @@ export interface OrdenMontajeINVIAN {
   Anunciante: string | null;
   Operacion: string | null;
   CodigoContrato: number | null;
+  // idquote (APS Global) y campania_id — no se renderizan en la tabla, pero
+  // entran al haystack del buscador para poder filtrar por id de campania.
+  idquote?: number | null;
+  campania_id?: number | null;
   PrecioPorCara: number | null;
   Vendedor: string | null;
   Descripcion: string | null;
@@ -965,8 +972,11 @@ export const campanasService = {
   // NUEVOS ENDPOINTS PARA GESTION DE ARTES
   // ============================================================================
 
-  async getInventarioSinArte(id: number): Promise<InventarioConArte[]> {
-    const response = await api.get<ApiResponse<InventarioConArte[]>>(`/campanas/${id}/inventario-sin-arte`);
+  // includeWithoutAps=true incluye tambien items que aun no tienen APS asignado
+  // (usado por el preview de Versionario Artes para que se vean circuitos pendientes).
+  async getInventarioSinArte(id: number, opts?: { includeWithoutAps?: boolean }): Promise<InventarioConArte[]> {
+    const params = opts?.includeWithoutAps ? { includeWithoutAps: 'true' } : undefined;
+    const response = await api.get<ApiResponse<InventarioConArte[]>>(`/campanas/${id}/inventario-sin-arte`, { params });
     if (!response.data.success || !response.data.data) {
       throw new Error(response.data.error || 'Error al obtener inventario sin arte');
     }
