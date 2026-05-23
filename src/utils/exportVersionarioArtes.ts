@@ -250,7 +250,10 @@ export async function exportVersionarioArtes({ campana, items, digitalFilesByRes
       : tarifasUnicas.length === 0 ? 0 : 'Varios';
     // Caras: contar inventarios únicos (espacios físicos), no filas
     // (cada fila era inventario × catorcena → inflaba el número).
-    const caras = new Set(arr.map(it => it.id)).size;
+    // Caras del circuito: SUMA de caras_totales por item (cada item es un
+    // grupo/reserva del back y trae su propio count de reservas). Da el total
+    // del circuito aun cuando un inventario fisico tenga multiples reservas.
+    const caras = arr.reduce((sum, it) => sum + (Number((it as any).caras_totales) || 1), 0);
 
     const urls = artesPorPlaza.get(plaza) || [];
     const notasResumen = buildNotasText(urls);
@@ -434,9 +437,11 @@ const buildEstatusCircuito = (arr: any[]): { text: string; breakdown: EstatusBre
   const counts = new Map<string, { count: number; level: number }>();
   for (const item of arr) {
     const { level, label } = getItemLevelStatus(item);
+    // Cada item representa caras_totales reservas (cuando el back agrupa).
+    const weight = Number(item.caras_totales) || 1;
     const cur = counts.get(label);
-    if (cur) counts.set(label, { count: cur.count + 1, level });
-    else counts.set(label, { count: 1, level });
+    if (cur) counts.set(label, { count: cur.count + weight, level });
+    else counts.set(label, { count: weight, level });
   }
   // Ordenar por nivel descendente (mas alto primero)
   const breakdown: EstatusBreakdownItem[] = [...counts.entries()]
@@ -559,7 +564,10 @@ export function buildVersionarioArtesPreview({ campanas }: { campanas: Versionar
       const tarifaDisplay: number | string = tarifasUnicas.length === 1
         ? tarifasUnicas[0]
         : tarifasUnicas.length === 0 ? 0 : 'Varios';
-      const caras = new Set(arr.map(it => it.id)).size;
+      // Caras del circuito: SUMA de caras_totales por item (cada item es un
+    // grupo/reserva del back y trae su propio count de reservas). Da el total
+    // del circuito aun cuando un inventario fisico tenga multiples reservas.
+    const caras = arr.reduce((sum, it) => sum + (Number((it as any).caras_totales) || 1), 0);
 
       const notasResumen = (() => {
         if (!notesByUrl || notesByUrl.size === 0) return '';
@@ -773,7 +781,10 @@ export async function exportVersionarioArtesMulti({ campanas, fileNameSuffix }: 
       ? tarifasUnicas[0]
       : tarifasUnicas.length === 0 ? 0 : 'Varios';
     // Caras: inventarios únicos, no filas (cada fila era inventario × catorcena).
-    const caras = new Set(arr.map(it => it.id)).size;
+    // Caras del circuito: SUMA de caras_totales por item (cada item es un
+    // grupo/reserva del back y trae su propio count de reservas). Da el total
+    // del circuito aun cuando un inventario fisico tenga multiples reservas.
+    const caras = arr.reduce((sum, it) => sum + (Number((it as any).caras_totales) || 1), 0);
 
     const notasResumen = (() => {
       if (!notesByUrl || notesByUrl.size === 0) return '';
