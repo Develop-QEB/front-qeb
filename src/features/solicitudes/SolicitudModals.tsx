@@ -1591,7 +1591,7 @@ export function AtenderModal({ isOpen, onClose, solicitud, onSuccess }: AtenderM
           </div>
           <div>
             <h3 className={`text-lg font-semibold ${isDark ? 'text-white' : 'text-gray-900'}`}>Atender Solicitud</h3>
-            <p className={`text-sm ${isDark ? 'text-zinc-400' : 'text-gray-500'}`}>#{solicitud.id}</p>
+            <p className={`text-sm ${isDark ? 'text-zinc-400' : 'text-gray-500'}`}>#{(solicitud as any).campania_id || solicitud.id}</p>
           </div>
         </div>
 
