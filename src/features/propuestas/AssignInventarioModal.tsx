@@ -1728,18 +1728,28 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
   }, [selectedCaraForSearch, tipoPeriodo]);
 
   // Para BF/CF/CT: split visual del KPI bonificación en Flujo/Contraflujo.
-  // No toca BD — caras_flujo/caras_contraflujo siguen en 0; total = bonificacion.
-  // Mismo comportamiento para Tradicional y Digital: respeta flujoPct (el input
-  // % front-only). La distribución es libre y la validación cuenta solo el TOTAL,
-  // no el ratio.
+  // Lee caras_flujo/caras_contraflujo de BD (back las persiste para que al
+  // cerrar y reabrir el modal el split se conserve). Si la cara es vieja
+  // (cflujo=0 y ccontra=0) → fallback al flujoPct local. Estas columnas
+  // para BF/CF/CT SOLO se usan en este KPI — nada de SAP/auth/reportes.
   const bonifSplit = useMemo(() => {
     if (!selectedCaraForSearch || !isBonifSplitArticle(selectedCaraForSearch.articulo)) {
       return { targetFlujo: 0, targetContra: 0, reservadoFlujo: 0, reservadoContra: 0 };
     }
     const total = selectedCaraForSearch.bonificacion || 0;
-    const pct = flujoPct;
-    const targetFlujo = Math.ceil(total * pct / 100);
-    const targetContra = total - targetFlujo;
+    const cfBd = Number(selectedCaraForSearch.caras_flujo) || 0;
+    const ccBd = Number(selectedCaraForSearch.caras_contraflujo) || 0;
+    let targetFlujo: number;
+    let targetContra: number;
+    if (cfBd + ccBd > 0) {
+      targetFlujo = cfBd;
+      targetContra = ccBd;
+    } else {
+      // Data vieja / sin total → fallback front
+      const pct = flujoPct;
+      targetFlujo = Math.ceil(total * pct / 100);
+      targetContra = total - targetFlujo;
+    }
     const caraReservas = reservas.filter(r =>
       r.id.startsWith(selectedCaraForSearch.localId) || r.solicitudCaraId === selectedCaraForSearch.id
     );
@@ -4941,10 +4951,9 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
               )}
 
               {/* % Distribución para BF/CF/CT (todos los tipos — Tradicional y Digital).
-                  Front-only: solo mueve flujoPct local que alimenta bonifSplit.
-                  NO escribe caras_flujo/caras_contraflujo en BD (regla Balance Flujos:
-                  la bonificación se queda como total en BD, el split es visual).
-                  La validación de completitud cuenta solo el TOTAL de bonif, no el ratio. */}
+                  Persiste caras_flujo/caras_contraflujo en BD (back las guarda solo
+                  para que al reabrir el modal el split se conserve — no las usa para
+                  SAP/auth/reportes). El total de bonificación no cambia. */}
               {isBonifSplitArticle(selectedCaraForSearch?.articulo) && (
                 <div className={`flex flex-col items-center justify-center px-2 py-1 rounded-xl ${isDark ? 'bg-zinc-800/30' : 'bg-gray-50/30'} border ${isDark ? 'border-zinc-700/20' : 'border-gray-200/20'} min-w-[70px]`}>
                   <span className={`text-[9px] ${isDark ? 'text-zinc-500' : 'text-gray-400'} mb-1`}>Distribución</span>
@@ -4954,15 +4963,37 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
                       min={0}
                       max={100}
                       value={flujoPct}
-                      onChange={(e) => {
+                      onChange={async (e) => {
                         const v = Math.max(0, Math.min(100, parseInt(e.target.value) || 0));
                         setFlujoPct(v);
+                        if (!selectedCaraForSearch?.id) return;
+                        const totalBonif = selectedCaraForSearch.bonificacion || 0;
+                        if (totalBonif === 0) return;
+                        const newFlujo = Math.ceil(totalBonif * v / 100);
+                        const newContra = totalBonif - newFlujo;
+                        setSavingPct(true);
+                        try {
+                          await propuestasService.updateCara(propuesta.id, selectedCaraForSearch.id, {
+                            caras_flujo: newFlujo,
+                            caras_contraflujo: newContra,
+                          } as any);
+                          const updatedCara = { ...selectedCaraForSearch, caras_flujo: newFlujo, caras_contraflujo: newContra };
+                          setSelectedCaraForSearch(updatedCara);
+                          setCaras(prev => prev.map(c => c.id === selectedCaraForSearch.id
+                            ? { ...c, caras_flujo: newFlujo, caras_contraflujo: newContra }
+                            : c
+                          ));
+                        } catch (err) {
+                          console.error('Error guardando distribución bonif:', err);
+                        } finally {
+                          setSavingPct(false);
+                        }
                       }}
                       className={`w-10 text-center text-xs font-bold ${isDark ? 'bg-zinc-800 border-zinc-700 text-cyan-400' : 'bg-white border-gray-200 text-cyan-600'} border rounded px-1 py-0.5 focus:outline-none focus:ring-1 focus:ring-cyan-500/50`}
                     />
                     <span className={`text-[10px] ${isDark ? 'text-zinc-500' : 'text-gray-400'}`}>%</span>
                   </div>
-                  <span className={`text-[9px] ${isDark ? 'text-zinc-600' : 'text-gray-300'} mt-0.5`}>{flujoPct}/{100 - flujoPct}</span>
+                  <span className={`text-[9px] ${isDark ? 'text-zinc-600' : 'text-gray-300'} mt-0.5`}>{savingPct ? '...' : `${flujoPct}/${100 - flujoPct}`}</span>
                 </div>
               )}
 
