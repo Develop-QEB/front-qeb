@@ -1,5 +1,5 @@
 import { useState, useMemo, useCallback } from 'react';
-import { X, Upload, FileSpreadsheet, AlertCircle, CheckCircle2, Info } from 'lucide-react';
+import { X, Upload, FileSpreadsheet, AlertCircle, CheckCircle2, Info, Download } from 'lucide-react';
 import * as XLSX from 'xlsx';
 import { useThemeStore } from '../../store/themeStore';
 
@@ -98,7 +98,8 @@ interface ColumnMap {
   clave: string;
   estado: string;
   cara: string | null;
-  schema: 'sears' | 'coca-cola' | 'unknown';
+  codigoUnico: string | null;
+  schema: 'codigo-unico' | 'sears' | 'coca-cola' | 'unknown';
 }
 
 const detectColumnMap = (headers: string[]): ColumnMap => {
@@ -111,29 +112,35 @@ const detectColumnMap = (headers: string[]): ColumnMap => {
     return null;
   };
 
-  // Intentar SEARS primero (clave sitio + estado)
+  // Formato principal: columna "Código Único" / "codigo_unico" / "CodigoUnico"
+  const codigoUnicoCol = find('codigo unico', 'codigo_unico', 'codigounico', 'código único', 'código unico', 'codigo único');
+  if (codigoUnicoCol) {
+    return { clave: '', estado: '', cara: null, codigoUnico: codigoUnicoCol, schema: 'codigo-unico' };
+  }
+
+  // SEARS (clave sitio + estado)
   const claveSitio = find('clave sitio', 'clavesitio', 'clave_sitio');
   const estadoCol = find('estado');
   if (claveSitio && estadoCol) {
-    return { clave: claveSitio, estado: estadoCol, cara: null, schema: 'sears' };
+    return { clave: claveSitio, estado: estadoCol, cara: null, codigoUnico: null, schema: 'sears' };
   }
 
-  // Intentar COCA-COLA (unidad + cara + ciudad)
+  // COCA-COLA (unidad + cara + ciudad)
   const unidad = find('unidad');
   const cara = find('cara');
   const ciudad = find('ciudad');
   if (unidad && ciudad) {
-    return { clave: unidad, estado: ciudad, cara: cara, schema: 'coca-cola' };
+    return { clave: unidad, estado: ciudad, cara: cara, codigoUnico: null, schema: 'coca-cola' };
   }
 
-  // Fallback: cualquier columna que parezca clave/sitio + estado/ciudad
+  // Fallback
   const claveAny = find('clave', 'sitio', 'id', 'codigo');
   const estadoAny = find('estado', 'ciudad');
   if (claveAny && estadoAny) {
-    return { clave: claveAny, estado: estadoAny, cara: find('cara', 'flujo'), schema: 'unknown' };
+    return { clave: claveAny, estado: estadoAny, cara: find('cara', 'flujo'), codigoUnico: null, schema: 'unknown' };
   }
 
-  return { clave: '', estado: '', cara: null, schema: 'unknown' };
+  return { clave: '', estado: '', cara: null, codigoUnico: null, schema: 'unknown' };
 };
 
 // ---------------------------------------------------------------------
@@ -245,21 +252,37 @@ export function CargaCsvModal({ isOpen, onClose, selectedInventory, onContinue }
       }
       const colMap = detectColumnMap(headers);
       setSchema(colMap.schema);
-      if (colMap.schema === 'unknown' || !colMap.clave || !colMap.estado) {
+      if (colMap.schema === 'unknown' || (colMap.schema !== 'codigo-unico' && (!colMap.clave || !colMap.estado))) {
         setParseError(
           'No se detectaron las columnas esperadas. ' +
-          'Se requiere "Clave Sitio" + "Estado" (formato SEARS) o "Unidad" + "Ciudad" (formato Coca-Cola).'
+          'Se requiere una columna "Código Único" (formato recomendado), ' +
+          '"Clave Sitio" + "Estado" (formato SEARS) o "Unidad" + "Ciudad" (formato Coca-Cola).'
         );
         setIsParsing(false);
         return;
       }
-      const parsed: CsvRow[] = rows.map((r, idx) => ({
-        rowIndex: idx + 2, // +2 porque excel cuenta desde 1 y hay header
-        raw: r,
-        clave: trimDisplay(r[colMap.clave]),
-        estado: trimDisplay(r[colMap.estado]),
-        cara: colMap.cara ? trimDisplay(r[colMap.cara]) : null,
-      })).filter(r => r.clave && r.estado); // descartar filas sin datos
+      let parsed: CsvRow[];
+      if (colMap.schema === 'codigo-unico' && colMap.codigoUnico) {
+        parsed = rows.map((r, idx) => {
+          const cu = trimDisplay(r[colMap.codigoUnico!]);
+          const { clave, cara, estado } = splitCodigoUnico(cu);
+          return {
+            rowIndex: idx + 2,
+            raw: r,
+            clave,
+            estado,
+            cara: cara || null,
+          };
+        }).filter(r => r.clave);
+      } else {
+        parsed = rows.map((r, idx) => ({
+          rowIndex: idx + 2,
+          raw: r,
+          clave: trimDisplay(r[colMap.clave]),
+          estado: trimDisplay(r[colMap.estado]),
+          cara: colMap.cara ? trimDisplay(r[colMap.cara]) : null,
+        })).filter(r => r.clave && r.estado);
+      }
       setCsvRows(parsed);
       setIsParsing(false);
     } catch (err: unknown) {
@@ -361,7 +384,7 @@ export function CargaCsvModal({ isOpen, onClose, selectedInventory, onContinue }
                     {file ? file.name : 'Click para subir CSV o XLSX'}
                   </p>
                   <p className={`text-[11px] mt-1 ${isDark ? 'text-zinc-500' : 'text-gray-500'}`}>
-                    Formato detectable: SEARS (Clave Sitio + Estado) o Coca-Cola (Unidad + Ciudad)
+                    Columna requerida: <strong>Código Único</strong> (ej: PV1008_Flujo2_Puerto Vallarta)
                   </p>
                   {file && (
                     <button
@@ -374,6 +397,28 @@ export function CargaCsvModal({ isOpen, onClose, selectedInventory, onContinue }
                   )}
                 </div>
               </label>
+
+              {/* Botón descargar CSV de ejemplo */}
+              <button
+                type="button"
+                onClick={() => {
+                  const exampleCodes = selectedInventory.slice(0, 3).map(inv => inv.codigo_unico);
+                  while (exampleCodes.length < 3) exampleCodes.push('PV1008_Flujo2_Puerto Vallarta');
+                  const csvContent = ['Codigo Unico', ...exampleCodes].join('\n');
+                  const blob = new Blob(['﻿' + csvContent], { type: 'text/csv;charset=utf-8;' });
+                  const link = document.createElement('a');
+                  link.href = URL.createObjectURL(blob);
+                  link.download = 'ejemplo_cotejo.csv';
+                  document.body.appendChild(link);
+                  link.click();
+                  document.body.removeChild(link);
+                  URL.revokeObjectURL(link.href);
+                }}
+                className={`flex items-center gap-1.5 text-[11px] ${isDark ? 'text-purple-400 hover:text-purple-300' : 'text-purple-600 hover:text-purple-700'} transition-colors`}
+              >
+                <Download className="h-3 w-3" />
+                Descargar CSV de ejemplo
+              </button>
 
               {isParsing && (
                 <div className={`text-sm flex items-center gap-2 ${isDark ? 'text-zinc-400' : 'text-gray-600'}`}>
@@ -396,7 +441,7 @@ export function CargaCsvModal({ isOpen, onClose, selectedInventory, onContinue }
                   <div className={`p-2.5 rounded-lg border flex items-center gap-2 text-xs ${isDark ? 'bg-zinc-900 border-zinc-700 text-zinc-400' : 'bg-white border-gray-200 text-gray-600'}`}>
                     <Info className="h-3.5 w-3.5" />
                     <span>
-                      Esquema detectado: <strong className={isDark ? 'text-zinc-200' : 'text-gray-800'}>{schema === 'sears' ? 'SEARS' : schema === 'coca-cola' ? 'Coca-Cola' : 'Personalizado'}</strong>
+                      Esquema detectado: <strong className={isDark ? 'text-zinc-200' : 'text-gray-800'}>{schema === 'codigo-unico' ? 'Código Único' : schema === 'sears' ? 'SEARS' : schema === 'coca-cola' ? 'Coca-Cola' : 'Personalizado'}</strong>
                       {' • '}{csvRows.length} fila(s) leídas del CSV
                     </span>
                   </div>
