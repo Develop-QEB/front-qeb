@@ -3570,6 +3570,26 @@ export function CampanasPage() {
                         inventarios = matchingInv;
                       }
                     }
+                    // Filtrar inventarios por etapa del gestor de artes
+                    const etapaFilters = advancedFilters.filter(f => f.field === 'etapa' && f.value);
+                    if (etapaFilters.length > 0 && inventarios.length > 0) {
+                      const matchingInv = inventarios.filter(inv => {
+                        const invEtapa = (inv as any).estatus_arte || 'Carga Artes';
+                        return etapaFilters.every(f => {
+                          const mapped = ETAPA_VALUES.find(e => e.label === f.value)?.value;
+                          if (!mapped) return true;
+                          if (mapped === '__programado__') {
+                            const ip = (inv as any).indicaciones_programacion;
+                            const has = !!(ip && String(ip).trim());
+                            return f.operator === '!=' ? !has : has;
+                          }
+                          const matches = invEtapa === mapped;
+                          return f.operator === '!=' ? !matches : matches;
+                        });
+                      });
+                      inventarios = matchingInv;
+                      if (inventarios.length === 0) return null;
+                    }
                     const isLoadingInv = loadingInventarios.has(campana.id);
                     const apsAgrupados = getInventarioAgrupadoPorAPS(inventarios);
                     const hasInventarios = allInventarios.length > 0;
