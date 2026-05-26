@@ -1,5 +1,5 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { Users, Mail, Briefcase, Building, Shield, Loader2, Search, Pencil, X, Trash2, Plus, Network, UserPlus, Check, Crown, Ticket, Send, Image, AlertTriangle, Clock, CheckCircle2, KeyRound, DoorOpen } from 'lucide-react';
+import { Users, Mail, Briefcase, Building, Shield, Loader2, Search, Pencil, X, Trash2, Plus, Network, UserPlus, Check, Crown, Ticket, Send, Image, AlertTriangle, Clock, CheckCircle2, KeyRound, DoorOpen, Filter, ChevronDown } from 'lucide-react';
 import { useState, useEffect, useMemo, useRef } from 'react';
 import { Header } from '../../components/layout/Header';
 import { usuariosService, UsuarioAdmin, UpdateUsuarioInput, CreateUsuarioInput, AssignmentsData, Reassignment } from '../../services/usuarios.service';
@@ -1280,6 +1280,26 @@ function RedDeTrabajoTab() {
   const [editingEquipo, setEditingEquipo] = useState<Equipo | null>(null);
   const [deletingEquipo, setDeletingEquipo] = useState<Equipo | null>(null);
   const [addingMembersEquipo, setAddingMembersEquipo] = useState<Equipo | null>(null);
+  const [search, setSearch] = useState('');
+  const [debouncedSearch, setDebouncedSearch] = useState('');
+  const [filterArea, setFilterArea] = useState<string>('');
+  const [showAreaDropdown, setShowAreaDropdown] = useState(false);
+  const areaDropdownRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const timer = setTimeout(() => setDebouncedSearch(search), 300);
+    return () => clearTimeout(timer);
+  }, [search]);
+
+  useEffect(() => {
+    const handleClickOutside = (e: MouseEvent) => {
+      if (areaDropdownRef.current && !areaDropdownRef.current.contains(e.target as Node)) {
+        setShowAreaDropdown(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
 
   const { data: equipos, isLoading } = useQuery({
     queryKey: ['equipos'],
@@ -1354,16 +1374,100 @@ function RedDeTrabajoTab() {
     removeMemberMutation.mutate({ equipoId, usuarioId });
   };
 
+  const areasEnEquipos = useMemo(() => {
+    if (!equipos) return [];
+    const areas = new Set<string>();
+    for (const eq of equipos) {
+      for (const m of eq.miembros) {
+        if (m.area) areas.add(m.area);
+      }
+    }
+    return Array.from(areas).sort();
+  }, [equipos]);
+
+  const filteredEquipos = useMemo(() => {
+    if (!equipos) return [];
+    return equipos.filter((eq) => {
+      if (filterArea) {
+        const hasMemberInArea = eq.miembros.some((m) => m.area === filterArea);
+        if (!hasMemberInArea) return false;
+      }
+      if (!debouncedSearch) return true;
+      const s = debouncedSearch.toLowerCase();
+      if (eq.nombre.toLowerCase().includes(s)) return true;
+      if (eq.descripcion?.toLowerCase().includes(s)) return true;
+      return eq.miembros.some(
+        (m) =>
+          m.nombre.toLowerCase().includes(s) ||
+          m.email.toLowerCase().includes(s) ||
+          m.area?.toLowerCase().includes(s) ||
+          m.puesto?.toLowerCase().includes(s)
+      );
+    });
+  }, [equipos, debouncedSearch, filterArea]);
+
   return (
     <div className="space-y-5">
       {/* Control Bar */}
       <div className={`rounded-2xl border ${isDark ? 'border-purple-500/20' : 'border-purple-200'} ${isDark ? 'bg-gradient-to-br from-zinc-900/90 via-purple-950/20 to-zinc-900/90' : 'bg-white'} backdrop-blur-xl p-5`}>
-        <div className="flex items-center justify-between">
-          <div>
-            <h2 className={`text-lg font-semibold ${isDark ? 'text-white' : 'text-gray-900'}`}>Red de Trabajo</h2>
-            <p className={`text-sm ${isDark ? 'text-zinc-400' : 'text-gray-500'}`}>Organiza a los usuarios en equipos de trabajo</p>
+        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+          {/* Search */}
+          <div className="relative flex-1 w-full sm:max-w-md">
+            <Search className="absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-purple-400" />
+            <input
+              type="search"
+              placeholder="Buscar equipos o personas..."
+              className={`w-full pl-11 pr-4 py-3 rounded-xl border ${isDark ? 'border-purple-500/20' : 'border-purple-200'} ${isDark ? 'bg-zinc-900/80 text-white placeholder:text-zinc-500' : 'bg-gray-50 text-gray-900 placeholder:text-gray-400'} text-sm focus:outline-none focus:ring-2 focus:ring-purple-500/30 focus:border-purple-500/40 transition-all hover:border-purple-500/40`}
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+            />
           </div>
+
+          {/* Actions */}
           <div className="flex items-center gap-3">
+            {/* Area Filter */}
+            <div className="relative" ref={areaDropdownRef}>
+              <button
+                onClick={() => setShowAreaDropdown(!showAreaDropdown)}
+                className={`flex items-center gap-2 px-3 py-2.5 rounded-xl text-sm font-medium border transition-all ${
+                  filterArea
+                    ? 'bg-purple-600 text-white border-purple-500'
+                    : isDark ? 'bg-zinc-900/80 text-zinc-400 border-purple-500/20 hover:border-purple-500/40' : 'bg-gray-50 text-gray-500 border-purple-200 hover:border-purple-300'
+                }`}
+              >
+                <Filter className="h-4 w-4" />
+                {filterArea || 'Área'}
+                <ChevronDown className="h-3.5 w-3.5" />
+              </button>
+              {showAreaDropdown && (
+                <div className={`absolute right-0 top-full mt-2 w-56 rounded-xl border ${isDark ? 'border-purple-500/20 bg-zinc-900' : 'border-purple-200 bg-white'} shadow-xl z-50 py-1 max-h-64 overflow-y-auto`}>
+                  <button
+                    onClick={() => { setFilterArea(''); setShowAreaDropdown(false); }}
+                    className={`w-full text-left px-4 py-2 text-sm transition-colors ${
+                      !filterArea
+                        ? isDark ? 'bg-purple-500/20 text-purple-300' : 'bg-purple-50 text-purple-700'
+                        : isDark ? 'text-zinc-300 hover:bg-zinc-800' : 'text-gray-700 hover:bg-gray-50'
+                    }`}
+                  >
+                    Todas las áreas
+                  </button>
+                  {areasEnEquipos.map((area) => (
+                    <button
+                      key={area}
+                      onClick={() => { setFilterArea(area); setShowAreaDropdown(false); }}
+                      className={`w-full text-left px-4 py-2 text-sm transition-colors ${
+                        filterArea === area
+                          ? isDark ? 'bg-purple-500/20 text-purple-300' : 'bg-purple-50 text-purple-700'
+                          : isDark ? 'text-zinc-300 hover:bg-zinc-800' : 'text-gray-700 hover:bg-gray-50'
+                      }`}
+                    >
+                      {area}
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+
             <button
               onClick={() => setShowEquipoModal(true)}
               className="flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-semibold text-white bg-gradient-to-r from-purple-600 to-fuchsia-600 hover:from-purple-500 hover:to-fuchsia-500 shadow-lg shadow-purple-500/25 hover:shadow-purple-500/40 transition-all"
@@ -1372,7 +1476,7 @@ function RedDeTrabajoTab() {
               Nuevo Equipo
             </button>
             <div className={`px-4 py-2 rounded-xl ${isDark ? 'bg-purple-500/10' : 'bg-purple-50'} border ${isDark ? 'border-purple-500/20' : 'border-purple-200'}`}>
-              <span className={`${isDark ? 'text-purple-300' : 'text-purple-600'} text-sm font-medium`}>{equipos?.length || 0} equipos</span>
+              <span className={`${isDark ? 'text-purple-300' : 'text-purple-600'} text-sm font-medium`}>{filteredEquipos.length}{equipos && filteredEquipos.length !== equipos.length ? `/${equipos.length}` : ''} equipos</span>
             </div>
           </div>
         </div>
@@ -1384,9 +1488,9 @@ function RedDeTrabajoTab() {
           <Loader2 className="h-10 w-10 text-purple-400 animate-spin mb-4" />
           <p className={`${isDark ? 'text-purple-300/70' : 'text-gray-500'} text-sm`}>Cargando equipos...</p>
         </div>
-      ) : equipos && equipos.length > 0 ? (
+      ) : filteredEquipos.length > 0 ? (
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-          {equipos.map((equipo) => (
+          {filteredEquipos.map((equipo) => (
             <EquipoCard
               key={equipo.id}
               equipo={equipo}
@@ -1396,6 +1500,19 @@ function RedDeTrabajoTab() {
               onRemoveMember={(userId) => handleRemoveMember(equipo.id, userId)}
             />
           ))}
+        </div>
+      ) : (debouncedSearch || filterArea) ? (
+        <div className={`rounded-2xl border ${isDark ? 'border-purple-500/20' : 'border-purple-200'} ${isDark ? 'bg-gradient-to-br from-zinc-900/90 via-purple-950/20 to-zinc-900/90' : 'bg-white'} p-16 text-center`}>
+          <Search className="h-16 w-16 text-purple-400/50 mx-auto mb-4" />
+          <h3 className={`text-xl font-semibold ${isDark ? 'text-white' : 'text-gray-900'} mb-2`}>Sin resultados</h3>
+          <p className={`${isDark ? 'text-zinc-400' : 'text-gray-500'} mb-6`}>No se encontraron equipos con los filtros aplicados</p>
+          <button
+            onClick={() => { setSearch(''); setFilterArea(''); }}
+            className={`inline-flex items-center gap-2 px-6 py-3 rounded-xl text-sm font-medium ${isDark ? 'bg-zinc-800 text-zinc-300 hover:bg-zinc-700' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'} transition-all`}
+          >
+            <X className="h-4 w-4" />
+            Limpiar filtros
+          </button>
         </div>
       ) : (
         <div className={`rounded-2xl border ${isDark ? 'border-purple-500/20' : 'border-purple-200'} ${isDark ? 'bg-gradient-to-br from-zinc-900/90 via-purple-950/20 to-zinc-900/90' : 'bg-white'} p-16 text-center`}>
