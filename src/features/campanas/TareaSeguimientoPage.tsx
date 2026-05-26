@@ -2803,7 +2803,7 @@ function FilterToolbar({
               <span className="text-sm font-medium text-purple-300">Filtros de búsqueda</span>
               <button onClick={() => setShowFilters(false)} className="text-muted-foreground hover:text-foreground"><X className="h-4 w-4" /></button>
             </div>
-            <div className="space-y-3 max-h-[300px] overflow-y-auto scrollbar-purple pr-1">
+            <div className="space-y-3 max-h-[300px] overflow-visible pr-1">
               {filters.map((filter, index) => (
                 <div key={filter.id} className="flex items-center gap-2">
                   {index > 0 && <span className="text-[10px] text-purple-400 font-medium w-8">AND</span>}
@@ -2835,7 +2835,7 @@ function FilterToolbar({
                         : allOptions;
                       if (filtered.length === 0) return null;
                       return (
-                        <div className={`absolute left-0 top-full mt-1 w-full max-h-[200px] overflow-y-auto z-[300] rounded border shadow-xl ${isDark ? 'bg-zinc-800 border-zinc-600' : 'bg-white border-gray-200'}`}>
+                        <div className={`absolute left-0 top-full mt-1 w-full max-h-[200px] overflow-y-auto z-[9999] rounded border shadow-xl ${isDark ? 'bg-zinc-800 border-zinc-600' : 'bg-white border-gray-200'}`}>
                           {filtered.slice(0, 50).map((val) => (
                             <button
                               key={val}
