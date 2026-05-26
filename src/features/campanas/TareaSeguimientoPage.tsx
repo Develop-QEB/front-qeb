@@ -18891,6 +18891,7 @@ export function TareaSeguimientoPage() {
                                                         )}
                                                       </button>
                                                     </th>
+                                                    <th className="p-2 font-medium text-purple-300">Código Único</th>
                                                     <th className="p-2 font-medium text-purple-300">ID</th>
                                                     <th className="p-2 font-medium text-purple-300">Arte Aprobado</th>
                                                     <th className="p-2 font-medium text-purple-300">Archivo</th>
@@ -19791,6 +19792,7 @@ export function TareaSeguimientoPage() {
                                                 <thead className="bg-purple-900/20">
                                                   <tr className="border-b border-border text-left">
                                                     <th className="p-2 w-8"></th>
+                                                    <th className="p-2 font-medium text-purple-300">Código Único</th>
                                                     <th className="p-2 font-medium text-purple-300">ID</th>
                                                     <th className="p-2 font-medium text-purple-300">Arte Aprobado</th>
                                                     <th className="p-2 font-medium text-purple-300">Archivo</th>
