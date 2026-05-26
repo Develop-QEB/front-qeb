@@ -687,7 +687,7 @@ const SolicitudRow = React.memo(function SolicitudRow({
             <MessageSquare className="h-3.5 w-3.5" />
           </button>
 
-          {/* Eliminar */}
+          {/* Rechazar (marca status='Rechazada' + libera reservas, NO elimina) */}
           {canDeletePerm && (
             <button
               onClick={(e) => { e.stopPropagation(); onDelete(item.id); }}
@@ -696,7 +696,7 @@ const SolicitudRow = React.memo(function SolicitudRow({
                 ? isDark ? 'bg-red-500/10 text-red-400 hover:bg-red-500/20 hover:text-red-300 border-red-500/20 hover:border-red-500/40' : 'bg-red-50 text-red-600 hover:bg-red-100 hover:text-red-700 border-red-200 hover:border-red-300'
                 : `${isDark ? 'bg-zinc-800/50 text-zinc-600 border-zinc-700/30' : 'bg-gray-100 text-gray-400 border-gray-200'} cursor-not-allowed`
                 }`}
-              title={canDelete ? 'Eliminar solicitud' : 'No disponible'}
+              title={canDelete ? 'Rechazar solicitud' : 'No disponible'}
             >
               <Trash2 className="h-3.5 w-3.5" />
             </button>
@@ -884,9 +884,12 @@ export function SolicitudesPage() {
     placeholderData: (prev) => prev, // mantiene la tabla anterior visible al paginar/filtrar
   });
 
-  // Delete mutation
+  // Botón papelera: NO elimina la solicitud, solo cambia status a 'Rechazada'.
+  // El back libera automáticamente las reservas asociadas (soft-delete) y
+  // el listado oculta 'Rechazada' por default, así que visualmente "desaparece".
+  // Mantenemos el nombre `deleteMutation` para minimizar cambios en el JSX.
   const deleteMutation = useMutation({
-    mutationFn: (id: number) => solicitudesService.delete(id),
+    mutationFn: (id: number) => solicitudesService.updateStatus(id, 'Rechazada'),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['solicitudes'] });
       queryClient.invalidateQueries({ queryKey: ['solicitudes-stats'] });
@@ -1737,13 +1740,15 @@ export function SolicitudesPage() {
         </div>
       </div>
 
-      {/* Delete Confirmation Modal */}
+      {/* Rechazo Confirmation Modal — NO elimina, solo marca status='Rechazada'
+          (el back libera reservas y oculta del listado). */}
       {deleteId && (
         <div className={`fixed inset-0 ${isDark ? 'bg-black/70' : 'bg-black/40'} flex items-center justify-center z-50`}>
           <div className={`${isDark ? 'bg-zinc-900 border-zinc-700' : 'bg-white border-gray-200'} border rounded-2xl p-6 max-w-md`}>
-            <h3 className={`text-lg font-semibold ${isDark ? 'text-white' : 'text-gray-900'} mb-2`}>Confirmar eliminacion</h3>
+            <h3 className={`text-lg font-semibold ${isDark ? 'text-white' : 'text-gray-900'} mb-2`}>Rechazar solicitud</h3>
             <p className={`${isDark ? 'text-zinc-400' : 'text-gray-500'} mb-6`}>
-              Estas seguro de que deseas eliminar esta solicitud? Esta accion no se puede deshacer.
+              Esto cambiara el status a <strong>Rechazada</strong> y liberara las reservas asociadas.
+              La solicitud no se borra: puedes verla filtrando por status &ldquo;Rechazada&rdquo;.
             </p>
             <div className="flex justify-end gap-3">
               <button
@@ -1757,7 +1762,7 @@ export function SolicitudesPage() {
                 disabled={deleteMutation.isPending}
                 className="px-4 py-2 rounded-lg bg-red-600 text-white text-sm hover:bg-red-700 disabled:opacity-50"
               >
-                {deleteMutation.isPending ? 'Eliminando...' : 'Eliminar'}
+                {deleteMutation.isPending ? 'Rechazando...' : 'Rechazar'}
               </button>
             </div>
           </div>
