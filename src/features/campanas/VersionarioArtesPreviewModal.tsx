@@ -128,6 +128,46 @@ function NotasPopover({ notas, isDark }: { notas: string; isDark: boolean }) {
   );
 }
 
+// ---- NombreArtePopover — muestra nombres de artes en popover para evitar desborde ----
+function NombreArtePopover({ nombreArte, isDark }: { nombreArte: string; isDark: boolean }) {
+  const [open, setOpen] = useState(false);
+  const lines = nombreArte.split('\n').filter(l => l.trim());
+  if (lines.length === 0) return <span className={`text-xs ${isDark ? 'text-zinc-600' : 'text-gray-400'}`}>-</span>;
+
+  const shortLabel = lines.length === 1
+    ? (lines[0].length > 28 ? lines[0].slice(0, 28) + '...' : lines[0])
+    : `${lines.length} artes`;
+
+  return (
+    <div className="relative">
+      <button
+        onClick={() => setOpen(!open)}
+        className={`px-2 py-1 rounded text-[10px] font-medium transition-colors text-left max-w-[160px] truncate block ${isDark ? 'bg-zinc-800/60 text-zinc-300 hover:bg-zinc-700/60 border border-zinc-700/50' : 'bg-gray-100 text-gray-700 hover:bg-gray-200 border border-gray-200'}`}
+        title={nombreArte}
+      >
+        {shortLabel}
+      </button>
+      {open && (
+        <>
+          <div className="fixed inset-0 z-[90]" onClick={() => setOpen(false)} />
+          <div className={`absolute bottom-full left-0 mb-1.5 z-[100] w-80 max-h-60 overflow-auto rounded-xl border shadow-2xl ${isDark ? 'border-purple-500/20 bg-zinc-900' : 'border-purple-200 bg-white'}`}>
+            <div className={`sticky top-0 px-3 py-2 border-b ${isDark ? 'border-zinc-800 bg-zinc-900' : 'border-gray-200 bg-white'}`}>
+              <span className={`text-[10px] font-semibold ${isDark ? 'text-purple-300' : 'text-purple-700'}`}>Nombres de Arte ({lines.length})</span>
+            </div>
+            <div className="p-2 space-y-1">
+              {lines.map((line, i) => (
+                <div key={i} className={`px-2 py-1.5 rounded text-[11px] break-all ${isDark ? 'bg-zinc-800/60 text-zinc-300' : 'bg-gray-50 text-gray-700'}`}>
+                  {line}
+                </div>
+              ))}
+            </div>
+          </div>
+        </>
+      )}
+    </div>
+  );
+}
+
 // ---- PeriodFilterModal — filtro de periodo (año/catorcena) para uso dentro del modal ----
 function PeriodFilterModal({
   catorcenasData,
@@ -351,6 +391,7 @@ interface Props {
   onDownload: () => void;
   catorcenasData?: { years: number[]; data: Catorcena[] };
   onReloadPeriod?: (yearInicio: number, yearFin: number, catInicio?: number, catFin?: number) => void;
+  initialPeriod?: { year: number; catorcena: number };
 }
 
 const PAGE_SIZE = 25;
@@ -433,7 +474,7 @@ function ArteThumb({ url }: { url: string }) {
   );
 }
 
-export function VersionarioArtesPreviewModal({ isOpen, onClose, preview, isLoading, isDownloading, loadingProgress, onDownload, catorcenasData, onReloadPeriod }: Props) {
+export function VersionarioArtesPreviewModal({ isOpen, onClose, preview, isLoading, isDownloading, loadingProgress, onDownload, catorcenasData, onReloadPeriod, initialPeriod }: Props) {
   const isDark = useThemeStore(s => s.theme) === 'dark';
   const [currentPage, setCurrentPage] = useState(1);
   const [search, setSearch] = useState('');
@@ -443,6 +484,8 @@ export function VersionarioArtesPreviewModal({ isOpen, onClose, preview, isLoadi
   const [filterCliente, setFilterCliente] = useState('');
   const [filterPlaza, setFilterPlaza] = useState('');
   const [filterArte, setFilterArte] = useState<'' | 'con_arte' | 'sin_arte'>('');
+  const [filterAps, setFilterAps] = useState<'' | 'con_aps' | 'sin_aps'>('');
+  const [filterPost, setFilterPost] = useState<'' | 'con_post' | 'sin_post'>('');
   const [filterTipoArchivo, setFilterTipoArchivo] = useState('');
   const [showFilters, setShowFilters] = useState(false);
 
@@ -461,12 +504,20 @@ export function VersionarioArtesPreviewModal({ isOpen, onClose, preview, isLoadi
       setFilterCliente('');
       setFilterPlaza('');
       setFilterArte('');
+      setFilterAps('');
+      setFilterPost('');
       setFilterTipoArchivo('');
       setShowFilters(false);
       setPeriodYearInicio(undefined);
       setPeriodYearFin(undefined);
       setPeriodCatInicio(undefined);
       setPeriodCatFin(undefined);
+    } else if (initialPeriod) {
+      setPeriodYearInicio(initialPeriod.year);
+      setPeriodYearFin(initialPeriod.year);
+      setPeriodCatInicio(initialPeriod.catorcena);
+      setPeriodCatFin(initialPeriod.catorcena);
+      setShowFilters(true);
     }
   }, [isOpen]);
 
@@ -498,7 +549,7 @@ export function VersionarioArtesPreviewModal({ isOpen, onClose, preview, isLoadi
   }, [preview]);
 
   const isPeriodActive = periodYearInicio !== undefined && periodYearFin !== undefined;
-  const activeFilterCount = [filterEstatus, filterCliente, filterPlaza, filterArte, filterTipoArchivo].filter(Boolean).length + (isPeriodActive ? 1 : 0);
+  const activeFilterCount = [filterEstatus, filterCliente, filterPlaza, filterArte, filterAps, filterPost, filterTipoArchivo].filter(Boolean).length + (isPeriodActive ? 1 : 0);
 
   // El filtro de periodo dispara una recarga desde el backend (onReloadPeriod),
   // por lo que no necesitamos filtrar client-side por periodo — los datos
@@ -533,6 +584,20 @@ export function VersionarioArtesPreviewModal({ isOpen, onClose, preview, isLoadi
       rows = rows.filter(r => !r.artesUrls.some(u => !!u));
     }
 
+    // Filtro Con/Sin APS
+    if (filterAps === 'con_aps') {
+      rows = rows.filter(r => r.apsQebId != null && r.apsQebId !== '' && r.apsQebId !== 0);
+    } else if (filterAps === 'sin_aps') {
+      rows = rows.filter(r => !r.apsQebId || r.apsQebId === '' || r.apsQebId === 0);
+    }
+
+    // Filtro Con/Sin POST
+    if (filterPost === 'con_post') {
+      rows = rows.filter(r => r.posted);
+    } else if (filterPost === 'sin_post') {
+      rows = rows.filter(r => !r.posted);
+    }
+
     // Filtro Tipo de Archivo
     if (filterTipoArchivo) {
       const ext = `.${filterTipoArchivo}`;
@@ -552,14 +617,14 @@ export function VersionarioArtesPreviewModal({ isOpen, onClose, preview, isLoadi
     }
 
     return rows;
-  }, [preview, search, filterEstatus, filterCliente, filterPlaza, filterArte, filterTipoArchivo]);
+  }, [preview, search, filterEstatus, filterCliente, filterPlaza, filterArte, filterAps, filterPost, filterTipoArchivo]);
 
   const totalPages = Math.max(1, Math.ceil(filteredRows.length / PAGE_SIZE));
   const safePage = Math.min(currentPage, totalPages);
   const paginated = filteredRows.slice((safePage - 1) * PAGE_SIZE, safePage * PAGE_SIZE);
 
   // Cuando cambia cualquier filtro, reset a pagina 1
-  useEffect(() => { setCurrentPage(1); }, [search, filterEstatus, filterCliente, filterPlaza, filterArte, filterTipoArchivo]);
+  useEffect(() => { setCurrentPage(1); }, [search, filterEstatus, filterCliente, filterPlaza, filterArte, filterAps, filterPost, filterTipoArchivo]);
 
   if (!isOpen) return null;
 
@@ -698,9 +763,55 @@ export function VersionarioArtesPreviewModal({ isOpen, onClose, preview, isLoadi
                 Sin arte
               </button>
             </div>
+            {/* Filtro Con/Sin APS */}
+            <div className="flex items-center gap-1">
+              <button
+                onClick={() => setFilterAps(filterAps === 'con_aps' ? '' : 'con_aps')}
+                className={`px-3 py-1.5 rounded-full text-xs font-medium transition-all duration-200 ${
+                  filterAps === 'con_aps'
+                    ? isDark ? 'bg-blue-500/20 text-blue-300 border border-blue-500/40' : 'bg-blue-100 text-blue-700 border border-blue-200'
+                    : isDark ? 'bg-zinc-800/80 text-zinc-400 border border-zinc-700/50 hover:border-zinc-600' : 'bg-gray-100 text-gray-500 border border-gray-200 hover:border-gray-300'
+                }`}
+              >
+                Con APS
+              </button>
+              <button
+                onClick={() => setFilterAps(filterAps === 'sin_aps' ? '' : 'sin_aps')}
+                className={`px-3 py-1.5 rounded-full text-xs font-medium transition-all duration-200 ${
+                  filterAps === 'sin_aps'
+                    ? isDark ? 'bg-amber-500/20 text-amber-300 border border-amber-500/40' : 'bg-amber-100 text-amber-700 border border-amber-200'
+                    : isDark ? 'bg-zinc-800/80 text-zinc-400 border border-zinc-700/50 hover:border-zinc-600' : 'bg-gray-100 text-gray-500 border border-gray-200 hover:border-gray-300'
+                }`}
+              >
+                Sin APS
+              </button>
+            </div>
+            {/* Filtro Con/Sin POST */}
+            <div className="flex items-center gap-1">
+              <button
+                onClick={() => setFilterPost(filterPost === 'con_post' ? '' : 'con_post')}
+                className={`px-3 py-1.5 rounded-full text-xs font-medium transition-all duration-200 ${
+                  filterPost === 'con_post'
+                    ? isDark ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/40' : 'bg-emerald-100 text-emerald-700 border border-emerald-200'
+                    : isDark ? 'bg-zinc-800/80 text-zinc-400 border border-zinc-700/50 hover:border-zinc-600' : 'bg-gray-100 text-gray-500 border border-gray-200 hover:border-gray-300'
+                }`}
+              >
+                Con POST
+              </button>
+              <button
+                onClick={() => setFilterPost(filterPost === 'sin_post' ? '' : 'sin_post')}
+                className={`px-3 py-1.5 rounded-full text-xs font-medium transition-all duration-200 ${
+                  filterPost === 'sin_post'
+                    ? isDark ? 'bg-red-500/20 text-red-300 border border-red-500/40' : 'bg-red-100 text-red-700 border border-red-200'
+                    : isDark ? 'bg-zinc-800/80 text-zinc-400 border border-zinc-700/50 hover:border-zinc-600' : 'bg-gray-100 text-gray-500 border border-gray-200 hover:border-gray-300'
+                }`}
+              >
+                Sin POST
+              </button>
+            </div>
             {activeFilterCount > 0 && (
               <button
-                onClick={() => { setFilterEstatus(''); setFilterCliente(''); setFilterPlaza(''); setFilterArte(''); setFilterTipoArchivo(''); setPeriodYearInicio(undefined); setPeriodYearFin(undefined); setPeriodCatInicio(undefined); setPeriodCatFin(undefined); }}
+                onClick={() => { setFilterEstatus(''); setFilterCliente(''); setFilterPlaza(''); setFilterArte(''); setFilterAps(''); setFilterPost(''); setFilterTipoArchivo(''); setPeriodYearInicio(undefined); setPeriodYearFin(undefined); setPeriodCatInicio(undefined); setPeriodCatFin(undefined); }}
                 className={`px-2 py-1 text-[10px] rounded transition-colors ${isDark ? 'text-zinc-500 hover:text-zinc-300' : 'text-gray-400 hover:text-gray-700'}`}
               >
                 Limpiar filtros
@@ -816,7 +927,9 @@ export function VersionarioArtesPreviewModal({ isOpen, onClose, preview, isLoadi
                     <td className="p-2">
                       <NotasPopover notas={r.notas} isDark={isDark} />
                     </td>
-                    <td className="p-2 max-w-[260px] whitespace-pre-wrap text-[11px]">{r.nombreArte || '-'}</td>
+                    <td className="p-2">
+                      <NombreArtePopover nombreArte={r.nombreArte} isDark={isDark} />
+                    </td>
                     {Array.from({ length: arteCols }).map((_, i) => (
                       <td key={`a-${idx}-${i}`} className="p-2">
                         {r.artesUrls[i] ? <ArteThumb url={r.artesUrls[i]} /> : <span className="text-zinc-600">-</span>}

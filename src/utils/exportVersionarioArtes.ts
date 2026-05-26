@@ -372,6 +372,7 @@ export interface VersionarioArtesPreviewRow {
   notas: string;
   nombreArte: string;
   artesUrls: string[];
+  posted: boolean;
 }
 
 // Determina el estatus jerarquico de un item: nivel + label.
@@ -615,6 +616,16 @@ export function buildVersionarioArtesPreview({ campanas }: { campanas: Versionar
 
       const { text: estatusText, breakdown: estatusBreakdown } = buildEstatusCircuito(arr);
 
+      const apsNumbers = arr.map(it => Number((it as any).APS)).filter(n => !isNaN(n) && n > 0);
+      const uniqueAps = [...new Set(apsNumbers)];
+      let posted = false;
+      if ((campana as any).posted_to_sap) {
+        posted = true;
+      } else if ((campana as any).posted_aps && uniqueAps.length > 0) {
+        const postedApsSet = new Set(((campana as any).posted_aps as number[]).map(Number));
+        posted = uniqueAps.every(a => postedApsSet.has(a));
+      }
+
       rows.push({
         idCampana: campana.id,
         plaza: plazaDisplay,
@@ -638,6 +649,7 @@ export function buildVersionarioArtesPreview({ campanas }: { campanas: Versionar
         notas: notasResumen,
         nombreArte: buildNombresArtesText(urls),
         artesUrls: urls,
+        posted,
       });
     }
   }

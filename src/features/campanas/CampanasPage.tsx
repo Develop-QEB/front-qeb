@@ -2427,133 +2427,114 @@ export function CampanasPage() {
   };
 
   const handleExportVersionarioArtes = async () => {
-    // Set único de campañas filtradas que están visibles en el Versionario.
-    const campanasMap = new Map<number, Campana>();
-    // Catorcenas activas visibles en el versionario
-    const activeCatKeys = new Set<string>();
-    campanasPorCatorcena.forEach(g => {
-      const cat = g.catorcena as { num: number; anio: number };
-      activeCatKeys.add(`${cat.num}:${cat.anio}`);
-      g.campanas.forEach(c => {
-        if (!campanasMap.has(c.id)) campanasMap.set(c.id, c);
-      });
-    });
-    // Pre-filtrar: solo campañas que realmente tengan contenido en las catorcenas activas
-    const campanasUnicas = [...campanasMap.values()].filter(c => {
-      const catContenido = (c as any).catorcenas_con_contenido as string | null;
-      if (catContenido) {
-        const cats = catContenido.split(',');
-        return cats.some(entry => activeCatKeys.has(entry.trim()));
-      }
-      // Sin catorcenas_con_contenido: incluir (podría tener inventario)
-      return true;
-    });
-    if (campanasUnicas.length === 0) return;
-    setVersionarioCampanasBase(campanasUnicas);
-
-    // Rangos de fecha de las catorcenas actualmente filtradas (lo que el
-    // usuario ve en la vista Versionario). Si el usuario filtro a Cat 15,
-    // solo dejamos circuitos cuyo inicio_periodo cae en Cat 15. Sin filtro
-    // → todos los circuitos pasan.
-    const activeCatRanges: Array<{ inicio: string; fin: string }> = [];
-    const seenCat = new Set<string>();
-    for (const g of campanasPorCatorcena) {
-      const cat = g.catorcena as { num: number; anio: number };
-      const key = `${cat.num}-${cat.anio}`;
-      if (seenCat.has(key)) continue;
-      seenCat.add(key);
-      const c = catorcenasData?.data.find(x => x.numero_catorcena === cat.num && x.a_o === cat.anio);
-      if (c?.fecha_inicio && c?.fecha_fin) {
-        activeCatRanges.push({ inicio: c.fecha_inicio, fin: c.fecha_fin });
-      }
-    }
-    const itemDentroDeRango = (item: any): boolean => {
-      if (activeCatRanges.length === 0) return true; // sin filtro
-      const inicio = String(item.inicio_periodo || '').slice(0, 10);
-      const fin = String(item.fin_periodo || inicio || '').slice(0, 10);
-      if (!inicio) return false;
-      return activeCatRanges.some(r =>
-        inicio <= String(r.fin).slice(0, 10) && fin >= String(r.inicio).slice(0, 10)
-      );
-    };
-
-    // Abrir el modal preview de inmediato con loader; la data se carga en bg.
-    // (Antes habia un window.confirm si eran >30 campañas — quitado: el progreso
-    // se ve dentro del modal y el usuario puede cerrarlo si se arrepiente.)
     versionarioCancelledRef.current = false;
     setVersionarioRawData(null);
     setVersionarioPreview(null);
     setVersionarioPreviewOpen(true);
 
-    setExportingVersionarioArtes(true);
-    setVersionarioArtesProgress({ current: 0, total: campanasUnicas.length });
-
-    try {
-      // POOL_SIZE alto: cada campaña SOLO hace 2 calls (con/sin arte) en preview,
-      // asi que podemos paralelizar mas sin saturar el server.
-      const POOL_SIZE = 15;
-      const resultados: Array<{
-        campana: Campana;
-        items: any[];
-        digitalFilesByReserva: Map<number, string[]>;
-        notesByUrl: Map<string, string>;
-      }> = [];
-
-      // Modo "lightweight" para el preview: solo inventarios, sin notas ni
-      // urls de artes digitales (esos requieren 1 call por reserva — muy
-      // lento). Se completan al darle "Descargar Excel".
-      const procesarCampana = async (campana: Campana) => {
-        try {
-          const [conArte, sinArte] = await Promise.all([
-            campanasService.getInventarioConArte(campana.id).catch(() => []),
-            // includeWithoutAps: true → tambien trae items sin APS asignado.
-            // SOLO afecta esta llamada del versionario; otros callers siguen
-            // pidiendo el endpoint sin flag (excluyendo sin-APS como antes).
-            campanasService.getInventarioSinArte(campana.id, { includeWithoutAps: true }).catch(() => []),
-          ]);
-          const allItems = [...(conArte || []), ...(sinArte || [])];
-          // Filtrar circuitos por catorcena activa (lo que el usuario filtro
-          // en la vista Versionario). Si no hay filtro, pasan todos.
-          const items = allItems.filter(it => itemDentroDeRango(it));
-          resultados.push({
-            campana,
-            items,
-            digitalFilesByReserva: new Map(),  // se llenara al descargar
-            notesByUrl: new Map(),              // se llenara al descargar
-          });
-        } catch {
-          // Si falla la campaña entera, la dejamos fuera para no bloquear el export.
-        } finally {
-          setVersionarioArtesProgress(prev => ({ ...prev, current: prev.current + 1 }));
+    if (currentCatorcena) {
+      await handleReloadVersionarioPeriod(
+        currentCatorcena.a_o,
+        currentCatorcena.a_o,
+        currentCatorcena.numero_catorcena,
+        currentCatorcena.numero_catorcena
+      );
+    } else {
+      // Sin catorcena actual detectada: cargar desde las campañas filtradas en la vista
+      const campanasMap = new Map<number, Campana>();
+      const activeCatKeys = new Set<string>();
+      campanasPorCatorcena.forEach(g => {
+        const cat = g.catorcena as { num: number; anio: number };
+        activeCatKeys.add(`${cat.num}:${cat.anio}`);
+        g.campanas.forEach(c => {
+          if (!campanasMap.has(c.id)) campanasMap.set(c.id, c);
+        });
+      });
+      const campanasUnicas = [...campanasMap.values()].filter(c => {
+        const catContenido = (c as any).catorcenas_con_contenido as string | null;
+        if (catContenido) {
+          const cats = catContenido.split(',');
+          return cats.some(entry => activeCatKeys.has(entry.trim()));
         }
+        return true;
+      });
+      if (campanasUnicas.length === 0) return;
+      setVersionarioCampanasBase(campanasUnicas);
+
+      const activeCatRanges: Array<{ inicio: string; fin: string }> = [];
+      const seenCat = new Set<string>();
+      for (const g of campanasPorCatorcena) {
+        const cat = g.catorcena as { num: number; anio: number };
+        const key = `${cat.num}-${cat.anio}`;
+        if (seenCat.has(key)) continue;
+        seenCat.add(key);
+        const c = catorcenasData?.data.find(x => x.numero_catorcena === cat.num && x.a_o === cat.anio);
+        if (c?.fecha_inicio && c?.fecha_fin) {
+          activeCatRanges.push({ inicio: c.fecha_inicio, fin: c.fecha_fin });
+        }
+      }
+      const itemDentroDeRango = (item: any): boolean => {
+        if (activeCatRanges.length === 0) return true;
+        const inicio = String(item.inicio_periodo || '').slice(0, 10);
+        const fin = String(item.fin_periodo || inicio || '').slice(0, 10);
+        if (!inicio) return false;
+        return activeCatRanges.some(r =>
+          inicio <= String(r.fin).slice(0, 10) && fin >= String(r.inicio).slice(0, 10)
+        );
       };
 
-      // Procesar en batches de POOL_SIZE. Si el usuario cierra el modal,
-      // versionarioCancelledRef.current === true y abortamos el loop.
-      for (let i = 0; i < campanasUnicas.length; i += POOL_SIZE) {
-        if (versionarioCancelledRef.current) break;
-        const batch = campanasUnicas.slice(i, i + POOL_SIZE);
-        await Promise.all(batch.map(procesarCampana));
+      setExportingVersionarioArtes(true);
+      setVersionarioArtesProgress({ current: 0, total: campanasUnicas.length });
+
+      try {
+        const POOL_SIZE = 15;
+        const resultados: Array<{
+          campana: Campana;
+          items: any[];
+          digitalFilesByReserva: Map<number, string[]>;
+          notesByUrl: Map<string, string>;
+        }> = [];
+
+        const procesarCampana = async (campana: Campana) => {
+          try {
+            const [conArte, sinArte] = await Promise.all([
+              campanasService.getInventarioConArte(campana.id).catch(() => []),
+              campanasService.getInventarioSinArte(campana.id, { includeWithoutAps: true }).catch(() => []),
+            ]);
+            const allItems = [...(conArte || []), ...(sinArte || [])];
+            const items = allItems.filter(it => itemDentroDeRango(it));
+            resultados.push({
+              campana,
+              items,
+              digitalFilesByReserva: new Map(),
+              notesByUrl: new Map(),
+            });
+          } catch { /* skip */ } finally {
+            setVersionarioArtesProgress(prev => ({ ...prev, current: prev.current + 1 }));
+          }
+        };
+
+        for (let i = 0; i < campanasUnicas.length; i += POOL_SIZE) {
+          if (versionarioCancelledRef.current) break;
+          const batch = campanasUnicas.slice(i, i + POOL_SIZE);
+          await Promise.all(batch.map(procesarCampana));
+        }
+
+        if (versionarioCancelledRef.current) return;
+
+        if (resultados.length === 0) {
+          alert('No se pudo recuperar inventario de las campañas seleccionadas.');
+          return;
+        }
+
+        const preview = buildVersionarioArtesPreview({ campanas: resultados });
+        setVersionarioRawData(resultados);
+        setVersionarioPreview(preview);
+        if (!versionarioCancelledRef.current) setVersionarioPreviewOpen(true);
+      } finally {
+        setExportingVersionarioArtes(false);
+        setVersionarioArtesProgress({ current: 0, total: 0 });
       }
-
-      // Si fue cancelado, no abrimos preview ni mostramos error.
-      if (versionarioCancelledRef.current) return;
-
-      if (resultados.length === 0) {
-        alert('No se pudo recuperar inventario de las campañas seleccionadas.');
-        return;
-      }
-
-      // En vez de exportar directo, abrimos el modal preview con las filas armadas.
-      // El usuario revisa, filtra y desde ahi pulsa "Descargar Excel".
-      const preview = buildVersionarioArtesPreview({ campanas: resultados });
-      setVersionarioRawData(resultados);
-      setVersionarioPreview(preview);
-      // Si el usuario lo cerro mientras procesabamos los ultimos, no lo reabrimos.
-      if (!versionarioCancelledRef.current) setVersionarioPreviewOpen(true);
-    } finally {
-      setExportingVersionarioArtes(false);
-      setVersionarioArtesProgress({ current: 0, total: 0 });
     }
   };
 
@@ -4247,6 +4228,7 @@ export function CampanasPage() {
           onDownload={handleDownloadVersionarioFromPreview}
           catorcenasData={catorcenasData}
           onReloadPeriod={handleReloadVersionarioPeriod}
+          initialPeriod={currentCatorcena ? { year: currentCatorcena.a_o, catorcena: currentCatorcena.numero_catorcena } : undefined}
         />
       )}
 
