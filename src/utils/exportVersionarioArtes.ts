@@ -358,6 +358,8 @@ export interface VersionarioArtesPreviewRow {
   cuic: string;
   fechaInicio: string;
   fechaFin: string;
+  fechaInicioRaw: string;
+  fechaFinRaw: string;
   cliente: string;
   marca: string;
   campania: string;
@@ -570,10 +572,37 @@ export function buildVersionarioArtesPreview({ campanas }: { campanas: Versionar
     const caras = arr.reduce((sum, it) => sum + (Number((it as any).caras_totales) || 1), 0);
 
       const notasResumen = (() => {
-        if (!notesByUrl || notesByUrl.size === 0) return '';
+        // Primero intentar notesByUrl (disponible en fase de descarga con datos enriquecidos)
+        if (notesByUrl && notesByUrl.size > 0) {
+          const lines: string[] = [];
+          urls.forEach((url, idx) => {
+            const nota = (notesByUrl.get(url) || '').trim();
+            if (nota) lines.push(`Arte ${idx + 1}: ${nota}`);
+          });
+          if (lines.length > 0) return lines.join('\n');
+        }
+        // Fallback: extraer notas desde artes_detalle, alineadas con las URLs únicas
+        const notaByArchivo = new Map<string, string>();
+        for (const it of arr) {
+          const detalle = (it as any).artes_detalle;
+          if (!detalle) continue;
+          try {
+            const parsed = typeof detalle === 'string' ? JSON.parse(detalle) : detalle;
+            if (Array.isArray(parsed)) {
+              for (const entry of parsed) {
+                const archivo = (entry.archivo || '').trim();
+                const nota = (entry.nota || '').trim();
+                if (archivo && nota && !notaByArchivo.has(archivo)) {
+                  notaByArchivo.set(archivo, nota);
+                }
+              }
+            }
+          } catch { /* ignore */ }
+        }
+        if (notaByArchivo.size === 0) return '';
         const lines: string[] = [];
         urls.forEach((url, idx) => {
-          const nota = (notesByUrl.get(url) || '').trim();
+          const nota = notaByArchivo.get(url) || '';
           if (nota) lines.push(`Arte ${idx + 1}: ${nota}`);
         });
         return lines.join('\n');
@@ -595,6 +624,8 @@ export function buildVersionarioArtesPreview({ campanas }: { campanas: Versionar
         cuic,
         fechaInicio: formatDate(minInicio),
         fechaFin: formatDate(maxFin),
+        fechaInicioRaw: minInicio,
+        fechaFinRaw: maxFin,
         cliente,
         marca,
         campania: campaniaNombre,
@@ -787,10 +818,36 @@ export async function exportVersionarioArtesMulti({ campanas, fileNameSuffix }: 
     const caras = arr.reduce((sum, it) => sum + (Number((it as any).caras_totales) || 1), 0);
 
     const notasResumen = (() => {
-      if (!notesByUrl || notesByUrl.size === 0) return '';
+      if (notesByUrl && notesByUrl.size > 0) {
+        const lines: string[] = [];
+        artesUrls.forEach((url, idx) => {
+          const nota = (notesByUrl.get(url) || '').trim();
+          if (nota) lines.push(`Arte ${idx + 1}: ${nota}`);
+        });
+        if (lines.length > 0) return lines.join('\n');
+      }
+      // Fallback: extraer notas desde artes_detalle, alineadas con URLs únicas
+      const notaByArchivo = new Map<string, string>();
+      for (const it of arr) {
+        const detalle = (it as any).artes_detalle;
+        if (!detalle) continue;
+        try {
+          const parsed = typeof detalle === 'string' ? JSON.parse(detalle) : detalle;
+          if (Array.isArray(parsed)) {
+            for (const entry of parsed) {
+              const archivo = (entry.archivo || '').trim();
+              const nota = (entry.nota || '').trim();
+              if (archivo && nota && !notaByArchivo.has(archivo)) {
+                notaByArchivo.set(archivo, nota);
+              }
+            }
+          }
+        } catch { /* ignore */ }
+      }
+      if (notaByArchivo.size === 0) return '';
       const lines: string[] = [];
       artesUrls.forEach((url, idx) => {
-        const nota = (notesByUrl.get(url) || '').trim();
+        const nota = notaByArchivo.get(url) || '';
         if (nota) lines.push(`Arte ${idx + 1}: ${nota}`);
       });
       return lines.join('\n');

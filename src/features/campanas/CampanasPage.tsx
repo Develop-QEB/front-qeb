@@ -1194,6 +1194,8 @@ export function CampanasPage() {
   // Datos crudos en cache para que "Descargar Excel" no vuelva a fetchear
   const [versionarioRawData, setVersionarioRawData] = useState<VersionarioArtesMultiArgs['campanas'] | null>(null);
   const [versionarioDownloading, setVersionarioDownloading] = useState(false);
+  // Campañas base usadas en el último export del versionario (para re-fetch con nuevo periodo)
+  const [versionarioCampanasBase, setVersionarioCampanasBase] = useState<Campana[]>([]);
   // Inversión (costo) por catorcena para la vista Versionario: { campanaId: { "numCat:anio": inversion } }
   const [inversionPorCatorcena, setInversionPorCatorcena] = useState<Record<number, Record<string, number>>>({});
 
@@ -2427,11 +2429,27 @@ export function CampanasPage() {
   const handleExportVersionarioArtes = async () => {
     // Set único de campañas filtradas que están visibles en el Versionario.
     const campanasMap = new Map<number, Campana>();
-    campanasPorCatorcena.forEach(g => g.campanas.forEach(c => {
-      if (!campanasMap.has(c.id)) campanasMap.set(c.id, c);
-    }));
-    const campanasUnicas = [...campanasMap.values()];
+    // Catorcenas activas visibles en el versionario
+    const activeCatKeys = new Set<string>();
+    campanasPorCatorcena.forEach(g => {
+      const cat = g.catorcena as { num: number; anio: number };
+      activeCatKeys.add(`${cat.num}:${cat.anio}`);
+      g.campanas.forEach(c => {
+        if (!campanasMap.has(c.id)) campanasMap.set(c.id, c);
+      });
+    });
+    // Pre-filtrar: solo campañas que realmente tengan contenido en las catorcenas activas
+    const campanasUnicas = [...campanasMap.values()].filter(c => {
+      const catContenido = (c as any).catorcenas_con_contenido as string | null;
+      if (catContenido) {
+        const cats = catContenido.split(',');
+        return cats.some(entry => activeCatKeys.has(entry.trim()));
+      }
+      // Sin catorcenas_con_contenido: incluir (podría tener inventario)
+      return true;
+    });
     if (campanasUnicas.length === 0) return;
+    setVersionarioCampanasBase(campanasUnicas);
 
     // Rangos de fecha de las catorcenas actualmente filtradas (lo que el
     // usuario ve en la vista Versionario). Si el usuario filtro a Cat 15,
@@ -2533,6 +2551,113 @@ export function CampanasPage() {
       setVersionarioPreview(preview);
       // Si el usuario lo cerro mientras procesabamos los ultimos, no lo reabrimos.
       if (!versionarioCancelledRef.current) setVersionarioPreviewOpen(true);
+    } finally {
+      setExportingVersionarioArtes(false);
+      setVersionarioArtesProgress({ current: 0, total: 0 });
+    }
+  };
+
+  // Re-carga inventarios del versionario con un nuevo rango de periodo.
+  // Disparado desde el modal cuando el usuario cambia el filtro de periodo interno.
+  const handleReloadVersionarioPeriod = async (pYearInicio: number, pYearFin: number, pCatInicio?: number, pCatFin?: number) => {
+    // 1. Obtener campañas que existen en el nuevo periodo desde el backend
+    versionarioCancelledRef.current = false;
+    setVersionarioRawData(null);
+    setVersionarioPreview(null);
+    setExportingVersionarioArtes(true);
+    setVersionarioArtesProgress({ current: 0, total: 0 });
+
+    try {
+      const campanasRes = await campanasService.getAll({
+        page: 1,
+        limit: 9999,
+        yearInicio: pYearInicio,
+        yearFin: pYearFin,
+        catorcenaInicio: pCatInicio,
+        catorcenaFin: pCatFin,
+        excludeRechazadas: true,
+      });
+      // Pre-filtrar: solo campañas cuyo rango de catorcenas realmente incluya el periodo solicitado
+      const rawCampanas: Campana[] = campanasRes.data || [];
+      const catInicioTarget = pCatInicio || 1;
+      const catFinTarget = pCatFin || 26;
+      const campanas = rawCampanas.filter(c => {
+        const cIniNum = c.catorcena_inicio_num ?? 1;
+        const cIniAnio = c.catorcena_inicio_anio ?? pYearInicio;
+        const cFinNum = c.catorcena_fin_num ?? 26;
+        const cFinAnio = c.catorcena_fin_anio ?? pYearFin;
+        const cStart = cIniAnio * 100 + cIniNum;
+        const cEnd = cFinAnio * 100 + cFinNum;
+        const tStart = pYearInicio * 100 + catInicioTarget;
+        const tEnd = pYearFin * 100 + catFinTarget;
+        return cEnd >= tStart && cStart <= tEnd;
+      });
+      if (campanas.length === 0) {
+        setVersionarioPreview({ headers: [], arteCols: 0, rows: [] });
+        return;
+      }
+      setVersionarioCampanasBase(campanas);
+
+      // 2. Construir rangos de fecha para filtrar items por periodo
+      const newCatRanges: Array<{ inicio: string; fin: string }> = [];
+      if (catorcenasData?.data) {
+        const allCats = catorcenasData.data;
+        const startYear = allCats.filter(c => c.a_o === pYearInicio).sort((a, b) => a.numero_catorcena - b.numero_catorcena);
+        const endYear = allCats.filter(c => c.a_o === pYearFin).sort((a, b) => a.numero_catorcena - b.numero_catorcena);
+        const startCat = pCatInicio ? startYear.find(c => c.numero_catorcena === pCatInicio) : startYear[0];
+        const endCat = pCatFin ? endYear.find(c => c.numero_catorcena === pCatFin) : endYear[endYear.length - 1];
+        if (startCat && endCat) {
+          newCatRanges.push({ inicio: startCat.fecha_inicio, fin: endCat.fecha_fin });
+        }
+      }
+
+      const itemDentroDeRangoNew = (item: any): boolean => {
+        if (newCatRanges.length === 0) return true;
+        const inicio = String(item.inicio_periodo || '').slice(0, 10);
+        const fin = String(item.fin_periodo || inicio || '').slice(0, 10);
+        if (!inicio) return false;
+        return newCatRanges.some(r =>
+          inicio <= String(r.fin).slice(0, 10) && fin >= String(r.inicio).slice(0, 10)
+        );
+      };
+
+      // 3. Fetch inventarios de las campañas del nuevo periodo
+      setVersionarioArtesProgress({ current: 0, total: campanas.length });
+      const POOL_SIZE = 15;
+      const resultados: VersionarioArtesMultiArgs['campanas'] = [];
+
+      const procesarCampana = async (campana: Campana) => {
+        try {
+          const [conArte, sinArte] = await Promise.all([
+            campanasService.getInventarioConArte(campana.id).catch(() => []),
+            campanasService.getInventarioSinArte(campana.id, { includeWithoutAps: true }).catch(() => []),
+          ]);
+          const allItems = [...(conArte || []), ...(sinArte || [])];
+          const items = allItems.filter(it => itemDentroDeRangoNew(it));
+          if (items.length > 0) {
+            resultados.push({
+              campana,
+              items,
+              digitalFilesByReserva: new Map(),
+              notesByUrl: new Map(),
+            });
+          }
+        } catch { /* skip */ } finally {
+          setVersionarioArtesProgress(prev => ({ ...prev, current: prev.current + 1 }));
+        }
+      };
+
+      for (let i = 0; i < campanas.length; i += POOL_SIZE) {
+        if (versionarioCancelledRef.current) break;
+        const batch = campanas.slice(i, i + POOL_SIZE);
+        await Promise.all(batch.map(procesarCampana));
+      }
+
+      if (versionarioCancelledRef.current) return;
+
+      const preview = buildVersionarioArtesPreview({ campanas: resultados });
+      setVersionarioRawData(resultados);
+      setVersionarioPreview(preview);
     } finally {
       setExportingVersionarioArtes(false);
       setVersionarioArtesProgress({ current: 0, total: 0 });
@@ -4120,6 +4245,8 @@ export function CampanasPage() {
           isDownloading={versionarioDownloading}
           loadingProgress={versionarioArtesProgress}
           onDownload={handleDownloadVersionarioFromPreview}
+          catorcenasData={catorcenasData}
+          onReloadPeriod={handleReloadVersionarioPeriod}
         />
       )}
 
