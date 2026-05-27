@@ -693,10 +693,13 @@ function getGroupKeyForField(item: InventoryRow, field: GroupByField, tipoPeriod
       return `APS ${item.aps ?? 'Sin asignar'}`;
     case 'grupo':
       if (item.grupo_id) {
+        // Solo articulo + grupo_id en la key — NO incluir ciudad porque
+        // dentro del mismo sc.id (circuito) los items pueden vivir en
+        // distintos estados (ej. zona metropolitana Edo Mex + CDMX) y eso
+        // splitearia un circuito real en dos visualmente.
         const parts: string[] = [];
         if (item.articulo) parts.push(item.articulo.toUpperCase());
         parts.push(`Grupo ${item.grupo_id}`);
-        if (item.ciudad) parts.push(item.ciudad);
         return parts.join(' | ');
       }
       return `Item ${item.id}`;
@@ -1516,10 +1519,11 @@ function UploadArtModal({
           break;
         case 'grupo':
           if (item.grupo_id) {
+            // Sin ciudad: items del mismo sc.id pueden tener distintos estados
+            // (zona metropolitana) y la ciudad splitearia el circuito real.
             const parts: string[] = [];
             if (item.articulo) parts.push(item.articulo.toUpperCase());
             parts.push(`Grupo ${item.grupo_id}`);
-            if (item.ciudad) parts.push(item.ciudad);
             key = parts.join(' | ');
           } else {
             key = `Item ${item.id}`;
@@ -4452,10 +4456,11 @@ function TaskDetailModal({
         case 'aps': return `APS ${item.aps ?? 'Sin asignar'}`;
         case 'grupo':
           if (item.grupo_id) {
+            // Sin ciudad: items del mismo sc.id pueden tener distintos estados
+            // (zona metropolitana) y la ciudad splitearia el circuito real.
             const parts: string[] = [];
             if (item.articulo) parts.push(item.articulo.toUpperCase());
             parts.push(`Grupo ${item.grupo_id}`);
-            if (item.ciudad) parts.push(item.ciudad);
             return parts.join(' | ');
           }
           return `Item ${item.id}`;
