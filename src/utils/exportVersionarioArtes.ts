@@ -622,8 +622,28 @@ export function buildVersionarioArtesPreview({ campanas }: { campanas: Versionar
       if ((campana as any).posted_to_sap) {
         posted = true;
       } else if ((campana as any).posted_aps && uniqueAps.length > 0) {
-        const postedApsSet = new Set(((campana as any).posted_aps as number[]).map(Number));
-        posted = uniqueAps.every(a => postedApsSet.has(a));
+        // posted_aps puede venir como array, JSON string "[1,2,3]" o CSV "1,2,3".
+        // Sin esta normalizacion, .map() crashea cuando es string y la funcion
+        // tira excepcion → modal queda vacio.
+        const raw = (campana as any).posted_aps;
+        let postedApsArr: number[] = [];
+        if (Array.isArray(raw)) {
+          postedApsArr = raw.map(Number).filter(n => !isNaN(n));
+        } else if (typeof raw === 'string') {
+          const trimmed = raw.trim();
+          if (trimmed.startsWith('[')) {
+            try {
+              const parsed = JSON.parse(trimmed);
+              if (Array.isArray(parsed)) postedApsArr = parsed.map(Number).filter(n => !isNaN(n));
+            } catch { /* malformed JSON, ignore */ }
+          } else if (trimmed) {
+            postedApsArr = trimmed.split(',').map(s => Number(s.trim())).filter(n => !isNaN(n));
+          }
+        }
+        if (postedApsArr.length > 0) {
+          const postedApsSet = new Set(postedApsArr);
+          posted = uniqueAps.every(a => postedApsSet.has(a));
+        }
       }
 
       rows.push({
