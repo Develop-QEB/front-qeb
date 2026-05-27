@@ -1947,12 +1947,49 @@ export function CampanasPage() {
     return itemInicio <= target.fin && efectiveFin >= target.inicio;
   }, [catorcenaDateMap]);
 
+  // Re-filtra los grupos por filtro de etapa: una campaña permanece en el grupo
+  // solo si tiene al menos un inventario en ESA catorcena que cumpla el filtro
+  // de etapa. Si los inventarios aun no se cargaron, no la oculta (espera).
+  // Asi el conteo "N campañas" coincide con lo que se ve al expandir.
+  const displayedCampanasPorCatorcena = useMemo(() => {
+    const etapaFilters = advancedFilters.filter(f => f.field === 'etapa' && f.value);
+    if (etapaFilters.length === 0) return campanasPorCatorcena;
+
+    const matchesEtapa = (inv: any): boolean => {
+      return etapaFilters.every(f => {
+        const mapped = ETAPA_VALUES.find(e => e.label === f.value)?.value;
+        if (!mapped) return true;
+        if (mapped === '__programado__') {
+          const ip = inv.indicaciones_programacion;
+          const has = !!(ip && String(ip).trim());
+          return f.operator === '!=' ? !has : has;
+        }
+        const invEtapa = inv.estatus_arte || 'Carga Artes';
+        const matches = invEtapa === mapped;
+        return f.operator === '!=' ? !matches : matches;
+      });
+    };
+
+    return campanasPorCatorcena
+      .map(g => {
+        const filteredCampanas = g.campanas.filter(c => {
+          const allInv = campanaInventarios[c.id];
+          if (!allInv) return true; // inventarios aun no cargados → mantener
+          const catInv = allInv.filter(inv => itemMatchesCatorcena(inv, g.catorcena.num, g.catorcena.anio));
+          if (catInv.length === 0) return false;
+          return catInv.some(matchesEtapa);
+        });
+        return { ...g, campanas: filteredCampanas };
+      })
+      .filter(g => g.campanas.length > 0);
+  }, [campanasPorCatorcena, advancedFilters, campanaInventarios, itemMatchesCatorcena]);
+
   // Campañas únicas en los grupos de catorcena visibles
   const uniqueCampsInCatorcenaView = useMemo(() => {
     const ids = new Set<number>();
-    campanasPorCatorcena.forEach(g => g.campanas.forEach(c => ids.add(c.id)));
+    displayedCampanasPorCatorcena.forEach(g => g.campanas.forEach(c => ids.add(c.id)));
     return ids.size;
-  }, [campanasPorCatorcena]);
+  }, [displayedCampanasPorCatorcena]);
 
   // Estadísticas para gráfica de Status — from global stats
   const statusChartData = useMemo(() => {
@@ -3491,7 +3528,7 @@ export function CampanasPage() {
                 </div>
                 <div className="flex items-center gap-3">
                   <div className="text-right">
-                    <p className={`text-2xl font-bold ${isDark ? 'text-white' : 'text-gray-900'}`}>{campanasPorCatorcena.length}</p>
+                    <p className={`text-2xl font-bold ${isDark ? 'text-white' : 'text-gray-900'}`}>{displayedCampanasPorCatorcena.length}</p>
                     <p className={`text-[10px] ${isDark ? 'text-zinc-500' : 'text-gray-400'} uppercase tracking-wide`}>Catorcenas</p>
                   </div>
                   <div className={`w-px h-10 ${isDark ? 'bg-zinc-800' : 'bg-gray-200'}`} />
@@ -3507,7 +3544,7 @@ export function CampanasPage() {
               <div className="flex items-center justify-center h-64">
                 <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-purple-500" />
               </div>
-            ) : campanasPorCatorcena.length === 0 ? (
+            ) : displayedCampanasPorCatorcena.length === 0 ? (
               <div className="flex flex-col items-center justify-center h-64 text-center">
                 <div className={`inline-flex items-center justify-center w-16 h-16 rounded-full ${isDark ? 'bg-purple-500/10' : 'bg-purple-50'} mb-4`}>
                   <Calendar className={`w-8 h-8 ${isDark ? 'text-purple-400' : 'text-purple-600'}`} />
@@ -3516,7 +3553,7 @@ export function CampanasPage() {
               </div>
             ) : (
               <div className={`divide-y ${isDark ? 'divide-zinc-800/30' : 'divide-gray-200'}`}>
-                {campanasPorCatorcena.map(({ key, catorcena, campanas, subgroups }) => {
+                {displayedCampanasPorCatorcena.map(({ key, catorcena, campanas, subgroups }) => {
                   const isCurrentCatorcena = currentCatorcena &&
                     currentCatorcena.numero_catorcena === catorcena.num &&
                     currentCatorcena.a_o === catorcena.anio;
@@ -4189,7 +4226,7 @@ export function CampanasPage() {
         {activeView === 'catorcena' && (
           <div className={`flex items-center justify-between px-5 py-3 border-t ${isDark ? 'border-zinc-800/50 bg-zinc-900/30 text-zinc-500' : 'border-gray-200 bg-gray-50 text-gray-400'} text-xs`}>
             <span>
-              {campanasPorCatorcena.length} catorcenas · {uniqueCampsInCatorcenaView} campañas
+              {displayedCampanasPorCatorcena.length} catorcenas · {uniqueCampsInCatorcenaView} campañas
               {activeGroupings.length > 1 && (
                 <span className={`${isDark ? 'text-fuchsia-400' : 'text-fuchsia-600'} ml-2`}>
                   · Subagrupado por {AVAILABLE_GROUPINGS.find(g => g.field === activeGroupings[1])?.label}
