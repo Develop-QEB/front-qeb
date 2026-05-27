@@ -111,21 +111,33 @@ const detectColumnMap = (headers: string[]): ColumnMap => {
     }
     return null;
   };
+  // Find por inclusion parcial (mas permisivo): busca header normalizado que
+  // CONTENGA todos los terminos dados (orden no importa).
+  const findContains = (...terms: string[]): string | null => {
+    const normTerms = terms.map(t => normalize(t));
+    for (let i = 0; i < lower.length; i++) {
+      const h = lower[i];
+      if (normTerms.every(t => h.includes(t))) return headers[i];
+    }
+    return null;
+  };
 
-  // Formato principal: columna "Código Único" / "codigo_unico" / "CodigoUnico"
-  const codigoUnicoCol = find('codigo unico', 'codigo_unico', 'codigounico', 'código único', 'código unico', 'codigo único');
+  // 1) Formato principal: columna "Código Único" (o variantes con/sin acentos,
+  //    espacios, guiones, etc.). Match exacto y luego por inclusion.
+  const codigoUnicoExact = find('codigo unico', 'codigo_unico', 'codigounico', 'código único', 'código unico', 'codigo único', 'codigo-unico', 'código-único');
+  const codigoUnicoCol = codigoUnicoExact || findContains('codigo', 'unico');
   if (codigoUnicoCol) {
     return { clave: '', estado: '', cara: null, codigoUnico: codigoUnicoCol, schema: 'codigo-unico' };
   }
 
-  // SEARS (clave sitio + estado)
-  const claveSitio = find('clave sitio', 'clavesitio', 'clave_sitio');
+  // 2) SEARS (clave sitio + estado)
+  const claveSitio = find('clave sitio', 'clavesitio', 'clave_sitio') || findContains('clave', 'sitio');
   const estadoCol = find('estado');
   if (claveSitio && estadoCol) {
     return { clave: claveSitio, estado: estadoCol, cara: null, codigoUnico: null, schema: 'sears' };
   }
 
-  // COCA-COLA (unidad + cara + ciudad)
+  // 3) COCA-COLA (unidad + cara + ciudad)
   const unidad = find('unidad');
   const cara = find('cara');
   const ciudad = find('ciudad');
@@ -133,7 +145,7 @@ const detectColumnMap = (headers: string[]): ColumnMap => {
     return { clave: unidad, estado: ciudad, cara: cara, codigoUnico: null, schema: 'coca-cola' };
   }
 
-  // Fallback
+  // 4) Fallback laxo
   const claveAny = find('clave', 'sitio', 'id', 'codigo');
   const estadoAny = find('estado', 'ciudad');
   if (claveAny && estadoAny) {
@@ -253,10 +265,12 @@ export function CargaCsvModal({ isOpen, onClose, selectedInventory, onContinue }
       const colMap = detectColumnMap(headers);
       setSchema(colMap.schema);
       if (colMap.schema === 'unknown' || (colMap.schema !== 'codigo-unico' && (!colMap.clave || !colMap.estado))) {
+        const detected = headers.length === 0 ? '(ninguna)' : headers.map(h => `"${h}"`).join(', ');
         setParseError(
           'No se detectaron las columnas esperadas. ' +
           'Se requiere una columna "Código Único" (formato recomendado), ' +
-          '"Clave Sitio" + "Estado" (formato SEARS) o "Unidad" + "Ciudad" (formato Coca-Cola).'
+          '"Clave Sitio" + "Estado" (formato SEARS) o "Unidad" + "Ciudad" (formato Coca-Cola). ' +
+          `Columnas detectadas en el archivo: ${detected}.`
         );
         setIsParsing(false);
         return;
