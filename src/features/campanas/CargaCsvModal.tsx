@@ -161,7 +161,10 @@ const detectColumnMap = (headers: string[]): ColumnMap => {
 
 const parseFile = async (file: File): Promise<{ rows: Record<string, unknown>[]; headers: string[] }> => {
   const buffer = await file.arrayBuffer();
-  const wb = XLSX.read(buffer, { type: 'array' });
+  // codepage: 65001 (UTF-8) — sin esto, xlsx lee CSV como Windows-1252 y los
+  // acentos llegan mojibake ("Código" -> "CÃ³digo"), rompiendo la deteccion de
+  // columnas que esperan "Código Único".
+  const wb = XLSX.read(buffer, { type: 'array', codepage: 65001 });
   // Tomamos la primer hoja con datos
   let sheetData: Record<string, unknown>[] = [];
   let headers: string[] = [];
