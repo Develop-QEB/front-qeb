@@ -1401,12 +1401,15 @@ function UploadArtModal({
   const [digitalWizardStep, setDigitalWizardStep] = useState<1 | 2>(1);
   const [selectedDigitalImages, setSelectedDigitalImages] = useState<Map<string, { url: string; source: 'existing' | 'upload'; preview?: string; isVideo: boolean }>>(new Map());
   const [digitalImageNotes, setDigitalImageNotes] = useState<Map<string, string>>(new Map());
+  const [digitalImageNames, setDigitalImageNames] = useState<Map<string, string>>(new Map());
   const [isUploadingDigitalFile, setIsUploadingDigitalFile] = useState(false);
 
   // Estado para wizard de artes tradicionales (2 pasos)
   const [wizardStep, setWizardStep] = useState<1 | 2>(1);
   const [selectedGalleryImages, setSelectedGalleryImages] = useState<Map<string, { url: string; source: 'existing' | 'upload' | 'url'; preview?: string }>>(new Map());
   const [imageNotes, setImageNotes] = useState<Map<string, string>>(new Map());
+  // Nombre arte capturado manualmente por el usuario (paralelo a imageNotes)
+  const [imageNames, setImageNames] = useState<Map<string, string>>(new Map());
 
   // Estado para fichas técnicas (browser de carpetas)
   const [expandedFichaFolders, setExpandedFichaFolders] = useState<Set<string>>(new Set());
@@ -1650,6 +1653,7 @@ function UploadArtModal({
         nota: digitalImageNotes.get(key)?.trim() || '',
         spot: idx + 1,
         tipo: img.isVideo ? 'video' : 'image',
+        nombre_arte: digitalImageNames.get(key)?.trim() || null,
       }));
       onSubmitDigitalFromLibrary({
         archivos,
@@ -1673,6 +1677,7 @@ function UploadArtModal({
         archivo: img.url,
         nota: imageNotes.get(key)?.trim() || '',
         spot: idx + 1,
+        nombre_arte: imageNames.get(key)?.trim() || null,
       }));
       onSubmitTradicional({
         archivos,
@@ -2239,6 +2244,17 @@ function UploadArtModal({
                                     </div>
                                   </div>
                                 </div>
+                                <input
+                                  type="text"
+                                  value={digitalImageNames.get(id) || ''}
+                                  onChange={(e) => setDigitalImageNames(prev => {
+                                    const next = new Map(prev);
+                                    next.set(id, e.target.value);
+                                    return next;
+                                  })}
+                                  placeholder="Nombre del arte (ej: Promo Mayo)"
+                                  className="w-full mb-1.5 px-2 py-1.5 text-xs bg-background border border-border rounded-lg focus:outline-none focus:ring-1 focus:ring-cyan-500"
+                                />
                                 <textarea
                                   value={digitalImageNotes.get(id) || ''}
                                   onChange={(e) => setDigitalImageNotes(prev => {
@@ -2432,25 +2448,43 @@ function UploadArtModal({
                                 className="w-full h-full object-cover"
                               />
                             </div>
-                            {/* Note input */}
-                            <div className="flex-1 min-w-0">
-                              <label className={`block text-[10px] font-medium mb-1 ${isDark ? 'text-zinc-400' : 'text-gray-600'}`}>
-                                Nota para imagen {idx + 1} <span className="text-red-400">*</span>
-                              </label>
-                              <textarea
-                                value={imageNotes.get(id) || ''}
-                                onChange={(e) => setImageNotes(prev => {
-                                  const next = new Map(prev);
-                                  next.set(id, e.target.value);
-                                  return next;
-                                })}
-                                placeholder="Escribe una nota para esta imagen..."
-                                rows={3}
-                                className="w-full px-2 py-1.5 text-xs bg-background border border-border rounded-lg focus:outline-none focus:ring-1 focus:ring-purple-500 resize-none"
-                              />
-                              {(!imageNotes.get(id) || imageNotes.get(id)?.trim() === '') && (
-                                <p className="mt-0.5 text-[9px] text-red-400">Nota obligatoria</p>
-                              )}
+                            {/* Inputs: Nombre Arte + Note */}
+                            <div className="flex-1 min-w-0 space-y-2">
+                              <div>
+                                <label className={`block text-[10px] font-medium mb-1 ${isDark ? 'text-zinc-400' : 'text-gray-600'}`}>
+                                  Nombre del Arte {idx + 1}
+                                </label>
+                                <input
+                                  type="text"
+                                  value={imageNames.get(id) || ''}
+                                  onChange={(e) => setImageNames(prev => {
+                                    const next = new Map(prev);
+                                    next.set(id, e.target.value);
+                                    return next;
+                                  })}
+                                  placeholder="Ej: Promo Mayo Mundial"
+                                  className="w-full px-2 py-1.5 text-xs bg-background border border-border rounded-lg focus:outline-none focus:ring-1 focus:ring-purple-500"
+                                />
+                              </div>
+                              <div>
+                                <label className={`block text-[10px] font-medium mb-1 ${isDark ? 'text-zinc-400' : 'text-gray-600'}`}>
+                                  Nota para imagen {idx + 1} <span className="text-red-400">*</span>
+                                </label>
+                                <textarea
+                                  value={imageNotes.get(id) || ''}
+                                  onChange={(e) => setImageNotes(prev => {
+                                    const next = new Map(prev);
+                                    next.set(id, e.target.value);
+                                    return next;
+                                  })}
+                                  placeholder="Escribe una nota para esta imagen..."
+                                  rows={2}
+                                  className="w-full px-2 py-1.5 text-xs bg-background border border-border rounded-lg focus:outline-none focus:ring-1 focus:ring-purple-500 resize-none"
+                                />
+                                {(!imageNotes.get(id) || imageNotes.get(id)?.trim() === '') && (
+                                  <p className="mt-0.5 text-[9px] text-red-400">Nota obligatoria</p>
+                                )}
+                              </div>
                             </div>
                           </div>
                         ))}
