@@ -603,6 +603,12 @@ function StatusModal({ isOpen, onClose, propuesta, onStatusChange, allowedStatus
   // Verificar si todas las caras tienen sus reservas completas
   const reservasIncompletas = useMemo(() => {
     if (!caras || !reservas) return false;
+    // Mensual = Gran Formato / Mi Macro: solo Flujo, sin Contraflujo. El modal
+    // de asignación ya colapsa F+CF -> Flujo, y el back valida igual (regla
+    // 93d70d9). Sin esta normalización aquí, propuestas mensuales 100%
+    // reservadas pero con caras_flujo+caras_contraflujo en BD se marcan como
+    // incompletas y bloquean el botón "Pase a ventas".
+    const esMensual = propuesta?.tipo_periodo === 'mensual';
     return caras.some(cara => {
       // Artículos sin requisito de reservas — siempre completos:
       // - IM (Impresión) y ESP/ES- (Ejecución Especial): nunca requieren inventario.
@@ -615,14 +621,20 @@ function StatusModal({ isOpen, onClose, propuesta, onStatusChange, allowedStatus
       // Bonificacion is determined by estatus='Bonificado', not by tipo_de_cara
       const bonificacionReservado = caraReservas.filter(r => r.estatus === 'Bonificado').length;
       const nonBonificacion = caraReservas.filter(r => r.estatus !== 'Bonificado');
-      const flujoReservado = nonBonificacion.filter(r => r.tipo_de_cara === 'A' || String(r.tipo_de_cara).startsWith('Flujo')).length;
-      const contraflujoReservado = nonBonificacion.filter(r => r.tipo_de_cara === 'B' || String(r.tipo_de_cara).startsWith('Contraflujo')).length;
-      const flujoRequerido = Number(cara.caras_flujo) || 0;
-      const contraflujoRequerido = Number(cara.caras_contraflujo) || 0;
+      const rawFlujoReservado = nonBonificacion.filter(r => r.tipo_de_cara === 'A' || String(r.tipo_de_cara).startsWith('Flujo')).length;
+      const rawContraReservado = nonBonificacion.filter(r => r.tipo_de_cara === 'B' || String(r.tipo_de_cara).startsWith('Contraflujo')).length;
+      const rawFlujoRequerido = Number(cara.caras_flujo) || 0;
+      const rawContraRequerido = Number(cara.caras_contraflujo) || 0;
       const bonificacionRequerido = Number(cara.bonificacion) || 0;
+
+      const flujoReservado = esMensual ? rawFlujoReservado + rawContraReservado : rawFlujoReservado;
+      const contraflujoReservado = esMensual ? 0 : rawContraReservado;
+      const flujoRequerido = esMensual ? rawFlujoRequerido + rawContraRequerido : rawFlujoRequerido;
+      const contraflujoRequerido = esMensual ? 0 : rawContraRequerido;
+
       return flujoReservado !== flujoRequerido || contraflujoReservado !== contraflujoRequerido || bonificacionReservado !== bonificacionRequerido;
     });
-  }, [caras, reservas]);
+  }, [caras, reservas, propuesta?.tipo_periodo]);
 
   const { data: comments, refetch: refetchComments } = useQuery({
     queryKey: ['propuesta-comments', propuesta?.id],
