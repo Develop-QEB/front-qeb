@@ -324,9 +324,14 @@ export interface CreateTareaData {
 
 export interface ArteExistente {
   id: string;
-  nombre: string;
+  nombre: string;     // nombre del archivo (slug del URL)
   url: string;
   usos: number;
+  // Campos opcionales para artes ya usados en el flujo (artes_tradicionales / imagenes_digitales).
+  // Para artes recien subidos via addedArtes (sin guardar aun), vienen null/undefined.
+  nombre_arte?: string | null; // nombre manual capturado en el modal de carga
+  nota?: string | null;        // nota asociada (artes_tradicionales.nota o imagenes_digitales.comentario)
+  estatus?: string | null;     // estatus del arte (Aprobado / Rechazado / Pendiente / etc.)
 }
 
 // Órdenes de Montaje

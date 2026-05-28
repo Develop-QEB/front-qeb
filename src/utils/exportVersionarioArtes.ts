@@ -60,9 +60,38 @@ const isVideoUrl = (url: string | null | undefined): boolean => {
 };
 
 // "Arte 1: nombre.png\nArte 2: otro.png" — un nombre por linea.
-const buildNombresArtesText = (urls: string[]): string => {
+// Si se pasa namesByUrl con nombre_arte manual del usuario, se usa ese en lugar
+// del nombre del archivo extraido de la URL.
+const buildNombresArtesText = (urls: string[], namesByUrl?: Map<string, string>): string => {
   if (!urls || urls.length === 0) return '';
-  return urls.map((u, idx) => `Arte ${idx + 1}: ${extractArteName(u)}`).join('\n');
+  return urls.map((u, idx) => {
+    const manual = namesByUrl?.get(u)?.trim();
+    const name = manual || extractArteName(u);
+    return `Arte ${idx + 1}: ${name}`;
+  }).join('\n');
+};
+
+// Extrae los nombre_arte por URL a partir de items.artes_detalle (JSON del back).
+// Para items multi-arte tradicional. Para artes digitales no hay nombre_arte
+// en preview lightweight — se obtiene al descargar via notesByUrl/namesByUrl
+// que se llenan en handleDownloadVersionarioFromPreview.
+const extractNamesByUrl = (arr: any[]): Map<string, string> => {
+  const m = new Map<string, string>();
+  for (const it of arr) {
+    const detalle = it.artes_detalle;
+    if (!detalle) continue;
+    try {
+      const parsed = typeof detalle === 'string' ? JSON.parse(detalle) : detalle;
+      if (Array.isArray(parsed)) {
+        for (const entry of parsed) {
+          const archivo = (entry.archivo || '').trim();
+          const nombre = (entry.nombre_arte || '').trim();
+          if (archivo && nombre && !m.has(archivo)) m.set(archivo, nombre);
+        }
+      }
+    } catch { /* ignore */ }
+  }
+  return m;
 };
 
 const fetchImage = async (url: string): Promise<FetchedImage | null> => {
@@ -283,7 +312,7 @@ export async function exportVersionarioArtes({ campana, items, digitalFilesByRes
       caras,
       estatusDisplay,
       notasResumen,
-      buildNombresArtesText(urls),
+      buildNombresArtesText(urls, extractNamesByUrl(arr)),
     ];
     // Padding vacío para celdas de arte
     for (let i = 0; i < maxArtesUnicos; i++) rowValues.push('');
@@ -667,7 +696,7 @@ export function buildVersionarioArtesPreview({ campanas }: { campanas: Versionar
         estatus: estatusText,
         estatusBreakdown,
         notas: notasResumen,
-        nombreArte: buildNombresArtesText(urls),
+        nombreArte: buildNombresArtesText(urls, extractNamesByUrl(arr)),
         artesUrls: urls,
         posted,
       });
@@ -905,7 +934,7 @@ export async function exportVersionarioArtesMulti({ campanas, fileNameSuffix }: 
       caras,
       estatusDisplay,
       notasResumen,
-      buildNombresArtesText(artesUrls),
+      buildNombresArtesText(artesUrls, extractNamesByUrl(arr)),
     ];
     for (let i = 0; i < maxArtesUnicos; i++) rowValues.push('');
 

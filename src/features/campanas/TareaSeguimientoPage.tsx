@@ -2123,7 +2123,12 @@ function UploadArtModal({
                                         ? 'border-cyan-400 ring-2 ring-cyan-400/30'
                                         : 'border-transparent hover:border-cyan-400/50'
                                     }`}
-                                    title={art.nombre}
+                                    title={[
+                                      art.nombre_arte ? `Nombre: ${art.nombre_arte}` : null,
+                                      `Archivo: ${art.nombre}`,
+                                      art.nota ? `Nota: ${art.nota}` : null,
+                                      art.estatus ? `Estatus: ${art.estatus}` : null,
+                                    ].filter(Boolean).join('\n')}
                                   >
                                     {isVideo ? (
                                       <div className="w-full h-full flex items-center justify-center bg-zinc-700">
@@ -2132,7 +2137,7 @@ function UploadArtModal({
                                     ) : (
                                       <ArteImg
                                         src={art.url}
-                                        alt={art.nombre}
+                                        alt={art.nombre_arte || art.nombre}
                                         className="w-full h-full object-cover"
                                       />
                                     )}
@@ -2141,8 +2146,24 @@ function UploadArtModal({
                                         <Check className="h-4 w-4 text-white" />
                                       </div>
                                     )}
+                                    {/* Badge de estatus arriba a la derecha */}
+                                    {art.estatus && (
+                                      <span className={`absolute top-0.5 right-0.5 px-1 py-0 rounded text-[8px] font-semibold ${
+                                        art.estatus.toLowerCase() === 'aprobado' ? 'bg-green-500/80 text-white'
+                                        : art.estatus.toLowerCase() === 'rechazado' ? 'bg-red-500/80 text-white'
+                                        : art.estatus.toLowerCase() === 'pendiente' ? 'bg-orange-500/80 text-white'
+                                        : 'bg-zinc-700/80 text-zinc-200'
+                                      }`}>{art.estatus}</span>
+                                    )}
                                     <div className="absolute bottom-0 left-0 right-0 bg-black/70 px-1 py-px">
-                                      <p className="text-[7px] text-zinc-300 truncate">{art.nombre}</p>
+                                      <p className="text-[7px] text-zinc-300 truncate" title={art.nombre_arte || art.nombre}>
+                                        {art.nombre_arte || art.nombre}
+                                      </p>
+                                      {art.nota && (
+                                        <p className="text-[7px] text-zinc-400 truncate italic" title={art.nota}>
+                                          {art.nota}
+                                        </p>
+                                      )}
                                     </div>
                                   </button>
                                 );
