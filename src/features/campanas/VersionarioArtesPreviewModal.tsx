@@ -417,9 +417,10 @@ const extractFileName = (url: string): string => {
 
 // Miniatura de arte. Si es video, muestra etiqueta "Video subido + nombre"
 // en lugar de intentar previsualizar.
-function ArteThumb({ url }: { url: string }) {
+function ArteThumb({ url, onClick }: { url: string; onClick?: () => void }) {
   const [errored, setErrored] = useState(false);
   const isDark = useThemeStore(s => s.theme) === 'dark';
+  const handleClick = onClick || (() => window.open(url, '_blank', 'noopener,noreferrer'));
 
   if (!url) {
     return (
@@ -435,9 +436,9 @@ function ArteThumb({ url }: { url: string }) {
     return (
       <button
         type="button"
-        onClick={() => window.open(url, '_blank', 'noopener,noreferrer')}
+        onClick={handleClick}
         className={`flex flex-col items-start gap-1 px-2 py-1 rounded border max-w-[180px] text-left transition-colors ${isDark ? 'bg-cyan-500/10 border-cyan-500/30 hover:bg-cyan-500/20' : 'bg-cyan-50 border-cyan-200 hover:bg-cyan-100'}`}
-        title={`Video subido: ${name}\nClick para abrir`}
+        title={`Video subido: ${name}\nClick para abrir galeria`}
       >
         <span className={`inline-flex items-center gap-1 text-[10px] font-semibold ${isDark ? 'text-cyan-300' : 'text-cyan-700'}`}>
           <Film className="h-3 w-3" />
@@ -459,9 +460,9 @@ function ArteThumb({ url }: { url: string }) {
   return (
     <button
       type="button"
-      onClick={() => window.open(url, '_blank', 'noopener,noreferrer')}
+      onClick={handleClick}
       className="w-16 h-12 rounded overflow-hidden border border-zinc-700 hover:border-purple-400/60 transition-colors bg-zinc-800"
-      title="Abrir arte en nueva pestaña"
+      title="Abrir galeria de artes"
     >
       <img
         src={url}
@@ -474,9 +475,157 @@ function ArteThumb({ url }: { url: string }) {
   );
 }
 
+// ArtesGalleryModal — vista carrusel para previsualizar/descargar artes del row.
+// Estilo similar a la galeria del modal de Ordenes de Montaje.
+function ArtesGalleryModal({ urls, initialIndex, onClose, isDark }: {
+  urls: string[]; initialIndex: number; onClose: () => void; isDark: boolean;
+}) {
+  const [idx, setIdx] = useState(initialIndex);
+  const [erroredKeys, setErroredKeys] = useState<Set<number>>(new Set());
+  const safeIdx = Math.max(0, Math.min(idx, urls.length - 1));
+  const current = urls[safeIdx];
+  const isVid = isVideoUrl(current);
+  const filename = extractFileName(current);
+
+  const handleDownload = async () => {
+    try {
+      const res = await fetch(current);
+      const blob = await res.blob();
+      const blobUrl = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = blobUrl;
+      a.download = filename || 'arte';
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(blobUrl);
+    } catch {
+      // Fallback: abrir en pestaña nueva si fetch falla por CORS
+      window.open(current, '_blank', 'noopener,noreferrer');
+    }
+  };
+
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') onClose();
+      if (e.key === 'ArrowLeft') setIdx(i => Math.max(0, i - 1));
+      if (e.key === 'ArrowRight') setIdx(i => Math.min(urls.length - 1, i + 1));
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [onClose, urls.length]);
+
+  return (
+    <div className="fixed inset-0 z-[110] flex items-center justify-center">
+      <div className="absolute inset-0 bg-black/85" onClick={onClose} />
+      <div className={`relative w-full max-w-5xl mx-4 max-h-[92vh] flex flex-col rounded-xl border shadow-2xl ${isDark ? 'bg-zinc-900 border-purple-500/40' : 'bg-white border-purple-200'}`}>
+        <div className="flex items-center justify-between p-3 border-b border-border flex-shrink-0">
+          <div className="flex items-center gap-3 min-w-0">
+            <ImageIcon className={`h-5 w-5 ${isDark ? 'text-purple-300' : 'text-purple-600'} shrink-0`} />
+            <div className="min-w-0">
+              <h3 className={`text-sm font-semibold truncate ${isDark ? 'text-white' : 'text-gray-900'}`}>
+                Arte {safeIdx + 1} de {urls.length}
+              </h3>
+              <p className={`text-[10px] truncate ${isDark ? 'text-zinc-400' : 'text-gray-500'}`} title={current}>
+                {filename}
+              </p>
+            </div>
+          </div>
+          <div className="flex items-center gap-1.5">
+            <button
+              onClick={handleDownload}
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium bg-gradient-to-r from-purple-600 to-purple-700 hover:from-purple-500 hover:to-purple-600 text-white shadow"
+              title="Descargar arte"
+            >
+              <Download className="h-3.5 w-3.5" />
+              Descargar
+            </button>
+            <button
+              onClick={onClose}
+              className={`p-1.5 rounded-lg ${isDark ? 'hover:bg-zinc-800 text-zinc-400' : 'hover:bg-gray-100 text-gray-500'}`}
+            >
+              <X className="h-5 w-5" />
+            </button>
+          </div>
+        </div>
+        <div className={`flex-1 flex items-center justify-center overflow-hidden p-4 ${isDark ? 'bg-zinc-950' : 'bg-gray-50'}`}>
+          {!current ? (
+            <div className="text-zinc-500">Sin arte</div>
+          ) : isVid ? (
+            <video src={current} controls className="max-w-full max-h-full" />
+          ) : erroredKeys.has(safeIdx) ? (
+            <div className="flex flex-col items-center gap-2 text-zinc-500">
+              <ImageIcon className="h-12 w-12" />
+              <span className="text-xs">No se pudo cargar la imagen</span>
+              <a href={current} target="_blank" rel="noopener noreferrer" className={`text-xs underline ${isDark ? 'text-cyan-400' : 'text-blue-600'}`}>
+                Abrir en pestaña nueva
+              </a>
+            </div>
+          ) : (
+            <img
+              src={current}
+              alt="arte"
+              onError={() => setErroredKeys(prev => { const n = new Set(prev); n.add(safeIdx); return n; })}
+              className="max-w-full max-h-full object-contain"
+            />
+          )}
+          {urls.length > 1 && (
+            <>
+              <button
+                onClick={() => setIdx(i => Math.max(0, i - 1))}
+                disabled={safeIdx === 0}
+                className={`absolute left-3 top-1/2 -translate-y-1/2 p-2 rounded-full ${isDark ? 'bg-zinc-800/80 hover:bg-zinc-700' : 'bg-white/90 hover:bg-white shadow'} ${safeIdx === 0 ? 'opacity-30 cursor-not-allowed' : ''}`}
+                title="Anterior"
+              >
+                <ChevronDown className={`h-4 w-4 rotate-90 ${isDark ? 'text-zinc-300' : 'text-gray-700'}`} />
+              </button>
+              <button
+                onClick={() => setIdx(i => Math.min(urls.length - 1, i + 1))}
+                disabled={safeIdx === urls.length - 1}
+                className={`absolute right-3 top-1/2 -translate-y-1/2 p-2 rounded-full ${isDark ? 'bg-zinc-800/80 hover:bg-zinc-700' : 'bg-white/90 hover:bg-white shadow'} ${safeIdx === urls.length - 1 ? 'opacity-30 cursor-not-allowed' : ''}`}
+                title="Siguiente"
+              >
+                <ChevronDown className={`h-4 w-4 -rotate-90 ${isDark ? 'text-zinc-300' : 'text-gray-700'}`} />
+              </button>
+            </>
+          )}
+        </div>
+        {urls.length > 1 && (
+          <div className={`flex items-center gap-2 p-2 border-t border-border overflow-x-auto ${isDark ? 'bg-zinc-900' : 'bg-gray-50'}`}>
+            {urls.map((u, i) => {
+              const vid = isVideoUrl(u);
+              return (
+                <button
+                  key={`th-${i}`}
+                  onClick={() => setIdx(i)}
+                  className={`flex-shrink-0 w-14 h-12 rounded overflow-hidden border-2 ${i === safeIdx ? 'border-purple-500' : 'border-transparent hover:border-purple-300'} transition-colors bg-zinc-800`}
+                  title={extractFileName(u)}
+                >
+                  {vid ? (
+                    <div className="w-full h-full flex items-center justify-center">
+                      <Film className="h-4 w-4 text-cyan-400" />
+                    </div>
+                  ) : (
+                    <img src={u} alt={`arte-${i + 1}`} className="w-full h-full object-cover" />
+                  )}
+                </button>
+              );
+            })}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
 export function VersionarioArtesPreviewModal({ isOpen, onClose, preview, isLoading, isDownloading, loadingProgress, onDownload, catorcenasData, onReloadPeriod, initialPeriod }: Props) {
   const isDark = useThemeStore(s => s.theme) === 'dark';
   const [currentPage, setCurrentPage] = useState(1);
+  // Galería de artes que abre al clickear una miniatura
+  const [galleryUrls, setGalleryUrls] = useState<string[] | null>(null);
+  const [galleryIndex, setGalleryIndex] = useState(0);
+  const openGallery = (urls: string[], idx: number) => { setGalleryUrls(urls); setGalleryIndex(idx); };
+  const closeGallery = () => setGalleryUrls(null);
   const [search, setSearch] = useState('');
 
   // --- Filtros internos del modal ---
@@ -610,7 +759,7 @@ export function VersionarioArtesPreviewModal({ isOpen, onClose, preview, isLoadi
     const q = search.trim().toLowerCase();
     if (q) {
       rows = rows.filter(r => {
-        const haystack = [String(r.idCampana), r.plaza, r.tipo, r.asesor, r.cliente, r.marca, r.campania, r.estatus, r.notas, r.nombreArte, String(r.apsQebId)]
+        const haystack = [String(r.idCampana), r.plaza, r.tipo, r.formato, r.asesor, r.cliente, r.marca, r.campania, r.estatus, r.notas, r.nombreArte, String(r.apsQebId)]
           .join(' | ').toLowerCase();
         return haystack.includes(q);
       });
@@ -878,6 +1027,7 @@ export function VersionarioArtesPreviewModal({ isOpen, onClose, preview, isLoadi
                     <td className="p-2 whitespace-nowrap">{r.idCampana}</td>
                     <td className="p-2 whitespace-nowrap">{r.plaza}</td>
                     <td className="p-2 whitespace-nowrap">{r.tipo}</td>
+                    <td className="p-2 whitespace-nowrap">{r.formato || '-'}</td>
                     <td className="p-2 whitespace-nowrap">{r.asesor}</td>
                     <td className="p-2 whitespace-nowrap">{r.apsQebId}</td>
                     <td className="p-2 whitespace-nowrap">{r.fechaInicio}</td>
@@ -930,9 +1080,31 @@ export function VersionarioArtesPreviewModal({ isOpen, onClose, preview, isLoadi
                     <td className="p-2">
                       <NombreArtePopover nombreArte={r.nombreArte} isDark={isDark} />
                     </td>
+                    <td className="p-2 max-w-[240px]">
+                      {r.artesUrls.length === 0 ? (
+                        <span className={`text-xs ${isDark ? 'text-zinc-600' : 'text-gray-400'}`}>-</span>
+                      ) : (
+                        <div className="flex flex-col gap-0.5">
+                          {r.artesUrls.map((u, ui) => (
+                            <a
+                              key={`u-${ui}`}
+                              href={u}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className={`text-[10px] truncate hover:underline ${isDark ? 'text-cyan-400 hover:text-cyan-300' : 'text-blue-600 hover:text-blue-700'}`}
+                              title={u}
+                            >
+                              {u}
+                            </a>
+                          ))}
+                        </div>
+                      )}
+                    </td>
                     {Array.from({ length: arteCols }).map((_, i) => (
                       <td key={`a-${idx}-${i}`} className="p-2">
-                        {r.artesUrls[i] ? <ArteThumb url={r.artesUrls[i]} /> : <span className="text-zinc-600">-</span>}
+                        {r.artesUrls[i]
+                          ? <ArteThumb url={r.artesUrls[i]} onClick={() => openGallery(r.artesUrls, i)} />
+                          : <span className="text-zinc-600">-</span>}
                       </td>
                     ))}
                   </tr>
@@ -982,6 +1154,15 @@ export function VersionarioArtesPreviewModal({ isOpen, onClose, preview, isLoadi
           </button>
         </div>
       </div>
+      {/* Galería de artes (carrusel + descarga) */}
+      {galleryUrls && galleryUrls.length > 0 && (
+        <ArtesGalleryModal
+          urls={galleryUrls}
+          initialIndex={galleryIndex}
+          onClose={closeGallery}
+          isDark={isDark}
+        />
+      )}
     </div>
   );
 }
