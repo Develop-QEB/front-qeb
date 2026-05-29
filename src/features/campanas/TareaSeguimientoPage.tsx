@@ -14991,6 +14991,39 @@ export function TareaSeguimientoPage() {
       });
     });
 
+    // [Fix Cliente imprime] Tareas de Recepción HUÉRFANAS — creadas via
+    // "Cliente imprime" sin tarea de Impresión predecesora. El loop de arriba
+    // solo recorre tareasImpresion, así que las reservas de estas Recepciones
+    // nunca entraban al mapa → desaparecían del tab Impresiones al atenderse.
+    // Aquí las agregamos por separado, sin tocar la lógica existente.
+    const impresionRelatedRecepcionIds = new Set<number>();
+    impresionToRecepcionesMap.forEach(recepciones => {
+      recepciones.forEach(r => impresionRelatedRecepcionIds.add(r.id));
+    });
+    tareasRecepcion.forEach(recepcion => {
+      // Si la Recepción ya está asociada a una Impresión, fue manejada arriba.
+      if (impresionRelatedRecepcionIds.has(recepcion.id)) return;
+      // No procesar Recepciones de faltantes — esas tienen su propio camino.
+      if (recepcionEsFaltantesMap.get(recepcion.id)) return;
+      const listado = recepcion.listado_inventario || recepcion.ids_reservas || '';
+      const ids = listado.replace(/\*/g, ',').split(',').map(s => s.trim()).filter(Boolean);
+      const esAtendida = recepcion.estatus === 'Atendido' || recepcion.estatus === 'Completado';
+      const estadoImpresion: EstadoImpresion = esAtendida ? 'recibido' : 'pendiente_recepcion';
+      ids.forEach(id => {
+        // Respeta lo que ya hay: si el id ya está en el mapa (vino del loop normal),
+        // no lo sobreescribimos.
+        if (reservaToTareaMap.has(id)) return;
+        reservaToTareaMap.set(id, {
+          tarea_id: recepcion.id,
+          tarea_estatus: recepcion.estatus || (esAtendida ? 'Atendido' : 'Pendiente'),
+          tarea_titulo: recepcion.titulo || `Recepción #${recepcion.id}`,
+          proveedor: recepcion.nombre_proveedores || '-',
+          estado_impresion: estadoImpresion,
+          tarea_recepcion_id: recepcion.id,
+        });
+      });
+    });
+
 
     // Filtrar items del inventario que están en tareas de impresión
     const rows: (InventoryRow & {
@@ -18027,11 +18060,37 @@ export function TareaSeguimientoPage() {
                   // Recibido = impresiones completadas - pendientes de recepción
                   const recibido = Math.max(0, completedImpresiones - pendingRecepcion);
 
+                  // [Fix Cliente imprime] Sumar Recepciones huérfanas atendidas
+                  // (las que se crearon via "Cliente imprime" sin tarea de Impresión).
+                  // Sin esto, el contador se queda en 0 aunque la Recepción esté Atendida.
+                  const impresionRelatedRecepcionIdsBadge = new Set<number>();
+                  tareasImp.forEach(imp => {
+                    const listadoImp = (imp.listado_inventario || imp.ids_reservas || '').replace(/\*/g, ',').split(',').map(s => s.trim()).filter(Boolean);
+                    tareasRec.forEach(rec => {
+                      const listadoRec = (rec.listado_inventario || rec.ids_reservas || '').replace(/\*/g, ',').split(',').map(s => s.trim()).filter(Boolean);
+                      if (listadoImp.some(id => listadoRec.includes(id))) {
+                        impresionRelatedRecepcionIdsBadge.add(rec.id);
+                      }
+                    });
+                  });
+                  const huerfanasRecibidas = tareasRec
+                    .filter(t => !impresionRelatedRecepcionIdsBadge.has(t.id))
+                    .filter(t => {
+                      // Excluir Recepciones de faltantes (tienen su propio camino)
+                      if (t.evidencia) {
+                        try { return JSON.parse(t.evidencia).tipo !== 'recepcion_faltantes'; } catch { return true; }
+                      }
+                      return true;
+                    })
+                    .filter(t => t.estatus === 'Atendido' || t.estatus === 'Completado')
+                    .reduce((sum, t) => sum + getNumImpresiones(t), 0);
+                  const recibidoTotal = recibido + huerfanasRecibidas;
+
                   return [
                     { key: 'orden_impresion' as const, label: 'Orden Impresión', count: inventoryOrdenImpresionData.length },
                     { key: 'en_impresion' as const, label: 'En Impresion', count: activeImpresiones },
                     { key: 'pendiente_recepcion' as const, label: 'Pend. Recepcion', count: pendingRecepcion },
-                    { key: 'recibido' as const, label: 'Recibido', count: recibido },
+                    { key: 'recibido' as const, label: 'Recibido', count: recibidoTotal },
                   ];
                 })().map(tab => (
                   <button
