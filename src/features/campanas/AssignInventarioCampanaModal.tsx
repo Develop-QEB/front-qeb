@@ -24,6 +24,7 @@ import { usePermissions } from '../../lib/permissions';
 import { filterAllowedArticulos } from '../../config/allowedDigitalArticles';
 import { useSocketEquipos, useSocketCampana, useSocketInventarioRealtime, type InventarioRealtimePayload } from '../../hooks/useSocket';
 import { useThemeStore } from '../../store/themeStore';
+import { SaveChangesConfirmModal, type ModifiedCircuito } from '../../components/SaveChangesConfirmModal';
 
 // GOOGLE_MAPS_API_KEY / LIBRARIES centralizados en src/config/googleMaps.ts
 // (evita que la API de Google Maps se cargue dos veces y trabe la pantalla).
@@ -900,6 +901,9 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
   const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('asc');
   const [agruparComoCompleto, setAgruparComoCompleto] = useState(true); // Group flujo+contraflujo at same location
 
+  // Save Changes Confirmation Modal — abre antes del bulk save con resumen
+  const [showSaveConfirm, setShowSaveConfirm] = useState(false);
+
   // Custom Confirmation Modal State
   const [confirmModal, setConfirmModal] = useState<{
     isOpen: boolean;
@@ -1454,6 +1458,24 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
       clienteChanged
     );
   }, [nombreCampania, notas, descripcion, yearInicio, yearFin, catorcenaInicio, catorcenaFin, currentAsignadosIds, imu, initialValues, clienteChanged]);
+
+  // Resumen de circuitos modificados para el modal de confirmación de guardado
+  const modifiedCircuitosForConfirm = useMemo<ModifiedCircuito[]>(() => {
+    const list: ModifiedCircuito[] = [];
+    for (const id of modifiedCaras.keys()) {
+      const cara = caras.find(c => c.id === id);
+      if (!cara) continue;
+      const ubicacion = cara.plaza || cara.estados || cara.ciudad || '(sin ubicación)';
+      const articulo = cara.articulo || '';
+      const formato = cara.formato || cara.tipo || '';
+      list.push({
+        id,
+        primary: ubicacion,
+        secondary: [articulo, formato].filter(Boolean).join(' · ') || undefined,
+      });
+    }
+    return list;
+  }, [modifiedCaras, caras]);
 
   // Handle update campaign
   const handleUpdateCampana = async () => {
@@ -9220,7 +9242,7 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
               {effectiveCanEdit && (
                 <button
                   disabled={(!hasChanges && modifiedCaras.size === 0) || isSaving}
-                  onClick={handleBulkSaveChanges}
+                  onClick={() => setShowSaveConfirm(true)}
                   className={`px-6 py-2 rounded-lg text-sm font-medium transition-all ${
                     (hasChanges || modifiedCaras.size > 0) && !isSaving
                       ? 'bg-purple-500 text-white hover:bg-purple-600 shadow-lg shadow-purple-500/25'
@@ -9241,6 +9263,19 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
       </div>
       {/* Confirmation Modal */}
       {confirmModalJSX}
+      {/* Save Changes Confirm Modal — resumen de cambios antes de guardar */}
+      <SaveChangesConfirmModal
+        isOpen={showSaveConfirm}
+        onClose={() => setShowSaveConfirm(false)}
+        onConfirm={async () => {
+          setShowSaveConfirm(false);
+          await handleBulkSaveChanges();
+        }}
+        isSaving={isSaving}
+        contextLabel="campaña"
+        hasGeneralChanges={hasChanges}
+        modifiedCircuitos={modifiedCircuitosForConfirm}
+      />
       {/* Toast Notification */}
       {toastJSX}
 
