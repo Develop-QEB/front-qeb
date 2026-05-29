@@ -1365,10 +1365,10 @@ function UploadArtModal({
   isOpen: boolean;
   onClose: () => void;
   selectedInventory: InventoryRow[];
-  onSubmit: (data: { option: UploadOption; value: string | File; inventoryIds: string[] }) => void;
-  onSubmitDigital?: (data: { files: { file: File; spot: number }[]; inventoryIds: string[] }) => void;
-  onSubmitTradicional?: (data: { archivos: { archivo: string; nota: string; spot: number }[]; inventoryIds: string[] }) => void;
-  onSubmitDigitalFromLibrary?: (data: { archivos: { archivo: string; nota: string; spot: number; tipo: string }[]; inventoryIds: string[] }) => void;
+  onSubmit: (data: { option: UploadOption; value: string | File; inventoryIds: string[]; markInstalado?: boolean }) => void;
+  onSubmitDigital?: (data: { files: { file: File; spot: number }[]; inventoryIds: string[]; markInstalado?: boolean }) => void;
+  onSubmitTradicional?: (data: { archivos: { archivo: string; nota: string; spot: number }[]; inventoryIds: string[]; markInstalado?: boolean }) => void;
+  onSubmitDigitalFromLibrary?: (data: { archivos: { archivo: string; nota: string; spot: number; tipo: string }[]; inventoryIds: string[]; markInstalado?: boolean }) => void;
   artesExistentes: ArteExistente[];
   addedArtes: ArteExistente[];
   onAddedArtesChange: (artes: ArteExistente[]) => void;
@@ -1645,6 +1645,31 @@ function UploadArtModal({
     setDraggedFile(null);
   };
 
+  // Detecta si alguno de los URLs seleccionados corresponde a un arte de la
+  // biblioteca con estatus "Instalado" y, en ese caso, pide confirmación al
+  // usuario para marcar el inventario destino también como instalado (se moverá
+  // a Validar Instalación > Instaladas).
+  const checkAndConfirmInstalado = (archivoUrls: string[]): { proceed: boolean; markInstalado: boolean } => {
+    const seen = new Set<string>();
+    const instaladoArtes: ArteExistente[] = [];
+    for (const url of archivoUrls) {
+      if (!url || seen.has(url)) continue;
+      seen.add(url);
+      const found = localArtes.find(a => a.url === url);
+      if (found && found.tiene_instalado === true) instaladoArtes.push(found);
+    }
+    if (instaladoArtes.length === 0) return { proceed: true, markInstalado: false };
+    const nombres = instaladoArtes.slice(0, 5).map(a => `  - ${a.nombre_arte || a.nombre}`).join('\n');
+    const extra = instaladoArtes.length > 5 ? `\n  ... y ${instaladoArtes.length - 5} mas` : '';
+    const msg =
+      'Los siguientes artes ya estan marcados como Instalado en otro inventario:\n' +
+      nombres + extra + '\n\n' +
+      'Al asignarlos, el inventario destino tambien quedara marcado como instalado y se movera a "Validar Instalacion > Instaladas".\n\n' +
+      'Continuar?';
+    const ok = window.confirm(msg);
+    return { proceed: ok, markInstalado: ok };
+  };
+
   const handleSubmit = () => {
     // Flujo digital con wizard - enviar archivos seleccionados de la biblioteca con notas
     if (isDigitalInventory && digitalWizardStep === 2 && onSubmitDigitalFromLibrary) {
@@ -1655,9 +1680,12 @@ function UploadArtModal({
         tipo: img.isVideo ? 'video' : 'image',
         nombre_arte: digitalImageNames.get(key)?.trim() || null,
       }));
+      const { proceed, markInstalado } = checkAndConfirmInstalado(archivos.map(a => a.archivo));
+      if (!proceed) return;
       onSubmitDigitalFromLibrary({
         archivos,
         inventoryIds: selectedInventory.map((i) => i.id),
+        markInstalado,
       });
       return;
     }
@@ -1679,9 +1707,12 @@ function UploadArtModal({
         spot: idx + 1,
         nombre_arte: imageNames.get(key)?.trim() || null,
       }));
+      const { proceed, markInstalado } = checkAndConfirmInstalado(archivos.map(a => a.archivo));
+      if (!proceed) return;
       onSubmitTradicional({
         archivos,
         inventoryIds: selectedInventory.map((i) => i.id),
+        markInstalado,
       });
       return;
     }
@@ -1696,10 +1727,15 @@ function UploadArtModal({
       value = link;
     }
 
+    const checkUrl = selectedOption === 'existing' && typeof value === 'string' ? [value as string] : [];
+    const { proceed, markInstalado } = checkAndConfirmInstalado(checkUrl);
+    if (!proceed) return;
+
     const payload = {
       option: selectedOption,
       value,
       inventoryIds: selectedInventory.map((i) => i.id),
+      markInstalado,
     };
     onSubmit(payload);
   };
@@ -2146,14 +2182,17 @@ function UploadArtModal({
                                         <Check className="h-4 w-4 text-white" />
                                       </div>
                                     )}
-                                    {/* Badge de estatus arriba a la derecha */}
-                                    {art.estatus && (
+                                    {/* Badge de estatus arriba a la derecha. Si el arte
+                                        esta marcado como Instalado en otra reserva,
+                                        priorizamos ese badge (purpura) sobre arte_aprobado. */}
+                                    {(art.tiene_instalado || art.estatus) && (
                                       <span className={`absolute top-0.5 right-0.5 px-1 py-0 rounded text-[8px] font-semibold ${
-                                        art.estatus.toLowerCase() === 'aprobado' ? 'bg-green-500/80 text-white'
-                                        : art.estatus.toLowerCase() === 'rechazado' ? 'bg-red-500/80 text-white'
-                                        : art.estatus.toLowerCase() === 'pendiente' ? 'bg-orange-500/80 text-white'
+                                        art.tiene_instalado ? 'bg-purple-500/80 text-white'
+                                        : art.estatus?.toLowerCase() === 'aprobado' ? 'bg-green-500/80 text-white'
+                                        : art.estatus?.toLowerCase() === 'rechazado' ? 'bg-red-500/80 text-white'
+                                        : art.estatus?.toLowerCase() === 'pendiente' ? 'bg-orange-500/80 text-white'
                                         : 'bg-zinc-700/80 text-zinc-200'
-                                      }`}>{art.estatus}</span>
+                                      }`}>{art.tiene_instalado ? 'Instalado' : art.estatus}</span>
                                     )}
                                     <div className="absolute bottom-0 left-0 right-0 bg-black/70 px-1 py-px">
                                       <p className="text-[7px] text-zinc-300 truncate" title={art.nombre_arte || art.nombre}>
@@ -2349,11 +2388,16 @@ function UploadArtModal({
                                         ? 'border-purple-400 ring-2 ring-purple-400/30'
                                         : 'border-transparent hover:border-purple-400/50'
                                     }`}
-                                    title={art.nombre}
+                                    title={[
+                                      art.nombre_arte ? `Nombre: ${art.nombre_arte}` : null,
+                                      `Archivo: ${art.nombre}`,
+                                      art.nota ? `Nota: ${art.nota}` : null,
+                                      art.tiene_instalado ? 'Estatus: Instalado (al asignarlo, el inventario destino quedara como instalado)' : (art.estatus ? `Estatus: ${art.estatus}` : null),
+                                    ].filter(Boolean).join('\n')}
                                   >
                                     <ArteImg
                                       src={art.url}
-                                      alt={art.nombre}
+                                      alt={art.nombre_arte || art.nombre}
                                       className="w-full h-full object-cover"
                                     />
                                     {isSelected && (
@@ -2361,8 +2405,24 @@ function UploadArtModal({
                                         <Check className="h-4 w-4 text-white" />
                                       </div>
                                     )}
+                                    {(art.tiene_instalado || art.estatus) && (
+                                      <span className={`absolute top-0.5 right-0.5 px-1 py-0 rounded text-[8px] font-semibold ${
+                                        art.tiene_instalado ? 'bg-purple-500/80 text-white'
+                                        : art.estatus?.toLowerCase() === 'aprobado' ? 'bg-green-500/80 text-white'
+                                        : art.estatus?.toLowerCase() === 'rechazado' ? 'bg-red-500/80 text-white'
+                                        : art.estatus?.toLowerCase() === 'pendiente' ? 'bg-orange-500/80 text-white'
+                                        : 'bg-zinc-700/80 text-zinc-200'
+                                      }`}>{art.tiene_instalado ? 'Instalado' : art.estatus}</span>
+                                    )}
                                     <div className="absolute bottom-0 left-0 right-0 bg-black/70 px-1 py-px">
-                                      <p className="text-[7px] text-zinc-300 truncate">{art.nombre}</p>
+                                      <p className="text-[7px] text-zinc-300 truncate" title={art.nombre_arte || art.nombre}>
+                                        {art.nombre_arte || art.nombre}
+                                      </p>
+                                      {art.nota && (
+                                        <p className="text-[7px] text-zinc-400 truncate italic" title={art.nota}>
+                                          {art.nota}
+                                        </p>
+                                      )}
                                     </div>
                                   </button>
                                 );
@@ -10391,22 +10451,37 @@ function TaskDetailModal({
                                           ? 'border-cyan-400 ring-2 ring-cyan-400/30'
                                           : 'border-transparent hover:border-cyan-400/50'
                                       }`}
-                                      title={art.nombre}
+                                      title={[
+                                        art.nombre_arte ? `Nombre: ${art.nombre_arte}` : null,
+                                        `Archivo: ${art.nombre}`,
+                                        art.tiene_instalado ? 'Estatus: Instalado' : (art.estatus ? `Estatus: ${art.estatus}` : null),
+                                      ].filter(Boolean).join('\n')}
                                     >
                                       {isVideo ? (
                                         <div className="w-full h-full flex items-center justify-center bg-zinc-700">
                                           <Play className="h-5 w-5 text-cyan-400" />
                                         </div>
                                       ) : (
-                                        <ArteImg src={art.url} alt={art.nombre} className="w-full h-full object-cover" />
+                                        <ArteImg src={art.url} alt={art.nombre_arte || art.nombre} className="w-full h-full object-cover" />
                                       )}
                                       {isSelected && (
                                         <div className="absolute inset-0 bg-cyan-600/30 flex items-center justify-center">
                                           <Check className="h-4 w-4 text-white" />
                                         </div>
                                       )}
+                                      {(art.tiene_instalado || art.estatus) && (
+                                        <span className={`absolute top-0.5 right-0.5 px-1 py-0 rounded text-[8px] font-semibold ${
+                                          art.tiene_instalado ? 'bg-purple-500/80 text-white'
+                                          : art.estatus?.toLowerCase() === 'aprobado' ? 'bg-green-500/80 text-white'
+                                          : art.estatus?.toLowerCase() === 'rechazado' ? 'bg-red-500/80 text-white'
+                                          : art.estatus?.toLowerCase() === 'pendiente' ? 'bg-orange-500/80 text-white'
+                                          : 'bg-zinc-700/80 text-zinc-200'
+                                        }`}>{art.tiene_instalado ? 'Instalado' : art.estatus}</span>
+                                      )}
                                       <div className="absolute bottom-0 left-0 right-0 bg-black/70 px-1 py-px">
-                                        <p className="text-[7px] text-zinc-300 truncate">{art.nombre}</p>
+                                        <p className="text-[7px] text-zinc-300 truncate" title={art.nombre_arte || art.nombre}>
+                                          {art.nombre_arte || art.nombre}
+                                        </p>
                                       </div>
                                     </button>
                                   );
@@ -10620,16 +10695,31 @@ function TaskDetailModal({
                                           ? 'border-orange-400 ring-2 ring-orange-400/30'
                                           : 'border-transparent hover:border-orange-400/50'
                                       }`}
-                                      title={art.nombre}
+                                      title={[
+                                        art.nombre_arte ? `Nombre: ${art.nombre_arte}` : null,
+                                        `Archivo: ${art.nombre}`,
+                                        art.tiene_instalado ? 'Estatus: Instalado' : (art.estatus ? `Estatus: ${art.estatus}` : null),
+                                      ].filter(Boolean).join('\n')}
                                     >
-                                      <ArteImg src={art.url} alt={art.nombre} className="w-full h-full object-cover" />
+                                      <ArteImg src={art.url} alt={art.nombre_arte || art.nombre} className="w-full h-full object-cover" />
                                       {isSelected && (
                                         <div className="absolute inset-0 bg-orange-600/30 flex items-center justify-center">
                                           <Check className="h-4 w-4 text-white" />
                                         </div>
                                       )}
+                                      {(art.tiene_instalado || art.estatus) && (
+                                        <span className={`absolute top-0.5 right-0.5 px-1 py-0 rounded text-[8px] font-semibold ${
+                                          art.tiene_instalado ? 'bg-purple-500/80 text-white'
+                                          : art.estatus?.toLowerCase() === 'aprobado' ? 'bg-green-500/80 text-white'
+                                          : art.estatus?.toLowerCase() === 'rechazado' ? 'bg-red-500/80 text-white'
+                                          : art.estatus?.toLowerCase() === 'pendiente' ? 'bg-orange-500/80 text-white'
+                                          : 'bg-zinc-700/80 text-zinc-200'
+                                        }`}>{art.tiene_instalado ? 'Instalado' : art.estatus}</span>
+                                      )}
                                       <div className="absolute bottom-0 left-0 right-0 bg-black/70 px-1 py-px">
-                                        <p className="text-[7px] text-zinc-300 truncate">{art.nombre}</p>
+                                        <p className="text-[7px] text-zinc-300 truncate" title={art.nombre_arte || art.nombre}>
+                                          {art.nombre_arte || art.nombre}
+                                        </p>
                                       </div>
                                     </button>
                                   );
@@ -14265,15 +14355,18 @@ export function TareaSeguimientoPage() {
 
   // ---- Mutations ----
   const assignArteMutation = useMutation({
-    mutationFn: ({ reservaIds, archivo }: { reservaIds: number[]; archivo: string }) =>
-      campanasService.assignArte(campanaId, reservaIds, archivo),
+    mutationFn: ({ reservaIds, archivo, markInstalado }: { reservaIds: number[]; archivo: string; markInstalado?: boolean }) =>
+      campanasService.assignArte(campanaId, reservaIds, archivo, markInstalado === true),
     onSuccess: () => {
       // Invalidar todos los queries de inventario para forzar recarga cuando se activen
       queryClient.invalidateQueries({ queryKey: ['campana-inventario-sin-arte'], exact: false });
       queryClient.invalidateQueries({ queryKey: ['campana-inventario-arte'], exact: false });
       queryClient.invalidateQueries({ queryKey: ['campana-artes-existentes'], exact: false });
-      // Invalidar tareas porque limpiar arte puede eliminar/actualizar tareas
+      // Invalidar tareas porque limpiar arte puede eliminar/actualizar tareas (y porque
+      // markInstalado=true crea una tarea de Instalación Completado).
       queryClient.invalidateQueries({ queryKey: ['campana-tareas', campanaId] });
+      // Refrescar Validar Instalación cuando el flujo de Instalado deba mostrarse.
+      queryClient.invalidateQueries({ queryKey: ['campana-inventario-testigos', campanaId] });
       queryClient.invalidateQueries({ queryKey: ['campanas'] });
       if (isUploadArtModalOpen) {
         setIsUploadArtModalOpen(false);
@@ -16519,7 +16612,7 @@ export function TareaSeguimientoPage() {
     }
   }, [createTareaMutation, campanaId, queryClient]);
 
-  const handleUploadArt = useCallback(async (data: { option: UploadOption; value: string | File; inventoryIds: string[] }) => {
+  const handleUploadArt = useCallback(async (data: { option: UploadOption; value: string | File; inventoryIds: string[]; markInstalado?: boolean }) => {
     // Get reserva IDs from selected inventory items
     const reservaIds = selectedInventoryItems.flatMap(item =>
       item.rsv_id.split(',').map(id => parseInt(id.trim())).filter(id => !isNaN(id))
@@ -16563,7 +16656,7 @@ export function TareaSeguimientoPage() {
       }
 
       if (archivo) {
-        assignArteMutation.mutate({ reservaIds, archivo });
+        assignArteMutation.mutate({ reservaIds, archivo, markInstalado: data.markInstalado === true });
       } else {
         setUploadArtError('No se especifico un archivo de arte');
       }
@@ -16605,7 +16698,8 @@ export function TareaSeguimientoPage() {
         })
       );
 
-      // Llamar al servicio para asignar arte digital
+      // Llamar al servicio para asignar arte digital (este flujo es upload fresco,
+      // sin biblioteca, por lo que nunca dispara markInstalado).
       await campanasService.assignArteDigital(campanaId, reservaIds, filesWithUrls);
 
       // Invalidar queries y cerrar modal
@@ -16651,7 +16745,7 @@ export function TareaSeguimientoPage() {
   }, [campanaId]);
 
   // Handler para asignar arte digital desde biblioteca (wizard con notas)
-  const handleUploadDigitalFromLibrary = useCallback(async (data: { archivos: { archivo: string; nota: string; spot: number; tipo: string }[]; inventoryIds: string[] }) => {
+  const handleUploadDigitalFromLibrary = useCallback(async (data: { archivos: { archivo: string; nota: string; spot: number; tipo: string }[]; inventoryIds: string[]; markInstalado?: boolean }) => {
     const reservaIds = selectedInventoryItems.flatMap(item =>
       item.rsv_id.split(',').map(id => parseInt(id.trim())).filter(id => !isNaN(id))
     );
@@ -16679,12 +16773,13 @@ export function TareaSeguimientoPage() {
         nota: a.nota,
       }));
 
-      await campanasService.assignArteDigital(campanaId, reservaIds, filesWithMeta);
+      await campanasService.assignArteDigital(campanaId, reservaIds, filesWithMeta, data.markInstalado === true);
 
       queryClient.invalidateQueries({ queryKey: ['campana-inventario-sin-arte'], exact: false });
       queryClient.invalidateQueries({ queryKey: ['campana-inventario-arte'], exact: false });
       queryClient.invalidateQueries({ queryKey: ['campana-artes-existentes'], exact: false });
       queryClient.invalidateQueries({ queryKey: ['campana-tareas', campanaId] });
+      queryClient.invalidateQueries({ queryKey: ['campana-inventario-testigos', campanaId] });
       queryClient.invalidateQueries({ queryKey: ['digital-file-summaries', campanaId] });
 
       setIsUploadArtModalOpen(false);
@@ -16697,7 +16792,7 @@ export function TareaSeguimientoPage() {
   }, [selectedInventoryItems, campanaId, queryClient]);
 
   // Handler para subir artes tradicionales (múltiples con notas)
-  const handleUploadTradicionalArt = useCallback(async (data: { archivos: { archivo: string; nota: string; spot: number }[]; inventoryIds: string[] }) => {
+  const handleUploadTradicionalArt = useCallback(async (data: { archivos: { archivo: string; nota: string; spot: number }[]; inventoryIds: string[]; markInstalado?: boolean }) => {
     const reservaIds = selectedInventoryItems.flatMap(item =>
       item.rsv_id.split(',').map(id => parseInt(id.trim())).filter(id => !isNaN(id))
     );
@@ -16718,12 +16813,13 @@ export function TareaSeguimientoPage() {
         return;
       }
 
-      await campanasService.assignArteTradicional(campanaId, reservaIds, validArchivos);
+      await campanasService.assignArteTradicional(campanaId, reservaIds, validArchivos, data.markInstalado === true);
 
       queryClient.invalidateQueries({ queryKey: ['campana-inventario-sin-arte'], exact: false });
       queryClient.invalidateQueries({ queryKey: ['campana-inventario-arte'], exact: false });
       queryClient.invalidateQueries({ queryKey: ['campana-artes-existentes'], exact: false });
       queryClient.invalidateQueries({ queryKey: ['campana-tareas', campanaId] });
+      queryClient.invalidateQueries({ queryKey: ['campana-inventario-testigos', campanaId] });
       queryClient.invalidateQueries({ queryKey: ['tradicional-file-summaries', campanaId] });
 
       setIsUploadArtModalOpen(false);
