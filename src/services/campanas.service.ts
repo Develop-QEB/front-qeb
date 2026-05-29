@@ -925,6 +925,23 @@ export const campanasService = {
     return response.data.data;
   },
 
+  // Asigna APS + lo etiqueta Pre Factura (back lo agrega a campania.prefactura_aps).
+  // El badge dorado en Con APS se pinta leyendo `campana.prefactura_aps`.
+  async assignAPSPrefactura(id: number, inventarioIds: number[], solicitudCarasIds?: number[], rsvIds?: number[]): Promise<{ aps: number; message: string }> {
+    const response = await api.post<ApiResponse<{ aps: number; message: string }>>(`/campanas/${id}/assign-aps-prefactura`, { inventarioIds, campanaId: id, solicitudCarasIds, rsvIds });
+    if (!response.data.success || !response.data.data) {
+      throw new Error(response.data.error || 'Error al asignar APS Pre Factura');
+    }
+    return response.data.data;
+  },
+
+  // Cancela la etiqueta Pre Factura — quita los APS del JSON y regresa las
+  // reservas a Sin APS (decisión: forzar reasignación con APS nuevo real).
+  async cancelPrefactura(id: number, aps: number[]): Promise<number[]> {
+    const response = await api.post<{ success: boolean; prefactura_aps: number[] }>(`/campanas/${id}/cancel-prefactura`, { aps });
+    return response.data.prefactura_aps;
+  },
+
   async sendAuthorizationPIN(codigo: string, solicitante: string, campana: string): Promise<void> {
     const response = await api.post<{ success: boolean; message: string }>('/correos/send-pin', {
       codigo,
