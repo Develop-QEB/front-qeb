@@ -378,6 +378,8 @@ const FILTER_FIELDS_DISPONIBLES: FilterFieldConfig[] = [
   { field: 'ubicacion', label: 'Ubicación', type: 'string' },
   { field: 'tradicional_digital', label: 'Tipo', type: 'string' },
   { field: 'mundialista', label: 'Mundialista', type: 'string' },
+  { field: 'mueble_chico', label: 'Mueble chico', type: 'string' },
+  { field: 'isla_vip', label: 'Isla VIP', type: 'string' },
 ];
 
 // Tipo extendido con conector Y/O entre filtros
@@ -892,6 +894,8 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
   const [flujoFilter, setFlujoFilter] = useState<'Todos' | 'Flujo' | 'Contraflujo'>(tipoPeriodo === 'mensual' ? 'Flujo' : 'Todos');
   const [islaFilter, setIslaFilter] = useState<'off' | 'si' | 'no'>('off');
   const [mundialistaFilter, setMundialistaFilter] = useState<'off' | 'si' | 'no'>('off');
+  const [muebleChicoFilter, setMuebleChicoFilter] = useState<'off' | 'si' | 'no'>('off');
+  const [islaVipFilter, setIslaVipFilter] = useState<'off' | 'si' | 'no'>('off');
   const [sortColumn, setSortColumn] = useState<string>('codigo_unico');
   const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('asc');
   const [agruparComoCompleto, setAgruparComoCompleto] = useState(true); // Group flujo+contraflujo at same location
@@ -3546,6 +3550,20 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
       data = data.filter(inv => !(inv as any).mundialista || (inv as any).mundialista.toUpperCase() !== 'SI');
     }
 
+    // Filter by mueble_chico - toggle: SI / NO / off
+    if (muebleChicoFilter === 'si') {
+      data = data.filter(inv => (inv as any).mueble_chico?.toUpperCase() === 'SI');
+    } else if (muebleChicoFilter === 'no') {
+      data = data.filter(inv => !(inv as any).mueble_chico || (inv as any).mueble_chico.toUpperCase() !== 'SI');
+    }
+
+    // Filter by isla_vip - solo aplica si islaFilter ya está activado (VIP es subset de isla).
+    if (islaFilter !== 'off' && islaVipFilter === 'si') {
+      data = data.filter(inv => (inv as any).isla_vip?.toUpperCase() === 'SI');
+    } else if (islaFilter !== 'off' && islaVipFilter === 'no') {
+      data = data.filter(inv => !(inv as any).isla_vip || (inv as any).isla_vip.toUpperCase() !== 'SI');
+    }
+
     // Filtros avanzados (embudo)
     if (disponiblesAdvFilters.length > 0) {
       data = applyAdvancedFilters(data as unknown as Record<string, unknown>[], disponiblesAdvFilters) as unknown as typeof data;
@@ -3599,7 +3617,7 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
     });
 
     return data;
-  }, [inventarioDisponible, disponiblesSearchTerm, poiFilterIds, flujoFilter, showOnlyUnicos, showOnlyCompletos, showOnlyUnicosDigitales, showSpotUnico, islaFilter, mundialistaFilter, disponiblesAdvFilters, groupByDistance, groupMode, filterUnicos, filterCompletos, filterUnicosDigitales, filterSpotUnico, groupByDistanceFunc, groupByListFunc, sortColumn, sortDirection, reservas]);
+  }, [inventarioDisponible, disponiblesSearchTerm, poiFilterIds, flujoFilter, showOnlyUnicos, showOnlyCompletos, showOnlyUnicosDigitales, showSpotUnico, islaFilter, islaVipFilter, mundialistaFilter, muebleChicoFilter, disponiblesAdvFilters, groupByDistance, groupMode, filterUnicos, filterCompletos, filterUnicosDigitales, filterSpotUnico, groupByDistanceFunc, groupByListFunc, sortColumn, sortDirection, reservas]);
 
   // Handle POI filter from map
   const handlePOIFilter = useCallback((idsToKeep: number[]) => {
@@ -3634,6 +3652,8 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
     setShowSpotUnico(false);
     setIslaFilter('off');
     setMundialistaFilter('off');
+    setMuebleChicoFilter('off');
+    setIslaVipFilter('off');
     setGroupByDistance(false);
     setPoiFilterIds(null);
     setDisponiblesSearchTerm('');
@@ -5302,11 +5322,12 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
                     </button>
                   )}
 
-                  {/* Isla filter - 3-state toggle: off → SI → NO → off */}
+                  {/* Isla filter - 3-state toggle: off → SI → NO → off. Si vuelve a off, resetea VIP. */}
                   <button
                     onClick={() => {
                       const next = islaFilter === 'off' ? 'si' : islaFilter === 'si' ? 'no' : 'off';
                       setIslaFilter(next);
+                      if (next === 'off') setIslaVipFilter('off');
                       if (next === 'si') { setSortColumn('codigo_unico'); setSortDirection('asc'); }
                     }}
                     className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-medium transition-all ${islaFilter === 'si'
@@ -5320,6 +5341,26 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
                     <MapPin className="h-3.5 w-3.5" />
                     {islaFilter === 'si' ? 'Isla ✓' : islaFilter === 'no' ? 'Isla ✗' : 'Isla'}
                   </button>
+
+                  {/* Isla VIP filter — solo visible cuando islaFilter está activo. VIP es subset de isla. */}
+                  {islaFilter !== 'off' && (
+                    <button
+                      onClick={() => {
+                        const next = islaVipFilter === 'off' ? 'si' : islaVipFilter === 'si' ? 'no' : 'off';
+                        setIslaVipFilter(next);
+                      }}
+                      className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-medium transition-all ${islaVipFilter === 'si'
+                        ? 'bg-violet-500 text-white shadow'
+                        : islaVipFilter === 'no'
+                          ? 'bg-red-500/80 text-white shadow'
+                          : `${isDark ? 'bg-zinc-800/80' : 'bg-gray-100/80'} ${isDark ? 'text-zinc-400' : 'text-gray-500'} border ${isDark ? 'border-zinc-700/50' : 'border-gray-200/50'} ${isDark ? 'hover:text-white' : 'hover:text-gray-900'}`
+                        }`}
+                      title={islaVipFilter === 'off' ? 'Filtrar islas VIP' : islaVipFilter === 'si' ? 'Mostrando islas VIP (click: sin VIP)' : 'Sin islas VIP (click: quitar filtro)'}
+                    >
+                      <span className="text-[14px] leading-none">★</span>
+                      {islaVipFilter === 'si' ? 'VIP ✓' : islaVipFilter === 'no' ? 'VIP ✗' : 'VIP'}
+                    </button>
+                  )}
 
                   {/* Mundialista filter - 3-state toggle: off → SI → NO → off */}
                   <button
@@ -5338,6 +5379,25 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
                   >
                     <Trophy className="h-3.5 w-3.5" />
                     {mundialistaFilter === 'si' ? 'Mundial ✓' : mundialistaFilter === 'no' ? 'Mundial ✗' : 'Mundial'}
+                  </button>
+
+                  {/* Mueble chico filter - 3-state toggle: off → SI → NO → off */}
+                  <button
+                    onClick={() => {
+                      const next = muebleChicoFilter === 'off' ? 'si' : muebleChicoFilter === 'si' ? 'no' : 'off';
+                      setMuebleChicoFilter(next);
+                      if (next === 'si') { setSortColumn('codigo_unico'); setSortDirection('asc'); }
+                    }}
+                    className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-medium transition-all ${muebleChicoFilter === 'si'
+                      ? 'bg-orange-500 text-white shadow'
+                      : muebleChicoFilter === 'no'
+                        ? 'bg-red-500/80 text-white shadow'
+                        : `${isDark ? 'bg-zinc-800/80' : 'bg-gray-100/80'} ${isDark ? 'text-zinc-400' : 'text-gray-500'} border ${isDark ? 'border-zinc-700/50' : 'border-gray-200/50'} ${isDark ? 'hover:text-white' : 'hover:text-gray-900'}`
+                      }`}
+                    title={muebleChicoFilter === 'off' ? 'Filtrar muebles chicos' : muebleChicoFilter === 'si' ? 'Mostrando muebles chicos (click: sin muebles chicos)' : 'Sin muebles chicos (click: quitar filtro)'}
+                  >
+                    <Package className="h-3.5 w-3.5" />
+                    {muebleChicoFilter === 'si' ? 'Chico ✓' : muebleChicoFilter === 'no' ? 'Chico ✗' : 'Chico'}
                   </button>
 
                   {/* Filtros avanzados (embudo) */}
