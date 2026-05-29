@@ -963,6 +963,7 @@ interface ImagenDigitalView {
   spot: number;
   tipo: 'image' | 'video';
   estado: string;
+  nombre_arte?: string | null;
 }
 
 // Tipo para artes tradicionales del backend
@@ -971,6 +972,7 @@ interface ArteTradicionalView {
   archivo: string;
   nota: string;
   spot: number;
+  nombre_arte?: string | null;
 }
 
 // Digital Gallery Modal Component
@@ -1092,9 +1094,15 @@ function DigitalGalleryModal({
                 </div>
               </div>
 
-              {/* Nombre Archivo + Nota (digital) */}
-              {(currentImage?.archivo || (currentImage as any)?.nota) && (
+              {/* Nombre Arte + Nombre Archivo + Nota (digital) */}
+              {(currentImage?.archivo || (currentImage as any)?.nota || (currentImage as any)?.nombre_arte) && (
                 <div className="mt-3 p-3 bg-cyan-500/10 border border-cyan-500/30 rounded-lg space-y-2">
+                  {(currentImage as any)?.nombre_arte && (
+                    <div>
+                      <p className="text-xs font-medium text-cyan-300 mb-1">Nombre Arte:</p>
+                      <p className="text-sm text-zinc-300 whitespace-pre-wrap">{(currentImage as any).nombre_arte}</p>
+                    </div>
+                  )}
                   {currentImage?.archivo && (() => {
                     const last = decodeURIComponent((currentImage.archivo.split('?')[0].split('/').pop() || ''));
                     const clean = last.replace(/^\d{10,}-[a-z0-9]+-/i, '') || last;
@@ -1272,9 +1280,15 @@ function TradicionalGalleryModal({
                 </div>
               </div>
 
-              {/* Nombre Archivo + Nota de la imagen actual */}
-              {(currentImage?.archivo || currentImage?.nota) && (
+              {/* Nombre Arte + Nombre Archivo + Nota de la imagen actual */}
+              {(currentImage?.archivo || currentImage?.nota || currentImage?.nombre_arte) && (
                 <div className="mt-3 p-3 bg-orange-500/10 border border-orange-500/30 rounded-lg space-y-2">
+                  {currentImage?.nombre_arte && (
+                    <div>
+                      <p className="text-xs font-medium text-orange-300 mb-1">Nombre Arte:</p>
+                      <p className="text-sm text-zinc-300 whitespace-pre-wrap">{currentImage.nombre_arte}</p>
+                    </div>
+                  )}
                   {currentImage?.archivo && (() => {
                     // Extrae nombre legible: quita prefijo timestamp-random- de la URL de Spaces
                     const last = decodeURIComponent((currentImage.archivo.split('?')[0].split('/').pop() || ''));
@@ -4015,6 +4029,7 @@ function TaskDetailModal({
         spot: img.spot,
         tipo: img.archivo.match(/\.(mp4|mov|avi|webm|mkv|wmv)$/i) ? 'video' as const : 'image' as const,
         estado: img.estado,
+        nombre_arte: img.nombre_arte || null,
       })));
     } catch (error) {
       console.error('Error fetching digital images:', error);
@@ -16735,6 +16750,7 @@ export function TareaSeguimientoPage() {
         spot: img.spot,
         tipo: img.tipo,
         estado: img.estado,
+        nombre_arte: img.nombre_arte || null,
       })));
     } catch (error) {
       console.error('Error al cargar imágenes digitales:', error);
@@ -16845,6 +16861,7 @@ export function TareaSeguimientoPage() {
         archivo: a.archivo,
         nota: a.nota,
         spot: a.spot,
+        nombre_arte: a.nombre_arte || null,
       })));
     } catch (error) {
       console.error('Error al cargar artes tradicionales:', error);

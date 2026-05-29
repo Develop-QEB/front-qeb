@@ -85,6 +85,7 @@ export interface ImagenDigital {
   respuesta: string;
   spot: number;
   tipo: 'image' | 'video';
+  nombre_arte?: string | null; // Nombre manual capturado en la carga (reemplaza al slug del archivo)
 }
 
 export interface DigitalFileSummary {
@@ -101,6 +102,7 @@ export interface ArteTradicional {
   nota: string;
   spot: number;
   createdAt: string | null;
+  nombre_arte?: string | null; // Nombre manual capturado en la carga (reemplaza al slug del archivo)
 }
 
 export interface TradicionalFileSummary {
