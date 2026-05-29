@@ -1795,7 +1795,13 @@ function UploadArtModal({
     // Para inventario digital con wizard
     if (isDigitalInventory) {
       if (digitalWizardStep === 2) {
-        return selectedDigitalImages.size === 0;
+        if (selectedDigitalImages.size === 0) return true;
+        // Nombre del Arte obligatorio para cada imagen
+        for (const [key] of selectedDigitalImages) {
+          const nombre = digitalImageNames.get(key);
+          if (!nombre || nombre.trim() === '') return true;
+        }
+        return false;
       }
       // En paso 1 no se usa el botón submit (se usa "Siguiente")
       return true;
@@ -1804,10 +1810,12 @@ function UploadArtModal({
     // Para inventario tradicional con wizard
     if (!isDigitalInventory && onSubmitTradicional) {
       if (wizardStep === 2) {
-        // En paso 2: todas las notas deben estar llenas
+        // En paso 2: nombre Y nota obligatorios para cada imagen
         if (selectedGalleryImages.size === 0) return true;
         for (const [key] of selectedGalleryImages) {
+          const nombre = imageNames.get(key);
           const nota = imageNotes.get(key);
+          if (!nombre || nombre.trim() === '') return true;
           if (!nota || nota.trim() === '') return true;
         }
         return false;
@@ -2278,7 +2286,7 @@ function UploadArtModal({
                     <>
                       <div className="overflow-y-auto pr-1" style={{ maxHeight: 'calc(90vh - 280px)' }}>
                         <label className="block text-xs font-medium text-muted-foreground mb-2">
-                          Notas por archivo (opcional) — {selectedDigitalImages.size} archivo{selectedDigitalImages.size !== 1 ? 's' : ''}
+                          Nombre y nota por archivo — {selectedDigitalImages.size} archivo{selectedDigitalImages.size !== 1 ? 's' : ''}
                         </label>
                         <div className="space-y-3">
                           {Array.from(selectedDigitalImages.entries()).map(([id, img], idx) => {
@@ -2318,6 +2326,9 @@ function UploadArtModal({
                                     </div>
                                   </div>
                                 </div>
+                                <label className="block text-[10px] font-medium text-zinc-400 mb-1">
+                                  Nombre del Arte {idx + 1} <span className="text-red-400">*</span>
+                                </label>
                                 <input
                                   type="text"
                                   value={digitalImageNames.get(id) || ''}
@@ -2326,9 +2337,14 @@ function UploadArtModal({
                                     next.set(id, e.target.value);
                                     return next;
                                   })}
-                                  placeholder="Nombre del arte (ej: Promo Mayo)"
-                                  className="w-full mb-1.5 px-2 py-1.5 text-xs bg-background border border-border rounded-lg focus:outline-none focus:ring-1 focus:ring-cyan-500"
+                                  className="w-full mb-0.5 px-2 py-1.5 text-xs bg-background border border-border rounded-lg focus:outline-none focus:ring-1 focus:ring-cyan-500"
                                 />
+                                {(!digitalImageNames.get(id) || digitalImageNames.get(id)?.trim() === '') && (
+                                  <p className="mb-1 text-[9px] text-red-400">Nombre obligatorio</p>
+                                )}
+                                <label className="block text-[10px] font-medium text-zinc-400 mb-1 mt-1.5">
+                                  Nota para imagen {idx + 1}
+                                </label>
                                 <textarea
                                   value={digitalImageNotes.get(id) || ''}
                                   onChange={(e) => setDigitalImageNotes(prev => {
@@ -2337,7 +2353,6 @@ function UploadArtModal({
                                     return next;
                                   })}
                                   rows={2}
-                                  placeholder="Nota (opcional)..."
                                   className="w-full px-2 py-1.5 text-xs bg-background border border-border rounded-lg focus:outline-none focus:ring-1 focus:ring-cyan-500 resize-none"
                                 />
                               </div>
@@ -2547,7 +2562,7 @@ function UploadArtModal({
                             <div className="flex-1 min-w-0 space-y-2">
                               <div>
                                 <label className={`block text-[10px] font-medium mb-1 ${isDark ? 'text-zinc-400' : 'text-gray-600'}`}>
-                                  Nombre del Arte {idx + 1}
+                                  Nombre del Arte {idx + 1} <span className="text-red-400">*</span>
                                 </label>
                                 <input
                                   type="text"
@@ -2557,9 +2572,11 @@ function UploadArtModal({
                                     next.set(id, e.target.value);
                                     return next;
                                   })}
-                                  placeholder="Ej: Promo Mayo Mundial"
                                   className="w-full px-2 py-1.5 text-xs bg-background border border-border rounded-lg focus:outline-none focus:ring-1 focus:ring-purple-500"
                                 />
+                                {(!imageNames.get(id) || imageNames.get(id)?.trim() === '') && (
+                                  <p className="mt-0.5 text-[9px] text-red-400">Nombre obligatorio</p>
+                                )}
                               </div>
                               <div>
                                 <label className={`block text-[10px] font-medium mb-1 ${isDark ? 'text-zinc-400' : 'text-gray-600'}`}>
@@ -2572,7 +2589,6 @@ function UploadArtModal({
                                     next.set(id, e.target.value);
                                     return next;
                                   })}
-                                  placeholder="Escribe una nota para esta imagen..."
                                   rows={2}
                                   className="w-full px-2 py-1.5 text-xs bg-background border border-border rounded-lg focus:outline-none focus:ring-1 focus:ring-purple-500 resize-none"
                                 />
@@ -12056,7 +12072,9 @@ function CreateTaskModal({
                 reservasConArtesTradicionales.add(arte.idReserva);
                 if (!archivosVistos.has(arte.archivo)) {
                   archivosVistos.add(arte.archivo);
-                  const nombreLegible = arte.nota || (arte.archivo.split('/').pop() || `Arte Tradicional`);
+                  // Prioridad: nombre_arte manual > slug del archivo. Nota NO entra aqui
+                  // porque la nota se muestra abajo como indicacion del archivo.
+                  const nombreLegible = arte.nombre_arte || (arte.archivo.split('/').pop() || `Arte Tradicional`);
                   archivos.push({
                     nombre: arte.archivo,
                     tipo: 'tradicional',
@@ -12096,12 +12114,14 @@ function CreateTaskModal({
             imagenes.forEach(img => {
               if (!archivosVistos.has(img.archivo)) {
                 archivosVistos.add(img.archivo);
+                const nombreLegible = img.nombre_arte || (img.archivo.split('/').pop() || `Arte Digital`);
                 archivos.push({
                   nombre: img.archivo,
                   tipo: 'digital',
                   id: img.id,
                   archivoData: img.archivoData,
                   spot: img.spot,
+                  nombreLegible,
                 });
               }
             });
@@ -12782,10 +12802,7 @@ function CreateTaskModal({
                               />
                             )}
                             <div className="flex-1 min-w-0">
-                              <p className="text-xs font-medium text-zinc-300 truncate">{displayName}</p>
-                              <span className={`text-[10px] px-1.5 py-0.5 rounded ${archivo.tipo === 'digital' ? 'bg-blue-500/20 text-blue-400' : 'bg-amber-500/20 text-amber-400'}`}>
-                                {archivo.tipo === 'digital' ? 'Digital' : 'Tradicional'}
-                              </span>
+                              <p className="text-xs font-medium text-zinc-300 truncate" title={displayName}>{displayName}</p>
                             </div>
                           </div>
                           <label className="block text-[10px] text-zinc-500 mb-1">Indicaciones para este archivo</label>
