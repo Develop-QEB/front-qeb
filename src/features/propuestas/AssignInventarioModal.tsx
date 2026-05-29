@@ -24,6 +24,7 @@ import { filterAllowedArticulos } from '../../config/allowedDigitalArticles';
 import { useSocketPropuesta, useSocketEquipos, useSocketInventarioRealtime, type InventarioRealtimePayload } from '../../hooks/useSocket';
 import { useThemeStore } from '../../store/themeStore';
 import { SaveChangesConfirmModal, type ModifiedCircuito } from '../../components/SaveChangesConfirmModal';
+import { DeleteCircuitoConfirmModal } from '../../components/DeleteCircuitoConfirmModal';
 
 // GOOGLE_MAPS_API_KEY / LIBRARIES centralizados en src/config/googleMaps.ts.
 
@@ -916,6 +917,26 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
 
   // Save Changes Confirmation Modal — abre antes del bulk save con resumen
   const [showSaveConfirm, setShowSaveConfirm] = useState(false);
+
+  // Delete Circuito Confirmation Modal — bote de basura de circuito con detalle
+  const [deleteCircuitoModal, setDeleteCircuitoModal] = useState<{
+    isOpen: boolean;
+    ubicacion: string;
+    articulo: string;
+    formato?: string;
+    tieneReservas: boolean;
+    tienePareja: boolean;
+    isDeleting: boolean;
+    onConfirm: () => Promise<void> | void;
+  }>({
+    isOpen: false,
+    ubicacion: '',
+    articulo: '',
+    tieneReservas: false,
+    tienePareja: false,
+    isDeleting: false,
+    onConfirm: () => {},
+  });
 
   // Custom Confirmation Modal State
   const [confirmModal, setConfirmModal] = useState<{
@@ -2132,49 +2153,41 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
 
     const anyTieneReservas = tieneReservas || pairTieneReservas;
 
-    setConfirmModal({
+    setDeleteCircuitoModal({
       isOpen: true,
-      title: 'Eliminar Formato',
-      message: pairCara
-        ? (anyTieneReservas
-            ? '⚠️ Este formato (y su par RT/BF) tiene inventario reservado. Al eliminarlo se liberarán todas las reservas. ¿Deseas continuar?'
-            : '¿Estás seguro de que deseas eliminar este formato y su par (RT/BF) de la propuesta?')
-        : (tieneReservas
-            ? '⚠️ Este formato tiene inventario reservado. Al eliminarlo se liberarán todas las reservas. ¿Deseas continuar?'
-            : '¿Estás seguro de que deseas eliminar este formato de la propuesta?'),
-      confirmText: 'Eliminar',
-      isDestructive: true,
+      ubicacion: caraToDelete?.plaza || caraToDelete?.estados || caraToDelete?.ciudad || '(sin ubicación)',
+      articulo: caraToDelete?.articulo || '',
+      formato: caraToDelete?.formato || caraToDelete?.tipo,
+      tieneReservas: anyTieneReservas,
+      tienePareja: !!pairCara,
+      isDeleting: false,
       onConfirm: async () => {
-        // If cara has DB id, delete from database
+        setDeleteCircuitoModal(prev => ({ ...prev, isDeleting: true }));
         if (caraToDelete?.id) {
           try {
             await propuestasService.deleteCara(propuesta.id, caraToDelete.id);
           } catch (error) {
             console.error('Error deleting cara:', error);
             alert('Error al eliminar el formato de la base de datos');
-            setConfirmModal(prev => ({ ...prev, isOpen: false }));
+            setDeleteCircuitoModal(prev => ({ ...prev, isOpen: false, isDeleting: false }));
             return;
           }
         }
-        // Delete pair cara if exists
         if (pairCara?.id) {
           try {
             await propuestasService.deleteCara(propuesta.id, pairCara.id);
           } catch (error) {
             console.error('Error deleting RT/BF pair cara:', error);
             alert('Error al eliminar la cara par (RT/BF) de la base de datos');
-            setConfirmModal(prev => ({ ...prev, isOpen: false }));
+            setDeleteCircuitoModal(prev => ({ ...prev, isOpen: false, isDeleting: false }));
             return;
           }
         }
-        // Update local state (remove both cara and its RT/BF pair, if any)
         const idsToRemove = new Set<string>([localId]);
         if (pairCara) idsToRemove.add(pairCara.localId);
         const dbIdsToRemove = new Set<number>();
         if (caraToDelete?.id) dbIdsToRemove.add(caraToDelete.id);
         if (pairCara?.id) dbIdsToRemove.add(pairCara.id);
-        // Limpiar IDs borrados de modifiedCaras para que el bulk save no intente
-        // actualizar registros que ya no existen en la BD (causa P2025).
         setModifiedCaras(prev => {
           const next = new Map(prev);
           for (const id of dbIdsToRemove) next.delete(id);
@@ -2185,7 +2198,7 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
           ![...idsToRemove].some(id => r.id.startsWith(id)) &&
           !(r.solicitudCaraId && dbIdsToRemove.has(r.solicitudCaraId))
         ));
-        setConfirmModal(prev => ({ ...prev, isOpen: false }));
+        setDeleteCircuitoModal(prev => ({ ...prev, isOpen: false, isDeleting: false }));
       }
     });
   };
@@ -9364,6 +9377,18 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
         contextLabel="propuesta"
         hasGeneralChanges={hasChanges}
         modifiedCircuitos={modifiedCircuitosForConfirm}
+      />
+      {/* Delete Circuito Confirm Modal — confirmación al usar bote de basura */}
+      <DeleteCircuitoConfirmModal
+        isOpen={deleteCircuitoModal.isOpen}
+        onClose={() => setDeleteCircuitoModal(prev => ({ ...prev, isOpen: false }))}
+        onConfirm={() => deleteCircuitoModal.onConfirm()}
+        isDeleting={deleteCircuitoModal.isDeleting}
+        ubicacion={deleteCircuitoModal.ubicacion}
+        articulo={deleteCircuitoModal.articulo}
+        formato={deleteCircuitoModal.formato}
+        tieneReservas={deleteCircuitoModal.tieneReservas}
+        tienePareja={deleteCircuitoModal.tienePareja}
       />
       {/* Toast Notification */}
       {toastJSX}

@@ -25,6 +25,7 @@ import { filterAllowedArticulos } from '../../config/allowedDigitalArticles';
 import { useSocketEquipos, useSocketCampana, useSocketInventarioRealtime, type InventarioRealtimePayload } from '../../hooks/useSocket';
 import { useThemeStore } from '../../store/themeStore';
 import { SaveChangesConfirmModal, type ModifiedCircuito } from '../../components/SaveChangesConfirmModal';
+import { DeleteCircuitoConfirmModal } from '../../components/DeleteCircuitoConfirmModal';
 
 // GOOGLE_MAPS_API_KEY / LIBRARIES centralizados en src/config/googleMaps.ts
 // (evita que la API de Google Maps se cargue dos veces y trabe la pantalla).
@@ -903,6 +904,26 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
 
   // Save Changes Confirmation Modal — abre antes del bulk save con resumen
   const [showSaveConfirm, setShowSaveConfirm] = useState(false);
+
+  // Delete Circuito Confirmation Modal — bote de basura de circuito con detalle
+  const [deleteCircuitoModal, setDeleteCircuitoModal] = useState<{
+    isOpen: boolean;
+    ubicacion: string;
+    articulo: string;
+    formato?: string;
+    tieneReservas: boolean;
+    tienePareja: boolean;
+    isDeleting: boolean;
+    onConfirm: () => Promise<void> | void;
+  }>({
+    isOpen: false,
+    ubicacion: '',
+    articulo: '',
+    tieneReservas: false,
+    tienePareja: false,
+    isDeleting: false,
+    onConfirm: () => {},
+  });
 
   // Custom Confirmation Modal State
   const [confirmModal, setConfirmModal] = useState<{
@@ -2313,16 +2334,16 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
 
     const isPair = pairedCaras.length > 0;
 
-    setConfirmModal({
+    setDeleteCircuitoModal({
       isOpen: true,
-      title: isPair ? 'Eliminar RT + BF' : 'Eliminar Formato',
-      message: isPair
-        ? '¿Estás seguro de que deseas eliminar este formato junto con su cara pareja (RT/BF) de la campaña?'
-        : '¿Estás seguro de que deseas eliminar este formato de la campaña?',
-      confirmText: 'Eliminar',
-      isDestructive: true,
+      ubicacion: caraToDelete?.plaza || caraToDelete?.estados || caraToDelete?.ciudad || '(sin ubicación)',
+      articulo: caraToDelete?.articulo || '',
+      formato: caraToDelete?.formato || caraToDelete?.tipo,
+      tieneReservas: tieneReservas,
+      tienePareja: isPair,
+      isDeleting: false,
       onConfirm: async () => {
-        // Delete all caras in the pair (+ the primary) from DB if they have IDs
+        setDeleteCircuitoModal(prev => ({ ...prev, isDeleting: true }));
         const toDelete = [caraToDelete, ...pairedCaras].filter(Boolean) as CaraItem[];
         for (const c of toDelete) {
           if (c.id) {
@@ -2331,22 +2352,20 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
             } catch (error) {
               console.error('Error deleting cara:', error);
               alert('Error al eliminar el formato de la base de datos');
-              setConfirmModal(prev => ({ ...prev, isOpen: false }));
+              setDeleteCircuitoModal(prev => ({ ...prev, isOpen: false, isDeleting: false }));
               return;
             }
           }
         }
-        // Update local state
         const deletedLocalIds = new Set(toDelete.map(c => c.localId));
         setCaras(prev => prev.filter(c => !deletedLocalIds.has(c.localId)));
         setReservas(prev => prev.filter(r => !toDelete.some(c => r.id.startsWith(c.localId))));
-        // Also drop any pending modifications for deleted caras
         setModifiedCaras(prev => {
           const next = new Map(prev);
           for (const c of toDelete) if (c.id) next.delete(c.id);
           return next;
         });
-        setConfirmModal(prev => ({ ...prev, isOpen: false }));
+        setDeleteCircuitoModal(prev => ({ ...prev, isOpen: false, isDeleting: false }));
       }
     });
   };
@@ -9275,6 +9294,18 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
         contextLabel="campaña"
         hasGeneralChanges={hasChanges}
         modifiedCircuitos={modifiedCircuitosForConfirm}
+      />
+      {/* Delete Circuito Confirm Modal — confirmación al usar bote de basura */}
+      <DeleteCircuitoConfirmModal
+        isOpen={deleteCircuitoModal.isOpen}
+        onClose={() => setDeleteCircuitoModal(prev => ({ ...prev, isOpen: false }))}
+        onConfirm={() => deleteCircuitoModal.onConfirm()}
+        isDeleting={deleteCircuitoModal.isDeleting}
+        ubicacion={deleteCircuitoModal.ubicacion}
+        articulo={deleteCircuitoModal.articulo}
+        formato={deleteCircuitoModal.formato}
+        tieneReservas={deleteCircuitoModal.tieneReservas}
+        tienePareja={deleteCircuitoModal.tienePareja}
       />
       {/* Toast Notification */}
       {toastJSX}
