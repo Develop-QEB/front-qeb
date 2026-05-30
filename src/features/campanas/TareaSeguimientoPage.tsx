@@ -14937,7 +14937,10 @@ export function TareaSeguimientoPage() {
     const tareasRecepcion = tareasAPI.filter(t => t.tipo === 'Recepción');
 
 
-    if (tareasImpresion.length === 0) return [];
+    // Solo cortar temprano si no hay ni Impresión ni Recepción. El flujo
+    // "Cliente imprime" crea solo Recepción huérfana, asi que un return
+    // por tareasImpresion.length===0 dejaria a esos items fuera del tab.
+    if (tareasImpresion.length === 0 && tareasRecepcion.length === 0) return [];
 
     // Crear mapas de conversión entre inventory_id y rsv_id
     const inventoryIdToRsvId = new Map<string, string>();
