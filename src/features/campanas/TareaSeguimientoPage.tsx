@@ -693,10 +693,13 @@ function getGroupKeyForField(item: InventoryRow, field: GroupByField, tipoPeriod
       return `APS ${item.aps ?? 'Sin asignar'}`;
     case 'grupo':
       if (item.grupo_id) {
+        // Solo articulo + grupo_id en la key — NO incluir ciudad porque
+        // dentro del mismo sc.id (circuito) los items pueden vivir en
+        // distintos estados (ej. zona metropolitana Edo Mex + CDMX) y eso
+        // splitearia un circuito real en dos visualmente.
         const parts: string[] = [];
         if (item.articulo) parts.push(item.articulo.toUpperCase());
         parts.push(`Grupo ${item.grupo_id}`);
-        if (item.ciudad) parts.push(item.ciudad);
         return parts.join(' | ');
       }
       return `Item ${item.id}`;
@@ -960,6 +963,7 @@ interface ImagenDigitalView {
   spot: number;
   tipo: 'image' | 'video';
   estado: string;
+  nombre_arte?: string | null;
 }
 
 // Tipo para artes tradicionales del backend
@@ -968,6 +972,7 @@ interface ArteTradicionalView {
   archivo: string;
   nota: string;
   spot: number;
+  nombre_arte?: string | null;
 }
 
 // Digital Gallery Modal Component
@@ -1089,9 +1094,15 @@ function DigitalGalleryModal({
                 </div>
               </div>
 
-              {/* Nombre Archivo + Nota (digital) */}
-              {(currentImage?.archivo || (currentImage as any)?.nota) && (
+              {/* Nombre Arte + Nombre Archivo + Nota (digital) */}
+              {(currentImage?.archivo || (currentImage as any)?.nota || (currentImage as any)?.nombre_arte) && (
                 <div className="mt-3 p-3 bg-cyan-500/10 border border-cyan-500/30 rounded-lg space-y-2">
+                  {(currentImage as any)?.nombre_arte && (
+                    <div>
+                      <p className="text-xs font-medium text-cyan-300 mb-1">Nombre Arte:</p>
+                      <p className="text-sm text-zinc-300 whitespace-pre-wrap">{(currentImage as any).nombre_arte}</p>
+                    </div>
+                  )}
                   {currentImage?.archivo && (() => {
                     const last = decodeURIComponent((currentImage.archivo.split('?')[0].split('/').pop() || ''));
                     const clean = last.replace(/^\d{10,}-[a-z0-9]+-/i, '') || last;
@@ -1269,9 +1280,15 @@ function TradicionalGalleryModal({
                 </div>
               </div>
 
-              {/* Nombre Archivo + Nota de la imagen actual */}
-              {(currentImage?.archivo || currentImage?.nota) && (
+              {/* Nombre Arte + Nombre Archivo + Nota de la imagen actual */}
+              {(currentImage?.archivo || currentImage?.nota || currentImage?.nombre_arte) && (
                 <div className="mt-3 p-3 bg-orange-500/10 border border-orange-500/30 rounded-lg space-y-2">
+                  {currentImage?.nombre_arte && (
+                    <div>
+                      <p className="text-xs font-medium text-orange-300 mb-1">Nombre Arte:</p>
+                      <p className="text-sm text-zinc-300 whitespace-pre-wrap">{currentImage.nombre_arte}</p>
+                    </div>
+                  )}
                   {currentImage?.archivo && (() => {
                     // Extrae nombre legible: quita prefijo timestamp-random- de la URL de Spaces
                     const last = decodeURIComponent((currentImage.archivo.split('?')[0].split('/').pop() || ''));
@@ -1362,10 +1379,10 @@ function UploadArtModal({
   isOpen: boolean;
   onClose: () => void;
   selectedInventory: InventoryRow[];
-  onSubmit: (data: { option: UploadOption; value: string | File; inventoryIds: string[] }) => void;
-  onSubmitDigital?: (data: { files: { file: File; spot: number }[]; inventoryIds: string[] }) => void;
-  onSubmitTradicional?: (data: { archivos: { archivo: string; nota: string; spot: number }[]; inventoryIds: string[] }) => void;
-  onSubmitDigitalFromLibrary?: (data: { archivos: { archivo: string; nota: string; spot: number; tipo: string }[]; inventoryIds: string[] }) => void;
+  onSubmit: (data: { option: UploadOption; value: string | File; inventoryIds: string[]; markInstalado?: boolean }) => void;
+  onSubmitDigital?: (data: { files: { file: File; spot: number }[]; inventoryIds: string[]; markInstalado?: boolean }) => void;
+  onSubmitTradicional?: (data: { archivos: { archivo: string; nota: string; spot: number }[]; inventoryIds: string[]; markInstalado?: boolean }) => void;
+  onSubmitDigitalFromLibrary?: (data: { archivos: { archivo: string; nota: string; spot: number; tipo: string }[]; inventoryIds: string[]; markInstalado?: boolean }) => void;
   artesExistentes: ArteExistente[];
   addedArtes: ArteExistente[];
   onAddedArtesChange: (artes: ArteExistente[]) => void;
@@ -1398,12 +1415,15 @@ function UploadArtModal({
   const [digitalWizardStep, setDigitalWizardStep] = useState<1 | 2>(1);
   const [selectedDigitalImages, setSelectedDigitalImages] = useState<Map<string, { url: string; source: 'existing' | 'upload'; preview?: string; isVideo: boolean }>>(new Map());
   const [digitalImageNotes, setDigitalImageNotes] = useState<Map<string, string>>(new Map());
+  const [digitalImageNames, setDigitalImageNames] = useState<Map<string, string>>(new Map());
   const [isUploadingDigitalFile, setIsUploadingDigitalFile] = useState(false);
 
   // Estado para wizard de artes tradicionales (2 pasos)
   const [wizardStep, setWizardStep] = useState<1 | 2>(1);
   const [selectedGalleryImages, setSelectedGalleryImages] = useState<Map<string, { url: string; source: 'existing' | 'upload' | 'url'; preview?: string }>>(new Map());
   const [imageNotes, setImageNotes] = useState<Map<string, string>>(new Map());
+  // Nombre arte capturado manualmente por el usuario (paralelo a imageNotes)
+  const [imageNames, setImageNames] = useState<Map<string, string>>(new Map());
 
   // Estado para fichas técnicas (browser de carpetas)
   const [expandedFichaFolders, setExpandedFichaFolders] = useState<Set<string>>(new Set());
@@ -1516,10 +1536,11 @@ function UploadArtModal({
           break;
         case 'grupo':
           if (item.grupo_id) {
+            // Sin ciudad: items del mismo sc.id pueden tener distintos estados
+            // (zona metropolitana) y la ciudad splitearia el circuito real.
             const parts: string[] = [];
             if (item.articulo) parts.push(item.articulo.toUpperCase());
             parts.push(`Grupo ${item.grupo_id}`);
-            if (item.ciudad) parts.push(item.ciudad);
             key = parts.join(' | ');
           } else {
             key = `Item ${item.id}`;
@@ -1638,6 +1659,31 @@ function UploadArtModal({
     setDraggedFile(null);
   };
 
+  // Detecta si alguno de los URLs seleccionados corresponde a un arte de la
+  // biblioteca con estatus "Instalado" y, en ese caso, pide confirmación al
+  // usuario para marcar el inventario destino también como instalado (se moverá
+  // a Validar Instalación > Instaladas).
+  const checkAndConfirmInstalado = (archivoUrls: string[]): { proceed: boolean; markInstalado: boolean } => {
+    const seen = new Set<string>();
+    const instaladoArtes: ArteExistente[] = [];
+    for (const url of archivoUrls) {
+      if (!url || seen.has(url)) continue;
+      seen.add(url);
+      const found = localArtes.find(a => a.url === url);
+      if (found && found.tiene_instalado === true) instaladoArtes.push(found);
+    }
+    if (instaladoArtes.length === 0) return { proceed: true, markInstalado: false };
+    const nombres = instaladoArtes.slice(0, 5).map(a => `  - ${a.nombre_arte || a.nombre}`).join('\n');
+    const extra = instaladoArtes.length > 5 ? `\n  ... y ${instaladoArtes.length - 5} mas` : '';
+    const msg =
+      'Los siguientes artes ya estan marcados como Instalado en otro inventario:\n' +
+      nombres + extra + '\n\n' +
+      'Al asignarlos, el inventario destino tambien quedara marcado como instalado y se movera a "Validar Instalacion > Instaladas".\n\n' +
+      'Continuar?';
+    const ok = window.confirm(msg);
+    return { proceed: ok, markInstalado: ok };
+  };
+
   const handleSubmit = () => {
     // Flujo digital con wizard - enviar archivos seleccionados de la biblioteca con notas
     if (isDigitalInventory && digitalWizardStep === 2 && onSubmitDigitalFromLibrary) {
@@ -1646,10 +1692,14 @@ function UploadArtModal({
         nota: digitalImageNotes.get(key)?.trim() || '',
         spot: idx + 1,
         tipo: img.isVideo ? 'video' : 'image',
+        nombre_arte: digitalImageNames.get(key)?.trim() || null,
       }));
+      const { proceed, markInstalado } = checkAndConfirmInstalado(archivos.map(a => a.archivo));
+      if (!proceed) return;
       onSubmitDigitalFromLibrary({
         archivos,
         inventoryIds: selectedInventory.map((i) => i.id),
+        markInstalado,
       });
       return;
     }
@@ -1669,10 +1719,14 @@ function UploadArtModal({
         archivo: img.url,
         nota: imageNotes.get(key)?.trim() || '',
         spot: idx + 1,
+        nombre_arte: imageNames.get(key)?.trim() || null,
       }));
+      const { proceed, markInstalado } = checkAndConfirmInstalado(archivos.map(a => a.archivo));
+      if (!proceed) return;
       onSubmitTradicional({
         archivos,
         inventoryIds: selectedInventory.map((i) => i.id),
+        markInstalado,
       });
       return;
     }
@@ -1687,10 +1741,15 @@ function UploadArtModal({
       value = link;
     }
 
+    const checkUrl = selectedOption === 'existing' && typeof value === 'string' ? [value as string] : [];
+    const { proceed, markInstalado } = checkAndConfirmInstalado(checkUrl);
+    if (!proceed) return;
+
     const payload = {
       option: selectedOption,
       value,
       inventoryIds: selectedInventory.map((i) => i.id),
+      markInstalado,
     };
     onSubmit(payload);
   };
@@ -1736,7 +1795,13 @@ function UploadArtModal({
     // Para inventario digital con wizard
     if (isDigitalInventory) {
       if (digitalWizardStep === 2) {
-        return selectedDigitalImages.size === 0;
+        if (selectedDigitalImages.size === 0) return true;
+        // Nombre del Arte obligatorio para cada imagen
+        for (const [key] of selectedDigitalImages) {
+          const nombre = digitalImageNames.get(key);
+          if (!nombre || nombre.trim() === '') return true;
+        }
+        return false;
       }
       // En paso 1 no se usa el botón submit (se usa "Siguiente")
       return true;
@@ -1745,10 +1810,12 @@ function UploadArtModal({
     // Para inventario tradicional con wizard
     if (!isDigitalInventory && onSubmitTradicional) {
       if (wizardStep === 2) {
-        // En paso 2: todas las notas deben estar llenas
+        // En paso 2: nombre Y nota obligatorios para cada imagen
         if (selectedGalleryImages.size === 0) return true;
         for (const [key] of selectedGalleryImages) {
+          const nombre = imageNames.get(key);
           const nota = imageNotes.get(key);
+          if (!nombre || nombre.trim() === '') return true;
           if (!nota || nota.trim() === '') return true;
         }
         return false;
@@ -1782,8 +1849,24 @@ function UploadArtModal({
           nn.delete(id);
           return nn;
         });
+        setImageNames(prevNames => {
+          const nn = new Map(prevNames);
+          nn.delete(id);
+          return nn;
+        });
       } else {
         next.set(id, { url, source: 'existing' });
+        // Pre-llenar nombre del arte si el arte ya tiene uno guardado en biblioteca.
+        // Asi se respeta el nombre que ya tiene en lugar de obligar al usuario a
+        // reescribirlo en cada carga.
+        const arte = localArtes.find(a => a.id === id);
+        if (arte?.nombre_arte) {
+          setImageNames(prevNames => {
+            const nn = new Map(prevNames);
+            nn.set(id, arte.nombre_arte || '');
+            return nn;
+          });
+        }
       }
       return next;
     });
@@ -1833,8 +1916,22 @@ function UploadArtModal({
           nn.delete(id);
           return nn;
         });
+        setDigitalImageNames(prevNames => {
+          const nn = new Map(prevNames);
+          nn.delete(id);
+          return nn;
+        });
       } else {
         next.set(id, { url, source: 'existing', isVideo });
+        // Pre-llenar nombre del arte si el arte ya tiene uno guardado en biblioteca.
+        const arte = localArtes.find(a => a.id === id);
+        if (arte?.nombre_arte) {
+          setDigitalImageNames(prevNames => {
+            const nn = new Map(prevNames);
+            nn.set(id, arte.nombre_arte || '');
+            return nn;
+          });
+        }
       }
       return next;
     });
@@ -2114,7 +2211,12 @@ function UploadArtModal({
                                         ? 'border-cyan-400 ring-2 ring-cyan-400/30'
                                         : 'border-transparent hover:border-cyan-400/50'
                                     }`}
-                                    title={art.nombre}
+                                    title={[
+                                      art.nombre_arte ? `Nombre: ${art.nombre_arte}` : null,
+                                      `Archivo: ${art.nombre}`,
+                                      art.nota ? `Nota: ${art.nota}` : null,
+                                      art.estatus ? `Estatus: ${art.estatus}` : null,
+                                    ].filter(Boolean).join('\n')}
                                   >
                                     {isVideo ? (
                                       <div className="w-full h-full flex items-center justify-center bg-zinc-700">
@@ -2123,7 +2225,7 @@ function UploadArtModal({
                                     ) : (
                                       <ArteImg
                                         src={art.url}
-                                        alt={art.nombre}
+                                        alt={art.nombre_arte || art.nombre}
                                         className="w-full h-full object-cover"
                                       />
                                     )}
@@ -2132,8 +2234,27 @@ function UploadArtModal({
                                         <Check className="h-4 w-4 text-white" />
                                       </div>
                                     )}
+                                    {/* Badge de estatus arriba a la derecha. Si el arte
+                                        esta marcado como Instalado en otra reserva,
+                                        priorizamos ese badge (purpura) sobre arte_aprobado. */}
+                                    {(art.tiene_instalado || art.estatus) && (
+                                      <span className={`absolute top-0.5 right-0.5 px-1 py-0 rounded text-[8px] font-semibold ${
+                                        art.tiene_instalado ? 'bg-purple-500/80 text-white'
+                                        : art.estatus?.toLowerCase() === 'aprobado' ? 'bg-green-500/80 text-white'
+                                        : art.estatus?.toLowerCase() === 'rechazado' ? 'bg-red-500/80 text-white'
+                                        : art.estatus?.toLowerCase() === 'pendiente' ? 'bg-orange-500/80 text-white'
+                                        : 'bg-zinc-700/80 text-zinc-200'
+                                      }`}>{art.tiene_instalado ? 'Instalado' : art.estatus}</span>
+                                    )}
                                     <div className="absolute bottom-0 left-0 right-0 bg-black/70 px-1 py-px">
-                                      <p className="text-[7px] text-zinc-300 truncate">{art.nombre}</p>
+                                      <p className="text-[7px] text-zinc-300 truncate" title={art.nombre_arte || art.nombre}>
+                                        {art.nombre_arte || art.nombre}
+                                      </p>
+                                      {art.nota && (
+                                        <p className="text-[7px] text-zinc-400 truncate italic" title={art.nota}>
+                                          {art.nota}
+                                        </p>
+                                      )}
                                     </div>
                                   </button>
                                 );
@@ -2195,7 +2316,7 @@ function UploadArtModal({
                     <>
                       <div className="overflow-y-auto pr-1" style={{ maxHeight: 'calc(90vh - 280px)' }}>
                         <label className="block text-xs font-medium text-muted-foreground mb-2">
-                          Notas por archivo (opcional) — {selectedDigitalImages.size} archivo{selectedDigitalImages.size !== 1 ? 's' : ''}
+                          Nombre y nota por archivo — {selectedDigitalImages.size} archivo{selectedDigitalImages.size !== 1 ? 's' : ''}
                         </label>
                         <div className="space-y-3">
                           {Array.from(selectedDigitalImages.entries()).map(([id, img], idx) => {
@@ -2235,6 +2356,25 @@ function UploadArtModal({
                                     </div>
                                   </div>
                                 </div>
+                                <label className="block text-[10px] font-medium text-zinc-400 mb-1">
+                                  Nombre del Arte {idx + 1} <span className="text-red-400">*</span>
+                                </label>
+                                <input
+                                  type="text"
+                                  value={digitalImageNames.get(id) || ''}
+                                  onChange={(e) => setDigitalImageNames(prev => {
+                                    const next = new Map(prev);
+                                    next.set(id, e.target.value);
+                                    return next;
+                                  })}
+                                  className="w-full mb-0.5 px-2 py-1.5 text-xs bg-background border border-border rounded-lg focus:outline-none focus:ring-1 focus:ring-cyan-500"
+                                />
+                                {(!digitalImageNames.get(id) || digitalImageNames.get(id)?.trim() === '') && (
+                                  <p className="mb-1 text-[9px] text-red-400">Nombre obligatorio</p>
+                                )}
+                                <label className="block text-[10px] font-medium text-zinc-400 mb-1 mt-1.5">
+                                  Nota para imagen {idx + 1}
+                                </label>
                                 <textarea
                                   value={digitalImageNotes.get(id) || ''}
                                   onChange={(e) => setDigitalImageNotes(prev => {
@@ -2243,7 +2383,6 @@ function UploadArtModal({
                                     return next;
                                   })}
                                   rows={2}
-                                  placeholder="Nota (opcional)..."
                                   className="w-full px-2 py-1.5 text-xs bg-background border border-border rounded-lg focus:outline-none focus:ring-1 focus:ring-cyan-500 resize-none"
                                 />
                               </div>
@@ -2308,11 +2447,16 @@ function UploadArtModal({
                                         ? 'border-purple-400 ring-2 ring-purple-400/30'
                                         : 'border-transparent hover:border-purple-400/50'
                                     }`}
-                                    title={art.nombre}
+                                    title={[
+                                      art.nombre_arte ? `Nombre: ${art.nombre_arte}` : null,
+                                      `Archivo: ${art.nombre}`,
+                                      art.nota ? `Nota: ${art.nota}` : null,
+                                      art.tiene_instalado ? 'Estatus: Instalado (al asignarlo, el inventario destino quedara como instalado)' : (art.estatus ? `Estatus: ${art.estatus}` : null),
+                                    ].filter(Boolean).join('\n')}
                                   >
                                     <ArteImg
                                       src={art.url}
-                                      alt={art.nombre}
+                                      alt={art.nombre_arte || art.nombre}
                                       className="w-full h-full object-cover"
                                     />
                                     {isSelected && (
@@ -2320,8 +2464,24 @@ function UploadArtModal({
                                         <Check className="h-4 w-4 text-white" />
                                       </div>
                                     )}
+                                    {(art.tiene_instalado || art.estatus) && (
+                                      <span className={`absolute top-0.5 right-0.5 px-1 py-0 rounded text-[8px] font-semibold ${
+                                        art.tiene_instalado ? 'bg-purple-500/80 text-white'
+                                        : art.estatus?.toLowerCase() === 'aprobado' ? 'bg-green-500/80 text-white'
+                                        : art.estatus?.toLowerCase() === 'rechazado' ? 'bg-red-500/80 text-white'
+                                        : art.estatus?.toLowerCase() === 'pendiente' ? 'bg-orange-500/80 text-white'
+                                        : 'bg-zinc-700/80 text-zinc-200'
+                                      }`}>{art.tiene_instalado ? 'Instalado' : art.estatus}</span>
+                                    )}
                                     <div className="absolute bottom-0 left-0 right-0 bg-black/70 px-1 py-px">
-                                      <p className="text-[7px] text-zinc-300 truncate">{art.nombre}</p>
+                                      <p className="text-[7px] text-zinc-300 truncate" title={art.nombre_arte || art.nombre}>
+                                        {art.nombre_arte || art.nombre}
+                                      </p>
+                                      {art.nota && (
+                                        <p className="text-[7px] text-zinc-400 truncate italic" title={art.nota}>
+                                          {art.nota}
+                                        </p>
+                                      )}
                                     </div>
                                   </button>
                                 );
@@ -2428,25 +2588,44 @@ function UploadArtModal({
                                 className="w-full h-full object-cover"
                               />
                             </div>
-                            {/* Note input */}
-                            <div className="flex-1 min-w-0">
-                              <label className={`block text-[10px] font-medium mb-1 ${isDark ? 'text-zinc-400' : 'text-gray-600'}`}>
-                                Nota para imagen {idx + 1} <span className="text-red-400">*</span>
-                              </label>
-                              <textarea
-                                value={imageNotes.get(id) || ''}
-                                onChange={(e) => setImageNotes(prev => {
-                                  const next = new Map(prev);
-                                  next.set(id, e.target.value);
-                                  return next;
-                                })}
-                                placeholder="Escribe una nota para esta imagen..."
-                                rows={3}
-                                className="w-full px-2 py-1.5 text-xs bg-background border border-border rounded-lg focus:outline-none focus:ring-1 focus:ring-purple-500 resize-none"
-                              />
-                              {(!imageNotes.get(id) || imageNotes.get(id)?.trim() === '') && (
-                                <p className="mt-0.5 text-[9px] text-red-400">Nota obligatoria</p>
-                              )}
+                            {/* Inputs: Nombre Arte + Note */}
+                            <div className="flex-1 min-w-0 space-y-2">
+                              <div>
+                                <label className={`block text-[10px] font-medium mb-1 ${isDark ? 'text-zinc-400' : 'text-gray-600'}`}>
+                                  Nombre del Arte {idx + 1} <span className="text-red-400">*</span>
+                                </label>
+                                <input
+                                  type="text"
+                                  value={imageNames.get(id) || ''}
+                                  onChange={(e) => setImageNames(prev => {
+                                    const next = new Map(prev);
+                                    next.set(id, e.target.value);
+                                    return next;
+                                  })}
+                                  className="w-full px-2 py-1.5 text-xs bg-background border border-border rounded-lg focus:outline-none focus:ring-1 focus:ring-purple-500"
+                                />
+                                {(!imageNames.get(id) || imageNames.get(id)?.trim() === '') && (
+                                  <p className="mt-0.5 text-[9px] text-red-400">Nombre obligatorio</p>
+                                )}
+                              </div>
+                              <div>
+                                <label className={`block text-[10px] font-medium mb-1 ${isDark ? 'text-zinc-400' : 'text-gray-600'}`}>
+                                  Nota para imagen {idx + 1} <span className="text-red-400">*</span>
+                                </label>
+                                <textarea
+                                  value={imageNotes.get(id) || ''}
+                                  onChange={(e) => setImageNotes(prev => {
+                                    const next = new Map(prev);
+                                    next.set(id, e.target.value);
+                                    return next;
+                                  })}
+                                  rows={2}
+                                  className="w-full px-2 py-1.5 text-xs bg-background border border-border rounded-lg focus:outline-none focus:ring-1 focus:ring-purple-500 resize-none"
+                                />
+                                {(!imageNotes.get(id) || imageNotes.get(id)?.trim() === '') && (
+                                  <p className="mt-0.5 text-[9px] text-red-400">Nota obligatoria</p>
+                                )}
+                              </div>
                             </div>
                           </div>
                         ))}
@@ -2803,7 +2982,7 @@ function FilterToolbar({
               <span className="text-sm font-medium text-purple-300">Filtros de búsqueda</span>
               <button onClick={() => setShowFilters(false)} className="text-muted-foreground hover:text-foreground"><X className="h-4 w-4" /></button>
             </div>
-            <div className="space-y-3 max-h-[300px] overflow-y-auto scrollbar-purple pr-1">
+            <div className="space-y-3 max-h-[300px] overflow-visible pr-1">
               {filters.map((filter, index) => (
                 <div key={filter.id} className="flex items-center gap-2">
                   {index > 0 && <span className="text-[10px] text-purple-400 font-medium w-8">AND</span>}
@@ -2835,7 +3014,7 @@ function FilterToolbar({
                         : allOptions;
                       if (filtered.length === 0) return null;
                       return (
-                        <div className={`absolute left-0 top-full mt-1 w-full max-h-[200px] overflow-y-auto z-[300] rounded border shadow-xl ${isDark ? 'bg-zinc-800 border-zinc-600' : 'bg-white border-gray-200'}`}>
+                        <div className={`absolute left-0 top-full mt-1 w-full max-h-[200px] overflow-y-auto z-[9999] rounded border shadow-xl ${isDark ? 'bg-zinc-800 border-zinc-600' : 'bg-white border-gray-200'}`}>
                           {filtered.slice(0, 50).map((val) => (
                             <button
                               key={val}
@@ -3896,6 +4075,7 @@ function TaskDetailModal({
         spot: img.spot,
         tipo: img.archivo.match(/\.(mp4|mov|avi|webm|mkv|wmv)$/i) ? 'video' as const : 'image' as const,
         estado: img.estado,
+        nombre_arte: img.nombre_arte || null,
       })));
     } catch (error) {
       console.error('Error fetching digital images:', error);
@@ -4452,10 +4632,11 @@ function TaskDetailModal({
         case 'aps': return `APS ${item.aps ?? 'Sin asignar'}`;
         case 'grupo':
           if (item.grupo_id) {
+            // Sin ciudad: items del mismo sc.id pueden tener distintos estados
+            // (zona metropolitana) y la ciudad splitearia el circuito real.
             const parts: string[] = [];
             if (item.articulo) parts.push(item.articulo.toUpperCase());
             parts.push(`Grupo ${item.grupo_id}`);
-            if (item.ciudad) parts.push(item.ciudad);
             return parts.join(' | ');
           }
           return `Item ${item.id}`;
@@ -10331,22 +10512,37 @@ function TaskDetailModal({
                                           ? 'border-cyan-400 ring-2 ring-cyan-400/30'
                                           : 'border-transparent hover:border-cyan-400/50'
                                       }`}
-                                      title={art.nombre}
+                                      title={[
+                                        art.nombre_arte ? `Nombre: ${art.nombre_arte}` : null,
+                                        `Archivo: ${art.nombre}`,
+                                        art.tiene_instalado ? 'Estatus: Instalado' : (art.estatus ? `Estatus: ${art.estatus}` : null),
+                                      ].filter(Boolean).join('\n')}
                                     >
                                       {isVideo ? (
                                         <div className="w-full h-full flex items-center justify-center bg-zinc-700">
                                           <Play className="h-5 w-5 text-cyan-400" />
                                         </div>
                                       ) : (
-                                        <ArteImg src={art.url} alt={art.nombre} className="w-full h-full object-cover" />
+                                        <ArteImg src={art.url} alt={art.nombre_arte || art.nombre} className="w-full h-full object-cover" />
                                       )}
                                       {isSelected && (
                                         <div className="absolute inset-0 bg-cyan-600/30 flex items-center justify-center">
                                           <Check className="h-4 w-4 text-white" />
                                         </div>
                                       )}
+                                      {(art.tiene_instalado || art.estatus) && (
+                                        <span className={`absolute top-0.5 right-0.5 px-1 py-0 rounded text-[8px] font-semibold ${
+                                          art.tiene_instalado ? 'bg-purple-500/80 text-white'
+                                          : art.estatus?.toLowerCase() === 'aprobado' ? 'bg-green-500/80 text-white'
+                                          : art.estatus?.toLowerCase() === 'rechazado' ? 'bg-red-500/80 text-white'
+                                          : art.estatus?.toLowerCase() === 'pendiente' ? 'bg-orange-500/80 text-white'
+                                          : 'bg-zinc-700/80 text-zinc-200'
+                                        }`}>{art.tiene_instalado ? 'Instalado' : art.estatus}</span>
+                                      )}
                                       <div className="absolute bottom-0 left-0 right-0 bg-black/70 px-1 py-px">
-                                        <p className="text-[7px] text-zinc-300 truncate">{art.nombre}</p>
+                                        <p className="text-[7px] text-zinc-300 truncate" title={art.nombre_arte || art.nombre}>
+                                          {art.nombre_arte || art.nombre}
+                                        </p>
                                       </div>
                                     </button>
                                   );
@@ -10560,16 +10756,31 @@ function TaskDetailModal({
                                           ? 'border-orange-400 ring-2 ring-orange-400/30'
                                           : 'border-transparent hover:border-orange-400/50'
                                       }`}
-                                      title={art.nombre}
+                                      title={[
+                                        art.nombre_arte ? `Nombre: ${art.nombre_arte}` : null,
+                                        `Archivo: ${art.nombre}`,
+                                        art.tiene_instalado ? 'Estatus: Instalado' : (art.estatus ? `Estatus: ${art.estatus}` : null),
+                                      ].filter(Boolean).join('\n')}
                                     >
-                                      <ArteImg src={art.url} alt={art.nombre} className="w-full h-full object-cover" />
+                                      <ArteImg src={art.url} alt={art.nombre_arte || art.nombre} className="w-full h-full object-cover" />
                                       {isSelected && (
                                         <div className="absolute inset-0 bg-orange-600/30 flex items-center justify-center">
                                           <Check className="h-4 w-4 text-white" />
                                         </div>
                                       )}
+                                      {(art.tiene_instalado || art.estatus) && (
+                                        <span className={`absolute top-0.5 right-0.5 px-1 py-0 rounded text-[8px] font-semibold ${
+                                          art.tiene_instalado ? 'bg-purple-500/80 text-white'
+                                          : art.estatus?.toLowerCase() === 'aprobado' ? 'bg-green-500/80 text-white'
+                                          : art.estatus?.toLowerCase() === 'rechazado' ? 'bg-red-500/80 text-white'
+                                          : art.estatus?.toLowerCase() === 'pendiente' ? 'bg-orange-500/80 text-white'
+                                          : 'bg-zinc-700/80 text-zinc-200'
+                                        }`}>{art.tiene_instalado ? 'Instalado' : art.estatus}</span>
+                                      )}
                                       <div className="absolute bottom-0 left-0 right-0 bg-black/70 px-1 py-px">
-                                        <p className="text-[7px] text-zinc-300 truncate">{art.nombre}</p>
+                                        <p className="text-[7px] text-zinc-300 truncate" title={art.nombre_arte || art.nombre}>
+                                          {art.nombre_arte || art.nombre}
+                                        </p>
                                       </div>
                                     </button>
                                   );
@@ -11891,7 +12102,9 @@ function CreateTaskModal({
                 reservasConArtesTradicionales.add(arte.idReserva);
                 if (!archivosVistos.has(arte.archivo)) {
                   archivosVistos.add(arte.archivo);
-                  const nombreLegible = arte.nota || (arte.archivo.split('/').pop() || `Arte Tradicional`);
+                  // Prioridad: nombre_arte manual > slug del archivo. Nota NO entra aqui
+                  // porque la nota se muestra abajo como indicacion del archivo.
+                  const nombreLegible = arte.nombre_arte || (arte.archivo.split('/').pop() || `Arte Tradicional`);
                   archivos.push({
                     nombre: arte.archivo,
                     tipo: 'tradicional',
@@ -11931,12 +12144,14 @@ function CreateTaskModal({
             imagenes.forEach(img => {
               if (!archivosVistos.has(img.archivo)) {
                 archivosVistos.add(img.archivo);
+                const nombreLegible = img.nombre_arte || (img.archivo.split('/').pop() || `Arte Digital`);
                 archivos.push({
                   nombre: img.archivo,
                   tipo: 'digital',
                   id: img.id,
                   archivoData: img.archivoData,
                   spot: img.spot,
+                  nombreLegible,
                 });
               }
             });
@@ -12617,10 +12832,7 @@ function CreateTaskModal({
                               />
                             )}
                             <div className="flex-1 min-w-0">
-                              <p className="text-xs font-medium text-zinc-300 truncate">{displayName}</p>
-                              <span className={`text-[10px] px-1.5 py-0.5 rounded ${archivo.tipo === 'digital' ? 'bg-blue-500/20 text-blue-400' : 'bg-amber-500/20 text-amber-400'}`}>
-                                {archivo.tipo === 'digital' ? 'Digital' : 'Tradicional'}
-                              </span>
+                              <p className="text-xs font-medium text-zinc-300 truncate" title={displayName}>{displayName}</p>
                             </div>
                           </div>
                           <label className="block text-[10px] text-zinc-500 mb-1">Indicaciones para este archivo</label>
@@ -14205,15 +14417,18 @@ export function TareaSeguimientoPage() {
 
   // ---- Mutations ----
   const assignArteMutation = useMutation({
-    mutationFn: ({ reservaIds, archivo }: { reservaIds: number[]; archivo: string }) =>
-      campanasService.assignArte(campanaId, reservaIds, archivo),
+    mutationFn: ({ reservaIds, archivo, markInstalado }: { reservaIds: number[]; archivo: string; markInstalado?: boolean }) =>
+      campanasService.assignArte(campanaId, reservaIds, archivo, markInstalado === true),
     onSuccess: () => {
       // Invalidar todos los queries de inventario para forzar recarga cuando se activen
       queryClient.invalidateQueries({ queryKey: ['campana-inventario-sin-arte'], exact: false });
       queryClient.invalidateQueries({ queryKey: ['campana-inventario-arte'], exact: false });
       queryClient.invalidateQueries({ queryKey: ['campana-artes-existentes'], exact: false });
-      // Invalidar tareas porque limpiar arte puede eliminar/actualizar tareas
+      // Invalidar tareas porque limpiar arte puede eliminar/actualizar tareas (y porque
+      // markInstalado=true crea una tarea de Instalación Completado).
       queryClient.invalidateQueries({ queryKey: ['campana-tareas', campanaId] });
+      // Refrescar Validar Instalación cuando el flujo de Instalado deba mostrarse.
+      queryClient.invalidateQueries({ queryKey: ['campana-inventario-testigos', campanaId] });
       queryClient.invalidateQueries({ queryKey: ['campanas'] });
       if (isUploadArtModalOpen) {
         setIsUploadArtModalOpen(false);
@@ -14752,7 +14967,10 @@ export function TareaSeguimientoPage() {
     const tareasRecepcion = tareasAPI.filter(t => t.tipo === 'Recepción');
 
 
-    if (tareasImpresion.length === 0) return [];
+    // Solo cortar temprano si no hay ni Impresión ni Recepción. El flujo
+    // "Cliente imprime" crea solo Recepción huérfana, asi que un return
+    // por tareasImpresion.length===0 dejaria a esos items fuera del tab.
+    if (tareasImpresion.length === 0 && tareasRecepcion.length === 0) return [];
 
     // Crear mapas de conversión entre inventory_id y rsv_id
     const inventoryIdToRsvId = new Map<string, string>();
@@ -14927,6 +15145,39 @@ export function TareaSeguimientoPage() {
           proveedor: tarea.nombre_proveedores || '-',
           estado_impresion: estadoImpresion,
           tarea_recepcion_id: tareaRecepcionId,
+        });
+      });
+    });
+
+    // [Fix Cliente imprime] Tareas de Recepción HUÉRFANAS — creadas via
+    // "Cliente imprime" sin tarea de Impresión predecesora. El loop de arriba
+    // solo recorre tareasImpresion, así que las reservas de estas Recepciones
+    // nunca entraban al mapa → desaparecían del tab Impresiones al atenderse.
+    // Aquí las agregamos por separado, sin tocar la lógica existente.
+    const impresionRelatedRecepcionIds = new Set<number>();
+    impresionToRecepcionesMap.forEach(recepciones => {
+      recepciones.forEach(r => impresionRelatedRecepcionIds.add(r.id));
+    });
+    tareasRecepcion.forEach(recepcion => {
+      // Si la Recepción ya está asociada a una Impresión, fue manejada arriba.
+      if (impresionRelatedRecepcionIds.has(recepcion.id)) return;
+      // No procesar Recepciones de faltantes — esas tienen su propio camino.
+      if (recepcionEsFaltantesMap.get(recepcion.id)) return;
+      const listado = recepcion.listado_inventario || recepcion.ids_reservas || '';
+      const ids = listado.replace(/\*/g, ',').split(',').map(s => s.trim()).filter(Boolean);
+      const esAtendida = recepcion.estatus === 'Atendido' || recepcion.estatus === 'Completado';
+      const estadoImpresion: EstadoImpresion = esAtendida ? 'recibido' : 'pendiente_recepcion';
+      ids.forEach(id => {
+        // Respeta lo que ya hay: si el id ya está en el mapa (vino del loop normal),
+        // no lo sobreescribimos.
+        if (reservaToTareaMap.has(id)) return;
+        reservaToTareaMap.set(id, {
+          tarea_id: recepcion.id,
+          tarea_estatus: recepcion.estatus || (esAtendida ? 'Atendido' : 'Pendiente'),
+          tarea_titulo: recepcion.titulo || `Recepción #${recepcion.id}`,
+          proveedor: recepcion.nombre_proveedores || '-',
+          estado_impresion: estadoImpresion,
+          tarea_recepcion_id: recepcion.id,
         });
       });
     });
@@ -16426,7 +16677,7 @@ export function TareaSeguimientoPage() {
     }
   }, [createTareaMutation, campanaId, queryClient]);
 
-  const handleUploadArt = useCallback(async (data: { option: UploadOption; value: string | File; inventoryIds: string[] }) => {
+  const handleUploadArt = useCallback(async (data: { option: UploadOption; value: string | File; inventoryIds: string[]; markInstalado?: boolean }) => {
     // Get reserva IDs from selected inventory items
     const reservaIds = selectedInventoryItems.flatMap(item =>
       item.rsv_id.split(',').map(id => parseInt(id.trim())).filter(id => !isNaN(id))
@@ -16470,7 +16721,7 @@ export function TareaSeguimientoPage() {
       }
 
       if (archivo) {
-        assignArteMutation.mutate({ reservaIds, archivo });
+        assignArteMutation.mutate({ reservaIds, archivo, markInstalado: data.markInstalado === true });
       } else {
         setUploadArtError('No se especifico un archivo de arte');
       }
@@ -16512,7 +16763,8 @@ export function TareaSeguimientoPage() {
         })
       );
 
-      // Llamar al servicio para asignar arte digital
+      // Llamar al servicio para asignar arte digital (este flujo es upload fresco,
+      // sin biblioteca, por lo que nunca dispara markInstalado).
       await campanasService.assignArteDigital(campanaId, reservaIds, filesWithUrls);
 
       // Invalidar queries y cerrar modal
@@ -16548,6 +16800,7 @@ export function TareaSeguimientoPage() {
         spot: img.spot,
         tipo: img.tipo,
         estado: img.estado,
+        nombre_arte: img.nombre_arte || null,
       })));
     } catch (error) {
       console.error('Error al cargar imágenes digitales:', error);
@@ -16558,7 +16811,7 @@ export function TareaSeguimientoPage() {
   }, [campanaId]);
 
   // Handler para asignar arte digital desde biblioteca (wizard con notas)
-  const handleUploadDigitalFromLibrary = useCallback(async (data: { archivos: { archivo: string; nota: string; spot: number; tipo: string }[]; inventoryIds: string[] }) => {
+  const handleUploadDigitalFromLibrary = useCallback(async (data: { archivos: { archivo: string; nota: string; spot: number; tipo: string }[]; inventoryIds: string[]; markInstalado?: boolean }) => {
     const reservaIds = selectedInventoryItems.flatMap(item =>
       item.rsv_id.split(',').map(id => parseInt(id.trim())).filter(id => !isNaN(id))
     );
@@ -16586,12 +16839,13 @@ export function TareaSeguimientoPage() {
         nota: a.nota,
       }));
 
-      await campanasService.assignArteDigital(campanaId, reservaIds, filesWithMeta);
+      await campanasService.assignArteDigital(campanaId, reservaIds, filesWithMeta, data.markInstalado === true);
 
       queryClient.invalidateQueries({ queryKey: ['campana-inventario-sin-arte'], exact: false });
       queryClient.invalidateQueries({ queryKey: ['campana-inventario-arte'], exact: false });
       queryClient.invalidateQueries({ queryKey: ['campana-artes-existentes'], exact: false });
       queryClient.invalidateQueries({ queryKey: ['campana-tareas', campanaId] });
+      queryClient.invalidateQueries({ queryKey: ['campana-inventario-testigos', campanaId] });
       queryClient.invalidateQueries({ queryKey: ['digital-file-summaries', campanaId] });
 
       setIsUploadArtModalOpen(false);
@@ -16604,7 +16858,7 @@ export function TareaSeguimientoPage() {
   }, [selectedInventoryItems, campanaId, queryClient]);
 
   // Handler para subir artes tradicionales (múltiples con notas)
-  const handleUploadTradicionalArt = useCallback(async (data: { archivos: { archivo: string; nota: string; spot: number }[]; inventoryIds: string[] }) => {
+  const handleUploadTradicionalArt = useCallback(async (data: { archivos: { archivo: string; nota: string; spot: number }[]; inventoryIds: string[]; markInstalado?: boolean }) => {
     const reservaIds = selectedInventoryItems.flatMap(item =>
       item.rsv_id.split(',').map(id => parseInt(id.trim())).filter(id => !isNaN(id))
     );
@@ -16625,12 +16879,13 @@ export function TareaSeguimientoPage() {
         return;
       }
 
-      await campanasService.assignArteTradicional(campanaId, reservaIds, validArchivos);
+      await campanasService.assignArteTradicional(campanaId, reservaIds, validArchivos, data.markInstalado === true);
 
       queryClient.invalidateQueries({ queryKey: ['campana-inventario-sin-arte'], exact: false });
       queryClient.invalidateQueries({ queryKey: ['campana-inventario-arte'], exact: false });
       queryClient.invalidateQueries({ queryKey: ['campana-artes-existentes'], exact: false });
       queryClient.invalidateQueries({ queryKey: ['campana-tareas', campanaId] });
+      queryClient.invalidateQueries({ queryKey: ['campana-inventario-testigos', campanaId] });
       queryClient.invalidateQueries({ queryKey: ['tradicional-file-summaries', campanaId] });
 
       setIsUploadArtModalOpen(false);
@@ -16656,6 +16911,7 @@ export function TareaSeguimientoPage() {
         archivo: a.archivo,
         nota: a.nota,
         spot: a.spot,
+        nombre_arte: a.nombre_arte || null,
       })));
     } catch (error) {
       console.error('Error al cargar artes tradicionales:', error);
@@ -17967,11 +18223,37 @@ export function TareaSeguimientoPage() {
                   // Recibido = impresiones completadas - pendientes de recepción
                   const recibido = Math.max(0, completedImpresiones - pendingRecepcion);
 
+                  // [Fix Cliente imprime] Sumar Recepciones huérfanas atendidas
+                  // (las que se crearon via "Cliente imprime" sin tarea de Impresión).
+                  // Sin esto, el contador se queda en 0 aunque la Recepción esté Atendida.
+                  const impresionRelatedRecepcionIdsBadge = new Set<number>();
+                  tareasImp.forEach(imp => {
+                    const listadoImp = (imp.listado_inventario || imp.ids_reservas || '').replace(/\*/g, ',').split(',').map(s => s.trim()).filter(Boolean);
+                    tareasRec.forEach(rec => {
+                      const listadoRec = (rec.listado_inventario || rec.ids_reservas || '').replace(/\*/g, ',').split(',').map(s => s.trim()).filter(Boolean);
+                      if (listadoImp.some(id => listadoRec.includes(id))) {
+                        impresionRelatedRecepcionIdsBadge.add(rec.id);
+                      }
+                    });
+                  });
+                  const huerfanasRecibidas = tareasRec
+                    .filter(t => !impresionRelatedRecepcionIdsBadge.has(t.id))
+                    .filter(t => {
+                      // Excluir Recepciones de faltantes (tienen su propio camino)
+                      if (t.evidencia) {
+                        try { return JSON.parse(t.evidencia).tipo !== 'recepcion_faltantes'; } catch { return true; }
+                      }
+                      return true;
+                    })
+                    .filter(t => t.estatus === 'Atendido' || t.estatus === 'Completado')
+                    .reduce((sum, t) => sum + getNumImpresiones(t), 0);
+                  const recibidoTotal = recibido + huerfanasRecibidas;
+
                   return [
                     { key: 'orden_impresion' as const, label: 'Orden Impresión', count: inventoryOrdenImpresionData.length },
                     { key: 'en_impresion' as const, label: 'En Impresion', count: activeImpresiones },
                     { key: 'pendiente_recepcion' as const, label: 'Pend. Recepcion', count: pendingRecepcion },
-                    { key: 'recibido' as const, label: 'Recibido', count: recibido },
+                    { key: 'recibido' as const, label: 'Recibido', count: recibidoTotal },
                   ];
                 })().map(tab => (
                   <button
@@ -18891,6 +19173,7 @@ export function TareaSeguimientoPage() {
                                                         )}
                                                       </button>
                                                     </th>
+                                                    <th className="p-2 font-medium text-purple-300">Código Único</th>
                                                     <th className="p-2 font-medium text-purple-300">ID</th>
                                                     <th className="p-2 font-medium text-purple-300">Arte Aprobado</th>
                                                     <th className="p-2 font-medium text-purple-300">Archivo</th>
@@ -19791,6 +20074,7 @@ export function TareaSeguimientoPage() {
                                                 <thead className="bg-purple-900/20">
                                                   <tr className="border-b border-border text-left">
                                                     <th className="p-2 w-8"></th>
+                                                    <th className="p-2 font-medium text-purple-300">Código Único</th>
                                                     <th className="p-2 font-medium text-purple-300">ID</th>
                                                     <th className="p-2 font-medium text-purple-300">Arte Aprobado</th>
                                                     <th className="p-2 font-medium text-purple-300">Archivo</th>

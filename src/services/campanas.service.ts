@@ -85,6 +85,7 @@ export interface ImagenDigital {
   respuesta: string;
   spot: number;
   tipo: 'image' | 'video';
+  nombre_arte?: string | null; // Nombre manual capturado en la carga (reemplaza al slug del archivo)
 }
 
 export interface DigitalFileSummary {
@@ -101,6 +102,7 @@ export interface ArteTradicional {
   nota: string;
   spot: number;
   createdAt: string | null;
+  nombre_arte?: string | null; // Nombre manual capturado en la carga (reemplaza al slug del archivo)
 }
 
 export interface TradicionalFileSummary {
@@ -324,9 +326,15 @@ export interface CreateTareaData {
 
 export interface ArteExistente {
   id: string;
-  nombre: string;
+  nombre: string;     // nombre del archivo (slug del URL)
   url: string;
   usos: number;
+  // Campos opcionales para artes ya usados en el flujo (artes_tradicionales / imagenes_digitales).
+  // Para artes recien subidos via addedArtes (sin guardar aun), vienen null/undefined.
+  nombre_arte?: string | null; // nombre manual capturado en el modal de carga
+  nota?: string | null;        // nota asociada (artes_tradicionales.nota o imagenes_digitales.comentario)
+  estatus?: string | null;     // estatus del arte (Aprobado / Rechazado / Pendiente / etc.)
+  tiene_instalado?: boolean;   // true si alguna reserva que usa este arte ya esta instalada
 }
 
 // Órdenes de Montaje
@@ -917,6 +925,23 @@ export const campanasService = {
     return response.data.data;
   },
 
+  // Asigna APS + lo etiqueta Pre Factura (back lo agrega a campania.prefactura_aps).
+  // El badge dorado en Con APS se pinta leyendo `campana.prefactura_aps`.
+  async assignAPSPrefactura(id: number, inventarioIds: number[], solicitudCarasIds?: number[], rsvIds?: number[]): Promise<{ aps: number; message: string }> {
+    const response = await api.post<ApiResponse<{ aps: number; message: string }>>(`/campanas/${id}/assign-aps-prefactura`, { inventarioIds, campanaId: id, solicitudCarasIds, rsvIds });
+    if (!response.data.success || !response.data.data) {
+      throw new Error(response.data.error || 'Error al asignar APS Pre Factura');
+    }
+    return response.data.data;
+  },
+
+  // Cancela la etiqueta Pre Factura — quita los APS del JSON y regresa las
+  // reservas a Sin APS (decisión: forzar reasignación con APS nuevo real).
+  async cancelPrefactura(id: number, aps: number[]): Promise<number[]> {
+    const response = await api.post<{ success: boolean; prefactura_aps: number[] }>(`/campanas/${id}/cancel-prefactura`, { aps });
+    return response.data.prefactura_aps;
+  },
+
   async sendAuthorizationPIN(codigo: string, solicitante: string, campana: string): Promise<void> {
     const response = await api.post<{ success: boolean; message: string }>('/correos/send-pin', {
       codigo,
@@ -991,10 +1016,11 @@ export const campanasService = {
     return response.data.data;
   },
 
-  async assignArte(id: number, reservaIds: number[], archivo: string): Promise<{ message: string; affected: number }> {
-    const response = await api.post<ApiResponse<{ message: string; affected: number }>>(`/campanas/${id}/assign-arte`, {
+  async assignArte(id: number, reservaIds: number[], archivo: string, markInstalado: boolean = false): Promise<{ message: string; affected: number; marked_instalado?: boolean }> {
+    const response = await api.post<ApiResponse<{ message: string; affected: number; marked_instalado?: boolean }>>(`/campanas/${id}/assign-arte`, {
       reservaIds,
       archivo,
+      ...(markInstalado ? { markInstalado: true } : {}),
     });
     if (!response.data.success || !response.data.data) {
       throw new Error(response.data.error || 'Error al asignar arte');
@@ -1005,11 +1031,13 @@ export const campanasService = {
   async assignArteDigital(
     id: number,
     reservaIds: number[],
-    archivos: { archivo: string; spot: number; nombre: string; tipo: string }[]
-  ): Promise<{ message: string; affected: number }> {
-    const response = await api.post<ApiResponse<{ message: string; affected: number }>>(`/campanas/${id}/assign-arte-digital`, {
+    archivos: { archivo: string; spot: number; nombre: string; tipo: string }[],
+    markInstalado: boolean = false
+  ): Promise<{ message: string; affected: number; marked_instalado?: boolean }> {
+    const response = await api.post<ApiResponse<{ message: string; affected: number; marked_instalado?: boolean }>>(`/campanas/${id}/assign-arte-digital`, {
       reservaIds,
       archivos,
+      ...(markInstalado ? { markInstalado: true } : {}),
     });
     if (!response.data.success || !response.data.data) {
       throw new Error(response.data.error || 'Error al asignar arte digital');
@@ -1091,11 +1119,13 @@ export const campanasService = {
   async assignArteTradicional(
     id: number,
     reservaIds: number[],
-    archivos: { archivo: string; nota: string; spot: number }[]
-  ): Promise<{ message: string; affected: number }> {
-    const response = await api.post<ApiResponse<{ message: string; affected: number }>>(`/campanas/${id}/assign-arte-tradicional`, {
+    archivos: { archivo: string; nota: string; spot: number }[],
+    markInstalado: boolean = false
+  ): Promise<{ message: string; affected: number; marked_instalado?: boolean }> {
+    const response = await api.post<ApiResponse<{ message: string; affected: number; marked_instalado?: boolean }>>(`/campanas/${id}/assign-arte-tradicional`, {
       reservaIds,
       archivos,
+      ...(markInstalado ? { markInstalado: true } : {}),
     });
     if (!response.data.success || !response.data.data) {
       throw new Error(response.data.error || 'Error al asignar arte tradicional');

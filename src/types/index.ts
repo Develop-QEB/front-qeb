@@ -336,6 +336,7 @@ export interface Campana {
   sap_database?: string | null;
   posted_to_sap?: boolean;
   posted_aps?: number[];
+  prefactura_aps?: number[];
   codigos_inventario?: string | null;
   IMU?: number | null;
   formatos?: string | null;

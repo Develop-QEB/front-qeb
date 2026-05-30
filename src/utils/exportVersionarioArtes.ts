@@ -60,9 +60,38 @@ const isVideoUrl = (url: string | null | undefined): boolean => {
 };
 
 // "Arte 1: nombre.png\nArte 2: otro.png" — un nombre por linea.
-const buildNombresArtesText = (urls: string[]): string => {
+// Si se pasa namesByUrl con nombre_arte manual del usuario, se usa ese en lugar
+// del nombre del archivo extraido de la URL.
+const buildNombresArtesText = (urls: string[], namesByUrl?: Map<string, string>): string => {
   if (!urls || urls.length === 0) return '';
-  return urls.map((u, idx) => `Arte ${idx + 1}: ${extractArteName(u)}`).join('\n');
+  return urls.map((u, idx) => {
+    const manual = namesByUrl?.get(u)?.trim();
+    const name = manual || extractArteName(u);
+    return `Arte ${idx + 1}: ${name}`;
+  }).join('\n');
+};
+
+// Extrae los nombre_arte por URL a partir de items.artes_detalle (JSON del back).
+// Para items multi-arte tradicional. Para artes digitales no hay nombre_arte
+// en preview lightweight — se obtiene al descargar via notesByUrl/namesByUrl
+// que se llenan en handleDownloadVersionarioFromPreview.
+const extractNamesByUrl = (arr: any[]): Map<string, string> => {
+  const m = new Map<string, string>();
+  for (const it of arr) {
+    const detalle = it.artes_detalle;
+    if (!detalle) continue;
+    try {
+      const parsed = typeof detalle === 'string' ? JSON.parse(detalle) : detalle;
+      if (Array.isArray(parsed)) {
+        for (const entry of parsed) {
+          const archivo = (entry.archivo || '').trim();
+          const nombre = (entry.nombre_arte || '').trim();
+          if (archivo && nombre && !m.has(archivo)) m.set(archivo, nombre);
+        }
+      }
+    } catch { /* ignore */ }
+  }
+  return m;
 };
 
 const fetchImage = async (url: string): Promise<FetchedImage | null> => {
@@ -167,6 +196,7 @@ export async function exportVersionarioArtes({ campana, items, digitalFilesByRes
     'ID Campaña',
     'Plaza',
     'Tipo',
+    'Formato',
     'Asesor Comercial',
     'APS QEB',
     'Fecha Inicio Periodo',
@@ -178,11 +208,12 @@ export async function exportVersionarioArtes({ campana, items, digitalFilesByRes
     'Estatus',
     'Notas',
     'Nombre Arte',
+    'URL Arte',
   ];
   const arteHeaders = Array.from({ length: maxArtesUnicos }, (_, i) => `Arte ${i + 1}`);
   const headers = [...baseHeaders, ...arteHeaders];
 
-  const baseWidths = [12, 22, 14, 26, 14, 14, 14, 30, 18, 26, 8, 18, 50, 40];
+  const baseWidths = [12, 22, 14, 14, 26, 14, 14, 14, 30, 18, 26, 8, 18, 50, 40, 60];
   sheet.columns = [
     ...baseWidths.map(w => ({ width: w })),
     ...Array(maxArtesUnicos).fill(null).map(() => ({ width: 22 })),
@@ -268,11 +299,14 @@ export async function exportVersionarioArtes({ campana, items, digitalFilesByRes
     // Plaza display: como ahora la `plaza` del loop es la key del circuito,
     // sacamos el nombre real de la plaza desde los items del circuito.
     const plazaDisplay = uniqueOrVarios(arr.map(it => getPlaza(it)));
+    const formatoDisplay = uniqueOrVarios(arr.map(it => (it.mueble || (it as any).formato || it.tipo_de_mueble || '').toString()));
+    const urlArteText = urls.join('\n');
 
     const rowValues: any[] = [
       campana.id,
       plazaDisplay,
       uniqueOrVarios(tipos),
+      formatoDisplay,
       asesor,
       computeApsDisplay(arr),
       formatDate(minInicio),
@@ -283,7 +317,8 @@ export async function exportVersionarioArtes({ campana, items, digitalFilesByRes
       caras,
       estatusDisplay,
       notasResumen,
-      buildNombresArtesText(urls),
+      buildNombresArtesText(urls, extractNamesByUrl(arr)),
+      urlArteText,
     ];
     // Padding vacío para celdas de arte
     for (let i = 0; i < maxArtesUnicos; i++) rowValues.push('');
@@ -353,11 +388,14 @@ export interface VersionarioArtesPreviewRow {
   idCampana: number | string; // ID de la campaña (APS Global - ID QEB era ambiguo)
   plaza: string;
   tipo: string;
+  formato: string; // PARABUS, MUPIS, COLUMNA, etc. (de inv.mueble / sc.formato)
   asesor: string;
   apsQebId: number | string; // APS asignado al circuito
   cuic: string;
   fechaInicio: string;
   fechaFin: string;
+  fechaInicioRaw: string;
+  fechaFinRaw: string;
   cliente: string;
   marca: string;
   campania: string;
@@ -370,6 +408,7 @@ export interface VersionarioArtesPreviewRow {
   notas: string;
   nombreArte: string;
   artesUrls: string[];
+  posted: boolean;
 }
 
 // Determina el estatus jerarquico de un item: nivel + label.
@@ -570,10 +609,37 @@ export function buildVersionarioArtesPreview({ campanas }: { campanas: Versionar
     const caras = arr.reduce((sum, it) => sum + (Number((it as any).caras_totales) || 1), 0);
 
       const notasResumen = (() => {
-        if (!notesByUrl || notesByUrl.size === 0) return '';
+        // Primero intentar notesByUrl (disponible en fase de descarga con datos enriquecidos)
+        if (notesByUrl && notesByUrl.size > 0) {
+          const lines: string[] = [];
+          urls.forEach((url, idx) => {
+            const nota = (notesByUrl.get(url) || '').trim();
+            if (nota) lines.push(`Arte ${idx + 1}: ${nota}`);
+          });
+          if (lines.length > 0) return lines.join('\n');
+        }
+        // Fallback: extraer notas desde artes_detalle, alineadas con las URLs únicas
+        const notaByArchivo = new Map<string, string>();
+        for (const it of arr) {
+          const detalle = (it as any).artes_detalle;
+          if (!detalle) continue;
+          try {
+            const parsed = typeof detalle === 'string' ? JSON.parse(detalle) : detalle;
+            if (Array.isArray(parsed)) {
+              for (const entry of parsed) {
+                const archivo = (entry.archivo || '').trim();
+                const nota = (entry.nota || '').trim();
+                if (archivo && nota && !notaByArchivo.has(archivo)) {
+                  notaByArchivo.set(archivo, nota);
+                }
+              }
+            }
+          } catch { /* ignore */ }
+        }
+        if (notaByArchivo.size === 0) return '';
         const lines: string[] = [];
         urls.forEach((url, idx) => {
-          const nota = (notesByUrl.get(url) || '').trim();
+          const nota = notaByArchivo.get(url) || '';
           if (nota) lines.push(`Arte ${idx + 1}: ${nota}`);
         });
         return lines.join('\n');
@@ -586,15 +652,53 @@ export function buildVersionarioArtesPreview({ campanas }: { campanas: Versionar
 
       const { text: estatusText, breakdown: estatusBreakdown } = buildEstatusCircuito(arr);
 
+      const apsNumbers = arr.map(it => Number((it as any).APS)).filter(n => !isNaN(n) && n > 0);
+      const uniqueAps = [...new Set(apsNumbers)];
+      let posted = false;
+      if ((campana as any).posted_to_sap) {
+        posted = true;
+      } else if ((campana as any).posted_aps && uniqueAps.length > 0) {
+        // posted_aps puede venir como array, JSON string "[1,2,3]" o CSV "1,2,3".
+        // Sin esta normalizacion, .map() crashea cuando es string y la funcion
+        // tira excepcion → modal queda vacio.
+        const raw = (campana as any).posted_aps;
+        let postedApsArr: number[] = [];
+        if (Array.isArray(raw)) {
+          postedApsArr = raw.map(Number).filter(n => !isNaN(n));
+        } else if (typeof raw === 'string') {
+          const trimmed = raw.trim();
+          if (trimmed.startsWith('[')) {
+            try {
+              const parsed = JSON.parse(trimmed);
+              if (Array.isArray(parsed)) postedApsArr = parsed.map(Number).filter(n => !isNaN(n));
+            } catch { /* malformed JSON, ignore */ }
+          } else if (trimmed) {
+            postedApsArr = trimmed.split(',').map(s => Number(s.trim())).filter(n => !isNaN(n));
+          }
+        }
+        if (postedApsArr.length > 0) {
+          const postedApsSet = new Set(postedApsArr);
+          posted = uniqueAps.every(a => postedApsSet.has(a));
+        }
+      }
+
+      // Formato: PARABUS / MUPIS / COLUMNA / etc. — prioriza inv.mueble,
+      // fallback a sc.formato. Si difieren entre items de la plaza, "Varios".
+      const formatos = arr.map(it => (it.mueble || (it as any).formato || it.tipo_de_mueble || '').toString());
+      const formatoDisplay = uniqueOrVarios(formatos);
+
       rows.push({
         idCampana: campana.id,
         plaza: plazaDisplay,
         tipo: uniqueOrVarios(tipos),
+        formato: formatoDisplay,
         asesor,
         apsQebId: computeApsDisplay(arr),
         cuic,
         fechaInicio: formatDate(minInicio),
         fechaFin: formatDate(maxFin),
+        fechaInicioRaw: minInicio,
+        fechaFinRaw: maxFin,
         cliente,
         marca,
         campania: campaniaNombre,
@@ -605,17 +709,18 @@ export function buildVersionarioArtesPreview({ campanas }: { campanas: Versionar
         estatus: estatusText,
         estatusBreakdown,
         notas: notasResumen,
-        nombreArte: buildNombresArtesText(urls),
+        nombreArte: buildNombresArtesText(urls, extractNamesByUrl(arr)),
         artesUrls: urls,
+        posted,
       });
     }
   }
 
   return {
     headers: [
-      'ID Campaña', 'Plaza', 'Tipo', 'Asesor Comercial', 'APS QEB',
+      'ID Campaña', 'Plaza', 'Tipo', 'Formato', 'Asesor Comercial', 'APS QEB',
       'Fecha Inicio Periodo', 'Fecha Fin Periodo', 'Cliente Comercial',
-      'Marca', 'Campaña', 'Caras', 'Estatus', 'Notas', 'Nombre Arte',
+      'Marca', 'Campaña', 'Caras', 'Estatus', 'Notas', 'Nombre Arte', 'URL Arte',
     ],
     arteCols: maxArtesUnicos,
     rows,
@@ -702,6 +807,7 @@ export async function exportVersionarioArtesMulti({ campanas, fileNameSuffix }: 
     'ID Campaña',
     'Plaza',
     'Tipo',
+    'Formato',
     'Asesor Comercial',
     'APS QEB',
     'Fecha Inicio Periodo',
@@ -713,11 +819,12 @@ export async function exportVersionarioArtesMulti({ campanas, fileNameSuffix }: 
     'Estatus',
     'Notas',
     'Nombre Arte',
+    'URL Arte',
   ];
   const arteHeaders = Array.from({ length: maxArtesUnicos }, (_, i) => `Arte ${i + 1}`);
   const headers = [...baseHeaders, ...arteHeaders];
 
-  const baseWidths = [12, 22, 14, 26, 14, 14, 14, 30, 18, 26, 8, 18, 50, 40];
+  const baseWidths = [12, 22, 14, 14, 26, 14, 14, 14, 30, 18, 26, 8, 18, 50, 40, 60];
   sheet.columns = [
     ...baseWidths.map(w => ({ width: w })),
     ...Array(maxArtesUnicos).fill(null).map(() => ({ width: 22 })),
@@ -787,10 +894,36 @@ export async function exportVersionarioArtesMulti({ campanas, fileNameSuffix }: 
     const caras = arr.reduce((sum, it) => sum + (Number((it as any).caras_totales) || 1), 0);
 
     const notasResumen = (() => {
-      if (!notesByUrl || notesByUrl.size === 0) return '';
+      if (notesByUrl && notesByUrl.size > 0) {
+        const lines: string[] = [];
+        artesUrls.forEach((url, idx) => {
+          const nota = (notesByUrl.get(url) || '').trim();
+          if (nota) lines.push(`Arte ${idx + 1}: ${nota}`);
+        });
+        if (lines.length > 0) return lines.join('\n');
+      }
+      // Fallback: extraer notas desde artes_detalle, alineadas con URLs únicas
+      const notaByArchivo = new Map<string, string>();
+      for (const it of arr) {
+        const detalle = (it as any).artes_detalle;
+        if (!detalle) continue;
+        try {
+          const parsed = typeof detalle === 'string' ? JSON.parse(detalle) : detalle;
+          if (Array.isArray(parsed)) {
+            for (const entry of parsed) {
+              const archivo = (entry.archivo || '').trim();
+              const nota = (entry.nota || '').trim();
+              if (archivo && nota && !notaByArchivo.has(archivo)) {
+                notaByArchivo.set(archivo, nota);
+              }
+            }
+          }
+        } catch { /* ignore */ }
+      }
+      if (notaByArchivo.size === 0) return '';
       const lines: string[] = [];
       artesUrls.forEach((url, idx) => {
-        const nota = (notesByUrl.get(url) || '').trim();
+        const nota = notaByArchivo.get(url) || '';
         if (nota) lines.push(`Arte ${idx + 1}: ${nota}`);
       });
       return lines.join('\n');
@@ -801,11 +934,14 @@ export async function exportVersionarioArtesMulti({ campanas, fileNameSuffix }: 
     const minInicio = inicios.length ? inicios.slice().sort()[0] : '';
     const maxFin = fines.length ? fines.slice().sort().reverse()[0] : '';
     const { text: estatusDisplay } = buildEstatusCircuito(arr);
+    const formatoDisplay = uniqueOrVarios(arr.map(it => (it.mueble || (it as any).formato || it.tipo_de_mueble || '').toString()));
+    const urlArteText = artesUrls.join('\n');
 
     const rowValues: any[] = [
       campana.id,
       plaza,
       uniqueOrVarios(tipos),
+      formatoDisplay,
       asesor,
       computeApsDisplay(arr),
       formatDate(minInicio),
@@ -816,7 +952,8 @@ export async function exportVersionarioArtesMulti({ campanas, fileNameSuffix }: 
       caras,
       estatusDisplay,
       notasResumen,
-      buildNombresArtesText(artesUrls),
+      buildNombresArtesText(artesUrls, extractNamesByUrl(arr)),
+      urlArteText,
     ];
     for (let i = 0; i < maxArtesUnicos; i++) rowValues.push('');
 

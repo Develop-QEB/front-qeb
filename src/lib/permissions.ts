@@ -322,10 +322,10 @@ const rolePermissions: Partial<Record<UserRole, Partial<RolePermissions>>> = {
     canCompartirPropuesta: true, // SÍ puede compartir
     canBuscarInventarioEnModal: false,
 
-    // Campañas: Ocultar botón editar (pero Detalle Campaña tiene acceso total)
+    // Campañas: Puede ver pero NO editar circuitos
     canEditCampanas: true,
-    // canEditDetalleCampana: true (por defecto)
-    // canDeleteDetalleCampana: true (por defecto)
+    canEditDetalleCampana: false,
+    canDeleteDetalleCampana: false,
 
     // Gestión de Artes: Puede hacer todo EXCEPTO resolver tareas de producción
     // canEditGestionArtes: true (por defecto)

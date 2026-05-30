@@ -1028,6 +1028,8 @@ export function CampanaDetailPage() {
   const [alreadyPosted, setAlreadyPosted] = useState(false);
   const [previewDeliveryNote, setPreviewDeliveryNote] = useState<any>(null);
   const [postedAPSGroups, setPostedAPSGroups] = useState<Set<number>>(new Set());
+  // APS etiquetados Pre Factura — bloquea POST a SAP y muestra badge dorado.
+  const [prefacturaAPSGroups, setPrefacturaAPSGroups] = useState<Set<number>>(new Set());
 
   const { isLoaded } = useLoadScript(GOOGLE_MAPS_LOADER_OPTIONS);
 
@@ -1090,11 +1092,12 @@ export function CampanaDetailPage() {
     placeholderData: (prev) => prev, // evita parpadeo al refrescar
   });
 
-  // Inicializar alreadyPosted y postedAPSGroups desde la DB
+  // Inicializar alreadyPosted, postedAPSGroups y prefacturaAPSGroups desde la DB
   useEffect(() => {
     if (campana?.posted_to_sap) setAlreadyPosted(true);
     if (campana?.posted_aps) setPostedAPSGroups(new Set(campana.posted_aps));
-  }, [campana?.posted_to_sap, campana?.posted_aps]);
+    if (campana?.prefactura_aps) setPrefacturaAPSGroups(new Set(campana.prefactura_aps));
+  }, [campana?.posted_to_sap, campana?.posted_aps, campana?.prefactura_aps]);
 
   const { data: inventarioReservado = [], isLoading: isLoadingInventario, error: errorInventario, refetch: refetchInventario } = useQuery({
     queryKey: ['campana-inventario', campanaId],
@@ -1649,25 +1652,60 @@ export function CampanaDetailPage() {
     }
   }, [campana, inventarioConAPS, selectedItemsAPS]);
 
-  // Handler para cancelar POST a SAP (solo TI/DEV)
+  // Handler para cancelar POST a SAP / Pre Factura. Si entre los APS
+  // seleccionados hay alguno etiquetado Pre Factura, se llama también a
+  // cancelPrefactura — que además regresa las reservas a Sin APS (decisión
+  // del producto: para liberar Pre Factura, reasignar APS desde cero).
   const handleCancelPostSAP = useCallback(async () => {
     if (!campana) return;
     setCancellingPostSAP(true);
     setCancelPostSAPResult(null);
     try {
-      const apsToCancel = selectedItemsAPS.size > 0
+      const selectedAPS = selectedItemsAPS.size > 0
         ? inventarioConAPS.filter(i => selectedItemsAPS.has(String(i.rsv_ids))).map(i => i.aps)
-        : undefined;
-      const updatedAPS = await campanasService.unmarkPostedAPS(campana.id, apsToCancel);
-      setPostedAPSGroups(new Set(updatedAPS));
-      if (updatedAPS.length === 0) setAlreadyPosted(false);
-      setCancelPostSAPResult({ success: true, message: 'POST cancelado correctamente' });
+        : null;
+
+      // Particionar selección entre POSTed (cancelar etiqueta SAP, deja APS) y
+      // Pre Factura (cancelar etiqueta + regresar reservas a Sin APS).
+      const apsPostedSel = selectedAPS
+        ? Array.from(new Set(selectedAPS.filter(a => postedAPSGroups.has(a))))
+        : null;
+      const apsPrefacturaSel = selectedAPS
+        ? Array.from(new Set(selectedAPS.filter(a => prefacturaAPSGroups.has(a))))
+        : null;
+
+      // Si no hay selección, mantener el comportamiento anterior: limpiar
+      // todo posted_aps. No tocamos Pre Factura globalmente para no
+      // sorprender — eso requiere selección explícita.
+      const ranPosted = apsPostedSel ? apsPostedSel.length > 0 : true;
+      const ranPrefactura = apsPrefacturaSel && apsPrefacturaSel.length > 0;
+
+      if (ranPosted) {
+        const updatedAPS = await campanasService.unmarkPostedAPS(campana.id, apsPostedSel || undefined);
+        setPostedAPSGroups(new Set(updatedAPS));
+        if (updatedAPS.length === 0) setAlreadyPosted(false);
+      }
+      if (ranPrefactura) {
+        const updatedPF = await campanasService.cancelPrefactura(campana.id, apsPrefacturaSel!);
+        setPrefacturaAPSGroups(new Set(updatedPF));
+        // Las reservas quedan en Sin APS — refrescamos ambas vistas.
+        queryClient.invalidateQueries({ queryKey: ['campana-inventario', campanaId] });
+        queryClient.invalidateQueries({ queryKey: ['campana-inventario-aps', campanaId] });
+        queryClient.invalidateQueries({ queryKey: ['campana', campanaId] });
+      }
+
+      const msg = ranPosted && ranPrefactura
+        ? 'POST y Pre Factura cancelados correctamente'
+        : ranPrefactura
+          ? 'Pre Factura cancelada — las reservas regresaron a Sin APS'
+          : 'POST cancelado correctamente';
+      setCancelPostSAPResult({ success: true, message: msg });
     } catch (error) {
       setCancelPostSAPResult({ success: false, message: error instanceof Error ? error.message : 'Error al cancelar POST' });
     } finally {
       setCancellingPostSAP(false);
     }
-  }, [campana, inventarioConAPS, selectedItemsAPS]);
+  }, [campana, campanaId, inventarioConAPS, selectedItemsAPS, postedAPSGroups, prefacturaAPSGroups, queryClient]);
 
   // Agrupar datos del inventario
   const groupedInventario = useMemo(() => {
@@ -2008,15 +2046,31 @@ export function CampanaDetailPage() {
     },
   });
 
-  const handleAssignAPS = () => {
-    if (selectedItems.size === 0) {
-      alert('Selecciona al menos un elemento para asignar APS');
-      return;
-    }
-    // Separar artículos normales (con inventario) de artículos IM (sin inventario)
+  // Mismo flujo que assignAPSMutation pero el back lo marca como Pre Factura
+  // (queda en campania.prefactura_aps → bloquea POST a SAP en la vista Con APS).
+  const assignAPSPrefacturaMutation = useMutation({
+    mutationFn: (params: { inventarioIds: number[]; solicitudCarasIds: number[]; rsvIds: number[] }) =>
+      campanasService.assignAPSPrefactura(campanaId, params.inventarioIds, params.solicitudCarasIds, params.rsvIds),
+    onSuccess: (data) => {
+      setSelectedItems(new Set());
+      setPrefacturaAPSGroups(prev => new Set([...prev, data.aps]));
+      queryClient.invalidateQueries({ queryKey: ['campana-inventario', campanaId] });
+      queryClient.invalidateQueries({ queryKey: ['campana-inventario-aps', campanaId] });
+      queryClient.invalidateQueries({ queryKey: ['campana', campanaId] });
+      queryClient.invalidateQueries({ queryKey: ['campanas'] });
+      alert(`APS Pre Factura #${data.aps} asignado correctamente`);
+    },
+    onError: (error: Error) => {
+      alert(`Error al asignar APS Pre Factura: ${error.message}`);
+    },
+  });
+
+  // Reúne los IDs (inventarioIds + solicitudCarasIds + rsvIds) desde la
+  // selección actual y valida que ningún grupo esté incompleto/excedido.
+  // Devuelve null si hay error (ya alertó al usuario).
+  const buildAPSPayloadFromSelection = (): { inventarioIds: number[]; solicitudCarasIds: number[]; rsvIds: number[] } | null => {
     const selectedReservado = inventarioReservado.filter(item => selectedItems.has(item.rsv_ids));
 
-    // Check if any selected item belongs to an incomplete group
     const selectedCaraIds = new Set(selectedReservado.map(item => item.solicitud_caras_id).filter(Boolean));
     for (const caraId of selectedCaraIds) {
       const cara = solicitudCaras.find((c: any) => c.id === caraId);
@@ -2026,11 +2080,11 @@ export function CampanaDetailPage() {
       const carasEsperadas = (cara.caras || 0) + (Number(cara.bonificacion) || 0);
       if (carasEsperadas > 0 && carasReservadas < carasEsperadas) {
         alert(`No se puede asignar APS: el grupo "${cara.articulo || ''} - ${cara.ciudad || ''}" está incompleto (${carasReservadas}/${carasEsperadas} caras asignadas)`);
-        return;
+        return null;
       }
       if (carasEsperadas > 0 && carasReservadas > carasEsperadas) {
         alert(`No se puede asignar APS: el grupo "${cara.articulo || ''} - ${cara.ciudad || ''}" tiene exceso de caras (${carasReservadas}/${carasEsperadas})`);
-        return;
+        return null;
       }
     }
     const normalItems = selectedReservado.filter(item => !String(item.rsv_ids).startsWith('sc_'));
@@ -2038,15 +2092,31 @@ export function CampanaDetailPage() {
 
     const inventarioIds = normalItems.map(item => item.id);
     const solicitudCarasIds = imItems.map(item => item.solicitud_caras_id).filter((id): id is number => id !== null);
-
-    // Extraer IDs reales de reservas desde rsv_ids (ej: "123,456" → [123, 456])
     const rsvIds = normalItems.flatMap(item =>
       String(item.rsv_ids).split(',').map(s => parseInt(s.trim())).filter(n => !isNaN(n))
     );
 
-    if (inventarioIds.length > 0 || solicitudCarasIds.length > 0) {
-      assignAPSMutation.mutate({ inventarioIds, solicitudCarasIds, rsvIds });
+    if (inventarioIds.length === 0 && solicitudCarasIds.length === 0) return null;
+    return { inventarioIds, solicitudCarasIds, rsvIds };
+  };
+
+  const handleAssignAPS = () => {
+    if (selectedItems.size === 0) {
+      alert('Selecciona al menos un elemento para asignar APS');
+      return;
     }
+    const payload = buildAPSPayloadFromSelection();
+    if (payload) assignAPSMutation.mutate(payload);
+  };
+
+  const handleAssignAPSPrefactura = () => {
+    if (selectedItems.size === 0) {
+      alert('Selecciona al menos un elemento para asignar APS Pre Factura');
+      return;
+    }
+    if (!confirm('Se asignará un APS etiquetado como Pre Factura.\n\nEste APS NO se podrá enviar a SAP (POST deshabilitado). Para liberarlo después se usa el botón Cancelar POST, que devolverá las reservas a Sin APS para reasignarles un APS real.\n\n¿Continuar?')) return;
+    const payload = buildAPSPayloadFromSelection();
+    if (payload) assignAPSPrefacturaMutation.mutate(payload);
   };
 
   // Cortesías (CT): ir directo al gestor de artes sin APS
@@ -2544,6 +2614,24 @@ export function CampanaDetailPage() {
                   {assignAPSMutation.isPending ? <Loader2 className="h-3 sm:h-3.5 w-3 sm:w-3.5 animate-spin" /> : <FileSpreadsheet className="h-3 sm:h-3.5 w-3 sm:w-3.5" />}
                   <span className="hidden sm:inline">{assignAPSMutation.isPending ? 'Asignando...' : `APS${selectedItems.size > 0 ? ` (${selectedItems.size})` : ''}`}</span>
                   <span className="sm:hidden">{assignAPSMutation.isPending ? '...' : `APS${selectedItems.size > 0 ? ` (${selectedItems.size})` : ''}`}</span>
+                </button>
+              )}
+              {/* APS Pre Factura — mismo permiso que Asignar APS. Crea el APS
+                  pero lo etiqueta de modo que NO se puede mandar a SAP. */}
+              {permissions.canEditDetalleCampana && (
+                <button
+                  onClick={handleAssignAPSPrefactura}
+                  disabled={selectedItems.size === 0 || assignAPSPrefacturaMutation.isPending || selectedHasIncompleteOrExcess}
+                  title={selectedHasIncompleteOrExcess ? 'Hay grupos incompletos o con exceso de caras — ajusta el inventario antes de asignar Pre Factura' : 'Asigna APS y lo etiqueta como Pre Factura (no se puede mandar a SAP hasta cancelar la etiqueta)'}
+                  className={`flex items-center gap-1 sm:gap-1.5 px-2 sm:px-3 py-1 sm:py-1.5 text-[10px] sm:text-xs font-medium rounded-lg transition-colors ${
+                    selectedItems.size === 0 || selectedHasIncompleteOrExcess
+                      ? isDark ? 'bg-amber-900/30 text-amber-400/50 cursor-not-allowed' : 'bg-amber-100 text-amber-300 cursor-not-allowed'
+                      : 'bg-amber-500 hover:bg-amber-600 text-white'
+                  }`}
+                >
+                  {assignAPSPrefacturaMutation.isPending ? <Loader2 className="h-3 sm:h-3.5 w-3 sm:w-3.5 animate-spin" /> : <FileSpreadsheet className="h-3 sm:h-3.5 w-3 sm:w-3.5" />}
+                  <span className="hidden sm:inline">{assignAPSPrefacturaMutation.isPending ? 'Asignando...' : `Pre Factura${selectedItems.size > 0 ? ` (${selectedItems.size})` : ''}`}</span>
+                  <span className="sm:hidden">{assignAPSPrefacturaMutation.isPending ? '...' : `PF${selectedItems.size > 0 ? ` (${selectedItems.size})` : ''}`}</span>
                 </button>
               )}
               {/* Cortesías (CT): bypass APS → gestor de artes (visible si algún item seleccionado es cortesía) */}
@@ -3876,7 +3964,13 @@ export function CampanaDetailPage() {
               {permissions.canEditDetalleCampana && (() => {
                 const selectedHavePosted = selectedItemsAPS.size > 0 &&
                   inventarioConAPS.filter(i => selectedItemsAPS.has(String(i.rsv_ids))).some(i => postedAPSGroups.has(i.aps));
-                const disabled = selectedItemsAPS.size === 0 || selectedHavePosted;
+                const selectedHavePrefactura = selectedItemsAPS.size > 0 &&
+                  inventarioConAPS.filter(i => selectedItemsAPS.has(String(i.rsv_ids))).some(i => prefacturaAPSGroups.has(i.aps));
+                // Para Pre Factura usamos el botón "Cancelar POST" (que llama
+                // a cancelPrefactura y regresa las reservas a Sin APS). Aquí
+                // bloqueamos el quitar-APS individual para evitar dejar el JSON
+                // prefactura_aps con números huérfanos.
+                const disabled = selectedItemsAPS.size === 0 || selectedHavePosted || selectedHavePrefactura;
                 return (
                 <button
                   onClick={handleQuitarAPS}
@@ -3886,7 +3980,7 @@ export function CampanaDetailPage() {
                       ? isDark ? 'bg-red-900/20 border-red-500/20 cursor-not-allowed' : 'bg-red-50 border-red-200 cursor-not-allowed'
                       : isDark ? 'bg-red-900/50 hover:bg-red-900/70 border-red-500/30' : 'bg-red-100 hover:bg-red-200 border-red-300'
                   }`}
-                  title={selectedHavePosted ? 'No se puede eliminar APS con POST a SAP' : quitandoAPS ? 'Quitando...' : 'Quitar APS'}
+                  title={selectedHavePosted ? 'No se puede eliminar APS con POST a SAP' : selectedHavePrefactura ? 'Para liberar un APS Pre Factura usa Cancelar POST' : quitandoAPS ? 'Quitando...' : 'Quitar APS'}
                 >
                   {quitandoAPS ? (
                     <Loader2 className={`h-3.5 sm:h-4 w-3.5 sm:w-4 animate-spin ${isDark ? 'text-red-400' : 'text-red-600'}`} />
@@ -3899,7 +3993,9 @@ export function CampanaDetailPage() {
               {permissions.canEditDetalleCampana && inventarioConAPS.length > 0 && (() => {
                 const selectedHavePostedAPS = selectedItemsAPS.size > 0 &&
                   inventarioConAPS.filter(i => selectedItemsAPS.has(String(i.rsv_ids))).some(i => postedAPSGroups.has(i.aps));
-                const isPostDisabled = alreadyPosted || selectedHavePostedAPS;
+                const selectedHavePrefacturaAPS = selectedItemsAPS.size > 0 &&
+                  inventarioConAPS.filter(i => selectedItemsAPS.has(String(i.rsv_ids))).some(i => prefacturaAPSGroups.has(i.aps));
+                const isPostDisabled = alreadyPosted || selectedHavePostedAPS || selectedHavePrefacturaAPS;
                 return (
                   <button
                     onClick={() => {
@@ -3915,7 +4011,7 @@ export function CampanaDetailPage() {
                     }}
                     disabled={isPostDisabled}
                     className={`flex items-center justify-center px-2 sm:px-3 py-1 sm:py-1.5 rounded-lg border transition-colors ${isPostDisabled ? (isDark ? 'bg-zinc-800/50 border-zinc-700' : 'bg-gray-100 border-gray-200') + ' cursor-not-allowed opacity-50' : (isDark ? 'bg-cyan-900/30' : 'bg-cyan-50') + ' border-cyan-500/20 hover:bg-cyan-500/20 hover:border-cyan-500/40'}`}
-                    title={alreadyPosted ? 'Ya se envió a SAP' : selectedHavePostedAPS ? 'Este APS ya fue enviado a SAP' : 'Enviar a SAP'}
+                    title={alreadyPosted ? 'Ya se envió a SAP' : selectedHavePostedAPS ? 'Este APS ya fue enviado a SAP' : selectedHavePrefacturaAPS ? 'Este APS está etiquetado como Pre Factura — no se puede mandar a SAP. Cancela la etiqueta primero.' : 'Enviar a SAP'}
                   >
                     <Upload className={`h-3 sm:h-3.5 w-3 sm:w-3.5 mr-1 ${isPostDisabled ? (isDark ? 'text-zinc-500' : 'text-gray-400') : (isDark ? 'text-cyan-400' : 'text-cyan-600')}`} />
                     <span className={`text-[10px] sm:text-xs font-medium ${isPostDisabled ? (isDark ? 'text-zinc-500' : 'text-gray-400') : (isDark ? 'text-cyan-300' : 'text-cyan-700')}`}>{alreadyPosted ? 'ENVIADO' : 'POST'}</span>
@@ -4533,6 +4629,9 @@ export function CampanaDetailPage() {
                             {activeGroupingsAPS[0] === 'aps' && allGroupItemsAPS[0] && (postedAPSGroups.has(allGroupItemsAPS[0].aps) || alreadyPosted) && (
                               <span className="text-[9px] font-semibold px-1 py-0.5 rounded bg-green-500/20 text-green-400 border border-green-500/30 shrink-0">POST</span>
                             )}
+                            {activeGroupingsAPS[0] === 'aps' && allGroupItemsAPS[0] && prefacturaAPSGroups.has(allGroupItemsAPS[0].aps) && (
+                              <span className="text-[9px] font-semibold px-1 py-0.5 rounded bg-amber-500/20 text-amber-400 border border-amber-500/30 shrink-0">PRE FACTURA</span>
+                            )}
                             <GroupSummaryInline items={allGroupItemsAPS} groupField={activeGroupingsAPS[0]} />
                             <span className="ml-auto text-[10px] text-muted-foreground shrink-0">
                               {totalItems} items
@@ -4679,6 +4778,9 @@ export function CampanaDetailPage() {
                                           {activeGroupingsAPS[1] === 'aps' && allSubItemsAPS[0] && postedAPSGroups.has(allSubItemsAPS[0].aps) && (
                                             <span className="text-[9px] font-semibold px-1 py-0.5 rounded bg-green-500/20 text-green-400 border border-green-500/30 shrink-0">POST</span>
                                           )}
+                                          {activeGroupingsAPS[1] === 'aps' && allSubItemsAPS[0] && prefacturaAPSGroups.has(allSubItemsAPS[0].aps) && (
+                                            <span className="text-[9px] font-semibold px-1 py-0.5 rounded bg-amber-500/20 text-amber-400 border border-amber-500/30 shrink-0">PRE FACTURA</span>
+                                          )}
                                           <GroupSummaryInline items={allSubItemsAPS} groupField={activeGroupingsAPS[1]} />
                                           <span className="ml-auto text-[10px] text-muted-foreground shrink-0">
                                             {subTotalItems}
@@ -4819,6 +4921,9 @@ export function CampanaDetailPage() {
                                                         <span className={`text-[10px] ${isDark ? 'text-white' : 'text-gray-900'}`}>{thirdGroupKey}</span>
                                                         {activeGroupingsAPS[2] === 'aps' && thirdItems[0] && postedAPSGroups.has(thirdItems[0].aps) && (
                                                           <span className="text-[9px] font-semibold px-1 py-0.5 rounded bg-green-500/20 text-green-400 border border-green-500/30 shrink-0">POST</span>
+                                                        )}
+                                                        {activeGroupingsAPS[2] === 'aps' && thirdItems[0] && prefacturaAPSGroups.has(thirdItems[0].aps) && (
+                                                          <span className="text-[9px] font-semibold px-1 py-0.5 rounded bg-amber-500/20 text-amber-400 border border-amber-500/30 shrink-0">PRE FACTURA</span>
                                                         )}
                                                         <GroupSummaryInline items={thirdItems} groupField={activeGroupingsAPS[2]} />
                                                         <span className="ml-auto text-[10px] text-muted-foreground shrink-0">

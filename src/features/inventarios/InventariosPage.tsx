@@ -19,6 +19,7 @@ import { Inventario } from '../../types';
 
 import { InventarioMap } from './InventarioMap';
 import { BloqueoModal, BloqueoData } from './BloqueoModal';
+import { BloqueoBulkModal, BloqueoBulkData } from './BloqueoBulkModal';
 import { AnalisisOcupacionModal } from './AnalisisOcupacionModal';
 import { AnalisisOcupacionListModal } from './AnalisisOcupacionListModal';
 import { ReorganizarOcupacionModal } from './ReorganizarOcupacionModal';
@@ -139,6 +140,9 @@ export function InventariosPage() {
   const [bloqueoItem, setBloqueoItem] = useState<Inventario | null>(null);
   const [isBloqueoSubmitting, setIsBloqueoSubmitting] = useState(false);
   const [desbloqueoItem, setDesbloqueoItem] = useState<Inventario | null>(null);
+  // Bloqueo masivo: cuando hay items aquí se abre el BloqueoBulkModal.
+  const [bloqueoBulkItems, setBloqueoBulkItems] = useState<Inventario[] | null>(null);
+  const [isBloqueoBulkSubmitting, setIsBloqueoBulkSubmitting] = useState(false);
 
   // Bulk upload state
   const [isBulkOpen, setIsBulkOpen] = useState(false);
@@ -368,6 +372,83 @@ export function InventariosPage() {
       setBloqueoItem(null);
     } finally {
       setIsBloqueoSubmitting(false);
+    }
+  };
+
+  // Bloqueo masivo: por cada inventario seleccionado, en paralelo,
+  // 1) toggleBlock (que ahora también soft-deletea las reservas activas en el back),
+  // 2) crea una tarea "Ajuste Inventario Bloqueado" por cada campaña afectada
+  //    con los analistas/tráfico que se asignaron en el wizard para esa pareja
+  //    (inv, campaña),
+  // 3) una notificación de seguimiento al usuario que bloqueó (1 por inventario).
+  // Inventarios que ya estaban bloqueados: se skipea el toggleBlock pero se
+  // crean tareas igual si tienen campañas activas (mismo criterio que el
+  // flujo individual).
+  const handleConfirmarBloqueoBulk = async (data: BloqueoBulkData) => {
+    setIsBloqueoBulkSubmitting(true);
+    try {
+      const fechaBloqueo = new Date().toLocaleDateString('es-MX', { day: '2-digit', month: '2-digit', year: 'numeric' });
+
+      await Promise.all(data.perItem.map(async (entry) => {
+        const inv = entry.item;
+        const infoInventario = [
+          `Inventario: #${inv.id}${inv.codigo_unico ? ` — ${inv.codigo_unico}` : ''}`,
+          inv.ubicacion ? `Ubicación: ${inv.ubicacion}` : null,
+          inv.plaza ? `Plaza: ${inv.plaza}` : null,
+        ].filter(Boolean).join('\n');
+
+        // 1) Bloquear (libera reservas en el back) — solo si no estaba bloqueado.
+        if (!entry.yaEstaBloquedo) {
+          await toggleBlockMutation.mutateAsync(inv.id);
+        }
+
+        // 2) Tareas por campaña afectada
+        await Promise.all(entry.pairs.map(p => {
+          const asignados = [...p.analistas, ...p.trafico];
+          const descripcion = [
+            infoInventario,
+            `\nFecha de bloqueo: ${fechaBloqueo}`,
+            `\nIndicaciones: ${data.motivo}`,
+            user ? `\nSolicitado por: ${user.nombre}` : null,
+          ].filter(Boolean).join('\n');
+
+          return campanasService.createTarea(p.campana.campana_id, {
+            titulo: 'Ajuste Inventario Bloqueado',
+            descripcion,
+            contenido: JSON.stringify([p.campana]),
+            tipo: 'Ajuste Inventario Bloqueado',
+            ...(asignados.length > 0 && {
+              id_asignado: asignados.map(u => u.id).join(', '),
+              asignado: asignados.map(u => u.nombre).join(', '),
+            }),
+          });
+        }));
+
+        // 3) Notificación de seguimiento por inventario
+        const seguimientoDesc = [
+          infoInventario,
+          `\nFecha de bloqueo: ${fechaBloqueo}`,
+          `\nIndicaciones: ${data.motivo}`,
+          user ? `\nBloqueado por: ${user.nombre}` : null,
+        ].filter(Boolean).join('\n');
+
+        await notificacionesService.create({
+          titulo: `Seguimiento de bloqueo — #${inv.id}${inv.codigo_unico ? ` ${inv.codigo_unico}` : ''}`,
+          descripcion: seguimientoDesc,
+          tipo: 'Notificación',
+          ...(user && {
+            id_responsable: user.id,
+            responsable: user.nombre,
+            id_asignado: String(user.id),
+            asignado: user.nombre,
+          }),
+        });
+      }));
+
+      setBloqueoBulkItems(null);
+      clearSelection();
+    } finally {
+      setIsBloqueoBulkSubmitting(false);
     }
   };
 
@@ -1094,6 +1175,37 @@ export function InventariosPage() {
                   </span>
                 )}
               </button>
+
+              {/* Bloquear masivo */}
+              {selectedRows.size > 0 && (
+                <button
+                  onClick={async () => {
+                    // Recolecta los inventarios seleccionados — usa los visibles
+                    // en `sortedData` y completa los que estén fuera de la página
+                    // con un fetch individual (mismo patrón que Análisis).
+                    const ids = Array.from(selectedRows);
+                    const enPagina: Record<number, Inventario> = {};
+                    sortedData.forEach(i => { if (selectedRows.has(i.id)) enPagina[i.id] = i; });
+                    const faltantes = ids.filter(id => !(id in enPagina));
+                    const fetched = await Promise.all(
+                      faltantes.map(async id => {
+                        try { return await inventariosService.getById(id); } catch { return null; }
+                      })
+                    );
+                    fetched.forEach(inv => { if (inv) enPagina[inv.id] = inv; });
+                    const items = ids.map(id => enPagina[id]).filter(Boolean) as Inventario[];
+                    if (items.length > 0) setBloqueoBulkItems(items);
+                  }}
+                  title={`Bloquear ${selectedRows.size} seleccionados`}
+                  className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-medium border transition-all ${isDark ? 'bg-rose-500/10 hover:bg-rose-500/20 text-rose-300 border-rose-500/30' : 'bg-rose-50 hover:bg-rose-100 text-rose-700 border-rose-200'}`}
+                >
+                  <EyeOff className="h-4 w-4" />
+                  Bloquear
+                  <span className={`ml-1 px-1.5 rounded-full text-[10px] font-bold ${isDark ? 'bg-rose-500/30 text-rose-200' : 'bg-rose-200 text-rose-800'}`}>
+                    {selectedRows.size}
+                  </span>
+                </button>
+              )}
 
               {/* Análisis Guardados */}
               <button
@@ -2165,6 +2277,14 @@ export function InventariosPage() {
         item={bloqueoItem}
         onConfirm={handleConfirmarBloqueo}
         isSubmitting={isBloqueoSubmitting}
+      />
+
+      <BloqueoBulkModal
+        isOpen={bloqueoBulkItems !== null}
+        onClose={() => setBloqueoBulkItems(null)}
+        items={bloqueoBulkItems || []}
+        onConfirm={handleConfirmarBloqueoBulk}
+        isSubmitting={isBloqueoBulkSubmitting}
       />
 
       {/* Modal de desbloqueo */}

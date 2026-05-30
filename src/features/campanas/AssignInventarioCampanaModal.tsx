@@ -24,6 +24,8 @@ import { usePermissions } from '../../lib/permissions';
 import { filterAllowedArticulos } from '../../config/allowedDigitalArticles';
 import { useSocketEquipos, useSocketCampana, useSocketInventarioRealtime, type InventarioRealtimePayload } from '../../hooks/useSocket';
 import { useThemeStore } from '../../store/themeStore';
+import { SaveChangesConfirmModal, type ModifiedCircuito } from '../../components/SaveChangesConfirmModal';
+import { DeleteCircuitoConfirmModal } from '../../components/DeleteCircuitoConfirmModal';
 
 // GOOGLE_MAPS_API_KEY / LIBRARIES centralizados en src/config/googleMaps.ts
 // (evita que la API de Google Maps se cargue dos veces y trabe la pantalla).
@@ -378,6 +380,8 @@ const FILTER_FIELDS_DISPONIBLES: FilterFieldConfig[] = [
   { field: 'ubicacion', label: 'Ubicación', type: 'string' },
   { field: 'tradicional_digital', label: 'Tipo', type: 'string' },
   { field: 'mundialista', label: 'Mundialista', type: 'string' },
+  { field: 'mueble_chico', label: 'Mueble chico', type: 'string' },
+  { field: 'isla_vip', label: 'Isla VIP', type: 'string' },
 ];
 
 // Tipo extendido con conector Y/O entre filtros
@@ -892,9 +896,34 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
   const [flujoFilter, setFlujoFilter] = useState<'Todos' | 'Flujo' | 'Contraflujo'>(tipoPeriodo === 'mensual' ? 'Flujo' : 'Todos');
   const [islaFilter, setIslaFilter] = useState<'off' | 'si' | 'no'>('off');
   const [mundialistaFilter, setMundialistaFilter] = useState<'off' | 'si' | 'no'>('off');
+  const [muebleChicoFilter, setMuebleChicoFilter] = useState<'off' | 'si' | 'no'>('off');
+  const [islaVipFilter, setIslaVipFilter] = useState<'off' | 'si' | 'no'>('off');
   const [sortColumn, setSortColumn] = useState<string>('codigo_unico');
   const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('asc');
   const [agruparComoCompleto, setAgruparComoCompleto] = useState(true); // Group flujo+contraflujo at same location
+
+  // Save Changes Confirmation Modal — abre antes del bulk save con resumen
+  const [showSaveConfirm, setShowSaveConfirm] = useState(false);
+
+  // Delete Circuito Confirmation Modal — bote de basura de circuito con detalle
+  const [deleteCircuitoModal, setDeleteCircuitoModal] = useState<{
+    isOpen: boolean;
+    ubicacion: string;
+    articulo: string;
+    formato?: string;
+    tieneReservas: boolean;
+    tienePareja: boolean;
+    isDeleting: boolean;
+    onConfirm: () => Promise<void> | void;
+  }>({
+    isOpen: false,
+    ubicacion: '',
+    articulo: '',
+    tieneReservas: false,
+    tienePareja: false,
+    isDeleting: false,
+    onConfirm: () => {},
+  });
 
   // Custom Confirmation Modal State
   const [confirmModal, setConfirmModal] = useState<{
@@ -1451,6 +1480,24 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
     );
   }, [nombreCampania, notas, descripcion, yearInicio, yearFin, catorcenaInicio, catorcenaFin, currentAsignadosIds, imu, initialValues, clienteChanged]);
 
+  // Resumen de circuitos modificados para el modal de confirmación de guardado
+  const modifiedCircuitosForConfirm = useMemo<ModifiedCircuito[]>(() => {
+    const list: ModifiedCircuito[] = [];
+    for (const id of modifiedCaras.keys()) {
+      const cara = caras.find(c => c.id === id);
+      if (!cara) continue;
+      const ubicacion = cara.plaza || cara.estados || cara.ciudad || '(sin ubicación)';
+      const articulo = cara.articulo || '';
+      const formato = cara.formato || cara.tipo || '';
+      list.push({
+        id,
+        primary: ubicacion,
+        secondary: [articulo, formato].filter(Boolean).join(' · ') || undefined,
+      });
+    }
+    return list;
+  }, [modifiedCaras, caras]);
+
   // Handle update campaign
   const handleUpdateCampana = async () => {
     if (invalidCaras.length > 0) {
@@ -1890,18 +1937,27 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
   }, [selectedCaraForSearch, flujoPct, tipoPeriodo]);
 
   // Para BF/CF/CT: split visual del KPI bonificación en Flujo/Contraflujo.
-  // No toca BD — caras_flujo/caras_contraflujo siguen en 0; total = bonificacion.
-  // Mismo comportamiento para Tradicional y Digital: respeta flujoPct (el input
-  // % front-only). La distribución es libre y la validación cuenta solo el TOTAL,
-  // no el ratio.
+  // Lee caras_flujo/caras_contraflujo de BD (back las persiste para que al
+  // cerrar y reabrir el modal el split se conserve). Si la cara es vieja
+  // (cflujo=0 y ccontra=0) → fallback al flujoPct local. Estas columnas
+  // para BF/CF/CT SOLO se usan en este KPI — nada de SAP/auth/reportes.
   const bonifSplit = useMemo(() => {
     if (!selectedCaraForSearch || !isBonifSplitArticle(selectedCaraForSearch.articulo)) {
       return { targetFlujo: 0, targetContra: 0, reservadoFlujo: 0, reservadoContra: 0 };
     }
     const total = selectedCaraForSearch.bonificacion || 0;
-    const pct = flujoPct;
-    const targetFlujo = Math.ceil(total * pct / 100);
-    const targetContra = total - targetFlujo;
+    const cfBd = Number(selectedCaraForSearch.caras_flujo) || 0;
+    const ccBd = Number(selectedCaraForSearch.caras_contraflujo) || 0;
+    let targetFlujo: number;
+    let targetContra: number;
+    if (cfBd + ccBd > 0) {
+      targetFlujo = cfBd;
+      targetContra = ccBd;
+    } else {
+      const pct = flujoPct;
+      targetFlujo = Math.ceil(total * pct / 100);
+      targetContra = total - targetFlujo;
+    }
     const caraReservas = reservas.filter(r =>
       r.id.startsWith(selectedCaraForSearch.localId) || r.solicitudCaraId === selectedCaraForSearch.id
     );
@@ -2278,16 +2334,16 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
 
     const isPair = pairedCaras.length > 0;
 
-    setConfirmModal({
+    setDeleteCircuitoModal({
       isOpen: true,
-      title: isPair ? 'Eliminar RT + BF' : 'Eliminar Formato',
-      message: isPair
-        ? '¿Estás seguro de que deseas eliminar este formato junto con su cara pareja (RT/BF) de la campaña?'
-        : '¿Estás seguro de que deseas eliminar este formato de la campaña?',
-      confirmText: 'Eliminar',
-      isDestructive: true,
+      ubicacion: caraToDelete?.plaza || caraToDelete?.estados || caraToDelete?.ciudad || '(sin ubicación)',
+      articulo: caraToDelete?.articulo || '',
+      formato: caraToDelete?.formato || caraToDelete?.tipo,
+      tieneReservas: tieneReservas,
+      tienePareja: isPair,
+      isDeleting: false,
       onConfirm: async () => {
-        // Delete all caras in the pair (+ the primary) from DB if they have IDs
+        setDeleteCircuitoModal(prev => ({ ...prev, isDeleting: true }));
         const toDelete = [caraToDelete, ...pairedCaras].filter(Boolean) as CaraItem[];
         for (const c of toDelete) {
           if (c.id) {
@@ -2296,22 +2352,20 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
             } catch (error) {
               console.error('Error deleting cara:', error);
               alert('Error al eliminar el formato de la base de datos');
-              setConfirmModal(prev => ({ ...prev, isOpen: false }));
+              setDeleteCircuitoModal(prev => ({ ...prev, isOpen: false, isDeleting: false }));
               return;
             }
           }
         }
-        // Update local state
         const deletedLocalIds = new Set(toDelete.map(c => c.localId));
         setCaras(prev => prev.filter(c => !deletedLocalIds.has(c.localId)));
         setReservas(prev => prev.filter(r => !toDelete.some(c => r.id.startsWith(c.localId))));
-        // Also drop any pending modifications for deleted caras
         setModifiedCaras(prev => {
           const next = new Map(prev);
           for (const c of toDelete) if (c.id) next.delete(c.id);
           return next;
         });
-        setConfirmModal(prev => ({ ...prev, isOpen: false }));
+        setDeleteCircuitoModal(prev => ({ ...prev, isOpen: false, isDeleting: false }));
       }
     });
   };
@@ -3537,6 +3591,20 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
       data = data.filter(inv => !(inv as any).mundialista || (inv as any).mundialista.toUpperCase() !== 'SI');
     }
 
+    // Filter by mueble_chico - toggle: SI / NO / off
+    if (muebleChicoFilter === 'si') {
+      data = data.filter(inv => (inv as any).mueble_chico?.toUpperCase() === 'SI');
+    } else if (muebleChicoFilter === 'no') {
+      data = data.filter(inv => !(inv as any).mueble_chico || (inv as any).mueble_chico.toUpperCase() !== 'SI');
+    }
+
+    // Filter by isla_vip - solo aplica si islaFilter ya está activado (VIP es subset de isla).
+    if (islaFilter !== 'off' && islaVipFilter === 'si') {
+      data = data.filter(inv => (inv as any).isla_vip?.toUpperCase() === 'SI');
+    } else if (islaFilter !== 'off' && islaVipFilter === 'no') {
+      data = data.filter(inv => !(inv as any).isla_vip || (inv as any).isla_vip.toUpperCase() !== 'SI');
+    }
+
     // Filtros avanzados (embudo)
     if (disponiblesAdvFilters.length > 0) {
       data = applyAdvancedFilters(data as unknown as Record<string, unknown>[], disponiblesAdvFilters) as unknown as typeof data;
@@ -3590,7 +3658,7 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
     });
 
     return data;
-  }, [inventarioDisponible, disponiblesSearchTerm, poiFilterIds, flujoFilter, showOnlyUnicos, showOnlyCompletos, showOnlyUnicosDigitales, showSpotUnico, islaFilter, mundialistaFilter, disponiblesAdvFilters, groupByDistance, groupMode, filterUnicos, filterCompletos, filterUnicosDigitales, filterSpotUnico, groupByDistanceFunc, groupByListFunc, sortColumn, sortDirection, reservas]);
+  }, [inventarioDisponible, disponiblesSearchTerm, poiFilterIds, flujoFilter, showOnlyUnicos, showOnlyCompletos, showOnlyUnicosDigitales, showSpotUnico, islaFilter, islaVipFilter, mundialistaFilter, muebleChicoFilter, disponiblesAdvFilters, groupByDistance, groupMode, filterUnicos, filterCompletos, filterUnicosDigitales, filterSpotUnico, groupByDistanceFunc, groupByListFunc, sortColumn, sortDirection, reservas]);
 
   // Handle POI filter from map
   const handlePOIFilter = useCallback((idsToKeep: number[]) => {
@@ -3625,6 +3693,8 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
     setShowSpotUnico(false);
     setIslaFilter('off');
     setMundialistaFilter('off');
+    setMuebleChicoFilter('off');
+    setIslaVipFilter('off');
     setGroupByDistance(false);
     setPoiFilterIds(null);
     setDisponiblesSearchTerm('');
@@ -5018,10 +5088,9 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
               )}
 
               {/* % Distribución para BF/CF/CT (todos los tipos — Tradicional y Digital).
-                  Front-only: solo mueve flujoPct local que alimenta bonifSplit.
-                  NO escribe caras_flujo/caras_contraflujo en BD (regla Balance Flujos:
-                  la bonificación se queda como total en BD, el split es visual).
-                  La validación de completitud cuenta solo el TOTAL de bonif, no el ratio. */}
+                  Persiste caras_flujo/caras_contraflujo en BD (back las guarda solo
+                  para que al reabrir el modal el split se conserve — no las usa para
+                  SAP/auth/reportes). El total de bonificación no cambia. */}
               {isBonifSplitArticle(selectedCaraForSearch?.articulo) && (
                 <div className={`flex flex-col items-center justify-center px-2 py-1 rounded-xl ${isDark ? 'bg-zinc-800/30' : 'bg-gray-50/30'} border ${isDark ? 'border-zinc-700/20' : 'border-gray-200/20'} min-w-[70px]`}>
                   <span className={`text-[9px] ${isDark ? 'text-zinc-500' : 'text-gray-400'} mb-1`}>Distribución</span>
@@ -5031,15 +5100,37 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
                       min={0}
                       max={100}
                       value={flujoPct}
-                      onChange={(e) => {
+                      onChange={async (e) => {
                         const v = Math.max(0, Math.min(100, parseInt(e.target.value) || 0));
                         setFlujoPct(v);
+                        if (!selectedCaraForSearch?.id || !campana) return;
+                        const totalBonif = selectedCaraForSearch.bonificacion || 0;
+                        if (totalBonif === 0) return;
+                        const newFlujo = Math.ceil(totalBonif * v / 100);
+                        const newContra = totalBonif - newFlujo;
+                        setSavingPct(true);
+                        try {
+                          await campanasService.updateCara(campana.id, selectedCaraForSearch.id, {
+                            caras_flujo: newFlujo,
+                            caras_contraflujo: newContra,
+                          } as any);
+                          const updatedCara = { ...selectedCaraForSearch, caras_flujo: newFlujo, caras_contraflujo: newContra };
+                          setSelectedCaraForSearch(updatedCara);
+                          setCaras(prev => prev.map(c => c.id === selectedCaraForSearch.id
+                            ? { ...c, caras_flujo: newFlujo, caras_contraflujo: newContra }
+                            : c
+                          ));
+                        } catch (err) {
+                          console.error('Error guardando distribución bonif:', err);
+                        } finally {
+                          setSavingPct(false);
+                        }
                       }}
                       className={`w-10 text-center text-xs font-bold ${isDark ? 'bg-zinc-800 border-zinc-700 text-cyan-400' : 'bg-white border-gray-200 text-cyan-600'} border rounded px-1 py-0.5 focus:outline-none focus:ring-1 focus:ring-cyan-500/50`}
                     />
                     <span className={`text-[10px] ${isDark ? 'text-zinc-500' : 'text-gray-400'}`}>%</span>
                   </div>
-                  <span className={`text-[9px] ${isDark ? 'text-zinc-600' : 'text-gray-300'} mt-0.5`}>{flujoPct}/{100 - flujoPct}</span>
+                  <span className={`text-[9px] ${isDark ? 'text-zinc-600' : 'text-gray-300'} mt-0.5`}>{savingPct ? '...' : `${flujoPct}/${100 - flujoPct}`}</span>
                 </div>
               )}
 
@@ -5272,11 +5363,12 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
                     </button>
                   )}
 
-                  {/* Isla filter - 3-state toggle: off → SI → NO → off */}
+                  {/* Isla filter - 3-state toggle: off → SI → NO → off. Si vuelve a off, resetea VIP. */}
                   <button
                     onClick={() => {
                       const next = islaFilter === 'off' ? 'si' : islaFilter === 'si' ? 'no' : 'off';
                       setIslaFilter(next);
+                      if (next === 'off') setIslaVipFilter('off');
                       if (next === 'si') { setSortColumn('codigo_unico'); setSortDirection('asc'); }
                     }}
                     className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-medium transition-all ${islaFilter === 'si'
@@ -5290,6 +5382,26 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
                     <MapPin className="h-3.5 w-3.5" />
                     {islaFilter === 'si' ? 'Isla ✓' : islaFilter === 'no' ? 'Isla ✗' : 'Isla'}
                   </button>
+
+                  {/* Isla VIP filter — solo visible cuando islaFilter está activo. VIP es subset de isla. */}
+                  {islaFilter !== 'off' && (
+                    <button
+                      onClick={() => {
+                        const next = islaVipFilter === 'off' ? 'si' : islaVipFilter === 'si' ? 'no' : 'off';
+                        setIslaVipFilter(next);
+                      }}
+                      className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-medium transition-all ${islaVipFilter === 'si'
+                        ? 'bg-violet-500 text-white shadow'
+                        : islaVipFilter === 'no'
+                          ? 'bg-red-500/80 text-white shadow'
+                          : `${isDark ? 'bg-zinc-800/80' : 'bg-gray-100/80'} ${isDark ? 'text-zinc-400' : 'text-gray-500'} border ${isDark ? 'border-zinc-700/50' : 'border-gray-200/50'} ${isDark ? 'hover:text-white' : 'hover:text-gray-900'}`
+                        }`}
+                      title={islaVipFilter === 'off' ? 'Filtrar islas VIP' : islaVipFilter === 'si' ? 'Mostrando islas VIP (click: sin VIP)' : 'Sin islas VIP (click: quitar filtro)'}
+                    >
+                      <span className="text-[14px] leading-none">★</span>
+                      {islaVipFilter === 'si' ? 'VIP ✓' : islaVipFilter === 'no' ? 'VIP ✗' : 'VIP'}
+                    </button>
+                  )}
 
                   {/* Mundialista filter - 3-state toggle: off → SI → NO → off */}
                   <button
@@ -5308,6 +5420,25 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
                   >
                     <Trophy className="h-3.5 w-3.5" />
                     {mundialistaFilter === 'si' ? 'Mundial ✓' : mundialistaFilter === 'no' ? 'Mundial ✗' : 'Mundial'}
+                  </button>
+
+                  {/* Mueble chico filter - 3-state toggle: off → SI → NO → off */}
+                  <button
+                    onClick={() => {
+                      const next = muebleChicoFilter === 'off' ? 'si' : muebleChicoFilter === 'si' ? 'no' : 'off';
+                      setMuebleChicoFilter(next);
+                      if (next === 'si') { setSortColumn('codigo_unico'); setSortDirection('asc'); }
+                    }}
+                    className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-medium transition-all ${muebleChicoFilter === 'si'
+                      ? 'bg-orange-500 text-white shadow'
+                      : muebleChicoFilter === 'no'
+                        ? 'bg-red-500/80 text-white shadow'
+                        : `${isDark ? 'bg-zinc-800/80' : 'bg-gray-100/80'} ${isDark ? 'text-zinc-400' : 'text-gray-500'} border ${isDark ? 'border-zinc-700/50' : 'border-gray-200/50'} ${isDark ? 'hover:text-white' : 'hover:text-gray-900'}`
+                      }`}
+                    title={muebleChicoFilter === 'off' ? 'Filtrar muebles chicos' : muebleChicoFilter === 'si' ? 'Mostrando muebles chicos (click: sin muebles chicos)' : 'Sin muebles chicos (click: quitar filtro)'}
+                  >
+                    <Package className="h-3.5 w-3.5" />
+                    {muebleChicoFilter === 'si' ? 'Chico ✓' : muebleChicoFilter === 'no' ? 'Chico ✗' : 'Chico'}
                   </button>
 
                   {/* Filtros avanzados (embudo) */}
@@ -9130,7 +9261,7 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
               {effectiveCanEdit && (
                 <button
                   disabled={(!hasChanges && modifiedCaras.size === 0) || isSaving}
-                  onClick={handleBulkSaveChanges}
+                  onClick={() => setShowSaveConfirm(true)}
                   className={`px-6 py-2 rounded-lg text-sm font-medium transition-all ${
                     (hasChanges || modifiedCaras.size > 0) && !isSaving
                       ? 'bg-purple-500 text-white hover:bg-purple-600 shadow-lg shadow-purple-500/25'
@@ -9151,6 +9282,31 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
       </div>
       {/* Confirmation Modal */}
       {confirmModalJSX}
+      {/* Save Changes Confirm Modal — resumen de cambios antes de guardar */}
+      <SaveChangesConfirmModal
+        isOpen={showSaveConfirm}
+        onClose={() => setShowSaveConfirm(false)}
+        onConfirm={async () => {
+          setShowSaveConfirm(false);
+          await handleBulkSaveChanges();
+        }}
+        isSaving={isSaving}
+        contextLabel="campaña"
+        hasGeneralChanges={hasChanges}
+        modifiedCircuitos={modifiedCircuitosForConfirm}
+      />
+      {/* Delete Circuito Confirm Modal — confirmación al usar bote de basura */}
+      <DeleteCircuitoConfirmModal
+        isOpen={deleteCircuitoModal.isOpen}
+        onClose={() => setDeleteCircuitoModal(prev => ({ ...prev, isOpen: false }))}
+        onConfirm={() => deleteCircuitoModal.onConfirm()}
+        isDeleting={deleteCircuitoModal.isDeleting}
+        ubicacion={deleteCircuitoModal.ubicacion}
+        articulo={deleteCircuitoModal.articulo}
+        formato={deleteCircuitoModal.formato}
+        tieneReservas={deleteCircuitoModal.tieneReservas}
+        tienePareja={deleteCircuitoModal.tienePareja}
+      />
       {/* Toast Notification */}
       {toastJSX}
 

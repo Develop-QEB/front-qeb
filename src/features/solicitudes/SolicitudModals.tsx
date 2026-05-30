@@ -1316,7 +1316,7 @@ export function StatusModal({ isOpen, onClose, solicitud, onStatusChange, status
 
   const STATUS_COLORS = getStatusColors(isDark);
   const statusColor = STATUS_COLORS[solicitud.status] || getDefaultStatusColor(isDark);
-  const statusOptions = ['Pendiente', 'Aprobada', 'Rechazada', 'Desactivada', 'Ajustar'];
+  const statusOptions = ['Pendiente', 'Aprobada', 'Rechazada', 'Ajustar'];
 
   return (
     <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50 p-4">

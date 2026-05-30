@@ -28,6 +28,46 @@ import { AssignInventarioCampanaModal } from '../campanas/AssignInventarioCampan
 import { propuestasService } from '../../services/propuestas.service';
 import { campanasService } from '../../services/campanas.service';
 
+// ============ HELPERS ============
+// Render texto con URLs (http://, https://, www.) convertidas en hyperlinks
+// que abren en nueva pestaña. Se mantienen los saltos de linea originales.
+function LinkifiedText({ text, className }: { text: string; className?: string }) {
+  // Regex: capta http(s)://... o www.... hasta el primer espacio o caracter no-URL
+  const URL_REGEX = /(https?:\/\/[^\s)<>"']+|www\.[^\s)<>"']+)/gi;
+  const parts: Array<{ kind: 'text' | 'link'; value: string }> = [];
+  let lastIndex = 0;
+  for (const match of text.matchAll(URL_REGEX)) {
+    const start = match.index ?? 0;
+    if (start > lastIndex) parts.push({ kind: 'text', value: text.slice(lastIndex, start) });
+    parts.push({ kind: 'link', value: match[0] });
+    lastIndex = start + match[0].length;
+  }
+  if (lastIndex < text.length) parts.push({ kind: 'text', value: text.slice(lastIndex) });
+
+  return (
+    <p className={className} style={{ whiteSpace: 'pre-wrap' }}>
+      {parts.map((p, i) => {
+        if (p.kind === 'link') {
+          const href = p.value.startsWith('www.') ? `https://${p.value}` : p.value;
+          return (
+            <a
+              key={i}
+              href={href}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="text-purple-400 hover:text-purple-300 underline break-all"
+              onClick={(e) => e.stopPropagation()}
+            >
+              {p.value}
+            </a>
+          );
+        }
+        return <span key={i}>{p.value}</span>;
+      })}
+    </p>
+  );
+}
+
 // ============ TIPOS ============
 type ContentType = 'notificaciones' | 'tareas';
 type ViewType = 'tablero' | 'lista' | 'calendario' | 'notas';
@@ -2742,7 +2782,10 @@ function TaskDrawer({
                           <span className={`text-xs font-medium ${isDark ? 'text-zinc-300' : 'text-gray-700'}`}>{autorNombre}</span>
                           <span className={`text-[10px] ${isDark ? 'text-zinc-600' : 'text-gray-400'}`}>{formatDate(c.fecha)}</span>
                         </div>
-                        <p className={`text-sm ${isDark ? 'text-zinc-400' : 'text-gray-600'} leading-relaxed`}>{c.contenido}</p>
+                        <LinkifiedText
+                          text={c.contenido}
+                          className={`text-sm ${isDark ? 'text-zinc-400' : 'text-gray-600'} leading-relaxed`}
+                        />
                       </div>
                     </div>
                   </div>

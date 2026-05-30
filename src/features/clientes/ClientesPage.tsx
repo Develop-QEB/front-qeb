@@ -14,6 +14,7 @@ import { getPermissions } from '../../lib/permissions';
 import { useSocketClientes } from '../../hooks/useSocket';
 import { useThemeStore } from '../../store/themeStore';
 import { SAP_BASE_URL } from '../../store/environmentStore';
+import { ClientesSyncModal } from './ClientesSyncModal';
 
 // ============ TIPOS Y CONFIGURACIÓN DE FILTROS/ORDENAMIENTO ============
 type FilterOperator = '=' | '!=' | 'contains' | 'not_contains';
@@ -551,6 +552,9 @@ export function ClientesPage() {
   const [showViewModal, setShowViewModal] = useState(false);
   const [showCreateModal, setShowCreateModal] = useState(false);
   useModalTracker('Registrar Cliente', showCreateModal);
+  const [showSyncModal, setShowSyncModal] = useState(false);
+  useModalTracker('Sincronizar Clientes SAP', showSyncModal);
+  const canSyncSap = user?.rol === 'Administrador' || user?.rol === 'DEV';
 
   // Estados para filtros avanzados
   const [filters, setFilters] = useState<FilterCondition[]>([]);
@@ -1071,6 +1075,18 @@ export function ClientesPage() {
                 Nuevo Cliente
               </button>
 
+              {/* Sincronizar desde SAP — solo en tab "db" y para Administrador/DEV */}
+              {isDb && canSyncSap && (
+                <button
+                  onClick={() => setShowSyncModal(true)}
+                  className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-medium transition-all border ${isDark ? 'bg-zinc-800/60 text-purple-300 border-purple-500/30 hover:bg-zinc-800' : 'bg-white text-purple-700 border-purple-300 hover:bg-purple-50'}`}
+                  title="Comparar QEB con SAP y aplicar cambios"
+                >
+                  <RefreshCw className="h-4 w-4" />
+                  Sincronizar SAP
+                </button>
+              )}
+
               {/* Botones de Acción: Filtrar, Agrupar, Ordenar */}
               <div className="flex items-center gap-2">
                 {/* Botón de Filtros */}
@@ -1559,6 +1575,9 @@ export function ClientesPage() {
           </div>
         </div>
       )}
+
+      {/* Sync modal */}
+      <ClientesSyncModal isOpen={showSyncModal} onClose={() => setShowSyncModal(false)} />
     </div>
   );
 }
