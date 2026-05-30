@@ -1849,8 +1849,24 @@ function UploadArtModal({
           nn.delete(id);
           return nn;
         });
+        setImageNames(prevNames => {
+          const nn = new Map(prevNames);
+          nn.delete(id);
+          return nn;
+        });
       } else {
         next.set(id, { url, source: 'existing' });
+        // Pre-llenar nombre del arte si el arte ya tiene uno guardado en biblioteca.
+        // Asi se respeta el nombre que ya tiene en lugar de obligar al usuario a
+        // reescribirlo en cada carga.
+        const arte = localArtes.find(a => a.id === id);
+        if (arte?.nombre_arte) {
+          setImageNames(prevNames => {
+            const nn = new Map(prevNames);
+            nn.set(id, arte.nombre_arte || '');
+            return nn;
+          });
+        }
       }
       return next;
     });
@@ -1900,8 +1916,22 @@ function UploadArtModal({
           nn.delete(id);
           return nn;
         });
+        setDigitalImageNames(prevNames => {
+          const nn = new Map(prevNames);
+          nn.delete(id);
+          return nn;
+        });
       } else {
         next.set(id, { url, source: 'existing', isVideo });
+        // Pre-llenar nombre del arte si el arte ya tiene uno guardado en biblioteca.
+        const arte = localArtes.find(a => a.id === id);
+        if (arte?.nombre_arte) {
+          setDigitalImageNames(prevNames => {
+            const nn = new Map(prevNames);
+            nn.set(id, arte.nombre_arte || '');
+            return nn;
+          });
+        }
       }
       return next;
     });
