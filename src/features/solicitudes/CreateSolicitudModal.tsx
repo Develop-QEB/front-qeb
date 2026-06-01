@@ -3418,15 +3418,17 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
                                             const authBlocked = isEditMode && anyPendingSaved;
                                             return (
                                           <div className="flex items-center justify-center gap-1">
-                                            <button
-                                              type="button"
-                                              onClick={() => { if (!authBlocked) handleEditCara(cara); }}
-                                              disabled={authBlocked}
-                                              className={`p-1 rounded text-[10px] ${authBlocked ? 'text-zinc-600 cursor-not-allowed' : editingCaraId === cara.id ? 'bg-purple-500/30 text-purple-300' : 'hover:bg-purple-500/20 text-purple-400'}`}
-                                              title={authBlocked ? 'Autorización pendiente - no se puede editar' : 'Editar'}
-                                            >
-                                              <Pencil className="h-3.5 w-3.5" />
-                                            </button>
+                                            {permissions.canEditCircuitoExistente && (
+                                              <button
+                                                type="button"
+                                                onClick={() => { if (!authBlocked) handleEditCara(cara); }}
+                                                disabled={authBlocked}
+                                                className={`p-1 rounded text-[10px] ${authBlocked ? 'text-zinc-600 cursor-not-allowed' : editingCaraId === cara.id ? 'bg-purple-500/30 text-purple-300' : 'hover:bg-purple-500/20 text-purple-400'}`}
+                                                title={authBlocked ? 'Autorización pendiente - no se puede editar' : 'Editar'}
+                                              >
+                                                <Pencil className="h-3.5 w-3.5" />
+                                              </button>
+                                            )}
                                             <button
                                               type="button"
                                               onClick={() => { if (!authBlocked) handleRemoveCara(cara.id); }}

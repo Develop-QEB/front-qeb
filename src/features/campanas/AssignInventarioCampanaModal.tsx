@@ -8551,17 +8551,19 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
                                       const blockReason = caraAPSBlocked ? 'Grupo con APS asignado - no se puede editar' : hasSavedPendingAuth ? 'Hay circuitos pendientes de autorizacion - no se pueden editar otros' : isLoadingThis ? 'Cargando editor...' : 'Editar';
                                       return (
                                       <>
-                                        <button
-                                          onClick={(e) => { e.stopPropagation(); if (!editBlocked && !loadingCaraAction) handleEditCara(cara); }}
-                                          disabled={editBlocked || !!loadingCaraAction}
-                                          className={`p-2 rounded-lg border transition-colors ${editBlocked || !!loadingCaraAction
-                                            ? 'bg-zinc-500/10 text-zinc-500 border-zinc-500/20 cursor-not-allowed'
-                                            : 'bg-amber-500/10 text-amber-400 border-amber-500/20 hover:bg-amber-500/20'
-                                          }`}
-                                          title={blockReason}
-                                        >
-                                          {isLoadingThis ? <Loader2 className="h-4 w-4 animate-spin" /> : <Pencil className="h-4 w-4" />}
-                                        </button>
+                                        {permissions.canEditCircuitoExistente && (
+                                          <button
+                                            onClick={(e) => { e.stopPropagation(); if (!editBlocked && !loadingCaraAction) handleEditCara(cara); }}
+                                            disabled={editBlocked || !!loadingCaraAction}
+                                            className={`p-2 rounded-lg border transition-colors ${editBlocked || !!loadingCaraAction
+                                              ? 'bg-zinc-500/10 text-zinc-500 border-zinc-500/20 cursor-not-allowed'
+                                              : 'bg-amber-500/10 text-amber-400 border-amber-500/20 hover:bg-amber-500/20'
+                                            }`}
+                                            title={blockReason}
+                                          >
+                                            {isLoadingThis ? <Loader2 className="h-4 w-4 animate-spin" /> : <Pencil className="h-4 w-4" />}
+                                          </button>
+                                        )}
                                         {canEditResumen && (() => {
                                           const reservaBlocked = hasReservas && !permissions.canDeleteCaraConReservas;
                                           const isDisabled = reservaBlocked || hasSavedPendingAuth || caraAPSBlocked || !!loadingCaraAction;

@@ -8544,17 +8544,19 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
                                     })()}
                                     {effectiveCanEdit && (
                                       <>
-                                        <button
-                                          onClick={(e) => { e.stopPropagation(); if (!hasSavedPendingAuth) handleEditCara(cara); }}
-                                          disabled={hasSavedPendingAuth}
-                                          className={`p-2 rounded-lg border transition-colors ${hasSavedPendingAuth
-                                            ? `bg-zinc-500/10 ${isDark ? 'text-zinc-500' : 'text-gray-400'} border-zinc-500/20 cursor-not-allowed`
-                                            : 'bg-amber-500/10 text-amber-400 border-amber-500/20 hover:bg-amber-500/20'
-                                          }`}
-                                          title={hasSavedPendingAuth ? 'Hay circuitos pendientes de autorizacion - no se pueden editar otros' : 'Editar'}
-                                        >
-                                          <Pencil className="h-4 w-4" />
-                                        </button>
+                                        {permissions.canEditCircuitoExistente && (
+                                          <button
+                                            onClick={(e) => { e.stopPropagation(); if (!hasSavedPendingAuth) handleEditCara(cara); }}
+                                            disabled={hasSavedPendingAuth}
+                                            className={`p-2 rounded-lg border transition-colors ${hasSavedPendingAuth
+                                              ? `bg-zinc-500/10 ${isDark ? 'text-zinc-500' : 'text-gray-400'} border-zinc-500/20 cursor-not-allowed`
+                                              : 'bg-amber-500/10 text-amber-400 border-amber-500/20 hover:bg-amber-500/20'
+                                            }`}
+                                            title={hasSavedPendingAuth ? 'Hay circuitos pendientes de autorizacion - no se pueden editar otros' : 'Editar'}
+                                          >
+                                            <Pencil className="h-4 w-4" />
+                                          </button>
+                                        )}
                                         {canEditResumen && (() => {
                                             const reservaBlocked = hasReservas && !permissions.canDeleteCaraConReservas;
                                             const isDisabled = reservaBlocked || hasSavedPendingAuth;
