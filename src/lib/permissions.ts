@@ -324,13 +324,13 @@ const rolePermissions: Partial<Record<UserRole, Partial<RolePermissions>>> = {
     canCompartirPropuesta: true, // SÍ puede compartir
     canBuscarInventarioEnModal: false,
 
-    // Campañas: acceso total a botones de detalle de campaña (Asignar/Quitar APS,
-    // Pre Factura, Cortesía a Gestor, POST a SAP y Cancelar POST a SAP).
+    // Campañas: acceso a botones de detalle de campaña (Asignar/Quitar APS,
+    // Pre Factura, Cortesía a Gestor y POST a SAP). Cancelar POST queda
+    // reservado a TI/Admin.
     canEditCampanas: true,
     canEditDetalleCampana: true,
     canDeleteDetalleCampana: false,
     canPostToSAP: true,
-    canCancelPostSAP: true,
 
     // Gestión de Artes: Puede hacer todo EXCEPTO resolver tareas de producción
     // canEditGestionArtes: true (por defecto)
