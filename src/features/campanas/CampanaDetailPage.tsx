@@ -3990,7 +3990,7 @@ export function CampanaDetailPage() {
                 </button>
                 );
               })()}
-              {permissions.canEditDetalleCampana && inventarioConAPS.length > 0 && (() => {
+              {(permissions.canEditDetalleCampana || permissions.canPostToSAP) && inventarioConAPS.length > 0 && (() => {
                 const selectedHavePostedAPS = selectedItemsAPS.size > 0 &&
                   inventarioConAPS.filter(i => selectedItemsAPS.has(String(i.rsv_ids))).some(i => postedAPSGroups.has(i.aps));
                 const selectedHavePrefacturaAPS = selectedItemsAPS.size > 0 &&
