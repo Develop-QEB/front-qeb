@@ -83,6 +83,7 @@ export interface RolePermissions {
   canEditArticuloOnEdit: boolean; // Editar artículo SAP al editar una cara existente (solo si no hay reservas)
   canDeleteDetalleCampana: boolean;
   canDeleteCaraConReservas: boolean;
+  canPostToSAP: boolean; // Ver y usar botón "Enviar a SAP" (POST) en detalle de campaña, independiente de canEditDetalleCampana
   canSeeGestionArtes: boolean; // Ver página de Gestión de Artes
   canEditGestionArtes: boolean;
   canResolveProduccionTasks: boolean; // Resolver/completar tareas de producción (Impresión, Recepción, Instalación)
@@ -168,6 +169,7 @@ const defaultPermissions: RolePermissions = {
   canEditArticuloOnEdit: false,
   canDeleteDetalleCampana: true,
   canDeleteCaraConReservas: true,
+  canPostToSAP: false,
   canSeeGestionArtes: true,
   canEditGestionArtes: true,
   canResolveProduccionTasks: true,
@@ -322,10 +324,11 @@ const rolePermissions: Partial<Record<UserRole, Partial<RolePermissions>>> = {
     canCompartirPropuesta: true, // SÍ puede compartir
     canBuscarInventarioEnModal: false,
 
-    // Campañas: Puede ver pero NO editar circuitos
+    // Campañas: Puede ver pero NO editar circuitos. SÍ puede mandar POST a SAP.
     canEditCampanas: true,
     canEditDetalleCampana: false,
     canDeleteDetalleCampana: false,
+    canPostToSAP: true,
 
     // Gestión de Artes: Puede hacer todo EXCEPTO resolver tareas de producción
     // canEditGestionArtes: true (por defecto)
