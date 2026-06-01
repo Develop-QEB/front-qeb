@@ -324,11 +324,13 @@ const rolePermissions: Partial<Record<UserRole, Partial<RolePermissions>>> = {
     canCompartirPropuesta: true, // SÍ puede compartir
     canBuscarInventarioEnModal: false,
 
-    // Campañas: Puede ver pero NO editar circuitos. SÍ puede mandar POST a SAP.
+    // Campañas: acceso total a botones de detalle de campaña (Asignar/Quitar APS,
+    // Pre Factura, Cortesía a Gestor, POST a SAP y Cancelar POST a SAP).
     canEditCampanas: true,
-    canEditDetalleCampana: false,
+    canEditDetalleCampana: true,
     canDeleteDetalleCampana: false,
     canPostToSAP: true,
+    canCancelPostSAP: true,
 
     // Gestión de Artes: Puede hacer todo EXCEPTO resolver tareas de producción
     // canEditGestionArtes: true (por defecto)
