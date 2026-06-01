@@ -977,19 +977,9 @@ export default function PropuestasVersionarioView({ isDark, filters, advancedFil
             </div>
           </div>
           <div className="flex items-center gap-3">
-            <button
-              onClick={handleExportCSV}
-              disabled={isExporting || groupTree.length === 0}
-              className={`flex items-center gap-2 px-3 py-2 rounded-xl text-xs font-medium transition-all ${
-                isExporting || groupTree.length === 0
-                  ? isDark ? 'bg-zinc-800/30 text-zinc-600 cursor-not-allowed' : 'bg-gray-100 text-gray-300 cursor-not-allowed'
-                  : isDark ? 'bg-zinc-800 text-zinc-300 hover:bg-zinc-700 border border-zinc-700/50' : 'bg-gray-100 text-gray-600 hover:bg-gray-200 border border-gray-200'
-              }`}
-            >
-              {isExporting ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Download className="h-3.5 w-3.5" />}
-              {isExporting ? 'Exportando...' : 'Exportar Excel'}
-            </button>
-            <div className={`w-px h-10 ${isDark ? 'bg-zinc-800' : 'bg-gray-200'}`} />
+            {/* Boton "Exportar Excel" se eliminó: los 2 exports (Layout y
+                Ocupacion) ahora viven en el header de PropuestasPage para
+                que esten juntos y mas visibles. */}
             <div className="text-right">
               <p className={`text-2xl font-bold ${isDark ? 'text-white' : 'text-gray-900'}`}>{groupTree.length}</p>
               <p className={`text-[10px] ${isDark ? 'text-zinc-500' : 'text-gray-400'} uppercase tracking-wide`}>{topLevelLabel}</p>

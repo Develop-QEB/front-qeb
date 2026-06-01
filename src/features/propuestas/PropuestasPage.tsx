@@ -1342,6 +1342,7 @@ export function PropuestasPage() {
   const limit = 20;
   const [activeView, setActiveView] = useState<'tabla' | 'versionario'>('tabla');
   const [exportingLayout, setExportingLayout] = useState(false);
+  const [exportingOcupacion, setExportingOcupacion] = useState(false);
   // Versionario (Desglose) grouping config — controlled here so the filter chip lives in the filters bar
   const [versionarioGroupings, setVersionarioGroupings] = useState<VersionarioGroupByField[]>(() => loadVersionarioGroupings());
   const [showVersionarioGroupConfig, setShowVersionarioGroupConfig] = useState(false);
@@ -1725,6 +1726,91 @@ export function PropuestasPage() {
     }
   };
 
+  // Export "Orden de Montaje (Ocupacion)" — formato inspirado en el de Campañas
+  // (Plaza, Tipo, Asesor, APS Global/Especifico, CUIC, Fechas, Cliente, Marca,
+  // Campana, Articulo, Negociacion, Caras, Tarifa, Monto Total). Adaptado para
+  // propuestas: 1 fila por circuito reservado (inv) — cuenta de caras tomada
+  // de inv.caras_totales (fallback 1) y monto = caras * tarifa.
+  const handleExportOcupacion = async () => {
+    setExportingOcupacion(true);
+    try {
+      const exportData = await propuestasService.getVersionarioData({
+        status: status || undefined,
+        search: debouncedSearchTags.length > 0 ? debouncedSearchTags.join('|') : debouncedSearchInput || undefined,
+        yearInicio,
+        yearFin,
+        catorcenaInicio,
+        catorcenaFin,
+        tipoPeriodo: tipoPeriodo || undefined,
+        excludeRechazadas: true,
+        page: 1,
+        limit: 100,
+      });
+      const { inventarios, propuestasInfo } = exportData;
+      const propMap = new Map(propuestasInfo.map((p: any) => [p.propuesta_id, p]));
+
+      const fmtPeriodo = (num: number | null | undefined, anio: number | null | undefined) => {
+        if (!num) return '';
+        return `Cat ${String(num).padStart(2, '0')} / ${anio || ''}`;
+      };
+
+      const headers = [
+        'Plaza', 'Tipo', 'Vendedor', 'APS Global', 'APS Específico', 'CUIC',
+        'Fecha Inicio', 'Fecha Fin', 'Anunciante', 'Campaña', 'Artículo',
+        'Negociación', 'Caras', 'Tarifa', 'Monto Total',
+      ];
+
+      const rows: (string | number)[][] = [];
+      for (const inv of inventarios as any[]) {
+        const info = propMap.get(inv.propuesta_id) as any;
+        if (!info) continue;
+        const caras = Number(inv.caras_totales) || 1;
+        const tarifa = Number(inv.tarifa_publica_sc) || 0;
+        const monto = caras * tarifa;
+        const negociacion = inv.cortesia
+          ? 'CORTESIA'
+          : (inv.estatus_reserva === 'Bonificado' || inv.estatus_reserva === 'Vendido bonificado')
+            ? 'BONIFICACION'
+            : 'RENTA';
+        rows.push([
+          inv.plaza || inv.estado || '',
+          inv.tipo_medio || inv.tradicional_digital || '',
+          info.vendedor || '',
+          String(info.propuesta_id),
+          inv.aps_especifico ? String(inv.aps_especifico) : '',
+          String(info.cuic || ''),
+          fmtPeriodo(info.catorcena_inicio_num, info.catorcena_inicio_anio),
+          fmtPeriodo(info.catorcena_fin_num, info.catorcena_fin_anio),
+          info.anunciante || '',
+          info.campana_nombre || info.nombre_campania || info.descripcion || '',
+          inv.articulo || '',
+          negociacion,
+          caras,
+          tarifa,
+          monto,
+        ]);
+      }
+
+      if (rows.length === 0) {
+        alert('No hay datos para exportar en formato Ocupación.');
+        return;
+      }
+
+      // Generar Excel (XLSX) — mismo formato que el de Campañas
+      const XLSX = await import('xlsx');
+      const wsData = [headers, ...rows];
+      const ws = XLSX.utils.aoa_to_sheet(wsData);
+      const wb = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(wb, ws, 'Ocupacion');
+      XLSX.writeFile(wb, `propuestas_orden_montaje_ocupacion_${new Date().toISOString().split('T')[0]}.xlsx`);
+    } catch (err) {
+      console.error('Error exportando Ocupacion:', err);
+      alert(`Error exportando Ocupación: ${err instanceof Error ? err.message : String(err)}`);
+    } finally {
+      setExportingOcupacion(false);
+    }
+  };
+
   // Handle export CSV - exports only visible/filtered data
   const handleExportCSV = () => {
     const dataToExport = hasLocalFilters ? filteredData : (data?.data || []);
@@ -1973,15 +2059,37 @@ export function PropuestasPage() {
                 Desglose
               </button>
 
-              {/* Export CSV / Layout */}
-              <button
-                onClick={activeView === 'versionario' ? handleExportLayout : handleExportCSV}
-                disabled={exportingLayout}
-                className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-medium ${isDark ? 'bg-zinc-800/60 text-zinc-400 border-zinc-700/50 hover:bg-zinc-800 hover:text-zinc-200' : 'bg-gray-100 text-gray-500 border-gray-200 hover:bg-gray-200 hover:text-gray-900'} border transition-all ${exportingLayout ? 'opacity-50 cursor-not-allowed' : ''}`}
-              >
-                {exportingLayout ? <Loader2 className="h-4 w-4 animate-spin" /> : <Download className="h-4 w-4" />}
-                {exportingLayout ? 'Generando...' : activeView === 'versionario' ? 'Exportar Layout' : 'Exportar CSV'}
-              </button>
+              {/* Botones de export */}
+              {activeView === 'versionario' ? (
+                <>
+                  <button
+                    onClick={handleExportLayout}
+                    disabled={exportingLayout || exportingOcupacion}
+                    className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-medium ${isDark ? 'bg-zinc-800/60 text-zinc-400 border-zinc-700/50 hover:bg-zinc-800 hover:text-zinc-200' : 'bg-gray-100 text-gray-500 border-gray-200 hover:bg-gray-200 hover:text-gray-900'} border transition-all ${exportingLayout || exportingOcupacion ? 'opacity-50 cursor-not-allowed' : ''}`}
+                    title="Exporta CSV en formato Layout (Campaña, Anunciante, Inversión, APS, etc.)"
+                  >
+                    {exportingLayout ? <Loader2 className="h-4 w-4 animate-spin" /> : <Download className="h-4 w-4" />}
+                    {exportingLayout ? 'Generando...' : 'Exportar Layout'}
+                  </button>
+                  <button
+                    onClick={handleExportOcupacion}
+                    disabled={exportingLayout || exportingOcupacion}
+                    className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-medium ${isDark ? 'bg-zinc-800/60 text-zinc-400 border-zinc-700/50 hover:bg-zinc-800 hover:text-zinc-200' : 'bg-gray-100 text-gray-500 border-gray-200 hover:bg-gray-200 hover:text-gray-900'} border transition-all ${exportingLayout || exportingOcupacion ? 'opacity-50 cursor-not-allowed' : ''}`}
+                    title="Exporta Excel formato Orden de Montaje (Plaza, Tipo, Vendedor, APS, CUIC, Caras, Tarifa, Monto)"
+                  >
+                    {exportingOcupacion ? <Loader2 className="h-4 w-4 animate-spin" /> : <Download className="h-4 w-4" />}
+                    {exportingOcupacion ? 'Generando...' : 'Exportar Ocupación'}
+                  </button>
+                </>
+              ) : (
+                <button
+                  onClick={handleExportCSV}
+                  className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-medium ${isDark ? 'bg-zinc-800/60 text-zinc-400 border-zinc-700/50 hover:bg-zinc-800 hover:text-zinc-200' : 'bg-gray-100 text-gray-500 border-gray-200 hover:bg-gray-200 hover:text-gray-900'} border transition-all`}
+                >
+                  <Download className="h-4 w-4" />
+                  Exportar CSV
+                </button>
+              )}
             </div>
 
             {/* Filters Row (Expandable) */}
