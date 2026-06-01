@@ -373,9 +373,14 @@ export function BloqueoModal({ isOpen, onClose, item, onConfirm, isSubmitting }:
             <>
               <div className="flex items-start gap-2.5 px-3 py-2.5 bg-red-500/10 border border-red-500/30 rounded-lg">
                 <Ban className="h-4 w-4 text-red-400 flex-shrink-0 mt-0.5" />
-                <p className="text-xs text-red-300">
-                  Se bloqueará este inventario. Indica el motivo para que se pueda desbloquear después.
-                </p>
+                <div className="space-y-1">
+                  <p className="text-xs text-red-300">
+                    Se bloqueará este inventario. Indica el motivo para que se pueda desbloquear después.
+                  </p>
+                  <p className="text-[11px] text-red-300/80">
+                    Cualquier reserva activa sobre este inventario se eliminará automáticamente, con o sin APS.
+                  </p>
+                </div>
               </div>
 
               <div>
@@ -403,6 +408,11 @@ export function BloqueoModal({ isOpen, onClose, item, onConfirm, isSubmitting }:
                       ? 'Se creará una tarea para que un usuario pueda revisar y desbloquear manualmente.'
                       : 'Se bloqueará el inventario y se creará una tarea por cada campaña afectada.'}
                   </p>
+                  {!yaEstaBloquedo && (
+                    <p className="text-[11px] text-red-300 mt-1">
+                      Todas las reservas activas de este inventario se eliminarán al confirmar, con o sin APS.
+                    </p>
+                  )}
                 </div>
               </div>
 
