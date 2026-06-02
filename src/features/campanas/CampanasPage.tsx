@@ -2703,7 +2703,10 @@ export function CampanasPage() {
   // Disparado desde el modal preview cuando el usuario confirma descarga.
   // El preview es "lightweight" (sin notas ni urls digitales). Aqui completamos
   // el fetch faltante en paralelo antes de generar el Excel.
-  const handleDownloadVersionarioFromPreview = async () => {
+  // opts.filterKeys: si hay filtros activos en el modal, set de circuitKey
+  //   visibles (export filtra a esos). Si null, exporta todo.
+  // opts.skipImages: descarga rapida sin embed (solo URL en celda).
+  const handleDownloadVersionarioFromPreview = async (opts: { filterKeys: Set<string> | null; skipImages: boolean }) => {
     if (!versionarioRawData || versionarioRawData.length === 0) return;
     // Guard: si ya estamos descargando, ignorar clicks subsecuentes.
     if (versionarioDownloading) return;
@@ -2760,6 +2763,8 @@ export function CampanasPage() {
       await exportVersionarioArtesMulti({
         campanas: enriquecidas,
         fileNameSuffix: `${enriquecidas.length}_campanas`,
+        filterKeys: opts.filterKeys,
+        skipImages: opts.skipImages,
       });
     } finally {
       setVersionarioDownloading(false);

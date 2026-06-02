@@ -388,7 +388,10 @@ interface Props {
   isLoading: boolean;
   isDownloading: boolean;
   loadingProgress?: { current: number; total: number };
-  onDownload: () => void;
+  // filterKeys: si hay filtros activos en el modal, set de circuitKey de las
+  //   filas visibles; si no hay filtros, null → exportar todo.
+  // skipImages: true para "descarga rapida" (sin miniaturas → URL hyperlink).
+  onDownload: (opts: { filterKeys: Set<string> | null; skipImages: boolean }) => void;
   catorcenasData?: { years: number[]; data: Catorcena[] };
   onReloadPeriod?: (yearInicio: number, yearFin: number, catInicio?: number, catFin?: number) => void;
   initialPeriod?: { year: number; catorcena: number };
@@ -636,6 +639,8 @@ export function VersionarioArtesPreviewModal({ isOpen, onClose, preview, isLoadi
   const [filterAps, setFilterAps] = useState<'' | 'con_aps' | 'sin_aps'>('');
   const [filterPost, setFilterPost] = useState<'' | 'con_post' | 'sin_post'>('');
   const [filterTipoArchivo, setFilterTipoArchivo] = useState('');
+  const [filterTipo, setFilterTipo] = useState(''); // Tradicional / Digital
+  const [filterFormato, setFilterFormato] = useState(''); // PARABUS, MUPIS, etc.
   const [showFilters, setShowFilters] = useState(false);
 
   // Filtro de periodo
@@ -656,6 +661,8 @@ export function VersionarioArtesPreviewModal({ isOpen, onClose, preview, isLoadi
       setFilterAps('');
       setFilterPost('');
       setFilterTipoArchivo('');
+      setFilterTipo('');
+      setFilterFormato('');
       setShowFilters(false);
       setPeriodYearInicio(undefined);
       setPeriodYearFin(undefined);
@@ -672,17 +679,30 @@ export function VersionarioArtesPreviewModal({ isOpen, onClose, preview, isLoadi
 
   // Opciones derivadas de los datos cargados
   const filterOptions = useMemo(() => {
-    if (!preview) return { estatuses: [] as string[], clientes: [] as string[], plazas: [] as string[], tiposArchivo: [] as string[] };
+    if (!preview) return { estatuses: [] as string[], clientes: [] as string[], plazas: [] as string[], tiposArchivo: [] as string[], tipos: [] as string[], formatos: [] as string[] };
     const estatusSet = new Set<string>();
     const clienteSet = new Set<string>();
     const plazaSet = new Set<string>();
     const extSet = new Set<string>();
+    const tipoSet = new Set<string>();
+    const formatoSet = new Set<string>();
     for (const r of preview.rows) {
       if (r.estatusBreakdown) {
         for (const b of r.estatusBreakdown) estatusSet.add(b.label);
       }
       if (r.cliente) clienteSet.add(r.cliente);
       if (r.plaza) plazaSet.add(r.plaza);
+      if (r.tipo) {
+        // Una fila puede tener "Tradicional, Digital" si agrupa ambos. Separar.
+        for (const t of r.tipo.split(/[,;|/]/).map(s => s.trim()).filter(Boolean)) {
+          tipoSet.add(t);
+        }
+      }
+      if (r.formato) {
+        for (const f of r.formato.split(/[,;|/]/).map(s => s.trim()).filter(Boolean)) {
+          formatoSet.add(f);
+        }
+      }
       for (const url of r.artesUrls) {
         if (!url) continue;
         const match = url.split('?')[0].match(/\.([a-zA-Z0-9]+)$/);
@@ -694,11 +714,13 @@ export function VersionarioArtesPreviewModal({ isOpen, onClose, preview, isLoadi
       clientes: [...clienteSet].sort(),
       plazas: [...plazaSet].sort(),
       tiposArchivo: [...extSet].sort(),
+      tipos: [...tipoSet].sort(),
+      formatos: [...formatoSet].sort(),
     };
   }, [preview]);
 
   const isPeriodActive = periodYearInicio !== undefined && periodYearFin !== undefined;
-  const activeFilterCount = [filterEstatus, filterCliente, filterPlaza, filterArte, filterAps, filterPost, filterTipoArchivo].filter(Boolean).length + (isPeriodActive ? 1 : 0);
+  const activeFilterCount = [filterEstatus, filterCliente, filterPlaza, filterArte, filterAps, filterPost, filterTipoArchivo, filterTipo, filterFormato].filter(Boolean).length + (isPeriodActive ? 1 : 0);
 
   // El filtro de periodo dispara una recarga desde el backend (onReloadPeriod),
   // por lo que no necesitamos filtrar client-side por periodo — los datos
@@ -755,6 +777,20 @@ export function VersionarioArtesPreviewModal({ isOpen, onClose, preview, isLoadi
       );
     }
 
+    // Filtro Tipo (Tradicional / Digital). r.tipo puede tener varios separados por ", "
+    if (filterTipo) {
+      rows = rows.filter(r =>
+        r.tipo?.split(/[,;|/]/).map(s => s.trim()).includes(filterTipo)
+      );
+    }
+
+    // Filtro Formato (PARABUS, MUPIS, etc.). Mismo split que tipo.
+    if (filterFormato) {
+      rows = rows.filter(r =>
+        r.formato?.split(/[,;|/]/).map(s => s.trim()).includes(filterFormato)
+      );
+    }
+
     // Busqueda textual
     const q = search.trim().toLowerCase();
     if (q) {
@@ -766,14 +802,14 @@ export function VersionarioArtesPreviewModal({ isOpen, onClose, preview, isLoadi
     }
 
     return rows;
-  }, [preview, search, filterEstatus, filterCliente, filterPlaza, filterArte, filterAps, filterPost, filterTipoArchivo]);
+  }, [preview, search, filterEstatus, filterCliente, filterPlaza, filterArte, filterAps, filterPost, filterTipoArchivo, filterTipo, filterFormato]);
 
   const totalPages = Math.max(1, Math.ceil(filteredRows.length / PAGE_SIZE));
   const safePage = Math.min(currentPage, totalPages);
   const paginated = filteredRows.slice((safePage - 1) * PAGE_SIZE, safePage * PAGE_SIZE);
 
   // Cuando cambia cualquier filtro, reset a pagina 1
-  useEffect(() => { setCurrentPage(1); }, [search, filterEstatus, filterCliente, filterPlaza, filterArte, filterAps, filterPost, filterTipoArchivo]);
+  useEffect(() => { setCurrentPage(1); }, [search, filterEstatus, filterCliente, filterPlaza, filterArte, filterAps, filterPost, filterTipoArchivo, filterTipo, filterFormato]);
 
   if (!isOpen) return null;
 
@@ -887,6 +923,22 @@ export function VersionarioArtesPreviewModal({ isOpen, onClose, preview, isLoadi
               value={filterTipoArchivo}
               onChange={setFilterTipoArchivo}
               onClear={() => setFilterTipoArchivo('')}
+              isDark={isDark}
+            />
+            <FilterChipModal
+              label="Tipo"
+              options={filterOptions.tipos}
+              value={filterTipo}
+              onChange={setFilterTipo}
+              onClear={() => setFilterTipo('')}
+              isDark={isDark}
+            />
+            <FilterChipModal
+              label="Formato"
+              options={filterOptions.formatos}
+              value={filterFormato}
+              onChange={setFilterFormato}
+              onClear={() => setFilterFormato('')}
               isDark={isDark}
             />
             {/* Filtro Con/Sin Arte */}
@@ -1140,18 +1192,48 @@ export function VersionarioArtesPreviewModal({ isOpen, onClose, preview, isLoadi
               </button>
             </div>
           )}
-          <button
-            onClick={onDownload}
-            disabled={isLoading || isDownloading || totalFilas === 0}
-            className={`flex items-center gap-2 px-4 py-2 text-sm font-medium rounded-lg transition-all ${
-              !isLoading && !isDownloading && totalFilas > 0
-                ? 'bg-gradient-to-r from-purple-600 to-purple-700 hover:from-purple-500 hover:to-purple-600 text-white shadow-lg shadow-purple-500/25'
-                : isDark ? 'bg-zinc-800 text-zinc-500 cursor-not-allowed' : 'bg-gray-200 text-gray-400 cursor-not-allowed'
-            }`}
-          >
-            <Download className="h-4 w-4" />
-            {isDownloading ? 'Generando Excel...' : 'Descargar Excel'}
-          </button>
+          {(() => {
+            // Set de circuitKey de las filas visibles. Si NO hay filtros ni
+            // busqueda, mandamos null para que exporte todo (mas rapido).
+            const hasFiltering = !!search.trim() || activeFilterCount > 0;
+            const visibleKeys: Set<string> | null = hasFiltering
+              ? new Set(filteredRows.map(r => r.circuitKey))
+              : null;
+            const cantidad = hasFiltering ? filteredRows.length : totalFilas;
+            const enabled = !isLoading && !isDownloading && cantidad > 0;
+            return (
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={() => onDownload({ filterKeys: visibleKeys, skipImages: true })}
+                  disabled={!enabled}
+                  title="Descarga rapida sin miniaturas (solo URLs). Util cuando el embed tarda mucho."
+                  className={`flex items-center gap-2 px-3 py-2 text-sm font-medium rounded-lg transition-all border ${
+                    enabled
+                      ? isDark
+                        ? 'bg-zinc-800 hover:bg-zinc-700 text-zinc-200 border-zinc-700'
+                        : 'bg-white hover:bg-gray-50 text-gray-700 border-gray-300'
+                      : isDark ? 'bg-zinc-800/50 text-zinc-600 border-zinc-800 cursor-not-allowed' : 'bg-gray-100 text-gray-400 border-gray-200 cursor-not-allowed'
+                  }`}
+                >
+                  <Download className="h-4 w-4" />
+                  Rápido (sin imágenes)
+                </button>
+                <button
+                  onClick={() => onDownload({ filterKeys: visibleKeys, skipImages: false })}
+                  disabled={!enabled}
+                  className={`flex items-center gap-2 px-4 py-2 text-sm font-medium rounded-lg transition-all ${
+                    enabled
+                      ? 'bg-gradient-to-r from-purple-600 to-purple-700 hover:from-purple-500 hover:to-purple-600 text-white shadow-lg shadow-purple-500/25'
+                      : isDark ? 'bg-zinc-800 text-zinc-500 cursor-not-allowed' : 'bg-gray-200 text-gray-400 cursor-not-allowed'
+                  }`}
+                  title={hasFiltering ? `Exportar ${cantidad} fila(s) con miniaturas` : 'Exportar todo con miniaturas'}
+                >
+                  <Download className="h-4 w-4" />
+                  {isDownloading ? 'Generando Excel...' : `Descargar Excel${hasFiltering ? ` (${cantidad})` : ''}`}
+                </button>
+              </div>
+            );
+          })()}
         </div>
       </div>
       {/* Galería de artes (carrusel + descarga) */}
