@@ -1468,11 +1468,22 @@ export function PropuestasPage() {
   const needsAllData = !!groupBy || advancedFilters.length > 0;
   const effectiveLimit = needsAllData ? 200 : limit;
 
+  // El listado oculta 'Rechazada' por default. PERO si el usuario agrega un
+  // filtro avanzado sobre el campo 'status' (p.ej. status = Rechazada), dejamos
+  // que ese filtro controle el estatus: pedimos al backend TODO (sin excluir
+  // rechazadas) y el filtro cliente-side se encarga de acotar. Así se pueden
+  // ver las rechazadas a voluntad sin perder el default de ocultarlas.
+  const statusInAdvanced = useMemo(
+    () => advancedFilters.some(f => f.field === 'status' && f.value.trim() !== ''),
+    [advancedFilters]
+  );
+  const excludeRechazadas = !statusInAdvanced;
+
   // Stats: WS invalida en cambios reales; staleTime corto evita refetches en
   // re-renders del padre. Pasamos `search` para que total/chart reflejen los
   // resultados filtrados aunque estemos en la página 1 de N.
   const { data: stats } = useQuery({
-    queryKey: ['propuestas-stats', status, yearInicio, yearFin, catorcenaInicio, catorcenaFin, tipoPeriodo, serverSearch],
+    queryKey: ['propuestas-stats', status, yearInicio, yearFin, catorcenaInicio, catorcenaFin, tipoPeriodo, serverSearch, excludeRechazadas],
     queryFn: () => propuestasService.getStats({
       status: status || undefined,
       yearInicio,
@@ -1481,13 +1492,13 @@ export function PropuestasPage() {
       catorcenaFin,
       tipoPeriodo: tipoPeriodo || undefined,
       search: serverSearch,
-      excludeRechazadas: true,
+      excludeRechazadas,
     }),
     staleTime: 1000 * 30,
   });
 
   const { data, isLoading } = useQuery({
-    queryKey: ['propuestas', needsAllData ? 1 : page, status, serverSearch, yearInicio, yearFin, catorcenaInicio, catorcenaFin, sortBy, sortOrder, groupBy, tipoPeriodo, needsAllData, historialFilter],
+    queryKey: ['propuestas', needsAllData ? 1 : page, status, serverSearch, yearInicio, yearFin, catorcenaInicio, catorcenaFin, sortBy, sortOrder, groupBy, tipoPeriodo, needsAllData, historialFilter, excludeRechazadas],
     queryFn: () =>
       propuestasService.getAll({
         page: needsAllData ? 1 : page,
@@ -1500,14 +1511,17 @@ export function PropuestasPage() {
         catorcenaFin,
         soloAtendidas: true,
         tipoPeriodo: tipoPeriodo || undefined,
-        excludeRechazadas: true,
+        excludeRechazadas,
         ...historialFilter,
       }),
     staleTime: 1000 * 30, // 30 s — WS invalida en cambios reales
     placeholderData: (prev) => prev, // mantiene la tabla anterior al paginar/filtrar
   });
 
-  const allStatuses = STATUS_OPTIONS;
+  // 'Rechazada' se oculta del chip simple de Status (las propuestas rechazadas
+  // están ocultas por default). Sigue disponible en el filtro avanzado para
+  // quien quiera verlas explícitamente.
+  const allStatuses = STATUS_OPTIONS.filter(s => s !== 'Rechazada');
 
   const hasPeriodFilter = yearInicio !== undefined && yearFin !== undefined;
   const hasActiveFilters = !!(status || tipoPeriodo || hasPeriodFilter || groupBy || sortBy !== 'fecha' || advancedFilters.length > 0 || searchTags.length > 0);
@@ -1528,6 +1542,12 @@ export function PropuestasPage() {
           values.add(String(val));
         }
       });
+      // El campo 'status' siempre ofrece todos los estatus conocidos (incl.
+      // Rechazada), aunque por default estén ocultos del listado: así el usuario
+      // puede seleccionarlos en el filtro avanzado para verlos.
+      if (fieldConfig.field === 'status') {
+        STATUS_OPTIONS.forEach(s => values.add(s));
+      }
       valuesMap[fieldConfig.field] = Array.from(values).sort();
     });
     return valuesMap;
@@ -2475,7 +2495,7 @@ export function PropuestasPage() {
               catorcenaInicio,
               catorcenaFin,
               tipoPeriodo: tipoPeriodo || undefined,
-              excludeRechazadas: true,
+              excludeRechazadas,
             }}
             advancedFilters={advancedFilters}
             activeGroupings={versionarioGroupings}

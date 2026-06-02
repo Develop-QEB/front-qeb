@@ -1251,8 +1251,19 @@ export function CampanasPage() {
   // razon_social, CUIC, marca, código de inventario, etc.
   const serverSearch = allSearchTerms.length > 0 ? allSearchTerms.join('|') : undefined;
 
+  // El listado oculta 'Rechazada' y 'Cancelada' por default. PERO si el usuario
+  // agrega un filtro avanzado sobre el campo 'status' (p.ej. status = Rechazada),
+  // dejamos que ese filtro controle el estatus: pedimos al backend sin excluir
+  // rechazadas/canceladas y el filtro cliente-side se encarga de acotar. Así se
+  // pueden ver a voluntad sin perder el default de ocultarlas.
+  const statusInAdvanced = useMemo(
+    () => advancedFilters.some(f => f.field === 'status' && f.value.trim() !== ''),
+    [advancedFilters]
+  );
+  const excludeRechazadas = !statusInAdvanced;
+
   const { data, isLoading } = useQuery({
-    queryKey: ['campanas', needsAllData ? 1 : page, status, yearInicio, yearFin, catorcenaInicio, catorcenaFin, tipoPeriodo, needsAllData, serverSearch, effectiveLimit, historialFilter],
+    queryKey: ['campanas', needsAllData ? 1 : page, status, yearInicio, yearFin, catorcenaInicio, catorcenaFin, tipoPeriodo, needsAllData, serverSearch, effectiveLimit, historialFilter, excludeRechazadas],
     queryFn: () =>
       campanasService.getAll({
         page: needsAllData ? 1 : page,
@@ -1264,7 +1275,7 @@ export function CampanasPage() {
         catorcenaInicio,
         catorcenaFin,
         tipoPeriodo: tipoPeriodo || undefined,
-        excludeRechazadas: true,
+        excludeRechazadas,
         ...historialFilter,
       }),
     staleTime: 1000 * 30, // 30 s — WS invalida en cambios reales
@@ -1275,7 +1286,7 @@ export function CampanasPage() {
   // Incluimos serverSearch para que total/chart reflejen los resultados
   // filtrados aunque estemos en la página 1 de N.
   const { data: statsData, isLoading: isLoadingStats } = useQuery({
-    queryKey: ['campanas-stats', status, yearInicio, yearFin, catorcenaInicio, catorcenaFin, tipoPeriodo, serverSearch],
+    queryKey: ['campanas-stats', status, yearInicio, yearFin, catorcenaInicio, catorcenaFin, tipoPeriodo, serverSearch, excludeRechazadas],
     queryFn: () =>
       campanasService.getStats({
         status: (status && status !== 'Incompleta') ? status : undefined,
@@ -1285,7 +1296,7 @@ export function CampanasPage() {
         catorcenaInicio,
         catorcenaFin,
         tipoPeriodo: tipoPeriodo || undefined,
-        excludeRechazadas: true,
+        excludeRechazadas,
       }),
     staleTime: 1000 * 30,
   });
@@ -2188,6 +2199,13 @@ export function CampanasPage() {
           values.add(String(val));
         }
       });
+      // El campo 'status' siempre ofrece los estatus ocultos por default
+      // (Rechazada / Cancelada): así el usuario puede seleccionarlos en el
+      // filtro avanzado para verlos, aunque no aparezcan en el listado base.
+      if (fieldConfig.field === 'status') {
+        values.add('Rechazada');
+        values.add('Cancelada');
+      }
       valuesMap[fieldConfig.field] = Array.from(values).sort();
     });
     return valuesMap;
