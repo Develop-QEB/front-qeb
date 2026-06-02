@@ -23,6 +23,7 @@ import { BloqueoBulkModal, BloqueoBulkData } from './BloqueoBulkModal';
 import { AnalisisOcupacionModal } from './AnalisisOcupacionModal';
 import { AnalisisOcupacionListModal } from './AnalisisOcupacionListModal';
 import { ReorganizarOcupacionModal } from './ReorganizarOcupacionModal';
+import { BloqueoMasivoModal } from './BloqueoMasivoModal';
 
 const getEstatusStyles = (isDark: boolean): Record<string, { bg: string; text: string; border: string }> => ({
   Activo: { bg: isDark ? 'bg-emerald-500/20' : 'bg-emerald-50', text: isDark ? 'text-emerald-300' : 'text-emerald-700', border: 'border-emerald-500/30' },
@@ -173,7 +174,27 @@ export function InventariosPage() {
   const [isAnalisisListOpen, setIsAnalisisListOpen] = useState(false);
   const [openingAnalisis, setOpeningAnalisis] = useState(false);
   const [isReorganizarOpen, setIsReorganizarOpen] = useState(false);
+  const [isBloqueoMasivoOpen, setIsBloqueoMasivoOpen] = useState(false);
+  const [bloqueoMasivoInventarios, setBloqueoMasivoInventarios] = useState<InventarioResumen[]>([]);
+  const [analisisMenuOpen, setAnalisisMenuOpen] = useState(false);
+  const [bloqueoMenuOpen, setBloqueoMenuOpen] = useState(false);
+  const analisisMenuRef = useRef<HTMLDivElement>(null);
+  const bloqueoMenuRef = useRef<HTMLDivElement>(null);
   const isDev = user?.rol === 'DEV';
+
+  useEffect(() => {
+    if (!analisisMenuOpen && !bloqueoMenuOpen) return;
+    const handler = (e: MouseEvent) => {
+      if (analisisMenuOpen && analisisMenuRef.current && !analisisMenuRef.current.contains(e.target as Node)) {
+        setAnalisisMenuOpen(false);
+      }
+      if (bloqueoMenuOpen && bloqueoMenuRef.current && !bloqueoMenuRef.current.contains(e.target as Node)) {
+        setBloqueoMenuOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+  }, [analisisMenuOpen, bloqueoMenuOpen]);
 
   useEffect(() => {
     if (!analisisIdParam) return;
@@ -546,6 +567,35 @@ export function InventariosPage() {
     setAnalisisInicial(undefined);
     setAnalisisInicialInventarios([]);
     setIsAnalisisOpen(true);
+  };
+
+  const openBloqueoMasivo = async () => {
+    if (selectedRows.size === 0) {
+      setBloqueoMasivoInventarios([]);
+      setIsBloqueoMasivoOpen(true);
+      return;
+    }
+    setOpeningAnalisis(true);
+    try {
+      const ids = Array.from(selectedRows);
+      const enPagina: Record<number, Inventario> = {};
+      sortedData.forEach(i => { if (selectedRows.has(i.id)) enPagina[i.id] = i; });
+      const faltantes = ids.filter(id => !(id in enPagina));
+      const fetched = await Promise.all(
+        faltantes.map(async id => {
+          try { return await inventariosService.getById(id); } catch { return null; }
+        })
+      );
+      fetched.forEach(inv => { if (inv) enPagina[inv.id] = inv; });
+      const resumenes = ids
+        .map(id => enPagina[id])
+        .filter((x): x is Inventario => !!x)
+        .map(inventarioToResumen);
+      setBloqueoMasivoInventarios(resumenes);
+      setIsBloqueoMasivoOpen(true);
+    } finally {
+      setOpeningAnalisis(false);
+    }
   };
 
   const openAnalisisGuardado = (a: AnalisisOcupacion) => {
@@ -1160,74 +1210,144 @@ export function InventariosPage() {
                 )}
               </button>
 
-              {/* Análisis de Ocupación */}
-              <button
-                onClick={selectedRows.size > 0 ? openAnalisisFromSelection : openAnalisisVacio}
-                disabled={openingAnalisis}
-                title={selectedRows.size > 0 ? `Analizar ${selectedRows.size} seleccionados` : 'Crear análisis de ocupación'}
-                className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-medium border transition-all ${isDark ? 'bg-fuchsia-500/10 hover:bg-fuchsia-500/20 text-fuchsia-300 border-fuchsia-500/30' : 'bg-fuchsia-50 hover:bg-fuchsia-100 text-fuchsia-700 border-fuchsia-200'} disabled:opacity-50`}
-              >
-                {openingAnalisis ? <Loader2 className="h-4 w-4 animate-spin" /> : <BarChart3 className="h-4 w-4" />}
-                Análisis de Ocupación
-                {selectedRows.size > 0 && (
-                  <span className={`ml-1 px-1.5 rounded-full text-[10px] font-bold ${isDark ? 'bg-fuchsia-500/30 text-fuchsia-200' : 'bg-fuchsia-200 text-fuchsia-800'}`}>
-                    {selectedRows.size}
-                  </span>
+              {/* Análisis ▾ */}
+              <div ref={analisisMenuRef} className="relative">
+                <button
+                  onClick={() => setAnalisisMenuOpen(o => !o)}
+                  disabled={openingAnalisis}
+                  className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-medium border transition-all ${isDark ? 'bg-fuchsia-500/10 hover:bg-fuchsia-500/20 text-fuchsia-300 border-fuchsia-500/30' : 'bg-fuchsia-50 hover:bg-fuchsia-100 text-fuchsia-700 border-fuchsia-200'} disabled:opacity-50`}
+                >
+                  {openingAnalisis ? <Loader2 className="h-4 w-4 animate-spin" /> : <BarChart3 className="h-4 w-4" />}
+                  Análisis
+                  {selectedRows.size > 0 && (
+                    <span className={`ml-1 px-1.5 rounded-full text-[10px] font-bold ${isDark ? 'bg-fuchsia-500/30 text-fuchsia-200' : 'bg-fuchsia-200 text-fuchsia-800'}`}>
+                      {selectedRows.size}
+                    </span>
+                  )}
+                  <ChevronDown className={`h-3.5 w-3.5 transition-transform ${analisisMenuOpen ? 'rotate-180' : ''}`} />
+                </button>
+                {analisisMenuOpen && (
+                  <div className={`absolute right-0 mt-1 w-64 rounded-xl border shadow-xl z-50 overflow-hidden ${isDark ? 'bg-zinc-900 border-fuchsia-500/30' : 'bg-white border-fuchsia-200'}`}>
+                    <button
+                      onClick={() => { setAnalisisMenuOpen(false); selectedRows.size > 0 ? openAnalisisFromSelection() : openAnalisisVacio(); }}
+                      className={`w-full flex items-start gap-2.5 px-3 py-2.5 text-left text-sm transition-colors ${isDark ? 'text-fuchsia-200 hover:bg-fuchsia-500/10' : 'text-fuchsia-800 hover:bg-fuchsia-50'}`}
+                    >
+                      <BarChart3 className="h-4 w-4 mt-0.5 shrink-0" />
+                      <div className="flex-1 min-w-0">
+                        <div className="font-medium flex items-center gap-1.5">
+                          Análisis de Ocupación
+                          {selectedRows.size > 0 && (
+                            <span className={`px-1.5 rounded-full text-[10px] font-bold ${isDark ? 'bg-fuchsia-500/30 text-fuchsia-200' : 'bg-fuchsia-200 text-fuchsia-800'}`}>
+                              {selectedRows.size}
+                            </span>
+                          )}
+                        </div>
+                        <div className={`text-[11px] ${isDark ? 'text-zinc-500' : 'text-gray-500'}`}>
+                          {selectedRows.size > 0 ? `Analizar ${selectedRows.size} seleccionados` : 'Crear un análisis nuevo'}
+                        </div>
+                      </div>
+                    </button>
+                    <button
+                      onClick={() => { setAnalisisMenuOpen(false); setIsAnalisisListOpen(true); }}
+                      className={`w-full flex items-start gap-2.5 px-3 py-2.5 text-left text-sm transition-colors border-t ${isDark ? 'text-zinc-200 hover:bg-zinc-800 border-zinc-800' : 'text-gray-700 hover:bg-gray-50 border-gray-100'}`}
+                    >
+                      <FolderOpen className="h-4 w-4 mt-0.5 shrink-0" />
+                      <div className="flex-1 min-w-0">
+                        <div className="font-medium">Guardados</div>
+                        <div className={`text-[11px] ${isDark ? 'text-zinc-500' : 'text-gray-500'}`}>Abrir un análisis guardado</div>
+                      </div>
+                    </button>
+                    {isDev && (
+                      <button
+                        onClick={() => { setAnalisisMenuOpen(false); setIsReorganizarOpen(true); }}
+                        className={`w-full flex items-start gap-2.5 px-3 py-2.5 text-left text-sm transition-colors border-t ${isDark ? 'text-cyan-300 hover:bg-cyan-500/10 border-zinc-800' : 'text-cyan-700 hover:bg-cyan-50 border-gray-100'}`}
+                      >
+                        <Activity className="h-4 w-4 mt-0.5 shrink-0" />
+                        <div className="flex-1 min-w-0">
+                          <div className="font-medium">Revisar por Campaña <span className={`ml-1 text-[10px] font-semibold ${isDark ? 'text-cyan-500/80' : 'text-cyan-600'}`}>DEV</span></div>
+                          <div className={`text-[11px] ${isDark ? 'text-zinc-500' : 'text-gray-500'}`}>Reorganizar ocupación por campaña</div>
+                        </div>
+                      </button>
+                    )}
+                  </div>
                 )}
-              </button>
+              </div>
 
-              {/* Bloquear masivo */}
-              {selectedRows.size > 0 && (
+              {/* Bloqueo ▾ */}
+              <div ref={bloqueoMenuRef} className="relative">
                 <button
-                  onClick={async () => {
-                    // Recolecta los inventarios seleccionados — usa los visibles
-                    // en `sortedData` y completa los que estén fuera de la página
-                    // con un fetch individual (mismo patrón que Análisis).
-                    const ids = Array.from(selectedRows);
-                    const enPagina: Record<number, Inventario> = {};
-                    sortedData.forEach(i => { if (selectedRows.has(i.id)) enPagina[i.id] = i; });
-                    const faltantes = ids.filter(id => !(id in enPagina));
-                    const fetched = await Promise.all(
-                      faltantes.map(async id => {
-                        try { return await inventariosService.getById(id); } catch { return null; }
-                      })
-                    );
-                    fetched.forEach(inv => { if (inv) enPagina[inv.id] = inv; });
-                    const items = ids.map(id => enPagina[id]).filter(Boolean) as Inventario[];
-                    if (items.length > 0) setBloqueoBulkItems(items);
-                  }}
-                  title={`Bloquear ${selectedRows.size} seleccionados`}
-                  className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-medium border transition-all ${isDark ? 'bg-rose-500/10 hover:bg-rose-500/20 text-rose-300 border-rose-500/30' : 'bg-rose-50 hover:bg-rose-100 text-rose-700 border-rose-200'}`}
+                  onClick={() => setBloqueoMenuOpen(o => !o)}
+                  disabled={openingAnalisis}
+                  className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-medium border transition-all ${isDark ? 'bg-rose-500/10 hover:bg-rose-500/20 text-rose-300 border-rose-500/30' : 'bg-rose-50 hover:bg-rose-100 text-rose-700 border-rose-200'} disabled:opacity-50`}
                 >
-                  <EyeOff className="h-4 w-4" />
-                  Bloquear
-                  <span className={`ml-1 px-1.5 rounded-full text-[10px] font-bold ${isDark ? 'bg-rose-500/30 text-rose-200' : 'bg-rose-200 text-rose-800'}`}>
-                    {selectedRows.size}
-                  </span>
+                  <Ban className="h-4 w-4" />
+                  Bloqueo
+                  {selectedRows.size > 0 && (
+                    <span className={`ml-1 px-1.5 rounded-full text-[10px] font-bold ${isDark ? 'bg-rose-500/30 text-rose-200' : 'bg-rose-200 text-rose-800'}`}>
+                      {selectedRows.size}
+                    </span>
+                  )}
+                  <ChevronDown className={`h-3.5 w-3.5 transition-transform ${bloqueoMenuOpen ? 'rotate-180' : ''}`} />
                 </button>
-              )}
-
-              {/* Análisis Guardados */}
-              <button
-                onClick={() => setIsAnalisisListOpen(true)}
-                title="Ver análisis guardados"
-                className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-medium border transition-all ${isDark ? 'bg-zinc-800 hover:bg-zinc-700 text-zinc-300 border-zinc-700' : 'bg-white hover:bg-gray-50 text-gray-700 border-gray-300'}`}
-              >
-                <FolderOpen className="h-4 w-4" />
-                Guardados
-              </button>
-
-              {/* Revisar por Campaña (DEV) */}
-              {isDev && (
-                <button
-                  onClick={() => setIsReorganizarOpen(true)}
-                  title="Revisar y reorganizar ocupación por campaña (DEV)"
-                  className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-medium border transition-all ${isDark ? 'bg-cyan-500/10 hover:bg-cyan-500/20 text-cyan-300 border-cyan-500/30' : 'bg-cyan-50 hover:bg-cyan-100 text-cyan-700 border-cyan-200'}`}
-                >
-                  <Activity className="h-4 w-4" />
-                  Revisar por Campaña
-                </button>
-              )}
+                {bloqueoMenuOpen && (
+                  <div className={`absolute right-0 mt-1 w-72 rounded-xl border shadow-xl z-50 overflow-hidden ${isDark ? 'bg-zinc-900 border-rose-500/30' : 'bg-white border-rose-200'}`}>
+                    <button
+                      onClick={async () => {
+                        setBloqueoMenuOpen(false);
+                        if (selectedRows.size === 0) return;
+                        const ids = Array.from(selectedRows);
+                        const enPagina: Record<number, Inventario> = {};
+                        sortedData.forEach(i => { if (selectedRows.has(i.id)) enPagina[i.id] = i; });
+                        const faltantes = ids.filter(id => !(id in enPagina));
+                        const fetched = await Promise.all(
+                          faltantes.map(async id => {
+                            try { return await inventariosService.getById(id); } catch { return null; }
+                          })
+                        );
+                        fetched.forEach(inv => { if (inv) enPagina[inv.id] = inv; });
+                        const items = ids.map(id => enPagina[id]).filter(Boolean) as Inventario[];
+                        if (items.length > 0) setBloqueoBulkItems(items);
+                      }}
+                      disabled={selectedRows.size === 0}
+                      className={`w-full flex items-start gap-2.5 px-3 py-2.5 text-left text-sm transition-colors ${isDark ? 'text-rose-200 hover:bg-rose-500/10 disabled:text-zinc-600 disabled:hover:bg-transparent' : 'text-rose-800 hover:bg-rose-50 disabled:text-gray-400 disabled:hover:bg-transparent'} disabled:cursor-not-allowed`}
+                    >
+                      <EyeOff className="h-4 w-4 mt-0.5 shrink-0" />
+                      <div className="flex-1 min-w-0">
+                        <div className="font-medium flex items-center gap-1.5">
+                          Bloquear seleccionados
+                          {selectedRows.size > 0 && (
+                            <span className={`px-1.5 rounded-full text-[10px] font-bold ${isDark ? 'bg-rose-500/30 text-rose-200' : 'bg-rose-200 text-rose-800'}`}>
+                              {selectedRows.size}
+                            </span>
+                          )}
+                        </div>
+                        <div className={`text-[11px] ${isDark ? 'text-zinc-500' : 'text-gray-500'}`}>
+                          {selectedRows.size > 0 ? `Bloqueo rápido de ${selectedRows.size} inventario(s)` : 'Marca filas en la tabla para activar'}
+                        </div>
+                      </div>
+                    </button>
+                    <button
+                      onClick={() => { setBloqueoMenuOpen(false); openBloqueoMasivo(); }}
+                      className={`w-full flex items-start gap-2.5 px-3 py-2.5 text-left text-sm transition-colors border-t ${isDark ? 'text-rose-200 hover:bg-rose-500/10 border-zinc-800' : 'text-rose-800 hover:bg-rose-50 border-gray-100'}`}
+                    >
+                      <Ban className="h-4 w-4 mt-0.5 shrink-0" />
+                      <div className="flex-1 min-w-0">
+                        <div className="font-medium flex items-center gap-1.5">
+                          Bloqueo Masivo (Matriz)
+                          {selectedRows.size > 0 && (
+                            <span className={`px-1.5 rounded-full text-[10px] font-bold ${isDark ? 'bg-rose-500/30 text-rose-200' : 'bg-rose-200 text-rose-800'}`}>
+                              {selectedRows.size}
+                            </span>
+                          )}
+                        </div>
+                        <div className={`text-[11px] ${isDark ? 'text-zinc-500' : 'text-gray-500'}`}>
+                          Matriz inventario × catorcena con tareas a Tráfico
+                        </div>
+                      </div>
+                    </button>
+                  </div>
+                )}
+              </div>
 
               {/* Bulk upload button */}
               <button
@@ -2362,6 +2482,14 @@ export function InventariosPage() {
           onClose={() => setIsReorganizarOpen(false)}
         />
       )}
+
+      {/* Bloqueo Masivo */}
+      <BloqueoMasivoModal
+        open={isBloqueoMasivoOpen}
+        onClose={() => setIsBloqueoMasivoOpen(false)}
+        initialInventarios={bloqueoMasivoInventarios}
+      />
+
     </div>
   );
 }
