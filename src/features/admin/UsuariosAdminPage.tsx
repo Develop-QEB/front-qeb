@@ -106,13 +106,13 @@ const getPuestosPorArea = (area: string): string[] => {
 };
 
 // Funcion para obtener roles segun area (puestos del area + Administrador)
-// currentUserRol: rol del usuario logueado, para proteger el rol DEV
-const getRolesPorArea = (area: string, currentUserRol?: string): string[] => {
+// El rol DEV NO se ofrece NUNCA desde este selector — absolutamente nadie
+// puede asignarlo desde el screen de usuarios. Los DEV se gestionan por DB
+// directamente.
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
+const getRolesPorArea = (area: string, _currentUserRol?: string): string[] => {
   const puestos = PUESTOS_POR_AREA[area] || [];
-  if (area === 'Desarrollo') {
-    // Solo un DEV puede asignar el rol DEV
-    return currentUserRol === 'DEV' ? ['DEV'] : [];
-  }
+  if (area === 'Desarrollo') return [];
   return [...puestos, 'Administrador'];
 };
 
