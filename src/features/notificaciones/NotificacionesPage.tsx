@@ -1413,6 +1413,14 @@ function getNavigationLabel(tipo: string, tipoTarea?: string, campaniaId?: numbe
     if (propuestaId) return 'Ver Propuesta';
     return 'Ver Solicitud';
   }
+  // Notif de comentario: el titulo dice donde fue dejado el comentario
+  // (en solicitud / en propuesta / en campaña). Esto va antes del fallback
+  // de propuestaId, que se cumple para los 3 casos y mandaba todo a propuesta.
+  const commentEntity = getCommentEntity(titulo || '');
+  if (commentEntity === 'campana') return 'Ver Campaña';
+  if (commentEntity === 'propuesta') return 'Ver Propuesta';
+  if (commentEntity === 'solicitud') return 'Ver Solicitud';
+
   if (tipoTarea?.toLowerCase().includes('solicitud')) {
     return 'Ver Solicitud';
   }
@@ -1442,6 +1450,19 @@ function getNavigationLabel(tipo: string, tipoTarea?: string, campaniaId?: numbe
 function isCommentNotification(titulo: string): boolean {
   const lower = titulo.toLowerCase();
   return lower.includes('comentario') || lower.includes('comment');
+}
+
+// Para una notif de comentario, distinguir si el comentario fue dejado en
+// solicitud, propuesta o campaña usando el titulo "Nuevo comentario en X #..."
+// Sin esto, el front cae al fallback que ve id_propuesta poblado y siempre
+// dice "Ver Propuesta" aunque el comentario haya sido en una campaña.
+function getCommentEntity(titulo: string): 'campana' | 'propuesta' | 'solicitud' | null {
+  if (!isCommentNotification(titulo)) return null;
+  const lower = titulo.toLowerCase();
+  if (lower.includes('en campaña') || lower.includes('en campana')) return 'campana';
+  if (lower.includes('en propuesta')) return 'propuesta';
+  if (lower.includes('en solicitud')) return 'solicitud';
+  return null;
 }
 
 // Función para verificar si es una tarea de rechazo que requiere edición
@@ -2189,6 +2210,29 @@ function TaskDrawer({
     if (tarea.tipo === 'Mención en Ticket' && tarea.id_solicitud) {
       onNavigate(`/admin/tickets-historial?ticketId=${tarea.id_solicitud}`);
       return;
+    }
+    // Notif de comentario: el titulo dice donde fue dejado (solicitud / propuesta / campaña).
+    // Sin esto el handler caia al ultimo branch (que solo entra si tipo es
+    // Autorización/Rechazo) o al de referencia_tipo+referencia_id (que no existen),
+    // por eso el boton no llevaba a ningun lado o llevaba a propuesta por id_propuesta.
+    const commentEntity = getCommentEntity(tarea.titulo || '');
+    if (commentEntity === 'campana' && tarea.campania_id) {
+      onNavigate(`/campanas/${tarea.campania_id}`);
+      return;
+    }
+    if (commentEntity === 'propuesta' && tarea.id_propuesta) {
+      const propId = parseInt(tarea.id_propuesta);
+      if (!isNaN(propId)) {
+        onNavigate(getDirectNavigationPath('propuesta', propId, tarea.titulo || '', tarea.tipo || undefined, null, propId));
+        return;
+      }
+    }
+    if (commentEntity === 'solicitud' && tarea.id_solicitud) {
+      const solicitudId = parseInt(tarea.id_solicitud);
+      if (!isNaN(solicitudId)) {
+        onNavigate(getDirectNavigationPath('solicitud', solicitudId, tarea.titulo || '', tarea.tipo || undefined));
+        return;
+      }
     }
     // Si tiene referencia_tipo y referencia_id, usar esos
     if (tarea.referencia_tipo && tarea.referencia_id) {
@@ -3826,6 +3870,26 @@ export function NotificacionesPage() {
                                 if (tarea.tipo === 'Mención en Ticket' && tarea.id_solicitud) {
                                   navigate(`/admin/tickets-historial?ticketId=${tarea.id_solicitud}`);
                                   return;
+                                }
+                                // Notif de comentario: navegar segun el titulo (solicitud / propuesta / campana).
+                                const commentEntity = getCommentEntity(tarea.titulo || '');
+                                if (commentEntity === 'campana' && tarea.campania_id) {
+                                  navigate(`/campanas/${tarea.campania_id}`);
+                                  return;
+                                }
+                                if (commentEntity === 'propuesta' && tarea.id_propuesta) {
+                                  const propId = parseInt(tarea.id_propuesta);
+                                  if (!isNaN(propId)) {
+                                    navigate(getDirectNavigationPath('propuesta', propId, tarea.titulo || '', tarea.tipo || undefined, null, propId));
+                                    return;
+                                  }
+                                }
+                                if (commentEntity === 'solicitud' && tarea.id_solicitud) {
+                                  const solicitudId = parseInt(tarea.id_solicitud);
+                                  if (!isNaN(solicitudId)) {
+                                    navigate(getDirectNavigationPath('solicitud', solicitudId, tarea.titulo || '', tarea.tipo || undefined));
+                                    return;
+                                  }
                                 }
                                 if (tarea.tipo?.includes('Rechazo')) {
                                   if (tarea.referencia_tipo === 'propuesta' && tarea.id_propuesta) {
