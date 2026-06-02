@@ -10,6 +10,7 @@ import { useThemeStore } from '../../store/themeStore';
 import { useAuthStore } from '../../store/authStore';
 import { getPermissions } from '../../lib/permissions';
 import { useSocketHistorialAcciones } from '../../hooks/useSocket';
+import { formatHistorialDetalles } from '../../lib/historial';
 
 function formatFechaHora(fecha: string): string {
   const d = new Date(fecha);
@@ -41,46 +42,11 @@ function formatSubtipo(raw: string): string | null {
   return map[sub] || sub.charAt(0).toUpperCase() + sub.slice(1).replace(/_/g, ' ');
 }
 
+// Wrapper local: la pagina global espera '-' cuando no hay detalles; el
+// modulo compartido devuelve ''. Mantenemos la semantica original.
 function formatDetalles(detalles: string | null): string {
-  if (!detalles) return '-';
-  if (!detalles.startsWith('{') && !detalles.startsWith('[')) return detalles;
-  try {
-    const obj = JSON.parse(detalles);
-    const parts: string[] = [];
-    if (obj.aprobadoPor) {
-      parts.push(`Aprobado por: ${obj.aprobadoPor}`);
-      if (obj.tipo) parts.push(`Tipo: ${obj.tipo}`);
-      if (obj.carasAprobadas) parts.push(`${obj.carasAprobadas} circuito(s)`);
-      return parts.join(' | ');
-    }
-    if (obj.rechazadoPor) {
-      parts.push(`Rechazado por: ${obj.rechazadoPor}`);
-      if (obj.tipo) parts.push(`Tipo: ${obj.tipo}`);
-      if (obj.motivo) parts.push(`Motivo: ${obj.motivo}`);
-      return parts.join(' | ');
-    }
-    if (obj.usuario) parts.push(obj.usuario);
-    if (obj.origen) parts.push(`Origen: ${obj.origen}`);
-    if (obj.cambios?.length) {
-      for (const c of obj.cambios) {
-        parts.push(`${c.label || c.campo}: ${c.antes} → ${c.despues}`);
-      }
-    }
-    if (obj.cara) {
-      const noun = (obj.cara.formato || '').toUpperCase().includes('PUENTE PEATONAL') ? 'puentes' : 'caras';
-      parts.push(`Artículo: ${obj.cara.articulo}, ${obj.cara.caras} ${noun}`);
-    }
-    if (obj.caras?.length) {
-      const c = obj.caras[0];
-      const noun = (c.formato || '').toUpperCase().includes('PUENTE PEATONAL') ? 'puentes' : 'caras';
-      parts.push(`${c.articulo} — ${c.formato} — ${c.caras} ${noun}`);
-    }
-    if (obj.pendientesDg) parts.push(`Pendientes DG: ${obj.pendientesDg}`);
-    if (obj.pendientesDcm) parts.push(`Pendientes DCM: ${obj.pendientesDcm}`);
-    return parts.length > 0 ? parts.join(' | ') : detalles;
-  } catch {
-    return detalles;
-  }
+  const out = formatHistorialDetalles(detalles);
+  return out || '-';
 }
 
 const tipoColors: Record<string, { bg: string; text: string; darkBg: string; darkText: string }> = {

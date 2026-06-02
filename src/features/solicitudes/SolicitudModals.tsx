@@ -12,6 +12,7 @@ import { useSocketEquipos, useSocketSolicitud } from '../../hooks/useSocket';
 import { notificacionesService, ResumenAutorizacion } from '../../services/notificaciones.service';
 import { Solicitud, Catorcena } from '../../types';
 import { formatCurrency, formatDate } from '../../lib/utils';
+import { formatHistorialDetalles } from '../../lib/historial';
 import { UserAvatar } from '../../components/ui/user-avatar';
 import { useThemeStore } from '../../store/themeStore';
 import jsPDF from 'jspdf';
@@ -1154,14 +1155,17 @@ export function ViewSolicitudModal({ isOpen, onClose, solicitudId, onEdit, onAte
                     Historial
                   </h3>
                   <div className="space-y-3">
-                    {data.historial.slice(0, 5).map((h, idx) => (
-                      <div key={idx} className="flex items-center gap-3 text-sm">
-                        <div className="w-2 h-2 rounded-full bg-violet-500" />
-                        <span className={isDark ? 'text-zinc-400' : 'text-gray-500'}>{formatDate(h.fecha_hora)}</span>
-                        <span className="px-2 py-0.5 rounded bg-violet-500/20 text-violet-300 text-xs">{h.accion}</span>
-                        <span className={`${isDark ? 'text-zinc-500' : 'text-gray-400'} truncate flex-1`}>{h.detalles}</span>
-                      </div>
-                    ))}
+                    {data.historial.slice(0, 5).map((h, idx) => {
+                      const detalles = formatHistorialDetalles(h.detalles);
+                      return (
+                        <div key={idx} className="flex items-center gap-3 text-sm">
+                          <div className="w-2 h-2 rounded-full bg-violet-500" />
+                          <span className={isDark ? 'text-zinc-400' : 'text-gray-500'}>{formatDate(h.fecha_hora)}</span>
+                          <span className="px-2 py-0.5 rounded bg-violet-500/20 text-violet-300 text-xs">{h.accion}</span>
+                          <span className={`${isDark ? 'text-zinc-500' : 'text-gray-400'} truncate flex-1`} title={detalles}>{detalles}</span>
+                        </div>
+                      );
+                    })}
                   </div>
                 </div>
               )}
