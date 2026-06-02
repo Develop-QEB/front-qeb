@@ -8577,7 +8577,7 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
                                             {isLoadingThis ? <Loader2 className="h-4 w-4 animate-spin" /> : <Pencil className="h-4 w-4" />}
                                           </button>
                                         )}
-                                        {canEditResumen && (() => {
+                                        {canEditResumen && permissions.canEditCircuitoExistente && (() => {
                                           const reservaBlocked = hasReservas && !permissions.canDeleteCaraConReservas;
                                           const isDisabled = reservaBlocked || hasSavedPendingAuth || caraAPSBlocked || !!loadingCaraAction;
                                           return (

@@ -3431,15 +3431,17 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
                                                 <Pencil className="h-3.5 w-3.5" />
                                               </button>
                                             )}
-                                            <button
-                                              type="button"
-                                              onClick={() => { if (!authBlocked) handleRemoveCara(cara.id); }}
-                                              disabled={authBlocked}
-                                              className={`p-1 rounded text-[10px] ${authBlocked ? 'text-zinc-600 cursor-not-allowed' : 'hover:bg-red-500/20 text-red-400'}`}
-                                              title={authBlocked ? 'Autorización pendiente' : 'Eliminar'}
-                                            >
-                                              <Trash2 className="h-3.5 w-3.5" />
-                                            </button>
+                                            {permissions.canEditCircuitoExistente && (
+                                              <button
+                                                type="button"
+                                                onClick={() => { if (!authBlocked) handleRemoveCara(cara.id); }}
+                                                disabled={authBlocked}
+                                                className={`p-1 rounded text-[10px] ${authBlocked ? 'text-zinc-600 cursor-not-allowed' : 'hover:bg-red-500/20 text-red-400'}`}
+                                                title={authBlocked ? 'Autorización pendiente' : 'Eliminar'}
+                                              >
+                                                <Trash2 className="h-3.5 w-3.5" />
+                                              </button>
+                                            )}
                                           </div>
                                             );
                                           })()}

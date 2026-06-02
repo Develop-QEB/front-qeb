@@ -8571,7 +8571,7 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
                                             <Pencil className="h-4 w-4" />
                                           </button>
                                         )}
-                                        {canEditResumen && (() => {
+                                        {canEditResumen && permissions.canEditCircuitoExistente && (() => {
                                             const reservaBlocked = hasReservas && !permissions.canDeleteCaraConReservas;
                                             const isDisabled = reservaBlocked || hasSavedPendingAuth;
                                             return (
