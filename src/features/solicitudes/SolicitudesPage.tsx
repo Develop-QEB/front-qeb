@@ -1825,7 +1825,7 @@ export function SolicitudesPage() {
           queryClient.invalidateQueries({ queryKey: ['solicitudes-stats'] });
           setStatusSolicitud(null);
         }}
-        statusReadOnly={!permissions.canChangeEstadoSolicitud}
+        statusReadOnly={!permissions.canChangeEstadoSolicitud || statusSolicitud?.status === 'Atendida'}
       />
 
       {/* Atender Modal */}

@@ -6,7 +6,7 @@ import {
   ArrowUpDown, Calendar, DollarSign, FileText, Building2, MessageSquare,
   CheckCircle, Users, Send, Loader2, User, Share2, MapPinned, Wrench, Clock,
   Pencil, Trash2, Package, MapPin, Eye, Plus, AlertTriangle, List, LayoutGrid,
-  Layers, Check
+  Layers, Check, XCircle
 } from 'lucide-react';
 import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip as RechartsTooltip } from 'recharts';
 import { Header } from '../../components/layout/Header';
@@ -623,8 +623,13 @@ function StatusModal({ isOpen, onClose, propuesta, onStatusChange, allowedStatus
       const nonBonificacion = caraReservas.filter(r => r.estatus !== 'Bonificado');
       const rawFlujoReservado = nonBonificacion.filter(r => r.tipo_de_cara === 'A' || String(r.tipo_de_cara).startsWith('Flujo')).length;
       const rawContraReservado = nonBonificacion.filter(r => r.tipo_de_cara === 'B' || String(r.tipo_de_cara).startsWith('Contraflujo')).length;
-      const rawFlujoRequerido = Number(cara.caras_flujo) || 0;
-      const rawContraRequerido = Number(cara.caras_contraflujo) || 0;
+      // BF/CF/CT: caras_flujo y caras_contraflujo son el split INTERNO de la
+      // bonificación (KPI buscador), no caras requeridas. Si las contamos como
+      // requeridas, el badge "incompleto" se dispara aunque tenga sus N reservas.
+      const articuloUpper = (cara.articulo || '').toUpperCase();
+      const esBonifSplit = articuloUpper.startsWith('BF') || articuloUpper.startsWith('CF') || articuloUpper.startsWith('CT');
+      const rawFlujoRequerido = esBonifSplit ? 0 : (Number(cara.caras_flujo) || 0);
+      const rawContraRequerido = esBonifSplit ? 0 : (Number(cara.caras_contraflujo) || 0);
       const bonificacionRequerido = Number(cara.bonificacion) || 0;
 
       const flujoReservado = esMensual ? rawFlujoReservado + rawContraReservado : rawFlujoReservado;
@@ -915,6 +920,20 @@ function ApproveModal({ isOpen, onClose, propuesta, onSuccess }: ApproveModalPro
     enabled: isOpen,
   });
 
+  // Caras de la propuesta — detectar circuitos rechazados por DG/DCM y
+  // bloquear el botón Aprobar antes de que el back devuelva 400.
+  const { data: carasAprobar } = useQuery({
+    queryKey: ['propuesta-caras', propuesta?.id, 'approve-modal-rechazadas'],
+    queryFn: () => propuestasService.getCaras(propuesta!.id),
+    enabled: isOpen && !!propuesta,
+  });
+  const carasRechazadasAprobar = useMemo(() => {
+    const cs = carasAprobar || [];
+    const dg = cs.filter(c => c.autorizacion_dg === 'rechazado').length;
+    const dcm = cs.filter(c => c.autorizacion_dcm === 'rechazado').length;
+    return { total: dg + dcm, dg, dcm, hasAny: dg > 0 || dcm > 0 };
+  }, [carasAprobar]);
+
   const approveMutation = useMutation({
     mutationFn: () => propuestasService.approve(propuesta!.id, {
       precio_simulado: precio ? parseFloat(precio) : undefined,
@@ -1094,6 +1113,18 @@ function ApproveModal({ isOpen, onClose, propuesta, onSuccess }: ApproveModalPro
           </div>
         </div>
 
+        {carasRechazadasAprobar.hasAny && (
+          <div className={`mx-6 mb-3 p-3 rounded-lg border ${isDark ? 'bg-rose-500/10 border-rose-500/30 text-rose-200' : 'bg-rose-50 border-rose-200 text-rose-800'} text-sm flex items-start gap-2`}>
+            <XCircle className="h-4 w-4 mt-0.5 shrink-0" />
+            <span>
+              No se puede aprobar: hay <b>{carasRechazadasAprobar.total}</b> circuito(s) rechazado(s) por DG/DCM
+              {carasRechazadasAprobar.dg > 0 && carasRechazadasAprobar.dcm > 0
+                ? ` (${carasRechazadasAprobar.dg} por DG, ${carasRechazadasAprobar.dcm} por DCM)`
+                : carasRechazadasAprobar.dg > 0 ? ` (${carasRechazadasAprobar.dg} por DG)` : ` (${carasRechazadasAprobar.dcm} por DCM)`}
+              . Edita o quita esos circuitos primero.
+            </span>
+          </div>
+        )}
         {/* Footer */}
         <div className={`px-6 py-4 border-t ${isDark ? 'border-zinc-800' : 'border-gray-200'} flex justify-end gap-3`}>
           <button
@@ -1104,7 +1135,8 @@ function ApproveModal({ isOpen, onClose, propuesta, onSuccess }: ApproveModalPro
           </button>
           <button
             onClick={() => approveMutation.mutate()}
-            disabled={approveMutation.isPending}
+            disabled={approveMutation.isPending || carasRechazadasAprobar.hasAny}
+            title={carasRechazadasAprobar.hasAny ? `${carasRechazadasAprobar.total} circuito(s) rechazado(s) por DG/DCM — edita o quita esos circuitos primero` : undefined}
             className="px-6 py-2 rounded-lg bg-gradient-to-r from-emerald-600 to-green-600 text-white text-sm font-medium hover:from-emerald-500 hover:to-green-500 disabled:opacity-50 flex items-center gap-2"
           >
             {approveMutation.isPending ? (
@@ -1342,6 +1374,7 @@ export function PropuestasPage() {
   const limit = 20;
   const [activeView, setActiveView] = useState<'tabla' | 'versionario'>('tabla');
   const [exportingLayout, setExportingLayout] = useState(false);
+  const [exportingOcupacion, setExportingOcupacion] = useState(false);
   // Versionario (Desglose) grouping config — controlled here so the filter chip lives in the filters bar
   const [versionarioGroupings, setVersionarioGroupings] = useState<VersionarioGroupByField[]>(() => loadVersionarioGroupings());
   const [showVersionarioGroupConfig, setShowVersionarioGroupConfig] = useState(false);
@@ -1725,6 +1758,91 @@ export function PropuestasPage() {
     }
   };
 
+  // Export "Orden de Montaje (Ocupacion)" — formato inspirado en el de Campañas
+  // (Plaza, Tipo, Asesor, APS Global/Especifico, CUIC, Fechas, Cliente, Marca,
+  // Campana, Articulo, Negociacion, Caras, Tarifa, Monto Total). Adaptado para
+  // propuestas: 1 fila por circuito reservado (inv) — cuenta de caras tomada
+  // de inv.caras_totales (fallback 1) y monto = caras * tarifa.
+  const handleExportOcupacion = async () => {
+    setExportingOcupacion(true);
+    try {
+      const exportData = await propuestasService.getVersionarioData({
+        status: status || undefined,
+        search: debouncedSearchTags.length > 0 ? debouncedSearchTags.join('|') : debouncedSearchInput || undefined,
+        yearInicio,
+        yearFin,
+        catorcenaInicio,
+        catorcenaFin,
+        tipoPeriodo: tipoPeriodo || undefined,
+        excludeRechazadas: true,
+        page: 1,
+        limit: 100,
+      });
+      const { inventarios, propuestasInfo } = exportData;
+      const propMap = new Map(propuestasInfo.map((p: any) => [p.propuesta_id, p]));
+
+      const fmtPeriodo = (num: number | null | undefined, anio: number | null | undefined) => {
+        if (!num) return '';
+        return `Cat ${String(num).padStart(2, '0')} / ${anio || ''}`;
+      };
+
+      const headers = [
+        'Plaza', 'Tipo', 'Vendedor', 'APS Global', 'APS Específico', 'CUIC',
+        'Fecha Inicio', 'Fecha Fin', 'Anunciante', 'Campaña', 'Artículo',
+        'Negociación', 'Caras', 'Tarifa', 'Monto Total',
+      ];
+
+      const rows: (string | number)[][] = [];
+      for (const inv of inventarios as any[]) {
+        const info = propMap.get(inv.propuesta_id) as any;
+        if (!info) continue;
+        const caras = Number(inv.caras_totales) || 1;
+        const tarifa = Number(inv.tarifa_publica_sc) || 0;
+        const monto = caras * tarifa;
+        const negociacion = inv.cortesia
+          ? 'CORTESIA'
+          : (inv.estatus_reserva === 'Bonificado' || inv.estatus_reserva === 'Vendido bonificado')
+            ? 'BONIFICACION'
+            : 'RENTA';
+        rows.push([
+          inv.plaza || inv.estado || '',
+          inv.tipo_medio || inv.tradicional_digital || '',
+          info.vendedor || '',
+          String(info.propuesta_id),
+          inv.aps_especifico ? String(inv.aps_especifico) : '',
+          String(info.cuic || ''),
+          fmtPeriodo(info.catorcena_inicio_num, info.catorcena_inicio_anio),
+          fmtPeriodo(info.catorcena_fin_num, info.catorcena_fin_anio),
+          info.anunciante || '',
+          info.campana_nombre || info.nombre_campania || info.descripcion || '',
+          inv.articulo || '',
+          negociacion,
+          caras,
+          tarifa,
+          monto,
+        ]);
+      }
+
+      if (rows.length === 0) {
+        alert('No hay datos para exportar en formato Ocupación.');
+        return;
+      }
+
+      // Generar Excel (XLSX) — mismo formato que el de Campañas
+      const XLSX = await import('xlsx');
+      const wsData = [headers, ...rows];
+      const ws = XLSX.utils.aoa_to_sheet(wsData);
+      const wb = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(wb, ws, 'Ocupacion');
+      XLSX.writeFile(wb, `propuestas_orden_montaje_ocupacion_${new Date().toISOString().split('T')[0]}.xlsx`);
+    } catch (err) {
+      console.error('Error exportando Ocupacion:', err);
+      alert(`Error exportando Ocupación: ${err instanceof Error ? err.message : String(err)}`);
+    } finally {
+      setExportingOcupacion(false);
+    }
+  };
+
   // Handle export CSV - exports only visible/filtered data
   const handleExportCSV = () => {
     const dataToExport = hasLocalFilters ? filteredData : (data?.data || []);
@@ -1973,15 +2091,37 @@ export function PropuestasPage() {
                 Desglose
               </button>
 
-              {/* Export CSV / Layout */}
-              <button
-                onClick={activeView === 'versionario' ? handleExportLayout : handleExportCSV}
-                disabled={exportingLayout}
-                className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-medium ${isDark ? 'bg-zinc-800/60 text-zinc-400 border-zinc-700/50 hover:bg-zinc-800 hover:text-zinc-200' : 'bg-gray-100 text-gray-500 border-gray-200 hover:bg-gray-200 hover:text-gray-900'} border transition-all ${exportingLayout ? 'opacity-50 cursor-not-allowed' : ''}`}
-              >
-                {exportingLayout ? <Loader2 className="h-4 w-4 animate-spin" /> : <Download className="h-4 w-4" />}
-                {exportingLayout ? 'Generando...' : activeView === 'versionario' ? 'Exportar Layout' : 'Exportar CSV'}
-              </button>
+              {/* Botones de export */}
+              {activeView === 'versionario' ? (
+                <>
+                  <button
+                    onClick={handleExportLayout}
+                    disabled={exportingLayout || exportingOcupacion}
+                    className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-medium ${isDark ? 'bg-zinc-800/60 text-zinc-400 border-zinc-700/50 hover:bg-zinc-800 hover:text-zinc-200' : 'bg-gray-100 text-gray-500 border-gray-200 hover:bg-gray-200 hover:text-gray-900'} border transition-all ${exportingLayout || exportingOcupacion ? 'opacity-50 cursor-not-allowed' : ''}`}
+                    title="Exporta CSV en formato Layout (Campaña, Anunciante, Inversión, APS, etc.)"
+                  >
+                    {exportingLayout ? <Loader2 className="h-4 w-4 animate-spin" /> : <Download className="h-4 w-4" />}
+                    {exportingLayout ? 'Generando...' : 'Exportar Layout'}
+                  </button>
+                  <button
+                    onClick={handleExportOcupacion}
+                    disabled={exportingLayout || exportingOcupacion}
+                    className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-medium ${isDark ? 'bg-zinc-800/60 text-zinc-400 border-zinc-700/50 hover:bg-zinc-800 hover:text-zinc-200' : 'bg-gray-100 text-gray-500 border-gray-200 hover:bg-gray-200 hover:text-gray-900'} border transition-all ${exportingLayout || exportingOcupacion ? 'opacity-50 cursor-not-allowed' : ''}`}
+                    title="Exporta Excel formato Orden de Montaje (Plaza, Tipo, Vendedor, APS, CUIC, Caras, Tarifa, Monto)"
+                  >
+                    {exportingOcupacion ? <Loader2 className="h-4 w-4 animate-spin" /> : <Download className="h-4 w-4" />}
+                    {exportingOcupacion ? 'Generando...' : 'Exportar Ocupación'}
+                  </button>
+                </>
+              ) : (
+                <button
+                  onClick={handleExportCSV}
+                  className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-medium ${isDark ? 'bg-zinc-800/60 text-zinc-400 border-zinc-700/50 hover:bg-zinc-800 hover:text-zinc-200' : 'bg-gray-100 text-gray-500 border-gray-200 hover:bg-gray-200 hover:text-gray-900'} border transition-all`}
+                >
+                  <Download className="h-4 w-4" />
+                  Exportar CSV
+                </button>
+              )}
             </div>
 
             {/* Filters Row (Expandable) */}

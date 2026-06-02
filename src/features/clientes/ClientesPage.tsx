@@ -554,7 +554,6 @@ export function ClientesPage() {
   useModalTracker('Registrar Cliente', showCreateModal);
   const [showSyncModal, setShowSyncModal] = useState(false);
   useModalTracker('Sincronizar Clientes SAP', showSyncModal);
-  const canSyncSap = user?.rol === 'Administrador' || user?.rol === 'DEV';
 
   // Estados para filtros avanzados
   const [filters, setFilters] = useState<FilterCondition[]>([]);
@@ -1075,8 +1074,8 @@ export function ClientesPage() {
                 Nuevo Cliente
               </button>
 
-              {/* Sincronizar desde SAP — solo en tab "db" y para Administrador/DEV */}
-              {isDb && canSyncSap && (
+              {/* Sincronizar desde SAP — visible para todos en tab "db" */}
+              {isDb && (
                 <button
                   onClick={() => setShowSyncModal(true)}
                   className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-medium transition-all border ${isDark ? 'bg-zinc-800/60 text-purple-300 border-purple-500/30 hover:bg-zinc-800' : 'bg-white text-purple-700 border-purple-300 hover:bg-purple-50'}`}

@@ -1857,8 +1857,15 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
     // con split 50/50 (caras_flujo + caras_contraflujo > 0 ambos) antes del fix.
     const rawFlujo = cara.caras_flujo || 0;
     const rawContra = cara.caras_contraflujo || 0;
-    const flujoRequerido = tipoPeriodo === 'mensual' ? rawFlujo + rawContra : rawFlujo;
-    const contraflujoRequerido = tipoPeriodo === 'mensual' ? 0 : rawContra;
+    // BF/CF/CT: desde el commit `feat(bonif-split)` (24-may-2026) se persisten
+    // caras_flujo y caras_contraflujo para los KPIs del buscador, pero esos
+    // valores son el split INTERNO de la bonificación (no caras adicionales).
+    // Para la lógica de completitud aquí, en BF el "requerido" de flujo/contra
+    // es 0 y todo el total vive en bonificacion. Sin esta excepción el totalRequerido
+    // contaba doble (e.g. flujo=2 + contra=2 + bonif=4 = 8 en lugar de 4).
+    const isSplitBonif = isBonifSplitArticle(cara.articulo);
+    const flujoRequerido = isSplitBonif ? 0 : (tipoPeriodo === 'mensual' ? rawFlujo + rawContra : rawFlujo);
+    const contraflujoRequerido = isSplitBonif ? 0 : (tipoPeriodo === 'mensual' ? 0 : rawContra);
     const bonificacionRequerido = cara.bonificacion || 0;
 
     // BF/CF/CT/IN: la bonificación se valida solo por TOTAL (no por ratio).
@@ -1866,7 +1873,6 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
     // (front-only, NO se guarda en BD). Aplica igual a Tradicional y Digital:
     // la vista no puede saber el ratio físico real una vez reservado, así que
     // la completitud cuenta el total de reservas tipo='Bonificacion'.
-    const isSplitBonif = isBonifSplitArticle(cara.articulo);
     const esBonifSplitDigital = isSplitBonif; // alias histórico — ahora vale para todos los tipos bonif-split
     const bonifTargetFlujo = isSplitBonif ? Math.ceil(bonificacionRequerido * flujoPct / 100) : 0;
     const bonifTargetContra = isSplitBonif ? bonificacionRequerido - bonifTargetFlujo : 0;
@@ -2249,8 +2255,13 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
       }
     }
 
-    // Calculate caras en renta (flujo + contraflujo)
-    const carasEnRenta = (cara.caras_flujo || 0) + (cara.caras_contraflujo || 0);
+    // Calculate caras en renta (flujo + contraflujo).
+    // BF/CF/CT: el split flujo/contra es el split de la bonificación (KPI),
+    // NO caras adicionales. Para esos artículos `caras` siempre debe ser 0,
+    // sino el form pre-llena con la suma y la guarda como total (data corrupta).
+    const carasEnRenta = isBonifSplitArticle(cara.articulo)
+      ? 0
+      : (cara.caras_flujo || 0) + (cara.caras_contraflujo || 0);
 
     // Try to find the matching catorcena from inicio_periodo
     let catorcenaInicioVal = cara.catorcena_inicio;
@@ -8381,7 +8392,10 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
                             );
                             const hasReservas = caraReservas.length > 0;
                             const status = getCaraCompletionStatus(cara);
-                            const totalCaras = (cara.caras_flujo || 0) + (cara.caras_contraflujo || 0) + (cara.bonificacion || 0);
+                            // BF/CF/CT: el split flujo/contra es interno a la bonificación; no se suma al total.
+                            const totalCaras = isBonifSplitArticle(cara.articulo)
+                              ? (cara.bonificacion || 0)
+                              : (cara.caras_flujo || 0) + (cara.caras_contraflujo || 0) + (cara.bonificacion || 0);
                             const carasFaltantes = status.totalRequerido - status.totalReservado;
 
                             // Determine status color and indicator
@@ -8544,17 +8558,19 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
                                     })()}
                                     {effectiveCanEdit && (
                                       <>
-                                        <button
-                                          onClick={(e) => { e.stopPropagation(); if (!hasSavedPendingAuth) handleEditCara(cara); }}
-                                          disabled={hasSavedPendingAuth}
-                                          className={`p-2 rounded-lg border transition-colors ${hasSavedPendingAuth
-                                            ? `bg-zinc-500/10 ${isDark ? 'text-zinc-500' : 'text-gray-400'} border-zinc-500/20 cursor-not-allowed`
-                                            : 'bg-amber-500/10 text-amber-400 border-amber-500/20 hover:bg-amber-500/20'
-                                          }`}
-                                          title={hasSavedPendingAuth ? 'Hay circuitos pendientes de autorizacion - no se pueden editar otros' : 'Editar'}
-                                        >
-                                          <Pencil className="h-4 w-4" />
-                                        </button>
+                                        {permissions.canEditCircuitoExistente && (
+                                          <button
+                                            onClick={(e) => { e.stopPropagation(); if (!hasSavedPendingAuth) handleEditCara(cara); }}
+                                            disabled={hasSavedPendingAuth}
+                                            className={`p-2 rounded-lg border transition-colors ${hasSavedPendingAuth
+                                              ? `bg-zinc-500/10 ${isDark ? 'text-zinc-500' : 'text-gray-400'} border-zinc-500/20 cursor-not-allowed`
+                                              : 'bg-amber-500/10 text-amber-400 border-amber-500/20 hover:bg-amber-500/20'
+                                            }`}
+                                            title={hasSavedPendingAuth ? 'Hay circuitos pendientes de autorizacion - no se pueden editar otros' : 'Editar'}
+                                          >
+                                            <Pencil className="h-4 w-4" />
+                                          </button>
+                                        )}
                                         {canEditResumen && (() => {
                                             const reservaBlocked = hasReservas && !permissions.canDeleteCaraConReservas;
                                             const isDisabled = reservaBlocked || hasSavedPendingAuth;

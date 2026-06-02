@@ -72,6 +72,7 @@ export interface RolePermissions {
   canEditResumenPropuesta: boolean; // Editar campos en Resumen de Propuesta del modal
   canCompartirPropuesta: boolean;
   canBuscarInventarioEnModal: boolean;
+  canEditCircuitoExistente: boolean; // Mostrar plumita (editar) en cada cara/circuito del modal Asignar Inventario
   canEditClienteEnFormularios: boolean; // Editar campo cliente (CUIC) en solicitudes y propuestas
 
   // Campañas
@@ -159,6 +160,7 @@ const defaultPermissions: RolePermissions = {
   canEditResumenPropuesta: true,
   canCompartirPropuesta: true,
   canBuscarInventarioEnModal: true,
+  canEditCircuitoExistente: true,
   canEditClienteEnFormularios: false, // Solo asesores pueden editar el campo cliente en formularios
 
   canEditCampanas: true,
@@ -323,6 +325,7 @@ const rolePermissions: Partial<Record<UserRole, Partial<RolePermissions>>> = {
     canAsignarInventario: true, // No puede editar inventario, solo ver
     canCompartirPropuesta: true, // SÍ puede compartir
     canBuscarInventarioEnModal: false,
+    canEditCircuitoExistente: false, // No puede editar circuitos existentes (plumita oculta)
 
     // Campañas: acceso a botones de detalle de campaña (Asignar/Quitar APS,
     // Pre Factura, Cortesía a Gestor y POST a SAP). Cancelar POST queda
