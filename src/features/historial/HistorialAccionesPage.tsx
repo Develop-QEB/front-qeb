@@ -25,7 +25,7 @@ function normalizeTipo(raw: string): string {
   if (raw === 'Arte' || raw.startsWith('Arte ')) return 'Arte';
   const map: Record<string, string> = {
     'Campaña': 'Campaña', 'Propuesta': 'Propuesta', 'Solicitud': 'Solicitud',
-    'Inventario': 'Inventario', 'Nota': 'Nota',
+    'Inventario': 'Inventario', 'Nota': 'Nota', 'Tarea': 'Tarea',
   };
   return map[raw] || raw;
 }
@@ -57,6 +57,7 @@ const tipoColors: Record<string, { bg: string; text: string; darkBg: string; dar
   'Autorización': { bg: 'bg-red-100', text: 'text-red-700', darkBg: 'bg-red-900/30', darkText: 'text-red-300' },
   'Nota': { bg: 'bg-yellow-100', text: 'text-yellow-700', darkBg: 'bg-yellow-900/30', darkText: 'text-yellow-300' },
   'Arte': { bg: 'bg-pink-100', text: 'text-pink-700', darkBg: 'bg-pink-900/30', darkText: 'text-pink-300' },
+  'Tarea': { bg: 'bg-cyan-100', text: 'text-cyan-700', darkBg: 'bg-cyan-900/30', darkText: 'text-cyan-300' },
 };
 
 function TipoBadge({ tipo, isDark }: { tipo: string; isDark: boolean }) {
@@ -337,6 +338,11 @@ export function HistorialAccionesPage() {
         else if (t === 'Arte' || t.startsWith('Arte ')) value = 'Arte*';
         result.push({ label: norm, value });
       }
+    }
+    // Garantizar que "Tarea" siempre este en el dropdown de "Agregar accion"
+    // aunque no haya entradas previas con tipo='Tarea' en historial.
+    if (!seen.has('Tarea')) {
+      result.push({ label: 'Tarea', value: 'Tarea' });
     }
     return result;
   })();
