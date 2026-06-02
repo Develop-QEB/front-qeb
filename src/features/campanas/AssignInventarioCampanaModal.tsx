@@ -4,7 +4,7 @@ import { useQuery, useQueryClient, useMutation } from '@tanstack/react-query';
 import {
   X, Search, Plus, Trash2, ChevronDown, ChevronRight, ChevronUp, Users,
   FileText, MapPin, Layers, Pencil, Map as MapIcon, Package, Calendar,
-  Gift, Target, Save, ArrowLeft, Filter, Grid, LayoutGrid, Ruler, ArrowUpDown, ArrowUp, ArrowDown, Download, Eye, Funnel, Check, Upload, Monitor, Loader2, Trophy, AlertTriangle
+  Gift, Target, Save, ArrowLeft, Filter, Grid, LayoutGrid, Ruler, ArrowUpDown, ArrowUp, ArrowDown, Download, Eye, Funnel, Check, Upload, Monitor, Loader2, Trophy, AlertTriangle, RefreshCw
 } from 'lucide-react';
 import { GoogleMap, useLoadScript, Marker } from '@react-google-maps/api';
 import { GOOGLE_MAPS_LOADER_OPTIONS } from '../../config/googleMaps';
@@ -2973,12 +2973,78 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
   };
 
   // Bulk save ALL pending changes (campaign summary + modified caras) in one action
+  // Reenviar a autorización un circuito rechazado: re-evalúa criterios (sin editar)
+  // y lo marca como modificado para que el bulk save lo persista. El backend
+  // recalcula porque venía rechazada y vuelve a crear la tarea de autorización.
+  const handleReenviarAutorizacionCara = async (cara: CaraItem) => {
+    let target = cara;
+    if (cara.esBf && cara.grupo_rt_bf) {
+      const rt = caras.find(c => !c.esBf && c.grupo_rt_bf === cara.grupo_rt_bf && c.inicio_periodo === cara.inicio_periodo && c.fin_periodo === cara.fin_periodo);
+      if (rt) target = rt;
+    }
+    if (!target.id) return;
+    const bfPair = target.grupo_rt_bf
+      ? caras.find(c => c.esBf && c.grupo_rt_bf === target.grupo_rt_bf && c.inicio_periodo === target.inicio_periodo && c.fin_periodo === target.fin_periodo)
+      : null;
+    const bonifEval = (target.bonificacion || 0) + (bfPair?.bonificacion || 0);
+    try {
+      const resultado = await solicitudesService.evaluarAutorizacion({
+        ciudad: target.ciudad,
+        estado: target.estados,
+        formato: target.formato,
+        tipo: target.tipo,
+        caras: target.caras,
+        bonificacion: bonifEval,
+        costo: target.costo,
+        tarifa_publica: target.tarifa_publica,
+        articulo: target.articulo || null,
+      });
+      setCaras(prev => prev.map(c => c.id === target.id
+        ? { ...c, autorizacion_dg: resultado.autorizacion_dg, autorizacion_dcm: resultado.autorizacion_dcm }
+        : c));
+      setModifiedCaras(prev => {
+        const next = new Map(prev);
+        next.set(target.id!, {
+          ciudad: target.ciudad,
+          estados: target.estados,
+          tipo: target.tipo,
+          flujo: target.flujo,
+          bonificacion: target.bonificacion,
+          caras: target.caras,
+          nivel_socioeconomico: target.nivel_socioeconomico,
+          formato: target.formato,
+          costo: target.costo,
+          tarifa_publica: target.tarifa_publica,
+          inicio_periodo: target.inicio_periodo,
+          fin_periodo: target.fin_periodo,
+          caras_flujo: target.caras_flujo,
+          caras_contraflujo: target.caras_contraflujo,
+          articulo: target.articulo,
+          descuento: target.descuento,
+          grupo_rt_bf: target.grupo_rt_bf,
+        });
+        return next;
+      });
+      const irAuth = resultado.autorizacion_dg === 'pendiente' || resultado.autorizacion_dcm === 'pendiente';
+      showToast(irAuth ? 'Circuito reenviado a autorización (guarda para aplicar)' : 'Circuito reprocesado: ya no requiere autorización', 'info');
+    } catch {
+      showToast('No se pudo reenviar a autorización', 'error');
+    }
+  };
+
   const handleBulkSaveChanges = async () => {
     const hasCampanaChanges = hasChanges;
     const hasCaraChanges = modifiedCaras.size > 0;
 
     if (!hasCampanaChanges && !hasCaraChanges) {
       showToast('No hay cambios pendientes', 'info');
+      return;
+    }
+
+    // No permitir guardar si quedan circuitos rechazados sin resolver.
+    const rechazadasSinResolver = caras.filter(c => c.autorizacion_dg === 'rechazado' || c.autorizacion_dcm === 'rechazado');
+    if (rechazadasSinResolver.length > 0) {
+      showToast(`Tienes ${rechazadasSinResolver.length} circuito(s) rechazado(s) sin resolver. Edítalos o usa "Reenviar a autorización" antes de guardar.`, 'error');
       return;
     }
 
@@ -8564,6 +8630,15 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
                                       const blockReason = caraAPSBlocked ? 'Grupo con APS asignado - no se puede editar' : hasSavedPendingAuth ? 'Hay circuitos pendientes de autorizacion - no se pueden editar otros' : isLoadingThis ? 'Cargando editor...' : 'Editar';
                                       return (
                                       <>
+                                        {(cara.autorizacion_dg === 'rechazado' || cara.autorizacion_dcm === 'rechazado') && (
+                                          <button
+                                            onClick={(e) => { e.stopPropagation(); handleReenviarAutorizacionCara(cara); }}
+                                            className="p-2 rounded-lg border bg-blue-500/10 text-blue-400 border-blue-500/20 hover:bg-blue-500/20 transition-colors"
+                                            title="Reenviar a autorización (reprocesar este circuito)"
+                                          >
+                                            <RefreshCw className="h-4 w-4" />
+                                          </button>
+                                        )}
                                         {permissions.canEditCircuitoExistente && (
                                           <button
                                             onClick={(e) => { e.stopPropagation(); if (!editBlocked && !loadingCaraAction) handleEditCara(cara); }}
