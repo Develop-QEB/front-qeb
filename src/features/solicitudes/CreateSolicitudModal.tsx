@@ -3425,11 +3425,13 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
                                         <td className="px-2 py-2 text-xs text-right text-emerald-400 font-medium">{formatCurrency(precioTotal)}</td>
                                         <td className="px-2 py-2 text-center">
                                           {(() => {
-                                            // Cortesías siempre aprobadas, no requieren autorización
-                                            const esCaraCortesia = cara.articulo?.ItemCode?.toUpperCase().startsWith('CT');
-                                            // Mostrar estado real de cada circuito (sin contaminación DG — eso se aplica al guardar)
-                                            const dgEfectivo = esCaraCortesia ? 'aprobado' : cara.autorizacion_dg;
-                                            const dcmEfectivo = esCaraCortesia ? 'aprobado' : cara.autorizacion_dcm;
+                                            // Mostrar estado real de cada circuito tal como esta en BD.
+                                            // Antes se forzaba CT a "aprobado" suponiendo que las cortesias
+                                            // no requerian autorizacion, pero pueden ser escaladas a DG y
+                                            // rechazadas — el back si las valida (commit 79c59e5) y bloquea
+                                            // Atender si hay rechazos. Caso reproducido en 80822.
+                                            const dgEfectivo = cara.autorizacion_dg;
+                                            const dcmEfectivo = cara.autorizacion_dcm;
                                             return (
                                               <div className="flex flex-col gap-0.5">
                                                 {dgEfectivo === 'aprobado' && dcmEfectivo === 'aprobado' && (
