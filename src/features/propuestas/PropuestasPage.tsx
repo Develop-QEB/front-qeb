@@ -915,6 +915,20 @@ function ApproveModal({ isOpen, onClose, propuesta, onSuccess }: ApproveModalPro
     enabled: isOpen,
   });
 
+  // Caras de la propuesta — detectar circuitos rechazados por DG/DCM y
+  // bloquear el botón Aprobar antes de que el back devuelva 400.
+  const { data: carasAprobar } = useQuery({
+    queryKey: ['propuesta-caras', propuesta?.id, 'approve-modal-rechazadas'],
+    queryFn: () => propuestasService.getCaras(propuesta!.id),
+    enabled: isOpen && !!propuesta,
+  });
+  const carasRechazadasAprobar = useMemo(() => {
+    const cs = carasAprobar || [];
+    const dg = cs.filter(c => c.autorizacion_dg === 'rechazado').length;
+    const dcm = cs.filter(c => c.autorizacion_dcm === 'rechazado').length;
+    return { total: dg + dcm, dg, dcm, hasAny: dg > 0 || dcm > 0 };
+  }, [carasAprobar]);
+
   const approveMutation = useMutation({
     mutationFn: () => propuestasService.approve(propuesta!.id, {
       precio_simulado: precio ? parseFloat(precio) : undefined,
@@ -1094,6 +1108,18 @@ function ApproveModal({ isOpen, onClose, propuesta, onSuccess }: ApproveModalPro
           </div>
         </div>
 
+        {carasRechazadasAprobar.hasAny && (
+          <div className={`mx-6 mb-3 p-3 rounded-lg border ${isDark ? 'bg-rose-500/10 border-rose-500/30 text-rose-200' : 'bg-rose-50 border-rose-200 text-rose-800'} text-sm flex items-start gap-2`}>
+            <XCircle className="h-4 w-4 mt-0.5 shrink-0" />
+            <span>
+              No se puede aprobar: hay <b>{carasRechazadasAprobar.total}</b> circuito(s) rechazado(s) por DG/DCM
+              {carasRechazadasAprobar.dg > 0 && carasRechazadasAprobar.dcm > 0
+                ? ` (${carasRechazadasAprobar.dg} por DG, ${carasRechazadasAprobar.dcm} por DCM)`
+                : carasRechazadasAprobar.dg > 0 ? ` (${carasRechazadasAprobar.dg} por DG)` : ` (${carasRechazadasAprobar.dcm} por DCM)`}
+              . Edita o quita esos circuitos primero.
+            </span>
+          </div>
+        )}
         {/* Footer */}
         <div className={`px-6 py-4 border-t ${isDark ? 'border-zinc-800' : 'border-gray-200'} flex justify-end gap-3`}>
           <button
@@ -1104,7 +1130,8 @@ function ApproveModal({ isOpen, onClose, propuesta, onSuccess }: ApproveModalPro
           </button>
           <button
             onClick={() => approveMutation.mutate()}
-            disabled={approveMutation.isPending}
+            disabled={approveMutation.isPending || carasRechazadasAprobar.hasAny}
+            title={carasRechazadasAprobar.hasAny ? `${carasRechazadasAprobar.total} circuito(s) rechazado(s) por DG/DCM — edita o quita esos circuitos primero` : undefined}
             className="px-6 py-2 rounded-lg bg-gradient-to-r from-emerald-600 to-green-600 text-white text-sm font-medium hover:from-emerald-500 hover:to-green-500 disabled:opacity-50 flex items-center gap-2"
           >
             {approveMutation.isPending ? (

@@ -1499,6 +1499,26 @@ export function AtenderModal({ isOpen, onClose, solicitud, onSuccess }: AtenderM
     enabled: isOpen,
   });
 
+  // Caras de la solicitud — para detectar circuitos rechazados por DG o DCM
+  // y bloquear el botón "Atender Solicitud" antes de que el back lo rechace
+  // con 400. El back igual valida, esto es UX.
+  const { data: fullDetails } = useQuery({
+    queryKey: ['solicitud-full', solicitud?.id, 'atender-modal-rechazadas'],
+    queryFn: () => solicitudesService.getFullDetails(solicitud!.id),
+    enabled: isOpen && !!solicitud,
+  });
+  const carasRechazadas = useMemo(() => {
+    const caras = fullDetails?.caras || [];
+    const dg = caras.filter(c => c.autorizacion_dg === 'rechazado');
+    const dcm = caras.filter(c => c.autorizacion_dcm === 'rechazado');
+    return {
+      total: dg.length + dcm.length,
+      dg: dg.length,
+      dcm: dcm.length,
+      hasAny: dg.length > 0 || dcm.length > 0,
+    };
+  }, [fullDetails]);
+
   // Pre-populate asignados with: 1) Original assignees from solicitud + 2) All users from "Tráfico" area
   useEffect(() => {
     if (isOpen && solicitud && users) {
@@ -1684,6 +1704,18 @@ export function AtenderModal({ isOpen, onClose, solicitud, onSuccess }: AtenderM
           </ul>
         </div>
 
+        {carasRechazadas.hasAny && (
+          <div className={`mb-4 p-3 rounded-lg border ${isDark ? 'bg-rose-500/10 border-rose-500/30 text-rose-200' : 'bg-rose-50 border-rose-200 text-rose-800'} text-sm flex items-start gap-2`}>
+            <XCircle className="h-4 w-4 mt-0.5 shrink-0" />
+            <span>
+              No se puede atender: hay <b>{carasRechazadas.total}</b> circuito(s) rechazado(s) por DG/DCM
+              {carasRechazadas.dg > 0 && carasRechazadas.dcm > 0
+                ? ` (${carasRechazadas.dg} por DG, ${carasRechazadas.dcm} por DCM)`
+                : carasRechazadas.dg > 0 ? ` (${carasRechazadas.dg} por DG)` : ` (${carasRechazadas.dcm} por DCM)`}
+              . Edita o quita esos circuitos primero.
+            </span>
+          </div>
+        )}
         <div className="flex justify-end gap-3">
           <button
             onClick={onClose}
@@ -1693,7 +1725,8 @@ export function AtenderModal({ isOpen, onClose, solicitud, onSuccess }: AtenderM
           </button>
           <button
             onClick={() => atenderMutation.mutate({ id: solicitud.id, asignados: selectedAsignados })}
-            disabled={atenderMutation.isPending}
+            disabled={atenderMutation.isPending || carasRechazadas.hasAny}
+            title={carasRechazadas.hasAny ? `${carasRechazadas.total} circuito(s) rechazado(s) por DG/DCM — edita o quita esos circuitos primero` : undefined}
             className="px-4 py-2 rounded-lg bg-cyan-600 text-white text-sm hover:bg-cyan-700 disabled:opacity-50 flex items-center gap-2"
           >
             {atenderMutation.isPending ? (
