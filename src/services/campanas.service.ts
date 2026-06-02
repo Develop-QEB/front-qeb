@@ -1016,11 +1016,11 @@ export const campanasService = {
     return response.data.data;
   },
 
-  async assignArte(id: number, reservaIds: number[], archivo: string, markInstalado: boolean = false): Promise<{ message: string; affected: number; marked_instalado?: boolean }> {
+  async assignArte(id: number, reservaIds: number[], archivo: string, markInstalado: boolean = false, instalacionMode?: 'instalado' | 'rotacion'): Promise<{ message: string; affected: number; marked_instalado?: boolean }> {
     const response = await api.post<ApiResponse<{ message: string; affected: number; marked_instalado?: boolean }>>(`/campanas/${id}/assign-arte`, {
       reservaIds,
       archivo,
-      ...(markInstalado ? { markInstalado: true } : {}),
+      ...(markInstalado ? { markInstalado: true, instalacionMode: instalacionMode || 'instalado' } : {}),
     });
     if (!response.data.success || !response.data.data) {
       throw new Error(response.data.error || 'Error al asignar arte');
@@ -1032,12 +1032,13 @@ export const campanasService = {
     id: number,
     reservaIds: number[],
     archivos: { archivo: string; spot: number; nombre: string; tipo: string }[],
-    markInstalado: boolean = false
+    markInstalado: boolean = false,
+    instalacionMode?: 'instalado' | 'rotacion'
   ): Promise<{ message: string; affected: number; marked_instalado?: boolean }> {
     const response = await api.post<ApiResponse<{ message: string; affected: number; marked_instalado?: boolean }>>(`/campanas/${id}/assign-arte-digital`, {
       reservaIds,
       archivos,
-      ...(markInstalado ? { markInstalado: true } : {}),
+      ...(markInstalado ? { markInstalado: true, instalacionMode: instalacionMode || 'instalado' } : {}),
     });
     if (!response.data.success || !response.data.data) {
       throw new Error(response.data.error || 'Error al asignar arte digital');
@@ -1120,12 +1121,13 @@ export const campanasService = {
     id: number,
     reservaIds: number[],
     archivos: { archivo: string; nota: string; spot: number }[],
-    markInstalado: boolean = false
+    markInstalado: boolean = false,
+    instalacionMode?: 'instalado' | 'rotacion'
   ): Promise<{ message: string; affected: number; marked_instalado?: boolean }> {
     const response = await api.post<ApiResponse<{ message: string; affected: number; marked_instalado?: boolean }>>(`/campanas/${id}/assign-arte-tradicional`, {
       reservaIds,
       archivos,
-      ...(markInstalado ? { markInstalado: true } : {}),
+      ...(markInstalado ? { markInstalado: true, instalacionMode: instalacionMode || 'instalado' } : {}),
     });
     if (!response.data.success || !response.data.data) {
       throw new Error(response.data.error || 'Error al asignar arte tradicional');

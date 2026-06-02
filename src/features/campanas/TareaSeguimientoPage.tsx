@@ -1379,10 +1379,10 @@ function UploadArtModal({
   isOpen: boolean;
   onClose: () => void;
   selectedInventory: InventoryRow[];
-  onSubmit: (data: { option: UploadOption; value: string | File; inventoryIds: string[]; markInstalado?: boolean }) => void;
-  onSubmitDigital?: (data: { files: { file: File; spot: number }[]; inventoryIds: string[]; markInstalado?: boolean }) => void;
-  onSubmitTradicional?: (data: { archivos: { archivo: string; nota: string; spot: number }[]; inventoryIds: string[]; markInstalado?: boolean }) => void;
-  onSubmitDigitalFromLibrary?: (data: { archivos: { archivo: string; nota: string; spot: number; tipo: string }[]; inventoryIds: string[]; markInstalado?: boolean }) => void;
+  onSubmit: (data: { option: UploadOption; value: string | File; inventoryIds: string[]; markInstalado?: boolean; instalacionMode?: 'instalado' | 'rotacion' }) => void;
+  onSubmitDigital?: (data: { files: { file: File; spot: number }[]; inventoryIds: string[]; markInstalado?: boolean; instalacionMode?: 'instalado' | 'rotacion' }) => void;
+  onSubmitTradicional?: (data: { archivos: { archivo: string; nota: string; spot: number }[]; inventoryIds: string[]; markInstalado?: boolean; instalacionMode?: 'instalado' | 'rotacion' }) => void;
+  onSubmitDigitalFromLibrary?: (data: { archivos: { archivo: string; nota: string; spot: number; tipo: string }[]; inventoryIds: string[]; markInstalado?: boolean; instalacionMode?: 'instalado' | 'rotacion' }) => void;
   artesExistentes: ArteExistente[];
   addedArtes: ArteExistente[];
   onAddedArtesChange: (artes: ArteExistente[]) => void;
@@ -1659,11 +1659,22 @@ function UploadArtModal({
     setDraggedFile(null);
   };
 
+  // Dialog state para el modal de 3 opciones (Instalado / Rotacion / Cancelar)
+  // que aparece cuando algun arte seleccionado de biblioteca esta marcado como
+  // Instalado. resolve() se llama al elegir y desbloquea el async checker.
+  const [instaladoDialog, setInstaladoDialog] = useState<{
+    artes: ArteExistente[];
+    resolve: (mode: 'instalado' | 'rotacion' | null) => void;
+  } | null>(null);
+
   // Detecta si alguno de los URLs seleccionados corresponde a un arte de la
-  // biblioteca con estatus "Instalado" y, en ese caso, pide confirmación al
-  // usuario para marcar el inventario destino también como instalado (se moverá
-  // a Validar Instalación > Instaladas).
-  const checkAndConfirmInstalado = (archivoUrls: string[]): { proceed: boolean; markInstalado: boolean } => {
+  // biblioteca con estatus "Instalado". Si si, abre el modal de eleccion y
+  // espera a que el usuario elija (Instalado, Rotacion o Cancelar).
+  const checkAndConfirmInstalado = async (archivoUrls: string[]): Promise<{
+    proceed: boolean;
+    markInstalado: boolean;
+    instalacionMode?: 'instalado' | 'rotacion';
+  }> => {
     const seen = new Set<string>();
     const instaladoArtes: ArteExistente[] = [];
     for (const url of archivoUrls) {
@@ -1673,18 +1684,16 @@ function UploadArtModal({
       if (found && found.tiene_instalado === true) instaladoArtes.push(found);
     }
     if (instaladoArtes.length === 0) return { proceed: true, markInstalado: false };
-    const nombres = instaladoArtes.slice(0, 5).map(a => `  - ${a.nombre_arte || a.nombre}`).join('\n');
-    const extra = instaladoArtes.length > 5 ? `\n  ... y ${instaladoArtes.length - 5} mas` : '';
-    const msg =
-      'Los siguientes artes ya estan marcados como Instalado en otro inventario:\n' +
-      nombres + extra + '\n\n' +
-      'Al asignarlos, el inventario destino tambien quedara marcado como instalado y se movera a "Validar Instalacion > Instaladas".\n\n' +
-      'Continuar?';
-    const ok = window.confirm(msg);
-    return { proceed: ok, markInstalado: ok };
+
+    const mode = await new Promise<'instalado' | 'rotacion' | null>((resolve) => {
+      setInstaladoDialog({ artes: instaladoArtes, resolve });
+    });
+    setInstaladoDialog(null);
+    if (mode === null) return { proceed: false, markInstalado: false };
+    return { proceed: true, markInstalado: true, instalacionMode: mode };
   };
 
-  const handleSubmit = () => {
+  const handleSubmit = async () => {
     // Flujo digital con wizard - enviar archivos seleccionados de la biblioteca con notas
     if (isDigitalInventory && digitalWizardStep === 2 && onSubmitDigitalFromLibrary) {
       const archivos = Array.from(selectedDigitalImages.entries()).map(([key, img], idx) => ({
@@ -1694,12 +1703,13 @@ function UploadArtModal({
         tipo: img.isVideo ? 'video' : 'image',
         nombre_arte: digitalImageNames.get(key)?.trim() || null,
       }));
-      const { proceed, markInstalado } = checkAndConfirmInstalado(archivos.map(a => a.archivo));
+      const { proceed, markInstalado, instalacionMode } = await checkAndConfirmInstalado(archivos.map(a => a.archivo));
       if (!proceed) return;
       onSubmitDigitalFromLibrary({
         archivos,
         inventoryIds: selectedInventory.map((i) => i.id),
         markInstalado,
+        instalacionMode,
       });
       return;
     }
@@ -1721,12 +1731,13 @@ function UploadArtModal({
         spot: idx + 1,
         nombre_arte: imageNames.get(key)?.trim() || null,
       }));
-      const { proceed, markInstalado } = checkAndConfirmInstalado(archivos.map(a => a.archivo));
+      const { proceed, markInstalado, instalacionMode } = await checkAndConfirmInstalado(archivos.map(a => a.archivo));
       if (!proceed) return;
       onSubmitTradicional({
         archivos,
         inventoryIds: selectedInventory.map((i) => i.id),
         markInstalado,
+        instalacionMode,
       });
       return;
     }
@@ -1742,7 +1753,7 @@ function UploadArtModal({
     }
 
     const checkUrl = selectedOption === 'existing' && typeof value === 'string' ? [value as string] : [];
-    const { proceed, markInstalado } = checkAndConfirmInstalado(checkUrl);
+    const { proceed, markInstalado, instalacionMode } = await checkAndConfirmInstalado(checkUrl);
     if (!proceed) return;
 
     const payload = {
@@ -1750,6 +1761,7 @@ function UploadArtModal({
       value,
       inventoryIds: selectedInventory.map((i) => i.id),
       markInstalado,
+      instalacionMode,
     };
     onSubmit(payload);
   };
@@ -2858,6 +2870,62 @@ function UploadArtModal({
           </div>
         </div>
       </div>
+
+      {/* Dialog para elegir destino cuando hay artes Instalado en la selección */}
+      {instaladoDialog && (
+        <div className="fixed inset-0 z-[110] flex items-center justify-center p-4">
+          <div className="absolute inset-0 bg-black/70" onClick={() => instaladoDialog.resolve(null)} />
+          <div className={`relative w-full max-w-md rounded-xl border shadow-2xl p-5 ${isDark ? 'bg-zinc-900 border-purple-500/30' : 'bg-white border-purple-200'}`}>
+            <h3 className={`text-base font-semibold mb-2 ${isDark ? 'text-white' : 'text-gray-900'}`}>
+              Arte con estatus "Instalado"
+            </h3>
+            <p className={`text-xs mb-3 ${isDark ? 'text-zinc-400' : 'text-gray-600'}`}>
+              {instaladoDialog.artes.length === 1
+                ? 'El arte seleccionado ya está marcado como Instalado en otro inventario:'
+                : `${instaladoDialog.artes.length} artes seleccionados ya están marcados como Instalado en otro inventario:`}
+            </p>
+            <ul className={`text-xs mb-4 max-h-24 overflow-y-auto rounded-md p-2 ${isDark ? 'bg-zinc-800/50 text-zinc-300' : 'bg-gray-50 text-gray-700'}`}>
+              {instaladoDialog.artes.slice(0, 8).map((a, i) => (
+                <li key={i} className="truncate">• {a.nombre_arte || a.nombre}</li>
+              ))}
+              {instaladoDialog.artes.length > 8 && (
+                <li className={`italic ${isDark ? 'text-zinc-500' : 'text-gray-500'}`}>... y {instaladoDialog.artes.length - 8} más</li>
+              )}
+            </ul>
+            <p className={`text-xs mb-3 font-medium ${isDark ? 'text-purple-300' : 'text-purple-700'}`}>
+              ¿Cómo quieres que se trate este inventario?
+            </p>
+            <div className="space-y-2">
+              <button
+                onClick={() => instaladoDialog.resolve('instalado')}
+                className={`w-full text-left p-3 rounded-lg border transition-colors ${isDark ? 'border-green-500/30 bg-green-500/10 hover:bg-green-500/20 text-green-200' : 'border-green-300 bg-green-50 hover:bg-green-100 text-green-800'}`}
+              >
+                <div className="font-medium text-sm">Instalado</div>
+                <div className={`text-[11px] mt-0.5 ${isDark ? 'text-green-300/70' : 'text-green-700/70'}`}>
+                  Se marca como instalado y va directo a "Validar Instalación &gt; Instaladas".
+                </div>
+              </button>
+              <button
+                onClick={() => instaladoDialog.resolve('rotacion')}
+                className={`w-full text-left p-3 rounded-lg border transition-colors ${isDark ? 'border-orange-500/30 bg-orange-500/10 hover:bg-orange-500/20 text-orange-200' : 'border-orange-300 bg-orange-50 hover:bg-orange-100 text-orange-800'}`}
+              >
+                <div className="font-medium text-sm">Rotación</div>
+                <div className={`text-[11px] mt-0.5 ${isDark ? 'text-orange-300/70' : 'text-orange-700/70'}`}>
+                  Reutilizas el arte pero aún hay que instalarlo. Va a "Validar Instalación &gt; Por Instalar".
+                </div>
+              </button>
+            </div>
+            <div className="flex justify-end mt-4">
+              <button
+                onClick={() => instaladoDialog.resolve(null)}
+                className={`px-4 py-2 text-sm rounded-lg transition-colors ${isDark ? 'text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800' : 'text-gray-600 hover:text-gray-800 hover:bg-gray-100'}`}
+              >
+                Cancelar
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -14417,8 +14485,8 @@ export function TareaSeguimientoPage() {
 
   // ---- Mutations ----
   const assignArteMutation = useMutation({
-    mutationFn: ({ reservaIds, archivo, markInstalado }: { reservaIds: number[]; archivo: string; markInstalado?: boolean }) =>
-      campanasService.assignArte(campanaId, reservaIds, archivo, markInstalado === true),
+    mutationFn: ({ reservaIds, archivo, markInstalado, instalacionMode }: { reservaIds: number[]; archivo: string; markInstalado?: boolean; instalacionMode?: 'instalado' | 'rotacion' }) =>
+      campanasService.assignArte(campanaId, reservaIds, archivo, markInstalado === true, instalacionMode),
     onSuccess: () => {
       // Invalidar todos los queries de inventario para forzar recarga cuando se activen
       queryClient.invalidateQueries({ queryKey: ['campana-inventario-sin-arte'], exact: false });
@@ -16677,7 +16745,7 @@ export function TareaSeguimientoPage() {
     }
   }, [createTareaMutation, campanaId, queryClient]);
 
-  const handleUploadArt = useCallback(async (data: { option: UploadOption; value: string | File; inventoryIds: string[]; markInstalado?: boolean }) => {
+  const handleUploadArt = useCallback(async (data: { option: UploadOption; value: string | File; inventoryIds: string[]; markInstalado?: boolean; instalacionMode?: 'instalado' | 'rotacion' }) => {
     // Get reserva IDs from selected inventory items
     const reservaIds = selectedInventoryItems.flatMap(item =>
       item.rsv_id.split(',').map(id => parseInt(id.trim())).filter(id => !isNaN(id))
@@ -16721,7 +16789,7 @@ export function TareaSeguimientoPage() {
       }
 
       if (archivo) {
-        assignArteMutation.mutate({ reservaIds, archivo, markInstalado: data.markInstalado === true });
+        assignArteMutation.mutate({ reservaIds, archivo, markInstalado: data.markInstalado === true, instalacionMode: data.instalacionMode });
       } else {
         setUploadArtError('No se especifico un archivo de arte');
       }
@@ -16811,7 +16879,7 @@ export function TareaSeguimientoPage() {
   }, [campanaId]);
 
   // Handler para asignar arte digital desde biblioteca (wizard con notas)
-  const handleUploadDigitalFromLibrary = useCallback(async (data: { archivos: { archivo: string; nota: string; spot: number; tipo: string }[]; inventoryIds: string[]; markInstalado?: boolean }) => {
+  const handleUploadDigitalFromLibrary = useCallback(async (data: { archivos: { archivo: string; nota: string; spot: number; tipo: string }[]; inventoryIds: string[]; markInstalado?: boolean; instalacionMode?: 'instalado' | 'rotacion' }) => {
     const reservaIds = selectedInventoryItems.flatMap(item =>
       item.rsv_id.split(',').map(id => parseInt(id.trim())).filter(id => !isNaN(id))
     );
@@ -16839,7 +16907,7 @@ export function TareaSeguimientoPage() {
         nota: a.nota,
       }));
 
-      await campanasService.assignArteDigital(campanaId, reservaIds, filesWithMeta, data.markInstalado === true);
+      await campanasService.assignArteDigital(campanaId, reservaIds, filesWithMeta, data.markInstalado === true, data.instalacionMode);
 
       queryClient.invalidateQueries({ queryKey: ['campana-inventario-sin-arte'], exact: false });
       queryClient.invalidateQueries({ queryKey: ['campana-inventario-arte'], exact: false });
@@ -16858,7 +16926,7 @@ export function TareaSeguimientoPage() {
   }, [selectedInventoryItems, campanaId, queryClient]);
 
   // Handler para subir artes tradicionales (múltiples con notas)
-  const handleUploadTradicionalArt = useCallback(async (data: { archivos: { archivo: string; nota: string; spot: number }[]; inventoryIds: string[]; markInstalado?: boolean }) => {
+  const handleUploadTradicionalArt = useCallback(async (data: { archivos: { archivo: string; nota: string; spot: number }[]; inventoryIds: string[]; markInstalado?: boolean; instalacionMode?: 'instalado' | 'rotacion' }) => {
     const reservaIds = selectedInventoryItems.flatMap(item =>
       item.rsv_id.split(',').map(id => parseInt(id.trim())).filter(id => !isNaN(id))
     );
@@ -16879,7 +16947,7 @@ export function TareaSeguimientoPage() {
         return;
       }
 
-      await campanasService.assignArteTradicional(campanaId, reservaIds, validArchivos, data.markInstalado === true);
+      await campanasService.assignArteTradicional(campanaId, reservaIds, validArchivos, data.markInstalado === true, data.instalacionMode);
 
       queryClient.invalidateQueries({ queryKey: ['campana-inventario-sin-arte'], exact: false });
       queryClient.invalidateQueries({ queryKey: ['campana-inventario-arte'], exact: false });

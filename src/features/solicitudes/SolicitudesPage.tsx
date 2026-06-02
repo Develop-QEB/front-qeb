@@ -836,13 +836,24 @@ export function SolicitudesPage() {
   // mantiene paginación correcta.
   const searchForBackend = allSearchTerms.length > 0 ? allSearchTerms.join('|') : undefined;
 
+  // El listado oculta 'Rechazada' por default. PERO si el usuario agrega un
+  // filtro avanzado sobre el campo 'status' (p.ej. status = Rechazada), dejamos
+  // que ese filtro controle el estatus: pedimos al backend TODO (sin excluir
+  // rechazadas) y el filtro cliente-side se encarga de acotar. Así se pueden
+  // ver las rechazadas a voluntad sin perder el default de ocultarlas.
+  const statusInAdvanced = useMemo(
+    () => advancedFilters.some(f => f.field === 'status' && f.value.trim() !== ''),
+    [advancedFilters]
+  );
+  const excludeRechazadas = !statusInAdvanced;
+
   // Fetch stats with all active filters.
   // staleTime corto: el WebSocket invalida la query en cambios reales, así
   // evitamos refetches innecesarios en cada re-render del padre.
   // Cuando search lo hace el backend, también lo mandamos a stats para que
   // el total y el chart reflejen los resultados filtrados.
   const { data: stats } = useQuery({
-    queryKey: ['solicitudes-stats', yearInicio, yearFin, catorcenaInicio, catorcenaFin, status, searchForBackend],
+    queryKey: ['solicitudes-stats', yearInicio, yearFin, catorcenaInicio, catorcenaFin, status, searchForBackend, excludeRechazadas],
     queryFn: () => solicitudesService.getStats({
       yearInicio,
       yearFin,
@@ -850,7 +861,7 @@ export function SolicitudesPage() {
       catorcenaFin,
       status: status || undefined,
       search: searchForBackend,
-      excludeRechazadas: true,
+      excludeRechazadas,
     }),
     staleTime: 1000 * 30, // 30 s
   });
@@ -862,7 +873,7 @@ export function SolicitudesPage() {
 
   // Fetch solicitudes
   const { data, isLoading } = useQuery({
-    queryKey: ['solicitudes', page, status, searchForBackend, yearInicio, yearFin, catorcenaInicio, catorcenaFin, sortBy, sortOrder, groupBy, tipoPeriodo, needsAllData, historialFilter],
+    queryKey: ['solicitudes', page, status, searchForBackend, yearInicio, yearFin, catorcenaInicio, catorcenaFin, sortBy, sortOrder, groupBy, tipoPeriodo, needsAllData, historialFilter, excludeRechazadas],
     queryFn: () =>
       solicitudesService.getAll({
         page: needsAllData ? 1 : page,
@@ -877,7 +888,7 @@ export function SolicitudesPage() {
         sortOrder,
         groupBy: groupBy || undefined,
         tipoPeriodo: tipoPeriodo || undefined,
-        excludeRechazadas: true,
+        excludeRechazadas,
         ...historialFilter,
       }),
     staleTime: 1000 * 30, // 30 s — WS invalida en cambios reales
@@ -1004,6 +1015,12 @@ export function SolicitudesPage() {
           values.add(String(val));
         }
       });
+      // El campo 'status' siempre ofrece todos los estatus conocidos (incl.
+      // Rechazada), aunque por default estén ocultos del listado: así el usuario
+      // puede seleccionarlos en el filtro avanzado para verlos.
+      if (fieldConfig.field === 'status') {
+        Object.keys(STATUS_COLORS_DARK).forEach(s => values.add(s));
+      }
       valuesMap[fieldConfig.field] = Array.from(values).sort();
     });
     return valuesMap;

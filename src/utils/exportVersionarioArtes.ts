@@ -120,9 +120,15 @@ export interface VersionarioArtesExportArgs {
   // Mapa opcional URL → nota: nota cargada al subir el arte (tradicional o digital).
   // La clave es la misma URL que termina en artesPorPlaza.
   notesByUrl?: Map<string, string>;
+  // Filtros activos en el modal preview (set de circuitKey). Si se pasa, solo
+  // se exportan los circuitos cuya key este en el set — respeta filtros UI.
+  filterKeys?: Set<string> | null;
+  // Saltar embed de miniaturas para descarga rapida. Las columnas "Arte N"
+  // quedan con la URL en texto en vez de la imagen.
+  skipImages?: boolean;
 }
 
-export async function exportVersionarioArtes({ campana, items, digitalFilesByReserva, notesByUrl }: VersionarioArtesExportArgs): Promise<void> {
+export async function exportVersionarioArtes({ campana, items, digitalFilesByReserva, notesByUrl, filterKeys, skipImages }: VersionarioArtesExportArgs): Promise<void> {
   const workbook = new ExcelJS.Workbook();
   workbook.creator = 'QEB';
   workbook.created = new Date();
@@ -151,6 +157,9 @@ export async function exportVersionarioArtes({ campana, items, digitalFilesByRes
   const byPlaza = new Map<string, InventarioConArte[]>();
   for (const it of items) {
     const k = getCircuitoKey(it);
+    // Si filterKeys esta dado, respetar el filtro UI del modal. La key del
+    // preview es `${campana.id}::${circuitId}`.
+    if (filterKeys && !filterKeys.has(`${campana.id}::${k}`)) continue;
     if (!byPlaza.has(k)) byPlaza.set(k, []);
     byPlaza.get(k)!.push(it);
   }
@@ -337,6 +346,12 @@ export async function exportVersionarioArtes({ campana, items, digitalFilesByRes
         row.getCell(colIndex + 1).value = { text: `Video subido: ${name}`, hyperlink: url };
         continue;
       }
+      // Modo rapido: no embed de imagen, solo hyperlink "Ver arte". Evita
+      // los segundos por imagen del fetch + addImage.
+      if (skipImages) {
+        row.getCell(colIndex + 1).value = { text: 'Ver arte', hyperlink: url };
+        continue;
+      }
       const imageId = await getImageId(url);
       if (imageId !== null) {
         sheet.addImage(imageId, {
@@ -356,8 +371,8 @@ export async function exportVersionarioArtes({ campana, items, digitalFilesByRes
   const blob = new Blob([buf], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
-  a.href = url;
-  a.download = `versionario_artes_${campaniaNombre.replace(/[^\w\-]+/g, '_') || campana.id}_${new Date().toISOString().slice(0, 10)}.xlsx`;
+  const sufijo = skipImages ? '_sin_miniaturas' : '';
+  a.download = `versionario_artes_${campaniaNombre.replace(/[^\w\-]+/g, '_') || campana.id}${sufijo}_${new Date().toISOString().slice(0, 10)}.xlsx`;
   document.body.appendChild(a);
   a.click();
   document.body.removeChild(a);
@@ -377,6 +392,12 @@ export interface VersionarioArtesMultiArgs {
     notesByUrl?: Map<string, string>;
   }>;
   fileNameSuffix?: string;
+  // Filtros activos en el modal preview (set de circuitKey). Si se pasa, solo
+  // se exportan los circuitos cuya key este en el set — respeta filtros UI.
+  filterKeys?: Set<string> | null;
+  // Saltar embed de miniaturas para descarga rapida. Las columnas "Arte N"
+  // quedan con la URL en texto en vez de la imagen.
+  skipImages?: boolean;
 }
 
 // Fila lista para mostrar como preview (mismas columnas que se exportan).
@@ -385,6 +406,10 @@ export interface VersionarioArtesMultiArgs {
 // mismo formato/articulo, mismo periodo y mismo APS. Es la misma granularidad
 // que muestra "Ocupacion BP" en el modal de Ordenes de Montaje.
 export interface VersionarioArtesPreviewRow {
+  // ID sintetico del circuito para vincular preview ↔ export (filtrar al
+  // descargar). Se construye con solicitudCaras.id (o fallback) + idCampana
+  // para que sea unico cuando hay multiples campañas en un mismo Excel.
+  circuitKey: string;
   idCampana: number | string; // ID de la campaña (APS Global - ID QEB era ambiguo)
   plaza: string;
   tipo: string;
@@ -555,7 +580,7 @@ export function buildVersionarioArtesPreview({ campanas }: { campanas: Versionar
       if (!byCircuito.has(k)) byCircuito.set(k, []);
       byCircuito.get(k)!.push(it);
     }
-    for (const [, arr] of byCircuito) {
+    for (const [circuitId, arr] of byCircuito) {
       const urls: string[] = [];
       const seen = new Set<string>();
       const pushUrl = (u: string | null | undefined) => {
@@ -688,6 +713,7 @@ export function buildVersionarioArtesPreview({ campanas }: { campanas: Versionar
       const formatoDisplay = uniqueOrVarios(formatos);
 
       rows.push({
+        circuitKey: `${campana.id}::${circuitId}`,
         idCampana: campana.id,
         plaza: plazaDisplay,
         tipo: uniqueOrVarios(tipos),
@@ -727,7 +753,7 @@ export function buildVersionarioArtesPreview({ campanas }: { campanas: Versionar
   };
 }
 
-export async function exportVersionarioArtesMulti({ campanas, fileNameSuffix }: VersionarioArtesMultiArgs): Promise<void> {
+export async function exportVersionarioArtesMulti({ campanas, fileNameSuffix, filterKeys, skipImages }: VersionarioArtesMultiArgs): Promise<void> {
   const workbook = new ExcelJS.Workbook();
   workbook.creator = 'QEB';
   workbook.created = new Date();
@@ -761,10 +787,12 @@ export async function exportVersionarioArtesMulti({ campanas, fileNameSuffix }: 
     const byCircuito = new Map<string, InventarioConArte[]>();
     for (const it of items) {
       const k = getCircuitoKey(it);
+      // Respetar filtros del modal preview cuando se descarga.
+      if (filterKeys && !filterKeys.has(`${campana.id}::${k}`)) continue;
       if (!byCircuito.has(k)) byCircuito.set(k, []);
       byCircuito.get(k)!.push(it);
     }
-    for (const [, arr] of byCircuito) {
+    for (const [circuitId, arr] of byCircuito) {
       // Plaza display: inline porque uniqueOrVarios se define mas abajo
       const plazaSet = new Set(arr.map(it => getPlaza(it)).filter(v => v != null && v !== ''));
       const plaza = plazaSet.size === 0 ? '' : plazaSet.size === 1 ? [...plazaSet][0] : 'Varios';
@@ -970,6 +998,11 @@ export async function exportVersionarioArtesMulti({ campanas, fileNameSuffix }: 
         row.getCell(colIndex + 1).value = { text: `Video subido: ${name}`, hyperlink: url };
         continue;
       }
+      // Modo rapido: solo hyperlink, sin fetch ni embed.
+      if (skipImages) {
+        row.getCell(colIndex + 1).value = { text: 'Ver arte', hyperlink: url };
+        continue;
+      }
       const imageId = await getImageId(url);
       if (imageId !== null) {
         sheet.addImage(imageId, {
@@ -991,7 +1024,8 @@ export async function exportVersionarioArtesMulti({ campanas, fileNameSuffix }: 
   const a = document.createElement('a');
   a.href = url;
   const sufijo = fileNameSuffix ? `_${fileNameSuffix}` : '';
-  a.download = `versionario_artes${sufijo}_${new Date().toISOString().slice(0, 10)}.xlsx`;
+  const rapidoTag = skipImages ? '_sin_miniaturas' : '';
+  a.download = `versionario_artes${sufijo}${rapidoTag}_${new Date().toISOString().slice(0, 10)}.xlsx`;
   document.body.appendChild(a);
   a.click();
   document.body.removeChild(a);
