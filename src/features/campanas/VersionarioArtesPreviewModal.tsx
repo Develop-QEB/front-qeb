@@ -1,5 +1,5 @@
 import { useMemo, useState, useEffect } from 'react';
-import { X, Download, Search, Image as ImageIcon, Film, ChevronDown, Filter, Calendar } from 'lucide-react';
+import { X, Download, Search, Image as ImageIcon, Film, ChevronDown, Filter, Calendar, Loader2 } from 'lucide-react';
 import { useThemeStore } from '../../store/themeStore';
 import type { VersionarioArtesPreview, VersionarioArtesPreviewRow } from '../../utils/exportVersionarioArtes';
 import type { Catorcena } from '../../types';
@@ -1215,8 +1215,8 @@ export function VersionarioArtesPreviewModal({ isOpen, onClose, preview, isLoadi
                       : isDark ? 'bg-zinc-800/50 text-zinc-600 border-zinc-800 cursor-not-allowed' : 'bg-gray-100 text-gray-400 border-gray-200 cursor-not-allowed'
                   }`}
                 >
-                  <Download className="h-4 w-4" />
-                  Rápido (sin imágenes)
+                  {isDownloading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Download className="h-4 w-4" />}
+                  {isDownloading ? 'Generando...' : 'Rápido (sin imágenes)'}
                 </button>
                 <button
                   onClick={() => onDownload({ filterKeys: visibleKeys, skipImages: false })}
@@ -1228,7 +1228,7 @@ export function VersionarioArtesPreviewModal({ isOpen, onClose, preview, isLoadi
                   }`}
                   title={hasFiltering ? `Exportar ${cantidad} fila(s) con miniaturas` : 'Exportar todo con miniaturas'}
                 >
-                  <Download className="h-4 w-4" />
+                  {isDownloading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Download className="h-4 w-4" />}
                   {isDownloading ? 'Generando Excel...' : `Descargar Excel${hasFiltering ? ` (${cantidad})` : ''}`}
                 </button>
               </div>
