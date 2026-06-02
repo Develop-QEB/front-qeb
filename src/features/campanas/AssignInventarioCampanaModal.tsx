@@ -2036,8 +2036,15 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
     // Mensual = todo cuenta como Flujo. Cubre caras viejas con split 50/50 en DB.
     const rawFlujo = cara.caras_flujo || 0;
     const rawContra = cara.caras_contraflujo || 0;
-    const flujoRequerido = tipoPeriodo === 'mensual' ? rawFlujo + rawContra : rawFlujo;
-    const contraflujoRequerido = tipoPeriodo === 'mensual' ? 0 : rawContra;
+    // BF/CF/CT: desde el commit `feat(bonif-split)` (24-may-2026) se persisten
+    // caras_flujo y caras_contraflujo para los KPIs del buscador, pero esos
+    // valores son el split INTERNO de la bonificación (no caras adicionales).
+    // Para la lógica de completitud aquí, en BF el "requerido" de flujo/contra
+    // es 0 y todo el total vive en bonificacion. Sin esta excepción el totalRequerido
+    // contaba doble (e.g. flujo=2 + contra=2 + bonif=4 = 8 en lugar de 4).
+    const isSplitBonif = isBonifSplitArticle(cara.articulo);
+    const flujoRequerido = isSplitBonif ? 0 : (tipoPeriodo === 'mensual' ? rawFlujo + rawContra : rawFlujo);
+    const contraflujoRequerido = isSplitBonif ? 0 : (tipoPeriodo === 'mensual' ? 0 : rawContra);
     const bonificacionRequerido = cara.bonificacion || 0;
 
     // BF/CF/CT/IN: la bonificación se valida solo por TOTAL (no por ratio).
@@ -2045,7 +2052,6 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
     // (front-only, NO se guarda en BD). Aplica igual a Tradicional y Digital:
     // la vista no puede saber el ratio físico real una vez reservado, así que
     // la completitud cuenta el total de reservas tipo='Bonificacion'.
-    const isSplitBonif = isBonifSplitArticle(cara.articulo);
     const esBonifSplitDigital = isSplitBonif; // alias histórico — ahora vale para todos los tipos bonif-split
     const bonifTargetFlujo = isSplitBonif ? Math.ceil(bonificacionRequerido * flujoPct / 100) : 0;
     const bonifTargetContra = isSplitBonif ? bonificacionRequerido - bonifTargetFlujo : 0;
@@ -2410,7 +2416,11 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
     }
 
     // Calculate caras en renta (flujo + contraflujo)
-    const carasEnRenta = (cara.caras_flujo || 0) + (cara.caras_contraflujo || 0);
+    // BF/CF/CT: el split flujo/contra es el split de la bonificación (KPI),
+    // NO caras adicionales. Para esos artículos `caras` siempre debe ser 0.
+    const carasEnRenta = isBonifSplitArticle(cara.articulo)
+      ? 0
+      : (cara.caras_flujo || 0) + (cara.caras_contraflujo || 0);
 
     const bonificacionForForm = bfPair ? (bfPair.bonificacion || 0) : cara.bonificacion;
 
@@ -8388,7 +8398,10 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
                               ? caraReservas.some(r => r.aps && postedAPSGroups.has(r.aps as number))
                               : caraHasAPS;
                             const status = getCaraCompletionStatus(cara);
-                            const totalCaras = (cara.caras_flujo || 0) + (cara.caras_contraflujo || 0) + (cara.bonificacion || 0);
+                            // BF/CF/CT: el split flujo/contra es interno a la bonificación; no se suma al total.
+                            const totalCaras = isBonifSplitArticle(cara.articulo)
+                              ? (cara.bonificacion || 0)
+                              : (cara.caras_flujo || 0) + (cara.caras_contraflujo || 0) + (cara.bonificacion || 0);
                             const carasFaltantes = status.totalRequerido - status.totalReservado;
 
                             // Determine status color and indicator

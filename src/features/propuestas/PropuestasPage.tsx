@@ -623,8 +623,13 @@ function StatusModal({ isOpen, onClose, propuesta, onStatusChange, allowedStatus
       const nonBonificacion = caraReservas.filter(r => r.estatus !== 'Bonificado');
       const rawFlujoReservado = nonBonificacion.filter(r => r.tipo_de_cara === 'A' || String(r.tipo_de_cara).startsWith('Flujo')).length;
       const rawContraReservado = nonBonificacion.filter(r => r.tipo_de_cara === 'B' || String(r.tipo_de_cara).startsWith('Contraflujo')).length;
-      const rawFlujoRequerido = Number(cara.caras_flujo) || 0;
-      const rawContraRequerido = Number(cara.caras_contraflujo) || 0;
+      // BF/CF/CT: caras_flujo y caras_contraflujo son el split INTERNO de la
+      // bonificación (KPI buscador), no caras requeridas. Si las contamos como
+      // requeridas, el badge "incompleto" se dispara aunque tenga sus N reservas.
+      const articuloUpper = (cara.articulo || '').toUpperCase();
+      const esBonifSplit = articuloUpper.startsWith('BF') || articuloUpper.startsWith('CF') || articuloUpper.startsWith('CT');
+      const rawFlujoRequerido = esBonifSplit ? 0 : (Number(cara.caras_flujo) || 0);
+      const rawContraRequerido = esBonifSplit ? 0 : (Number(cara.caras_contraflujo) || 0);
       const bonificacionRequerido = Number(cara.bonificacion) || 0;
 
       const flujoReservado = esMensual ? rawFlujoReservado + rawContraReservado : rawFlujoReservado;
