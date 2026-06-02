@@ -29,6 +29,7 @@ export interface HistorialFilters {
   search?: string;
   fechaDesde?: string;
   fechaHasta?: string;
+  auditAdmin?: boolean; // solo DEV: filtra acciones de Administrador/DEV
 }
 
 export interface HistorialUsuario {
@@ -47,6 +48,7 @@ export const historialService = {
     if (filters.search) params.set('search', filters.search);
     if (filters.fechaDesde) params.set('fechaDesde', filters.fechaDesde);
     if (filters.fechaHasta) params.set('fechaHasta', filters.fechaHasta);
+    if (filters.auditAdmin) params.set('audit_admin', 'true');
 
     const { data } = await api.get(`/historial?${params.toString()}`);
     return data;

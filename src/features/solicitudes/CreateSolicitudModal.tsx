@@ -290,6 +290,7 @@ const getFilePreviewUrl = (url: string | null): string | null => {
 };
 
 interface SAPCuicItem {
+  id: number;  // cliente.id en BD QEB — único por cliente (vs CUIC y card_code que pueden repetirse cuando 1 cliente legal tiene varias marcas)
   CUIC: number;
   T0_U_RazonSocial: string;
   T0_U_Cliente: string;
@@ -757,6 +758,7 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
       const result = await clientesService.getAllFull();
       // Map to SAPCuicItem-compatible format
       return (result.data || []).map(c => ({
+        id: c.id,
         CUIC: c.CUIC!,
         T0_U_RazonSocial: c.T0_U_RazonSocial || '',
         T0_U_Cliente: c.T0_U_Cliente || '',
@@ -1584,6 +1586,36 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
     }
   };
 
+  // Reenviar a autorización un circuito rechazado: re-evalúa criterios con los
+  // datos actuales (sin editar) y lo deja en pendiente/aprobado. Al guardar, el
+  // backend lo persiste y vuelve a crear la tarea de autorización si quedó pendiente.
+  const handleReenviarAutorizacion = async (id: string) => {
+    const cara = caras.find(c => c.id === id);
+    if (!cara) return;
+    try {
+      const resultado = await solicitudesService.evaluarAutorizacion({
+        ciudad: cara.ciudades.join(', '),
+        estado: cara.estado,
+        formato: cara.formato,
+        tipo: cara.tipo,
+        caras: cara.renta,
+        bonificacion: cara.bonificacion,
+        costo: cara.precioTotal,
+        tarifa_publica: cara.tarifaPublica,
+        articulo: cara.articulo?.ItemCode || null,
+      });
+      // Solo se actualiza autorizacion_* (badge/local). _original* se mantiene
+      // (estado de BD) para no interferir con el bloqueo de edición.
+      setCaras(prev => prev.map(c => c.id === id
+        ? { ...c, autorizacion_dg: resultado.autorizacion_dg, autorizacion_dcm: resultado.autorizacion_dcm }
+        : c));
+      const irAuth = resultado.autorizacion_dg === 'pendiente' || resultado.autorizacion_dcm === 'pendiente';
+      showToast(irAuth ? 'Circuito reenviado a autorización' : 'Circuito reprocesado: ya no requiere autorización', 'success');
+    } catch {
+      showToast('No se pudo reenviar a autorización', 'error');
+    }
+  };
+
   // Edit cara - loads cara data into form. If RT/BF pair, load both.
   const handleEditCara = (cara: CaraEntry) => {
     // If this is a BF row, find and edit the RT row instead
@@ -1815,6 +1847,15 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
       return;
     }
 
+    // No permitir guardar si quedan circuitos rechazados sin resolver. El usuario
+    // debe editarlos o usar "Reenviar a autorización" en TODOS antes de guardar.
+    const rechazadasSinResolver = caras.filter(c => c.autorizacion_dg === 'rechazado' || c.autorizacion_dcm === 'rechazado');
+    if (rechazadasSinResolver.length > 0) {
+      showToast(`Tienes ${rechazadasSinResolver.length} circuito(s) rechazado(s) sin resolver. Edítalos o usa "Reenviar a autorización" antes de guardar.`, 'error');
+      isSubmittingRef.current = false;
+      return;
+    }
+
     // Si hay archivo nuevo (File), subirlo primero a Spaces
     let archivoUrl = archivo;
     if (archivoFile) {
@@ -1945,18 +1986,24 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
       editFormPopulatedRef.current = true;
       const sol = editSolicitudData.solicitud;
 
-      // Find the CUIC item from local DB data
-      // Match by card_code + sap_database first (most precise), then fall back to CUIC + additional fields
+      // Find the CUIC item from local DB data.
+      // cliente.id es la única clave verdaderamente única: CUIC y card_code pueden
+      // repetirse cuando un mismo cliente legal (razon social) tiene varias marcas
+      // (ej. FRABEL/LOREAL CUIC 5171 y FRABEL/MAYBELLINE CUIC 5177 comparten card_code).
+      // Por eso priorizamos cliente_id antes que cualquier otro identificador.
+      const solClienteId = sol.cliente_id || null;
       const solCuic = sol.cuic ? parseInt(sol.cuic, 10) : null;
       const solSapDb = sol.sap_database || null;
       const solCardCode = sol.card_code || null;
       const solRazonSocial = sol.razon_social || null;
       const cuicItem =
-        // Best match: card_code + sap_database
-        (solCardCode && solSapDb ? cuicDataRaw.find(c => c.ACA_U_SAPCode === solCardCode && c.sap_database === solSapDb) : null)
+        // Best match: cliente_id (único por cliente en BD)
+        (solClienteId ? cuicDataRaw.find(c => c.id === solClienteId) : null)
+        // Fallback: card_code + sap_database
+        || (solCardCode && solSapDb ? cuicDataRaw.find(c => c.ACA_U_SAPCode === solCardCode && c.sap_database === solSapDb) : null)
         // Fallback: card_code only
         || (solCardCode ? cuicDataRaw.find(c => c.ACA_U_SAPCode === solCardCode) : null)
-        // Fallback: CUIC + razon_social (razon_social is always saved and distinguishes clients with same CUIC)
+        // Fallback: CUIC + razon_social
         || (solRazonSocial ? cuicDataRaw.find(c => c.CUIC === solCuic && c.T0_U_RazonSocial === solRazonSocial) : null)
         // Last resort: CUIC only
         || cuicDataRaw.find(c => c.CUIC === solCuic);
@@ -3378,11 +3425,13 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
                                         <td className="px-2 py-2 text-xs text-right text-emerald-400 font-medium">{formatCurrency(precioTotal)}</td>
                                         <td className="px-2 py-2 text-center">
                                           {(() => {
-                                            // Cortesías siempre aprobadas, no requieren autorización
-                                            const esCaraCortesia = cara.articulo?.ItemCode?.toUpperCase().startsWith('CT');
-                                            // Mostrar estado real de cada circuito (sin contaminación DG — eso se aplica al guardar)
-                                            const dgEfectivo = esCaraCortesia ? 'aprobado' : cara.autorizacion_dg;
-                                            const dcmEfectivo = esCaraCortesia ? 'aprobado' : cara.autorizacion_dcm;
+                                            // Mostrar estado real de cada circuito tal como esta en BD.
+                                            // Antes se forzaba CT a "aprobado" suponiendo que las cortesias
+                                            // no requerian autorizacion, pero pueden ser escaladas a DG y
+                                            // rechazadas — el back si las valida (commit 79c59e5) y bloquea
+                                            // Atender si hay rechazos. Caso reproducido en 80822.
+                                            const dgEfectivo = cara.autorizacion_dg;
+                                            const dcmEfectivo = cara.autorizacion_dcm;
                                             return (
                                               <div className="flex flex-col gap-0.5">
                                                 {dgEfectivo === 'aprobado' && dcmEfectivo === 'aprobado' && (
@@ -3420,6 +3469,16 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
                                             const authBlocked = isEditMode && anyPendingSaved;
                                             return (
                                           <div className="flex items-center justify-center gap-1">
+                                            {(cara.autorizacion_dg === 'rechazado' || cara.autorizacion_dcm === 'rechazado') && (
+                                              <button
+                                                type="button"
+                                                onClick={() => handleReenviarAutorizacion(cara.id)}
+                                                className="p-1 rounded text-[10px] hover:bg-blue-500/20 text-blue-400"
+                                                title="Reenviar a autorización (reprocesar este circuito)"
+                                              >
+                                                <RefreshCw className="h-3.5 w-3.5" />
+                                              </button>
+                                            )}
                                             {permissions.canEditCircuitoExistente && (
                                               <button
                                                 type="button"
