@@ -1306,8 +1306,9 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
       autorizacion_dg = 'aprobado';
       autorizacion_dcm = 'aprobado';
     } else if (skipAuthEval && editingOriginal) {
-      autorizacion_dg = editingOriginal._originalDg;
-      autorizacion_dcm = editingOriginal._originalDcm;
+      // Solo cambió NSE/ciudad: conservar el estado mostrado ACTUAL (local), no el de BD
+      autorizacion_dg = editingOriginal.autorizacion_dg ?? editingOriginal._originalDg;
+      autorizacion_dcm = editingOriginal.autorizacion_dcm ?? editingOriginal._originalDcm;
     } else {
       try {
         const ciudadesStr = newCara.ciudades.length > 0
@@ -1417,8 +1418,11 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
         precioTotal,
         autorizacion_dg,
         autorizacion_dcm,
-        _originalDg: autorizacion_dg,
-        _originalDcm: autorizacion_dcm,
+        // _original* refleja SOLO el estado guardado en BD (no la evaluación local).
+        // Cara existente editada: conserva su valor de BD. Cara nueva: undefined.
+        // Esto evita que una edición sin guardar bloquee la edición de los demás circuitos.
+        _originalDg: editingCaraId ? editingOriginal?._originalDg : undefined,
+        _originalDcm: editingCaraId ? editingOriginal?._originalDcm : undefined,
         grupo_rt_bf: grupoRtBf,
         grupo_masivo_id: grupoMasivoId,
       });
@@ -1446,8 +1450,9 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
           precioTotal: 0,
           autorizacion_dg, // BF inherits RT auth state
           autorizacion_dcm,
-          _originalDg: autorizacion_dg,
-          _originalDcm: autorizacion_dcm,
+          // _original* = estado de BD (BF hereda el del RT existente; nueva = undefined)
+          _originalDg: editingCaraId ? editingOriginal?._originalDg : undefined,
+          _originalDcm: editingCaraId ? editingOriginal?._originalDcm : undefined,
           grupo_rt_bf: grupoRtBf,
           grupo_masivo_id: grupoMasivoId,
           esBf: true,
@@ -1491,14 +1496,11 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
       } else {
         updated = [...prev, ...newCaras];
       }
-      // Reset todas las caras a sus valores originales del backend
-      // No contaminar aquí — mostrar estado real de cada circuito.
-      // La contaminación DG se aplica al guardar (backend crea una sola tarea DG).
-      return updated.map(c => ({
-        ...c,
-        autorizacion_dg: c._originalDg,
-        autorizacion_dcm: c._originalDcm,
-      }));
+      // Mostrar el estado REAL/local de cada circuito en su badge (autorizacion_*),
+      // SIN tocar _original* (que refleja solo lo guardado en BD y gobierna el bloqueo).
+      // Así, editar un circuito a "pendiente" no congela la edición de los demás
+      // hasta que se guarde. La contaminación DG se aplica al guardar (backend).
+      return updated;
     });
     const wasEditing = !!editingCaraId;
     if (editingCaraId) setEditingCaraId(null);
