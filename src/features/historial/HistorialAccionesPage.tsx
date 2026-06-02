@@ -295,6 +295,7 @@ export function HistorialAccionesPage() {
   const permissions = getPermissions(user?.rol);
   const queryClient = useQueryClient();
 
+  const [activeTab, setActiveTab] = useState<'general' | 'admin'>('general');
   const [filters, setFilters] = useState<HistorialFilters>({ page: 1, limit: 50 });
   const [searchInput, setSearchInput] = useState('');
   const [showNotaModal, setShowNotaModal] = useState(false);
@@ -304,11 +305,18 @@ export function HistorialAccionesPage() {
   const [isExporting, setIsExporting] = useState(false);
   const [detalleModal, setDetalleModal] = useState<HistorialEntry | null>(null);
 
+  // Tab "Acciones Admin" solo visible para usuarios con rol DEV
+  const canSeeAdminTab = user?.rol === 'DEV';
+  // El filtro auditAdmin viaja al backend cuando la tab admin esta activa
+  const effectiveFilters: HistorialFilters = activeTab === 'admin' && canSeeAdminTab
+    ? { ...filters, auditAdmin: true }
+    : filters;
+
   useSocketHistorialAcciones();
 
   const { data, isLoading, isFetching } = useQuery({
-    queryKey: ['historial-acciones', filters],
-    queryFn: () => historialService.getAll(filters),
+    queryKey: ['historial-acciones', effectiveFilters],
+    queryFn: () => historialService.getAll(effectiveFilters),
   });
 
   const { data: tiposRaw = [] } = useQuery({
@@ -367,7 +375,7 @@ export function HistorialAccionesPage() {
   const handleExport = async () => {
     setIsExporting(true);
     try {
-      const result = await historialService.getAll({ ...filters, page: 1, limit: 10000 });
+      const result = await historialService.getAll({ ...effectiveFilters, page: 1, limit: 10000 });
       const XLSX = await import('xlsx');
       const rows = result.data.map(e => ({
         'Fecha/Hora': formatFechaHora(e.fecha_hora),
@@ -495,6 +503,36 @@ export function HistorialAccionesPage() {
   return (
     <div className="min-h-screen">
       <Header title="Historial de Acciones" />
+
+      {/* Tabs — la pestaña "Acciones Admin" solo es visible para rol DEV */}
+      {canSeeAdminTab && (
+        <div className={`px-6 pt-4 border-b ${isDark ? 'border-zinc-800' : 'border-gray-200'}`}>
+          <div className="flex items-center gap-1">
+            <button
+              onClick={() => setActiveTab('general')}
+              className={`px-4 py-2 text-sm font-medium border-b-2 transition-colors ${
+                activeTab === 'general'
+                  ? isDark ? 'border-purple-500 text-white' : 'border-purple-600 text-gray-900'
+                  : isDark ? 'border-transparent text-zinc-400 hover:text-zinc-200' : 'border-transparent text-gray-500 hover:text-gray-700'
+              }`}
+            >
+              General
+            </button>
+            <button
+              onClick={() => setActiveTab('admin')}
+              className={`px-4 py-2 text-sm font-medium border-b-2 transition-colors flex items-center gap-1.5 ${
+                activeTab === 'admin'
+                  ? isDark ? 'border-purple-500 text-white' : 'border-purple-600 text-gray-900'
+                  : isDark ? 'border-transparent text-zinc-400 hover:text-zinc-200' : 'border-transparent text-gray-500 hover:text-gray-700'
+              }`}
+              title="Solo visible para rol DEV"
+            >
+              Acciones Admin
+              <span className={`text-[10px] px-1.5 py-0.5 rounded ${isDark ? 'bg-amber-500/20 text-amber-300' : 'bg-amber-100 text-amber-700'}`}>DEV</span>
+            </button>
+          </div>
+        </div>
+      )}
 
       <div className="space-y-4 p-6">
       {/* Barra de filtros */}
