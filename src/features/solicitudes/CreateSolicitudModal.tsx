@@ -643,6 +643,11 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
   const circuitFormRef = useRef<HTMLDivElement>(null);
   const circuitTableRef = useRef<HTMLDivElement>(null);
   const editFormPopulatedRef = useRef(false);
+  // Snapshot del formulario al iniciar edición (para detectar cambios no guardados)
+  const initialSnapshotRef = useRef<string | null>(null);
+  // Marca síncrona de que se restauró un borrador (evita que el effect de reset
+  // borre los campos que el effect de carga de borrador acaba de poblar).
+  const draftRestoredRef = useRef(false);
 
   // Form state
   const [step, setStep] = useState(1);
@@ -716,6 +721,9 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
 
   // Editing cara state
   const [editingCaraId, setEditingCaraId] = useState<string | null>(null);
+
+  // Confirmación al cerrar con cambios sin guardar
+  const [showCloseConfirm, setShowCloseConfirm] = useState(false);
 
   // Fetch users (filtered by team)
   const { data: users } = useQuery({
@@ -890,6 +898,7 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
     if (!draft) return;
     const hasData = draft.nombreCampania || draft.selectedCuic || draft.caras?.length > 0;
     if (!hasData) return;
+    draftRestoredRef.current = true; // síncrono: bloquea el reset en el mismo commit
     if (draft.step) setStep(draft.step);
     if (draft.selectedCuic) setSelectedCuic(draft.selectedCuic);
     if (draft.selectedAsignados?.length) setSelectedAsignados(draft.selectedAsignados);
@@ -935,7 +944,7 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
 
   // Reset form when opening modal in create mode
   useEffect(() => {
-    if (isOpen && !isEditMode && !restoredFromDraft) {
+    if (isOpen && !isEditMode && !restoredFromDraft && !draftRestoredRef.current) {
       // Reset all form state for a fresh start
       editFormPopulatedRef.current = false;
       setStep(1);
@@ -992,6 +1001,7 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
     if (isOpen && isEditMode && editSolicitudId) {
       // Reset state before loading new solicitud data
       editFormPopulatedRef.current = false;
+      initialSnapshotRef.current = null;
       setRestoredFromDraft(false);
       setSelectedCuic(null);
       setSelectedAsignados([]);
@@ -1810,6 +1820,7 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
   const resetForm = () => {
     isSubmittingRef.current = false;
     clearDraft();
+    draftRestoredRef.current = false;
     setRestoredFromDraft(false);
     setStep(1);
     setSelectedCuic(null);
@@ -2208,6 +2219,52 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
     }
   }, [isEditMode, editSolicitudData, cuicDataRaw, articulosData, catorcenasData]);
 
+  // Huella de los campos relevantes del formulario, para detectar cambios sin guardar.
+  const formSnapshot = useMemo(() => JSON.stringify({
+    cuic: selectedCuic?.id ?? null,
+    asignados: selectedAsignados.map(a => a.id).slice().sort(),
+    nombreCampania, descripcion, notas,
+    tipoPeriodo, yearInicio, yearFin, catorcenaInicio, catorcenaFin, mesInicio, mesFin,
+    imu, archivo,
+    caras: caras.map(c => ({
+      a: c.articulo?.ItemCode, e: c.estado, ci: c.ciudades, f: c.formato, t: c.tipo,
+      n: c.nse, r: c.renta, b: c.bonificacion, d: c.descuento,
+      pi: c.periodoInicio, pf: c.periodoFin, cn: c.catorcenaNum, cy: c.catorcenaYear,
+    })),
+  }), [selectedCuic, selectedAsignados, nombreCampania, descripcion, notas, tipoPeriodo,
+       yearInicio, yearFin, catorcenaInicio, catorcenaFin, mesInicio, mesFin, imu, archivo, caras]);
+
+  // Captura el snapshot inicial una vez que el formulario de edición terminó de poblarse.
+  useEffect(() => {
+    if (!isOpen || !isEditMode) return;
+    if (editFormPopulatedRef.current && initialSnapshotRef.current === null) {
+      initialSnapshotRef.current = formSnapshot;
+    }
+  }, [isOpen, isEditMode, formSnapshot]);
+
+  // ¿Hay cambios sin guardar?
+  const isFormDirty = (): boolean => {
+    if (isEditMode) {
+      if (!editFormPopulatedRef.current || initialSnapshotRef.current === null) return false;
+      return formSnapshot !== initialSnapshotRef.current;
+    }
+    // Modo crear: hay trabajo si se ingresó cualquier dato significativo
+    const soloCreador = selectedAsignados.length <= 1;
+    return Boolean(
+      nombreCampania || selectedCuic || caras.length > 0 || descripcion || notas ||
+      !soloCreador || archivo || newCara.articulo
+    );
+  };
+
+  // Intento de cierre: avisa si hay cambios sin guardar, si no cierra directo.
+  const handleAttemptClose = () => {
+    if (isFormDirty()) {
+      setShowCloseConfirm(true);
+    } else {
+      onClose();
+    }
+  };
+
   // Toggle NSE
   const toggleNse = (nse: string) => {
     if (newCara.nse.includes(nse)) {
@@ -2248,7 +2305,7 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
               </button>
             </div>
           </div>
-          <button onClick={onClose} className={`p-2 ${isDark ? 'hover:bg-zinc-800' : 'hover:bg-gray-100'} rounded-lg transition-colors`}>
+          <button onClick={handleAttemptClose} className={`p-2 ${isDark ? 'hover:bg-zinc-800' : 'hover:bg-gray-100'} rounded-lg transition-colors`}>
             <X className={`h-5 w-5 ${isDark ? 'text-zinc-400' : 'text-gray-500'}`} />
           </button>
         </div>
@@ -3759,7 +3816,7 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
         <div className={`flex items-center justify-between px-6 py-4 border-t ${isDark ? 'border-zinc-800 bg-zinc-900/50' : 'border-gray-200 bg-gray-50/50'}`}>
           <button
             type="button"
-            onClick={() => step > 1 ? setStep(step - 1) : onClose()}
+            onClick={() => step > 1 ? setStep(step - 1) : handleAttemptClose()}
             className={`px-4 py-2 ${isDark ? 'bg-zinc-800 text-zinc-300 hover:bg-zinc-700' : 'bg-gray-200 text-gray-700 hover:bg-gray-300'} rounded-lg text-sm font-medium transition-colors`}
           >
             {step === 1 ? 'Cancelar' : 'Anterior'}
@@ -3796,6 +3853,46 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
           )}
         </div>
       </div>
+
+      {/* Confirmación de cierre con cambios sin guardar */}
+      {showCloseConfirm && (
+        <div className="fixed inset-0 z-[80] flex items-center justify-center p-4">
+          <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={() => setShowCloseConfirm(false)} />
+          <div className={`relative w-full max-w-md rounded-2xl border shadow-2xl p-6 ${isDark ? 'bg-zinc-900 border-zinc-700' : 'bg-white border-gray-200'}`}>
+            <div className="flex items-start gap-3">
+              <div className="flex-shrink-0 p-2 rounded-full bg-amber-500/20">
+                <AlertTriangle className="h-6 w-6 text-amber-400" />
+              </div>
+              <div className="flex-1">
+                <h3 className={`text-lg font-bold ${isDark ? 'text-white' : 'text-gray-900'}`}>
+                  ¿Salir sin guardar?
+                </h3>
+                <p className={`mt-1 text-sm ${isDark ? 'text-zinc-400' : 'text-gray-500'}`}>
+                  {isEditMode
+                    ? 'Tienes cambios sin guardar en esta solicitud. Si sales ahora, se perderán.'
+                    : 'Tienes una solicitud en progreso sin guardar. Si sales ahora, se perderán los cambios.'}
+                </p>
+              </div>
+            </div>
+            <div className="mt-6 flex items-center justify-end gap-3">
+              <button
+                type="button"
+                onClick={() => setShowCloseConfirm(false)}
+                className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${isDark ? 'bg-zinc-800 text-zinc-300 hover:bg-zinc-700' : 'bg-gray-200 text-gray-700 hover:bg-gray-300'}`}
+              >
+                Regresar
+              </button>
+              <button
+                type="button"
+                onClick={() => { setShowCloseConfirm(false); if (!isEditMode) resetForm(); onClose(); }}
+                className="px-4 py-2 rounded-lg text-sm font-medium bg-red-600 text-white hover:bg-red-700 transition-colors"
+              >
+                Salir sin guardar
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Toast notification */}
       {toast.show && (
