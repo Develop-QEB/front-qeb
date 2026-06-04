@@ -121,11 +121,19 @@ export function ClientePropuestaMapPage() {
   });
 
   const allInventario = data?.inventario || [];
-  // Inventario visible: filtrado por la seleccion (?ids=) o todo si no hay seleccion.
-  const inventario = useMemo(
-    () => (selectedIdSet.size > 0 ? allInventario.filter(i => selectedIdSet.has(i.id)) : allInventario),
-    [allInventario, selectedIdSet]
-  );
+  // Inventario visible: filtrado por la seleccion (?ids=) o todo si no hay seleccion,
+  // y dedup por id (cada ubicacion se repite una vez por catorcena -> evita pines encimados).
+  const inventario = useMemo(() => {
+    const filtered = selectedIdSet.size > 0
+      ? allInventario.filter(i => selectedIdSet.has(i.id))
+      : allInventario;
+    const seen = new Set<number>();
+    return filtered.filter(i => {
+      if (seen.has(i.id)) return false;
+      seen.add(i.id);
+      return true;
+    });
+  }, [allInventario, selectedIdSet]);
   const tipoPeriodo = (data?.cotizacion as any)?.tipo_periodo || 'catorcena';
 
   // Descargar KML de lo visible (reusa el endpoint publico del backend).
@@ -230,7 +238,7 @@ export function ClientePropuestaMapPage() {
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-white via-blue-50/30 to-green-50/30 text-gray-800 flex flex-col">
+    <div className="h-screen overflow-hidden bg-gradient-to-br from-white via-blue-50/30 to-green-50/30 text-gray-800 flex flex-col">
       {/* Header */}
       <header className="sticky top-0 z-50 backdrop-blur shadow-md border-b bg-white/95 border-gray-200">
         <div className="max-w-full mx-auto px-4 py-4 flex items-center justify-between">
@@ -239,7 +247,7 @@ export function ClientePropuestaMapPage() {
               <img src="/logo-grupo-imu.png" alt="IMU" className="h-14 w-auto object-contain" />
             </div>
             <div className="border-l pl-4 border-gray-300">
-              <h1 className="text-xl font-bold text-[#0054A6]">Propuesta de Campana</h1>
+              <h1 className="text-xl font-bold text-[#0054A6]">Propuesta de Campaña</h1>
               <p className="text-sm text-gray-500">Referencia #{propuestaId}</p>
             </div>
           </div>
@@ -305,7 +313,7 @@ export function ClientePropuestaMapPage() {
       </div>
 
       {/* Map - Full remaining height */}
-      <div className="flex-1 relative">
+      <div className="flex-1 relative min-h-0">
         {/* Map toolbar */}
         <div className="absolute top-4 left-4 z-10 flex items-center gap-2 bg-white/95 backdrop-blur rounded-xl shadow-lg border border-gray-200 px-4 py-2.5">
           <MapIcon className="h-4 w-4 text-[#0054A6]" />
