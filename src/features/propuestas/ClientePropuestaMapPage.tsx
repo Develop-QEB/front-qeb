@@ -1,7 +1,7 @@
-import { useParams } from 'react-router-dom';
+import { useParams, useSearchParams } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { useState, useMemo, useRef } from 'react';
-import { Map as MapIcon, Loader2, ExternalLink, Copy, Check } from 'lucide-react';
+import { Map as MapIcon, Loader2, ExternalLink, Copy, Check, Download } from 'lucide-react';
 import { GoogleMap, useLoadScript, Marker, Circle, Autocomplete, InfoWindow } from '@react-google-maps/api';
 import { formatCurrency } from '../../lib/utils';
 
@@ -94,7 +94,15 @@ async function fetchPublicPropuesta(id: number): Promise<PublicPropuestaData> {
 
 export function ClientePropuestaMapPage() {
   const { id } = useParams<{ id: string }>();
+  const [searchParams] = useSearchParams();
   const propuestaId = id ? parseInt(id, 10) : 0;
+
+  // ?ids=1,2,3 -> mostrar solo el inventario seleccionado en Compartir. Sin ids: todo.
+  const idsParam = searchParams.get('ids') || '';
+  const selectedIdSet = useMemo(
+    () => new Set(idsParam.split(',').map(s => parseInt(s.trim(), 10)).filter(n => Number.isFinite(n))),
+    [idsParam]
+  );
   const mapRef = useRef<google.maps.Map | null>(null);
   const autocompleteRef = useRef<google.maps.places.Autocomplete | null>(null);
 
@@ -112,8 +120,20 @@ export function ClientePropuestaMapPage() {
     enabled: propuestaId > 0,
   });
 
-  const inventario = data?.inventario || [];
+  const allInventario = data?.inventario || [];
+  // Inventario visible: filtrado por la seleccion (?ids=) o todo si no hay seleccion.
+  const inventario = useMemo(
+    () => (selectedIdSet.size > 0 ? allInventario.filter(i => selectedIdSet.has(i.id)) : allInventario),
+    [allInventario, selectedIdSet]
+  );
   const tipoPeriodo = (data?.cotizacion as any)?.tipo_periodo || 'catorcena';
+
+  // Descargar KML de lo visible (reusa el endpoint publico del backend).
+  const handleDownloadKML = () => {
+    const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3000';
+    const qs = idsParam ? `?ids=${idsParam}` : '';
+    window.open(`${API_URL}/public/propuestas/${propuestaId}/kml${qs}`, '_blank', 'noopener,noreferrer');
+  };
 
   const periodoInicio = useMemo(() => {
     if (tipoPeriodo === 'mensual' && data?.cotizacion?.fecha_inicio) {
@@ -178,7 +198,9 @@ export function ClientePropuestaMapPage() {
   };
 
   const handleCopyLink = () => {
-    const publicUrl = `${window.location.origin}/cliente/propuesta/${propuestaId}`;
+    // Comparte ESTE mapa con la misma seleccion (?ids=) para que el cliente vea lo mismo.
+    const qs = idsParam ? `?ids=${idsParam}` : '';
+    const publicUrl = `${window.location.origin}/cliente/propuesta/${propuestaId}/mapa${qs}`;
     navigator.clipboard.writeText(publicUrl);
     setCopied(true);
     setTimeout(() => setCopied(false), 2000);
@@ -254,6 +276,13 @@ export function ClientePropuestaMapPage() {
             >
               <ExternalLink className="h-4 w-4" /> Ver Completa
             </a>
+            <button
+              onClick={handleDownloadKML}
+              className="flex items-center gap-2 px-4 py-2 bg-[#7AB800] hover:bg-[#689c00] text-white rounded-lg text-sm font-medium shadow-sm transition-colors"
+              title="Descargar KML de los puntos del mapa"
+            >
+              <Download className="h-4 w-4" /> KML
+            </button>
             <button
               onClick={handleCopyLink}
               className="flex items-center gap-2 px-4 py-2 bg-[#0054A6] hover:bg-[#003B71] text-white rounded-lg text-sm font-medium shadow-sm transition-colors"

@@ -3,7 +3,7 @@ import { useQuery } from '@tanstack/react-query';
 import { useState, useMemo, useRef } from 'react';
 import {
   ArrowLeft, Share2, Download, FileText, Map as MapIcon, Copy, Check, Loader2,
-  ChevronDown, ChevronRight, Filter, ArrowUpDown, Layers, FileSpreadsheet, ExternalLink, X, Navigation
+  ChevronDown, ChevronRight, Filter, ArrowUpDown, Layers, FileSpreadsheet, ExternalLink, X, Maximize2
 } from 'lucide-react';
 import { GoogleMap, useLoadScript, Marker, Circle, Autocomplete, InfoWindow } from '@react-google-maps/api';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell } from 'recharts';
@@ -570,21 +570,18 @@ export function CompartirPropuestaPage() {
     a.click();
   };
 
-  // Abrir lo SELECCIONADO en Google Maps.
-  // Google renderiza el KML que sirve el backend publico (maps?q=<url-del-kml>).
-  // OJO: el KML debe ser accesible desde internet; en localhost Google no puede leerlo.
-  const handleOpenInGoogleMaps = () => {
-    if (!inventario || selectedItems.size === 0) return;
-    const ids = Array.from(new Set(
-      inventario
-        .filter(i => selectedItems.has(itemKey(i)) && i.latitud && i.longitud)
-        .map(i => i.id)
-    ));
-    if (ids.length === 0) return;
-    const apiBase = import.meta.env.VITE_API_URL || 'http://localhost:3000';
-    const kmlUrl = `${apiBase}/public/propuestas/${propuestaId}/kml?ids=${ids.join(',')}`;
-    const gmapsUrl = `https://www.google.com/maps?q=${encodeURIComponent(kmlUrl)}`;
-    window.open(gmapsUrl, '_blank', 'noopener,noreferrer');
+  // Abrir el visor de mapa publico de QEB (pantalla completa, branding IMU) con la
+  // seleccion actual. Si no hay seleccion, abre el mapa con todo el inventario.
+  const handleExpandMap = () => {
+    const ids = inventario
+      ? Array.from(new Set(
+          inventario
+            .filter(i => selectedItems.has(itemKey(i)) && i.latitud && i.longitud)
+            .map(i => i.id)
+        ))
+      : [];
+    const qs = ids.length > 0 ? `?ids=${ids.join(',')}` : '';
+    window.open(`/cliente/propuesta/${propuestaId}/mapa${qs}`, '_blank', 'noopener,noreferrer');
   };
 
   // Download KML for a specific group
@@ -1284,11 +1281,9 @@ export function CompartirPropuestaPage() {
                     <MapIcon className="h-3.5 w-3.5" /> KML ({selectedItems.size})
                   </button>
                 )}
-                {selectedItems.size > 0 && (
-                  <button onClick={handleOpenInGoogleMaps} className="flex items-center gap-1.5 px-3 py-1.5 bg-gradient-to-r from-red-500 to-orange-500 hover:from-red-400 hover:to-orange-400 text-white rounded-lg text-xs font-medium shadow-sm transition-colors" title={`Abrir ${selectedItems.size} seleccionados en Google Maps`}>
-                    <Navigation className="h-3.5 w-3.5" /> Google Maps
-                  </button>
-                )}
+                <button onClick={handleExpandMap} className="flex items-center gap-1.5 px-3 py-1.5 bg-gradient-to-r from-indigo-600 to-violet-600 hover:from-indigo-500 hover:to-violet-500 text-white rounded-lg text-xs font-medium shadow-sm transition-colors" title={selectedItems.size > 0 ? `Expandir mapa con ${selectedItems.size} seleccionados` : 'Expandir mapa con todo el inventario'}>
+                  <Maximize2 className="h-3.5 w-3.5" /> Expandir Mapa
+                </button>
               </div>
             </div>
             <div className="flex flex-wrap items-center gap-3">
