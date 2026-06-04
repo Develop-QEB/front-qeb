@@ -1094,8 +1094,8 @@ function DigitalGalleryModal({
                 </div>
               </div>
 
-              {/* Nombre Arte + Nombre Archivo + Nota (digital) */}
-              {(currentImage?.archivo || (currentImage as any)?.nota || (currentImage as any)?.nombre_arte) && (
+              {/* Nombre Arte + Nombre Archivo + Nota + Estatus Operaciones (digital) */}
+              {(currentImage?.archivo || (currentImage as any)?.nota || (currentImage as any)?.nombre_arte || (currentImage as any)?.estatus_operaciones) && (
                 <div className="mt-3 p-3 bg-cyan-500/10 border border-cyan-500/30 rounded-lg space-y-2">
                   {(currentImage as any)?.nombre_arte && (
                     <div>
@@ -1117,6 +1117,12 @@ function DigitalGalleryModal({
                     <div>
                       <p className="text-xs font-medium text-cyan-300 mb-1">Nota:</p>
                       <p className="text-sm text-zinc-300 whitespace-pre-wrap">{(currentImage as any).nota}</p>
+                    </div>
+                  )}
+                  {(currentImage as any)?.estatus_operaciones && (
+                    <div>
+                      <p className="text-xs font-medium text-cyan-300 mb-1">Estatus Operaciones:</p>
+                      <p className="text-sm text-zinc-300 whitespace-pre-wrap">{(currentImage as any).estatus_operaciones}</p>
                     </div>
                   )}
                 </div>
@@ -1280,8 +1286,8 @@ function TradicionalGalleryModal({
                 </div>
               </div>
 
-              {/* Nombre Arte + Nombre Archivo + Nota de la imagen actual */}
-              {(currentImage?.archivo || currentImage?.nota || currentImage?.nombre_arte) && (
+              {/* Nombre Arte + Nombre Archivo + Nota + Estatus Operaciones de la imagen actual */}
+              {(currentImage?.archivo || currentImage?.nota || currentImage?.nombre_arte || (currentImage as any)?.estatus_operaciones) && (
                 <div className="mt-3 p-3 bg-orange-500/10 border border-orange-500/30 rounded-lg space-y-2">
                   {currentImage?.nombre_arte && (
                     <div>
@@ -1304,6 +1310,12 @@ function TradicionalGalleryModal({
                     <div>
                       <p className="text-xs font-medium text-orange-300 mb-1">Nota:</p>
                       <p className="text-sm text-zinc-300 whitespace-pre-wrap">{currentImage.nota}</p>
+                    </div>
+                  )}
+                  {(currentImage as any)?.estatus_operaciones && (
+                    <div>
+                      <p className="text-xs font-medium text-orange-300 mb-1">Estatus Operaciones:</p>
+                      <p className="text-sm text-zinc-300 whitespace-pre-wrap">{(currentImage as any).estatus_operaciones}</p>
                     </div>
                   )}
                 </div>
@@ -1381,8 +1393,8 @@ function UploadArtModal({
   selectedInventory: InventoryRow[];
   onSubmit: (data: { option: UploadOption; value: string | File; inventoryIds: string[]; markInstalado?: boolean; instalacionMode?: 'instalado' | 'rotacion' }) => void;
   onSubmitDigital?: (data: { files: { file: File; spot: number }[]; inventoryIds: string[]; markInstalado?: boolean; instalacionMode?: 'instalado' | 'rotacion' }) => void;
-  onSubmitTradicional?: (data: { archivos: { archivo: string; nota: string; spot: number }[]; inventoryIds: string[]; markInstalado?: boolean; instalacionMode?: 'instalado' | 'rotacion' }) => void;
-  onSubmitDigitalFromLibrary?: (data: { archivos: { archivo: string; nota: string; spot: number; tipo: string }[]; inventoryIds: string[]; markInstalado?: boolean; instalacionMode?: 'instalado' | 'rotacion' }) => void;
+  onSubmitTradicional?: (data: { archivos: { archivo: string; nota: string; spot: number; nombre_arte?: string | null; estatus_operaciones?: string | null }[]; inventoryIds: string[]; markInstalado?: boolean; instalacionMode?: 'instalado' | 'rotacion' }) => void;
+  onSubmitDigitalFromLibrary?: (data: { archivos: { archivo: string; nota: string; spot: number; tipo: string; nombre_arte?: string | null; estatus_operaciones?: string | null }[]; inventoryIds: string[]; markInstalado?: boolean; instalacionMode?: 'instalado' | 'rotacion' }) => void;
   artesExistentes: ArteExistente[];
   addedArtes: ArteExistente[];
   onAddedArtesChange: (artes: ArteExistente[]) => void;
@@ -1416,6 +1428,8 @@ function UploadArtModal({
   const [selectedDigitalImages, setSelectedDigitalImages] = useState<Map<string, { url: string; source: 'existing' | 'upload'; preview?: string; isVideo: boolean }>>(new Map());
   const [digitalImageNotes, setDigitalImageNotes] = useState<Map<string, string>>(new Map());
   const [digitalImageNames, setDigitalImageNames] = useState<Map<string, string>>(new Map());
+  // Estatus Operaciones (texto manual opcional) por imagen — digital
+  const [digitalImageEstatusOps, setDigitalImageEstatusOps] = useState<Map<string, string>>(new Map());
   const [isUploadingDigitalFile, setIsUploadingDigitalFile] = useState(false);
 
   // Estado para wizard de artes tradicionales (2 pasos)
@@ -1424,6 +1438,8 @@ function UploadArtModal({
   const [imageNotes, setImageNotes] = useState<Map<string, string>>(new Map());
   // Nombre arte capturado manualmente por el usuario (paralelo a imageNotes)
   const [imageNames, setImageNames] = useState<Map<string, string>>(new Map());
+  // Estatus Operaciones (texto manual opcional) por imagen — tradicional
+  const [imageEstatusOps, setImageEstatusOps] = useState<Map<string, string>>(new Map());
 
   // Estado para fichas técnicas (browser de carpetas)
   const [expandedFichaFolders, setExpandedFichaFolders] = useState<Set<string>>(new Set());
@@ -1702,6 +1718,7 @@ function UploadArtModal({
         spot: idx + 1,
         tipo: img.isVideo ? 'video' : 'image',
         nombre_arte: digitalImageNames.get(key)?.trim() || null,
+        estatus_operaciones: digitalImageEstatusOps.get(key)?.trim() || null,
       }));
       const { proceed, markInstalado, instalacionMode } = await checkAndConfirmInstalado(archivos.map(a => a.archivo));
       if (!proceed) return;
@@ -1730,6 +1747,7 @@ function UploadArtModal({
         nota: imageNotes.get(key)?.trim() || '',
         spot: idx + 1,
         nombre_arte: imageNames.get(key)?.trim() || null,
+        estatus_operaciones: imageEstatusOps.get(key)?.trim() || null,
       }));
       const { proceed, markInstalado, instalacionMode } = await checkAndConfirmInstalado(archivos.map(a => a.archivo));
       if (!proceed) return;
@@ -1782,9 +1800,11 @@ function UploadArtModal({
     setWizardStep(1);
     setSelectedGalleryImages(new Map());
     setImageNotes(new Map());
+    setImageEstatusOps(new Map());
     setDigitalWizardStep(1);
     setSelectedDigitalImages(new Map());
     setDigitalImageNotes(new Map());
+    setDigitalImageEstatusOps(new Map());
     setModalTab('artes');
     setExpandedFichaFolders(new Set());
     onClose();
@@ -1852,36 +1872,29 @@ function UploadArtModal({
   const canGoToStep2 = selectedGalleryImages.size > 0 && !isUploadingFile;
 
   const toggleGalleryImage = (id: string, url: string) => {
-    setSelectedGalleryImages(prev => {
-      const next = new Map(prev);
-      if (next.has(id)) {
-        next.delete(id);
-        setImageNotes(prevNotes => {
-          const nn = new Map(prevNotes);
-          nn.delete(id);
-          return nn;
-        });
-        setImageNames(prevNames => {
-          const nn = new Map(prevNames);
-          nn.delete(id);
-          return nn;
-        });
-      } else {
-        next.set(id, { url, source: 'existing' });
-        // Pre-llenar nombre del arte si el arte ya tiene uno guardado en biblioteca.
-        // Asi se respeta el nombre que ya tiene en lugar de obligar al usuario a
-        // reescribirlo en cada carga.
-        const arte = localArtes.find(a => a.id === id);
-        if (arte?.nombre_arte) {
-          setImageNames(prevNames => {
-            const nn = new Map(prevNames);
-            nn.set(id, arte.nombre_arte || '');
-            return nn;
-          });
-        }
-      }
-      return next;
-    });
+    // Deseleccionar: limpiar selección + sus campos.
+    if (selectedGalleryImages.has(id)) {
+      setSelectedGalleryImages(prev => { const n = new Map(prev); n.delete(id); return n; });
+      setImageNotes(prev => { const n = new Map(prev); n.delete(id); return n; });
+      setImageNames(prev => { const n = new Map(prev); n.delete(id); return n; });
+      setImageEstatusOps(prev => { const n = new Map(prev); n.delete(id); return n; });
+      return;
+    }
+    // Seleccionar. NOTA: los setters van al nivel superior (NO anidados dentro
+    // del updater de setSelectedGalleryImages) — anidarlos hacía que el prefill
+    // del nombre se perdiera de forma intermitente.
+    setSelectedGalleryImages(prev => { const n = new Map(prev); n.set(id, { url, source: 'existing' }); return n; });
+    // Pre-llenar nombre del arte / estatus operaciones desde la biblioteca, para
+    // respetar lo que ya tiene en lugar de obligar a reescribirlo. Match por id;
+    // fallback por url (el id de biblioteca es posicional y puede variar).
+    const arte = localArtes.find(a => a.id === id) || localArtes.find(a => a.url === url);
+    if (arte?.nombre_arte) {
+      setImageNames(prev => { const n = new Map(prev); n.set(id, arte.nombre_arte || ''); return n; });
+    }
+    const estatusOpExistente = (arte as { estatus_operaciones?: string | null } | undefined)?.estatus_operaciones;
+    if (estatusOpExistente) {
+      setImageEstatusOps(prev => { const n = new Map(prev); n.set(id, estatusOpExistente); return n; });
+    }
   };
 
   const addUploadedFile = async (selectedFile: File) => {
@@ -1919,34 +1932,23 @@ function UploadArtModal({
 
   // Helpers para el wizard digital
   const toggleDigitalGalleryImage = (id: string, url: string, isVideo: boolean) => {
-    setSelectedDigitalImages(prev => {
-      const next = new Map(prev);
-      if (next.has(id)) {
-        next.delete(id);
-        setDigitalImageNotes(prevNotes => {
-          const nn = new Map(prevNotes);
-          nn.delete(id);
-          return nn;
-        });
-        setDigitalImageNames(prevNames => {
-          const nn = new Map(prevNames);
-          nn.delete(id);
-          return nn;
-        });
-      } else {
-        next.set(id, { url, source: 'existing', isVideo });
-        // Pre-llenar nombre del arte si el arte ya tiene uno guardado en biblioteca.
-        const arte = localArtes.find(a => a.id === id);
-        if (arte?.nombre_arte) {
-          setDigitalImageNames(prevNames => {
-            const nn = new Map(prevNames);
-            nn.set(id, arte.nombre_arte || '');
-            return nn;
-          });
-        }
-      }
-      return next;
-    });
+    if (selectedDigitalImages.has(id)) {
+      setSelectedDigitalImages(prev => { const n = new Map(prev); n.delete(id); return n; });
+      setDigitalImageNotes(prev => { const n = new Map(prev); n.delete(id); return n; });
+      setDigitalImageNames(prev => { const n = new Map(prev); n.delete(id); return n; });
+      setDigitalImageEstatusOps(prev => { const n = new Map(prev); n.delete(id); return n; });
+      return;
+    }
+    // Setters al nivel superior (NO anidados) — anidarlos perdía el prefill del nombre.
+    setSelectedDigitalImages(prev => { const n = new Map(prev); n.set(id, { url, source: 'existing', isVideo }); return n; });
+    const arte = localArtes.find(a => a.id === id) || localArtes.find(a => a.url === url);
+    if (arte?.nombre_arte) {
+      setDigitalImageNames(prev => { const n = new Map(prev); n.set(id, arte.nombre_arte || ''); return n; });
+    }
+    const estatusOpExistente = (arte as { estatus_operaciones?: string | null } | undefined)?.estatus_operaciones;
+    if (estatusOpExistente) {
+      setDigitalImageEstatusOps(prev => { const n = new Map(prev); n.set(id, estatusOpExistente); return n; });
+    }
   };
 
   const addUploadedDigitalFile = async (selectedFile: File) => {
@@ -2397,6 +2399,20 @@ function UploadArtModal({
                                   rows={2}
                                   className="w-full px-2 py-1.5 text-xs bg-background border border-border rounded-lg focus:outline-none focus:ring-1 focus:ring-cyan-500 resize-none"
                                 />
+                                <label className="block text-[10px] font-medium text-zinc-400 mb-1 mt-1.5">
+                                  Estatus Operaciones {idx + 1}
+                                </label>
+                                <textarea
+                                  value={digitalImageEstatusOps.get(id) || ''}
+                                  onChange={(e) => setDigitalImageEstatusOps(prev => {
+                                    const next = new Map(prev);
+                                    next.set(id, e.target.value);
+                                    return next;
+                                  })}
+                                  rows={2}
+                                  placeholder="Estatus de operaciones (opcional)"
+                                  className="w-full px-2 py-1.5 text-xs bg-background border border-border rounded-lg focus:outline-none focus:ring-1 focus:ring-cyan-500 resize-none"
+                                />
                               </div>
                             );
                           })}
@@ -2637,6 +2653,20 @@ function UploadArtModal({
                                 {(!imageNotes.get(id) || imageNotes.get(id)?.trim() === '') && (
                                   <p className="mt-0.5 text-[9px] text-red-400">Nota obligatoria</p>
                                 )}
+                                <label className={`block text-[10px] font-medium mb-1 mt-1.5 ${isDark ? 'text-zinc-400' : 'text-gray-600'}`}>
+                                  Estatus Operaciones {idx + 1}
+                                </label>
+                                <textarea
+                                  value={imageEstatusOps.get(id) || ''}
+                                  onChange={(e) => setImageEstatusOps(prev => {
+                                    const next = new Map(prev);
+                                    next.set(id, e.target.value);
+                                    return next;
+                                  })}
+                                  rows={2}
+                                  placeholder="Estatus de operaciones (opcional)"
+                                  className="w-full px-2 py-1.5 text-xs bg-background border border-border rounded-lg focus:outline-none focus:ring-1 focus:ring-purple-500 resize-none"
+                                />
                               </div>
                             </div>
                           </div>
@@ -4144,6 +4174,7 @@ function TaskDetailModal({
         tipo: img.archivo.match(/\.(mp4|mov|avi|webm|mkv|wmv)$/i) ? 'video' as const : 'image' as const,
         estado: img.estado,
         nombre_arte: img.nombre_arte || null,
+        estatus_operaciones: img.estatus_operaciones || null,
       })));
     } catch (error) {
       console.error('Error fetching digital images:', error);
@@ -16869,6 +16900,7 @@ export function TareaSeguimientoPage() {
         tipo: img.tipo,
         estado: img.estado,
         nombre_arte: img.nombre_arte || null,
+        estatus_operaciones: img.estatus_operaciones || null,
       })));
     } catch (error) {
       console.error('Error al cargar imágenes digitales:', error);
@@ -16879,7 +16911,7 @@ export function TareaSeguimientoPage() {
   }, [campanaId]);
 
   // Handler para asignar arte digital desde biblioteca (wizard con notas)
-  const handleUploadDigitalFromLibrary = useCallback(async (data: { archivos: { archivo: string; nota: string; spot: number; tipo: string }[]; inventoryIds: string[]; markInstalado?: boolean; instalacionMode?: 'instalado' | 'rotacion' }) => {
+  const handleUploadDigitalFromLibrary = useCallback(async (data: { archivos: { archivo: string; nota: string; spot: number; tipo: string; nombre_arte?: string | null; estatus_operaciones?: string | null }[]; inventoryIds: string[]; markInstalado?: boolean; instalacionMode?: 'instalado' | 'rotacion' }) => {
     const reservaIds = selectedInventoryItems.flatMap(item =>
       item.rsv_id.split(',').map(id => parseInt(id.trim())).filter(id => !isNaN(id))
     );
@@ -16905,6 +16937,8 @@ export function TareaSeguimientoPage() {
         nombre: a.archivo.split('/').pop() || 'archivo',
         tipo: a.tipo,
         nota: a.nota,
+        nombre_arte: a.nombre_arte ?? null,
+        estatus_operaciones: a.estatus_operaciones ?? null,
       }));
 
       await campanasService.assignArteDigital(campanaId, reservaIds, filesWithMeta, data.markInstalado === true, data.instalacionMode);
@@ -16926,7 +16960,7 @@ export function TareaSeguimientoPage() {
   }, [selectedInventoryItems, campanaId, queryClient]);
 
   // Handler para subir artes tradicionales (múltiples con notas)
-  const handleUploadTradicionalArt = useCallback(async (data: { archivos: { archivo: string; nota: string; spot: number }[]; inventoryIds: string[]; markInstalado?: boolean; instalacionMode?: 'instalado' | 'rotacion' }) => {
+  const handleUploadTradicionalArt = useCallback(async (data: { archivos: { archivo: string; nota: string; spot: number; nombre_arte?: string | null; estatus_operaciones?: string | null }[]; inventoryIds: string[]; markInstalado?: boolean; instalacionMode?: 'instalado' | 'rotacion' }) => {
     const reservaIds = selectedInventoryItems.flatMap(item =>
       item.rsv_id.split(',').map(id => parseInt(id.trim())).filter(id => !isNaN(id))
     );
@@ -16980,6 +17014,7 @@ export function TareaSeguimientoPage() {
         nota: a.nota,
         spot: a.spot,
         nombre_arte: a.nombre_arte || null,
+        estatus_operaciones: a.estatus_operaciones || null,
       })));
     } catch (error) {
       console.error('Error al cargar artes tradicionales:', error);

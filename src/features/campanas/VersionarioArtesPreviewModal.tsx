@@ -1,4 +1,4 @@
-import { useMemo, useState, useEffect } from 'react';
+import { useMemo, useState, useEffect, useRef } from 'react';
 import { X, Download, Search, Image as ImageIcon, Film, ChevronDown, Filter, Calendar, Loader2 } from 'lucide-react';
 import { useThemeStore } from '../../store/themeStore';
 import type { VersionarioArtesPreview, VersionarioArtesPreviewRow } from '../../utils/exportVersionarioArtes';
@@ -15,8 +15,8 @@ function FilterChipModal({
 }: {
   label: string;
   options: string[];
-  value: string;
-  onChange: (value: string) => void;
+  value: string[];
+  onChange: (value: string[]) => void;
   onClear: () => void;
   isDark?: boolean;
 }) {
@@ -29,20 +29,26 @@ function FilterChipModal({
   }, [options, searchTerm]);
 
   const handleClose = () => { setOpen(false); setSearchTerm(''); };
+  // Multiselect: alterna la opción dentro del arreglo (no cierra al elegir).
+  const toggle = (opt: string) => {
+    if (value.includes(opt)) onChange(value.filter(v => v !== opt));
+    else onChange([...value, opt]);
+  };
+  const active = value.length > 0;
 
   return (
     <div className="relative">
       <button
         onClick={() => setOpen(!open)}
-        className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium transition-all duration-200 ${value
+        className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium transition-all duration-200 ${active
           ? isDark ? 'bg-purple-500/20 text-purple-300 border border-purple-500/40' : 'bg-purple-100 text-purple-700 border border-purple-200'
           : isDark
             ? 'bg-zinc-800/80 text-zinc-400 border border-zinc-700/50 hover:border-zinc-600'
             : 'bg-gray-100 text-gray-500 border border-gray-200 hover:border-gray-300'
         }`}
       >
-        <span>{value || label}</span>
-        {value ? (
+        <span>{active ? `${label} (${value.length})` : label}</span>
+        {active ? (
           <X className={`h-3 w-3 ${isDark ? 'hover:text-white' : 'hover:text-gray-900'}`} onClick={(e) => { e.stopPropagation(); onClear(); }} />
         ) : (
           <ChevronDown className="h-3 w-3" />
@@ -69,22 +75,33 @@ function FilterChipModal({
                   {options.length === 0 ? 'Sin opciones' : 'No se encontraron resultados'}
                 </div>
               ) : (
-                filteredOptions.map((option) => (
-                  <button
-                    key={option}
-                    onClick={() => { onChange(option); handleClose(); }}
-                    className={`w-full px-3 py-2 text-left text-xs transition-colors ${value === option
-                      ? isDark ? 'bg-purple-500/20 text-purple-300' : 'bg-purple-50 text-purple-700'
-                      : isDark ? 'text-zinc-400 hover:bg-zinc-800 hover:text-white' : 'text-gray-500 hover:bg-gray-100 hover:text-gray-900'
-                    }`}
-                  >
-                    {option}
-                  </button>
-                ))
+                filteredOptions.map((option) => {
+                  const sel = value.includes(option);
+                  return (
+                    <button
+                      key={option}
+                      onClick={() => toggle(option)}
+                      className={`w-full px-3 py-2 text-left text-xs transition-colors flex items-center gap-2 ${sel
+                        ? isDark ? 'bg-purple-500/20 text-purple-300' : 'bg-purple-50 text-purple-700'
+                        : isDark ? 'text-zinc-400 hover:bg-zinc-800 hover:text-white' : 'text-gray-500 hover:bg-gray-100 hover:text-gray-900'
+                      }`}
+                    >
+                      <span className={`flex-shrink-0 w-3.5 h-3.5 rounded border text-[9px] leading-none flex items-center justify-center ${sel ? 'bg-purple-500 border-purple-500 text-white' : isDark ? 'border-zinc-600' : 'border-gray-300'}`}>
+                        {sel ? '✓' : ''}
+                      </span>
+                      <span className="truncate">{option}</span>
+                    </button>
+                  );
+                })
               )}
             </div>
-            <div className={`px-3 py-1.5 border-t ${isDark ? 'border-zinc-800 text-zinc-500' : 'border-gray-200 text-gray-400'} text-[10px]`}>
-              {filteredOptions.length} de {options.length} opciones
+            <div className={`px-3 py-1.5 border-t ${isDark ? 'border-zinc-800 text-zinc-500' : 'border-gray-200 text-gray-400'} text-[10px] flex items-center justify-between gap-2`}>
+              <span>{filteredOptions.length} de {options.length} opciones</span>
+              {active && (
+                <button onClick={(e) => { e.stopPropagation(); onClear(); }} className={isDark ? 'text-purple-400 hover:text-purple-300' : 'text-purple-600 hover:text-purple-700'}>
+                  Limpiar ({value.length})
+                </button>
+              )}
             </div>
           </div>
         </>
@@ -422,8 +439,22 @@ const extractFileName = (url: string): string => {
 // en lugar de intentar previsualizar.
 function ArteThumb({ url, onClick }: { url: string; onClick?: () => void }) {
   const [errored, setErrored] = useState(false);
+  // La miniatura solo descarga la imagen cuando entra a la vista (la tabla
+  // renderiza al instante con placeholder; las imágenes llegan al hacer scroll).
+  const [inView, setInView] = useState(false);
+  const btnRef = useRef<HTMLButtonElement | null>(null);
   const isDark = useThemeStore(s => s.theme) === 'dark';
   const handleClick = onClick || (() => window.open(url, '_blank', 'noopener,noreferrer'));
+
+  useEffect(() => {
+    const el = btnRef.current;
+    if (!el || inView) return;
+    const obs = new IntersectionObserver((entries) => {
+      if (entries.some(e => e.isIntersecting)) { setInView(true); obs.disconnect(); }
+    }, { rootMargin: '150px' });
+    obs.observe(el);
+    return () => obs.disconnect();
+  }, [inView]);
 
   if (!url) {
     return (
@@ -462,26 +493,33 @@ function ArteThumb({ url, onClick }: { url: string; onClick?: () => void }) {
   }
   return (
     <button
+      ref={btnRef}
       type="button"
       onClick={handleClick}
-      className="w-16 h-12 rounded overflow-hidden border border-zinc-700 hover:border-purple-400/60 transition-colors bg-zinc-800"
+      className="w-16 h-12 rounded overflow-hidden border border-zinc-700 hover:border-purple-400/60 transition-colors bg-zinc-800 flex items-center justify-center"
       title="Abrir galeria de artes"
     >
-      <img
-        src={url}
-        alt="arte"
-        loading="lazy"
-        onError={() => setErrored(true)}
-        className="w-full h-full object-cover"
-      />
+      {inView ? (
+        <img
+          src={url}
+          alt="arte"
+          loading="lazy"
+          decoding="async"
+          onError={() => setErrored(true)}
+          className="w-full h-full object-cover"
+        />
+      ) : (
+        <ImageIcon className="h-4 w-4 text-zinc-600" />
+      )}
     </button>
   );
 }
 
 // ArtesGalleryModal — vista carrusel para previsualizar/descargar artes del row.
 // Estilo similar a la galeria del modal de Ordenes de Montaje.
-function ArtesGalleryModal({ urls, initialIndex, onClose, isDark }: {
+function ArtesGalleryModal({ urls, initialIndex, onClose, isDark, ficha }: {
   urls: string[]; initialIndex: number; onClose: () => void; isDark: boolean;
+  ficha?: { nombreArte: string; notas: string; estatusOperaciones: string } | null;
 }) {
   const [idx, setIdx] = useState(initialIndex);
   const [erroredKeys, setErroredKeys] = useState<Set<number>>(new Set());
@@ -521,7 +559,7 @@ function ArtesGalleryModal({ urls, initialIndex, onClose, isDark }: {
   return (
     <div className="fixed inset-0 z-[110] flex items-center justify-center">
       <div className="absolute inset-0 bg-black/85" onClick={onClose} />
-      <div className={`relative w-full max-w-5xl mx-4 max-h-[92vh] flex flex-col rounded-xl border shadow-2xl ${isDark ? 'bg-zinc-900 border-purple-500/40' : 'bg-white border-purple-200'}`}>
+      <div className={`relative w-[92vw] max-w-6xl mx-4 h-[90vh] flex flex-col rounded-xl border shadow-2xl ${isDark ? 'bg-zinc-900 border-purple-500/40' : 'bg-white border-purple-200'}`}>
         <div className="flex items-center justify-between p-3 border-b border-border flex-shrink-0">
           <div className="flex items-center gap-3 min-w-0">
             <ImageIcon className={`h-5 w-5 ${isDark ? 'text-purple-300' : 'text-purple-600'} shrink-0`} />
@@ -569,7 +607,7 @@ function ArtesGalleryModal({ urls, initialIndex, onClose, isDark }: {
               src={current}
               alt="arte"
               onError={() => setErroredKeys(prev => { const n = new Set(prev); n.add(safeIdx); return n; })}
-              className="max-w-full max-h-full object-contain"
+              className={`max-w-full max-h-full object-contain rounded-lg shadow-lg border ${isDark ? 'border-zinc-700' : 'border-gray-300'}`}
             />
           )}
           {urls.length > 1 && (
@@ -593,6 +631,29 @@ function ArtesGalleryModal({ urls, initialIndex, onClose, isDark }: {
             </>
           )}
         </div>
+        {/* Ficha del arte: Nombre Arte / Observaciones / Estatus Operaciones */}
+        {ficha && (ficha.nombreArte || ficha.notas || ficha.estatusOperaciones) && (
+          <div className={`p-3 border-t border-border space-y-2 text-xs overflow-y-auto max-h-40 flex-shrink-0 ${isDark ? 'bg-zinc-900' : 'bg-gray-50'}`}>
+            {ficha.nombreArte && (
+              <div>
+                <p className={`font-medium mb-0.5 ${isDark ? 'text-purple-300' : 'text-purple-600'}`}>Nombre Arte:</p>
+                <p className={`whitespace-pre-wrap ${isDark ? 'text-zinc-300' : 'text-gray-700'}`}>{ficha.nombreArte}</p>
+              </div>
+            )}
+            {ficha.notas && (
+              <div>
+                <p className={`font-medium mb-0.5 ${isDark ? 'text-purple-300' : 'text-purple-600'}`}>Observaciones:</p>
+                <p className={`whitespace-pre-wrap ${isDark ? 'text-zinc-300' : 'text-gray-700'}`}>{ficha.notas}</p>
+              </div>
+            )}
+            {ficha.estatusOperaciones && (
+              <div>
+                <p className={`font-medium mb-0.5 ${isDark ? 'text-purple-300' : 'text-purple-600'}`}>Estatus Operaciones:</p>
+                <p className={`whitespace-pre-wrap ${isDark ? 'text-zinc-300' : 'text-gray-700'}`}>{ficha.estatusOperaciones}</p>
+              </div>
+            )}
+          </div>
+        )}
         {urls.length > 1 && (
           <div className={`flex items-center gap-2 p-2 border-t border-border overflow-x-auto ${isDark ? 'bg-zinc-900' : 'bg-gray-50'}`}>
             {urls.map((u, i) => {
@@ -627,20 +688,22 @@ export function VersionarioArtesPreviewModal({ isOpen, onClose, preview, isLoadi
   // Galería de artes que abre al clickear una miniatura
   const [galleryUrls, setGalleryUrls] = useState<string[] | null>(null);
   const [galleryIndex, setGalleryIndex] = useState(0);
-  const openGallery = (urls: string[], idx: number) => { setGalleryUrls(urls); setGalleryIndex(idx); };
+  const [galleryFicha, setGalleryFicha] = useState<{ nombreArte: string; notas: string; estatusOperaciones: string } | null>(null);
+  const openGallery = (urls: string[], idx: number, ficha?: { nombreArte: string; notas: string; estatusOperaciones: string }) => { setGalleryUrls(urls); setGalleryIndex(idx); setGalleryFicha(ficha || null); };
   const closeGallery = () => setGalleryUrls(null);
   const [search, setSearch] = useState('');
 
   // --- Filtros internos del modal ---
-  const [filterEstatus, setFilterEstatus] = useState('');
-  const [filterCliente, setFilterCliente] = useState('');
-  const [filterPlaza, setFilterPlaza] = useState('');
+  const [filterEstatus, setFilterEstatus] = useState<string[]>([]);
+  const [filterCliente, setFilterCliente] = useState<string[]>([]);
+  const [filterAsesor, setFilterAsesor] = useState<string[]>([]);
+  const [filterPlaza, setFilterPlaza] = useState<string[]>([]);
   const [filterArte, setFilterArte] = useState<'' | 'con_arte' | 'sin_arte'>('');
   const [filterAps, setFilterAps] = useState<'' | 'con_aps' | 'sin_aps'>('');
   const [filterPost, setFilterPost] = useState<'' | 'con_post' | 'sin_post'>('');
-  const [filterTipoArchivo, setFilterTipoArchivo] = useState('');
-  const [filterTipo, setFilterTipo] = useState(''); // Tradicional / Digital
-  const [filterFormato, setFilterFormato] = useState(''); // PARABUS, MUPIS, etc.
+  const [filterTipoArchivo, setFilterTipoArchivo] = useState<string[]>([]);
+  const [filterTipo, setFilterTipo] = useState<string[]>([]); // Tradicional / Digital
+  const [filterFormato, setFilterFormato] = useState<string[]>([]); // PARABUS, MUPIS, etc.
   const [showFilters, setShowFilters] = useState(false);
 
   // Filtro de periodo
@@ -649,20 +712,30 @@ export function VersionarioArtesPreviewModal({ isOpen, onClose, preview, isLoadi
   const [periodCatInicio, setPeriodCatInicio] = useState<number | undefined>(undefined);
   const [periodCatFin, setPeriodCatFin] = useState<number | undefined>(undefined);
 
+  // Bloquear el scroll del fondo mientras el modal está abierto (si no, el
+  // scroll dentro del modal se "va para atrás" a la página).
+  useEffect(() => {
+    if (!isOpen) return;
+    const prev = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    return () => { document.body.style.overflow = prev; };
+  }, [isOpen]);
+
   // Reset paginacion/search/filtros al cerrar/abrir
   useEffect(() => {
     if (!isOpen) {
       setCurrentPage(1);
       setSearch('');
-      setFilterEstatus('');
-      setFilterCliente('');
-      setFilterPlaza('');
+      setFilterEstatus([]);
+      setFilterCliente([]);
+      setFilterAsesor([]);
+      setFilterPlaza([]);
       setFilterArte('');
       setFilterAps('');
       setFilterPost('');
-      setFilterTipoArchivo('');
-      setFilterTipo('');
-      setFilterFormato('');
+      setFilterTipoArchivo([]);
+      setFilterTipo([]);
+      setFilterFormato([]);
       setShowFilters(false);
       setPeriodYearInicio(undefined);
       setPeriodYearFin(undefined);
@@ -679,9 +752,10 @@ export function VersionarioArtesPreviewModal({ isOpen, onClose, preview, isLoadi
 
   // Opciones derivadas de los datos cargados
   const filterOptions = useMemo(() => {
-    if (!preview) return { estatuses: [] as string[], clientes: [] as string[], plazas: [] as string[], tiposArchivo: [] as string[], tipos: [] as string[], formatos: [] as string[] };
+    if (!preview) return { estatuses: [] as string[], clientes: [] as string[], asesores: [] as string[], plazas: [] as string[], tiposArchivo: [] as string[], tipos: [] as string[], formatos: [] as string[] };
     const estatusSet = new Set<string>();
     const clienteSet = new Set<string>();
+    const asesorSet = new Set<string>();
     const plazaSet = new Set<string>();
     const extSet = new Set<string>();
     const tipoSet = new Set<string>();
@@ -691,6 +765,7 @@ export function VersionarioArtesPreviewModal({ isOpen, onClose, preview, isLoadi
         for (const b of r.estatusBreakdown) estatusSet.add(b.label);
       }
       if (r.cliente) clienteSet.add(r.cliente);
+      if (r.asesor) asesorSet.add(r.asesor);
       if (r.plaza) plazaSet.add(r.plaza);
       if (r.tipo) {
         // Una fila puede tener "Tradicional, Digital" si agrupa ambos. Separar.
@@ -712,6 +787,7 @@ export function VersionarioArtesPreviewModal({ isOpen, onClose, preview, isLoadi
     return {
       estatuses: [...estatusSet].sort(),
       clientes: [...clienteSet].sort(),
+      asesores: [...asesorSet].sort(),
       plazas: [...plazaSet].sort(),
       tiposArchivo: [...extSet].sort(),
       tipos: [...tipoSet].sort(),
@@ -720,7 +796,12 @@ export function VersionarioArtesPreviewModal({ isOpen, onClose, preview, isLoadi
   }, [preview]);
 
   const isPeriodActive = periodYearInicio !== undefined && periodYearFin !== undefined;
-  const activeFilterCount = [filterEstatus, filterCliente, filterPlaza, filterArte, filterAps, filterPost, filterTipoArchivo, filterTipo, filterFormato].filter(Boolean).length + (isPeriodActive ? 1 : 0);
+  // Dropdowns multiselect (arreglos): cuentan si tienen ≥1 selección.
+  // Tri-state (Arte/Aps/Post, strings): cuentan si no están vacíos.
+  const activeFilterCount =
+    [filterEstatus, filterCliente, filterAsesor, filterPlaza, filterTipoArchivo, filterTipo, filterFormato].filter(a => a.length > 0).length +
+    [filterArte, filterAps, filterPost].filter(Boolean).length +
+    (isPeriodActive ? 1 : 0);
 
   // El filtro de periodo dispara una recarga desde el backend (onReloadPeriod),
   // por lo que no necesitamos filtrar client-side por periodo — los datos
@@ -731,21 +812,26 @@ export function VersionarioArtesPreviewModal({ isOpen, onClose, preview, isLoadi
     if (!preview) return [];
     let rows = preview.rows;
 
-    // Filtro Estatus
-    if (filterEstatus) {
+    // Filtro Estatus (multiselect: pasa si tiene ALGUNO de los seleccionados)
+    if (filterEstatus.length) {
       rows = rows.filter(r =>
-        r.estatusBreakdown?.some(b => b.label === filterEstatus)
+        r.estatusBreakdown?.some(b => filterEstatus.includes(b.label))
       );
     }
 
-    // Filtro Cliente
-    if (filterCliente) {
-      rows = rows.filter(r => r.cliente === filterCliente);
+    // Filtro Cliente (multiselect)
+    if (filterCliente.length) {
+      rows = rows.filter(r => filterCliente.includes(r.cliente));
     }
 
-    // Filtro Plaza
-    if (filterPlaza) {
-      rows = rows.filter(r => r.plaza === filterPlaza);
+    // Filtro Asesor (multiselect)
+    if (filterAsesor.length) {
+      rows = rows.filter(r => filterAsesor.includes(r.asesor));
+    }
+
+    // Filtro Plaza (multiselect)
+    if (filterPlaza.length) {
+      rows = rows.filter(r => filterPlaza.includes(r.plaza));
     }
 
     // Filtro Con/Sin Arte
@@ -769,25 +855,25 @@ export function VersionarioArtesPreviewModal({ isOpen, onClose, preview, isLoadi
       rows = rows.filter(r => !r.posted);
     }
 
-    // Filtro Tipo de Archivo
-    if (filterTipoArchivo) {
-      const ext = `.${filterTipoArchivo}`;
+    // Filtro Tipo de Archivo (multiselect: pasa si tiene archivo de ALGUNA ext)
+    if (filterTipoArchivo.length) {
+      const exts = filterTipoArchivo.map(e => `.${e}`);
       rows = rows.filter(r =>
-        r.artesUrls.some(u => u && u.split('?')[0].toLowerCase().endsWith(ext))
+        r.artesUrls.some(u => u && exts.some(ext => u.split('?')[0].toLowerCase().endsWith(ext)))
       );
     }
 
     // Filtro Tipo (Tradicional / Digital). r.tipo puede tener varios separados por ", "
-    if (filterTipo) {
+    if (filterTipo.length) {
       rows = rows.filter(r =>
-        r.tipo?.split(/[,;|/]/).map(s => s.trim()).includes(filterTipo)
+        r.tipo?.split(/[,;|/]/).map(s => s.trim()).some(t => filterTipo.includes(t))
       );
     }
 
     // Filtro Formato (PARABUS, MUPIS, etc.). Mismo split que tipo.
-    if (filterFormato) {
+    if (filterFormato.length) {
       rows = rows.filter(r =>
-        r.formato?.split(/[,;|/]/).map(s => s.trim()).includes(filterFormato)
+        r.formato?.split(/[,;|/]/).map(s => s.trim()).some(f => filterFormato.includes(f))
       );
     }
 
@@ -795,21 +881,21 @@ export function VersionarioArtesPreviewModal({ isOpen, onClose, preview, isLoadi
     const q = search.trim().toLowerCase();
     if (q) {
       rows = rows.filter(r => {
-        const haystack = [String(r.idCampana), r.plaza, r.tipo, r.formato, r.asesor, r.cliente, r.marca, r.campania, r.estatus, r.notas, r.nombreArte, String(r.apsQebId)]
+        const haystack = [String(r.idCampana), r.plaza, r.tipo, r.formato, r.asesor, r.cliente, r.marca, r.campania, r.estatus, r.notas, r.nombreArte, r.estatusOperaciones, String(r.apsQebId)]
           .join(' | ').toLowerCase();
         return haystack.includes(q);
       });
     }
 
     return rows;
-  }, [preview, search, filterEstatus, filterCliente, filterPlaza, filterArte, filterAps, filterPost, filterTipoArchivo, filterTipo, filterFormato]);
+  }, [preview, search, filterEstatus, filterCliente, filterAsesor, filterPlaza, filterArte, filterAps, filterPost, filterTipoArchivo, filterTipo, filterFormato]);
 
   const totalPages = Math.max(1, Math.ceil(filteredRows.length / PAGE_SIZE));
   const safePage = Math.min(currentPage, totalPages);
   const paginated = filteredRows.slice((safePage - 1) * PAGE_SIZE, safePage * PAGE_SIZE);
 
   // Cuando cambia cualquier filtro, reset a pagina 1
-  useEffect(() => { setCurrentPage(1); }, [search, filterEstatus, filterCliente, filterPlaza, filterArte, filterAps, filterPost, filterTipoArchivo, filterTipo, filterFormato]);
+  useEffect(() => { setCurrentPage(1); }, [search, filterEstatus, filterCliente, filterAsesor, filterPlaza, filterArte, filterAps, filterPost, filterTipoArchivo, filterTipo, filterFormato]);
 
   if (!isOpen) return null;
 
@@ -898,7 +984,7 @@ export function VersionarioArtesPreviewModal({ isOpen, onClose, preview, isLoadi
               options={filterOptions.estatuses}
               value={filterEstatus}
               onChange={setFilterEstatus}
-              onClear={() => setFilterEstatus('')}
+              onClear={() => setFilterEstatus([])}
               isDark={isDark}
             />
             <FilterChipModal
@@ -906,7 +992,15 @@ export function VersionarioArtesPreviewModal({ isOpen, onClose, preview, isLoadi
               options={filterOptions.clientes}
               value={filterCliente}
               onChange={setFilterCliente}
-              onClear={() => setFilterCliente('')}
+              onClear={() => setFilterCliente([])}
+              isDark={isDark}
+            />
+            <FilterChipModal
+              label="Asesor"
+              options={filterOptions.asesores}
+              value={filterAsesor}
+              onChange={setFilterAsesor}
+              onClear={() => setFilterAsesor([])}
               isDark={isDark}
             />
             <FilterChipModal
@@ -914,7 +1008,7 @@ export function VersionarioArtesPreviewModal({ isOpen, onClose, preview, isLoadi
               options={filterOptions.plazas}
               value={filterPlaza}
               onChange={setFilterPlaza}
-              onClear={() => setFilterPlaza('')}
+              onClear={() => setFilterPlaza([])}
               isDark={isDark}
             />
             <FilterChipModal
@@ -922,7 +1016,7 @@ export function VersionarioArtesPreviewModal({ isOpen, onClose, preview, isLoadi
               options={filterOptions.tiposArchivo}
               value={filterTipoArchivo}
               onChange={setFilterTipoArchivo}
-              onClear={() => setFilterTipoArchivo('')}
+              onClear={() => setFilterTipoArchivo([])}
               isDark={isDark}
             />
             <FilterChipModal
@@ -930,7 +1024,7 @@ export function VersionarioArtesPreviewModal({ isOpen, onClose, preview, isLoadi
               options={filterOptions.tipos}
               value={filterTipo}
               onChange={setFilterTipo}
-              onClear={() => setFilterTipo('')}
+              onClear={() => setFilterTipo([])}
               isDark={isDark}
             />
             <FilterChipModal
@@ -938,7 +1032,7 @@ export function VersionarioArtesPreviewModal({ isOpen, onClose, preview, isLoadi
               options={filterOptions.formatos}
               value={filterFormato}
               onChange={setFilterFormato}
-              onClear={() => setFilterFormato('')}
+              onClear={() => setFilterFormato([])}
               isDark={isDark}
             />
             {/* Filtro Con/Sin Arte */}
@@ -1012,7 +1106,7 @@ export function VersionarioArtesPreviewModal({ isOpen, onClose, preview, isLoadi
             </div>
             {activeFilterCount > 0 && (
               <button
-                onClick={() => { setFilterEstatus(''); setFilterCliente(''); setFilterPlaza(''); setFilterArte(''); setFilterAps(''); setFilterPost(''); setFilterTipoArchivo(''); setPeriodYearInicio(undefined); setPeriodYearFin(undefined); setPeriodCatInicio(undefined); setPeriodCatFin(undefined); }}
+                onClick={() => { setFilterEstatus([]); setFilterCliente([]); setFilterAsesor([]); setFilterPlaza([]); setFilterArte(''); setFilterAps(''); setFilterPost(''); setFilterTipoArchivo([]); setPeriodYearInicio(undefined); setPeriodYearFin(undefined); setPeriodCatInicio(undefined); setPeriodCatFin(undefined); }}
                 className={`px-2 py-1 text-[10px] rounded transition-colors ${isDark ? 'text-zinc-500 hover:text-zinc-300' : 'text-gray-400 hover:text-gray-700'}`}
               >
                 Limpiar filtros
@@ -1088,49 +1182,18 @@ export function VersionarioArtesPreviewModal({ isOpen, onClose, preview, isLoadi
                     <td className="p-2 whitespace-nowrap">{r.marca}</td>
                     <td className="p-2 whitespace-nowrap max-w-[200px] truncate" title={r.campania}>{r.campania}</td>
                     <td className="p-2 text-right">{r.caras}</td>
-                    <td className="p-2 whitespace-nowrap">
-                      {(() => {
-                        const items = r.estatusBreakdown || [];
-                        if (items.length === 0) return <span className="text-zinc-600">-</span>;
-                        const getCls = (label: string): string => {
-                          const lower = label.toLowerCase();
-                          if (lower === 'subir artes') return isDark ? 'bg-zinc-600/40 text-zinc-200 border border-zinc-500/30' : 'bg-gray-100 text-gray-700 border border-gray-200';
-                          if (lower === 'sin revisar') return isDark ? 'bg-zinc-500/20 text-zinc-300 border border-zinc-500/30' : 'bg-gray-100 text-gray-600 border border-gray-200';
-                          if (lower === 'en revisión') return isDark ? 'bg-yellow-500/20 text-yellow-300 border border-yellow-500/30' : 'bg-yellow-100 text-yellow-700 border border-yellow-200';
-                          if (lower === 'aprobado') return isDark ? 'bg-green-500/20 text-green-300 border border-green-500/30' : 'bg-green-100 text-green-700 border border-green-200';
-                          if (lower === 'rechazado') return isDark ? 'bg-red-500/20 text-red-300 border border-red-500/30' : 'bg-red-100 text-red-700 border border-red-200';
-                          if (lower === 'pendiente') return isDark ? 'bg-orange-500/20 text-orange-300 border border-orange-500/30' : 'bg-orange-100 text-orange-700 border border-orange-200';
-                          if (lower === 'en programación') return isDark ? 'bg-cyan-500/20 text-cyan-300 border border-cyan-500/30' : 'bg-cyan-100 text-cyan-700 border border-cyan-200';
-                          if (lower === 'en impresión') return isDark ? 'bg-blue-500/20 text-blue-300 border border-blue-500/30' : 'bg-blue-100 text-blue-700 border border-blue-200';
-                          if (lower === 'pendiente de recepción') return isDark ? 'bg-indigo-500/20 text-indigo-300 border border-indigo-500/30' : 'bg-indigo-100 text-indigo-700 border border-indigo-200';
-                          if (lower === 'recibido') return isDark ? 'bg-indigo-500/30 text-indigo-200 border border-indigo-500/40' : 'bg-indigo-200 text-indigo-800 border border-indigo-300';
-                          if (lower === 'por instalar') return isDark ? 'bg-emerald-500/10 text-emerald-300 border border-emerald-500/20' : 'bg-emerald-50 text-emerald-700 border border-emerald-200';
-                          if (lower === 'instaladas') return isDark ? 'bg-emerald-500/30 text-emerald-200 border border-emerald-500/40' : 'bg-emerald-100 text-emerald-700 border border-emerald-200';
-                          if (lower === 'testigo') return isDark ? 'bg-emerald-600/40 text-emerald-100 border border-emerald-500/50' : 'bg-emerald-200 text-emerald-800 border border-emerald-300';
-                          return isDark ? 'bg-zinc-700/40 text-zinc-300' : 'bg-gray-200 text-gray-700';
-                        };
-                        // Si solo hay 1 estatus → mostramos solo el label (sin conteo redundante)
-                        if (items.length === 1) {
-                          const it = items[0];
-                          return <span className={`px-2 py-0.5 rounded text-[10px] font-medium ${getCls(it.label)}`}>{it.label}</span>;
-                        }
-                        // Mixto → varios badges con su conteo, en orden por nivel descendente
-                        return (
-                          <div className="flex flex-wrap gap-1">
-                            {items.map(it => (
-                              <span key={it.label} className={`px-2 py-0.5 rounded text-[10px] font-medium ${getCls(it.label)}`}>
-                                {it.count} {it.label}
-                              </span>
-                            ))}
-                          </div>
-                        );
-                      })()}
-                    </td>
                     <td className="p-2">
                       <NotasPopover notas={r.notas} isDark={isDark} />
                     </td>
                     <td className="p-2">
                       <NombreArtePopover nombreArte={r.nombreArte} isDark={isDark} />
+                    </td>
+                    <td className="p-2 max-w-[180px]">
+                      {r.estatusOperaciones ? (
+                        <span className="text-xs whitespace-pre-wrap break-words" title={r.estatusOperaciones}>{r.estatusOperaciones}</span>
+                      ) : (
+                        <span className={`text-xs ${isDark ? 'text-zinc-600' : 'text-gray-400'}`}>-</span>
+                      )}
                     </td>
                     <td className="p-2 max-w-[240px]">
                       {r.artesUrls.length === 0 ? (
@@ -1155,7 +1218,7 @@ export function VersionarioArtesPreviewModal({ isOpen, onClose, preview, isLoadi
                     {Array.from({ length: arteCols }).map((_, i) => (
                       <td key={`a-${idx}-${i}`} className="p-2">
                         {r.artesUrls[i]
-                          ? <ArteThumb url={r.artesUrls[i]} onClick={() => openGallery(r.artesUrls, i)} />
+                          ? <ArteThumb url={r.artesUrls[i]} onClick={() => openGallery(r.artesUrls, i, { nombreArte: r.nombreArte, notas: r.notas, estatusOperaciones: r.estatusOperaciones })} />
                           : <span className="text-zinc-600">-</span>}
                       </td>
                     ))}
@@ -1243,6 +1306,7 @@ export function VersionarioArtesPreviewModal({ isOpen, onClose, preview, isLoadi
           initialIndex={galleryIndex}
           onClose={closeGallery}
           isDark={isDark}
+          ficha={galleryFicha}
         />
       )}
     </div>

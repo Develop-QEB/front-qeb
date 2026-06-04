@@ -86,6 +86,7 @@ export interface ImagenDigital {
   spot: number;
   tipo: 'image' | 'video';
   nombre_arte?: string | null; // Nombre manual capturado en la carga (reemplaza al slug del archivo)
+  estatus_operaciones?: string | null; // Texto manual de Estatus Operaciones (ficha)
 }
 
 export interface DigitalFileSummary {
@@ -103,6 +104,7 @@ export interface ArteTradicional {
   spot: number;
   createdAt: string | null;
   nombre_arte?: string | null; // Nombre manual capturado en la carga (reemplaza al slug del archivo)
+  estatus_operaciones?: string | null; // Texto manual de Estatus Operaciones (ficha)
 }
 
 export interface TradicionalFileSummary {
@@ -1015,11 +1017,25 @@ export const campanasService = {
 
   // includeWithoutAps=true incluye tambien items que aun no tienen APS asignado
   // (usado por el preview de Versionario Artes para que se vean circuitos pendientes).
-  async getInventarioSinArte(id: number, opts?: { includeWithoutAps?: boolean }): Promise<InventarioConArte[]> {
-    const params = opts?.includeWithoutAps ? { includeWithoutAps: 'true' } : undefined;
-    const response = await api.get<ApiResponse<InventarioConArte[]>>(`/campanas/${id}/inventario-sin-arte`, { params });
+  async getInventarioSinArte(id: number, opts?: { includeWithoutAps?: boolean; grouped?: boolean }): Promise<InventarioConArte[]> {
+    const params: Record<string, string> = {};
+    if (opts?.includeWithoutAps) params.includeWithoutAps = 'true';
+    if (opts?.grouped) params.grouped = 'true';
+    const response = await api.get<ApiResponse<InventarioConArte[]>>(`/campanas/${id}/inventario-sin-arte`, { params: Object.keys(params).length ? params : undefined });
     if (!response.data.success || !response.data.data) {
       throw new Error(response.data.error || 'Error al obtener inventario sin arte');
+    }
+    return response.data.data;
+  },
+
+  // BULK: inventario (con+sin arte) de varias campañas en 1 request. Para el
+  // Versionario de Artes (evita 2 llamadas por campaña).
+  async getInventarioVersionarioBulk(ids: number[], opts?: { includeWithoutAps?: boolean }): Promise<Record<string, { conArte: InventarioConArte[]; sinArte: InventarioConArte[] }>> {
+    const params: Record<string, string> = { ids: ids.join(',') };
+    if (opts?.includeWithoutAps) params.includeWithoutAps = 'true';
+    const response = await api.get<ApiResponse<Record<string, { conArte: InventarioConArte[]; sinArte: InventarioConArte[] }>>>(`/campanas/inventario-versionario-bulk`, { params });
+    if (!response.data.success || !response.data.data) {
+      throw new Error(response.data.error || 'Error al obtener inventario bulk');
     }
     return response.data.data;
   },
@@ -1047,7 +1063,7 @@ export const campanasService = {
   async assignArteDigital(
     id: number,
     reservaIds: number[],
-    archivos: { archivo: string; spot: number; nombre: string; tipo: string }[],
+    archivos: { archivo: string; spot: number; nombre: string; tipo: string; nota?: string; nombre_arte?: string | null; estatus_operaciones?: string | null }[],
     markInstalado: boolean = false,
     instalacionMode?: 'instalado' | 'rotacion'
   ): Promise<{ message: string; affected: number; marked_instalado?: boolean }> {
@@ -1066,6 +1082,16 @@ export const campanasService = {
     const response = await api.get<ApiResponse<ImagenDigital[]>>(`/campanas/${campanaId}/imagenes-digitales/${reservaId}`);
     if (!response.data.success || !response.data.data) {
       throw new Error(response.data.error || 'Error al obtener imágenes digitales');
+    }
+    return response.data.data;
+  },
+
+  // BULK: todas las imágenes digitales de la campaña en 1 request, con el
+  // id_reserva REAL de cada archivo. Usado por el Versionario al descargar Excel.
+  async getImagenesDigitalesBulk(campanaId: number): Promise<ImagenDigital[]> {
+    const response = await api.get<ApiResponse<ImagenDigital[]>>(`/campanas/${campanaId}/imagenes-digitales-bulk`);
+    if (!response.data.success || !response.data.data) {
+      throw new Error(response.data.error || 'Error al obtener imágenes digitales bulk');
     }
     return response.data.data;
   },
@@ -1136,7 +1162,7 @@ export const campanasService = {
   async assignArteTradicional(
     id: number,
     reservaIds: number[],
-    archivos: { archivo: string; nota: string; spot: number }[],
+    archivos: { archivo: string; nota: string; spot: number; nombre_arte?: string | null; estatus_operaciones?: string | null }[],
     markInstalado: boolean = false,
     instalacionMode?: 'instalado' | 'rotacion'
   ): Promise<{ message: string; affected: number; marked_instalado?: boolean }> {
