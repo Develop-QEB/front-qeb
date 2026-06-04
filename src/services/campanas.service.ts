@@ -513,7 +513,7 @@ export function buildDeliveryNote(
       let dscTAsig: string;
       if (isIntercambio) {
         codTAsig = 201;
-        dscTAsig = 'Intercambio';
+        dscTAsig = 'Otros'; // descripción canónica del código 201 en SAP
       } else if (!isRenta && isBonifiedEstatus) {
         codTAsig = 204;
         dscTAsig = 'Bonificado';
