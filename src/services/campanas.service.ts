@@ -492,19 +492,35 @@ export function buildDeliveryNote(
 
       // U_CodTAsig + U_dscTAsig deben ser un par válido en SAP:
       //   200 = "Venta"        (para RT-* o reservas vendidas)
+      //   201 = "Intercambio"  (para IN-* / artículos de intercambio)
       //   204 = "Bonificado"   (para BF/CF/CT o reservas bonificadas)
       // SAP rechaza con -2028 si la descripción no coincide con un código
       // existente en su tabla — por eso NO mandamos textos custom como
       // "Vendido bonificado" o "Reservado", siempre la descripción canónica
       // del CodTAsig que está enviando.
       const isRenta = articuloCode.startsWith('RT-') || articuloCode.startsWith('RT_');
+      // Intercambio se identifica por artículo IN-* (misma convención que en
+      // todo el flujo: caras, KPIs, autorización). Contablemente NO es venta.
+      const isIntercambio = articuloCode.startsWith('IN');
       const isBonifiedEstatus =
         firstItem.estatus_reserva === 'Bonificado' ||
         firstItem.estatus_reserva === 'Vendido bonificado';
-      // Renta gana sobre estatus: aunque el reserva.estatus esté en
-      // "Vendido bonificado", si el artículo es RT-*, va como Venta.
-      const codTAsig = !isRenta && isBonifiedEstatus ? 204 : 200;
-      const dscTAsig = codTAsig === 204 ? 'Bonificado' : 'Venta';
+      // Precedencia: Intercambio (201) gana sobre todo — aunque el estatus de
+      // la reserva sea "Vendido", un artículo IN-* va como Intercambio.
+      // Luego Renta gana sobre estatus bonificado (RT-* siempre Venta).
+      // El resto bonificado → 204; lo demás → 200 Venta.
+      let codTAsig: number;
+      let dscTAsig: string;
+      if (isIntercambio) {
+        codTAsig = 201;
+        dscTAsig = 'Intercambio';
+      } else if (!isRenta && isBonifiedEstatus) {
+        codTAsig = 204;
+        dscTAsig = 'Bonificado';
+      } else {
+        codTAsig = 200;
+        dscTAsig = 'Venta';
+      }
 
       return {
         LineNum: index.toString(),
