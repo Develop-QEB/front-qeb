@@ -1533,6 +1533,7 @@ export function SolicitudesPage() {
                 <HistorialFilterPopover
                   values={historialFilter}
                   isDark={isDark}
+                  estatusOptions={['Pendiente', 'Aprobada', 'Atendida', 'En Proceso', 'Rechazada', 'Cancelada']}
                   onApply={(v) => { setHistorialFilter(v); setPage(1); }}
                   onClear={() => { setHistorialFilter({}); setPage(1); }}
                 />

@@ -2364,6 +2364,7 @@ export function PropuestasPage() {
                 <HistorialFilterPopover
                   values={historialFilter}
                   isDark={isDark}
+                  estatusOptions={['Aprobada', 'Pase a ventas', 'Compartir', 'Atendida', 'Ajuste Cto Cliente', 'Ajuste Comercial', 'Rechazada', 'Cancelada', 'Descartada']}
                   onApply={(v) => { setHistorialFilter(v); setPage(1); }}
                   onClear={() => { setHistorialFilter({}); setPage(1); }}
                 />

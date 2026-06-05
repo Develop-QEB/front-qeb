@@ -3285,6 +3285,7 @@ export function CampanasPage() {
                 <HistorialFilterPopover
                   values={historialFilter}
                   isDark={isDark}
+                  estatusOptions={['Abierto', 'Aprobada', 'En pauta', 'Activa', 'Pase a ventas', 'Finalizada', 'Desactivada', 'Cancelada', 'Rechazada']}
                   onApply={(v) => { setHistorialFilter(v); setPage(1); }}
                   onClear={() => { setHistorialFilter({}); setPage(1); }}
                 />
