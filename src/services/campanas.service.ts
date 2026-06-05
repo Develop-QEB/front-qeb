@@ -405,6 +405,11 @@ export interface OrdenMontajeINVIAN {
   num_artes_digitales?: number | null;
   nombres_artes_digitales?: string | null;
   nombres_archivo_data?: string | null;
+  // Orden de Montaje: nombre_arte MANUAL, notas y URL de DO (separados por coma
+  // cuando hay varios artes). Aplica a digital y tradicional.
+  nombre_arte_manual?: string | null;
+  notas_artes?: string | null;
+  urls_artes_do?: string | null;
   cortesia?: number | null;
   numero_articulo?: string | null;
   cto?: string | null;
