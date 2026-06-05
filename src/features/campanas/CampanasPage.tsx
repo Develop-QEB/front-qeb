@@ -1262,8 +1262,15 @@ export function CampanasPage() {
   );
   const excludeRechazadas = !statusInAdvanced;
 
+  // Si el filtro de historial pide "cambió a Rechazada", desactivamos el
+  // exclude por default — si no, el filtro daria 0 porque la pagina oculta
+  // todo lo que tiene status='Rechazada' actual.
+  const effectiveExcludeRechazadas = (
+    historialFilter.modo === 'cambio_estatus' && historialFilter.estatusValor === 'Rechazada'
+  ) ? false : excludeRechazadas;
+
   const { data, isLoading } = useQuery({
-    queryKey: ['campanas', needsAllData ? 1 : page, status, yearInicio, yearFin, catorcenaInicio, catorcenaFin, tipoPeriodo, needsAllData, serverSearch, effectiveLimit, historialFilter, excludeRechazadas],
+    queryKey: ['campanas', needsAllData ? 1 : page, status, yearInicio, yearFin, catorcenaInicio, catorcenaFin, tipoPeriodo, needsAllData, serverSearch, effectiveLimit, historialFilter, effectiveExcludeRechazadas],
     queryFn: () =>
       campanasService.getAll({
         page: needsAllData ? 1 : page,
@@ -1275,7 +1282,7 @@ export function CampanasPage() {
         catorcenaInicio,
         catorcenaFin,
         tipoPeriodo: tipoPeriodo || undefined,
-        excludeRechazadas,
+        excludeRechazadas: effectiveExcludeRechazadas,
         ...historialFilter,
       }),
     staleTime: 1000 * 30, // 30 s — WS invalida en cambios reales
@@ -3285,7 +3292,7 @@ export function CampanasPage() {
                 <HistorialFilterPopover
                   values={historialFilter}
                   isDark={isDark}
-                  estatusOptions={['Abierto', 'Aprobada', 'En pauta', 'Activa', 'Pase a ventas', 'Finalizada', 'Desactivada', 'Cancelada', 'Rechazada']}
+                  estatusOptions={['Rechazada', 'Ajuste CTO Cliente', 'Aprobada', 'Atendido', 'Compartir']}
                   onApply={(v) => { setHistorialFilter(v); setPage(1); }}
                   onClear={() => { setHistorialFilter({}); setPage(1); }}
                 />

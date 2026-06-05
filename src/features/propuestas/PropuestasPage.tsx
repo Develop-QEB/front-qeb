@@ -1497,8 +1497,15 @@ export function PropuestasPage() {
     staleTime: 1000 * 30,
   });
 
+  // Si el filtro de historial pide "cambió a Rechazada", desactivamos el
+  // exclude por default — si no, el filtro daria 0 porque la pagina oculta
+  // todo lo que tiene status='Rechazada' actual.
+  const effectiveExcludeRechazadas = (
+    historialFilter.modo === 'cambio_estatus' && historialFilter.estatusValor === 'Rechazada'
+  ) ? false : excludeRechazadas;
+
   const { data, isLoading } = useQuery({
-    queryKey: ['propuestas', needsAllData ? 1 : page, status, serverSearch, yearInicio, yearFin, catorcenaInicio, catorcenaFin, sortBy, sortOrder, groupBy, tipoPeriodo, needsAllData, historialFilter, excludeRechazadas],
+    queryKey: ['propuestas', needsAllData ? 1 : page, status, serverSearch, yearInicio, yearFin, catorcenaInicio, catorcenaFin, sortBy, sortOrder, groupBy, tipoPeriodo, needsAllData, historialFilter, effectiveExcludeRechazadas],
     queryFn: () =>
       propuestasService.getAll({
         page: needsAllData ? 1 : page,
@@ -1511,7 +1518,7 @@ export function PropuestasPage() {
         catorcenaFin,
         soloAtendidas: true,
         tipoPeriodo: tipoPeriodo || undefined,
-        excludeRechazadas,
+        excludeRechazadas: effectiveExcludeRechazadas,
         ...historialFilter,
       }),
     staleTime: 1000 * 30, // 30 s — WS invalida en cambios reales
@@ -2364,7 +2371,7 @@ export function PropuestasPage() {
                 <HistorialFilterPopover
                   values={historialFilter}
                   isDark={isDark}
-                  estatusOptions={['Aprobada', 'Pase a ventas', 'Compartir', 'Atendida', 'Ajuste Cto Cliente', 'Ajuste Comercial', 'Rechazada', 'Cancelada', 'Descartada']}
+                  estatusOptions={['Atendido', 'Pase a ventas', 'Rechazada', 'Ajuste Cto-Cliente', 'Ajuste Comercial', 'Abierto']}
                   onApply={(v) => { setHistorialFilter(v); setPage(1); }}
                   onClear={() => { setHistorialFilter({}); setPage(1); }}
                 />
