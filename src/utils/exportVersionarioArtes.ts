@@ -167,6 +167,13 @@ const downscaleImage = async (buffer: ArrayBuffer): Promise<FetchedImage | null>
   }
 };
 
+// Contador para cache-buster: hace ÚNICA cada petición al proxy. Sin esto, un
+// caché HTTP (navegador/CDN) podía servir la imagen ya cacheada de OTRO arte
+// (respuesta cruzada) → en el Excel salía la foto equivocada en la celda, y
+// distinta en cada descarga (no determinista). Con un nonce único + el header
+// `no-store` del backend, cada celda trae SIEMPRE la imagen real de su URL.
+let __imgReqSeq = 0;
+
 const fetchImage = async (url: string): Promise<FetchedImage | null> => {
   if (!url) return null;
   let raw: FetchedImage | null = null;
@@ -177,7 +184,8 @@ const fetchImage = async (url: string): Promise<FetchedImage | null> => {
     // Access-Control-Allow-Origin para fetch desde el front).
     try {
       const res = await api.get('/uploads/proxy-image', {
-        params: { url },
+        // `_cb` = cache-buster único por petición (ver comentario arriba).
+        params: { url, _cb: `${Date.now()}_${__imgReqSeq++}` },
         responseType: 'arraybuffer',
       });
       const contentType = String(res.headers['content-type'] || '');
