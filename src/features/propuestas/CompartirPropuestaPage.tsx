@@ -461,10 +461,17 @@ export function CompartirPropuestaPage() {
 
   const handleDownloadXLSX = () => {
     if (!inventario) return;
+    // Si hay filas seleccionadas en los checkboxes, exportar SOLO esas. Si no hay
+    // selección, exportar todo el inventario.
+    const source = selectedItems.size > 0
+      ? inventario.filter(i => selectedItems.has(itemKey(i)))
+      : inventario;
+    if (source.length === 0) return;
     import('xlsx').then(XLSX => {
-      const headers = ['Clave', 'Plaza', 'Ubicación', 'Tipo de Cara', 'Formato', 'Periodo', 'Lat', 'Long', 'NOTAS'];
+      // codigo_unico (completo) va ANTES de Clave (que es solo el prefijo).
+      const headers = ['codigo_unico', 'Clave', 'Plaza', 'Ubicación', 'Tipo de Cara', 'Formato', 'Periodo', 'Lat', 'Long', 'NOTAS'];
       const byPlaza: Record<string, typeof inventario> = {};
-      for (const i of inventario) {
+      for (const i of source) {
         const plaza = i.plaza || 'Sin Plaza';
         if (!byPlaza[plaza]) byPlaza[plaza] = [];
         byPlaza[plaza].push(i);
@@ -472,6 +479,7 @@ export function CompartirPropuestaPage() {
       const wb = XLSX.utils.book_new();
       for (const plaza of Object.keys(byPlaza).sort()) {
         const rows = byPlaza[plaza].map(i => [
+          i.codigo_unico || '',
           (i.codigo_unico || '').split('_')[0],
           i.plaza || '',
           i.ubicacion || '',
@@ -486,7 +494,8 @@ export function CompartirPropuestaPage() {
         const sheetName = plaza.substring(0, 31);
         XLSX.utils.book_append_sheet(wb, ws, sheetName);
       }
-      XLSX.writeFile(wb, `reservas_propuesta_${propuestaId}.xlsx`);
+      const sufijo = selectedItems.size > 0 ? '_seleccion' : '';
+      XLSX.writeFile(wb, `reservas_propuesta_${propuestaId}${sufijo}.xlsx`);
     });
   };
 
