@@ -11,4 +11,4 @@
  * checkboxes y la barra de acciones masivas; el borrado individual (bote de
  * basura) sigue funcionando normal.
  */
-export const BULK_DELETE_ENABLED = false;
+export const BULK_DELETE_ENABLED = true;
