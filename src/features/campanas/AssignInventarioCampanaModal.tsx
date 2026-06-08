@@ -27,6 +27,7 @@ import { useThemeStore } from '../../store/themeStore';
 import { SaveChangesConfirmModal, type ModifiedCircuito } from '../../components/SaveChangesConfirmModal';
 import { DeleteCircuitoConfirmModal } from '../../components/DeleteCircuitoConfirmModal';
 import { CircuitCheckbox } from '../../components/ui/CircuitCheckbox';
+import { BULK_DELETE_ENABLED } from '../../config/featureFlags';
 
 // GOOGLE_MAPS_API_KEY / LIBRARIES centralizados en src/config/googleMaps.ts
 // (evita que la API de Google Maps se cargue dos veces y trabe la pantalla).
@@ -917,6 +918,7 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
     tieneReservas: boolean;
     tienePareja: boolean;
     isDeleting: boolean;
+    count?: number;
     onConfirm: () => Promise<void> | void;
   }>({
     isOpen: false,
@@ -2381,10 +2383,22 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
   };
 
   // ── Selección masiva de circuitos ──────────────────────────────────────────
+  // Una cara con APS asignado (o de un grupo APS ya posteado a SAP) no se puede
+  // eliminar — mismo criterio que el bote individual (caraAPSBlocked).
+  const isCaraAPSBlocked = (cara: CaraItem) => {
+    const caraReservas = reservas.filter(r => r.id.startsWith(cara.localId) || r.solicitudCaraId === cara.id);
+    if (postedAPSGroups.size > 0) {
+      return caraReservas.some(r => r.aps && postedAPSGroups.has(r.aps as number));
+    }
+    return caraReservas.some(r => r.aps && r.aps > 0);
+  };
+
   // Una cara es seleccionable si se puede eliminar: sin autorizaciones pendientes
-  // guardadas y sin reservas (salvo permiso). Mismo criterio que el bote individual.
+  // guardadas, sin APS asignado, y sin reservas (salvo permiso). El inventario
+  // (reservas) sí se libera al borrar. Mismo criterio que el bote individual.
   const isCaraSelectable = (cara: CaraItem) => {
     if (hasSavedPendingAuth) return false;
+    if (isCaraAPSBlocked(cara)) return false;
     const tieneReservas = caraHasReservas(cara.localId, cara.id);
     if (tieneReservas && !permissions.canDeleteCaraConReservas) return false;
     return true;
@@ -2413,7 +2427,8 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
 
   // Elimina en lote las caras seleccionadas. Reutiliza la lógica del borrado individual:
   // arrastra pares RT/BF del mismo periodo y persiste cada baja al backend.
-  const handleBulkDeleteCaras = async () => {
+  // Abre el modal de confirmación estilizado antes de borrar.
+  const handleBulkDeleteCaras = () => {
     const selected = caras.filter(c => selectedCaraIds.has(c.localId));
     if (selected.length === 0) return;
 
@@ -2429,7 +2444,13 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
     });
     const carasToDelete = caras.filter(c => localIdsToRemove.has(c.localId));
 
-    // Seguridad: ninguna de las caras a eliminar puede tener reservas sin permiso
+    // Seguridad: ninguna de las caras a eliminar puede tener APS asignado, ni
+    // reservas protegidas (sin permiso). El inventario normal sí se libera al borrar.
+    const bloqueadaAPS = carasToDelete.find(c => isCaraAPSBlocked(c));
+    if (bloqueadaAPS) {
+      alert('Algunos circuitos seleccionados (o su par RT/BF) tienen APS asignado y no se pueden eliminar. Quítalos de la selección.');
+      return;
+    }
     const bloqueada = carasToDelete.find(c => caraHasReservas(c.localId, c.id) && !permissions.canDeleteCaraConReservas);
     if (bloqueada) {
       alert('Algunos circuitos seleccionados (o su par RT/BF) tienen reservas y no se pueden eliminar. Quítalos de la selección.');
@@ -2437,41 +2458,53 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
     }
 
     const circuitCount = carasToDelete.filter(c => !c.esBf).length;
-    const ok = window.confirm(
-      `¿Eliminar ${circuitCount} circuito${circuitCount !== 1 ? 's' : ''} seleccionado${circuitCount !== 1 ? 's' : ''}? Esta acción no se puede deshacer.`
-    );
-    if (!ok) return;
+    const tieneReservas = carasToDelete.some(c => caraHasReservas(c.localId, c.id));
+    const tienePareja = carasToDelete.length > selected.length;
 
-    // Eliminar primero las persistidas en BD; si una falla, detener y limpiar solo lo borrado
-    const removedLocalIds = new Set<string>();
-    const removedDbIds = new Set<number>();
-    let failed: CaraItem | null = null;
-    for (const cara of carasToDelete) {
-      if (cara.id) {
-        try {
-          await campanasService.deleteCara(campana!.id, cara.id);
-          removedDbIds.add(cara.id);
-        } catch (error) {
-          console.error('Error deleting cara (bulk):', error);
-          failed = cara;
-          break;
+    setDeleteCircuitoModal({
+      isOpen: true,
+      ubicacion: '',
+      articulo: '',
+      tieneReservas,
+      tienePareja,
+      isDeleting: false,
+      count: circuitCount,
+      onConfirm: async () => {
+        setDeleteCircuitoModal(prev => ({ ...prev, isDeleting: true }));
+
+        // Eliminar primero las persistidas en BD; si una falla, detener y limpiar solo lo borrado
+        const removedLocalIds = new Set<string>();
+        const removedDbIds = new Set<number>();
+        let failed: CaraItem | null = null;
+        for (const cara of carasToDelete) {
+          if (cara.id) {
+            try {
+              await campanasService.deleteCara(campana!.id, cara.id);
+              removedDbIds.add(cara.id);
+            } catch (error) {
+              console.error('Error deleting cara (bulk):', error);
+              failed = cara;
+              break;
+            }
+          }
+          removedLocalIds.add(cara.localId);
         }
-      }
-      removedLocalIds.add(cara.localId);
-    }
 
-    setCaras(prev => prev.filter(c => !removedLocalIds.has(c.localId)));
-    setReservas(prev => prev.filter(r => ![...removedLocalIds].some(id => r.id.startsWith(id))));
-    setModifiedCaras(prev => {
-      const next = new Map(prev);
-      for (const id of removedDbIds) next.delete(id);
-      return next;
+        setCaras(prev => prev.filter(c => !removedLocalIds.has(c.localId)));
+        setReservas(prev => prev.filter(r => ![...removedLocalIds].some(id => r.id.startsWith(id))));
+        setModifiedCaras(prev => {
+          const next = new Map(prev);
+          for (const id of removedDbIds) next.delete(id);
+          return next;
+        });
+        setSelectedCaraIds(new Set());
+        setDeleteCircuitoModal(prev => ({ ...prev, isOpen: false, isDeleting: false }));
+
+        if (failed) {
+          alert(`No se pudo eliminar "${failed.articulo || failed.localId}". Se eliminaron ${removedLocalIds.size} de ${carasToDelete.length} circuitos.`);
+        }
+      },
     });
-    setSelectedCaraIds(new Set());
-
-    if (failed) {
-      alert(`No se pudo eliminar "${failed.articulo || failed.localId}". Se eliminaron ${removedLocalIds.size} de ${carasToDelete.length} circuitos.`);
-    }
   };
 
   // Handle edit cara - permite edición parcial cuando hay reservas
@@ -8490,7 +8523,7 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
                   </div>
                 )}
                 {/* Barra de acciones masivas: aparece al seleccionar circuitos */}
-                {effectiveCanEdit && canEditResumen && permissions.canEditCircuitoExistente && selectedCaraIds.size > 0 && (
+                {BULK_DELETE_ENABLED && effectiveCanEdit && canEditResumen && permissions.canEditCircuitoExistente && selectedCaraIds.size > 0 && (
                   <div className="flex items-center justify-between px-5 py-2.5 bg-red-500/10 border-b border-red-500/20">
                     <span className="text-sm font-medium text-red-300">
                       {caras.filter(c => selectedCaraIds.has(c.localId) && !c.esBf).length} circuito(s) seleccionado(s)
@@ -8553,7 +8586,7 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
                         ? monthLabelLong(groupFechaInicio)
                         : catorcenaLabel;
 
-                      const bulkSelectEnabled = effectiveCanEdit && canEditResumen && permissions.canEditCircuitoExistente;
+                      const bulkSelectEnabled = BULK_DELETE_ENABLED && effectiveCanEdit && canEditResumen && permissions.canEditCircuitoExistente;
                       const selectableIds = groupData.caras.filter(isCaraSelectable).map(c => c.localId);
                       const groupAllSelected = selectableIds.length > 0 && selectableIds.every(id => selectedCaraIds.has(id));
                       const groupSomeSelected = selectableIds.some(id => selectedCaraIds.has(id));
@@ -9540,6 +9573,7 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
         formato={deleteCircuitoModal.formato}
         tieneReservas={deleteCircuitoModal.tieneReservas}
         tienePareja={deleteCircuitoModal.tienePareja}
+        count={deleteCircuitoModal.count}
       />
       {/* Toast Notification */}
       {toastJSX}
