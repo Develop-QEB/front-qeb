@@ -20,6 +20,7 @@ import { useFormPersist } from '../../hooks/useFormPersist';
 import { uploadsService } from '../../services/uploads.service';
 import { parseCircuitoDigital, type CircuitoInfo } from '../../lib/circuitos';
 import { circuitosService } from '../../services/circuitos.service';
+import { CircuitCheckbox } from '../../components/ui/CircuitCheckbox';
 
 // Tarifas now come from SAP (U_IMU_PublicPrice = tarifa publica, PriceList 11 = tarifa piso)
 
@@ -719,6 +720,9 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
   // Expanded catorcenas in table
   const [expandedCatorcenas, setExpandedCatorcenas] = useState<Set<string>>(new Set());
 
+  // Selección masiva de circuitos (para eliminar en lote por circuito / catorcena)
+  const [selectedCaraIds, setSelectedCaraIds] = useState<Set<string>>(new Set());
+
   // Editing cara state
   const [editingCaraId, setEditingCaraId] = useState<string | null>(null);
 
@@ -976,6 +980,7 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
       setTipoArchivo(null);
       setImu(false);
       setExpandedCatorcenas(new Set());
+      setSelectedCaraIds(new Set());
       setNewCara({
         articulo: null,
         plaza: '',
@@ -1596,6 +1601,59 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
     }
   };
 
+  // ── Selección masiva de circuitos ──────────────────────────────────────────
+  // Permite seleccionar 1, varios circuitos o una catorcena completa y eliminarlos
+  // en lote (misma acción que el bote de basura individual: arrastra pares RT/BF).
+  const toggleCaraSelection = (id: string) => {
+    setSelectedCaraIds(prev => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  };
+
+  // Selecciona / deselecciona todos los circuitos de una catorcena (items del grupo)
+  const toggleCatorcenaSelection = (items: CaraEntry[]) => {
+    const ids = items.map(c => c.id);
+    setSelectedCaraIds(prev => {
+      const next = new Set(prev);
+      const allSelected = ids.length > 0 && ids.every(id => next.has(id));
+      if (allSelected) ids.forEach(id => next.delete(id));
+      else ids.forEach(id => next.add(id));
+      return next;
+    });
+  };
+
+  // Elimina en lote todas las caras seleccionadas. Reutiliza la lógica del borrado
+  // individual: si una cara tiene par RT/BF, se elimina también su pareja.
+  const handleBulkRemove = () => {
+    if (selectedCaraIds.size === 0) return;
+    const seleccionadas = caras.filter(c => selectedCaraIds.has(c.id) && !c.esBf);
+    const cuenta = seleccionadas.length || selectedCaraIds.size;
+    const ok = window.confirm(
+      `¿Eliminar ${cuenta} circuito${cuenta !== 1 ? 's' : ''} seleccionado${cuenta !== 1 ? 's' : ''}?`
+    );
+    if (!ok) return;
+
+    const toRemove = new Set<string>();
+    selectedCaraIds.forEach(id => {
+      const cara = caras.find(c => c.id === id);
+      if (!cara) return;
+      if (cara.grupo_rt_bf) {
+        caras
+          .filter(c => c.grupo_rt_bf === cara.grupo_rt_bf && c.catorcenaNum === cara.catorcenaNum && c.catorcenaYear === cara.catorcenaYear)
+          .forEach(c => toRemove.add(c.id));
+      } else {
+        toRemove.add(id);
+      }
+    });
+
+    setCaras(prev => prev.filter(c => !toRemove.has(c.id)));
+    if (editingCaraId && toRemove.has(editingCaraId)) setEditingCaraId(null);
+    setSelectedCaraIds(new Set());
+  };
+
   // Reenviar a autorización un circuito rechazado: re-evalúa criterios con los
   // datos actuales (sin editar) y lo deja en pendiente/aprobado. Al guardar, el
   // backend lo persiste y vuelve a crear la tarea de autorización si quedó pendiente.
@@ -1739,6 +1797,13 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
     return `Cat ${num} / ${year}`;
   };
 
+  // Autorización bloqueada: en edición, si hay circuitos guardados pendientes no se
+  // puede editar/eliminar (ni en lote). Mismo criterio que el botón individual.
+  const authBlocked = useMemo(
+    () => isEditMode && caras.some(c => c._originalDg === 'pendiente' || c._originalDcm === 'pendiente'),
+    [isEditMode, caras]
+  );
+
   // Toggle catorcena expansion
   const toggleCatorcena = (key: string) => {
     setExpandedCatorcenas(prev => {
@@ -1844,6 +1909,7 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
     setTipoArchivo(null);
     setImu(false);
     setExpandedCatorcenas(new Set());
+    setSelectedCaraIds(new Set());
   };
 
   // Handle submit
@@ -3396,6 +3462,32 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
                 </div>
               </div>
 
+              {/* Barra de acciones masivas: aparece al seleccionar circuitos */}
+              {permissions.canEditCircuitoExistente && !authBlocked && selectedCaraIds.size > 0 && (
+                <div className="flex items-center justify-between px-4 py-2.5 mb-2 rounded-lg bg-red-500/10 border border-red-500/30">
+                  <span className="text-sm font-medium text-red-300">
+                    {caras.filter(c => selectedCaraIds.has(c.id) && !c.esBf).length} circuito(s) seleccionado(s)
+                  </span>
+                  <div className="flex items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={() => setSelectedCaraIds(new Set())}
+                      className={`px-3 py-1.5 rounded-lg text-xs font-medium ${isDark ? 'text-zinc-300 hover:bg-zinc-700/50' : 'text-gray-600 hover:bg-gray-100'}`}
+                    >
+                      Limpiar
+                    </button>
+                    <button
+                      type="button"
+                      onClick={handleBulkRemove}
+                      className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium bg-red-500/20 text-red-300 hover:bg-red-500/30 transition-colors"
+                    >
+                      <Trash2 className="h-3.5 w-3.5" />
+                      Eliminar seleccionados
+                    </button>
+                  </div>
+                </div>
+              )}
+
               {/* Caras table - grouped by catorcena */}
               <div ref={circuitTableRef} className={`rounded-xl border ${isDark ? 'border-zinc-700/50' : 'border-gray-200'} overflow-hidden`}>
                 {groupedCaras.length === 0 ? (
@@ -3412,25 +3504,43 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
                       const groupAllPP = items.length > 0 && items.every(i => (i.formato || '').toUpperCase().includes('PUENTE PEATONAL'));
                       const carasHeader = groupAllPP ? 'Puentes' : 'Caras';
 
+                      const groupAllSelected = items.length > 0 && items.every(i => selectedCaraIds.has(i.id));
+                      const groupSomeSelected = items.some(i => selectedCaraIds.has(i.id));
+
                       return (
                         <div key={key}>
                           {/* Period header */}
-                          <button
-                            type="button"
-                            onClick={() => toggleCatorcena(key)}
-                            className={`w-full flex items-center justify-between px-4 py-3 ${isDark ? 'bg-zinc-800/50 hover:bg-zinc-800 border-zinc-700/50' : 'bg-gray-50 hover:bg-gray-100 border-gray-200'} transition-colors border-b`}
-                          >
+                          <div className={`w-full flex items-center justify-between px-4 py-3 ${isDark ? 'bg-zinc-800/50 hover:bg-zinc-800 border-zinc-700/50' : 'bg-gray-50 hover:bg-gray-100 border-gray-200'} transition-colors border-b`}>
                             <div className="flex items-center gap-3">
-                              {isExpanded ? <ChevronDown className={`h-4 w-4 ${isDark ? 'text-zinc-400' : 'text-gray-500'}`} /> : <ChevronRight className={`h-4 w-4 ${isDark ? 'text-zinc-400' : 'text-gray-500'}`} />}
-                              <span className={`font-medium ${isDark ? 'text-white' : 'text-gray-900'}`}>{getPeriodLabel(key)}</span>
-                              <span className={`text-xs ${isDark ? 'text-zinc-500' : 'text-gray-400'}`}>({items.filter(c => !c.esBf).length} circuitos)</span>
+                              {permissions.canEditCircuitoExistente && !authBlocked && (
+                                <CircuitCheckbox
+                                  checked={groupAllSelected}
+                                  indeterminate={!groupAllSelected && groupSomeSelected}
+                                  stopPropagation
+                                  onChange={() => toggleCatorcenaSelection(items)}
+                                  title="Seleccionar toda la catorcena"
+                                />
+                              )}
+                              <button
+                                type="button"
+                                onClick={() => toggleCatorcena(key)}
+                                className="flex items-center gap-3 text-left"
+                              >
+                                {isExpanded ? <ChevronDown className={`h-4 w-4 ${isDark ? 'text-zinc-400' : 'text-gray-500'}`} /> : <ChevronRight className={`h-4 w-4 ${isDark ? 'text-zinc-400' : 'text-gray-500'}`} />}
+                                <span className={`font-medium ${isDark ? 'text-white' : 'text-gray-900'}`}>{getPeriodLabel(key)}</span>
+                                <span className={`text-xs ${isDark ? 'text-zinc-500' : 'text-gray-400'}`}>({items.filter(c => !c.esBf).length} circuitos)</span>
+                              </button>
                             </div>
-                            <div className="flex items-center gap-4 text-sm">
+                            <button
+                              type="button"
+                              onClick={() => toggleCatorcena(key)}
+                              className="flex items-center gap-4 text-sm"
+                            >
                               <span className={isDark ? 'text-zinc-400' : 'text-gray-500'}>{groupRenta} renta</span>
                               <span className="text-emerald-400">{groupBonif} bonif.</span>
                               <span className="text-amber-400 font-medium">{formatCurrency(groupTotal)}</span>
-                            </div>
-                          </button>
+                            </button>
+                          </div>
 
                           {/* Expanded items */}
                           {isExpanded && (
@@ -3438,6 +3548,9 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
                               <table className="w-full min-w-[1000px]">
                                 <thead>
                                   <tr className={isDark ? 'bg-zinc-800/30' : 'bg-gray-50'}>
+                                    {permissions.canEditCircuitoExistente && !authBlocked && (
+                                      <th className="px-2 py-2 w-8"></th>
+                                    )}
                                     <th className={`px-2 py-2 text-left text-[10px] font-semibold ${isDark ? 'text-zinc-500' : 'text-gray-500'}`}>Artículo</th>
                                     <th className={`px-2 py-2 text-left text-[10px] font-semibold ${isDark ? 'text-zinc-500' : 'text-gray-500'}`}>Plaza</th>
                                     <th className={`px-2 py-2 text-left text-[10px] font-semibold ${isDark ? 'text-zinc-500' : 'text-gray-500'}`}>Tipo</th>
@@ -3459,7 +3572,16 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
                                     const descuento = totalCaras > 0 ? ((cara.bonificacion / totalCaras) * 100) : 0;
 
                                     return (
-                                      <tr key={cara.id} className={`border-t ${isDark ? 'border-zinc-800/50 hover:bg-zinc-800/20' : 'border-gray-100 hover:bg-gray-50'}`}>
+                                      <tr key={cara.id} className={`border-t ${selectedCaraIds.has(cara.id) ? (isDark ? 'bg-red-500/10' : 'bg-red-50') : ''} ${isDark ? 'border-zinc-800/50 hover:bg-zinc-800/20' : 'border-gray-100 hover:bg-gray-50'}`}>
+                                        {permissions.canEditCircuitoExistente && !authBlocked && (
+                                          <td className="px-2 py-2 text-center">
+                                            <CircuitCheckbox
+                                              checked={selectedCaraIds.has(cara.id)}
+                                              onChange={() => toggleCaraSelection(cara.id)}
+                                              title="Seleccionar circuito"
+                                            />
+                                          </td>
+                                        )}
                                         <td className={`px-2 py-2 text-xs ${isDark ? 'text-white' : 'text-gray-900'} max-w-[140px]`} title={`${cara.articulo.ItemCode} - ${cara.articulo.ItemName}`}>
                                           <div className="truncate font-medium">{cara.articulo.ItemCode}</div>
                                           <div className={`truncate text-[10px] ${isDark ? 'text-zinc-500' : 'text-gray-400'}`}>{cara.articulo.ItemName}</div>

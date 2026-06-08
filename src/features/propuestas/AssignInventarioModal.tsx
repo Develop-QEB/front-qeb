@@ -25,6 +25,7 @@ import { useSocketPropuesta, useSocketEquipos, useSocketInventarioRealtime, type
 import { useThemeStore } from '../../store/themeStore';
 import { SaveChangesConfirmModal, type ModifiedCircuito } from '../../components/SaveChangesConfirmModal';
 import { DeleteCircuitoConfirmModal } from '../../components/DeleteCircuitoConfirmModal';
+import { CircuitCheckbox } from '../../components/ui/CircuitCheckbox';
 
 // GOOGLE_MAPS_API_KEY / LIBRARIES centralizados en src/config/googleMaps.ts.
 
@@ -814,6 +815,8 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
   const [caras, setCaras] = useState<CaraItem[]>([]);
   const [expandedCaras, setExpandedCaras] = useState<Set<string>>(new Set());
   const [expandedCatorcenas, setExpandedCatorcenas] = useState<Set<string>>(new Set());
+  // Selección masiva de circuitos (eliminar en lote por circuito / catorcena). Guarda localId.
+  const [selectedCaraIds, setSelectedCaraIds] = useState<Set<string>>(new Set());
   const [editingCaraId, setEditingCaraId] = useState<string | null>(null);
   // Track locally modified caras (caraDbId -> CaraUpdateData) for bulk save
   const [modifiedCaras, setModifiedCaras] = useState<Map<number, CaraUpdateData>>(new Map());
@@ -1421,6 +1424,7 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
           };
         });
         setCaras(carasWithIds);
+        setSelectedCaraIds(new Set());
       }
     }
   }, [solicitudDetails, propuesta, isOpen, users, catorcenasData]);
@@ -2207,6 +2211,103 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
         setDeleteCircuitoModal(prev => ({ ...prev, isOpen: false, isDeleting: false }));
       }
     });
+  };
+
+  // ── Selección masiva de circuitos ──────────────────────────────────────────
+  // Una cara es seleccionable si se puede eliminar: sin autorizaciones pendientes
+  // guardadas y sin reservas (salvo permiso). Mismo criterio que el bote individual.
+  const isCaraSelectable = (cara: CaraItem) => {
+    if (hasSavedPendingAuth) return false;
+    const tieneReservas = caraHasReservas(cara.localId, cara.id);
+    if (tieneReservas && !permissions.canDeleteCaraConReservas) return false;
+    return true;
+  };
+
+  const toggleCaraSelection = (localId: string) => {
+    setSelectedCaraIds(prev => {
+      const next = new Set(prev);
+      if (next.has(localId)) next.delete(localId);
+      else next.add(localId);
+      return next;
+    });
+  };
+
+  // Selecciona / deselecciona todos los circuitos seleccionables de una catorcena
+  const toggleCatorcenaSelection = (grupoCaras: CaraItem[]) => {
+    const ids = grupoCaras.filter(isCaraSelectable).map(c => c.localId);
+    setSelectedCaraIds(prev => {
+      const next = new Set(prev);
+      const allSelected = ids.length > 0 && ids.every(id => next.has(id));
+      if (allSelected) ids.forEach(id => next.delete(id));
+      else ids.forEach(id => next.add(id));
+      return next;
+    });
+  };
+
+  // Elimina en lote las caras seleccionadas. Reutiliza la lógica del borrado individual:
+  // arrastra pares RT/BF del mismo periodo y persiste cada baja al backend.
+  const handleBulkDeleteCaras = async () => {
+    const selected = caras.filter(c => selectedCaraIds.has(c.localId));
+    if (selected.length === 0) return;
+
+    // Expandir a pares RT/BF del mismo periodo
+    const localIdsToRemove = new Set<string>();
+    selected.forEach(cara => {
+      localIdsToRemove.add(cara.localId);
+      if (cara.grupo_rt_bf) {
+        caras
+          .filter(c => c.grupo_rt_bf === cara.grupo_rt_bf && c.inicio_periodo === cara.inicio_periodo && c.fin_periodo === cara.fin_periodo)
+          .forEach(c => localIdsToRemove.add(c.localId));
+      }
+    });
+    const carasToDelete = caras.filter(c => localIdsToRemove.has(c.localId));
+
+    // Seguridad: ninguna de las caras a eliminar puede tener reservas sin permiso
+    const bloqueada = carasToDelete.find(c => caraHasReservas(c.localId, c.id) && !permissions.canDeleteCaraConReservas);
+    if (bloqueada) {
+      alert('Algunos circuitos seleccionados (o su par RT/BF) tienen reservas y no se pueden eliminar. Quítalos de la selección.');
+      return;
+    }
+
+    const circuitCount = carasToDelete.filter(c => !c.esBf).length;
+    const ok = window.confirm(
+      `¿Eliminar ${circuitCount} circuito${circuitCount !== 1 ? 's' : ''} seleccionado${circuitCount !== 1 ? 's' : ''}? Esta acción no se puede deshacer.`
+    );
+    if (!ok) return;
+
+    // Eliminar primero las persistidas en BD; si una falla, detener y limpiar solo lo borrado
+    const removedLocalIds = new Set<string>();
+    const removedDbIds = new Set<number>();
+    let failed: CaraItem | null = null;
+    for (const cara of carasToDelete) {
+      if (cara.id) {
+        try {
+          await propuestasService.deleteCara(propuesta.id, cara.id);
+          removedDbIds.add(cara.id);
+        } catch (error) {
+          console.error('Error deleting cara (bulk):', error);
+          failed = cara;
+          break;
+        }
+      }
+      removedLocalIds.add(cara.localId);
+    }
+
+    setModifiedCaras(prev => {
+      const next = new Map(prev);
+      for (const id of removedDbIds) next.delete(id);
+      return next;
+    });
+    setCaras(prev => prev.filter(c => !removedLocalIds.has(c.localId)));
+    setReservas(prev => prev.filter(r =>
+      ![...removedLocalIds].some(id => r.id.startsWith(id)) &&
+      !(r.solicitudCaraId && removedDbIds.has(r.solicitudCaraId))
+    ));
+    setSelectedCaraIds(new Set());
+
+    if (failed) {
+      alert(`No se pudo eliminar "${failed.articulo || failed.localId}". Se eliminaron ${removedLocalIds.size} de ${carasToDelete.length} circuitos.`);
+    }
   };
 
   // Handle edit cara - permite edición parcial cuando hay reservas
@@ -8380,6 +8481,30 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
                   </div>
                 )}
 
+                {/* Barra de acciones masivas: aparece al seleccionar circuitos */}
+                {effectiveCanEdit && canEditResumen && permissions.canEditCircuitoExistente && selectedCaraIds.size > 0 && (
+                  <div className="flex items-center justify-between px-5 py-2.5 bg-red-500/10 border-b border-red-500/20">
+                    <span className="text-sm font-medium text-red-300">
+                      {caras.filter(c => selectedCaraIds.has(c.localId) && !c.esBf).length} circuito(s) seleccionado(s)
+                    </span>
+                    <div className="flex items-center gap-2">
+                      <button
+                        onClick={() => setSelectedCaraIds(new Set())}
+                        className={`px-3 py-1.5 rounded-lg text-xs font-medium ${isDark ? 'text-zinc-300 hover:bg-zinc-700/50' : 'text-gray-600 hover:bg-gray-100'}`}
+                      >
+                        Limpiar
+                      </button>
+                      <button
+                        onClick={handleBulkDeleteCaras}
+                        className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium bg-red-500/20 text-red-300 hover:bg-red-500/30 transition-colors"
+                      >
+                        <Trash2 className="h-3.5 w-3.5" />
+                        Eliminar seleccionados
+                      </button>
+                    </div>
+                  </div>
+                )}
+
                 <div ref={caraTableRef} className="divide-y divide-zinc-700/30">
                   {caras.length === 0 ? (
                     <div className={`p-8 text-center ${isDark ? 'text-zinc-500' : 'text-gray-400'}`}>
@@ -8428,6 +8553,11 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
                       };
                       const showRange = tipoPeriodo === 'mensual' && minIni && maxFin;
 
+                      const bulkSelectEnabled = effectiveCanEdit && canEditResumen && permissions.canEditCircuitoExistente;
+                      const selectableIds = groupData.caras.filter(isCaraSelectable).map(c => c.localId);
+                      const groupAllSelected = selectableIds.length > 0 && selectableIds.every(id => selectedCaraIds.has(id));
+                      const groupSomeSelected = selectableIds.some(id => selectedCaraIds.has(id));
+
                       return (
                         <div key={periodo}>
                           {/* Period Header - Collapsible */}
@@ -8435,6 +8565,15 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
                             className="px-5 py-3 bg-purple-500/10 border-b border-purple-500/20 flex items-center gap-3 cursor-pointer hover:bg-purple-500/15 transition-colors"
                             onClick={() => toggleCatorcena(periodo)}
                           >
+                            {bulkSelectEnabled && selectableIds.length > 0 && (
+                              <CircuitCheckbox
+                                checked={groupAllSelected}
+                                indeterminate={!groupAllSelected && groupSomeSelected}
+                                stopPropagation
+                                onChange={() => toggleCatorcenaSelection(groupData.caras)}
+                                title="Seleccionar toda la catorcena"
+                              />
+                            )}
                             <button className="text-purple-400">
                               {isCatorcenaExpanded ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
                             </button>
@@ -8482,7 +8621,16 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
                             return (
                               <div key={cara.localId} className={`${statusColor === 'blue' ? 'bg-blue-500/5' : statusColor === 'red' ? 'bg-red-500/5' : statusColor === 'emerald' ? 'bg-emerald-500/5' : 'bg-amber-500/5'}`}>
                                 {/* Cara row */}
-                                <div className={`flex items-center gap-3 px-5 py-3 ${isDark ? 'hover:bg-zinc-800/30' : 'hover:bg-gray-50/30'} transition-colors`}>
+                                <div className={`flex items-center gap-3 px-5 py-3 ${selectedCaraIds.has(cara.localId) ? (isDark ? 'bg-red-500/10' : 'bg-red-50') : ''} ${isDark ? 'hover:bg-zinc-800/30' : 'hover:bg-gray-50/30'} transition-colors`}>
+                                  {/* Checkbox de selección masiva */}
+                                  {bulkSelectEnabled && isCaraSelectable(cara) && (
+                                    <CircuitCheckbox
+                                      checked={selectedCaraIds.has(cara.localId)}
+                                      stopPropagation
+                                      onChange={() => toggleCaraSelection(cara.localId)}
+                                      title="Seleccionar circuito"
+                                    />
+                                  )}
                                   {/* Completion indicator */}
                                   <div className={`w-2 h-2 rounded-full ${
                                     statusColor === 'blue' ? 'bg-blue-500' : statusColor === 'red' ? 'bg-red-500 animate-pulse' : statusColor === 'emerald' ? 'bg-emerald-500' : 'bg-amber-500 animate-pulse'

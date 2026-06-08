@@ -1,7 +1,7 @@
-import { useParams } from 'react-router-dom';
+import { useParams, useSearchParams } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { useState, useMemo, useRef } from 'react';
-import { Map as MapIcon, Loader2, ExternalLink, Copy, Check } from 'lucide-react';
+import { Map as MapIcon, Loader2, ExternalLink, Copy, Check, Download } from 'lucide-react';
 import { GoogleMap, useLoadScript, Marker, Circle, Autocomplete, InfoWindow } from '@react-google-maps/api';
 import { formatCurrency } from '../../lib/utils';
 
@@ -94,7 +94,15 @@ async function fetchPublicPropuesta(id: number): Promise<PublicPropuestaData> {
 
 export function ClientePropuestaMapPage() {
   const { id } = useParams<{ id: string }>();
+  const [searchParams] = useSearchParams();
   const propuestaId = id ? parseInt(id, 10) : 0;
+
+  // ?ids=1,2,3 -> mostrar solo el inventario seleccionado en Compartir. Sin ids: todo.
+  const idsParam = searchParams.get('ids') || '';
+  const selectedIdSet = useMemo(
+    () => new Set(idsParam.split(',').map(s => parseInt(s.trim(), 10)).filter(n => Number.isFinite(n))),
+    [idsParam]
+  );
   const mapRef = useRef<google.maps.Map | null>(null);
   const autocompleteRef = useRef<google.maps.places.Autocomplete | null>(null);
 
@@ -112,8 +120,28 @@ export function ClientePropuestaMapPage() {
     enabled: propuestaId > 0,
   });
 
-  const inventario = data?.inventario || [];
+  const allInventario = data?.inventario || [];
+  // Inventario visible: filtrado por la seleccion (?ids=) o todo si no hay seleccion,
+  // y dedup por id (cada ubicacion se repite una vez por catorcena -> evita pines encimados).
+  const inventario = useMemo(() => {
+    const filtered = selectedIdSet.size > 0
+      ? allInventario.filter(i => selectedIdSet.has(i.id))
+      : allInventario;
+    const seen = new Set<number>();
+    return filtered.filter(i => {
+      if (seen.has(i.id)) return false;
+      seen.add(i.id);
+      return true;
+    });
+  }, [allInventario, selectedIdSet]);
   const tipoPeriodo = (data?.cotizacion as any)?.tipo_periodo || 'catorcena';
+
+  // Descargar KML de lo visible (reusa el endpoint publico del backend).
+  const handleDownloadKML = () => {
+    const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3000';
+    const qs = idsParam ? `?ids=${idsParam}` : '';
+    window.open(`${API_URL}/public/propuestas/${propuestaId}/kml${qs}`, '_blank', 'noopener,noreferrer');
+  };
 
   const periodoInicio = useMemo(() => {
     if (tipoPeriodo === 'mensual' && data?.cotizacion?.fecha_inicio) {
@@ -178,7 +206,9 @@ export function ClientePropuestaMapPage() {
   };
 
   const handleCopyLink = () => {
-    const publicUrl = `${window.location.origin}/cliente/propuesta/${propuestaId}`;
+    // Comparte ESTE mapa con la misma seleccion (?ids=) para que el cliente vea lo mismo.
+    const qs = idsParam ? `?ids=${idsParam}` : '';
+    const publicUrl = `${window.location.origin}/cliente/propuesta/${propuestaId}/mapa${qs}`;
     navigator.clipboard.writeText(publicUrl);
     setCopied(true);
     setTimeout(() => setCopied(false), 2000);
@@ -208,7 +238,7 @@ export function ClientePropuestaMapPage() {
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-white via-blue-50/30 to-green-50/30 text-gray-800 flex flex-col">
+    <div className="h-screen overflow-hidden bg-gradient-to-br from-white via-blue-50/30 to-green-50/30 text-gray-800 flex flex-col">
       {/* Header */}
       <header className="sticky top-0 z-50 backdrop-blur shadow-md border-b bg-white/95 border-gray-200">
         <div className="max-w-full mx-auto px-4 py-4 flex items-center justify-between">
@@ -217,7 +247,7 @@ export function ClientePropuestaMapPage() {
               <img src="/logo-grupo-imu.png" alt="IMU" className="h-14 w-auto object-contain" />
             </div>
             <div className="border-l pl-4 border-gray-300">
-              <h1 className="text-xl font-bold text-[#0054A6]">Propuesta de Campana</h1>
+              <h1 className="text-xl font-bold text-[#0054A6]">Propuesta de Campaña</h1>
               <p className="text-sm text-gray-500">Referencia #{propuestaId}</p>
             </div>
           </div>
@@ -255,6 +285,13 @@ export function ClientePropuestaMapPage() {
               <ExternalLink className="h-4 w-4" /> Ver Completa
             </a>
             <button
+              onClick={handleDownloadKML}
+              className="flex items-center gap-2 px-4 py-2 bg-[#7AB800] hover:bg-[#689c00] text-white rounded-lg text-sm font-medium shadow-sm transition-colors"
+              title="Descargar KML de los puntos del mapa"
+            >
+              <Download className="h-4 w-4" /> KML
+            </button>
+            <button
               onClick={handleCopyLink}
               className="flex items-center gap-2 px-4 py-2 bg-[#0054A6] hover:bg-[#003B71] text-white rounded-lg text-sm font-medium shadow-sm transition-colors"
             >
@@ -276,7 +313,7 @@ export function ClientePropuestaMapPage() {
       </div>
 
       {/* Map - Full remaining height */}
-      <div className="flex-1 relative">
+      <div className="flex-1 relative min-h-0">
         {/* Map toolbar */}
         <div className="absolute top-4 left-4 z-10 flex items-center gap-2 bg-white/95 backdrop-blur rounded-xl shadow-lg border border-gray-200 px-4 py-2.5">
           <MapIcon className="h-4 w-4 text-[#0054A6]" />

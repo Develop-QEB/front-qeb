@@ -1262,8 +1262,15 @@ export function CampanasPage() {
   );
   const excludeRechazadas = !statusInAdvanced;
 
+  // Si el filtro de historial pide "cambió a Rechazada", desactivamos el
+  // exclude por default — si no, el filtro daria 0 porque la pagina oculta
+  // todo lo que tiene status='Rechazada' actual.
+  const effectiveExcludeRechazadas = (
+    historialFilter.modo === 'cambio_estatus' && historialFilter.estatusValor === 'Rechazada'
+  ) ? false : excludeRechazadas;
+
   const { data, isLoading } = useQuery({
-    queryKey: ['campanas', needsAllData ? 1 : page, status, yearInicio, yearFin, catorcenaInicio, catorcenaFin, tipoPeriodo, needsAllData, serverSearch, effectiveLimit, historialFilter, excludeRechazadas],
+    queryKey: ['campanas', needsAllData ? 1 : page, status, yearInicio, yearFin, catorcenaInicio, catorcenaFin, tipoPeriodo, needsAllData, serverSearch, effectiveLimit, historialFilter, effectiveExcludeRechazadas],
     queryFn: () =>
       campanasService.getAll({
         page: needsAllData ? 1 : page,
@@ -1275,7 +1282,7 @@ export function CampanasPage() {
         catorcenaInicio,
         catorcenaFin,
         tipoPeriodo: tipoPeriodo || undefined,
-        excludeRechazadas,
+        excludeRechazadas: effectiveExcludeRechazadas,
         ...historialFilter,
       }),
     staleTime: 1000 * 30, // 30 s — WS invalida en cambios reales
@@ -1710,6 +1717,10 @@ export function CampanasPage() {
   useEffect(() => {
     if (activeView !== 'catorcena' || !filteredData.length) return;
     if (isLoadingBatchRef.current) return; // Prevent concurrent batches
+    // Mientras el Versionario de Artes está cargando, NO disparar el auto-load de
+    // inventarios del grid: compite por las ~6 conexiones del browser y la DB,
+    // y el grid está tapado por el modal de todos modos. Reanuda al terminar.
+    if (exportingVersionarioArtes || versionarioPreviewOpen) return;
     const idsToLoad = filteredData
       .filter(c => !campanaInventarios[c.id] && !loadingRef.current.has(c.id))
       .map(c => c.id);
@@ -1746,7 +1757,7 @@ export function CampanasPage() {
         isLoadingBatchRef.current = false;
         setLoadingInventarios(new Set(loadingRef.current));
       });
-  }, [activeView, filteredData, campanaInventarios]);
+  }, [activeView, filteredData, campanaInventarios, exportingVersionarioArtes, versionarioPreviewOpen]);
 
   // Cargar inversión por catorcena (usando sc.costo) — usado por versionario y tabla.
   // Patrón: `loadedIdsRef` evita reintentar IDs ya procesados. `batchTick` es
@@ -2542,37 +2553,48 @@ export function CampanasPage() {
       setVersionarioArtesProgress({ current: 0, total: campanasUnicas.length });
 
       try {
-        const POOL_SIZE = 15;
+        // BULK: 1 request por chunk de ~20 campañas (con arte + sin arte agrupado),
+        // varios chunks en paralelo. Esquiva el límite de ~6 conexiones del browser
+        // y trae un payload chico (agrupado por circuito).
+        const CHUNK_SIZE = 20;
+        const PARALLEL_CHUNKS = 6;
         const resultados: Array<{
           campana: Campana;
           items: any[];
           digitalFilesByReserva: Map<number, string[]>;
           notesByUrl: Map<string, string>;
         }> = [];
+        const campanaById = new Map(campanasUnicas.map(c => [c.id, c]));
+        const chunks: number[][] = [];
+        for (let i = 0; i < campanasUnicas.length; i += CHUNK_SIZE) {
+          chunks.push(campanasUnicas.slice(i, i + CHUNK_SIZE).map(c => c.id));
+        }
 
-        const procesarCampana = async (campana: Campana) => {
+        const procesarChunk = async (chunkIds: number[]) => {
           try {
-            const [conArte, sinArte] = await Promise.all([
-              campanasService.getInventarioConArte(campana.id).catch(() => []),
-              campanasService.getInventarioSinArte(campana.id, { includeWithoutAps: true }).catch(() => []),
-            ]);
-            const allItems = [...(conArte || []), ...(sinArte || [])];
-            const items = allItems.filter(it => itemDentroDeRango(it));
-            resultados.push({
-              campana,
-              items,
-              digitalFilesByReserva: new Map(),
-              notesByUrl: new Map(),
-            });
+            const bulk = await campanasService.getInventarioVersionarioBulk(chunkIds, { includeWithoutAps: true });
+            for (const cid of chunkIds) {
+              const campana = campanaById.get(cid);
+              if (!campana) continue;
+              const entry = bulk[String(cid)] || { conArte: [], sinArte: [] };
+              const allItems = [...(entry.conArte || []), ...(entry.sinArte || [])];
+              const items = allItems.filter(it => itemDentroDeRango(it));
+              resultados.push({
+                campana,
+                items,
+                digitalFilesByReserva: new Map(),
+                notesByUrl: new Map(),
+              });
+            }
           } catch { /* skip */ } finally {
-            setVersionarioArtesProgress(prev => ({ ...prev, current: prev.current + 1 }));
+            setVersionarioArtesProgress(prev => ({ ...prev, current: Math.min(prev.total, prev.current + chunkIds.length) }));
           }
         };
 
-        for (let i = 0; i < campanasUnicas.length; i += POOL_SIZE) {
+        for (let i = 0; i < chunks.length; i += PARALLEL_CHUNKS) {
           if (versionarioCancelledRef.current) break;
-          const batch = campanasUnicas.slice(i, i + POOL_SIZE);
-          await Promise.all(batch.map(procesarCampana));
+          const wave = chunks.slice(i, i + PARALLEL_CHUNKS);
+          await Promise.all(wave.map(procesarChunk));
         }
 
         if (versionarioCancelledRef.current) return;
@@ -2657,36 +2679,44 @@ export function CampanasPage() {
         );
       };
 
-      // 3. Fetch inventarios de las campañas del nuevo periodo
+      // 3. Fetch inventarios de las campañas del nuevo periodo (BULK por chunks)
       setVersionarioArtesProgress({ current: 0, total: campanas.length });
-      const POOL_SIZE = 15;
+      const CHUNK_SIZE = 20;
+      const PARALLEL_CHUNKS = 6;
       const resultados: VersionarioArtesMultiArgs['campanas'] = [];
+      const campanaById = new Map(campanas.map(c => [c.id, c]));
+      const chunks: number[][] = [];
+      for (let i = 0; i < campanas.length; i += CHUNK_SIZE) {
+        chunks.push(campanas.slice(i, i + CHUNK_SIZE).map(c => c.id));
+      }
 
-      const procesarCampana = async (campana: Campana) => {
+      const procesarChunk = async (chunkIds: number[]) => {
         try {
-          const [conArte, sinArte] = await Promise.all([
-            campanasService.getInventarioConArte(campana.id).catch(() => []),
-            campanasService.getInventarioSinArte(campana.id, { includeWithoutAps: true }).catch(() => []),
-          ]);
-          const allItems = [...(conArte || []), ...(sinArte || [])];
-          const items = allItems.filter(it => itemDentroDeRangoNew(it));
-          if (items.length > 0) {
-            resultados.push({
-              campana,
-              items,
-              digitalFilesByReserva: new Map(),
-              notesByUrl: new Map(),
-            });
+          const bulk = await campanasService.getInventarioVersionarioBulk(chunkIds, { includeWithoutAps: true });
+          for (const cid of chunkIds) {
+            const campana = campanaById.get(cid);
+            if (!campana) continue;
+            const entry = bulk[String(cid)] || { conArte: [], sinArte: [] };
+            const allItems = [...(entry.conArte || []), ...(entry.sinArte || [])];
+            const items = allItems.filter(it => itemDentroDeRangoNew(it));
+            if (items.length > 0) {
+              resultados.push({
+                campana,
+                items,
+                digitalFilesByReserva: new Map(),
+                notesByUrl: new Map(),
+              });
+            }
           }
         } catch { /* skip */ } finally {
-          setVersionarioArtesProgress(prev => ({ ...prev, current: prev.current + 1 }));
+          setVersionarioArtesProgress(prev => ({ ...prev, current: Math.min(prev.total, prev.current + chunkIds.length) }));
         }
       };
 
-      for (let i = 0; i < campanas.length; i += POOL_SIZE) {
+      for (let i = 0; i < chunks.length; i += PARALLEL_CHUNKS) {
         if (versionarioCancelledRef.current) break;
-        const batch = campanas.slice(i, i + POOL_SIZE);
-        await Promise.all(batch.map(procesarCampana));
+        const wave = chunks.slice(i, i + PARALLEL_CHUNKS);
+        await Promise.all(wave.map(procesarChunk));
       }
 
       if (versionarioCancelledRef.current) return;
@@ -2734,28 +2764,29 @@ export function CampanasPage() {
           const digitalFilesByReserva = new Map<number, string[]>();
           const notesByUrl = new Map<string, string>();
           if (tieneDigitales) {
-            await Promise.all([...allRsvIds].map(async (rsvId) => {
-              try {
-                const imgs = await campanasService.getImagenesDigitales(campana.id, rsvId);
-                const urls = imgs.map((im: any) => im.archivoData || im.archivo).filter((u: any): u is string => !!u);
-                if (urls.length) digitalFilesByReserva.set(rsvId, urls);
-                for (const im of imgs) {
-                  const url = (im as any).archivoData || (im as any).archivo;
-                  const comentario = ((im as any).comentario || '').trim();
-                  if (url && comentario) notesByUrl.set(url, comentario);
-                }
-              } catch { /* ignore */ }
-            }));
-          }
-          await Promise.all([...allRsvIds].map(async (rsvId) => {
+            // UNA sola request por campaña (antes eran cientos: 1 por reserva).
+            // El bulk conserva el id_reserva real de cada archivo, así cada
+            // imagen cae en su circuito correcto.
             try {
-              const artes = await campanasService.getArtesTradicionales(campana.id, rsvId);
-              for (const a of artes) {
-                const nota = ((a as any).nota || '').trim();
-                if ((a as any).archivo && nota) notesByUrl.set((a as any).archivo, nota);
+              const imgs = await campanasService.getImagenesDigitalesBulk(campana.id);
+              for (const im of imgs) {
+                const url = (im as any).archivoData || (im as any).archivo;
+                if (!url) continue;
+                const rid = Number((im as any).idReserva);
+                if (!isNaN(rid)) {
+                  const arr = digitalFilesByReserva.get(rid) || [];
+                  arr.push(url);
+                  digitalFilesByReserva.set(rid, arr);
+                }
+                const comentario = ((im as any).comentario || '').trim();
+                if (comentario) notesByUrl.set(url, comentario);
               }
             } catch { /* ignore */ }
-          }));
+          }
+          // NOTA: ya NO pedimos getArtesTradicionales por reserva (eran miles de
+          // requests de ~26 bytes que tardaban añales). Las notas de artes
+          // tradicionales ya vienen en `it.artes_detalle` del bulk, y el export
+          // las extrae de ahí como fallback. Solo los digitales necesitan fetch.
           return { campana, items, digitalFilesByReserva, notesByUrl };
         }));
         enriquecidas.push(...completed);
@@ -3261,6 +3292,7 @@ export function CampanasPage() {
                 <HistorialFilterPopover
                   values={historialFilter}
                   isDark={isDark}
+                  estatusOptions={['Rechazada', 'Ajuste CTO Cliente', 'Aprobada', 'Atendido', 'Compartir']}
                   onApply={(v) => { setHistorialFilter(v); setPage(1); }}
                   onClear={() => { setHistorialFilter({}); setPage(1); }}
                 />

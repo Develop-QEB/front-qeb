@@ -1440,9 +1440,16 @@ export function CampanaDetailPage() {
     const headers = ['Código', 'Grupo ID', 'Mueble', 'Estado', 'Tipo', 'Caras'];
     const fields: (keyof InventarioConAPS)[] = ['codigo_unico', 'solicitud_caras_id', 'mueble', 'estado', 'tipo_de_cara', 'caras_totales'];
 
+    // Si hay filas seleccionadas en los checkboxes, exportar SOLO esas (mismo
+    // patrón que POST a SAP / Quitar APS). Si no hay selección, exportar todo lo
+    // visible según los filtros activos (periodo/APS/etc.).
+    const rowsToExport = selectedItemsAPS.size > 0
+      ? filteredInventarioAPS.filter(i => selectedItemsAPS.has(String(i.rsv_ids)))
+      : filteredInventarioAPS;
+
     const csvContent = [
       headers.join(','),
-      ...filteredInventarioAPS.map(item =>
+      ...rowsToExport.map(item =>
         fields.map(field => {
           const value = item[field];
           // Escapar comas y comillas en valores
@@ -1458,12 +1465,13 @@ export function CampanaDetailPage() {
     const url = URL.createObjectURL(blob);
     const link = document.createElement('a');
     link.href = url;
-    link.download = `inventario_aps_${campana?.nombre || 'campana'}_${new Date().toISOString().split('T')[0]}.csv`;
+    const sufijo = selectedItemsAPS.size > 0 ? '_seleccion' : '';
+    link.download = `inventario_aps_${campana?.nombre || 'campana'}${sufijo}_${new Date().toISOString().split('T')[0]}.csv`;
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
     URL.revokeObjectURL(url);
-  }, [filteredInventarioAPS, campana?.nombre]);
+  }, [filteredInventarioAPS, selectedItemsAPS, campana?.nombre]);
 
   // Handler para POST a SAP
   const handlePostToSAP = useCallback(async () => {

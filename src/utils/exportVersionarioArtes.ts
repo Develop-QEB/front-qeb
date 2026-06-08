@@ -12,7 +12,19 @@ const formatDate = (dateStr: string | null | undefined): string => {
   return `${String(d.getDate()).padStart(2, '0')}/${String(d.getMonth() + 1).padStart(2, '0')}/${d.getFullYear()}`;
 };
 
-type FetchedImage = { buffer: ArrayBuffer; ext: 'png' | 'jpeg' | 'gif' };
+type FetchedImage = { buffer: ArrayBuffer; ext: 'png' | 'jpeg' | 'gif'; width?: number; height?: number };
+// Referencia a una imagen ya registrada en el workbook + sus dimensiones reales
+// (para insertarla conservando proporción, sin apachurrarla).
+type ImageRef = { id: number; w: number; h: number };
+
+// Caja destino dentro de la celda de arte (px). La imagen se escala para CABER
+// preservando aspect ratio, así no se ve estirada/apachurrada.
+const ART_BOX_W = 150;
+const ART_BOX_H = 60;
+const fitInBox = (w: number, h: number): { width: number; height: number } => {
+  const s = Math.min(ART_BOX_W / w, ART_BOX_H / h, 1);
+  return { width: Math.max(1, Math.round(w * s)), height: Math.max(1, Math.round(h * s)) };
+};
 
 const detectExt = (urlOrType: string): 'png' | 'jpeg' | 'gif' => {
   const s = urlOrType.toLowerCase();
@@ -94,21 +106,98 @@ const extractNamesByUrl = (arr: any[]): Map<string, string> => {
   return m;
 };
 
-const fetchImage = async (url: string): Promise<FetchedImage | null> => {
-  if (!url) return null;
-  if (url.startsWith('data:')) return dataUrlToBuffer(url);
-  // Usamos el proxy del backend para evitar CORS (Spaces no manda
-  // Access-Control-Allow-Origin para fetch desde el front).
+// Extrae el estatus_operaciones (texto manual) por URL desde items.artes_detalle.
+const extractEstatusOpByUrl = (arr: any[]): Map<string, string> => {
+  const m = new Map<string, string>();
+  for (const it of arr) {
+    const detalle = it.artes_detalle;
+    if (!detalle) continue;
+    try {
+      const parsed = typeof detalle === 'string' ? JSON.parse(detalle) : detalle;
+      if (Array.isArray(parsed)) {
+        for (const entry of parsed) {
+          const archivo = (entry.archivo || '').trim();
+          const est = (entry.estatus_operaciones || '').trim();
+          if (archivo && est && !m.has(archivo)) m.set(archivo, est);
+        }
+      }
+    } catch { /* ignore */ }
+  }
+  return m;
+};
+
+// Texto de Estatus Operaciones por circuito: valores distintos (uno por arte), unidos por linea.
+const buildEstatusOpText = (urls: string[], estatusByUrl?: Map<string, string>): string => {
+  if (!urls || urls.length === 0 || !estatusByUrl) return '';
+  const vals: string[] = [];
+  for (const u of urls) {
+    const v = estatusByUrl.get(u)?.trim();
+    if (v && !vals.includes(v)) vals.push(v);
+  }
+  return vals.join('\n');
+};
+
+// Reescala a una miniatura chica y la re-codifica como JPEG de baja calidad.
+// En el Excel el arte es solo simbólico (miniatura), no HD: esto baja muchísimo
+// el peso del archivo y el tiempo de addImage/escritura del xlsx.
+const THUMB_MAX_PX = 160; // lado mayor de la miniatura
+const THUMB_JPEG_QUALITY = 0.4;
+const downscaleImage = async (buffer: ArrayBuffer): Promise<FetchedImage | null> => {
   try {
-    const res = await api.get('/uploads/proxy-image', {
-      params: { url },
-      responseType: 'arraybuffer',
-    });
-    const contentType = String(res.headers['content-type'] || '');
-    return { buffer: res.data as ArrayBuffer, ext: detectExt(contentType || url) };
+    const bmp = await createImageBitmap(new Blob([buffer]));
+    const scale = Math.min(1, THUMB_MAX_PX / Math.max(bmp.width, bmp.height));
+    const w = Math.max(1, Math.round(bmp.width * scale));
+    const h = Math.max(1, Math.round(bmp.height * scale));
+    const canvas = document.createElement('canvas');
+    canvas.width = w;
+    canvas.height = h;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) { bmp.close?.(); return null; }
+    // Fondo blanco: JPEG no tiene alfa, sin esto los PNG transparentes salen negros.
+    ctx.fillStyle = '#ffffff';
+    ctx.fillRect(0, 0, w, h);
+    ctx.drawImage(bmp, 0, 0, w, h);
+    bmp.close?.();
+    const dataUrl = canvas.toDataURL('image/jpeg', THUMB_JPEG_QUALITY);
+    const res = dataUrlToBuffer(dataUrl);
+    if (res) { res.width = w; res.height = h; } // dims reales para conservar proporción
+    return res;
   } catch {
     return null;
   }
+};
+
+// Contador para cache-buster: hace ÚNICA cada petición al proxy. Sin esto, un
+// caché HTTP (navegador/CDN) podía servir la imagen ya cacheada de OTRO arte
+// (respuesta cruzada) → en el Excel salía la foto equivocada en la celda, y
+// distinta en cada descarga (no determinista). Con un nonce único + el header
+// `no-store` del backend, cada celda trae SIEMPRE la imagen real de su URL.
+let __imgReqSeq = 0;
+
+const fetchImage = async (url: string): Promise<FetchedImage | null> => {
+  if (!url) return null;
+  let raw: FetchedImage | null = null;
+  if (url.startsWith('data:')) {
+    raw = dataUrlToBuffer(url);
+  } else {
+    // Usamos el proxy del backend para evitar CORS (Spaces no manda
+    // Access-Control-Allow-Origin para fetch desde el front).
+    try {
+      const res = await api.get('/uploads/proxy-image', {
+        // `_cb` = cache-buster único por petición (ver comentario arriba).
+        params: { url, _cb: `${Date.now()}_${__imgReqSeq++}` },
+        responseType: 'arraybuffer',
+      });
+      const contentType = String(res.headers['content-type'] || '');
+      raw = { buffer: res.data as ArrayBuffer, ext: detectExt(contentType || url) };
+    } catch {
+      return null;
+    }
+  }
+  if (!raw) return null;
+  // Reescalar a miniatura. Si falla (formato raro), usamos el original.
+  const thumb = await downscaleImage(raw.buffer);
+  return thumb || raw;
 };
 
 export interface VersionarioArtesExportArgs {
@@ -136,11 +225,10 @@ export async function exportVersionarioArtes({ campana, items, digitalFilesByRes
 
   const cuic = campana.cuic ? String(campana.cuic) : '';
   const asesor = (campana as any).T0_U_Asesor || (campana as any).asesor || '';
-  const cliente = (campana as any).cliente_razon_social
-    || (campana as any).cliente_nombre
-    || (campana as any).T0_U_RazonSocial
-    || (campana as any).T0_U_Cliente
+  // Campo "cliente" (comercial), NO la razón social.
+  const cliente = (campana as any).T0_U_Cliente
     || (campana as any).T1_U_Cliente
+    || (campana as any).cliente_nombre
     || (campana as any).cliente
     || '';
   const marca = (campana as any).T2_U_Marca || (campana as any).marca || '';
@@ -210,7 +298,7 @@ export async function exportVersionarioArtes({ campana, items, digitalFilesByRes
     'APS QEB',
     'Fecha Inicio Periodo',
     'Fecha Fin Periodo',
-    'Cliente Comercial',
+    'Cliente',
     'Marca',
     'Campaña',
     'Caras',
@@ -238,8 +326,8 @@ export async function exportVersionarioArtes({ campana, items, digitalFilesByRes
   };
   headerRow.height = 22;
 
-  const imageCache = new Map<string, number | null>();
-  const getImageId = async (url: string | null | undefined): Promise<number | null> => {
+  const imageCache = new Map<string, ImageRef | null>();
+  const getImageId = async (url: string | null | undefined): Promise<ImageRef | null> => {
     if (!url) return null;
     if (imageCache.has(url)) return imageCache.get(url) ?? null;
     const fetched = await fetchImage(url);
@@ -248,8 +336,9 @@ export async function exportVersionarioArtes({ campana, items, digitalFilesByRes
       return null;
     }
     const id = workbook.addImage({ buffer: fetched.buffer, extension: fetched.ext });
-    imageCache.set(url, id);
-    return id;
+    const ref: ImageRef = { id, w: fetched.width || 160, h: fetched.height || 100 };
+    imageCache.set(url, ref);
+    return ref;
   };
 
   const ROW_HEIGHT = 70;
@@ -352,11 +441,16 @@ export async function exportVersionarioArtes({ campana, items, digitalFilesByRes
         row.getCell(colIndex + 1).value = { text: 'Ver arte', hyperlink: url };
         continue;
       }
-      const imageId = await getImageId(url);
-      if (imageId !== null) {
-        sheet.addImage(imageId, {
-          tl: { col: colIndex + 0.05, row: row.number - 1 + 0.05 },
-          ext: { width: 130, height: 80 },
+      const imgRef = await getImageId(url);
+      if (imgRef !== null) {
+        // Anclaje a UNA celda (tl) con tamaño que CONSERVA proporción (fitInBox),
+        // no estirado a la celda. Queda dentro de la celda y se mueve/oculta con
+        // ella al filtrar (editAs: 'oneCell'). El alto cabe en la fila, así no se
+        // desborda a la de abajo (bug de "se ve el arte de otra fila").
+        const { width, height } = fitInBox(imgRef.w, imgRef.h);
+        sheet.addImage(imgRef.id, {
+          tl: { col: colIndex + 0.08, row: row.number - 1 + 0.08 },
+          ext: { width, height },
           editAs: 'oneCell',
         });
       } else {
@@ -432,6 +526,7 @@ export interface VersionarioArtesPreviewRow {
   estatusBreakdown: EstatusBreakdownItem[]; // desglose para renderizar badges
   notas: string;
   nombreArte: string;
+  estatusOperaciones: string; // texto manual de Estatus Operaciones (ficha)
   artesUrls: string[];
   posted: boolean;
 }
@@ -606,11 +701,10 @@ export function buildVersionarioArtesPreview({ campanas }: { campanas: Versionar
 
       const cuic = campana.cuic ? String(campana.cuic) : '';
       const asesor = (campana as any).T0_U_Asesor || (campana as any).asesor || '';
-      const cliente = (campana as any).cliente_razon_social
-    || (campana as any).cliente_nombre
-    || (campana as any).T0_U_RazonSocial
-    || (campana as any).T0_U_Cliente
+      // Campo "cliente" (comercial), NO la razón social.
+      const cliente = (campana as any).T0_U_Cliente
     || (campana as any).T1_U_Cliente
+    || (campana as any).cliente_nombre
     || (campana as any).cliente
     || '';
       const marca = (campana as any).T2_U_Marca || (campana as any).marca || '';
@@ -736,6 +830,7 @@ export function buildVersionarioArtesPreview({ campanas }: { campanas: Versionar
         estatusBreakdown,
         notas: notasResumen,
         nombreArte: buildNombresArtesText(urls, extractNamesByUrl(arr)),
+        estatusOperaciones: buildEstatusOpText(urls, extractEstatusOpByUrl(arr)),
         artesUrls: urls,
         posted,
       });
@@ -745,8 +840,8 @@ export function buildVersionarioArtesPreview({ campanas }: { campanas: Versionar
   return {
     headers: [
       'ID Campaña', 'Plaza', 'Tipo', 'Formato', 'Asesor Comercial', 'APS QEB',
-      'Fecha Inicio Periodo', 'Fecha Fin Periodo', 'Cliente Comercial',
-      'Marca', 'Campaña', 'Caras', 'Estatus', 'Notas', 'Nombre Arte', 'URL Arte',
+      'Fecha Inicio Periodo', 'Fecha Fin Periodo', 'Cliente',
+      'Marca', 'Campaña', 'Caras', 'Observaciones', 'Nombre Arte', 'Estatus Operaciones', 'URL Arte',
     ],
     arteCols: maxArtesUnicos,
     rows,
@@ -831,6 +926,9 @@ export async function exportVersionarioArtesMulti({ campanas, fileNameSuffix, fi
     return a.plaza.localeCompare(b.plaza);
   });
 
+  // IMPORTANTE: estas columnas deben coincidir EXACTO (nombre y orden) con las
+  // de buildVersionarioArtesPreview (lo que se ve en la tabla del modal), para
+  // que el Excel descargado sea igual a la tabla.
   const baseHeaders = [
     'ID Campaña',
     'Plaza',
@@ -840,19 +938,19 @@ export async function exportVersionarioArtesMulti({ campanas, fileNameSuffix, fi
     'APS QEB',
     'Fecha Inicio Periodo',
     'Fecha Fin Periodo',
-    'Cliente Comercial',
+    'Cliente',
     'Marca',
     'Campaña',
     'Caras',
-    'Estatus',
-    'Notas',
+    'Observaciones',
     'Nombre Arte',
+    'Estatus Operaciones',
     'URL Arte',
   ];
   const arteHeaders = Array.from({ length: maxArtesUnicos }, (_, i) => `Arte ${i + 1}`);
   const headers = [...baseHeaders, ...arteHeaders];
 
-  const baseWidths = [12, 22, 14, 14, 26, 14, 14, 14, 30, 18, 26, 8, 18, 50, 40, 60];
+  const baseWidths = [12, 22, 14, 14, 26, 14, 14, 14, 30, 18, 26, 8, 50, 40, 30, 60];
   sheet.columns = [
     ...baseWidths.map(w => ({ width: w })),
     ...Array(maxArtesUnicos).fill(null).map(() => ({ width: 22 })),
@@ -868,8 +966,8 @@ export async function exportVersionarioArtesMulti({ campanas, fileNameSuffix, fi
   };
   headerRow.height = 22;
 
-  const imageCache = new Map<string, number | null>();
-  const getImageId = async (url: string | null | undefined): Promise<number | null> => {
+  const imageCache = new Map<string, ImageRef | null>();
+  const getImageId = async (url: string | null | undefined): Promise<ImageRef | null> => {
     if (!url) return null;
     if (imageCache.has(url)) return imageCache.get(url) ?? null;
     const fetched = await fetchImage(url);
@@ -878,8 +976,9 @@ export async function exportVersionarioArtesMulti({ campanas, fileNameSuffix, fi
       return null;
     }
     const id = workbook.addImage({ buffer: fetched.buffer, extension: fetched.ext });
-    imageCache.set(url, id);
-    return id;
+    const ref: ImageRef = { id, w: fetched.width || 160, h: fetched.height || 100 };
+    imageCache.set(url, ref);
+    return ref;
   };
 
   const ROW_HEIGHT = 70;
@@ -892,16 +991,33 @@ export async function exportVersionarioArtesMulti({ campanas, fileNameSuffix, fi
     return 'Varios';
   };
 
+  // PRE-FETCH en paralelo de TODAS las imágenes únicas (fetch + downscale) antes
+  // de armar las filas. Antes el loop hacía `await getImageId` una por una
+  // (red serializada → tardaba añales). Aquí llenamos el imageCache en paralelo
+  // y el loop de filas solo lee del cache.
+  if (!skipImages) {
+    const uniqueUrls = new Set<string>();
+    for (const b of bloques) {
+      for (const u of b.artesUrls) {
+        if (u && !isVideoUrl(u)) uniqueUrls.add(u);
+      }
+    }
+    const urlList = [...uniqueUrls];
+    const PREFETCH_POOL = 8;
+    for (let i = 0; i < urlList.length; i += PREFETCH_POOL) {
+      await Promise.all(urlList.slice(i, i + PREFETCH_POOL).map(u => getImageId(u)));
+    }
+  }
+
   for (const bloque of bloques) {
     const { campana, plaza, items: arr, artesUrls, notesByUrl } = bloque;
 
     const cuic = campana.cuic ? String(campana.cuic) : '';
     const asesor = (campana as any).T0_U_Asesor || (campana as any).asesor || '';
-    const cliente = (campana as any).cliente_razon_social
-    || (campana as any).cliente_nombre
-    || (campana as any).T0_U_RazonSocial
-    || (campana as any).T0_U_Cliente
+    // Campo "cliente" (comercial), NO la razón social.
+    const cliente = (campana as any).T0_U_Cliente
     || (campana as any).T1_U_Cliente
+    || (campana as any).cliente_nombre
     || (campana as any).cliente
     || '';
     const marca = (campana as any).T2_U_Marca || (campana as any).marca || '';
@@ -961,10 +1077,11 @@ export async function exportVersionarioArtesMulti({ campanas, fileNameSuffix, fi
     const fines = arr.map(it => it.fin_periodo).filter(Boolean) as string[];
     const minInicio = inicios.length ? inicios.slice().sort()[0] : '';
     const maxFin = fines.length ? fines.slice().sort().reverse()[0] : '';
-    const { text: estatusDisplay } = buildEstatusCircuito(arr);
     const formatoDisplay = uniqueOrVarios(arr.map(it => (it.mueble || (it as any).formato || it.tipo_de_mueble || '').toString()));
     const urlArteText = artesUrls.join('\n');
 
+    // Orden de columnas IGUAL al preview: ...Caras, Observaciones, Nombre Arte,
+    // Estatus Operaciones, URL Arte (sin la vieja columna 'Estatus').
     const rowValues: any[] = [
       campana.id,
       plaza,
@@ -978,9 +1095,9 @@ export async function exportVersionarioArtesMulti({ campanas, fileNameSuffix, fi
       marca,
       campaniaNombre,
       caras,
-      estatusDisplay,
       notasResumen,
       buildNombresArtesText(artesUrls, extractNamesByUrl(arr)),
+      buildEstatusOpText(artesUrls, extractEstatusOpByUrl(arr)),
       urlArteText,
     ];
     for (let i = 0; i < maxArtesUnicos; i++) rowValues.push('');
@@ -1003,11 +1120,16 @@ export async function exportVersionarioArtesMulti({ campanas, fileNameSuffix, fi
         row.getCell(colIndex + 1).value = { text: 'Ver arte', hyperlink: url };
         continue;
       }
-      const imageId = await getImageId(url);
-      if (imageId !== null) {
-        sheet.addImage(imageId, {
-          tl: { col: colIndex + 0.05, row: row.number - 1 + 0.05 },
-          ext: { width: 130, height: 80 },
+      const imgRef = await getImageId(url);
+      if (imgRef !== null) {
+        // Anclaje a UNA celda (tl) con tamaño que CONSERVA proporción (fitInBox),
+        // no estirado a la celda. Queda dentro de la celda y se mueve/oculta con
+        // ella al filtrar (editAs: 'oneCell'). El alto cabe en la fila, así no se
+        // desborda a la de abajo (bug de "se ve el arte de otra fila").
+        const { width, height } = fitInBox(imgRef.w, imgRef.h);
+        sheet.addImage(imgRef.id, {
+          tl: { col: colIndex + 0.08, row: row.number - 1 + 0.08 },
+          ext: { width, height },
           editAs: 'oneCell',
         });
       } else {

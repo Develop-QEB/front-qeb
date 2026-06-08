@@ -3,7 +3,7 @@ import { useQuery } from '@tanstack/react-query';
 import { useState, useMemo, useRef } from 'react';
 import {
   ArrowLeft, Share2, Download, FileText, Map as MapIcon, Copy, Check, Loader2,
-  ChevronDown, ChevronRight, Filter, ArrowUpDown, Layers, FileSpreadsheet, ExternalLink, X
+  ChevronDown, ChevronRight, Filter, ArrowUpDown, Layers, FileSpreadsheet, ExternalLink, X, Maximize2
 } from 'lucide-react';
 import { GoogleMap, useLoadScript, Marker, Circle, Autocomplete, InfoWindow } from '@react-google-maps/api';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell } from 'recharts';
@@ -461,10 +461,17 @@ export function CompartirPropuestaPage() {
 
   const handleDownloadXLSX = () => {
     if (!inventario) return;
+    // Si hay filas seleccionadas en los checkboxes, exportar SOLO esas. Si no hay
+    // selección, exportar todo el inventario.
+    const source = selectedItems.size > 0
+      ? inventario.filter(i => selectedItems.has(itemKey(i)))
+      : inventario;
+    if (source.length === 0) return;
     import('xlsx').then(XLSX => {
-      const headers = ['Clave', 'Plaza', 'Ubicación', 'Tipo de Cara', 'Formato', 'Periodo', 'Lat', 'Long', 'NOTAS'];
+      // codigo_unico (completo) va ANTES de Clave (que es solo el prefijo).
+      const headers = ['codigo_unico', 'Clave', 'Plaza', 'Ubicación', 'Tipo de Cara', 'Formato', 'Periodo', 'Lat', 'Long', 'NOTAS'];
       const byPlaza: Record<string, typeof inventario> = {};
-      for (const i of inventario) {
+      for (const i of source) {
         const plaza = i.plaza || 'Sin Plaza';
         if (!byPlaza[plaza]) byPlaza[plaza] = [];
         byPlaza[plaza].push(i);
@@ -472,6 +479,7 @@ export function CompartirPropuestaPage() {
       const wb = XLSX.utils.book_new();
       for (const plaza of Object.keys(byPlaza).sort()) {
         const rows = byPlaza[plaza].map(i => [
+          i.codigo_unico || '',
           (i.codigo_unico || '').split('_')[0],
           i.plaza || '',
           i.ubicacion || '',
@@ -486,7 +494,8 @@ export function CompartirPropuestaPage() {
         const sheetName = plaza.substring(0, 31);
         XLSX.utils.book_append_sheet(wb, ws, sheetName);
       }
-      XLSX.writeFile(wb, `reservas_propuesta_${propuestaId}.xlsx`);
+      const sufijo = selectedItems.size > 0 ? '_seleccion' : '';
+      XLSX.writeFile(wb, `reservas_propuesta_${propuestaId}${sufijo}.xlsx`);
     });
   };
 
@@ -568,6 +577,20 @@ export function CompartirPropuestaPage() {
     a.href = url;
     a.download = `reservas_propuesta_${propuestaId}_seleccionados.kml`;
     a.click();
+  };
+
+  // Abrir el visor de mapa publico de QEB (pantalla completa, branding IMU) con la
+  // seleccion actual. Si no hay seleccion, abre el mapa con todo el inventario.
+  const handleExpandMap = () => {
+    const ids = inventario
+      ? Array.from(new Set(
+          inventario
+            .filter(i => selectedItems.has(itemKey(i)) && i.latitud && i.longitud)
+            .map(i => i.id)
+        ))
+      : [];
+    const qs = ids.length > 0 ? `?ids=${ids.join(',')}` : '';
+    window.open(`/cliente/propuesta/${propuestaId}/mapa${qs}`, '_blank', 'noopener,noreferrer');
   };
 
   // Download KML for a specific group
@@ -1267,6 +1290,9 @@ export function CompartirPropuestaPage() {
                     <MapIcon className="h-3.5 w-3.5" /> KML ({selectedItems.size})
                   </button>
                 )}
+                <button onClick={handleExpandMap} className="flex items-center gap-1.5 px-3 py-1.5 bg-gradient-to-r from-indigo-600 to-violet-600 hover:from-indigo-500 hover:to-violet-500 text-white rounded-lg text-xs font-medium shadow-sm transition-colors" title={selectedItems.size > 0 ? `Expandir mapa con ${selectedItems.size} seleccionados` : 'Expandir mapa con todo el inventario'}>
+                  <Maximize2 className="h-3.5 w-3.5" /> Expandir Mapa
+                </button>
               </div>
             </div>
             <div className="flex flex-wrap items-center gap-3">

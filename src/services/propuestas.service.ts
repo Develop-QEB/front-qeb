@@ -16,6 +16,11 @@ export interface PropuestasParams {
   cambioEstatusHasta?: string;
   creacionDesde?: string;
   creacionHasta?: string;
+  // Nuevo filtro unificado (HistorialFilterPopover)
+  modo?: 'creacion' | 'cambio_estatus';
+  fechaDesde?: string;
+  fechaHasta?: string;
+  estatusValor?: string;
   excludeRechazadas?: boolean;
 }
 

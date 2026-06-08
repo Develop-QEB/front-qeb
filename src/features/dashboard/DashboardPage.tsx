@@ -35,6 +35,7 @@ import {
   Loader2,
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
+import api from '../../lib/api';
 import { Header } from '../../components/layout/Header';
 import { Skeleton } from '../../components/ui/skeleton';
 import { useThemeStore } from '../../store/themeStore';
@@ -1846,6 +1847,29 @@ export function DashboardPage() {
 
   const handleEstatusChange = (estatus: EstatusType) => { setActiveEstatus(estatus); setInventoryPage(1); };
 
+  // Descarga el reporte "Pase a ventas" (CSV generado al dia por el back).
+  const [descargandoPaseVentas, setDescargandoPaseVentas] = useState(false);
+  const descargarPaseAVentas = useCallback(async () => {
+    setDescargandoPaseVentas(true);
+    try {
+      const res = await api.get('/dashboard/pase-a-ventas-report', { responseType: 'blob' });
+      const blob = new Blob([res.data], { type: 'text/csv;charset=utf-8;' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `pase_a_ventas_${new Date().toISOString().slice(0, 10)}.csv`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+    } catch (e) {
+      console.error('Error descargando reporte pase a ventas:', e);
+      alert('No se pudo descargar el reporte de pase a ventas.');
+    } finally {
+      setDescargandoPaseVentas(false);
+    }
+  }, []);
+
   return (
     <div className="min-h-screen">
       <Header title="DASHBOARD / HOME" />
@@ -1873,6 +1897,20 @@ export function DashboardPage() {
               {hasActiveFilters && (
                 <Button variant="ghost" size="sm" onClick={handleClearFilters} className={`gap-2 ${isDark ? 'text-purple-400 hover:text-purple-300' : 'text-purple-500 hover:text-purple-700'}`}>
                   <RotateCcw className="h-4 w-4" /> Limpiar
+                </Button>
+              )}
+              {/* Reporte Pase a Ventas — solo visible al filtrar por KPI "Vendido" */}
+              {activeEstatus === 'Vendido' && (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={descargarPaseAVentas}
+                  disabled={descargandoPaseVentas}
+                  className="gap-2"
+                  title="Reporte Pase a Ventas"
+                >
+                  <Download className="h-4 w-4" />
+                  {descargandoPaseVentas ? 'Generando...' : 'Reporte Pase a Ventas'}
                 </Button>
               )}
               <Button

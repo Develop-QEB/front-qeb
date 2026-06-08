@@ -244,6 +244,22 @@ const cleanArteName = (raw?: string | null): string => {
     .join(', ');
 };
 
+// Nombre de arte para el Orden de Montaje: prioriza el nombre_arte MANUAL
+// (campo de la carga de artes); si no hay, cae al nombre de archivo limpio.
+const arteNombreMontaje = (item: OrdenMontajeINVIAN): string => {
+  const manual = (item.nombre_arte_manual || '').trim();
+  if (manual) return manual;
+  return cleanArteName(item.nombres_artes_digitales || item.ArteFileName || (item.ArteUrl === 'HAS_ARTE' ? '' : item.ArteUrl?.split('/').pop()) || '');
+};
+
+// Origen del arte para el Orden de Montaje: URL(s) de Digital Ocean donde está
+// almacenado el arte (separadas por coma si hay varios). Fallback al ArteUrl.
+const arteOrigenMontaje = (item: OrdenMontajeINVIAN): string => {
+  const urls = (item.urls_artes_do || '').trim();
+  if (urls) return urls;
+  return item.ArteUrl === 'HAS_ARTE' ? '' : (getFileUrl(item.ArteUrl) || '');
+};
+
 // Extrae la ciudad del codigo_unico de inventarios.
 // Formato esperado: 'CODIGO_SENTIDO_CIUDAD' (ej. 'AC3033_Contraflujo2_Acapulco de Juárez').
 // Casos especiales en la data: separador con coma en lugar de _ (ej. '21061_Flujo,Monterrey'
@@ -1319,11 +1335,14 @@ export function OrdenesMontajeModal({ isOpen, onClose, canExport = true }: Orden
           'Descripción (Opcional)': item.Descripcion || '',
           'Inicio o Periodo': item.InicioPeriodo || '',
           'Fin o Segmento': item.FinSegmento || '',
-          // Arte = nombre limpio del arte (sin prefix de DO Spaces, sin extensión).
-          // Antes salía en "Código de arte"; ahora "Código de arte" va vacío.
-          'Arte': cleanArteName(item.nombres_artes_digitales || item.ArteFileName || (item.ArteUrl === 'HAS_ARTE' ? '' : item.ArteUrl?.split('/').pop()) || ''),
+          // Arte = nombre_arte MANUAL (el de la carga de artes). Si no hay nombre
+          // manual, cae al nombre de archivo limpio.
+          'Arte': arteNombreMontaje(item),
+          // Notas de los artes (separadas por coma si hay varios).
+          'Notas': item.notas_artes || '',
           'Código de arte (Opcional)': '',
-          'Origen del arte (Opcional)': item.ArteUrl === 'HAS_ARTE' ? '' : (getFileUrl(item.ArteUrl) || ''),
+          // Origen = URL(s) de Digital Ocean donde está almacenado el arte.
+          'Origen del arte (Opcional)': arteOrigenMontaje(item),
           'Unidad': (item.Unidad || '').split('_')[0] || '',
           'Cara': item.Cara || '',
           'Plaza': plazaDerivada,
@@ -1351,11 +1370,14 @@ export function OrdenesMontajeModal({ isOpen, onClose, canExport = true }: Orden
           'Descripción (Opcional)': item.Descripcion || '',
           'Inicio o Periodo': item.InicioPeriodo || '',
           'Fin o Segmento': item.FinSegmento || '',
-          // Arte = nombre limpio del arte (sin prefix de DO Spaces, sin extensión).
-          // Antes salía en "Código de arte"; ahora "Código de arte" va vacío.
-          'Arte': cleanArteName(item.nombres_artes_digitales || item.ArteFileName || (item.ArteUrl === 'HAS_ARTE' ? '' : item.ArteUrl?.split('/').pop()) || ''),
+          // Arte = nombre_arte MANUAL (el de la carga de artes). Si no hay nombre
+          // manual, cae al nombre de archivo limpio.
+          'Arte': arteNombreMontaje(item),
+          // Notas de los artes (separadas por coma si hay varios).
+          'Notas': item.notas_artes || '',
           'Código de arte (Opcional)': '',
-          'Origen del arte (Opcional)': item.ArteUrl === 'HAS_ARTE' ? '' : (getFileUrl(item.ArteUrl) || ''),
+          // Origen = URL(s) de Digital Ocean donde está almacenado el arte.
+          'Origen del arte (Opcional)': arteOrigenMontaje(item),
           'Unidad': (item.Unidad || '').split('_')[0] || '',
           'Cara': item.Cara || '',
           'Plaza': plazaDerivada,
@@ -2277,6 +2299,7 @@ export function OrdenesMontajeModal({ isOpen, onClose, canExport = true }: Orden
                     <th className="px-3 py-3 text-left text-[10px] font-semibold text-purple-300 uppercase tracking-wider">Inicio/Periodo</th>
                     <th className="px-3 py-3 text-left text-[10px] font-semibold text-purple-300 uppercase tracking-wider">Fin/Segmento</th>
                     <th className="px-3 py-3 text-left text-[10px] font-semibold text-purple-300 uppercase tracking-wider">Arte</th>
+                    <th className="px-3 py-3 text-left text-[10px] font-semibold text-purple-300 uppercase tracking-wider">Notas</th>
                     <th className="px-3 py-3 text-left text-[10px] font-semibold text-purple-300 uppercase tracking-wider">Código de arte (Opcional)</th>
                     <th className="px-3 py-3 text-left text-[10px] font-semibold text-purple-300 uppercase tracking-wider">Origen del arte (Opcional)</th>
                     <th className="px-3 py-3 text-left text-[10px] font-semibold text-purple-300 uppercase tracking-wider">Unidad</th>
@@ -2298,7 +2321,7 @@ export function OrdenesMontajeModal({ isOpen, onClose, canExport = true }: Orden
                     const showCto = activeTab === 'invian-digital';
                     const showCodigoUnico = true;
                     const showTipoInventario = true;
-                    const invianColSpan = 15 + (showCto ? 1 : 0) + (showCodigoUnico ? 1 : 0) + (showTipoInventario ? 1 : 0);
+                    const invianColSpan = 16 + (showCto ? 1 : 0) + (showCodigoUnico ? 1 : 0) + (showTipoInventario ? 1 : 0);
                     return (
                       <>
                         {currentGrouped ? (
@@ -2493,8 +2516,6 @@ const INVIANRow = React.memo(function INVIANRow({ item, isDark, onOpenGallery, s
 
   const hasTraditionalArte = item.ArteUrl === 'HAS_ARTE';
   const arteUrl = hasTraditionalArte ? null : getFileUrl(item.ArteUrl);
-  // For digital items with multiple artes, show comma-separated filenames from backend
-  const fileName = item.nombres_artes_digitales || item.ArteFileName || (hasTraditionalArte ? 'Arte' : item.ArteUrl?.split('/').pop()) || null;
 
   return (
     <tr className={`border-b ${isDark ? 'border-zinc-800/50 hover:bg-zinc-800/30' : 'border-gray-200 hover:bg-gray-50'} transition-colors`}>
@@ -2521,16 +2542,20 @@ const INVIANRow = React.memo(function INVIANRow({ item, isDark, onOpenGallery, s
       </td>
       <td className="px-3 py-2 text-xs text-purple-300">{item.InicioPeriodo || '-'}</td>
       <td className="px-3 py-2 text-xs text-purple-300">{item.FinSegmento || '-'}</td>
-      {/* Arte = nombre limpio del arte (sin prefix DO Spaces, sin extensión).
-          Antes salía en "Código de arte"; ahora ese campo va vacío. */}
+      {/* Arte = nombre_arte MANUAL (carga de artes). Si no hay, cae al nombre
+          de archivo limpio. */}
       {(() => {
-        const clean = cleanArteName(fileName);
+        const nombre = arteNombreMontaje(item);
         return (
-          <td className={`px-3 py-2 text-xs ${isDark ? 'text-zinc-300' : 'text-gray-700'} max-w-[180px] truncate`} title={clean}>
-            {clean || '-'}
+          <td className={`px-3 py-2 text-xs ${isDark ? 'text-zinc-300' : 'text-gray-700'} max-w-[180px] truncate`} title={nombre}>
+            {nombre || '-'}
           </td>
         );
       })()}
+      {/* Notas de los artes (separadas por coma si hay varios) */}
+      <td className={`px-3 py-2 text-xs ${isDark ? 'text-zinc-300' : 'text-gray-700'} max-w-[180px] truncate`} title={item.notas_artes || ''}>
+        {item.notas_artes || '-'}
+      </td>
       {/* Código de arte (Opcional) — intencionalmente vacío */}
       <td className={`px-3 py-2 text-xs ${isDark ? 'text-zinc-500' : 'text-gray-400'} max-w-[150px] truncate`}>
         -

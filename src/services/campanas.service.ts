@@ -86,6 +86,7 @@ export interface ImagenDigital {
   spot: number;
   tipo: 'image' | 'video';
   nombre_arte?: string | null; // Nombre manual capturado en la carga (reemplaza al slug del archivo)
+  estatus_operaciones?: string | null; // Texto manual de Estatus Operaciones (ficha)
 }
 
 export interface DigitalFileSummary {
@@ -103,6 +104,7 @@ export interface ArteTradicional {
   spot: number;
   createdAt: string | null;
   nombre_arte?: string | null; // Nombre manual capturado en la carga (reemplaza al slug del archivo)
+  estatus_operaciones?: string | null; // Texto manual de Estatus Operaciones (ficha)
 }
 
 export interface TradicionalFileSummary {
@@ -403,6 +405,11 @@ export interface OrdenMontajeINVIAN {
   num_artes_digitales?: number | null;
   nombres_artes_digitales?: string | null;
   nombres_archivo_data?: string | null;
+  // Orden de Montaje: nombre_arte MANUAL, notas y URL de DO (separados por coma
+  // cuando hay varios artes). Aplica a digital y tradicional.
+  nombre_arte_manual?: string | null;
+  notas_artes?: string | null;
+  urls_artes_do?: string | null;
   cortesia?: number | null;
   numero_articulo?: string | null;
   cto?: string | null;
@@ -492,19 +499,35 @@ export function buildDeliveryNote(
 
       // U_CodTAsig + U_dscTAsig deben ser un par válido en SAP:
       //   200 = "Venta"        (para RT-* o reservas vendidas)
+      //   201 = "Intercambio"  (para IN-* / artículos de intercambio)
       //   204 = "Bonificado"   (para BF/CF/CT o reservas bonificadas)
       // SAP rechaza con -2028 si la descripción no coincide con un código
       // existente en su tabla — por eso NO mandamos textos custom como
       // "Vendido bonificado" o "Reservado", siempre la descripción canónica
       // del CodTAsig que está enviando.
       const isRenta = articuloCode.startsWith('RT-') || articuloCode.startsWith('RT_');
+      // Intercambio se identifica por artículo IN-* (misma convención que en
+      // todo el flujo: caras, KPIs, autorización). Contablemente NO es venta.
+      const isIntercambio = articuloCode.startsWith('IN');
       const isBonifiedEstatus =
         firstItem.estatus_reserva === 'Bonificado' ||
         firstItem.estatus_reserva === 'Vendido bonificado';
-      // Renta gana sobre estatus: aunque el reserva.estatus esté en
-      // "Vendido bonificado", si el artículo es RT-*, va como Venta.
-      const codTAsig = !isRenta && isBonifiedEstatus ? 204 : 200;
-      const dscTAsig = codTAsig === 204 ? 'Bonificado' : 'Venta';
+      // Precedencia: Intercambio (201) gana sobre todo — aunque el estatus de
+      // la reserva sea "Vendido", un artículo IN-* va como Intercambio.
+      // Luego Renta gana sobre estatus bonificado (RT-* siempre Venta).
+      // El resto bonificado → 204; lo demás → 200 Venta.
+      let codTAsig: number;
+      let dscTAsig: string;
+      if (isIntercambio) {
+        codTAsig = 201;
+        dscTAsig = 'Otros'; // descripción canónica del código 201 en SAP
+      } else if (!isRenta && isBonifiedEstatus) {
+        codTAsig = 204;
+        dscTAsig = 'Bonificado';
+      } else {
+        codTAsig = 200;
+        dscTAsig = 'Venta';
+      }
 
       return {
         LineNum: index.toString(),
@@ -807,6 +830,11 @@ export interface CampanasParams {
   cambioEstatusHasta?: string;
   creacionDesde?: string;
   creacionHasta?: string;
+  // Nuevo filtro unificado (HistorialFilterPopover)
+  modo?: 'creacion' | 'cambio_estatus';
+  fechaDesde?: string;
+  fechaHasta?: string;
+  estatusValor?: string;
   excludeRechazadas?: boolean;
 }
 
@@ -999,11 +1027,25 @@ export const campanasService = {
 
   // includeWithoutAps=true incluye tambien items que aun no tienen APS asignado
   // (usado por el preview de Versionario Artes para que se vean circuitos pendientes).
-  async getInventarioSinArte(id: number, opts?: { includeWithoutAps?: boolean }): Promise<InventarioConArte[]> {
-    const params = opts?.includeWithoutAps ? { includeWithoutAps: 'true' } : undefined;
-    const response = await api.get<ApiResponse<InventarioConArte[]>>(`/campanas/${id}/inventario-sin-arte`, { params });
+  async getInventarioSinArte(id: number, opts?: { includeWithoutAps?: boolean; grouped?: boolean }): Promise<InventarioConArte[]> {
+    const params: Record<string, string> = {};
+    if (opts?.includeWithoutAps) params.includeWithoutAps = 'true';
+    if (opts?.grouped) params.grouped = 'true';
+    const response = await api.get<ApiResponse<InventarioConArte[]>>(`/campanas/${id}/inventario-sin-arte`, { params: Object.keys(params).length ? params : undefined });
     if (!response.data.success || !response.data.data) {
       throw new Error(response.data.error || 'Error al obtener inventario sin arte');
+    }
+    return response.data.data;
+  },
+
+  // BULK: inventario (con+sin arte) de varias campañas en 1 request. Para el
+  // Versionario de Artes (evita 2 llamadas por campaña).
+  async getInventarioVersionarioBulk(ids: number[], opts?: { includeWithoutAps?: boolean }): Promise<Record<string, { conArte: InventarioConArte[]; sinArte: InventarioConArte[] }>> {
+    const params: Record<string, string> = { ids: ids.join(',') };
+    if (opts?.includeWithoutAps) params.includeWithoutAps = 'true';
+    const response = await api.get<ApiResponse<Record<string, { conArte: InventarioConArte[]; sinArte: InventarioConArte[] }>>>(`/campanas/inventario-versionario-bulk`, { params });
+    if (!response.data.success || !response.data.data) {
+      throw new Error(response.data.error || 'Error al obtener inventario bulk');
     }
     return response.data.data;
   },
@@ -1031,7 +1073,7 @@ export const campanasService = {
   async assignArteDigital(
     id: number,
     reservaIds: number[],
-    archivos: { archivo: string; spot: number; nombre: string; tipo: string }[],
+    archivos: { archivo: string; spot: number; nombre: string; tipo: string; nota?: string; nombre_arte?: string | null; estatus_operaciones?: string | null }[],
     markInstalado: boolean = false,
     instalacionMode?: 'instalado' | 'rotacion'
   ): Promise<{ message: string; affected: number; marked_instalado?: boolean }> {
@@ -1050,6 +1092,16 @@ export const campanasService = {
     const response = await api.get<ApiResponse<ImagenDigital[]>>(`/campanas/${campanaId}/imagenes-digitales/${reservaId}`);
     if (!response.data.success || !response.data.data) {
       throw new Error(response.data.error || 'Error al obtener imágenes digitales');
+    }
+    return response.data.data;
+  },
+
+  // BULK: todas las imágenes digitales de la campaña en 1 request, con el
+  // id_reserva REAL de cada archivo. Usado por el Versionario al descargar Excel.
+  async getImagenesDigitalesBulk(campanaId: number): Promise<ImagenDigital[]> {
+    const response = await api.get<ApiResponse<ImagenDigital[]>>(`/campanas/${campanaId}/imagenes-digitales-bulk`);
+    if (!response.data.success || !response.data.data) {
+      throw new Error(response.data.error || 'Error al obtener imágenes digitales bulk');
     }
     return response.data.data;
   },
@@ -1120,7 +1172,7 @@ export const campanasService = {
   async assignArteTradicional(
     id: number,
     reservaIds: number[],
-    archivos: { archivo: string; nota: string; spot: number }[],
+    archivos: { archivo: string; nota: string; spot: number; nombre_arte?: string | null; estatus_operaciones?: string | null }[],
     markInstalado: boolean = false,
     instalacionMode?: 'instalado' | 'rotacion'
   ): Promise<{ message: string; affected: number; marked_instalado?: boolean }> {
