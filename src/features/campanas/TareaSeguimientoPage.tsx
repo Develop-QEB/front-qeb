@@ -1410,6 +1410,7 @@ function UploadArtModal({
   const [file, setFile] = useState<File | null>(null);
   const [filePreview, setFilePreview] = useState<string | null>(null);
   const [link, setLink] = useState('');
+  const [digitalLink, setDigitalLink] = useState('');
   const [duplicateWarning, setDuplicateWarning] = useState<{ nombre: string; usos: number; url: string } | null>(null);
   const [isCheckingDuplicate, setIsCheckingDuplicate] = useState(false);
 
@@ -1910,8 +1911,12 @@ function UploadArtModal({
         url: uploadResult.url,
         usos: 0,
       }]);
-    } catch (err) {
+    } catch (err: any) {
       console.error('Error uploading file:', err);
+      const backendError = err?.response?.data?.error
+        || err?.message
+        || 'No se pudo subir el archivo. Verifica el tipo y tamaño e intenta de nuevo.';
+      alert(`Error al subir "${selectedFile.name}":\n\n${backendError}`);
     } finally {
       setIsUploadingFile(false);
     }
@@ -1925,6 +1930,21 @@ function UploadArtModal({
     onAddedArtesChange([...addedArtes, {
       id,
       nombre: trimmed.split('/').pop() || 'URL image',
+      url: trimmed,
+      usos: 0,
+    }]);
+  };
+
+  // URL upload para flujo digital (imagen o video). Mismo patrón que addUrlImage
+  // pero pensado para artes_digitales: la biblioteca acepta http(s) y reconoce
+  // si es video por extensión para que la miniatura/preview lo trate como tal.
+  const addUrlDigital = (url: string) => {
+    const trimmed = url.trim();
+    if (!trimmed) return;
+    const id = `url-dig-${Date.now()}`;
+    onAddedArtesChange([...addedArtes, {
+      id,
+      nombre: trimmed.split('/').pop() || 'URL archivo',
       url: trimmed,
       usos: 0,
     }]);
@@ -1962,8 +1982,15 @@ function UploadArtModal({
         url: uploadResult.url,
         usos: 0,
       }]);
-    } catch (err) {
+    } catch (err: any) {
       console.error('Error uploading digital file:', err);
+      // Mostrar al usuario el mensaje real del backend (ej. "El archivo es demasiado
+      // grande", "Tipo de archivo no permitido", "Archivo invalido"). Si no hay
+      // mensaje, mostrar texto generico.
+      const backendError = err?.response?.data?.error
+        || err?.message
+        || 'No se pudo subir el archivo. Verifica el tipo y tamaño e intenta de nuevo.';
+      alert(`Error al subir "${selectedFile.name}":\n\n${backendError}`);
     } finally {
       setIsUploadingDigitalFile(false);
     }
@@ -2312,6 +2339,24 @@ function UploadArtModal({
                               JPG, PNG, GIF, MP4, MOV, WEBM
                             </p>
                           </div>
+                        </div>
+                        {/* O agregar por URL (imagen o video) */}
+                        <div className="flex gap-1">
+                          <input
+                            type="url"
+                            value={digitalLink}
+                            onChange={(e) => setDigitalLink(e.target.value)}
+                            placeholder="o pega la URL del archivo (imagen o video)..."
+                            className="flex-1 px-2 py-1.5 text-[10px] bg-background border border-border rounded-lg focus:outline-none focus:ring-1 focus:ring-cyan-500"
+                          />
+                          <button
+                            type="button"
+                            onClick={() => { addUrlDigital(digitalLink); setDigitalLink(''); }}
+                            disabled={!digitalLink.trim()}
+                            className="px-2 py-1.5 text-[10px] bg-cyan-600 hover:bg-cyan-700 text-white rounded-lg disabled:opacity-50 transition-colors"
+                          >
+                            +
+                          </button>
                         </div>
                       </div>
 
