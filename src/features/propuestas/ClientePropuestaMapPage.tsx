@@ -1,7 +1,7 @@
 import { useParams, useSearchParams } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { useState, useMemo, useRef } from 'react';
-import { Map as MapIcon, Loader2, ExternalLink, Copy, Check, Download } from 'lucide-react';
+import { Map as MapIcon, Loader2, ExternalLink, Copy, Check, Download, ChevronDown, Search } from 'lucide-react';
 import { GoogleMap, useLoadScript, Marker, Circle, Autocomplete, InfoWindow } from '@react-google-maps/api';
 import { formatCurrency } from '../../lib/utils';
 
@@ -111,6 +111,8 @@ export function ClientePropuestaMapPage() {
   const [searchRange, setSearchRange] = useState(300);
   const [poiSearch, setPoiSearch] = useState('');
   const [copied, setCopied] = useState(false);
+  const [showList, setShowList] = useState(true);
+  const [listSearch, setListSearch] = useState('');
 
   const { isLoaded } = useLoadScript(GOOGLE_MAPS_LOADER_OPTIONS);
 
@@ -188,6 +190,29 @@ export function ClientePropuestaMapPage() {
     const avgLng = validItems.reduce((sum, i) => sum + i.longitud, 0) / validItems.length;
     return { lat: avgLat, lng: avgLng };
   }, [inventario]);
+
+  // Ubicaciones para la barra lateral (solo con coords), filtradas por el buscador.
+  const listItems = useMemo(() => {
+    const items = inventario.filter(i => i.latitud && i.longitud);
+    const q = listSearch.trim().toLowerCase();
+    if (!q) return items;
+    return items.filter(i =>
+      (i.codigo_unico || '').toLowerCase().includes(q) ||
+      (i.plaza || '').toLowerCase().includes(q) ||
+      (i.ubicacion || '').toLowerCase().includes(q) ||
+      (i.mueble || '').toLowerCase().includes(q)
+    );
+  }, [inventario, listSearch]);
+
+  // Centrar el mapa en una ubicacion y abrir su InfoWindow.
+  const handleFocusLocation = (item: InventarioReservado) => {
+    if (!item.latitud || !item.longitud) return;
+    setSelectedMarker(item);
+    if (mapRef.current) {
+      mapRef.current.panTo({ lat: item.latitud, lng: item.longitud });
+      mapRef.current.setZoom(16);
+    }
+  };
 
   const handlePOIPlaceChanged = () => {
     const place = autocompleteRef.current?.getPlace();
@@ -314,11 +339,69 @@ export function ClientePropuestaMapPage() {
 
       {/* Map - Full remaining height */}
       <div className="flex-1 relative min-h-0">
-        {/* Map toolbar */}
-        <div className="absolute top-4 left-4 z-10 flex items-center gap-2 bg-white/95 backdrop-blur rounded-xl shadow-lg border border-gray-200 px-4 py-2.5">
-          <MapIcon className="h-4 w-4 text-[#0054A6]" />
-          <span className="text-sm font-semibold text-[#0054A6]">Mapa de Ubicaciones</span>
-          <span className="text-xs text-gray-400 ml-1">({inventario.filter(i => i.latitud && i.longitud).length} puntos)</span>
+        {/* Panel lateral: lista de ubicaciones */}
+        <div
+          className="absolute top-4 left-4 z-10 w-80 max-w-[calc(100%-2rem)] flex flex-col bg-white/95 backdrop-blur rounded-xl shadow-lg border border-gray-200 overflow-hidden"
+          style={{ maxHeight: 'calc(100% - 2rem)' }}
+        >
+          {/* Header (toggle) */}
+          <button
+            onClick={() => setShowList(v => !v)}
+            className="flex items-center gap-2 px-4 py-2.5 w-full hover:bg-gray-50 transition-colors"
+          >
+            <MapIcon className="h-4 w-4 text-[#0054A6]" />
+            <span className="text-sm font-semibold text-[#0054A6]">Mapa de Ubicaciones</span>
+            <span className="text-xs text-gray-400 ml-1">({listItems.length})</span>
+            <ChevronDown className={`h-4 w-4 text-gray-400 ml-auto transition-transform ${showList ? '' : '-rotate-90'}`} />
+          </button>
+
+          {showList && (
+            <>
+              {/* Buscador */}
+              <div className="px-3 pb-2 relative">
+                <Search className="h-3.5 w-3.5 text-gray-400 absolute left-5 top-1/2 -translate-y-1/2 pointer-events-none" />
+                <input
+                  value={listSearch}
+                  onChange={(e) => setListSearch(e.target.value)}
+                  placeholder="Buscar ubicacion..."
+                  className="w-full pl-8 pr-3 py-1.5 border border-gray-300 rounded-lg text-xs focus:outline-none focus:ring-2 focus:ring-[#0054A6] text-gray-700"
+                />
+              </div>
+
+              {/* Lista */}
+              <div className="flex-1 min-h-0 overflow-y-auto px-2 pb-2 space-y-1">
+                {listItems.map((item) => {
+                  const isActive = selectedMarker?.id === item.id;
+                  const dot = String(item.tipo_de_cara).startsWith('Flujo')
+                    ? '#ef4444'
+                    : String(item.tipo_de_cara).startsWith('Contraflujo')
+                    ? '#3b82f6'
+                    : IMU_BLUE;
+                  return (
+                    <button
+                      key={item.id}
+                      onClick={() => handleFocusLocation(item)}
+                      className={`w-full text-left px-2.5 py-2 rounded-lg border transition-colors ${
+                        isActive ? 'bg-[#0054A6]/10 border-[#0054A6]/40' : 'bg-white hover:bg-gray-50 border-gray-200'
+                      }`}
+                    >
+                      <div className="flex items-center gap-2">
+                        <span className="h-2.5 w-2.5 rounded-full flex-shrink-0" style={{ backgroundColor: dot }} />
+                        <span className="text-xs font-semibold text-gray-800 truncate">{item.codigo_unico}</span>
+                      </div>
+                      <div className="text-[11px] text-gray-500 truncate mt-0.5 pl-4">{item.ubicacion || item.plaza || 'Sin ubicacion'}</div>
+                      <div className="text-[10px] text-gray-400 truncate pl-4">
+                        {[item.mueble, item.plaza].filter(Boolean).join(' · ')}
+                      </div>
+                    </button>
+                  );
+                })}
+                {listItems.length === 0 && (
+                  <p className="text-center text-xs text-gray-400 py-4">Sin resultados</p>
+                )}
+              </div>
+            </>
+          )}
         </div>
 
         {/* POI search controls */}
@@ -361,23 +444,25 @@ export function ClientePropuestaMapPage() {
               }
             }}
           >
-            {inventario.map((item) => (
-              item.latitud && item.longitud && (
+            {inventario.map((item) => {
+              const isActive = selectedMarker?.id === item.id;
+              return item.latitud && item.longitud && (
                 <Marker
                   key={item.id}
                   position={{ lat: item.latitud, lng: item.longitud }}
                   onClick={() => setSelectedMarker(item)}
+                  zIndex={isActive ? 999 : undefined}
                   icon={{
                     path: google.maps.SymbolPath.CIRCLE,
-                    scale: 8,
-                    fillColor: String(item.tipo_de_cara).startsWith('Flujo') ? '#ef4444' : String(item.tipo_de_cara).startsWith('Contraflujo') ? '#3b82f6' : IMU_BLUE,
+                    scale: isActive ? 11 : 8,
+                    fillColor: isActive ? IMU_GREEN : String(item.tipo_de_cara).startsWith('Flujo') ? '#ef4444' : String(item.tipo_de_cara).startsWith('Contraflujo') ? '#3b82f6' : IMU_BLUE,
                     fillOpacity: 0.9,
                     strokeColor: '#ffffff',
-                    strokeWeight: 2,
+                    strokeWeight: isActive ? 3 : 2,
                   }}
                 />
-              )
-            ))}
+              );
+            })}
             {selectedMarker && (
               <InfoWindow
                 position={{ lat: selectedMarker.latitud, lng: selectedMarker.longitud }}
