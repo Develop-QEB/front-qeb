@@ -360,7 +360,13 @@ const rolePermissions: Partial<Record<UserRole, Partial<RolePermissions>>> = {
     // Campañas: acceso a botones de detalle de campaña (Asignar/Quitar APS,
     // Pre Factura, Cortesía a Gestor y POST a SAP). Cancelar POST queda
     // reservado a TI/Admin.
-    canEditCampanas: true,
+    // CSV (Matriz QEB 2026-01-28): "No debe poder editar la información de
+    // las campañas, ya que esta función corresponde únicamente al Asesor
+    // Comercial". Por eso canEditCampanas (botón Editar info: nombre/fechas)
+    // queda en false. Las acciones operativas (APS, SAP, prefactura) viven
+    // bajo canEditDetalleCampana y siguen permitidas porque el CSV las
+    // lista como responsabilidades del ASC.
+    canEditCampanas: false,
     canEditDetalleCampana: true,
     canDeleteDetalleCampana: false,
     canPostToSAP: true,
@@ -439,7 +445,9 @@ const rolePermissions: Partial<Record<UserRole, Partial<RolePermissions>>> = {
     canExportOrdenesMontaje: false,
   },
   'Director Comercial': {
-    // Solo lectura - permisos pendientes de definición
+    // CSV (Matriz QEB 2026-01-28): ve todo (Dashboard, Clientes, Proveedores,
+    // Solicitudes, Propuestas, Campañas, Inventarios), aprueba/rechaza
+    // autorizaciones, descarga ODM/versionario.
     canSeeDashboard: true,
     canSeeClientes: true,
     canSeeProveedores: false,
@@ -465,7 +473,7 @@ const rolePermissions: Partial<Record<UserRole, Partial<RolePermissions>>> = {
 
     canEditPropuestaStatus: false,
     allowedPropuestaStatuses: [],
-    canAprobarPropuesta: false,
+    canAprobarPropuesta: true, // CSV: aprueba/rechaza autorizaciones
     canAsignarInventario: false,
     canEditResumenPropuesta: false,
     canCompartirPropuesta: false,
@@ -477,7 +485,7 @@ const rolePermissions: Partial<Record<UserRole, Partial<RolePermissions>>> = {
     canSeeGestionArtes: true,
     canEditGestionArtes: false,
     canResolveProduccionTasks: false,
-    canSeeOrdenesMontajeButton: false,
+    canSeeOrdenesMontajeButton: true, // CSV: descarga ODM/versionario
 
     canSeeTabProgramacion: true,
     canSeeTabImpresiones: true,
@@ -493,7 +501,7 @@ const rolePermissions: Partial<Record<UserRole, Partial<RolePermissions>>> = {
     canEditInventarios: false,
     canDeleteInventarios: false,
 
-    canExportOrdenesMontaje: false,
+    canExportOrdenesMontaje: true, // CSV: descarga ODM/versionario
   },
   // Gerente Comercial: mismos permisos que Director Comercial PERO no recibe
   // tareas de autorización DCM (se filtra explícitamente en
