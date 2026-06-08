@@ -11,6 +11,8 @@ interface DeleteCircuitoConfirmModalProps {
   formato?: string;
   tieneReservas: boolean;
   tienePareja: boolean;
+  /** Si se define y es > 1, el modal muestra un resumen de borrado masivo de N circuitos */
+  count?: number;
 }
 
 export function DeleteCircuitoConfirmModal({
@@ -23,10 +25,13 @@ export function DeleteCircuitoConfirmModal({
   formato,
   tieneReservas,
   tienePareja,
+  count,
 }: DeleteCircuitoConfirmModalProps) {
   const isDark = useThemeStore((s) => s.theme) === 'dark';
   if (!isOpen) return null;
 
+  const bulk = count != null;
+  const plural = (count ?? 0) > 1;
   const secondary = [articulo, formato].filter(Boolean).join(' · ');
 
   return (
@@ -45,7 +50,7 @@ export function DeleteCircuitoConfirmModal({
             </div>
             <div>
               <h3 className={`text-base font-bold ${isDark ? 'text-white' : 'text-gray-900'}`}>
-                Eliminar circuito
+                {plural ? 'Eliminar circuitos' : 'Eliminar circuito'}
               </h3>
               <p className={`text-xs ${isDark ? 'text-zinc-400' : 'text-gray-500'}`}>
                 Esta acción no se puede deshacer
@@ -58,13 +63,21 @@ export function DeleteCircuitoConfirmModal({
           <div
             className={`p-3 rounded-lg ${isDark ? 'bg-zinc-800/50' : 'bg-gray-50'} border ${isDark ? 'border-zinc-700' : 'border-gray-200'}`}
           >
-            <p className={`text-sm font-semibold ${isDark ? 'text-zinc-100' : 'text-gray-900'}`}>
-              {ubicacion}
-            </p>
-            {secondary && (
-              <p className={`text-xs mt-0.5 ${isDark ? 'text-zinc-400' : 'text-gray-500'}`}>
-                {secondary}
+            {bulk ? (
+              <p className={`text-sm font-semibold ${isDark ? 'text-zinc-100' : 'text-gray-900'}`}>
+                {count} circuito{plural ? 's' : ''} seleccionado{plural ? 's' : ''}
               </p>
+            ) : (
+              <>
+                <p className={`text-sm font-semibold ${isDark ? 'text-zinc-100' : 'text-gray-900'}`}>
+                  {ubicacion}
+                </p>
+                {secondary && (
+                  <p className={`text-xs mt-0.5 ${isDark ? 'text-zinc-400' : 'text-gray-500'}`}>
+                    {secondary}
+                  </p>
+                )}
+              </>
             )}
           </div>
 
@@ -72,7 +85,9 @@ export function DeleteCircuitoConfirmModal({
             <div className="flex items-start gap-2 p-3 rounded-lg bg-amber-500/10 border border-amber-500/30">
               <AlertTriangle className="h-4 w-4 text-amber-400 mt-0.5 shrink-0" />
               <p className="text-xs text-amber-300">
-                Este circuito tiene reservas activas — se liberarán al eliminarlo.
+                {plural
+                  ? 'Algunos circuitos tienen reservas activas — se liberarán al eliminarlos.'
+                  : 'Este circuito tiene reservas activas — se liberarán al eliminarlo.'}
               </p>
             </div>
           )}
@@ -81,7 +96,9 @@ export function DeleteCircuitoConfirmModal({
             <div className="flex items-start gap-2 p-3 rounded-lg bg-amber-500/10 border border-amber-500/30">
               <AlertTriangle className="h-4 w-4 text-amber-400 mt-0.5 shrink-0" />
               <p className="text-xs text-amber-300">
-                También se eliminará su par RT/BF del mismo periodo.
+                {plural
+                  ? 'También se eliminarán sus pares RT/BF del mismo periodo.'
+                  : 'También se eliminará su par RT/BF del mismo periodo.'}
               </p>
             </div>
           )}
@@ -108,7 +125,7 @@ export function DeleteCircuitoConfirmModal({
             ) : (
               <>
                 <Trash2 className="h-4 w-4" />
-                Eliminar
+                {plural ? `Eliminar ${count}` : 'Eliminar'}
               </>
             )}
           </button>

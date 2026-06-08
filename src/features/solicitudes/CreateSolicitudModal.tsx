@@ -21,6 +21,8 @@ import { uploadsService } from '../../services/uploads.service';
 import { parseCircuitoDigital, type CircuitoInfo } from '../../lib/circuitos';
 import { circuitosService } from '../../services/circuitos.service';
 import { CircuitCheckbox } from '../../components/ui/CircuitCheckbox';
+import { DeleteCircuitoConfirmModal } from '../../components/DeleteCircuitoConfirmModal';
+import { BULK_DELETE_ENABLED } from '../../config/featureFlags';
 
 // Tarifas now come from SAP (U_IMU_PublicPrice = tarifa publica, PriceList 11 = tarifa piso)
 
@@ -722,6 +724,13 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
 
   // Selección masiva de circuitos (para eliminar en lote por circuito / catorcena)
   const [selectedCaraIds, setSelectedCaraIds] = useState<Set<string>>(new Set());
+  // Modal de confirmación para el borrado masivo
+  const [bulkDeleteModal, setBulkDeleteModal] = useState<{
+    isOpen: boolean;
+    count: number;
+    tienePareja: boolean;
+    onConfirm: () => void;
+  }>({ isOpen: false, count: 0, tienePareja: false, onConfirm: () => {} });
 
   // Editing cara state
   const [editingCaraId, setEditingCaraId] = useState<string | null>(null);
@@ -1627,14 +1636,9 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
 
   // Elimina en lote todas las caras seleccionadas. Reutiliza la lógica del borrado
   // individual: si una cara tiene par RT/BF, se elimina también su pareja.
+  // Abre el modal de confirmación estilizado antes de borrar.
   const handleBulkRemove = () => {
     if (selectedCaraIds.size === 0) return;
-    const seleccionadas = caras.filter(c => selectedCaraIds.has(c.id) && !c.esBf);
-    const cuenta = seleccionadas.length || selectedCaraIds.size;
-    const ok = window.confirm(
-      `¿Eliminar ${cuenta} circuito${cuenta !== 1 ? 's' : ''} seleccionado${cuenta !== 1 ? 's' : ''}?`
-    );
-    if (!ok) return;
 
     const toRemove = new Set<string>();
     selectedCaraIds.forEach(id => {
@@ -1649,9 +1653,20 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
       }
     });
 
-    setCaras(prev => prev.filter(c => !toRemove.has(c.id)));
-    if (editingCaraId && toRemove.has(editingCaraId)) setEditingCaraId(null);
-    setSelectedCaraIds(new Set());
+    const cuenta = caras.filter(c => selectedCaraIds.has(c.id) && !c.esBf).length || selectedCaraIds.size;
+    const tienePareja = toRemove.size > selectedCaraIds.size;
+
+    setBulkDeleteModal({
+      isOpen: true,
+      count: cuenta,
+      tienePareja,
+      onConfirm: () => {
+        setCaras(prev => prev.filter(c => !toRemove.has(c.id)));
+        if (editingCaraId && toRemove.has(editingCaraId)) setEditingCaraId(null);
+        setSelectedCaraIds(new Set());
+        setBulkDeleteModal(prev => ({ ...prev, isOpen: false }));
+      },
+    });
   };
 
   // Reenviar a autorización un circuito rechazado: re-evalúa criterios con los
@@ -3463,7 +3478,7 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
               </div>
 
               {/* Barra de acciones masivas: aparece al seleccionar circuitos */}
-              {permissions.canEditCircuitoExistente && !authBlocked && selectedCaraIds.size > 0 && (
+              {BULK_DELETE_ENABLED && permissions.canEditCircuitoExistente && !authBlocked && selectedCaraIds.size > 0 && (
                 <div className="flex items-center justify-between px-4 py-2.5 mb-2 rounded-lg bg-red-500/10 border border-red-500/30">
                   <span className="text-sm font-medium text-red-300">
                     {caras.filter(c => selectedCaraIds.has(c.id) && !c.esBf).length} circuito(s) seleccionado(s)
@@ -3512,7 +3527,7 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
                           {/* Period header */}
                           <div className={`w-full flex items-center justify-between px-4 py-3 ${isDark ? 'bg-zinc-800/50 hover:bg-zinc-800 border-zinc-700/50' : 'bg-gray-50 hover:bg-gray-100 border-gray-200'} transition-colors border-b`}>
                             <div className="flex items-center gap-3">
-                              {permissions.canEditCircuitoExistente && !authBlocked && (
+                              {BULK_DELETE_ENABLED && permissions.canEditCircuitoExistente && !authBlocked && (
                                 <CircuitCheckbox
                                   checked={groupAllSelected}
                                   indeterminate={!groupAllSelected && groupSomeSelected}
@@ -3548,7 +3563,7 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
                               <table className="w-full min-w-[1000px]">
                                 <thead>
                                   <tr className={isDark ? 'bg-zinc-800/30' : 'bg-gray-50'}>
-                                    {permissions.canEditCircuitoExistente && !authBlocked && (
+                                    {BULK_DELETE_ENABLED && permissions.canEditCircuitoExistente && !authBlocked && (
                                       <th className="px-2 py-2 w-8"></th>
                                     )}
                                     <th className={`px-2 py-2 text-left text-[10px] font-semibold ${isDark ? 'text-zinc-500' : 'text-gray-500'}`}>Artículo</th>
@@ -3573,7 +3588,7 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
 
                                     return (
                                       <tr key={cara.id} className={`border-t ${selectedCaraIds.has(cara.id) ? (isDark ? 'bg-red-500/10' : 'bg-red-50') : ''} ${isDark ? 'border-zinc-800/50 hover:bg-zinc-800/20' : 'border-gray-100 hover:bg-gray-50'}`}>
-                                        {permissions.canEditCircuitoExistente && !authBlocked && (
+                                        {BULK_DELETE_ENABLED && permissions.canEditCircuitoExistente && !authBlocked && (
                                           <td className="px-2 py-2 text-center">
                                             <CircuitCheckbox
                                               checked={selectedCaraIds.has(cara.id)}
@@ -3977,6 +3992,18 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
       </div>
 
       {/* Confirmación de cierre con cambios sin guardar */}
+      {/* Modal de confirmación de borrado masivo */}
+      <DeleteCircuitoConfirmModal
+        isOpen={bulkDeleteModal.isOpen}
+        onClose={() => setBulkDeleteModal(prev => ({ ...prev, isOpen: false }))}
+        onConfirm={() => bulkDeleteModal.onConfirm()}
+        ubicacion=""
+        articulo=""
+        tieneReservas={false}
+        tienePareja={bulkDeleteModal.tienePareja}
+        count={bulkDeleteModal.count}
+      />
+
       {showCloseConfirm && (
         <div className="fixed inset-0 z-[80] flex items-center justify-center p-4">
           <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={() => setShowCloseConfirm(false)} />
