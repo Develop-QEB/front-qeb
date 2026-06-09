@@ -624,7 +624,7 @@ const rolePermissions: Partial<Record<UserRole, Partial<RolePermissions>>> = {
   },
   'Especialista de BI': {
     // Visualización general amplia
-    canSeeDashboard: false,
+    canSeeDashboard: true,
     canSeeClientes: true,
     canSeeProveedores: false,
     canSeeSolicitudes: true,
