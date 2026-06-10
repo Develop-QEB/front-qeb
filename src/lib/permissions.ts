@@ -909,6 +909,7 @@ const rolePermissions: Partial<Record<UserRole, Partial<RolePermissions>>> = {
   // ============================================================================
   'Call Center CON': {
     // Solo Recepción de artes - carga de reportes
+    // CSV (Matriz QEB 2026-01-28): debe descargar ODM y versionario.
     canSeeDashboard: false,
     canSeeClientes: false,
     canSeeProveedores: false,
@@ -947,7 +948,7 @@ const rolePermissions: Partial<Record<UserRole, Partial<RolePermissions>>> = {
     canSeeGestionArtes: true,
     canEditGestionArtes: false,
     canResolveProduccionTasks: true,
-    canSeeOrdenesMontajeButton: false,
+    canSeeOrdenesMontajeButton: true, // CSV: descarga ODM/versionario
 
     canSeeTabProgramacion: true,
     canSeeTabImpresiones: true,
@@ -964,7 +965,7 @@ const rolePermissions: Partial<Record<UserRole, Partial<RolePermissions>>> = {
     canEditInventarios: false,
     canDeleteInventarios: false,
 
-    canExportOrdenesMontaje: false,
+    canExportOrdenesMontaje: true, // CSV: descarga ODM/versionario
   },
   'Gerente de Operaciones CON': {
     // Solo lectura - permisos pendientes de definición
@@ -1006,7 +1007,7 @@ const rolePermissions: Partial<Record<UserRole, Partial<RolePermissions>>> = {
     canSeeGestionArtes: true,
     canEditGestionArtes: false,
     canResolveProduccionTasks: false,
-    canSeeOrdenesMontajeButton: false,
+    canSeeOrdenesMontajeButton: true, // CSV: descarga ODM/versionario
 
     canSeeTabProgramacion: true,
     canSeeTabImpresiones: true,
@@ -1022,7 +1023,7 @@ const rolePermissions: Partial<Record<UserRole, Partial<RolePermissions>>> = {
     canEditInventarios: false,
     canDeleteInventarios: false,
 
-    canExportOrdenesMontaje: false,
+    canExportOrdenesMontaje: true, // CSV: descarga ODM/versionario
   },
   'Jefe de Operaciones Digital': {
     canSeeDashboard: false,
@@ -1062,7 +1063,7 @@ const rolePermissions: Partial<Record<UserRole, Partial<RolePermissions>>> = {
     canDeleteDetalleCampana: false,
     canEditCampanaStatus: false,
     canSeeGestionArtes: true,
-    canSeeOrdenesMontajeButton: false,
+    canSeeOrdenesMontajeButton: true, // CSV: descarga ODM/versionario
 
     // Gestión de Artes - solo tab Programación, puede usarla y resolver tareas
     canEditGestionArtes: true,
@@ -1081,7 +1082,7 @@ const rolePermissions: Partial<Record<UserRole, Partial<RolePermissions>>> = {
     canEditInventarios: false,
     canDeleteInventarios: false,
 
-    canExportOrdenesMontaje: false,
+    canExportOrdenesMontaje: true, // CSV: descarga ODM/versionario
   },
   'Gerente Digital (Operaciones)': {
     canSeeDashboard: false,
@@ -1121,7 +1122,7 @@ const rolePermissions: Partial<Record<UserRole, Partial<RolePermissions>>> = {
     canDeleteDetalleCampana: false,
     canEditCampanaStatus: false,
     canSeeGestionArtes: true,
-    canSeeOrdenesMontajeButton: false,
+    canSeeOrdenesMontajeButton: true, // CSV: descarga ODM/versionario
 
     // Gestión de Artes - solo tab Programación, puede usarla y resolver tareas
     canEditGestionArtes: true,
@@ -1140,7 +1141,7 @@ const rolePermissions: Partial<Record<UserRole, Partial<RolePermissions>>> = {
     canEditInventarios: false,
     canDeleteInventarios: false,
 
-    canExportOrdenesMontaje: false,
+    canExportOrdenesMontaje: true, // CSV: descarga ODM/versionario
   },
   'Administrador': {
     // Admin tiene todos los permisos por defecto
@@ -1680,7 +1681,7 @@ const rolePermissions: Partial<Record<UserRole, Partial<RolePermissions>>> = {
     canSeeGestionArtes: true, // Pueden ver gestión de artes
     canEditGestionArtes: false, // No pueden editar
     canResolveProduccionTasks: true, // Pueden resolver tareas de producción (solo Recepción)
-    canSeeOrdenesMontajeButton: false, // Ocultar botón órdenes de montaje
+    canSeeOrdenesMontajeButton: true, // CSV: descarga ODM/versionario
 
     // Gestión de Artes - Tabs
     canSeeTabProgramacion: true,
@@ -1700,7 +1701,7 @@ const rolePermissions: Partial<Record<UserRole, Partial<RolePermissions>>> = {
     canDeleteInventarios: false,
 
     // Órdenes de Montaje
-    canExportOrdenesMontaje: false,
+    canExportOrdenesMontaje: true, // CSV: descarga ODM/versionario
   },
   'Gerentes de Operaciones Plazas (GDL y MTY)': {
     // Secciones visibles
