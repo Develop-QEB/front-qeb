@@ -148,6 +148,7 @@ export interface InventarioReservado {
   anio_catorcena?: number | null;
   tarifa_publica?: number | null;
   tarifa_publica_sc?: number | null;
+  tarifa_bruta_sc?: number | null; // tarifa publica SIN descuento (costo/caras) — para inversion
   formato?: string | null;
   bonificacion_sc?: number | null;
   renta?: number | null;
@@ -467,7 +468,12 @@ export function buildDeliveryNote(
     const documentLines: SAPDocumentLine[] = uniqueArticulos.map((articulo, index) => {
       const itemsWithArticulo = itemsForAPS.filter(item => item.articulo === articulo);
       const firstItem = itemsWithArticulo[0];
-      const totalPrice = Number(firstItem.tarifa_publica_sc) || Number(firstItem.tarifa_publica) || 0;
+      // UnitPrice = tarifa BRUTA (costo/caras). El campo tarifa_publica_sc guarda
+      // la tarifa DILUIDA (costo/(renta+bonificacion)) — usarla × solo las caras
+      // de renta cobra de MENOS porque la bonificacion ya esta restada en la
+      // tarifa Y ademas va en linea aparte a $0 (doble conteo). La bruta cobra
+      // correcto: costo/caras_renta × caras_renta = costo real. Ver ticket 80531.
+      const totalPrice = Number(firstItem.tarifa_bruta_sc) || Number(firstItem.tarifa_publica_sc) || Number(firstItem.tarifa_publica) || 0;
 
       // Período: mensual ("MES NN-YYYY" + ID por mes) vs catorcena ("CATORCENA NN-YYYY" + ID por cat).
       let dscPeriod: string;
