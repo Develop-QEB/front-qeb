@@ -57,6 +57,17 @@ function formatInicioPeriodo(item: InventarioReservado, tipoPeriodo?: string): s
   return 'Sin asignar';
 }
 
+// Tarifa BRUTA por cara (costo/caras). El campo tarifa_publica viene diluido por
+// las bonificadas (= costo/(renta+bonif)); multiplicarlo x caras_renta cuenta doble
+// la bonificacion y da inversion de MENOS. La inversion correcta = tarifa_bruta_sc x
+// caras_totales (= costo bruto, lo que paga el cliente). Las bonificadas ya van diluidas.
+function tarifaBruta(item: InventarioReservado): number {
+  return Number((item as any).tarifa_bruta_sc) || Number(item.tarifa_publica) || 0;
+}
+function inversionBruta(item: InventarioReservado): number {
+  return tarifaBruta(item) * (Number(item.caras_totales) || 0);
+}
+
 // Filter types (from CampanaDetailPage)
 type FilterOperator = '=' | '!=' | 'contains' | 'not_contains' | '>' | '<' | '>=' | '<=';
 
@@ -228,8 +239,10 @@ export function CompartirPropuestaPage() {
     const bonificadas = catorcenaFilteredInventario.reduce((sum, i) => sum + Number(i.caras_bonificadas || 0), 0);
     const total = renta + bonificadas;
 
-    // Inversion only from renta caras (bonificadas are free)
-    const inversion = catorcenaFilteredInventario.reduce((sum, i) => sum + (Number(i.tarifa_publica || 0) * Number(i.caras_renta || 0)), 0);
+    // Inversion BRUTA = tarifa_bruta_sc (costo/caras) x caras_totales = costo.
+    // Las bonificadas ya van diluidas en la tarifa; NO se multiplica por caras_renta
+    // (eso contaba doble la bonificacion y daba inversion de menos, el bug del $299).
+    const inversion = catorcenaFilteredInventario.reduce((sum, i) => sum + inversionBruta(i), 0);
 
     return { total, renta, bonificadas, inversion };
   }, [catorcenaFilteredInventario]);
@@ -369,7 +382,7 @@ export function CompartirPropuestaPage() {
         items,
         totalCaras: items.reduce((sum, i) => sum + (Number(i.caras_renta) || 0), 0),
         totalBonificadas: items.reduce((sum, i) => sum + (Number(i.caras_bonificadas) || 0), 0),
-        totalInversion: items.reduce((sum, i) => sum + ((Number(i.tarifa_publica) || 0) * (Number(i.caras_renta) || 0)), 0),
+        totalInversion: items.reduce((sum, i) => sum + inversionBruta(i), 0),
         formatos: [...new Set(items.map(i => i.mueble || 'N/A'))],
         tipos: [...new Set(items.map(i => i.tradicional_digital || 'N/A'))],
         plazas: [...new Set(items.map(i => i.plaza || 'N/A'))],
@@ -937,7 +950,7 @@ export function CompartirPropuestaPage() {
           // Calculate group totals
           const groupCaras = items.reduce((sum, i) => sum + (Number(i.caras_renta) || 0), 0);
           const groupBonif = items.reduce((sum, i) => sum + (Number(i.caras_bonificadas) || 0), 0);
-          const groupTarifa = items.reduce((sum, i) => sum + (Number(i.tarifa_publica) || 0) * (Number(i.caras_renta) || 0), 0);
+          const groupTarifa = items.reduce((sum, i) => sum + inversionBruta(i), 0);
 
           // === ARTICULO SUB-HEADER ===
           doc.setFillColor(...IMU_GREEN);
@@ -945,7 +958,7 @@ export function CompartirPropuestaPage() {
           doc.setFontSize(8);
           doc.setFont('helvetica', 'bold');
           doc.setTextColor(...WHITE);
-          const groupTarifaUnit = items.length > 0 ? (Number(items[0].tarifa_publica) || 0) : 0;
+          const groupTarifaUnit = items.length > 0 ? tarifaBruta(items[0]) : 0;
           doc.text(`${articulo}`, marginX + 10, y + 4);
           doc.setFont('helvetica', 'normal');
           doc.text(`Renta: ${groupCaras}${groupBonif > 0 ? `  |  Bonif: ${groupBonif}` : ''}  |  Tarifa: ${formatCurrency(groupTarifaUnit)}  |  Inversion: ${formatCurrency(groupTarifa)}`, pageWidth - marginX - 10, y + 4, { align: 'right' });
@@ -1531,7 +1544,7 @@ export function CompartirPropuestaPage() {
                                 <div className="flex items-center gap-3 text-xs">
                                   <span className={isDark ? 'text-zinc-400' : 'text-gray-500'}>{(artGroup.articulo || '').toUpperCase().startsWith('IN') ? 'Intercambio' : 'Renta'}: <span className={`font-medium ${isDark ? 'text-white' : 'text-gray-900'}`}>{artGroup.totalCaras}</span></span>
                                   {artGroup.totalBonificadas > 0 && <span className={isDark ? 'text-cyan-400' : 'text-cyan-600'}>Bonif: <span className="font-medium">{artGroup.totalBonificadas}</span></span>}
-                                  <span className={isDark ? 'text-amber-300' : 'text-amber-600'}>Tarifa: <span className="font-medium">{formatCurrency(artGroup.items[0]?.tarifa_publica || 0)}</span></span>
+                                  <span className={isDark ? 'text-amber-300' : 'text-amber-600'}>Tarifa: <span className="font-medium">{formatCurrency(artGroup.items[0] ? tarifaBruta(artGroup.items[0]) : 0)}</span></span>
                                   <span className={isDark ? 'text-emerald-400' : 'text-emerald-600'}>{formatCurrency(artGroup.totalInversion)}</span>
                                 </div>
                               </button>
@@ -1565,7 +1578,7 @@ export function CompartirPropuestaPage() {
                                     </thead>
                                     <tbody className={`divide-y ${isDark ? 'divide-purple-500/10' : 'divide-gray-100'}`}>
                                       {artGroup.items.map((item, idx) => {
-                                        const inv = (Number(item.tarifa_publica) || 0) * (Number(item.caras_renta) || 0);
+                                        const inv = inversionBruta(item);
                                         const key = itemKey(item);
                                         const isSelected = selectedItems.has(key);
                                         return (
@@ -1584,7 +1597,7 @@ export function CompartirPropuestaPage() {
                                             <td className={`px-3 py-2 text-center font-semibold text-xs ${isDark ? 'text-white' : 'text-gray-900'}`}>{item.caras_totales}</td>
                                             <td className={`px-3 py-2 text-right text-xs font-mono ${isDark ? 'text-zinc-500' : 'text-gray-500'}`}>{item.latitud?.toFixed(6) || '-'}</td>
                                             <td className={`px-3 py-2 text-right text-xs font-mono ${isDark ? 'text-zinc-500' : 'text-gray-500'}`}>{item.longitud?.toFixed(6) || '-'}</td>
-                                            <td className={`px-3 py-2 text-right text-xs ${isDark ? 'text-amber-300' : 'text-amber-700'}`}>{formatCurrency(item.tarifa_publica || 0)}</td>
+                                            <td className={`px-3 py-2 text-right text-xs ${isDark ? 'text-amber-300' : 'text-amber-700'}`}>{formatCurrency(tarifaBruta(item))}</td>
                                             <td className={`px-3 py-2 text-right font-medium text-xs ${isDark ? 'text-emerald-300' : 'text-emerald-700'}`}>{formatCurrency(inv)}</td>
                                           </tr>
                                         );
@@ -1713,7 +1726,7 @@ export function CompartirPropuestaPage() {
                         <p><strong>Formato:</strong> {selectedMarker.mueble || 'N/A'}</p>
                         <p><strong>Ubicación:</strong> {selectedMarker.ubicacion || 'N/A'}</p>
                         <p><strong>{(selectedMarker.mueble || '').toUpperCase().includes('PUENTE PEATONAL') ? 'Puentes' : 'Caras'}:</strong> {selectedMarker.caras_totales}</p>
-                        <p><strong>Tarifa:</strong> {formatCurrency(selectedMarker.tarifa_publica || 0)}</p>
+                        <p><strong>Tarifa:</strong> {formatCurrency(tarifaBruta(selectedMarker))}</p>
                         {selectedMarker.numero_catorcena && (
                           <p><strong>Periodo:</strong> {tipoPeriodo === 'mensual' && selectedMarker.inicio_periodo ? (() => { const parts = selectedMarker.inicio_periodo.split('-'); return parts.length >= 2 ? `${MESES_LABEL[parseInt(parts[1]) - 1]} ${parts[0]}` : `Cat ${selectedMarker.numero_catorcena} / ${selectedMarker.anio_catorcena}`; })() : `Cat ${selectedMarker.numero_catorcena} / ${selectedMarker.anio_catorcena}`}</p>
                         )}

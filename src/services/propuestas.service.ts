@@ -73,6 +73,7 @@ export interface InventarioReservado {
   alto: number | null;
   nivel_socioeconomico: string | null;
   tarifa_publica: number | null;
+  tarifa_bruta_sc?: number | null; // tarifa publica SIN descuento (costo/caras) — para inversion bruta
   grupo_completo_id: number | null;
   numero_catorcena?: number | null;
   anio_catorcena?: number | null;
