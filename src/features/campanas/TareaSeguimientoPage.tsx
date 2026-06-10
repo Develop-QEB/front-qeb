@@ -1449,6 +1449,39 @@ function UploadArtModal({
   const [fichasError, setFichasError] = useState<string | null>(null);
   const [fichasLoaded, setFichasLoaded] = useState(false);
 
+  // Reset completo del state interno cada vez que el modal se ABRE.
+  // Antes el state persistia entre opens porque el componente no se desmonta
+  // (solo se oculta con if !isOpen return null) y el handleClose no siempre
+  // se llamaba — p.ej. cuando assignArteMutation.onSuccess cerraba el modal
+  // externamente, quedaba la seleccion anterior visible al re-abrir.
+  // Esto cierra los sintomas "algo ya preseleccionado" y "se quitan artes
+  // pre cargados" reportados.
+  useEffect(() => {
+    if (!isOpen) return;
+    setSelectedOption('file');
+    setExistingArtUrl('');
+    setFile(null);
+    setFilePreview(null);
+    setLink('');
+    setDigitalLink('');
+    setDuplicateWarning(null);
+    setIsCheckingDuplicate(false);
+    setDigitalFiles([]);
+    setDraggedFile(null);
+    setWizardStep(1);
+    setDigitalWizardStep(1);
+    setSelectedGalleryImages(new Map());
+    setSelectedDigitalImages(new Map());
+    setImageNotes(new Map());
+    setImageNames(new Map());
+    setImageEstatusOps(new Map());
+    setDigitalImageNotes(new Map());
+    setDigitalImageNames(new Map());
+    setDigitalImageEstatusOps(new Map());
+    setModalTab('artes');
+    setExpandedFichaFolders(new Set());
+  }, [isOpen]);
+
   // Cargar árbol de fichas técnicas cuando se abre la tab
   useEffect(() => {
     if (modalTab !== 'fichas' || fichasLoaded) return;
@@ -1801,10 +1834,12 @@ function UploadArtModal({
     setWizardStep(1);
     setSelectedGalleryImages(new Map());
     setImageNotes(new Map());
+    setImageNames(new Map());
     setImageEstatusOps(new Map());
     setDigitalWizardStep(1);
     setSelectedDigitalImages(new Map());
     setDigitalImageNotes(new Map());
+    setDigitalImageNames(new Map());
     setDigitalImageEstatusOps(new Map());
     setModalTab('artes');
     setExpandedFichaFolders(new Set());
@@ -14457,11 +14492,15 @@ export function TareaSeguimientoPage() {
     staleTime: 30000, // Considerar frescos por 30s para evitar refetch innecesario
   });
 
-  // Artes existentes de la campaña
+  // Artes existentes de la campaña. placeholderData mantiene la lista
+  // previa visible durante el refetch (que dispara assignArteMutation.onSuccess
+  // al invalidar), evitando el flicker de "biblioteca vacia momentanea" que
+  // hacia parecer que se quitaban artes ya cargados.
   const { data: artesExistentes = [], isLoading: isLoadingArtes } = useQuery({
     queryKey: ['campana-artes-existentes', campanaId],
     queryFn: () => campanasService.getArtesExistentes(campanaId),
     enabled: campanaId > 0 && (isUploadArtModalOpen || isTaskDetailModalOpen),
+    placeholderData: (prev) => prev,
   });
 
   // Proveedores para asignar tareas
@@ -14580,6 +14619,10 @@ export function TareaSeguimientoPage() {
       }
       setUploadArtError(null);
       setSelectedInventoryIds(new Set());
+      // La biblioteca local (artes que el usuario subio en esta sesion del
+      // modal) ya fue consumida en el assign exitoso — limpiarla evita que
+      // re-aparezca al abrir el modal nuevamente.
+      setParentAddedArtes([]);
     },
     onError: (error) => {
       setUploadArtError(error instanceof Error ? error.message : 'Error al asignar arte');
@@ -20879,6 +20922,9 @@ export function TareaSeguimientoPage() {
         onClose={() => {
           setIsUploadArtModalOpen(false);
           setUploadArtError(null);
+          // Limpiamos la biblioteca local de artes subidos en la sesion para
+          // que la proxima apertura del modal arranque sin residuos.
+          setParentAddedArtes([]);
         }}
         selectedInventory={selectedInventoryItems}
         onSubmit={handleUploadArt}
