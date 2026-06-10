@@ -1908,27 +1908,25 @@ function UploadArtModal({
   const canGoToStep2 = selectedGalleryImages.size > 0 && !isUploadingFile;
 
   const toggleGalleryImage = (id: string, url: string) => {
-    // Deseleccionar: limpiar selección + sus campos.
+    // Deseleccionar: solo quitar de la seleccion. NO limpiamos las ediciones
+    // que el usuario hizo en nombre/nota/estatus_ops, asi si vuelve a
+    // seleccionar este arte conserva lo que tecleo. El reset completo se hace
+    // al cerrar el modal (handleClose) o al re-abrirlo (useEffect en isOpen).
     if (selectedGalleryImages.has(id)) {
       setSelectedGalleryImages(prev => { const n = new Map(prev); n.delete(id); return n; });
-      setImageNotes(prev => { const n = new Map(prev); n.delete(id); return n; });
-      setImageNames(prev => { const n = new Map(prev); n.delete(id); return n; });
-      setImageEstatusOps(prev => { const n = new Map(prev); n.delete(id); return n; });
       return;
     }
-    // Seleccionar. NOTA: los setters van al nivel superior (NO anidados dentro
-    // del updater de setSelectedGalleryImages) — anidarlos hacía que el prefill
-    // del nombre se perdiera de forma intermitente.
+    // Seleccionar. Setters al nivel superior (NO anidados) — anidarlos hacia
+    // que el prefill se perdiera de forma intermitente.
     setSelectedGalleryImages(prev => { const n = new Map(prev); n.set(id, { url, source: 'existing' }); return n; });
-    // Pre-llenar nombre del arte / estatus operaciones desde la biblioteca, para
-    // respetar lo que ya tiene en lugar de obligar a reescribirlo. Match por id;
-    // fallback por url (el id de biblioteca es posicional y puede variar).
+    // Prefill desde biblioteca SOLO si el usuario no ha capturado nada todavia
+    // para este id en esta sesion (no sobreescribir su edicion previa).
     const arte = localArtes.find(a => a.id === id) || localArtes.find(a => a.url === url);
-    if (arte?.nombre_arte) {
+    if (arte?.nombre_arte && !imageNames.has(id)) {
       setImageNames(prev => { const n = new Map(prev); n.set(id, arte.nombre_arte || ''); return n; });
     }
     const estatusOpExistente = (arte as { estatus_operaciones?: string | null } | undefined)?.estatus_operaciones;
-    if (estatusOpExistente) {
+    if (estatusOpExistente && !imageEstatusOps.has(id)) {
       setImageEstatusOps(prev => { const n = new Map(prev); n.set(id, estatusOpExistente); return n; });
     }
   };
@@ -1987,21 +1985,19 @@ function UploadArtModal({
 
   // Helpers para el wizard digital
   const toggleDigitalGalleryImage = (id: string, url: string, isVideo: boolean) => {
+    // Igual que toggleGalleryImage (tradicional): no limpiar ediciones al
+    // deseleccionar; prefill solo si el usuario aun no ha capturado nada.
     if (selectedDigitalImages.has(id)) {
       setSelectedDigitalImages(prev => { const n = new Map(prev); n.delete(id); return n; });
-      setDigitalImageNotes(prev => { const n = new Map(prev); n.delete(id); return n; });
-      setDigitalImageNames(prev => { const n = new Map(prev); n.delete(id); return n; });
-      setDigitalImageEstatusOps(prev => { const n = new Map(prev); n.delete(id); return n; });
       return;
     }
-    // Setters al nivel superior (NO anidados) — anidarlos perdía el prefill del nombre.
     setSelectedDigitalImages(prev => { const n = new Map(prev); n.set(id, { url, source: 'existing', isVideo }); return n; });
     const arte = localArtes.find(a => a.id === id) || localArtes.find(a => a.url === url);
-    if (arte?.nombre_arte) {
+    if (arte?.nombre_arte && !digitalImageNames.has(id)) {
       setDigitalImageNames(prev => { const n = new Map(prev); n.set(id, arte.nombre_arte || ''); return n; });
     }
     const estatusOpExistente = (arte as { estatus_operaciones?: string | null } | undefined)?.estatus_operaciones;
-    if (estatusOpExistente) {
+    if (estatusOpExistente && !digitalImageEstatusOps.has(id)) {
       setDigitalImageEstatusOps(prev => { const n = new Map(prev); n.set(id, estatusOpExistente); return n; });
     }
   };
