@@ -672,6 +672,16 @@ function StatusModal({ isOpen, onClose, propuesta, onStatusChange, allowedStatus
       queryClient.invalidateQueries({ queryKey: ['propuestas-stats'] });
       onStatusChange();
     },
+    onError: (err: any) => {
+      // El backend devuelve 400 con mensaje claro cuando bloquea el cambio
+      // (campaña activa ya creada, caras pendientes de autorización, cliente sin CUIC,
+      // reservas incompletas, etc.). Antes de este onError la mutación silenciaba
+      // el error y el usuario veía "nada" al darle al botón — ticket #419.
+      const backendError = err?.response?.data?.error
+        || err?.message
+        || 'No se pudo cambiar el estatus de la propuesta.';
+      alert(backendError);
+    },
   });
 
   useEffect(() => {
