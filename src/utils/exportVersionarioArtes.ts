@@ -13,9 +13,15 @@ const formatDate = (dateStr: string | null | undefined): string => {
 };
 
 type FetchedImage = { buffer: ArrayBuffer; ext: 'png' | 'jpeg' | 'gif'; width?: number; height?: number };
-// Referencia a una imagen ya registrada en el workbook + sus dimensiones reales
-// (para insertarla conservando proporción, sin apachurrarla).
-type ImageRef = { id: number; w: number; h: number };
+// Referencia a una imagen lista para anclar: buffer reescalado + dimensiones
+// reales. NO cacheamos un imageId del workbook porque reutilizar el mismo
+// imageId en varios anchors dispara un bug de ExcelJS 4.4.0
+// (worksheet-xform.js indexa drawingRelsHash por longitud del array de rels
+// y no por imageId → la 2a/3a ocurrencia de una misma imagen termina
+// apuntando al rId de OTRA imagen → en el Excel salen imagenes desfasadas
+// de su campaña/circuito). Solucion: hacer workbook.addImage UNA VEZ POR
+// ANCHOR (perdiendo dedup en el .xlsx, pero las miniaturas ya son JPEG bajita).
+type ImageRef = { buffer: ArrayBuffer; ext: 'png' | 'jpeg' | 'gif'; w: number; h: number };
 
 // Caja destino dentro de la celda de arte (px). La imagen se escala para CABER
 // preservando aspect ratio, así no se ve estirada/apachurrada.
@@ -327,7 +333,7 @@ export async function exportVersionarioArtes({ campana, items, digitalFilesByRes
   headerRow.height = 22;
 
   const imageCache = new Map<string, ImageRef | null>();
-  const getImageId = async (url: string | null | undefined): Promise<ImageRef | null> => {
+  const getImageRef = async (url: string | null | undefined): Promise<ImageRef | null> => {
     if (!url) return null;
     if (imageCache.has(url)) return imageCache.get(url) ?? null;
     const fetched = await fetchImage(url);
@@ -335,8 +341,12 @@ export async function exportVersionarioArtes({ campana, items, digitalFilesByRes
       imageCache.set(url, null);
       return null;
     }
-    const id = workbook.addImage({ buffer: fetched.buffer, extension: fetched.ext });
-    const ref: ImageRef = { id, w: fetched.width || 160, h: fetched.height || 100 };
+    const ref: ImageRef = {
+      buffer: fetched.buffer,
+      ext: fetched.ext,
+      w: fetched.width || 160,
+      h: fetched.height || 100,
+    };
     imageCache.set(url, ref);
     return ref;
   };
@@ -441,14 +451,17 @@ export async function exportVersionarioArtes({ campana, items, digitalFilesByRes
         row.getCell(colIndex + 1).value = { text: 'Ver arte', hyperlink: url };
         continue;
       }
-      const imgRef = await getImageId(url);
+      const imgRef = await getImageRef(url);
       if (imgRef !== null) {
+        // Importante: workbook.addImage por ANCHOR (no por URL). Ver comentario
+        // de ImageRef arriba sobre el bug de ExcelJS 4.4.0 con imageIds reusados.
+        const imageId = workbook.addImage({ buffer: imgRef.buffer, extension: imgRef.ext });
         // Anclaje a UNA celda (tl) con tamaño que CONSERVA proporción (fitInBox),
         // no estirado a la celda. Queda dentro de la celda y se mueve/oculta con
         // ella al filtrar (editAs: 'oneCell'). El alto cabe en la fila, así no se
         // desborda a la de abajo (bug de "se ve el arte de otra fila").
         const { width, height } = fitInBox(imgRef.w, imgRef.h);
-        sheet.addImage(imgRef.id, {
+        sheet.addImage(imageId, {
           tl: { col: colIndex + 0.08, row: row.number - 1 + 0.08 },
           ext: { width, height },
           editAs: 'oneCell',
@@ -967,7 +980,7 @@ export async function exportVersionarioArtesMulti({ campanas, fileNameSuffix, fi
   headerRow.height = 22;
 
   const imageCache = new Map<string, ImageRef | null>();
-  const getImageId = async (url: string | null | undefined): Promise<ImageRef | null> => {
+  const getImageRef = async (url: string | null | undefined): Promise<ImageRef | null> => {
     if (!url) return null;
     if (imageCache.has(url)) return imageCache.get(url) ?? null;
     const fetched = await fetchImage(url);
@@ -975,8 +988,12 @@ export async function exportVersionarioArtesMulti({ campanas, fileNameSuffix, fi
       imageCache.set(url, null);
       return null;
     }
-    const id = workbook.addImage({ buffer: fetched.buffer, extension: fetched.ext });
-    const ref: ImageRef = { id, w: fetched.width || 160, h: fetched.height || 100 };
+    const ref: ImageRef = {
+      buffer: fetched.buffer,
+      ext: fetched.ext,
+      w: fetched.width || 160,
+      h: fetched.height || 100,
+    };
     imageCache.set(url, ref);
     return ref;
   };
@@ -992,7 +1009,7 @@ export async function exportVersionarioArtesMulti({ campanas, fileNameSuffix, fi
   };
 
   // PRE-FETCH en paralelo de TODAS las imágenes únicas (fetch + downscale) antes
-  // de armar las filas. Antes el loop hacía `await getImageId` una por una
+  // de armar las filas. Antes el loop hacía `await getImageRef` una por una
   // (red serializada → tardaba añales). Aquí llenamos el imageCache en paralelo
   // y el loop de filas solo lee del cache.
   if (!skipImages) {
@@ -1005,7 +1022,7 @@ export async function exportVersionarioArtesMulti({ campanas, fileNameSuffix, fi
     const urlList = [...uniqueUrls];
     const PREFETCH_POOL = 8;
     for (let i = 0; i < urlList.length; i += PREFETCH_POOL) {
-      await Promise.all(urlList.slice(i, i + PREFETCH_POOL).map(u => getImageId(u)));
+      await Promise.all(urlList.slice(i, i + PREFETCH_POOL).map(u => getImageRef(u)));
     }
   }
 
@@ -1120,14 +1137,17 @@ export async function exportVersionarioArtesMulti({ campanas, fileNameSuffix, fi
         row.getCell(colIndex + 1).value = { text: 'Ver arte', hyperlink: url };
         continue;
       }
-      const imgRef = await getImageId(url);
+      const imgRef = await getImageRef(url);
       if (imgRef !== null) {
+        // Importante: workbook.addImage por ANCHOR (no por URL). Ver comentario
+        // de ImageRef arriba sobre el bug de ExcelJS 4.4.0 con imageIds reusados.
+        const imageId = workbook.addImage({ buffer: imgRef.buffer, extension: imgRef.ext });
         // Anclaje a UNA celda (tl) con tamaño que CONSERVA proporción (fitInBox),
         // no estirado a la celda. Queda dentro de la celda y se mueve/oculta con
         // ella al filtrar (editAs: 'oneCell'). El alto cabe en la fila, así no se
         // desborda a la de abajo (bug de "se ve el arte de otra fila").
         const { width, height } = fitInBox(imgRef.w, imgRef.h);
-        sheet.addImage(imgRef.id, {
+        sheet.addImage(imageId, {
           tl: { col: colIndex + 0.08, row: row.number - 1 + 0.08 },
           ext: { width, height },
           editAs: 'oneCell',
