@@ -1046,10 +1046,19 @@ export const campanasService = {
 
   // BULK: inventario (con+sin arte) de varias campañas en 1 request. Para el
   // Versionario de Artes (evita 2 llamadas por campaña).
-  async getInventarioVersionarioBulk(ids: number[], opts?: { includeWithoutAps?: boolean }): Promise<Record<string, { conArte: InventarioConArte[]; sinArte: InventarioConArte[] }>> {
+  // Acepta `signal` (AbortController) y `timeout` para que el orquestador del
+  // Versionario pueda cancelar requests en vuelo y rendirse en chunks colgados
+  // en lugar de bloquear el wave completo con Promise.all.
+  async getInventarioVersionarioBulk(
+    ids: number[],
+    opts?: { includeWithoutAps?: boolean; signal?: AbortSignal; timeout?: number }
+  ): Promise<Record<string, { conArte: InventarioConArte[]; sinArte: InventarioConArte[] }>> {
     const params: Record<string, string> = { ids: ids.join(',') };
     if (opts?.includeWithoutAps) params.includeWithoutAps = 'true';
-    const response = await api.get<ApiResponse<Record<string, { conArte: InventarioConArte[]; sinArte: InventarioConArte[] }>>>(`/campanas/inventario-versionario-bulk`, { params });
+    const response = await api.get<ApiResponse<Record<string, { conArte: InventarioConArte[]; sinArte: InventarioConArte[] }>>>(
+      `/campanas/inventario-versionario-bulk`,
+      { params, signal: opts?.signal, timeout: opts?.timeout },
+    );
     if (!response.data.success || !response.data.data) {
       throw new Error(response.data.error || 'Error al obtener inventario bulk');
     }
@@ -1104,8 +1113,14 @@ export const campanasService = {
 
   // BULK: todas las imágenes digitales de la campaña en 1 request, con el
   // id_reserva REAL de cada archivo. Usado por el Versionario al descargar Excel.
-  async getImagenesDigitalesBulk(campanaId: number): Promise<ImagenDigital[]> {
-    const response = await api.get<ApiResponse<ImagenDigital[]>>(`/campanas/${campanaId}/imagenes-digitales-bulk`);
+  async getImagenesDigitalesBulk(
+    campanaId: number,
+    opts?: { signal?: AbortSignal; timeout?: number }
+  ): Promise<ImagenDigital[]> {
+    const response = await api.get<ApiResponse<ImagenDigital[]>>(
+      `/campanas/${campanaId}/imagenes-digitales-bulk`,
+      { signal: opts?.signal, timeout: opts?.timeout },
+    );
     if (!response.data.success || !response.data.data) {
       throw new Error(response.data.error || 'Error al obtener imágenes digitales bulk');
     }

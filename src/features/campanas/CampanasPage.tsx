@@ -1188,6 +1188,11 @@ export function CampanasPage() {
   const [versionarioArtesProgress, setVersionarioArtesProgress] = useState({ current: 0, total: 0 });
   // Flag para cancelar la carga si el usuario cierra el modal en medio.
   const versionarioCancelledRef = useRef(false);
+  // AbortController de la carga en curso. Permite abortar requests HTTP en vuelo
+  // de verdad (no solo ignorarlas) cuando se cierra el modal o se dispara una
+  // nueva carga — clave para no acumular fetches huérfanos consumiendo sockets
+  // del browser y bloqueando el siguiente wave.
+  const versionarioAbortRef = useRef<AbortController | null>(null);
   // Preview del Versionario Artes (modal con tabla paginada antes de descargar)
   const [versionarioPreviewOpen, setVersionarioPreviewOpen] = useState(false);
   const [versionarioPreview, setVersionarioPreview] = useState<VersionarioArtesPreview | null>(null);
@@ -2553,11 +2558,16 @@ export function CampanasPage() {
       setVersionarioArtesProgress({ current: 0, total: campanasUnicas.length });
 
       try {
-        // BULK: 1 request por chunk de ~20 campañas (con arte + sin arte agrupado),
-        // varios chunks en paralelo. Esquiva el límite de ~6 conexiones del browser
-        // y trae un payload chico (agrupado por circuito).
+        // BULK: 1 request por chunk de ~20 campañas (con arte + sin arte agrupado).
+        // Orquestador: pool de N workers tirando de una cola compartida, con
+        // timeout + retry por chunk y AbortController para cancelacion real.
+        // Antes era `await Promise.all` por waves de 6, que se atoraba en cuanto
+        // 1 chunk se colgaba (sin timeout) o cuando el browser limit (6 conn por
+        // host menos WebSocket) dejaba la 6a promesa en queue indefinidamente.
         const CHUNK_SIZE = 20;
-        const PARALLEL_CHUNKS = 6;
+        const WORKERS = 4;              // bajo el browser HTTP/1.1 limit (6) - WS (1) - margen
+        const CHUNK_TIMEOUT_MS = 60_000;
+        const CHUNK_RETRIES = 2;
         const resultados: Array<{
           campana: Campana;
           items: any[];
@@ -2569,10 +2579,21 @@ export function CampanasPage() {
         for (let i = 0; i < campanasUnicas.length; i += CHUNK_SIZE) {
           chunks.push(campanasUnicas.slice(i, i + CHUNK_SIZE).map(c => c.id));
         }
+        const queue = [...chunks];
 
-        const procesarChunk = async (chunkIds: number[]) => {
+        // Cancelar carga previa si la hubo, y registrar la nueva.
+        versionarioAbortRef.current?.abort();
+        const abortCtrl = new AbortController();
+        versionarioAbortRef.current = abortCtrl;
+
+        const procesarChunk = async (chunkIds: number[], attempt = 0): Promise<void> => {
+          if (abortCtrl.signal.aborted) return;
           try {
-            const bulk = await campanasService.getInventarioVersionarioBulk(chunkIds, { includeWithoutAps: true });
+            const bulk = await campanasService.getInventarioVersionarioBulk(chunkIds, {
+              includeWithoutAps: true,
+              signal: abortCtrl.signal,
+              timeout: CHUNK_TIMEOUT_MS,
+            });
             for (const cid of chunkIds) {
               const campana = campanaById.get(cid);
               if (!campana) continue;
@@ -2586,18 +2607,30 @@ export function CampanasPage() {
                 notesByUrl: new Map(),
               });
             }
-          } catch { /* skip */ } finally {
-            setVersionarioArtesProgress(prev => ({ ...prev, current: Math.min(prev.total, prev.current + chunkIds.length) }));
+          } catch {
+            if (abortCtrl.signal.aborted) return;
+            if (attempt < CHUNK_RETRIES) return procesarChunk(chunkIds, attempt + 1);
+            // Sin retries restantes: dejamos pasar (las campañas de este chunk
+            // quedaran fuera del preview en vez de bloquear toda la carga).
+          } finally {
+            if (!abortCtrl.signal.aborted) {
+              setVersionarioArtesProgress(prev => ({ ...prev, current: Math.min(prev.total, prev.current + chunkIds.length) }));
+            }
           }
         };
 
-        for (let i = 0; i < chunks.length; i += PARALLEL_CHUNKS) {
-          if (versionarioCancelledRef.current) break;
-          const wave = chunks.slice(i, i + PARALLEL_CHUNKS);
-          await Promise.all(wave.map(procesarChunk));
-        }
+        // Worker pool: N workers tomando chunks de una cola compartida hasta vaciarla.
+        // Mientras haya pendientes, los N slots estan siempre activos — no quedan
+        // ociosos esperando al wave (= chunk mas lento).
+        const runWorker = async () => {
+          while (queue.length > 0 && !abortCtrl.signal.aborted && !versionarioCancelledRef.current) {
+            const chunk = queue.shift()!;
+            await procesarChunk(chunk);
+          }
+        };
+        await Promise.all(Array.from({ length: WORKERS }, () => runWorker()));
 
-        if (versionarioCancelledRef.current) return;
+        if (abortCtrl.signal.aborted || versionarioCancelledRef.current) return;
 
         if (resultados.length === 0) {
           alert('No se pudo recuperar inventario de las campañas seleccionadas.');
@@ -2680,19 +2713,33 @@ export function CampanasPage() {
       };
 
       // 3. Fetch inventarios de las campañas del nuevo periodo (BULK por chunks)
+      // Mismo orquestador que handleExportVersionarioArtes: worker pool + timeout
+      // + retry + AbortController. Ver comentario alla para los porques.
       setVersionarioArtesProgress({ current: 0, total: campanas.length });
       const CHUNK_SIZE = 20;
-      const PARALLEL_CHUNKS = 6;
+      const WORKERS = 4;
+      const CHUNK_TIMEOUT_MS = 60_000;
+      const CHUNK_RETRIES = 2;
       const resultados: VersionarioArtesMultiArgs['campanas'] = [];
       const campanaById = new Map(campanas.map(c => [c.id, c]));
       const chunks: number[][] = [];
       for (let i = 0; i < campanas.length; i += CHUNK_SIZE) {
         chunks.push(campanas.slice(i, i + CHUNK_SIZE).map(c => c.id));
       }
+      const queue = [...chunks];
 
-      const procesarChunk = async (chunkIds: number[]) => {
+      versionarioAbortRef.current?.abort();
+      const abortCtrl = new AbortController();
+      versionarioAbortRef.current = abortCtrl;
+
+      const procesarChunk = async (chunkIds: number[], attempt = 0): Promise<void> => {
+        if (abortCtrl.signal.aborted) return;
         try {
-          const bulk = await campanasService.getInventarioVersionarioBulk(chunkIds, { includeWithoutAps: true });
+          const bulk = await campanasService.getInventarioVersionarioBulk(chunkIds, {
+            includeWithoutAps: true,
+            signal: abortCtrl.signal,
+            timeout: CHUNK_TIMEOUT_MS,
+          });
           for (const cid of chunkIds) {
             const campana = campanaById.get(cid);
             if (!campana) continue;
@@ -2708,18 +2755,26 @@ export function CampanasPage() {
               });
             }
           }
-        } catch { /* skip */ } finally {
-          setVersionarioArtesProgress(prev => ({ ...prev, current: Math.min(prev.total, prev.current + chunkIds.length) }));
+        } catch {
+          if (abortCtrl.signal.aborted) return;
+          if (attempt < CHUNK_RETRIES) return procesarChunk(chunkIds, attempt + 1);
+          // Sin retries restantes: dejamos pasar las campañas del chunk.
+        } finally {
+          if (!abortCtrl.signal.aborted) {
+            setVersionarioArtesProgress(prev => ({ ...prev, current: Math.min(prev.total, prev.current + chunkIds.length) }));
+          }
         }
       };
 
-      for (let i = 0; i < chunks.length; i += PARALLEL_CHUNKS) {
-        if (versionarioCancelledRef.current) break;
-        const wave = chunks.slice(i, i + PARALLEL_CHUNKS);
-        await Promise.all(wave.map(procesarChunk));
-      }
+      const runWorker = async () => {
+        while (queue.length > 0 && !abortCtrl.signal.aborted && !versionarioCancelledRef.current) {
+          const chunk = queue.shift()!;
+          await procesarChunk(chunk);
+        }
+      };
+      await Promise.all(Array.from({ length: WORKERS }, () => runWorker()));
 
-      if (versionarioCancelledRef.current) return;
+      if (abortCtrl.signal.aborted || versionarioCancelledRef.current) return;
 
       const preview = buildVersionarioArtesPreview({ campanas: resultados });
       setVersionarioRawData(resultados);
@@ -2743,57 +2798,78 @@ export function CampanasPage() {
     // flushSync para que el boton cambie a "Generando..." al instante
     // (sin esto el render se aplaza hasta que se complete el primer batch).
     flushSync(() => setVersionarioDownloading(true));
+    // AbortController dedicado a la descarga (separado del de la carga del
+    // preview). Permite cortar requests en vuelo si el usuario cierra el modal
+    // a la mitad o dispara una segunda descarga.
+    versionarioAbortRef.current?.abort();
+    const abortCtrl = new AbortController();
+    versionarioAbortRef.current = abortCtrl;
     try {
-      // Completar notas + archivos digitales en pool de 15 campañas paralelas.
-      const POOL = 15;
-      const enriquecidas: typeof versionarioRawData = [];
-      for (let i = 0; i < versionarioRawData.length; i += POOL) {
-        const batch = versionarioRawData.slice(i, i + POOL);
-        const completed = await Promise.all(batch.map(async (entry) => {
-          const { campana, items } = entry;
-          const allRsvIds = new Set<number>();
-          for (const it of items) {
-            String((it as any).rsv_id || (it as any).rsv_ids || '')
-              .split(',').map(s => parseInt(s.trim())).filter(n => !isNaN(n))
-              .forEach(n => allRsvIds.add(n));
-          }
-          const tieneDigitales = items.some((it: any) => {
-            const t = String(it.tipo_medio || it.tradicional_digital || '').toLowerCase();
-            return t.includes('digital');
-          });
-          const digitalFilesByReserva = new Map<number, string[]>();
-          const notesByUrl = new Map<string, string>();
-          if (tieneDigitales) {
-            // UNA sola request por campaña (antes eran cientos: 1 por reserva).
-            // El bulk conserva el id_reserva real de cada archivo, así cada
-            // imagen cae en su circuito correcto.
-            try {
-              const imgs = await campanasService.getImagenesDigitalesBulk(campana.id);
-              for (const im of imgs) {
-                const url = (im as any).archivoData || (im as any).archivo;
-                if (!url) continue;
-                const rid = Number((im as any).idReserva);
-                if (!isNaN(rid)) {
-                  const arr = digitalFilesByReserva.get(rid) || [];
-                  arr.push(url);
-                  digitalFilesByReserva.set(rid, arr);
-                }
-                const comentario = ((im as any).comentario || '').trim();
-                if (comentario) notesByUrl.set(url, comentario);
+      // Enriquecer cada campaña que tenga digitales con sus archivos+notas.
+      // Worker pool + timeout + retry (mismo patron que la carga del preview)
+      // en lugar del viejo `Promise.all` por waves de 15 — un chunk colgado
+      // ya no bloquea la descarga completa.
+      const WORKERS = 4;            // bajo el browser limit (6 HTTP/1.1 - 1 WS - margen)
+      const REQUEST_TIMEOUT_MS = 30_000;
+      const RETRIES = 2;
+
+      const enriquecidas: typeof versionarioRawData = new Array(versionarioRawData.length);
+      const queue: number[] = versionarioRawData.map((_, idx) => idx);
+
+      const procesarEntry = async (idx: number, attempt = 0): Promise<void> => {
+        if (abortCtrl.signal.aborted) return;
+        const entry = versionarioRawData[idx];
+        const { campana, items } = entry;
+        const tieneDigitales = items.some((it: any) => {
+          const t = String(it.tipo_medio || it.tradicional_digital || '').toLowerCase();
+          return t.includes('digital');
+        });
+        const digitalFilesByReserva = new Map<number, string[]>();
+        const notesByUrl = new Map<string, string>();
+        if (tieneDigitales) {
+          try {
+            const imgs = await campanasService.getImagenesDigitalesBulk(campana.id, {
+              signal: abortCtrl.signal,
+              timeout: REQUEST_TIMEOUT_MS,
+            });
+            for (const im of imgs) {
+              const url = (im as any).archivoData || (im as any).archivo;
+              if (!url) continue;
+              const rid = Number((im as any).idReserva);
+              if (!isNaN(rid)) {
+                const arr = digitalFilesByReserva.get(rid) || [];
+                arr.push(url);
+                digitalFilesByReserva.set(rid, arr);
               }
-            } catch { /* ignore */ }
+              const comentario = ((im as any).comentario || '').trim();
+              if (comentario) notesByUrl.set(url, comentario);
+            }
+          } catch {
+            if (abortCtrl.signal.aborted) return;
+            if (attempt < RETRIES) return procesarEntry(idx, attempt + 1);
+            // Tras retries: la campaña queda sin digitales pero la descarga sigue.
           }
-          // NOTA: ya NO pedimos getArtesTradicionales por reserva (eran miles de
-          // requests de ~26 bytes que tardaban añales). Las notas de artes
-          // tradicionales ya vienen en `it.artes_detalle` del bulk, y el export
-          // las extrae de ahí como fallback. Solo los digitales necesitan fetch.
-          return { campana, items, digitalFilesByReserva, notesByUrl };
-        }));
-        enriquecidas.push(...completed);
-      }
+        }
+        enriquecidas[idx] = { campana, items, digitalFilesByReserva, notesByUrl };
+      };
+
+      const runWorker = async () => {
+        while (queue.length > 0 && !abortCtrl.signal.aborted) {
+          const idx = queue.shift()!;
+          await procesarEntry(idx);
+        }
+      };
+      await Promise.all(Array.from({ length: WORKERS }, () => runWorker()));
+
+      if (abortCtrl.signal.aborted) return;
+
+      // Compactar (puede haber huecos si algunas entries quedaron pendientes
+      // por abort durante el loop).
+      const enriquecidasOk = enriquecidas.filter(Boolean);
+
       await exportVersionarioArtesMulti({
-        campanas: enriquecidas,
-        fileNameSuffix: `${enriquecidas.length}_campanas`,
+        campanas: enriquecidasOk,
+        fileNameSuffix: `${enriquecidasOk.length}_campanas`,
         filterKeys: opts.filterKeys,
         skipImages: opts.skipImages,
       });
@@ -4328,7 +4404,10 @@ export function CampanasPage() {
           isOpen={versionarioPreviewOpen}
           onClose={() => {
             // Cancela la carga en background si aun corre, y limpia estado.
+            // El abort() corta las requests HTTP en vuelo de verdad (libera los
+            // sockets del browser), no solo pone un flag que la corutina ignora.
             versionarioCancelledRef.current = true;
+            versionarioAbortRef.current?.abort();
             setVersionarioPreviewOpen(false);
             setExportingVersionarioArtes(false);
             setVersionarioArtesProgress({ current: 0, total: 0 });
