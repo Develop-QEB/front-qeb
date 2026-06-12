@@ -914,6 +914,14 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
   // (mismo codigo_unico) en otras caras del mismo grupo_masivo_id
   const [eliminarMasivoP, setEliminarMasivoP] = useState<boolean>(false);
   const [excluirDistanciaKm, setExcluirDistanciaKm] = useState<number>(1);
+  // Disponibilidad multi-periodo (switch general del buscador de formatos):
+  // aplica SOLO al circuito que se está reservando. Cuando está ON y se eligen
+  // periodos extra, la disponibilidad mostrada = inventario libre en la cat/periodo
+  // del circuito Y en TODOS los periodos seleccionados (intersección por codigo_unico).
+  // Solo afecta lo que se ve; la reserva se sigue creando en el periodo del circuito.
+  const [disponibilidadMultiP, setDisponibilidadMultiP] = useState<boolean>(false);
+  const [periodosExtraP, setPeriodosExtraP] = useState<Set<string>>(new Set());
+  const [showPeriodosDropdown, setShowPeriodosDropdown] = useState<boolean>(false);
 
   // Filtros avanzados (embudo) para tabla Buscar Disponibles
   const [disponiblesAdvFilters, setDisponiblesAdvFilters] = useState<AdvancedFilterCondition[]>([]);
@@ -3476,6 +3484,83 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
     }));
   }, [tamanoGrupoReservados]);
 
+  // Catálogo de periodos seleccionables para la disponibilidad multi-periodo.
+  // Catorcena: usa la tabla `catorcenas` (numero · año). Mensual: genera los 12
+  // meses del año del periodo base y el siguiente (por si la campaña cruza año).
+  const periodosCatalogo = useMemo((): { key: string; label: string; fecha_inicio: string; fecha_fin: string }[] => {
+    if (tipoPeriodo === 'mensual') {
+      const baseIni = selectedCaraForSearch?.inicio_periodo;
+      const baseYear = baseIni ? Number(String(baseIni).slice(0, 4)) : (yearInicio || new Date().getFullYear());
+      const out: { key: string; label: string; fecha_inicio: string; fecha_fin: string }[] = [];
+      for (const y of [baseYear, baseYear + 1]) {
+        for (let m = 0; m < 12; m++) {
+          const ini = `${y}-${String(m + 1).padStart(2, '0')}-01`;
+          const finDate = new Date(y, m + 1, 0);
+          const fin = `${y}-${String(m + 1).padStart(2, '0')}-${String(finDate.getDate()).padStart(2, '0')}`;
+          out.push({ key: ini, label: `${MESES_LABEL[m]} ${y}`, fecha_inicio: ini, fecha_fin: fin });
+        }
+      }
+      return out;
+    }
+    return (catorcenasData?.data || [])
+      .slice()
+      .sort((a, b) => String(a.fecha_inicio).localeCompare(String(b.fecha_inicio)))
+      .map(c => ({
+        key: String(c.fecha_inicio).slice(0, 10),
+        label: `Cat ${c.numero_catorcena} · ${c.a_o}`,
+        fecha_inicio: String(c.fecha_inicio).slice(0, 10),
+        fecha_fin: String(c.fecha_fin).slice(0, 10),
+      }));
+  }, [tipoPeriodo, catorcenasData, selectedCaraForSearch?.inicio_periodo, yearInicio]);
+
+  // Clave del periodo base (el del propio circuito): siempre cuenta en la
+  // intersección y no debe ofrecerse como "extra" en el multiselect.
+  const periodoBaseKey = useMemo(
+    () => String(selectedCaraForSearch?.inicio_periodo || '').slice(0, 10),
+    [selectedCaraForSearch?.inicio_periodo]
+  );
+
+  // Dada la data ya disponible para el periodo del circuito, intersecta con la
+  // disponibilidad de cada periodo extra: una llamada a getDisponibles por
+  // periodo (sin solicitudCaraId: queremos disponibilidad real en ese otro
+  // periodo) y se conserva solo el inventario libre en TODOS (por codigo_unico).
+  const intersectarMultiPeriodo = useCallback(async (
+    baseData: InventarioDisponible[],
+    cara: CaraItem,
+  ): Promise<InventarioDisponible[]> => {
+    if (!disponibilidadMultiP || periodosExtraP.size === 0) return baseData;
+    const periodos = periodosCatalogo.filter(p => periodosExtraP.has(p.key) && p.key !== periodoBaseKey);
+    if (periodos.length === 0) return baseData;
+
+    let ciudadFilter = cara.ciudad || undefined;
+    if (ciudadFilter && ciudadFilter.split(',').length > 3) ciudadFilter = undefined;
+    const estadoParam = cara.estados === 'Ciudad de México / AM' ? 'Ciudad de México,Estado de México' : cara.estados;
+    const isAM = cara.estados === 'Ciudad de México / AM';
+
+    const respuestas = await Promise.all(periodos.map(p =>
+      inventariosService.getDisponibles({
+        ciudad: ciudadFilter,
+        estado: estadoParam || undefined,
+        formato: cara.formato || undefined,
+        nse: cara.nivel_socioeconomico || undefined,
+        tipo: cara.tipo || undefined,
+        fecha_inicio: p.fecha_inicio,
+        fecha_fin: p.fecha_fin,
+        excluir_mi_macro: tipoPeriodo === 'catorcena' ? 1 : undefined,
+      })
+        .then(r => (r.data || []).filter(inv => !isAM || (inv.plaza || '').toUpperCase() !== 'TOLUCA'))
+        .catch(() => [] as InventarioDisponible[])
+    ));
+
+    // Intersección por codigo_unico (nivel unidad física).
+    let claves = new Set(baseData.map(i => String(i.codigo_unico)));
+    for (const resp of respuestas) {
+      const libres = new Set(resp.map(i => String(i.codigo_unico)));
+      claves = new Set([...claves].filter(c => libres.has(c)));
+    }
+    return baseData.filter(i => claves.has(String(i.codigo_unico)));
+  }, [disponibilidadMultiP, periodosExtraP, periodosCatalogo, periodoBaseKey, tipoPeriodo]);
+
   // Handle search inventory - open search view and fetch disponibles
   const handleSearchInventory = async (cara: CaraItem) => {
     setSelectedCaraForSearch(cara);
@@ -3550,7 +3635,8 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
       const data = (response.data || []).filter(inv =>
         !isAM || (inv.plaza || '').toUpperCase() !== 'TOLUCA'
       );
-      setInventarioDisponible(data);
+      const dataFinal = await intersectarMultiPeriodo(data, cara);
+      setInventarioDisponible(dataFinal);
     } catch (error) {
       console.error('Error fetching disponibles:', error);
       setInventarioDisponible([]);
@@ -3566,6 +3652,13 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [reservaMasivaP]);
+
+  // Al cambiar de circuito en el buscador, reiniciar la disponibilidad multi-periodo.
+  useEffect(() => {
+    setDisponibilidadMultiP(false);
+    setPeriodosExtraP(new Set());
+    setShowPeriodosDropdown(false);
+  }, [selectedCaraForSearch?.id]);
 
   // Re-search when excluirCategoria changes (if already in search view)
   useEffect(() => {
@@ -3619,13 +3712,23 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
       const data2 = (response.data || []).filter(inv =>
         !isAM2 || (inv.plaza || '').toUpperCase() !== 'TOLUCA'
       );
-      setInventarioDisponible(data2);
+      const data2Final = await intersectarMultiPeriodo(data2, selectedCaraForSearch);
+      setInventarioDisponible(data2Final);
     } catch (error) {
       console.error('Error fetching disponibles:', error);
     } finally {
       setIsSearching(false);
     }
   };
+
+  // Re-filtrar cuando se prende/apaga el switch o cambian los periodos extra.
+  // Usamos refetch (no handleSearchInventory) para no resetear filtros/selección.
+  useEffect(() => {
+    if (viewState === 'search-inventory' && selectedCaraForSearch) {
+      handleRefetchDisponibles();
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [disponibilidadMultiP, periodosExtraP]);
 
   // Filtered and processed inventory data
   const processedInventory = useMemo((): ProcessedInventoryItem[] => {
@@ -5836,6 +5939,76 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
                       </label>
                     );
                   })()}
+
+                  {/* Disponibilidad multi-periodo: switch GENERAL del buscador.
+                      Aplica solo a este circuito. Al activarlo se pueden elegir
+                      periodos extra y la disponibilidad se ajusta a lo que está
+                      libre en la cat/periodo del circuito Y en TODOS los elegidos. */}
+                  <div className="relative">
+                    <label className={`flex items-center gap-2 text-xs cursor-pointer select-none px-2 py-1.5 rounded-lg border ${disponibilidadMultiP ? 'bg-purple-500/20 border-purple-500/40 text-purple-300' : (isDark ? 'bg-zinc-800 border-zinc-700 text-zinc-300' : 'bg-gray-50 border-gray-200 text-gray-700')}`}>
+                      <Calendar className="h-3.5 w-3.5" />
+                      <span>Disponibilidad multi-periodo{disponibilidadMultiP && periodosExtraP.size > 0 ? ` (+${periodosExtraP.size})` : ''}</span>
+                      <button
+                        type="button"
+                        onClick={() => setDisponibilidadMultiP(v => !v)}
+                        className={`relative inline-flex h-4 w-7 items-center rounded-full transition-colors ${disponibilidadMultiP ? 'bg-purple-500' : (isDark ? 'bg-zinc-700' : 'bg-gray-300')}`}
+                        title="Filtra el inventario que esté disponible en la cat/periodo del circuito Y en los periodos extra que selecciones"
+                      >
+                        <span className={`inline-block h-3 w-3 transform rounded-full bg-white transition-transform ${disponibilidadMultiP ? 'translate-x-3.5' : 'translate-x-0.5'}`} />
+                      </button>
+                      {disponibilidadMultiP && (
+                        <button
+                          type="button"
+                          onClick={() => setShowPeriodosDropdown(v => !v)}
+                          className={`flex items-center gap-1 -mr-1 pl-1 ${isDark ? 'text-purple-300' : 'text-purple-600'}`}
+                          title="Elegir periodos extra"
+                        >
+                          <span className="text-[10px] uppercase">Periodos</span>
+                          <ChevronDown className={`h-3 w-3 transition-transform ${showPeriodosDropdown ? 'rotate-180' : ''}`} />
+                        </button>
+                      )}
+                    </label>
+
+                    {disponibilidadMultiP && showPeriodosDropdown && (
+                      <>
+                        <div className="fixed inset-0 z-40" onClick={() => setShowPeriodosDropdown(false)} />
+                        <div className={`absolute left-0 top-full mt-1 z-50 w-64 max-h-72 overflow-y-auto rounded-lg border shadow-xl ${isDark ? 'bg-zinc-900 border-zinc-700' : 'bg-white border-gray-200'}`}>
+                          <div className={`sticky top-0 px-3 py-2 text-[11px] border-b ${isDark ? 'bg-zinc-900 border-zinc-800 text-zinc-400' : 'bg-white border-gray-100 text-gray-500'}`}>
+                            Periodos extra (además del circuito)
+                            {periodosExtraP.size > 0 && (
+                              <button
+                                type="button"
+                                onClick={() => setPeriodosExtraP(new Set())}
+                                className="ml-2 text-red-400 hover:text-red-300"
+                              >
+                                limpiar
+                              </button>
+                            )}
+                          </div>
+                          {periodosCatalogo.filter(p => p.key !== periodoBaseKey).map(p => {
+                            const checked = periodosExtraP.has(p.key);
+                            return (
+                              <button
+                                key={p.key}
+                                type="button"
+                                onClick={() => setPeriodosExtraP(prev => {
+                                  const next = new Set(prev);
+                                  if (next.has(p.key)) next.delete(p.key); else next.add(p.key);
+                                  return next;
+                                })}
+                                className={`w-full flex items-center gap-2 px-3 py-2 text-left text-xs border-b ${isDark ? 'border-zinc-800/50' : 'border-gray-100'} last:border-0 ${checked ? 'bg-purple-500/15 text-purple-300' : `${isDark ? 'text-zinc-300 hover:bg-zinc-800' : 'text-gray-700 hover:bg-gray-100'}`}`}
+                              >
+                                <span className={`flex items-center justify-center h-4 w-4 rounded border ${checked ? 'bg-purple-500 border-purple-500' : (isDark ? 'border-zinc-600' : 'border-gray-300')}`}>
+                                  {checked && <Check className="h-3 w-3 text-white" />}
+                                </span>
+                                {p.label}
+                              </button>
+                            );
+                          })}
+                        </div>
+                      </>
+                    )}
+                  </div>
 
                   {/* Exclusión por categoría de cliente — esconde inventario
                       cercano a piezas reservadas por clientes de una categoría
