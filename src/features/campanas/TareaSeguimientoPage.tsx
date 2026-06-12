@@ -4174,7 +4174,7 @@ function TaskDetailModal({
   const queryClientAsig = useQueryClient();
   const updateAsignadosTaskMutation = useMutation({
     mutationFn: ({ asignado, id_asignado }: { asignado: string; id_asignado: string }) =>
-      notificacionesService.update(task?.id || 0, { asignado, id_asignado }),
+      notificacionesService.update(Number(task?.id) || 0, { asignado, id_asignado }),
     onSuccess: () => {
       // Invalidamos tanto las tareas de la campana como las notificaciones para
       // que el cambio se refleje en ambos modulos al mismo tiempo.
