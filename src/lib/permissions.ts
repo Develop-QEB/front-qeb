@@ -1489,7 +1489,9 @@ const rolePermissions: Partial<Record<UserRole, Partial<RolePermissions>>> = {
     canSeeTabRevisarAprobar: true, // Sí pueden ver Revisar y Aprobar
     canSeeTabTestigos: false,
     canSeeTabValidacionInstalacion: false,
-    canCreateTareasGestionArtes: false, // No pueden crear tareas
+    // CSV (Matriz QEB 2026-01-28): "Asignación de revisión de artes a otro
+    // diseñador" → debe poder crear/asignar tareas de revisión.
+    canCreateTareasGestionArtes: true,
     canResolveRevisionArtesTasks: true, // Sí pueden resolver tareas de revisión de artes
 
     // Inventarios - oculto
