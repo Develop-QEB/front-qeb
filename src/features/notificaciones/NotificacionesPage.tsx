@@ -2062,6 +2062,10 @@ function TaskDrawer({
       notificacionesService.update(tarea.id, { asignado, id_asignado }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['notificaciones'] });
+      // Si la tarea pertenece a una campaña, invalidar tambien las queries de
+      // tareas por campaña para que el TaskDetailModal del gestor de artes
+      // refleje el nuevo asignado al abrir.
+      queryClient.invalidateQueries({ queryKey: ['campana-tareas'], exact: false });
     },
   });
 

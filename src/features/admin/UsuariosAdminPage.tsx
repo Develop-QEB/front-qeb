@@ -1955,12 +1955,13 @@ function UsuariosTab() {
                       </td>
                       <td className="px-5 py-4">
                         <span
-                          className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium border ${getRolBadgeStyle(
+                          title={usuario.rol}
+                          className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium border whitespace-nowrap max-w-[220px] ${getRolBadgeStyle(
                             usuario.rol
                           )}`}
                         >
-                          <Shield className="h-3 w-3" />
-                          {usuario.rol}
+                          <Shield className="h-3 w-3 flex-shrink-0" />
+                          <span className="truncate">{usuario.rol}</span>
                         </span>
                       </td>
                       <td className="px-5 py-4 hidden xl:table-cell">

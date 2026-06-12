@@ -59,6 +59,8 @@ import { campanasService, InventarioConArte, InventarioConAPS, TareaCampana, Art
 import { proveedoresService } from '../../services/proveedores.service';
 import { Proveedor, Catorcena } from '../../types';
 import { solicitudesService } from '../../services/solicitudes.service';
+import { usuariosService } from '../../services/usuarios.service';
+import { notificacionesService } from '../../services/notificaciones.service';
 
 const MESES_LABEL = ['Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun', 'Jul', 'Ago', 'Sep', 'Oct', 'Nov', 'Dic'];
 const MESES_FULL = ['Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio', 'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre'];
@@ -4152,6 +4154,67 @@ function TaskDetailModal({
     queryFn: () => solicitudesService.getUsers(undefined, false),
     enabled: isOpen && task?.tipo === 'Programación para Tráfico',
   });
+
+  // CSV: Coordinador de Diseño puede 'Asignación de revisión de artes a otro
+  // diseñador'. Habilitamos el editor de asignados desde este modal solo para
+  // tareas de tipo 'Revisión de artes', alineado con NotificacionesPage.
+  const currentUser = useAuthStore((s) => s.user);
+  const isAdminTask = ['Administrador', 'DEV'].includes(currentUser?.rol || '');
+  const isCoordDisenoEditingRevision = currentUser?.rol === 'Coordinador de Diseño'
+    && task?.tipo === 'Revisión de artes';
+  const canEditAsignados = isAdminTask || isCoordDisenoEditingRevision;
+
+  const { data: usuariosParaAsignar } = useQuery({
+    queryKey: ['usuarios'],
+    queryFn: () => usuariosService.getAll(),
+    enabled: isOpen && canEditAsignados,
+    staleTime: 5 * 60 * 1000,
+  });
+
+  const queryClientAsig = useQueryClient();
+  const updateAsignadosTaskMutation = useMutation({
+    mutationFn: ({ asignado, id_asignado }: { asignado: string; id_asignado: string }) =>
+      notificacionesService.update(task?.id || 0, { asignado, id_asignado }),
+    onSuccess: () => {
+      // Invalidamos tanto las tareas de la campana como las notificaciones para
+      // que el cambio se refleje en ambos modulos al mismo tiempo.
+      queryClientAsig.invalidateQueries({ queryKey: ['campana-tareas', campanaId] });
+      queryClientAsig.invalidateQueries({ queryKey: ['notificaciones'] });
+    },
+  });
+
+  const [asigDropdownOpen, setAsigDropdownOpen] = useState(false);
+  const asigDropdownRef = useRef<HTMLDivElement>(null);
+  const initialSelectedAsignados = useMemo(() => {
+    if (!task?.id_asignado) return [] as string[];
+    return String(task.id_asignado).split(',').map(s => s.trim()).filter(Boolean);
+  }, [task?.id_asignado]);
+  const [selectedAsigIds, setSelectedAsigIds] = useState<string[]>(initialSelectedAsignados);
+  // Cuando cambia la tarea actual o sus asignados externos (refetch tras edicion
+  // remota), resincronizamos la seleccion local para que el dropdown muestre
+  // siempre lo que esta vigente.
+  useEffect(() => { setSelectedAsigIds(initialSelectedAsignados); }, [initialSelectedAsignados]);
+  useEffect(() => {
+    if (!asigDropdownOpen) return;
+    const handler = (e: MouseEvent) => {
+      if (asigDropdownRef.current && !asigDropdownRef.current.contains(e.target as Node)) setAsigDropdownOpen(false);
+    };
+    document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+  }, [asigDropdownOpen]);
+
+  const toggleAsigSelection = (id: string) => {
+    const next = selectedAsigIds.includes(id)
+      ? selectedAsigIds.filter(s => s !== id)
+      : [...selectedAsigIds, id];
+    setSelectedAsigIds(next);
+    const idStr = next.join(',');
+    const nombres = next
+      .map(uid => usuariosParaAsignar?.find(u => String(u.id) === uid)?.nombre)
+      .filter(Boolean)
+      .join(', ');
+    updateAsignadosTaskMutation.mutate({ asignado: nombres, id_asignado: idStr });
+  };
 
   const [activeTab, setActiveTab] = useState<TaskDetailTab>('resumen');
   const [selectedArteIds, setSelectedArteIds] = useState<Set<string>>(new Set());
@@ -10049,7 +10112,34 @@ function TaskDetailModal({
                   </div>
                   <div>
                     <span className="text-zinc-500">Asignado:</span>
-                    <p className="text-white font-medium">{task.asignado || '-'}</p>
+                    {canEditAsignados && usuariosParaAsignar ? (
+                      <div className="relative mt-1" ref={asigDropdownRef}>
+                        <button
+                          onClick={() => setAsigDropdownOpen(v => !v)}
+                          className="flex items-center justify-between gap-2 w-full text-sm bg-zinc-800 border border-zinc-700 text-white rounded px-2 py-1"
+                        >
+                          <span className="truncate">{task.asignado || 'Sin asignar'}</span>
+                          <ChevronDown className="h-3 w-3 flex-shrink-0 text-zinc-400" />
+                        </button>
+                        {asigDropdownOpen && (
+                          <div className="absolute left-0 top-full mt-1 z-50 bg-zinc-900 border border-zinc-700 rounded-lg shadow-xl p-1.5 min-w-[220px] max-h-[260px] overflow-y-auto">
+                            {usuariosParaAsignar.map(u => (
+                              <label key={u.id} className="flex items-center gap-2 px-2 py-1.5 hover:bg-zinc-800 rounded cursor-pointer">
+                                <input
+                                  type="checkbox"
+                                  checked={selectedAsigIds.includes(String(u.id))}
+                                  onChange={() => toggleAsigSelection(String(u.id))}
+                                  className="accent-purple-500"
+                                />
+                                <span className="text-xs text-zinc-300">{u.nombre}</span>
+                              </label>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    ) : (
+                      <p className="text-white font-medium">{task.asignado || '-'}</p>
+                    )}
                   </div>
                   <div>
                     <span className="text-zinc-500">Responsable:</span>
