@@ -1113,8 +1113,14 @@ export const campanasService = {
 
   // BULK: todas las imágenes digitales de la campaña en 1 request, con el
   // id_reserva REAL de cada archivo. Usado por el Versionario al descargar Excel.
-  async getImagenesDigitalesBulk(campanaId: number): Promise<ImagenDigital[]> {
-    const response = await api.get<ApiResponse<ImagenDigital[]>>(`/campanas/${campanaId}/imagenes-digitales-bulk`);
+  async getImagenesDigitalesBulk(
+    campanaId: number,
+    opts?: { signal?: AbortSignal; timeout?: number }
+  ): Promise<ImagenDigital[]> {
+    const response = await api.get<ApiResponse<ImagenDigital[]>>(
+      `/campanas/${campanaId}/imagenes-digitales-bulk`,
+      { signal: opts?.signal, timeout: opts?.timeout },
+    );
     if (!response.data.success || !response.data.data) {
       throw new Error(response.data.error || 'Error al obtener imágenes digitales bulk');
     }

@@ -2,6 +2,7 @@ import ExcelJS from 'exceljs';
 import type { Campana } from '../types';
 import type { InventarioConArte } from '../services/campanas.service';
 import api from '../lib/api';
+import { uploadsService } from '../services/uploads.service';
 
 const formatDate = (dateStr: string | null | undefined): string => {
   if (!dateStr) return '';
@@ -1008,10 +1009,11 @@ export async function exportVersionarioArtesMulti({ campanas, fileNameSuffix, fi
     return 'Varios';
   };
 
-  // PRE-FETCH en paralelo de TODAS las imágenes únicas (fetch + downscale) antes
-  // de armar las filas. Antes el loop hacía `await getImageRef` una por una
-  // (red serializada → tardaba añales). Aquí llenamos el imageCache en paralelo
-  // y el loop de filas solo lee del cache.
+  // PRE-FETCH bulk de TODAS las imágenes únicas usando el endpoint server-side
+  // /uploads/proxy-images-bulk: el backend descarga desde Spaces en paralelo
+  // (sin el limite de 6 conn/host del browser) y devuelve los buffers en base64.
+  // Pasa de N round-trips browser→back (~792 para cat 10) a N/100 (≤10 requests).
+  // El downscale sigue ocurriendo en el front porque el back no tiene libvips/sharp.
   if (!skipImages) {
     const uniqueUrls = new Set<string>();
     for (const b of bloques) {
@@ -1020,9 +1022,62 @@ export async function exportVersionarioArtesMulti({ campanas, fileNameSuffix, fi
       }
     }
     const urlList = [...uniqueUrls];
-    const PREFETCH_POOL = 8;
-    for (let i = 0; i < urlList.length; i += PREFETCH_POOL) {
-      await Promise.all(urlList.slice(i, i + PREFETCH_POOL).map(u => getImageRef(u)));
+
+    // Lotes de 100 (limite del endpoint), 3 lotes paralelos para tener 3 fetches
+    // bulk en vuelo (cada uno trae 100 buffers).
+    const BULK_BATCH = 100;
+    const PARALLEL_BULKS = 3;
+    const lotes: string[][] = [];
+    for (let i = 0; i < urlList.length; i += BULK_BATCH) {
+      lotes.push(urlList.slice(i, i + BULK_BATCH));
+    }
+
+    // El cache de fetch (separado de imageCache para reusar entre lotes).
+    const rawByUrl = new Map<string, FetchedImage | null>();
+
+    const procesarLote = async (lote: string[]) => {
+      try {
+        const results = await uploadsService.proxyImagesBulk(lote, { timeout: 90_000 });
+        for (const r of results) {
+          if (r.error || !r.buffer) {
+            rawByUrl.set(r.url, null);
+            continue;
+          }
+          // Decode base64 → ArrayBuffer
+          const bin = atob(r.buffer);
+          const buf = new ArrayBuffer(bin.length);
+          const view = new Uint8Array(buf);
+          for (let i = 0; i < bin.length; i++) view[i] = bin.charCodeAt(i);
+          rawByUrl.set(r.url, { buffer: buf, ext: detectExt(r.contentType || r.url) });
+        }
+      } catch {
+        // El lote entero fallo: dejamos los URLs sin cache → fallback "Ver arte".
+        for (const u of lote) if (!rawByUrl.has(u)) rawByUrl.set(u, null);
+      }
+    };
+
+    // Worker pool sobre los lotes (en lugar de Promise.all por waves).
+    const colaLotes = [...lotes];
+    const runLoteWorker = async () => {
+      while (colaLotes.length > 0) {
+        const lote = colaLotes.shift()!;
+        await procesarLote(lote);
+      }
+    };
+    await Promise.all(Array.from({ length: PARALLEL_BULKS }, () => runLoteWorker()));
+
+    // Ahora downscale local de cada raw → ImageRef cacheado por URL.
+    for (const url of urlList) {
+      const raw = rawByUrl.get(url);
+      if (!raw) { imageCache.set(url, null); continue; }
+      const thumb = await downscaleImage(raw.buffer);
+      const final = thumb || raw;
+      imageCache.set(url, {
+        buffer: final.buffer,
+        ext: final.ext,
+        w: final.width || 160,
+        h: final.height || 100,
+      });
     }
   }
 

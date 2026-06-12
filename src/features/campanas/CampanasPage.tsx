@@ -2798,57 +2798,78 @@ export function CampanasPage() {
     // flushSync para que el boton cambie a "Generando..." al instante
     // (sin esto el render se aplaza hasta que se complete el primer batch).
     flushSync(() => setVersionarioDownloading(true));
+    // AbortController dedicado a la descarga (separado del de la carga del
+    // preview). Permite cortar requests en vuelo si el usuario cierra el modal
+    // a la mitad o dispara una segunda descarga.
+    versionarioAbortRef.current?.abort();
+    const abortCtrl = new AbortController();
+    versionarioAbortRef.current = abortCtrl;
     try {
-      // Completar notas + archivos digitales en pool de 15 campañas paralelas.
-      const POOL = 15;
-      const enriquecidas: typeof versionarioRawData = [];
-      for (let i = 0; i < versionarioRawData.length; i += POOL) {
-        const batch = versionarioRawData.slice(i, i + POOL);
-        const completed = await Promise.all(batch.map(async (entry) => {
-          const { campana, items } = entry;
-          const allRsvIds = new Set<number>();
-          for (const it of items) {
-            String((it as any).rsv_id || (it as any).rsv_ids || '')
-              .split(',').map(s => parseInt(s.trim())).filter(n => !isNaN(n))
-              .forEach(n => allRsvIds.add(n));
-          }
-          const tieneDigitales = items.some((it: any) => {
-            const t = String(it.tipo_medio || it.tradicional_digital || '').toLowerCase();
-            return t.includes('digital');
-          });
-          const digitalFilesByReserva = new Map<number, string[]>();
-          const notesByUrl = new Map<string, string>();
-          if (tieneDigitales) {
-            // UNA sola request por campaña (antes eran cientos: 1 por reserva).
-            // El bulk conserva el id_reserva real de cada archivo, así cada
-            // imagen cae en su circuito correcto.
-            try {
-              const imgs = await campanasService.getImagenesDigitalesBulk(campana.id);
-              for (const im of imgs) {
-                const url = (im as any).archivoData || (im as any).archivo;
-                if (!url) continue;
-                const rid = Number((im as any).idReserva);
-                if (!isNaN(rid)) {
-                  const arr = digitalFilesByReserva.get(rid) || [];
-                  arr.push(url);
-                  digitalFilesByReserva.set(rid, arr);
-                }
-                const comentario = ((im as any).comentario || '').trim();
-                if (comentario) notesByUrl.set(url, comentario);
+      // Enriquecer cada campaña que tenga digitales con sus archivos+notas.
+      // Worker pool + timeout + retry (mismo patron que la carga del preview)
+      // en lugar del viejo `Promise.all` por waves de 15 — un chunk colgado
+      // ya no bloquea la descarga completa.
+      const WORKERS = 4;            // bajo el browser limit (6 HTTP/1.1 - 1 WS - margen)
+      const REQUEST_TIMEOUT_MS = 30_000;
+      const RETRIES = 2;
+
+      const enriquecidas: typeof versionarioRawData = new Array(versionarioRawData.length);
+      const queue: number[] = versionarioRawData.map((_, idx) => idx);
+
+      const procesarEntry = async (idx: number, attempt = 0): Promise<void> => {
+        if (abortCtrl.signal.aborted) return;
+        const entry = versionarioRawData[idx];
+        const { campana, items } = entry;
+        const tieneDigitales = items.some((it: any) => {
+          const t = String(it.tipo_medio || it.tradicional_digital || '').toLowerCase();
+          return t.includes('digital');
+        });
+        const digitalFilesByReserva = new Map<number, string[]>();
+        const notesByUrl = new Map<string, string>();
+        if (tieneDigitales) {
+          try {
+            const imgs = await campanasService.getImagenesDigitalesBulk(campana.id, {
+              signal: abortCtrl.signal,
+              timeout: REQUEST_TIMEOUT_MS,
+            });
+            for (const im of imgs) {
+              const url = (im as any).archivoData || (im as any).archivo;
+              if (!url) continue;
+              const rid = Number((im as any).idReserva);
+              if (!isNaN(rid)) {
+                const arr = digitalFilesByReserva.get(rid) || [];
+                arr.push(url);
+                digitalFilesByReserva.set(rid, arr);
               }
-            } catch { /* ignore */ }
+              const comentario = ((im as any).comentario || '').trim();
+              if (comentario) notesByUrl.set(url, comentario);
+            }
+          } catch {
+            if (abortCtrl.signal.aborted) return;
+            if (attempt < RETRIES) return procesarEntry(idx, attempt + 1);
+            // Tras retries: la campaña queda sin digitales pero la descarga sigue.
           }
-          // NOTA: ya NO pedimos getArtesTradicionales por reserva (eran miles de
-          // requests de ~26 bytes que tardaban añales). Las notas de artes
-          // tradicionales ya vienen en `it.artes_detalle` del bulk, y el export
-          // las extrae de ahí como fallback. Solo los digitales necesitan fetch.
-          return { campana, items, digitalFilesByReserva, notesByUrl };
-        }));
-        enriquecidas.push(...completed);
-      }
+        }
+        enriquecidas[idx] = { campana, items, digitalFilesByReserva, notesByUrl };
+      };
+
+      const runWorker = async () => {
+        while (queue.length > 0 && !abortCtrl.signal.aborted) {
+          const idx = queue.shift()!;
+          await procesarEntry(idx);
+        }
+      };
+      await Promise.all(Array.from({ length: WORKERS }, () => runWorker()));
+
+      if (abortCtrl.signal.aborted) return;
+
+      // Compactar (puede haber huecos si algunas entries quedaron pendientes
+      // por abort durante el loop).
+      const enriquecidasOk = enriquecidas.filter(Boolean);
+
       await exportVersionarioArtesMulti({
-        campanas: enriquecidas,
-        fileNameSuffix: `${enriquecidas.length}_campanas`,
+        campanas: enriquecidasOk,
+        fileNameSuffix: `${enriquecidasOk.length}_campanas`,
         filterKeys: opts.filterKeys,
         skipImages: opts.skipImages,
       });
