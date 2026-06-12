@@ -1410,9 +1410,15 @@ export function CampanaDetailPage() {
     const headers = ['Código', 'Grupo ID', 'Mueble', 'Tipo de Mueble', 'Estado', 'Tipo', 'Caras'];
     const fields: (keyof InventarioReservado)[] = ['codigo_unico', 'solicitud_caras_id', 'mueble', 'tipo_de_mueble', 'estado', 'tipo_de_cara', 'caras_totales'];
 
+    // Si hay filas seleccionadas en los checkboxes, exportar SOLO esas; si no,
+    // exportar todo lo visible según los filtros activos.
+    const rowsToExport = selectedItems.size > 0
+      ? filteredInventarioReservado.filter(i => selectedItems.has(i.rsv_ids))
+      : filteredInventarioReservado;
+
     const csvContent = [
       headers.join(','),
-      ...filteredInventarioReservado.map(item =>
+      ...rowsToExport.map(item =>
         fields.map(field => {
           const value = item[field];
           // Escapar comas y comillas en valores
@@ -1428,12 +1434,13 @@ export function CampanaDetailPage() {
     const url = URL.createObjectURL(blob);
     const link = document.createElement('a');
     link.href = url;
-    link.download = `inventario_reservado_${campana?.nombre || 'campana'}_${new Date().toISOString().split('T')[0]}.csv`;
+    const sufijo = selectedItems.size > 0 ? '_seleccion' : '';
+    link.download = `inventario_reservado_${campana?.nombre || 'campana'}${sufijo}_${new Date().toISOString().split('T')[0]}.csv`;
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
     URL.revokeObjectURL(url);
-  }, [filteredInventarioReservado, campana?.nombre]);
+  }, [filteredInventarioReservado, selectedItems, campana?.nombre]);
 
   // Función para descargar CSV (inventario con APS)
   const downloadCSVAPS = useCallback(() => {
