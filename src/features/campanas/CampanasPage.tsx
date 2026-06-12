@@ -1188,6 +1188,11 @@ export function CampanasPage() {
   const [versionarioArtesProgress, setVersionarioArtesProgress] = useState({ current: 0, total: 0 });
   // Flag para cancelar la carga si el usuario cierra el modal en medio.
   const versionarioCancelledRef = useRef(false);
+  // AbortController de la carga en curso. Permite abortar requests HTTP en vuelo
+  // de verdad (no solo ignorarlas) cuando se cierra el modal o se dispara una
+  // nueva carga — clave para no acumular fetches huérfanos consumiendo sockets
+  // del browser y bloqueando el siguiente wave.
+  const versionarioAbortRef = useRef<AbortController | null>(null);
   // Preview del Versionario Artes (modal con tabla paginada antes de descargar)
   const [versionarioPreviewOpen, setVersionarioPreviewOpen] = useState(false);
   const [versionarioPreview, setVersionarioPreview] = useState<VersionarioArtesPreview | null>(null);
@@ -2553,11 +2558,16 @@ export function CampanasPage() {
       setVersionarioArtesProgress({ current: 0, total: campanasUnicas.length });
 
       try {
-        // BULK: 1 request por chunk de ~20 campañas (con arte + sin arte agrupado),
-        // varios chunks en paralelo. Esquiva el límite de ~6 conexiones del browser
-        // y trae un payload chico (agrupado por circuito).
+        // BULK: 1 request por chunk de ~20 campañas (con arte + sin arte agrupado).
+        // Orquestador: pool de N workers tirando de una cola compartida, con
+        // timeout + retry por chunk y AbortController para cancelacion real.
+        // Antes era `await Promise.all` por waves de 6, que se atoraba en cuanto
+        // 1 chunk se colgaba (sin timeout) o cuando el browser limit (6 conn por
+        // host menos WebSocket) dejaba la 6a promesa en queue indefinidamente.
         const CHUNK_SIZE = 20;
-        const PARALLEL_CHUNKS = 6;
+        const WORKERS = 4;              // bajo el browser HTTP/1.1 limit (6) - WS (1) - margen
+        const CHUNK_TIMEOUT_MS = 60_000;
+        const CHUNK_RETRIES = 2;
         const resultados: Array<{
           campana: Campana;
           items: any[];
@@ -2569,10 +2579,21 @@ export function CampanasPage() {
         for (let i = 0; i < campanasUnicas.length; i += CHUNK_SIZE) {
           chunks.push(campanasUnicas.slice(i, i + CHUNK_SIZE).map(c => c.id));
         }
+        const queue = [...chunks];
 
-        const procesarChunk = async (chunkIds: number[]) => {
+        // Cancelar carga previa si la hubo, y registrar la nueva.
+        versionarioAbortRef.current?.abort();
+        const abortCtrl = new AbortController();
+        versionarioAbortRef.current = abortCtrl;
+
+        const procesarChunk = async (chunkIds: number[], attempt = 0): Promise<void> => {
+          if (abortCtrl.signal.aborted) return;
           try {
-            const bulk = await campanasService.getInventarioVersionarioBulk(chunkIds, { includeWithoutAps: true });
+            const bulk = await campanasService.getInventarioVersionarioBulk(chunkIds, {
+              includeWithoutAps: true,
+              signal: abortCtrl.signal,
+              timeout: CHUNK_TIMEOUT_MS,
+            });
             for (const cid of chunkIds) {
               const campana = campanaById.get(cid);
               if (!campana) continue;
@@ -2586,18 +2607,30 @@ export function CampanasPage() {
                 notesByUrl: new Map(),
               });
             }
-          } catch { /* skip */ } finally {
-            setVersionarioArtesProgress(prev => ({ ...prev, current: Math.min(prev.total, prev.current + chunkIds.length) }));
+          } catch {
+            if (abortCtrl.signal.aborted) return;
+            if (attempt < CHUNK_RETRIES) return procesarChunk(chunkIds, attempt + 1);
+            // Sin retries restantes: dejamos pasar (las campañas de este chunk
+            // quedaran fuera del preview en vez de bloquear toda la carga).
+          } finally {
+            if (!abortCtrl.signal.aborted) {
+              setVersionarioArtesProgress(prev => ({ ...prev, current: Math.min(prev.total, prev.current + chunkIds.length) }));
+            }
           }
         };
 
-        for (let i = 0; i < chunks.length; i += PARALLEL_CHUNKS) {
-          if (versionarioCancelledRef.current) break;
-          const wave = chunks.slice(i, i + PARALLEL_CHUNKS);
-          await Promise.all(wave.map(procesarChunk));
-        }
+        // Worker pool: N workers tomando chunks de una cola compartida hasta vaciarla.
+        // Mientras haya pendientes, los N slots estan siempre activos — no quedan
+        // ociosos esperando al wave (= chunk mas lento).
+        const runWorker = async () => {
+          while (queue.length > 0 && !abortCtrl.signal.aborted && !versionarioCancelledRef.current) {
+            const chunk = queue.shift()!;
+            await procesarChunk(chunk);
+          }
+        };
+        await Promise.all(Array.from({ length: WORKERS }, () => runWorker()));
 
-        if (versionarioCancelledRef.current) return;
+        if (abortCtrl.signal.aborted || versionarioCancelledRef.current) return;
 
         if (resultados.length === 0) {
           alert('No se pudo recuperar inventario de las campañas seleccionadas.');
@@ -2680,19 +2713,33 @@ export function CampanasPage() {
       };
 
       // 3. Fetch inventarios de las campañas del nuevo periodo (BULK por chunks)
+      // Mismo orquestador que handleExportVersionarioArtes: worker pool + timeout
+      // + retry + AbortController. Ver comentario alla para los porques.
       setVersionarioArtesProgress({ current: 0, total: campanas.length });
       const CHUNK_SIZE = 20;
-      const PARALLEL_CHUNKS = 6;
+      const WORKERS = 4;
+      const CHUNK_TIMEOUT_MS = 60_000;
+      const CHUNK_RETRIES = 2;
       const resultados: VersionarioArtesMultiArgs['campanas'] = [];
       const campanaById = new Map(campanas.map(c => [c.id, c]));
       const chunks: number[][] = [];
       for (let i = 0; i < campanas.length; i += CHUNK_SIZE) {
         chunks.push(campanas.slice(i, i + CHUNK_SIZE).map(c => c.id));
       }
+      const queue = [...chunks];
 
-      const procesarChunk = async (chunkIds: number[]) => {
+      versionarioAbortRef.current?.abort();
+      const abortCtrl = new AbortController();
+      versionarioAbortRef.current = abortCtrl;
+
+      const procesarChunk = async (chunkIds: number[], attempt = 0): Promise<void> => {
+        if (abortCtrl.signal.aborted) return;
         try {
-          const bulk = await campanasService.getInventarioVersionarioBulk(chunkIds, { includeWithoutAps: true });
+          const bulk = await campanasService.getInventarioVersionarioBulk(chunkIds, {
+            includeWithoutAps: true,
+            signal: abortCtrl.signal,
+            timeout: CHUNK_TIMEOUT_MS,
+          });
           for (const cid of chunkIds) {
             const campana = campanaById.get(cid);
             if (!campana) continue;
@@ -2708,18 +2755,26 @@ export function CampanasPage() {
               });
             }
           }
-        } catch { /* skip */ } finally {
-          setVersionarioArtesProgress(prev => ({ ...prev, current: Math.min(prev.total, prev.current + chunkIds.length) }));
+        } catch {
+          if (abortCtrl.signal.aborted) return;
+          if (attempt < CHUNK_RETRIES) return procesarChunk(chunkIds, attempt + 1);
+          // Sin retries restantes: dejamos pasar las campañas del chunk.
+        } finally {
+          if (!abortCtrl.signal.aborted) {
+            setVersionarioArtesProgress(prev => ({ ...prev, current: Math.min(prev.total, prev.current + chunkIds.length) }));
+          }
         }
       };
 
-      for (let i = 0; i < chunks.length; i += PARALLEL_CHUNKS) {
-        if (versionarioCancelledRef.current) break;
-        const wave = chunks.slice(i, i + PARALLEL_CHUNKS);
-        await Promise.all(wave.map(procesarChunk));
-      }
+      const runWorker = async () => {
+        while (queue.length > 0 && !abortCtrl.signal.aborted && !versionarioCancelledRef.current) {
+          const chunk = queue.shift()!;
+          await procesarChunk(chunk);
+        }
+      };
+      await Promise.all(Array.from({ length: WORKERS }, () => runWorker()));
 
-      if (versionarioCancelledRef.current) return;
+      if (abortCtrl.signal.aborted || versionarioCancelledRef.current) return;
 
       const preview = buildVersionarioArtesPreview({ campanas: resultados });
       setVersionarioRawData(resultados);
@@ -4328,7 +4383,10 @@ export function CampanasPage() {
           isOpen={versionarioPreviewOpen}
           onClose={() => {
             // Cancela la carga en background si aun corre, y limpia estado.
+            // El abort() corta las requests HTTP en vuelo de verdad (libera los
+            // sockets del browser), no solo pone un flag que la corutina ignora.
             versionarioCancelledRef.current = true;
+            versionarioAbortRef.current?.abort();
             setVersionarioPreviewOpen(false);
             setExportingVersionarioArtes(false);
             setVersionarioArtesProgress({ current: 0, total: 0 });
