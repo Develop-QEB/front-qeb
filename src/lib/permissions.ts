@@ -33,6 +33,36 @@ export type UserRole =
   | 'Coordinador de Facturación y Cobranza'
   | 'Mesa de Control'
   | 'Analista de Facturación y Cobranza'
+  // Nuevos roles (Matriz Roles QEB 2026-01-28) — agregados sin tocar los anteriores.
+  // Perfil A — Transversales (full visibility, sin aprobar autorizaciones, con descarga)
+  | 'Director General Adjunto'
+  | 'Director Desarrollo de Nuevos Negocios'
+  | 'Gerente Comercial Vía Pública'
+  | 'Gerente Comercial Plazas'
+  | 'Jefe de BI'
+  // Perfil B — TI y Mejora Continua (admin completo)
+  | 'Gerente de TI'
+  | 'Especialista de TI'
+  | 'Analista de TI'
+  | 'Jefe de Mejora Continua'
+  | 'Analista de Mejora Continua'
+  // Perfil C — Plazas operativas (Campañas + Descarga ODM + Instalación)
+  | 'Gerente de Operaciones GDL'
+  | 'Gerente de Operaciones MTY'
+  | 'Gerente Regional de Plazas'
+  | 'Jefe Regional de Plazas'
+  | 'Técnico en logística digital'
+  | 'Jefe de Operaciones Oaxaca'
+  | 'Jefe de Operaciones Acapulco'
+  | 'Jefe de Operaciones Toluca'
+  | 'Jefe de Operaciones Veracruz'
+  | 'Jefe de Operaciones Pto. Vallarta'
+  | 'Jefe de Operaciones Puebla'
+  | 'Jefe de Operaciones Culiacán'
+  | 'Jefe de Operaciones Mazatlán'
+  | 'Jefe de Operaciones León'
+  | 'Jefe de Operaciones Tijuana'
+  | 'Jefe de Operaciones Mérida'
   | 'Administrador'
   | 'DEV';
 
@@ -330,7 +360,13 @@ const rolePermissions: Partial<Record<UserRole, Partial<RolePermissions>>> = {
     // Campañas: acceso a botones de detalle de campaña (Asignar/Quitar APS,
     // Pre Factura, Cortesía a Gestor y POST a SAP). Cancelar POST queda
     // reservado a TI/Admin.
-    canEditCampanas: true,
+    // CSV (Matriz QEB 2026-01-28): "No debe poder editar la información de
+    // las campañas, ya que esta función corresponde únicamente al Asesor
+    // Comercial". Por eso canEditCampanas (botón Editar info: nombre/fechas)
+    // queda en false. Las acciones operativas (APS, SAP, prefactura) viven
+    // bajo canEditDetalleCampana y siguen permitidas porque el CSV las
+    // lista como responsabilidades del ASC.
+    canEditCampanas: false,
     canEditDetalleCampana: true,
     canDeleteDetalleCampana: false,
     canPostToSAP: true,
@@ -409,7 +445,9 @@ const rolePermissions: Partial<Record<UserRole, Partial<RolePermissions>>> = {
     canExportOrdenesMontaje: false,
   },
   'Director Comercial': {
-    // Solo lectura - permisos pendientes de definición
+    // CSV (Matriz QEB 2026-01-28): ve todo (Dashboard, Clientes, Proveedores,
+    // Solicitudes, Propuestas, Campañas, Inventarios), aprueba/rechaza
+    // autorizaciones, descarga ODM/versionario.
     canSeeDashboard: true,
     canSeeClientes: true,
     canSeeProveedores: false,
@@ -435,7 +473,7 @@ const rolePermissions: Partial<Record<UserRole, Partial<RolePermissions>>> = {
 
     canEditPropuestaStatus: false,
     allowedPropuestaStatuses: [],
-    canAprobarPropuesta: false,
+    canAprobarPropuesta: true, // CSV: aprueba/rechaza autorizaciones
     canAsignarInventario: false,
     canEditResumenPropuesta: false,
     canCompartirPropuesta: false,
@@ -447,7 +485,7 @@ const rolePermissions: Partial<Record<UserRole, Partial<RolePermissions>>> = {
     canSeeGestionArtes: true,
     canEditGestionArtes: false,
     canResolveProduccionTasks: false,
-    canSeeOrdenesMontajeButton: false,
+    canSeeOrdenesMontajeButton: true, // CSV: descarga ODM/versionario
 
     canSeeTabProgramacion: true,
     canSeeTabImpresiones: true,
@@ -463,7 +501,7 @@ const rolePermissions: Partial<Record<UserRole, Partial<RolePermissions>>> = {
     canEditInventarios: false,
     canDeleteInventarios: false,
 
-    canExportOrdenesMontaje: false,
+    canExportOrdenesMontaje: true, // CSV: descarga ODM/versionario
   },
   // Gerente Comercial: mismos permisos que Director Comercial PERO no recibe
   // tareas de autorización DCM (se filtra explícitamente en
@@ -566,7 +604,7 @@ const rolePermissions: Partial<Record<UserRole, Partial<RolePermissions>>> = {
     canSeeGestionArtes: true,
     canEditGestionArtes: false,
     canResolveProduccionTasks: false,
-    canSeeOrdenesMontajeButton: false,
+    canSeeOrdenesMontajeButton: true, // CSV: descarga ODM/versionario
 
     canSeeTabProgramacion: true,
     canSeeTabImpresiones: false,
@@ -582,11 +620,11 @@ const rolePermissions: Partial<Record<UserRole, Partial<RolePermissions>>> = {
     canEditInventarios: false,
     canDeleteInventarios: false,
 
-    canExportOrdenesMontaje: false,
+    canExportOrdenesMontaje: true, // CSV: descarga ODM/versionario
   },
   'Especialista de BI': {
     // Visualización general amplia
-    canSeeDashboard: false,
+    canSeeDashboard: true,
     canSeeClientes: true,
     canSeeProveedores: false,
     canSeeSolicitudes: true,
@@ -623,7 +661,7 @@ const rolePermissions: Partial<Record<UserRole, Partial<RolePermissions>>> = {
     canSeeGestionArtes: true,
     canEditGestionArtes: false,
     canResolveProduccionTasks: false,
-    canSeeOrdenesMontajeButton: false,
+    canSeeOrdenesMontajeButton: true, // CSV: descarga ODM/versionario
 
     canSeeTabProgramacion: true,
     canSeeTabImpresiones: true,
@@ -639,7 +677,7 @@ const rolePermissions: Partial<Record<UserRole, Partial<RolePermissions>>> = {
     canEditInventarios: false,
     canDeleteInventarios: false,
 
-    canExportOrdenesMontaje: false,
+    canExportOrdenesMontaje: true, // CSV: descarga ODM/versionario
   },
   'Director de Desarrollo Digital': {
     // Solo lectura - permisos PENDIENTES de definición
@@ -871,6 +909,7 @@ const rolePermissions: Partial<Record<UserRole, Partial<RolePermissions>>> = {
   // ============================================================================
   'Call Center CON': {
     // Solo Recepción de artes - carga de reportes
+    // CSV (Matriz QEB 2026-01-28): debe descargar ODM y versionario.
     canSeeDashboard: false,
     canSeeClientes: false,
     canSeeProveedores: false,
@@ -909,7 +948,7 @@ const rolePermissions: Partial<Record<UserRole, Partial<RolePermissions>>> = {
     canSeeGestionArtes: true,
     canEditGestionArtes: false,
     canResolveProduccionTasks: true,
-    canSeeOrdenesMontajeButton: false,
+    canSeeOrdenesMontajeButton: true, // CSV: descarga ODM/versionario
 
     canSeeTabProgramacion: true,
     canSeeTabImpresiones: true,
@@ -926,7 +965,7 @@ const rolePermissions: Partial<Record<UserRole, Partial<RolePermissions>>> = {
     canEditInventarios: false,
     canDeleteInventarios: false,
 
-    canExportOrdenesMontaje: false,
+    canExportOrdenesMontaje: true, // CSV: descarga ODM/versionario
   },
   'Gerente de Operaciones CON': {
     // Solo lectura - permisos pendientes de definición
@@ -968,7 +1007,7 @@ const rolePermissions: Partial<Record<UserRole, Partial<RolePermissions>>> = {
     canSeeGestionArtes: true,
     canEditGestionArtes: false,
     canResolveProduccionTasks: false,
-    canSeeOrdenesMontajeButton: false,
+    canSeeOrdenesMontajeButton: true, // CSV: descarga ODM/versionario
 
     canSeeTabProgramacion: true,
     canSeeTabImpresiones: true,
@@ -984,7 +1023,7 @@ const rolePermissions: Partial<Record<UserRole, Partial<RolePermissions>>> = {
     canEditInventarios: false,
     canDeleteInventarios: false,
 
-    canExportOrdenesMontaje: false,
+    canExportOrdenesMontaje: true, // CSV: descarga ODM/versionario
   },
   'Jefe de Operaciones Digital': {
     canSeeDashboard: false,
@@ -1024,7 +1063,7 @@ const rolePermissions: Partial<Record<UserRole, Partial<RolePermissions>>> = {
     canDeleteDetalleCampana: false,
     canEditCampanaStatus: false,
     canSeeGestionArtes: true,
-    canSeeOrdenesMontajeButton: false,
+    canSeeOrdenesMontajeButton: true, // CSV: descarga ODM/versionario
 
     // Gestión de Artes - solo tab Programación, puede usarla y resolver tareas
     canEditGestionArtes: true,
@@ -1043,7 +1082,7 @@ const rolePermissions: Partial<Record<UserRole, Partial<RolePermissions>>> = {
     canEditInventarios: false,
     canDeleteInventarios: false,
 
-    canExportOrdenesMontaje: false,
+    canExportOrdenesMontaje: true, // CSV: descarga ODM/versionario
   },
   'Gerente Digital (Operaciones)': {
     canSeeDashboard: false,
@@ -1083,7 +1122,7 @@ const rolePermissions: Partial<Record<UserRole, Partial<RolePermissions>>> = {
     canDeleteDetalleCampana: false,
     canEditCampanaStatus: false,
     canSeeGestionArtes: true,
-    canSeeOrdenesMontajeButton: false,
+    canSeeOrdenesMontajeButton: true, // CSV: descarga ODM/versionario
 
     // Gestión de Artes - solo tab Programación, puede usarla y resolver tareas
     canEditGestionArtes: true,
@@ -1102,7 +1141,7 @@ const rolePermissions: Partial<Record<UserRole, Partial<RolePermissions>>> = {
     canEditInventarios: false,
     canDeleteInventarios: false,
 
-    canExportOrdenesMontaje: false,
+    canExportOrdenesMontaje: true, // CSV: descarga ODM/versionario
   },
   'Administrador': {
     // Admin tiene todos los permisos por defecto
@@ -1450,7 +1489,9 @@ const rolePermissions: Partial<Record<UserRole, Partial<RolePermissions>>> = {
     canSeeTabRevisarAprobar: true, // Sí pueden ver Revisar y Aprobar
     canSeeTabTestigos: false,
     canSeeTabValidacionInstalacion: false,
-    canCreateTareasGestionArtes: false, // No pueden crear tareas
+    // CSV (Matriz QEB 2026-01-28): "Asignación de revisión de artes a otro
+    // diseñador" → debe poder crear/asignar tareas de revisión.
+    canCreateTareasGestionArtes: true,
     canResolveRevisionArtesTasks: true, // Sí pueden resolver tareas de revisión de artes
 
     // Inventarios - oculto
@@ -1642,7 +1683,7 @@ const rolePermissions: Partial<Record<UserRole, Partial<RolePermissions>>> = {
     canSeeGestionArtes: true, // Pueden ver gestión de artes
     canEditGestionArtes: false, // No pueden editar
     canResolveProduccionTasks: true, // Pueden resolver tareas de producción (solo Recepción)
-    canSeeOrdenesMontajeButton: false, // Ocultar botón órdenes de montaje
+    canSeeOrdenesMontajeButton: true, // CSV: descarga ODM/versionario
 
     // Gestión de Artes - Tabs
     canSeeTabProgramacion: true,
@@ -1662,7 +1703,7 @@ const rolePermissions: Partial<Record<UserRole, Partial<RolePermissions>>> = {
     canDeleteInventarios: false,
 
     // Órdenes de Montaje
-    canExportOrdenesMontaje: false,
+    canExportOrdenesMontaje: true, // CSV: descarga ODM/versionario
   },
   'Gerentes de Operaciones Plazas (GDL y MTY)': {
     // Secciones visibles
@@ -1709,7 +1750,7 @@ const rolePermissions: Partial<Record<UserRole, Partial<RolePermissions>>> = {
     canSeeGestionArtes: true,
     canEditGestionArtes: false,
     canResolveProduccionTasks: true,
-    canSeeOrdenesMontajeButton: false,
+    canSeeOrdenesMontajeButton: true, // CSV: descarga ODM/versionario
 
     // Gestión de Artes - Tabs
     canSeeTabProgramacion: true,
@@ -1729,7 +1770,7 @@ const rolePermissions: Partial<Record<UserRole, Partial<RolePermissions>>> = {
     canDeleteInventarios: false,
 
     // Órdenes de Montaje
-    canExportOrdenesMontaje: false,
+    canExportOrdenesMontaje: true, // CSV: descarga ODM/versionario
   },
   'Jefes de Operaciones Plazas': {
     // Secciones visibles
@@ -1776,7 +1817,7 @@ const rolePermissions: Partial<Record<UserRole, Partial<RolePermissions>>> = {
     canSeeGestionArtes: true,
     canEditGestionArtes: false,
     canResolveProduccionTasks: true,
-    canSeeOrdenesMontajeButton: false,
+    canSeeOrdenesMontajeButton: true, // CSV: descarga ODM/versionario
 
     // Gestión de Artes - Tabs
     canSeeTabProgramacion: true,
@@ -1796,7 +1837,7 @@ const rolePermissions: Partial<Record<UserRole, Partial<RolePermissions>>> = {
     canDeleteInventarios: false,
 
     // Órdenes de Montaje
-    canExportOrdenesMontaje: false,
+    canExportOrdenesMontaje: true, // CSV: descarga ODM/versionario
   },
   'Supervisores de Operaciones': {
     // Secciones visibles
@@ -2067,6 +2108,466 @@ const rolePermissions: Partial<Record<UserRole, Partial<RolePermissions>>> = {
 
     // Órdenes de Montaje
     canExportOrdenesMontaje: false,
+  },
+
+  // ============================================================================
+  // NUEVOS ROLES — Matriz QEB 2026-01-28
+  // ============================================================================
+
+  // Perfil A — Transversales: ven todo (Dashboard, Clientes, Proveedores,
+  // Solicitudes, Propuestas, Campanas, Inventarios), pueden descargar
+  // ODM/versionario. NO aprueban/rechazan autorizaciones (no son DG/DCM).
+  'Director General Adjunto': {
+    canSeeAdminUsuarios: false,
+    canCreateClientes: false, canEditClientes: false, canDeleteClientes: false,
+    canCreateProveedores: false, canEditProveedores: false, canDeleteProveedores: false,
+    canCreateSolicitudes: false, canEditSolicitudes: false, canDeleteSolicitudes: false,
+    canAtenderSolicitudes: false, canChangeEstadoSolicitud: false,
+    canEditPropuestaStatus: false, allowedPropuestaStatuses: [],
+    canAprobarPropuesta: false, canAsignarInventario: false, canEditResumenPropuesta: false,
+    canCompartirPropuesta: true, canBuscarInventarioEnModal: false,
+    canEditCampanas: false, canEditCampanaStatus: false,
+    canEditDetalleCampana: false, canDeleteDetalleCampana: false,
+    canSeeGestionArtes: true, canEditGestionArtes: false,
+    canResolveProduccionTasks: false, canSeeOrdenesMontajeButton: true,
+    canCreateTareasGestionArtes: false, canResolveRevisionArtesTasks: false,
+    canCreateInventarios: false, canEditInventarios: false, canDeleteInventarios: false,
+    canExportOrdenesMontaje: true,
+  },
+  'Director Desarrollo de Nuevos Negocios': {
+    canSeeAdminUsuarios: false,
+    canCreateClientes: false, canEditClientes: false, canDeleteClientes: false,
+    canCreateProveedores: false, canEditProveedores: false, canDeleteProveedores: false,
+    canCreateSolicitudes: false, canEditSolicitudes: false, canDeleteSolicitudes: false,
+    canAtenderSolicitudes: false, canChangeEstadoSolicitud: false,
+    canEditPropuestaStatus: false, allowedPropuestaStatuses: [],
+    canAprobarPropuesta: false, canAsignarInventario: false, canEditResumenPropuesta: false,
+    canCompartirPropuesta: true, canBuscarInventarioEnModal: false,
+    canEditCampanas: false, canEditCampanaStatus: false,
+    canEditDetalleCampana: false, canDeleteDetalleCampana: false,
+    canSeeGestionArtes: true, canEditGestionArtes: false,
+    canResolveProduccionTasks: false, canSeeOrdenesMontajeButton: true,
+    canCreateTareasGestionArtes: false, canResolveRevisionArtesTasks: false,
+    canCreateInventarios: false, canEditInventarios: false, canDeleteInventarios: false,
+    canExportOrdenesMontaje: true,
+  },
+  'Gerente Comercial Vía Pública': {
+    canSeeAdminUsuarios: false,
+    canCreateClientes: false, canEditClientes: false, canDeleteClientes: false,
+    canCreateProveedores: false, canEditProveedores: false, canDeleteProveedores: false,
+    canCreateSolicitudes: false, canEditSolicitudes: false, canDeleteSolicitudes: false,
+    canAtenderSolicitudes: false, canChangeEstadoSolicitud: false,
+    canEditPropuestaStatus: false, allowedPropuestaStatuses: [],
+    canAprobarPropuesta: false, canAsignarInventario: false, canEditResumenPropuesta: false,
+    canCompartirPropuesta: true, canBuscarInventarioEnModal: false,
+    canEditCampanas: false, canEditCampanaStatus: false,
+    canEditDetalleCampana: false, canDeleteDetalleCampana: false,
+    canSeeGestionArtes: true, canEditGestionArtes: false,
+    canResolveProduccionTasks: false, canSeeOrdenesMontajeButton: true,
+    canCreateTareasGestionArtes: false, canResolveRevisionArtesTasks: false,
+    canCreateInventarios: false, canEditInventarios: false, canDeleteInventarios: false,
+    canExportOrdenesMontaje: true,
+  },
+  'Gerente Comercial Plazas': {
+    canSeeAdminUsuarios: false,
+    canCreateClientes: false, canEditClientes: false, canDeleteClientes: false,
+    canCreateProveedores: false, canEditProveedores: false, canDeleteProveedores: false,
+    canCreateSolicitudes: false, canEditSolicitudes: false, canDeleteSolicitudes: false,
+    canAtenderSolicitudes: false, canChangeEstadoSolicitud: false,
+    canEditPropuestaStatus: false, allowedPropuestaStatuses: [],
+    canAprobarPropuesta: false, canAsignarInventario: false, canEditResumenPropuesta: false,
+    canCompartirPropuesta: true, canBuscarInventarioEnModal: false,
+    canEditCampanas: false, canEditCampanaStatus: false,
+    canEditDetalleCampana: false, canDeleteDetalleCampana: false,
+    canSeeGestionArtes: true, canEditGestionArtes: false,
+    canResolveProduccionTasks: false, canSeeOrdenesMontajeButton: true,
+    canCreateTareasGestionArtes: false, canResolveRevisionArtesTasks: false,
+    canCreateInventarios: false, canEditInventarios: false, canDeleteInventarios: false,
+    canExportOrdenesMontaje: true,
+  },
+  'Jefe de BI': {
+    canSeeAdminUsuarios: false,
+    canCreateClientes: false, canEditClientes: false, canDeleteClientes: false,
+    canCreateProveedores: false, canEditProveedores: false, canDeleteProveedores: false,
+    canCreateSolicitudes: false, canEditSolicitudes: false, canDeleteSolicitudes: false,
+    canAtenderSolicitudes: false, canChangeEstadoSolicitud: false,
+    canEditPropuestaStatus: false, allowedPropuestaStatuses: [],
+    canAprobarPropuesta: false, canAsignarInventario: false, canEditResumenPropuesta: false,
+    canCompartirPropuesta: true, canBuscarInventarioEnModal: false,
+    canEditCampanas: false, canEditCampanaStatus: false,
+    canEditDetalleCampana: false, canDeleteDetalleCampana: false,
+    canSeeGestionArtes: true, canEditGestionArtes: false,
+    canResolveProduccionTasks: false, canSeeOrdenesMontajeButton: true,
+    canCreateTareasGestionArtes: false, canResolveRevisionArtesTasks: false,
+    canCreateInventarios: false, canEditInventarios: false, canDeleteInventarios: false,
+    canExportOrdenesMontaje: true,
+  },
+
+  // Perfil B — TI + Mejora Continua: perfil de administrador completo
+  // (visibilidad y edicion de todos los modulos, igual que 'Administrador').
+  'Gerente de TI': {
+    canEditClienteEnFormularios: true, canEditCaraFiltersOnEdit: true,
+    canEditArticuloOnEdit: true, canCancelPostSAP: true,
+    canSeeAllHistorial: true, canApproveArteSinRevisar: true,
+  },
+  'Especialista de TI': {
+    canEditClienteEnFormularios: true, canEditCaraFiltersOnEdit: true,
+    canEditArticuloOnEdit: true, canCancelPostSAP: true,
+    canSeeAllHistorial: true, canApproveArteSinRevisar: true,
+  },
+  'Analista de TI': {
+    canEditClienteEnFormularios: true, canEditCaraFiltersOnEdit: true,
+    canEditArticuloOnEdit: true, canCancelPostSAP: true,
+    canSeeAllHistorial: true, canApproveArteSinRevisar: true,
+  },
+  'Jefe de Mejora Continua': {
+    canEditClienteEnFormularios: true, canEditCaraFiltersOnEdit: true,
+    canEditArticuloOnEdit: true, canCancelPostSAP: true,
+    canSeeAllHistorial: true, canApproveArteSinRevisar: true,
+  },
+  'Analista de Mejora Continua': {
+    canEditClienteEnFormularios: true, canEditCaraFiltersOnEdit: true,
+    canEditArticuloOnEdit: true, canCancelPostSAP: true,
+    canSeeAllHistorial: true, canApproveArteSinRevisar: true,
+  },
+
+  // Perfil C — Plazas operativas: solo modulo Campanas, descarga ODM y
+  // tareas de Instalacion. Mismo perfil que 'Director de Operaciones'.
+  'Gerente de Operaciones GDL': {
+    canSeeDashboard: false, canSeeClientes: false, canSeeProveedores: false,
+    canSeeSolicitudes: false, canSeePropuestas: false, canSeeInventarios: false,
+    canSeeAdminUsuarios: false,
+    canCreateClientes: false, canEditClientes: false, canDeleteClientes: false,
+    canCreateProveedores: false, canEditProveedores: false, canDeleteProveedores: false,
+    canCreateSolicitudes: false, canEditSolicitudes: false, canDeleteSolicitudes: false,
+    canAtenderSolicitudes: false, canChangeEstadoSolicitud: false,
+    canEditPropuestaStatus: false, allowedPropuestaStatuses: [],
+    canAprobarPropuesta: false, canAsignarInventario: false, canEditResumenPropuesta: false,
+    canCompartirPropuesta: false, canBuscarInventarioEnModal: false,
+    canEditCampanas: false, canEditCampanaStatus: false,
+    canEditDetalleCampana: false, canDeleteDetalleCampana: false,
+    canSeeGestionArtes: true, canEditGestionArtes: false,
+    canResolveProduccionTasks: true, canSeeOrdenesMontajeButton: true,
+    canSeeTabRevisarAprobar: false, canCreateTareasGestionArtes: false,
+    canResolveRevisionArtesTasks: false, canOnlyOpenRecepcionTasks: true,
+    canCreateInstalacionFromRecibido: true,
+    canCreateInventarios: false, canEditInventarios: false, canDeleteInventarios: false,
+    canExportOrdenesMontaje: true,
+  },
+  'Gerente de Operaciones MTY': {
+    canSeeDashboard: false, canSeeClientes: false, canSeeProveedores: false,
+    canSeeSolicitudes: false, canSeePropuestas: false, canSeeInventarios: false,
+    canSeeAdminUsuarios: false,
+    canCreateClientes: false, canEditClientes: false, canDeleteClientes: false,
+    canCreateProveedores: false, canEditProveedores: false, canDeleteProveedores: false,
+    canCreateSolicitudes: false, canEditSolicitudes: false, canDeleteSolicitudes: false,
+    canAtenderSolicitudes: false, canChangeEstadoSolicitud: false,
+    canEditPropuestaStatus: false, allowedPropuestaStatuses: [],
+    canAprobarPropuesta: false, canAsignarInventario: false, canEditResumenPropuesta: false,
+    canCompartirPropuesta: false, canBuscarInventarioEnModal: false,
+    canEditCampanas: false, canEditCampanaStatus: false,
+    canEditDetalleCampana: false, canDeleteDetalleCampana: false,
+    canSeeGestionArtes: true, canEditGestionArtes: false,
+    canResolveProduccionTasks: true, canSeeOrdenesMontajeButton: true,
+    canSeeTabRevisarAprobar: false, canCreateTareasGestionArtes: false,
+    canResolveRevisionArtesTasks: false, canOnlyOpenRecepcionTasks: true,
+    canCreateInstalacionFromRecibido: true,
+    canCreateInventarios: false, canEditInventarios: false, canDeleteInventarios: false,
+    canExportOrdenesMontaje: true,
+  },
+  'Gerente Regional de Plazas': {
+    canSeeDashboard: false, canSeeClientes: false, canSeeProveedores: false,
+    canSeeSolicitudes: false, canSeePropuestas: false, canSeeInventarios: false,
+    canSeeAdminUsuarios: false,
+    canCreateClientes: false, canEditClientes: false, canDeleteClientes: false,
+    canCreateProveedores: false, canEditProveedores: false, canDeleteProveedores: false,
+    canCreateSolicitudes: false, canEditSolicitudes: false, canDeleteSolicitudes: false,
+    canAtenderSolicitudes: false, canChangeEstadoSolicitud: false,
+    canEditPropuestaStatus: false, allowedPropuestaStatuses: [],
+    canAprobarPropuesta: false, canAsignarInventario: false, canEditResumenPropuesta: false,
+    canCompartirPropuesta: false, canBuscarInventarioEnModal: false,
+    canEditCampanas: false, canEditCampanaStatus: false,
+    canEditDetalleCampana: false, canDeleteDetalleCampana: false,
+    canSeeGestionArtes: true, canEditGestionArtes: false,
+    canResolveProduccionTasks: true, canSeeOrdenesMontajeButton: true,
+    canSeeTabRevisarAprobar: false, canCreateTareasGestionArtes: false,
+    canResolveRevisionArtesTasks: false, canOnlyOpenRecepcionTasks: true,
+    canCreateInstalacionFromRecibido: true,
+    canCreateInventarios: false, canEditInventarios: false, canDeleteInventarios: false,
+    canExportOrdenesMontaje: true,
+  },
+  'Jefe Regional de Plazas': {
+    canSeeDashboard: false, canSeeClientes: false, canSeeProveedores: false,
+    canSeeSolicitudes: false, canSeePropuestas: false, canSeeInventarios: false,
+    canSeeAdminUsuarios: false,
+    canCreateClientes: false, canEditClientes: false, canDeleteClientes: false,
+    canCreateProveedores: false, canEditProveedores: false, canDeleteProveedores: false,
+    canCreateSolicitudes: false, canEditSolicitudes: false, canDeleteSolicitudes: false,
+    canAtenderSolicitudes: false, canChangeEstadoSolicitud: false,
+    canEditPropuestaStatus: false, allowedPropuestaStatuses: [],
+    canAprobarPropuesta: false, canAsignarInventario: false, canEditResumenPropuesta: false,
+    canCompartirPropuesta: false, canBuscarInventarioEnModal: false,
+    canEditCampanas: false, canEditCampanaStatus: false,
+    canEditDetalleCampana: false, canDeleteDetalleCampana: false,
+    canSeeGestionArtes: true, canEditGestionArtes: false,
+    canResolveProduccionTasks: true, canSeeOrdenesMontajeButton: true,
+    canSeeTabRevisarAprobar: false, canCreateTareasGestionArtes: false,
+    canResolveRevisionArtesTasks: false, canOnlyOpenRecepcionTasks: true,
+    canCreateInstalacionFromRecibido: true,
+    canCreateInventarios: false, canEditInventarios: false, canDeleteInventarios: false,
+    canExportOrdenesMontaje: true,
+  },
+  'Técnico en logística digital': {
+    canSeeDashboard: false, canSeeClientes: false, canSeeProveedores: false,
+    canSeeSolicitudes: false, canSeePropuestas: false, canSeeInventarios: false,
+    canSeeAdminUsuarios: false,
+    canCreateClientes: false, canEditClientes: false, canDeleteClientes: false,
+    canCreateProveedores: false, canEditProveedores: false, canDeleteProveedores: false,
+    canCreateSolicitudes: false, canEditSolicitudes: false, canDeleteSolicitudes: false,
+    canAtenderSolicitudes: false, canChangeEstadoSolicitud: false,
+    canEditPropuestaStatus: false, allowedPropuestaStatuses: [],
+    canAprobarPropuesta: false, canAsignarInventario: false, canEditResumenPropuesta: false,
+    canCompartirPropuesta: false, canBuscarInventarioEnModal: false,
+    canEditCampanas: false, canEditCampanaStatus: false,
+    canEditDetalleCampana: false, canDeleteDetalleCampana: false,
+    canSeeGestionArtes: true, canEditGestionArtes: false,
+    canResolveProduccionTasks: true, canSeeOrdenesMontajeButton: true,
+    canSeeTabRevisarAprobar: false, canCreateTareasGestionArtes: false,
+    canResolveRevisionArtesTasks: false, canOnlyOpenRecepcionTasks: true,
+    canCreateInstalacionFromRecibido: true,
+    canCreateInventarios: false, canEditInventarios: false, canDeleteInventarios: false,
+    canExportOrdenesMontaje: true,
+  },
+  'Jefe de Operaciones Oaxaca': {
+    canSeeDashboard: false, canSeeClientes: false, canSeeProveedores: false,
+    canSeeSolicitudes: false, canSeePropuestas: false, canSeeInventarios: false,
+    canSeeAdminUsuarios: false,
+    canCreateClientes: false, canEditClientes: false, canDeleteClientes: false,
+    canCreateProveedores: false, canEditProveedores: false, canDeleteProveedores: false,
+    canCreateSolicitudes: false, canEditSolicitudes: false, canDeleteSolicitudes: false,
+    canAtenderSolicitudes: false, canChangeEstadoSolicitud: false,
+    canEditPropuestaStatus: false, allowedPropuestaStatuses: [],
+    canAprobarPropuesta: false, canAsignarInventario: false, canEditResumenPropuesta: false,
+    canCompartirPropuesta: false, canBuscarInventarioEnModal: false,
+    canEditCampanas: false, canEditCampanaStatus: false,
+    canEditDetalleCampana: false, canDeleteDetalleCampana: false,
+    canSeeGestionArtes: true, canEditGestionArtes: false,
+    canResolveProduccionTasks: true, canSeeOrdenesMontajeButton: true,
+    canSeeTabRevisarAprobar: false, canCreateTareasGestionArtes: false,
+    canResolveRevisionArtesTasks: false, canOnlyOpenRecepcionTasks: true,
+    canCreateInstalacionFromRecibido: true,
+    canCreateInventarios: false, canEditInventarios: false, canDeleteInventarios: false,
+    canExportOrdenesMontaje: true,
+  },
+  'Jefe de Operaciones Acapulco': {
+    canSeeDashboard: false, canSeeClientes: false, canSeeProveedores: false,
+    canSeeSolicitudes: false, canSeePropuestas: false, canSeeInventarios: false,
+    canSeeAdminUsuarios: false,
+    canCreateClientes: false, canEditClientes: false, canDeleteClientes: false,
+    canCreateProveedores: false, canEditProveedores: false, canDeleteProveedores: false,
+    canCreateSolicitudes: false, canEditSolicitudes: false, canDeleteSolicitudes: false,
+    canAtenderSolicitudes: false, canChangeEstadoSolicitud: false,
+    canEditPropuestaStatus: false, allowedPropuestaStatuses: [],
+    canAprobarPropuesta: false, canAsignarInventario: false, canEditResumenPropuesta: false,
+    canCompartirPropuesta: false, canBuscarInventarioEnModal: false,
+    canEditCampanas: false, canEditCampanaStatus: false,
+    canEditDetalleCampana: false, canDeleteDetalleCampana: false,
+    canSeeGestionArtes: true, canEditGestionArtes: false,
+    canResolveProduccionTasks: true, canSeeOrdenesMontajeButton: true,
+    canSeeTabRevisarAprobar: false, canCreateTareasGestionArtes: false,
+    canResolveRevisionArtesTasks: false, canOnlyOpenRecepcionTasks: true,
+    canCreateInstalacionFromRecibido: true,
+    canCreateInventarios: false, canEditInventarios: false, canDeleteInventarios: false,
+    canExportOrdenesMontaje: true,
+  },
+  'Jefe de Operaciones Toluca': {
+    canSeeDashboard: false, canSeeClientes: false, canSeeProveedores: false,
+    canSeeSolicitudes: false, canSeePropuestas: false, canSeeInventarios: false,
+    canSeeAdminUsuarios: false,
+    canCreateClientes: false, canEditClientes: false, canDeleteClientes: false,
+    canCreateProveedores: false, canEditProveedores: false, canDeleteProveedores: false,
+    canCreateSolicitudes: false, canEditSolicitudes: false, canDeleteSolicitudes: false,
+    canAtenderSolicitudes: false, canChangeEstadoSolicitud: false,
+    canEditPropuestaStatus: false, allowedPropuestaStatuses: [],
+    canAprobarPropuesta: false, canAsignarInventario: false, canEditResumenPropuesta: false,
+    canCompartirPropuesta: false, canBuscarInventarioEnModal: false,
+    canEditCampanas: false, canEditCampanaStatus: false,
+    canEditDetalleCampana: false, canDeleteDetalleCampana: false,
+    canSeeGestionArtes: true, canEditGestionArtes: false,
+    canResolveProduccionTasks: true, canSeeOrdenesMontajeButton: true,
+    canSeeTabRevisarAprobar: false, canCreateTareasGestionArtes: false,
+    canResolveRevisionArtesTasks: false, canOnlyOpenRecepcionTasks: true,
+    canCreateInstalacionFromRecibido: true,
+    canCreateInventarios: false, canEditInventarios: false, canDeleteInventarios: false,
+    canExportOrdenesMontaje: true,
+  },
+  'Jefe de Operaciones Veracruz': {
+    canSeeDashboard: false, canSeeClientes: false, canSeeProveedores: false,
+    canSeeSolicitudes: false, canSeePropuestas: false, canSeeInventarios: false,
+    canSeeAdminUsuarios: false,
+    canCreateClientes: false, canEditClientes: false, canDeleteClientes: false,
+    canCreateProveedores: false, canEditProveedores: false, canDeleteProveedores: false,
+    canCreateSolicitudes: false, canEditSolicitudes: false, canDeleteSolicitudes: false,
+    canAtenderSolicitudes: false, canChangeEstadoSolicitud: false,
+    canEditPropuestaStatus: false, allowedPropuestaStatuses: [],
+    canAprobarPropuesta: false, canAsignarInventario: false, canEditResumenPropuesta: false,
+    canCompartirPropuesta: false, canBuscarInventarioEnModal: false,
+    canEditCampanas: false, canEditCampanaStatus: false,
+    canEditDetalleCampana: false, canDeleteDetalleCampana: false,
+    canSeeGestionArtes: true, canEditGestionArtes: false,
+    canResolveProduccionTasks: true, canSeeOrdenesMontajeButton: true,
+    canSeeTabRevisarAprobar: false, canCreateTareasGestionArtes: false,
+    canResolveRevisionArtesTasks: false, canOnlyOpenRecepcionTasks: true,
+    canCreateInstalacionFromRecibido: true,
+    canCreateInventarios: false, canEditInventarios: false, canDeleteInventarios: false,
+    canExportOrdenesMontaje: true,
+  },
+  'Jefe de Operaciones Pto. Vallarta': {
+    canSeeDashboard: false, canSeeClientes: false, canSeeProveedores: false,
+    canSeeSolicitudes: false, canSeePropuestas: false, canSeeInventarios: false,
+    canSeeAdminUsuarios: false,
+    canCreateClientes: false, canEditClientes: false, canDeleteClientes: false,
+    canCreateProveedores: false, canEditProveedores: false, canDeleteProveedores: false,
+    canCreateSolicitudes: false, canEditSolicitudes: false, canDeleteSolicitudes: false,
+    canAtenderSolicitudes: false, canChangeEstadoSolicitud: false,
+    canEditPropuestaStatus: false, allowedPropuestaStatuses: [],
+    canAprobarPropuesta: false, canAsignarInventario: false, canEditResumenPropuesta: false,
+    canCompartirPropuesta: false, canBuscarInventarioEnModal: false,
+    canEditCampanas: false, canEditCampanaStatus: false,
+    canEditDetalleCampana: false, canDeleteDetalleCampana: false,
+    canSeeGestionArtes: true, canEditGestionArtes: false,
+    canResolveProduccionTasks: true, canSeeOrdenesMontajeButton: true,
+    canSeeTabRevisarAprobar: false, canCreateTareasGestionArtes: false,
+    canResolveRevisionArtesTasks: false, canOnlyOpenRecepcionTasks: true,
+    canCreateInstalacionFromRecibido: true,
+    canCreateInventarios: false, canEditInventarios: false, canDeleteInventarios: false,
+    canExportOrdenesMontaje: true,
+  },
+  'Jefe de Operaciones Puebla': {
+    canSeeDashboard: false, canSeeClientes: false, canSeeProveedores: false,
+    canSeeSolicitudes: false, canSeePropuestas: false, canSeeInventarios: false,
+    canSeeAdminUsuarios: false,
+    canCreateClientes: false, canEditClientes: false, canDeleteClientes: false,
+    canCreateProveedores: false, canEditProveedores: false, canDeleteProveedores: false,
+    canCreateSolicitudes: false, canEditSolicitudes: false, canDeleteSolicitudes: false,
+    canAtenderSolicitudes: false, canChangeEstadoSolicitud: false,
+    canEditPropuestaStatus: false, allowedPropuestaStatuses: [],
+    canAprobarPropuesta: false, canAsignarInventario: false, canEditResumenPropuesta: false,
+    canCompartirPropuesta: false, canBuscarInventarioEnModal: false,
+    canEditCampanas: false, canEditCampanaStatus: false,
+    canEditDetalleCampana: false, canDeleteDetalleCampana: false,
+    canSeeGestionArtes: true, canEditGestionArtes: false,
+    canResolveProduccionTasks: true, canSeeOrdenesMontajeButton: true,
+    canSeeTabRevisarAprobar: false, canCreateTareasGestionArtes: false,
+    canResolveRevisionArtesTasks: false, canOnlyOpenRecepcionTasks: true,
+    canCreateInstalacionFromRecibido: true,
+    canCreateInventarios: false, canEditInventarios: false, canDeleteInventarios: false,
+    canExportOrdenesMontaje: true,
+  },
+  'Jefe de Operaciones Culiacán': {
+    canSeeDashboard: false, canSeeClientes: false, canSeeProveedores: false,
+    canSeeSolicitudes: false, canSeePropuestas: false, canSeeInventarios: false,
+    canSeeAdminUsuarios: false,
+    canCreateClientes: false, canEditClientes: false, canDeleteClientes: false,
+    canCreateProveedores: false, canEditProveedores: false, canDeleteProveedores: false,
+    canCreateSolicitudes: false, canEditSolicitudes: false, canDeleteSolicitudes: false,
+    canAtenderSolicitudes: false, canChangeEstadoSolicitud: false,
+    canEditPropuestaStatus: false, allowedPropuestaStatuses: [],
+    canAprobarPropuesta: false, canAsignarInventario: false, canEditResumenPropuesta: false,
+    canCompartirPropuesta: false, canBuscarInventarioEnModal: false,
+    canEditCampanas: false, canEditCampanaStatus: false,
+    canEditDetalleCampana: false, canDeleteDetalleCampana: false,
+    canSeeGestionArtes: true, canEditGestionArtes: false,
+    canResolveProduccionTasks: true, canSeeOrdenesMontajeButton: true,
+    canSeeTabRevisarAprobar: false, canCreateTareasGestionArtes: false,
+    canResolveRevisionArtesTasks: false, canOnlyOpenRecepcionTasks: true,
+    canCreateInstalacionFromRecibido: true,
+    canCreateInventarios: false, canEditInventarios: false, canDeleteInventarios: false,
+    canExportOrdenesMontaje: true,
+  },
+  'Jefe de Operaciones Mazatlán': {
+    canSeeDashboard: false, canSeeClientes: false, canSeeProveedores: false,
+    canSeeSolicitudes: false, canSeePropuestas: false, canSeeInventarios: false,
+    canSeeAdminUsuarios: false,
+    canCreateClientes: false, canEditClientes: false, canDeleteClientes: false,
+    canCreateProveedores: false, canEditProveedores: false, canDeleteProveedores: false,
+    canCreateSolicitudes: false, canEditSolicitudes: false, canDeleteSolicitudes: false,
+    canAtenderSolicitudes: false, canChangeEstadoSolicitud: false,
+    canEditPropuestaStatus: false, allowedPropuestaStatuses: [],
+    canAprobarPropuesta: false, canAsignarInventario: false, canEditResumenPropuesta: false,
+    canCompartirPropuesta: false, canBuscarInventarioEnModal: false,
+    canEditCampanas: false, canEditCampanaStatus: false,
+    canEditDetalleCampana: false, canDeleteDetalleCampana: false,
+    canSeeGestionArtes: true, canEditGestionArtes: false,
+    canResolveProduccionTasks: true, canSeeOrdenesMontajeButton: true,
+    canSeeTabRevisarAprobar: false, canCreateTareasGestionArtes: false,
+    canResolveRevisionArtesTasks: false, canOnlyOpenRecepcionTasks: true,
+    canCreateInstalacionFromRecibido: true,
+    canCreateInventarios: false, canEditInventarios: false, canDeleteInventarios: false,
+    canExportOrdenesMontaje: true,
+  },
+  'Jefe de Operaciones León': {
+    canSeeDashboard: false, canSeeClientes: false, canSeeProveedores: false,
+    canSeeSolicitudes: false, canSeePropuestas: false, canSeeInventarios: false,
+    canSeeAdminUsuarios: false,
+    canCreateClientes: false, canEditClientes: false, canDeleteClientes: false,
+    canCreateProveedores: false, canEditProveedores: false, canDeleteProveedores: false,
+    canCreateSolicitudes: false, canEditSolicitudes: false, canDeleteSolicitudes: false,
+    canAtenderSolicitudes: false, canChangeEstadoSolicitud: false,
+    canEditPropuestaStatus: false, allowedPropuestaStatuses: [],
+    canAprobarPropuesta: false, canAsignarInventario: false, canEditResumenPropuesta: false,
+    canCompartirPropuesta: false, canBuscarInventarioEnModal: false,
+    canEditCampanas: false, canEditCampanaStatus: false,
+    canEditDetalleCampana: false, canDeleteDetalleCampana: false,
+    canSeeGestionArtes: true, canEditGestionArtes: false,
+    canResolveProduccionTasks: true, canSeeOrdenesMontajeButton: true,
+    canSeeTabRevisarAprobar: false, canCreateTareasGestionArtes: false,
+    canResolveRevisionArtesTasks: false, canOnlyOpenRecepcionTasks: true,
+    canCreateInstalacionFromRecibido: true,
+    canCreateInventarios: false, canEditInventarios: false, canDeleteInventarios: false,
+    canExportOrdenesMontaje: true,
+  },
+  'Jefe de Operaciones Tijuana': {
+    canSeeDashboard: false, canSeeClientes: false, canSeeProveedores: false,
+    canSeeSolicitudes: false, canSeePropuestas: false, canSeeInventarios: false,
+    canSeeAdminUsuarios: false,
+    canCreateClientes: false, canEditClientes: false, canDeleteClientes: false,
+    canCreateProveedores: false, canEditProveedores: false, canDeleteProveedores: false,
+    canCreateSolicitudes: false, canEditSolicitudes: false, canDeleteSolicitudes: false,
+    canAtenderSolicitudes: false, canChangeEstadoSolicitud: false,
+    canEditPropuestaStatus: false, allowedPropuestaStatuses: [],
+    canAprobarPropuesta: false, canAsignarInventario: false, canEditResumenPropuesta: false,
+    canCompartirPropuesta: false, canBuscarInventarioEnModal: false,
+    canEditCampanas: false, canEditCampanaStatus: false,
+    canEditDetalleCampana: false, canDeleteDetalleCampana: false,
+    canSeeGestionArtes: true, canEditGestionArtes: false,
+    canResolveProduccionTasks: true, canSeeOrdenesMontajeButton: true,
+    canSeeTabRevisarAprobar: false, canCreateTareasGestionArtes: false,
+    canResolveRevisionArtesTasks: false, canOnlyOpenRecepcionTasks: true,
+    canCreateInstalacionFromRecibido: true,
+    canCreateInventarios: false, canEditInventarios: false, canDeleteInventarios: false,
+    canExportOrdenesMontaje: true,
+  },
+  'Jefe de Operaciones Mérida': {
+    canSeeDashboard: false, canSeeClientes: false, canSeeProveedores: false,
+    canSeeSolicitudes: false, canSeePropuestas: false, canSeeInventarios: false,
+    canSeeAdminUsuarios: false,
+    canCreateClientes: false, canEditClientes: false, canDeleteClientes: false,
+    canCreateProveedores: false, canEditProveedores: false, canDeleteProveedores: false,
+    canCreateSolicitudes: false, canEditSolicitudes: false, canDeleteSolicitudes: false,
+    canAtenderSolicitudes: false, canChangeEstadoSolicitud: false,
+    canEditPropuestaStatus: false, allowedPropuestaStatuses: [],
+    canAprobarPropuesta: false, canAsignarInventario: false, canEditResumenPropuesta: false,
+    canCompartirPropuesta: false, canBuscarInventarioEnModal: false,
+    canEditCampanas: false, canEditCampanaStatus: false,
+    canEditDetalleCampana: false, canDeleteDetalleCampana: false,
+    canSeeGestionArtes: true, canEditGestionArtes: false,
+    canResolveProduccionTasks: true, canSeeOrdenesMontajeButton: true,
+    canSeeTabRevisarAprobar: false, canCreateTareasGestionArtes: false,
+    canResolveRevisionArtesTasks: false, canOnlyOpenRecepcionTasks: true,
+    canCreateInstalacionFromRecibido: true,
+    canCreateInventarios: false, canEditInventarios: false, canDeleteInventarios: false,
+    canExportOrdenesMontaje: true,
   },
 };
 

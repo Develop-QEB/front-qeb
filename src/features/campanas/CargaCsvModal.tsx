@@ -1,20 +1,21 @@
 import { useState, useMemo, useCallback } from 'react';
-import { X, Upload, FileSpreadsheet, AlertCircle, CheckCircle2, Info, Download } from 'lucide-react';
+import { X, Upload, FileSpreadsheet, AlertCircle, CheckCircle2, Info, Download, Filter, RotateCcw } from 'lucide-react';
 import * as XLSX from 'xlsx';
 import { useThemeStore } from '../../store/themeStore';
 
 // =====================================================================
 // CargaCsvModal — Herramienta alterna para asignar artes en bloque.
 //
-// Flujo:
-//   1) Usuario selecciona N ubicaciones via checkbox en la tab "Subir Artes".
-//   2) Click en "Cargar CSV" → abre este modal (paso 1 unicamente).
-//   3) Sube un CSV o XLSX y hace cotejo (match) contra la seleccion.
-//   4) Click en "Siguiente" → el modal cierra y se abre el UploadArtModal
-//      existente con SOLO los items que matchearon.
-//
-// La logica de subir arte + notas + guardar la maneja UploadArtModal
-// (no duplicamos nada — reusamos el flujo actual).
+// Flujo nuevo (Versionado Masivo):
+//   1) Usuario selecciona N ubicaciones via checkbox en "Subir Artes".
+//   2) Click en "Cargar CSV" → abre este modal.
+//   3) Sube un CSV o XLSX. El modal MUESTRA todo el contenido del archivo
+//      (preview completo) con filtro por columna "version".
+//   4) Usuario filtra (opcional) por una o varias versiones especificas.
+//   5) Click en "Comparar" → ahora si se hace el match contra el
+//      inventario seleccionado, solo sobre las filas visibles (filtradas).
+//   6) Click en "Siguiente" → continua a UploadArtModal con los ids
+//      matcheados.
 // =====================================================================
 
 export interface CargaCsvInventoryRow {
@@ -41,6 +42,7 @@ interface CsvRow {
   clave: string;
   estado: string;
   cara: string | null; // null si el CSV no trae columna de cara
+  version: string | null; // null si el CSV no trae columna de version
 }
 
 interface MatchResult {
@@ -99,6 +101,7 @@ interface ColumnMap {
   estado: string;
   cara: string | null;
   codigoUnico: string | null;
+  version: string | null;
   schema: 'codigo-unico' | 'sears' | 'coca-cola' | 'unknown';
 }
 
@@ -122,19 +125,22 @@ const detectColumnMap = (headers: string[]): ColumnMap => {
     return null;
   };
 
+  // Columna version (variantes con/sin acentos, sin importar el esquema)
+  const versionCol = find('version', 'versión', 'ver') || findContains('version');
+
   // 1) Formato principal: columna "Código Único" (o variantes con/sin acentos,
   //    espacios, guiones, etc.). Match exacto y luego por inclusion.
   const codigoUnicoExact = find('codigo unico', 'codigo_unico', 'codigounico', 'código único', 'código unico', 'codigo único', 'codigo-unico', 'código-único');
   const codigoUnicoCol = codigoUnicoExact || findContains('codigo', 'unico');
   if (codigoUnicoCol) {
-    return { clave: '', estado: '', cara: null, codigoUnico: codigoUnicoCol, schema: 'codigo-unico' };
+    return { clave: '', estado: '', cara: null, codigoUnico: codigoUnicoCol, version: versionCol, schema: 'codigo-unico' };
   }
 
   // 2) SEARS (clave sitio + estado)
   const claveSitio = find('clave sitio', 'clavesitio', 'clave_sitio') || findContains('clave', 'sitio');
   const estadoCol = find('estado');
   if (claveSitio && estadoCol) {
-    return { clave: claveSitio, estado: estadoCol, cara: null, codigoUnico: null, schema: 'sears' };
+    return { clave: claveSitio, estado: estadoCol, cara: null, codigoUnico: null, version: versionCol, schema: 'sears' };
   }
 
   // 3) COCA-COLA (unidad + cara + ciudad)
@@ -142,17 +148,17 @@ const detectColumnMap = (headers: string[]): ColumnMap => {
   const cara = find('cara');
   const ciudad = find('ciudad');
   if (unidad && ciudad) {
-    return { clave: unidad, estado: ciudad, cara: cara, codigoUnico: null, schema: 'coca-cola' };
+    return { clave: unidad, estado: ciudad, cara: cara, codigoUnico: null, version: versionCol, schema: 'coca-cola' };
   }
 
   // 4) Fallback laxo
   const claveAny = find('clave', 'sitio', 'id', 'codigo');
   const estadoAny = find('estado', 'ciudad');
   if (claveAny && estadoAny) {
-    return { clave: claveAny, estado: estadoAny, cara: find('cara', 'flujo'), codigoUnico: null, schema: 'unknown' };
+    return { clave: claveAny, estado: estadoAny, cara: find('cara', 'flujo'), codigoUnico: null, version: versionCol, schema: 'unknown' };
   }
 
-  return { clave: '', estado: '', cara: null, codigoUnico: null, schema: 'unknown' };
+  return { clave: '', estado: '', cara: null, codigoUnico: null, version: versionCol, schema: 'unknown' };
 };
 
 // ---------------------------------------------------------------------
@@ -239,16 +245,30 @@ export function CargaCsvModal({ isOpen, onClose, selectedInventory, onContinue }
   const isDark = useThemeStore(s => s.theme) === 'dark';
   const [file, setFile] = useState<File | null>(null);
   const [csvRows, setCsvRows] = useState<CsvRow[]>([]);
+  const [csvHeaders, setCsvHeaders] = useState<string[]>([]);
   const [parseError, setParseError] = useState<string | null>(null);
   const [isParsing, setIsParsing] = useState(false);
   const [schema, setSchema] = useState<ColumnMap['schema']>('unknown');
+  const [hasVersionColumn, setHasVersionColumn] = useState(false);
+  const [versionColumnName, setVersionColumnName] = useState<string | null>(null);
+  // Filtro por version: set de versiones ACTIVAS (vacio = mostrar todas)
+  const [versionFilter, setVersionFilter] = useState<Set<string>>(new Set());
+  // Match result diferido — solo se calcula con boton "Comparar"
+  const [matchResult, setMatchResult] = useState<MatchResult | null>(null);
+  const [hasCompared, setHasCompared] = useState(false);
 
   // Cuando se cierra el modal externamente, limpiamos estado
   const handleClose = useCallback(() => {
     setFile(null);
     setCsvRows([]);
+    setCsvHeaders([]);
     setParseError(null);
     setSchema('unknown');
+    setHasVersionColumn(false);
+    setVersionColumnName(null);
+    setVersionFilter(new Set());
+    setMatchResult(null);
+    setHasCompared(false);
     onClose();
   }, [onClose]);
 
@@ -258,6 +278,12 @@ export function CargaCsvModal({ isOpen, onClose, selectedInventory, onContinue }
     setIsParsing(true);
     setParseError(null);
     setCsvRows([]);
+    setCsvHeaders([]);
+    setHasVersionColumn(false);
+    setVersionColumnName(null);
+    setVersionFilter(new Set());
+    setMatchResult(null);
+    setHasCompared(false);
     try {
       const { rows, headers } = await parseFile(selected);
       if (rows.length === 0) {
@@ -267,6 +293,9 @@ export function CargaCsvModal({ isOpen, onClose, selectedInventory, onContinue }
       }
       const colMap = detectColumnMap(headers);
       setSchema(colMap.schema);
+      setCsvHeaders(headers);
+      setHasVersionColumn(!!colMap.version);
+      setVersionColumnName(colMap.version);
       if (colMap.schema === 'unknown' || (colMap.schema !== 'codigo-unico' && (!colMap.clave || !colMap.estado))) {
         const detected = headers.length === 0 ? '(ninguna)' : headers.map(h => `"${h}"`).join(', ');
         setParseError(
@@ -289,6 +318,7 @@ export function CargaCsvModal({ isOpen, onClose, selectedInventory, onContinue }
             clave,
             estado,
             cara: cara || null,
+            version: colMap.version ? trimDisplay(r[colMap.version]) || null : null,
           };
         }).filter(r => r.clave);
       } else {
@@ -298,6 +328,7 @@ export function CargaCsvModal({ isOpen, onClose, selectedInventory, onContinue }
           clave: trimDisplay(r[colMap.clave]),
           estado: trimDisplay(r[colMap.estado]),
           cara: colMap.cara ? trimDisplay(r[colMap.cara]) : null,
+          version: colMap.version ? trimDisplay(r[colMap.version]) || null : null,
         })).filter(r => r.clave && r.estado);
       }
       setCsvRows(parsed);
@@ -309,11 +340,49 @@ export function CargaCsvModal({ isOpen, onClose, selectedInventory, onContinue }
     }
   }, []);
 
-  const matchResult = useMemo<MatchResult | null>(() => {
-    if (csvRows.length === 0) return null;
-    return computeMatch(csvRows, selectedInventory);
-  }, [csvRows, selectedInventory]);
+  // Lista de versiones unicas presentes en el CSV (para los chips del filtro)
+  const versionesUnicas = useMemo(() => {
+    if (!hasVersionColumn) return [];
+    const set = new Set<string>();
+    for (const r of csvRows) {
+      if (r.version) set.add(r.version);
+    }
+    return Array.from(set).sort();
+  }, [csvRows, hasVersionColumn]);
 
+  // Filas filtradas por version (esto es lo que se mostrara en el preview
+  // y lo que se usara para el match cuando se haga click en "Comparar").
+  const filteredCsvRows = useMemo(() => {
+    if (versionFilter.size === 0) return csvRows;
+    return csvRows.filter(r => r.version !== null && versionFilter.has(r.version));
+  }, [csvRows, versionFilter]);
+
+  // El match se vuelve obsoleto si el usuario cambia el filtro despues de
+  // comparar — limpiamos para forzarlo a comparar de nuevo.
+  const handleVersionToggle = useCallback((v: string) => {
+    setVersionFilter(prev => {
+      const next = new Set(prev);
+      if (next.has(v)) next.delete(v); else next.add(v);
+      return next;
+    });
+    setMatchResult(null);
+    setHasCompared(false);
+  }, []);
+
+  const handleVersionClear = useCallback(() => {
+    setVersionFilter(new Set());
+    setMatchResult(null);
+    setHasCompared(false);
+  }, []);
+
+  const handleCompare = useCallback(() => {
+    if (filteredCsvRows.length === 0) return;
+    const result = computeMatch(filteredCsvRows, selectedInventory);
+    setMatchResult(result);
+    setHasCompared(true);
+  }, [filteredCsvRows, selectedInventory]);
+
+  const canCompare = csvRows.length > 0 && filteredCsvRows.length > 0;
   const canContinue = !!matchResult && matchResult.matchedInventoryIds.length > 0;
 
   const handleContinue = () => {
@@ -326,7 +395,7 @@ export function CargaCsvModal({ isOpen, onClose, selectedInventory, onContinue }
   return (
     <div className="fixed inset-0 z-[70] flex items-center justify-center">
       <div className="absolute inset-0 bg-black/70" onClick={handleClose} />
-      <div className={`relative w-full max-w-6xl mx-4 max-h-[92vh] flex flex-col rounded-xl border shadow-2xl ${isDark ? 'bg-zinc-900 border-purple-500/30' : 'bg-white border-purple-200'}`}>
+      <div className={`relative w-full max-w-7xl mx-4 max-h-[92vh] flex flex-col rounded-xl border shadow-2xl ${isDark ? 'bg-zinc-900 border-purple-500/30' : 'bg-white border-purple-200'}`}>
         {/* Header */}
         <div className="flex items-center justify-between p-4 border-b border-border flex-shrink-0">
           <div className="flex items-center gap-3">
@@ -334,8 +403,8 @@ export function CargaCsvModal({ isOpen, onClose, selectedInventory, onContinue }
               <FileSpreadsheet className={`h-5 w-5 ${isDark ? 'text-purple-300' : 'text-purple-600'}`} />
             </div>
             <div>
-              <h3 className={`text-lg font-semibold ${isDark ? 'text-white' : 'text-gray-900'}`}>Cargar CSV — Paso 1 de 3</h3>
-              <p className={`text-xs ${isDark ? 'text-zinc-400' : 'text-gray-500'}`}>Cotejo de archivo contra ubicaciones seleccionadas</p>
+              <h3 className={`text-lg font-semibold ${isDark ? 'text-white' : 'text-gray-900'}`}>Cargar CSV — Versionado Masivo</h3>
+              <p className={`text-xs ${isDark ? 'text-zinc-400' : 'text-gray-500'}`}>Sube archivo → filtra por versión → comparar → siguiente</p>
             </div>
           </div>
           <button onClick={handleClose} className={`p-1.5 rounded-lg transition-colors ${isDark ? 'hover:bg-zinc-800 text-zinc-400' : 'hover:bg-gray-100 text-gray-500'}`}>
@@ -345,10 +414,10 @@ export function CargaCsvModal({ isOpen, onClose, selectedInventory, onContinue }
 
         {/* Content — grid 2 columnas */}
         <div className="flex-1 overflow-hidden grid grid-cols-1 md:grid-cols-2 gap-4 p-4">
-          {/* Columna izquierda: ubicaciones seleccionadas */}
+          {/* Columna izquierda: ubicaciones seleccionadas en QEB */}
           <div className={`flex flex-col rounded-lg border overflow-hidden ${isDark ? 'border-zinc-700 bg-zinc-800/40' : 'border-gray-200 bg-gray-50'}`}>
             <div className={`px-3 py-2 border-b ${isDark ? 'border-zinc-700 bg-zinc-800' : 'border-gray-200 bg-white'} flex items-center justify-between`}>
-              <span className={`text-sm font-semibold ${isDark ? 'text-purple-300' : 'text-purple-700'}`}>Ubicaciones seleccionadas</span>
+              <span className={`text-sm font-semibold ${isDark ? 'text-purple-300' : 'text-purple-700'}`}>Ubicaciones seleccionadas (QEB)</span>
               <span className={`px-2 py-0.5 rounded text-xs font-medium ${isDark ? 'bg-purple-500/20 text-purple-300' : 'bg-purple-100 text-purple-700'}`}>
                 {selectedInventory.length} total
               </span>
@@ -381,14 +450,19 @@ export function CargaCsvModal({ isOpen, onClose, selectedInventory, onContinue }
             </div>
           </div>
 
-          {/* Columna derecha: subir CSV + resultados del cotejo */}
+          {/* Columna derecha: CSV — dropzone, preview con filtro version, resultado match */}
           <div className={`flex flex-col rounded-lg border overflow-hidden ${isDark ? 'border-zinc-700 bg-zinc-800/40' : 'border-gray-200 bg-gray-50'}`}>
-            <div className={`px-3 py-2 border-b ${isDark ? 'border-zinc-700 bg-zinc-800' : 'border-gray-200 bg-white'}`}>
-              <span className={`text-sm font-semibold ${isDark ? 'text-purple-300' : 'text-purple-700'}`}>Archivo de cotejo</span>
+            <div className={`px-3 py-2 border-b ${isDark ? 'border-zinc-700 bg-zinc-800' : 'border-gray-200 bg-white'} flex items-center justify-between`}>
+              <span className={`text-sm font-semibold ${isDark ? 'text-purple-300' : 'text-purple-700'}`}>Archivo CSV / XLSX</span>
+              {csvRows.length > 0 && (
+                <span className={`px-2 py-0.5 rounded text-xs font-medium ${isDark ? 'bg-purple-500/20 text-purple-300' : 'bg-purple-100 text-purple-700'}`}>
+                  {filteredCsvRows.length}/{csvRows.length} filas
+                </span>
+              )}
             </div>
             <div className="flex-1 overflow-auto p-3 space-y-3">
-              {/* Dropzone */}
-              <label className={`block border-2 border-dashed rounded-lg p-4 cursor-pointer transition-colors ${isDark ? 'border-purple-500/40 hover:border-purple-500/60 hover:bg-purple-500/5' : 'border-purple-300 hover:border-purple-500 hover:bg-purple-50'}`}>
+              {/* Dropzone — siempre visible para permitir cambiar archivo */}
+              <label className={`block border-2 border-dashed rounded-lg p-3 cursor-pointer transition-colors ${isDark ? 'border-purple-500/40 hover:border-purple-500/60 hover:bg-purple-500/5' : 'border-purple-300 hover:border-purple-500 hover:bg-purple-50'}`}>
                 <input
                   type="file"
                   accept=".csv,.xlsx,.xls"
@@ -396,18 +470,18 @@ export function CargaCsvModal({ isOpen, onClose, selectedInventory, onContinue }
                   onChange={(e) => handleFileSelect(e.target.files?.[0] || null)}
                 />
                 <div className="flex flex-col items-center text-center">
-                  <Upload className={`h-6 w-6 mb-2 ${isDark ? 'text-purple-400' : 'text-purple-600'}`} />
+                  <Upload className={`h-5 w-5 mb-1.5 ${isDark ? 'text-purple-400' : 'text-purple-600'}`} />
                   <p className={`text-sm font-medium ${isDark ? 'text-zinc-200' : 'text-gray-800'}`}>
                     {file ? file.name : 'Click para subir CSV o XLSX'}
                   </p>
-                  <p className={`text-[11px] mt-1 ${isDark ? 'text-zinc-500' : 'text-gray-500'}`}>
-                    Columna requerida: <strong>Código Único</strong> (ej: PV1008_Flujo2_Puerto Vallarta)
+                  <p className={`text-[11px] mt-0.5 ${isDark ? 'text-zinc-500' : 'text-gray-500'}`}>
+                    Mínimo: <strong>Código Único</strong> + <strong>Versión</strong> (columnas del Excel)
                   </p>
                   {file && (
                     <button
                       type="button"
-                      onClick={(e) => { e.preventDefault(); e.stopPropagation(); setFile(null); setCsvRows([]); setParseError(null); }}
-                      className={`mt-2 text-[11px] underline ${isDark ? 'text-zinc-400 hover:text-zinc-200' : 'text-gray-500 hover:text-gray-700'}`}
+                      onClick={(e) => { e.preventDefault(); e.stopPropagation(); setFile(null); setCsvRows([]); setCsvHeaders([]); setParseError(null); setVersionFilter(new Set()); setMatchResult(null); setHasCompared(false); }}
+                      className={`mt-1.5 text-[11px] underline ${isDark ? 'text-zinc-400 hover:text-zinc-200' : 'text-gray-500 hover:text-gray-700'}`}
                     >
                       Quitar archivo
                     </button>
@@ -421,11 +495,11 @@ export function CargaCsvModal({ isOpen, onClose, selectedInventory, onContinue }
                 onClick={() => {
                   const exampleCodes = selectedInventory.slice(0, 3).map(inv => inv.codigo_unico);
                   while (exampleCodes.length < 3) exampleCodes.push('PV1008_Flujo2_Puerto Vallarta');
-                  const csvContent = ['Codigo Unico', ...exampleCodes].join('\n');
+                  const csvContent = ['Codigo Unico,Version', ...exampleCodes.map((c, i) => `${c},v${i + 1}`)].join('\n');
                   const blob = new Blob(['﻿' + csvContent], { type: 'text/csv;charset=utf-8;' });
                   const link = document.createElement('a');
                   link.href = URL.createObjectURL(blob);
-                  link.download = 'ejemplo_cotejo.csv';
+                  link.download = 'ejemplo_versionado.csv';
                   document.body.appendChild(link);
                   link.click();
                   document.body.removeChild(link);
@@ -451,18 +525,123 @@ export function CargaCsvModal({ isOpen, onClose, selectedInventory, onContinue }
                 </div>
               )}
 
-              {/* Resumen de match */}
+              {/* Esquema detectado */}
+              {csvRows.length > 0 && (
+                <div className={`p-2 rounded-lg border flex items-center gap-2 text-xs ${isDark ? 'bg-zinc-900 border-zinc-700 text-zinc-400' : 'bg-white border-gray-200 text-gray-600'}`}>
+                  <Info className="h-3.5 w-3.5 shrink-0" />
+                  <span>
+                    Esquema: <strong className={isDark ? 'text-zinc-200' : 'text-gray-800'}>{schema === 'codigo-unico' ? 'Código Único' : schema === 'sears' ? 'SEARS' : schema === 'coca-cola' ? 'Coca-Cola' : 'Personalizado'}</strong>
+                    {hasVersionColumn ? (
+                      <> · Versión: <strong className={isDark ? 'text-zinc-200' : 'text-gray-800'}>"{versionColumnName}"</strong></>
+                    ) : (
+                      <span className={isDark ? 'text-amber-400' : 'text-amber-600'}> · Sin columna versión</span>
+                    )}
+                  </span>
+                </div>
+              )}
+
+              {/* Filtro por version — chips clickeables */}
+              {csvRows.length > 0 && hasVersionColumn && versionesUnicas.length > 0 && (
+                <div className={`p-2.5 rounded-lg border ${isDark ? 'bg-zinc-900 border-zinc-700' : 'bg-white border-gray-200'}`}>
+                  <div className="flex items-center justify-between mb-2">
+                    <div className={`text-xs font-medium flex items-center gap-1.5 ${isDark ? 'text-zinc-300' : 'text-gray-700'}`}>
+                      <Filter className="h-3 w-3" />
+                      Filtrar por versión {versionFilter.size > 0 && `(${versionFilter.size} seleccionada${versionFilter.size === 1 ? '' : 's'})`}
+                    </div>
+                    {versionFilter.size > 0 && (
+                      <button
+                        onClick={handleVersionClear}
+                        className={`flex items-center gap-1 text-[10px] ${isDark ? 'text-zinc-400 hover:text-zinc-200' : 'text-gray-500 hover:text-gray-700'}`}
+                      >
+                        <RotateCcw className="h-3 w-3" /> Limpiar
+                      </button>
+                    )}
+                  </div>
+                  <div className="flex flex-wrap gap-1.5">
+                    {versionesUnicas.map(v => {
+                      const active = versionFilter.has(v);
+                      return (
+                        <button
+                          key={v}
+                          onClick={() => handleVersionToggle(v)}
+                          className={`px-2 py-0.5 rounded-full text-[11px] font-medium border transition-colors ${
+                            active
+                              ? isDark ? 'bg-purple-500/30 text-purple-200 border-purple-500/50' : 'bg-purple-100 text-purple-700 border-purple-300'
+                              : isDark ? 'bg-zinc-800 text-zinc-400 border-zinc-700 hover:border-zinc-600' : 'bg-gray-50 text-gray-600 border-gray-200 hover:border-gray-300'
+                          }`}
+                        >
+                          {v}
+                        </button>
+                      );
+                    })}
+                  </div>
+                  <p className={`text-[10px] mt-2 ${isDark ? 'text-zinc-500' : 'text-gray-500'}`}>
+                    {versionFilter.size === 0
+                      ? 'Sin filtro: se mostrarán todas las filas del CSV.'
+                      : 'Solo se mostrarán y compararán filas con las versiones seleccionadas.'}
+                  </p>
+                </div>
+              )}
+
+              {/* Preview completo del CSV (con todas sus columnas) */}
+              {csvRows.length > 0 && csvHeaders.length > 0 && (
+                <div className={`rounded-lg border overflow-hidden ${isDark ? 'border-zinc-700 bg-zinc-900' : 'border-gray-200 bg-white'}`}>
+                  <div className={`px-2.5 py-1.5 text-[11px] font-medium ${isDark ? 'text-zinc-400 bg-zinc-800' : 'text-gray-600 bg-gray-100'}`}>
+                    Vista previa CSV — {filteredCsvRows.length} fila{filteredCsvRows.length === 1 ? '' : 's'}
+                  </div>
+                  <div className="max-h-64 overflow-auto">
+                    <table className="w-full text-[11px]">
+                      <thead className={`sticky top-0 ${isDark ? 'bg-zinc-800' : 'bg-gray-100'}`}>
+                        <tr className={`text-left ${isDark ? 'text-zinc-400' : 'text-gray-600'}`}>
+                          <th className="p-1.5 font-medium">#</th>
+                          {csvHeaders.map(h => (
+                            <th key={h} className="p-1.5 font-medium whitespace-nowrap">{h}</th>
+                          ))}
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {filteredCsvRows.slice(0, 100).map(r => (
+                          <tr key={r.rowIndex} className={`border-t ${isDark ? 'border-zinc-800' : 'border-gray-100'}`}>
+                            <td className={`p-1.5 font-mono ${isDark ? 'text-zinc-500' : 'text-gray-400'}`}>{r.rowIndex}</td>
+                            {csvHeaders.map(h => (
+                              <td key={h} className={`p-1.5 ${isDark ? 'text-zinc-300' : 'text-gray-700'}`}>
+                                {trimDisplay(r.raw[h]) || '-'}
+                              </td>
+                            ))}
+                          </tr>
+                        ))}
+                        {filteredCsvRows.length > 100 && (
+                          <tr>
+                            <td colSpan={csvHeaders.length + 1} className={`p-2 text-center text-[10px] italic ${isDark ? 'text-zinc-500' : 'text-gray-500'}`}>
+                              ... y {filteredCsvRows.length - 100} fila(s) más
+                            </td>
+                          </tr>
+                        )}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              )}
+
+              {/* Botón Comparar — accion explicita */}
+              {csvRows.length > 0 && (
+                <button
+                  onClick={handleCompare}
+                  disabled={!canCompare}
+                  className={`w-full flex items-center justify-center gap-2 px-3 py-2 text-sm font-medium rounded-lg transition-all ${
+                    canCompare
+                      ? 'bg-gradient-to-r from-purple-600 to-purple-700 hover:from-purple-500 hover:to-purple-600 text-white shadow'
+                      : isDark ? 'bg-zinc-800 text-zinc-500 cursor-not-allowed' : 'bg-gray-200 text-gray-400 cursor-not-allowed'
+                  }`}
+                >
+                  <CheckCircle2 className="h-4 w-4" />
+                  {hasCompared ? 'Volver a comparar' : 'Comparar con seleccionados'}
+                </button>
+              )}
+
+              {/* Resumen de match — solo despues de "Comparar" */}
               {matchResult && (
                 <div className="space-y-2">
-                  {/* Schema detectado */}
-                  <div className={`p-2.5 rounded-lg border flex items-center gap-2 text-xs ${isDark ? 'bg-zinc-900 border-zinc-700 text-zinc-400' : 'bg-white border-gray-200 text-gray-600'}`}>
-                    <Info className="h-3.5 w-3.5" />
-                    <span>
-                      Esquema detectado: <strong className={isDark ? 'text-zinc-200' : 'text-gray-800'}>{schema === 'codigo-unico' ? 'Código Único' : schema === 'sears' ? 'SEARS' : schema === 'coca-cola' ? 'Coca-Cola' : 'Personalizado'}</strong>
-                      {' • '}{csvRows.length} fila(s) leídas del CSV
-                    </span>
-                  </div>
-
                   {/* Coincidencias */}
                   <div className={`p-3 rounded-lg border ${
                     matchResult.matchedInventoryIds.length > 0
@@ -503,7 +682,7 @@ export function CargaCsvModal({ isOpen, onClose, selectedInventory, onContinue }
                         <ul className={`text-[11px] space-y-0.5 ${isDark ? 'text-yellow-200' : 'text-yellow-900'}`}>
                           {matchResult.csvRowsNotMatched.slice(0, 50).map(r => (
                             <li key={r.rowIndex}>
-                              Fila {r.rowIndex}: <span className="font-mono">{r.clave}</span> / {r.estado}{r.cara ? ` / ${r.cara}` : ''}
+                              Fila {r.rowIndex}: <span className="font-mono">{r.clave}</span> / {r.estado}{r.cara ? ` / ${r.cara}` : ''}{r.version ? ` · v: ${r.version}` : ''}
                             </li>
                           ))}
                           {matchResult.csvRowsNotMatched.length > 50 && (
@@ -546,6 +725,7 @@ export function CargaCsvModal({ isOpen, onClose, selectedInventory, onContinue }
           <button
             onClick={handleContinue}
             disabled={!canContinue}
+            title={!canContinue ? (hasCompared ? 'Sin coincidencias — ajusta el filtro y vuelve a comparar' : 'Click en "Comparar" primero') : 'Continuar con los inventarios que matchearon'}
             className={`flex items-center gap-2 px-4 py-2 text-sm font-medium rounded-lg transition-all ${
               canContinue
                 ? 'bg-gradient-to-r from-purple-600 to-purple-700 hover:from-purple-500 hover:to-purple-600 text-white shadow-lg shadow-purple-500/25'

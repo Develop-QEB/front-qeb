@@ -2041,13 +2041,19 @@ function TaskDrawer({
   const user = useAuthStore((state) => state.user);
   const canNavigate = hasNavigationRoute(tarea);
   const isAdmin = ['Administrador', 'DEV'].includes(user?.rol || '');
+  // CSV: Coordinador de Diseño puede "Asignación de revisión de artes a otro
+  // diseñador". Le habilitamos el editor de asignados, pero SOLO en tareas
+  // del tipo 'Revisión de artes' (no en otros tipos).
+  const isCoordDisenoEditingRevision = user?.rol === 'Coordinador de Diseño'
+    && tarea.tipo === 'Revisión de artes';
+  const canEditAsignados = isAdmin || isCoordDisenoEditingRevision;
 
   const queryClient = useQueryClient();
 
   const { data: usuarios } = useQuery({
     queryKey: ['usuarios'],
     queryFn: () => usuariosService.getAll(),
-    enabled: isAdmin && contentType === 'tareas',
+    enabled: canEditAsignados && contentType === 'tareas',
     staleTime: 5 * 60 * 1000,
   });
 
@@ -2056,6 +2062,10 @@ function TaskDrawer({
       notificacionesService.update(tarea.id, { asignado, id_asignado }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['notificaciones'] });
+      // Si la tarea pertenece a una campaña, invalidar tambien las queries de
+      // tareas por campaña para que el TaskDetailModal del gestor de artes
+      // refleje el nuevo asignado al abrir.
+      queryClient.invalidateQueries({ queryKey: ['campana-tareas'], exact: false });
     },
   });
 
@@ -2657,7 +2667,7 @@ function TaskDrawer({
               <User className="h-4 w-4" />
               <span className="text-xs">Asignado a</span>
             </div>
-            {isAdmin && contentType === 'tareas' && usuarios ? (
+            {canEditAsignados && contentType === 'tareas' && usuarios ? (
               <div className="relative" ref={asignadoRef}>
                 <button
                   onClick={() => setAsignadoOpen(v => !v)}

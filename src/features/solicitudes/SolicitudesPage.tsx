@@ -499,6 +499,10 @@ const getStatusColor = (status: string, isDark: boolean): StatusColor => {
   return map[status] || (isDark ? DEFAULT_STATUS_COLOR_DARK : DEFAULT_STATUS_COLOR_LIGHT);
 };
 
+// Estatus reales de una solicitud (NO incluye 'Cancelada', que es estatus de
+// campaña). Se usan como opciones fijas del filtro simple de Status.
+const SOLICITUD_STATUSES = ['Pendiente', 'Aprobada', 'Rechazada', 'Ajustar', 'Atendida'];
+
 // Chart colors for dynamic status
 const CHART_COLORS = [
   '#8b5cf6', // violet-500
@@ -845,7 +849,10 @@ export function SolicitudesPage() {
     () => advancedFilters.some(f => f.field === 'status' && f.value.trim() !== ''),
     [advancedFilters]
   );
-  const excludeRechazadas = !statusInAdvanced;
+  // El filtro SIMPLE de status también puede pedir 'Rechazada'. Si lo hace, no
+  // debemos excluirlas: de lo contrario el backend ignora el filtro y devuelve
+  // "todo MENOS rechazadas", así que el chip de Rechazada no mostraba nada.
+  const excludeRechazadas = !statusInAdvanced && status !== 'Rechazada';
 
   // Fetch stats with all active filters.
   // staleTime corto: el WebSocket invalida la query en cambios reales, así
@@ -915,10 +922,13 @@ export function SolicitudesPage() {
     },
   });
 
-  // Get all unique status from stats
+  // Estatus válidos de una solicitud. Se ofrecen SIEMPRE en el filtro simple
+  // (incluyendo 'Rechazada', oculta del listado por default) para poder
+  // consultarlas a voluntad. Se suman los que vengan en stats por compat.
   const allStatuses = useMemo(() => {
-    if (!stats?.byStatus) return [];
-    return Object.keys(stats.byStatus).sort();
+    const set = new Set<string>(SOLICITUD_STATUSES);
+    if (stats?.byStatus) Object.keys(stats.byStatus).forEach(s => set.add(s));
+    return Array.from(set).sort();
   }, [stats]);
 
   // Mini Donut Chart Component - compact version

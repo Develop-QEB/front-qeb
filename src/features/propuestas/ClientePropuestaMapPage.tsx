@@ -51,6 +51,7 @@ interface InventarioReservado {
   articulo: string | null;
   tipo_de_mueble: string | null;
   tarifa_publica: number | null;
+  tarifa_bruta_sc?: number | null; // tarifa publica SIN descuento (costo/caras)
   numero_catorcena?: number | null;
   anio_catorcena?: number | null;
   inicio_periodo?: string | null;
@@ -476,7 +477,7 @@ export function ClientePropuestaMapPage() {
                     <p><strong>Formato:</strong> {selectedMarker.mueble || 'N/A'}</p>
                     <p><strong>Ubicacion:</strong> {selectedMarker.ubicacion || 'N/A'}</p>
                     <p><strong>{(selectedMarker.mueble || '').toUpperCase().includes('PUENTE PEATONAL') ? 'Puentes' : 'Caras'}:</strong> {selectedMarker.caras_totales}</p>
-                    <p><strong>Tarifa:</strong> {formatCurrency(selectedMarker.tarifa_publica || 0)}</p>
+                    <p><strong>Tarifa:</strong> {formatCurrency(Number(selectedMarker.tarifa_bruta_sc) || Number(selectedMarker.tarifa_publica) || 0)}</p>
                     {selectedMarker.numero_catorcena && (
                       <p><strong>Periodo:</strong> {tipoPeriodo === 'mensual' && selectedMarker.inicio_periodo ? (() => { const parts = selectedMarker.inicio_periodo!.split('-'); return parts.length >= 2 ? `${MESES_LABEL[parseInt(parts[1]) - 1]} ${parts[0]}` : `Cat ${selectedMarker.numero_catorcena} / ${selectedMarker.anio_catorcena}`; })() : `Cat ${selectedMarker.numero_catorcena} / ${selectedMarker.anio_catorcena}`}</p>
                     )}

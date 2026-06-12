@@ -42,15 +42,20 @@ const AREAS_DISPONIBLES = [
 const PUESTOS_POR_AREA: Record<string, string[]> = {
   'Direccion General': [
     'Director General',
+    'Director General Adjunto',
+    'Director Desarrollo de Nuevos Negocios',
   ],
   'Comercial': [
     'Director Comercial',
     'Gerente Comercial',
+    'Gerente Comercial Vía Pública',
+    'Gerente Comercial Plazas',
     'Asesor Comercial',
     'Asesor Analista',
     'Analista de Servicio al Cliente',
     'Jefe Digital Comercial',
     'Especialista de BI',
+    'Jefe de BI',
   ],
   'Direccion Comercial Aeropuerto': [
     'Director Comercial Aeropuerto',
@@ -79,6 +84,23 @@ const PUESTOS_POR_AREA: Record<string, string[]> = {
     'Jefes de Operaciones Plazas',
     'Gerente Digital (Operaciones)',
     'Jefe de Operaciones Digital',
+    // Nuevos roles operativos (Matriz 2026-01-28) — granularidad por plaza
+    'Gerente de Operaciones GDL',
+    'Gerente de Operaciones MTY',
+    'Gerente Regional de Plazas',
+    'Jefe Regional de Plazas',
+    'Técnico en logística digital',
+    'Jefe de Operaciones Oaxaca',
+    'Jefe de Operaciones Acapulco',
+    'Jefe de Operaciones Toluca',
+    'Jefe de Operaciones Veracruz',
+    'Jefe de Operaciones Pto. Vallarta',
+    'Jefe de Operaciones Puebla',
+    'Jefe de Operaciones Culiacán',
+    'Jefe de Operaciones Mazatlán',
+    'Jefe de Operaciones León',
+    'Jefe de Operaciones Tijuana',
+    'Jefe de Operaciones Mérida',
   ],
   'Facturacion': [
     'Coordinador de Facturacion y Cobranza',
@@ -87,9 +109,14 @@ const PUESTOS_POR_AREA: Record<string, string[]> = {
   ],
   'Mejora Continua': [
     'Mejora Continua',
+    'Jefe de Mejora Continua',
+    'Analista de Mejora Continua',
   ],
   'TI': [
     'TI',
+    'Gerente de TI',
+    'Especialista de TI',
+    'Analista de TI',
   ],
   'Desarrollo': [
     'Lider de Desarrollo',
@@ -1928,12 +1955,13 @@ function UsuariosTab() {
                       </td>
                       <td className="px-5 py-4">
                         <span
-                          className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium border ${getRolBadgeStyle(
+                          title={usuario.rol}
+                          className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium border whitespace-nowrap max-w-[220px] ${getRolBadgeStyle(
                             usuario.rol
                           )}`}
                         >
-                          <Shield className="h-3 w-3" />
-                          {usuario.rol}
+                          <Shield className="h-3 w-3 flex-shrink-0" />
+                          <span className="truncate">{usuario.rol}</span>
                         </span>
                       </td>
                       <td className="px-5 py-4 hidden xl:table-cell">

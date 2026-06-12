@@ -59,6 +59,8 @@ import { campanasService, InventarioConArte, InventarioConAPS, TareaCampana, Art
 import { proveedoresService } from '../../services/proveedores.service';
 import { Proveedor, Catorcena } from '../../types';
 import { solicitudesService } from '../../services/solicitudes.service';
+import { usuariosService } from '../../services/usuarios.service';
+import { notificacionesService } from '../../services/notificaciones.service';
 
 const MESES_LABEL = ['Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun', 'Jul', 'Ago', 'Sep', 'Oct', 'Nov', 'Dic'];
 const MESES_FULL = ['Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio', 'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre'];
@@ -1449,6 +1451,39 @@ function UploadArtModal({
   const [fichasError, setFichasError] = useState<string | null>(null);
   const [fichasLoaded, setFichasLoaded] = useState(false);
 
+  // Reset completo del state interno cada vez que el modal se ABRE.
+  // Antes el state persistia entre opens porque el componente no se desmonta
+  // (solo se oculta con if !isOpen return null) y el handleClose no siempre
+  // se llamaba — p.ej. cuando assignArteMutation.onSuccess cerraba el modal
+  // externamente, quedaba la seleccion anterior visible al re-abrir.
+  // Esto cierra los sintomas "algo ya preseleccionado" y "se quitan artes
+  // pre cargados" reportados.
+  useEffect(() => {
+    if (!isOpen) return;
+    setSelectedOption('file');
+    setExistingArtUrl('');
+    setFile(null);
+    setFilePreview(null);
+    setLink('');
+    setDigitalLink('');
+    setDuplicateWarning(null);
+    setIsCheckingDuplicate(false);
+    setDigitalFiles([]);
+    setDraggedFile(null);
+    setWizardStep(1);
+    setDigitalWizardStep(1);
+    setSelectedGalleryImages(new Map());
+    setSelectedDigitalImages(new Map());
+    setImageNotes(new Map());
+    setImageNames(new Map());
+    setImageEstatusOps(new Map());
+    setDigitalImageNotes(new Map());
+    setDigitalImageNames(new Map());
+    setDigitalImageEstatusOps(new Map());
+    setModalTab('artes');
+    setExpandedFichaFolders(new Set());
+  }, [isOpen]);
+
   // Cargar árbol de fichas técnicas cuando se abre la tab
   useEffect(() => {
     if (modalTab !== 'fichas' || fichasLoaded) return;
@@ -1801,10 +1836,12 @@ function UploadArtModal({
     setWizardStep(1);
     setSelectedGalleryImages(new Map());
     setImageNotes(new Map());
+    setImageNames(new Map());
     setImageEstatusOps(new Map());
     setDigitalWizardStep(1);
     setSelectedDigitalImages(new Map());
     setDigitalImageNotes(new Map());
+    setDigitalImageNames(new Map());
     setDigitalImageEstatusOps(new Map());
     setModalTab('artes');
     setExpandedFichaFolders(new Set());
@@ -1873,27 +1910,25 @@ function UploadArtModal({
   const canGoToStep2 = selectedGalleryImages.size > 0 && !isUploadingFile;
 
   const toggleGalleryImage = (id: string, url: string) => {
-    // Deseleccionar: limpiar selección + sus campos.
+    // Deseleccionar: solo quitar de la seleccion. NO limpiamos las ediciones
+    // que el usuario hizo en nombre/nota/estatus_ops, asi si vuelve a
+    // seleccionar este arte conserva lo que tecleo. El reset completo se hace
+    // al cerrar el modal (handleClose) o al re-abrirlo (useEffect en isOpen).
     if (selectedGalleryImages.has(id)) {
       setSelectedGalleryImages(prev => { const n = new Map(prev); n.delete(id); return n; });
-      setImageNotes(prev => { const n = new Map(prev); n.delete(id); return n; });
-      setImageNames(prev => { const n = new Map(prev); n.delete(id); return n; });
-      setImageEstatusOps(prev => { const n = new Map(prev); n.delete(id); return n; });
       return;
     }
-    // Seleccionar. NOTA: los setters van al nivel superior (NO anidados dentro
-    // del updater de setSelectedGalleryImages) — anidarlos hacía que el prefill
-    // del nombre se perdiera de forma intermitente.
+    // Seleccionar. Setters al nivel superior (NO anidados) — anidarlos hacia
+    // que el prefill se perdiera de forma intermitente.
     setSelectedGalleryImages(prev => { const n = new Map(prev); n.set(id, { url, source: 'existing' }); return n; });
-    // Pre-llenar nombre del arte / estatus operaciones desde la biblioteca, para
-    // respetar lo que ya tiene en lugar de obligar a reescribirlo. Match por id;
-    // fallback por url (el id de biblioteca es posicional y puede variar).
+    // Prefill desde biblioteca SOLO si el usuario no ha capturado nada todavia
+    // para este id en esta sesion (no sobreescribir su edicion previa).
     const arte = localArtes.find(a => a.id === id) || localArtes.find(a => a.url === url);
-    if (arte?.nombre_arte) {
+    if (arte?.nombre_arte && !imageNames.has(id)) {
       setImageNames(prev => { const n = new Map(prev); n.set(id, arte.nombre_arte || ''); return n; });
     }
     const estatusOpExistente = (arte as { estatus_operaciones?: string | null } | undefined)?.estatus_operaciones;
-    if (estatusOpExistente) {
+    if (estatusOpExistente && !imageEstatusOps.has(id)) {
       setImageEstatusOps(prev => { const n = new Map(prev); n.set(id, estatusOpExistente); return n; });
     }
   };
@@ -1952,21 +1987,19 @@ function UploadArtModal({
 
   // Helpers para el wizard digital
   const toggleDigitalGalleryImage = (id: string, url: string, isVideo: boolean) => {
+    // Igual que toggleGalleryImage (tradicional): no limpiar ediciones al
+    // deseleccionar; prefill solo si el usuario aun no ha capturado nada.
     if (selectedDigitalImages.has(id)) {
       setSelectedDigitalImages(prev => { const n = new Map(prev); n.delete(id); return n; });
-      setDigitalImageNotes(prev => { const n = new Map(prev); n.delete(id); return n; });
-      setDigitalImageNames(prev => { const n = new Map(prev); n.delete(id); return n; });
-      setDigitalImageEstatusOps(prev => { const n = new Map(prev); n.delete(id); return n; });
       return;
     }
-    // Setters al nivel superior (NO anidados) — anidarlos perdía el prefill del nombre.
     setSelectedDigitalImages(prev => { const n = new Map(prev); n.set(id, { url, source: 'existing', isVideo }); return n; });
     const arte = localArtes.find(a => a.id === id) || localArtes.find(a => a.url === url);
-    if (arte?.nombre_arte) {
+    if (arte?.nombre_arte && !digitalImageNames.has(id)) {
       setDigitalImageNames(prev => { const n = new Map(prev); n.set(id, arte.nombre_arte || ''); return n; });
     }
     const estatusOpExistente = (arte as { estatus_operaciones?: string | null } | undefined)?.estatus_operaciones;
-    if (estatusOpExistente) {
+    if (estatusOpExistente && !digitalImageEstatusOps.has(id)) {
       setDigitalImageEstatusOps(prev => { const n = new Map(prev); n.set(id, estatusOpExistente); return n; });
     }
   };
@@ -4121,6 +4154,67 @@ function TaskDetailModal({
     queryFn: () => solicitudesService.getUsers(undefined, false),
     enabled: isOpen && task?.tipo === 'Programación para Tráfico',
   });
+
+  // CSV: Coordinador de Diseño puede 'Asignación de revisión de artes a otro
+  // diseñador'. Habilitamos el editor de asignados desde este modal solo para
+  // tareas de tipo 'Revisión de artes', alineado con NotificacionesPage.
+  const currentUser = useAuthStore((s) => s.user);
+  const isAdminTask = ['Administrador', 'DEV'].includes(currentUser?.rol || '');
+  const isCoordDisenoEditingRevision = currentUser?.rol === 'Coordinador de Diseño'
+    && task?.tipo === 'Revisión de artes';
+  const canEditAsignados = isAdminTask || isCoordDisenoEditingRevision;
+
+  const { data: usuariosParaAsignar } = useQuery({
+    queryKey: ['usuarios'],
+    queryFn: () => usuariosService.getAll(),
+    enabled: isOpen && canEditAsignados,
+    staleTime: 5 * 60 * 1000,
+  });
+
+  const queryClientAsig = useQueryClient();
+  const updateAsignadosTaskMutation = useMutation({
+    mutationFn: ({ asignado, id_asignado }: { asignado: string; id_asignado: string }) =>
+      notificacionesService.update(Number(task?.id) || 0, { asignado, id_asignado }),
+    onSuccess: () => {
+      // Invalidamos tanto las tareas de la campana como las notificaciones para
+      // que el cambio se refleje en ambos modulos al mismo tiempo.
+      queryClientAsig.invalidateQueries({ queryKey: ['campana-tareas', campanaId] });
+      queryClientAsig.invalidateQueries({ queryKey: ['notificaciones'] });
+    },
+  });
+
+  const [asigDropdownOpen, setAsigDropdownOpen] = useState(false);
+  const asigDropdownRef = useRef<HTMLDivElement>(null);
+  const initialSelectedAsignados = useMemo(() => {
+    if (!task?.id_asignado) return [] as string[];
+    return String(task.id_asignado).split(',').map(s => s.trim()).filter(Boolean);
+  }, [task?.id_asignado]);
+  const [selectedAsigIds, setSelectedAsigIds] = useState<string[]>(initialSelectedAsignados);
+  // Cuando cambia la tarea actual o sus asignados externos (refetch tras edicion
+  // remota), resincronizamos la seleccion local para que el dropdown muestre
+  // siempre lo que esta vigente.
+  useEffect(() => { setSelectedAsigIds(initialSelectedAsignados); }, [initialSelectedAsignados]);
+  useEffect(() => {
+    if (!asigDropdownOpen) return;
+    const handler = (e: MouseEvent) => {
+      if (asigDropdownRef.current && !asigDropdownRef.current.contains(e.target as Node)) setAsigDropdownOpen(false);
+    };
+    document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+  }, [asigDropdownOpen]);
+
+  const toggleAsigSelection = (id: string) => {
+    const next = selectedAsigIds.includes(id)
+      ? selectedAsigIds.filter(s => s !== id)
+      : [...selectedAsigIds, id];
+    setSelectedAsigIds(next);
+    const idStr = next.join(',');
+    const nombres = next
+      .map(uid => usuariosParaAsignar?.find(u => String(u.id) === uid)?.nombre)
+      .filter(Boolean)
+      .join(', ');
+    updateAsignadosTaskMutation.mutate({ asignado: nombres, id_asignado: idStr });
+  };
 
   const [activeTab, setActiveTab] = useState<TaskDetailTab>('resumen');
   const [selectedArteIds, setSelectedArteIds] = useState<Set<string>>(new Set());
@@ -10018,7 +10112,34 @@ function TaskDetailModal({
                   </div>
                   <div>
                     <span className="text-zinc-500">Asignado:</span>
-                    <p className="text-white font-medium">{task.asignado || '-'}</p>
+                    {canEditAsignados && usuariosParaAsignar ? (
+                      <div className="relative mt-1" ref={asigDropdownRef}>
+                        <button
+                          onClick={() => setAsigDropdownOpen(v => !v)}
+                          className="flex items-center justify-between gap-2 w-full text-sm bg-zinc-800 border border-zinc-700 text-white rounded px-2 py-1"
+                        >
+                          <span className="truncate">{task.asignado || 'Sin asignar'}</span>
+                          <ChevronDown className="h-3 w-3 flex-shrink-0 text-zinc-400" />
+                        </button>
+                        {asigDropdownOpen && (
+                          <div className="absolute left-0 top-full mt-1 z-50 bg-zinc-900 border border-zinc-700 rounded-lg shadow-xl p-1.5 min-w-[220px] max-h-[260px] overflow-y-auto">
+                            {usuariosParaAsignar.map(u => (
+                              <label key={u.id} className="flex items-center gap-2 px-2 py-1.5 hover:bg-zinc-800 rounded cursor-pointer">
+                                <input
+                                  type="checkbox"
+                                  checked={selectedAsigIds.includes(String(u.id))}
+                                  onChange={() => toggleAsigSelection(String(u.id))}
+                                  className="accent-purple-500"
+                                />
+                                <span className="text-xs text-zinc-300">{u.nombre}</span>
+                              </label>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    ) : (
+                      <p className="text-white font-medium">{task.asignado || '-'}</p>
+                    )}
                   </div>
                   <div>
                     <span className="text-zinc-500">Responsable:</span>
@@ -14457,11 +14578,15 @@ export function TareaSeguimientoPage() {
     staleTime: 30000, // Considerar frescos por 30s para evitar refetch innecesario
   });
 
-  // Artes existentes de la campaña
+  // Artes existentes de la campaña. placeholderData mantiene la lista
+  // previa visible durante el refetch (que dispara assignArteMutation.onSuccess
+  // al invalidar), evitando el flicker de "biblioteca vacia momentanea" que
+  // hacia parecer que se quitaban artes ya cargados.
   const { data: artesExistentes = [], isLoading: isLoadingArtes } = useQuery({
     queryKey: ['campana-artes-existentes', campanaId],
     queryFn: () => campanasService.getArtesExistentes(campanaId),
     enabled: campanaId > 0 && (isUploadArtModalOpen || isTaskDetailModalOpen),
+    placeholderData: (prev) => prev,
   });
 
   // Proveedores para asignar tareas
@@ -14580,6 +14705,10 @@ export function TareaSeguimientoPage() {
       }
       setUploadArtError(null);
       setSelectedInventoryIds(new Set());
+      // La biblioteca local (artes que el usuario subio en esta sesion del
+      // modal) ya fue consumida en el assign exitoso — limpiarla evita que
+      // re-aparezca al abrir el modal nuevamente.
+      setParentAddedArtes([]);
     },
     onError: (error) => {
       setUploadArtError(error instanceof Error ? error.message : 'Error al asignar arte');
@@ -20879,6 +21008,9 @@ export function TareaSeguimientoPage() {
         onClose={() => {
           setIsUploadArtModalOpen(false);
           setUploadArtError(null);
+          // Limpiamos la biblioteca local de artes subidos en la sesion para
+          // que la proxima apertura del modal arranque sin residuos.
+          setParentAddedArtes([]);
         }}
         selectedInventory={selectedInventoryItems}
         onSubmit={handleUploadArt}

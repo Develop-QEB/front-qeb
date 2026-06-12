@@ -543,7 +543,7 @@ function GroupSummaryInline({ items, groupField, isDark: isDarkProp }: { items: 
   const isDark = isDarkProp ?? (useThemeStore((s) => s.theme) === 'dark');
   if (groupField === 'aps') return null;
   const carasTotal = items.reduce((s, i) => s + (Number(i.caras_totales) || 0), 0);
-  const getTarifa = (i: InventarioReservado) => Number(i.tarifa_publica_sc) || Number(i.tarifa_publica) || 0;
+  const getTarifa = (i: InventarioReservado) => Number(i.tarifa_bruta_sc) || Number(i.tarifa_publica_sc) || Number(i.tarifa_publica) || 0;
   const totalInversion = items.reduce((s, i) => s + getTarifa(i) * (Number(i.caras_totales) || 0), 0);
   const tarifas = [...new Set(items.map(i => getTarifa(i)).filter(t => t > 0))];
   const uniformTarifa = tarifas.length === 1 ? tarifas[0] : 0;
@@ -618,11 +618,11 @@ function renderReservadoCell(item: InventarioReservado, col: TableColumn, p = 'p
   if (col.field === 'renta') return <td key={col.field} className={`${p} text-center ${isDark ? 'text-violet-300' : 'text-violet-700'} text-[10px]`}>{item.renta != null ? item.renta : '-'}</td>;
   if (col.field === 'bonificacion_sc') return <td key={col.field} className={`${p} text-center ${isDark ? 'text-pink-300' : 'text-pink-700'} text-[10px]`}>{item.bonificacion_sc != null ? item.bonificacion_sc : '-'}</td>;
   if (col.field === 'tarifa_publica') {
-    const t = Number(item.tarifa_publica_sc) || Number(item.tarifa_publica) || 0;
+    const t = Number(item.tarifa_bruta_sc) || Number(item.tarifa_publica_sc) || Number(item.tarifa_publica) || 0;
     return <td key={col.field} className={`${p} text-amber-400 text-right font-mono text-[10px]`}>{fmtMoney(t)}</td>;
   }
   if (col.field === 'total_inversion') {
-    const t = Number(item.tarifa_publica_sc) || Number(item.tarifa_publica) || 0;
+    const t = Number(item.tarifa_bruta_sc) || Number(item.tarifa_publica_sc) || Number(item.tarifa_publica) || 0;
     const inv = t * (Number(item.caras_totales) || 0);
     return <td key={col.field} className={`${p} text-emerald-400 text-right font-mono font-medium text-[10px]`}>{fmtMoney(inv)}</td>;
   }
@@ -639,11 +639,11 @@ function renderIMCell(item: InventarioReservado, col: TableColumn, p = 'p-1.5', 
   if (col.field === 'caras_totales') return <td key={col.field} className={`${p} text-center`}><span className={`px-1.5 py-0.5 rounded text-[10px] font-bold ${isDark ? 'bg-amber-500/20 text-amber-300' : 'bg-amber-50 text-amber-700'}`}>{item.caras_totales}</span></td>;
   if (col.field === 'plaza') return <td key={col.field} className={`${p} ${isDark ? 'text-zinc-300' : 'text-gray-700'} text-[10px]`}>{item.plaza || '-'}</td>;
   if (col.field === 'tarifa_publica') {
-    const t = Number((item as any).tarifa_publica_sc) || Number(item.tarifa_publica) || 0;
+    const t = Number((item as any).tarifa_bruta_sc) || Number((item as any).tarifa_publica_sc) || Number(item.tarifa_publica) || 0;
     return <td key={col.field} className={`${p} text-amber-400 text-right font-mono text-[10px]`}>{fmtMoney(t)}</td>;
   }
   if (col.field === 'total_inversion') {
-    const t = Number((item as any).tarifa_publica_sc) || Number(item.tarifa_publica) || 0;
+    const t = Number((item as any).tarifa_bruta_sc) || Number((item as any).tarifa_publica_sc) || Number(item.tarifa_publica) || 0;
     const inv = t * (Number(item.caras_totales) || 0);
     return <td key={col.field} className={`${p} text-emerald-400 text-right font-mono font-medium text-[10px]`}>{fmtMoney(inv)}</td>;
   }
@@ -2395,7 +2395,7 @@ export function CampanaDetailPage() {
               <InfoItem label="Bonificacion" value={campana.bonificacion} type="default" isDark={isDark} />
               <InfoItem label="Descuento" value={campana.descuento ? `${campana.descuento}%` : null} type="percent" isDark={isDark} />
               <InfoItem label="Inversion" value={(() => {
-                const getTarifa = (i: InventarioReservado) => Number(i.tarifa_publica_sc) || Number(i.tarifa_publica) || 0;
+                const getTarifa = (i: InventarioReservado) => Number(i.tarifa_bruta_sc) || Number(i.tarifa_publica_sc) || Number(i.tarifa_publica) || 0;
                 const total = [...inventarioReservado, ...inventarioConAPS].reduce((s, i) => s + getTarifa(i) * (Number(i.caras_totales) || 0), 0);
                 return total || (typeof campana.inversion === "string" ? parseFloat(campana.inversion) : campana.inversion);
               })()} type="amount" isDark={isDark} />
