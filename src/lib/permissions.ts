@@ -604,7 +604,7 @@ const rolePermissions: Partial<Record<UserRole, Partial<RolePermissions>>> = {
     canSeeGestionArtes: true,
     canEditGestionArtes: false,
     canResolveProduccionTasks: false,
-    canSeeOrdenesMontajeButton: false,
+    canSeeOrdenesMontajeButton: true, // CSV: descarga ODM/versionario
 
     canSeeTabProgramacion: true,
     canSeeTabImpresiones: false,
@@ -620,7 +620,7 @@ const rolePermissions: Partial<Record<UserRole, Partial<RolePermissions>>> = {
     canEditInventarios: false,
     canDeleteInventarios: false,
 
-    canExportOrdenesMontaje: false,
+    canExportOrdenesMontaje: true, // CSV: descarga ODM/versionario
   },
   'Especialista de BI': {
     // Visualización general amplia
@@ -661,7 +661,7 @@ const rolePermissions: Partial<Record<UserRole, Partial<RolePermissions>>> = {
     canSeeGestionArtes: true,
     canEditGestionArtes: false,
     canResolveProduccionTasks: false,
-    canSeeOrdenesMontajeButton: false,
+    canSeeOrdenesMontajeButton: true, // CSV: descarga ODM/versionario
 
     canSeeTabProgramacion: true,
     canSeeTabImpresiones: true,
@@ -677,7 +677,7 @@ const rolePermissions: Partial<Record<UserRole, Partial<RolePermissions>>> = {
     canEditInventarios: false,
     canDeleteInventarios: false,
 
-    canExportOrdenesMontaje: false,
+    canExportOrdenesMontaje: true, // CSV: descarga ODM/versionario
   },
   'Director de Desarrollo Digital': {
     // Solo lectura - permisos PENDIENTES de definición
@@ -1748,7 +1748,7 @@ const rolePermissions: Partial<Record<UserRole, Partial<RolePermissions>>> = {
     canSeeGestionArtes: true,
     canEditGestionArtes: false,
     canResolveProduccionTasks: true,
-    canSeeOrdenesMontajeButton: false,
+    canSeeOrdenesMontajeButton: true, // CSV: descarga ODM/versionario
 
     // Gestión de Artes - Tabs
     canSeeTabProgramacion: true,
@@ -1768,7 +1768,7 @@ const rolePermissions: Partial<Record<UserRole, Partial<RolePermissions>>> = {
     canDeleteInventarios: false,
 
     // Órdenes de Montaje
-    canExportOrdenesMontaje: false,
+    canExportOrdenesMontaje: true, // CSV: descarga ODM/versionario
   },
   'Jefes de Operaciones Plazas': {
     // Secciones visibles
@@ -1815,7 +1815,7 @@ const rolePermissions: Partial<Record<UserRole, Partial<RolePermissions>>> = {
     canSeeGestionArtes: true,
     canEditGestionArtes: false,
     canResolveProduccionTasks: true,
-    canSeeOrdenesMontajeButton: false,
+    canSeeOrdenesMontajeButton: true, // CSV: descarga ODM/versionario
 
     // Gestión de Artes - Tabs
     canSeeTabProgramacion: true,
@@ -1835,7 +1835,7 @@ const rolePermissions: Partial<Record<UserRole, Partial<RolePermissions>>> = {
     canDeleteInventarios: false,
 
     // Órdenes de Montaje
-    canExportOrdenesMontaje: false,
+    canExportOrdenesMontaje: true, // CSV: descarga ODM/versionario
   },
   'Supervisores de Operaciones': {
     // Secciones visibles
