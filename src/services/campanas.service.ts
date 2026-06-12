@@ -416,6 +416,9 @@ export interface OrdenMontajeINVIAN {
   cto?: string | null;
   sap_database?: string | null;
   posted?: boolean;
+  // Para "Inventario UN+": formato (mueble) y tipo de periodo (mensual/catorcena).
+  formato?: string | null;
+  tipo_periodo?: string | null;
 }
 
 export interface ComentarioRevisionArte {

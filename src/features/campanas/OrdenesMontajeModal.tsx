@@ -224,7 +224,7 @@ interface OrdenesMontajeModalProps {
   canExport?: boolean;
 }
 
-type TabType = 'cat' | 'ocupacion-digital' | 'digital' | 'invian' | 'invian-digital';
+type TabType = 'cat' | 'ocupacion-digital' | 'digital' | 'invian' | 'invian-digital' | 'invian-unmas';
 
 // Limpia el nombre de un arte quitando el prefijo de Digital Ocean Spaces
 // (formato: "<timestamp>-<hash>-<nombreReal>.<ext>") y la extensión.
@@ -259,6 +259,18 @@ const arteOrigenMontaje = (item: OrdenMontajeINVIAN): string => {
   if (urls) return urls;
   return item.ArteUrl === 'HAS_ARTE' ? '' : (getFileUrl(item.ArteUrl) || '');
 };
+
+// Gran formato (UN+): formatos que van a las órdenes "UN+" (Ocupación UN+ e
+// Inventario UN+). Una fila es UN+ si es MENSUAL y su formato cae en esta lista.
+// Incluye vidrios (exterior/interior) — antes faltaban y se quedaban fuera.
+const GRAN_FORMATO_KEYWORDS = ['mi macro', 'mimacro', 'kiosco', 'bolero', 'bajo puente', 'puente peatonal', 'vidrio'];
+const esGranFormato = (formato: string | null | undefined): boolean => {
+  const f = (formato || '').toLowerCase();
+  if (!f) return false;
+  return GRAN_FORMATO_KEYWORDS.some(kw => f.includes(kw));
+};
+const esMensual = (tipoPeriodo: string | null | undefined): boolean =>
+  (tipoPeriodo || '').toLowerCase() === 'mensual';
 
 // Extrae la ciudad del codigo_unico de inventarios.
 // Formato esperado: 'CODIGO_SENTIDO_CIUDAD' (ej. 'AC3033_Contraflujo2_Acapulco de Juárez').
@@ -649,7 +661,7 @@ export function OrdenesMontajeModal({ isOpen, onClose, canExport = true }: Orden
       status: status || undefined,
       ...apiCatorcenaRange,
     }),
-    enabled: isOpen && (activeTab === 'invian' || activeTab === 'invian-digital'),
+    enabled: isOpen && (activeTab === 'invian' || activeTab === 'invian-digital' || activeTab === 'invian-unmas'),
   });
 
   // Haystack precalculado por item — antes `buildHaystack` se ejecutaba en
@@ -888,16 +900,8 @@ export function OrdenesMontajeModal({ isOpen, onClose, canExport = true }: Orden
     if (!catData) return [];
     let items = [...catData];
 
-    // Solo periodos mensuales
-    items = items.filter(item => (item.tipo_periodo || '').toLowerCase() === 'mensual');
-
-    // Solo gran formato (whitelist por keywords en formato/tipo)
-    const GRAN_FORMATO = ['mi macro', 'mimacro', 'kiosco', 'bolero', 'bajo puente', 'puente peatonal'];
-    items = items.filter(item => {
-      const f = (item.tipo || '').toLowerCase();
-      if (!f) return false;
-      return GRAN_FORMATO.some(kw => f.includes(kw));
-    });
+    // Solo periodos mensuales + gran formato (incluye vidrios; ver helper).
+    items = items.filter(item => esMensual(item.tipo_periodo) && esGranFormato(item.tipo));
 
     // Filtros globales
     if (sapDbFilter !== 'todas') {
@@ -1200,6 +1204,25 @@ export function OrdenesMontajeModal({ isOpen, onClose, canExport = true }: Orden
     return Object.entries(groups).sort((a, b) => b[1].length - a[1].length);
   }, [filteredINVIANDigitalData, invianGroupings]);
 
+  // Inventario UN+ — igual que Inventario VP pero SOLO mensual + gran formato.
+  // Se deriva de filteredINVIANData (que ya aplicó búsqueda/filtros/orden), solo
+  // se acota a mensual + gran formato (incluye vidrios; ver esGranFormato).
+  const filteredINVIANUnmasData = useMemo(
+    () => filteredINVIANData.filter(item => esMensual(item.tipo_periodo) && esGranFormato(item.formato)),
+    [filteredINVIANData]
+  );
+
+  const groupedINVIANUnmasData = useMemo(() => {
+    if (invianGroupings.length === 0 || !filteredINVIANUnmasData.length) return null;
+    const groups: Record<string, OrdenMontajeINVIAN[]> = {};
+    filteredINVIANUnmasData.forEach(item => {
+      const key = getINVIANGroupValue(item, invianGroupings[0]);
+      if (!groups[key]) groups[key] = [];
+      groups[key].push(item);
+    });
+    return Object.entries(groups).sort((a, b) => b[1].length - a[1].length);
+  }, [filteredINVIANUnmasData, invianGroupings]);
+
   // Calculate totals - ensure numeric addition (based on filtered data)
   const catTotals = useMemo(() => {
     if (!filteredCATData || filteredCATData.length === 0) return { caras: 0, tarifa: 0, monto: 0 };
@@ -1317,13 +1340,12 @@ export function OrdenesMontajeModal({ isOpen, onClose, canExport = true }: Orden
       const wb = XLSX.utils.book_new();
       XLSX.utils.book_append_sheet(wb, ws, 'Digital');
       XLSX.writeFile(wb, `orden_montaje_digital_${new Date().toISOString().split('T')[0]}.xlsx`);
-    } else if (activeTab === 'invian' && filteredINVIANData.length > 0) {
-      // Columnas alineadas con la UI: 4 columnas de arte (Arte, Código de arte,
-      // Arte Url, Origen del arte). Antes había duplicados (`Arte` con marca,
-      // `Código de arte` con rsv_id, `Origen del arte` con OrigenArte, e
-      // `Indicaciones`) — el CSV se mostraba inconsistente con lo que ven en
-      // pantalla. Ahora coincide.
-      const wsData = filteredINVIANData.map(item => {
+    } else if ((activeTab === 'invian' || activeTab === 'invian-unmas') && (activeTab === 'invian-unmas' ? filteredINVIANUnmasData : filteredINVIANData).length > 0) {
+      // Inventario VP y Inventario UN+ comparten las MISMAS columnas (formato
+      // para importar a INVIAN). UN+ solo cambia el subconjunto de filas
+      // (mensual + gran formato) y el nombre del archivo.
+      const invSource = activeTab === 'invian-unmas' ? filteredINVIANUnmasData : filteredINVIANData;
+      const wsData = invSource.map(item => {
         const plazaDerivada = extractCiudadFromCodigoUnico(item.Unidad) || item.Ciudad || '';
         return {
           'Campaña': item.Campania || '',
@@ -1355,8 +1377,9 @@ export function OrdenesMontajeModal({ isOpen, onClose, canExport = true }: Orden
 
       const ws = XLSX.utils.json_to_sheet(wsData);
       const wb = XLSX.utils.book_new();
-      XLSX.utils.book_append_sheet(wb, ws, 'Orden Montaje INVIAN');
-      XLSX.writeFile(wb, `orden_montaje_invian_${new Date().toISOString().split('T')[0]}.xlsx`);
+      const esUnmas = activeTab === 'invian-unmas';
+      XLSX.utils.book_append_sheet(wb, ws, esUnmas ? 'Orden Montaje INVIAN UN+' : 'Orden Montaje INVIAN');
+      XLSX.writeFile(wb, `orden_montaje_invian${esUnmas ? '_unmas' : ''}_${new Date().toISOString().split('T')[0]}.xlsx`);
     } else if (activeTab === 'invian-digital' && filteredINVIANDigitalData.length > 0) {
       const wsData = filteredINVIANDigitalData.map(item => {
         const plazaDerivada = extractCiudadFromCodigoUnico(item.Unidad) || item.Ciudad || '';
@@ -1553,7 +1576,7 @@ export function OrdenesMontajeModal({ isOpen, onClose, canExport = true }: Orden
   if (!isOpen) return null;
 
   const isLoading = activeTab === 'cat' || activeTab === 'digital' || activeTab === 'ocupacion-digital' ? isLoadingCAT : isLoadingINVIAN;
-  const dataCount = activeTab === 'cat' ? filteredCATData.length : activeTab === 'ocupacion-digital' ? filteredOcupacionDigitalData.length : activeTab === 'digital' ? filteredDigitalData.length : activeTab === 'invian-digital' ? filteredINVIANDigitalData.length : filteredINVIANData.length;
+  const dataCount = activeTab === 'cat' ? filteredCATData.length : activeTab === 'ocupacion-digital' ? filteredOcupacionDigitalData.length : activeTab === 'digital' ? filteredDigitalData.length : activeTab === 'invian-digital' ? filteredINVIANDigitalData.length : activeTab === 'invian-unmas' ? filteredINVIANUnmasData.length : filteredINVIANData.length;
   // Ocupación VP: total = registros NO digitales del endpoint CAT (los digitales
   // viven en la pestaña Ocupación Digital y confundía verlos restados del total).
   const totalCount = activeTab === 'cat'
@@ -1561,6 +1584,7 @@ export function OrdenesMontajeModal({ isOpen, onClose, canExport = true }: Orden
     : activeTab === 'ocupacion-digital' ? filteredOcupacionDigitalData.length
     : activeTab === 'digital' ? filteredDigitalData.length
     : activeTab === 'invian-digital' ? filteredINVIANDigitalData.length
+    : activeTab === 'invian-unmas' ? filteredINVIANUnmasData.length
     : (invianData?.length || 0);
 
   const totalPages = Math.max(1, Math.ceil(dataCount / PAGE_SIZE));
@@ -1572,6 +1596,7 @@ export function OrdenesMontajeModal({ isOpen, onClose, canExport = true }: Orden
   const paginatedDigitalData = filteredDigitalData.slice((safeCurrentPage - 1) * PAGE_SIZE, safeCurrentPage * PAGE_SIZE);
   const paginatedINVIANData = filteredINVIANData.slice((safeCurrentPage - 1) * PAGE_SIZE, safeCurrentPage * PAGE_SIZE);
   const paginatedINVIANDigitalData = filteredINVIANDigitalData.slice((safeCurrentPage - 1) * PAGE_SIZE, safeCurrentPage * PAGE_SIZE);
+  const paginatedINVIANUnmasData = filteredINVIANUnmasData.slice((safeCurrentPage - 1) * PAGE_SIZE, safeCurrentPage * PAGE_SIZE);
 
   return (
     <div
@@ -1602,10 +1627,10 @@ export function OrdenesMontajeModal({ isOpen, onClose, canExport = true }: Orden
           </button>
         </div>
 
-        {/* Tabs and Controls */}
-        <div className={`flex items-center justify-between px-6 py-3 border-b ${isDark ? 'border-zinc-800/50 bg-zinc-900/80' : 'border-gray-200 bg-gray-50/80'}`}>
-          {/* Tabs */}
-          <div className={`flex p-1 ${isDark ? 'bg-zinc-800/80 border-zinc-700/50' : 'bg-gray-100 border-gray-200'} rounded-xl border`}>
+        {/* Controles (arriba) + Tabs (abajo), en 2 filas para no amontonar */}
+        <div className={`flex flex-col gap-3 px-6 py-3 border-b ${isDark ? 'border-zinc-800/50 bg-zinc-900/80' : 'border-gray-200 bg-gray-50/80'}`}>
+          {/* Tabs ARRIBA: tira pareja de 6 columnas iguales (no cambian de tamaño al seleccionar) */}
+          <div className={`order-1 grid grid-cols-3 sm:grid-cols-6 gap-1 p-1 ${isDark ? 'bg-zinc-800/80 border-zinc-700/50' : 'bg-gray-100 border-gray-200'} rounded-xl border`}>
             <button
               onClick={() => { setActiveTab('cat'); setCurrentPage(1); }}
               className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all ${
@@ -1661,12 +1686,23 @@ export function OrdenesMontajeModal({ isOpen, onClose, canExport = true }: Orden
               <Monitor className="h-4 w-4" />
               Inventario Digital
             </button>
+            <button
+              onClick={() => { setActiveTab('invian-unmas'); setCurrentPage(1); }}
+              className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all ${
+                activeTab === 'invian-unmas'
+                  ? 'bg-gradient-to-r from-amber-500 to-orange-500 text-white shadow-lg shadow-amber-500/25'
+                  : isDark ? 'text-zinc-400 hover:text-zinc-200' : 'text-gray-500 hover:text-gray-900'
+              }`}
+            >
+              <FileSpreadsheet className="h-4 w-4" />
+              Inventario UN+
+            </button>
           </div>
 
-          {/* Right side controls */}
-          <div className="flex items-center gap-3">
+          {/* Controles (abajo de los tabs): contador → filtro → exportar */}
+          <div className="order-2 flex items-center gap-3">
             {/* Filters Button */}
-            <div className="relative">
+            <div className="relative order-2">
               <button
                 onClick={() => setShowFilterPopup(!showFilterPopup)}
                 className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all ${
@@ -1965,28 +2001,25 @@ export function OrdenesMontajeModal({ isOpen, onClose, canExport = true }: Orden
               )}
             </div>
 
-            {/* Count */}
-            <span className="px-3 py-1.5 rounded-lg bg-zinc-800 text-zinc-300 text-xs font-medium border border-zinc-700">
+            {/* Count (primero) */}
+            <span className="order-1 px-3 py-1.5 rounded-lg bg-zinc-800 text-zinc-300 text-xs font-medium border border-zinc-700">
               {dataCount}{dataCount !== totalCount && ` / ${totalCount}`} filas
             </span>
 
-            {/* Export */}
+            {/* Export (al final) */}
             {canExport && (
               <button
                 onClick={handleExportXLSX}
                 disabled={isLoading || dataCount === 0}
-                className="flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium bg-green-600 hover:bg-green-500 text-white disabled:opacity-50 disabled:cursor-not-allowed"
+                className="order-3 flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium bg-green-600 hover:bg-green-500 text-white disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 <Download className="h-4 w-4" />
                 Exportar
               </button>
             )}
-          </div>
-        </div>
 
-        {/* Search Bar */}
-        <div className={`px-6 py-3 border-b ${isDark ? 'border-zinc-800/50 bg-zinc-900/60' : 'border-gray-200 bg-gray-50/60'}`}>
-          <div className={`relative w-full flex items-center flex-wrap gap-1.5 min-h-[44px] px-3 py-1.5 rounded-xl border ${isDark ? 'border-purple-500/20 bg-zinc-900/80 hover:border-purple-500/40' : 'border-purple-200 bg-white hover:border-gray-300'} focus-within:ring-2 focus-within:ring-purple-500/30 focus-within:border-purple-500/40 transition-all`}>
+            {/* Buscador: a la derecha de Exportar, se estira hasta donde topan los tabs */}
+            <div className={`order-4 relative flex-1 min-w-[200px] flex items-center flex-wrap gap-1.5 min-h-[40px] px-3 py-1.5 rounded-xl border ${isDark ? 'border-purple-500/20 bg-zinc-900/80 hover:border-purple-500/40' : 'border-purple-200 bg-white hover:border-gray-300'} focus-within:ring-2 focus-within:ring-purple-500/30 focus-within:border-purple-500/40 transition-all`}>
             <Search className={`h-4 w-4 shrink-0 ${isDark ? 'text-purple-400' : 'text-purple-500'}`} />
             {searchTags.map((tag) => (
               <span
@@ -2027,6 +2060,7 @@ export function OrdenesMontajeModal({ isOpen, onClose, canExport = true }: Orden
                 <X className="h-3.5 w-3.5" />
               </button>
             )}
+            </div>
           </div>
         </div>
 
@@ -2315,9 +2349,9 @@ export function OrdenesMontajeModal({ isOpen, onClose, canExport = true }: Orden
                 </thead>
                 <tbody>
                   {(() => {
-                    const currentDataFull = activeTab === 'invian-digital' ? filteredINVIANDigitalData : filteredINVIANData;
-                    const currentData = activeTab === 'invian-digital' ? paginatedINVIANDigitalData : paginatedINVIANData;
-                    const currentGrouped = activeTab === 'invian-digital' ? groupedINVIANDigitalData : groupedINVIANData;
+                    const currentDataFull = activeTab === 'invian-digital' ? filteredINVIANDigitalData : activeTab === 'invian-unmas' ? filteredINVIANUnmasData : filteredINVIANData;
+                    const currentData = activeTab === 'invian-digital' ? paginatedINVIANDigitalData : activeTab === 'invian-unmas' ? paginatedINVIANUnmasData : paginatedINVIANData;
+                    const currentGrouped = activeTab === 'invian-digital' ? groupedINVIANDigitalData : activeTab === 'invian-unmas' ? groupedINVIANUnmasData : groupedINVIANData;
                     const showCto = activeTab === 'invian-digital';
                     const showCodigoUnico = true;
                     const showTipoInventario = true;
