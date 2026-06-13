@@ -907,6 +907,9 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
   const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('asc');
   const [agruparComoCompleto, setAgruparComoCompleto] = useState(true); // Group flujo+contraflujo at same location
   const [excluirCategoria, setExcluirCategoria] = useState<string>('');
+  // Modo de exclusión por categoría: 'distancia' (Haversine, default),
+  // 'contracara' (misma estructura con la categoría en la otra cara) o 'ambas'.
+  const [excluirModo, setExcluirModo] = useState<'distancia' | 'contracara' | 'ambas'>('distancia');
   // Reserva Masiva: solo aparece cuando la cara tiene grupo_masivo_id; cuando ON,
   // (a) filtra inventario disponible en TODO el rango del grupo, (b) replica reserva a todas las caras
   const [reservaMasivaP, setReservaMasivaP] = useState<boolean>(false);
@@ -3624,6 +3627,7 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
         solicitudCaraId: cara.id,
         excluir_categoria: excluirCategoria || undefined,
         excluir_distancia_km: excluirCategoria ? excluirDistanciaKm : undefined,
+        excluir_modo: excluirCategoria ? excluirModo : undefined,
         // Mi Macro Periférico es mensual; si la propuesta es catorcenal,
         // excluir esos inventarios del buscador (comparten mueble='PARABUS').
         excluir_mi_macro: tipoPeriodo === 'catorcena' ? 1 : undefined,
@@ -3666,7 +3670,7 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
       handleSearchInventory(selectedCaraForSearch);
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [excluirCategoria, excluirDistanciaKm]);
+  }, [excluirCategoria, excluirDistanciaKm, excluirModo]);
 
   // Refetch disponibles with current filters
   const handleRefetchDisponibles = async () => {
@@ -3705,6 +3709,9 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
         fecha_inicio: fechaIniSearch2,
         fecha_fin: fechaFinSearch2,
         solicitudCaraId: selectedCaraForSearch.id,
+        excluir_categoria: excluirCategoria || undefined,
+        excluir_distancia_km: excluirCategoria ? excluirDistanciaKm : undefined,
+        excluir_modo: excluirCategoria ? excluirModo : undefined,
         excluir_mi_macro: tipoPeriodo === 'catorcena' ? 1 : undefined,
       });
       // CDMX/AM no incluye TOLUCA — filtrar Toluca cuando la cara es AM.
@@ -6010,10 +6017,13 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
                     )}
                   </div>
 
-                  {/* Exclusión por categoría de cliente — esconde inventario
-                      cercano a piezas reservadas por clientes de una categoría
-                      X dentro del radio elegido (Haversine en back). */}
-                  <div className={`flex items-center gap-1 px-2 py-1 rounded-lg border ${excluirCategoria ? 'bg-amber-500/15 border-amber-500/40' : (isDark ? 'bg-zinc-800 border-zinc-700' : 'bg-gray-50 border-gray-200')}`} title="Excluye inventario disponible que esté cerca de piezas reservadas por clientes de la categoría seleccionada.">
+                  {/* Exclusión por categoría de cliente. Dos modos (back):
+                      · Distancia: esconde disponible cercano (Haversine) a piezas
+                        reservadas por la categoría dentro del radio elegido.
+                      · Contracara: esconde disponible cuya MISMA estructura (mismo
+                        codigo_unico + plaza) ya tenga la categoría en la otra cara.
+                      · Ambas: aplica los dos criterios. */}
+                  <div className={`flex items-center gap-1 px-2 py-1 rounded-lg border ${excluirCategoria ? 'bg-amber-500/15 border-amber-500/40' : (isDark ? 'bg-zinc-800 border-zinc-700' : 'bg-gray-50 border-gray-200')}`} title="Excluye inventario disponible relacionado con piezas reservadas por clientes de la categoría seleccionada.">
                     <span className={`text-[10px] uppercase ${excluirCategoria ? 'text-amber-300' : (isDark ? 'text-zinc-500' : 'text-gray-500')}`}>Excluir cat.</span>
                     <select
                       value={excluirCategoria}
@@ -6026,6 +6036,18 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
                       ))}
                     </select>
                     {excluirCategoria && (
+                      <select
+                        value={excluirModo}
+                        onChange={(e) => setExcluirModo(e.target.value as 'distancia' | 'contracara' | 'ambas')}
+                        className={`px-1.5 py-0.5 rounded text-xs border-0 focus:ring-1 focus:ring-amber-500/50 ${isDark ? 'bg-zinc-900 text-amber-300' : 'bg-white text-amber-700'}`}
+                        title="Cómo excluir: por cercanía (distancia), por contracara del mismo mueble, o ambas"
+                      >
+                        <option value="distancia">Distancia</option>
+                        <option value="contracara">Contracara</option>
+                        <option value="ambas">Ambas</option>
+                      </select>
+                    )}
+                    {excluirCategoria && (excluirModo === 'distancia' || excluirModo === 'ambas') && (
                       <select
                         value={excluirDistanciaKm}
                         onChange={(e) => setExcluirDistanciaKm(Number(e.target.value))}
