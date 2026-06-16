@@ -1076,11 +1076,18 @@ export const campanasService = {
     return response.data.data;
   },
 
-  async assignArte(id: number, reservaIds: number[], archivo: string, markInstalado: boolean = false, instalacionMode?: 'instalado' | 'rotacion'): Promise<{ message: string; affected: number; marked_instalado?: boolean }> {
+  async assignArte(id: number, reservaIds: number[], archivo: string, markInstalado: boolean = false, instalacionMode?: 'instalado' | 'rotacion', operacionesAsignados?: { ids: number[]; nombres: string[] } | null): Promise<{ message: string; affected: number; marked_instalado?: boolean }> {
+    const opsPayload = (markInstalado && operacionesAsignados && operacionesAsignados.ids.length > 0)
+      ? {
+          idAsignadoOperaciones: operacionesAsignados.ids.join(','),
+          asignadoOperaciones: operacionesAsignados.nombres.join(','),
+        }
+      : {};
     const response = await api.post<ApiResponse<{ message: string; affected: number; marked_instalado?: boolean }>>(`/campanas/${id}/assign-arte`, {
       reservaIds,
       archivo,
       ...(markInstalado ? { markInstalado: true, instalacionMode: instalacionMode || 'instalado' } : {}),
+      ...opsPayload,
     });
     if (!response.data.success || !response.data.data) {
       throw new Error(response.data.error || 'Error al asignar arte');
@@ -1093,12 +1100,20 @@ export const campanasService = {
     reservaIds: number[],
     archivos: { archivo: string; spot: number; nombre: string; tipo: string; nota?: string; nombre_arte?: string | null; estatus_operaciones?: string | null }[],
     markInstalado: boolean = false,
-    instalacionMode?: 'instalado' | 'rotacion'
+    instalacionMode?: 'instalado' | 'rotacion',
+    operacionesAsignados?: { ids: number[]; nombres: string[] } | null
   ): Promise<{ message: string; affected: number; marked_instalado?: boolean }> {
+    const opsPayload = (markInstalado && operacionesAsignados && operacionesAsignados.ids.length > 0)
+      ? {
+          idAsignadoOperaciones: operacionesAsignados.ids.join(','),
+          asignadoOperaciones: operacionesAsignados.nombres.join(','),
+        }
+      : {};
     const response = await api.post<ApiResponse<{ message: string; affected: number; marked_instalado?: boolean }>>(`/campanas/${id}/assign-arte-digital`, {
       reservaIds,
       archivos,
       ...(markInstalado ? { markInstalado: true, instalacionMode: instalacionMode || 'instalado' } : {}),
+      ...opsPayload,
     });
     if (!response.data.success || !response.data.data) {
       throw new Error(response.data.error || 'Error al asignar arte digital');
@@ -1198,12 +1213,20 @@ export const campanasService = {
     reservaIds: number[],
     archivos: { archivo: string; nota: string; spot: number; nombre_arte?: string | null; estatus_operaciones?: string | null }[],
     markInstalado: boolean = false,
-    instalacionMode?: 'instalado' | 'rotacion'
+    instalacionMode?: 'instalado' | 'rotacion',
+    operacionesAsignados?: { ids: number[]; nombres: string[] } | null
   ): Promise<{ message: string; affected: number; marked_instalado?: boolean }> {
+    const opsPayload = (markInstalado && operacionesAsignados && operacionesAsignados.ids.length > 0)
+      ? {
+          idAsignadoOperaciones: operacionesAsignados.ids.join(','),
+          asignadoOperaciones: operacionesAsignados.nombres.join(','),
+        }
+      : {};
     const response = await api.post<ApiResponse<{ message: string; affected: number; marked_instalado?: boolean }>>(`/campanas/${id}/assign-arte-tradicional`, {
       reservaIds,
       archivos,
       ...(markInstalado ? { markInstalado: true, instalacionMode: instalacionMode || 'instalado' } : {}),
+      ...opsPayload,
     });
     if (!response.data.success || !response.data.data) {
       throw new Error(response.data.error || 'Error al asignar arte tradicional');
@@ -1407,6 +1430,14 @@ export const campanasService = {
     if (!response.data.success) {
       throw new Error(response.data.error || 'Error al eliminar tarea');
     }
+  },
+
+  async getUsuariosOperaciones(): Promise<{ id: number; nombre: string; area: string; puesto: string; user_role: string }[]> {
+    const response = await api.get<ApiResponse<{ id: number; nombre: string; area: string; puesto: string; user_role: string }[]>>(`/campanas/usuarios/operaciones`);
+    if (!response.data.success || !response.data.data) {
+      throw new Error(response.data.error || 'Error al obtener usuarios de Operaciones');
+    }
+    return response.data.data;
   },
 
   async getArtesExistentes(id: number): Promise<ArteExistente[]> {
