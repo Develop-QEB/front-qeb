@@ -40,7 +40,7 @@ export function Header({ title, badgeCount }: HeaderProps) {
                String(n.id_responsable) === userId;
       }
       // Tareas
-      if (n.estatus === 'Atendido') return false;
+      if (n.estatus === 'Atendido' || n.estatus === 'Rechazado' || n.estatus === 'Cancelado') return false;
       if (n.id_asignado !== undefined && n.id_asignado !== null) {
         return String(n.id_asignado).split(',').map(s => s.trim()).includes(userId);
       }
