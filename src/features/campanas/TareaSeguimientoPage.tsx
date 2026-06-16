@@ -1530,7 +1530,20 @@ function UploadArtModal({
   const [isCheckingDuplicate, setIsCheckingDuplicate] = useState(false);
 
   // Local library: extends artesExistentes with uploaded files/URLs (addedArtes persists in parent)
-  const localArtes = useMemo(() => [...artesExistentes, ...addedArtes], [artesExistentes, addedArtes]);
+  // Dedup por URL: si un arte subido localmente ya coincide con uno existente
+  // del backend (porque ya se subió y el backend lo devolvió), evitar duplicado
+  // visual en la biblioteca.
+  const localArtes = useMemo(() => {
+    const seen = new Set<string>();
+    const out: ArteExistente[] = [];
+    for (const a of [...artesExistentes, ...addedArtes]) {
+      const key = (a.url || '').trim();
+      if (!key || seen.has(key)) continue;
+      seen.add(key);
+      out.push(a);
+    }
+    return out;
+  }, [artesExistentes, addedArtes]);
 
   // Tab del modal: Artes o Fichas Técnicas
   const [modalTab, setModalTab] = useState<'artes' | 'fichas'>('artes');
@@ -21181,9 +21194,10 @@ export function TareaSeguimientoPage() {
         onClose={() => {
           setIsUploadArtModalOpen(false);
           setUploadArtError(null);
-          // Limpiamos la biblioteca local de artes subidos en la sesion para
-          // que la proxima apertura del modal arranque sin residuos.
-          setParentAddedArtes([]);
+          // NO limpiamos parentAddedArtes aquí: los artes que el usuario subió
+          // a la biblioteca local pero aún no asignó deben permanecer para
+          // la próxima apertura. La limpieza solo ocurre al guardar exitosamente
+          // (onSuccess de assignArteMutation).
         }}
         selectedInventory={selectedInventoryItems}
         onSubmit={handleUploadArt}
