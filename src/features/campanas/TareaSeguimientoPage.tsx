@@ -53,6 +53,7 @@ import {
   FolderOpen,
   AlertTriangle,
   ImageOff,
+  Save,
 } from 'lucide-react';
 import { Header } from '../../components/layout/Header';
 import { campanasService, InventarioConArte, InventarioConAPS, TareaCampana, ArteExistente, DigitalFileSummary, TradicionalFileSummary, FichasTecnicasNode } from '../../services/campanas.service';
@@ -977,6 +978,96 @@ interface ArteTradicionalView {
   nombre_arte?: string | null;
 }
 
+// Editor reutilizable del campo "Estatus Operaciones" para los modales de galería.
+// Persiste vía PATCH /campanas/:id/artes/estatus-operaciones; el cambio se aplica
+// a TODAS las reservas que comparten el mismo archivo dentro de la campaña.
+// El botón Guardar sólo aparece cuando hay cambios sin guardar.
+function EstatusOperacionesEditor({
+  campanaId,
+  archivo,
+  initialValue,
+  accentColor,
+}: {
+  campanaId: number;
+  archivo: string;
+  initialValue: string;
+  accentColor: 'cyan' | 'orange';
+}) {
+  const queryClient = useQueryClient();
+  const [val, setVal] = useState<string>(initialValue || '');
+  const [saved, setSaved] = useState<string>(initialValue || '');
+  const [saving, setSaving] = useState(false);
+  const [justSaved, setJustSaved] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    setVal(initialValue || '');
+    setSaved(initialValue || '');
+    setJustSaved(false);
+    setError(null);
+  }, [initialValue, archivo]);
+
+  const isDirty = val !== saved;
+  const labelColor = accentColor === 'cyan' ? 'text-cyan-300' : 'text-orange-300';
+
+  const handleSave = async () => {
+    if (!archivo || saving || !isDirty) return;
+    try {
+      setSaving(true);
+      setError(null);
+      const trimmed = val.trim();
+      await campanasService.updateArteEstatusOperaciones(campanaId, archivo, trimmed || null);
+      setSaved(val);
+      setJustSaved(true);
+      window.setTimeout(() => setJustSaved(false), 2500);
+      // Invalidación local inmediata; el socket también lo hará para los demás clientes.
+      queryClient.invalidateQueries({ queryKey: ['campana-tareas', campanaId], exact: false });
+      queryClient.invalidateQueries({ queryKey: ['inventario-con-arte', campanaId], exact: false });
+      queryClient.invalidateQueries({ queryKey: ['artes-tradicionales', campanaId], exact: false });
+      queryClient.invalidateQueries({ queryKey: ['imagenes-digitales', campanaId], exact: false });
+      queryClient.invalidateQueries({ queryKey: ['tradicional-file-summaries', campanaId], exact: false });
+      queryClient.invalidateQueries({ queryKey: ['digital-file-summaries', campanaId], exact: false });
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Error al guardar');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <div>
+      <div className="flex items-center justify-between mb-1">
+        <p className={`text-xs font-medium ${labelColor}`}>Estatus Operaciones:</p>
+        {justSaved && !isDirty && (
+          <span className="inline-flex items-center gap-1 text-[10px] font-medium text-emerald-400">
+            <Check className="h-3 w-3" /> Guardado
+          </span>
+        )}
+      </div>
+      <textarea
+        value={val}
+        onChange={(e) => { setVal(e.target.value); setJustSaved(false); }}
+        rows={2}
+        placeholder="Escribe el estatus de operaciones..."
+        className="w-full text-sm p-2 rounded border bg-zinc-800 border-zinc-700 text-zinc-200 placeholder-zinc-500 focus:border-purple-500 focus:outline-none resize-y"
+      />
+      {error && <p className="mt-1 text-[10px] text-red-400">{error}</p>}
+      {isDirty && (
+        <div className="mt-1.5 flex items-center justify-end">
+          <button
+            onClick={handleSave}
+            disabled={saving}
+            className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium shadow ${saving ? 'bg-purple-600/50 text-white cursor-wait' : 'bg-gradient-to-r from-purple-600 to-purple-700 hover:from-purple-500 hover:to-purple-600 text-white'}`}
+          >
+            {saving ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Save className="h-3.5 w-3.5" />}
+            {saving ? 'Guardando...' : 'Guardar'}
+          </button>
+        </div>
+      )}
+    </div>
+  );
+}
+
 // Digital Gallery Modal Component
 function DigitalGalleryModal({
   isOpen,
@@ -985,6 +1076,7 @@ function DigitalGalleryModal({
   isLoading,
   title,
   isDark = true,
+  campanaId,
 }: {
   isOpen: boolean;
   onClose: () => void;
@@ -992,6 +1084,7 @@ function DigitalGalleryModal({
   isLoading: boolean;
   title?: string;
   isDark?: boolean;
+  campanaId?: number;
 }) {
   const [currentIndex, setCurrentIndex] = useState(0);
 
@@ -1121,11 +1214,20 @@ function DigitalGalleryModal({
                       <p className="text-sm text-zinc-300 whitespace-pre-wrap">{(currentImage as any).nota}</p>
                     </div>
                   )}
-                  {(currentImage as any)?.estatus_operaciones && (
-                    <div>
-                      <p className="text-xs font-medium text-cyan-300 mb-1">Estatus Operaciones:</p>
-                      <p className="text-sm text-zinc-300 whitespace-pre-wrap">{(currentImage as any).estatus_operaciones}</p>
-                    </div>
+                  {campanaId && currentImage?.archivo ? (
+                    <EstatusOperacionesEditor
+                      campanaId={campanaId}
+                      archivo={currentImage.archivo}
+                      initialValue={(currentImage as any)?.estatus_operaciones || ''}
+                      accentColor="cyan"
+                    />
+                  ) : (
+                    (currentImage as any)?.estatus_operaciones && (
+                      <div>
+                        <p className="text-xs font-medium text-cyan-300 mb-1">Estatus Operaciones:</p>
+                        <p className="text-sm text-zinc-300 whitespace-pre-wrap">{(currentImage as any).estatus_operaciones}</p>
+                      </div>
+                    )
                   )}
                 </div>
               )}
@@ -1192,12 +1294,14 @@ function TradicionalGalleryModal({
   imagenes,
   isLoading,
   title,
+  campanaId,
 }: {
   isOpen: boolean;
   onClose: () => void;
   imagenes: ArteTradicionalView[];
   isLoading: boolean;
   title?: string;
+  campanaId?: number;
 }) {
   const [currentIndex, setCurrentIndex] = useState(0);
 
@@ -1314,11 +1418,20 @@ function TradicionalGalleryModal({
                       <p className="text-sm text-zinc-300 whitespace-pre-wrap">{currentImage.nota}</p>
                     </div>
                   )}
-                  {(currentImage as any)?.estatus_operaciones && (
-                    <div>
-                      <p className="text-xs font-medium text-orange-300 mb-1">Estatus Operaciones:</p>
-                      <p className="text-sm text-zinc-300 whitespace-pre-wrap">{(currentImage as any).estatus_operaciones}</p>
-                    </div>
+                  {campanaId && currentImage?.archivo ? (
+                    <EstatusOperacionesEditor
+                      campanaId={campanaId}
+                      archivo={currentImage.archivo}
+                      initialValue={(currentImage as any)?.estatus_operaciones || ''}
+                      accentColor="orange"
+                    />
+                  ) : (
+                    (currentImage as any)?.estatus_operaciones && (
+                      <div>
+                        <p className="text-xs font-medium text-orange-300 mb-1">Estatus Operaciones:</p>
+                        <p className="text-sm text-zinc-300 whitespace-pre-wrap">{(currentImage as any).estatus_operaciones}</p>
+                      </div>
+                    )
                   )}
                 </div>
               )}
@@ -11821,6 +11934,7 @@ function TaskDetailModal({
         imagenes={digitalGalleryImages}
         isLoading={isLoadingDigitalGallery}
         title={digitalGalleryTitle}
+        campanaId={campanaId}
       />
     </div>
   );
@@ -21096,6 +21210,7 @@ export function TareaSeguimientoPage() {
         imagenes={digitalGalleryImages}
         isLoading={isLoadingDigitalGallery}
         title={digitalGalleryTitle}
+        campanaId={campanaId}
       />
 
       {/* Tradicional Gallery Modal */}
@@ -21108,6 +21223,7 @@ export function TareaSeguimientoPage() {
         imagenes={tradicionalGalleryImages}
         isLoading={isLoadingTradicionalGallery}
         title={tradicionalGalleryTitle}
+        campanaId={campanaId}
       />
 
       {/* Task Detail Modal */}
