@@ -142,6 +142,12 @@ const isBonifSplitArticle = (articulo?: string | null): boolean => {
   return a.startsWith('BF') || a.startsWith('CF') || a.startsWith('CT');
 };
 
+// Feature flag: el switch "Disponibilidad multi-periodo" del buscador se oculta
+// por pedido del negocio (jun-2026). La lógica (intersectarMultiPeriodo, estados)
+// queda intacta y neutralizada — como el toggle nunca se prende, la intersección
+// regresa la data sin tocar. Para reactivarlo, poner en true. Ver commit 576a7bc.
+const SHOW_DISPONIBILIDAD_MULTIPERIODO = false;
+
 // Tarifa publica now comes from SAP (U_IMU_PublicPrice field on each article)
 
 // Ciudad -> Estado mapping for auto-selection
@@ -5950,7 +5956,10 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
                   {/* Disponibilidad multi-periodo: switch GENERAL del buscador.
                       Aplica solo a este circuito. Al activarlo se pueden elegir
                       periodos extra y la disponibilidad se ajusta a lo que está
-                      libre en la cat/periodo del circuito Y en TODOS los elegidos. */}
+                      libre en la cat/periodo del circuito Y en TODOS los elegidos.
+                      OCULTO por pedido del negocio (jun-2026) — flag
+                      SHOW_DISPONIBILIDAD_MULTIPERIODO. */}
+                  {SHOW_DISPONIBILIDAD_MULTIPERIODO && (
                   <div className="relative">
                     <label className={`flex items-center gap-2 text-xs cursor-pointer select-none px-2 py-1.5 rounded-lg border ${disponibilidadMultiP ? 'bg-purple-500/20 border-purple-500/40 text-purple-300' : (isDark ? 'bg-zinc-800 border-zinc-700 text-zinc-300' : 'bg-gray-50 border-gray-200 text-gray-700')}`}>
                       <Calendar className="h-3.5 w-3.5" />
@@ -6016,6 +6025,7 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
                       </>
                     )}
                   </div>
+                  )}
 
                   {/* Exclusión por categoría de cliente. Dos modos (back):
                       · Distancia: esconde disponible cercano (Haversine) a piezas
