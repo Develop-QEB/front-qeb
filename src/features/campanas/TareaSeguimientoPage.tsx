@@ -18356,7 +18356,7 @@ export function TareaSeguimientoPage() {
                       </>
                     )}
                   </button>
-                  {permissions.canApproveArteSinRevisar && (() => {
+                  {permissions.canApproveArteSinRevisar && activeEstadoArteTab !== 'aprobado' && (() => {
                     const itemsSinRevisar = selectedInventoryItems.filter(item => item.estado_arte === 'sin_revisar');
                     const hasSinRevisar = itemsSinRevisar.length > 0;
                     return (
