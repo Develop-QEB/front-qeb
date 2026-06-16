@@ -20,6 +20,7 @@ export const SOCKET_EVENTS = {
   ARTE_SUBIDO: 'arte:subido',
   ARTE_APROBADO: 'arte:aprobado',
   ARTE_RECHAZADO: 'arte:rechazado',
+  ARTE_ESTATUS_OPERACIONES_ACTUALIZADO: 'arte:estatus-operaciones:actualizado',
 
   // Inventario
   INVENTARIO_ACTUALIZADO: 'inventario:actualizado',
@@ -202,6 +203,16 @@ export function useSocketCampana(campanaId: number | null) {
       queryClient.invalidateQueries({ queryKey: ['campana-inventario-sin-arte', data.campanaId] });
     };
 
+    const handleArteEstatusOperacionesActualizado = (data: { campanaId: number; archivo: string }) => {
+      console.log('[Socket] Estatus operaciones actualizado:', data);
+      queryClient.invalidateQueries({ queryKey: ['campana-inventario-arte', data.campanaId] });
+      queryClient.invalidateQueries({ queryKey: ['campana-tareas', data.campanaId] });
+      queryClient.invalidateQueries({ queryKey: ['tradicional-file-summaries', data.campanaId], exact: false });
+      queryClient.invalidateQueries({ queryKey: ['digital-file-summaries', data.campanaId], exact: false });
+      queryClient.invalidateQueries({ queryKey: ['artes-tradicionales', data.campanaId], exact: false });
+      queryClient.invalidateQueries({ queryKey: ['imagenes-digitales', data.campanaId], exact: false });
+    };
+
     const handleInventarioActualizado = (data: { campanaId: number }) => {
       console.log('[Socket] Inventario actualizado:', data);
       queryClient.invalidateQueries({ queryKey: ['campana-inventario-arte', data.campanaId] });
@@ -266,6 +277,7 @@ export function useSocketCampana(campanaId: number | null) {
     socket.on(SOCKET_EVENTS.ARTE_SUBIDO, handleArteSubido);
     socket.on(SOCKET_EVENTS.ARTE_APROBADO, handleArteAprobado);
     socket.on(SOCKET_EVENTS.ARTE_RECHAZADO, handleArteRechazado);
+    socket.on(SOCKET_EVENTS.ARTE_ESTATUS_OPERACIONES_ACTUALIZADO, handleArteEstatusOperacionesActualizado);
     socket.on(SOCKET_EVENTS.INVENTARIO_ACTUALIZADO, handleInventarioActualizado);
     socket.on(SOCKET_EVENTS.CAMPANA_COMENTARIO_CREADO, handleComentarioCreado);
     socket.on(SOCKET_EVENTS.AUTORIZACION_APROBADA, handleAutorizacionAprobadaCampana);
@@ -280,6 +292,7 @@ export function useSocketCampana(campanaId: number | null) {
       socket.off(SOCKET_EVENTS.ARTE_SUBIDO, handleArteSubido);
       socket.off(SOCKET_EVENTS.ARTE_APROBADO, handleArteAprobado);
       socket.off(SOCKET_EVENTS.ARTE_RECHAZADO, handleArteRechazado);
+      socket.off(SOCKET_EVENTS.ARTE_ESTATUS_OPERACIONES_ACTUALIZADO, handleArteEstatusOperacionesActualizado);
       socket.off(SOCKET_EVENTS.INVENTARIO_ACTUALIZADO, handleInventarioActualizado);
       socket.off(SOCKET_EVENTS.CAMPANA_COMENTARIO_CREADO, handleComentarioCreado);
       socket.off(SOCKET_EVENTS.AUTORIZACION_APROBADA, handleAutorizacionAprobadaCampana);

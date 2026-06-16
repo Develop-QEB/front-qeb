@@ -416,6 +416,9 @@ export interface OrdenMontajeINVIAN {
   cto?: string | null;
   sap_database?: string | null;
   posted?: boolean;
+  // Para "Inventario UN+": formato (mueble) y tipo de periodo (mensual/catorcena).
+  formato?: string | null;
+  tipo_periodo?: string | null;
 }
 
 export interface ComentarioRevisionArte {
@@ -1299,6 +1302,21 @@ export const campanasService = {
     });
     if (!response.data.success || !response.data.data) {
       throw new Error(response.data.error || 'Error al actualizar estado de arte');
+    }
+    return response.data.data;
+  },
+
+  async updateArteEstatusOperaciones(
+    campanaId: number,
+    archivo: string,
+    estatus_operaciones: string | null
+  ): Promise<{ affected: number; tradicional: number; digital: number; archivo: string; estatus_operaciones: string | null }> {
+    const response = await api.patch<ApiResponse<{ affected: number; tradicional: number; digital: number; archivo: string; estatus_operaciones: string | null }>>(
+      `/campanas/${campanaId}/artes/estatus-operaciones`,
+      { archivo, estatus_operaciones }
+    );
+    if (!response.data.success || !response.data.data) {
+      throw new Error(response.data.error || 'Error al actualizar estatus de operaciones');
     }
     return response.data.data;
   },

@@ -167,9 +167,10 @@ interface ResumenCatorcenaGroup {
 const MESES_LABEL = ['Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio', 'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre'];
 
 function formatInicioPeriodo(item: InventarioReservado, tipoPeriodo?: string): string {
-  // Caras circuito siempre se muestran como mes (sin importar tipoPeriodo)
-  const esCircuito = /^(RT|BF|CT|CF)-DIG-\d+-[A-Z]+$/i.test((item as any).articulo || '');
-  if ((esCircuito || tipoPeriodo === 'mensual') && item.inicio_periodo) {
+  // El periodo (catorcena vs mes) lo manda el tipoPeriodo de la propuesta.
+  // Los circuitos digitales son catorcenales y deben mostrar su catorcena —
+  // NO forzar a mes. (Ticket #414.)
+  if (tipoPeriodo === 'mensual' && item.inicio_periodo) {
     const parts = item.inicio_periodo.split('-');
     if (parts.length >= 2) {
       const m = parseInt(parts[1]);

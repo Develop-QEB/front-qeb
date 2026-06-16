@@ -53,6 +53,7 @@ import {
   FolderOpen,
   AlertTriangle,
   ImageOff,
+  Save,
 } from 'lucide-react';
 import { Header } from '../../components/layout/Header';
 import { campanasService, InventarioConArte, InventarioConAPS, TareaCampana, ArteExistente, DigitalFileSummary, TradicionalFileSummary, FichasTecnicasNode } from '../../services/campanas.service';
@@ -977,6 +978,96 @@ interface ArteTradicionalView {
   nombre_arte?: string | null;
 }
 
+// Editor reutilizable del campo "Estatus Operaciones" para los modales de galería.
+// Persiste vía PATCH /campanas/:id/artes/estatus-operaciones; el cambio se aplica
+// a TODAS las reservas que comparten el mismo archivo dentro de la campaña.
+// El botón Guardar sólo aparece cuando hay cambios sin guardar.
+function EstatusOperacionesEditor({
+  campanaId,
+  archivo,
+  initialValue,
+  accentColor,
+}: {
+  campanaId: number;
+  archivo: string;
+  initialValue: string;
+  accentColor: 'cyan' | 'orange';
+}) {
+  const queryClient = useQueryClient();
+  const [val, setVal] = useState<string>(initialValue || '');
+  const [saved, setSaved] = useState<string>(initialValue || '');
+  const [saving, setSaving] = useState(false);
+  const [justSaved, setJustSaved] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    setVal(initialValue || '');
+    setSaved(initialValue || '');
+    setJustSaved(false);
+    setError(null);
+  }, [initialValue, archivo]);
+
+  const isDirty = val !== saved;
+  const labelColor = accentColor === 'cyan' ? 'text-cyan-300' : 'text-orange-300';
+
+  const handleSave = async () => {
+    if (!archivo || saving || !isDirty) return;
+    try {
+      setSaving(true);
+      setError(null);
+      const trimmed = val.trim();
+      await campanasService.updateArteEstatusOperaciones(campanaId, archivo, trimmed || null);
+      setSaved(val);
+      setJustSaved(true);
+      window.setTimeout(() => setJustSaved(false), 2500);
+      // Invalidación local inmediata; el socket también lo hará para los demás clientes.
+      queryClient.invalidateQueries({ queryKey: ['campana-tareas', campanaId], exact: false });
+      queryClient.invalidateQueries({ queryKey: ['inventario-con-arte', campanaId], exact: false });
+      queryClient.invalidateQueries({ queryKey: ['artes-tradicionales', campanaId], exact: false });
+      queryClient.invalidateQueries({ queryKey: ['imagenes-digitales', campanaId], exact: false });
+      queryClient.invalidateQueries({ queryKey: ['tradicional-file-summaries', campanaId], exact: false });
+      queryClient.invalidateQueries({ queryKey: ['digital-file-summaries', campanaId], exact: false });
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Error al guardar');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <div>
+      <div className="flex items-center justify-between mb-1">
+        <p className={`text-xs font-medium ${labelColor}`}>Estatus Operaciones:</p>
+        {justSaved && !isDirty && (
+          <span className="inline-flex items-center gap-1 text-[10px] font-medium text-emerald-400">
+            <Check className="h-3 w-3" /> Guardado
+          </span>
+        )}
+      </div>
+      <textarea
+        value={val}
+        onChange={(e) => { setVal(e.target.value); setJustSaved(false); }}
+        rows={2}
+        placeholder="Escribe el estatus de operaciones..."
+        className="w-full text-sm p-2 rounded border bg-zinc-800 border-zinc-700 text-zinc-200 placeholder-zinc-500 focus:border-purple-500 focus:outline-none resize-y"
+      />
+      {error && <p className="mt-1 text-[10px] text-red-400">{error}</p>}
+      {isDirty && (
+        <div className="mt-1.5 flex items-center justify-end">
+          <button
+            onClick={handleSave}
+            disabled={saving}
+            className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium shadow ${saving ? 'bg-purple-600/50 text-white cursor-wait' : 'bg-gradient-to-r from-purple-600 to-purple-700 hover:from-purple-500 hover:to-purple-600 text-white'}`}
+          >
+            {saving ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Save className="h-3.5 w-3.5" />}
+            {saving ? 'Guardando...' : 'Guardar'}
+          </button>
+        </div>
+      )}
+    </div>
+  );
+}
+
 // Digital Gallery Modal Component
 function DigitalGalleryModal({
   isOpen,
@@ -985,6 +1076,7 @@ function DigitalGalleryModal({
   isLoading,
   title,
   isDark = true,
+  campanaId,
 }: {
   isOpen: boolean;
   onClose: () => void;
@@ -992,6 +1084,7 @@ function DigitalGalleryModal({
   isLoading: boolean;
   title?: string;
   isDark?: boolean;
+  campanaId?: number;
 }) {
   const [currentIndex, setCurrentIndex] = useState(0);
 
@@ -1121,11 +1214,20 @@ function DigitalGalleryModal({
                       <p className="text-sm text-zinc-300 whitespace-pre-wrap">{(currentImage as any).nota}</p>
                     </div>
                   )}
-                  {(currentImage as any)?.estatus_operaciones && (
-                    <div>
-                      <p className="text-xs font-medium text-cyan-300 mb-1">Estatus Operaciones:</p>
-                      <p className="text-sm text-zinc-300 whitespace-pre-wrap">{(currentImage as any).estatus_operaciones}</p>
-                    </div>
+                  {campanaId && currentImage?.archivo ? (
+                    <EstatusOperacionesEditor
+                      campanaId={campanaId}
+                      archivo={currentImage.archivo}
+                      initialValue={(currentImage as any)?.estatus_operaciones || ''}
+                      accentColor="cyan"
+                    />
+                  ) : (
+                    (currentImage as any)?.estatus_operaciones && (
+                      <div>
+                        <p className="text-xs font-medium text-cyan-300 mb-1">Estatus Operaciones:</p>
+                        <p className="text-sm text-zinc-300 whitespace-pre-wrap">{(currentImage as any).estatus_operaciones}</p>
+                      </div>
+                    )
                   )}
                 </div>
               )}
@@ -1192,12 +1294,14 @@ function TradicionalGalleryModal({
   imagenes,
   isLoading,
   title,
+  campanaId,
 }: {
   isOpen: boolean;
   onClose: () => void;
   imagenes: ArteTradicionalView[];
   isLoading: boolean;
   title?: string;
+  campanaId?: number;
 }) {
   const [currentIndex, setCurrentIndex] = useState(0);
 
@@ -1314,11 +1418,20 @@ function TradicionalGalleryModal({
                       <p className="text-sm text-zinc-300 whitespace-pre-wrap">{currentImage.nota}</p>
                     </div>
                   )}
-                  {(currentImage as any)?.estatus_operaciones && (
-                    <div>
-                      <p className="text-xs font-medium text-orange-300 mb-1">Estatus Operaciones:</p>
-                      <p className="text-sm text-zinc-300 whitespace-pre-wrap">{(currentImage as any).estatus_operaciones}</p>
-                    </div>
+                  {campanaId && currentImage?.archivo ? (
+                    <EstatusOperacionesEditor
+                      campanaId={campanaId}
+                      archivo={currentImage.archivo}
+                      initialValue={(currentImage as any)?.estatus_operaciones || ''}
+                      accentColor="orange"
+                    />
+                  ) : (
+                    (currentImage as any)?.estatus_operaciones && (
+                      <div>
+                        <p className="text-xs font-medium text-orange-300 mb-1">Estatus Operaciones:</p>
+                        <p className="text-sm text-zinc-300 whitespace-pre-wrap">{(currentImage as any).estatus_operaciones}</p>
+                      </div>
+                    )
                   )}
                 </div>
               )}
@@ -11821,6 +11934,7 @@ function TaskDetailModal({
         imagenes={digitalGalleryImages}
         isLoading={isLoadingDigitalGallery}
         title={digitalGalleryTitle}
+        campanaId={campanaId}
       />
     </div>
   );
@@ -15227,6 +15341,52 @@ export function TareaSeguimientoPage() {
   // Agrupa items por tarea de impresión con info de estado del flujo
   type EstadoImpresion = 'en_impresion' | 'pendiente_recepcion' | 'recibido';
 
+  // [Fix badge Recibido] Compute relación imp↔rec en espacio de rsv_ids, accesible
+  // al badge para no doble-contar Recepciones normales como huérfanas cuando los
+  // campos listado_inventario (composites) vs ids_reservas (rsv_ids) no coinciden.
+  const impresionRecepcionRelation = useMemo(() => {
+    const compositeToRsv = new Map<string, string[]>();
+    inventarioArteAPI.forEach(item => {
+      const invId = String(item.id);
+      const compositeId = item.grupo ? `${item.id}_${item.grupo}` : invId;
+      const rsvId = item.rsvId || item.rsv_id || item.rsv_ids || '';
+      if (rsvId) {
+        const rsvIds = rsvId.split(',').map((r: string) => r.trim()).filter(Boolean);
+        compositeToRsv.set(compositeId, rsvIds);
+        if (!compositeToRsv.has(invId)) compositeToRsv.set(invId, rsvIds);
+      }
+    });
+    const toRsvSet = (tarea: { listado_inventario?: string | null; ids_reservas?: string | null }): Set<string> => {
+      const set = new Set<string>();
+      const composites = (tarea.listado_inventario || '').replace(/\*/g, ',').split(',').map((s: string) => s.trim()).filter(Boolean);
+      composites.forEach(id => {
+        const rsv = compositeToRsv.get(id);
+        if (rsv) rsv.forEach(r => set.add(r));
+      });
+      const reservaIds = (tarea.ids_reservas || '').replace(/\*/g, ',').split(',').map((s: string) => s.trim()).filter(Boolean);
+      reservaIds.forEach(r => set.add(r));
+      return set;
+    };
+    const tareasImp = tareasAPI.filter(t => t.tipo === 'Impresión');
+    const tareasRec = tareasAPI.filter(t => t.tipo === 'Recepción');
+    const impRsv = new Map<number, Set<string>>();
+    tareasImp.forEach(t => impRsv.set(t.id, toRsvSet(t)));
+    const recepcionesLigadasAImpresion = new Set<number>();
+    tareasRec.forEach(rec => {
+      const recRsv = toRsvSet(rec);
+      if (recRsv.size === 0) return;
+      for (const imp of tareasImp) {
+        const set = impRsv.get(imp.id) || new Set<string>();
+        if (set.size === 0) continue;
+        if ([...set].some(r => recRsv.has(r))) {
+          recepcionesLigadasAImpresion.add(rec.id);
+          break;
+        }
+      }
+    });
+    return { recepcionesLigadasAImpresion };
+  }, [tareasAPI, inventarioArteAPI]);
+
   const inventoryImpresionesData = useMemo((): (InventoryRow & {
     tarea_id?: number;
     tarea_estatus?: string;
@@ -15320,17 +15480,36 @@ export function TareaSeguimientoPage() {
     });
 
     // Crear mapa de tarea de impresión -> tareas de recepción relacionadas (puede haber varias: normal + faltantes)
+    // [Fix matching imp↔rec] Comparar SOLO en espacio de rsv_ids. normalizeIds agrega
+    // bases sin grupo (4308) que causan falsos positivos cuando el mismo inv_id base
+    // aparece en dos catorcenas distintas (grupo 10593 y 10592) — eso ligaba una
+    // Recepción "Cliente imprime" del grupo 10592 con una Impresión del grupo 10593.
+    const toRsvIdSet = (tarea: { listado_inventario?: string | null; ids_reservas?: string | null }): Set<string> => {
+      const set = new Set<string>();
+      const composites = (tarea.listado_inventario || '').replace(/\*/g, ',').split(',').map(s => s.trim()).filter(Boolean);
+      composites.forEach(id => {
+        const rsvIds = compositeToRsvIds.get(id);
+        if (rsvIds) rsvIds.forEach(r => set.add(r));
+      });
+      const reservaIds = (tarea.ids_reservas || '').replace(/\*/g, ',').split(',').map(s => s.trim()).filter(Boolean);
+      reservaIds.forEach(r => set.add(r));
+      return set;
+    };
+
+    const impresionRsvIdsCache = new Map<number, Set<string>>();
+    tareasImpresion.forEach(impresion => {
+      impresionRsvIdsCache.set(impresion.id, toRsvIdSet(impresion));
+    });
+
     const impresionToRecepcionesMap = new Map<number, typeof tareasRecepcion>();
     tareasRecepcion.forEach(recepcion => {
-      const recepcionIds = recepcionIdsMap.get(recepcion.id) || new Set<string>();
-
+      const recepcionRsv = toRsvIdSet(recepcion);
+      if (recepcionRsv.size === 0) return;
       tareasImpresion.forEach(impresion => {
-        const listadoImpresion = impresion.listado_inventario || impresion.ids_reservas || '';
-        const impresionIds = normalizeIds(listadoImpresion);
-
-        // Comparar sets: deben tener al menos un elemento en común
-        const hasCommon = [...impresionIds].some(id => recepcionIds.has(id));
-        if (hasCommon && recepcionIds.size > 0 && impresionIds.size > 0) {
+        const impresionRsv = impresionRsvIdsCache.get(impresion.id) || new Set<string>();
+        if (impresionRsv.size === 0) return;
+        const hasCommon = [...impresionRsv].some(r => recepcionRsv.has(r));
+        if (hasCommon) {
           const existing = impresionToRecepcionesMap.get(impresion.id) || [];
           existing.push(recepcion);
           impresionToRecepcionesMap.set(impresion.id, existing);
@@ -18177,7 +18356,7 @@ export function TareaSeguimientoPage() {
                       </>
                     )}
                   </button>
-                  {permissions.canApproveArteSinRevisar && (() => {
+                  {permissions.canApproveArteSinRevisar && activeEstadoArteTab !== 'aprobado' && (() => {
                     const itemsSinRevisar = selectedInventoryItems.filter(item => item.estado_arte === 'sin_revisar');
                     const hasSinRevisar = itemsSinRevisar.length > 0;
                     return (
@@ -18502,17 +18681,11 @@ export function TareaSeguimientoPage() {
 
                   // [Fix Cliente imprime] Sumar Recepciones huérfanas atendidas
                   // (las que se crearon via "Cliente imprime" sin tarea de Impresión).
-                  // Sin esto, el contador se queda en 0 aunque la Recepción esté Atendida.
-                  const impresionRelatedRecepcionIdsBadge = new Set<number>();
-                  tareasImp.forEach(imp => {
-                    const listadoImp = (imp.listado_inventario || imp.ids_reservas || '').replace(/\*/g, ',').split(',').map(s => s.trim()).filter(Boolean);
-                    tareasRec.forEach(rec => {
-                      const listadoRec = (rec.listado_inventario || rec.ids_reservas || '').replace(/\*/g, ',').split(',').map(s => s.trim()).filter(Boolean);
-                      if (listadoImp.some(id => listadoRec.includes(id))) {
-                        impresionRelatedRecepcionIdsBadge.add(rec.id);
-                      }
-                    });
-                  });
+                  // El matching se hace en espacio de rsv_ids puros (ver
+                  // impresionRecepcionRelation) para que una Recepción normal cuyo
+                  // listado_inventario está vacío pero su ids_reservas sí coincide
+                  // con la Impresión NO se cuente como huérfana.
+                  const impresionRelatedRecepcionIdsBadge = impresionRecepcionRelation.recepcionesLigadasAImpresion;
                   const huerfanasRecibidas = tareasRec
                     .filter(t => !impresionRelatedRecepcionIdsBadge.has(t.id))
                     .filter(t => {
@@ -21037,6 +21210,7 @@ export function TareaSeguimientoPage() {
         imagenes={digitalGalleryImages}
         isLoading={isLoadingDigitalGallery}
         title={digitalGalleryTitle}
+        campanaId={campanaId}
       />
 
       {/* Tradicional Gallery Modal */}
@@ -21049,6 +21223,7 @@ export function TareaSeguimientoPage() {
         imagenes={tradicionalGalleryImages}
         isLoading={isLoadingTradicionalGallery}
         title={tradicionalGalleryTitle}
+        campanaId={campanaId}
       />
 
       {/* Task Detail Modal */}

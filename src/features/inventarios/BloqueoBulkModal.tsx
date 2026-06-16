@@ -147,7 +147,11 @@ export function BloqueoBulkModal({ isOpen, onClose, items, onConfirm, isSubmitti
   // === Campañas activas por inventario (deduplicadas dentro del mismo inv) ===
   const campanasPorInv = useMemo((): Map<number, CampanaActivaBulk[]> => {
     const map = new Map<number, CampanaActivaBulk[]>();
-    const hoy = new Date();
+    // "Actual o futuro" por FECHA (no por hora), alineado con el backend
+    // (toggleBlock: sc.fin_periodo >= CURDATE()). Comparar por date-part evita
+    // corrimientos de timezone y el caso límite de un período que termina hoy.
+    const d = new Date();
+    const hoyStr = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
     for (let i = 0; i < items.length; i++) {
       const inv = items[i];
       const h = historialQueries[i]?.data;
@@ -157,7 +161,7 @@ export function BloqueoBulkModal({ isOpen, onClose, items, onConfirm, isSubmitti
       for (const ev of h.historial) {
         if (
           ['Reservado', 'Ocupado', 'Vendido'].includes(ev.reserva_estatus) &&
-          new Date(ev.fin_periodo) >= hoy &&
+          (ev.fin_periodo || '').slice(0, 10) >= hoyStr &&
           !seen.has(ev.campana_id)
         ) {
           seen.add(ev.campana_id);

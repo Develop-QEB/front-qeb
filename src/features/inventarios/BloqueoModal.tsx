@@ -132,12 +132,18 @@ export function BloqueoModal({ isOpen, onClose, item, onConfirm, isSubmitting }:
 
   const campanasActivas = useMemo((): CampanaActiva[] => {
     if (!historialData) return [];
-    const hoy = new Date();
+    // "Actual o futuro": el período no ha terminado (fin_periodo >= hoy, por
+    // FECHA, no por hora). Alinea con el filtro del backend (toggleBlock:
+    // sc.fin_periodo >= CURDATE()), que es el que realmente libera la reserva.
+    // Comparar por date-part evita corrimientos de timezone y el caso límite
+    // de un período que termina hoy.
+    const d = new Date();
+    const hoyStr = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
     const seen = new Set<number>();
     return historialData.historial
       .filter(h =>
         ['Reservado', 'Ocupado', 'Vendido'].includes(h.reserva_estatus) &&
-        new Date(h.fin_periodo) >= hoy
+        (h.fin_periodo || '').slice(0, 10) >= hoyStr
       )
       .reduce<CampanaActiva[]>((acc, h) => {
         if (!seen.has(h.campana_id)) {

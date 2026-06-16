@@ -1,6 +1,7 @@
 import { useMemo, useState, useEffect, useRef } from 'react';
-import { X, Download, Search, Image as ImageIcon, Film, ChevronDown, Filter, Calendar, Loader2 } from 'lucide-react';
+import { X, Download, Search, Image as ImageIcon, Film, ChevronDown, Filter, Calendar, Loader2, Save, Check as CheckIcon } from 'lucide-react';
 import { useThemeStore } from '../../store/themeStore';
+import { campanasService } from '../../services/campanas.service';
 import type { VersionarioArtesPreview, VersionarioArtesPreviewRow } from '../../utils/exportVersionarioArtes';
 import type { Catorcena } from '../../types';
 
@@ -517,9 +518,13 @@ function ArteThumb({ url, onClick }: { url: string; onClick?: () => void }) {
 
 // ArtesGalleryModal — vista carrusel para previsualizar/descargar artes del row.
 // Estilo similar a la galeria del modal de Ordenes de Montaje.
-function ArtesGalleryModal({ urls, initialIndex, onClose, isDark, ficha }: {
+// Cuando recibe campanaId el campo "Estatus Operaciones" es editable y persiste
+// vía PATCH /campanas/:id/artes/estatus-operaciones (aplica a TODAS las reservas
+// que comparten el mismo archivo dentro de la campaña).
+function ArtesGalleryModal({ urls, initialIndex, onClose, isDark, ficha, campanaId }: {
   urls: string[]; initialIndex: number; onClose: () => void; isDark: boolean;
   ficha?: { nombreArte: string; notas: string; estatusOperaciones: string } | null;
+  campanaId?: number;
 }) {
   const [idx, setIdx] = useState(initialIndex);
   const [erroredKeys, setErroredKeys] = useState<Set<number>>(new Set());
@@ -527,6 +532,41 @@ function ArtesGalleryModal({ urls, initialIndex, onClose, isDark, ficha }: {
   const current = urls[safeIdx];
   const isVid = isVideoUrl(current);
   const filename = extractFileName(current);
+
+  const initialEstatus = ficha?.estatusOperaciones || '';
+  const [estatusVal, setEstatusVal] = useState<string>(initialEstatus);
+  const [savedEstatus, setSavedEstatus] = useState<string>(initialEstatus);
+  const [savingEstatus, setSavingEstatus] = useState(false);
+  const [justSaved, setJustSaved] = useState(false);
+  const [saveError, setSaveError] = useState<string | null>(null);
+
+  // Reset campo cuando cambia la ficha entrante (ej. abren con otra reserva)
+  useEffect(() => {
+    setEstatusVal(initialEstatus);
+    setSavedEstatus(initialEstatus);
+    setJustSaved(false);
+    setSaveError(null);
+  }, [initialEstatus]);
+
+  const canEditEstatus = Boolean(campanaId) && !isVid && Boolean(current);
+  const isDirty = canEditEstatus && estatusVal !== savedEstatus;
+
+  const handleSaveEstatus = async () => {
+    if (!campanaId || !current || savingEstatus || !isDirty) return;
+    try {
+      setSavingEstatus(true);
+      setSaveError(null);
+      const trimmed = estatusVal.trim();
+      await campanasService.updateArteEstatusOperaciones(campanaId, current, trimmed || null);
+      setSavedEstatus(estatusVal);
+      setJustSaved(true);
+      window.setTimeout(() => setJustSaved(false), 2500);
+    } catch (err) {
+      setSaveError(err instanceof Error ? err.message : 'Error al guardar');
+    } finally {
+      setSavingEstatus(false);
+    }
+  };
 
   const handleDownload = async () => {
     try {
@@ -632,25 +672,61 @@ function ArtesGalleryModal({ urls, initialIndex, onClose, isDark, ficha }: {
           )}
         </div>
         {/* Ficha del arte: Nombre Arte / Observaciones / Estatus Operaciones */}
-        {ficha && (ficha.nombreArte || ficha.notas || ficha.estatusOperaciones) && (
-          <div className={`p-3 border-t border-border space-y-2 text-xs overflow-y-auto max-h-40 flex-shrink-0 ${isDark ? 'bg-zinc-900' : 'bg-gray-50'}`}>
-            {ficha.nombreArte && (
+        {(ficha || canEditEstatus) && (
+          <div className={`p-3 border-t border-border space-y-2 text-xs overflow-y-auto max-h-56 flex-shrink-0 ${isDark ? 'bg-zinc-900' : 'bg-gray-50'}`}>
+            {ficha?.nombreArte && (
               <div>
                 <p className={`font-medium mb-0.5 ${isDark ? 'text-purple-300' : 'text-purple-600'}`}>Nombre Arte:</p>
                 <p className={`whitespace-pre-wrap ${isDark ? 'text-zinc-300' : 'text-gray-700'}`}>{ficha.nombreArte}</p>
               </div>
             )}
-            {ficha.notas && (
+            {ficha?.notas && (
               <div>
                 <p className={`font-medium mb-0.5 ${isDark ? 'text-purple-300' : 'text-purple-600'}`}>Observaciones:</p>
                 <p className={`whitespace-pre-wrap ${isDark ? 'text-zinc-300' : 'text-gray-700'}`}>{ficha.notas}</p>
               </div>
             )}
-            {ficha.estatusOperaciones && (
+            {canEditEstatus ? (
               <div>
-                <p className={`font-medium mb-0.5 ${isDark ? 'text-purple-300' : 'text-purple-600'}`}>Estatus Operaciones:</p>
-                <p className={`whitespace-pre-wrap ${isDark ? 'text-zinc-300' : 'text-gray-700'}`}>{ficha.estatusOperaciones}</p>
+                <div className="flex items-center justify-between mb-1">
+                  <p className={`font-medium ${isDark ? 'text-purple-300' : 'text-purple-600'}`}>Estatus Operaciones:</p>
+                  {justSaved && !isDirty && (
+                    <span className={`inline-flex items-center gap-1 text-[10px] font-medium ${isDark ? 'text-emerald-400' : 'text-emerald-600'}`}>
+                      <CheckIcon className="h-3 w-3" />
+                      Guardado
+                    </span>
+                  )}
+                </div>
+                <textarea
+                  value={estatusVal}
+                  onChange={(e) => { setEstatusVal(e.target.value); setJustSaved(false); }}
+                  rows={2}
+                  placeholder="Escribe el estatus de operaciones..."
+                  className={`w-full text-xs p-2 rounded border resize-y ${isDark ? 'bg-zinc-800 border-zinc-700 text-zinc-200 placeholder-zinc-500 focus:border-purple-500' : 'bg-white border-gray-300 text-gray-800 placeholder-gray-400 focus:border-purple-500'} focus:outline-none`}
+                />
+                {saveError && (
+                  <p className={`mt-1 text-[10px] ${isDark ? 'text-red-400' : 'text-red-600'}`}>{saveError}</p>
+                )}
+                {isDirty && (
+                  <div className="mt-1.5 flex items-center justify-end">
+                    <button
+                      onClick={handleSaveEstatus}
+                      disabled={savingEstatus}
+                      className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium shadow ${savingEstatus ? 'bg-purple-600/50 text-white cursor-wait' : 'bg-gradient-to-r from-purple-600 to-purple-700 hover:from-purple-500 hover:to-purple-600 text-white'}`}
+                    >
+                      {savingEstatus ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Save className="h-3.5 w-3.5" />}
+                      {savingEstatus ? 'Guardando...' : 'Guardar'}
+                    </button>
+                  </div>
+                )}
               </div>
+            ) : (
+              ficha?.estatusOperaciones && (
+                <div>
+                  <p className={`font-medium mb-0.5 ${isDark ? 'text-purple-300' : 'text-purple-600'}`}>Estatus Operaciones:</p>
+                  <p className={`whitespace-pre-wrap ${isDark ? 'text-zinc-300' : 'text-gray-700'}`}>{ficha.estatusOperaciones}</p>
+                </div>
+              )
             )}
           </div>
         )}

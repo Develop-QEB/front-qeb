@@ -80,6 +80,24 @@ const isTrafico = (u: UserOption) =>
 
 const fmtFecha = (d: string) => new Date(d).toLocaleDateString('es-MX', { day: '2-digit', month: 'short' });
 
+// Fecha de hoy como 'YYYY-MM-DD' (local). Se compara contra el date-part del
+// `fin_periodo` para decidir si una tarjeta ya está en el pasado.
+const hoyISO = (): string => {
+  const d = new Date();
+  const mes = String(d.getMonth() + 1).padStart(2, '0');
+  const dia = String(d.getDate()).padStart(2, '0');
+  return `${d.getFullYear()}-${mes}-${dia}`;
+};
+
+// Una tarjeta es "pasada" si su período ya terminó (fin_periodo < hoy). Alinea
+// con el filtro `sc.fin_periodo >= CURDATE()` del backend (toggleBlock): esas
+// reservas NO se liberan, así que tampoco deben contar ni generar tareas.
+// Comparamos por date-part del string ISO para evitar corrimientos de timezone.
+const esPeriodoPasado = (fin: string | null | undefined): boolean => {
+  if (!fin) return false; // sin fecha → conservador: no la descartamos
+  return fin.slice(0, 10) < hoyISO();
+};
+
 const labelForCampana = (c: CampanaEnCelda): string => {
   if (c.campana_id) return c.campana_nombre || `Campaña #${c.campana_id}`;
   return `Propuesta #${c.propuesta_id}`;
@@ -305,7 +323,9 @@ export function BloqueoMasivoModal({ open, onClose, initialInventarios }: Bloque
     return out;
   }, [matriz, selectedInventarios, selectedReservas, bloqueadosLocal]);
 
-  // === Tarjetas afectadas: todas las cards en los inventarios objetivo ===
+  // === Tarjetas afectadas: cards ACTUALES/FUTURAS en los inventarios objetivo ===
+  // Se excluyen las de período ya vencido: el backend (toggleBlock) no las
+  // libera, así que no deben contar ni generar tareas "Sustituir Inventario".
   const tarjetasAfectadas = useMemo(() => {
     if (!matriz) return [] as { card: CampanaEnCelda; inv: InventarioResumen; cat: CatorcenaRef }[];
     const out: { card: CampanaEnCelda; inv: InventarioResumen; cat: CatorcenaRef }[] = [];
@@ -317,6 +337,7 @@ export function BloqueoMasivoModal({ open, onClose, initialInventarios }: Bloque
         const celda = invCeldas[cellKeyOf(cat)];
         if (!celda) continue;
         for (const card of celda.campanas) {
+          if (esPeriodoPasado(card.fin_periodo)) continue;
           out.push({ card, inv, cat });
         }
       }

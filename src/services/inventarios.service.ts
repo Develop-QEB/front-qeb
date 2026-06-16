@@ -57,6 +57,9 @@ export interface DisponiblesParams {
   excluir_categoria?: string;
   excluir_distancia_km?: number;
   excluir_mi_macro?: string | number;
+  // Modo de exclusión por categoría: 'distancia' (Haversine, default),
+  // 'contracara' (misma estructura con la categoría en la otra cara) o 'ambas'.
+  excluir_modo?: 'distancia' | 'contracara' | 'ambas';
 }
 
 export interface InventarioDisponible extends Inventario {

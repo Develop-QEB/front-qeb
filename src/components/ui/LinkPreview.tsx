@@ -63,9 +63,18 @@ export function LinkPreview({ url, isDark = true }: { url: string; isDark?: bool
   const m = meta || { url };
   const showImage = !!m.image && !imgError;
   const titleText = m.title || m.url;
+  // Normaliza URLs sin scheme (p.ej. "www.link.com") para que <a href> abra
+  // el sitio externo en vez de tratarlo como ruta relativa.
+  const safeHref = /^https?:\/\//i.test(m.url) ? m.url : `https://${m.url}`;
+  // Host seguro: si el back no devolvió host y new URL revienta porque la
+  // URL no tiene scheme, caemos al string original en vez de crashear la pantalla.
+  const safeHost = (() => {
+    if (m.host) return m.host;
+    try { return new URL(safeHref).host; } catch { return m.url; }
+  })();
 
   return (
-    <a href={m.url} target="_blank" rel="noopener noreferrer" className={cardCls}>
+    <a href={safeHref} target="_blank" rel="noopener noreferrer" className={cardCls}>
       {showImage && (
         <img
           src={m.image as string}
@@ -90,7 +99,7 @@ export function LinkPreview({ url, isDark = true }: { url: string; isDark?: bool
           )}
           <p className={`text-[10px] mt-1 truncate ${isDark ? 'text-zinc-500' : 'text-gray-400'} flex items-center gap-1`}>
             <ExternalLink className="h-3 w-3" />
-            {m.host || new URL(m.url).host}
+            {safeHost}
           </p>
         </div>
       </div>

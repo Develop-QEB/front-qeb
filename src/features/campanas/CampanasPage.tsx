@@ -1826,6 +1826,29 @@ export function CampanasPage() {
       .map(c => ({ num: c.numero_catorcena, anio: c.a_o }))
       .sort((a, b) => a.anio !== b.anio ? a.anio - b.anio : a.num - b.num);
 
+    // Mapa de fechas por catorcena (num-anio → {ini, fin} en ms) y helpers de
+    // fecha por grupo. Los grupos MENSUALES usan su propio rango de mes, no la
+    // catorcena — así no se mezclan ni se ordenan como si fueran catorcena.
+    const catFechas = new Map<string, { ini: number; fin: number }>();
+    (catorcenasData?.data || []).forEach(c => {
+      catFechas.set(`${c.numero_catorcena}-${c.a_o}`, {
+        ini: new Date(c.fecha_inicio).getTime(),
+        fin: new Date(c.fecha_fin).getTime(),
+      });
+    });
+    // Rango de fechas (ms) que cubre un grupo (mensual = el mes; catorcena = sus fechas).
+    const rangoGrupo = (cat: { num: number; anio: number; isMensual?: boolean }): { ini: number; fin: number } => {
+      if (cat.isMensual) {
+        return {
+          ini: new Date(cat.anio, cat.num - 1, 1).getTime(),
+          fin: new Date(cat.anio, cat.num, 0, 23, 59, 59, 999).getTime(),
+        };
+      }
+      const d = catFechas.get(`${cat.num}-${cat.anio}`);
+      // Fallback aproximado si no hay fecha de catorcena (no debería pasar).
+      return d || { ini: new Date(cat.anio, 0, 1).getTime() + cat.num, fin: new Date(cat.anio, 0, 1).getTime() + cat.num };
+    };
+
     filteredData.forEach(item => {
       const isMensual = (item as any).tipo_periodo === 'mensual';
       if (isMensual && item.fecha_inicio) {
@@ -1833,7 +1856,8 @@ export function CampanasPage() {
         const parts = item.fecha_inicio.split('-');
         const anio = parseInt(parts[0]);
         const mes = parseInt(parts[1]); // 1-12
-        const key = `${anio}-${String(mes).padStart(2, '0')}`;
+        // Llave con namespace 'M-' para que Junio (mes 6) NO colisione con Cat 6.
+        const key = `M-${anio}-${String(mes).padStart(2, '0')}`;
         if (!groups[key]) {
           groups[key] = {
             catorcena: { num: mes, anio, isMensual: true } as any,
@@ -1899,24 +1923,26 @@ export function CampanasPage() {
       }
     });
 
-    // Filtrar grupos para que solo queden catorcenas dentro del rango del filtro de periodo activo
+    // Filtrar grupos por FECHA dentro del rango del filtro de periodo activo
+    // (no por llave string — los meses tienen namespace 'M-' y no comparan igual
+    // que las catorcenas). Un grupo se mantiene si su rango de fechas solapa el
+    // rango de fechas del filtro de catorcenas.
     if (yearInicio && yearFin && catorcenaInicio && catorcenaFin) {
-      const filterStartKey = `${yearInicio}-${String(catorcenaInicio).padStart(2, '0')}`;
-      const filterEndKey = `${yearFin}-${String(catorcenaFin).padStart(2, '0')}`;
-      Object.keys(groups).forEach(key => {
-        if (key < filterStartKey || key > filterEndKey) {
-          delete groups[key];
-        }
+      const fStart = catFechas.get(`${catorcenaInicio}-${yearInicio}`);
+      const fEnd = catFechas.get(`${catorcenaFin}-${yearFin}`);
+      const filtIni = fStart ? fStart.ini : -Infinity;
+      const filtFin = fEnd ? fEnd.fin : Infinity;
+      Object.entries(groups).forEach(([key, value]) => {
+        const r = rangoGrupo(value.catorcena);
+        if (r.fin < filtIni || r.ini > filtFin) delete groups[key];
       });
       // Una campaña solo aparece en las catorcenas donde tiene caras reales
       // (catorcenas_con_contenido). Si su período toca el rango filtrado pero no tiene caras
       // ahí, queda fuera — eso es correcto, su actividad está en otra catorcena.
     } else if (yearInicio && yearFin) {
-      Object.keys(groups).forEach(key => {
-        const groupAnio = parseInt(key.split('-')[0]);
-        if (groupAnio < yearInicio || groupAnio > yearFin) {
-          delete groups[key];
-        }
+      Object.entries(groups).forEach(([key, value]) => {
+        const a = value.catorcena.anio;
+        if (a < yearInicio || a > yearFin) delete groups[key];
       });
     }
 
@@ -1925,9 +1951,11 @@ export function CampanasPage() {
       ? activeGroupings[1]
       : null;
 
-    // Ordenar por año desc, luego por catorcena desc
+    // Ordenar por FECHA real descendente (más reciente arriba). Así los meses
+    // caen en su lugar cronológico entre las catorcenas (antes se ordenaba por
+    // la llave string y los meses 1-12 se intercalaban como si fueran catorcenas).
     return Object.entries(groups)
-      .sort((a, b) => b[0].localeCompare(a[0]))
+      .sort((a, b) => rangoGrupo(b[1].catorcena).ini - rangoGrupo(a[1].catorcena).ini)
       .map(([key, value]) => {
         // Si hay segunda agrupación, crear subgrupos
         if (secondGrouping) {
@@ -1974,6 +2002,39 @@ export function CampanasPage() {
     return itemInicio <= target.fin && efectiveFin >= target.inicio;
   }, [catorcenaDateMap]);
 
+  // Versión consciente de MENSUAL: para grupos mensuales matchea por el rango de
+  // fechas del MES (no por número de catorcena, que en mensual es el mes 1-12).
+  const itemMatchesGrupo = useCallback((inv: any, cat: { num: number; anio: number; isMensual?: boolean }): boolean => {
+    if (cat?.isMensual) {
+      const ini = inv.inicio_periodo ? new Date(inv.inicio_periodo).getTime() : null;
+      if (!ini) return false;
+      const fin = inv.fin_periodo ? new Date(inv.fin_periodo).getTime() : ini;
+      const mIni = new Date(cat.anio, cat.num - 1, 1).getTime();
+      const mFin = new Date(cat.anio, cat.num, 0, 23, 59, 59, 999).getTime();
+      return ini <= mFin && fin >= mIni;
+    }
+    return itemMatchesCatorcena(inv, cat.num, cat.anio);
+  }, [itemMatchesCatorcena]);
+
+  // Inversión de una campaña en un grupo. La inversión viene por catorcena
+  // (llave "num:anio"). Para grupos mensuales se SUMAN las catorcenas que caen
+  // dentro del mes; para catorcena se toma su llave directa.
+  const getInversionGrupo = useCallback((invMap: Record<string, number> | undefined, cat: { num: number; anio: number; isMensual?: boolean }): number => {
+    if (!invMap) return 0;
+    if (cat?.isMensual) {
+      const mIni = new Date(cat.anio, cat.num - 1, 1).getTime();
+      const mFin = new Date(cat.anio, cat.num, 0, 23, 59, 59, 999).getTime();
+      let sum = 0;
+      for (const [k, v] of Object.entries(invMap)) {
+        if (k === 'total') continue;
+        const d = catorcenaDateMap[k.replace(':', '-')];
+        if (d && d.inicio <= mFin && d.fin >= mIni) sum += Number(v) || 0;
+      }
+      return sum;
+    }
+    return Number(invMap[`${cat.num}:${cat.anio}`]) || 0;
+  }, [catorcenaDateMap]);
+
   // Re-filtra los grupos por filtro de etapa: una campaña permanece en el grupo
   // solo si tiene al menos un inventario en ESA catorcena que cumpla el filtro
   // de etapa. Si los inventarios aun no se cargaron, no la oculta (espera).
@@ -2002,7 +2063,7 @@ export function CampanasPage() {
         const filteredCampanas = g.campanas.filter(c => {
           const allInv = campanaInventarios[c.id];
           if (!allInv) return true; // inventarios aun no cargados → mantener
-          const catInv = allInv.filter(inv => itemMatchesCatorcena(inv, g.catorcena.num, g.catorcena.anio));
+          const catInv = allInv.filter(inv => itemMatchesGrupo(inv, g.catorcena));
           if (catInv.length === 0) return false;
           return catInv.some(matchesEtapa);
         });
@@ -2408,24 +2469,20 @@ export function CampanasPage() {
           const aps = info?.aps_global || (campana as any).aps_global || campana.id || '';
           const cuic = info?.cuic || (campana as any).cuic || '';
           const vendedor = info?.vendedor || (campana as any).creador_nombre || '';
-          // Inversión prorrateada específica de esta catorcena (sc.costo × días_overlap / días_totales).
-          const catKey = `${catorcena.num}:${catorcena.anio}`;
+          // Inversión del periodo (catorcena o MES). Mensual = suma de catorcenas del mes.
+          const periodKey = (catorcena as any).isMensual ? `M${catorcena.anio}-${catorcena.num}` : `${catorcena.num}:${catorcena.anio}`;
           const invData = invMap[campana.id];
           const invCampana = invData !== undefined
-            ? (invData[catKey] || 0)
+            ? getInversionGrupo(invData, catorcena)
             : Number(info?.inversion || (campana as any).inversion) || 0;
-          const exportKey = `${campana.id}:${catKey}`;
+          const exportKey = `${campana.id}:${periodKey}`;
           const showInversion = !invExportedKey.has(exportKey);
           if (showInversion) invExportedKey.add(exportKey);
           const invStr = showInversion && invCampana > 0 ? `$${invCampana.toLocaleString('es-MX')}` : '0';
           const descripcion = info?.descripcion || (campana as any).descripcion || '';
 
           const allInv = invByCampana[campana.id] || [];
-          const inventarios = allInv.filter((inv: any) => {
-            const invNum = Number(inv.numero_catorcena);
-            const invAnio = Number(inv.anio_catorcena);
-            return invNum === catorcena.num && invAnio === catorcena.anio;
-          });
+          const inventarios = allInv.filter((inv: any) => itemMatchesGrupo(inv, catorcena));
           const periodo = (catorcena as any).isMensual
             ? `Mes ${catorcena.num}`
             : `Catorcena #${String(catorcena.num).padStart(2, '0')}`;
@@ -3700,8 +3757,8 @@ export function CampanasPage() {
                     const periodColor = PERIOD_COLORS_LOCAL[periodStatus] || getDefaultStatusColor(isDark);
                     const isExpanded = expandedCampanas.has(campana.id);
                     const allInventarios = campanaInventarios[campana.id] || [];
-                    // Filtrar inventarios por la catorcena del grupo actual (match exacto + overlap de fechas)
-                    let inventarios = allInventarios.filter(inv => itemMatchesCatorcena(inv, catorcena.num, catorcena.anio));
+                    // Filtrar inventarios por el periodo del grupo actual (catorcena o MES).
+                    let inventarios = allInventarios.filter(inv => itemMatchesGrupo(inv, catorcena));
                     // Filtrar inventarios por los términos de búsqueda (codigo_unico)
                     const isSearchingInventario = allSearchTerms.length > 0 && allSearchTerms.some(term => {
                       // Detectar si algún término parece código de inventario (busca en inventarios cargados)
@@ -3839,12 +3896,11 @@ export function CampanasPage() {
                             ) : null;
                           })()}
                           {(() => {
-                            // Inversión específica de esta catorcena (sc.costo). Si el batch cargó y no hay
-                            // valor para este catKey, la campaña no tiene caras aquí → 0.
-                            const catKey = `${catorcena.num}:${catorcena.anio}`;
+                            // Inversión del periodo (catorcena o MES). Para mensual se
+                            // suman las catorcenas que caen dentro del mes (ver helper).
                             const invData = inversionPorCatorcena[campana.id];
                             const invCampana = invData !== undefined
-                              ? (invData[catKey] || 0)
+                              ? getInversionGrupo(invData, catorcena)
                               : (Number((campana as any).inversion) || 0);
                             return (
                               <span className={`px-2 py-0.5 rounded-full text-[10px] ${isDark ? 'bg-green-500/15 text-green-300' : 'bg-green-50 text-green-700'} border border-green-500/25 flex items-center gap-1`} title="Inversión de la catorcena">
@@ -4280,15 +4336,14 @@ export function CampanasPage() {
                           En curso
                         </span>
                       )}
-                      {/* Inversión de la catorcena: suma de sc.costo por catorcena (específica del período) */}
+                      {/* Inversión del periodo (catorcena o MES): suma por campaña.
+                          Para mensual suma las catorcenas que caen dentro del mes. */}
                       {(() => {
-                        const catKey = `${catorcena.num}:${catorcena.anio}`;
                         const totalInversion = campanas.reduce((s, c) => {
                           const invData = inversionPorCatorcena[c.id];
-                          // Si cargó el batch, usar valor específico de la catorcena.
                           // Si aún no carga, sumar 0 — NO usar c.inversion (es el total de
-                          // la campaña, no la porción de esta catorcena: inflaría el badge).
-                          return s + (invData?.[catKey] || 0);
+                          // la campaña, no la porción del período: inflaría el badge).
+                          return s + getInversionGrupo(invData, catorcena);
                         }, 0);
 
                         return totalInversion > 0 ? (
