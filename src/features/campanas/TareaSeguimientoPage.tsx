@@ -15227,6 +15227,52 @@ export function TareaSeguimientoPage() {
   // Agrupa items por tarea de impresión con info de estado del flujo
   type EstadoImpresion = 'en_impresion' | 'pendiente_recepcion' | 'recibido';
 
+  // [Fix badge Recibido] Compute relación imp↔rec en espacio de rsv_ids, accesible
+  // al badge para no doble-contar Recepciones normales como huérfanas cuando los
+  // campos listado_inventario (composites) vs ids_reservas (rsv_ids) no coinciden.
+  const impresionRecepcionRelation = useMemo(() => {
+    const compositeToRsv = new Map<string, string[]>();
+    inventarioArteAPI.forEach(item => {
+      const invId = String(item.id);
+      const compositeId = item.grupo ? `${item.id}_${item.grupo}` : invId;
+      const rsvId = item.rsvId || item.rsv_id || item.rsv_ids || '';
+      if (rsvId) {
+        const rsvIds = rsvId.split(',').map((r: string) => r.trim()).filter(Boolean);
+        compositeToRsv.set(compositeId, rsvIds);
+        if (!compositeToRsv.has(invId)) compositeToRsv.set(invId, rsvIds);
+      }
+    });
+    const toRsvSet = (tarea: { listado_inventario?: string | null; ids_reservas?: string | null }): Set<string> => {
+      const set = new Set<string>();
+      const composites = (tarea.listado_inventario || '').replace(/\*/g, ',').split(',').map((s: string) => s.trim()).filter(Boolean);
+      composites.forEach(id => {
+        const rsv = compositeToRsv.get(id);
+        if (rsv) rsv.forEach(r => set.add(r));
+      });
+      const reservaIds = (tarea.ids_reservas || '').replace(/\*/g, ',').split(',').map((s: string) => s.trim()).filter(Boolean);
+      reservaIds.forEach(r => set.add(r));
+      return set;
+    };
+    const tareasImp = tareasAPI.filter(t => t.tipo === 'Impresión');
+    const tareasRec = tareasAPI.filter(t => t.tipo === 'Recepción');
+    const impRsv = new Map<number, Set<string>>();
+    tareasImp.forEach(t => impRsv.set(t.id, toRsvSet(t)));
+    const recepcionesLigadasAImpresion = new Set<number>();
+    tareasRec.forEach(rec => {
+      const recRsv = toRsvSet(rec);
+      if (recRsv.size === 0) return;
+      for (const imp of tareasImp) {
+        const set = impRsv.get(imp.id) || new Set<string>();
+        if (set.size === 0) continue;
+        if ([...set].some(r => recRsv.has(r))) {
+          recepcionesLigadasAImpresion.add(rec.id);
+          break;
+        }
+      }
+    });
+    return { recepcionesLigadasAImpresion };
+  }, [tareasAPI, inventarioArteAPI]);
+
   const inventoryImpresionesData = useMemo((): (InventoryRow & {
     tarea_id?: number;
     tarea_estatus?: string;
@@ -15320,17 +15366,36 @@ export function TareaSeguimientoPage() {
     });
 
     // Crear mapa de tarea de impresión -> tareas de recepción relacionadas (puede haber varias: normal + faltantes)
+    // [Fix matching imp↔rec] Comparar SOLO en espacio de rsv_ids. normalizeIds agrega
+    // bases sin grupo (4308) que causan falsos positivos cuando el mismo inv_id base
+    // aparece en dos catorcenas distintas (grupo 10593 y 10592) — eso ligaba una
+    // Recepción "Cliente imprime" del grupo 10592 con una Impresión del grupo 10593.
+    const toRsvIdSet = (tarea: { listado_inventario?: string | null; ids_reservas?: string | null }): Set<string> => {
+      const set = new Set<string>();
+      const composites = (tarea.listado_inventario || '').replace(/\*/g, ',').split(',').map(s => s.trim()).filter(Boolean);
+      composites.forEach(id => {
+        const rsvIds = compositeToRsvIds.get(id);
+        if (rsvIds) rsvIds.forEach(r => set.add(r));
+      });
+      const reservaIds = (tarea.ids_reservas || '').replace(/\*/g, ',').split(',').map(s => s.trim()).filter(Boolean);
+      reservaIds.forEach(r => set.add(r));
+      return set;
+    };
+
+    const impresionRsvIdsCache = new Map<number, Set<string>>();
+    tareasImpresion.forEach(impresion => {
+      impresionRsvIdsCache.set(impresion.id, toRsvIdSet(impresion));
+    });
+
     const impresionToRecepcionesMap = new Map<number, typeof tareasRecepcion>();
     tareasRecepcion.forEach(recepcion => {
-      const recepcionIds = recepcionIdsMap.get(recepcion.id) || new Set<string>();
-
+      const recepcionRsv = toRsvIdSet(recepcion);
+      if (recepcionRsv.size === 0) return;
       tareasImpresion.forEach(impresion => {
-        const listadoImpresion = impresion.listado_inventario || impresion.ids_reservas || '';
-        const impresionIds = normalizeIds(listadoImpresion);
-
-        // Comparar sets: deben tener al menos un elemento en común
-        const hasCommon = [...impresionIds].some(id => recepcionIds.has(id));
-        if (hasCommon && recepcionIds.size > 0 && impresionIds.size > 0) {
+        const impresionRsv = impresionRsvIdsCache.get(impresion.id) || new Set<string>();
+        if (impresionRsv.size === 0) return;
+        const hasCommon = [...impresionRsv].some(r => recepcionRsv.has(r));
+        if (hasCommon) {
           const existing = impresionToRecepcionesMap.get(impresion.id) || [];
           existing.push(recepcion);
           impresionToRecepcionesMap.set(impresion.id, existing);
@@ -18502,17 +18567,11 @@ export function TareaSeguimientoPage() {
 
                   // [Fix Cliente imprime] Sumar Recepciones huérfanas atendidas
                   // (las que se crearon via "Cliente imprime" sin tarea de Impresión).
-                  // Sin esto, el contador se queda en 0 aunque la Recepción esté Atendida.
-                  const impresionRelatedRecepcionIdsBadge = new Set<number>();
-                  tareasImp.forEach(imp => {
-                    const listadoImp = (imp.listado_inventario || imp.ids_reservas || '').replace(/\*/g, ',').split(',').map(s => s.trim()).filter(Boolean);
-                    tareasRec.forEach(rec => {
-                      const listadoRec = (rec.listado_inventario || rec.ids_reservas || '').replace(/\*/g, ',').split(',').map(s => s.trim()).filter(Boolean);
-                      if (listadoImp.some(id => listadoRec.includes(id))) {
-                        impresionRelatedRecepcionIdsBadge.add(rec.id);
-                      }
-                    });
-                  });
+                  // El matching se hace en espacio de rsv_ids puros (ver
+                  // impresionRecepcionRelation) para que una Recepción normal cuyo
+                  // listado_inventario está vacío pero su ids_reservas sí coincide
+                  // con la Impresión NO se cuente como huérfana.
+                  const impresionRelatedRecepcionIdsBadge = impresionRecepcionRelation.recepcionesLigadasAImpresion;
                   const huerfanasRecibidas = tareasRec
                     .filter(t => !impresionRelatedRecepcionIdsBadge.has(t.id))
                     .filter(t => {
