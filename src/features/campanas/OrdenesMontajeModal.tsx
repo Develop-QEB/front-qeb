@@ -1721,7 +1721,7 @@ export function OrdenesMontajeModal({ isOpen, onClose, canExport = true }: Orden
               </button>
 
               {showFilterPopup && (
-                <div className="absolute right-0 top-full mt-2 z-[60] w-[480px] bg-zinc-900 border border-zinc-700 rounded-xl shadow-2xl">
+                <div className="absolute left-0 top-full mt-2 z-[60] w-[480px] max-w-[calc(95vw-4rem)] bg-zinc-900 border border-zinc-700 rounded-xl shadow-2xl">
                   <div className="p-4 border-b border-zinc-800 flex items-center justify-between">
                     <span className="text-sm font-semibold text-white">Filtros y Opciones</span>
                     <button onClick={() => setShowFilterPopup(false)} className="text-zinc-400 hover:text-white">
