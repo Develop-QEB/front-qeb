@@ -7558,6 +7558,29 @@ function TaskDetailModal({
                     {/* Lista de artes agrupados con inputs para cantidad recibida */}
                     <div className="max-h-[250px] overflow-y-auto space-y-3">
                       {(() => {
+                        // Helper: abre la galería tradicional con la ficha del arte
+                        // (nombre/observaciones/estatus_operaciones) al hacer click
+                        // en el thumbnail. Encuentra reservaIds asociados a esa URL
+                        // a partir de taskInventory; si no hay match, cae a todos
+                        // los ids_reservas de la tarea para que la galería igual abra.
+                        const openArteGaleria = (arteUrl: string | undefined | null, codigoFallback: string) => {
+                          if (!arteUrl) return;
+                          const matching = taskInventory.filter(it => it.archivo_arte === arteUrl);
+                          let rsvIds: number[] = [];
+                          let codigo = codigoFallback;
+                          if (matching.length > 0) {
+                            rsvIds = matching.flatMap(it => String(it.rsv_id || it.id).split(',').map(s => parseInt(s.trim())).filter(n => !isNaN(n)));
+                            codigo = matching[0].codigo_unico || codigoFallback;
+                          } else {
+                            rsvIds = (task.ids_reservas || '')
+                              .split(',')
+                              .map(v => parseInt(v.trim()))
+                              .filter(n => !isNaN(n));
+                          }
+                          if (rsvIds.length === 0) return;
+                          openTradicionalGallery(rsvIds, codigo);
+                        };
+
                         // Verificar si es una tarea de recepción faltantes (tiene evidencia especial)
                         let esFaltantes = false;
                         let faltantesData: { arte: string; cantidad: number }[] = [];
@@ -7580,8 +7603,14 @@ function TaskDetailModal({
                             const key = faltante.arte || 'sin_arte';
                             return (
                               <div key={idx} className="flex items-center gap-4 p-3 bg-zinc-800/30 rounded-lg border border-border/50">
-                                {/* Preview de imagen */}
-                                <div className="w-20 h-16 bg-zinc-800 rounded-lg overflow-hidden flex-shrink-0 border border-zinc-700">
+                                {/* Preview de imagen — click para abrir galería con ficha */}
+                                <button
+                                  type="button"
+                                  onClick={() => openArteGaleria(faltante.arte, `Recepción · Arte ${idx + 1}`)}
+                                  disabled={!faltante.arte}
+                                  className="w-20 h-16 bg-zinc-800 rounded-lg overflow-hidden flex-shrink-0 border border-zinc-700 hover:border-purple-400/60 hover:ring-1 hover:ring-purple-500/40 transition-colors disabled:cursor-default disabled:hover:border-zinc-700 disabled:hover:ring-0"
+                                  title={faltante.arte ? 'Ver galería del arte (nombre, observaciones, estatus)' : 'Sin arte asignado'}
+                                >
                                   {faltante.arte ? (
                                     <ArteImg
                                       src={faltante.arte}
@@ -7593,7 +7622,7 @@ function TaskDetailModal({
                                       <Image className="h-5 w-5 text-zinc-600" />
                                     </div>
                                   )}
-                                </div>
+                                </button>
 
                                 {/* Info del grupo - mostrar cantidad faltante */}
                                 <div className="flex-1 min-w-0">
@@ -7660,8 +7689,14 @@ function TaskDetailModal({
                             const imageUrl = getImageUrl(arteUrl);
                             return (
                               <div key={arteUrl} className="flex items-center gap-4 p-3 bg-zinc-800/30 rounded-lg border border-border/50">
-                                {/* Preview de imagen */}
-                                <div className="w-20 h-16 bg-zinc-800 rounded-lg overflow-hidden flex-shrink-0 border border-zinc-700">
+                                {/* Preview de imagen — click para abrir galería con ficha */}
+                                <button
+                                  type="button"
+                                  onClick={() => openArteGaleria(arteUrl, nombreArchivo)}
+                                  disabled={!imageUrl && !arteUrl}
+                                  className="w-20 h-16 bg-zinc-800 rounded-lg overflow-hidden flex-shrink-0 border border-zinc-700 hover:border-purple-400/60 hover:ring-1 hover:ring-purple-500/40 transition-colors disabled:cursor-default disabled:hover:border-zinc-700 disabled:hover:ring-0"
+                                  title={imageUrl ? 'Ver galería del arte (nombre, observaciones, estatus)' : 'Sin arte disponible'}
+                                >
                                   {imageUrl ? (
                                     <img
                                       src={imageUrl}
@@ -7673,7 +7708,7 @@ function TaskDetailModal({
                                       <Image className="h-6 w-6 text-zinc-600" />
                                     </div>
                                   )}
-                                </div>
+                                </button>
 
                                 {/* Info del grupo */}
                                 <div className="flex-1 min-w-0">
@@ -7800,8 +7835,14 @@ function TaskDetailModal({
 
                           return (
                           <div key={key} className="flex items-center gap-4 p-3 bg-zinc-800/30 rounded-lg border border-border/50">
-                            {/* Preview de imagen */}
-                            <div className="w-20 h-16 bg-zinc-800 rounded-lg overflow-hidden flex-shrink-0 border border-zinc-700">
+                            {/* Preview de imagen — click para abrir galería con ficha */}
+                            <button
+                              type="button"
+                              onClick={() => openArteGaleria(grupo.archivo, grupo.items[0]?.codigo_unico || 'Recepción')}
+                              disabled={!grupo.archivo}
+                              className="w-20 h-16 bg-zinc-800 rounded-lg overflow-hidden flex-shrink-0 border border-zinc-700 hover:border-purple-400/60 hover:ring-1 hover:ring-purple-500/40 transition-colors disabled:cursor-default disabled:hover:border-zinc-700 disabled:hover:ring-0"
+                              title={grupo.archivo ? 'Ver galería del arte (nombre, observaciones, estatus)' : 'Sin arte asignado'}
+                            >
                               {grupo.archivo ? (
                                 <ArteImg
                                   src={grupo.archivo}
@@ -7813,7 +7854,7 @@ function TaskDetailModal({
                                   <Image className="h-5 w-5 text-zinc-600" />
                                 </div>
                               )}
-                            </div>
+                            </button>
 
                             {/* Info del grupo */}
                             <div className="flex-1 min-w-0">
