@@ -3190,15 +3190,18 @@ function InstaladoChoiceDialog({
           )}
         </ul>
 
-        {/* Selector de Operaciones — opcional para Instalado, recomendado para Rotación */}
+        {/* Selector de Operaciones — OBLIGATORIO para habilitar Instalado o Rotación.
+            Antes era opcional y las tareas se creaban sin asignado, y como el
+            TaskDetailModal no permite editar el asignado de Instalación, quedaban
+            huérfanas. Ahora se exige al menos 1 asignado de Operaciones. */}
         <div className="mb-4">
           <button
             type="button"
             onClick={() => setShowOpsList(s => !s)}
-            className={`w-full text-left text-xs font-medium px-3 py-2 rounded-lg border transition-colors flex items-center justify-between ${isDark ? 'border-zinc-700 bg-zinc-800/50 hover:bg-zinc-800 text-zinc-200' : 'border-gray-300 bg-gray-50 hover:bg-gray-100 text-gray-800'}`}
+            className={`w-full text-left text-xs font-medium px-3 py-2 rounded-lg border transition-colors flex items-center justify-between ${selectedOps.size === 0 ? (isDark ? 'border-red-500/40 bg-red-500/10 hover:bg-red-500/20 text-red-200' : 'border-red-300 bg-red-50 hover:bg-red-100 text-red-700') : (isDark ? 'border-zinc-700 bg-zinc-800/50 hover:bg-zinc-800 text-zinc-200' : 'border-gray-300 bg-gray-50 hover:bg-gray-100 text-gray-800')}`}
           >
             <span>
-              Asignar a Operaciones
+              Asignar a Operaciones <span className="text-red-400">*</span>
               {selectedOps.size > 0 && (
                 <span className={`ml-2 px-1.5 py-0.5 rounded text-[10px] ${isDark ? 'bg-purple-500/30 text-purple-200' : 'bg-purple-100 text-purple-700'}`}>
                   {selectedOps.size}
@@ -3229,8 +3232,10 @@ function InstaladoChoiceDialog({
               )}
             </div>
           )}
-          <p className={`text-[10px] mt-1 ${isDark ? 'text-zinc-500' : 'text-gray-500'}`}>
-            Opcional para Instalado. Recomendado para Rotación (la tarea de instalación les llegará).
+          <p className={`text-[10px] mt-1 ${selectedOps.size === 0 ? (isDark ? 'text-red-300' : 'text-red-600') : (isDark ? 'text-zinc-500' : 'text-gray-500')}`}>
+            {selectedOps.size === 0
+              ? 'Selecciona al menos un usuario de Operaciones para habilitar Instalado / Rotación.'
+              : 'La tarea de instalación generada les llegará a estas personas.'}
           </p>
         </div>
 
@@ -3239,20 +3244,24 @@ function InstaladoChoiceDialog({
         </p>
         <div className="space-y-2">
           <button
+            disabled={selectedOps.size === 0}
             onClick={() => onResolve({ mode: 'instalado', operaciones: buildOps() })}
-            className={`w-full text-left p-3 rounded-lg border transition-colors ${isDark ? 'border-green-500/30 bg-green-500/10 hover:bg-green-500/20 text-green-200' : 'border-green-300 bg-green-50 hover:bg-green-100 text-green-800'}`}
+            className={`w-full text-left p-3 rounded-lg border transition-colors ${selectedOps.size === 0 ? 'opacity-40 cursor-not-allowed border-zinc-700 bg-zinc-800/30 text-zinc-500' : (isDark ? 'border-green-500/30 bg-green-500/10 hover:bg-green-500/20 text-green-200' : 'border-green-300 bg-green-50 hover:bg-green-100 text-green-800')}`}
+            title={selectedOps.size === 0 ? 'Asigna al menos un usuario de Operaciones primero' : ''}
           >
             <div className="font-medium text-sm">Instalado</div>
-            <div className={`text-[11px] mt-0.5 ${isDark ? 'text-green-300/70' : 'text-green-700/70'}`}>
+            <div className={`text-[11px] mt-0.5 ${selectedOps.size === 0 ? 'text-zinc-600' : (isDark ? 'text-green-300/70' : 'text-green-700/70')}`}>
               Se marca como instalado y va directo a "Validar Instalación &gt; Instaladas".
             </div>
           </button>
           <button
+            disabled={selectedOps.size === 0}
             onClick={() => onResolve({ mode: 'rotacion', operaciones: buildOps() })}
-            className={`w-full text-left p-3 rounded-lg border transition-colors ${isDark ? 'border-orange-500/30 bg-orange-500/10 hover:bg-orange-500/20 text-orange-200' : 'border-orange-300 bg-orange-50 hover:bg-orange-100 text-orange-800'}`}
+            className={`w-full text-left p-3 rounded-lg border transition-colors ${selectedOps.size === 0 ? 'opacity-40 cursor-not-allowed border-zinc-700 bg-zinc-800/30 text-zinc-500' : (isDark ? 'border-orange-500/30 bg-orange-500/10 hover:bg-orange-500/20 text-orange-200' : 'border-orange-300 bg-orange-50 hover:bg-orange-100 text-orange-800')}`}
+            title={selectedOps.size === 0 ? 'Asigna al menos un usuario de Operaciones primero' : ''}
           >
             <div className="font-medium text-sm">Rotación</div>
-            <div className={`text-[11px] mt-0.5 ${isDark ? 'text-orange-300/70' : 'text-orange-700/70'}`}>
+            <div className={`text-[11px] mt-0.5 ${selectedOps.size === 0 ? 'text-zinc-600' : (isDark ? 'text-orange-300/70' : 'text-orange-700/70')}`}>
               Reutilizas el arte pero aún hay que instalarlo. Va a "Validar Instalación &gt; Por Instalar".
             </div>
           </button>
