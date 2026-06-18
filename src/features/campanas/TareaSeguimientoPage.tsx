@@ -19449,6 +19449,11 @@ export function TareaSeguimientoPage() {
                                       proveedores_id: tarea.proveedores_id || undefined,
                                       num_impresiones: tarea.num_impresiones || undefined,
                                       evidencia: tarea.evidencia || undefined,
+                                      // Sin estos campos la vista "Recepción completada" no
+                                      // mostraba ni las fotos comprobatorias ni las
+                                      // observaciones al dar "Ver detalle" en sub-tab Recibido.
+                                      archivo_testigo: tarea.archivo_testigo || undefined,
+                                      contenido: tarea.contenido || undefined,
                                     };
                                     setSelectedTask(taskRow);
                                     setIsTaskDetailModalOpen(true);
@@ -19630,6 +19635,11 @@ export function TareaSeguimientoPage() {
                                     proveedores_id: tarea.proveedores_id || undefined,
                                     num_impresiones: tarea.num_impresiones || undefined,
                                     evidencia: tarea.evidencia || undefined,
+                                    // Sin estos campos la vista "Recepción completada" no
+                                    // mostraba ni las fotos comprobatorias ni las
+                                    // observaciones al dar "Ver detalle" en sub-tab Recibido.
+                                    archivo_testigo: tarea.archivo_testigo || undefined,
+                                    contenido: tarea.contenido || undefined,
                                   };
                                   setSelectedTask(taskRow);
                                   setIsTaskDetailModalOpen(true);
