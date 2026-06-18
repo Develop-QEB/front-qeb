@@ -8143,6 +8143,97 @@ function TaskDetailModal({
             </div>
           )}
 
+          {/* === VISTA INFORMATIVA PARA TAREAS DE GESTIÓN DE RECEPCIÓN PARCIAL (ASC) === */}
+          {task.tipo === 'Gestión de Recepción Parcial' && (
+            <div className="space-y-4">
+              {(() => {
+                let evParcial: { tipo?: string; recepcionFaltantesTitulo?: string; totalFaltantes?: number; faltantesPorArte?: { arte: string; cantidad: number }[]; campania_nombre?: string } = {};
+                if (task.evidencia) {
+                  try { evParcial = JSON.parse(task.evidencia); } catch {}
+                }
+                const detalle = Array.isArray(evParcial.faltantesPorArte) ? evParcial.faltantesPorArte : [];
+                const total = Number(evParcial.totalFaltantes || 0);
+                return (
+                  <>
+                    <div className="bg-yellow-500/10 border border-yellow-500/30 rounded-lg p-4">
+                      <h4 className="text-sm font-medium text-yellow-300 mb-2 flex items-center gap-2">
+                        <AlertTriangle className="h-4 w-4" />
+                        Recepción Parcial
+                      </h4>
+                      <p className="text-xs text-zinc-300">
+                        La recepción <span className="font-semibold text-white">"{evParcial.recepcionFaltantesTitulo || task.titulo}"</span> se atendió de forma parcial. Esta tarea es informativa: revisa el detalle y márcala como atendida cuando hayas dado seguimiento.
+                      </p>
+                    </div>
+
+                    <div className="bg-zinc-900/50 rounded-lg p-4 border border-border">
+                      <h4 className="text-sm font-medium text-purple-300 mb-3">Información</h4>
+                      <div className="grid grid-cols-2 md:grid-cols-3 gap-3 text-sm">
+                        <div>
+                          <span className="text-zinc-500">Campaña:</span>
+                          <p className="text-white font-medium">{evParcial.campania_nombre || campana?.nombre || '-'}</p>
+                        </div>
+                        <div>
+                          <span className="text-zinc-500">Total faltantes:</span>
+                          <p className="text-2xl font-bold text-red-400">{total}</p>
+                        </div>
+                        <div>
+                          <span className="text-zinc-500">Estatus:</span>
+                          <p className={`font-medium ${task.estatus === 'Atendido' || task.estatus === 'Completado' ? 'text-green-400' : 'text-yellow-400'}`}>{task.estatus}</p>
+                        </div>
+                      </div>
+                    </div>
+
+                    {detalle.length > 0 && (
+                      <div className="bg-zinc-900/50 rounded-lg border border-border overflow-hidden">
+                        <div className="px-4 py-3 border-b border-border bg-zinc-800/50">
+                          <h4 className="text-sm font-medium text-purple-300">Detalle por arte</h4>
+                        </div>
+                        <div className="p-4 space-y-2 max-h-[300px] overflow-y-auto">
+                          {detalle.map((f, idx) => {
+                            const nombreArchivo = f.arte ? (f.arte.split('/').pop() || 'Arte') : 'Sin arte';
+                            return (
+                              <div key={idx} className="flex items-center gap-3 p-3 bg-zinc-800/30 rounded-lg border border-border/50">
+                                <div className="w-16 h-12 bg-zinc-800 rounded overflow-hidden flex-shrink-0 border border-zinc-700">
+                                  {f.arte ? (
+                                    <ArteImg src={f.arte} alt="Arte" className="w-full h-full object-cover" />
+                                  ) : (
+                                    <div className="w-full h-full flex items-center justify-center">
+                                      <Image className="h-4 w-4 text-zinc-600" />
+                                    </div>
+                                  )}
+                                </div>
+                                <div className="flex-1 min-w-0">
+                                  <p className="text-xs text-zinc-400 truncate">{nombreArchivo}</p>
+                                </div>
+                                <div className="text-right">
+                                  <p className="text-lg font-bold text-red-400">{f.cantidad}</p>
+                                  <p className="text-[10px] text-zinc-500">faltante{f.cantidad !== 1 ? 's' : ''}</p>
+                                </div>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    )}
+
+                    {task.estatus !== 'Atendido' && task.estatus !== 'Completado' && task.estatus !== 'Finalizada' && (
+                      <div className="flex justify-end pt-2">
+                        <button
+                          onClick={() => onTaskComplete(task.id)}
+                          disabled={isUpdating}
+                          className="flex items-center gap-2 px-6 py-2.5 text-sm font-medium bg-green-600 hover:bg-green-700 text-white rounded-lg transition-colors disabled:opacity-50"
+                        >
+                          {isUpdating ? <Loader2 className="h-4 w-4 animate-spin" /> : <CheckCircle2 className="h-4 w-4" />}
+                          Marcar como atendida
+                        </button>
+                      </div>
+                    )}
+                  </>
+                );
+              })()}
+            </div>
+          )}
+
           {/* === VISTA ESPECIAL PARA TAREAS DE INSTALACIÓN === */}
           {task.tipo === 'Instalación' && (
             <div className="space-y-4">
