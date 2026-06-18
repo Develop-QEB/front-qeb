@@ -18620,7 +18620,15 @@ export function TareaSeguimientoPage() {
                       </>
                     )}
                   </button>
-                  {permissions.canApproveArteSinRevisar && activeEstadoArteTab !== 'aprobado' && (() => {
+                  {/* Boton Aprobar oculto en sub-tabs Sin Revisar, En Revisión
+                      y Aprobado: el flujo correcto pasa por una tarea de Revisión
+                      de artes; el atajo directo solo aplica al sub-tab Rechazado
+                      (re-aprobar algo previamente rechazado). */}
+                  {permissions.canApproveArteSinRevisar
+                    && activeEstadoArteTab !== 'aprobado'
+                    && activeEstadoArteTab !== 'sin_revisar'
+                    && activeEstadoArteTab !== 'en_revision'
+                    && (() => {
                     const itemsSinRevisar = selectedInventoryItems.filter(item => item.estado_arte === 'sin_revisar');
                     const hasSinRevisar = itemsSinRevisar.length > 0;
                     return (
