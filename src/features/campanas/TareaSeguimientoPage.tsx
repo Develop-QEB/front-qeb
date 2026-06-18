@@ -7868,7 +7868,14 @@ function TaskDetailModal({
                       // (lee de evidencia, descripción, o taskInventory.length)
                       const totalSolicitadas = impresionesOrdenadas;
 
-                      // Obtener las keys de artes para sumar cantidades recibidas
+                      // Obtener las keys de artes para sumar cantidades recibidas.
+                      // IMPORTANTE: las keys deben coincidir con las que usan los
+                      // inputs (mismo orden de prioridad: faltantesPorArte ->
+                      // impresiones por URL -> taskInventory.archivo_arte ->
+                      // __total__). Antes solo se cubrian faltantes y taskInventory;
+                      // si la Recepcion normal tenia varios artes con desglose en
+                      // evidencia.impresiones, las cantidades recibidas no se
+                      // sumaban y el total mostrado se desfasaba al teclear.
                       let artesKeys: string[] = [];
 
                       if (task.evidencia) {
@@ -7876,12 +7883,18 @@ function TaskDetailModal({
                           const evidenciaObj = JSON.parse(task.evidencia);
                           if (evidenciaObj.tipo === 'recepcion_faltantes' && evidenciaObj.faltantesPorArte) {
                             artesKeys = evidenciaObj.faltantesPorArte.map((f: { arte: string }) => f.arte || 'sin_arte');
+                          } else if (evidenciaObj.impresiones && typeof evidenciaObj.impresiones === 'object') {
+                            artesKeys = Object.keys(evidenciaObj.impresiones);
                           }
                         } catch (e) {}
                       }
 
                       if (artesKeys.length === 0) {
                         artesKeys = [...new Set(taskInventory.map(item => item.archivo_arte || 'sin_arte'))];
+                        if (artesKeys.length === 0) {
+                          // Fallback "Sin desglose de arte" usa __total__ como key.
+                          artesKeys = ['__total__'];
+                        }
                       }
 
                       const totalRecibidas = artesKeys.reduce((sum, key) => sum + (cantidadesRecibidas[key] || 0), 0);
