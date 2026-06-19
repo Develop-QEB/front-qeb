@@ -681,19 +681,14 @@ export function AnalisisOcupacionModal({
 }
 
 // ===== Matrix View =====
-interface CampanaDuplicada {
-  campana_id: number;
-  nombre: string;
-  cliente: string;
-  propuestas: number[];
-  ocurrencias: number;
-  celdasConRepeticion: number; // # de celdas donde aparece >1 vez (mismo inventario+catorcena)
-}
-
 const labelForCampana = (c: CampanaEnCelda): string => {
   if (c.campana_id) return c.campana_nombre || `Campaña #${c.campana_id}`;
   return `Propuesta #${c.propuesta_id}`;
 };
+
+// Un inventario Tradicional solo admite 1 campaña por catorcena; los Digitales admiten varias.
+const esDigital = (inv?: InventarioResumen): boolean => inv?.tradicional_digital === 'Digital';
+const conflictoKey = (invId: number, cellKey: string): string => `${invId}|${cellKey}`;
 
 function MatrizView({
   matriz,
@@ -906,79 +901,41 @@ function MatrizView({
     });
 
 
-  const duplicados = useMemo<CampanaDuplicada[]>(() => {
-    if (!matriz) return [];
-    const map = new Map<number, {
-      nombre: string;
-      cliente: string;
-      propuestas: Set<number>;
-      ocurrencias: number;
-      celdasConRepeticion: number;
-    }>();
-    for (const invCeldas of Object.values(matriz.celdas)) {
-      for (const celda of Object.values(invCeldas)) {
-        // contar ocurrencias por campana_id dentro de esta celda
-        const cellCounts = new Map<number, number>();
-        for (const c of celda.campanas) {
-          if (!c.campana_id) continue;
-          cellCounts.set(c.campana_id, (cellCounts.get(c.campana_id) || 0) + 1);
-        }
-        for (const c of celda.campanas) {
-          if (!c.campana_id) continue; // ignorar propuestas sin campaña confirmada
-          const entry = map.get(c.campana_id);
-          if (entry) {
-            if (c.propuesta_id) entry.propuestas.add(c.propuesta_id);
-            entry.ocurrencias += 1;
-          } else {
-            const propuestas = new Set<number>();
-            if (c.propuesta_id) propuestas.add(c.propuesta_id);
-            map.set(c.campana_id, {
-              nombre: c.campana_nombre || `Campaña #${c.campana_id}`,
-              cliente: c.cliente_nombre || 'Sin cliente',
-              propuestas,
-              ocurrencias: 1,
-              celdasConRepeticion: 0,
-            });
-          }
-        }
-        // marcar las celdas que tienen >1 card de la misma campaña
-        for (const [cid, count] of cellCounts) {
-          if (count > 1) {
-            const entry = map.get(cid);
-            if (entry) entry.celdasConRepeticion += 1;
-          }
-        }
-      }
-    }
-    return Array.from(map.entries())
-      .filter(([, v]) => v.propuestas.size > 1 || v.celdasConRepeticion > 0)
-      .map(([campana_id, v]) => ({
-        campana_id,
-        nombre: v.nombre,
-        cliente: v.cliente,
-        propuestas: Array.from(v.propuestas).sort((a, b) => a - b),
-        ocurrencias: v.ocurrencias,
-        celdasConRepeticion: v.celdasConRepeticion,
-      }))
-      .sort((a, b) =>
-        (b.celdasConRepeticion - a.celdasConRepeticion) ||
-        (b.propuestas.length - a.propuestas.length)
-      );
+  const invById = useMemo(() => {
+    const m = new Map<number, InventarioResumen>();
+    if (matriz) for (const inv of matriz.inventarios) m.set(inv.id, inv);
+    return m;
   }, [matriz]);
 
-  const duplicadoIds = useMemo(
-    () => new Set(duplicados.map(d => d.campana_id)),
-    [duplicados]
-  );
+  // Conflictos: celdas de inventarios Tradicionales con 2+ tarjetas.
+  // Un Tradicional solo puede tener una campaña por catorcena; los Digitales se excluyen.
+  const conflictoCeldas = useMemo(() => {
+    const set = new Set<string>();
+    if (!matriz) return set;
+    for (const [invIdStr, invCeldas] of Object.entries(matriz.celdas)) {
+      if (esDigital(invById.get(Number(invIdStr)))) continue;
+      for (const [cellKey, celda] of Object.entries(invCeldas)) {
+        if (celda.campanas.length >= 2) set.add(conflictoKey(Number(invIdStr), cellKey));
+      }
+    }
+    return set;
+  }, [matriz, invById]);
 
-  const isCampanaDuplicada = (c: CampanaEnCelda) =>
-    !!c.campana_id && duplicadoIds.has(c.campana_id);
-
-  const cardPasaFiltros = (c: CampanaEnCelda) => {
-    if (isFiltered && !campanaFilter.has(labelForCampana(c))) return false;
-    if (soloDuplicados && !isCampanaDuplicada(c)) return false;
-    return true;
-  };
+  // Lista de conflictos (sitio × catorcena) para el panel informativo.
+  const conflictos = useMemo(() => {
+    if (!matriz) return [] as { inv: InventarioResumen; cat: CatorcenaRef; count: number }[];
+    const out: { inv: InventarioResumen; cat: CatorcenaRef; count: number }[] = [];
+    for (const inv of matriz.inventarios) {
+      if (esDigital(inv)) continue;
+      const invCeldas = matriz.celdas[inv.id];
+      if (!invCeldas) continue;
+      for (const cat of matriz.catorcenas) {
+        const celda = invCeldas[cellKeyOf(cat)];
+        if (celda && celda.campanas.length >= 2) out.push({ inv, cat, count: celda.campanas.length });
+      }
+    }
+    return out;
+  }, [matriz]);
 
   const inventariosFiltrados = useMemo(() => {
     if (!matriz) return [] as InventarioResumen[];
@@ -986,17 +943,19 @@ function MatrizView({
     return matriz.inventarios.filter(inv => {
       const invCeldas = matriz.celdas[inv.id];
       if (!invCeldas) return false;
-      for (const celda of Object.values(invCeldas)) {
+      for (const cat of matriz.catorcenas) {
+        const cellKey = cellKeyOf(cat);
+        const celda = invCeldas[cellKey];
+        if (!celda) continue;
+        if (soloDuplicados && !conflictoCeldas.has(conflictoKey(inv.id, cellKey))) continue;
         for (const c of celda.campanas) {
           if (isFiltered && !campanaFilter.has(labelForCampana(c))) continue;
-          if (soloDuplicados && !isCampanaDuplicada(c)) continue;
           return true;
         }
       }
       return false;
     });
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [matriz, campanaFilter, isFiltered, soloDuplicados, duplicadoIds]);
+  }, [matriz, campanaFilter, isFiltered, soloDuplicados, conflictoCeldas]);
 
   // Cards visibles y liberables (sin APS, dentro de los filtros activos)
   const selectableCards = useMemo(() => {
@@ -1005,18 +964,20 @@ function MatrizView({
     for (const inv of inventariosFiltrados) {
       const invCeldas = matriz.celdas[inv.id];
       if (!invCeldas) continue;
-      for (const celda of Object.values(invCeldas)) {
+      for (const cat of matriz.catorcenas) {
+        const cellKey = cellKeyOf(cat);
+        const celda = invCeldas[cellKey];
+        if (!celda) continue;
+        if (soloDuplicados && !conflictoCeldas.has(conflictoKey(inv.id, cellKey))) continue;
         for (const c of celda.campanas) {
           if (c.aps && c.aps > 0) continue;
           if (isFiltered && !campanaFilter.has(labelForCampana(c))) continue;
-          if (soloDuplicados && !isCampanaDuplicada(c)) continue;
           out.push(c);
         }
       }
     }
     return out;
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [matriz, inventariosFiltrados, campanaFilter, isFiltered, soloDuplicados, duplicadoIds]);
+  }, [matriz, inventariosFiltrados, campanaFilter, isFiltered, soloDuplicados, conflictoCeldas]);
 
   const allSelectableSelected = selectableCards.length > 0
     && selectableCards.every(c => selectedReservas.has(c.reserva_id));
@@ -1202,26 +1163,26 @@ function MatrizView({
           </div>
         )}
       </div>
-      {duplicados.length > 0 && (
+      {conflictos.length > 0 && (
         <div className={`rounded-lg border ${isDark ? 'border-amber-500/30 bg-amber-500/5' : 'border-amber-200 bg-amber-50'} text-xs`}>
           <div className="flex items-stretch">
             <button
               onClick={() => setShowDuplicados(s => !s)}
               className={`flex-1 flex items-center gap-2 px-3 py-2 ${isDark ? 'text-amber-300 hover:bg-amber-500/10' : 'text-amber-700 hover:bg-amber-100/50'} rounded-l-lg transition-colors`}
-              title="Campañas con varios propuesta_id o repetidas en la misma celda"
+              title="Inventarios Tradicionales con 2 o más campañas en la misma catorcena"
             >
               <AlertCircle className="h-3.5 w-3.5" />
               <span className="font-semibold">
-                {duplicados.length} {duplicados.length === 1 ? 'campaña duplicada' : 'campañas duplicadas'}
+                {conflictos.length} {conflictos.length === 1 ? 'celda con conflicto' : 'celdas con conflicto'}
               </span>
               <span className={`${isDark ? 'text-amber-400/70' : 'text-amber-600/80'}`}>
-                (multi-propuesta o repetida en misma celda)
+                (Tradicional con 2+ campañas en una catorcena)
               </span>
               <ChevronDown className={`h-3.5 w-3.5 ml-auto transition-transform ${showDuplicados ? 'rotate-180' : ''}`} />
             </button>
             <button
               onClick={() => setSoloDuplicados(s => !s)}
-              title="Mostrar solo filas/cards de campañas duplicadas"
+              title="Mostrar solo las celdas en conflicto"
               className={`flex items-center gap-1.5 px-3 py-2 border-l text-xs font-medium rounded-r-lg transition-colors ${
                 soloDuplicados
                   ? isDark
@@ -1233,43 +1194,25 @@ function MatrizView({
               }`}
             >
               {soloDuplicados ? <CheckCircle2 className="h-3.5 w-3.5" /> : <Filter className="h-3.5 w-3.5" />}
-              Solo duplicadas
+              Solo conflictos
             </button>
           </div>
           {showDuplicados && (
             <div className={`px-3 pb-2 pt-1 max-h-44 overflow-y-auto border-t ${isDark ? 'border-amber-500/20' : 'border-amber-200/60'}`}>
               <ul className="space-y-1">
-                {duplicados.map(d => {
-                  const tags: { label: string; titleAttr: string }[] = [];
-                  if (d.propuestas.length > 1) {
-                    tags.push({
-                      label: `${d.propuestas.length} propuestas`,
-                      titleAttr: `propuestas: ${d.propuestas.map(p => `#${p}`).join(', ')}`,
-                    });
-                  }
-                  if (d.celdasConRepeticion > 0) {
-                    tags.push({
-                      label: `${d.celdasConRepeticion} ${d.celdasConRepeticion === 1 ? 'celda repetida' : 'celdas repetidas'}`,
-                      titleAttr: 'Misma campaña aparece más de una vez en la misma celda (inventario × catorcena)',
-                    });
-                  }
-                  return (
-                    <li key={d.campana_id} className={`flex flex-wrap items-center gap-x-2 gap-y-0.5 ${isDark ? 'text-zinc-300' : 'text-gray-700'}`}>
-                      <span className="font-medium">{d.nombre}</span>
-                      <span className={isDark ? 'text-zinc-500' : 'text-gray-500'}>· {d.cliente}</span>
-                      <span className={isDark ? 'text-zinc-500' : 'text-gray-500'}>· {d.ocurrencias} {d.ocurrencias === 1 ? 'card' : 'cards'}</span>
-                      {tags.map(t => (
-                        <span
-                          key={t.label}
-                          title={t.titleAttr}
-                          className={`px-1.5 py-0.5 rounded-full text-[10px] font-medium border ${isDark ? 'bg-amber-500/15 text-amber-300 border-amber-500/30' : 'bg-white text-amber-700 border-amber-200'}`}
-                        >
-                          {t.label}
-                        </span>
-                      ))}
-                    </li>
-                  );
-                })}
+                {conflictos.map(({ inv, cat, count }) => (
+                  <li key={`${inv.id}-${cellKeyOf(cat)}`} className={`flex flex-wrap items-center gap-x-2 gap-y-0.5 ${isDark ? 'text-zinc-300' : 'text-gray-700'}`}>
+                    <span className="font-mono font-medium">{inv.codigo_unico || `#${inv.id}`}</span>
+                    <span className={isDark ? 'text-zinc-500' : 'text-gray-500'}>· C{cat.numero}-{cat.anio}</span>
+                    <span className={isDark ? 'text-zinc-500' : 'text-gray-500'}>· {inv.plaza || '-'}</span>
+                    <span
+                      title="Cantidad de campañas en esta celda (un Tradicional solo debería tener una)"
+                      className={`px-1.5 py-0.5 rounded-full text-[10px] font-medium border ${isDark ? 'bg-amber-500/15 text-amber-300 border-amber-500/30' : 'bg-white text-amber-700 border-amber-200'}`}
+                    >
+                      {count} campañas
+                    </span>
+                  </li>
+                ))}
               </ul>
             </div>
           )}
@@ -1314,13 +1257,16 @@ function MatrizView({
                 </div>
               </td>
               {matriz.catorcenas.map(cat => {
-                const celda = matriz.celdas[inv.id]?.[cellKeyOf(cat)];
+                const cellKey = cellKeyOf(cat);
+                const celda = matriz.celdas[inv.id]?.[cellKey];
                 const ocupado = celda?.ocupado;
                 const todasCampanas = celda?.campanas || [];
-                const algunFiltroActivo = isFiltered || soloDuplicados;
-                const campanas = algunFiltroActivo
-                  ? todasCampanas.filter(cardPasaFiltros)
-                  : todasCampanas;
+                const esConflicto = conflictoCeldas.has(conflictoKey(inv.id, cellKey));
+                const campanas = (() => {
+                  if (soloDuplicados && !esConflicto) return [] as CampanaEnCelda[];
+                  if (isFiltered) return todasCampanas.filter(c => campanaFilter.has(labelForCampana(c)));
+                  return todasCampanas;
+                })();
 
                 if (!ocupado || todasCampanas.length === 0) {
                   const disponibleClass = isDark
@@ -1354,6 +1300,15 @@ function MatrizView({
                 return (
                   <td key={cellKeyOf(cat)} className="px-1.5 py-1.5 align-top">
                     <div className="flex flex-col gap-1.5">
+                      {esConflicto && (
+                        <div
+                          className={`flex items-center gap-1 px-1.5 py-0.5 rounded text-[9px] font-bold uppercase tracking-wide ${isDark ? 'bg-amber-500/20 text-amber-300' : 'bg-amber-100 text-amber-700'}`}
+                          title="Inventario Tradicional con más de una campaña en esta catorcena"
+                        >
+                          <AlertCircle className="h-2.5 w-2.5" />
+                          Conflicto · {todasCampanas.length}
+                        </div>
+                      )}
                       {campanas.map(c => {
                         const esPropuesta = !c.campana_id;
                         const cardClass = esPropuesta

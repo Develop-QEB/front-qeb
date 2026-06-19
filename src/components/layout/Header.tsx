@@ -7,7 +7,6 @@ import { useChatStore } from '../../store/chatStore';
 import { notificacionesService } from '../../services/notificaciones.service';
 import { UserAvatar } from '../ui/user-avatar';
 import { useSocketNotificaciones } from '../../hooks/useSocket';
-import { useMemo } from 'react';
 import { ThemeToggle } from '../ui/ThemeToggle';
 import { authService } from '../../services/auth.service';
 
@@ -22,34 +21,20 @@ export function Header({ title, badgeCount }: HeaderProps) {
   const toggleChat = useChatStore((s) => s.toggle);
   useSocketNotificaciones();
 
-  const { data: notifData } = useQuery({
-    queryKey: ['notificaciones', '__badge__'],
-    queryFn: () => notificacionesService.getAll({ limit: 200 }),
+  // Antes pediamos getAll(limit:200) y filtrabamos en cliente. Para usuarios
+  // con muchas tareas historicas (ej. Rodrigo Margain con 405) el limit se
+  // llenaba con Atendidos viejos y el conteo era incorrecto. Ahora el back
+  // calcula badge_count en el endpoint /notificaciones/stats con la misma
+  // logica (estatus NOT IN Atendido/Rechazado/Cancelado, filtrado por
+  // id_responsable o id_asignado).
+  const { data: stats } = useQuery({
+    queryKey: ['notificaciones-stats', '__badge__'],
+    queryFn: () => notificacionesService.getStats(),
     staleTime: 5 * 60 * 1000,
     enabled: !!user,
   });
 
-  const unreadCount = useMemo(() => {
-    if (!notifData?.data || !user) return 0;
-    const userId = String(user.id);
-    return notifData.data.filter(n => {
-      if (n.tipo === 'Notificación') {
-        if (n.leida || n.estatus === 'Atendido') return false;
-        return n.id_responsable !== undefined &&
-               n.id_responsable !== null &&
-               String(n.id_responsable) === userId;
-      }
-      // Tareas
-      if (n.estatus === 'Atendido' || n.estatus === 'Rechazado' || n.estatus === 'Cancelado') return false;
-      if (n.id_asignado !== undefined && n.id_asignado !== null) {
-        return String(n.id_asignado).split(',').map(s => s.trim()).includes(userId);
-      }
-      if (n.id_responsable !== undefined && n.id_responsable !== null) {
-        return String(n.id_responsable) === userId;
-      }
-      return false;
-    }).length;
-  }, [notifData?.data, user?.id]);
+  const unreadCount = stats?.badge_count ?? 0;
 
   return (
     <header className={`sticky top-0 z-[50] flex h-16 items-center gap-4 border-b backdrop-blur-sm px-6 ${

@@ -3190,15 +3190,18 @@ function InstaladoChoiceDialog({
           )}
         </ul>
 
-        {/* Selector de Operaciones — opcional para Instalado, recomendado para Rotación */}
+        {/* Selector de Operaciones — OBLIGATORIO para habilitar Instalado o Rotación.
+            Antes era opcional y las tareas se creaban sin asignado, y como el
+            TaskDetailModal no permite editar el asignado de Instalación, quedaban
+            huérfanas. Ahora se exige al menos 1 asignado de Operaciones. */}
         <div className="mb-4">
           <button
             type="button"
             onClick={() => setShowOpsList(s => !s)}
-            className={`w-full text-left text-xs font-medium px-3 py-2 rounded-lg border transition-colors flex items-center justify-between ${isDark ? 'border-zinc-700 bg-zinc-800/50 hover:bg-zinc-800 text-zinc-200' : 'border-gray-300 bg-gray-50 hover:bg-gray-100 text-gray-800'}`}
+            className={`w-full text-left text-xs font-medium px-3 py-2 rounded-lg border transition-colors flex items-center justify-between ${selectedOps.size === 0 ? (isDark ? 'border-red-500/40 bg-red-500/10 hover:bg-red-500/20 text-red-200' : 'border-red-300 bg-red-50 hover:bg-red-100 text-red-700') : (isDark ? 'border-zinc-700 bg-zinc-800/50 hover:bg-zinc-800 text-zinc-200' : 'border-gray-300 bg-gray-50 hover:bg-gray-100 text-gray-800')}`}
           >
             <span>
-              Asignar a Operaciones
+              Asignar a Operaciones <span className="text-red-400">*</span>
               {selectedOps.size > 0 && (
                 <span className={`ml-2 px-1.5 py-0.5 rounded text-[10px] ${isDark ? 'bg-purple-500/30 text-purple-200' : 'bg-purple-100 text-purple-700'}`}>
                   {selectedOps.size}
@@ -3229,8 +3232,10 @@ function InstaladoChoiceDialog({
               )}
             </div>
           )}
-          <p className={`text-[10px] mt-1 ${isDark ? 'text-zinc-500' : 'text-gray-500'}`}>
-            Opcional para Instalado. Recomendado para Rotación (la tarea de instalación les llegará).
+          <p className={`text-[10px] mt-1 ${selectedOps.size === 0 ? (isDark ? 'text-red-300' : 'text-red-600') : (isDark ? 'text-zinc-500' : 'text-gray-500')}`}>
+            {selectedOps.size === 0
+              ? 'Selecciona al menos un usuario de Operaciones para habilitar Instalado / Rotación.'
+              : 'La tarea de instalación generada les llegará a estas personas.'}
           </p>
         </div>
 
@@ -3239,20 +3244,24 @@ function InstaladoChoiceDialog({
         </p>
         <div className="space-y-2">
           <button
+            disabled={selectedOps.size === 0}
             onClick={() => onResolve({ mode: 'instalado', operaciones: buildOps() })}
-            className={`w-full text-left p-3 rounded-lg border transition-colors ${isDark ? 'border-green-500/30 bg-green-500/10 hover:bg-green-500/20 text-green-200' : 'border-green-300 bg-green-50 hover:bg-green-100 text-green-800'}`}
+            className={`w-full text-left p-3 rounded-lg border transition-colors ${selectedOps.size === 0 ? 'opacity-40 cursor-not-allowed border-zinc-700 bg-zinc-800/30 text-zinc-500' : (isDark ? 'border-green-500/30 bg-green-500/10 hover:bg-green-500/20 text-green-200' : 'border-green-300 bg-green-50 hover:bg-green-100 text-green-800')}`}
+            title={selectedOps.size === 0 ? 'Asigna al menos un usuario de Operaciones primero' : ''}
           >
             <div className="font-medium text-sm">Instalado</div>
-            <div className={`text-[11px] mt-0.5 ${isDark ? 'text-green-300/70' : 'text-green-700/70'}`}>
+            <div className={`text-[11px] mt-0.5 ${selectedOps.size === 0 ? 'text-zinc-600' : (isDark ? 'text-green-300/70' : 'text-green-700/70')}`}>
               Se marca como instalado y va directo a "Validar Instalación &gt; Instaladas".
             </div>
           </button>
           <button
+            disabled={selectedOps.size === 0}
             onClick={() => onResolve({ mode: 'rotacion', operaciones: buildOps() })}
-            className={`w-full text-left p-3 rounded-lg border transition-colors ${isDark ? 'border-orange-500/30 bg-orange-500/10 hover:bg-orange-500/20 text-orange-200' : 'border-orange-300 bg-orange-50 hover:bg-orange-100 text-orange-800'}`}
+            className={`w-full text-left p-3 rounded-lg border transition-colors ${selectedOps.size === 0 ? 'opacity-40 cursor-not-allowed border-zinc-700 bg-zinc-800/30 text-zinc-500' : (isDark ? 'border-orange-500/30 bg-orange-500/10 hover:bg-orange-500/20 text-orange-200' : 'border-orange-300 bg-orange-50 hover:bg-orange-100 text-orange-800')}`}
+            title={selectedOps.size === 0 ? 'Asigna al menos un usuario de Operaciones primero' : ''}
           >
             <div className="font-medium text-sm">Rotación</div>
-            <div className={`text-[11px] mt-0.5 ${isDark ? 'text-orange-300/70' : 'text-orange-700/70'}`}>
+            <div className={`text-[11px] mt-0.5 ${selectedOps.size === 0 ? 'text-zinc-600' : (isDark ? 'text-orange-300/70' : 'text-orange-700/70')}`}>
               Reutilizas el arte pero aún hay que instalarlo. Va a "Validar Instalación &gt; Por Instalar".
             </div>
           </button>
@@ -7558,6 +7567,29 @@ function TaskDetailModal({
                     {/* Lista de artes agrupados con inputs para cantidad recibida */}
                     <div className="max-h-[250px] overflow-y-auto space-y-3">
                       {(() => {
+                        // Helper: abre la galería tradicional con la ficha del arte
+                        // (nombre/observaciones/estatus_operaciones) al hacer click
+                        // en el thumbnail. Encuentra reservaIds asociados a esa URL
+                        // a partir de taskInventory; si no hay match, cae a todos
+                        // los ids_reservas de la tarea para que la galería igual abra.
+                        const openArteGaleria = (arteUrl: string | undefined | null, codigoFallback: string) => {
+                          if (!arteUrl) return;
+                          const matching = taskInventory.filter(it => it.archivo_arte === arteUrl);
+                          let rsvIds: number[] = [];
+                          let codigo = codigoFallback;
+                          if (matching.length > 0) {
+                            rsvIds = matching.flatMap(it => String(it.rsv_id || it.id).split(',').map(s => parseInt(s.trim())).filter(n => !isNaN(n)));
+                            codigo = matching[0].codigo_unico || codigoFallback;
+                          } else {
+                            rsvIds = (task.ids_reservas || '')
+                              .split(',')
+                              .map(v => parseInt(v.trim()))
+                              .filter(n => !isNaN(n));
+                          }
+                          if (rsvIds.length === 0) return;
+                          openTradicionalGallery(rsvIds, codigo);
+                        };
+
                         // Verificar si es una tarea de recepción faltantes (tiene evidencia especial)
                         let esFaltantes = false;
                         let faltantesData: { arte: string; cantidad: number }[] = [];
@@ -7580,8 +7612,14 @@ function TaskDetailModal({
                             const key = faltante.arte || 'sin_arte';
                             return (
                               <div key={idx} className="flex items-center gap-4 p-3 bg-zinc-800/30 rounded-lg border border-border/50">
-                                {/* Preview de imagen */}
-                                <div className="w-20 h-16 bg-zinc-800 rounded-lg overflow-hidden flex-shrink-0 border border-zinc-700">
+                                {/* Preview de imagen — click para abrir galería con ficha */}
+                                <button
+                                  type="button"
+                                  onClick={() => openArteGaleria(faltante.arte, `Recepción · Arte ${idx + 1}`)}
+                                  disabled={!faltante.arte}
+                                  className="w-20 h-16 bg-zinc-800 rounded-lg overflow-hidden flex-shrink-0 border border-zinc-700 hover:border-purple-400/60 hover:ring-1 hover:ring-purple-500/40 transition-colors disabled:cursor-default disabled:hover:border-zinc-700 disabled:hover:ring-0"
+                                  title={faltante.arte ? 'Ver galería del arte (nombre, observaciones, estatus)' : 'Sin arte asignado'}
+                                >
                                   {faltante.arte ? (
                                     <ArteImg
                                       src={faltante.arte}
@@ -7593,7 +7631,7 @@ function TaskDetailModal({
                                       <Image className="h-5 w-5 text-zinc-600" />
                                     </div>
                                   )}
-                                </div>
+                                </button>
 
                                 {/* Info del grupo - mostrar cantidad faltante */}
                                 <div className="flex-1 min-w-0">
@@ -7660,8 +7698,14 @@ function TaskDetailModal({
                             const imageUrl = getImageUrl(arteUrl);
                             return (
                               <div key={arteUrl} className="flex items-center gap-4 p-3 bg-zinc-800/30 rounded-lg border border-border/50">
-                                {/* Preview de imagen */}
-                                <div className="w-20 h-16 bg-zinc-800 rounded-lg overflow-hidden flex-shrink-0 border border-zinc-700">
+                                {/* Preview de imagen — click para abrir galería con ficha */}
+                                <button
+                                  type="button"
+                                  onClick={() => openArteGaleria(arteUrl, nombreArchivo)}
+                                  disabled={!imageUrl && !arteUrl}
+                                  className="w-20 h-16 bg-zinc-800 rounded-lg overflow-hidden flex-shrink-0 border border-zinc-700 hover:border-purple-400/60 hover:ring-1 hover:ring-purple-500/40 transition-colors disabled:cursor-default disabled:hover:border-zinc-700 disabled:hover:ring-0"
+                                  title={imageUrl ? 'Ver galería del arte (nombre, observaciones, estatus)' : 'Sin arte disponible'}
+                                >
                                   {imageUrl ? (
                                     <img
                                       src={imageUrl}
@@ -7673,7 +7717,7 @@ function TaskDetailModal({
                                       <Image className="h-6 w-6 text-zinc-600" />
                                     </div>
                                   )}
-                                </div>
+                                </button>
 
                                 {/* Info del grupo */}
                                 <div className="flex-1 min-w-0">
@@ -7800,8 +7844,14 @@ function TaskDetailModal({
 
                           return (
                           <div key={key} className="flex items-center gap-4 p-3 bg-zinc-800/30 rounded-lg border border-border/50">
-                            {/* Preview de imagen */}
-                            <div className="w-20 h-16 bg-zinc-800 rounded-lg overflow-hidden flex-shrink-0 border border-zinc-700">
+                            {/* Preview de imagen — click para abrir galería con ficha */}
+                            <button
+                              type="button"
+                              onClick={() => openArteGaleria(grupo.archivo, grupo.items[0]?.codigo_unico || 'Recepción')}
+                              disabled={!grupo.archivo}
+                              className="w-20 h-16 bg-zinc-800 rounded-lg overflow-hidden flex-shrink-0 border border-zinc-700 hover:border-purple-400/60 hover:ring-1 hover:ring-purple-500/40 transition-colors disabled:cursor-default disabled:hover:border-zinc-700 disabled:hover:ring-0"
+                              title={grupo.archivo ? 'Ver galería del arte (nombre, observaciones, estatus)' : 'Sin arte asignado'}
+                            >
                               {grupo.archivo ? (
                                 <ArteImg
                                   src={grupo.archivo}
@@ -7813,7 +7863,7 @@ function TaskDetailModal({
                                   <Image className="h-5 w-5 text-zinc-600" />
                                 </div>
                               )}
-                            </div>
+                            </button>
 
                             {/* Info del grupo */}
                             <div className="flex-1 min-w-0">
@@ -7868,7 +7918,14 @@ function TaskDetailModal({
                       // (lee de evidencia, descripción, o taskInventory.length)
                       const totalSolicitadas = impresionesOrdenadas;
 
-                      // Obtener las keys de artes para sumar cantidades recibidas
+                      // Obtener las keys de artes para sumar cantidades recibidas.
+                      // IMPORTANTE: las keys deben coincidir con las que usan los
+                      // inputs (mismo orden de prioridad: faltantesPorArte ->
+                      // impresiones por URL -> taskInventory.archivo_arte ->
+                      // __total__). Antes solo se cubrian faltantes y taskInventory;
+                      // si la Recepcion normal tenia varios artes con desglose en
+                      // evidencia.impresiones, las cantidades recibidas no se
+                      // sumaban y el total mostrado se desfasaba al teclear.
                       let artesKeys: string[] = [];
 
                       if (task.evidencia) {
@@ -7876,12 +7933,18 @@ function TaskDetailModal({
                           const evidenciaObj = JSON.parse(task.evidencia);
                           if (evidenciaObj.tipo === 'recepcion_faltantes' && evidenciaObj.faltantesPorArte) {
                             artesKeys = evidenciaObj.faltantesPorArte.map((f: { arte: string }) => f.arte || 'sin_arte');
+                          } else if (evidenciaObj.impresiones && typeof evidenciaObj.impresiones === 'object') {
+                            artesKeys = Object.keys(evidenciaObj.impresiones);
                           }
                         } catch (e) {}
                       }
 
                       if (artesKeys.length === 0) {
                         artesKeys = [...new Set(taskInventory.map(item => item.archivo_arte || 'sin_arte'))];
+                        if (artesKeys.length === 0) {
+                          // Fallback "Sin desglose de arte" usa __total__ como key.
+                          artesKeys = ['__total__'];
+                        }
                       }
 
                       const totalRecibidas = artesKeys.reduce((sum, key) => sum + (cantidadesRecibidas[key] || 0), 0);
@@ -8086,6 +8149,97 @@ function TaskDetailModal({
                   <p className="text-sm text-zinc-400">Tarea de recepción activa - Solo visualización</p>
                 </div>
               )}
+            </div>
+          )}
+
+          {/* === VISTA INFORMATIVA PARA TAREAS DE GESTIÓN DE RECEPCIÓN PARCIAL (ASC) === */}
+          {task.tipo === 'Gestión de Recepción Parcial' && (
+            <div className="space-y-4">
+              {(() => {
+                let evParcial: { tipo?: string; recepcionFaltantesTitulo?: string; totalFaltantes?: number; faltantesPorArte?: { arte: string; cantidad: number }[]; campania_nombre?: string } = {};
+                if (task.evidencia) {
+                  try { evParcial = JSON.parse(task.evidencia); } catch {}
+                }
+                const detalle = Array.isArray(evParcial.faltantesPorArte) ? evParcial.faltantesPorArte : [];
+                const total = Number(evParcial.totalFaltantes || 0);
+                return (
+                  <>
+                    <div className="bg-yellow-500/10 border border-yellow-500/30 rounded-lg p-4">
+                      <h4 className="text-sm font-medium text-yellow-300 mb-2 flex items-center gap-2">
+                        <AlertTriangle className="h-4 w-4" />
+                        Recepción Parcial
+                      </h4>
+                      <p className="text-xs text-zinc-300">
+                        La recepción <span className="font-semibold text-white">"{evParcial.recepcionFaltantesTitulo || task.titulo}"</span> se atendió de forma parcial. Esta tarea es informativa: revisa el detalle y márcala como atendida cuando hayas dado seguimiento.
+                      </p>
+                    </div>
+
+                    <div className="bg-zinc-900/50 rounded-lg p-4 border border-border">
+                      <h4 className="text-sm font-medium text-purple-300 mb-3">Información</h4>
+                      <div className="grid grid-cols-2 md:grid-cols-3 gap-3 text-sm">
+                        <div>
+                          <span className="text-zinc-500">Campaña:</span>
+                          <p className="text-white font-medium">{evParcial.campania_nombre || campana?.nombre || '-'}</p>
+                        </div>
+                        <div>
+                          <span className="text-zinc-500">Total faltantes:</span>
+                          <p className="text-2xl font-bold text-red-400">{total}</p>
+                        </div>
+                        <div>
+                          <span className="text-zinc-500">Estatus:</span>
+                          <p className={`font-medium ${task.estatus === 'Atendido' || task.estatus === 'Completado' ? 'text-green-400' : 'text-yellow-400'}`}>{task.estatus}</p>
+                        </div>
+                      </div>
+                    </div>
+
+                    {detalle.length > 0 && (
+                      <div className="bg-zinc-900/50 rounded-lg border border-border overflow-hidden">
+                        <div className="px-4 py-3 border-b border-border bg-zinc-800/50">
+                          <h4 className="text-sm font-medium text-purple-300">Detalle por arte</h4>
+                        </div>
+                        <div className="p-4 space-y-2 max-h-[300px] overflow-y-auto">
+                          {detalle.map((f, idx) => {
+                            const nombreArchivo = f.arte ? (f.arte.split('/').pop() || 'Arte') : 'Sin arte';
+                            return (
+                              <div key={idx} className="flex items-center gap-3 p-3 bg-zinc-800/30 rounded-lg border border-border/50">
+                                <div className="w-16 h-12 bg-zinc-800 rounded overflow-hidden flex-shrink-0 border border-zinc-700">
+                                  {f.arte ? (
+                                    <ArteImg src={f.arte} alt="Arte" className="w-full h-full object-cover" />
+                                  ) : (
+                                    <div className="w-full h-full flex items-center justify-center">
+                                      <Image className="h-4 w-4 text-zinc-600" />
+                                    </div>
+                                  )}
+                                </div>
+                                <div className="flex-1 min-w-0">
+                                  <p className="text-xs text-zinc-400 truncate">{nombreArchivo}</p>
+                                </div>
+                                <div className="text-right">
+                                  <p className="text-lg font-bold text-red-400">{f.cantidad}</p>
+                                  <p className="text-[10px] text-zinc-500">faltante{f.cantidad !== 1 ? 's' : ''}</p>
+                                </div>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    )}
+
+                    {task.estatus !== 'Atendido' && task.estatus !== 'Completado' && task.estatus !== 'Finalizada' && (
+                      <div className="flex justify-end pt-2">
+                        <button
+                          onClick={() => onTaskComplete(task.id)}
+                          disabled={isUpdating}
+                          className="flex items-center gap-2 px-6 py-2.5 text-sm font-medium bg-green-600 hover:bg-green-700 text-white rounded-lg transition-colors disabled:opacity-50"
+                        >
+                          {isUpdating ? <Loader2 className="h-4 w-4 animate-spin" /> : <CheckCircle2 className="h-4 w-4" />}
+                          Marcar como atendida
+                        </button>
+                      </div>
+                    )}
+                  </>
+                );
+              })()}
             </div>
           )}
 
@@ -18475,7 +18629,15 @@ export function TareaSeguimientoPage() {
                       </>
                     )}
                   </button>
-                  {permissions.canApproveArteSinRevisar && activeEstadoArteTab !== 'aprobado' && (() => {
+                  {/* Boton Aprobar oculto en sub-tabs Sin Revisar, En Revisión
+                      y Aprobado: el flujo correcto pasa por una tarea de Revisión
+                      de artes; el atajo directo solo aplica al sub-tab Rechazado
+                      (re-aprobar algo previamente rechazado). */}
+                  {permissions.canApproveArteSinRevisar
+                    && activeEstadoArteTab !== 'aprobado'
+                    && activeEstadoArteTab !== 'sin_revisar'
+                    && activeEstadoArteTab !== 'en_revision'
+                    && (() => {
                     const itemsSinRevisar = selectedInventoryItems.filter(item => item.estado_arte === 'sin_revisar');
                     const hasSinRevisar = itemsSinRevisar.length > 0;
                     return (
@@ -19304,6 +19466,11 @@ export function TareaSeguimientoPage() {
                                       proveedores_id: tarea.proveedores_id || undefined,
                                       num_impresiones: tarea.num_impresiones || undefined,
                                       evidencia: tarea.evidencia || undefined,
+                                      // Sin estos campos la vista "Recepción completada" no
+                                      // mostraba ni las fotos comprobatorias ni las
+                                      // observaciones al dar "Ver detalle" en sub-tab Recibido.
+                                      archivo_testigo: tarea.archivo_testigo || undefined,
+                                      contenido: tarea.contenido || undefined,
                                     };
                                     setSelectedTask(taskRow);
                                     setIsTaskDetailModalOpen(true);
@@ -19485,6 +19652,11 @@ export function TareaSeguimientoPage() {
                                     proveedores_id: tarea.proveedores_id || undefined,
                                     num_impresiones: tarea.num_impresiones || undefined,
                                     evidencia: tarea.evidencia || undefined,
+                                    // Sin estos campos la vista "Recepción completada" no
+                                    // mostraba ni las fotos comprobatorias ni las
+                                    // observaciones al dar "Ver detalle" en sub-tab Recibido.
+                                    archivo_testigo: tarea.archivo_testigo || undefined,
+                                    contenido: tarea.contenido || undefined,
                                   };
                                   setSelectedTask(taskRow);
                                   setIsTaskDetailModalOpen(true);

@@ -445,6 +445,10 @@ export interface Notificacion {
 export interface NotificacionStats {
   total: number;
   no_leidas: number;
+  activas?: number;
+  atendidas?: number;
+  /** Conteo exacto para la burbuja roja del header. */
+  badge_count?: number;
   por_tipo: Record<string, number>;
   por_estatus?: Record<string, number>;
 }
