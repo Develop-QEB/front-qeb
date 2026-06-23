@@ -484,7 +484,7 @@ export function CompartirPropuestaPage() {
     if (source.length === 0) return;
     import('xlsx').then(XLSX => {
       // codigo_unico (completo) va ANTES de Clave (que es solo el prefijo).
-      const headers = ['codigo_unico', 'Clave', 'Plaza', 'Ubicación', 'Tipo de Cara', 'Formato', 'Periodo', 'Lat', 'Long', 'NOTAS'];
+      const headers = ['codigo_unico', 'Clave', 'Plaza', 'Ubicación', 'Tipo de Cara', 'Formato', 'Tipo Inventario', 'Periodo', 'Lat', 'Long', 'NOTAS'];
       const byPlaza: Record<string, typeof inventario> = {};
       for (const i of source) {
         const plaza = i.plaza || 'Sin Plaza';
@@ -500,6 +500,7 @@ export function CompartirPropuestaPage() {
           i.ubicacion || '',
           i.tipo_de_cara || '',
           i.mueble || '',
+          i.tradicional_digital || '',
           formatInicioPeriodo(i, tipoPeriodo),
           i.latitud || '',
           i.longitud || '',
