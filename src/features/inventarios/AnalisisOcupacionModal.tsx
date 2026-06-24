@@ -29,6 +29,12 @@ interface AnalisisOcupacionModalProps {
   initialInventarios?: InventarioResumen[];
   initialAnalisis?: AnalisisOcupacion;
   onSaved?: (a: AnalisisOcupacion) => void;
+  /**
+   * Modo solo lectura: usado al abrir un enlace compartido desde un usuario sin
+   * acceso al módulo de inventario. Oculta guardar, compartir, cambiar periodos
+   * y todas las acciones de edición/liberación sobre la matriz.
+   */
+  readOnly?: boolean;
 }
 
 function parseCsvCodes(text: string): string[] {
@@ -76,12 +82,13 @@ export function AnalisisOcupacionModal({
   initialInventarios,
   initialAnalisis,
   onSaved,
+  readOnly = false,
 }: AnalisisOcupacionModalProps) {
   const isDark = useThemeStore(s => s.theme) === 'dark';
   const queryClient = useQueryClient();
   const userRole = useAuthStore(s => s.user?.rol);
-  // Selección múltiple (botón oculto): solo DEV.
-  const canBulkSelect = userRole === 'DEV';
+  // Selección múltiple (botón oculto): solo DEV. Nunca en modo solo lectura.
+  const canBulkSelect = !readOnly && userRole === 'DEV';
 
   const [selectionMode, setSelectionMode] = useState(false);
 
@@ -116,7 +123,7 @@ export function AnalisisOcupacionModal({
       setCodigosNoEncontrados(initialAnalisis.codigosNoEncontrados);
       setCatorcenasSelected(initialAnalisis.catorcenas);
       setAnalisisId(initialAnalisis.id);
-      setAnalisisNombre(owner ? initialAnalisis.nombre : `Copia de ${initialAnalisis.nombre}`);
+      setAnalisisNombre(owner || readOnly ? initialAnalisis.nombre : `Copia de ${initialAnalisis.nombre}`);
       setIsOwner(owner);
       // Construir matriz al abrir
       void buildMatrizFor(initialAnalisis.inventarios, initialAnalisis.catorcenas);
@@ -579,13 +586,34 @@ export function AnalisisOcupacionModal({
                 isDark={isDark}
                 onRefresh={() => buildMatrizFor(inventarios, catorcenasSelected)}
                 selectionMode={selectionMode}
+                readOnly={readOnly}
               />
             )}
           </div>
 
           {/* Footer */}
           <div className={`p-4 border-t ${isDark ? 'border-zinc-800 bg-zinc-900/50' : 'border-gray-200 bg-gray-50'} flex items-center justify-between gap-3`}>
-            {step === 'matriz' ? (
+            {step === 'matriz' && readOnly ? (
+              <div className="flex items-center gap-2 flex-1">
+                <span className={`text-sm font-medium truncate max-w-md ${isDark ? 'text-white' : 'text-gray-900'}`}>
+                  {analisisNombre}
+                </span>
+                <span
+                  title="Estás viendo un análisis compartido en modo solo lectura."
+                  className={`text-[10px] px-2 py-0.5 rounded-full font-medium whitespace-nowrap ${isDark ? 'bg-purple-500/15 text-purple-300 border border-purple-500/30' : 'bg-purple-50 text-purple-700 border border-purple-200'}`}
+                >
+                  Solo lectura
+                </span>
+                <div className="ml-auto">
+                  <button
+                    onClick={onClose}
+                    className={`px-3 py-1.5 rounded-lg text-sm ${isDark ? 'text-zinc-400 hover:bg-zinc-800' : 'text-gray-600 hover:bg-gray-100'}`}
+                  >
+                    Cerrar
+                  </button>
+                </div>
+              </div>
+            ) : step === 'matriz' ? (
               <div className="flex items-center gap-2 flex-1">
                 <input
                   type="text"
@@ -696,19 +724,24 @@ function MatrizView({
   isDark,
   onRefresh,
   selectionMode,
+  readOnly = false,
 }: {
   matriz: MatrizOcupacion | null;
   building: boolean;
   isDark: boolean;
   onRefresh: () => Promise<void> | void;
   selectionMode: boolean;
+  readOnly?: boolean;
 }) {
   const userRole = useAuthStore(s => s.user?.rol);
-  const canRelease = userRole === 'DEV'
+  // En modo solo lectura nadie puede liberar reservas, sin importar el rol.
+  const canRelease = !readOnly && (
+    userRole === 'DEV'
     || userRole === 'Gerente de Trafico'
     || userRole === 'Coordinador de trafico'
     || userRole === 'Especialista de trafico'
-    || userRole === 'Auxiliar de trafico';
+    || userRole === 'Auxiliar de trafico'
+  );
 
   const [showDuplicados, setShowDuplicados] = useState(false);
   const [soloDuplicados, setSoloDuplicados] = useState(false);
