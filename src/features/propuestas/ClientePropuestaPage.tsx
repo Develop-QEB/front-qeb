@@ -66,6 +66,7 @@ interface InventarioReservado {
   inicio_periodo?: string | null;
   fin_periodo?: string | null;
   formato?: string | null;
+  tradicional_digital?: string | null;
 }
 
 // Tarifa BRUTA por cara (costo/caras). tarifa_publica viene diluido por las
