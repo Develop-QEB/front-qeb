@@ -2355,6 +2355,43 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
     }
   };
 
+  // Validacion de campos requeridos por paso para bloquear avance.
+  // El checkbox IMU no entra: puede o no estar activo, no afecta completar.
+  const isStepComplete = (s: number): boolean => {
+    if (s === 1) {
+      // Cliente: CUIC seleccionado + al menos un asignado
+      return Boolean(selectedCuic) && selectedAsignados.length > 0;
+    }
+    if (s === 2) {
+      // Campaña: nombre + rango de fechas valido + descripcion + notas
+      if (!nombreCampania.trim()) return false;
+      if (!yearInicio || !yearFin) return false;
+      if (tipoPeriodo === 'catorcena') {
+        if (!catorcenaInicio || !catorcenaFin) return false;
+      } else {
+        if (!mesInicio || !mesFin) return false;
+      }
+      if (!descripcion.trim()) return false;
+      if (!notas.trim()) return false;
+      return true;
+    }
+    if (s === 3) {
+      // Asignar Circuitos: al menos un circuito agregado
+      return caras.length > 0;
+    }
+    return true;
+  };
+  // Para avanzar al paso N hay que tener completos los pasos 1..N-1.
+  const canAdvanceToStep = (target: number): boolean => {
+    if (target <= step) return true; // siempre puede regresar
+    for (let i = 1; i < target; i++) {
+      if (!isStepComplete(i)) return false;
+    }
+    return true;
+  };
+  // En modo edición no bloqueamos (los datos ya existen y pueden ajustarse).
+  const enforceStepLock = !isEditMode;
+
   if (!isOpen) return null;
 
   return (
@@ -2399,11 +2436,15 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
               { num: 2, label: 'Campaña', icon: FileText },
               { num: 3, label: 'Asignar Circuitos', icon: MapPin },
               { num: 4, label: 'Resumen', icon: Layers },
-            ].map((s, i) => (
+            ].map((s, i) => {
+              const stepLocked = enforceStepLock && !canAdvanceToStep(s.num);
+              return (
               <React.Fragment key={s.num}>
                 <button
-                  onClick={() => setStep(s.num)}
-                  className={`flex items-center gap-2 px-3 py-1.5 rounded-lg text-sm font-medium transition-all ${step === s.num
+                  onClick={() => { if (!stepLocked) setStep(s.num); }}
+                  disabled={stepLocked}
+                  title={stepLocked ? 'Completa los campos del paso actual antes de avanzar' : undefined}
+                  className={`flex items-center gap-2 px-3 py-1.5 rounded-lg text-sm font-medium transition-all ${stepLocked ? 'cursor-not-allowed opacity-60' : ''} ${step === s.num
                     ? 'bg-purple-500/20 text-purple-300 border border-purple-500/40'
                     : step > s.num
                       ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/30'
@@ -2415,7 +2456,8 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
                 </button>
                 {i < 3 && <div className={`flex-1 h-px ${isDark ? 'bg-zinc-700' : 'bg-gray-200'}`} />}
               </React.Fragment>
-            ))}
+              );
+            })}
           </div>
         </div>
 
@@ -3960,13 +4002,27 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
           </button>
 
           {step < 4 ? (
-            <button
-              type="button"
-              onClick={() => setStep(step + 1)}
-              className="px-4 py-2 bg-purple-600 text-white rounded-lg text-sm font-medium hover:bg-purple-700 transition-colors"
-            >
-              Siguiente
-            </button>
+            (() => {
+              const blockNext = enforceStepLock && !isStepComplete(step);
+              const missingHint = step === 1
+                ? 'Selecciona CUIC y al menos un asignado'
+                : step === 2
+                  ? 'Completa nombre, rango de fechas, descripcion y notas'
+                  : step === 3
+                    ? 'Agrega al menos un circuito'
+                    : '';
+              return (
+                <button
+                  type="button"
+                  onClick={() => { if (!blockNext) setStep(step + 1); }}
+                  disabled={blockNext}
+                  title={blockNext ? missingHint : undefined}
+                  className="px-4 py-2 bg-purple-600 text-white rounded-lg text-sm font-medium hover:bg-purple-700 transition-colors disabled:bg-purple-600/40 disabled:cursor-not-allowed"
+                >
+                  Siguiente
+                </button>
+              );
+            })()
           ) : (
             <button
               type="button"
