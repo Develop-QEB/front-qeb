@@ -1884,7 +1884,22 @@ function UploadArtModal({
     };
   };
 
+  // Estado de loading local — cubre todo el handleSubmit:
+  // 1) Botón Finalizar deshabilitado con spinner
+  // 2) Overlay sobre todo el modal para bloquear clicks accidentales mientras
+  //    el padre procesa la asignación (assignArteTradicional / Digital /
+  //    markReservasComoInstaladas con sus side-effects de Rotación/Operaciones).
+  // Antes solo se reflejaba isSubmitting del flujo legacy; el wizard cerraba
+  // el dialog "Instalado/Rotación" y dejaba el modal interactivo durante el
+  // procesamiento — user podía dar click en otras cosas o dispararlo doble.
+  const [isProcessingFinal, setIsProcessingFinal] = useState(false);
+  // Reset al abrir el modal por si quedó colgado en una sesión anterior.
+  useEffect(() => {
+    if (isOpen) setIsProcessingFinal(false);
+  }, [isOpen]);
+
   const handleSubmit = async () => {
+    if (isProcessingFinal) return;
     // Flujo digital con wizard - enviar archivos seleccionados de la biblioteca con notas
     if (isDigitalInventory && digitalWizardStep === 2 && onSubmitDigitalFromLibrary) {
       const archivos = Array.from(selectedDigitalImages.entries()).map(([key, img], idx) => ({
@@ -1897,6 +1912,7 @@ function UploadArtModal({
       }));
       const { proceed, markInstalado, instalacionMode, operacionesAsignados } = await checkAndConfirmInstalado(archivos.map(a => a.archivo));
       if (!proceed) return;
+      setIsProcessingFinal(true);
       onSubmitDigitalFromLibrary({
         archivos,
         inventoryIds: selectedInventory.map((i) => i.id),
@@ -1909,6 +1925,7 @@ function UploadArtModal({
 
     // Fallback: flujo digital legacy (archivos subidos directamente)
     if (isDigitalInventory && digitalFiles.length > 0 && onSubmitDigital) {
+      setIsProcessingFinal(true);
       onSubmitDigital({
         files: digitalFiles.map(f => ({ file: f.file, spot: f.spot })),
         inventoryIds: selectedInventory.map((i) => i.id),
@@ -1927,6 +1944,7 @@ function UploadArtModal({
       }));
       const { proceed, markInstalado, instalacionMode, operacionesAsignados } = await checkAndConfirmInstalado(archivos.map(a => a.archivo));
       if (!proceed) return;
+      setIsProcessingFinal(true);
       onSubmitTradicional({
         archivos,
         inventoryIds: selectedInventory.map((i) => i.id),
@@ -1959,6 +1977,7 @@ function UploadArtModal({
       instalacionMode,
       operacionesAsignados,
     };
+    setIsProcessingFinal(true);
     onSubmit(payload);
   };
 
@@ -2203,7 +2222,10 @@ function UploadArtModal({
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center">
-      <div className="absolute inset-0 bg-black/50 backdrop-blur-sm" onClick={handleClose} />
+      <div
+        className="absolute inset-0 bg-black/50 backdrop-blur-sm"
+        onClick={() => { if (!isProcessingFinal) handleClose(); }}
+      />
       <div className="relative bg-card border border-border rounded-xl w-full max-w-6xl mx-4 max-h-[90vh] flex flex-col">
         {/* Header */}
         <div className="flex items-center justify-between p-4 border-b border-border flex-shrink-0">
@@ -3110,15 +3132,29 @@ function UploadArtModal({
             ) : (
               <button
                 onClick={handleSubmit}
-                disabled={isSubmitDisabled()}
+                disabled={isSubmitDisabled() || isProcessingFinal}
                 className={`flex items-center gap-2 px-4 py-2 text-sm font-medium ${isDigitalInventory ? 'bg-cyan-600 hover:bg-cyan-700' : 'bg-purple-600 hover:bg-purple-700'} text-white rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed`}
               >
-                {isSubmitting && <Loader2 className="h-4 w-4 animate-spin" />}
-                {isSubmitting ? 'Guardando...' : 'Finalizar'}
+                {(isSubmitting || isProcessingFinal) && <Loader2 className="h-4 w-4 animate-spin" />}
+                {(isSubmitting || isProcessingFinal) ? 'Guardando...' : 'Finalizar'}
               </button>
             )}
           </div>
         </div>
+
+        {/* Overlay bloqueante mientras se procesa la asignación. Evita que el
+            usuario haga clicks adicionales en el modal cuando el flujo
+            Instalado/Rotación cerro el dialog y el back aun esta procesando
+            (assignArteTradicional + markReservasComoInstaladas con side-effects). */}
+        {isProcessingFinal && (
+          <div className="absolute inset-0 z-[60] flex items-center justify-center bg-black/60 backdrop-blur-sm rounded-xl">
+            <div className="flex flex-col items-center gap-3 px-6 py-5 rounded-xl bg-zinc-900 border border-purple-500/40 shadow-2xl">
+              <Loader2 className="h-8 w-8 animate-spin text-purple-400" />
+              <p className="text-sm text-white font-medium">Procesando asignación...</p>
+              <p className="text-[11px] text-zinc-400">No cierres la ventana</p>
+            </div>
+          </div>
+        )}
       </div>
 
       {/* Dialog para elegir destino cuando hay artes Instalado en la selección */}
