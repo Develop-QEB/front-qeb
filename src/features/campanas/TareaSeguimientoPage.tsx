@@ -15952,31 +15952,52 @@ export function TareaSeguimientoPage() {
 
   // Transform artículos IM con APS para subtab "Orden Impresión"
   const inventoryOrdenImpresionData = useMemo((): InventoryRow[] => {
-    return imArticlesAPI.map((item: InventarioConAPS) => ({
-      id: String(item.rsv_ids),
-      rsv_id: String(item.rsv_ids),
-      codigo_unico: item.codigo_unico || item.articulo || '',
-      tipo_de_cara: 'Impresión',
-      catorcena: item.numero_catorcena || 0,
-      anio: item.anio_catorcena || 0,
-      aps: item.aps || null,
-      grupo_id: null,
-      estatus: 'Impresión',
-      espacio: '',
-      inicio_periodo: item.inicio_periodo?.split('T')[0] || '',
-      fin_periodo: item.fin_periodo?.split('T')[0] || '',
-      caras_totales: item.caras_totales || 0,
-      tipo_medio: item.tipo_medio || '',
-      mueble: item.formato || '',
-      ciudad: (item as any).estado || '',
-      plaza: item.plaza || '',
-      municipio: '',
-      nse: '',
-      ubicacion: '',
-      tradicional_digital: 'Tradicional' as const,
-      articulo: item.articulo || '',
-    }));
-  }, [imArticlesAPI]);
+    // Quitar items que ya estan en alguna tarea de "Orden de Impresion" no
+    // resuelta — su listado_inventario es CSV de rsv_ids. Sin esto el usuario
+    // podia crear N tareas duplicadas sobre los mismos articulos.
+    const usedIds = new Set<string>();
+    tareasAPI
+      .filter(t =>
+        t.tipo === 'Orden de Impresión'
+        && t.estatus !== 'Atendido'
+        && t.estatus !== 'Completado'
+        && t.estatus !== 'Rechazado'
+        && t.estatus !== 'Cancelado'
+      )
+      .forEach(t => {
+        (t.listado_inventario || '').split(',').forEach(raw => {
+          const v = raw.trim();
+          if (v) usedIds.add(v);
+        });
+      });
+
+    return imArticlesAPI
+      .filter((item: InventarioConAPS) => !usedIds.has(String(item.rsv_ids)))
+      .map((item: InventarioConAPS) => ({
+        id: String(item.rsv_ids),
+        rsv_id: String(item.rsv_ids),
+        codigo_unico: item.codigo_unico || item.articulo || '',
+        tipo_de_cara: 'Impresión',
+        catorcena: item.numero_catorcena || 0,
+        anio: item.anio_catorcena || 0,
+        aps: item.aps || null,
+        grupo_id: null,
+        estatus: 'Impresión',
+        espacio: '',
+        inicio_periodo: item.inicio_periodo?.split('T')[0] || '',
+        fin_periodo: item.fin_periodo?.split('T')[0] || '',
+        caras_totales: item.caras_totales || 0,
+        tipo_medio: item.tipo_medio || '',
+        mueble: item.formato || '',
+        ciudad: (item as any).estado || '',
+        plaza: item.plaza || '',
+        municipio: '',
+        nse: '',
+        ubicacion: '',
+        tradicional_digital: 'Tradicional' as const,
+        articulo: item.articulo || '',
+      }));
+  }, [imArticlesAPI, tareasAPI]);
 
   // Mapa de rsv_id -> estado de impresión (para mostrar en tab Aprobado)
   const impresionStatusMap = useMemo(() => {
