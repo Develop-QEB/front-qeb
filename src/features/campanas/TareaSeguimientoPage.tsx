@@ -8086,16 +8086,28 @@ function TaskDetailModal({
                           } catch {
                             urls = [task.archivo_testigo];
                           }
+                          // Contenedor con tamaño fijo + ArteImg (incluye
+                          // referrerPolicy="no-referrer" + placeholder de fallo).
+                          // Antes era un <img> plano con max-h pero sin width
+                          // ni manejo de error — si Spaces respondia con
+                          // referrer policy fallido el thumbnail quedaba en 0px
+                          // y solo se veia el texto del alt.
                           return urls.map((url, idx) => {
                             const imgUrl = getImageUrl(url) || url;
                             return (
-                              <img
+                              <button
                                 key={idx}
-                                src={imgUrl}
-                                alt={`Comprobante ${idx + 1}`}
-                                className="max-h-[150px] rounded-lg border border-border cursor-pointer hover:opacity-90 transition-opacity"
+                                type="button"
                                 onClick={() => window.open(imgUrl, '_blank')}
-                              />
+                                className="w-32 h-32 rounded-lg border border-border overflow-hidden cursor-pointer hover:opacity-90 transition-opacity bg-zinc-900/50 flex items-center justify-center"
+                                title={`Comprobante ${idx + 1}`}
+                              >
+                                <ArteImg
+                                  src={url}
+                                  alt={`Comprobante ${idx + 1}`}
+                                  className="w-full h-full object-cover"
+                                />
+                              </button>
                             );
                           });
                         })()}
