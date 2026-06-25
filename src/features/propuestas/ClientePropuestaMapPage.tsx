@@ -7,6 +7,7 @@ import {
 } from 'lucide-react';
 import { GoogleMap, useLoadScript, Marker, Circle, Autocomplete, InfoWindow } from '@react-google-maps/api';
 import { formatCurrency } from '../../lib/utils';
+import { toNum, applyNumberFormats, FMT_ENTERO, FMT_MONEDA, FMT_COORD } from '../../utils/excelFormat';
 
 // Config UNICA de Google Maps (mismo id/key/libraries en toda la app) para
 // que el script se inyecte una sola vez. Ver src/config/googleMaps.ts.
@@ -348,9 +349,11 @@ export function ClientePropuestaMapPage() {
       const headers = ['Catorcena', 'Circuito', 'Codigo', 'Plaza', 'Ubicacion', 'Tipo Cara', 'Formato', 'Tipo Inventario', 'Articulo', 'Caras', 'Tarifa', 'Latitud', 'Longitud'];
       const rows = downloadRows.map(i => [
         i._catLabel, i.articulo || '', i.codigo_unico, i.plaza, i.ubicacion, i.tipo_de_cara, i.mueble,
-        i.tradicional_digital || '', i.articulo, i.caras_totales, tarifaBruta(i), i.latitud || '', i.longitud || '',
+        i.tradicional_digital || '', i.articulo, toNum(i.caras_totales), tarifaBruta(i), toNum(i.latitud), toNum(i.longitud),
       ]);
       const ws = XLSX.utils.aoa_to_sheet([headers, ...rows]);
+      // Caras (9), Tarifa (10), Latitud (11), Longitud (12) como celdas tipo número
+      applyNumberFormats(XLSX, ws, rows.length, { 9: FMT_ENTERO, 10: FMT_MONEDA, 11: FMT_COORD, 12: FMT_COORD });
       const wb = XLSX.utils.book_new();
       XLSX.utils.book_append_sheet(wb, ws, 'Reservas');
       XLSX.writeFile(wb, `reservas_propuesta_${propuestaId}.xlsx`);
