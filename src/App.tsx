@@ -1,5 +1,5 @@
 import { lazy, Suspense } from 'react';
-import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
+import { BrowserRouter, Routes, Route, Navigate, useParams } from 'react-router-dom';
 import { QueryClientProvider } from '@tanstack/react-query';
 import { queryClient } from './lib/queryClient';
 import { LoginPage } from './features/auth/LoginPage';
@@ -14,6 +14,7 @@ const DashboardPage = lazy(() => import('./features/dashboard/DashboardPage').th
 const ClientesPage = lazy(() => import('./features/clientes/ClientesPage').then(m => ({ default: m.ClientesPage })));
 const ProveedoresPage = lazy(() => import('./features/proveedores/ProveedoresPage').then(m => ({ default: m.ProveedoresPage })));
 const InventariosPage = lazy(() => import('./features/inventarios/InventariosPage').then(m => ({ default: m.InventariosPage })));
+const AnalisisOcupacionCompartidoPage = lazy(() => import('./features/inventarios/AnalisisOcupacionCompartidoPage').then(m => ({ default: m.AnalisisOcupacionCompartidoPage })));
 const SolicitudesPage = lazy(() => import('./features/solicitudes/SolicitudesPage').then(m => ({ default: m.SolicitudesPage })));
 const PropuestasPage = lazy(() => import('./features/propuestas/PropuestasPage').then(m => ({ default: m.PropuestasPage })));
 const CompartirPropuestaPage = lazy(() => import('./features/propuestas/CompartirPropuestaPage').then(m => ({ default: m.CompartirPropuestaPage })));
@@ -83,10 +84,19 @@ function HomeRoute() {
 // Componente para proteger ruta de Inventarios
 function InventariosRoute() {
   const user = useAuthStore((state) => state.user);
+  const { analisisId } = useParams<{ analisisId?: string }>();
   const permissions = getPermissions(user?.rol);
 
-  if (!user || !permissions.canSeeInventarios) {
-    return <Navigate to={getFirstAvailableRoute(permissions, user?.rol)} replace />;
+  if (!user) {
+    return <Navigate to={getFirstAvailableRoute(permissions, undefined)} replace />;
+  }
+  // Cualquier usuario autenticado puede ver un análisis compartido por enlace en
+  // modo solo lectura, aunque no tenga acceso al módulo de inventario.
+  if (!permissions.canSeeInventarios) {
+    if (analisisId) {
+      return <AnalisisOcupacionCompartidoPage />;
+    }
+    return <Navigate to={getFirstAvailableRoute(permissions, user.rol)} replace />;
   }
   return <InventariosPage />;
 }

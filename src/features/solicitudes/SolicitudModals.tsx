@@ -1027,14 +1027,28 @@ export function ViewSolicitudModal({ isOpen, onClose, solicitudId, onEdit, onAte
                                                   grupoCarasMap.set(c.grupo_rt_bf, (grupoCarasMap.get(c.grupo_rt_bf) || 0) + (Number(c.caras) || 0) + (Number(c.bonificacion) || 0));
                                                 }
                                               }
+                                              // "Contaminacion DG": si AL MENOS UNA cara de toda la solicitud
+                                              // esta Pend. DG, la regla del back es que todo escala a DG al
+                                              // guardar. Reflejamos esa regla en vivo para que la badge
+                                              // mientras se edita coincida con lo que se guardara.
+                                              const algunaPendDg = (data?.caras || []).some(c => (c.autorizacion_dg || 'aprobado') === 'pendiente');
                                               return articuloGroup.caras.map((cara, idx) => {
                                               const totalCarasLocal = (Number(cara.caras) || 0) + (Number(cara.bonificacion) || 0);
                                               const totalCarasGrupo = cara.grupo_rt_bf ? (grupoCarasMap.get(cara.grupo_rt_bf) || totalCarasLocal) : totalCarasLocal;
                                               const tarifaPublicaReal = (Number(cara.caras) || 0) > 0 ? (Number(cara.costo) || 0) / (Number(cara.caras) || 1) : (cara.tarifa_publica || 0);
                                               const tarifaEfectiva = totalCarasGrupo > 0 ? (Number(cara.costo) || 0) / totalCarasGrupo : 0;
                                               // Compute combined authorization state from both columns
-                                              const authDg = cara.autorizacion_dg || 'aprobado';
-                                              const authDcm = cara.autorizacion_dcm || 'aprobado';
+                                              // Contaminacion: si esta cara es solo Pend. DCM pero la
+                                              // solicitud tiene otra cara con Pend. DG, mostramos esta
+                                              // como Pend. DG tambien (igual a lo que pasara al guardar).
+                                              const authDgRaw = cara.autorizacion_dg || 'aprobado';
+                                              const authDcmRaw = cara.autorizacion_dcm || 'aprobado';
+                                              const escalaPorContaminacion = algunaPendDg
+                                                && authDgRaw !== 'pendiente'
+                                                && authDgRaw !== 'rechazado'
+                                                && (authDcmRaw === 'pendiente' || authDgRaw === 'pendiente');
+                                              const authDg = escalaPorContaminacion ? 'pendiente' : authDgRaw;
+                                              const authDcm = escalaPorContaminacion ? 'aprobado' : authDcmRaw;
 
                                               // Build authorization badges array
                                               const authBadges: { label: string; color: { bg: string; text: string; border: string } }[] = [];

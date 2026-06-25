@@ -66,6 +66,7 @@ interface InventarioReservado {
   inicio_periodo?: string | null;
   fin_periodo?: string | null;
   formato?: string | null;
+  tradicional_digital?: string | null;
 }
 
 // Tarifa BRUTA por cara (costo/caras). tarifa_publica viene diluido por las
@@ -469,9 +470,9 @@ export function ClientePropuestaPage() {
   // Handlers
   const handleDownloadXLSX = () => {
     import('xlsx').then(XLSX => {
-      const headers = ['Codigo', 'Plaza', 'Ubicacion', 'Tipo Cara', 'Formato', 'Articulo', 'Caras', 'Tarifa', 'Periodo', 'Latitud', 'Longitud'];
+      const headers = ['Codigo', 'Plaza', 'Ubicacion', 'Tipo Cara', 'Formato', 'Tipo Inventario', 'Articulo', 'Caras', 'Tarifa', 'Periodo', 'Latitud', 'Longitud'];
       const rows = inventario.map(i => [
-        i.codigo_unico, i.plaza, i.ubicacion, i.tipo_de_cara, i.mueble, i.articulo,
+        i.codigo_unico, i.plaza, i.ubicacion, i.tipo_de_cara, i.mueble, i.tradicional_digital || '', i.articulo,
         i.caras_totales, tarifaBruta(i), formatInicioPeriodo(i, tipoPeriodo), i.latitud || '', i.longitud || ''
       ]);
       const ws = XLSX.utils.aoa_to_sheet([headers, ...rows]);
