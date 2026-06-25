@@ -247,7 +247,11 @@ const cleanArteName = (raw?: string | null): string => {
 // Nombre de arte para el Orden de Montaje: prioriza el nombre_arte MANUAL
 // (campo de la carga de artes); si no hay, cae al nombre de archivo limpio.
 const arteNombreMontaje = (item: OrdenMontajeINVIAN): string => {
-  const manual = (item.nombre_arte_manual || '').trim();
+  // Limpiamos también el nombre_arte_manual: cuando no hay nombre manual real, el
+  // back cae al nombre de archivo CRUDO (ej. "1778...-hash-Bankaool_Abuela.png"),
+  // que se veía como "link/archivo" en vez de nombre. cleanArteName le quita el
+  // prefijo de Spaces y la extensión; un nombre manual real queda casi intacto.
+  const manual = cleanArteName(item.nombre_arte_manual || '').trim();
   if (manual) return manual;
   return cleanArteName(item.nombres_artes_digitales || item.ArteFileName || (item.ArteUrl === 'HAS_ARTE' ? '' : item.ArteUrl?.split('/').pop()) || '');
 };
