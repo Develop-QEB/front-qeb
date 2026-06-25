@@ -1,7 +1,7 @@
 import { useParams, useSearchParams } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { useState, useMemo, useRef } from 'react';
-import { Map as MapIcon, Loader2, ExternalLink, Copy, Check, Download, ChevronDown, Search } from 'lucide-react';
+import { Map as MapIcon, Loader2, ExternalLink, Copy, Check, Download, ChevronDown, Search, FileSpreadsheet } from 'lucide-react';
 import { GoogleMap, useLoadScript, Marker, Circle, Autocomplete, InfoWindow } from '@react-google-maps/api';
 import { formatCurrency } from '../../lib/utils';
 
@@ -50,6 +50,7 @@ interface InventarioReservado {
   plaza: string | null;
   articulo: string | null;
   tipo_de_mueble: string | null;
+  tradicional_digital?: string | null;
   tarifa_publica: number | null;
   tarifa_bruta_sc?: number | null; // tarifa publica SIN descuento (costo/caras)
   numero_catorcena?: number | null;
@@ -84,6 +85,25 @@ interface POIMarker {
 }
 
 const MESES_LABEL = ['Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio', 'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre'];
+
+// Inversion bruta = tarifa_bruta_sc x caras_totales (mismo criterio que la vista de compartir).
+function tarifaBruta(item: InventarioReservado): number {
+  return Number(item.tarifa_bruta_sc) || Number(item.tarifa_publica) || 0;
+}
+
+function formatInicioPeriodo(item: InventarioReservado, tipoPeriodo?: string): string {
+  if (tipoPeriodo === 'mensual' && item.inicio_periodo) {
+    const parts = item.inicio_periodo.split('-');
+    if (parts.length >= 2) {
+      const m = parseInt(parts[1]);
+      return `${MESES_LABEL[m - 1]} ${parts[0]}`;
+    }
+  }
+  if (item.numero_catorcena && item.anio_catorcena) {
+    return `Cat ${item.numero_catorcena} / ${item.anio_catorcena}`;
+  }
+  return 'Sin asignar';
+}
 
 async function fetchPublicPropuesta(id: number): Promise<PublicPropuestaData> {
   const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3000';
@@ -138,6 +158,21 @@ export function ClientePropuestaMapPage() {
     });
   }, [allInventario, selectedIdSet]);
   const tipoPeriodo = (data?.cotizacion as any)?.tipo_periodo || 'catorcena';
+
+  // Descargar Excel de lo visible en el mapa (mismo formato que la vista de compartir).
+  const handleDownloadXLSX = () => {
+    import('xlsx').then(XLSX => {
+      const headers = ['Codigo', 'Plaza', 'Ubicacion', 'Tipo Cara', 'Formato', 'Tipo Inventario', 'Articulo', 'Caras', 'Tarifa', 'Periodo', 'Latitud', 'Longitud'];
+      const rows = inventario.map(i => [
+        i.codigo_unico, i.plaza, i.ubicacion, i.tipo_de_cara, i.mueble, i.tradicional_digital || '', i.articulo,
+        i.caras_totales, tarifaBruta(i), formatInicioPeriodo(i, tipoPeriodo), i.latitud || '', i.longitud || ''
+      ]);
+      const ws = XLSX.utils.aoa_to_sheet([headers, ...rows]);
+      const wb = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(wb, ws, 'Reservas');
+      XLSX.writeFile(wb, `reservas_propuesta_${propuestaId}.xlsx`);
+    });
+  };
 
   // Descargar KML de lo visible (reusa el endpoint publico del backend).
   const handleDownloadKML = () => {
@@ -311,8 +346,15 @@ export function ClientePropuestaMapPage() {
               <ExternalLink className="h-4 w-4" /> Ver Completa
             </a>
             <button
-              onClick={handleDownloadKML}
+              onClick={handleDownloadXLSX}
               className="flex items-center gap-2 px-4 py-2 bg-[#7AB800] hover:bg-[#689c00] text-white rounded-lg text-sm font-medium shadow-sm transition-colors"
+              title="Descargar Excel de lo que se ve en el mapa"
+            >
+              <FileSpreadsheet className="h-4 w-4" /> Excel
+            </button>
+            <button
+              onClick={handleDownloadKML}
+              className="flex items-center gap-2 px-4 py-2 bg-[#0054A6] hover:bg-[#003B71] text-white rounded-lg text-sm font-medium shadow-sm transition-colors"
               title="Descargar KML de los puntos del mapa"
             >
               <Download className="h-4 w-4" /> KML
