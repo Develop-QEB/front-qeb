@@ -9,6 +9,7 @@ import { GoogleMap, useLoadScript, Marker, Circle, Autocomplete, InfoWindow } fr
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell } from 'recharts';
 import { propuestasService, InventarioReservado, PropuestaFullDetails } from '../../services/propuestas.service';
 import { formatCurrency, formatDate } from '../../lib/utils';
+import { toNum, applyNumberFormats, FMT_COORD } from '../../utils/excelFormat';
 import { useThemeStore } from '../../store/themeStore';
 
 // Config UNICA de Google Maps (mismo id/key/libraries en toda la app) para
@@ -502,11 +503,13 @@ export function CompartirPropuestaPage() {
           i.mueble || '',
           i.tradicional_digital || '',
           formatInicioPeriodo(i, tipoPeriodo),
-          i.latitud || '',
-          i.longitud || '',
+          toNum(i.latitud),
+          toNum(i.longitud),
           ''
         ]);
         const ws = XLSX.utils.aoa_to_sheet([headers, ...rows]);
+        // Lat (col 8) y Long (col 9) como celdas tipo número
+        applyNumberFormats(XLSX, ws, rows.length, { 8: FMT_COORD, 9: FMT_COORD });
         const sheetName = plaza.substring(0, 31);
         XLSX.utils.book_append_sheet(wb, ws, sheetName);
       }
