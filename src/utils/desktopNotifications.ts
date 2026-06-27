@@ -39,6 +39,54 @@ export async function requestNotificationPermission(): Promise<NotificationStatu
   }
 }
 
+export interface DesktopNotifPayload {
+  titulo: string;
+  descripcion?: string | null;
+  tareaId?: number | null;
+  /** Tag para deduplicar (evita popups dobles si el evento llega 2 veces). */
+  tag?: string;
+  /** Si true, la notificación no se cierra sola (p.ej. recordatorios). */
+  requireInteraction?: boolean;
+}
+
+/**
+ * Dispara una notificación nativa genérica del navegador, respetando permiso.
+ * Al hacer click navega a /notificaciones?tareaId=X (si hay tareaId) y enfoca.
+ */
+export function showDesktopNotification(payload: DesktopNotifPayload): void {
+  if (typeof window === 'undefined' || !('Notification' in window)) return;
+  if (Notification.permission !== 'granted') return;
+
+  const body = payload.descripcion || 'Tienes una nueva notificación';
+  try {
+    const notif = new Notification(payload.titulo || 'QEB', {
+      body,
+      tag: payload.tag || (payload.tareaId ? `notif-${payload.tareaId}` : undefined),
+      requireInteraction: !!payload.requireInteraction,
+      icon: '/favicon.ico',
+      data: { tareaId: payload.tareaId },
+    });
+
+    notif.onclick = () => {
+      try {
+        window.focus();
+        const params = payload.tareaId ? `?tareaId=${payload.tareaId}` : '';
+        const target = `/notificaciones${params}`;
+        if (window.location.pathname.startsWith('/notificaciones')) {
+          window.history.pushState({}, '', target);
+          window.dispatchEvent(new PopStateEvent('popstate'));
+        } else {
+          window.location.href = target;
+        }
+      } finally {
+        notif.close();
+      }
+    };
+  } catch (err) {
+    console.warn('[DesktopNotif] No se pudo crear la notificacion:', err);
+  }
+}
+
 export interface RecordatorioNotifPayload {
   titulo: string;
   descripcion?: string | null;

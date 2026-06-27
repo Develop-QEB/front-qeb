@@ -2,6 +2,7 @@ import { useState, useEffect, useRef } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { User, Mail, Briefcase, Building2, Lock, Save, Eye, EyeOff, CheckCircle, AlertCircle, Camera, Loader2 } from 'lucide-react';
 import { Header } from '../../components/layout/Header';
+import { PreferenciasNotificacionesCard } from './PreferenciasNotificacionesCard';
 import { authService } from '../../services/auth.service';
 import { useAuthStore } from '../../store/authStore';
 import { useThemeStore } from '../../store/themeStore';
@@ -341,6 +342,9 @@ export function PerfilPage() {
               )}
             </form>
           </div>
+
+          {/* Preferencias de notificaciones */}
+          <PreferenciasNotificacionesCard />
 
           {/* Cambiar contraseña */}
           <div className={cardCls}>

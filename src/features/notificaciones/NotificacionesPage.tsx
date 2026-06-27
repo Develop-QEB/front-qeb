@@ -1,6 +1,6 @@
 import { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import {
   Search, ChevronDown, ChevronRight,
   Calendar, User, FileText, X, List, LayoutGrid, CalendarDays,
@@ -2881,9 +2881,11 @@ export function NotificacionesPage() {
   const queryClient = useQueryClient();
   const navigate = useNavigate();
   const isDark = useThemeStore((s) => s.theme) === 'dark';
+  const currentUserId = useAuthStore((s) => s.user?.id);
 
-  // Suscribirse a WebSocket para actualizaciones en tiempo real
-  useSocketNotificaciones();
+  // Suscribirse a WebSocket para actualizaciones en tiempo real.
+  // popups: false — los popups los dispara solo la instancia del Header.
+  useSocketNotificaciones(currentUserId);
 
   // Estado de contenido (notificaciones vs tareas)
   const [contentType, setContentType] = useState<ContentType>('tareas');
@@ -2940,6 +2942,23 @@ export function NotificacionesPage() {
       setIsDrawerClosing(false);
     }, 250); // Duración de la animación
   }, []);
+
+  // Abrir directamente una notificación/tarea cuando llega ?tareaId=X
+  // (p.ej. al hacer clic en un toast de notificación).
+  const [searchParams, setSearchParams] = useSearchParams();
+  useEffect(() => {
+    const tid = searchParams.get('tareaId');
+    if (!tid) return;
+    const id = parseInt(tid, 10);
+    if (!isNaN(id)) {
+      notificacionesService.getById(id)
+        .then((full) => setSelectedTarea(full))
+        .catch((e) => console.error('No se pudo abrir la notificación', e));
+    }
+    // Limpiar el parámetro para no reabrirla en cada render/navegación.
+    searchParams.delete('tareaId');
+    setSearchParams(searchParams, { replace: true });
+  }, [searchParams, setSearchParams]);
 
   // Debounce search
   useEffect(() => {

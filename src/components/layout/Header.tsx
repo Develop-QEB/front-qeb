@@ -19,7 +19,17 @@ export function Header({ title, badgeCount }: HeaderProps) {
   const user = useAuthStore((state) => state.user);
   const isDark = useThemeStore((s) => s.theme) === 'dark';
   const toggleChat = useChatStore((s) => s.toggle);
-  useSocketNotificaciones();
+  // El Header es la instancia global: maneja los popups de notificaciones.
+  useSocketNotificaciones(user?.id, { popups: true });
+
+  // Cargar preferencias de notificaciones en cache (las consume el hook de socket
+  // para decidir si muestra popup). Opt-out: si falla, se asume todo activo.
+  useQuery({
+    queryKey: ['notif-preferencias'],
+    queryFn: () => notificacionesService.getPreferencias(),
+    staleTime: 10 * 60 * 1000,
+    enabled: !!user,
+  });
 
   // Antes pediamos getAll(limit:200) y filtrabamos en cliente. Para usuarios
   // con muchas tareas historicas (ej. Rodrigo Margain con 405) el limit se
