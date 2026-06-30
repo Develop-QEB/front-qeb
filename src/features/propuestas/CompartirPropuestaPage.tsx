@@ -598,17 +598,20 @@ export function CompartirPropuestaPage() {
     a.click();
   };
 
-  // Abrir el visor de mapa publico de QEB (pantalla completa, branding IMU) con la
-  // seleccion actual. Si no hay seleccion, abre el mapa con todo el inventario.
+  // Abrir el visor de mapa publico de QEB (pantalla completa, branding IMU) reflejando
+  // lo que se ve en el mapa: respeta el filtro de catorcenas y la seleccion de items.
+  // Sin ningun filtro/seleccion abre el mapa con todo el inventario.
   const handleExpandMap = () => {
-    const ids = inventario
-      ? Array.from(new Set(
-          inventario
-            .filter(i => selectedItems.has(itemKey(i)) && i.latitud && i.longitud)
-            .map(i => i.id)
-        ))
-      : [];
-    const qs = ids.length > 0 ? `?ids=${ids.join(',')}` : '';
+    const base = catorcenaFilteredInventario; // respeta los chips de catorcena
+    const chosen = selectedItems.size > 0
+      ? base.filter(i => selectedItems.has(itemKey(i)))
+      : base;
+    const ids = Array.from(new Set(
+      chosen.filter(i => i.latitud && i.longitud).map(i => i.id)
+    ));
+    // Solo acotamos por URL si hay un subconjunto real (seleccion o filtro de catorcena).
+    const isSubset = selectedItems.size > 0 || selectedCatorcenas.size > 0;
+    const qs = isSubset && ids.length > 0 ? `?ids=${ids.join(',')}` : '';
     window.open(`/cliente/propuesta/${propuestaId}/mapa${qs}`, '_blank', 'noopener,noreferrer');
   };
 
