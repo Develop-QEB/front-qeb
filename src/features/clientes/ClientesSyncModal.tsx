@@ -37,7 +37,6 @@ const FIELD_LABELS: Record<string, string> = {
   T1_U_IDACA: 'T1 ID ACA',
   T1_U_IDCM: 'T1 ID CM',
   T1_U_IDMarca: 'ID Marca',
-  T1_U_UnidadNegocio: 'Unidad Negocio',
   T2_U_IDCategoria: 'ID Categoría',
   T2_U_Categoria: 'Categoría',
   T2_U_IDCM: 'T2 ID CM',
@@ -233,7 +232,8 @@ export function ClientesSyncModal({ isOpen, onClose }: { isOpen: boolean; onClos
                   const isApplied = applied.has(d.cliente_id);
                   const isOmitted = omitted.has(d.cliente_id);
                   const isApplying = applying.has(d.cliente_id);
-                  const numCampos = Object.keys(d.cambios).length;
+                  // Se oculta T1_U_UnidadNegocio del diff visible (sigue sincronizándose al aplicar).
+                  const numCampos = Object.keys(d.cambios).filter(f => f !== 'T1_U_UnidadNegocio').length;
                   return (
                     <div
                       key={d.cliente_id}
@@ -324,7 +324,7 @@ export function ClientesSyncModal({ isOpen, onClose }: { isOpen: boolean; onClos
                             <div className={`font-semibold ${isDark ? 'text-zinc-400' : 'text-gray-600'} pb-1`}>Campo</div>
                             <div className={`font-semibold ${isDark ? 'text-zinc-400' : 'text-gray-600'} pb-1`}>Actual (QEB)</div>
                             <div className={`font-semibold ${isDark ? 'text-zinc-400' : 'text-gray-600'} pb-1`}>SAP</div>
-                            {Object.entries(d.cambios).map(([field, val]) => (
+                            {Object.entries(d.cambios).filter(([field]) => field !== 'T1_U_UnidadNegocio').map(([field, val]) => (
                               <ContentsRow
                                 key={field}
                                 label={FIELD_LABELS[field] || field}

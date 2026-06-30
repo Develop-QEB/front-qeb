@@ -1209,7 +1209,6 @@ export function CompartirPropuestaPage() {
             { label: 'CUIC', value: details?.solicitud?.cuic },
             { label: 'Cliente', value: details?.solicitud?.cliente },
             { label: 'Razón Social', value: details?.solicitud?.razon_social },
-            { label: 'Unidad de Negocio', value: details?.solicitud?.unidad_negocio },
             { label: 'Marca', value: details?.solicitud?.marca_nombre },
             { label: 'Asesor', value: details?.solicitud?.asesor },
             { label: 'Agencia', value: details?.solicitud?.agencia },

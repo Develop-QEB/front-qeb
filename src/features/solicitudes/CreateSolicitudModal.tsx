@@ -2617,10 +2617,6 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
                       <span className={isDark ? 'text-zinc-500' : 'text-gray-400'}>Agencia:</span>
                       <span className={isDark ? 'text-white' : 'text-gray-900'}>{selectedCuic.T0_U_Agencia || '-'}</span>
                     </div>
-                    <div className="flex justify-between col-span-2">
-                      <span className={isDark ? 'text-zinc-500' : 'text-gray-400'}>Unidad de Negocio:</span>
-                      <span className={isDark ? 'text-white' : 'text-gray-900'}>{selectedCuic.T1_U_UnidadNegocio || '-'}</span>
-                    </div>
                   </div>
                 </div>
               )}
