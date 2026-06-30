@@ -56,6 +56,8 @@ export interface PreferenciasNotif {
 export interface CatalogoItem {
   clave: string;
   label: string;
+  /** false = este tipo no envía correo → se oculta su toggle de correo. */
+  email?: boolean;
 }
 
 export interface CatalogoNotif {

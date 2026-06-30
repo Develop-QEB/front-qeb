@@ -1,12 +1,37 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { Bell, Monitor, Mail, Loader2 } from 'lucide-react';
 import { useThemeStore } from '../../store/themeStore';
+import { useAuthStore } from '../../store/authStore';
+import { getPermissions, RolePermissions } from '../../lib/permissions';
 import {
   notificacionesService,
   PreferenciasNotif,
   PreferenciaUpdateItem,
   CatalogoNotif,
 } from '../../services/notificaciones.service';
+
+// ¿Este tipo de tarea es relevante para el rol? Deriva de los permisos reales
+// (getPermissions). Si el rol no puede recibir/abrir ese tipo, no se muestra el
+// toggle. Las notificaciones (categorías) son universales y no se filtran aquí.
+function tipoTareaVisible(clave: string, p: RolePermissions, rol?: string | null): boolean {
+  if (rol === 'Administrador' || rol === 'DEV') return true;
+  switch (clave) {
+    case 'Autorización DG': return rol === 'Director General';
+    case 'Autorización DCM': return rol === 'Director Comercial';
+    case 'Resultado de autorización': return p.canSeePropuestas || p.canSeeSolicitudes;
+    case 'Revisión de artes': return p.canResolveRevisionArtesTasks;
+    case 'Corrección': return p.canResolveCorreccionTasks || p.canOnlyOpenCorreccionTasks;
+    case 'Ajuste Cto Cliente': return p.canSeePropuestas;
+    case 'Ajuste Comercial': return p.canSeeSolicitudes || p.canSeePropuestas;
+    case 'Impresión': return p.canOnlyOpenImpresionTasks || p.canResolveProduccionTasks;
+    case 'Instalación': return p.canResolveProduccionTasks || p.canOnlyOpenRecepcionTasks || p.canCreateInstalacionFromRecibido || p.canCreateOrdenInstalacion;
+    case 'Recepción': return p.canResolveProduccionTasks || p.canOnlyOpenRecepcionTasks;
+    case 'Producción': return p.canResolveProduccionTasks;
+    case 'Programación': return p.canCreateOrdenProgramacion || p.canOnlyOpenOrdenProgramacionTasks || p.canSeeTabProgramacion;
+    case 'Seguimiento': return p.canSeeSolicitudes || p.canSeePropuestas || p.canSeeCampanas;
+    default: return true;
+  }
+}
 
 type Clase = 'notificacion' | 'tarea' | '__global__';
 type Canal = 'popup' | 'email';
@@ -62,6 +87,8 @@ function Switch({ checked, onChange, dimmed }: { checked: boolean; onChange: (v:
 export function PreferenciasNotificacionesCard() {
   const isDark = useThemeStore((s) => s.theme === 'dark');
   const queryClient = useQueryClient();
+  const rol = useAuthStore((s) => s.user?.rol);
+  const perms = getPermissions(rol);
 
   const { data, isLoading } = useQuery<PrefsData>({
     queryKey: ['notif-preferencias'],
@@ -115,10 +142,11 @@ export function PreferenciasNotificacionesCard() {
   };
 
   // Una fila: etiqueta + switch popup + switch correo.
+  // emailAplica=false oculta el switch de correo (ese tipo no envía correo).
   const Row = ({
-    label, clase, clave, bold, popupDim, emailDim,
+    label, clase, clave, bold, popupDim, emailDim, emailAplica = true,
   }: {
-    label: string; clase: Clase; clave: string; bold?: boolean; popupDim?: boolean; emailDim?: boolean;
+    label: string; clase: Clase; clave: string; bold?: boolean; popupDim?: boolean; emailDim?: boolean; emailAplica?: boolean;
   }) => {
     const popupVal = getVal(prefs, 'popup', clase, clave);
     const emailVal = getVal(prefs, 'email', clase, clave);
@@ -129,7 +157,9 @@ export function PreferenciasNotificacionesCard() {
           <Switch checked={popupVal} dimmed={popupDim} onChange={() => toggle('popup', clase, clave, popupVal)} />
         </div>
         <div className="w-10 flex justify-center">
-          <Switch checked={emailVal} dimmed={emailDim} onChange={() => toggle('email', clase, clave, emailVal)} />
+          {emailAplica
+            ? <Switch checked={emailVal} dimmed={emailDim} onChange={() => toggle('email', clase, clave, emailVal)} />
+            : <span className={`text-xs ${isDark ? 'text-zinc-700' : 'text-gray-300'}`}>—</span>}
         </div>
       </div>
     );
@@ -139,6 +169,9 @@ export function PreferenciasNotificacionesCard() {
   const notifMasterOffEmail = !prefs.email.master || !prefs.email.masterNotificacion;
   const tareaMasterOffPopup = !prefs.popup.master || !prefs.popup.masterTarea;
   const tareaMasterOffEmail = !prefs.email.master || !prefs.email.masterTarea;
+
+  // Solo los tipos de tarea que el rol puede recibir (según permisos reales).
+  const tareasVisibles = data.catalogo.tarea.filter((t) => tipoTareaVisible(t.clave, perms, rol));
 
   return (
     <div className={cardCls}>
@@ -176,19 +209,23 @@ export function PreferenciasNotificacionesCard() {
         popupDim={!prefs.popup.master} emailDim={!prefs.email.master} />
       {data.catalogo.notificacion.map((c) => (
         <Row key={`n-${c.clave}`} label={c.label} clase="notificacion" clave={c.clave}
-          popupDim={notifMasterOffPopup} emailDim={notifMasterOffEmail} />
+          popupDim={notifMasterOffPopup} emailDim={notifMasterOffEmail} emailAplica={c.email !== false} />
       ))}
 
-      {/* Tareas */}
-      <div className={`mt-4 mb-1 text-xs font-semibold uppercase tracking-wider ${isDark ? 'text-zinc-500' : 'text-gray-400'}`}>
-        Tareas
-      </div>
-      <Row label="Todas las tareas" clase="tarea" clave="__all__" bold
-        popupDim={!prefs.popup.master} emailDim={!prefs.email.master} />
-      {data.catalogo.tarea.map((t) => (
-        <Row key={`t-${t.clave}`} label={t.label} clase="tarea" clave={t.clave}
-          popupDim={tareaMasterOffPopup} emailDim={tareaMasterOffEmail} />
-      ))}
+      {/* Tareas — solo los tipos que el rol puede recibir (según permisos) */}
+      {tareasVisibles.length > 0 && (
+        <>
+          <div className={`mt-4 mb-1 text-xs font-semibold uppercase tracking-wider ${isDark ? 'text-zinc-500' : 'text-gray-400'}`}>
+            Tareas
+          </div>
+          <Row label="Todas las tareas" clase="tarea" clave="__all__" bold
+            popupDim={!prefs.popup.master} emailDim={!prefs.email.master} />
+          {tareasVisibles.map((t) => (
+            <Row key={`t-${t.clave}`} label={t.label} clase="tarea" clave={t.clave}
+              popupDim={tareaMasterOffPopup} emailDim={tareaMasterOffEmail} emailAplica={t.email !== false} />
+          ))}
+        </>
+      )}
     </div>
   );
 }

@@ -328,6 +328,7 @@ export function useSocketNotificaciones(
       tipo?: string;
       clase?: 'notificacion' | 'tarea';
       categoria?: string;
+      clave?: string;
       titulo?: string;
       descripcion?: string;
       tarea_id?: number;
@@ -359,7 +360,9 @@ export function useSocketNotificaciones(
       const prefsData = queryClient.getQueryData<{ preferencias: PreferenciasNotif }>(['notif-preferencias']);
       const prefs = prefsData?.preferencias;
       const clase: 'tarea' | 'notificacion' = payload?.clase === 'tarea' ? 'tarea' : 'notificacion';
-      const clave = clase === 'tarea' ? (payload?.tipo || '') : (payload?.categoria || 'general');
+      // En tareas usamos la clave canónica que envía el backend (cubre variantes
+      // de nombre); en notificaciones, la categoría.
+      const clave = clase === 'tarea' ? (payload?.clave || payload?.tipo || '') : (payload?.categoria || 'general');
 
       let permitido = true;
       if (prefs) {
