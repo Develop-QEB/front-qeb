@@ -71,6 +71,8 @@ const PUESTOS_POR_AREA: Record<string, string[]> = {
     'Coordinador de Facturación y Cobranza',
     'Mesa de Control',
     'Analista de Facturación y Cobranza',
+    'Coordinador de Facturación',
+    'Especialista de Facturación',
   ],
   'Mejora Continua': [
     'Mejora Continua',
