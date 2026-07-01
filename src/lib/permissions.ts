@@ -236,7 +236,7 @@ const defaultPermissions: RolePermissions = {
 
   canCancelPostSAP: false,
 
-  canSeeHistorialAcciones: false,
+  canSeeHistorialAcciones: true,
   canSeeAllHistorial: false,
 };
 
