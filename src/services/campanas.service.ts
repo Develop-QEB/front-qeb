@@ -1281,13 +1281,15 @@ export const campanasService = {
 
   async uploadTestigoFile(file: File): Promise<{ url: string; filename: string }> {
     const formData = new FormData();
-    formData.append('file', file);
+    // Forzar filename para que multer no lo pierda. Antes al hacer append(file, file)
+    // sin nombre explicito, en algunos entornos el mimetype/nombre no llegaba y
+    // multer terminaba pasando 96 bytes de basura en vez del binario real.
+    formData.append('file', file, file.name || `foto-${Date.now()}.jpg`);
 
-    const response = await api.post<ApiResponse<{ url: string; filename: string; originalName: string; size: number; mimetype: string }>>('/uploads/testigo', formData, {
-      headers: {
-        'Content-Type': 'multipart/form-data',
-      },
-    });
+    // NO setear Content-Type manualmente. Axios/browser lo pone con boundary=
+    // ----XXX que multer necesita para parsear el multipart. Si lo hardcodeas
+    // como "multipart/form-data" sin boundary el body se corrompe.
+    const response = await api.post<ApiResponse<{ url: string; filename: string; originalName: string; size: number; mimetype: string }>>('/uploads/testigo', formData);
     if (!response.data.success || !response.data.data) {
       throw new Error(response.data.error || 'Error al subir archivo de testigo');
     }
