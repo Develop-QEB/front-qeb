@@ -4702,6 +4702,7 @@ function TaskDetailModal({
   const [decisiones, setDecisiones] = useState<DecisionesState>({});
   const [validationErrors, setValidationErrors] = useState<string[]>([]);
   const [isFinalizando, setIsFinalizando] = useState(false);
+  const [envioRevisionError, setEnvioRevisionError] = useState<string | null>(null);
 
   // Estado para crear tarea de recepción (Impresión)
   const [isCreatingRecepcion, setIsCreatingRecepcion] = useState(false);
@@ -5763,19 +5764,26 @@ function TaskDetailModal({
     }
   };
 
-  // Función para enviar artes corregidos a revisión (para tareas de Corrección)
+  // Función para enviar artes corregidos a revisión (para tareas de Corrección).
+  // Usa un endpoint transaccional del back: cambia estado del arte + rota roles de
+  // la Revisión anterior + crea nueva Revisión + cierra la Corrección, todo dentro
+  // de un prisma.$transaction. Si algo falla, no queda estado inconsistente.
   const handleEnviarARevision = async () => {
     if (!task) return;
     setIsFinalizando(true);
+    setEnvioRevisionError(null);
 
     try {
-      // Obtener todos los IDs de reservas de la tarea
       const reservaIds = taskInventory.flatMap(item =>
         item.rsv_id.split(',').map(id => parseInt(id.trim())).filter(id => !isNaN(id))
       );
 
       if (reservaIds.length === 0) {
-        console.error('No hay reservas para enviar a revisión');
+        setEnvioRevisionError('No hay reservas para enviar a revisión.');
+        return;
+      }
+      if (!task.id) {
+        setEnvioRevisionError('La tarea no tiene id — recarga la página.');
         return;
       }
 
@@ -5791,24 +5799,30 @@ function TaskDetailModal({
           asignadoIds = parsed.original_id_asignado || undefined;
         }
       } catch { /* contenido no es JSON o está vacío */ }
-      // Fallback legacy: si la Corrección no tiene contenido JSON (tareas viejas),
-      // usar el responsable de la Corrección (comportamiento previo).
       if (!asignadoNombres) {
         asignadoNombres = task.responsable || task.creador || '';
       }
 
-      // Enviar a revisión (cambia estado a Pendiente y crea nueva tarea)
-      await onSendToReview(reservaIds, asignadoNombres, asignadoIds);
-
-      // Marcar la tarea de corrección como completada
-      if (task.id) {
-        await onTaskComplete(task.id);
+      try {
+        await campanasService.completarCorreccionEnviarRevision(campanaId, {
+          correccionId: parseInt(task.id),
+          reservaIds,
+          asignadoNombres,
+          asignadoIds,
+        });
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : String(err);
+        setEnvioRevisionError(`No se pudo enviar a revisión: ${msg}. La Corrección sigue activa — reintenta.`);
+        console.error('Error al completar Corrección:', err);
+        return;
       }
 
-      // Cerrar modal
+      // Invalidar caches para que las tablas y contadores se refresquen
+      queryClientAsig.invalidateQueries({ queryKey: ['campana-tareas', campanaId], exact: false });
+      queryClientAsig.invalidateQueries({ queryKey: ['inventario-con-arte', campanaId], exact: false });
+      queryClientAsig.invalidateQueries({ queryKey: ['tareas'], exact: false });
+
       onClose();
-    } catch (error) {
-      console.error('Error al enviar a revisión:', error);
     } finally {
       setIsFinalizando(false);
     }
@@ -11739,7 +11753,12 @@ function TaskDetailModal({
                   </div>
 
                   {/* Botón de enviar a revisión */}
-                  <div className="flex justify-end">
+                  <div className="flex flex-col items-end gap-2">
+                    {envioRevisionError && (
+                      <div className="w-full text-xs text-red-300 bg-red-900/30 border border-red-700/40 rounded-md px-3 py-2">
+                        {envioRevisionError}
+                      </div>
+                    )}
                     <button
                       onClick={handleEnviarARevision}
                       disabled={isFinalizando || isUpdating || taskInventory.length === 0}
@@ -11753,7 +11772,7 @@ function TaskDetailModal({
                       ) : (
                         <>
                           <Send className="h-4 w-4" />
-                          Enviar a Revisión
+                          {envioRevisionError ? 'Reintentar envío' : 'Enviar a Revisión'}
                         </>
                       )}
                     </button>

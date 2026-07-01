@@ -1331,6 +1331,25 @@ export const campanasService = {
     return response.data.data;
   },
 
+  async completarCorreccionEnviarRevision(
+    id: number,
+    payload: {
+      correccionId: number;
+      reservaIds: number[];
+      asignadoNombres: string;
+      asignadoIds?: string;
+    }
+  ): Promise<{ message: string; nuevaRevisionId?: number; affected: number; alreadyDone?: boolean }> {
+    const response = await api.post<ApiResponse<{ message: string; nuevaRevisionId?: number; affected: number; alreadyDone?: boolean }>>(
+      `/campanas/${id}/completar-correccion`,
+      payload
+    );
+    if (!response.data.success || !response.data.data) {
+      throw new Error(response.data.error || 'Error al completar la corrección');
+    }
+    return response.data.data;
+  },
+
   async updateArteEstatusOperaciones(
     campanaId: number,
     archivo: string,
