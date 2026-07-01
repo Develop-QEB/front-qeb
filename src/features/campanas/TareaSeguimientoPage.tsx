@@ -340,6 +340,11 @@ interface InventoryRow {
   latitud?: number; // Para mapa
   longitud?: number; // Para mapa
   articulo?: string; // ItemCode de SAP (ej: RT-P1-COB-GD)
+  // Solo poblado en inventoryOrdenImpresionData: tarifa publica unitaria y
+  // costo total del articulo, para incluir en el contenido de la tarea
+  // Orden de Impresion.
+  tarifa_publica?: number | null;
+  costo_total?: number | null;
   // Para Atender arte
   estado_arte?: 'sin_revisar' | 'en_revision' | 'aprobado' | 'rechazado';
   estado_tarea?: 'sin_atender' | 'en_progreso' | 'atendido';
@@ -12343,9 +12348,14 @@ function OrdenImpresionModal({
     const selectedProveedor = proveedores.find(p => p.id === proveedorId);
     const listadoIds = selectedItems.map(i => i.id).join(',');
 
-    // Construir contenido con info de artículos
+    const fmtMoney = (v: number | null | undefined): string => {
+      if (v == null || !Number.isFinite(Number(v))) return '-';
+      return `$${Number(v).toLocaleString('es-MX', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+    };
+
+    // Contenido con info de articulos incluyendo tarifa publica y total.
     const articulosInfo = selectedItems.map(i =>
-      `${i.articulo || i.codigo_unico} | ${i.mueble || '-'} | ${i.caras_totales} imp. | ${i.plaza || '-'} | APS: ${i.aps || '-'}`
+      `${i.articulo || i.codigo_unico} | ${i.mueble || '-'} | ${i.caras_totales} imp. | ${i.plaza || '-'} | APS: ${i.aps || '-'} | Tarifa Publica: ${fmtMoney(i.tarifa_publica)} | Total: ${fmtMoney(i.costo_total)}`
     ).join('\n');
 
     onSubmit({
@@ -16000,15 +16010,16 @@ export function TareaSeguimientoPage() {
 
   // Transform artículos IM con APS para subtab "Orden Impresión"
   const inventoryOrdenImpresionData = useMemo((): InventoryRow[] => {
-    // Quitar items que ya estan en alguna tarea de "Orden de Impresion" no
-    // resuelta — su listado_inventario es CSV de rsv_ids. Sin esto el usuario
-    // podia crear N tareas duplicadas sobre los mismos articulos.
+    // Quitar items que ya estan en alguna tarea de "Orden de Impresion"
+    // salvo que la tarea haya sido Rechazada o Cancelada (en ese caso el
+    // item vuelve al listado). Antes tambien reaparecian al pasar la tarea
+    // a Atendido/Completado — comportamiento incorrecto: si la orden se
+    // completo el articulo ya se "mando" y no debe permitir crear otra
+    // orden sobre el mismo item.
     const usedIds = new Set<string>();
     tareasAPI
       .filter(t =>
         t.tipo === 'Orden de Impresión'
-        && t.estatus !== 'Atendido'
-        && t.estatus !== 'Completado'
         && t.estatus !== 'Rechazado'
         && t.estatus !== 'Cancelado'
       )
@@ -16044,6 +16055,9 @@ export function TareaSeguimientoPage() {
         ubicacion: '',
         tradicional_digital: 'Tradicional' as const,
         articulo: item.articulo || '',
+        // Tarifas para incluir en el contenido de la tarea Orden de Impresion.
+        tarifa_publica: (item as any).tarifa_publica_sc ?? item.tarifa_publica ?? null,
+        costo_total: (item as any).tarifa_bruta_sc ?? null,
       }));
   }, [imArticlesAPI, tareasAPI]);
 
