@@ -2613,6 +2613,12 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
   // EDIT: only updates local state + tracks in modifiedCaras (bulk save later)
   // CREATE: still persists to DB immediately (needs ID for reservas)
   const handleSaveCara = async (forcedPeriod?: { catorcena: number; anio: number; inicio_periodo: string; fin_periodo: string }) => {
+    // Bloqueo: con autorización de dirección pendiente no se pueden AGREGAR
+    // circuitos nuevos (editar uno existente sí, por eso el !editingCaraId).
+    if (hasSavedPendingAuth && !editingCaraId) {
+      alert('Hay circuito(s) con autorización pendiente de DG/DCM. No puedes agregar nuevos circuitos hasta que dirección los apruebe o rechace.');
+      return;
+    }
     if (!newCara.formato || !newCara.estados) {
       alert('Por favor completa al menos el formato y estado');
       return;
@@ -7789,8 +7795,10 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
                     </span>
                     {effectiveCanEdit && canEditResumen && (
                       <button
-                        onClick={() => { setShowAddCaraForm(true); setEditingCaraId(null); setNewCara(EMPTY_CARA); setSelectedArticulo(null); setArticuloBf(null); }}
-                        className="flex items-center gap-1.5 px-3 py-1.5 bg-purple-500/20 text-purple-300 border border-purple-500/40 rounded-lg hover:bg-purple-500/30 transition-colors"
+                        onClick={() => { if (hasSavedPendingAuth) return; setShowAddCaraForm(true); setEditingCaraId(null); setNewCara(EMPTY_CARA); setSelectedArticulo(null); setArticuloBf(null); }}
+                        disabled={hasSavedPendingAuth}
+                        title={hasSavedPendingAuth ? 'Hay circuitos pendientes de autorización de dirección — no se pueden agregar nuevos' : undefined}
+                        className="flex items-center gap-1.5 px-3 py-1.5 bg-purple-500/20 text-purple-300 border border-purple-500/40 rounded-lg hover:bg-purple-500/30 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
                       >
                         <Plus className="h-3.5 w-3.5" />
                         Agregar Cara
