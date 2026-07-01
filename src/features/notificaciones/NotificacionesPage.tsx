@@ -27,6 +27,7 @@ import { AssignInventarioModal } from '../propuestas/AssignInventarioModal';
 import { AssignInventarioCampanaModal } from '../campanas/AssignInventarioCampanaModal';
 import { propuestasService } from '../../services/propuestas.service';
 import { campanasService } from '../../services/campanas.service';
+import { NotasDireccionBitacora } from './NotasDireccionBitacora';
 
 // ============ HELPERS ============
 // Render texto con URLs (http://, https://, www.) convertidas en hyperlinks
@@ -1953,17 +1954,13 @@ function ApprovalModal({
             </div>
           )}
 
-          {/* Notas Dirección */}
-          {tarea.notas_direccion && (
-            <div className="mb-6">
-              <h3 className={`text-xs font-medium ${isDark ? 'text-zinc-500' : 'text-gray-400'} uppercase tracking-wider mb-3 flex items-center gap-2`}>
-                <FileText className="h-3.5 w-3.5 text-orange-400" />
-                Notas Dirección
-              </h3>
-              <div className={`p-3 rounded-xl ${isDark ? 'bg-zinc-800/30 border-zinc-800/50' : 'bg-gray-50 border-gray-200'} border max-h-60 overflow-y-auto`}>
-                <p className={`text-sm ${isDark ? 'text-zinc-300' : 'text-gray-700'} whitespace-pre-wrap break-words leading-relaxed`}>{tarea.notas_direccion}</p>
-              </div>
-            </div>
+          {/* Notas Dirección — bitácora acumulable */}
+          {tarea.id_solicitud && (
+            <NotasDireccionBitacora
+              idSolicitud={parseInt(tarea.id_solicitud)}
+              isDark={isDark}
+              bitacoraCount={tarea.notas_direccion_bitacora_count}
+            />
           )}
         </div>
 
@@ -2812,17 +2809,15 @@ function TaskDrawer({
         </div>
 
 
-        {/* Notas Dirección (solo para directores en tareas de autorización) */}
-        {isAutorizacionTask && ['Director General', 'Director Comercial'].includes(user?.rol || '') && tarea.notas_direccion && (
-          <div className={`p-5 border-t ${isDark ? 'border-zinc-800/50' : 'border-gray-200'}`}>
-            <h3 className={`text-xs font-medium ${isDark ? 'text-zinc-500' : 'text-gray-400'} uppercase tracking-wider mb-3 flex items-center gap-2`}>
-              <FileText className="h-3.5 w-3.5 text-orange-400" />
-              Notas Dirección
-            </h3>
-            <div className={`p-3 rounded-xl ${isDark ? 'bg-zinc-800/30 border-zinc-800/50' : 'bg-gray-50 border-gray-200'} border max-h-60 overflow-y-auto scrollbar-purple`}>
-              <p className={`text-sm ${isDark ? 'text-zinc-300' : 'text-gray-700'} whitespace-pre-wrap break-words leading-relaxed`}>{tarea.notas_direccion}</p>
-            </div>
-          </div>
+        {/* Notas Dirección — bitácora acumulable, visible para directores y admins en tareas de autorización */}
+        {isAutorizacionTask
+          && ['Director General', 'Director Comercial', 'Administrador', 'DEV'].includes(user?.rol || '')
+          && tarea.id_solicitud && (
+          <NotasDireccionBitacora
+            idSolicitud={parseInt(tarea.id_solicitud)}
+            isDark={isDark}
+            bitacoraCount={tarea.notas_direccion_bitacora_count}
+          />
         )}
 
         {/* Comentarios (oculto para directores en tareas de autorización) */}
