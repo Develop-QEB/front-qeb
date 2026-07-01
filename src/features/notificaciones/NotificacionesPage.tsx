@@ -1344,6 +1344,12 @@ function isGestionArtesTarea(tipo?: string | null): boolean {
   return !!tipo && GESTION_ARTES_TIPOS.includes(tipo);
 }
 
+// Tarea informativa "Gestión de Recepción Parcial" (ASC): navega al gestor
+// de artes → tab Impresiones → sub-tab Pend. Recepción para ver el detalle.
+function isRecepcionParcialTarea(tipo?: string | null): boolean {
+  return tipo === 'Gestión de Recepción Parcial';
+}
+
 // Notificaciones tipo='Notificación' que en realidad pertenecen al flujo de
 // Gestión de Artes (las que crea el backend al aprobar/rechazar arte).
 // Las identificamos por el título porque su `tipo` es genérico.
@@ -1371,6 +1377,10 @@ function hasNavigationRoute(tarea: Notificacion): boolean {
   if (isGestionArtesTarea(tarea.tipo) && tarea.campania_id) {
     return true;
   }
+  // Gestión de Recepción Parcial (informativa ASC): siempre a Gestor de Artes.
+  if (isRecepcionParcialTarea(tarea.tipo) && tarea.campania_id) {
+    return true;
+  }
   // Si es tarea de autorización o rechazo con id_solicitud, también puede navegar
   if (tarea.id_solicitud && (tarea.tipo?.includes('Autorización') || tarea.tipo?.includes('Rechazo'))) {
     return true;
@@ -1391,6 +1401,10 @@ function getNavigationLabel(tipo: string, tipoTarea?: string, campaniaId?: numbe
   // Tareas de Gestión de Artes → Ver Gestión de Artes
   if (isGestionArtesTarea(tipoTarea)) {
     return 'Ver Gestión de Artes';
+  }
+  // Gestión de Recepción Parcial (informativa ASC) → sub-tab Pend. Recepción
+  if (isRecepcionParcialTarea(tipoTarea)) {
+    return 'Ver Recepción Parcial';
   }
   // Tareas de Rechazo: usar referencia_tipo para el label correcto
   if (tipoTarea?.includes('Rechazo')) {
@@ -1485,6 +1499,11 @@ function getDirectNavigationPath(tipo: string, id: number, titulo: string, tipoT
   // Tareas de Gestión de Artes → Gestión de Artes con auto-open del modal (prioridad sobre propuesta)
   if (isGestionArtesTarea(tipoTarea) && campaniaId) {
     return `/campanas/${campaniaId}/tareas?taskId=${tareaId || id}`;
+  }
+  // Gestión de Recepción Parcial (informativa ASC) → tab Impresiones →
+  // sub-tab Pend. Recepción para que el ASC vea el detalle de la parcial.
+  if (isRecepcionParcialTarea(tipoTarea) && campaniaId) {
+    return `/campanas/${campaniaId}/tareas?tab=impresiones&subtab=pendiente_recepcion`;
   }
 
   // Notificaciones de "Artes aprobados/rechazados" (tipo='Notificación') →

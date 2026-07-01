@@ -16479,6 +16479,16 @@ export function TareaSeguimientoPage() {
     if (urlSubtab === 'instaladas' || urlSubtab === 'por_instalar' || urlSubtab === 'testigo') {
       setActiveEstadoInstalacionTab(urlSubtab);
     }
+    // Sub-tabs del tab principal "impresiones" — usado por notificaciones
+    // "Gestión de Recepción Parcial" para llevar al ASC directo a Pend. Recepcion.
+    if (
+      urlSubtab === 'orden_impresion' ||
+      urlSubtab === 'en_impresion' ||
+      urlSubtab === 'pendiente_recepcion' ||
+      urlSubtab === 'recibido'
+    ) {
+      setActiveEstadoImpresionTab(urlSubtab);
+    }
   // Solo al montar
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
