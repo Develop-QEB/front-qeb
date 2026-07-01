@@ -2952,7 +2952,16 @@ export function NotificacionesPage() {
     const id = parseInt(tid, 10);
     if (!isNaN(id)) {
       notificacionesService.getById(id)
-        .then((full) => setSelectedTarea(full))
+        .then((full) => {
+          // Tareas de Autorización DG/DCM: abrir directo el modal de revisar y
+          // autorizar (no el panel lateral) para directores.
+          const isDirectorUser = ['Director General', 'Director Comercial'].includes(useAuthStore.getState().user?.rol || '');
+          if (isDirectorUser && full.tipo?.includes('Autorización')) {
+            setApprovalModalTarea(full);
+          } else {
+            setSelectedTarea(full);
+          }
+        })
         .catch((e) => console.error('No se pudo abrir la notificación', e));
     }
     // Limpiar el parámetro para no reabrirla en cada render/navegación.
