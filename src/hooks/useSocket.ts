@@ -357,24 +357,18 @@ export function useSocketNotificaciones(
       // masivos a todos los usuarios conectados).
       if (!popups || !paraMi) return;
 
-      // Decidir el popup según las preferencias del usuario (opt-out: si no hay
-      // preferencias cargadas o no hay regla, se muestra).
+      // El popup es OPT-IN (default OFF): solo se muestra si la preferencia
+      // efectiva del usuario es true. La matriz ya resuelve la herencia
+      // (específico → master de clase → master de canal → default del canal).
+      // Si aún no hay preferencias cargadas, no se muestra (default off).
       const prefsData = queryClient.getQueryData<{ preferencias: PreferenciasNotif }>(['notif-preferencias']);
       const prefs = prefsData?.preferencias;
+      if (!prefs) return;
       const clase: 'tarea' | 'notificacion' = payload?.clase === 'tarea' ? 'tarea' : 'notificacion';
       // En tareas usamos la clave canónica que envía el backend (cubre variantes
       // de nombre); en notificaciones, la categoría.
       const clave = clase === 'tarea' ? (payload?.clave || payload?.tipo || '') : (payload?.categoria || 'general');
-
-      let permitido = true;
-      if (prefs) {
-        const canal = prefs.popup;
-        const masterClase = clase === 'tarea' ? canal.masterTarea : canal.masterNotificacion;
-        if (!canal.master) permitido = false;
-        else if (masterClase === false) permitido = false;
-        else if (canal[clase]?.[clave] === false) permitido = false;
-      }
-      if (!permitido) return;
+      if (!prefs.popup[clase]?.[clave]) return;
 
       const esRecordatorio = payload?.tipo === 'Recordatorio';
       useNotifToastStore.getState().push({
