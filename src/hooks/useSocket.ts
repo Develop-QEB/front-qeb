@@ -348,7 +348,9 @@ export function useSocketNotificaciones(
       }
 
       queryClient.invalidateQueries({ queryKey: ['notificaciones-stats'], refetchType: 'active' });
-      queryClient.invalidateQueries({ queryKey: ['notificaciones'], refetchType: 'active' });
+      // Lista (payload pesado ~330KB): NO refetch inmediato en los ~20 clientes.
+      // Se marca stale y refetchea al abrir el panel (evita la tormenta de CPU).
+      queryClient.invalidateQueries({ queryKey: ['notificaciones'], refetchType: 'none' });
 
       // Popup SOLO para eventos dirigidos a mí. Los eventos antiguos sin
       // `destinatarios` refrescan la lista pero no disparan popup (evita popups
@@ -388,25 +390,33 @@ export function useSocketNotificaciones(
     const handleNotificacionLeida = () => {
       console.log('[Socket] Notificación leída');
       queryClient.invalidateQueries({ queryKey: ['notificaciones-stats'], refetchType: 'active' });
-      queryClient.invalidateQueries({ queryKey: ['notificaciones'], refetchType: 'active' });
+      // Lista (payload pesado ~330KB): NO refetch inmediato en los ~20 clientes.
+      // Se marca stale y refetchea al abrir el panel (evita la tormenta de CPU).
+      queryClient.invalidateQueries({ queryKey: ['notificaciones'], refetchType: 'none' });
     };
 
     const handleTareaCreada = () => {
       console.log('[Socket] Tarea creada');
       queryClient.invalidateQueries({ queryKey: ['notificaciones-stats'], refetchType: 'active' });
-      queryClient.invalidateQueries({ queryKey: ['notificaciones'], refetchType: 'active' });
+      // Lista (payload pesado ~330KB): NO refetch inmediato en los ~20 clientes.
+      // Se marca stale y refetchea al abrir el panel (evita la tormenta de CPU).
+      queryClient.invalidateQueries({ queryKey: ['notificaciones'], refetchType: 'none' });
     };
 
     const handleTareaActualizada = () => {
       console.log('[Socket] Tarea actualizada');
       queryClient.invalidateQueries({ queryKey: ['notificaciones-stats'], refetchType: 'active' });
-      queryClient.invalidateQueries({ queryKey: ['notificaciones'], refetchType: 'active' });
+      // Lista (payload pesado ~330KB): NO refetch inmediato en los ~20 clientes.
+      // Se marca stale y refetchea al abrir el panel (evita la tormenta de CPU).
+      queryClient.invalidateQueries({ queryKey: ['notificaciones'], refetchType: 'none' });
     };
 
     const handleTareaEliminada = () => {
       console.log('[Socket] Tarea eliminada');
       queryClient.invalidateQueries({ queryKey: ['notificaciones-stats'], refetchType: 'active' });
-      queryClient.invalidateQueries({ queryKey: ['notificaciones'], refetchType: 'active' });
+      // Lista (payload pesado ~330KB): NO refetch inmediato en los ~20 clientes.
+      // Se marca stale y refetchea al abrir el panel (evita la tormenta de CPU).
+      queryClient.invalidateQueries({ queryKey: ['notificaciones'], refetchType: 'none' });
     };
 
     socket.on(SOCKET_EVENTS.NOTIFICACION_NUEVA, handleNotificacionNueva);
