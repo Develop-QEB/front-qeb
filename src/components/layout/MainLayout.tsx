@@ -9,6 +9,7 @@ import { useThemeStore } from '../../store/themeStore';
 import { useAuthStore } from '../../store/authStore';
 import { LightThemeNotificationModal } from './LightThemeNotificationModal';
 import { UpdateNotificationModal } from './UpdateNotificationModal';
+import { NotificacionToaster } from '../ui/NotificacionToaster';
 
 export function MainLayout() {
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
@@ -24,16 +25,6 @@ export function MainLayout() {
     });
     return () => { cancelled = true; };
   }, [prefetchAllAsync]);
-
-  // Pedir permiso para notificaciones de escritorio una vez que el usuario esta
-  // autenticado. Idempotente: solo se muestra el prompt si todavia no se ha
-  // pedido y el navegador no lo tiene granted/denied permanente.
-  useEffect(() => {
-    if (!user) return;
-    import('../../utils/desktopNotifications').then(({ requestNotificationPermission }) => {
-      requestNotificationPermission().catch(() => { /* ignore */ });
-    });
-  }, [user]);
 
   const handleLoadingFinished = useCallback(() => {
     setInitialLoading(false);
@@ -66,6 +57,9 @@ export function MainLayout() {
 
       {/* QEBooh: ventana de chat. Se abre/cierra desde el boton del header. */}
       <QEBooh />
+
+      {/* Toasts de notificación in-app (sin depender del navegador) */}
+      <NotificacionToaster />
 
       {user && user.light_theme_notified !== true && (
         <LightThemeNotificationModal />

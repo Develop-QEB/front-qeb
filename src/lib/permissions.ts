@@ -33,6 +33,8 @@ export type UserRole =
   | 'Coordinador de Facturación y Cobranza'
   | 'Mesa de Control'
   | 'Analista de Facturación y Cobranza'
+  | 'Coordinador de Facturación'
+  | 'Especialista de Facturación'
   // Nuevos roles (Matriz Roles QEB 2026-01-28) — agregados sin tocar los anteriores.
   // Perfil A — Transversales (full visibility, sin aprobar autorizaciones, con descarga)
   | 'Director General Adjunto'
@@ -236,7 +238,7 @@ const defaultPermissions: RolePermissions = {
 
   canCancelPostSAP: false,
 
-  canSeeHistorialAcciones: false,
+  canSeeHistorialAcciones: true,
   canSeeAllHistorial: false,
 };
 
@@ -2107,6 +2109,106 @@ const rolePermissions: Partial<Record<UserRole, Partial<RolePermissions>>> = {
     canDeleteInventarios: false,
 
     // Órdenes de Montaje
+    canExportOrdenesMontaje: false,
+  },
+
+  // Nuevos roles de Facturacion (Matriz Roles QEB IDs 39 y 40):
+  // solo visibilidad total del modulo Campanas (Gestion de Artes en solo lectura),
+  // sin edicion ni resolucion de tareas. Mismo perfil que Coord. Facturacion y Cobranza.
+  'Coordinador de Facturación': {
+    canSeeDashboard: false,
+    canSeeClientes: false,
+    canSeeProveedores: false,
+    canSeeSolicitudes: false,
+    canSeePropuestas: false,
+    canSeeCampanas: true,
+    canSeeInventarios: false,
+    canSeeAdminUsuarios: false,
+
+    canCreateClientes: false, canEditClientes: false, canDeleteClientes: false,
+    canCreateProveedores: false, canEditProveedores: false, canDeleteProveedores: false,
+
+    canCreateSolicitudes: false, canEditSolicitudes: false, canDeleteSolicitudes: false,
+    canAtenderSolicitudes: false, canChangeEstadoSolicitud: false,
+
+    canEditPropuestaStatus: false,
+    allowedPropuestaStatuses: [],
+    canAprobarPropuesta: false,
+    canAsignarInventario: false,
+    canEditResumenPropuesta: false,
+    canCompartirPropuesta: false,
+    canBuscarInventarioEnModal: false,
+
+    canEditCampanas: false,
+    canEditDetalleCampana: false,
+    canDeleteDetalleCampana: false,
+    canSeeGestionArtes: true,
+    canEditGestionArtes: false,
+    canResolveProduccionTasks: false,
+    canSeeOrdenesMontajeButton: false,
+
+    canSeeTabProgramacion: true,
+    canSeeTabImpresiones: true,
+    canSeeTabSubirArtes: false,
+    canSeeTabRevisarAprobar: true,
+    canSeeTabTestigos: true,
+    canSeeTabValidacionInstalacion: true,
+    canCreateTareasGestionArtes: false,
+    canResolveRevisionArtesTasks: false,
+    canOnlyOpenImpresionTasks: false,
+    canOnlyOpenRecepcionTasks: false,
+    canOpenTasks: false,
+
+    canCreateInventarios: false, canEditInventarios: false, canDeleteInventarios: false,
+
+    canExportOrdenesMontaje: false,
+  },
+  'Especialista de Facturación': {
+    canSeeDashboard: false,
+    canSeeClientes: false,
+    canSeeProveedores: false,
+    canSeeSolicitudes: false,
+    canSeePropuestas: false,
+    canSeeCampanas: true,
+    canSeeInventarios: false,
+    canSeeAdminUsuarios: false,
+
+    canCreateClientes: false, canEditClientes: false, canDeleteClientes: false,
+    canCreateProveedores: false, canEditProveedores: false, canDeleteProveedores: false,
+
+    canCreateSolicitudes: false, canEditSolicitudes: false, canDeleteSolicitudes: false,
+    canAtenderSolicitudes: false, canChangeEstadoSolicitud: false,
+
+    canEditPropuestaStatus: false,
+    allowedPropuestaStatuses: [],
+    canAprobarPropuesta: false,
+    canAsignarInventario: false,
+    canEditResumenPropuesta: false,
+    canCompartirPropuesta: false,
+    canBuscarInventarioEnModal: false,
+
+    canEditCampanas: false,
+    canEditDetalleCampana: false,
+    canDeleteDetalleCampana: false,
+    canSeeGestionArtes: true,
+    canEditGestionArtes: false,
+    canResolveProduccionTasks: false,
+    canSeeOrdenesMontajeButton: false,
+
+    canSeeTabProgramacion: true,
+    canSeeTabImpresiones: true,
+    canSeeTabSubirArtes: false,
+    canSeeTabRevisarAprobar: true,
+    canSeeTabTestigos: true,
+    canSeeTabValidacionInstalacion: true,
+    canCreateTareasGestionArtes: false,
+    canResolveRevisionArtesTasks: false,
+    canOnlyOpenImpresionTasks: false,
+    canOnlyOpenRecepcionTasks: false,
+    canOpenTasks: false,
+
+    canCreateInventarios: false, canEditInventarios: false, canDeleteInventarios: false,
+
     canExportOrdenesMontaje: false,
   },
 

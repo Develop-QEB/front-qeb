@@ -1,7 +1,8 @@
 import { useEffect, useRef, useCallback } from 'react';
 import { io, Socket } from 'socket.io-client';
 import { useQueryClient } from '@tanstack/react-query';
-import { showRecordatorioNotification } from '../utils/desktopNotifications';
+import { useNotifToastStore } from '../store/notifToastStore';
+import type { PreferenciasNotif } from '../services/notificaciones.service';
 
 const SOCKET_URL = import.meta.env.VITE_API_URL?.replace('/api', '') || 'http://localhost:3000';
 
@@ -312,59 +313,104 @@ export function useSocketCampana(campanaId: number | null) {
 /**
  * Hook para escuchar notificaciones globales
  */
-export function useSocketNotificaciones() {
+export function useSocketNotificaciones(
+  userId?: number | null,
+  opts?: { popups?: boolean }
+) {
   const queryClient = useQueryClient();
+  // popups: solo una instancia (el Header) debe mostrar popups para no duplicar.
+  const popups = opts?.popups ?? false;
 
   useEffect(() => {
     const socket = getSocket();
 
     const handleNotificacionNueva = (payload?: {
       tipo?: string;
+      clase?: 'notificacion' | 'tarea';
+      categoria?: string;
+      clave?: string;
       titulo?: string;
       descripcion?: string;
       tarea_id?: number;
       historial_id?: number;
       fecha_entrega?: string;
+      destinatarios?: number[];
     }) => {
       console.log('[Socket] Nueva notificación', payload);
-      queryClient.invalidateQueries({ queryKey: ['notificaciones-stats'], refetchType: 'active' });
-      queryClient.invalidateQueries({ queryKey: ['notificaciones'], refetchType: 'active' });
-      // Si el evento corresponde a un Recordatorio del historial, mostrar
-      // notificacion nativa del navegador (Notification API). El payload puede
-      // estar vacio para otros tipos de notificacion; en ese caso no se dispara.
-      if (payload && payload.tipo === 'Recordatorio') {
-        showRecordatorioNotification({
-          titulo: payload.titulo || 'Recordatorio QEB',
-          descripcion: payload.descripcion,
-          tareaId: payload.tarea_id,
-          historial_id: payload.historial_id,
-          fecha_entrega: payload.fecha_entrega,
-        });
+
+      // Filtrar por destinatario. Si el evento viene "dirigido" (trae lista de
+      // destinatarios) y yo no estoy en ella, no es para mí: ni refresco ni popup.
+      const dest = payload?.destinatarios;
+      const dirigido = Array.isArray(dest);
+      const paraMi = dirigido && userId != null && dest!.includes(userId);
+      if (dirigido && !paraMi) {
+        return;
       }
+
+      queryClient.invalidateQueries({ queryKey: ['notificaciones-stats'], refetchType: 'active' });
+      // Lista (payload pesado ~330KB): NO refetch inmediato en los ~20 clientes.
+      // Se marca stale y refetchea al abrir el panel (evita la tormenta de CPU).
+      queryClient.invalidateQueries({ queryKey: ['notificaciones'], refetchType: 'none' });
+
+      // Popup SOLO para eventos dirigidos a mí. Los eventos antiguos sin
+      // `destinatarios` refrescan la lista pero no disparan popup (evita popups
+      // masivos a todos los usuarios conectados).
+      if (!popups || !paraMi) return;
+
+      // El popup es OPT-IN (default OFF): solo se muestra si la preferencia
+      // efectiva del usuario es true. La matriz ya resuelve la herencia
+      // (específico → master de clase → master de canal → default del canal).
+      // Si aún no hay preferencias cargadas, no se muestra (default off).
+      const prefsData = queryClient.getQueryData<{ preferencias: PreferenciasNotif }>(['notif-preferencias']);
+      const prefs = prefsData?.preferencias;
+      if (!prefs) return;
+      const clase: 'tarea' | 'notificacion' = payload?.clase === 'tarea' ? 'tarea' : 'notificacion';
+      // En tareas usamos la clave canónica que envía el backend (cubre variantes
+      // de nombre); en notificaciones, la categoría.
+      const clave = clase === 'tarea' ? (payload?.clave || payload?.tipo || '') : (payload?.categoria || 'general');
+      if (!prefs.popup[clase]?.[clave]) return;
+
+      const esRecordatorio = payload?.tipo === 'Recordatorio';
+      useNotifToastStore.getState().push({
+        titulo: payload?.titulo || (esRecordatorio ? 'Recordatorio QEB' : 'Nueva notificación'),
+        descripcion: payload?.descripcion
+          ?? (payload?.fecha_entrega ? `Fecha: ${new Date(payload.fecha_entrega).toLocaleDateString('es-MX')}` : undefined),
+        tareaId: payload?.tarea_id,
+        tipo: payload?.tipo,
+        requireInteraction: esRecordatorio,
+      });
     };
 
     const handleNotificacionLeida = () => {
       console.log('[Socket] Notificación leída');
       queryClient.invalidateQueries({ queryKey: ['notificaciones-stats'], refetchType: 'active' });
-      queryClient.invalidateQueries({ queryKey: ['notificaciones'], refetchType: 'active' });
+      // Lista (payload pesado ~330KB): NO refetch inmediato en los ~20 clientes.
+      // Se marca stale y refetchea al abrir el panel (evita la tormenta de CPU).
+      queryClient.invalidateQueries({ queryKey: ['notificaciones'], refetchType: 'none' });
     };
 
     const handleTareaCreada = () => {
       console.log('[Socket] Tarea creada');
       queryClient.invalidateQueries({ queryKey: ['notificaciones-stats'], refetchType: 'active' });
-      queryClient.invalidateQueries({ queryKey: ['notificaciones'], refetchType: 'active' });
+      // Lista (payload pesado ~330KB): NO refetch inmediato en los ~20 clientes.
+      // Se marca stale y refetchea al abrir el panel (evita la tormenta de CPU).
+      queryClient.invalidateQueries({ queryKey: ['notificaciones'], refetchType: 'none' });
     };
 
     const handleTareaActualizada = () => {
       console.log('[Socket] Tarea actualizada');
       queryClient.invalidateQueries({ queryKey: ['notificaciones-stats'], refetchType: 'active' });
-      queryClient.invalidateQueries({ queryKey: ['notificaciones'], refetchType: 'active' });
+      // Lista (payload pesado ~330KB): NO refetch inmediato en los ~20 clientes.
+      // Se marca stale y refetchea al abrir el panel (evita la tormenta de CPU).
+      queryClient.invalidateQueries({ queryKey: ['notificaciones'], refetchType: 'none' });
     };
 
     const handleTareaEliminada = () => {
       console.log('[Socket] Tarea eliminada');
       queryClient.invalidateQueries({ queryKey: ['notificaciones-stats'], refetchType: 'active' });
-      queryClient.invalidateQueries({ queryKey: ['notificaciones'], refetchType: 'active' });
+      // Lista (payload pesado ~330KB): NO refetch inmediato en los ~20 clientes.
+      // Se marca stale y refetchea al abrir el panel (evita la tormenta de CPU).
+      queryClient.invalidateQueries({ queryKey: ['notificaciones'], refetchType: 'none' });
     };
 
     socket.on(SOCKET_EVENTS.NOTIFICACION_NUEVA, handleNotificacionNueva);
@@ -380,7 +426,7 @@ export function useSocketNotificaciones() {
       socket.off(SOCKET_EVENTS.TAREA_ACTUALIZADA, handleTareaActualizada);
       socket.off(SOCKET_EVENTS.TAREA_ELIMINADA, handleTareaEliminada);
     };
-  }, [queryClient]);
+  }, [queryClient, userId, popups]);
 }
 
 /**
@@ -717,6 +763,8 @@ export function useSocketPropuestas() {
       console.log('[Socket] Propuesta actualizada');
       queryClient.invalidateQueries({ queryKey: ['propuestas'], refetchType: 'active' });
       queryClient.invalidateQueries({ queryKey: ['propuestas-stats'], refetchType: 'active' });
+      // Refresca la bitácora abierta (comentarios) del detalle de la propuesta.
+      queryClient.invalidateQueries({ queryKey: ['propuesta-comments'], refetchType: 'active' });
     };
 
     const handlePropuestaStatusChanged = () => {

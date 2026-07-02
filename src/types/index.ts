@@ -438,6 +438,7 @@ export interface Notificacion {
   creador?: string | null;
   cliente?: string | null;
   notas_direccion?: string | null;
+  notas_direccion_bitacora_count?: number;
   descripcion_trafico?: string | null;
   formatos?: string | null;
 }

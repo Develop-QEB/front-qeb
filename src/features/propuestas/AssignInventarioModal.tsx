@@ -1992,7 +1992,11 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
   const carasGroupedByCatorcena = useMemo(() => {
     const groups: Record<string, { caras: CaraItem[]; catorcenaNum?: number; year?: number }> = {};
     caras.forEach(cara => {
-      let periodo = cara.inicio_periodo || 'Sin periodo';
+      // Normalizar a YYYY-MM-DD: una cara recién agregada trae inicio_periodo con
+      // hora (ISO) y las del backend vienen cortadas a 10; sin normalizar el key,
+      // la cara nueva cae en un grupo de catorcena separado (falla visual). Al
+      // guardar y recargar se juntan porque todas vienen igual del backend.
+      let periodo = cara.inicio_periodo ? String(cara.inicio_periodo).slice(0, 10) : 'Sin periodo';
       let parsedMonth: number | undefined;
       let parsedYear: number | undefined;
       if (tipoPeriodo === 'mensual' && cara.inicio_periodo) {

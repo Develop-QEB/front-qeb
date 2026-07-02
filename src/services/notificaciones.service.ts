@@ -38,6 +38,40 @@ export interface UpdateTareaParams {
   evidencia?: string;
 }
 
+// ==================== PREFERENCIAS DE NOTIFICACIONES ====================
+
+export interface PreferenciasMatrizCanal {
+  master: boolean;
+  masterNotificacion: boolean;
+  masterTarea: boolean;
+  notificacion: Record<string, boolean>;
+  tarea: Record<string, boolean>;
+}
+
+export interface PreferenciasNotif {
+  popup: PreferenciasMatrizCanal;
+  email: PreferenciasMatrizCanal;
+}
+
+export interface CatalogoItem {
+  clave: string;
+  label: string;
+  /** false = este tipo no envía correo → se oculta su toggle de correo. */
+  email?: boolean;
+}
+
+export interface CatalogoNotif {
+  notificacion: CatalogoItem[];
+  tarea: CatalogoItem[];
+}
+
+export interface PreferenciaUpdateItem {
+  canal: 'popup' | 'email';
+  clase: 'notificacion' | 'tarea' | '__global__';
+  clave: string;
+  habilitado: boolean;
+}
+
 export const notificacionesService = {
   async getAll(params: NotificacionesParams = {}): Promise<PaginatedResponse<Notificacion>> {
     const response = await api.get<PaginatedResponse<Notificacion>>('/notificaciones', { params });
@@ -163,6 +197,29 @@ export const notificacionesService = {
     const response = await api.get<ApiResponse<HistorialAutorizacion[]>>(`/notificaciones/autorizacion/${idquote}/historial`);
     if (!response.data.success || !response.data.data) {
       throw new Error(response.data.error || 'Error al obtener historial');
+    }
+    return response.data.data;
+  },
+
+  // ==================== PREFERENCIAS ====================
+
+  async getPreferencias(): Promise<{ preferencias: PreferenciasNotif; catalogo: CatalogoNotif }> {
+    const response = await api.get<ApiResponse<{ preferencias: PreferenciasNotif; catalogo: CatalogoNotif }>>(
+      '/notificaciones/preferencias'
+    );
+    if (!response.data.success || !response.data.data) {
+      throw new Error(response.data.error || 'Error al obtener preferencias');
+    }
+    return response.data.data;
+  },
+
+  async updatePreferencias(items: PreferenciaUpdateItem[]): Promise<{ preferencias: PreferenciasNotif }> {
+    const response = await api.put<ApiResponse<{ preferencias: PreferenciasNotif }>>(
+      '/notificaciones/preferencias',
+      { items }
+    );
+    if (!response.data.success || !response.data.data) {
+      throw new Error(response.data.error || 'Error al guardar preferencias');
     }
     return response.data.data;
   },

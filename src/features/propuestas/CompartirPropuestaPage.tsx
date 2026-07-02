@@ -9,6 +9,7 @@ import { GoogleMap, useLoadScript, Marker, Circle, Autocomplete, InfoWindow } fr
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell } from 'recharts';
 import { propuestasService, InventarioReservado, PropuestaFullDetails } from '../../services/propuestas.service';
 import { formatCurrency, formatDate } from '../../lib/utils';
+import { toNum, applyNumberFormats, FMT_COORD } from '../../utils/excelFormat';
 import { useThemeStore } from '../../store/themeStore';
 
 // Config UNICA de Google Maps (mismo id/key/libraries en toda la app) para
@@ -502,11 +503,13 @@ export function CompartirPropuestaPage() {
           i.mueble || '',
           i.tradicional_digital || '',
           formatInicioPeriodo(i, tipoPeriodo),
-          i.latitud || '',
-          i.longitud || '',
+          toNum(i.latitud),
+          toNum(i.longitud),
           ''
         ]);
         const ws = XLSX.utils.aoa_to_sheet([headers, ...rows]);
+        // Lat (col 8) y Long (col 9) como celdas tipo número
+        applyNumberFormats(XLSX, ws, rows.length, { 8: FMT_COORD, 9: FMT_COORD });
         const sheetName = plaza.substring(0, 31);
         XLSX.utils.book_append_sheet(wb, ws, sheetName);
       }
@@ -595,17 +598,20 @@ export function CompartirPropuestaPage() {
     a.click();
   };
 
-  // Abrir el visor de mapa publico de QEB (pantalla completa, branding IMU) con la
-  // seleccion actual. Si no hay seleccion, abre el mapa con todo el inventario.
+  // Abrir el visor de mapa publico de QEB (pantalla completa, branding IMU) reflejando
+  // lo que se ve en el mapa: respeta el filtro de catorcenas y la seleccion de items.
+  // Sin ningun filtro/seleccion abre el mapa con todo el inventario.
   const handleExpandMap = () => {
-    const ids = inventario
-      ? Array.from(new Set(
-          inventario
-            .filter(i => selectedItems.has(itemKey(i)) && i.latitud && i.longitud)
-            .map(i => i.id)
-        ))
-      : [];
-    const qs = ids.length > 0 ? `?ids=${ids.join(',')}` : '';
+    const base = catorcenaFilteredInventario; // respeta los chips de catorcena
+    const chosen = selectedItems.size > 0
+      ? base.filter(i => selectedItems.has(itemKey(i)))
+      : base;
+    const ids = Array.from(new Set(
+      chosen.filter(i => i.latitud && i.longitud).map(i => i.id)
+    ));
+    // Solo acotamos por URL si hay un subconjunto real (seleccion o filtro de catorcena).
+    const isSubset = selectedItems.size > 0 || selectedCatorcenas.size > 0;
+    const qs = isSubset && ids.length > 0 ? `?ids=${ids.join(',')}` : '';
     window.open(`/cliente/propuesta/${propuestaId}/mapa${qs}`, '_blank', 'noopener,noreferrer');
   };
 
@@ -1203,7 +1209,6 @@ export function CompartirPropuestaPage() {
             { label: 'CUIC', value: details?.solicitud?.cuic },
             { label: 'Cliente', value: details?.solicitud?.cliente },
             { label: 'Razón Social', value: details?.solicitud?.razon_social },
-            { label: 'Unidad de Negocio', value: details?.solicitud?.unidad_negocio },
             { label: 'Marca', value: details?.solicitud?.marca_nombre },
             { label: 'Asesor', value: details?.solicitud?.asesor },
             { label: 'Agencia', value: details?.solicitud?.agencia },

@@ -340,6 +340,11 @@ interface InventoryRow {
   latitud?: number; // Para mapa
   longitud?: number; // Para mapa
   articulo?: string; // ItemCode de SAP (ej: RT-P1-COB-GD)
+  // Solo poblado en inventoryOrdenImpresionData: tarifa publica unitaria y
+  // costo total del articulo, para incluir en el contenido de la tarea
+  // Orden de Impresion.
+  tarifa_publica?: number | null;
+  costo_total?: number | null;
   // Para Atender arte
   estado_arte?: 'sin_revisar' | 'en_revision' | 'aprobado' | 'rechazado';
   estado_tarea?: 'sin_atender' | 'en_progreso' | 'atendido';
@@ -4697,6 +4702,7 @@ function TaskDetailModal({
   const [decisiones, setDecisiones] = useState<DecisionesState>({});
   const [validationErrors, setValidationErrors] = useState<string[]>([]);
   const [isFinalizando, setIsFinalizando] = useState(false);
+  const [envioRevisionError, setEnvioRevisionError] = useState<string | null>(null);
 
   // Estado para crear tarea de recepción (Impresión)
   const [isCreatingRecepcion, setIsCreatingRecepcion] = useState(false);
@@ -5758,19 +5764,26 @@ function TaskDetailModal({
     }
   };
 
-  // Función para enviar artes corregidos a revisión (para tareas de Corrección)
+  // Función para enviar artes corregidos a revisión (para tareas de Corrección).
+  // Usa un endpoint transaccional del back: cambia estado del arte + rota roles de
+  // la Revisión anterior + crea nueva Revisión + cierra la Corrección, todo dentro
+  // de un prisma.$transaction. Si algo falla, no queda estado inconsistente.
   const handleEnviarARevision = async () => {
     if (!task) return;
     setIsFinalizando(true);
+    setEnvioRevisionError(null);
 
     try {
-      // Obtener todos los IDs de reservas de la tarea
       const reservaIds = taskInventory.flatMap(item =>
         item.rsv_id.split(',').map(id => parseInt(id.trim())).filter(id => !isNaN(id))
       );
 
       if (reservaIds.length === 0) {
-        console.error('No hay reservas para enviar a revisión');
+        setEnvioRevisionError('No hay reservas para enviar a revisión.');
+        return;
+      }
+      if (!task.id) {
+        setEnvioRevisionError('La tarea no tiene id — recarga la página.');
         return;
       }
 
@@ -5786,24 +5799,30 @@ function TaskDetailModal({
           asignadoIds = parsed.original_id_asignado || undefined;
         }
       } catch { /* contenido no es JSON o está vacío */ }
-      // Fallback legacy: si la Corrección no tiene contenido JSON (tareas viejas),
-      // usar el responsable de la Corrección (comportamiento previo).
       if (!asignadoNombres) {
         asignadoNombres = task.responsable || task.creador || '';
       }
 
-      // Enviar a revisión (cambia estado a Pendiente y crea nueva tarea)
-      await onSendToReview(reservaIds, asignadoNombres, asignadoIds);
-
-      // Marcar la tarea de corrección como completada
-      if (task.id) {
-        await onTaskComplete(task.id);
+      try {
+        await campanasService.completarCorreccionEnviarRevision(campanaId, {
+          correccionId: parseInt(task.id),
+          reservaIds,
+          asignadoNombres,
+          asignadoIds,
+        });
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : String(err);
+        setEnvioRevisionError(`No se pudo enviar a revisión: ${msg}. La Corrección sigue activa — reintenta.`);
+        console.error('Error al completar Corrección:', err);
+        return;
       }
 
-      // Cerrar modal
+      // Invalidar caches para que las tablas y contadores se refresquen
+      queryClientAsig.invalidateQueries({ queryKey: ['campana-tareas', campanaId], exact: false });
+      queryClientAsig.invalidateQueries({ queryKey: ['inventario-con-arte', campanaId], exact: false });
+      queryClientAsig.invalidateQueries({ queryKey: ['tareas'], exact: false });
+
       onClose();
-    } catch (error) {
-      console.error('Error al enviar a revisión:', error);
     } finally {
       setIsFinalizando(false);
     }
@@ -11734,7 +11753,12 @@ function TaskDetailModal({
                   </div>
 
                   {/* Botón de enviar a revisión */}
-                  <div className="flex justify-end">
+                  <div className="flex flex-col items-end gap-2">
+                    {envioRevisionError && (
+                      <div className="w-full text-xs text-red-300 bg-red-900/30 border border-red-700/40 rounded-md px-3 py-2">
+                        {envioRevisionError}
+                      </div>
+                    )}
                     <button
                       onClick={handleEnviarARevision}
                       disabled={isFinalizando || isUpdating || taskInventory.length === 0}
@@ -11748,7 +11772,7 @@ function TaskDetailModal({
                       ) : (
                         <>
                           <Send className="h-4 w-4" />
-                          Enviar a Revisión
+                          {envioRevisionError ? 'Reintentar envío' : 'Enviar a Revisión'}
                         </>
                       )}
                     </button>
@@ -12343,9 +12367,14 @@ function OrdenImpresionModal({
     const selectedProveedor = proveedores.find(p => p.id === proveedorId);
     const listadoIds = selectedItems.map(i => i.id).join(',');
 
-    // Construir contenido con info de artículos
+    const fmtMoney = (v: number | null | undefined): string => {
+      if (v == null || !Number.isFinite(Number(v))) return '-';
+      return `$${Number(v).toLocaleString('es-MX', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+    };
+
+    // Contenido con info de articulos incluyendo tarifa publica y total.
     const articulosInfo = selectedItems.map(i =>
-      `${i.articulo || i.codigo_unico} | ${i.mueble || '-'} | ${i.caras_totales} imp. | ${i.plaza || '-'} | APS: ${i.aps || '-'}`
+      `${i.articulo || i.codigo_unico} | ${i.mueble || '-'} | ${i.caras_totales} imp. | ${i.plaza || '-'} | APS: ${i.aps || '-'} | Tarifa Publica: ${fmtMoney(i.tarifa_publica)} | Total: ${fmtMoney(i.costo_total)}`
     ).join('\n');
 
     onSubmit({
@@ -16000,15 +16029,16 @@ export function TareaSeguimientoPage() {
 
   // Transform artículos IM con APS para subtab "Orden Impresión"
   const inventoryOrdenImpresionData = useMemo((): InventoryRow[] => {
-    // Quitar items que ya estan en alguna tarea de "Orden de Impresion" no
-    // resuelta — su listado_inventario es CSV de rsv_ids. Sin esto el usuario
-    // podia crear N tareas duplicadas sobre los mismos articulos.
+    // Quitar items que ya estan en alguna tarea de "Orden de Impresion"
+    // salvo que la tarea haya sido Rechazada o Cancelada (en ese caso el
+    // item vuelve al listado). Antes tambien reaparecian al pasar la tarea
+    // a Atendido/Completado — comportamiento incorrecto: si la orden se
+    // completo el articulo ya se "mando" y no debe permitir crear otra
+    // orden sobre el mismo item.
     const usedIds = new Set<string>();
     tareasAPI
       .filter(t =>
         t.tipo === 'Orden de Impresión'
-        && t.estatus !== 'Atendido'
-        && t.estatus !== 'Completado'
         && t.estatus !== 'Rechazado'
         && t.estatus !== 'Cancelado'
       )
@@ -16044,6 +16074,9 @@ export function TareaSeguimientoPage() {
         ubicacion: '',
         tradicional_digital: 'Tradicional' as const,
         articulo: item.articulo || '',
+        // Tarifas para incluir en el contenido de la tarea Orden de Impresion.
+        tarifa_publica: (item as any).tarifa_publica_sc ?? item.tarifa_publica ?? null,
+        costo_total: (item as any).tarifa_bruta_sc ?? null,
       }));
   }, [imArticlesAPI, tareasAPI]);
 
@@ -16464,6 +16497,16 @@ export function TareaSeguimientoPage() {
     if (urlTab) setActiveMainTab(urlTab);
     if (urlSubtab === 'instaladas' || urlSubtab === 'por_instalar' || urlSubtab === 'testigo') {
       setActiveEstadoInstalacionTab(urlSubtab);
+    }
+    // Sub-tabs del tab principal "impresiones" — usado por notificaciones
+    // "Gestión de Recepción Parcial" para llevar al ASC directo a Pend. Recepcion.
+    if (
+      urlSubtab === 'orden_impresion' ||
+      urlSubtab === 'en_impresion' ||
+      urlSubtab === 'pendiente_recepcion' ||
+      urlSubtab === 'recibido'
+    ) {
+      setActiveEstadoImpresionTab(urlSubtab);
     }
   // Solo al montar
   // eslint-disable-next-line react-hooks/exhaustive-deps

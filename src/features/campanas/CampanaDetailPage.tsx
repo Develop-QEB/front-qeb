@@ -2430,7 +2430,6 @@ export function CampanaDetailPage() {
               <InfoItem label="CUIC" value={campana.cuic} type="id" />
               <InfoItem label="Agencia" value={campana.T0_U_Agencia} type="category" />
               <InfoItem label="Asesor" value={campana.T0_U_Asesor} type="user" />
-              <InfoItem label="Unidad Negocio" value={campana.T1_U_UnidadNegocio} type="category" />
               <InfoItem label="Marca" value={campana.T2_U_Marca} type="category" />
               <InfoItem label="Producto" value={campana.T2_U_Producto} type="category" />
               <InfoItem label="Categoria" value={campana.T2_U_Categoria} type="category" />

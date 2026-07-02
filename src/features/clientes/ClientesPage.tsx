@@ -224,10 +224,6 @@ function ViewClienteModal({ isOpen, onClose, cliente }: ViewClienteModalProps) {
                     <span className={`${isDark ? 'text-zinc-500' : 'text-gray-500'} text-sm`}>Razón Social</span>
                     <span className={`${isDark ? 'text-white' : 'text-gray-900'} text-sm truncate ml-4 max-w-[200px]`}>{cliente.T0_U_RazonSocial || '-'}</span>
                   </div>
-                  <div className="flex justify-between">
-                    <span className={`${isDark ? 'text-zinc-500' : 'text-gray-500'} text-sm`}>Unidad de Negocio</span>
-                    <span className={`${isDark ? 'text-cyan-300' : 'text-cyan-600'} text-sm`}>{cliente.T1_U_UnidadNegocio || cliente.ASESOR_U_UnidadNegocio || '-'}</span>
-                  </div>
                 </div>
               </div>
 
@@ -1547,10 +1543,6 @@ export function ClientesPage() {
                 <div>
                   <label className={`text-xs ${isDark ? 'text-zinc-400' : 'text-gray-500'} mb-1 block`}>Categoría</label>
                   <input name="categoria" className={`w-full px-3 py-2 ${isDark ? 'bg-zinc-800 border-zinc-700 text-white' : 'bg-gray-50 border-gray-300 text-gray-900'} border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-purple-500/50`} placeholder="Categoría" />
-                </div>
-                <div>
-                  <label className={`text-xs ${isDark ? 'text-zinc-400' : 'text-gray-500'} mb-1 block`}>Unidad de Negocio</label>
-                  <input name="unidad_negocio" className={`w-full px-3 py-2 ${isDark ? 'bg-zinc-800 border-zinc-700 text-white' : 'bg-gray-50 border-gray-300 text-gray-900'} border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-purple-500/50`} placeholder="Unidad de negocio" />
                 </div>
                 <div>
                   <label className={`text-xs ${isDark ? 'text-zinc-400' : 'text-gray-500'} mb-1 block`}>Agencia</label>

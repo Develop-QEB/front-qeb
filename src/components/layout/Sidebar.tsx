@@ -44,7 +44,7 @@ type PermissionKey = 'canSeeDashboard' | 'canSeeClientes' | 'canSeeProveedores' 
 
 
 const navigation: { name: string; href: string; icon: React.ElementType; prefetchKey?: PrefetchKey; permissionKey: PermissionKey }[] = [
-  { name: 'Dashboard', href: '/', icon: LayoutDashboard, permissionKey: 'canSeeDashboard' },
+  { name: 'Dashboard', href: '/dashboard', icon: LayoutDashboard, permissionKey: 'canSeeDashboard' },
   { name: 'Clientes', href: '/clientes', icon: Users, prefetchKey: 'prefetchClientes', permissionKey: 'canSeeClientes' },
   { name: 'Proveedores', href: '/proveedores', icon: Building2, prefetchKey: 'prefetchProveedores', permissionKey: 'canSeeProveedores' },
   { name: 'Solicitudes', href: '/solicitudes', icon: FileText, prefetchKey: 'prefetchSolicitudes', permissionKey: 'canSeeSolicitudes' },

@@ -65,20 +65,31 @@ function getFirstAvailableRoute(permissions: ReturnType<typeof getPermissions>, 
 }
 
 // Componente para la ruta principal - redirige según permisos
+// "/" es solo un redirector de landing (no renderiza el Dashboard). El Dashboard
+// vive en "/dashboard" (pestaña propia), así el landing por rol y la pestaña
+// Dashboard quedan desacoplados: Dirección aterriza en su centro de tareas y aun
+// así puede abrir el Dashboard.
 function HomeRoute() {
   const user = useAuthStore((state) => state.user);
   const permissions = getPermissions(user?.rol);
 
-  // Directores: redirigir a /notificaciones (Mis Tareas es el tab default).
   if (user?.rol && ROLES_LAND_ON_TAREAS.includes(user.rol)) {
     return <Navigate to="/notificaciones" replace />;
   }
-  // Si puede ver Dashboard, mostrarlo
   if (permissions.canSeeDashboard) {
-    return <DashboardPage />;
+    return <Navigate to="/dashboard" replace />;
   }
-  // Si no, redirigir a la primera ruta disponible
   return <Navigate to={getFirstAvailableRoute(permissions, user?.rol)} replace />;
+}
+
+// Pestaña Dashboard (accesible para todos los que tengan permiso, incl. Dirección).
+function DashboardRoute() {
+  const user = useAuthStore((state) => state.user);
+  const permissions = getPermissions(user?.rol);
+  if (!permissions.canSeeDashboard) {
+    return <Navigate to={getFirstAvailableRoute(permissions, user?.rol)} replace />;
+  }
+  return <DashboardPage />;
 }
 
 // Componente para proteger ruta de Inventarios
@@ -207,6 +218,7 @@ function App() {
             }
           >
             <Route path="/" element={<Suspense fallback={null}><HomeRoute /></Suspense>} />
+            <Route path="/dashboard" element={<Suspense fallback={null}><DashboardRoute /></Suspense>} />
             <Route path="/clientes" element={<Suspense fallback={null}><ClientesPage /></Suspense>} />
             <Route path="/proveedores" element={<Suspense fallback={null}><ProveedoresPage /></Suspense>} />
             <Route path="/inventarios" element={<Suspense fallback={null}><InventariosRoute /></Suspense>} />

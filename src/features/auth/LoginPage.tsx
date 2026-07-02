@@ -44,6 +44,8 @@ export function LoginPage() {
       const response = await authService.login(data.email, data.password);
       queryClient.clear();
       setAuth(response.user, response.accessToken, response.refreshToken);
+      // El landing por rol lo decide HomeRoute ("/"): Dirección → centro de
+      // tareas; el resto → Dashboard / su primera ruta disponible.
       navigate('/');
     } catch (err: any) {
       const message = err?.response?.data?.error || err?.message || 'Error al iniciar sesion';

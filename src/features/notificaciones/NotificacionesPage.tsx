@@ -1,6 +1,6 @@
 import { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import {
   Search, ChevronDown, ChevronRight,
   Calendar, User, FileText, X, List, LayoutGrid, CalendarDays,
@@ -27,6 +27,7 @@ import { AssignInventarioModal } from '../propuestas/AssignInventarioModal';
 import { AssignInventarioCampanaModal } from '../campanas/AssignInventarioCampanaModal';
 import { propuestasService } from '../../services/propuestas.service';
 import { campanasService } from '../../services/campanas.service';
+import { NotasDireccionBitacora } from './NotasDireccionBitacora';
 
 // ============ HELPERS ============
 // Render texto con URLs (http://, https://, www.) convertidas en hyperlinks
@@ -1344,6 +1345,12 @@ function isGestionArtesTarea(tipo?: string | null): boolean {
   return !!tipo && GESTION_ARTES_TIPOS.includes(tipo);
 }
 
+// Tarea informativa "Gestión de Recepción Parcial" (ASC): navega al gestor
+// de artes → tab Impresiones → sub-tab Pend. Recepción para ver el detalle.
+function isRecepcionParcialTarea(tipo?: string | null): boolean {
+  return tipo === 'Gestión de Recepción Parcial';
+}
+
 // Notificaciones tipo='Notificación' que en realidad pertenecen al flujo de
 // Gestión de Artes (las que crea el backend al aprobar/rechazar arte).
 // Las identificamos por el título porque su `tipo` es genérico.
@@ -1371,6 +1378,10 @@ function hasNavigationRoute(tarea: Notificacion): boolean {
   if (isGestionArtesTarea(tarea.tipo) && tarea.campania_id) {
     return true;
   }
+  // Gestión de Recepción Parcial (informativa ASC): siempre a Gestor de Artes.
+  if (isRecepcionParcialTarea(tarea.tipo) && tarea.campania_id) {
+    return true;
+  }
   // Si es tarea de autorización o rechazo con id_solicitud, también puede navegar
   if (tarea.id_solicitud && (tarea.tipo?.includes('Autorización') || tarea.tipo?.includes('Rechazo'))) {
     return true;
@@ -1391,6 +1402,10 @@ function getNavigationLabel(tipo: string, tipoTarea?: string, campaniaId?: numbe
   // Tareas de Gestión de Artes → Ver Gestión de Artes
   if (isGestionArtesTarea(tipoTarea)) {
     return 'Ver Gestión de Artes';
+  }
+  // Gestión de Recepción Parcial (informativa ASC) → sub-tab Pend. Recepción
+  if (isRecepcionParcialTarea(tipoTarea)) {
+    return 'Ver Recepción Parcial';
   }
   // Tareas de Rechazo: usar referencia_tipo para el label correcto
   if (tipoTarea?.includes('Rechazo')) {
@@ -1485,6 +1500,11 @@ function getDirectNavigationPath(tipo: string, id: number, titulo: string, tipoT
   // Tareas de Gestión de Artes → Gestión de Artes con auto-open del modal (prioridad sobre propuesta)
   if (isGestionArtesTarea(tipoTarea) && campaniaId) {
     return `/campanas/${campaniaId}/tareas?taskId=${tareaId || id}`;
+  }
+  // Gestión de Recepción Parcial (informativa ASC) → tab Impresiones →
+  // sub-tab Pend. Recepción para que el ASC vea el detalle de la parcial.
+  if (isRecepcionParcialTarea(tipoTarea) && campaniaId) {
+    return `/campanas/${campaniaId}/tareas?tab=impresiones&subtab=pendiente_recepcion`;
   }
 
   // Notificaciones de "Artes aprobados/rechazados" (tipo='Notificación') →
@@ -1934,17 +1954,13 @@ function ApprovalModal({
             </div>
           )}
 
-          {/* Notas Dirección */}
-          {tarea.notas_direccion && (
-            <div className="mb-6">
-              <h3 className={`text-xs font-medium ${isDark ? 'text-zinc-500' : 'text-gray-400'} uppercase tracking-wider mb-3 flex items-center gap-2`}>
-                <FileText className="h-3.5 w-3.5 text-orange-400" />
-                Notas Dirección
-              </h3>
-              <div className={`p-3 rounded-xl ${isDark ? 'bg-zinc-800/30 border-zinc-800/50' : 'bg-gray-50 border-gray-200'} border max-h-60 overflow-y-auto`}>
-                <p className={`text-sm ${isDark ? 'text-zinc-300' : 'text-gray-700'} whitespace-pre-wrap break-words leading-relaxed`}>{tarea.notas_direccion}</p>
-              </div>
-            </div>
+          {/* Notas Dirección — bitácora acumulable */}
+          {tarea.id_solicitud && (
+            <NotasDireccionBitacora
+              idSolicitud={parseInt(tarea.id_solicitud)}
+              isDark={isDark}
+              bitacoraCount={tarea.notas_direccion_bitacora_count}
+            />
           )}
         </div>
 
@@ -2793,17 +2809,15 @@ function TaskDrawer({
         </div>
 
 
-        {/* Notas Dirección (solo para directores en tareas de autorización) */}
-        {isAutorizacionTask && ['Director General', 'Director Comercial'].includes(user?.rol || '') && tarea.notas_direccion && (
-          <div className={`p-5 border-t ${isDark ? 'border-zinc-800/50' : 'border-gray-200'}`}>
-            <h3 className={`text-xs font-medium ${isDark ? 'text-zinc-500' : 'text-gray-400'} uppercase tracking-wider mb-3 flex items-center gap-2`}>
-              <FileText className="h-3.5 w-3.5 text-orange-400" />
-              Notas Dirección
-            </h3>
-            <div className={`p-3 rounded-xl ${isDark ? 'bg-zinc-800/30 border-zinc-800/50' : 'bg-gray-50 border-gray-200'} border max-h-60 overflow-y-auto scrollbar-purple`}>
-              <p className={`text-sm ${isDark ? 'text-zinc-300' : 'text-gray-700'} whitespace-pre-wrap break-words leading-relaxed`}>{tarea.notas_direccion}</p>
-            </div>
-          </div>
+        {/* Notas Dirección — bitácora acumulable, visible para directores y admins en tareas de autorización */}
+        {isAutorizacionTask
+          && ['Director General', 'Director Comercial', 'Administrador', 'DEV'].includes(user?.rol || '')
+          && tarea.id_solicitud && (
+          <NotasDireccionBitacora
+            idSolicitud={parseInt(tarea.id_solicitud)}
+            isDark={isDark}
+            bitacoraCount={tarea.notas_direccion_bitacora_count}
+          />
         )}
 
         {/* Comentarios (oculto para directores en tareas de autorización) */}
@@ -2881,9 +2895,11 @@ export function NotificacionesPage() {
   const queryClient = useQueryClient();
   const navigate = useNavigate();
   const isDark = useThemeStore((s) => s.theme) === 'dark';
+  const currentUserId = useAuthStore((s) => s.user?.id);
 
-  // Suscribirse a WebSocket para actualizaciones en tiempo real
-  useSocketNotificaciones();
+  // Suscribirse a WebSocket para actualizaciones en tiempo real.
+  // popups: false — los popups los dispara solo la instancia del Header.
+  useSocketNotificaciones(currentUserId);
 
   // Estado de contenido (notificaciones vs tareas)
   const [contentType, setContentType] = useState<ContentType>('tareas');
@@ -2940,6 +2956,32 @@ export function NotificacionesPage() {
       setIsDrawerClosing(false);
     }, 250); // Duración de la animación
   }, []);
+
+  // Abrir directamente una notificación/tarea cuando llega ?tareaId=X
+  // (p.ej. al hacer clic en un toast de notificación).
+  const [searchParams, setSearchParams] = useSearchParams();
+  useEffect(() => {
+    const tid = searchParams.get('tareaId');
+    if (!tid) return;
+    const id = parseInt(tid, 10);
+    if (!isNaN(id)) {
+      notificacionesService.getById(id)
+        .then((full) => {
+          // Tareas de Autorización DG/DCM: abrir directo el modal de revisar y
+          // autorizar (no el panel lateral) para directores.
+          const isDirectorUser = ['Director General', 'Director Comercial'].includes(useAuthStore.getState().user?.rol || '');
+          if (isDirectorUser && full.tipo?.includes('Autorización')) {
+            setApprovalModalTarea(full);
+          } else {
+            setSelectedTarea(full);
+          }
+        })
+        .catch((e) => console.error('No se pudo abrir la notificación', e));
+    }
+    // Limpiar el parámetro para no reabrirla en cada render/navegación.
+    searchParams.delete('tareaId');
+    setSearchParams(searchParams, { replace: true });
+  }, [searchParams, setSearchParams]);
 
   // Debounce search
   useEffect(() => {

@@ -1244,6 +1244,12 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
 
   // Add cara entry
   const handleAddCara = async () => {
+    // Bloqueo: con autorización de dirección pendiente no se pueden AGREGAR
+    // circuitos nuevos (editar uno existente sí, por eso el !editingCaraId).
+    if (authBlocked && !editingCaraId) {
+      showToast('Hay circuito(s) con autorización pendiente de DG/DCM. No puedes agregar nuevos circuitos hasta que dirección los apruebe o rechace.', 'error');
+      return;
+    }
     // Circuitos: NSE no es requerido (los inventarios del circuito ya están fijos)
     const esCircuitoNew = newCara.articulo ? !!parseCircuitoDigital(newCara.articulo.ItemCode) : false;
     if (!newCara.articulo || !newCara.estado || !newCara.formato || !newCara.tipo) return;
@@ -2617,10 +2623,6 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
                       <span className={isDark ? 'text-zinc-500' : 'text-gray-400'}>Agencia:</span>
                       <span className={isDark ? 'text-white' : 'text-gray-900'}>{selectedCuic.T0_U_Agencia || '-'}</span>
                     </div>
-                    <div className="flex justify-between col-span-2">
-                      <span className={isDark ? 'text-zinc-500' : 'text-gray-400'}>Unidad de Negocio:</span>
-                      <span className={isDark ? 'text-white' : 'text-gray-900'}>{selectedCuic.T1_U_UnidadNegocio || '-'}</span>
-                    </div>
                   </div>
                 </div>
               )}
@@ -3490,7 +3492,9 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
                       const baseInvalid = !newCara.articulo || !newCara.estado || !newCara.formato || !newCara.tipo || !newCara.periodo || (tipoPeriodo === 'mensual' && (!newCara.periodoInicioCustom || !newCara.periodoFinCustom));
                       // NSE solo requerido si NO es circuito
                       const nseInvalid = !esCirc && newCara.nse.length === 0;
-                      return baseInvalid || nseInvalid;
+                      // Bloqueo: con autorización de dirección pendiente no se
+                      // pueden AGREGAR circuitos nuevos (editar uno existente sí).
+                      return baseInvalid || nseInvalid || (authBlocked && !editingCaraId);
                     })()}
                     className={`flex items-center gap-2 px-4 py-2 ${editingCaraId ? 'bg-amber-600 hover:bg-amber-700' : 'bg-purple-600 hover:bg-purple-700'} ${isDark ? 'disabled:bg-zinc-700 disabled:text-zinc-500' : 'disabled:bg-gray-200 disabled:text-gray-400'} text-white rounded-lg text-sm font-medium transition-colors`}
                   >
