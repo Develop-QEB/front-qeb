@@ -3291,7 +3291,7 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
                   {/* Renta */}
                   <div>
                     <label className={`text-xs ${isDark ? 'text-zinc-500' : 'text-gray-500'}`}>
-                      {newCara.articulo?.ItemCode?.toUpperCase().startsWith('IM') ? 'Impresiones' : newCara.articulo?.ItemCode?.toUpperCase().startsWith('IN') ? 'Intercambio' : isEspecialArticle(newCara.articulo?.ItemCode || '') ? 'Ejec. Especiales' : 'Renta'}
+                      {newCara.articulo?.ItemCode?.toUpperCase().startsWith('IM') ? 'Impresiones' : newCara.articulo?.ItemCode?.toUpperCase().startsWith('IN') ? 'Intercambio' : isEspecialArticle(newCara.articulo?.ItemCode || '') ? 'Ejec. Especiales' : 'Caras'}
                       {newCara.articulo?.ItemCode?.toUpperCase().startsWith('CT') && (
                         <span className="ml-1 text-cyan-400 text-[10px]">(Cortesía)</span>
                       )}

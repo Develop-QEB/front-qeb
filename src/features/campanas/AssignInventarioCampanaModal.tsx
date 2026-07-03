@@ -7774,7 +7774,7 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
                   </h3>
                   <div className="flex items-center gap-4 text-xs">
                     <span className="text-zinc-400">
-                      Renta: <span className="text-purple-300 font-medium">{carasKPIs.totalRenta}</span>
+                      Caras: <span className="text-purple-300 font-medium">{carasKPIs.totalRenta}</span>
                     </span>
                     {carasKPIs.totalImpresiones > 0 && (
                       <span className="text-zinc-400">

@@ -7879,7 +7879,7 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
                 <div className={`px-5 py-3 border-b ${isDark ? 'border-zinc-700/50' : 'border-gray-200/50'} ${isDark ? 'bg-zinc-800/50' : 'bg-gray-50/50'} flex items-center justify-between`}>
                   <h3 className={`text-sm font-medium ${isDark ? 'text-white' : 'text-gray-900'} flex items-center gap-2`}>
                     <Layers className="h-4 w-4 text-purple-400" />
-                    Formatos / Circuitos
+                    Formatos / Caras
                   </h3>
                   <div className="flex items-center gap-4 text-xs">
                     <span className={`${isDark ? 'text-zinc-400' : 'text-gray-500'}`}>
