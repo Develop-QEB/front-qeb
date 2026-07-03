@@ -2416,8 +2416,13 @@ function TaskDrawer({
             </button>
           )}
 
-          {/* Botón finalizar tarea */}
-          {contentType === 'tareas' && user?.rol !== 'Director General' && (
+          {/* Botón finalizar tarea.
+              Oculto para 'Revisión de artes': finalizar aquí solo marca la tarea
+              como Atendido sin aprobar los artes (arte_aprobado sigue 'Pendiente'),
+              dejándolos atorados en "Sin revisar". La aprobación debe hacerse desde
+              el botón "Ir a gestión de artes" (Revisar y Aprobar). */}
+          {contentType === 'tareas' && user?.rol !== 'Director General'
+            && tarea.tipo !== 'Revisión de artes' && tarea.tipo !== 'Revision de artes' && (
             <button
               onClick={(e) => {
                 e.stopPropagation();
