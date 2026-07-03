@@ -735,16 +735,23 @@ function calcularCatorcena(fecha: Date): number {
 }
 
 // Helper para formatear inicio_periodo como "Cat X / YYYY" o "Mes YYYY".
-// Detecta mensual por flag explícito O por duración del período (>14 días).
-// Esto evita el caso donde tipoPeriodo no llega o llega mal y un período
-// mensual se etiqueta como "Cat 8" basándose solo en el inicio.
+// Prioridad: tipo_periodo explícito de la campaña > numero_catorcena asignada
+// por el backend > heurística por duración (>14 días). La heurística SOLO
+// aplica cuando la campaña no declara tipo_periodo: en una campaña catorcenal,
+// un fin_periodo largo (p.ej. una fila que abarca dos catorcenas) no debe
+// re-etiquetar el grupo como "Julio 2026".
 function formatInicioPeriodo(
   item: InventarioReservado | InventarioConAPS & { fin_periodo?: string | null },
   tipoPeriodo?: string,
 ): string {
   const itemAny = item as InventarioReservado & { fin_periodo?: string | null };
   let isMensual = tipoPeriodo === 'mensual';
-  if (!isMensual && itemAny.inicio_periodo && itemAny.fin_periodo) {
+
+  if (!isMensual && item.numero_catorcena && item.anio_catorcena) {
+    return `Cat ${item.numero_catorcena} / ${item.anio_catorcena}`;
+  }
+
+  if (!isMensual && !tipoPeriodo && itemAny.inicio_periodo && itemAny.fin_periodo) {
     const ini = new Date(itemAny.inicio_periodo).getTime();
     const fin = new Date(itemAny.fin_periodo).getTime();
     if (!isNaN(ini) && !isNaN(fin)) {
@@ -819,9 +826,10 @@ function getGroupValue(item: InventarioReservado | InventarioConAPS, field: Grou
 // asi sus claves coinciden con las de groupedInventario al hacer match/render.
 function getSCGroupValue(sc: SolicitudCara, field: GroupByField, tipoPeriodo?: string): string {
   if (field === 'inicio_periodo') {
-    // Detectar mensual por flag o por duración del período (>14 días).
+    // Heurística por duración SOLO cuando la campaña no declara tipo_periodo
+    // (mismo criterio que formatInicioPeriodo para que las claves coincidan).
     let isMensual = tipoPeriodo === 'mensual';
-    if (!isMensual && sc.inicio_periodo && sc.fin_periodo) {
+    if (!isMensual && !tipoPeriodo && sc.inicio_periodo && sc.fin_periodo) {
       const ini = new Date(sc.inicio_periodo).getTime();
       const fin = new Date(sc.fin_periodo).getTime();
       if (!isNaN(ini) && !isNaN(fin) && (fin - ini) / 86400000 > 14) isMensual = true;
@@ -1093,7 +1101,11 @@ export function CampanaDetailPage() {
     gcTime: 1000 * 60 * 60,    // 1 h
   });
   const catorcenas = catorcenasData?.data || [];
-  const tipoPeriodo = (campana as any)?.tipo_periodo || 'catorcena';
+  // Sin default 'catorcena': formatInicioPeriodo/getSCGroupValue necesitan
+  // distinguir "la campaña declara catorcena" de "no llegó el dato" para
+  // decidir si aplican la heurística de duración. Todos los demás consumidores
+  // solo comparan === 'mensual', así que undefined se comporta igual.
+  const tipoPeriodo = (campana as any)?.tipo_periodo || undefined;
 
   // Calcular centro del mapa basado en inventario
   const mapCenter = useMemo(() => {
