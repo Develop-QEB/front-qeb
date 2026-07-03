@@ -1,9 +1,9 @@
 import { useParams, useNavigate } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
-import { useState, useMemo, useRef } from 'react';
+import { useState, useMemo, useRef, useCallback, memo } from 'react';
 import {
   ArrowLeft, Share2, Download, FileText, Map as MapIcon, Copy, Check, Loader2,
-  ChevronDown, ChevronRight, Filter, ArrowUpDown, Layers, FileSpreadsheet, ExternalLink, X, Maximize2
+  ChevronDown, ChevronRight, Filter, ArrowUpDown, Layers, FileSpreadsheet, ExternalLink, X, Maximize2, Eye, EyeOff
 } from 'lucide-react';
 import { GoogleMap, useLoadScript, Marker, Circle, Autocomplete, InfoWindow } from '@react-google-maps/api';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell } from 'recharts';
@@ -167,6 +167,66 @@ function applyFilters<T>(data: T[], filters: FilterCondition[]): T[] {
   });
 }
 
+// Marker memoizado: solo se re-renderiza si cambia SU item/selección. Sin esto,
+// cada toggle de checkbox recreaba las ~5010 instancias de google.maps.Marker en el
+// hilo principal (freeze/crash en propuestas grandes). Con memo + onSelect estable,
+// togglear un item solo actualiza los markers cuyo isSelected cambió.
+const MapMarker = memo(function MapMarker({ item, isSelected, onSelect }: {
+  item: InventarioReservado;
+  isSelected: boolean;
+  onSelect: (item: InventarioReservado) => void;
+}) {
+  if (!item.latitud || !item.longitud) return null;
+  return (
+    <Marker
+      position={{ lat: item.latitud, lng: item.longitud }}
+      onClick={() => onSelect(item)}
+      icon={{
+        path: google.maps.SymbolPath.CIRCLE,
+        scale: isSelected ? 10 : 7,
+        fillColor: isSelected
+          ? '#22c55e' // Verde si está seleccionado
+          : String(item.tipo_de_cara).startsWith('Flujo') ? '#ef4444' : String(item.tipo_de_cara).startsWith('Contraflujo') ? '#3b82f6' : '#a855f7',
+        fillOpacity: isSelected ? 1 : 0.9,
+        strokeColor: '#fff',
+        strokeWeight: isSelected ? 3 : 1.5,
+      }}
+    />
+  );
+});
+
+// Fila de detalle memoizada: togglear un checkbox solo re-renderiza la fila afectada,
+// no las miles de filas de los grupos expandidos.
+const DetailRow = memo(function DetailRow({ item, isSelected, isDark, onToggle }: {
+  item: InventarioReservado;
+  isSelected: boolean;
+  isDark: boolean;
+  onToggle: (key: string) => void;
+}) {
+  const inv = inversionBruta(item);
+  const key = item.rsv_ids;
+  return (
+    <tr onClick={() => onToggle(key)} className={`cursor-pointer transition-colors ${isSelected ? 'bg-purple-500/10' : 'hover:bg-purple-500/5'}`}>
+      <td className="px-3 py-2" onClick={(e) => e.stopPropagation()}>
+        <input type="checkbox" checked={isSelected} onChange={() => onToggle(key)} className="checkbox-purple" />
+      </td>
+      <td className={`px-3 py-2 font-mono text-xs ${isDark ? 'text-blue-300' : 'text-blue-600'}`}>{item.codigo_unico}</td>
+      <td className={`px-3 py-2 text-xs ${isDark ? 'text-zinc-300' : 'text-gray-700'}`}>{item.plaza || '-'}</td>
+      <td className={`px-3 py-2 text-xs ${isDark ? 'text-zinc-400' : 'text-gray-600'}`}>
+        {item.mueble || '-'}
+        {item.tipo_de_mueble && item.tipo_de_mueble?.toUpperCase() !== item.mueble?.toUpperCase() && (
+          <span className={`block text-[10px] ${isDark ? 'text-zinc-500' : 'text-gray-500'}`}>{item.tipo_de_mueble}</span>
+        )}
+      </td>
+      <td className={`px-3 py-2 text-center font-semibold text-xs ${isDark ? 'text-white' : 'text-gray-900'}`}>{item.caras_totales}</td>
+      <td className={`px-3 py-2 text-right text-xs font-mono ${isDark ? 'text-zinc-500' : 'text-gray-500'}`}>{item.latitud?.toFixed(6) || '-'}</td>
+      <td className={`px-3 py-2 text-right text-xs font-mono ${isDark ? 'text-zinc-500' : 'text-gray-500'}`}>{item.longitud?.toFixed(6) || '-'}</td>
+      <td className={`px-3 py-2 text-right text-xs ${isDark ? 'text-amber-300' : 'text-amber-700'}`}>{formatCurrency(tarifaBruta(item))}</td>
+      <td className={`px-3 py-2 text-right font-medium text-xs ${isDark ? 'text-emerald-300' : 'text-emerald-700'}`}>{formatCurrency(inv)}</td>
+    </tr>
+  );
+});
+
 export function CompartirPropuestaPage() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
@@ -197,6 +257,11 @@ export function CompartirPropuestaPage() {
   const [searchRange, setSearchRange] = useState(300);
   const [poiSearch, setPoiSearch] = useState('');
   const [selectedMarker, setSelectedMarker] = useState<InventarioReservado | null>(null);
+  // El mapa embebido pinta un marker por inventario (miles en propuestas grandes) y es
+  // lo más pesado de la página. Colapsado por default: así los checkboxes van fluidos y
+  // el mapa solo se monta cuando el usuario lo pide. ("Ver Mapa"/"Expandir Mapa" siguen
+  // abriendo el visor completo aparte.)
+  const [showMap, setShowMap] = useState(false);
 
   // Google Maps
   const { isLoaded } = useLoadScript(GOOGLE_MAPS_LOADER_OPTIONS);
@@ -270,6 +335,20 @@ export function CompartirPropuestaPage() {
     });
     return Object.entries(counts).map(([name, value]) => ({ name, value })).sort((a, b) => b.value - a.value);
   }, [catorcenaFilteredInventario]);
+
+  // Markers visibles en el mapa (con coords y respetando la selección). Memoizado para
+  // no reconstruir el arreglo salvo que cambie el inventario filtrado o la selección.
+  const visibleMarkers = useMemo(() => {
+    return catorcenaFilteredInventario.filter(i =>
+      i.latitud && i.longitud && (selectedItems.size === 0 || selectedItems.has(i.rsv_ids))
+    );
+  }, [catorcenaFilteredInventario, selectedItems]);
+
+  // En el mapa EMBEBIDO: si hay demasiados pines (>2000) y no hay selección, no pintarlos
+  // todos (traba el navegador). Se piden que seleccione circuitos primero. NO aplica a
+  // "Expandir Mapa" (visor aparte), que sí muestra todo sin selección.
+  const MAX_PINES_INLINE = 2000;
+  const demasiadosPines = selectedItems.size === 0 && visibleMarkers.length > MAX_PINES_INLINE;
 
   // Map center (responds to catorcena filter)
   const mapCenter = useMemo(() => {
@@ -657,28 +736,38 @@ export function CompartirPropuestaPage() {
   // Center map on group items
   const handleShowGroupOnMap = (items: InventarioReservado[]) => {
     const validItems = items.filter(i => i.latitud && i.longitud);
-    if (validItems.length === 0 || !mapRef.current) return;
+    if (validItems.length === 0) return;
 
-    // Create bounds
+    // Seleccionar y asegurar que el mapa esté visible (si estaba oculto se monta ahora).
+    setSelectedItems(new Set(items.map(itemKey)));
+    setShowMap(true);
+
+    // Si el mapa ya está montado, encuadrar al grupo. Si se acaba de revelar, su onLoad
+    // hará el fitBounds inicial.
+    if (!mapRef.current) return;
     const bounds = new google.maps.LatLngBounds();
     validItems.forEach(item => {
       bounds.extend({ lat: item.latitud, lng: item.longitud });
     });
     mapRef.current.fitBounds(bounds, 50);
-
-    // Also select these items
-    setSelectedItems(new Set(items.map(itemKey)));
   };
 
-  // Toggle item selection
-  const toggleItemSelection = (key: string) => {
+  // Toggle item selection — useCallback estable (usa updater funcional, sin deps) para
+  // que MapMarker/DetailRow memoizados no se invaliden en cada render.
+  const toggleItemSelection = useCallback((key: string) => {
     setSelectedItems(prev => {
       const next = new Set(prev);
       if (next.has(key)) next.delete(key);
       else next.add(key);
       return next;
     });
-  };
+  }, []);
+
+  // Click en marker del mapa: selecciona y abre InfoWindow. Referencia estable.
+  const handleMarkerClick = useCallback((item: InventarioReservado) => {
+    setSelectedMarker(item);
+    toggleItemSelection(item.rsv_ids);
+  }, [toggleItemSelection]);
 
   // Toggle select all in a group
   const toggleGroupSelection = (items: InventarioReservado[]) => {
@@ -1585,29 +1674,16 @@ export function CompartirPropuestaPage() {
                                       </tr>
                                     </thead>
                                     <tbody className={`divide-y ${isDark ? 'divide-purple-500/10' : 'divide-gray-100'}`}>
-                                      {artGroup.items.map((item, idx) => {
-                                        const inv = inversionBruta(item);
+                                      {artGroup.items.map((item) => {
                                         const key = itemKey(item);
-                                        const isSelected = selectedItems.has(key);
                                         return (
-                                          <tr key={idx} onClick={() => toggleItemSelection(key)} className={`cursor-pointer transition-colors ${isSelected ? 'bg-purple-500/10' : 'hover:bg-purple-500/5'}`}>
-                                            <td className="px-3 py-2" onClick={(e) => e.stopPropagation()}>
-                                              <input type="checkbox" checked={isSelected} onChange={() => toggleItemSelection(key)} className="checkbox-purple" />
-                                            </td>
-                                            <td className={`px-3 py-2 font-mono text-xs ${isDark ? 'text-blue-300' : 'text-blue-600'}`}>{item.codigo_unico}</td>
-                                            <td className={`px-3 py-2 text-xs ${isDark ? 'text-zinc-300' : 'text-gray-700'}`}>{item.plaza || '-'}</td>
-                                            <td className={`px-3 py-2 text-xs ${isDark ? 'text-zinc-400' : 'text-gray-600'}`}>
-                                              {item.mueble || '-'}
-                                              {item.tipo_de_mueble && item.tipo_de_mueble?.toUpperCase() !== item.mueble?.toUpperCase() && (
-                                                <span className={`block text-[10px] ${isDark ? 'text-zinc-500' : 'text-gray-500'}`}>{item.tipo_de_mueble}</span>
-                                              )}
-                                            </td>
-                                            <td className={`px-3 py-2 text-center font-semibold text-xs ${isDark ? 'text-white' : 'text-gray-900'}`}>{item.caras_totales}</td>
-                                            <td className={`px-3 py-2 text-right text-xs font-mono ${isDark ? 'text-zinc-500' : 'text-gray-500'}`}>{item.latitud?.toFixed(6) || '-'}</td>
-                                            <td className={`px-3 py-2 text-right text-xs font-mono ${isDark ? 'text-zinc-500' : 'text-gray-500'}`}>{item.longitud?.toFixed(6) || '-'}</td>
-                                            <td className={`px-3 py-2 text-right text-xs ${isDark ? 'text-amber-300' : 'text-amber-700'}`}>{formatCurrency(tarifaBruta(item))}</td>
-                                            <td className={`px-3 py-2 text-right font-medium text-xs ${isDark ? 'text-emerald-300' : 'text-emerald-700'}`}>{formatCurrency(inv)}</td>
-                                          </tr>
+                                          <DetailRow
+                                            key={key}
+                                            item={item}
+                                            isSelected={selectedItems.has(key)}
+                                            isDark={isDark}
+                                            onToggle={toggleItemSelection}
+                                          />
                                         );
                                       })}
                                     </tbody>
@@ -1633,6 +1709,7 @@ export function CompartirPropuestaPage() {
             <h3 className={`text-lg font-semibold ${isDark ? 'text-white' : 'text-gray-900'}`}>Mapa de Reservas</h3>
 
             <div className="flex items-center gap-2 ml-auto">
+              {showMap && (<>
               <select
                 value={searchRange}
                 onChange={(e) => setSearchRange(parseInt(e.target.value))}
@@ -1669,10 +1746,42 @@ export function CompartirPropuestaPage() {
                   Limpiar POIs
                 </button>
               )}
+              </>)}
+              {/* Toggle: el mapa está oculto por default (pinta miles de markers y traba
+                  los checkboxes en propuestas grandes). Mismo patrón que "Mostrar Pines"
+                  del Dashboard. */}
+              <button
+                onClick={() => setShowMap(v => !v)}
+                className={`flex items-center gap-2 px-4 py-2 rounded-lg text-xs font-medium transition-all border ${showMap
+                  ? (isDark ? 'bg-purple-500/20 text-purple-300 border-purple-500/30' : 'bg-purple-50 text-purple-600 border-purple-200')
+                  : (isDark ? 'bg-zinc-800/80 text-zinc-400 border-zinc-700 hover:bg-zinc-700' : 'bg-gray-100 text-gray-500 border-gray-200 hover:bg-gray-200')
+                }`}
+              >
+                {showMap ? <Eye className="h-4 w-4" /> : <EyeOff className="h-4 w-4" />}
+                {showMap ? 'Ocultar mapa' : 'Mostrar mapa'}
+              </button>
             </div>
           </div>
 
-          <div className="h-[500px]">
+          {!showMap && (
+            <button
+              onClick={() => setShowMap(true)}
+              className={`w-full h-32 flex flex-col items-center justify-center gap-2 transition-colors ${isDark ? 'text-zinc-500 hover:bg-zinc-800/40' : 'text-gray-400 hover:bg-gray-50'}`}
+            >
+              <MapIcon className="h-8 w-8 opacity-60" />
+              <span className="text-sm font-medium">Mostrar mapa ({visibleMarkers.length} pines)</span>
+              <span className="text-xs opacity-70">Oculto para mantener la lista fluida</span>
+            </button>
+          )}
+
+          {showMap && (
+          <div className="h-[500px] relative">
+            {demasiadosPines && (
+              <div className="absolute top-3 left-1/2 -translate-x-1/2 z-10 max-w-md px-4 py-2.5 rounded-xl shadow-lg border bg-amber-500/95 text-amber-950 border-amber-600 text-xs font-medium text-center pointer-events-none">
+                {visibleMarkers.length.toLocaleString()} pines: Seleccionar Catorcenas para mostrarlos aquí.
+                O usa <strong>Expandir Mapa</strong> para ver todos.
+              </div>
+            )}
             {isLoaded ? (
               <GoogleMap
                 mapContainerStyle={{ width: '100%', height: '100%' }}
@@ -1695,32 +1804,14 @@ export function CompartirPropuestaPage() {
                   }
                 }}
               >
-                {catorcenaFilteredInventario
-                  .filter((item) => selectedItems.size === 0 || selectedItems.has(itemKey(item)))
-                  .map((item) => {
-                    const key = itemKey(item);
-                    const isSelected = selectedItems.has(key);
-                    return item.latitud && item.longitud && (
-                    <Marker
-                      key={key}
-                      position={{ lat: item.latitud, lng: item.longitud }}
-                      onClick={() => {
-                        setSelectedMarker(item);
-                        toggleItemSelection(key);
-                      }}
-                      icon={{
-                        path: google.maps.SymbolPath.CIRCLE,
-                        scale: isSelected ? 10 : 7,
-                        fillColor: isSelected
-                          ? '#22c55e' // Verde si está seleccionado
-                          : String(item.tipo_de_cara).startsWith('Flujo') ? '#ef4444' : String(item.tipo_de_cara).startsWith('Contraflujo') ? '#3b82f6' : '#a855f7',
-                        fillOpacity: isSelected ? 1 : 0.9,
-                        strokeColor: '#fff',
-                        strokeWeight: isSelected ? 3 : 1.5,
-                      }}
-                    />
-                  );
-                })}
+                {!demasiadosPines && visibleMarkers.map((item) => (
+                  <MapMarker
+                    key={itemKey(item)}
+                    item={item}
+                    isSelected={selectedItems.has(itemKey(item))}
+                    onSelect={handleMarkerClick}
+                  />
+                ))}
                 {selectedMarker && (
                   <InfoWindow
                     position={{ lat: selectedMarker.latitud, lng: selectedMarker.longitud }}
@@ -1763,6 +1854,7 @@ export function CompartirPropuestaPage() {
               </div>
             )}
           </div>
+          )}
         </div>
       </main>
     </div>
