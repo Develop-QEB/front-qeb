@@ -91,6 +91,9 @@ interface CaraItem {
   autorizacion_dcm?: string;
   _originalDg?: string;
   _originalDcm?: string;
+  // Costo/caras de BD al cargar (regla "Direcciones Aprobadas" en la pre-evaluación).
+  _originalCosto?: number;
+  _originalCaras?: number;
   // RT/BF grouping: pair an RT (renta) cara with a BF (bonificación) cara
   grupo_rt_bf?: number | null;
   grupo_masivo_id?: number | null;
@@ -124,6 +127,30 @@ const isEspecialArticle = (itemCode: string, itemName?: string): boolean => {
 const isNoInventoryArticle = (itemCode: string, itemName?: string): boolean => {
   return isImpresionArticle(itemCode, itemName) || isEspecialArticle(itemCode, itemName);
 };
+
+// Regla "Direcciones Aprobadas" (espejo del backend conservarAprobacionSiIncrementa).
+// Si la cara YA estaba aprobada por DG y DCM en BD y la edición NO baja costo/caras
+// (tolerando baja de costo <= 3% de la tarifa pública), la pre-evaluación conserva
+// "aprobado" en vez de mostrar "Pend. DG/DCM". Solo al decrementar (bajan caras, o
+// baja el costo > 3% de la tarifa) se muestra el estado recalculado.
+function conservarAprobacionFront(
+  estado: { autorizacion_dg?: string; autorizacion_dcm?: string },
+  prev: { dg?: string; dcm?: string; costo?: number; caras?: number },
+  nuevo: { costo: number; caras: number; tarifa_publica?: number }
+): { autorizacion_dg?: string; autorizacion_dcm?: string } {
+  const yaAprobada = prev.dg === 'aprobado' && prev.dcm === 'aprobado';
+  if (!yaAprobada) return estado;
+  // Sin valores originales no conservar a ciegas: mostrar la evaluación real.
+  if (prev.costo == null || prev.caras == null) return estado;
+  const umbral = 0.03 * Number(nuevo.tarifa_publica ?? 0);
+  const bajaCosto = Number(prev.costo) - Number(nuevo.costo);
+  const noBajaCosto = bajaCosto <= umbral + 0.005; // epsilon de centavos
+  const noBajaCaras = Number(nuevo.caras) >= Number(prev.caras);
+  if (noBajaCosto && noBajaCaras) {
+    return { autorizacion_dg: 'aprobado', autorizacion_dcm: 'aprobado' };
+  }
+  return estado;
+}
 
 // "Gestion QTO" — artículos para Querétaro/Celaya (sufijo `-QR`, ej. `RT-P1-COB-QR`).
 // Comportamiento: la reserva de inventario es OPCIONAL — pase a ventas funciona
@@ -1436,6 +1463,12 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
           autorizacion_dcm: cara.autorizacion_dcm || 'aprobado',
           _originalDg: cara.autorizacion_dg || 'aprobado',
           _originalDcm: cara.autorizacion_dcm || 'aprobado',
+          // Costo/caras de BD (para la regla "Direcciones Aprobadas"). caras = total
+          // (flujo+contraflujo) en RT, o bonificacion en BF, igual que compara el edit.
+          _originalCosto: Number(cara.costo) || 0,
+          _originalCaras: esBf
+            ? (Number(cara.bonificacion) || 0)
+            : (Number(cara.caras_flujo) || 0) + (Number(cara.caras_contraflujo) || 0),
           grupo_rt_bf: grupoRtBf,
           grupo_masivo_id: (cara as any).grupo_masivo_id != null ? Number((cara as any).grupo_masivo_id) : null,
           esBf,
@@ -2787,6 +2820,18 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
             });
             autorizacion_dg = resultado.autorizacion_dg || 'aprobado';
             autorizacion_dcm = resultado.autorizacion_dcm || 'aprobado';
+
+            // "Direcciones Aprobadas": si esta cara YA estaba aprobada en BD y la
+            // edición no baja costo/caras (tolerancia 3% tarifa), conservar aprobado
+            // —igual que hará el backend al guardar—. Evita el badge engañoso al
+            // solo incrementar caras/tarifa.
+            const conservado = conservarAprobacionFront(
+              { autorizacion_dg, autorizacion_dcm },
+              { dg: caraToEdit._originalDg, dcm: caraToEdit._originalDcm, costo: caraToEdit._originalCosto, caras: caraToEdit._originalCaras },
+              { costo: costoCalculado, caras: newCara.caras, tarifa_publica: newCara.tarifa_publica }
+            );
+            autorizacion_dg = conservado.autorizacion_dg || 'aprobado';
+            autorizacion_dcm = conservado.autorizacion_dcm || 'aprobado';
           } catch (error) {
             console.error('Error evaluando autorización:', error);
           }

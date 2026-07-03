@@ -347,6 +347,11 @@ interface CaraEntry {
   // Valores originales del backend (antes de contaminación)
   _originalDg?: 'aprobado' | 'pendiente' | 'rechazado';
   _originalDcm?: 'aprobado' | 'pendiente' | 'rechazado';
+  // Costo/caras tal como estaban en BD al cargar la solicitud. Sirven para
+  // replicar en el front la regla "Direcciones Aprobadas": si la cara ya estaba
+  // aprobada y no bajan costo/caras, la pre-evaluación conserva "aprobado".
+  _originalCosto?: number;
+  _originalCaras?: number;
   // RT/BF grouping
   grupo_rt_bf?: number;
   esBf?: boolean; // true if this is the BF row of a RT/BF pair
@@ -358,6 +363,31 @@ interface Props {
   isOpen: boolean;
   onClose: () => void;
   editSolicitudId?: number;
+}
+
+// Regla "Direcciones Aprobadas" (espejo del backend conservarAprobacionSiIncrementa).
+// Si la cara YA estaba aprobada por DG y DCM en BD y la edición NO baja costo/caras
+// (tolerando baja de costo <= 3% de la tarifa pública), la pre-evaluación conserva
+// "aprobado" en vez de mostrar "Pend. DG/DCM". Solo cuando decrementa (bajan caras,
+// o baja el costo > 3% de la tarifa) se muestra el estado recalculado.
+function conservarAprobacionFront(
+  estado: { autorizacion_dg?: 'aprobado' | 'pendiente' | 'rechazado'; autorizacion_dcm?: 'aprobado' | 'pendiente' | 'rechazado' },
+  prev: { dg?: 'aprobado' | 'pendiente' | 'rechazado'; dcm?: 'aprobado' | 'pendiente' | 'rechazado'; costo?: number; caras?: number },
+  nuevo: { costo: number; caras: number; tarifa_publica?: number }
+): { autorizacion_dg?: 'aprobado' | 'pendiente' | 'rechazado'; autorizacion_dcm?: 'aprobado' | 'pendiente' | 'rechazado' } {
+  const yaAprobada = prev.dg === 'aprobado' && prev.dcm === 'aprobado';
+  if (!yaAprobada) return estado;
+  // Si faltan los valores originales de BD, NO conservar a ciegas: mostrar la
+  // evaluación real (evita falsos "aprobado" cuando en verdad decrementó).
+  if (prev.costo == null || prev.caras == null) return estado;
+  const umbral = 0.03 * Number(nuevo.tarifa_publica ?? 0);
+  const bajaCosto = Number(prev.costo) - Number(nuevo.costo);
+  const noBajaCosto = bajaCosto <= umbral + 0.005; // epsilon de centavos
+  const noBajaCaras = Number(nuevo.caras) >= Number(prev.caras);
+  if (noBajaCosto && noBajaCaras) {
+    return { autorizacion_dg: 'aprobado', autorizacion_dcm: 'aprobado' };
+  }
+  return estado;
 }
 
 // Searchable Select Component - Shows ALL options
@@ -1432,6 +1462,20 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
         });
         autorizacion_dg = resultado.autorizacion_dg;
         autorizacion_dcm = resultado.autorizacion_dcm;
+
+        // "Direcciones Aprobadas": si esta cara YA estaba aprobada en BD y la
+        // edición no baja costo/caras (tolerancia 3% tarifa), conservar aprobado
+        // en la pre-evaluación —igual que hará el backend al guardar—. Evita el
+        // badge engañoso "Pend. DG" al solo incrementar caras/tarifa.
+        if (isEditMode && editingOriginal) {
+          const conservado = conservarAprobacionFront(
+            { autorizacion_dg, autorizacion_dcm },
+            { dg: editingOriginal._originalDg, dcm: editingOriginal._originalDcm, costo: editingOriginal._originalCosto, caras: editingOriginal._originalCaras },
+            { costo: precioTotal, caras: newCara.renta, tarifa_publica: newCara.tarifaPublica }
+          );
+          autorizacion_dg = conservado.autorizacion_dg;
+          autorizacion_dcm = conservado.autorizacion_dcm;
+        }
       } catch (error: any) {
         console.error('[handleAddCara] Error evaluando autorización:', error?.response?.data || error?.message || error);
       }
@@ -1527,6 +1571,12 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
         // Esto evita que una edición sin guardar bloquee la edición de los demás circuitos.
         _originalDg: editingCaraId ? editingOriginal?._originalDg : undefined,
         _originalDcm: editingCaraId ? editingOriginal?._originalDcm : undefined,
+        // Preservar costo/caras de BD a través de ediciones en sesión, igual que
+        // _originalDg/_originalDcm. Sin esto, tras la primera edición se perderían
+        // (undefined→0) y la regla "Direcciones Aprobadas" conservaría aprobado
+        // siempre, incluso al DECREMENTAR.
+        _originalCosto: editingCaraId ? editingOriginal?._originalCosto : undefined,
+        _originalCaras: editingCaraId ? editingOriginal?._originalCaras : undefined,
         grupo_rt_bf: grupoRtBf,
         grupo_masivo_id: grupoMasivoId,
       });
@@ -1557,6 +1607,8 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
           // _original* = estado de BD (BF hereda el del RT existente; nueva = undefined)
           _originalDg: editingCaraId ? editingOriginal?._originalDg : undefined,
           _originalDcm: editingCaraId ? editingOriginal?._originalDcm : undefined,
+          _originalCosto: editingCaraId ? editingOriginal?._originalCosto : undefined,
+          _originalCaras: editingCaraId ? editingOriginal?._originalCaras : undefined,
           grupo_rt_bf: grupoRtBf,
           grupo_masivo_id: grupoMasivoId,
           esBf: true,
@@ -2351,6 +2403,12 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
             autorizacion_dcm: cara.autorizacion_dcm as CaraEntry['autorizacion_dcm'],
             _originalDg: cara.autorizacion_dg as CaraEntry['autorizacion_dg'],
             _originalDcm: cara.autorizacion_dcm as CaraEntry['autorizacion_dcm'],
+            // Costo/caras de BD (para la regla "Direcciones Aprobadas" en el front).
+            // caras = renta (RT) o bonificacion (BF), igual que compara el backend.
+            _originalCosto: Number(cara.costo) || 0,
+            _originalCaras: ((cara.articulo || '').toUpperCase().startsWith('BF') || (cara.articulo || '').toUpperCase().startsWith('CF'))
+              ? (Number(cara.bonificacion) || 0)
+              : (Number(cara.caras) || 0),
           };
         });
         // Recalculate tarifaEfectiva using grupo_rt_bf total caras
