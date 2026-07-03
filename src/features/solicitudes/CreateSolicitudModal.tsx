@@ -603,6 +603,78 @@ function MultiSelectTags({
   );
 }
 
+// Dropdown multi-seleccion (mismo formato que propuestas/campañas). Se usa para
+// ciudades: en vez de amontonar chips, muestra "N seleccionados" y un panel con checkboxes.
+function MultiSelectDropdown({
+  options,
+  selected,
+  onChange,
+  placeholder = 'Seleccionar...',
+}: {
+  options: string[];
+  selected: string[];
+  onChange: (selected: string[]) => void;
+  placeholder?: string;
+}) {
+  const isDark = useThemeStore((s) => s.theme) === 'dark';
+  const [isOpen, setIsOpen] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (ref.current && !ref.current.contains(event.target as Node)) {
+        setIsOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
+
+  const toggleOption = (option: string) => {
+    if (selected.includes(option)) {
+      onChange(selected.filter(s => s !== option));
+    } else {
+      onChange([...selected, option]);
+    }
+  };
+
+  return (
+    <div ref={ref} className="relative">
+      <button
+        type="button"
+        onClick={() => setIsOpen(!isOpen)}
+        className={`w-full px-3 py-2 ${isDark ? 'bg-zinc-800' : 'bg-gray-50'} border ${isDark ? 'border-zinc-700' : 'border-gray-200'} rounded-lg text-sm ${isDark ? 'text-white' : 'text-gray-900'} text-left focus:outline-none focus:ring-1 focus:ring-purple-500/50 flex items-center justify-between`}
+      >
+        <span className={selected.length === 0 ? (isDark ? 'text-zinc-500' : 'text-gray-400') : ''}>
+          {selected.length === 0 ? placeholder : selected.length === 1 ? selected[0] : `${selected.length} seleccionados`}
+        </span>
+        <ChevronDown className={`h-4 w-4 ${isDark ? 'text-zinc-400' : 'text-gray-500'} transition-transform ${isOpen ? 'rotate-180' : ''}`} />
+      </button>
+      {isOpen && (
+        <div className={`absolute z-50 mt-1 w-full ${isDark ? 'bg-zinc-800' : 'bg-white'} border ${isDark ? 'border-zinc-700' : 'border-gray-200'} rounded-lg shadow-xl max-h-48 overflow-y-auto`}>
+          {options.map(option => (
+            <label
+              key={option}
+              className={`flex items-center gap-2 px-3 py-2 ${isDark ? 'hover:bg-zinc-700' : 'hover:bg-gray-100'} cursor-pointer text-sm ${isDark ? 'text-white' : 'text-gray-900'}`}
+            >
+              <input
+                type="checkbox"
+                checked={selected.includes(option)}
+                onChange={() => toggleOption(option)}
+                className="checkbox-purple"
+              />
+              {option}
+            </label>
+          ))}
+          {options.length === 0 && (
+            <div className={`px-3 py-2 ${isDark ? 'text-zinc-500' : 'text-gray-400'} text-sm`}>Sin opciones</div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ============================================================
 // CreateSolicitudModal — también funciona como EDITAR SOLICITUD
 // Si recibe editSolicitudId, entra en modo edición (isEditMode)
@@ -3127,14 +3199,14 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
                   {/* Ciudad (opcional) */}
                   <div>
                     <label className={`text-xs ${isDark ? 'text-zinc-500' : 'text-gray-500'}`}>Ciudad (opcional)</label>
-                    <MultiSelectTags
-                      label="ciudad"
-                      options={filteredCiudades.map(c => ({ ciudad: c }))}
-                      selected={newCara.ciudades.map(c => ({ ciudad: c }))}
-                      onChange={(items) => setNewCara({ ...newCara, ciudades: items.map(i => i.ciudad) })}
-                      displayKey="ciudad"
-                      valueKey="ciudad"
-                      searchKey="ciudad"
+                    <MultiSelectDropdown
+                      // Union: siempre incluir las ciudades ya seleccionadas aunque no esten
+                      // en filteredCiudades (p.ej. caras editadas con estado/plaza vacio),
+                      // para que se vean y se puedan quitar en vez de quedar ocultas.
+                      options={Array.from(new Set([...filteredCiudades, ...newCara.ciudades])).sort((a, b) => a.localeCompare(b))}
+                      selected={newCara.ciudades}
+                      onChange={(selected) => setNewCara({ ...newCara, ciudades: selected })}
+                      placeholder="Seleccionar ciudades..."
                     />
                   </div>
 
