@@ -1509,7 +1509,6 @@ export function ClientesPage() {
                   T2_U_Marca: (form.elements.namedItem('marca') as HTMLInputElement).value || null,
                   T2_U_Producto: (form.elements.namedItem('producto') as HTMLInputElement).value || null,
                   T2_U_Categoria: (form.elements.namedItem('categoria') as HTMLInputElement).value || null,
-                  T1_U_UnidadNegocio: (form.elements.namedItem('unidad_negocio') as HTMLInputElement).value || null,
                   T0_U_Agencia: (form.elements.namedItem('agencia') as HTMLInputElement).value || null,
                   T0_U_Asesor: (form.elements.namedItem('asesor') as HTMLInputElement).value || null,
                   sap_database: null,
