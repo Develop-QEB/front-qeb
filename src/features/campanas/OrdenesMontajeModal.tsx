@@ -621,11 +621,18 @@ export function OrdenesMontajeModal({ isOpen, onClose, canExport = true }: Orden
     queryFn: () => solicitudesService.getCatorcenas(),
   });
 
-  // Set default catorcena filter to current catorcena on open
+  // Set default catorcena filter to current catorcena on open.
+  // Comparamos por día calendario (YYYY-MM-DD) en vez de objetos Date: `new Date("2026-07-06")`
+  // se parsea como medianoche UTC, que en México (UTC-6) cae en el día anterior y rompía el
+  // match en los bordes de la catorcena. El slice a 10 chars sirve para fechas puras e ISO.
   useEffect(() => {
     if (isOpen && catorcenasData?.data && selectedCatorcenas.length === 0) {
       const now = new Date();
-      const catActual = catorcenasData.data.find((c: any) => new Date(c.fecha_inicio) <= now && new Date(c.fecha_fin) >= now);
+      const todayStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
+      const dayOf = (s: string) => String(s).slice(0, 10);
+      const catActual = catorcenasData.data.find((c: any) =>
+        c.fecha_inicio && c.fecha_fin && dayOf(c.fecha_inicio) <= todayStr && dayOf(c.fecha_fin) >= todayStr
+      );
       if (catActual) {
         setSelectedCatorcenas([`${catActual.numero_catorcena}-${catActual.a_o}`]);
       }
