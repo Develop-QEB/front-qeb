@@ -21890,6 +21890,17 @@ Por favor registra la cantidad de impresiones recibidas.`,
             ...(guiaPdfFinal ? { guia_pdf: guiaPdfFinal } : {})
           });
 
+          // 1. Marcar la Recepción original como Atendida — ya recibio parcial,
+          // la nueva Recepción Faltantes toma el relevo por los faltantes.
+          // Sin esto ambas quedaban activas y confundian el flujo (bug reportado).
+          if (selectedTask.id) {
+            await updateTareaMutation.mutateAsync({
+              tareaId: parseInt(selectedTask.id),
+              data: { estatus: 'Atendido' }
+            });
+          }
+
+          // 2. Crear la Recepción Faltantes
           await createTareaMutation.mutateAsync({
             titulo: `Recepción Faltantes - ${identificadorBase}`,
             descripcion: `Tarea de recepción de impresiones faltantes.
