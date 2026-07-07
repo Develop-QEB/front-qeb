@@ -86,7 +86,7 @@ import { useThemeStore } from '../../store/themeStore';
 import { getPermissions } from '../../lib/permissions';
 import { useSocketCampana, useSocketEquipos } from '../../hooks/useSocket';
 import { LinkPreview } from '../../components/ui/LinkPreview';
-import { exportVersionarioArtes } from '../../utils/exportVersionarioArtes';
+import { exportVersionarioArtesMulti } from '../../utils/exportVersionarioArtes';
 import * as XLSX from 'xlsx';
 import { CargaCsvModal } from './CargaCsvModal';
 
@@ -17419,7 +17419,14 @@ export function TareaSeguimientoPage() {
           }
         } catch {/* ignorar reservas sin tradicionales */}
       }));
-      await exportVersionarioArtes({ campana: campana as any, items, digitalFilesByReserva, notesByUrl });
+      // Usar el mismo exporter que descarga desde el screen Campañas > Versionario
+      // para que el formato del Excel sea el mismo (agrupa por circuito, cabecera,
+      // miniaturas). exportVersionarioArtes (single, legado) tenia bug: nunca setea
+      // a.href al blob y por eso el archivo no bajaba.
+      await exportVersionarioArtesMulti({
+        campanas: [{ campana: campana as any, items, digitalFilesByReserva, notesByUrl }],
+        fileNameSuffix: campana?.nombre ? `_${(campana.nombre as string).replace(/[^\w\-]+/g, '_')}` : `_${campanaId}`,
+      });
     } catch (e) {
       console.error('Error exportando versionario artes:', e);
       alert('Error al generar el Excel de Versionario Artes. Revisa la consola.');
