@@ -27,6 +27,9 @@ import { SaveChangesConfirmModal, type ModifiedCircuito } from '../../components
 import { DeleteCircuitoConfirmModal } from '../../components/DeleteCircuitoConfirmModal';
 import { CircuitCheckbox } from '../../components/ui/CircuitCheckbox';
 import { BULK_DELETE_ENABLED } from '../../config/featureFlags';
+import { NotasDireccionBitacora } from '../notificaciones/NotasDireccionBitacora';
+import { NuevaNotaDireccionModal } from '../notificaciones/NuevaNotaDireccionModal';
+import { notasDireccionService } from '../../services/notasDireccion.service';
 
 // GOOGLE_MAPS_API_KEY / LIBRARIES centralizados en src/config/googleMaps.ts.
 
@@ -1034,6 +1037,11 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
   const [inventarioDisponible, setInventarioDisponible] = useState<InventarioDisponible[]>([]);
   const [isSearching, setIsSearching] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
+
+  // Mini-modal Nueva Nota Dirección (obligatoria al guardar cambios que
+  // disparan autorización DG/DCM). Feedback Jos 2026-07-08.
+  const [showNotaDireccionModal, setShowNotaDireccionModal] = useState(false);
+  const [pendingAuthTipo, setPendingAuthTipo] = useState<'dg' | 'dcm' | 'ambas' | null>(null);
 
   // Real-time: cuando OTRO usuario reserva un espacio cuyo período se solapa
   // con la cara que estoy buscando, quitarlo de mi listado de disponibles en
@@ -3095,7 +3103,7 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
     }
   };
 
-  const handleBulkSaveChanges = async () => {
+  const handleBulkSaveChanges = async (skipNotaGate = false) => {
     const hasPropuestaChanges = hasChanges;
     const hasCaraChanges = modifiedCaras.size > 0;
 
@@ -3114,6 +3122,18 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
     if (rechazadasSinResolver.length > 0) {
       showToast(`Tienes ${rechazadasSinResolver.length} circuito(s) rechazado(s) sin resolver. Edítalos o usa "Reenviar a autorización" antes de guardar.`, 'error');
       return;
+    }
+
+    // Gate obligatorio: si la edición dispara autorización DG/DCM nueva, pedir
+    // Nota de Dirección antes de continuar. Feedback Jos 2026-07-08.
+    if (!skipNotaGate && propuesta.solicitud_id) {
+      const willTriggerDg = caras.some(c => c.autorizacion_dg === 'pendiente');
+      const willTriggerDcm = caras.some(c => c.autorizacion_dcm === 'pendiente');
+      if (willTriggerDg || willTriggerDcm) {
+        setPendingAuthTipo(willTriggerDg && willTriggerDcm ? 'ambas' : willTriggerDg ? 'dg' : 'dcm');
+        setShowNotaDireccionModal(true);
+        return;
+      }
     }
 
     setIsSaving(true);
@@ -7778,14 +7798,29 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
                   {/* Notes and Description */}
                   <div className="grid grid-cols-2 gap-4">
                     <div className="space-y-1">
-                      <label className={`text-xs ${isDark ? 'text-zinc-500' : 'text-gray-400'}`}>Notas Dirección</label>
-                      <textarea
-                        value={notas}
-                        onChange={(e) => canEditResumen && setNotas(e.target.value)}
-                        disabled={!canEditResumen}
-                        className={`w-full px-3 py-2 ${isDark ? 'bg-zinc-800' : 'bg-gray-50'} border ${isDark ? 'border-zinc-700' : 'border-gray-200'} rounded-lg text-sm ${isDark ? 'text-white' : 'text-gray-900'} placeholder:${isDark ? 'text-zinc-500' : 'text-gray-400'} focus:outline-none focus:ring-1 focus:ring-purple-500/50 resize-none h-20 ${!canEditResumen ? 'opacity-60 cursor-not-allowed' : ''}`}
-                        placeholder="Notas adicionales..."
-                      />
+                      {propuesta.solicitud_id ? (
+                        // Modo edición de propuesta: bitácora readonly. La nota
+                        // nueva se pide en el mini-modal al guardar cambios que
+                        // disparan autorización.
+                        <div className={`px-3 py-2 rounded-lg border ${isDark ? 'bg-zinc-800/60 border-zinc-700' : 'bg-gray-50 border-gray-200'} h-20 overflow-y-auto`}>
+                          <NotasDireccionBitacora
+                            idSolicitud={propuesta.solicitud_id}
+                            isDark={isDark}
+                            variant="inline"
+                          />
+                        </div>
+                      ) : (
+                        <>
+                          <label className={`text-xs ${isDark ? 'text-zinc-500' : 'text-gray-400'}`}>Notas Dirección</label>
+                          <textarea
+                            value={notas}
+                            onChange={(e) => canEditResumen && setNotas(e.target.value)}
+                            disabled={!canEditResumen}
+                            className={`w-full px-3 py-2 ${isDark ? 'bg-zinc-800' : 'bg-gray-50'} border ${isDark ? 'border-zinc-700' : 'border-gray-200'} rounded-lg text-sm ${isDark ? 'text-white' : 'text-gray-900'} placeholder:${isDark ? 'text-zinc-500' : 'text-gray-400'} focus:outline-none focus:ring-1 focus:ring-purple-500/50 resize-none h-20 ${!canEditResumen ? 'opacity-60 cursor-not-allowed' : ''}`}
+                            placeholder="Notas adicionales..."
+                          />
+                        </>
+                      )}
                     </div>
                     <div className="space-y-1">
                       <label className={`text-xs ${isDark ? 'text-zinc-500' : 'text-gray-400'}`}>Descripción Trafico</label>
@@ -9885,6 +9920,26 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
         contextLabel="propuesta"
         hasGeneralChanges={hasChanges}
         modifiedCircuitos={modifiedCircuitosForConfirm}
+      />
+
+      {/* Mini-modal Nueva Nota Dirección — obligatorio cuando la edición dispara
+          autorización DG/DCM. Al confirmar guarda la nota y continúa el save. */}
+      <NuevaNotaDireccionModal
+        isOpen={showNotaDireccionModal}
+        contexto="propuesta"
+        referenciaLabel={propuesta.id ? `#${propuesta.id}` : undefined}
+        tipoAutorizacion={pendingAuthTipo}
+        onCancel={() => {
+          setShowNotaDireccionModal(false);
+          setPendingAuthTipo(null);
+        }}
+        onConfirm={async (texto) => {
+          if (!propuesta.solicitud_id) return;
+          await notasDireccionService.create(propuesta.solicitud_id, texto);
+          setShowNotaDireccionModal(false);
+          setPendingAuthTipo(null);
+          await handleBulkSaveChanges(true);
+        }}
       />
       {/* Delete Circuito Confirm Modal — confirmación al usar bote de basura */}
       <DeleteCircuitoConfirmModal
