@@ -16000,9 +16000,23 @@ export function TareaSeguimientoPage() {
       const itemId = String(item.id);
       const compositeId = item.grupo ? `${item.id}_${item.grupo}` : itemId;
       const rsvId = item.rsvId || item.rsv_id || item.rsv_ids || '';
-      const tareaInfo = reservaToTareaMap.get(compositeId)
+      // rsv_id puede venir concatenado (ej "3456,3457" cuando el item agrupa
+      // varias reservas). El loop huerfano de Recepciones indexa ids
+      // individuales — sin splitear aca el matching NUNCA hallaba la
+      // Recepción y el tab "Pend. Recepción" se veia vacio aunque el badge
+      // sumaba num_impresiones. Bug reportado por Jos 2026-07-09.
+      const rsvIndividuales = rsvId
+        ? rsvId.split(',').map(s => s.trim()).filter(Boolean)
+        : [];
+      let tareaInfo = reservaToTareaMap.get(compositeId)
         || reservaToTareaMap.get(itemId)
         || (rsvId ? reservaToTareaMap.get(rsvId) : undefined);
+      if (!tareaInfo) {
+        for (const rsv of rsvIndividuales) {
+          const hit = reservaToTareaMap.get(rsv);
+          if (hit) { tareaInfo = hit; break; }
+        }
+      }
 
       if (tareaInfo) {
         const row = transformInventarioToRow(item, 'aprobado');
@@ -19566,7 +19580,15 @@ export function TareaSeguimientoPage() {
                             {permissions.canOpenTasks && (
                               <button
                                 onClick={() => {
-                                  const tarea = tareasAPI.find(t => t.id === grupo.tarea_id);
+                                  // En sub-tab Recibido, grupo.tarea_id apunta a la Impresión
+                                  // padre pero la foto comprobatoria + observaciones estan en
+                                  // la Recepción hija. Preferimos la Recepción para el "Ver
+                                  // detalle" (bug reportado por Jos 2026-07-09).
+                                  const tareaRecepcionId = (grupo.items[0] as any)?.tarea_recepcion_id as number | undefined;
+                                  const tareaRecepcion = tareaRecepcionId
+                                    ? tareasAPI.find(t => t.id === tareaRecepcionId)
+                                    : null;
+                                  const tarea = tareaRecepcion || tareasAPI.find(t => t.id === grupo.tarea_id);
                                   if (tarea) {
                                     const taskRow: TaskRow = {
                                       id: tarea.id.toString(),
@@ -19585,9 +19607,6 @@ export function TareaSeguimientoPage() {
                                       proveedores_id: tarea.proveedores_id || undefined,
                                       num_impresiones: tarea.num_impresiones || undefined,
                                       evidencia: tarea.evidencia || undefined,
-                                      // Sin estos campos la vista "Recepción completada" no
-                                      // mostraba ni las fotos comprobatorias ni las
-                                      // observaciones al dar "Ver detalle" en sub-tab Recibido.
                                       archivo_testigo: tarea.archivo_testigo || undefined,
                                       contenido: tarea.contenido || undefined,
                                     };
