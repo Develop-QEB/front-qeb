@@ -1745,26 +1745,26 @@ function ApprovalModal({
   return (
     <div className="fixed inset-0 z-[60] flex items-center justify-center">
       <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={onClose} />
-      <div className={`relative w-full max-w-4xl max-h-[90vh] mx-4 rounded-2xl ${isDark ? 'bg-zinc-900 border-zinc-700' : 'bg-white border-gray-200'} border shadow-2xl flex flex-col overflow-hidden`}>
+      <div className={`relative w-full max-w-4xl max-h-[95vh] sm:max-h-[90vh] mx-2 sm:mx-4 rounded-2xl ${isDark ? 'bg-zinc-900 border-zinc-700' : 'bg-white border-gray-200'} border shadow-2xl flex flex-col overflow-hidden`}>
         {/* Header */}
-        <div className={`p-6 border-b ${isDark ? 'border-zinc-800' : 'border-gray-200'}`}>
-          <div className="flex items-center justify-between mb-4">
-            <div className="flex items-center gap-3">
-              <div className="p-2 rounded-xl bg-orange-500/20 border border-orange-500/30">
+        <div className={`p-4 sm:p-6 border-b ${isDark ? 'border-zinc-800' : 'border-gray-200'}`}>
+          <div className="flex items-center justify-between mb-4 gap-3">
+            <div className="flex items-center gap-3 min-w-0">
+              <div className="p-2 rounded-xl bg-orange-500/20 border border-orange-500/30 flex-shrink-0">
                 <ShieldCheck className="h-5 w-5 text-orange-400" />
               </div>
-              <div>
-                <h2 className={`text-lg font-semibold ${isDark ? 'text-white' : 'text-gray-900'}`}>{tarea.tipo}</h2>
-                <p className={`text-xs ${isDark ? 'text-zinc-500' : 'text-gray-400'}`}>{tarea.titulo}</p>
+              <div className="min-w-0">
+                <h2 className={`text-base sm:text-lg font-semibold truncate ${isDark ? 'text-white' : 'text-gray-900'}`}>{tarea.tipo}</h2>
+                <p className={`text-xs truncate ${isDark ? 'text-zinc-500' : 'text-gray-400'}`}>{tarea.titulo}</p>
               </div>
             </div>
-            <button onClick={onClose} className={`p-2 rounded-xl ${isDark ? 'hover:bg-zinc-800 text-zinc-400' : 'hover:bg-gray-100 text-gray-500'} transition-colors`}>
+            <button onClick={onClose} className={`p-2 flex-shrink-0 rounded-xl ${isDark ? 'hover:bg-zinc-800 text-zinc-400' : 'hover:bg-gray-100 text-gray-500'} transition-colors`}>
               <X className="h-5 w-5" />
             </button>
           </div>
 
           {/* Info cards */}
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-2 sm:gap-3">
             <div className={`p-3 rounded-xl ${isDark ? 'bg-zinc-800/50 border-zinc-700/50' : 'bg-gray-50 border-gray-200'} border`}>
               <div className={`text-[10px] uppercase tracking-wider ${isDark ? 'text-zinc-500' : 'text-gray-400'} mb-1`}>Cliente</div>
               <div className={`text-sm font-medium ${isDark ? 'text-white' : 'text-gray-900'} truncate`}>{cliente}</div>
@@ -1785,8 +1785,8 @@ function ApprovalModal({
         </div>
 
         {/* Resumen + Inversión */}
-        <div className={`px-6 py-4 border-b ${isDark ? 'border-zinc-800' : 'border-gray-200'}`}>
-          <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
+        <div className={`px-4 sm:px-6 py-3 sm:py-4 border-b ${isDark ? 'border-zinc-800' : 'border-gray-200'}`}>
+          <div className="grid grid-cols-2 md:grid-cols-5 gap-2 sm:gap-3">
             {resumenData && (
               <>
                 <div className="p-2 rounded-lg bg-emerald-500/10 border border-emerald-500/20 text-center">
@@ -1815,7 +1815,7 @@ function ApprovalModal({
         </div>
 
         {/* Tabla de caras organizada por catorcenas */}
-        <div className="flex-1 overflow-y-auto px-6 py-4">
+        <div className="flex-1 overflow-y-auto px-3 sm:px-6 py-3 sm:py-4">
           {Array.from(catorcenaGroups.entries()).map(([catorcena, caras]) => {
             const periodoInfo = caras[0]?.inicio_periodo && caras[0]?.fin_periodo
               ? `${formatDate(caras[0].inicio_periodo)} → ${formatDate(caras[0].fin_periodo)}`
@@ -1991,25 +1991,27 @@ function ApprovalModal({
 
         {/* Footer con acciones */}
         {isAutorizacionTask && tarea.estatus !== 'Atendido' && tarea.estatus !== 'Cancelado' && (
-          <div className={`p-6 border-t ${isDark ? 'border-zinc-800' : 'border-gray-200'}`}>
+          <div className={`p-4 sm:p-6 border-t ${isDark ? 'border-zinc-800' : 'border-gray-200'}`}>
             {!showRechazoInput ? (
-              <div className="flex gap-3">
+              <div className="flex gap-2 sm:gap-3">
                 <button
                   onClick={() => aprobarMutation.mutate()}
                   disabled={aprobarMutation.isPending || carasPendientes.length === 0}
-                  className="flex-1 flex items-center justify-center gap-2 px-4 py-3 rounded-xl bg-emerald-600 text-white text-sm font-medium hover:bg-emerald-700 disabled:opacity-50 disabled:cursor-not-allowed transition-all"
+                  className="flex-1 flex items-center justify-center gap-2 px-3 sm:px-4 py-3 rounded-xl bg-emerald-600 text-white text-sm font-medium hover:bg-emerald-700 disabled:opacity-50 disabled:cursor-not-allowed transition-all"
                 >
                   {aprobarMutation.isPending ? (
                     <Loader2 className="h-4 w-4 animate-spin" />
                   ) : (
                     <CheckCircle className="h-4 w-4" />
                   )}
-                  {aprobarMutation.isPending ? 'Aprobando...' : `Aprobar ${carasPendientes.length} circuito${carasPendientes.length !== 1 ? 's' : ''}`}
+                  <span className="truncate">
+                    {aprobarMutation.isPending ? 'Aprobando...' : `Aprobar ${carasPendientes.length} circuito${carasPendientes.length !== 1 ? 's' : ''}`}
+                  </span>
                 </button>
                 <button
                   onClick={() => setShowRechazoInput(true)}
                   disabled={carasPendientes.length === 0}
-                  className="flex items-center justify-center gap-2 px-6 py-3 rounded-xl bg-red-600/20 text-red-400 text-sm font-medium hover:bg-red-600/30 border border-red-500/30 disabled:opacity-50 disabled:cursor-not-allowed transition-all"
+                  className="flex items-center justify-center gap-2 px-4 sm:px-6 py-3 rounded-xl bg-red-600/20 text-red-400 text-sm font-medium hover:bg-red-600/30 border border-red-500/30 disabled:opacity-50 disabled:cursor-not-allowed transition-all"
                 >
                   <X className="h-4 w-4" />
                   Rechazar
@@ -3344,7 +3346,7 @@ export function NotificacionesPage() {
       {/* Barra superior fija */}
       <div className={`sticky top-16 z-20 ${isDark ? 'bg-[#1a1025]/95' : 'bg-white/95'} backdrop-blur-sm border-b ${isDark ? 'border-zinc-800/80' : 'border-gray-200'}`}>
         {/* Tabs: Notificaciones / Tareas */}
-        <div className={`flex items-center gap-1 px-6 py-2 border-b ${isDark ? 'border-zinc-800/50' : 'border-gray-200'}`}>
+        <div className={`flex items-center gap-1 px-3 md:px-6 py-2 border-b overflow-x-auto ${isDark ? 'border-zinc-800/50' : 'border-gray-200'}`}>
           <button
             onClick={() => setContentType('notificaciones')}
             className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all ${
@@ -3375,8 +3377,8 @@ export function NotificacionesPage() {
         </div>
 
         {/* Navegación de vistas */}
-        <div className={`flex items-center justify-between px-6 py-3 border-b ${isDark ? 'border-zinc-800/50' : 'border-gray-200'}`}>
-          <div className="flex items-center gap-1">
+        <div className={`flex items-center justify-between gap-2 px-3 md:px-6 py-3 border-b ${isDark ? 'border-zinc-800/50' : 'border-gray-200'}`}>
+          <div className="flex items-center gap-1 overflow-x-auto min-w-0">
             {viewTabs.map((tab) => (
               <button
                 key={tab.key}
@@ -3429,9 +3431,9 @@ export function NotificacionesPage() {
 
         {/* Barra de controles - Solo para vistas de tareas */}
         {view !== 'notas' && (
-          <div className="flex items-center gap-4 px-6 py-3">
+          <div className="flex flex-wrap items-center gap-2 md:gap-4 px-3 md:px-6 py-3">
             {/* Búsqueda */}
-            <div className="relative flex-1 max-w-md">
+            <div className="relative flex-1 min-w-[180px] max-w-md">
               <Search className={`absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 ${isDark ? 'text-zinc-500' : 'text-gray-400'}`} />
               <input
                 type="search"
@@ -3731,7 +3733,7 @@ export function NotificacionesPage() {
       </div>
 
       {/* Contenido principal */}
-      <div className="flex-1 p-6">
+      <div className="flex-1 p-3 md:p-6">
         {isLoading ? (
           <div className="flex items-center justify-center h-64">
             <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-purple-500" />

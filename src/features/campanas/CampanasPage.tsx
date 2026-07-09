@@ -3004,9 +3004,9 @@ export function CampanasPage() {
     <div className="min-h-screen">
       <Header title="Campañas" />
 
-      <div className="p-6 space-y-5">
+      <div className="p-3 md:p-6 space-y-4 md:space-y-5">
         {/* Dashboard KPIs Grid - Same style as Solicitudes/Propuestas */}
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 md:gap-4">
           {/* Main KPI: Total Campañas */}
           <div className={`col-span-1 rounded-2xl border ${isDark ? 'border-zinc-800/80 bg-zinc-900/50' : 'border-gray-200 bg-white'} backdrop-blur-sm p-5 flex flex-col justify-between relative overflow-hidden group`}>
             <div className={`absolute top-0 right-0 w-32 h-32 ${isDark ? 'bg-purple-500/10 group-hover:bg-purple-500/20' : 'bg-purple-200/20 group-hover:bg-purple-200/30'} rounded-full blur-3xl -mr-10 -mt-10 pointer-events-none transition-all duration-500`} />
@@ -3574,7 +3574,7 @@ export function CampanasPage() {
                 </div>
               )}
               <div className="overflow-x-auto">
-                <table className="w-full">
+                <table className="w-full min-w-[1100px]">
                   <thead>
                     <tr className={`border-b ${isDark ? 'border-purple-500/20 bg-gradient-to-r from-purple-900/30 via-fuchsia-900/20 to-purple-900/30' : 'border-purple-200 bg-purple-50'}`}>
                       <th className={`px-4 py-3 text-left text-xs font-semibold ${isDark ? 'text-purple-300' : 'text-purple-700'} uppercase tracking-wider`}>ID</th>
