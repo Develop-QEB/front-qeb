@@ -30,6 +30,31 @@ import { campanasService } from '../../services/campanas.service';
 import { NotasDireccionBitacora } from './NotasDireccionBitacora';
 
 // ============ HELPERS ============
+// Tipos de tareas creadas desde el Gestor de Artes. Estas tareas se
+// atienden en su modal real (con side-effects: aprobar arte, subir foto,
+// rotar roles, marcar instalado, etc). NUNCA deben cerrarse via el boton
+// "Finalizar tarea" del preview lateral — solo marcaria estatus=Atendido
+// sin disparar los side-effects, dejando el flujo roto (bug reportado
+// por Jos 2026-07-09).
+const TIPOS_GESTOR_ARTES = new Set([
+  'Revisión de artes', 'Revision de artes',
+  'Correccion', 'Corrección',
+  'Impresión', 'Impresion',
+  'Orden de Impresión', 'Orden de Impresion',
+  'Recepción', 'Recepcion',
+  'Gestión de Recepción Parcial', 'Gestion de Recepcion Parcial',
+  'Testigo',
+  'Instalación', 'Instalacion',
+  'Programación', 'Programacion',
+  'Programación para Tráfico', 'Programacion para Trafico',
+  'Orden de Programación', 'Orden de Programacion',
+  'Orden de Instalación', 'Orden de Instalacion',
+]);
+function isTareaGestorArtes(tipo?: string | null): boolean {
+  if (!tipo) return false;
+  return TIPOS_GESTOR_ARTES.has(tipo);
+}
+
 // Render texto con URLs (http://, https://, www.) convertidas en hyperlinks
 // que abren en nueva pestaña. Se mantienen los saltos de linea originales.
 function LinkifiedText({ text, className }: { text: string; className?: string }) {
@@ -2417,12 +2442,14 @@ function TaskDrawer({
           )}
 
           {/* Botón finalizar tarea.
-              Oculto para 'Revisión de artes': finalizar aquí solo marca la tarea
-              como Atendido sin aprobar los artes (arte_aprobado sigue 'Pendiente'),
-              dejándolos atorados en "Sin revisar". La aprobación debe hacerse desde
-              el botón "Ir a gestión de artes" (Revisar y Aprobar). */}
+              Oculto para todas las tareas generadas en Gestor de Artes: se
+              atienden en la tarea real del modal de Gestor, no en el preview
+              lateral. Finalizar aquí solo marcaria estatus=Atendido sin
+              disparar los side-effects reales (aprobar arte, subir foto,
+              rotar roles, marcar reserva como instalada, etc). Feedback de
+              Jos 2026-07-09 — antes solo se excluia 'Revisión de artes'. */}
           {contentType === 'tareas' && user?.rol !== 'Director General'
-            && tarea.tipo !== 'Revisión de artes' && tarea.tipo !== 'Revision de artes' && (
+            && !isTareaGestorArtes(tarea.tipo) && (
             <button
               onClick={(e) => {
                 e.stopPropagation();
