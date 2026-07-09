@@ -2206,13 +2206,17 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
     };
 
     if (isEditMode) {
-      // Al Guardar cambios en edición: si dispara autorización nueva (DG o DCM)
-      // pedir Nota Dirección obligatoria antes de mandar el update.
-      const willTriggerDg = caras.some(c => c.autorizacion_dg === 'pendiente');
-      const willTriggerDcm = caras.some(c => c.autorizacion_dcm === 'pendiente');
-      if (willTriggerDg || willTriggerDcm) {
+      // Al Guardar cambios en edición: si HAY autorización pendiente (current
+      // en el form O original en BD), cada save re-envía la autorización.
+      // Pedir Nota Dirección obligatoria antes de mandar el update.
+      // Antes solo se miraba c.autorizacion_dg current — dejaba fuera el caso
+      // frecuente de una solicitud con circuitos ya 'pendiente' de antes que
+      // el usuario re-edita (feedback de Jos 2026-07-09).
+      const dgPending = caras.some(c => c.autorizacion_dg === 'pendiente' || (c as any)._originalDg === 'pendiente');
+      const dcmPending = caras.some(c => c.autorizacion_dcm === 'pendiente' || (c as any)._originalDcm === 'pendiente');
+      if (dgPending || dcmPending) {
         setPendingUpdateData(data);
-        setPendingAuthTipo(willTriggerDg && willTriggerDcm ? 'ambas' : willTriggerDg ? 'dg' : 'dcm');
+        setPendingAuthTipo(dgPending && dcmPending ? 'ambas' : dgPending ? 'dg' : 'dcm');
         setShowNotaDireccionModal(true);
         isSubmittingRef.current = false;
         return;

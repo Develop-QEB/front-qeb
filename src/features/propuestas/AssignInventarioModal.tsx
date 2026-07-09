@@ -3124,13 +3124,15 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
       return;
     }
 
-    // Gate obligatorio: si la edición dispara autorización DG/DCM nueva, pedir
-    // Nota de Dirección antes de continuar. Feedback Jos 2026-07-08.
+    // Gate obligatorio: si HAY autorización pendiente (current o guardada),
+    // cada save re-envía la autorización → pedir Nota Dirección. Feedback
+    // Jos 2026-07-08/09 — la condicion se amplio para cubrir el caso de
+    // propuestas que ya tenian circuitos 'pendiente' de antes.
     if (!skipNotaGate && propuesta.solicitud_id) {
-      const willTriggerDg = caras.some(c => c.autorizacion_dg === 'pendiente');
-      const willTriggerDcm = caras.some(c => c.autorizacion_dcm === 'pendiente');
-      if (willTriggerDg || willTriggerDcm) {
-        setPendingAuthTipo(willTriggerDg && willTriggerDcm ? 'ambas' : willTriggerDg ? 'dg' : 'dcm');
+      const dgPending = caras.some(c => c.autorizacion_dg === 'pendiente' || (c as any)._originalDg === 'pendiente');
+      const dcmPending = caras.some(c => c.autorizacion_dcm === 'pendiente' || (c as any)._originalDcm === 'pendiente');
+      if (dgPending || dcmPending) {
+        setPendingAuthTipo(dgPending && dcmPending ? 'ambas' : dgPending ? 'dg' : 'dcm');
         setShowNotaDireccionModal(true);
         return;
       }
