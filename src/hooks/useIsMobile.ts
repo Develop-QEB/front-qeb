@@ -19,14 +19,12 @@ export function useIsMobile(): boolean {
     if (mql.addEventListener) {
       mql.addEventListener('change', handler);
     } else {
-      // @ts-expect-error - fallback legacy
       mql.addListener(handler);
     }
     return () => {
       if (mql.removeEventListener) {
         mql.removeEventListener('change', handler);
       } else {
-        // @ts-expect-error - fallback legacy
         mql.removeListener(handler);
       }
     };
