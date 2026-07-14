@@ -6,7 +6,7 @@ import type { SapDatabase } from '../store/environmentStore';
 export type { CampanaWithComments };
 
 // SAP Configuration
-const SAP_BASE_URL = 'https://binding-convinced-ride-foto.trycloudflare.com';
+const SAP_BASE_URL = 'https://workflow-namely-changes-nothing.trycloudflare.com';
 
 // Interfaces para SAP Delivery Note
 export interface SAPDocumentLine {
