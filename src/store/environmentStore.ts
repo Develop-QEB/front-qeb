@@ -4,7 +4,7 @@ import { persist } from 'zustand/middleware';
 export type SapDatabase = 'CIMU' | 'TEST' | 'TRADE';
 export type Environment = SapDatabase;
 
-export const SAP_BASE_URL = 'https://workflow-namely-changes-nothing.trycloudflare.com';
+export const SAP_BASE_URL = 'https://binding-convinced-ride-foto.trycloudflare.com';
 
 // Configuracion por BD SAP
 const ENDPOINT_CONFIG: Record<SapDatabase, { cuic: string; deliveryNotes: string; series: number }> = {
