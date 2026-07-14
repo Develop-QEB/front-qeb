@@ -13,7 +13,7 @@ import { getSapCache, setSapCache, SAP_CACHE_KEYS } from '../lib/sapCache';
 import { filterAllowedArticulos } from '../config/allowedDigitalArticles';
 
 // SAP API URL
-const SAP_BASE_URL = 'https://binding-convinced-ride-foto.trycloudflare.com';
+const SAP_BASE_URL = 'https://workflow-namely-changes-nothing.trycloudflare.com';
 
 // Interfaces para SAP
 interface SAPCuicItem {
