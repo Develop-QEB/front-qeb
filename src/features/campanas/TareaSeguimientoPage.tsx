@@ -6852,11 +6852,18 @@ function TaskDetailModal({
                           <th className="p-2 font-medium text-blue-300">Impresiones</th>
                           <th className="p-2 font-medium text-blue-300">Ciudad</th>
                           <th className="p-2 font-medium text-blue-300">APS</th>
+                          <th className="p-2 font-medium text-blue-300">Tarifa Pública</th>
+                          <th className="p-2 font-medium text-blue-300">Total</th>
                         </tr>
                       </thead>
                       <tbody>
                         {task.contenido.split('\n').filter(Boolean).map((line, idx) => {
                           const parts = line.split(' | ').map(s => s.trim());
+                          // El contenido se genera desde OrdenImpresionModal (línea ~12417)
+                          // con este orden: articulo | formato | impresiones | plaza |
+                          // APS: N | Tarifa Publica: $... | Total: $...
+                          const tarifaPublica = parts[5]?.replace(/^Tarifa Publica:\s*/, '') || '-';
+                          const total = parts[6]?.replace(/^Total:\s*/, '') || '-';
                           return (
                             <tr key={idx} className="border-b border-border/20 hover:bg-blue-900/10">
                               <td className="p-2">
@@ -6876,6 +6883,8 @@ function TaskDetailModal({
                                   {parts[4]?.replace('APS: ', '') || '-'}
                                 </span>
                               </td>
+                              <td className="p-2 text-right font-mono text-emerald-300">{tarifaPublica}</td>
+                              <td className="p-2 text-right font-mono text-emerald-400 font-semibold">{total}</td>
                             </tr>
                           );
                         })}
@@ -6889,12 +6898,31 @@ function TaskDetailModal({
               {canResolveCurrentTask && task.estatus !== 'Atendido' && task.estatus !== 'Completado' && task.estatus !== 'Finalizada' && (
                 <div className="flex justify-end pt-2">
                   <button
-                    onClick={() => onTaskComplete(task.id)}
+                    onClick={async () => {
+                      // Al finalizar, cerrar el modal automaticamente (antes se
+                      // quedaba abierto — feedback Jos 2026-07-15).
+                      try {
+                        await onTaskComplete(task.id);
+                        onClose();
+                      } catch (e) {
+                        // Si falla, dejar modal abierto para que reintente
+                        console.error('Error al finalizar Orden de Impresion:', e);
+                      }
+                    }}
                     disabled={isUpdating}
-                    className="flex items-center gap-2 px-6 py-2.5 text-sm font-medium bg-green-600 hover:bg-green-700 text-white rounded-lg transition-colors disabled:opacity-50"
+                    className="flex items-center gap-2 px-6 py-2.5 text-sm font-medium bg-green-600 hover:bg-green-700 text-white rounded-lg transition-colors disabled:opacity-60 disabled:cursor-not-allowed"
                   >
-                    {isUpdating ? <Loader2 className="h-4 w-4 animate-spin" /> : <CheckCircle2 className="h-4 w-4" />}
-                    Finalizar Orden
+                    {isUpdating ? (
+                      <>
+                        <Loader2 className="h-4 w-4 animate-spin" />
+                        Finalizando...
+                      </>
+                    ) : (
+                      <>
+                        <CheckCircle2 className="h-4 w-4" />
+                        Finalizar Orden
+                      </>
+                    )}
                   </button>
                 </div>
               )}
