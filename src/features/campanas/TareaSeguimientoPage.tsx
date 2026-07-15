@@ -4389,6 +4389,7 @@ function TaskDetailModal({
   openTradicionalGallery,
   tipoPeriodo = 'catorcena',
   campana = null,
+  tareasCampana = [],
 }: {
   isOpen: boolean;
   onClose: () => void;
@@ -4424,6 +4425,9 @@ function TaskDetailModal({
   openTradicionalGallery: (reservaIds: number | number[], codigoUnico: string) => void;
   tipoPeriodo?: string;
   campana?: any;
+  // Tareas de la campaña (compartidas desde el padre para poder calcular
+  // impresiones recibidas — buscando la Recepción Faltantes hija por titulo).
+  tareasCampana?: TareaCampana[];
 }) {
   const isDark = useThemeStore((s) => s.theme) === 'dark';
 
@@ -7607,6 +7611,42 @@ function TaskDetailModal({
                     <span className="text-zinc-500">Impresiones solicitadas:</span>
                     <p className="text-2xl font-bold text-purple-400">{impresionesOrdenadas}</p>
                   </div>
+                  {task.estatus === 'Atendido' && (() => {
+                    // Impresiones recibidas: solicitadas - faltantes reportados en
+                    // la Recepción Faltantes hija (si existe). Si no hay tarea de
+                    // Faltantes, todo lo solicitado fue recibido. Feedback Jos 2026-07-15.
+                    const identifierMatch = task.titulo?.match(/TASK-\d+/) || task.identificador?.match(/TASK-\d+/);
+                    const identifier = identifierMatch ? identifierMatch[0] : `TASK-${task.id}`;
+                    let faltantesReportados = 0;
+                    // Buscar Faltantes hija por titulo "Recepción Faltantes - {identifier}"
+                    // o por ser una tarea Recepción con evidencia recepcion_faltantes que
+                    // referencie a esta tarea en su evidencia.
+                    for (const t of tareasCampana) {
+                      if (t.tipo !== 'Recepción') continue;
+                      if (t.id === parseInt(task.id)) continue;
+                      const tituloMatch = (t.titulo || '').includes(identifier);
+                      let ev: any = null;
+                      try { ev = t.evidencia ? JSON.parse(t.evidencia) : null; } catch {}
+                      const esFaltantesDeEsta = tituloMatch && ev?.tipo === 'recepcion_faltantes';
+                      if (esFaltantesDeEsta) {
+                        faltantesReportados += t.num_impresiones || ev?.totalFaltantes || 0;
+                      }
+                    }
+                    const recibidas = Math.max(0, impresionesOrdenadas - faltantesReportados);
+                    return (
+                      <div>
+                        <span className="text-zinc-500">Impresiones recibidas:</span>
+                        <p className="text-2xl font-bold text-emerald-400">
+                          {recibidas}
+                          {faltantesReportados > 0 && (
+                            <span className="text-sm font-normal text-zinc-500 ml-2">
+                              ({faltantesReportados} faltantes)
+                            </span>
+                          )}
+                        </p>
+                      </div>
+                    );
+                  })()}
                 </div>
               </div>
 
@@ -15963,7 +16003,8 @@ export function TareaSeguimientoPage() {
     tareasRecepcion.forEach(recepcion => {
       // Si la Recepción ya está asociada a una Impresión, fue manejada arriba.
       if (impresionRelatedRecepcionIds.has(recepcion.id)) return;
-      // No procesar Recepciones de faltantes — esas tienen su propio camino.
+      // Recepciones de faltantes se procesan en el pass siguiente para poder
+      // sobreescribir a la Recepción normal padre (caso Cliente Imprime).
       if (recepcionEsFaltantesMap.get(recepcion.id)) return;
       const listado = recepcion.listado_inventario || recepcion.ids_reservas || '';
       const ids = listado.replace(/\*/g, ',').split(',').map(s => s.trim()).filter(Boolean);
@@ -15977,6 +16018,31 @@ export function TareaSeguimientoPage() {
           tarea_id: recepcion.id,
           tarea_estatus: recepcion.estatus || (esAtendida ? 'Atendido' : 'Pendiente'),
           tarea_titulo: recepcion.titulo || `Recepción #${recepcion.id}`,
+          proveedor: recepcion.nombre_proveedores || '-',
+          estado_impresion: estadoImpresion,
+          tarea_recepcion_id: recepcion.id,
+        });
+      });
+    });
+
+    // Segundo pass: Recepciones Faltantes HUÉRFANAS (sin Impresión padre).
+    // Cliente Imprime crea Recepción normal + Recepción Faltantes sin Impresión.
+    // El loop huérfano de arriba marca los items como 'recibido' via la Recepción
+    // normal atendida. Aquí SOBREESCRIBIMOS los items que están específicamente
+    // en la Faltantes → 'pendiente_recepcion' (aparecen en el sub-tab correcto).
+    // Bug reportado por Jos 2026-07-15.
+    tareasRecepcion.forEach(recepcion => {
+      if (impresionRelatedRecepcionIds.has(recepcion.id)) return;
+      if (!recepcionEsFaltantesMap.get(recepcion.id)) return;
+      const listado = recepcion.listado_inventario || recepcion.ids_reservas || '';
+      const ids = normalizeIds(listado);
+      const esAtendida = recepcion.estatus === 'Atendido' || recepcion.estatus === 'Completado';
+      const estadoImpresion: EstadoImpresion = esAtendida ? 'recibido' : 'pendiente_recepcion';
+      ids.forEach(id => {
+        reservaToTareaMap.set(id, {
+          tarea_id: recepcion.id,
+          tarea_estatus: recepcion.estatus || (esAtendida ? 'Atendido' : 'Pendiente'),
+          tarea_titulo: recepcion.titulo || `Recepción Faltantes #${recepcion.id}`,
           proveedor: recepcion.nombre_proveedores || '-',
           estado_impresion: estadoImpresion,
           tarea_recepcion_id: recepcion.id,
@@ -21664,6 +21730,7 @@ export function TareaSeguimientoPage() {
           setSelectedTask(null);
         }}
         task={selectedTask}
+        tareasCampana={tareasAPI}
         inventoryData={inventoryArteData}
         artesExistentes={artesExistentes}
         isLoadingArtes={isLoadingArtes}
