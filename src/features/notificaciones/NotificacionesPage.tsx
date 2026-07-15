@@ -1688,6 +1688,30 @@ function ApprovalModal({
     },
   });
 
+  // Filtro DG (paso previo con Director General Adjunto) — no aprueba/rechaza
+  // caras, solo decide "Enviar a DG" o "Rechazar como Corrección" a nivel tarea.
+  const isFiltroDgTask = tarea.tipo === 'Filtro Autorización DG';
+  const aprobarFiltroDgMutation = useMutation({
+    mutationFn: () => notificacionesService.aprobarFiltroDg(tarea.id),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['notificaciones'] });
+      queryClient.invalidateQueries({ queryKey: ['notificaciones-stats'] });
+      onAction();
+      onClose();
+    },
+  });
+  const rechazarFiltroDgMutation = useMutation({
+    mutationFn: (motivo: string) => notificacionesService.rechazarFiltroDg(tarea.id, motivo),
+    onSuccess: () => {
+      setShowRechazoInput(false);
+      setRechazoMotivo('');
+      queryClient.invalidateQueries({ queryKey: ['notificaciones'] });
+      queryClient.invalidateQueries({ queryKey: ['notificaciones-stats'] });
+      onAction();
+      onClose();
+    },
+  });
+
   const allCaras = carasData || [];
   const carasPendientes = useMemo(() => {
     if (!carasData || !tipoAutorizacion) return [];
@@ -1697,6 +1721,8 @@ function ApprovalModal({
 
   const [autoFinalized, setAutoFinalized] = useState(false);
   useEffect(() => {
+    // No auto-finalizar para Filtro DG — el DGA debe decidir explicitamente.
+    if (isFiltroDgTask) return;
     if (
       carasData &&
       carasData.length > 0 &&
@@ -1998,26 +2024,30 @@ function ApprovalModal({
             {!showRechazoInput ? (
               <div className="flex gap-2 sm:gap-3">
                 <button
-                  onClick={() => aprobarMutation.mutate()}
-                  disabled={aprobarMutation.isPending || carasPendientes.length === 0}
+                  onClick={() => isFiltroDgTask ? aprobarFiltroDgMutation.mutate() : aprobarMutation.mutate()}
+                  disabled={isFiltroDgTask
+                    ? aprobarFiltroDgMutation.isPending
+                    : (aprobarMutation.isPending || carasPendientes.length === 0)}
                   className="flex-1 flex items-center justify-center gap-2 px-3 sm:px-4 py-3 rounded-xl bg-emerald-600 text-white text-sm font-medium hover:bg-emerald-700 disabled:opacity-50 disabled:cursor-not-allowed transition-all"
                 >
-                  {aprobarMutation.isPending ? (
+                  {(isFiltroDgTask ? aprobarFiltroDgMutation.isPending : aprobarMutation.isPending) ? (
                     <Loader2 className="h-4 w-4 animate-spin" />
                   ) : (
                     <CheckCircle className="h-4 w-4" />
                   )}
                   <span className="truncate">
-                    {aprobarMutation.isPending ? 'Aprobando...' : `Aprobar ${carasPendientes.length} circuito${carasPendientes.length !== 1 ? 's' : ''}`}
+                    {isFiltroDgTask
+                      ? (aprobarFiltroDgMutation.isPending ? 'Enviando...' : 'Enviar a Dirección General')
+                      : (aprobarMutation.isPending ? 'Aprobando...' : `Aprobar ${carasPendientes.length} circuito${carasPendientes.length !== 1 ? 's' : ''}`)}
                   </span>
                 </button>
                 <button
                   onClick={() => setShowRechazoInput(true)}
-                  disabled={carasPendientes.length === 0}
+                  disabled={!isFiltroDgTask && carasPendientes.length === 0}
                   className="flex items-center justify-center gap-2 px-4 sm:px-6 py-3 rounded-xl bg-red-600/20 text-red-400 text-sm font-medium hover:bg-red-600/30 border border-red-500/30 disabled:opacity-50 disabled:cursor-not-allowed transition-all"
                 >
                   <X className="h-4 w-4" />
-                  Rechazar
+                  {isFiltroDgTask ? 'Rechazar como Corrección' : 'Rechazar'}
                 </button>
               </div>
             ) : (
@@ -2025,18 +2055,22 @@ function ApprovalModal({
                 <textarea
                   value={rechazoMotivo}
                   onChange={(e) => setRechazoMotivo(e.target.value)}
-                  placeholder="Escribe el motivo del rechazo..."
+                  placeholder={isFiltroDgTask
+                    ? 'Describe qué necesita corregir el creador antes de enviar a Dirección General...'
+                    : 'Escribe el motivo del rechazo...'}
                   rows={3}
                   className={`w-full px-4 py-3 rounded-xl ${isDark ? 'bg-zinc-800/50 text-white placeholder:text-zinc-600' : 'bg-gray-50 text-gray-900 placeholder:text-gray-400'} border border-red-500/30 text-sm focus:outline-none focus:border-red-500/50 resize-none`}
                 />
                 <div className="flex gap-2">
                   <button
-                    onClick={() => rechazarMutation.mutate(rechazoMotivo)}
-                    disabled={rechazarMutation.isPending || !rechazoMotivo.trim()}
+                    onClick={() => isFiltroDgTask ? rechazarFiltroDgMutation.mutate(rechazoMotivo) : rechazarMutation.mutate(rechazoMotivo)}
+                    disabled={(isFiltroDgTask ? rechazarFiltroDgMutation.isPending : rechazarMutation.isPending) || !rechazoMotivo.trim()}
                     className="flex-1 flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl bg-red-600 text-white text-sm font-medium hover:bg-red-700 disabled:opacity-50 disabled:cursor-not-allowed transition-all"
                   >
-                    {rechazarMutation.isPending && <Loader2 className="h-4 w-4 animate-spin" />}
-                    {rechazarMutation.isPending ? 'Rechazando...' : 'Confirmar Rechazo'}
+                    {(isFiltroDgTask ? rechazarFiltroDgMutation.isPending : rechazarMutation.isPending) && <Loader2 className="h-4 w-4 animate-spin" />}
+                    {isFiltroDgTask
+                      ? (rechazarFiltroDgMutation.isPending ? 'Enviando corrección...' : 'Confirmar Corrección')
+                      : (rechazarMutation.isPending ? 'Rechazando...' : 'Confirmar Rechazo')}
                   </button>
                   <button
                     onClick={() => { setShowRechazoInput(false); setRechazoMotivo(''); }}
@@ -2421,7 +2455,7 @@ function TaskDrawer({
           )}
 
           {/* Botón Ir a ver (oculto para directores en tareas de autorización) */}
-          {canNavigate && onNavigate && !(isAutorizacionTask && ['Director General', 'Director Comercial'].includes(user?.rol || '')) && (
+          {canNavigate && onNavigate && !(isAutorizacionTask && ['Director General', 'Director Comercial', 'Director General Adjunto'].includes(user?.rol || '')) && (
             <button
               onClick={handleNavigate}
               className="mt-4 w-full flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl bg-gradient-to-r from-purple-600 to-pink-600 text-white text-sm font-medium hover:from-purple-500 hover:to-pink-500 transition-all hover:scale-[1.02] active:scale-[0.98] shadow-lg shadow-purple-500/20"
@@ -2432,7 +2466,7 @@ function TaskDrawer({
           )}
 
           {/* Botón Revisar y Autorizar para directores (visible incluso en finalizadas) */}
-          {isAutorizacionTask && ['Director General', 'Director Comercial'].includes(user?.rol || '') && tarea.estatus !== 'Cancelado' && onOpenApprovalModal && (
+          {isAutorizacionTask && ['Director General', 'Director Comercial', 'Director General Adjunto'].includes(user?.rol || '') && tarea.estatus !== 'Cancelado' && onOpenApprovalModal && (
             <button
               onClick={() => onOpenApprovalModal()}
               className={`mt-4 w-full flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl text-sm font-bold transition-all hover:scale-[1.02] active:scale-[0.98] ${
@@ -2453,7 +2487,8 @@ function TaskDrawer({
               disparar los side-effects reales (aprobar arte, subir foto,
               rotar roles, marcar reserva como instalada, etc). Feedback de
               Jos 2026-07-09 — antes solo se excluia 'Revisión de artes'. */}
-          {contentType === 'tareas' && user?.rol !== 'Director General'
+          {contentType === 'tareas'
+            && !['Director General', 'Director General Adjunto'].includes(user?.rol || '')
             && !isTareaGestorArtes(tarea.tipo) && (
             <button
               onClick={(e) => {
@@ -2858,7 +2893,7 @@ function TaskDrawer({
         )}
 
         {/* Comentarios (oculto para directores en tareas de autorización) */}
-        {!(isAutorizacionTask && ['Director General', 'Director Comercial'].includes(user?.rol || '')) && <div className={`p-5 border-t ${isDark ? 'border-zinc-800/50' : 'border-gray-200'}`}>
+        {!(isAutorizacionTask && ['Director General', 'Director Comercial', 'Director General Adjunto'].includes(user?.rol || '')) && <div className={`p-5 border-t ${isDark ? 'border-zinc-800/50' : 'border-gray-200'}`}>
           <div className="flex items-center justify-between mb-4">
             <h3 className={`text-xs font-medium ${isDark ? 'text-zinc-500' : 'text-gray-400'} uppercase tracking-wider flex items-center gap-2`}>
               <MessageSquare className="h-3.5 w-3.5" />

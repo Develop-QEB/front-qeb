@@ -201,6 +201,25 @@ export const notificacionesService = {
     return response.data.data;
   },
 
+  // Filtro DG (Director General Adjunto) — paso previo a Autorización DG.
+  // El DGA aprueba (crea Autorización DG real) o rechaza como Corrección
+  // (crea tarea Corrección al creador). Feedback 2026-07-15.
+  async aprobarFiltroDg(tareaId: number): Promise<{ tareaDgId: number }> {
+    const response = await api.post<ApiResponse<{ tareaDgId: number }>>(`/solicitudes/filtro-dg/${tareaId}/aprobar`);
+    if (!response.data.success || !response.data.data) {
+      throw new Error(response.data.error || 'Error al aprobar filtro DG');
+    }
+    return response.data.data;
+  },
+
+  async rechazarFiltroDg(tareaId: number, motivo: string): Promise<{ tareaCorreccionId: number }> {
+    const response = await api.post<ApiResponse<{ tareaCorreccionId: number }>>(`/solicitudes/filtro-dg/${tareaId}/rechazar`, { motivo });
+    if (!response.data.success || !response.data.data) {
+      throw new Error(response.data.error || 'Error al rechazar filtro DG');
+    }
+    return response.data.data;
+  },
+
   // ==================== PREFERENCIAS ====================
 
   async getPreferencias(): Promise<{ preferencias: PreferenciasNotif; catalogo: CatalogoNotif }> {
