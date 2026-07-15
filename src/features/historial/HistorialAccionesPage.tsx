@@ -377,7 +377,13 @@ export function HistorialAccionesPage() {
     try {
       const result = await historialService.getAll({ ...effectiveFilters, page: 1, limit: 10000 });
       const XLSX = await import('xlsx');
-      const rows = result.data.map(e => ({
+      // Excluir tambien en la descarga los registros de "Suplantó identidad".
+      const rows = result.data
+        .filter(e => {
+          const a = e.accion || '';
+          return !a.includes('Suplantó identidad') && !a.includes('Suplanto identidad');
+        })
+        .map(e => ({
         'Fecha/Hora': formatFechaHora(e.fecha_hora),
         'Tipo': normalizeTipo(e.tipo),
         'Ref ID': e.ref_id || '',
@@ -402,7 +408,13 @@ export function HistorialAccionesPage() {
     });
   }, []);
 
-  const historial = data?.data || [];
+  // Ocultar registros de "Suplantó identidad de X" que quedaron en la BD
+  // antes del fix del back (2026-07-15). No tocamos main DB — filtramos en
+  // front para que ese evento nunca sea visible en el screen de Historial.
+  const historial = (data?.data || []).filter(entry => {
+    const accion = entry.accion || '';
+    return !accion.includes('Suplantó identidad') && !accion.includes('Suplanto identidad');
+  });
   const pagination = data?.pagination;
 
   const groupNodes = groupLevels.length > 0 ? (() => {
