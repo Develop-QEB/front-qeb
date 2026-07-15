@@ -9622,7 +9622,20 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
               {effectiveCanEdit && (
                 <button
                   disabled={(!hasChanges && modifiedCaras.size === 0) || isSaving}
-                  onClick={() => setShowSaveConfirm(true)}
+                  onClick={() => {
+                    // Flujo nuevo (feedback Jos 2026-07-15): nota primero,
+                    // confirmar cambios después.
+                    if (campanaDetails?.solicitud_id) {
+                      const dgPending = caras.some(c => c.autorizacion_dg === 'pendiente' || (c as any)._originalDg === 'pendiente');
+                      const dcmPending = caras.some(c => c.autorizacion_dcm === 'pendiente' || (c as any)._originalDcm === 'pendiente');
+                      if (dgPending || dcmPending) {
+                        setPendingAuthTipo(dgPending && dcmPending ? 'ambas' : dgPending ? 'dg' : 'dcm');
+                        setShowNotaDireccionModal(true);
+                        return;
+                      }
+                    }
+                    setShowSaveConfirm(true);
+                  }}
                   className={`px-6 py-2 rounded-lg text-sm font-medium transition-all ${
                     (hasChanges || modifiedCaras.size > 0) && !isSaving
                       ? 'bg-purple-500 text-white hover:bg-purple-600 shadow-lg shadow-purple-500/25'
@@ -9649,7 +9662,9 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
         onClose={() => setShowSaveConfirm(false)}
         onConfirm={async () => {
           setShowSaveConfirm(false);
-          await handleBulkSaveChanges();
+          // skipNotaGate=true: si aplicaba la nota, ya se pidió antes de este
+          // modal (nuevo flujo). Si no aplicaba, no cambia nada.
+          await handleBulkSaveChanges(true);
         }}
         isSaving={isSaving}
         contextLabel="campaña"
@@ -9658,7 +9673,9 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
       />
 
       {/* Mini-modal Nueva Nota Dirección — obligatorio cuando la edición
-          dispara autorización DG/DCM. Feedback Jos 2026-07-08. */}
+          dispara autorización DG/DCM. Feedback Jos 2026-07-15: al confirmar
+          guarda la nota y luego abre el Confirmar Cambios (antes iba directo
+          al save y se sentía confuso). */}
       <NuevaNotaDireccionModal
         isOpen={showNotaDireccionModal}
         contexto="campana"
@@ -9673,7 +9690,7 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
           await notasDireccionService.create(campanaDetails.solicitud_id, texto);
           setShowNotaDireccionModal(false);
           setPendingAuthTipo(null);
-          await handleBulkSaveChanges(true);
+          setShowSaveConfirm(true);
         }}
       />
       {/* Delete Circuito Confirm Modal — confirmación al usar bote de basura */}

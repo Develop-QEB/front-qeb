@@ -9889,7 +9889,22 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
               {effectiveCanEdit && (
                 <button
                   disabled={(!hasChanges && modifiedCaras.size === 0) || isSaving}
-                  onClick={() => setShowSaveConfirm(true)}
+                  onClick={() => {
+                    // Flujo nuevo (feedback Jos 2026-07-15): si hay autorización
+                    // pendiente, mostrar PRIMERO la ventana de Nueva Nota Dirección
+                    // y DESPUÉS el confirmar cambios. Antes iba confirmar → nota,
+                    // que se sentía confuso.
+                    if (propuesta.solicitud_id) {
+                      const dgPending = caras.some(c => c.autorizacion_dg === 'pendiente' || (c as any)._originalDg === 'pendiente');
+                      const dcmPending = caras.some(c => c.autorizacion_dcm === 'pendiente' || (c as any)._originalDcm === 'pendiente');
+                      if (dgPending || dcmPending) {
+                        setPendingAuthTipo(dgPending && dcmPending ? 'ambas' : dgPending ? 'dg' : 'dcm');
+                        setShowNotaDireccionModal(true);
+                        return;
+                      }
+                    }
+                    setShowSaveConfirm(true);
+                  }}
                   className={`px-6 py-2 rounded-lg text-sm font-medium transition-all ${
                     (hasChanges || modifiedCaras.size > 0) && !isSaving
                       ? 'bg-purple-500 text-white hover:bg-purple-600 shadow-lg shadow-purple-500/25'
@@ -9910,13 +9925,15 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
       </div>
       {/* Confirmation Modal */}
       {confirmModalJSX}
-      {/* Save Changes Confirm Modal — resumen de cambios antes de guardar */}
+      {/* Save Changes Confirm Modal — resumen de cambios antes de guardar.
+          Con skipNotaGate=true: el gate ya se ejecutó (o no aplicaba) en el
+          click del botón Guardar Cambios, así que aquí solo confirmamos. */}
       <SaveChangesConfirmModal
         isOpen={showSaveConfirm}
         onClose={() => setShowSaveConfirm(false)}
         onConfirm={async () => {
           setShowSaveConfirm(false);
-          await handleBulkSaveChanges();
+          await handleBulkSaveChanges(true);
         }}
         isSaving={isSaving}
         contextLabel="propuesta"
@@ -9925,7 +9942,8 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
       />
 
       {/* Mini-modal Nueva Nota Dirección — obligatorio cuando la edición dispara
-          autorización DG/DCM. Al confirmar guarda la nota y continúa el save. */}
+          autorización DG/DCM. Al confirmar guarda la nota y luego abre el
+          Confirmar Cambios (feedback Jos 2026-07-15: nota primero, confirmar después). */}
       <NuevaNotaDireccionModal
         isOpen={showNotaDireccionModal}
         contexto="propuesta"
@@ -9940,7 +9958,9 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
           await notasDireccionService.create(propuesta.solicitud_id, texto);
           setShowNotaDireccionModal(false);
           setPendingAuthTipo(null);
-          await handleBulkSaveChanges(true);
+          // Cadena al Confirmar Cambios (Save Confirm) — ya no ejecutamos save
+          // directo, mantenemos el paso de verificación de cambios como final.
+          setShowSaveConfirm(true);
         }}
       />
       {/* Delete Circuito Confirm Modal — confirmación al usar bote de basura */}
