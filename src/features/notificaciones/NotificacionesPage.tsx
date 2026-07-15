@@ -1763,53 +1763,54 @@ function ApprovalModal({
             </button>
           </div>
 
-          {/* Info cards */}
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-2 sm:gap-3">
-            <div className={`p-3 rounded-xl ${isDark ? 'bg-zinc-800/50 border-zinc-700/50' : 'bg-gray-50 border-gray-200'} border`}>
-              <div className={`text-[10px] uppercase tracking-wider ${isDark ? 'text-zinc-500' : 'text-gray-400'} mb-1`}>Cliente</div>
-              <div className={`text-sm font-medium ${isDark ? 'text-white' : 'text-gray-900'} truncate`}>{cliente}</div>
+          {/* Info cards — compactas en móvil para dejar espacio a la tabla.
+              Feedback Jos 2026-07-15. */}
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-1.5 sm:gap-3">
+            <div className={`px-2 py-1.5 sm:p-3 rounded-lg sm:rounded-xl ${isDark ? 'bg-zinc-800/50 border-zinc-700/50' : 'bg-gray-50 border-gray-200'} border`}>
+              <div className={`text-[9px] sm:text-[10px] uppercase tracking-wider ${isDark ? 'text-zinc-500' : 'text-gray-400'}`}>Cliente</div>
+              <div className={`text-xs sm:text-sm font-medium ${isDark ? 'text-white' : 'text-gray-900'} truncate`}>{cliente}</div>
             </div>
-            <div className={`p-3 rounded-xl ${isDark ? 'bg-zinc-800/50 border-zinc-700/50' : 'bg-gray-50 border-gray-200'} border`}>
-              <div className={`text-[10px] uppercase tracking-wider ${isDark ? 'text-zinc-500' : 'text-gray-400'} mb-1`}>Creador</div>
-              <div className={`text-sm font-medium ${isDark ? 'text-white' : 'text-gray-900'} truncate`}>{creador}</div>
+            <div className={`px-2 py-1.5 sm:p-3 rounded-lg sm:rounded-xl ${isDark ? 'bg-zinc-800/50 border-zinc-700/50' : 'bg-gray-50 border-gray-200'} border`}>
+              <div className={`text-[9px] sm:text-[10px] uppercase tracking-wider ${isDark ? 'text-zinc-500' : 'text-gray-400'}`}>Creador</div>
+              <div className={`text-xs sm:text-sm font-medium ${isDark ? 'text-white' : 'text-gray-900'} truncate`}>{creador}</div>
             </div>
-            <div className={`p-3 rounded-xl ${isDark ? 'bg-zinc-800/50 border-zinc-700/50' : 'bg-gray-50 border-gray-200'} border`}>
-              <div className={`text-[10px] uppercase tracking-wider ${isDark ? 'text-zinc-500' : 'text-gray-400'} mb-1`}>Origen</div>
-              <div className={`text-sm font-medium ${isDark ? 'text-white' : 'text-gray-900'}`}>{origen}</div>
+            <div className={`px-2 py-1.5 sm:p-3 rounded-lg sm:rounded-xl ${isDark ? 'bg-zinc-800/50 border-zinc-700/50' : 'bg-gray-50 border-gray-200'} border`}>
+              <div className={`text-[9px] sm:text-[10px] uppercase tracking-wider ${isDark ? 'text-zinc-500' : 'text-gray-400'}`}>Origen</div>
+              <div className={`text-xs sm:text-sm font-medium ${isDark ? 'text-white' : 'text-gray-900'} truncate`}>{origen}</div>
             </div>
-            <div className={`p-3 rounded-xl ${isDark ? 'bg-zinc-800/50 border-zinc-700/50' : 'bg-gray-50 border-gray-200'} border`}>
-              <div className={`text-[10px] uppercase tracking-wider ${isDark ? 'text-zinc-500' : 'text-gray-400'} mb-1`}>Creación</div>
-              <div className={`text-sm font-medium ${isDark ? 'text-white' : 'text-gray-900'}`}>{tarea.fecha_creacion ? formatDate(tarea.fecha_creacion) : '—'}</div>
+            <div className={`px-2 py-1.5 sm:p-3 rounded-lg sm:rounded-xl ${isDark ? 'bg-zinc-800/50 border-zinc-700/50' : 'bg-gray-50 border-gray-200'} border`}>
+              <div className={`text-[9px] sm:text-[10px] uppercase tracking-wider ${isDark ? 'text-zinc-500' : 'text-gray-400'}`}>Creación</div>
+              <div className={`text-xs sm:text-sm font-medium ${isDark ? 'text-white' : 'text-gray-900'} truncate`}>{tarea.fecha_creacion ? formatDate(tarea.fecha_creacion) : '—'}</div>
             </div>
           </div>
         </div>
 
-        {/* Resumen + Inversión */}
-        <div className={`px-4 sm:px-6 py-3 sm:py-4 border-b ${isDark ? 'border-zinc-800' : 'border-gray-200'}`}>
-          <div className="grid grid-cols-2 md:grid-cols-5 gap-2 sm:gap-3">
+        {/* Resumen + Inversión — compactas en móvil */}
+        <div className={`px-3 sm:px-6 py-2 sm:py-4 border-b ${isDark ? 'border-zinc-800' : 'border-gray-200'}`}>
+          <div className="grid grid-cols-3 md:grid-cols-5 gap-1.5 sm:gap-3">
             {resumenData && (
               <>
-                <div className="p-2 rounded-lg bg-emerald-500/10 border border-emerald-500/20 text-center">
-                  <div className="text-lg font-bold text-emerald-400">{resumenData.aprobadas}</div>
-                  <div className={`text-[10px] ${isDark ? 'text-zinc-500' : 'text-gray-400'}`}>Aprobadas</div>
+                <div className="px-1.5 py-1 sm:p-2 rounded-md sm:rounded-lg bg-emerald-500/10 border border-emerald-500/20 text-center">
+                  <div className="text-sm sm:text-lg font-bold text-emerald-400 leading-tight">{resumenData.aprobadas}</div>
+                  <div className={`text-[9px] sm:text-[10px] ${isDark ? 'text-zinc-500' : 'text-gray-400'}`}>Aprobadas</div>
                 </div>
-                <div className="p-2 rounded-lg bg-red-500/10 border border-red-500/20 text-center">
-                  <div className="text-lg font-bold text-red-400">{tipoAutorizacion === 'dcm' ? resumenData.pendientesDcm : resumenData.pendientesDg}</div>
-                  <div className={`text-[10px] ${isDark ? 'text-zinc-500' : 'text-gray-400'}`}>Pend. {tipoAutorizacion === 'dcm' ? 'DCM' : 'DG'}</div>
+                <div className="px-1.5 py-1 sm:p-2 rounded-md sm:rounded-lg bg-red-500/10 border border-red-500/20 text-center">
+                  <div className="text-sm sm:text-lg font-bold text-red-400 leading-tight">{tipoAutorizacion === 'dcm' ? resumenData.pendientesDcm : resumenData.pendientesDg}</div>
+                  <div className={`text-[9px] sm:text-[10px] ${isDark ? 'text-zinc-500' : 'text-gray-400'}`}>Pend. {tipoAutorizacion === 'dcm' ? 'DCM' : 'DG'}</div>
                 </div>
               </>
             )}
-            <div className="p-2 rounded-lg bg-cyan-500/10 border border-cyan-500/20 text-center">
-              <div className="text-lg font-bold text-cyan-400">{totals.totalGeneral}</div>
-              <div className={`text-[10px] ${isDark ? 'text-zinc-500' : 'text-gray-400'}`}>Total caras</div>
+            <div className="px-1.5 py-1 sm:p-2 rounded-md sm:rounded-lg bg-cyan-500/10 border border-cyan-500/20 text-center">
+              <div className="text-sm sm:text-lg font-bold text-cyan-400 leading-tight">{totals.totalGeneral}</div>
+              <div className={`text-[9px] sm:text-[10px] ${isDark ? 'text-zinc-500' : 'text-gray-400'}`}>Total caras</div>
             </div>
-            <div className="p-2 rounded-lg bg-emerald-500/10 border border-emerald-500/20 text-center">
-              <div className="text-lg font-bold text-emerald-400">{totals.totalBonif}</div>
-              <div className={`text-[10px] ${isDark ? 'text-zinc-500' : 'text-gray-400'}`}>Bonificación</div>
+            <div className="px-1.5 py-1 sm:p-2 rounded-md sm:rounded-lg bg-emerald-500/10 border border-emerald-500/20 text-center">
+              <div className="text-sm sm:text-lg font-bold text-emerald-400 leading-tight">{totals.totalBonif}</div>
+              <div className={`text-[9px] sm:text-[10px] ${isDark ? 'text-zinc-500' : 'text-gray-400'}`}>Bonificación</div>
             </div>
-            <div className="p-2 rounded-lg bg-purple-500/10 border border-purple-500/20 text-center">
-              <div className="text-lg font-bold text-purple-400">${totals.totalInversion.toLocaleString('es-MX', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</div>
-              <div className={`text-[10px] ${isDark ? 'text-zinc-500' : 'text-gray-400'}`}>Inversión</div>
+            <div className="px-1.5 py-1 sm:p-2 rounded-md sm:rounded-lg bg-purple-500/10 border border-purple-500/20 text-center">
+              <div className="text-xs sm:text-lg font-bold text-purple-400 leading-tight truncate">${totals.totalInversion.toLocaleString('es-MX', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</div>
+              <div className={`text-[9px] sm:text-[10px] ${isDark ? 'text-zinc-500' : 'text-gray-400'}`}>Inversión</div>
             </div>
           </div>
         </div>
@@ -1845,8 +1846,10 @@ function ApprovalModal({
                 </button>
 
                 {!isCollapsed && (
-                <div className={`mt-2 rounded-xl border ${isDark ? 'border-zinc-700/50' : 'border-gray-200'} overflow-hidden`}>
-                  <table className="w-full">
+                <div className={`mt-2 rounded-xl border ${isDark ? 'border-zinc-700/50' : 'border-gray-200'} overflow-x-auto scrollbar-purple`}>
+                  {/* min-w para forzar scroll horizontal en móvil (10 columnas
+                      no caben en <640px). Feedback Jos 2026-07-15. */}
+                  <table className="w-full min-w-[820px]">
                     <thead className={isDark ? 'bg-zinc-800/70' : 'bg-gray-50'}>
                       <tr>
                         <th className={`px-3 py-2.5 text-left text-[10px] font-semibold ${isDark ? 'text-zinc-500' : 'text-gray-400'} uppercase`}>Artículo</th>
