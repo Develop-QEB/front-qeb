@@ -23,6 +23,9 @@ import { circuitosService } from '../../services/circuitos.service';
 import { CircuitCheckbox } from '../../components/ui/CircuitCheckbox';
 import { DeleteCircuitoConfirmModal } from '../../components/DeleteCircuitoConfirmModal';
 import { BULK_DELETE_ENABLED } from '../../config/featureFlags';
+import { NotasDireccionBitacora } from '../notificaciones/NotasDireccionBitacora';
+import { NuevaNotaDireccionModal } from '../notificaciones/NuevaNotaDireccionModal';
+import { notasDireccionService } from '../../services/notasDireccion.service';
 
 // Tarifas now come from SAP (U_IMU_PublicPrice = tarifa publica, PriceList 11 = tarifa piso)
 
@@ -714,6 +717,13 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
   const isDark = useThemeStore((s) => s.theme) === 'dark';
   const isEditMode = !!editSolicitudId; // <-- MODO EDITAR si tiene ID
   useModalTracker(isEditMode ? 'Editar Solicitud' : 'Nueva Solicitud', isOpen);
+
+  // Mini-modal Nueva Nota Dirección: se abre al Guardar cambios en edición
+  // cuando la edición genera autorización pendiente. La nota es obligatoria.
+  const [showNotaDireccionModal, setShowNotaDireccionModal] = useState(false);
+  // Cachea el data del submit mientras se pide la nota, para no reconstruirlo.
+  const [pendingUpdateData, setPendingUpdateData] = useState<any>(null);
+  const [pendingAuthTipo, setPendingAuthTipo] = useState<'dg' | 'dcm' | 'ambas' | null>(null);
 
   // Socket para actualizar usuarios en tiempo real cuando cambian miembros de equipos
   useSocketEquipos();
@@ -2196,10 +2206,37 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
     };
 
     if (isEditMode) {
+      // Al Guardar cambios en edición: si HAY autorización pendiente (current
+      // en el form O original en BD), cada save re-envía la autorización.
+      // Pedir Nota Dirección obligatoria antes de mandar el update.
+      // Antes solo se miraba c.autorizacion_dg current — dejaba fuera el caso
+      // frecuente de una solicitud con circuitos ya 'pendiente' de antes que
+      // el usuario re-edita (feedback de Jos 2026-07-09).
+      const dgPending = caras.some(c => c.autorizacion_dg === 'pendiente' || (c as any)._originalDg === 'pendiente');
+      const dcmPending = caras.some(c => c.autorizacion_dcm === 'pendiente' || (c as any)._originalDcm === 'pendiente');
+      if (dgPending || dcmPending) {
+        setPendingUpdateData(data);
+        setPendingAuthTipo(dgPending && dcmPending ? 'ambas' : dgPending ? 'dg' : 'dcm');
+        setShowNotaDireccionModal(true);
+        isSubmittingRef.current = false;
+        return;
+      }
       updateMutation.mutate(data);
     } else {
       createMutation.mutate(data);
     }
+  };
+
+  // Confirm handler del mini-modal Nueva Nota Dirección — POST la nota y luego
+  // dispara el update. Si la nota falla, no se envía el update.
+  const handleNotaDireccionConfirm = async (texto: string) => {
+    if (!editSolicitudId || !pendingUpdateData) return;
+    await notasDireccionService.create(editSolicitudId, texto);
+    setShowNotaDireccionModal(false);
+    isSubmittingRef.current = true;
+    updateMutation.mutate(pendingUpdateData);
+    setPendingUpdateData(null);
+    setPendingAuthTipo(null);
   };
 
   // Populate form when editing
@@ -3017,16 +3054,33 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
                 />
               </div>
 
-              {/* Notas */}
+              {/* Notas Dirección */}
               <div className="space-y-2">
-                <label className={`text-sm font-medium ${isDark ? 'text-zinc-300' : 'text-gray-700'}`}>Notas Dirección</label>
-                <textarea
-                  value={notas}
-                  onChange={(e) => setNotas(e.target.value)}
-                  placeholder="Notas breves..."
-                  rows={4}
-                  className={`w-full px-4 py-3 ${isDark ? 'bg-zinc-800 border-zinc-700 text-white placeholder:text-zinc-500' : 'bg-gray-100 border-gray-200 text-gray-900 placeholder:text-gray-400'} border rounded-xl focus:outline-none focus:ring-2 focus:ring-purple-500/50 resize-none`}
-                />
+                {isEditMode && editSolicitudId ? (
+                  // Modo edición: bitácora readonly. La nueva nota se pide en el
+                  // mini-modal al Guardar cambios (si dispara autorización).
+                  <div className={`px-4 py-3 rounded-xl border ${isDark ? 'bg-zinc-800/40 border-zinc-700' : 'bg-gray-50 border-gray-200'}`}>
+                    <NotasDireccionBitacora
+                      idSolicitud={editSolicitudId}
+                      isDark={isDark}
+                      variant="inline"
+                    />
+                    <p className={`mt-2 text-[11px] italic ${isDark ? 'text-zinc-500' : 'text-gray-500'}`}>
+                      Al guardar, si se dispara una autorización nueva se te pedirá una nota específica para esa autorización.
+                    </p>
+                  </div>
+                ) : (
+                  <>
+                    <label className={`text-sm font-medium ${isDark ? 'text-zinc-300' : 'text-gray-700'}`}>Notas Dirección</label>
+                    <textarea
+                      value={notas}
+                      onChange={(e) => setNotas(e.target.value)}
+                      placeholder="Notas breves..."
+                      rows={4}
+                      className={`w-full px-4 py-3 ${isDark ? 'bg-zinc-800 border-zinc-700 text-white placeholder:text-zinc-500' : 'bg-gray-100 border-gray-200 text-gray-900 placeholder:text-gray-400'} border rounded-xl focus:outline-none focus:ring-2 focus:ring-purple-500/50 resize-none`}
+                    />
+                  </>
+                )}
               </div>
             </div>
           )}
@@ -4254,6 +4308,20 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
           </div>
         </div>
       )}
+
+      <NuevaNotaDireccionModal
+        isOpen={showNotaDireccionModal}
+        contexto="solicitud"
+        referenciaLabel={editSolicitudId ? `#${editSolicitudId}` : undefined}
+        tipoAutorizacion={pendingAuthTipo}
+        onCancel={() => {
+          setShowNotaDireccionModal(false);
+          setPendingUpdateData(null);
+          setPendingAuthTipo(null);
+          isSubmittingRef.current = false;
+        }}
+        onConfirm={handleNotaDireccionConfirm}
+      />
     </div>
   );
 }

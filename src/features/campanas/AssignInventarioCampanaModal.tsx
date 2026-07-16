@@ -28,6 +28,9 @@ import { SaveChangesConfirmModal, type ModifiedCircuito } from '../../components
 import { DeleteCircuitoConfirmModal } from '../../components/DeleteCircuitoConfirmModal';
 import { CircuitCheckbox } from '../../components/ui/CircuitCheckbox';
 import { BULK_DELETE_ENABLED } from '../../config/featureFlags';
+import { NotasDireccionBitacora } from '../notificaciones/NotasDireccionBitacora';
+import { NuevaNotaDireccionModal } from '../notificaciones/NuevaNotaDireccionModal';
+import { notasDireccionService } from '../../services/notasDireccion.service';
 
 // GOOGLE_MAPS_API_KEY / LIBRARIES centralizados en src/config/googleMaps.ts
 // (evita que la API de Google Maps se cargue dos veces y trabe la pantalla).
@@ -1004,6 +1007,11 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
   const [inventarioDisponible, setInventarioDisponible] = useState<InventarioDisponible[]>([]);
   const [isSearching, setIsSearching] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
+
+  // Mini-modal Nueva Nota Dirección (obligatoria al guardar cambios que
+  // disparan autorización DG/DCM en la campaña). Feedback Jos 2026-07-08.
+  const [showNotaDireccionModal, setShowNotaDireccionModal] = useState(false);
+  const [pendingAuthTipo, setPendingAuthTipo] = useState<'dg' | 'dcm' | 'ambas' | null>(null);
 
   // Real-time: cuando OTRO usuario reserva un espacio cuyo período se solapa
   // con la cara que estoy buscando, lo quito de mi listado en vivo.
@@ -3242,7 +3250,7 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
     }
   };
 
-  const handleBulkSaveChanges = async () => {
+  const handleBulkSaveChanges = async (skipNotaGate = false) => {
     const hasCampanaChanges = hasChanges;
     const hasCaraChanges = modifiedCaras.size > 0;
 
@@ -3256,6 +3264,20 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
     if (rechazadasSinResolver.length > 0) {
       showToast(`Tienes ${rechazadasSinResolver.length} circuito(s) rechazado(s) sin resolver. Edítalos o usa "Reenviar a autorización" antes de guardar.`, 'error');
       return;
+    }
+
+    // Gate obligatorio: si HAY autorización pendiente (current o guardada),
+    // cada save re-envía la autorización → pedir Nota Dirección. Feedback
+    // Jos 2026-07-08/09 — la condicion se amplio para cubrir campañas con
+    // circuitos ya 'pendiente' de antes.
+    if (!skipNotaGate && campanaDetails?.solicitud_id) {
+      const dgPending = caras.some(c => c.autorizacion_dg === 'pendiente' || (c as any)._originalDg === 'pendiente');
+      const dcmPending = caras.some(c => c.autorizacion_dcm === 'pendiente' || (c as any)._originalDcm === 'pendiente');
+      if (dgPending || dcmPending) {
+        setPendingAuthTipo(dgPending && dcmPending ? 'ambas' : dgPending ? 'dg' : 'dcm');
+        setShowNotaDireccionModal(true);
+        return;
+      }
     }
 
     setIsSaving(true);
@@ -7703,14 +7725,29 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
                   {/* Notes and Description */}
                   <div className="grid grid-cols-2 gap-4">
                     <div className="space-y-1">
-                      <label className={`text-xs ${isDark ? 'text-zinc-500' : 'text-gray-500'}`}>Notas Dirección</label>
-                      <textarea
-                        value={notas}
-                        onChange={(e) => canEditResumen && setNotas(e.target.value)}
-                        disabled={!canEditResumen}
-                        className={`w-full px-3 py-2 ${isDark ? 'bg-zinc-800 border-zinc-700 text-white' : 'bg-white border-gray-300 text-gray-900'} border rounded-lg text-sm placeholder:text-zinc-500 focus:outline-none focus:ring-1 focus:ring-purple-500/50 resize-none h-20 ${!canEditResumen ? 'opacity-60 cursor-not-allowed' : ''}`}
-                        placeholder="Notas adicionales..."
-                      />
+                      {campanaDetails?.solicitud_id ? (
+                        // Edición de campaña: bitácora readonly. La nota nueva
+                        // se pide en el mini-modal al guardar cambios que
+                        // disparan autorización.
+                        <div className={`px-3 py-2 rounded-lg border ${isDark ? 'bg-zinc-800/60 border-zinc-700' : 'bg-white border-gray-300'} h-20 overflow-y-auto`}>
+                          <NotasDireccionBitacora
+                            idSolicitud={campanaDetails.solicitud_id}
+                            isDark={isDark}
+                            variant="inline"
+                          />
+                        </div>
+                      ) : (
+                        <>
+                          <label className={`text-xs ${isDark ? 'text-zinc-500' : 'text-gray-500'}`}>Notas Dirección</label>
+                          <textarea
+                            value={notas}
+                            onChange={(e) => canEditResumen && setNotas(e.target.value)}
+                            disabled={!canEditResumen}
+                            className={`w-full px-3 py-2 ${isDark ? 'bg-zinc-800 border-zinc-700 text-white' : 'bg-white border-gray-300 text-gray-900'} border rounded-lg text-sm placeholder:text-zinc-500 focus:outline-none focus:ring-1 focus:ring-purple-500/50 resize-none h-20 ${!canEditResumen ? 'opacity-60 cursor-not-allowed' : ''}`}
+                            placeholder="Notas adicionales..."
+                          />
+                        </>
+                      )}
                     </div>
                     <div className="space-y-1">
                       <label className={`text-xs ${isDark ? 'text-zinc-500' : 'text-gray-500'}`}>Descripción Trafico</label>
@@ -9609,7 +9646,20 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
               {effectiveCanEdit && (
                 <button
                   disabled={(!hasChanges && modifiedCaras.size === 0) || isSaving}
-                  onClick={() => setShowSaveConfirm(true)}
+                  onClick={() => {
+                    // Flujo nuevo (feedback Jos 2026-07-15): nota primero,
+                    // confirmar cambios después.
+                    if (campanaDetails?.solicitud_id) {
+                      const dgPending = caras.some(c => c.autorizacion_dg === 'pendiente' || (c as any)._originalDg === 'pendiente');
+                      const dcmPending = caras.some(c => c.autorizacion_dcm === 'pendiente' || (c as any)._originalDcm === 'pendiente');
+                      if (dgPending || dcmPending) {
+                        setPendingAuthTipo(dgPending && dcmPending ? 'ambas' : dgPending ? 'dg' : 'dcm');
+                        setShowNotaDireccionModal(true);
+                        return;
+                      }
+                    }
+                    setShowSaveConfirm(true);
+                  }}
                   className={`px-6 py-2 rounded-lg text-sm font-medium transition-all ${
                     (hasChanges || modifiedCaras.size > 0) && !isSaving
                       ? 'bg-purple-500 text-white hover:bg-purple-600 shadow-lg shadow-purple-500/25'
@@ -9636,12 +9686,36 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
         onClose={() => setShowSaveConfirm(false)}
         onConfirm={async () => {
           setShowSaveConfirm(false);
-          await handleBulkSaveChanges();
+          // skipNotaGate=true: si aplicaba la nota, ya se pidió antes de este
+          // modal (nuevo flujo). Si no aplicaba, no cambia nada.
+          await handleBulkSaveChanges(true);
         }}
         isSaving={isSaving}
         contextLabel="campaña"
         hasGeneralChanges={hasChanges}
         modifiedCircuitos={modifiedCircuitosForConfirm}
+      />
+
+      {/* Mini-modal Nueva Nota Dirección — obligatorio cuando la edición
+          dispara autorización DG/DCM. Feedback Jos 2026-07-15: al confirmar
+          guarda la nota y luego abre el Confirmar Cambios (antes iba directo
+          al save y se sentía confuso). */}
+      <NuevaNotaDireccionModal
+        isOpen={showNotaDireccionModal}
+        contexto="campana"
+        referenciaLabel={campana?.id ? `#${campana.id}` : undefined}
+        tipoAutorizacion={pendingAuthTipo}
+        onCancel={() => {
+          setShowNotaDireccionModal(false);
+          setPendingAuthTipo(null);
+        }}
+        onConfirm={async (texto) => {
+          if (!campanaDetails?.solicitud_id) return;
+          await notasDireccionService.create(campanaDetails.solicitud_id, texto);
+          setShowNotaDireccionModal(false);
+          setPendingAuthTipo(null);
+          setShowSaveConfirm(true);
+        }}
       />
       {/* Delete Circuito Confirm Modal — confirmación al usar bote de basura */}
       <DeleteCircuitoConfirmModal

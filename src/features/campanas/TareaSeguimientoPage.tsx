@@ -86,7 +86,7 @@ import { useThemeStore } from '../../store/themeStore';
 import { getPermissions } from '../../lib/permissions';
 import { useSocketCampana, useSocketEquipos } from '../../hooks/useSocket';
 import { LinkPreview } from '../../components/ui/LinkPreview';
-import { exportVersionarioArtes } from '../../utils/exportVersionarioArtes';
+import { exportVersionarioArtesMulti } from '../../utils/exportVersionarioArtes';
 import * as XLSX from 'xlsx';
 import { CargaCsvModal } from './CargaCsvModal';
 
@@ -4389,6 +4389,7 @@ function TaskDetailModal({
   openTradicionalGallery,
   tipoPeriodo = 'catorcena',
   campana = null,
+  tareasCampana = [],
 }: {
   isOpen: boolean;
   onClose: () => void;
@@ -4424,6 +4425,9 @@ function TaskDetailModal({
   openTradicionalGallery: (reservaIds: number | number[], codigoUnico: string) => void;
   tipoPeriodo?: string;
   campana?: any;
+  // Tareas de la campaña (compartidas desde el padre para poder calcular
+  // impresiones recibidas — buscando la Recepción Faltantes hija por titulo).
+  tareasCampana?: TareaCampana[];
 }) {
   const isDark = useThemeStore((s) => s.theme) === 'dark';
 
@@ -6848,11 +6852,18 @@ function TaskDetailModal({
                           <th className="p-2 font-medium text-blue-300">Impresiones</th>
                           <th className="p-2 font-medium text-blue-300">Ciudad</th>
                           <th className="p-2 font-medium text-blue-300">APS</th>
+                          <th className="p-2 font-medium text-blue-300">Tarifa Pública</th>
+                          <th className="p-2 font-medium text-blue-300">Total</th>
                         </tr>
                       </thead>
                       <tbody>
                         {task.contenido.split('\n').filter(Boolean).map((line, idx) => {
                           const parts = line.split(' | ').map(s => s.trim());
+                          // El contenido se genera desde OrdenImpresionModal (línea ~12417)
+                          // con este orden: articulo | formato | impresiones | plaza |
+                          // APS: N | Tarifa Publica: $... | Total: $...
+                          const tarifaPublica = parts[5]?.replace(/^Tarifa Publica:\s*/, '') || '-';
+                          const total = parts[6]?.replace(/^Total:\s*/, '') || '-';
                           return (
                             <tr key={idx} className="border-b border-border/20 hover:bg-blue-900/10">
                               <td className="p-2">
@@ -6872,6 +6883,8 @@ function TaskDetailModal({
                                   {parts[4]?.replace('APS: ', '') || '-'}
                                 </span>
                               </td>
+                              <td className="p-2 text-right font-mono text-emerald-300">{tarifaPublica}</td>
+                              <td className="p-2 text-right font-mono text-emerald-400 font-semibold">{total}</td>
                             </tr>
                           );
                         })}
@@ -6885,12 +6898,31 @@ function TaskDetailModal({
               {canResolveCurrentTask && task.estatus !== 'Atendido' && task.estatus !== 'Completado' && task.estatus !== 'Finalizada' && (
                 <div className="flex justify-end pt-2">
                   <button
-                    onClick={() => onTaskComplete(task.id)}
+                    onClick={async () => {
+                      // Al finalizar, cerrar el modal automaticamente (antes se
+                      // quedaba abierto — feedback Jos 2026-07-15).
+                      try {
+                        await onTaskComplete(task.id);
+                        onClose();
+                      } catch (e) {
+                        // Si falla, dejar modal abierto para que reintente
+                        console.error('Error al finalizar Orden de Impresion:', e);
+                      }
+                    }}
                     disabled={isUpdating}
-                    className="flex items-center gap-2 px-6 py-2.5 text-sm font-medium bg-green-600 hover:bg-green-700 text-white rounded-lg transition-colors disabled:opacity-50"
+                    className="flex items-center gap-2 px-6 py-2.5 text-sm font-medium bg-green-600 hover:bg-green-700 text-white rounded-lg transition-colors disabled:opacity-60 disabled:cursor-not-allowed"
                   >
-                    {isUpdating ? <Loader2 className="h-4 w-4 animate-spin" /> : <CheckCircle2 className="h-4 w-4" />}
-                    Finalizar Orden
+                    {isUpdating ? (
+                      <>
+                        <Loader2 className="h-4 w-4 animate-spin" />
+                        Finalizando...
+                      </>
+                    ) : (
+                      <>
+                        <CheckCircle2 className="h-4 w-4" />
+                        Finalizar Orden
+                      </>
+                    )}
                   </button>
                 </div>
               )}
@@ -7607,6 +7639,42 @@ function TaskDetailModal({
                     <span className="text-zinc-500">Impresiones solicitadas:</span>
                     <p className="text-2xl font-bold text-purple-400">{impresionesOrdenadas}</p>
                   </div>
+                  {task.estatus === 'Atendido' && (() => {
+                    // Impresiones recibidas: solicitadas - faltantes reportados en
+                    // la Recepción Faltantes hija (si existe). Si no hay tarea de
+                    // Faltantes, todo lo solicitado fue recibido. Feedback Jos 2026-07-15.
+                    const identifierMatch = task.titulo?.match(/TASK-\d+/) || task.identificador?.match(/TASK-\d+/);
+                    const identifier = identifierMatch ? identifierMatch[0] : `TASK-${task.id}`;
+                    let faltantesReportados = 0;
+                    // Buscar Faltantes hija por titulo "Recepción Faltantes - {identifier}"
+                    // o por ser una tarea Recepción con evidencia recepcion_faltantes que
+                    // referencie a esta tarea en su evidencia.
+                    for (const t of tareasCampana) {
+                      if (t.tipo !== 'Recepción') continue;
+                      if (t.id === parseInt(task.id)) continue;
+                      const tituloMatch = (t.titulo || '').includes(identifier);
+                      let ev: any = null;
+                      try { ev = t.evidencia ? JSON.parse(t.evidencia) : null; } catch {}
+                      const esFaltantesDeEsta = tituloMatch && ev?.tipo === 'recepcion_faltantes';
+                      if (esFaltantesDeEsta) {
+                        faltantesReportados += t.num_impresiones || ev?.totalFaltantes || 0;
+                      }
+                    }
+                    const recibidas = Math.max(0, impresionesOrdenadas - faltantesReportados);
+                    return (
+                      <div>
+                        <span className="text-zinc-500">Impresiones recibidas:</span>
+                        <p className="text-2xl font-bold text-emerald-400">
+                          {recibidas}
+                          {faltantesReportados > 0 && (
+                            <span className="text-sm font-normal text-zinc-500 ml-2">
+                              ({faltantesReportados} faltantes)
+                            </span>
+                          )}
+                        </p>
+                      </div>
+                    );
+                  })()}
                 </div>
               </div>
 
@@ -15963,7 +16031,8 @@ export function TareaSeguimientoPage() {
     tareasRecepcion.forEach(recepcion => {
       // Si la Recepción ya está asociada a una Impresión, fue manejada arriba.
       if (impresionRelatedRecepcionIds.has(recepcion.id)) return;
-      // No procesar Recepciones de faltantes — esas tienen su propio camino.
+      // Recepciones de faltantes se procesan en el pass siguiente para poder
+      // sobreescribir a la Recepción normal padre (caso Cliente Imprime).
       if (recepcionEsFaltantesMap.get(recepcion.id)) return;
       const listado = recepcion.listado_inventario || recepcion.ids_reservas || '';
       const ids = listado.replace(/\*/g, ',').split(',').map(s => s.trim()).filter(Boolean);
@@ -15977,6 +16046,31 @@ export function TareaSeguimientoPage() {
           tarea_id: recepcion.id,
           tarea_estatus: recepcion.estatus || (esAtendida ? 'Atendido' : 'Pendiente'),
           tarea_titulo: recepcion.titulo || `Recepción #${recepcion.id}`,
+          proveedor: recepcion.nombre_proveedores || '-',
+          estado_impresion: estadoImpresion,
+          tarea_recepcion_id: recepcion.id,
+        });
+      });
+    });
+
+    // Segundo pass: Recepciones Faltantes HUÉRFANAS (sin Impresión padre).
+    // Cliente Imprime crea Recepción normal + Recepción Faltantes sin Impresión.
+    // El loop huérfano de arriba marca los items como 'recibido' via la Recepción
+    // normal atendida. Aquí SOBREESCRIBIMOS los items que están específicamente
+    // en la Faltantes → 'pendiente_recepcion' (aparecen en el sub-tab correcto).
+    // Bug reportado por Jos 2026-07-15.
+    tareasRecepcion.forEach(recepcion => {
+      if (impresionRelatedRecepcionIds.has(recepcion.id)) return;
+      if (!recepcionEsFaltantesMap.get(recepcion.id)) return;
+      const listado = recepcion.listado_inventario || recepcion.ids_reservas || '';
+      const ids = normalizeIds(listado);
+      const esAtendida = recepcion.estatus === 'Atendido' || recepcion.estatus === 'Completado';
+      const estadoImpresion: EstadoImpresion = esAtendida ? 'recibido' : 'pendiente_recepcion';
+      ids.forEach(id => {
+        reservaToTareaMap.set(id, {
+          tarea_id: recepcion.id,
+          tarea_estatus: recepcion.estatus || (esAtendida ? 'Atendido' : 'Pendiente'),
+          tarea_titulo: recepcion.titulo || `Recepción Faltantes #${recepcion.id}`,
           proveedor: recepcion.nombre_proveedores || '-',
           estado_impresion: estadoImpresion,
           tarea_recepcion_id: recepcion.id,
@@ -16000,9 +16094,23 @@ export function TareaSeguimientoPage() {
       const itemId = String(item.id);
       const compositeId = item.grupo ? `${item.id}_${item.grupo}` : itemId;
       const rsvId = item.rsvId || item.rsv_id || item.rsv_ids || '';
-      const tareaInfo = reservaToTareaMap.get(compositeId)
+      // rsv_id puede venir concatenado (ej "3456,3457" cuando el item agrupa
+      // varias reservas). El loop huerfano de Recepciones indexa ids
+      // individuales — sin splitear aca el matching NUNCA hallaba la
+      // Recepción y el tab "Pend. Recepción" se veia vacio aunque el badge
+      // sumaba num_impresiones. Bug reportado por Jos 2026-07-09.
+      const rsvIndividuales = rsvId
+        ? rsvId.split(',').map(s => s.trim()).filter(Boolean)
+        : [];
+      let tareaInfo = reservaToTareaMap.get(compositeId)
         || reservaToTareaMap.get(itemId)
         || (rsvId ? reservaToTareaMap.get(rsvId) : undefined);
+      if (!tareaInfo) {
+        for (const rsv of rsvIndividuales) {
+          const hit = reservaToTareaMap.get(rsv);
+          if (hit) { tareaInfo = hit; break; }
+        }
+      }
 
       if (tareaInfo) {
         const row = transformInventarioToRow(item, 'aprobado');
@@ -17419,7 +17527,14 @@ export function TareaSeguimientoPage() {
           }
         } catch {/* ignorar reservas sin tradicionales */}
       }));
-      await exportVersionarioArtes({ campana: campana as any, items, digitalFilesByReserva, notesByUrl });
+      // Usar el mismo exporter que descarga desde el screen Campañas > Versionario
+      // para que el formato del Excel sea el mismo (agrupa por circuito, cabecera,
+      // miniaturas). exportVersionarioArtes (single, legado) tenia bug: nunca setea
+      // a.href al blob y por eso el archivo no bajaba.
+      await exportVersionarioArtesMulti({
+        campanas: [{ campana: campana as any, items, digitalFilesByReserva, notesByUrl }],
+        fileNameSuffix: campana?.nombre ? `_${(campana.nombre as string).replace(/[^\w\-]+/g, '_')}` : `_${campanaId}`,
+      });
     } catch (e) {
       console.error('Error exportando versionario artes:', e);
       alert('Error al generar el Excel de Versionario Artes. Revisa la consola.');
@@ -19559,7 +19674,15 @@ export function TareaSeguimientoPage() {
                             {permissions.canOpenTasks && (
                               <button
                                 onClick={() => {
-                                  const tarea = tareasAPI.find(t => t.id === grupo.tarea_id);
+                                  // En sub-tab Recibido, grupo.tarea_id apunta a la Impresión
+                                  // padre pero la foto comprobatoria + observaciones estan en
+                                  // la Recepción hija. Preferimos la Recepción para el "Ver
+                                  // detalle" (bug reportado por Jos 2026-07-09).
+                                  const tareaRecepcionId = (grupo.items[0] as any)?.tarea_recepcion_id as number | undefined;
+                                  const tareaRecepcion = tareaRecepcionId
+                                    ? tareasAPI.find(t => t.id === tareaRecepcionId)
+                                    : null;
+                                  const tarea = tareaRecepcion || tareasAPI.find(t => t.id === grupo.tarea_id);
                                   if (tarea) {
                                     const taskRow: TaskRow = {
                                       id: tarea.id.toString(),
@@ -19578,9 +19701,6 @@ export function TareaSeguimientoPage() {
                                       proveedores_id: tarea.proveedores_id || undefined,
                                       num_impresiones: tarea.num_impresiones || undefined,
                                       evidencia: tarea.evidencia || undefined,
-                                      // Sin estos campos la vista "Recepción completada" no
-                                      // mostraba ni las fotos comprobatorias ni las
-                                      // observaciones al dar "Ver detalle" en sub-tab Recibido.
                                       archivo_testigo: tarea.archivo_testigo || undefined,
                                       contenido: tarea.contenido || undefined,
                                     };
@@ -21638,6 +21758,7 @@ export function TareaSeguimientoPage() {
           setSelectedTask(null);
         }}
         task={selectedTask}
+        tareasCampana={tareasAPI}
         inventoryData={inventoryArteData}
         artesExistentes={artesExistentes}
         isLoadingArtes={isLoadingArtes}
@@ -21883,6 +22004,17 @@ Por favor registra la cantidad de impresiones recibidas.`,
             ...(guiaPdfFinal ? { guia_pdf: guiaPdfFinal } : {})
           });
 
+          // 1. Marcar la Recepción original como Atendida — ya recibio parcial,
+          // la nueva Recepción Faltantes toma el relevo por los faltantes.
+          // Sin esto ambas quedaban activas y confundian el flujo (bug reportado).
+          if (selectedTask.id) {
+            await updateTareaMutation.mutateAsync({
+              tareaId: parseInt(selectedTask.id),
+              data: { estatus: 'Atendido' }
+            });
+          }
+
+          // 2. Crear la Recepción Faltantes
           await createTareaMutation.mutateAsync({
             titulo: `Recepción Faltantes - ${identificadorBase}`,
             descripcion: `Tarea de recepción de impresiones faltantes.

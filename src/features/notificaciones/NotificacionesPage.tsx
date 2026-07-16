@@ -30,6 +30,31 @@ import { campanasService } from '../../services/campanas.service';
 import { NotasDireccionBitacora } from './NotasDireccionBitacora';
 
 // ============ HELPERS ============
+// Tipos de tareas creadas desde el Gestor de Artes. Estas tareas se
+// atienden en su modal real (con side-effects: aprobar arte, subir foto,
+// rotar roles, marcar instalado, etc). NUNCA deben cerrarse via el boton
+// "Finalizar tarea" del preview lateral — solo marcaria estatus=Atendido
+// sin disparar los side-effects, dejando el flujo roto (bug reportado
+// por Jos 2026-07-09).
+const TIPOS_GESTOR_ARTES = new Set([
+  'Revisión de artes', 'Revision de artes',
+  'Correccion', 'Corrección',
+  'Impresión', 'Impresion',
+  'Orden de Impresión', 'Orden de Impresion',
+  'Recepción', 'Recepcion',
+  'Gestión de Recepción Parcial', 'Gestion de Recepcion Parcial',
+  'Testigo',
+  'Instalación', 'Instalacion',
+  'Programación', 'Programacion',
+  'Programación para Tráfico', 'Programacion para Trafico',
+  'Orden de Programación', 'Orden de Programacion',
+  'Orden de Instalación', 'Orden de Instalacion',
+]);
+function isTareaGestorArtes(tipo?: string | null): boolean {
+  if (!tipo) return false;
+  return TIPOS_GESTOR_ARTES.has(tipo);
+}
+
 // Render texto con URLs (http://, https://, www.) convertidas en hyperlinks
 // que abren en nueva pestaña. Se mantienen los saltos de linea originales.
 function LinkifiedText({ text, className }: { text: string; className?: string }) {
@@ -1663,6 +1688,30 @@ function ApprovalModal({
     },
   });
 
+  // Filtro DG (paso previo con Director General Adjunto) — no aprueba/rechaza
+  // caras, solo decide "Enviar a DG" o "Rechazar como Corrección" a nivel tarea.
+  const isFiltroDgTask = tarea.tipo === 'Filtro Autorización DG';
+  const aprobarFiltroDgMutation = useMutation({
+    mutationFn: () => notificacionesService.aprobarFiltroDg(tarea.id),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['notificaciones'] });
+      queryClient.invalidateQueries({ queryKey: ['notificaciones-stats'] });
+      onAction();
+      onClose();
+    },
+  });
+  const rechazarFiltroDgMutation = useMutation({
+    mutationFn: (motivo: string) => notificacionesService.rechazarFiltroDg(tarea.id, motivo),
+    onSuccess: () => {
+      setShowRechazoInput(false);
+      setRechazoMotivo('');
+      queryClient.invalidateQueries({ queryKey: ['notificaciones'] });
+      queryClient.invalidateQueries({ queryKey: ['notificaciones-stats'] });
+      onAction();
+      onClose();
+    },
+  });
+
   const allCaras = carasData || [];
   const carasPendientes = useMemo(() => {
     if (!carasData || !tipoAutorizacion) return [];
@@ -1672,6 +1721,8 @@ function ApprovalModal({
 
   const [autoFinalized, setAutoFinalized] = useState(false);
   useEffect(() => {
+    // No auto-finalizar para Filtro DG — el DGA debe decidir explicitamente.
+    if (isFiltroDgTask) return;
     if (
       carasData &&
       carasData.length > 0 &&
@@ -1720,77 +1771,78 @@ function ApprovalModal({
   return (
     <div className="fixed inset-0 z-[60] flex items-center justify-center">
       <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={onClose} />
-      <div className={`relative w-full max-w-4xl max-h-[90vh] mx-4 rounded-2xl ${isDark ? 'bg-zinc-900 border-zinc-700' : 'bg-white border-gray-200'} border shadow-2xl flex flex-col overflow-hidden`}>
+      <div className={`relative w-full max-w-4xl max-h-[95vh] sm:max-h-[90vh] mx-2 sm:mx-4 rounded-2xl ${isDark ? 'bg-zinc-900 border-zinc-700' : 'bg-white border-gray-200'} border shadow-2xl flex flex-col overflow-hidden`}>
         {/* Header */}
-        <div className={`p-6 border-b ${isDark ? 'border-zinc-800' : 'border-gray-200'}`}>
-          <div className="flex items-center justify-between mb-4">
-            <div className="flex items-center gap-3">
-              <div className="p-2 rounded-xl bg-orange-500/20 border border-orange-500/30">
+        <div className={`p-4 sm:p-6 border-b ${isDark ? 'border-zinc-800' : 'border-gray-200'}`}>
+          <div className="flex items-center justify-between mb-4 gap-3">
+            <div className="flex items-center gap-3 min-w-0">
+              <div className="p-2 rounded-xl bg-orange-500/20 border border-orange-500/30 flex-shrink-0">
                 <ShieldCheck className="h-5 w-5 text-orange-400" />
               </div>
-              <div>
-                <h2 className={`text-lg font-semibold ${isDark ? 'text-white' : 'text-gray-900'}`}>{tarea.tipo}</h2>
-                <p className={`text-xs ${isDark ? 'text-zinc-500' : 'text-gray-400'}`}>{tarea.titulo}</p>
+              <div className="min-w-0">
+                <h2 className={`text-base sm:text-lg font-semibold truncate ${isDark ? 'text-white' : 'text-gray-900'}`}>{tarea.tipo}</h2>
+                <p className={`text-xs truncate ${isDark ? 'text-zinc-500' : 'text-gray-400'}`}>{tarea.titulo}</p>
               </div>
             </div>
-            <button onClick={onClose} className={`p-2 rounded-xl ${isDark ? 'hover:bg-zinc-800 text-zinc-400' : 'hover:bg-gray-100 text-gray-500'} transition-colors`}>
+            <button onClick={onClose} className={`p-2 flex-shrink-0 rounded-xl ${isDark ? 'hover:bg-zinc-800 text-zinc-400' : 'hover:bg-gray-100 text-gray-500'} transition-colors`}>
               <X className="h-5 w-5" />
             </button>
           </div>
 
-          {/* Info cards */}
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-            <div className={`p-3 rounded-xl ${isDark ? 'bg-zinc-800/50 border-zinc-700/50' : 'bg-gray-50 border-gray-200'} border`}>
-              <div className={`text-[10px] uppercase tracking-wider ${isDark ? 'text-zinc-500' : 'text-gray-400'} mb-1`}>Cliente</div>
-              <div className={`text-sm font-medium ${isDark ? 'text-white' : 'text-gray-900'} truncate`}>{cliente}</div>
+          {/* Info cards — compactas en móvil para dejar espacio a la tabla.
+              Feedback Jos 2026-07-15. */}
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-1.5 sm:gap-3">
+            <div className={`px-2 py-1.5 sm:p-3 rounded-lg sm:rounded-xl ${isDark ? 'bg-zinc-800/50 border-zinc-700/50' : 'bg-gray-50 border-gray-200'} border`}>
+              <div className={`text-[9px] sm:text-[10px] uppercase tracking-wider ${isDark ? 'text-zinc-500' : 'text-gray-400'}`}>Cliente</div>
+              <div className={`text-xs sm:text-sm font-medium ${isDark ? 'text-white' : 'text-gray-900'} truncate`}>{cliente}</div>
             </div>
-            <div className={`p-3 rounded-xl ${isDark ? 'bg-zinc-800/50 border-zinc-700/50' : 'bg-gray-50 border-gray-200'} border`}>
-              <div className={`text-[10px] uppercase tracking-wider ${isDark ? 'text-zinc-500' : 'text-gray-400'} mb-1`}>Creador</div>
-              <div className={`text-sm font-medium ${isDark ? 'text-white' : 'text-gray-900'} truncate`}>{creador}</div>
+            <div className={`px-2 py-1.5 sm:p-3 rounded-lg sm:rounded-xl ${isDark ? 'bg-zinc-800/50 border-zinc-700/50' : 'bg-gray-50 border-gray-200'} border`}>
+              <div className={`text-[9px] sm:text-[10px] uppercase tracking-wider ${isDark ? 'text-zinc-500' : 'text-gray-400'}`}>Creador</div>
+              <div className={`text-xs sm:text-sm font-medium ${isDark ? 'text-white' : 'text-gray-900'} truncate`}>{creador}</div>
             </div>
-            <div className={`p-3 rounded-xl ${isDark ? 'bg-zinc-800/50 border-zinc-700/50' : 'bg-gray-50 border-gray-200'} border`}>
-              <div className={`text-[10px] uppercase tracking-wider ${isDark ? 'text-zinc-500' : 'text-gray-400'} mb-1`}>Origen</div>
-              <div className={`text-sm font-medium ${isDark ? 'text-white' : 'text-gray-900'}`}>{origen}</div>
+            <div className={`px-2 py-1.5 sm:p-3 rounded-lg sm:rounded-xl ${isDark ? 'bg-zinc-800/50 border-zinc-700/50' : 'bg-gray-50 border-gray-200'} border`}>
+              <div className={`text-[9px] sm:text-[10px] uppercase tracking-wider ${isDark ? 'text-zinc-500' : 'text-gray-400'}`}>Origen</div>
+              <div className={`text-xs sm:text-sm font-medium ${isDark ? 'text-white' : 'text-gray-900'} truncate`}>{origen}</div>
             </div>
-            <div className={`p-3 rounded-xl ${isDark ? 'bg-zinc-800/50 border-zinc-700/50' : 'bg-gray-50 border-gray-200'} border`}>
-              <div className={`text-[10px] uppercase tracking-wider ${isDark ? 'text-zinc-500' : 'text-gray-400'} mb-1`}>Creación</div>
-              <div className={`text-sm font-medium ${isDark ? 'text-white' : 'text-gray-900'}`}>{tarea.fecha_creacion ? formatDate(tarea.fecha_creacion) : '—'}</div>
+            <div className={`px-2 py-1.5 sm:p-3 rounded-lg sm:rounded-xl ${isDark ? 'bg-zinc-800/50 border-zinc-700/50' : 'bg-gray-50 border-gray-200'} border`}>
+              <div className={`text-[9px] sm:text-[10px] uppercase tracking-wider ${isDark ? 'text-zinc-500' : 'text-gray-400'}`}>Creación</div>
+              <div className={`text-xs sm:text-sm font-medium ${isDark ? 'text-white' : 'text-gray-900'} truncate`}>{tarea.fecha_creacion ? formatDate(tarea.fecha_creacion) : '—'}</div>
             </div>
           </div>
         </div>
 
-        {/* Resumen + Inversión */}
-        <div className={`px-6 py-4 border-b ${isDark ? 'border-zinc-800' : 'border-gray-200'}`}>
-          <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
+        {/* Resumen + Inversión — compactas en móvil */}
+        <div className={`px-3 sm:px-6 py-2 sm:py-4 border-b ${isDark ? 'border-zinc-800' : 'border-gray-200'}`}>
+          <div className="grid grid-cols-3 md:grid-cols-5 gap-1.5 sm:gap-3">
             {resumenData && (
               <>
-                <div className="p-2 rounded-lg bg-emerald-500/10 border border-emerald-500/20 text-center">
-                  <div className="text-lg font-bold text-emerald-400">{resumenData.aprobadas}</div>
-                  <div className={`text-[10px] ${isDark ? 'text-zinc-500' : 'text-gray-400'}`}>Aprobadas</div>
+                <div className="px-1.5 py-1 sm:p-2 rounded-md sm:rounded-lg bg-emerald-500/10 border border-emerald-500/20 text-center">
+                  <div className="text-sm sm:text-lg font-bold text-emerald-400 leading-tight">{resumenData.aprobadas}</div>
+                  <div className={`text-[9px] sm:text-[10px] ${isDark ? 'text-zinc-500' : 'text-gray-400'}`}>Aprobadas</div>
                 </div>
-                <div className="p-2 rounded-lg bg-red-500/10 border border-red-500/20 text-center">
-                  <div className="text-lg font-bold text-red-400">{tipoAutorizacion === 'dcm' ? resumenData.pendientesDcm : resumenData.pendientesDg}</div>
-                  <div className={`text-[10px] ${isDark ? 'text-zinc-500' : 'text-gray-400'}`}>Pend. {tipoAutorizacion === 'dcm' ? 'DCM' : 'DG'}</div>
+                <div className="px-1.5 py-1 sm:p-2 rounded-md sm:rounded-lg bg-red-500/10 border border-red-500/20 text-center">
+                  <div className="text-sm sm:text-lg font-bold text-red-400 leading-tight">{tipoAutorizacion === 'dcm' ? resumenData.pendientesDcm : resumenData.pendientesDg}</div>
+                  <div className={`text-[9px] sm:text-[10px] ${isDark ? 'text-zinc-500' : 'text-gray-400'}`}>Pend. {tipoAutorizacion === 'dcm' ? 'DCM' : 'DG'}</div>
                 </div>
               </>
             )}
-            <div className="p-2 rounded-lg bg-cyan-500/10 border border-cyan-500/20 text-center">
-              <div className="text-lg font-bold text-cyan-400">{totals.totalGeneral}</div>
-              <div className={`text-[10px] ${isDark ? 'text-zinc-500' : 'text-gray-400'}`}>Total caras</div>
+            <div className="px-1.5 py-1 sm:p-2 rounded-md sm:rounded-lg bg-cyan-500/10 border border-cyan-500/20 text-center">
+              <div className="text-sm sm:text-lg font-bold text-cyan-400 leading-tight">{totals.totalGeneral}</div>
+              <div className={`text-[9px] sm:text-[10px] ${isDark ? 'text-zinc-500' : 'text-gray-400'}`}>Total caras</div>
             </div>
-            <div className="p-2 rounded-lg bg-emerald-500/10 border border-emerald-500/20 text-center">
-              <div className="text-lg font-bold text-emerald-400">{totals.totalBonif}</div>
-              <div className={`text-[10px] ${isDark ? 'text-zinc-500' : 'text-gray-400'}`}>Bonificación</div>
+            <div className="px-1.5 py-1 sm:p-2 rounded-md sm:rounded-lg bg-emerald-500/10 border border-emerald-500/20 text-center">
+              <div className="text-sm sm:text-lg font-bold text-emerald-400 leading-tight">{totals.totalBonif}</div>
+              <div className={`text-[9px] sm:text-[10px] ${isDark ? 'text-zinc-500' : 'text-gray-400'}`}>Bonificación</div>
             </div>
-            <div className="p-2 rounded-lg bg-purple-500/10 border border-purple-500/20 text-center">
-              <div className="text-lg font-bold text-purple-400">${totals.totalInversion.toLocaleString('es-MX', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</div>
-              <div className={`text-[10px] ${isDark ? 'text-zinc-500' : 'text-gray-400'}`}>Inversión</div>
+            <div className="px-1.5 py-1 sm:p-2 rounded-md sm:rounded-lg bg-purple-500/10 border border-purple-500/20 text-center">
+              <div className="text-xs sm:text-lg font-bold text-purple-400 leading-tight truncate">${totals.totalInversion.toLocaleString('es-MX', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</div>
+              <div className={`text-[9px] sm:text-[10px] ${isDark ? 'text-zinc-500' : 'text-gray-400'}`}>Inversión</div>
             </div>
           </div>
         </div>
 
         {/* Tabla de caras organizada por catorcenas */}
-        <div className="flex-1 overflow-y-auto px-6 py-4">
+        <div className="flex-1 overflow-y-auto px-3 sm:px-6 py-3 sm:py-4">
           {Array.from(catorcenaGroups.entries()).map(([catorcena, caras]) => {
             const periodoInfo = caras[0]?.inicio_periodo && caras[0]?.fin_periodo
               ? `${formatDate(caras[0].inicio_periodo)} → ${formatDate(caras[0].fin_periodo)}`
@@ -1820,8 +1872,10 @@ function ApprovalModal({
                 </button>
 
                 {!isCollapsed && (
-                <div className={`mt-2 rounded-xl border ${isDark ? 'border-zinc-700/50' : 'border-gray-200'} overflow-hidden`}>
-                  <table className="w-full">
+                <div className={`mt-2 rounded-xl border ${isDark ? 'border-zinc-700/50' : 'border-gray-200'} overflow-x-auto scrollbar-purple`}>
+                  {/* min-w para forzar scroll horizontal en móvil (10 columnas
+                      no caben en <640px). Feedback Jos 2026-07-15. */}
+                  <table className="w-full min-w-[820px]">
                     <thead className={isDark ? 'bg-zinc-800/70' : 'bg-gray-50'}>
                       <tr>
                         <th className={`px-3 py-2.5 text-left text-[10px] font-semibold ${isDark ? 'text-zinc-500' : 'text-gray-400'} uppercase`}>Artículo</th>
@@ -1966,28 +2020,34 @@ function ApprovalModal({
 
         {/* Footer con acciones */}
         {isAutorizacionTask && tarea.estatus !== 'Atendido' && tarea.estatus !== 'Cancelado' && (
-          <div className={`p-6 border-t ${isDark ? 'border-zinc-800' : 'border-gray-200'}`}>
+          <div className={`p-4 sm:p-6 border-t ${isDark ? 'border-zinc-800' : 'border-gray-200'}`}>
             {!showRechazoInput ? (
-              <div className="flex gap-3">
+              <div className="flex gap-2 sm:gap-3">
                 <button
-                  onClick={() => aprobarMutation.mutate()}
-                  disabled={aprobarMutation.isPending || carasPendientes.length === 0}
-                  className="flex-1 flex items-center justify-center gap-2 px-4 py-3 rounded-xl bg-emerald-600 text-white text-sm font-medium hover:bg-emerald-700 disabled:opacity-50 disabled:cursor-not-allowed transition-all"
+                  onClick={() => isFiltroDgTask ? aprobarFiltroDgMutation.mutate() : aprobarMutation.mutate()}
+                  disabled={isFiltroDgTask
+                    ? aprobarFiltroDgMutation.isPending
+                    : (aprobarMutation.isPending || carasPendientes.length === 0)}
+                  className="flex-1 flex items-center justify-center gap-2 px-3 sm:px-4 py-3 rounded-xl bg-emerald-600 text-white text-sm font-medium hover:bg-emerald-700 disabled:opacity-50 disabled:cursor-not-allowed transition-all"
                 >
-                  {aprobarMutation.isPending ? (
+                  {(isFiltroDgTask ? aprobarFiltroDgMutation.isPending : aprobarMutation.isPending) ? (
                     <Loader2 className="h-4 w-4 animate-spin" />
                   ) : (
                     <CheckCircle className="h-4 w-4" />
                   )}
-                  {aprobarMutation.isPending ? 'Aprobando...' : `Aprobar ${carasPendientes.length} circuito${carasPendientes.length !== 1 ? 's' : ''}`}
+                  <span className="truncate">
+                    {isFiltroDgTask
+                      ? (aprobarFiltroDgMutation.isPending ? 'Enviando...' : 'Enviar a Dirección General')
+                      : (aprobarMutation.isPending ? 'Aprobando...' : `Aprobar ${carasPendientes.length} circuito${carasPendientes.length !== 1 ? 's' : ''}`)}
+                  </span>
                 </button>
                 <button
                   onClick={() => setShowRechazoInput(true)}
-                  disabled={carasPendientes.length === 0}
-                  className="flex items-center justify-center gap-2 px-6 py-3 rounded-xl bg-red-600/20 text-red-400 text-sm font-medium hover:bg-red-600/30 border border-red-500/30 disabled:opacity-50 disabled:cursor-not-allowed transition-all"
+                  disabled={!isFiltroDgTask && carasPendientes.length === 0}
+                  className="flex items-center justify-center gap-2 px-4 sm:px-6 py-3 rounded-xl bg-red-600/20 text-red-400 text-sm font-medium hover:bg-red-600/30 border border-red-500/30 disabled:opacity-50 disabled:cursor-not-allowed transition-all"
                 >
                   <X className="h-4 w-4" />
-                  Rechazar
+                  {isFiltroDgTask ? 'Rechazar como Corrección' : 'Rechazar'}
                 </button>
               </div>
             ) : (
@@ -1995,18 +2055,22 @@ function ApprovalModal({
                 <textarea
                   value={rechazoMotivo}
                   onChange={(e) => setRechazoMotivo(e.target.value)}
-                  placeholder="Escribe el motivo del rechazo..."
+                  placeholder={isFiltroDgTask
+                    ? 'Describe qué necesita corregir el creador antes de enviar a Dirección General...'
+                    : 'Escribe el motivo del rechazo...'}
                   rows={3}
                   className={`w-full px-4 py-3 rounded-xl ${isDark ? 'bg-zinc-800/50 text-white placeholder:text-zinc-600' : 'bg-gray-50 text-gray-900 placeholder:text-gray-400'} border border-red-500/30 text-sm focus:outline-none focus:border-red-500/50 resize-none`}
                 />
                 <div className="flex gap-2">
                   <button
-                    onClick={() => rechazarMutation.mutate(rechazoMotivo)}
-                    disabled={rechazarMutation.isPending || !rechazoMotivo.trim()}
+                    onClick={() => isFiltroDgTask ? rechazarFiltroDgMutation.mutate(rechazoMotivo) : rechazarMutation.mutate(rechazoMotivo)}
+                    disabled={(isFiltroDgTask ? rechazarFiltroDgMutation.isPending : rechazarMutation.isPending) || !rechazoMotivo.trim()}
                     className="flex-1 flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl bg-red-600 text-white text-sm font-medium hover:bg-red-700 disabled:opacity-50 disabled:cursor-not-allowed transition-all"
                   >
-                    {rechazarMutation.isPending && <Loader2 className="h-4 w-4 animate-spin" />}
-                    {rechazarMutation.isPending ? 'Rechazando...' : 'Confirmar Rechazo'}
+                    {(isFiltroDgTask ? rechazarFiltroDgMutation.isPending : rechazarMutation.isPending) && <Loader2 className="h-4 w-4 animate-spin" />}
+                    {isFiltroDgTask
+                      ? (rechazarFiltroDgMutation.isPending ? 'Enviando corrección...' : 'Confirmar Corrección')
+                      : (rechazarMutation.isPending ? 'Rechazando...' : 'Confirmar Rechazo')}
                   </button>
                   <button
                     onClick={() => { setShowRechazoInput(false); setRechazoMotivo(''); }}
@@ -2391,7 +2455,7 @@ function TaskDrawer({
           )}
 
           {/* Botón Ir a ver (oculto para directores en tareas de autorización) */}
-          {canNavigate && onNavigate && !(isAutorizacionTask && ['Director General', 'Director Comercial'].includes(user?.rol || '')) && (
+          {canNavigate && onNavigate && !(isAutorizacionTask && ['Director General', 'Director Comercial', 'Director General Adjunto'].includes(user?.rol || '')) && (
             <button
               onClick={handleNavigate}
               className="mt-4 w-full flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl bg-gradient-to-r from-purple-600 to-pink-600 text-white text-sm font-medium hover:from-purple-500 hover:to-pink-500 transition-all hover:scale-[1.02] active:scale-[0.98] shadow-lg shadow-purple-500/20"
@@ -2402,7 +2466,7 @@ function TaskDrawer({
           )}
 
           {/* Botón Revisar y Autorizar para directores (visible incluso en finalizadas) */}
-          {isAutorizacionTask && ['Director General', 'Director Comercial'].includes(user?.rol || '') && tarea.estatus !== 'Cancelado' && onOpenApprovalModal && (
+          {isAutorizacionTask && ['Director General', 'Director Comercial', 'Director General Adjunto'].includes(user?.rol || '') && tarea.estatus !== 'Cancelado' && onOpenApprovalModal && (
             <button
               onClick={() => onOpenApprovalModal()}
               className={`mt-4 w-full flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl text-sm font-bold transition-all hover:scale-[1.02] active:scale-[0.98] ${
@@ -2417,12 +2481,15 @@ function TaskDrawer({
           )}
 
           {/* Botón finalizar tarea.
-              Oculto para 'Revisión de artes': finalizar aquí solo marca la tarea
-              como Atendido sin aprobar los artes (arte_aprobado sigue 'Pendiente'),
-              dejándolos atorados en "Sin revisar". La aprobación debe hacerse desde
-              el botón "Ir a gestión de artes" (Revisar y Aprobar). */}
-          {contentType === 'tareas' && user?.rol !== 'Director General'
-            && tarea.tipo !== 'Revisión de artes' && tarea.tipo !== 'Revision de artes' && (
+              Oculto para todas las tareas generadas en Gestor de Artes: se
+              atienden en la tarea real del modal de Gestor, no en el preview
+              lateral. Finalizar aquí solo marcaria estatus=Atendido sin
+              disparar los side-effects reales (aprobar arte, subir foto,
+              rotar roles, marcar reserva como instalada, etc). Feedback de
+              Jos 2026-07-09 — antes solo se excluia 'Revisión de artes'. */}
+          {contentType === 'tareas'
+            && !['Director General', 'Director General Adjunto'].includes(user?.rol || '')
+            && !isTareaGestorArtes(tarea.tipo) && (
             <button
               onClick={(e) => {
                 e.stopPropagation();
@@ -2826,7 +2893,7 @@ function TaskDrawer({
         )}
 
         {/* Comentarios (oculto para directores en tareas de autorización) */}
-        {!(isAutorizacionTask && ['Director General', 'Director Comercial'].includes(user?.rol || '')) && <div className={`p-5 border-t ${isDark ? 'border-zinc-800/50' : 'border-gray-200'}`}>
+        {!(isAutorizacionTask && ['Director General', 'Director Comercial', 'Director General Adjunto'].includes(user?.rol || '')) && <div className={`p-5 border-t ${isDark ? 'border-zinc-800/50' : 'border-gray-200'}`}>
           <div className="flex items-center justify-between mb-4">
             <h3 className={`text-xs font-medium ${isDark ? 'text-zinc-500' : 'text-gray-400'} uppercase tracking-wider flex items-center gap-2`}>
               <MessageSquare className="h-3.5 w-3.5" />
@@ -3317,7 +3384,7 @@ export function NotificacionesPage() {
       {/* Barra superior fija */}
       <div className={`sticky top-16 z-20 ${isDark ? 'bg-[#1a1025]/95' : 'bg-white/95'} backdrop-blur-sm border-b ${isDark ? 'border-zinc-800/80' : 'border-gray-200'}`}>
         {/* Tabs: Notificaciones / Tareas */}
-        <div className={`flex items-center gap-1 px-6 py-2 border-b ${isDark ? 'border-zinc-800/50' : 'border-gray-200'}`}>
+        <div className={`flex items-center gap-1 px-3 md:px-6 py-2 border-b overflow-x-auto ${isDark ? 'border-zinc-800/50' : 'border-gray-200'}`}>
           <button
             onClick={() => setContentType('notificaciones')}
             className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all ${
@@ -3348,8 +3415,8 @@ export function NotificacionesPage() {
         </div>
 
         {/* Navegación de vistas */}
-        <div className={`flex items-center justify-between px-6 py-3 border-b ${isDark ? 'border-zinc-800/50' : 'border-gray-200'}`}>
-          <div className="flex items-center gap-1">
+        <div className={`flex items-center justify-between gap-2 px-3 md:px-6 py-3 border-b ${isDark ? 'border-zinc-800/50' : 'border-gray-200'}`}>
+          <div className="flex items-center gap-1 overflow-x-auto min-w-0">
             {viewTabs.map((tab) => (
               <button
                 key={tab.key}
@@ -3402,9 +3469,9 @@ export function NotificacionesPage() {
 
         {/* Barra de controles - Solo para vistas de tareas */}
         {view !== 'notas' && (
-          <div className="flex items-center gap-4 px-6 py-3">
+          <div className="flex flex-wrap items-center gap-2 md:gap-4 px-3 md:px-6 py-3">
             {/* Búsqueda */}
-            <div className="relative flex-1 max-w-md">
+            <div className="relative flex-1 min-w-[180px] max-w-md">
               <Search className={`absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 ${isDark ? 'text-zinc-500' : 'text-gray-400'}`} />
               <input
                 type="search"
@@ -3704,7 +3771,7 @@ export function NotificacionesPage() {
       </div>
 
       {/* Contenido principal */}
-      <div className="flex-1 p-6">
+      <div className="flex-1 p-3 md:p-6">
         {isLoading ? (
           <div className="flex items-center justify-center h-64">
             <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-purple-500" />

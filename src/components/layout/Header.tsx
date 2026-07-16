@@ -1,9 +1,10 @@
 import { Link } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
-import { Bell, FlaskConical, Settings, Bot } from 'lucide-react';
+import { Bell, FlaskConical, Settings, Bot, Menu } from 'lucide-react';
 import { useAuthStore } from '../../store/authStore';
 import { useThemeStore } from '../../store/themeStore';
 import { useChatStore } from '../../store/chatStore';
+import { useSidebarStore } from '../../store/sidebarStore';
 import { notificacionesService } from '../../services/notificaciones.service';
 import { UserAvatar } from '../ui/user-avatar';
 import { useSocketNotificaciones } from '../../hooks/useSocket';
@@ -19,6 +20,7 @@ export function Header({ title, badgeCount }: HeaderProps) {
   const user = useAuthStore((state) => state.user);
   const isDark = useThemeStore((s) => s.theme) === 'dark';
   const toggleChat = useChatStore((s) => s.toggle);
+  const openMobileSidebar = useSidebarStore((s) => s.openMobile);
   // El Header es la instancia global: maneja los popups de notificaciones.
   useSocketNotificaciones(user?.id, { popups: true });
 
@@ -47,12 +49,22 @@ export function Header({ title, badgeCount }: HeaderProps) {
   const unreadCount = stats?.badge_count ?? 0;
 
   return (
-    <header className={`sticky top-0 z-[50] flex h-16 items-center gap-4 border-b backdrop-blur-sm px-6 ${
+    <header className={`sticky top-0 z-[50] flex h-16 items-center gap-2 md:gap-4 border-b backdrop-blur-sm px-3 md:px-6 ${
       isDark
         ? 'border-purple-900/30 bg-[#1a1025]/80'
         : 'border-purple-200/50 bg-white/80'
     }`}>
-      <h1 className={`text-lg font-light tracking-wide uppercase ${isDark ? 'text-white' : 'text-gray-700'}`}>
+      {/* Botón hamburguesa: solo móvil (abre drawer del sidebar) */}
+      <button
+        onClick={openMobileSidebar}
+        className={`md:hidden p-2 rounded-md transition-colors ${isDark ? 'hover:bg-purple-900/30 text-zinc-300' : 'hover:bg-purple-50 text-gray-600'}`}
+        title="Abrir menú"
+        aria-label="Abrir menú"
+      >
+        <Menu className="h-5 w-5" />
+      </button>
+
+      <h1 className={`text-base md:text-lg font-light tracking-wide uppercase truncate ${isDark ? 'text-white' : 'text-gray-700'}`}>
         {title}
         {badgeCount !== undefined && badgeCount > 0 && (
           <span className="ml-2 inline-flex items-center justify-center min-w-[22px] h-[22px] rounded-full bg-red-500 text-[11px] font-bold text-white px-1.5 align-middle">
@@ -61,16 +73,18 @@ export function Header({ title, badgeCount }: HeaderProps) {
         )}
       </h1>
 
-      <div className="ml-auto flex items-center gap-4">
-        {/* Indicador de ambiente */}
-        <span className={`flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium border ${
+      <div className="ml-auto flex items-center gap-2 md:gap-4">
+        {/* Indicador de ambiente (oculto en móvil chico para no saturar) */}
+        <span className={`hidden sm:flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium border ${
           isDark
             ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500/30'
             : 'bg-emerald-50 text-emerald-600 border-emerald-200'
         }`}>
           Activo
         </span>
-        <VersionBadge isDark={isDark} />
+        <div className="hidden sm:block">
+          <VersionBadge isDark={isDark} />
+        </div>
 
         {/* Theme Toggle */}
         <ThemeToggle />

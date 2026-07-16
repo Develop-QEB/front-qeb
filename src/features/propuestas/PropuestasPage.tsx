@@ -1037,25 +1037,25 @@ function ApproveModal({ isOpen, onClose, propuesta, onSuccess }: ApproveModalPro
   if (!isOpen || !propuesta) return null;
 
   return (
-    <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50 p-4">
-      <div className={`${isDark ? 'bg-zinc-900 border-zinc-700' : 'bg-white border-gray-200'} border rounded-2xl w-full max-w-xl max-h-[85vh] overflow-hidden flex flex-col`}>
+    <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50 p-2 sm:p-4">
+      <div className={`${isDark ? 'bg-zinc-900 border-zinc-700' : 'bg-white border-gray-200'} border rounded-2xl w-full max-w-xl max-h-[92vh] sm:max-h-[85vh] overflow-hidden flex flex-col`}>
         {/* Header */}
-        <div className={`flex items-center justify-between px-6 py-4 border-b ${isDark ? 'border-zinc-800' : 'border-gray-200'} bg-gradient-to-r from-emerald-600/20 to-green-600/10`}>
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-xl bg-emerald-500/20 flex items-center justify-center">
+        <div className={`flex items-center justify-between px-4 sm:px-6 py-3 sm:py-4 border-b ${isDark ? 'border-zinc-800' : 'border-gray-200'} bg-gradient-to-r from-emerald-600/20 to-green-600/10`}>
+          <div className="flex items-center gap-3 min-w-0">
+            <div className="w-10 h-10 rounded-xl bg-emerald-500/20 flex items-center justify-center flex-shrink-0">
               <CheckCircle className="h-5 w-5 text-emerald-400" />
             </div>
-            <div>
-              <h2 className={`text-lg font-semibold ${isDark ? 'text-white' : 'text-gray-900'}`}>Aprobar Propuesta</h2>
+            <div className="min-w-0">
+              <h2 className={`text-base sm:text-lg font-semibold truncate ${isDark ? 'text-white' : 'text-gray-900'}`}>Aprobar Propuesta</h2>
               <p className={`text-xs ${isDark ? 'text-zinc-400' : 'text-gray-500'}`}>#{propuesta.id}</p>
             </div>
           </div>
-          <button onClick={onClose} className={`p-2 ${isDark ? 'hover:bg-zinc-800' : 'hover:bg-gray-100'} rounded-lg transition-colors`}>
+          <button onClick={onClose} className={`p-2 flex-shrink-0 ${isDark ? 'hover:bg-zinc-800' : 'hover:bg-gray-100'} rounded-lg transition-colors`}>
             <X className={`h-5 w-5 ${isDark ? 'text-zinc-400' : 'text-gray-500'}`} />
           </button>
         </div>
 
-        <div className="flex-1 overflow-y-auto p-6 space-y-5">
+        <div className="flex-1 overflow-y-auto p-4 sm:p-6 space-y-4 sm:space-y-5">
           {/* Asignados */}
           <div>
             <label className={`block text-sm ${isDark ? 'text-zinc-400' : 'text-gray-500'} mb-2`}>
@@ -1124,7 +1124,7 @@ function ApproveModal({ isOpen, onClose, propuesta, onSuccess }: ApproveModalPro
         </div>
 
         {carasRechazadasAprobar.hasAny && (
-          <div className={`mx-6 mb-3 p-3 rounded-lg border ${isDark ? 'bg-rose-500/10 border-rose-500/30 text-rose-200' : 'bg-rose-50 border-rose-200 text-rose-800'} text-sm flex items-start gap-2`}>
+          <div className={`mx-4 sm:mx-6 mb-3 p-3 rounded-lg border ${isDark ? 'bg-rose-500/10 border-rose-500/30 text-rose-200' : 'bg-rose-50 border-rose-200 text-rose-800'} text-sm flex items-start gap-2`}>
             <XCircle className="h-4 w-4 mt-0.5 shrink-0" />
             <span>
               No se puede aprobar: hay <b>{carasRechazadasAprobar.total}</b> circuito(s) rechazado(s) por DG/DCM
@@ -1136,10 +1136,10 @@ function ApproveModal({ isOpen, onClose, propuesta, onSuccess }: ApproveModalPro
           </div>
         )}
         {/* Footer */}
-        <div className={`px-6 py-4 border-t ${isDark ? 'border-zinc-800' : 'border-gray-200'} flex justify-end gap-3`}>
+        <div className={`px-4 sm:px-6 py-3 sm:py-4 border-t ${isDark ? 'border-zinc-800' : 'border-gray-200'} flex flex-col-reverse sm:flex-row sm:justify-end gap-2 sm:gap-3`}>
           <button
             onClick={onClose}
-            className={`px-4 py-2 rounded-lg ${isDark ? 'bg-zinc-800 text-zinc-300 hover:bg-zinc-700 border-zinc-700' : 'bg-gray-100 text-gray-700 hover:bg-gray-200 border-gray-200'} text-sm border`}
+            className={`w-full sm:w-auto px-4 py-2.5 sm:py-2 rounded-lg ${isDark ? 'bg-zinc-800 text-zinc-300 hover:bg-zinc-700 border-zinc-700' : 'bg-gray-100 text-gray-700 hover:bg-gray-200 border-gray-200'} text-sm border`}
           >
             Cancelar
           </button>
@@ -1147,7 +1147,7 @@ function ApproveModal({ isOpen, onClose, propuesta, onSuccess }: ApproveModalPro
             onClick={() => approveMutation.mutate()}
             disabled={approveMutation.isPending || carasRechazadasAprobar.hasAny}
             title={carasRechazadasAprobar.hasAny ? `${carasRechazadasAprobar.total} circuito(s) rechazado(s) por DG/DCM — edita o quita esos circuitos primero` : undefined}
-            className="px-6 py-2 rounded-lg bg-gradient-to-r from-emerald-600 to-green-600 text-white text-sm font-medium hover:from-emerald-500 hover:to-green-500 disabled:opacity-50 flex items-center gap-2"
+            className="w-full sm:w-auto justify-center px-6 py-2.5 sm:py-2 rounded-lg bg-gradient-to-r from-emerald-600 to-green-600 text-white text-sm font-medium hover:from-emerald-500 hover:to-green-500 disabled:opacity-50 flex items-center gap-2"
           >
             {approveMutation.isPending ? (
               <>
@@ -1947,9 +1947,9 @@ export function PropuestasPage() {
     <div className="min-h-screen">
       <Header title="Propuestas" />
 
-      <div className="p-6 space-y-5">
+      <div className="p-3 md:p-6 space-y-4 md:space-y-5">
         {/* Dashboard Grid - Same style as Solicitudes */}
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 md:gap-4">
 
           {/* Main KPI: Total */}
           <div className={`col-span-1 md:col-span-2 lg:col-span-1 rounded-2xl border ${isDark ? 'border-zinc-800/80 bg-zinc-900/50' : 'border-gray-200 bg-white'} backdrop-blur-sm p-5 flex flex-col justify-between relative overflow-hidden group`}>
@@ -2548,7 +2548,7 @@ export function PropuestasPage() {
             </div>
           )}
           <div className="overflow-x-auto">
-            <table className="w-full">
+            <table className="w-full min-w-[1100px]">
               <thead>
                 <tr className={`border-b ${isDark ? 'border-purple-500/20 bg-gradient-to-r from-purple-900/30 via-fuchsia-900/20 to-purple-900/30' : 'border-gray-200 bg-gray-50'}`}>
                   <th className={`px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider ${isDark ? 'text-purple-300' : 'text-gray-600'}`}>ID</th>

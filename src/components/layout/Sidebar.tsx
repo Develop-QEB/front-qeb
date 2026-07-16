@@ -15,12 +15,15 @@ import {
   Ticket,
   BarChart3,
   History,
+  X,
 } from 'lucide-react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { cn } from '../../lib/utils';
 import { useAuthStore } from '../../store/authStore';
 import { useThemeStore } from '../../store/themeStore';
+import { useSidebarStore } from '../../store/sidebarStore';
 import { usePrefetch } from '../../hooks/usePrefetch';
+import { useIsMobile } from '../../hooks/useIsMobile';
 import { getPermissions } from '../../lib/permissions';
 import { AyudaModal } from './AyudaModal';
 import { ticketsService } from '../../services/tickets.service';
@@ -58,6 +61,12 @@ export function Sidebar({ collapsed, onToggle }: SidebarProps) {
   const logout = useAuthStore((state) => state.logout);
   const user = useAuthStore((state) => state.user);
   const isDark = useThemeStore((s) => s.theme) === 'dark';
+  const mobileOpen = useSidebarStore((s) => s.mobileOpen);
+  const closeMobile = useSidebarStore((s) => s.closeMobile);
+  const isMobile = useIsMobile();
+  // En móvil el sidebar es siempre un drawer expandido; el estado collapsed
+  // solo aplica en desktop.
+  const effectiveCollapsed = isMobile ? false : collapsed;
   const prefetch = usePrefetch();
   const [ayudaOpen, setAyudaOpen] = useState(false);
   const [ayudaTutorial, setAyudaTutorial] = useState('asesores-solicitudes');
@@ -118,13 +127,18 @@ export function Sidebar({ collapsed, onToggle }: SidebarProps) {
             ? 'bg-[#1a1025] text-white border-purple-900/30 shadow-purple-900/10'
             : 'bg-white text-gray-800 border-purple-200/50 shadow-purple-100/10'
         }`,
-        collapsed ? 'w-16' : 'w-64'
+        // Mobile: drawer w-64 (ignora collapsed). Desktop: respeta collapsed.
+        'w-64',
+        effectiveCollapsed ? 'md:w-16' : 'md:w-64',
+        // Mobile: se oculta con translate cuando está cerrado. Desktop: siempre visible.
+        mobileOpen ? 'translate-x-0' : '-translate-x-full',
+        'md:translate-x-0'
       )}
     >
       <div className="flex h-full flex-col">
         {/* Header con Logo */}
         <div className={`flex h-20 items-center justify-between px-4 border-b ${borderColor}`}>
-          {!collapsed ? (
+          {!effectiveCollapsed ? (
             <div className="flex items-center gap-3">
               {isDark ? (
                 <img src="/images/logo-bco.png" alt="QEB" className="h-8 w-auto" />
@@ -142,21 +156,29 @@ export function Sidebar({ collapsed, onToggle }: SidebarProps) {
           <button
             onClick={onToggle}
             className={cn(
-              `p-1.5 rounded-md transition-colors text-purple-500 ${hoverBg}`,
-              collapsed && 'hidden'
+              // Toggle expand/collapse (solo desktop)
+              `p-1.5 rounded-md transition-colors text-purple-500 ${hoverBg} hidden md:block`,
+              effectiveCollapsed && 'md:hidden'
             )}
           >
             <ChevronLeft
-              className={cn('h-5 w-5 transition-transform text-purple-500', collapsed && 'rotate-180')}
+              className={cn('h-5 w-5 transition-transform text-purple-500', effectiveCollapsed && 'rotate-180')}
             />
+          </button>
+          <button
+            onClick={closeMobile}
+            className={`md:hidden p-1.5 rounded-md transition-colors text-purple-500 ${hoverBg}`}
+            title="Cerrar menú"
+          >
+            <X className="h-5 w-5" />
           </button>
         </div>
 
-        {/* Boton toggle cuando collapsed */}
-        {collapsed && (
+        {/* Boton toggle cuando collapsed (solo desktop, en móvil no aplica) */}
+        {effectiveCollapsed && (
           <button
             onClick={onToggle}
-            className={`p-2 mx-auto mt-2 rounded-md transition-colors ${hoverBg}`}
+            className={`hidden md:block p-2 mx-auto mt-2 rounded-md transition-colors ${hoverBg}`}
           >
             <ChevronLeft className="h-5 w-5 rotate-180 text-purple-500" />
           </button>
@@ -180,13 +202,13 @@ export function Sidebar({ collapsed, onToggle }: SidebarProps) {
                         : isDark
                           ? 'text-zinc-400 hover:bg-purple-900/30 hover:text-purple-300'
                           : 'text-gray-500 hover:bg-purple-50 hover:text-purple-700',
-                      collapsed && 'justify-center px-2'
+                      effectiveCollapsed && 'justify-center px-2'
                     )
                   }
-                  title={collapsed ? item.name : undefined}
+                  title={effectiveCollapsed ? item.name : undefined}
                 >
                   <item.icon className="h-5 w-5 flex-shrink-0" />
-                  {!collapsed && <span>{item.name}</span>}
+                  {!effectiveCollapsed && <span>{item.name}</span>}
                 </NavLink>
               </li>
             ))}
@@ -212,13 +234,13 @@ export function Sidebar({ collapsed, onToggle }: SidebarProps) {
                       : isDark
                         ? 'text-zinc-400 hover:bg-purple-900/30 hover:text-purple-300'
                         : 'text-gray-500 hover:bg-purple-50 hover:text-purple-700',
-                    collapsed && 'justify-center px-2'
+                    effectiveCollapsed && 'justify-center px-2'
                   )
                 }
-                title={collapsed ? item.name : undefined}
+                title={effectiveCollapsed ? item.name : undefined}
               >
                 <item.icon className="h-5 w-5 flex-shrink-0" />
-                {!collapsed && <span>{item.name}</span>}
+                {!effectiveCollapsed && <span>{item.name}</span>}
               </NavLink>
             ))}
             {canSeeHistorialTickets && (
@@ -234,10 +256,10 @@ export function Sidebar({ collapsed, onToggle }: SidebarProps) {
                       : isDark
                         ? 'text-zinc-400 hover:bg-purple-900/30 hover:text-purple-300'
                         : 'text-gray-500 hover:bg-purple-50 hover:text-purple-700',
-                    collapsed && 'justify-center px-2'
+                    effectiveCollapsed && 'justify-center px-2'
                   )
                 }
-                title={collapsed ? 'Historial de Tickets' : undefined}
+                title={effectiveCollapsed ? 'Historial de Tickets' : undefined}
               >
                 <div className="relative">
                   <Ticket className="h-5 w-5 flex-shrink-0" />
@@ -245,7 +267,7 @@ export function Sidebar({ collapsed, onToggle }: SidebarProps) {
                     <div className="absolute -top-1 -right-1 w-2.5 h-2.5 rounded-full bg-red-500 border-2 border-[#1a1025]" />
                   )}
                 </div>
-                {!collapsed && (
+                {!effectiveCollapsed && (
                   <span className="flex-1 flex items-center justify-between">
                     Historial de Tickets
                     {ticketsUnreadCount > 0 && (
@@ -270,13 +292,13 @@ export function Sidebar({ collapsed, onToggle }: SidebarProps) {
                       : isDark
                         ? 'text-zinc-400 hover:bg-purple-900/30 hover:text-purple-300'
                         : 'text-gray-500 hover:bg-purple-50 hover:text-purple-700',
-                    collapsed && 'justify-center px-2'
+                    effectiveCollapsed && 'justify-center px-2'
                   )
                 }
-                title={collapsed ? 'Historial QEBooh' : undefined}
+                title={effectiveCollapsed ? 'Historial QEBooh' : undefined}
               >
                 <Bot className="h-5 w-5 flex-shrink-0" />
-                {!collapsed && <span>Historial QEBooh</span>}
+                {!effectiveCollapsed && <span>Historial QEBooh</span>}
               </NavLink>
             )}
             {(user?.rol === 'DEV' || user?.rol === 'Administrador') && (
@@ -292,13 +314,13 @@ export function Sidebar({ collapsed, onToggle }: SidebarProps) {
                       : isDark
                         ? 'text-zinc-400 hover:bg-purple-900/30 hover:text-purple-300'
                         : 'text-gray-500 hover:bg-purple-50 hover:text-purple-700',
-                    collapsed && 'justify-center px-2'
+                    effectiveCollapsed && 'justify-center px-2'
                   )
                 }
-                title={collapsed ? 'Reportes de Tickets' : undefined}
+                title={effectiveCollapsed ? 'Reportes de Tickets' : undefined}
               >
                 <BarChart3 className="h-5 w-5 flex-shrink-0" />
-                {!collapsed && <span>Reportes de Tickets</span>}
+                {!effectiveCollapsed && <span>Reportes de Tickets</span>}
               </NavLink>
             )}
             {permissions.canSeeHistorialAcciones && (
@@ -314,13 +336,13 @@ export function Sidebar({ collapsed, onToggle }: SidebarProps) {
                       : isDark
                         ? 'text-zinc-400 hover:bg-purple-900/30 hover:text-purple-300'
                         : 'text-gray-500 hover:bg-purple-50 hover:text-purple-700',
-                    collapsed && 'justify-center px-2'
+                    effectiveCollapsed && 'justify-center px-2'
                   )
                 }
-                title={collapsed ? 'Historial de Acciones' : undefined}
+                title={effectiveCollapsed ? 'Historial de Acciones' : undefined}
               >
                 <History className="h-5 w-5 flex-shrink-0" />
-                {!collapsed && <span>Historial de Acciones</span>}
+                {!effectiveCollapsed && <span>Historial de Acciones</span>}
               </NavLink>
             )}
           </div>
@@ -328,7 +350,7 @@ export function Sidebar({ collapsed, onToggle }: SidebarProps) {
 
         {/* User section */}
         <div className={`border-t ${borderColor} p-4`}>
-          {!collapsed && user && (
+          {!effectiveCollapsed && user && (
             <div className="mb-3 px-2">
               <p className={`text-sm font-medium truncate ${isDark ? 'text-white' : 'text-gray-800'}`}>{user.nombre}</p>
               <p className={`text-xs truncate ${isDark ? 'text-zinc-500' : 'text-gray-400'}`}>{user.email}</p>
@@ -336,22 +358,22 @@ export function Sidebar({ collapsed, onToggle }: SidebarProps) {
           )}
           <button
             onClick={() => setAyudaOpen(true)}
-            className={cn(actionBtnCls, collapsed && 'justify-center px-2', 'relative')}
-            title={collapsed ? 'Ayuda' : undefined}
+            className={cn(actionBtnCls, effectiveCollapsed && 'justify-center px-2', 'relative')}
+            title={effectiveCollapsed ? 'Ayuda' : undefined}
           >
             <HelpCircle className="h-5 w-5 flex-shrink-0" />
-            {!collapsed && <span>Ayuda</span>}
+            {!effectiveCollapsed && <span>Ayuda</span>}
             {chatUnreadCount > 0 && (
               <span className="absolute top-1.5 left-6 h-2.5 w-2.5 rounded-full bg-red-500 animate-pulse ring-2 ring-red-500/30" />
             )}
           </button>
           <button
             onClick={handleLogout}
-            className={cn(actionBtnCls, collapsed && 'justify-center px-2')}
-            title={collapsed ? 'Cerrar sesion' : undefined}
+            className={cn(actionBtnCls, effectiveCollapsed && 'justify-center px-2')}
+            title={effectiveCollapsed ? 'Cerrar sesion' : undefined}
           >
             <LogOut className="h-5 w-5 flex-shrink-0" />
-            {!collapsed && <span>Cerrar sesion</span>}
+            {!effectiveCollapsed && <span>Cerrar sesion</span>}
           </button>
         </div>
       </div>
