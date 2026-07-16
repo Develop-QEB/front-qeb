@@ -661,17 +661,17 @@ function GoogleMapsChart({
 
   return (
     <GlassCard className="h-full overflow-hidden">
-      <div className={`p-4 flex items-center justify-between border-b ${isDark ? 'border-purple-900/30' : 'border-purple-200/50'}`}>
-        <div className="flex items-center gap-3">
-          <div className={`p-2 rounded-lg ${isDark ? 'bg-cyan-500/10' : 'bg-cyan-50'}`}>
+      <div className={`p-3 md:p-4 flex flex-wrap items-center justify-between gap-3 border-b ${isDark ? 'border-purple-900/30' : 'border-purple-200/50'}`}>
+        <div className="flex items-center gap-3 min-w-0">
+          <div className={`p-2 rounded-lg flex-shrink-0 ${isDark ? 'bg-cyan-500/10' : 'bg-cyan-50'}`}>
             <MapPin className={`h-4 w-4 ${isDark ? 'text-cyan-300' : 'text-cyan-600'}`} />
           </div>
-          <div>
-            <h3 className={`text-sm font-medium ${isDark ? 'text-white' : 'text-gray-800'}`}>Mapa de Inventario</h3>
+          <div className="min-w-0">
+            <h3 className={`text-sm font-medium truncate ${isDark ? 'text-white' : 'text-gray-800'}`}>Mapa de Inventario</h3>
             <p className={`text-xs ${isDark ? 'text-zinc-500' : 'text-gray-400'}`}>{total.toLocaleString()} inventarios en {validPlazas.length} plazas</p>
           </div>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
           {showPins && zoomLevel < MIN_ZOOM_FOR_PINS && (
             <span className={`px-3 py-1.5 rounded-xl text-xs border ${isDark ? 'bg-zinc-700/60 text-zinc-400 border-zinc-600/40' : 'bg-gray-100 text-gray-500 border-gray-300'}`}>
               Haz zoom para ver pines
@@ -699,7 +699,7 @@ function GoogleMapsChart({
           </button>
         </div>
       </div>
-      <div className="h-[500px] relative">
+      <div className="h-[360px] md:h-[500px] relative">
         <GoogleMap
           mapContainerStyle={{ width: '100%', height: '100%' }}
           center={center}
@@ -1341,19 +1341,19 @@ function InventoryTable({ data, isLoading, page, totalPages, total, onPageChange
   return (
     <GlassCard className="overflow-hidden">
       <div
-        className={`p-4 flex items-center justify-between cursor-pointer ${isDark ? 'hover:bg-purple-500/10' : 'hover:bg-purple-50/50'} transition-colors border-b ${isDark ? 'border-purple-900/30' : 'border-purple-200/50'}`}
+        className={`p-3 md:p-4 flex flex-wrap items-center justify-between gap-3 cursor-pointer ${isDark ? 'hover:bg-purple-500/10' : 'hover:bg-purple-50/50'} transition-colors border-b ${isDark ? 'border-purple-900/30' : 'border-purple-200/50'}`}
         onClick={() => setExpanded(!expanded)}
       >
-        <div className="flex items-center gap-3">
-          <div className={`p-2 rounded-lg ${isDark ? 'bg-pink-500/10' : 'bg-pink-50'}`}>
+        <div className="flex items-center gap-3 min-w-0">
+          <div className={`p-2 rounded-lg flex-shrink-0 ${isDark ? 'bg-pink-500/10' : 'bg-pink-50'}`}>
             <Package className={`h-4 w-4 ${isDark ? 'text-pink-300' : 'text-pink-600'}`} />
           </div>
-          <div>
-            <h3 className={`text-sm font-medium ${isDark ? 'text-white' : 'text-gray-800'}`}>Inventario Detallado</h3>
+          <div className="min-w-0">
+            <h3 className={`text-sm font-medium truncate ${isDark ? 'text-white' : 'text-gray-800'}`}>Inventario Detallado</h3>
             <p className={`text-xs ${isDark ? 'text-zinc-500' : 'text-gray-400'}`}>{total.toLocaleString()} inventarios totales</p>
           </div>
         </div>
-        <div className="flex items-center gap-4">
+        <div className="flex flex-wrap items-center gap-2 md:gap-4">
           <button
             onClick={(e) => { e.stopPropagation(); downloadAllCSV(); }}
             className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium ${isDark ? 'bg-pink-500/10 text-pink-300 hover:bg-pink-500/20 border-pink-500/20' : 'bg-pink-50 text-pink-600 hover:bg-pink-100 border-pink-200'} border transition-colors`}
@@ -1596,7 +1596,7 @@ function InventoryTable({ data, isLoading, page, totalPages, total, onPageChange
           ) : (
             <>
               <div className="max-h-[400px] overflow-auto">
-                <table className="w-full">
+                <table className="w-full min-w-[900px]">
                   <thead className={`sticky top-0 ${isDark ? 'bg-[#1a1025]/98' : 'bg-white/98'} backdrop-blur-sm z-10`}>
                     <tr className={`border-b ${isDark ? 'border-purple-900/30' : 'border-purple-200/50'}`}>
                       <th className="px-4 py-3 text-left">
@@ -1874,12 +1874,12 @@ export function DashboardPage() {
     <div className="min-h-screen">
       <Header title="DASHBOARD / HOME" />
 
-      <div className="p-6 space-y-6">
+      <div className="p-3 md:p-6 space-y-4 md:space-y-6">
         {/* Header */}
         <div className="flex flex-col gap-4">
-          <div className="flex items-center justify-between flex-wrap gap-4">
-            <div className="flex items-center gap-4 flex-wrap">
-              <h2 className={`text-lg font-light ${isDark ? 'text-white' : 'text-gray-800'}`}>Resumen de Inventario</h2>
+          <div className="flex items-center justify-between flex-wrap gap-3 md:gap-4">
+            <div className="flex items-center gap-3 md:gap-4 flex-wrap">
+              <h2 className={`text-base md:text-lg font-light ${isDark ? 'text-white' : 'text-gray-800'}`}>Resumen de Inventario</h2>
               <CatorcenaIndicator
                 catorcena={filterOptions?.catorcenaActual}
                 filteredCatorcena={filteredCatorcena}
@@ -1932,7 +1932,7 @@ export function DashboardPage() {
 
           {showFilters && (
             <GlassCard>
-              <div className="p-4 grid gap-4 md:grid-cols-3 lg:grid-cols-5">
+              <div className="p-4 grid gap-4 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-5">
                 <MultiSelectFilter
                   label="Estado"
                   values={filters.estado || []}
@@ -2122,7 +2122,7 @@ export function DashboardPage() {
         </div>
 
         {/* KPIs */}
-        <div className="grid gap-4 md:grid-cols-5">
+        <div className="grid gap-3 md:gap-4 grid-cols-2 md:grid-cols-3 lg:grid-cols-5">
           <KPICard title="Total" value={stats?.kpis.total || 0} icon={Package} color="purple" isActive={activeEstatus === 'total'} onClick={() => handleEstatusChange('total')} isLoading={loadingStats} />
           <KPICard title="Disponible" value={stats?.kpis.disponibles || 0} icon={CheckCircle2} color="green" isActive={activeEstatus === 'Disponible'} onClick={() => handleEstatusChange('Disponible')} isLoading={loadingStats} />
           <KPICard title="Reservado" value={stats?.kpis.reservados || 0} icon={Clock} color="yellow" isActive={activeEstatus === 'Reservado'} onClick={() => handleEstatusChange('Reservado')} isLoading={loadingStats} />

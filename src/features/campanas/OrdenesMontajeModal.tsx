@@ -630,8 +630,15 @@ export function OrdenesMontajeModal({ isOpen, onClose, canExport = true }: Orden
       const now = new Date();
       const todayStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
       const dayOf = (s: string) => String(s).slice(0, 10);
-      const catActual = catorcenasData.data.find((c: any) =>
+      // Catorcenas que contienen hoy. En el día de transición los rangos se solapan
+      // (fecha_fin de una == fecha_inicio de la siguiente), así que puede haber más de
+      // una; nos quedamos con la de inicio más reciente = la catorcena vigente.
+      const vigentes = catorcenasData.data.filter((c: any) =>
         c.fecha_inicio && c.fecha_fin && dayOf(c.fecha_inicio) <= todayStr && dayOf(c.fecha_fin) >= todayStr
+      );
+      const catActual = vigentes.reduce(
+        (best: any, c: any) => (!best || dayOf(c.fecha_inicio) > dayOf(best.fecha_inicio) ? c : best),
+        null as any
       );
       if (catActual) {
         setSelectedCatorcenas([`${catActual.numero_catorcena}-${catActual.a_o}`]);

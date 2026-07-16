@@ -1,41 +1,33 @@
 import { useState } from 'react';
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { FileText, ChevronDown, ChevronUp, Send, Loader2, Clock } from 'lucide-react';
+import { useQuery } from '@tanstack/react-query';
+import { FileText, ChevronDown, ChevronUp, Loader2, Clock } from 'lucide-react';
 import { notasDireccionService, NotaDireccion } from '../../services/notasDireccion.service';
-import { useAuthStore } from '../../store/authStore';
 import { formatDate } from '../../lib/utils';
-
-const ROLES_QUE_AGREGAN = ['Director General', 'Director Comercial', 'Administrador', 'DEV'];
 
 interface Props {
   idSolicitud: number;
   isDark: boolean;
+  // Cuenta pre-cargada del back (opcional). Si viene 0 y no hay nota inicial,
+  // saltamos el fetch para no gastar round-trip.
   bitacoraCount?: number;
-  onNotaAgregada?: () => void;
+  // Contenedor: 'card' (default, con borde propio) o 'inline' (sin borde,
+  // encaja dentro del formulario donde reemplaza el textarea).
+  variant?: 'card' | 'inline';
 }
 
-export function NotasDireccionBitacora({ idSolicitud, isDark, bitacoraCount, onNotaAgregada }: Props) {
-  const { user } = useAuthStore();
-  const queryClient = useQueryClient();
+// Bitacora de Notas Direccion — SOLO LECTURA.
+// La creacion de notas ocurre desde NuevaNotaDireccionModal al guardar cambios
+// que disparan autorizacion (feedback de Jos 2026-07-08 — Direccion no agrega,
+// solo consume la ultima nota; el asesor pone la nota especifica de cada
+// autorizacion desde el mini-modal al guardar).
+export function NotasDireccionBitacora({ idSolicitud, isDark, bitacoraCount, variant = 'card' }: Props) {
   const [expanded, setExpanded] = useState(false);
-  const [nuevaNota, setNuevaNota] = useState('');
-
-  const puedeAgregar = !!user?.rol && ROLES_QUE_AGREGAN.includes(user.rol);
 
   const notasQuery = useQuery({
     queryKey: ['notas-direccion', idSolicitud],
     queryFn: () => notasDireccionService.getAll(idSolicitud),
-    enabled: expanded || (bitacoraCount ?? 0) === 0,
-  });
-
-  const addMutation = useMutation({
-    mutationFn: (texto: string) => notasDireccionService.create(idSolicitud, texto),
-    onSuccess: () => {
-      setNuevaNota('');
-      queryClient.invalidateQueries({ queryKey: ['notas-direccion', idSolicitud] });
-      queryClient.invalidateQueries({ queryKey: ['notificaciones'] });
-      onNotaAgregada?.();
-    },
+    // Si no hay bitacora y hay pocas chances de tener nota inicial, solo carga al expandir
+    enabled: expanded || (bitacoraCount ?? 1) > 0,
   });
 
   const notas = notasQuery.data ?? [];
@@ -43,9 +35,13 @@ export function NotasDireccionBitacora({ idSolicitud, isDark, bitacoraCount, onN
   const anteriores = notas.length > 1 ? notas.slice(0, -1) : [];
   const totalAnteriores = anteriores.length;
 
+  const wrapperClass = variant === 'card'
+    ? `p-5 border-t ${isDark ? 'border-zinc-800/50' : 'border-gray-200'}`
+    : '';
+
   return (
-    <div className={`p-5 border-t ${isDark ? 'border-zinc-800/50' : 'border-gray-200'}`}>
-      <h3 className={`text-xs font-medium ${isDark ? 'text-zinc-500' : 'text-gray-400'} uppercase tracking-wider mb-3 flex items-center gap-2`}>
+    <div className={wrapperClass}>
+      <h3 className={`text-xs font-medium ${isDark ? 'text-zinc-500' : 'text-gray-400'} uppercase tracking-wider mb-2 flex items-center gap-2`}>
         <FileText className="h-3.5 w-3.5 text-orange-400" />
         Notas Dirección
       </h3>
@@ -85,6 +81,7 @@ export function NotasDireccionBitacora({ idSolicitud, isDark, bitacoraCount, onN
       {totalAnteriores > 0 && (
         <>
           <button
+            type="button"
             onClick={() => setExpanded(v => !v)}
             className={`mt-3 flex items-center gap-1.5 text-xs font-medium ${isDark ? 'text-purple-300 hover:text-purple-200' : 'text-purple-600 hover:text-purple-700'} transition-colors`}
           >
@@ -108,41 +105,6 @@ export function NotasDireccionBitacora({ idSolicitud, isDark, bitacoraCount, onN
             </div>
           )}
         </>
-      )}
-
-      {puedeAgregar && (
-        <div className={`mt-4 pt-3 border-t ${isDark ? 'border-zinc-800/50' : 'border-gray-200'}`}>
-          <label className={`text-[11px] uppercase tracking-wider font-medium ${isDark ? 'text-zinc-500' : 'text-gray-500'} block mb-1.5`}>
-            Agregar nota nueva
-          </label>
-          <textarea
-            value={nuevaNota}
-            onChange={e => setNuevaNota(e.target.value)}
-            rows={3}
-            placeholder="Escribe la nota que se enviará a Dirección..."
-            className={`w-full text-sm rounded-lg px-3 py-2 resize-none ${isDark
-              ? 'bg-zinc-900/50 border-zinc-800 text-zinc-200 placeholder:text-zinc-600'
-              : 'bg-white border-gray-200 text-gray-800 placeholder:text-gray-400'} border focus:outline-none focus:border-purple-500/50`}
-            disabled={addMutation.isPending}
-          />
-          {addMutation.isError && (
-            <p className="mt-1 text-xs text-red-400">
-              {(addMutation.error as Error)?.message || 'No se pudo agregar la nota.'}
-            </p>
-          )}
-          <div className="flex justify-end mt-2">
-            <button
-              onClick={() => nuevaNota.trim() && addMutation.mutate(nuevaNota.trim())}
-              disabled={!nuevaNota.trim() || addMutation.isPending}
-              className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-colors ${!nuevaNota.trim() || addMutation.isPending
-                ? (isDark ? 'bg-zinc-800/50 text-zinc-600 cursor-not-allowed' : 'bg-gray-100 text-gray-400 cursor-not-allowed')
-                : (isDark ? 'bg-purple-600/80 hover:bg-purple-600 text-white' : 'bg-purple-600 hover:bg-purple-700 text-white')}`}
-            >
-              {addMutation.isPending ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Send className="h-3.5 w-3.5" />}
-              Agregar nota
-            </button>
-          </div>
-        </div>
       )}
     </div>
   );
