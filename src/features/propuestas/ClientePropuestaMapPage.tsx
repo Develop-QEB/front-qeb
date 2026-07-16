@@ -168,8 +168,23 @@ export function ClientePropuestaMapPage() {
   const [searchParams] = useSearchParams();
   const propuestaId = id ? parseInt(id, 10) : 0;
 
-  // ?ids=1,2,3 -> alcance inicial compartido desde "Compartir". Sin ids: todo.
+  // Alcance inicial compartido desde "Compartir" / "Expandir Mapa". Prioridad:
+  //   ?sel=id@catorcena,...  -> subconjunto EXACTO por reserva (id + catorcena). Es la
+  //      clave que evita arrastrar otras catorcenas del mismo inventario.
+  //   ?periodos=YYYY-NN,...  -> solo ciertas catorcenas (todo su inventario).
+  //   ?ids=1,2,3             -> legado (por id de inventario, sin distinguir catorcena).
+  //   sin params             -> todo el inventario.
+  const selParam = searchParams.get('sel') || '';
+  const periodosParam = searchParams.get('periodos') || '';
   const idsParam = searchParams.get('ids') || '';
+  const selKeySet = useMemo(
+    () => new Set(selParam.split(',').map(s => s.trim()).filter(Boolean)),
+    [selParam]
+  );
+  const periodoSet = useMemo(
+    () => new Set(periodosParam.split(',').map(s => s.trim()).filter(Boolean)),
+    [periodosParam]
+  );
   const selectedIdSet = useMemo(
     () => new Set(idsParam.split(',').map(s => parseInt(s.trim(), 10)).filter(n => Number.isFinite(n))),
     [idsParam]
@@ -211,14 +226,21 @@ export function ClientePropuestaMapPage() {
   // separadas las reservas por catorcena). _rk = clave estable por fila.
   const baseRows = useMemo<Row[]>(() => {
     const raw = data?.inventario || [];
-    const scoped = selectedIdSet.size > 0 ? raw.filter(i => selectedIdSet.has(i.id)) : raw;
+    let scoped = raw;
+    if (selKeySet.size > 0) {
+      scoped = raw.filter(i => selKeySet.has(`${i.id}@${catKeyOf(i, tipoPeriodo)}`));
+    } else if (periodoSet.size > 0) {
+      scoped = raw.filter(i => periodoSet.has(catKeyOf(i, tipoPeriodo)));
+    } else if (selectedIdSet.size > 0) {
+      scoped = raw.filter(i => selectedIdSet.has(i.id));
+    }
     return scoped.map((i, idx) => ({
       ...i,
       _rk: `${idx}`,
       _catKey: catKeyOf(i, tipoPeriodo),
       _catLabel: catLabelOf(i, tipoPeriodo),
     }));
-  }, [data, selectedIdSet, tipoPeriodo]);
+  }, [data, selKeySet, periodoSet, selectedIdSet, tipoPeriodo]);
 
   // Catorcenas presentes, ordenadas, con color asignado.
   const catorcenas = useMemo(() => {
@@ -435,9 +457,23 @@ export function ClientePropuestaMapPage() {
     }
   };
 
+  // Copiar enlace "a la medida": si el usuario seleccionó filas en este mapa, el enlace
+  // codifica EXACTAMENTE esa seleccion (?sel=id@catorcena). Si no hay seleccion, preserva
+  // el alcance con el que se abrió el mapa (sel / periodos / ids).
   const handleCopyLink = () => {
-    const qs = idsParam ? `?ids=${idsParam}` : '';
-    const publicUrl = `${window.location.origin}/cliente/propuesta/${propuestaId}/mapa${qs}`;
+    const params = new URLSearchParams();
+    if (selected.size > 0) {
+      const chosen = baseRows.filter(r => selected.has(r._rk) && r.latitud && r.longitud);
+      const sel = Array.from(new Set(chosen.map(r => `${r.id}@${r._catKey}`)));
+      if (sel.length > 0) params.set('sel', sel.join(','));
+    } else {
+      for (const k of ['sel', 'periodos', 'ids'] as const) {
+        const v = searchParams.get(k);
+        if (v) params.set(k, v);
+      }
+    }
+    const qs = params.toString();
+    const publicUrl = `${window.location.origin}/cliente/propuesta/${propuestaId}/mapa${qs ? `?${qs}` : ''}`;
     navigator.clipboard.writeText(publicUrl);
     setCopied(true);
     setTimeout(() => setCopied(false), 2000);
