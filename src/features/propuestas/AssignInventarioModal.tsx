@@ -2612,6 +2612,29 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
         // ---- LOCAL-ONLY UPDATE (no API call for the RT cara itself) ----
         const caraToEdit = caras.find(c => c.localId === editingCaraId);
         if (caraToEdit?.id) {
+          // Cambio de periodo con reservas: avisar que se borrarán. Al guardar, el
+          // backend libera las reservas del circuito (cara + pareja RT/BF) y lo
+          // reubica en el nuevo periodo con reservas en 0.
+          // Comparar en formato YYYY-MM-DD (handleEditCara trunca a 10 chars, la cara
+          // guardada conserva el timestamp completo).
+          const periodoCambio =
+            String(newCara.inicio_periodo || '').slice(0, 10) !== String(caraToEdit.inicio_periodo || '').slice(0, 10) ||
+            String(newCara.fin_periodo || '').slice(0, 10) !== String(caraToEdit.fin_periodo || '').slice(0, 10);
+          if (periodoCambio) {
+            const grupoLocal = caraToEdit.grupo_rt_bf
+              ? caras.filter(c => c.grupo_rt_bf === caraToEdit.grupo_rt_bf)
+              : [caraToEdit];
+            const tieneReservasPeriodo = reservas.some(r =>
+              grupoLocal.some(g => r.id.startsWith(g.localId) || (g.id && r.solicitudCaraId === g.id))
+            );
+            if (tieneReservasPeriodo) {
+              const ok = window.confirm(
+                'Este circuito tiene inventario reservado. Al cambiar el periodo se borrarán las reservas del circuito y se moverá al nuevo periodo con las reservas en 0. ¿Deseas continuar?'
+              );
+              if (!ok) return;
+            }
+          }
+
           // Find existing BF pair for this RT cara (if any)
           const existingBfPair = caraToEdit.grupo_rt_bf
             ? caras.find(c =>
@@ -8152,7 +8175,7 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
                     <div className="mb-4">
                       <div className="space-y-1">
                         <label className={`text-xs ${isDark ? 'text-zinc-500' : 'text-gray-400'}`}>
-                          Periodo {editingCaraHasReservas && <span className="text-amber-400 text-[10px]">(bloqueado)</span>}
+                          Periodo
                           {tipoPeriodo !== 'mensual' && catorcenaInicio && yearInicio && catorcenaFin && yearFin && (
                             <span className={`${isDark ? 'text-zinc-600' : 'text-gray-400'} ml-1`}>
                               (Rango: {catorcenaInicio}/{yearInicio} - {catorcenaFin}/{yearFin})
@@ -8294,7 +8317,7 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
                           <select
                             value={newCara.catorcena_inicio && newCara.anio_inicio ? `${newCara.anio_inicio}-${newCara.catorcena_inicio}` : ''}
                             onChange={(e) => {
-                              if (!canEditResumen || editingCaraHasReservas) return;
+                              if (!canEditResumen) return;
                               if (e.target.value) {
                                 const [year, cat] = e.target.value.split('-').map(Number);
                                 if (tipoPeriodo === 'mensual') {
@@ -8347,8 +8370,8 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
                                 });
                               }
                             }}
-                            disabled={!canEditResumen || editingCaraHasReservas}
-                            className={`w-full px-3 py-2 ${isDark ? 'bg-zinc-800' : 'bg-gray-50'} border ${isDark ? 'border-zinc-700' : 'border-gray-200'} rounded-lg text-sm ${isDark ? 'text-white' : 'text-gray-900'} focus:outline-none focus:ring-1 focus:ring-purple-500/50 ${(!canEditResumen || editingCaraHasReservas) ? 'opacity-60 cursor-not-allowed' : ''}`}
+                            disabled={!canEditResumen}
+                            className={`w-full px-3 py-2 ${isDark ? 'bg-zinc-800' : 'bg-gray-50'} border ${isDark ? 'border-zinc-700' : 'border-gray-200'} rounded-lg text-sm ${isDark ? 'text-white' : 'text-gray-900'} focus:outline-none focus:ring-1 focus:ring-purple-500/50 ${(!canEditResumen) ? 'opacity-60 cursor-not-allowed' : ''}`}
                           >
                             <option value="">{tipoPeriodo === 'mensual' ? 'Mes inicio' : 'Cat. inicio'}</option>
                             {tipoPeriodo === 'mensual' ? (
@@ -8390,7 +8413,7 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
                           <select
                             value={newCara.catorcena_fin && newCara.anio_fin ? `${newCara.anio_fin}-${newCara.catorcena_fin}` : ''}
                             onChange={(e) => {
-                              if (!canEditResumen || editingCaraHasReservas) return;
+                              if (!canEditResumen) return;
                               if (e.target.value) {
                                 const [year, cat] = e.target.value.split('-').map(Number);
                                 if (tipoPeriodo === 'mensual') {
@@ -8412,8 +8435,8 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
                                 }
                               }
                             }}
-                            disabled={!canEditResumen || editingCaraHasReservas || !newCara.catorcena_inicio}
-                            className={`w-full px-3 py-2 ${isDark ? 'bg-zinc-800' : 'bg-gray-50'} border ${isDark ? 'border-zinc-700' : 'border-gray-200'} rounded-lg text-sm ${isDark ? 'text-white' : 'text-gray-900'} focus:outline-none focus:ring-1 focus:ring-purple-500/50 ${(!canEditResumen || editingCaraHasReservas || !newCara.catorcena_inicio) ? 'opacity-60 cursor-not-allowed' : ''}`}
+                            disabled={!canEditResumen || !newCara.catorcena_inicio}
+                            className={`w-full px-3 py-2 ${isDark ? 'bg-zinc-800' : 'bg-gray-50'} border ${isDark ? 'border-zinc-700' : 'border-gray-200'} rounded-lg text-sm ${isDark ? 'text-white' : 'text-gray-900'} focus:outline-none focus:ring-1 focus:ring-purple-500/50 ${(!canEditResumen || !newCara.catorcena_inicio) ? 'opacity-60 cursor-not-allowed' : ''}`}
                           >
                             <option value="">{tipoPeriodo === 'mensual' ? 'Mes fin' : 'Cat. fin'}</option>
                             {tipoPeriodo === 'mensual' ? (

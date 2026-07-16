@@ -2761,6 +2761,30 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
           return;
         }
 
+        // Cambio de periodo con reservas: avisar que se borrarán. Al guardar, el
+        // backend libera las reservas del circuito (cara + pareja RT/BF) y lo
+        // reubica en el nuevo periodo con reservas en 0. (Las caras con APS ya
+        // tienen el periodo bloqueado, así que aquí solo aplica sin APS.)
+        // Comparar en formato YYYY-MM-DD (handleEditCara trunca a 10 chars, la cara
+        // guardada conserva el timestamp completo).
+        const periodoCambio =
+          String(newCara.inicio_periodo || '').slice(0, 10) !== String(caraToEdit.inicio_periodo || '').slice(0, 10) ||
+          String(newCara.fin_periodo || '').slice(0, 10) !== String(caraToEdit.fin_periodo || '').slice(0, 10);
+        if (periodoCambio) {
+          const grupoLocal = caraToEdit.grupo_rt_bf
+            ? caras.filter(c => c.grupo_rt_bf === caraToEdit.grupo_rt_bf)
+            : [caraToEdit];
+          const tieneReservasPeriodo = reservas.some(r =>
+            grupoLocal.some(g => r.id.startsWith(g.localId) || (g.id && r.solicitudCaraId === g.id))
+          );
+          if (tieneReservasPeriodo) {
+            const ok = window.confirm(
+              'Este circuito tiene inventario reservado. Al cambiar el periodo se borrarán las reservas del circuito y se moverá al nuevo periodo con las reservas en 0. ¿Deseas continuar?'
+            );
+            if (!ok) return;
+          }
+        }
+
         // Determine grupo_rt_bf: reuse existing, or generate a new one if pairing now.
         let grupoRtBf: number | null = caraToEdit.grupo_rt_bf || null;
         if (wantsPair && !grupoRtBf) grupoRtBf = Date.now() % 2000000000;
