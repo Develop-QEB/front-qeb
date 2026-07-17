@@ -872,10 +872,6 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
 
   // Reservas state
   const [reservas, setReservas] = useState<ReservaItem[]>([]);
-  // Circuitos (cara + pareja RT/BF) cuyo periodo cambió con reservas: sus reservas
-  // se liberan en el backend al guardar. Guardamos localId/dbId para reflejarlas en
-  // 0 localmente tras el guardado, sin esperar al refetch.
-  const caraReservasLiberadasRef = useRef<{ localIds: Set<string>; dbIds: Set<number> }>({ localIds: new Set(), dbIds: new Set() });
 
   // Track APS posted to SAP
   // postedAPSGroups and editingCaraHasReservas moved after campanaDetails declaration
@@ -2794,11 +2790,19 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
               'Este circuito tiene inventario reservado. Al cambiar el periodo se borrarán las reservas del circuito y se moverá al nuevo periodo con las reservas en 0. ¿Deseas continuar?'
             );
             if (!ok) return;
-            // Marcar el grupo para reflejar sus reservas en 0 tras el guardado.
-            grupoLocal.forEach(g => {
-              caraReservasLiberadasRef.current.localIds.add(g.localId);
-              if (g.id) caraReservasLiberadasRef.current.dbIds.add(g.id);
-            });
+            // Reflejar las reservas en 0 de inmediato (al Aceptar), sin esperar al
+            // guardado. El backend las libera al guardar; aquí las quitamos del
+            // estado local Y del cache de la query para que el useEffect de sync no
+            // las repueble con data vieja.
+            const dbIds = new Set(grupoLocal.map(g => g.id).filter((x): x is number => !!x));
+            const localIds = grupoLocal.map(g => g.localId);
+            setReservas(prev => prev.filter(r =>
+              !dbIds.has(r.solicitudCaraId as number) &&
+              !localIds.some(lid => r.id.startsWith(`${lid}-`))
+            ));
+            queryClient.setQueryData(['campana-reservas-modal', campana!.id], (old: unknown) =>
+              Array.isArray(old) ? old.filter((r: { solicitud_cara_id?: number }) => !dbIds.has(r.solicitud_cara_id as number)) : old
+            );
           }
         }
 
@@ -3370,17 +3374,6 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
 
         setModifiedCaras(new Map());
         messages.push(result.message || `${carasArray.length} circuito(s) actualizados`);
-
-        // Reflejar en 0 las reservas de los circuitos cuyo periodo cambió (el
-        // backend ya las liberó), sin esperar al refetch de la query.
-        const liberadas = caraReservasLiberadasRef.current;
-        if (liberadas.localIds.size > 0 || liberadas.dbIds.size > 0) {
-          setReservas(prev => prev.filter(r =>
-            !liberadas.dbIds.has(r.solicitudCaraId as number) &&
-            ![...liberadas.localIds].some(lid => r.id.startsWith(`${lid}-`))
-          ));
-          caraReservasLiberadasRef.current = { localIds: new Set(), dbIds: new Set() };
-        }
       }
 
       // Refresh data — incluye reservas modal para que circuitos se redibujen verdes/llenos tras redistribuir
@@ -8122,9 +8115,9 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
                       <div className="space-y-1">
                         <label className={`text-xs ${isDark ? 'text-zinc-500' : 'text-gray-500'}`}>
                           Periodo {editingCaraHasReservas && <span className="text-amber-400 text-[10px]">(bloqueado)</span>}
-                          {tipoPeriodo !== 'mensual' && campana!.catorcena_inicio_num && campana!.catorcena_inicio_anio && campana!.catorcena_fin_num && campana!.catorcena_fin_anio && (
+                          {tipoPeriodo !== 'mensual' && catorcenaInicio && yearInicio && catorcenaFin && yearFin && (
                             <span className="text-zinc-600 ml-1">
-                              (Rango: {campana!.catorcena_inicio_num}/{campana!.catorcena_inicio_anio} - {campana!.catorcena_fin_num}/{campana!.catorcena_fin_anio})
+                              (Rango: {catorcenaInicio}/{yearInicio} - {catorcenaFin}/{yearFin})
                             </span>
                           )}
                         </label>
@@ -8322,12 +8315,15 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
                           ) : (
                             catorcenasData?.data
                               .filter(c => {
-                                if (!campana!.catorcena_inicio_num || !campana!.catorcena_inicio_anio || !campana!.catorcena_fin_num || !campana!.catorcena_fin_anio) {
+                                // Usar el rango EN VIVO (state) del encabezado, no el guardado
+                                // en `campana`, para que al ampliar el periodo arriba (sin guardar
+                                // aún) las nuevas catorcenas ya estén disponibles por circuito.
+                                if (!catorcenaInicio || !yearInicio || !catorcenaFin || !yearFin) {
                                   return true;
                                 }
                                 const catValue = c.a_o * 100 + c.numero_catorcena;
-                                const minValue = campana!.catorcena_inicio_anio * 100 + campana!.catorcena_inicio_num;
-                                const maxValue = campana!.catorcena_fin_anio * 100 + campana!.catorcena_fin_num;
+                                const minValue = yearInicio * 100 + catorcenaInicio;
+                                const maxValue = yearFin * 100 + catorcenaFin;
                                 return catValue >= minValue && catValue <= maxValue;
                               })
                               .map(c => (
