@@ -2701,7 +2701,10 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
               const conservado = conservarAprobacionFront(
                 { autorizacion_dg, autorizacion_dcm },
                 { dg: caraToEdit._originalDg, dcm: caraToEdit._originalDcm, costo: caraToEdit._originalCosto, caras: caraToEdit._originalCaras },
-                { costo: costoCalculado, caras: newCara.caras, tarifa_publica: newCara.tarifa_publica }
+                // CT/BF/CF: la cantidad va en `bonificacion` (caras=0), igual que
+                // `_originalCaras`. Sin esto, comparaba newCara.caras(0) vs _originalCaras(10)
+                // → parecía que "bajaron las caras" → no conservaba (CT editando solo NSE).
+                { costo: costoCalculado, caras: isBonifSplitArticle(newCara.articulo) ? (Number(newCara.bonificacion) || 0) : newCara.caras, tarifa_publica: newCara.tarifa_publica }
               );
               autorizacion_dg = conservado.autorizacion_dg || 'aprobado';
               autorizacion_dcm = conservado.autorizacion_dcm || 'aprobado';
