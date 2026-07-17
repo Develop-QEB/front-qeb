@@ -871,6 +871,10 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
 
   // Reservas state
   const [reservas, setReservas] = useState<ReservaItem[]>([]);
+  // Circuitos (cara + pareja RT/BF) cuyo periodo cambió con reservas: sus reservas
+  // se liberan en el backend al guardar. Guardamos localId/dbId para reflejarlas en
+  // 0 localmente tras el guardado, sin esperar al refetch.
+  const caraReservasLiberadasRef = useRef<{ localIds: Set<string>; dbIds: Set<number> }>({ localIds: new Set(), dbIds: new Set() });
 
   // Check if the cara being edited has reservas (to block certain fields)
   const editingCaraHasReservas = useMemo(() => {
@@ -2640,6 +2644,11 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
                 'Este circuito tiene inventario reservado. Al cambiar el periodo se borrarán las reservas del circuito y se moverá al nuevo periodo con las reservas en 0. ¿Deseas continuar?'
               );
               if (!ok) return;
+              // Marcar el grupo para reflejar sus reservas en 0 tras el guardado.
+              grupoLocal.forEach(g => {
+                caraReservasLiberadasRef.current.localIds.add(g.localId);
+                if (g.id) caraReservasLiberadasRef.current.dbIds.add(g.id);
+              });
             }
           }
 
@@ -3264,6 +3273,17 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
         // Clear modified caras tracking
         setModifiedCaras(new Map());
         messages.push(result.message || `${carasArray.length} circuito(s) actualizados`);
+
+        // Reflejar en 0 las reservas de los circuitos cuyo periodo cambió (el
+        // backend ya las liberó), sin esperar al refetch de la query.
+        const liberadas = caraReservasLiberadasRef.current;
+        if (liberadas.localIds.size > 0 || liberadas.dbIds.size > 0) {
+          setReservas(prev => prev.filter(r =>
+            !liberadas.dbIds.has(r.solicitudCaraId as number) &&
+            ![...liberadas.localIds].some(lid => r.id.startsWith(`${lid}-`))
+          ));
+          caraReservasLiberadasRef.current = { localIds: new Set(), dbIds: new Set() };
+        }
       }
 
       // Refresh data — incluye reservas modal para que circuitos se redibujen verdes/llenos tras redistribuir
