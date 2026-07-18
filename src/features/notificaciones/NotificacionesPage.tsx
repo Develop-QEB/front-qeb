@@ -2455,7 +2455,7 @@ function TaskDrawer({
           )}
 
           {/* Botón Ir a ver (oculto para directores en tareas de autorización) */}
-          {canNavigate && onNavigate && !(isAutorizacionTask && ['Director General', 'Director Comercial', 'Gerente Comercial Vía Pública', 'Gerente Comercial Plazas', 'Gerente Comercial'].includes(user?.rol || '')) && (
+          {canNavigate && onNavigate && !(isAutorizacionTask && ['Director General', 'Director Comercial', 'Director General Adjunto'].includes(user?.rol || '')) && (
             <button
               onClick={handleNavigate}
               className="mt-4 w-full flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl bg-gradient-to-r from-purple-600 to-pink-600 text-white text-sm font-medium hover:from-purple-500 hover:to-pink-500 transition-all hover:scale-[1.02] active:scale-[0.98] shadow-lg shadow-purple-500/20"
@@ -2466,7 +2466,7 @@ function TaskDrawer({
           )}
 
           {/* Botón Revisar y Autorizar para directores (visible incluso en finalizadas) */}
-          {isAutorizacionTask && ['Director General', 'Director Comercial', 'Gerente Comercial Vía Pública', 'Gerente Comercial Plazas', 'Gerente Comercial'].includes(user?.rol || '') && tarea.estatus !== 'Cancelado' && onOpenApprovalModal && (
+          {isAutorizacionTask && ['Director General', 'Director Comercial', 'Director General Adjunto'].includes(user?.rol || '') && tarea.estatus !== 'Cancelado' && onOpenApprovalModal && (
             <button
               onClick={() => onOpenApprovalModal()}
               className={`mt-4 w-full flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl text-sm font-bold transition-all hover:scale-[1.02] active:scale-[0.98] ${
@@ -2488,7 +2488,7 @@ function TaskDrawer({
               rotar roles, marcar reserva como instalada, etc). Feedback de
               Jos 2026-07-09 — antes solo se excluia 'Revisión de artes'. */}
           {contentType === 'tareas'
-            && !['Director General', 'Gerente Comercial Vía Pública', 'Gerente Comercial Plazas', 'Gerente Comercial'].includes(user?.rol || '')
+            && !['Director General', 'Director General Adjunto'].includes(user?.rol || '')
             && !isTareaGestorArtes(tarea.tipo) && (
             <button
               onClick={(e) => {
@@ -2893,7 +2893,7 @@ function TaskDrawer({
         )}
 
         {/* Comentarios (oculto para directores en tareas de autorización) */}
-        {!(isAutorizacionTask && ['Director General', 'Director Comercial', 'Gerente Comercial Vía Pública', 'Gerente Comercial Plazas', 'Gerente Comercial'].includes(user?.rol || '')) && <div className={`p-5 border-t ${isDark ? 'border-zinc-800/50' : 'border-gray-200'}`}>
+        {!(isAutorizacionTask && ['Director General', 'Director Comercial', 'Director General Adjunto'].includes(user?.rol || '')) && <div className={`p-5 border-t ${isDark ? 'border-zinc-800/50' : 'border-gray-200'}`}>
           <div className="flex items-center justify-between mb-4">
             <h3 className={`text-xs font-medium ${isDark ? 'text-zinc-500' : 'text-gray-400'} uppercase tracking-wider flex items-center gap-2`}>
               <MessageSquare className="h-3.5 w-3.5" />
