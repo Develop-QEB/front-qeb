@@ -1815,6 +1815,9 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
   const handleReenviarAutorizacion = async (id: string) => {
     const cara = caras.find(c => c.id === id);
     if (!cara) return;
+    // Reenvío tras corrección: forzar 'pendiente' independiente del evaluador.
+    // Feedback Jos 2026-07-17.
+    const eraCorreccion = cara.autorizacion_dg === 'correccion';
     try {
       const resultado = await solicitudesService.evaluarAutorizacion({
         ciudad: cara.ciudades.join(', '),
@@ -1827,12 +1830,13 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
         tarifa_publica: cara.tarifaPublica,
         articulo: cara.articulo?.ItemCode || null,
       });
+      const nuevoDg = eraCorreccion ? 'pendiente' : resultado.autorizacion_dg;
       // Solo se actualiza autorizacion_* (badge/local). _original* se mantiene
       // (estado de BD) para no interferir con el bloqueo de edición.
       setCaras(prev => prev.map(c => c.id === id
-        ? { ...c, autorizacion_dg: resultado.autorizacion_dg, autorizacion_dcm: resultado.autorizacion_dcm }
+        ? { ...c, autorizacion_dg: nuevoDg, autorizacion_dcm: resultado.autorizacion_dcm }
         : c));
-      const irAuth = resultado.autorizacion_dg === 'pendiente' || resultado.autorizacion_dcm === 'pendiente';
+      const irAuth = nuevoDg === 'pendiente' || resultado.autorizacion_dcm === 'pendiente';
       showToast(irAuth ? 'Circuito reenviado a autorización' : 'Circuito reprocesado: ya no requiere autorización', 'success');
     } catch {
       showToast('No se pudo reenviar a autorización', 'error');
@@ -2212,7 +2216,11 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
       // Antes solo se miraba c.autorizacion_dg current — dejaba fuera el caso
       // frecuente de una solicitud con circuitos ya 'pendiente' de antes que
       // el usuario re-edita (feedback de Jos 2026-07-09).
-      const dgPending = caras.some(c => c.autorizacion_dg === 'pendiente' || (c as any)._originalDg === 'pendiente');
+      const dgPending = caras.some(c =>
+        c.autorizacion_dg === 'pendiente' ||
+        (c as any)._originalDg === 'pendiente' ||
+        (c as any)._originalDg === 'correccion'
+      );
       const dcmPending = caras.some(c => c.autorizacion_dcm === 'pendiente' || (c as any)._originalDcm === 'pendiente');
       if (dgPending || dcmPending) {
         setPendingUpdateData(data);

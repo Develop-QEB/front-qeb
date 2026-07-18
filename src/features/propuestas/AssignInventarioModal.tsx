@@ -3097,6 +3097,11 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
       ? caras.find(c => c.esBf && c.grupo_rt_bf === target.grupo_rt_bf && c.inicio_periodo === target.inicio_periodo && c.fin_periodo === target.fin_periodo)
       : null;
     const bonifEval = (target.bonificacion || 0) + (bfPair?.bonificacion || 0);
+    // Si la cara estaba en 'correccion' (rechazo del filtro DG), el reenvío
+    // fuerza autorización DG nueva independientemente de lo que devuelva
+    // evaluarAutorizacion — el asesor esta explicitamente pidiendo re-enviar.
+    // Feedback Jos 2026-07-17.
+    const eraCorreccion = target.autorizacion_dg === 'correccion';
     try {
       const resultado = await solicitudesService.evaluarAutorizacion({
         ciudad: target.ciudad,
@@ -3109,8 +3114,9 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
         tarifa_publica: target.tarifa_publica,
         articulo: target.articulo || null,
       });
+      const nuevoDg = eraCorreccion ? 'pendiente' : resultado.autorizacion_dg;
       setCaras(prev => prev.map(c => c.id === target.id
-        ? { ...c, autorizacion_dg: resultado.autorizacion_dg, autorizacion_dcm: resultado.autorizacion_dcm }
+        ? { ...c, autorizacion_dg: nuevoDg, autorizacion_dcm: resultado.autorizacion_dcm }
         : c));
       setModifiedCaras(prev => {
         const next = new Map(prev);
@@ -3168,7 +3174,11 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
     // Jos 2026-07-08/09 — la condicion se amplio para cubrir el caso de
     // propuestas que ya tenian circuitos 'pendiente' de antes.
     if (!skipNotaGate && propuesta.solicitud_id) {
-      const dgPending = caras.some(c => c.autorizacion_dg === 'pendiente' || (c as any)._originalDg === 'pendiente');
+      const dgPending = caras.some(c =>
+        c.autorizacion_dg === 'pendiente' ||
+        (c as any)._originalDg === 'pendiente' ||
+        (c as any)._originalDg === 'correccion'
+      );
       const dcmPending = caras.some(c => c.autorizacion_dcm === 'pendiente' || (c as any)._originalDcm === 'pendiente');
       if (dgPending || dcmPending) {
         setPendingAuthTipo(dgPending && dcmPending ? 'ambas' : dgPending ? 'dg' : 'dcm');
@@ -9934,7 +9944,11 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
                     // y DESPUÉS el confirmar cambios. Antes iba confirmar → nota,
                     // que se sentía confuso.
                     if (propuesta.solicitud_id) {
-                      const dgPending = caras.some(c => c.autorizacion_dg === 'pendiente' || (c as any)._originalDg === 'pendiente');
+                      const dgPending = caras.some(c =>
+                        c.autorizacion_dg === 'pendiente' ||
+                        (c as any)._originalDg === 'pendiente' ||
+                        (c as any)._originalDg === 'correccion'
+                      );
                       const dcmPending = caras.some(c => c.autorizacion_dcm === 'pendiente' || (c as any)._originalDcm === 'pendiente');
                       if (dgPending || dcmPending) {
                         setPendingAuthTipo(dgPending && dcmPending ? 'ambas' : dgPending ? 'dg' : 'dcm');

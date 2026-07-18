@@ -3221,6 +3221,9 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
       ? caras.find(c => c.esBf && c.grupo_rt_bf === target.grupo_rt_bf && c.inicio_periodo === target.inicio_periodo && c.fin_periodo === target.fin_periodo)
       : null;
     const bonifEval = (target.bonificacion || 0) + (bfPair?.bonificacion || 0);
+    // Reenvío tras corrección: forzar 'pendiente' aunque evaluarAutorizacion
+    // devuelva otro estado. Feedback Jos 2026-07-17.
+    const eraCorreccion = target.autorizacion_dg === 'correccion';
     try {
       const resultado = await solicitudesService.evaluarAutorizacion({
         ciudad: target.ciudad,
@@ -3233,8 +3236,9 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
         tarifa_publica: target.tarifa_publica,
         articulo: target.articulo || null,
       });
+      const nuevoDg = eraCorreccion ? 'pendiente' : resultado.autorizacion_dg;
       setCaras(prev => prev.map(c => c.id === target.id
-        ? { ...c, autorizacion_dg: resultado.autorizacion_dg, autorizacion_dcm: resultado.autorizacion_dcm }
+        ? { ...c, autorizacion_dg: nuevoDg, autorizacion_dcm: resultado.autorizacion_dcm }
         : c));
       setModifiedCaras(prev => {
         const next = new Map(prev);
@@ -3287,7 +3291,11 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
     // Jos 2026-07-08/09 — la condicion se amplio para cubrir campañas con
     // circuitos ya 'pendiente' de antes.
     if (!skipNotaGate && campanaDetails?.solicitud_id) {
-      const dgPending = caras.some(c => c.autorizacion_dg === 'pendiente' || (c as any)._originalDg === 'pendiente');
+      const dgPending = caras.some(c =>
+        c.autorizacion_dg === 'pendiente' ||
+        (c as any)._originalDg === 'pendiente' ||
+        (c as any)._originalDg === 'correccion'
+      );
       const dcmPending = caras.some(c => c.autorizacion_dcm === 'pendiente' || (c as any)._originalDcm === 'pendiente');
       if (dgPending || dcmPending) {
         setPendingAuthTipo(dgPending && dcmPending ? 'ambas' : dgPending ? 'dg' : 'dcm');
@@ -9669,7 +9677,11 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
                     // Flujo nuevo (feedback Jos 2026-07-15): nota primero,
                     // confirmar cambios después.
                     if (campanaDetails?.solicitud_id) {
-                      const dgPending = caras.some(c => c.autorizacion_dg === 'pendiente' || (c as any)._originalDg === 'pendiente');
+                      const dgPending = caras.some(c =>
+                        c.autorizacion_dg === 'pendiente' ||
+                        (c as any)._originalDg === 'pendiente' ||
+                        (c as any)._originalDg === 'correccion'
+                      );
                       const dcmPending = caras.some(c => c.autorizacion_dcm === 'pendiente' || (c as any)._originalDcm === 'pendiente');
                       if (dgPending || dcmPending) {
                         setPendingAuthTipo(dgPending && dcmPending ? 'ambas' : dgPending ? 'dg' : 'dcm');

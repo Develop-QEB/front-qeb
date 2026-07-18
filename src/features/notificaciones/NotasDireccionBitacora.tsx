@@ -26,8 +26,12 @@ export function NotasDireccionBitacora({ idSolicitud, isDark, bitacoraCount, var
   const notasQuery = useQuery({
     queryKey: ['notas-direccion', idSolicitud],
     queryFn: () => notasDireccionService.getAll(idSolicitud),
-    // Si no hay bitacora y hay pocas chances de tener nota inicial, solo carga al expandir
-    enabled: expanded || (bitacoraCount ?? 1) > 0,
+    // Siempre que haya idSolicitud, hacer fetch. El bitacoraCount que viene
+    // del payload de la notificación puede estar stale si el asesor agrega
+    // notas después de que el DG cargó su listado — no confiar en él.
+    // Feedback Jos 2026-07-17.
+    enabled: idSolicitud > 0,
+    staleTime: 30_000,
   });
 
   const notas = notasQuery.data ?? [];
