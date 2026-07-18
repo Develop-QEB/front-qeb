@@ -9073,6 +9073,11 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
                                         {(dgDisplay === 'rechazado' || dcmDisplay === 'rechazado') && (
                                           <span className="text-[10px] px-1.5 py-0.5 rounded bg-red-600/30 text-red-400">Rechazado</span>
                                         )}
+                                        {/* Estado "corrección" — devuelto por el Gerente Comercial en el
+                                            filtro DG. Se muestra en naranja y permite editar+reenviar. */}
+                                        {dgDisplay === 'correccion' && (
+                                          <span className="text-[10px] px-1.5 py-0.5 rounded bg-orange-500/20 text-orange-300">Corrección</span>
+                                        )}
                                         {dgDisplay === 'pendiente' && dcmDisplay !== 'rechazado' && (
                                           <span className="text-[10px] px-1.5 py-0.5 rounded bg-red-500/20 text-red-300">Pend. DG</span>
                                         )}
@@ -9127,11 +9132,13 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
                                     })()}
                                     {effectiveCanEdit && (
                                       <>
-                                        {(cara.autorizacion_dg === 'rechazado' || cara.autorizacion_dcm === 'rechazado') && (
+                                        {(cara.autorizacion_dg === 'rechazado' || cara.autorizacion_dcm === 'rechazado' || cara.autorizacion_dg === 'correccion') && (
                                           <button
                                             onClick={(e) => { e.stopPropagation(); handleReenviarAutorizacionCara(cara); }}
                                             className="p-2 rounded-lg border bg-blue-500/10 text-blue-400 border-blue-500/20 hover:bg-blue-500/20 transition-colors"
-                                            title="Reenviar a autorización (reprocesar este circuito)"
+                                            title={cara.autorizacion_dg === 'correccion'
+                                              ? 'Reenviar a autorización tras corrección'
+                                              : 'Reenviar a autorización (reprocesar este circuito)'}
                                           >
                                             <RefreshCw className="h-4 w-4" />
                                           </button>

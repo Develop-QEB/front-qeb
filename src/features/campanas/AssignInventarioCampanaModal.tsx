@@ -8894,6 +8894,11 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
                                         {(dgDisplay === 'rechazado' || dcmDisplay === 'rechazado') && (
                                           <span className={`text-[10px] px-1.5 py-0.5 rounded ${isDark ? 'bg-red-600/30 text-red-400' : 'bg-red-100 text-red-700'}`}>Rechazado</span>
                                         )}
+                                        {/* Estado "corrección" — devuelto por el Gerente Comercial en el
+                                            filtro DG. Se muestra en naranja y permite editar+reenviar. */}
+                                        {dgDisplay === 'correccion' && (
+                                          <span className={`text-[10px] px-1.5 py-0.5 rounded ${isDark ? 'bg-orange-500/20 text-orange-300' : 'bg-orange-100 text-orange-700'}`}>Corrección</span>
+                                        )}
                                         {dgDisplay === 'pendiente' && dcmDisplay !== 'rechazado' && (
                                           <span className={`text-[10px] px-1.5 py-0.5 rounded ${isDark ? 'bg-red-500/20 text-red-300' : 'bg-red-100 text-red-700'}`}>Pend. DG</span>
                                         )}
@@ -8952,11 +8957,13 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
                                       const blockReason = caraAPSBlocked ? 'Grupo con APS asignado - no se puede editar' : hasSavedPendingAuth ? 'Hay circuitos pendientes de autorizacion - no se pueden editar otros' : isLoadingThis ? 'Cargando editor...' : 'Editar';
                                       return (
                                       <>
-                                        {(cara.autorizacion_dg === 'rechazado' || cara.autorizacion_dcm === 'rechazado') && (
+                                        {(cara.autorizacion_dg === 'rechazado' || cara.autorizacion_dcm === 'rechazado' || cara.autorizacion_dg === 'correccion') && (
                                           <button
                                             onClick={(e) => { e.stopPropagation(); handleReenviarAutorizacionCara(cara); }}
                                             className="p-2 rounded-lg border bg-blue-500/10 text-blue-400 border-blue-500/20 hover:bg-blue-500/20 transition-colors"
-                                            title="Reenviar a autorización (reprocesar este circuito)"
+                                            title={cara.autorizacion_dg === 'correccion'
+                                              ? 'Reenviar a autorización tras corrección'
+                                              : 'Reenviar a autorización (reprocesar este circuito)'}
                                           >
                                             <RefreshCw className="h-4 w-4" />
                                           </button>
