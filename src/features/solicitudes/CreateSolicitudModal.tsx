@@ -345,11 +345,11 @@ interface CaraEntry {
   tarifaEfectiva?: number;
   descuento: number;
   precioTotal: number;
-  autorizacion_dg?: 'aprobado' | 'pendiente' | 'rechazado';
-  autorizacion_dcm?: 'aprobado' | 'pendiente' | 'rechazado';
+  autorizacion_dg?: 'aprobado' | 'pendiente' | 'rechazado' | 'correccion';
+  autorizacion_dcm?: 'aprobado' | 'pendiente' | 'rechazado' | 'correccion';
   // Valores originales del backend (antes de contaminación)
-  _originalDg?: 'aprobado' | 'pendiente' | 'rechazado';
-  _originalDcm?: 'aprobado' | 'pendiente' | 'rechazado';
+  _originalDg?: 'aprobado' | 'pendiente' | 'rechazado' | 'correccion';
+  _originalDcm?: 'aprobado' | 'pendiente' | 'rechazado' | 'correccion';
   // Costo/caras tal como estaban en BD al cargar la solicitud. Sirven para
   // replicar en el front la regla "Direcciones Aprobadas": si la cara ya estaba
   // aprobada y no bajan costo/caras, la pre-evaluación conserva "aprobado".
@@ -374,10 +374,10 @@ interface Props {
 // "aprobado" en vez de mostrar "Pend. DG/DCM". Solo cuando decrementa (bajan caras,
 // o baja el costo > 3% de la tarifa) se muestra el estado recalculado.
 function conservarAprobacionFront(
-  estado: { autorizacion_dg?: 'aprobado' | 'pendiente' | 'rechazado'; autorizacion_dcm?: 'aprobado' | 'pendiente' | 'rechazado' },
-  prev: { dg?: 'aprobado' | 'pendiente' | 'rechazado'; dcm?: 'aprobado' | 'pendiente' | 'rechazado'; costo?: number; caras?: number },
+  estado: { autorizacion_dg?: 'aprobado' | 'pendiente' | 'rechazado' | 'correccion'; autorizacion_dcm?: 'aprobado' | 'pendiente' | 'rechazado' | 'correccion' },
+  prev: { dg?: 'aprobado' | 'pendiente' | 'rechazado' | 'correccion'; dcm?: 'aprobado' | 'pendiente' | 'rechazado' | 'correccion'; costo?: number; caras?: number },
   nuevo: { costo: number; caras: number; tarifa_publica?: number }
-): { autorizacion_dg?: 'aprobado' | 'pendiente' | 'rechazado'; autorizacion_dcm?: 'aprobado' | 'pendiente' | 'rechazado' } {
+): { autorizacion_dg?: 'aprobado' | 'pendiente' | 'rechazado' | 'correccion'; autorizacion_dcm?: 'aprobado' | 'pendiente' | 'rechazado' | 'correccion' } {
   const yaAprobada = prev.dg === 'aprobado' && prev.dcm === 'aprobado';
   if (!yaAprobada) return estado;
   // Si faltan los valores originales de BD, NO conservar a ciegas: mostrar la
