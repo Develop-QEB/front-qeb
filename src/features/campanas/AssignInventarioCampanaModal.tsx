@@ -2769,6 +2769,43 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
           return;
         }
 
+        // Cambio de periodo con reservas: avisar que se borrarán. Al guardar, el
+        // backend libera las reservas del circuito (cara + pareja RT/BF) y lo
+        // reubica en el nuevo periodo con reservas en 0. (Las caras con APS ya
+        // tienen el periodo bloqueado, así que aquí solo aplica sin APS.)
+        // Comparar en formato YYYY-MM-DD (handleEditCara trunca a 10 chars, la cara
+        // guardada conserva el timestamp completo).
+        const periodoCambio =
+          String(newCara.inicio_periodo || '').slice(0, 10) !== String(caraToEdit.inicio_periodo || '').slice(0, 10) ||
+          String(newCara.fin_periodo || '').slice(0, 10) !== String(caraToEdit.fin_periodo || '').slice(0, 10);
+        if (periodoCambio) {
+          const grupoLocal = caraToEdit.grupo_rt_bf
+            ? caras.filter(c => c.grupo_rt_bf === caraToEdit.grupo_rt_bf)
+            : [caraToEdit];
+          const tieneReservasPeriodo = reservas.some(r =>
+            grupoLocal.some(g => r.id.startsWith(g.localId) || (g.id && r.solicitudCaraId === g.id))
+          );
+          if (tieneReservasPeriodo) {
+            const ok = window.confirm(
+              'Este circuito tiene inventario reservado. Al cambiar el periodo se borrarán las reservas del circuito y se moverá al nuevo periodo con las reservas en 0. ¿Deseas continuar?'
+            );
+            if (!ok) return;
+            // Reflejar las reservas en 0 de inmediato (al Aceptar), sin esperar al
+            // guardado. El backend las libera al guardar; aquí las quitamos del
+            // estado local Y del cache de la query para que el useEffect de sync no
+            // las repueble con data vieja.
+            const dbIds = new Set(grupoLocal.map(g => g.id).filter((x): x is number => !!x));
+            const localIds = grupoLocal.map(g => g.localId);
+            setReservas(prev => prev.filter(r =>
+              !dbIds.has(r.solicitudCaraId as number) &&
+              !localIds.some(lid => r.id.startsWith(`${lid}-`))
+            ));
+            queryClient.setQueryData(['campana-reservas-modal', campana!.id], (old: unknown) =>
+              Array.isArray(old) ? old.filter((r: { solicitud_cara_id?: number }) => !dbIds.has(r.solicitud_cara_id as number)) : old
+            );
+          }
+        }
+
         // Determine grupo_rt_bf: reuse existing, or generate a new one if pairing now.
         let grupoRtBf: number | null = caraToEdit.grupo_rt_bf || null;
         if (wantsPair && !grupoRtBf) grupoRtBf = Date.now() % 2000000000;
@@ -2836,7 +2873,10 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
             const conservado = conservarAprobacionFront(
               { autorizacion_dg, autorizacion_dcm },
               { dg: caraToEdit._originalDg, dcm: caraToEdit._originalDcm, costo: caraToEdit._originalCosto, caras: caraToEdit._originalCaras },
-              { costo: costoCalculado, caras: newCara.caras, tarifa_publica: newCara.tarifa_publica }
+              // CT/BF/CF: la cantidad va en `bonificacion` (caras=0), igual que
+              // `_originalCaras`. Sin esto, comparaba newCara.caras(0) vs _originalCaras(10)
+              // → parecía que "bajaron las caras" → no conservaba (CT editando solo NSE).
+              { costo: costoCalculado, caras: isBonifSplitArticle(newCara.articulo) ? (Number(newCara.bonificacion) || 0) : newCara.caras, tarifa_publica: newCara.tarifa_publica }
             );
             autorizacion_dg = conservado.autorizacion_dg || 'aprobado';
             autorizacion_dcm = conservado.autorizacion_dcm || 'aprobado';
@@ -8078,9 +8118,9 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
                       <div className="space-y-1">
                         <label className={`text-xs ${isDark ? 'text-zinc-500' : 'text-gray-500'}`}>
                           Periodo {editingCaraHasReservas && <span className="text-amber-400 text-[10px]">(bloqueado)</span>}
-                          {tipoPeriodo !== 'mensual' && campana!.catorcena_inicio_num && campana!.catorcena_inicio_anio && campana!.catorcena_fin_num && campana!.catorcena_fin_anio && (
+                          {tipoPeriodo !== 'mensual' && catorcenaInicio && yearInicio && catorcenaFin && yearFin && (
                             <span className="text-zinc-600 ml-1">
-                              (Rango: {campana!.catorcena_inicio_num}/{campana!.catorcena_inicio_anio} - {campana!.catorcena_fin_num}/{campana!.catorcena_fin_anio})
+                              (Rango: {catorcenaInicio}/{yearInicio} - {catorcenaFin}/{yearFin})
                             </span>
                           )}
                         </label>
@@ -8278,12 +8318,15 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
                           ) : (
                             catorcenasData?.data
                               .filter(c => {
-                                if (!campana!.catorcena_inicio_num || !campana!.catorcena_inicio_anio || !campana!.catorcena_fin_num || !campana!.catorcena_fin_anio) {
+                                // Usar el rango EN VIVO (state) del encabezado, no el guardado
+                                // en `campana`, para que al ampliar el periodo arriba (sin guardar
+                                // aún) las nuevas catorcenas ya estén disponibles por circuito.
+                                if (!catorcenaInicio || !yearInicio || !catorcenaFin || !yearFin) {
                                   return true;
                                 }
                                 const catValue = c.a_o * 100 + c.numero_catorcena;
-                                const minValue = campana!.catorcena_inicio_anio * 100 + campana!.catorcena_inicio_num;
-                                const maxValue = campana!.catorcena_fin_anio * 100 + campana!.catorcena_fin_num;
+                                const minValue = yearInicio * 100 + catorcenaInicio;
+                                const maxValue = yearFin * 100 + catorcenaFin;
                                 return catValue >= minValue && catValue <= maxValue;
                               })
                               .map(c => (

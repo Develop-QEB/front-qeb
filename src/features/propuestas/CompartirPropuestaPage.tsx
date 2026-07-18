@@ -60,6 +60,15 @@ function formatInicioPeriodo(item: InventarioReservado, tipoPeriodo?: string): s
   return 'Sin asignar';
 }
 
+// Clave estable de catorcena de una fila (mensual usa "YYYY-MM"; catorcenal usa
+// "YYYY-NN"). Debe coincidir EXACTO con catKeyOf() de ClientePropuestaMapPage para que
+// el alcance compartido por URL (?periodos / ?sel) reconstruya el mismo subconjunto.
+function catKeyOf(item: InventarioReservado, tipoPeriodo?: string): string {
+  if (tipoPeriodo === 'mensual' && item.inicio_periodo) return item.inicio_periodo.substring(0, 7);
+  if (item.numero_catorcena && item.anio_catorcena) return `${item.anio_catorcena}-${item.numero_catorcena}`;
+  return 'sin';
+}
+
 // Tarifa BRUTA por cara (costo/caras). El campo tarifa_publica viene diluido por
 // las bonificadas (= costo/(renta+bonif)); multiplicarlo x caras_renta cuenta doble
 // la bonificacion y da inversion de MENOS. La inversion correcta = tarifa_bruta_sc x
@@ -285,17 +294,7 @@ export function CompartirPropuestaPage() {
   const catorcenaFilteredInventario = useMemo(() => {
     if (!inventario) return [];
     if (selectedCatorcenas.size === 0) return inventario as InventarioReservado[];
-    return (inventario as InventarioReservado[]).filter(i => {
-      if (tipoPeriodo === 'mensual' && i.inicio_periodo) {
-        const key = i.inicio_periodo.substring(0, 7); // "YYYY-MM"
-        return selectedCatorcenas.has(key);
-      }
-      if (i.numero_catorcena && i.anio_catorcena) {
-        const key = `${i.anio_catorcena}-${i.numero_catorcena}`;
-        return selectedCatorcenas.has(key);
-      }
-      return false;
-    });
+    return (inventario as InventarioReservado[]).filter(i => selectedCatorcenas.has(catKeyOf(i, tipoPeriodo)));
   }, [inventario, selectedCatorcenas, tipoPeriodo]);
 
   // Computed data
@@ -678,20 +677,26 @@ export function CompartirPropuestaPage() {
   };
 
   // Abrir el visor de mapa publico de QEB (pantalla completa, branding IMU) reflejando
-  // lo que se ve en el mapa: respeta el filtro de catorcenas y la seleccion de items.
-  // Sin ningun filtro/seleccion abre el mapa con todo el inventario.
+  // EXACTAMENTE lo que se seleccionó para compartir. Construye el mapa "a la medida":
+  //   - Seleccion de filas (checkboxes): ?sel=id@catorcena por cada reserva. La clave
+  //     compuesta evita arrastrar otras catorcenas del mismo inventario (un id se repite
+  //     entre catorcenas) — el bug que hacía que el mapa no respondiera a la seleccion.
+  //   - Solo chips de catorcena: ?periodos=YYYY-NN,... (compacto, no enumera cada pin).
+  //   - Sin nada seleccionado: sin params -> mapa completo.
   const handleExpandMap = () => {
     const base = catorcenaFilteredInventario; // respeta los chips de catorcena
-    const chosen = selectedItems.size > 0
-      ? base.filter(i => selectedItems.has(itemKey(i)))
-      : base;
-    const ids = Array.from(new Set(
-      chosen.filter(i => i.latitud && i.longitud).map(i => i.id)
-    ));
-    // Solo acotamos por URL si hay un subconjunto real (seleccion o filtro de catorcena).
-    const isSubset = selectedItems.size > 0 || selectedCatorcenas.size > 0;
-    const qs = isSubset && ids.length > 0 ? `?ids=${ids.join(',')}` : '';
-    window.open(`/cliente/propuesta/${propuestaId}/mapa${qs}`, '_blank', 'noopener,noreferrer');
+    const params = new URLSearchParams();
+
+    if (selectedItems.size > 0) {
+      const chosen = base.filter(i => selectedItems.has(itemKey(i)) && i.latitud && i.longitud);
+      const sel = Array.from(new Set(chosen.map(i => `${i.id}@${catKeyOf(i, tipoPeriodo)}`)));
+      if (sel.length > 0) params.set('sel', sel.join(','));
+    } else if (selectedCatorcenas.size > 0) {
+      params.set('periodos', Array.from(selectedCatorcenas).join(','));
+    }
+
+    const qs = params.toString();
+    window.open(`/cliente/propuesta/${propuestaId}/mapa${qs ? `?${qs}` : ''}`, '_blank', 'noopener,noreferrer');
   };
 
   // Download KML for a specific group
@@ -1400,7 +1405,13 @@ export function CompartirPropuestaPage() {
                     <MapIcon className="h-3.5 w-3.5" /> KML ({selectedItems.size})
                   </button>
                 )}
-                <button onClick={handleExpandMap} className="flex items-center gap-1.5 px-3 py-1.5 bg-gradient-to-r from-indigo-600 to-violet-600 hover:from-indigo-500 hover:to-violet-500 text-white rounded-lg text-xs font-medium shadow-sm transition-colors" title={selectedItems.size > 0 ? `Expandir mapa con ${selectedItems.size} seleccionados` : 'Expandir mapa con todo el inventario'}>
+                <button onClick={handleExpandMap} className="flex items-center gap-1.5 px-3 py-1.5 bg-gradient-to-r from-indigo-600 to-violet-600 hover:from-indigo-500 hover:to-violet-500 text-white rounded-lg text-xs font-medium shadow-sm transition-colors" title={
+                  selectedItems.size > 0
+                    ? `Expandir mapa con ${selectedItems.size} seleccionados`
+                    : selectedCatorcenas.size > 0
+                      ? `Expandir mapa con ${selectedCatorcenas.size} ${tipoPeriodo === 'mensual' ? 'periodo(s)' : 'catorcena(s)'} seleccionada(s)`
+                      : 'Expandir mapa con todo el inventario'
+                }>
                   <Maximize2 className="h-3.5 w-3.5" /> Expandir Mapa
                 </button>
               </div>
