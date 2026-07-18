@@ -3868,12 +3868,6 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
                                                     Rechazado
                                                   </span>
                                                 )}
-                                                {/* Estado corrección — Gerente Comercial rechazó filtro DG */}
-                                                {dgEfectivo === 'correccion' && (
-                                                  <span className="text-[10px] px-1.5 py-0.5 rounded bg-orange-500/20 text-orange-300" title="Devuelto por Gerente Comercial — corregir y reenviar">
-                                                    Corrección
-                                                  </span>
-                                                )}
                                                 {dgEfectivo === 'pendiente' && dcmEfectivo !== 'rechazado' && (
                                                   <span className="text-[10px] px-1.5 py-0.5 rounded bg-red-500/20 text-red-300" title="Requiere autorización DG">
                                                     Pend. DG
@@ -3899,14 +3893,12 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
                                             const authBlocked = isEditMode && anyPendingSaved;
                                             return (
                                           <div className="flex items-center justify-center gap-1">
-                                            {(cara.autorizacion_dg === 'rechazado' || cara.autorizacion_dcm === 'rechazado' || cara.autorizacion_dg === 'correccion') && (
+                                            {(cara.autorizacion_dg === 'rechazado' || cara.autorizacion_dcm === 'rechazado') && (
                                               <button
                                                 type="button"
                                                 onClick={() => handleReenviarAutorizacion(cara.id)}
                                                 className="p-1 rounded text-[10px] hover:bg-blue-500/20 text-blue-400"
-                                                title={cara.autorizacion_dg === 'correccion'
-                                                  ? 'Reenviar a autorización tras corrección'
-                                                  : 'Reenviar a autorización (reprocesar este circuito)'}
+                                                title="Reenviar a autorización (reprocesar este circuito)"
                                               >
                                                 <RefreshCw className="h-3.5 w-3.5" />
                                               </button>

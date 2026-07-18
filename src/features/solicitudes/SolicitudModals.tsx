@@ -1064,12 +1064,6 @@ export function ViewSolicitudModal({ isOpen, onClose, solicitudId, onEdit, onAte
                                                   color: { bg: isDark ? 'bg-emerald-500/20' : 'bg-emerald-50', text: isDark ? 'text-emerald-300' : 'text-emerald-700', border: isDark ? 'border-emerald-500/30' : 'border-emerald-200' }
                                                 });
                                               } else {
-                                                if (authDg === 'correccion') {
-                                                  authBadges.push({
-                                                    label: 'Corrección',
-                                                    color: { bg: isDark ? 'bg-orange-500/20' : 'bg-orange-50', text: isDark ? 'text-orange-300' : 'text-orange-700', border: isDark ? 'border-orange-500/30' : 'border-orange-200' }
-                                                  });
-                                                }
                                                 if (authDg === 'pendiente') {
                                                   authBadges.push({
                                                     label: 'Pend. DG',
