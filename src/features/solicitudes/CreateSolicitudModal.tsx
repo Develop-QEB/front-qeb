@@ -26,6 +26,7 @@ import { BULK_DELETE_ENABLED } from '../../config/featureFlags';
 import { NotasDireccionBitacora } from '../notificaciones/NotasDireccionBitacora';
 import { NuevaNotaDireccionModal } from '../notificaciones/NuevaNotaDireccionModal';
 import { notasDireccionService } from '../../services/notasDireccion.service';
+import { getRequiredPeriodoForArticulo } from '../../lib/periodos';
 
 // Tarifas now come from SAP (U_IMU_PublicPrice = tarifa publica, PriceList 11 = tarifa piso)
 
@@ -180,20 +181,7 @@ const isQuretaroArticle = (itemCode: string): boolean => {
   return (itemCode || '').toUpperCase().endsWith('-QR');
 };
 
-const getRequiredPeriodoForArticulo = (itemName: string): 'catorcena' | 'mensual' => {
-  if (!itemName) return 'catorcena';
-  const name = itemName.toUpperCase();
-  // Mensual: Kioscos, Boleros, Mi Macro, Puentes Peatonales, Carteleras/Unipolares, Bajo Puentes
-  if (name.includes('KIOSCO') || name.includes('KIOSKO')) return 'mensual';
-  if (name.includes('BOLERO')) return 'mensual';
-  if (name.includes('MI MACRO')) return 'mensual';
-  if (name.includes('PEATONAL')) return 'mensual';
-  if (name.includes('BAJO PUENTE')) return 'mensual';
-  if (name.includes('CARTELERA')) return 'mensual';
-  if (name.includes('UNIPOLAR')) return 'mensual';
-  // Catorcenal: PB y Columna, Digital PB y Columna (y todo lo demás)
-  return 'catorcena';
-};
+// getRequiredPeriodoForArticulo se importa de lib/periodos (fuente única de verdad)
 
 // Tipo auto-detection from article name (Tradicional or Digital)
 const getTipoFromName = (itemName: string): 'Tradicional' | 'Digital' => {

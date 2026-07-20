@@ -15,7 +15,7 @@ import { inventariosService, InventarioDisponible } from '../../services/inventa
 import { campanasService, ReservaModalItem } from '../../services/campanas.service';
 import { clientesService } from '../../services/clientes.service';
 import { formatCurrency } from '../../lib/utils';
-import { monthLabelLong, monthLabelShort, dayMonthShort } from '../../lib/periodos';
+import { monthLabelLong, monthLabelShort, dayMonthShort, getRequiredPeriodoForArticulo } from '../../lib/periodos';
 import { parseCircuitoDigital } from '../../lib/circuitos';
 import { circuitosService } from '../../services/circuitos.service';
 import { useEnvironmentStore, getEndpoints } from '../../store/environmentStore';
@@ -8000,7 +8000,10 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
                           options={(articulosData || []).filter(a => {
                             const code = a.ItemCode.toUpperCase();
                             // BF/CF solo aparecen en el dropdown de bonificación, no en el principal
-                            return !code.startsWith('BF') && !code.startsWith('CF');
+                            if (code.startsWith('BF') || code.startsWith('CF')) return false;
+                            // Gran Formato ↔ periodo: mensual solo muestra Gran Formato;
+                            // catorcena los excluye (mismo criterio que en solicitudes).
+                            return getRequiredPeriodoForArticulo(a.ItemName) === tipoPeriodo;
                           })}
                           value={selectedArticulo}
                           onChange={async (item: SAPArticulo) => {
