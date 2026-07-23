@@ -13,7 +13,7 @@ import { useAuthStore } from '../../store/authStore';
 import { useThemeStore } from '../../store/themeStore';
 import { useSocketTicketsHistorial, useSocketTicketChat, useSocketTicketChatSoporte } from '../../hooks/useSocket';
 
-const STATUS_OPTIONS = ['Nuevo', 'En Progreso', 'Validación', 'Duda del Bot', 'Resuelto', 'Cerrado'];
+const STATUS_OPTIONS = ['Nuevo', 'En Progreso', 'Validación', 'Resuelto', 'Cerrado'];
 const PRIORIDAD_OPTIONS = ['Baja', 'Normal', 'Alta', 'Urgente'];
 const TEAM_MEMBERS = ['Jos', 'Akary', 'Mario', 'Bladi'];
 const TEAM_COLORS: Record<string, { text: string; bg: string; border: string }> = {
@@ -721,7 +721,7 @@ export function HistorialTicketsPage() {
   const [filterTecnico, setFilterTecnico] = useState('Todos');
   const [onlyUnread, setOnlyUnread] = useState(false);
   const [selectedTicket, setSelectedTicket] = useState<TicketHistorial | null>(null);
-  const [activeTab, setActiveTab] = useState<'Nuevo' | 'En Progreso' | 'Validación' | 'Duda del Bot' | 'Resuelto' | 'Cerrado'>('Nuevo');
+  const [activeTab, setActiveTab] = useState<'Nuevo' | 'En Progreso' | 'Validación' | 'Resuelto' | 'Cerrado'>('Nuevo');
 
   useSocketTicketsHistorial();
 
@@ -780,7 +780,6 @@ export function HistorialTicketsPage() {
     { key: 'Nuevo', label: 'Pendientes', showCount: true },
     { key: 'En Progreso', label: 'En Proceso', showCount: true },
     { key: 'Validación', label: 'Validación', showCount: true },
-    { key: 'Duda del Bot', label: 'Duda del Bot', showCount: true },
     { key: 'Resuelto', label: 'Resueltos', showCount: false },
     { key: 'Cerrado', label: 'Cerrados', showCount: false },
   ];
