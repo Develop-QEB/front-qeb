@@ -28,6 +28,18 @@ import { AssignInventarioCampanaModal } from '../campanas/AssignInventarioCampan
 import { propuestasService } from '../../services/propuestas.service';
 import { campanasService } from '../../services/campanas.service';
 import { NotasDireccionBitacora } from './NotasDireccionBitacora';
+import { NuevaActividadComercialModal } from './NuevaActividadComercialModal';
+
+// Roles que pueden crear tarea manual "Actividad Comercial".
+// Se muestra el boton solo a estos. El back re-valida.
+const ROLES_ACTIVIDAD_COMERCIAL = new Set([
+  'Asesor Comercial',
+  'Asesor Comercial Aeropuerto',
+  'Gerente Comercial',
+  'Director Comercial',
+  'Administrador',
+  'DEV',
+]);
 
 // ============ HELPERS ============
 // Tipos de tareas creadas desde el Gestor de Artes. Estas tareas se
@@ -2968,6 +2980,9 @@ export function NotificacionesPage() {
   const navigate = useNavigate();
   const isDark = useThemeStore((s) => s.theme) === 'dark';
   const currentUserId = useAuthStore((s) => s.user?.id);
+  const currentUserRol = useAuthStore((s) => s.user?.rol);
+  const puedeCrearActividadComercial = !!currentUserRol && ROLES_ACTIVIDAD_COMERCIAL.has(currentUserRol);
+  const [showActividadModal, setShowActividadModal] = useState(false);
 
   // Suscribirse a WebSocket para actualizaciones en tiempo real.
   // popups: false — los popups los dispara solo la instancia del Header.
@@ -3435,6 +3450,20 @@ export function NotificacionesPage() {
 
           {/* Botones de acción */}
           <div className="flex items-center gap-2">
+            {contentType === 'tareas' && puedeCrearActividadComercial && (
+              <button
+                onClick={() => setShowActividadModal(true)}
+                className={`flex items-center gap-2 px-3 py-2 rounded-lg text-sm font-medium transition-all ${
+                  isDark
+                    ? 'bg-amber-500/15 text-amber-300 border border-amber-500/30 hover:bg-amber-500/25'
+                    : 'bg-amber-50 text-amber-700 border border-amber-200 hover:bg-amber-100'
+                }`}
+                title="Nueva actividad comercial"
+              >
+                <Plus className="h-4 w-4" />
+                <span className="hidden sm:inline">Actividad comercial</span>
+              </button>
+            )}
             <button
               onClick={() => {
                 // Exportar a CSV
@@ -4181,6 +4210,14 @@ export function NotificacionesPage() {
           isOpen={!!editCampana}
           onClose={() => setEditCampana(null)}
           campana={editCampana}
+        />
+      )}
+
+      {/* Nueva Actividad Comercial (tarea manual asesor) */}
+      {puedeCrearActividadComercial && (
+        <NuevaActividadComercialModal
+          isOpen={showActividadModal}
+          onClose={() => setShowActividadModal(false)}
         />
       )}
 
