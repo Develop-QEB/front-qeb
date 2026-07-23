@@ -690,7 +690,7 @@ export function ViewSolicitudModal({ isOpen, onClose, solicitudId, onEdit, onAte
 
   return (
     <div className="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center z-50 p-4 isolate">
-      <div className={`${isDark ? 'bg-gradient-to-br from-zinc-900 via-zinc-900 to-zinc-950 border-zinc-800/50' : 'bg-white border-gray-200'} border rounded-3xl w-full max-w-5xl max-h-[90vh] overflow-hidden flex flex-col shadow-2xl relative z-50`}>
+      <div className={`${isDark ? 'bg-gradient-to-br from-zinc-900 via-zinc-900 to-zinc-950 border-zinc-800/50' : 'bg-white border-gray-200'} border rounded-3xl w-[97vw] max-w-[1800px] max-h-[92vh] overflow-hidden flex flex-col shadow-2xl relative z-50`}>
         {/* Header - Estilo violeta consistente */}
         <div className="relative px-6 py-5 border-b border-violet-500/20 bg-gradient-to-r from-violet-600/20 via-purple-600/15 to-fuchsia-600/10">
           <div className="flex items-center justify-between">

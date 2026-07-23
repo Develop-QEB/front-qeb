@@ -2566,7 +2566,7 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center">
       <div className="absolute inset-0 bg-black/80 backdrop-blur-sm" />
-      <div className={`relative w-full max-w-5xl max-h-[95vh] h-[95vh] ${isDark ? 'bg-zinc-900 border-zinc-700' : 'bg-white border-gray-200'} rounded-2xl border shadow-2xl overflow-hidden flex flex-col`}>
+      <div className={`relative w-[97vw] max-w-[1800px] max-h-[95vh] h-[95vh] ${isDark ? 'bg-zinc-900 border-zinc-700' : 'bg-white border-gray-200'} rounded-2xl border shadow-2xl overflow-hidden flex flex-col`}>
         {/* Header */}
         <div className={`flex items-center justify-between px-6 py-4 border-b ${isDark ? 'border-zinc-800' : 'border-gray-200'}`}>
           <div className="flex items-center gap-4">

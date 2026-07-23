@@ -5305,7 +5305,7 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
         {toastJSX}
         <div className="absolute inset-0 bg-black/70 backdrop-blur-sm" onClick={handleBackToMain} />
 
-        <div className={`relative w-[95vw] max-w-[1600px] h-[90vh] ${isDark ? 'bg-zinc-900' : 'bg-white'} rounded-2xl border border-purple-500/20 shadow-2xl flex flex-col overflow-hidden`}>
+        <div className={`relative w-[97vw] max-w-[1800px] h-[92vh] ${isDark ? 'bg-zinc-900' : 'bg-white'} rounded-2xl border border-purple-500/20 shadow-2xl flex flex-col overflow-hidden`}>
           {/* Header */}
           <div className={`flex items-center justify-between px-6 py-4 border-b ${isDark ? 'border-zinc-800' : 'border-gray-200'}`}>
             <div className="flex items-center gap-4">
@@ -7545,7 +7545,7 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
     <div className="fixed inset-0 z-50 flex items-center justify-center">
       <div className="absolute inset-0 bg-black/70 backdrop-blur-sm" onClick={handleClose} />
 
-      <div className={`relative w-[95vw] max-w-[1400px] h-[90vh] ${isDark ? 'bg-zinc-900' : 'bg-white'} rounded-2xl border border-purple-500/20 shadow-2xl flex flex-col overflow-hidden`}>
+      <div className={`relative w-[97vw] max-w-[1800px] h-[92vh] ${isDark ? 'bg-zinc-900' : 'bg-white'} rounded-2xl border border-purple-500/20 shadow-2xl flex flex-col overflow-hidden`}>
         {/* Header */}
         <div className={`flex items-center justify-between px-6 py-4 border-b ${isDark ? 'border-zinc-800' : 'border-gray-200'}`}>
           <div>
