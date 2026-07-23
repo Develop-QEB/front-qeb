@@ -465,9 +465,21 @@ function GoogleMapsChart({
     [filteredCoords]
   );
   const coordsTruncados = filteredCoords.length > MAX_MARKERS;
-// Auto-fit bounds when data changes (allCoords viene filtrado del backend)
+
+  // Firma estable del conjunto de plazas (nombre + coord). Cambia cuando cambian
+  // los FILTROS (otro set de plazas), pero NO cuando el usuario prende/apaga
+  // pines (ahi el back devuelve las mismas plazas). Se usa como unica dependencia
+  // del auto-encuadre para que el toggle de pines no reposicione el mapa.
+  const plazaSignature = useMemo(
+    () => validPlazas.map(p => `${p.plaza}:${p.lat},${p.lng}`).join('|'),
+    [validPlazas]
+  );
+
+  // Auto-encuadre SOLO cuando cambia el set de plazas (filtros) o al primer
+  // render. Antes dependia de allCoords, que se puebla al mostrar pines, y por
+  // eso el toggle hacia zoom a CDMX. Ahora encuadra a los centroides de plaza.
   useEffect(() => {
-    if (!mapRef.current || !mapReady) return;
+    if (!mapRef.current || !mapReady || validPlazas.length === 0) return;
 
     // Delay para asegurar que el mapa esta renderizado
     const timeoutId = setTimeout(() => {
@@ -475,23 +487,10 @@ function GoogleMapsChart({
 
       const bounds = new google.maps.LatLngBounds();
       let hasPoints = false;
-
-      // Usar allCoords (ya viene filtrado del backend por ciudad/estado).
-      // Si los pines estan apagados allCoords viene vacio, asi que caemos a las
-      // plazas para que el mapa igual se centre en la zona filtrada.
-      if (allCoords.length > 0) {
-        // Limitar a primeros 1000 para calcular bounds mas rapido
-        const coordsForBounds = allCoords.slice(0, 1000);
-        coordsForBounds.forEach(coord => {
-          bounds.extend({ lat: coord.lat, lng: coord.lng });
-          hasPoints = true;
-        });
-      } else if (validPlazas.length > 0) {
-        validPlazas.forEach(plaza => {
-          bounds.extend({ lat: plaza.lat!, lng: plaza.lng! });
-          hasPoints = true;
-        });
-      }
+      validPlazas.forEach(plaza => {
+        bounds.extend({ lat: plaza.lat!, lng: plaza.lng! });
+        hasPoints = true;
+      });
 
       if (hasPoints) {
         // Ajustar el mapa a los bounds con padding
@@ -521,7 +520,11 @@ function GoogleMapsChart({
     }, 200);
 
     return () => clearTimeout(timeoutId);
-  }, [allCoords, validPlazas, mapReady]);
+    // Depende SOLO de plazaSignature (no de allCoords) para que el toggle de
+    // pines no vuelva a encuadrar. validPlazas se lee dentro pero su contenido
+    // esta capturado por la firma.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [plazaSignature, mapReady]);
 
   // Auto-fit bounds when selection changes (checkboxes in table)
   useEffect(() => {
@@ -658,46 +661,6 @@ function GoogleMapsChart({
       }
     };
   }, [showPins, markerCoords, isLoaded, mapReady]);
-
-  // Con los pines apagados el mapa quedaba completamente vacio. Estas burbujas
-  // por plaza salen de byPlaza (ya viene en la respuesta, no cuesta payload
-  // extra) y se ven desde el nivel pais; al hacer click acercan a esa plaza.
-  useEffect(() => {
-    if (!mapRef.current || !isLoaded || showPins) return;
-
-    const maxPlazaCount = Math.max(...validPlazas.map(p => p.count), 1);
-    const plazaMarkers = validPlazas.map(plaza => {
-      const intensity = Math.sqrt(plaza.count / maxPlazaCount);
-      const marker = new google.maps.Marker({
-        position: { lat: plaza.lat!, lng: plaza.lng! },
-        map: mapRef.current,
-        icon: {
-          path: google.maps.SymbolPath.CIRCLE,
-          scale: 9 + intensity * 12,
-          fillColor: intensity > 0.7 ? '#ec4899' : intensity > 0.4 ? '#d946ef' : '#8b5cf6',
-          fillOpacity: 0.85,
-          strokeColor: '#fff',
-          strokeWeight: 2,
-        },
-        label: {
-          text: plaza.count > 999 ? `${(plaza.count / 1000).toFixed(1)}k` : String(plaza.count),
-          color: '#fff',
-          fontSize: '10px',
-          fontWeight: 'bold',
-        },
-        title: `${plaza.plaza} — ${plaza.count.toLocaleString()} inventarios`,
-        zIndex: plaza.count,
-      });
-      marker.addListener('click', () => {
-        onSelectPlaza(plaza.plaza);
-        mapRef.current?.setCenter({ lat: plaza.lat!, lng: plaza.lng! });
-        mapRef.current?.setZoom(11);
-      });
-      return marker;
-    });
-
-    return () => { plazaMarkers.forEach(m => m.setMap(null)); };
-  }, [validPlazas, showPins, isLoaded, mapReady, onSelectPlaza]);
 
   const onMapLoad = useCallback((map: google.maps.Map) => {
     mapRef.current = map;
@@ -1878,7 +1841,7 @@ function formatMoneyMXN(n: number): string {
 
 // Bloque: estado de POST a SAP (pendientes por postear vs posteadas), con
 // conteo y monto. El monto total exacto se muestra en el tooltip.
-function PosteoStatsCard({ data, isLoading }: { data?: PosteoStats; isLoading: boolean }) {
+function PosteoStatsCard({ data, isLoading, periodoLabel }: { data?: PosteoStats; isLoading: boolean; periodoLabel?: string | null }) {
   const isDark = useThemeStore((s) => s.theme) === 'dark';
 
   const pendientes = data?.pendientes ?? { count: 0, monto: 0 };
@@ -1906,9 +1869,14 @@ function PosteoStatsCard({ data, isLoading }: { data?: PosteoStats; isLoading: b
 
   return (
     <GlassCard>
-      <div className={`p-4 border-b ${isDark ? 'border-purple-900/30' : 'border-purple-200/50'} flex items-center justify-between gap-2`}>
+      <div className={`p-4 border-b ${isDark ? 'border-purple-900/30' : 'border-purple-200/50'} flex flex-wrap items-center justify-between gap-2`}>
         <h3 className={`text-sm font-medium ${isDark ? 'text-white' : 'text-gray-800'} uppercase tracking-wider flex items-center gap-2`}>
           <Send className="h-4 w-4 text-emerald-500" /> Estado de POST a SAP
+          {periodoLabel && (
+            <span className={`normal-case tracking-normal text-[11px] font-medium px-2 py-0.5 rounded-full ${isDark ? 'bg-emerald-500/10 text-emerald-300' : 'bg-emerald-50 text-emerald-600'}`}>
+              {periodoLabel}
+            </span>
+          )}
         </h3>
         {data && (
           <span className={`text-[10px] ${isDark ? 'text-zinc-500' : 'text-gray-400'}`}>
@@ -2002,26 +1970,41 @@ export function DashboardPage() {
   });
 
 
+  const filteredCatorcena = useMemo(() => {
+    if (!filters.catorcena_id || !filterOptions?.catorcenas) return null;
+    return filterOptions.catorcenas.find(c => c.id === filters.catorcena_id) || null;
+  }, [filters.catorcena_id, filterOptions]);
+
   // Estado de POST a SAP — solo depende del periodo (catorcena / rango de fechas).
-  const posteoFilters = useMemo(() => ({
-    catorcena_id: filters.catorcena_id,
-    fecha_inicio: filters.fecha_inicio,
-    fecha_fin: filters.fecha_fin,
-  }), [filters.catorcena_id, filters.fecha_inicio, filters.fecha_fin]);
+  // El dashboard SIEMPRE opera sobre un periodo: si el usuario no eligio uno,
+  // usamos la catorcena actual (la que muestra el indicador "Periodo Actual"),
+  // no todo el historico.
+  const posteoFilters = useMemo(() => {
+    if (filters.catorcena_id) return { catorcena_id: filters.catorcena_id };
+    if (filters.fecha_inicio && filters.fecha_fin) return { fecha_inicio: filters.fecha_inicio, fecha_fin: filters.fecha_fin };
+    if (filterOptions?.catorcenaActual?.id) return { catorcena_id: filterOptions.catorcenaActual.id };
+    return {};
+  }, [filters.catorcena_id, filters.fecha_inicio, filters.fecha_fin, filterOptions?.catorcenaActual?.id]);
   const { data: posteoStats, isLoading: loadingPosteo } = useQuery({
     queryKey: ['dashboard', 'posteo-stats', posteoFilters],
     queryFn: () => dashboardService.getPosteoStats(posteoFilters),
   });
 
+  // Etiqueta del periodo que refleja el bloque de posteo (para dejar claro que
+  // los montos son de esa catorcena, no del historico completo).
+  const posteoPeriodoLabel = useMemo(() => {
+    if (filters.fecha_inicio && filters.fecha_fin) {
+      const fmt = (d: string) => new Date(d).toLocaleDateString('es-MX', { day: 'numeric', month: 'short' });
+      return `${fmt(filters.fecha_inicio)} – ${fmt(filters.fecha_fin)}`;
+    }
+    const cat = filteredCatorcena || filterOptions?.catorcenaActual;
+    return cat ? `Cat. ${cat.numero} / ${cat.ano}` : null;
+  }, [filters.fecha_inicio, filters.fecha_fin, filteredCatorcena, filterOptions?.catorcenaActual]);
+
   const graficas = useMemo(() => activeEstatus !== 'total' && estatusStats ? estatusStats.graficas : stats?.graficas, [activeEstatus, estatusStats, stats]);
 
   // Base para los % de los KPIs: el total de inventarios con los filtros activos.
   const kpiTotal = stats?.kpis.total || 0;
-
-  const filteredCatorcena = useMemo(() => {
-    if (!filters.catorcena_id || !filterOptions?.catorcenas) return null;
-    return filterOptions.catorcenas.find(c => c.id === filters.catorcena_id) || null;
-  }, [filters.catorcena_id, filterOptions]);
 
   const handleClearFilters = () => { setFilters({}); setActiveEstatus('total'); setInventoryPage(1); setSelectedYear(null); setSelectedCatNum(null); setDateMode('catorcenal'); };
   const activeFilterCount =
@@ -2321,7 +2304,7 @@ export function DashboardPage() {
         </div>
 
         {/* Estado de POST a SAP: pendientes por postear vs posteadas */}
-        <PosteoStatsCard data={posteoStats} isLoading={loadingPosteo} />
+        <PosteoStatsCard data={posteoStats} isLoading={loadingPosteo} periodoLabel={posteoPeriodoLabel} />
 
         {/* Charts Row 1 */}
         {(loadingEstatus || loadingInventory) && (
