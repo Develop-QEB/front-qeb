@@ -40,8 +40,15 @@ const MaintenancePage = lazy(() => import('./features/maintenance/MaintenancePag
 const DEV_USERS_IDS = [1057460, 1057462]; // Mario, Jos
 
 // Roles TI: gestionan tickets area='TI' desde el mismo board (/dev/tickets).
-// El backend filtra por rol para que solo vean su area.
+// El backend filtra por area del usuario. Aquí ademas de los 3 roles TI
+// explicitos, permitimos a cualquiera con area='TI' (ej: 'Gerente de TI' con
+// rol Administrador en la BD — feedback Jos 2026-07-23).
 const TI_ROLES = ['Gerente de TI', 'Especialista de TI', 'Analista de TI'];
+function isUserTI(u?: { rol?: string; area?: string } | null): boolean {
+  if (!u) return false;
+  if (u.area === 'TI') return true;
+  return !!u.rol && TI_ROLES.includes(u.rol);
+}
 
 const HISTORIAL_TICKETS_EMAILS = [
   'akary.lopez@datistic.mx',
@@ -152,8 +159,7 @@ function GestionArtesRoute() {
 function HistorialTicketsRoute() {
   const user = useAuthStore((state) => state.user);
   const isWhitelistEmail = user && HISTORIAL_TICKETS_EMAILS.includes(user.email.toLowerCase());
-  const isTI = user?.rol && TI_ROLES.includes(user.rol);
-  if (!user || (!isWhitelistEmail && !isTI)) {
+  if (!user || (!isWhitelistEmail && !isUserTI(user))) {
     return <Navigate to="/" replace />;
   }
   return <HistorialTicketsPage />;
@@ -191,8 +197,7 @@ function DevTicketsRoute() {
   const user = useAuthStore((state) => state.user);
 
   const isDev = user && DEV_USERS_IDS.includes(user.id);
-  const isTI = user?.rol && TI_ROLES.includes(user.rol);
-  if (!user || (!isDev && !isTI)) {
+  if (!user || (!isDev && !isUserTI(user))) {
     return <Navigate to="/" replace />;
   }
   return <DevTicketsPage />;
