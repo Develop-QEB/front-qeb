@@ -48,6 +48,7 @@ const STATUS_COLORS_DARK: Record<string, StatusColor> = {
   'Ajuste Comercial': { bg: 'bg-amber-500/20', text: 'text-amber-300', border: 'border-amber-500/30' },
   'Pase a ventas': { bg: 'bg-emerald-500/20', text: 'text-emerald-300', border: 'border-emerald-500/30' },
   'Atendido': { bg: 'bg-cyan-500/20', text: 'text-cyan-300', border: 'border-cyan-500/30' },
+  'Liberada': { bg: 'bg-teal-500/20', text: 'text-teal-300', border: 'border-teal-500/30' },
   // Legacy (datos históricos)
   'Pendiente': { bg: 'bg-amber-500/20', text: 'text-amber-300', border: 'border-amber-500/30' },
   'Por aprobar': { bg: 'bg-amber-500/20', text: 'text-amber-300', border: 'border-amber-500/30' },
@@ -63,6 +64,7 @@ const STATUS_COLORS_LIGHT: Record<string, StatusColor> = {
   'Ajuste Comercial': { bg: 'bg-amber-50', text: 'text-amber-700', border: 'border-amber-500/30' },
   'Pase a ventas': { bg: 'bg-emerald-50', text: 'text-emerald-700', border: 'border-emerald-500/30' },
   'Atendido': { bg: 'bg-cyan-50', text: 'text-cyan-700', border: 'border-cyan-500/30' },
+  'Liberada': { bg: 'bg-teal-50', text: 'text-teal-700', border: 'border-teal-500/30' },
   'Pendiente': { bg: 'bg-amber-50', text: 'text-amber-700', border: 'border-amber-500/30' },
   'Por aprobar': { bg: 'bg-amber-50', text: 'text-amber-700', border: 'border-amber-500/30' },
   'Activa': { bg: 'bg-green-50', text: 'text-green-700', border: 'border-green-500/30' },
@@ -79,7 +81,7 @@ const getStatusColor = (status: string, isDark: boolean): StatusColor => {
   return map[status] || (isDark ? DEFAULT_STATUS_COLOR_DARK : DEFAULT_STATUS_COLOR_LIGHT);
 };
 
-const STATUS_OPTIONS = ['Atendido', 'Abierto', 'Ajuste Cto-Cliente', 'Ajuste Comercial', 'Pase a ventas', 'Rechazada'];
+const STATUS_OPTIONS = ['Atendido', 'Abierto', 'Ajuste Cto-Cliente', 'Ajuste Comercial', 'Pase a ventas', 'Liberada', 'Rechazada'];
 
 // Chart colors for dynamic status
 const CHART_COLORS = [
@@ -2381,7 +2383,7 @@ export function PropuestasPage() {
                 <HistorialFilterPopover
                   values={historialFilter}
                   isDark={isDark}
-                  estatusOptions={['Atendido', 'Pase a ventas', 'Rechazada', 'Ajuste Cto-Cliente', 'Ajuste Comercial', 'Abierto']}
+                  estatusOptions={['Atendido', 'Pase a ventas', 'Liberada', 'Rechazada', 'Ajuste Cto-Cliente', 'Ajuste Comercial', 'Abierto']}
                   onApply={(v) => { setHistorialFilter(v); setPage(1); }}
                   onClear={() => { setHistorialFilter({}); setPage(1); }}
                 />
