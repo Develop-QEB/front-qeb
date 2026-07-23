@@ -1,5 +1,27 @@
 import api from '../lib/api';
 
+// Categorías hardcoded — deben coincidir con back CATEGORIAS_TI.
+// TI => routa a equipo TI. QEB => routa a equipo QEB (default si no se elige).
+export const TICKET_CATEGORIAS_TI = [
+  'Desposteo SAP',
+  'Posteo SAP',
+  'Ajuste de Usuario',
+] as const;
+
+export const TICKET_CATEGORIAS_QEB = [
+  'Autorización DG/DCM',
+  'Asignación de circuitos/inventario',
+  'Edición de propuesta o campaña',
+  'Versionario / Reportes',
+  'Otro',
+] as const;
+
+export type TicketCategoria =
+  | (typeof TICKET_CATEGORIAS_TI)[number]
+  | (typeof TICKET_CATEGORIAS_QEB)[number];
+
+export type TicketArea = 'TI' | 'QEB';
+
 export interface Ticket {
   id: number;
   titulo: string;
@@ -7,6 +29,8 @@ export interface Ticket {
   imagen?: string | null;
   status: 'Nuevo' | 'En Progreso' | 'Validación' | 'Resuelto' | 'Cerrado';
   prioridad: 'Baja' | 'Normal' | 'Alta' | 'Urgente';
+  categoria?: string | null;
+  area?: TicketArea;
   usuario_id: number;
   usuario_nombre: string;
   usuario_email: string;
@@ -23,6 +47,7 @@ export interface CreateTicketInput {
   descripcion: string;
   imagen?: string | null;
   prioridad?: 'Baja' | 'Normal' | 'Alta' | 'Urgente';
+  categoria?: string | null;
 }
 
 export interface UpdateTicketStatusInput {
@@ -63,6 +88,8 @@ export interface TicketHistorial {
   imagen?: string | null;
   status: string;
   prioridad: string;
+  categoria?: string | null;
+  area?: TicketArea;
   usuario_id: number;
   usuario_nombre: string;
   usuario_email: string;

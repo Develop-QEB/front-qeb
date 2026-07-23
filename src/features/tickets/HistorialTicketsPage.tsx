@@ -588,6 +588,17 @@ function TicketDetailModal({
               <span className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-medium border ${prioridadStyles[ticket.prioridad]?.text} ${prioridadStyles[ticket.prioridad]?.bg} ${prioridadStyles[ticket.prioridad]?.border}`}>
                 {ticket.prioridad}
               </span>
+              {ticket.area && (
+                <span className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-medium border ${
+                  ticket.area === 'TI'
+                    ? (isDark ? 'bg-cyan-500/10 text-cyan-300 border-cyan-500/30' : 'bg-cyan-50 text-cyan-700 border-cyan-200')
+                    : (isDark ? 'bg-purple-500/10 text-purple-300 border-purple-500/30' : 'bg-purple-50 text-purple-700 border-purple-200')
+                }`}
+                title={ticket.categoria || undefined}
+                >
+                  {ticket.area}{ticket.categoria ? ` · ${ticket.categoria}` : ''}
+                </span>
+              )}
             </div>
 
             <p className={`text-sm leading-relaxed whitespace-pre-wrap ${isDark ? 'text-zinc-300' : 'text-gray-600'}`}>
@@ -1000,6 +1011,18 @@ export function HistorialTicketsPage() {
                         <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-medium border ${ps.text} ${ps.bg} ${ps.border}`}>
                           {t.prioridad}
                         </span>
+                        {t.area && (
+                          <span
+                            title={t.categoria || undefined}
+                            className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-medium border ${
+                              t.area === 'TI'
+                                ? (isDark ? 'bg-cyan-500/10 text-cyan-300 border-cyan-500/30' : 'bg-cyan-50 text-cyan-700 border-cyan-200')
+                                : (isDark ? 'bg-purple-500/10 text-purple-300 border-purple-500/30' : 'bg-purple-50 text-purple-700 border-purple-200')
+                            }`}
+                          >
+                            {t.area}{t.categoria ? ` · ${t.categoria}` : ''}
+                          </span>
+                        )}
                         {t.usuario_area && (
                           <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-medium border ${isDark ? 'text-teal-400 bg-teal-500/10 border-teal-500/30' : 'text-teal-600 bg-teal-50 border-teal-200'}`}>
                             {t.usuario_area}
