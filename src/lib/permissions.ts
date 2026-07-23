@@ -19,6 +19,8 @@ export type UserRole =
   | 'Coordinador de trafico'
   | 'Especialista de trafico'
   | 'Auxiliar de trafico'
+  // Rol mixto: Coordinador de tráfico + Especialista de BI (2026-07-23)
+  | 'Bi Trafico'
   | 'Coordinador de Diseño'
   | 'Diseñadores'
   | 'Compradores'
@@ -1229,6 +1231,74 @@ const rolePermissions: Partial<Record<UserRole, Partial<RolePermissions>>> = {
     canCreateInventarios: false,
     canEditInventarios: false,
     canDeleteInventarios: false,
+  },
+  // Rol mixto BI + Tráfico solicitado 2026-07-23 (Miguel Blancas).
+  // Unión OR de Coordinador de trafico + Especialista de BI: cada flag queda en
+  // true si al menos uno lo tiene. Los arrays de estatus se toman del rol de
+  // tráfico porque BI no cambia estatus. Los gates restrictivos (canOnlyOpen*)
+  // se conservan del lado tráfico para no ampliar accidentalmente el gestor de
+  // artes.
+  'Bi Trafico': {
+    canSeeDashboard: true,
+    canSeeClientes: true,          // BI
+    canSeeProveedores: false,
+    canSeeSolicitudes: true,       // BI
+    canSeePropuestas: true,
+    canSeeCampanas: true,
+    canSeeInventarios: true,       // Tráfico
+    canSeeAdminUsuarios: false,
+
+    canCreateClientes: false,
+    canEditClientes: false,
+    canDeleteClientes: false,
+
+    canCreateProveedores: false,
+    canEditProveedores: false,
+    canDeleteProveedores: false,
+
+    canCreateSolicitudes: false,
+    canEditSolicitudes: false,
+    canDeleteSolicitudes: false,
+    canAtenderSolicitudes: false,
+    canChangeEstadoSolicitud: false,
+
+    canEditPropuestaStatus: true,                                    // Tráfico
+    allowedPropuestaStatuses: ['Abierto', 'Atendido', 'Ajuste Comercial'], // Tráfico
+    canAprobarPropuesta: false,
+    canAsignarInventario: true,       // Tráfico
+    canEditResumenPropuesta: true,    // Tráfico
+    canCompartirPropuesta: true,      // ambos
+    canBuscarInventarioEnModal: true, // Tráfico
+
+    canEditCampanas: true,                              // Tráfico
+    allowedCampanaStatuses: ['Compartir', 'Rechazada'], // Tráfico
+    canEditDetalleCampana: false,
+    canEditCaraFiltersOnEdit: true,   // Tráfico
+    canDeleteDetalleCampana: false,
+    canSeeGestionArtes: true,
+    canEditGestionArtes: false,
+    canResolveProduccionTasks: false,
+    canSeeOrdenesMontajeButton: true, // BI
+
+    canSeeTabProgramacion: true,
+    canSeeTabImpresiones: true,       // BI
+    canSeeTabSubirArtes: false,
+    canSeeTabRevisarAprobar: true,
+    canSeeTabTestigos: false,
+    canSeeTabValidacionInstalacion: true, // Tráfico
+    canCreateTareasGestionArtes: false,
+    canResolveRevisionArtesTasks: false,
+    canOpenTasks: true,                       // Tráfico
+    canCreateOrdenProgramacion: true,         // Tráfico
+    canCreateOrdenInstalacion: true,          // Tráfico
+    canOnlyOpenOrdenProgramacionTasks: true,  // Tráfico
+    canOnlyOpenOrdenInstalacionTasks: true,   // Tráfico
+
+    canCreateInventarios: false,
+    canEditInventarios: false,
+    canDeleteInventarios: false,
+
+    canExportOrdenesMontaje: true, // ambos
   },
   'Coordinador de trafico': {
     // Secciones visibles
