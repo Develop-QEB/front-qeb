@@ -7,7 +7,7 @@ import {
   Calendar, Clock, Eye, Megaphone, Edit2, Check, Minus, ArrowUpDown, User,
   List, LayoutGrid, Building2, MapPin, Loader2, Package, ClipboardList, Plus, Trash2,
   ArrowUp, ArrowDown, Lock, SlidersHorizontal, Upload, Printer, Monitor, Camera, Share2,
-  Image, FileText, DollarSign, Hash, Gift, AlertTriangle, Film, Play
+  Image, FileText, DollarSign, Hash, Gift, AlertTriangle, Film, Play, Zap
 } from 'lucide-react';
 import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip, Legend } from 'recharts';
 import { Header } from '../../components/layout/Header';
@@ -1152,9 +1152,14 @@ export function CampanasPage() {
   const [activeGroupings, setActiveGroupings] = useState<GroupByField[]>([]);
   const [expandedGroups, setExpandedGroups] = useState<Set<string>>(new Set());
 
+  // Filtros rápidos del versionario (estilo Órdenes de Montaje): APS y POST a SAP.
+  const [apsFilter, setApsFilter] = useState<'todas' | 'con' | 'sin'>('todas');
+  const [postFilter, setPostFilter] = useState<'todas' | 'con' | 'sin'>('todas');
+
   // Estados para filtros expandibles
   const [showFilters, setShowFilters] = useState(false);
   const [showAdvancedFilters, setShowAdvancedFilters] = useState(false);
+  const [showQuickFilters, setShowQuickFilters] = useState(false);
   const [comboboxOpen, setComboboxOpen] = useState<string | null>(null);
   const [selectedCatorcenaInicio, setSelectedCatorcenaInicio] = useState('');
   const [editModalOpen, setEditModalOpen] = useState(false);
@@ -2041,7 +2046,27 @@ export function CampanasPage() {
   // Asi el conteo "N campañas" coincide con lo que se ve al expandir.
   const displayedCampanasPorCatorcena = useMemo(() => {
     const etapaFilters = advancedFilters.filter(f => f.field === 'etapa' && f.value);
-    if (etapaFilters.length === 0) return campanasPorCatorcena;
+
+    // ¿El backend está mandando has_post? Si NINGUNA campaña lo trae, el backend
+    // no está actualizado → ignoramos el filtro POST (no ocultamos todo).
+    const postSupported = campanasPorCatorcena.some(g => g.campanas.some(c => c.has_post !== undefined));
+    const effPostFilter = postSupported ? postFilter : 'todas';
+    const hasQuickFilter = apsFilter !== 'todas' || effPostFilter !== 'todas';
+
+    if (etapaFilters.length === 0 && !hasQuickFilter) return campanasPorCatorcena;
+
+    // Filtros rápidos APS / POST — a NIVEL CAMPAÑA (flags has_aps/has_post que ya
+    // trae la lista). No requieren cargar inventario, así el conteo "N campañas"
+    // coincide con lo que se muestra y es instantáneo.
+    const matchesQuick = (c: Campana): boolean => {
+      const tieneAps = !!c.has_aps;
+      const tienePost = !!c.has_post;
+      if (apsFilter === 'con' && !tieneAps) return false;
+      if (apsFilter === 'sin' && tieneAps) return false;
+      if (effPostFilter === 'con' && !tienePost) return false;
+      if (effPostFilter === 'sin' && tienePost) return false;
+      return true;
+    };
 
     const matchesEtapa = (inv: any): boolean => {
       return etapaFilters.every(f => {
@@ -2061,16 +2086,22 @@ export function CampanasPage() {
     return campanasPorCatorcena
       .map(g => {
         const filteredCampanas = g.campanas.filter(c => {
-          const allInv = campanaInventarios[c.id];
-          if (!allInv) return true; // inventarios aun no cargados → mantener
-          const catInv = allInv.filter(inv => itemMatchesGrupo(inv, g.catorcena));
-          if (catInv.length === 0) return false;
-          return catInv.some(matchesEtapa);
+          // Filtro rápido APS/POST a nivel campaña (barato, sin inventario).
+          if (hasQuickFilter && !matchesQuick(c)) return false;
+          // Filtro de etapa (requiere inventario cargado).
+          if (etapaFilters.length > 0) {
+            const allInv = campanaInventarios[c.id];
+            if (!allInv) return true; // inventarios aun no cargados → mantener
+            const catInv = allInv.filter(inv => itemMatchesGrupo(inv, g.catorcena));
+            if (catInv.length === 0) return false;
+            return catInv.some(matchesEtapa);
+          }
+          return true;
         });
         return { ...g, campanas: filteredCampanas };
       })
       .filter(g => g.campanas.length > 0);
-  }, [campanasPorCatorcena, advancedFilters, campanaInventarios, itemMatchesCatorcena]);
+  }, [campanasPorCatorcena, advancedFilters, campanaInventarios, itemMatchesCatorcena, apsFilter, postFilter]);
 
   // Campañas únicas en los grupos de catorcena visibles
   const uniqueCampsInCatorcenaView = useMemo(() => {
@@ -2227,15 +2258,17 @@ export function CampanasPage() {
     };
 
     // Construir resultado: primero los con APS (ordenados desc), luego los sin APS
-    const resultado: { aps: number | null; totalItems: number; grupos: { key: string; grupoId: number | null; articulo: string | null; items: InventarioConAPS[] }[] }[] = [];
+    const resultado: { aps: number | null; totalItems: number; posted: boolean; grupos: { key: string; grupoId: number | null; articulo: string | null; items: InventarioConAPS[] }[] }[] = [];
 
-    // Agregar los que tienen APS (ordenados descendente)
+    // Agregar los que tienen APS (ordenados descendente). Un grupo APS se marca
+    // `posted` si su APS ya se posteó a SAP (todos sus items vienen con posted=true).
     Object.entries(conAPS)
       .sort((a, b) => Number(b[0]) - Number(a[0]))
       .forEach(([apsValue, items]) => {
         resultado.push({
           aps: Number(apsValue),
           totalItems: items.length,
+          posted: items.length > 0 && items.every(it => it.posted === true),
           grupos: agruparPorGrupo(items)
         });
       });
@@ -2245,6 +2278,7 @@ export function CampanasPage() {
       resultado.push({
         aps: null, // null indica "Sin APS"
         totalItems: sinAPS.length,
+        posted: false,
         grupos: agruparPorGrupo(sinAPS)
       });
     }
@@ -2253,7 +2287,7 @@ export function CampanasPage() {
   };
 
   const hasPeriodFilter = yearInicio !== undefined && yearFin !== undefined;
-  const hasActiveFilters = !!(status || hasPeriodFilter || activeGroupings.length > 0 || searchTags.length > 0 || selectedCatorcenaInicio || advancedFilters.length > 0 || sortField !== null);
+  const hasActiveFilters = !!(status || hasPeriodFilter || activeGroupings.length > 0 || searchTags.length > 0 || selectedCatorcenaInicio || advancedFilters.length > 0 || sortField !== null || apsFilter !== 'todas' || postFilter !== 'todas');
 
   // Get unique values for each field (for advanced filter dropdowns).
   // Solo se calcula cuando el panel de filtros avanzados está abierto: evita
@@ -2319,6 +2353,8 @@ export function CampanasPage() {
     setActiveGroupings([]);
     setExpandedGroups(new Set());
     setAdvancedFilters([]);
+    setApsFilter('todas');
+    setPostFilter('todas');
     setPage(1);
   };
 
@@ -3213,6 +3249,83 @@ export function CampanasPage() {
             {/* Filters Row (Expandable) */}
             {showFilters && (
               <div className={`flex flex-wrap items-center gap-2 pt-3 border-t ${isDark ? 'border-zinc-800/50' : 'border-gray-200'} relative z-50`}>
+                {/* Filtros rápidos APS / POST a SAP (solo en Versionario) — botón + popover */}
+                {activeView === 'catorcena' && (() => {
+                  const quickActive = apsFilter !== 'todas' || postFilter !== 'todas';
+                  return (
+                    <div className="relative">
+                      <button
+                        onClick={() => setShowQuickFilters(!showQuickFilters)}
+                        className={`flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-medium rounded-lg transition-colors ${
+                          quickActive
+                            ? 'bg-purple-600 text-white'
+                            : isDark ? 'bg-purple-900/50 hover:bg-purple-900/70 border border-purple-500/30 text-purple-300' : 'bg-purple-50 hover:bg-purple-100 border border-purple-200 text-purple-700'
+                        }`}
+                        title="Filtros rápidos: APS / POST a SAP"
+                      >
+                        <Zap className="h-3.5 w-3.5" />
+                        <span>Rápidos</span>
+                        {quickActive && <span className="w-1.5 h-1.5 rounded-full bg-white" />}
+                      </button>
+                      {showQuickFilters && (
+                        <div className={`absolute left-0 top-full mt-1 z-[100] w-[300px] ${isDark ? 'bg-zinc-900 border-purple-500/30' : 'bg-white border-purple-200'} border rounded-xl shadow-2xl p-4`}>
+                          <div className="flex items-center justify-between mb-3">
+                            <span className={`text-sm font-medium ${isDark ? 'text-purple-300' : 'text-purple-700'}`}>Filtros rápidos</span>
+                            <button onClick={() => setShowQuickFilters(false)} className={`${isDark ? 'text-zinc-500 hover:text-white' : 'text-gray-400 hover:text-gray-900'}`}>
+                              <X className="h-4 w-4" />
+                            </button>
+                          </div>
+                          <div className="space-y-4">
+                            <div>
+                              <label className={`text-xs font-medium ${isDark ? 'text-zinc-400' : 'text-gray-500'} mb-2 block`}>APS Específico</label>
+                              <div className="flex gap-2">
+                                {(['todas', 'con', 'sin'] as const).map(opt => (
+                                  <button
+                                    key={opt}
+                                    onClick={() => setApsFilter(opt)}
+                                    className={`flex-1 px-2 py-2 rounded-lg text-xs font-medium transition-colors ${
+                                      apsFilter === opt
+                                        ? 'bg-purple-600 text-white border border-purple-500'
+                                        : isDark ? 'bg-zinc-800 text-zinc-300 border border-zinc-700 hover:bg-zinc-700' : 'bg-gray-100 text-gray-600 border border-gray-200 hover:bg-gray-200'
+                                    }`}
+                                  >
+                                    {opt === 'todas' ? 'Todas' : opt === 'con' ? 'Con APS' : 'Sin APS'}
+                                  </button>
+                                ))}
+                              </div>
+                            </div>
+                            <div>
+                              <label className={`text-xs font-medium ${isDark ? 'text-zinc-400' : 'text-gray-500'} mb-2 block`}>POST a SAP</label>
+                              <div className="flex gap-2">
+                                {(['todas', 'con', 'sin'] as const).map(opt => (
+                                  <button
+                                    key={opt}
+                                    onClick={() => setPostFilter(opt)}
+                                    className={`flex-1 px-2 py-2 rounded-lg text-xs font-medium transition-colors ${
+                                      postFilter === opt
+                                        ? 'bg-purple-600 text-white border border-purple-500'
+                                        : isDark ? 'bg-zinc-800 text-zinc-300 border border-zinc-700 hover:bg-zinc-700' : 'bg-gray-100 text-gray-600 border border-gray-200 hover:bg-gray-200'
+                                    }`}
+                                  >
+                                    {opt === 'todas' ? 'Todas' : opt === 'con' ? 'Con POST' : 'Sin POST'}
+                                  </button>
+                                ))}
+                              </div>
+                            </div>
+                            {quickActive && (
+                              <button
+                                onClick={() => { setApsFilter('todas'); setPostFilter('todas'); }}
+                                className={`w-full px-3 py-2 rounded-lg text-xs font-medium ${isDark ? 'bg-zinc-800 text-zinc-300 hover:bg-zinc-700 border border-zinc-700' : 'bg-gray-100 text-gray-600 hover:bg-gray-200 border border-gray-200'} transition-colors`}
+                              >
+                                Limpiar filtros rápidos
+                              </button>
+                            )}
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  );
+                })()}
                 {/* Advanced Filter Button with Dropdown */}
                 <div className="relative">
                   <button
@@ -3815,6 +3928,8 @@ export function CampanasPage() {
                       inventarios = matchingInv;
                       if (inventarios.length === 0) return null;
                     }
+                    // Los filtros rápidos APS / POST se aplican a nivel campaña en
+                    // `displayedCampanasPorCatorcena` (flags has_aps/has_post), no aquí.
                     const isLoadingInv = loadingInventarios.has(campana.id);
                     const apsAgrupados = getInventarioAgrupadoPorAPS(inventarios);
                     const hasInventarios = allInventarios.length > 0;
@@ -3966,6 +4081,11 @@ export function CampanasPage() {
                                         <Package className={`h-3 w-3 ${isDark ? 'text-emerald-400' : 'text-emerald-600'}`} />
                                         <span className={`text-xs ${isDark ? 'text-white' : 'text-gray-900'} font-medium`}>{apsGroup.aps ? `APS ${apsGroup.aps}` : 'Sin APS'}</span>
                                         <span className={`text-[10px] ${isDark ? 'text-zinc-500' : 'text-gray-400'}`}>{apsGroup.totalItems} ubicaciones</span>
+                                        {apsGroup.posted && (
+                                          <span className={`px-2 py-0.5 rounded-full text-[10px] ${isDark ? 'bg-sky-500/20 text-sky-300 border-sky-500/30' : 'bg-sky-50 text-sky-700 border-sky-500/30'} border flex items-center gap-1`}>
+                                            <Check className="h-3 w-3" /> Posteado
+                                          </span>
+                                        )}
                                       </button>
                                       {isAPSExpanded && (
                                         <div className={`px-3 py-2 space-y-1 ${isDark ? 'bg-zinc-900/50' : 'bg-white'}`}>
