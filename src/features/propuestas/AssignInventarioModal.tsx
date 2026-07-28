@@ -858,6 +858,12 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
   const [editingCaraId, setEditingCaraId] = useState<string | null>(null);
   // Track locally modified caras (caraDbId -> CaraUpdateData) for bulk save
   const [modifiedCaras, setModifiedCaras] = useState<Map<number, CaraUpdateData>>(new Map());
+  // Caras agregadas en ESTA sesión y aún no confirmadas con "Guardar Cambios".
+  // Se persisten con deferAuth (para tener id y poder reservar) pero SIN disparar
+  // autorización. Si el usuario cierra sin guardar, se borran (rollback) para que
+  // "no quede nada". Al guardar, se limpian (ya quedan confirmadas). No es estado
+  // de render (useRef) para no re-renderizar en cada agregado.
+  const sessionNewCaraIdsRef = useRef<Set<number>>(new Set());
 
   // New cara form
   const [newCara, setNewCara] = useState<Omit<CaraItem, 'localId'>>(EMPTY_CARA);
@@ -2268,6 +2274,8 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
           for (const id of dbIdsToRemove) next.delete(id);
           return next;
         });
+        // Ya se borraron de BD: sacarlas del set de rollback para no re-borrarlas al cerrar.
+        for (const id of dbIdsToRemove) sessionNewCaraIdsRef.current.delete(id);
         setCaras(prev => prev.filter(c => !idsToRemove.has(c.localId)));
         setReservas(prev => prev.filter(r =>
           ![...idsToRemove].some(id => r.id.startsWith(id)) &&
@@ -2588,6 +2596,10 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
       articulo: newCara.articulo,
       descuento: newCara.descuento,
       grupo_rt_bf: grupoRtBfVal,
+      // Agregar durante la edición NO debe disparar autorización: se difiere al
+      // "Guardar Cambios". La cara se persiste (para reservas) sin mandar tarea
+      // ni contaminar otras caras; si sale sin guardar, se hace rollback.
+      deferAuth: true,
     };
 
     // BF cara data (only built in pair mode)
@@ -2613,6 +2625,7 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
           articulo: newCara.articuloBf.ItemCode,
           descuento: 0,
           grupo_rt_bf: grupoRtBfVal,
+          deferAuth: true,
         }
       : null;
 
@@ -2736,6 +2749,7 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
               bfIdToRemove = existingBfPair.id ?? null;
               bfLocalIdToRemove = existingBfPair.localId;
               const createdBf = await propuestasService.createCara(propuesta.id, bfCaraData);
+              sessionNewCaraIdsRef.current.add(createdBf.id);
               newBfCaraItem = {
                 localId: `cara-${createdBf.id}`,
                 id: createdBf.id,
@@ -2788,6 +2802,7 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
           } else if (!existingBfPair && usePairMode && bfCaraData) {
             // Create new BF pair in DB
             const createdBf = await propuestasService.createCara(propuesta.id, bfCaraData);
+            sessionNewCaraIdsRef.current.add(createdBf.id);
             newBfCaraItem = {
               localId: `cara-${createdBf.id}`,
               id: createdBf.id,
@@ -3072,6 +3087,10 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
           if (createdBfItem?.id && bfCaraData) next.set(createdBfItem.id, bfCaraData);
           return next;
         });
+
+        // Registrar como cara(s) nueva(s) sin confirmar (para rollback si cierra sin guardar).
+        sessionNewCaraIdsRef.current.add(createdCara.id);
+        if (createdBfItem?.id) sessionNewCaraIdsRef.current.add(createdBfItem.id);
       }
 
       setNewCara(EMPTY_CARA);
@@ -3301,6 +3320,10 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
         queryClient.invalidateQueries({ queryKey: ['solicitud-full-details', propuesta.solicitud_id] }),
         queryClient.invalidateQueries({ queryKey: ['propuesta-reservas-modal', propuesta.id] }),
       ]);
+
+      // Guardado OK: las caras agregadas quedaron confirmadas y su autorización se
+      // generó una sola vez en bulkUpdateCaras. Ya no son candidatas a rollback.
+      sessionNewCaraIdsRef.current.clear();
 
       showToast(messages.join(' | '), 'success');
     } catch (error) {
@@ -7518,20 +7541,40 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
   }
 
   // Handle close with unsaved changes warning
+  // Rollback de las caras agregadas en ESTA sesión y NO confirmadas con "Guardar
+  // Cambios". Se persistieron con deferAuth (sin disparar autorización) para tener
+  // id y poder reservar; si el usuario cierra sin guardar, se borran para que no
+  // quede nada (ni caras, ni autorización — que nunca se generó).
+  const rollbackCarasNuevasSinGuardar = async () => {
+    const ids = [...sessionNewCaraIdsRef.current];
+    if (ids.length === 0) return;
+    for (const id of ids) {
+      try {
+        await propuestasService.deleteCara(propuesta.id, id);
+      } catch (e) {
+        // Puede que ya no exista (p. ej. borrada como parte de su grupo): ignorar.
+        console.error('[rollback] no se pudo borrar cara nueva sin guardar', id, e);
+      }
+    }
+    sessionNewCaraIdsRef.current.clear();
+  };
+
   const handleClose = () => {
-    if (hasChanges || modifiedCaras.size > 0) {
+    const hayCarasNuevas = sessionNewCaraIdsRef.current.size > 0;
+    if (hasChanges || modifiedCaras.size > 0 || hayCarasNuevas) {
       setConfirmModal({
         isOpen: true,
         title: 'Cambios sin guardar',
         message: `Tienes ${[
           hasChanges ? 'cambios en la propuesta' : '',
-          modifiedCaras.size > 0 ? `${modifiedCaras.size} circuito(s) editado(s)` : '',
-        ].filter(Boolean).join(' y ')} sin guardar. ¿Seguro que quieres cerrar?`,
+          modifiedCaras.size > 0 ? `${modifiedCaras.size} circuito(s) sin guardar` : '',
+        ].filter(Boolean).join(' y ') || 'cambios'} sin guardar.${hayCarasNuevas ? ' Los circuitos agregados se descartarán.' : ''} ¿Seguro que quieres cerrar?`,
         confirmText: 'Cerrar sin guardar',
         cancelText: 'Volver',
         isDestructive: true,
-        onConfirm: () => {
+        onConfirm: async () => {
           setConfirmModal(prev => ({ ...prev, isOpen: false }));
+          await rollbackCarasNuevasSinGuardar();
           onClose();
         },
       });

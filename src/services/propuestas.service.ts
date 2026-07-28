@@ -409,6 +409,10 @@ export interface CaraUpdateData {
   grupo_rt_bf?: number | null;
   // Si true, propaga este update a todas las caras del mismo grupo_masivo_id
   aplicarAGrupo?: boolean;
+  // Solo para createCara desde el modal de edición: persiste la cara pero NO
+  // dispara la autorización (ni contamina otras caras ni crea la tarea). La
+  // autorización se genera al dar "Guardar Cambios" (bulkUpdateCaras).
+  deferAuth?: boolean;
 }
 
 export interface SolicitudCara {
