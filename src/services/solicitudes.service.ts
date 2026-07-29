@@ -61,6 +61,10 @@ export interface InventarioOptions {
 }
 
 export interface SolicitudCaraInput {
+  // ID en solicitudCaras (BD). Solo se envía en edición para caras existentes.
+  // Permite al back hacer diff-based (update in place) en lugar de
+  // delete-all+recreate (fix bug de Ana, solicitud 81311, 2026-07-29).
+  id?: number;
   ciudad: string;
   estado: string;
   tipo: string;
@@ -76,6 +80,10 @@ export interface SolicitudCaraInput {
   caras_flujo?: number;
   caras_contraflujo?: number;
   descuento?: number;
+  autorizacion_dg?: string;
+  autorizacion_dcm?: string;
+  grupo_rt_bf?: number | null;
+  grupo_masivo_id?: number | null;
 }
 
 export interface CreateSolicitudInput {

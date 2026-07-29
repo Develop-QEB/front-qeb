@@ -312,6 +312,12 @@ interface SAPArticulo {
 
 interface CaraEntry {
   id: string;
+  // ID real en solicitudCaras (BD). Presente solo si la cara ya existe en BD
+  // (modo edición). Undefined para caras agregadas localmente que aún no se
+  // guardan. Sin esto, el back no puede distinguir cuál cara es cuál en el
+  // guardado y termina borrando/recreando todo (bug reportado por Jos con la
+  // solicitud 81311 el 2026-07-29).
+  _dbId?: number;
   articulo: SAPArticulo;
   estado: string;
   ciudades: string[];
@@ -2140,6 +2146,12 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
         const isBonifArt = articuloUp.startsWith('BF') || articuloUp.startsWith('CF');
         const treatAsBf = c.esBf || isBonifArt;
         return ({
+        // ID real de BD (undefined si la cara es nueva agregada localmente).
+        // Al back le sirve para hacer diff-based: si viene id, se actualiza en
+        // sitio; si no, se crea. Antes se mandaba todo sin id y el back hacía
+        // delete-all+recreate, lo que borraba líneas cuando el front (por
+        // cualquier bug) omitía una — bug reportado por Jos 2026-07-29.
+        id: c._dbId,
         ciudad: c.ciudades.join(', '),
         // Mandamos la plaza (ej. "GUADALAJARA") como `estado` porque el backend
         // guarda este campo en `solicitudCaras.estados` y la UI de propuestas
@@ -2401,6 +2413,7 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
 
           return {
             id: `edit-${idx}-${Date.now()}-${Math.random()}`,
+            _dbId: typeof cara.id === 'number' ? cara.id : (cara.id ? Number(cara.id) : undefined),
             articulo,
             estado: cara.estados || '',
             ciudades: cara.ciudad ? cara.ciudad.split(', ').map(c => c.trim()) : [],
