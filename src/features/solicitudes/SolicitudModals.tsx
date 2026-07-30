@@ -10,6 +10,7 @@ import {
 import { solicitudesService, SolicitudFullDetails, Comentario, SolicitudCara, UserOption } from '../../services/solicitudes.service';
 import { useSocketEquipos, useSocketSolicitud } from '../../hooks/useSocket';
 import { notificacionesService, ResumenAutorizacion } from '../../services/notificaciones.service';
+import { NotasDireccionBitacora } from '../notificaciones/NotasDireccionBitacora';
 import { Solicitud, Catorcena } from '../../types';
 import { formatCurrency, formatDate } from '../../lib/utils';
 import { formatHistorialDetalles } from '../../lib/historial';
@@ -835,12 +836,17 @@ export function ViewSolicitudModal({ isOpen, onClose, solicitudId, onEdit, onAte
                         <span className={`${isDark ? 'text-zinc-300' : 'text-gray-700'} text-sm`}>{data.solicitud.descripcion}</span>
                       </div>
                     )}
-                    {data.solicitud.notas && (
-                      <div className={`pt-2 border-t ${isDark ? 'border-zinc-700/50' : 'border-gray-200'}`}>
-                        <span className={`${isDark ? 'text-zinc-500' : 'text-gray-400'} text-sm block mb-1`}>Notas Dirección</span>
-                        <span className={`${isDark ? 'text-zinc-300' : 'text-gray-700'} text-sm`}>{data.solicitud.notas}</span>
-                      </div>
-                    )}
+                    {/* Bitácora completa de Notas Dirección — feedback Jos
+                        2026-07-31: antes solo se veía la nota inicial
+                        (solicitud.notas), ahora se muestra todo el historial
+                        con el mismo componente que usan los demás modales. */}
+                    <div className={`pt-2 border-t ${isDark ? 'border-zinc-700/50' : 'border-gray-200'}`}>
+                      <NotasDireccionBitacora
+                        idSolicitud={data.solicitud.id}
+                        isDark={isDark}
+                        variant="inline"
+                      />
+                    </div>
                   </div>
                 </div>
 
