@@ -319,8 +319,15 @@ export interface ActividadRef {
 }
 
 export interface CrearActividadComercialInput {
-  subtipo: ActividadSubtipo;
-  ref_id: number;
+  // Campaña/Propuesta opcional (feedback Jos 2026-07-31). Si el usuario no
+  // seleccionó nada, se omiten subtipo y ref_id.
+  subtipo?: ActividadSubtipo;
+  ref_id?: number;
+  // Cliente y marca son campos independientes que el usuario puede escribir a
+  // mano o dejar en blanco. Si vienen del payload, mandan sobre lo que el back
+  // pudiera derivar del ref_id.
+  cliente?: string;
+  marca?: string;
   descripcion: string;
   fecha_fin?: string;
   activar_recordatorio?: boolean;
@@ -340,8 +347,9 @@ export interface ActividadComercialCreated {
   asignado: string;
   cliente: string | null;
   marca: string | null;
-  subtipo: ActividadSubtipo;
-  ref_id: number;
+  // Opcionales: pueden venir null si no se seleccionó campaña/propuesta.
+  subtipo: ActividadSubtipo | null;
+  ref_id: number | null;
 }
 
 // Tipos de autorización

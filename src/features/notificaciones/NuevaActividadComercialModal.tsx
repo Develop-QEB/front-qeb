@@ -34,6 +34,11 @@ export function NuevaActividadComercialModal({ isOpen, onClose }: Props) {
   const [subtipo, setSubtipo] = useState<ActividadSubtipo>('Campaña');
   const [search, setSearch] = useState('');
   const [selected, setSelected] = useState<ActividadRef | null>(null);
+  // Cliente y Marca son campos INDEPENDIENTES del selector de campaña/propuesta.
+  // Si el usuario selecciona una campaña/propuesta se autorrellenan como sugerencia,
+  // pero el usuario los puede sobrescribir manualmente (feedback Jos 2026-07-31).
+  const [cliente, setCliente] = useState('');
+  const [marca, setMarca] = useState('');
   const [descripcion, setDescripcion] = useState('');
   const [fechaEntrega, setFechaEntrega] = useState('');
   const [activarRecordatorio, setActivarRecordatorio] = useState(false);
@@ -49,6 +54,8 @@ export function NuevaActividadComercialModal({ isOpen, onClose }: Props) {
       setSubtipo('Campaña');
       setSearch('');
       setSelected(null);
+      setCliente('');
+      setMarca('');
       setDescripcion('');
       setFechaEntrega('');
       setActivarRecordatorio(false);
@@ -88,15 +95,18 @@ export function NuevaActividadComercialModal({ isOpen, onClose }: Props) {
 
   const handleSubmit = () => {
     setError(null);
-    if (!selected) { setError(`Selecciona una ${subtipo.toLowerCase()}.`); return; }
     const desc = descripcion.trim();
     if (!desc) { setError('La descripción es obligatoria.'); return; }
     const dias = activarRecordatorio && fechaEntrega
       ? Math.max(0, Math.min(365, parseInt(diasAntes || '0', 10) || 0))
       : undefined;
     createMutation.mutate({
-      subtipo,
-      ref_id: selected.id,
+      // Campaña/Propuesta ahora es OPCIONAL. Si no hay selección, subtipo/ref_id
+      // se omiten. Cliente y marca se mandan tal como los editó el usuario.
+      subtipo: selected ? subtipo : undefined,
+      ref_id: selected?.id,
+      cliente: cliente.trim() || undefined,
+      marca: marca.trim() || undefined,
       descripcion: desc,
       fecha_fin: fechaEntrega || undefined,
       activar_recordatorio: activarRecordatorio,
@@ -185,10 +195,10 @@ export function NuevaActividadComercialModal({ isOpen, onClose }: Props) {
               </div>
             </div>
 
-            {/* Tipo + selector de referencia */}
+            {/* Tipo + selector de referencia (OPCIONAL) */}
             <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
               <div>
-                <label className={labelCls}>Tipo *</label>
+                <label className={labelCls}>Tipo</label>
                 <select
                   className={inputCls}
                   value={subtipo}
@@ -203,7 +213,7 @@ export function NuevaActividadComercialModal({ isOpen, onClose }: Props) {
                 </select>
               </div>
               <div>
-                <label className={labelCls}>Buscar {subtipo.toLowerCase()} *</label>
+                <label className={labelCls}>Buscar {subtipo.toLowerCase()} (opcional)</label>
                 <div className="relative">
                   <Search className={`absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 ${isDark ? 'text-zinc-500' : 'text-gray-400'}`} />
                   <input
@@ -216,8 +226,10 @@ export function NuevaActividadComercialModal({ isOpen, onClose }: Props) {
               </div>
             </div>
 
-            {/* Resultados */}
-            {!selected && (
+            {/* Resultados (solo cuando el usuario esta buscando y aun no ha
+                seleccionado). Al elegir uno, se autorellenan Cliente/Marca abajo
+                sin bloquearlos. */}
+            {!selected && search.trim().length > 0 && (
               <div className={`rounded-lg border max-h-52 overflow-y-auto ${isDark ? 'border-zinc-800' : 'border-gray-200'}`}>
                 {listQuery.isLoading && (
                   <div className={`px-3 py-3 text-xs flex items-center gap-2 ${isDark ? 'text-zinc-500' : 'text-gray-400'}`}>
@@ -233,7 +245,13 @@ export function NuevaActividadComercialModal({ isOpen, onClose }: Props) {
                   <button
                     key={item.id}
                     type="button"
-                    onClick={() => setSelected(item)}
+                    onClick={() => {
+                      setSelected(item);
+                      // Autorrellenar como sugerencia — el usuario aún puede
+                      // sobrescribirlos porque los inputs son editables.
+                      if (item.cliente) setCliente(item.cliente);
+                      if (item.marca) setMarca(item.marca);
+                    }}
                     className={`w-full text-left px-3 py-2 text-xs transition-colors flex items-center justify-between gap-2 ${
                       isDark ? 'hover:bg-zinc-800 text-zinc-200 border-b border-zinc-800/60'
                              : 'hover:bg-amber-50 text-gray-700 border-b border-gray-100'
@@ -255,38 +273,50 @@ export function NuevaActividadComercialModal({ isOpen, onClose }: Props) {
               </div>
             )}
 
-            {/* Seleccionado + cliente/marca */}
+            {/* Chip de la campaña/propuesta seleccionada (no bloquea nada) */}
             {selected && (
-              <div className={`rounded-lg border p-3 ${isDark ? 'border-amber-500/30 bg-amber-500/5' : 'border-amber-200 bg-amber-50/50'}`}>
-                <div className="flex items-start justify-between gap-2">
-                  <div className="min-w-0">
-                    <div className={`text-xs font-medium ${isDark ? 'text-amber-300' : 'text-amber-700'}`}>
-                      {subtipo} seleccionada
-                    </div>
-                    <div className={`text-sm font-semibold mt-0.5 truncate ${isDark ? 'text-zinc-100' : 'text-gray-900'}`}>
-                      {selected.label}
-                    </div>
-                  </div>
-                  <button
-                    type="button"
-                    onClick={() => setSelected(null)}
-                    className={`text-xs px-2 py-1 rounded ${isDark ? 'text-zinc-400 hover:bg-zinc-800' : 'text-gray-500 hover:bg-gray-100'}`}
-                  >
-                    Cambiar
-                  </button>
+              <div className={`flex items-center justify-between gap-2 rounded-lg border px-3 py-2 ${isDark ? 'border-amber-500/30 bg-amber-500/5' : 'border-amber-200 bg-amber-50/50'}`}>
+                <div className="min-w-0">
+                  <span className={`text-[10px] font-medium uppercase tracking-wide mr-2 ${isDark ? 'text-amber-300' : 'text-amber-700'}`}>
+                    {subtipo}
+                  </span>
+                  <span className={`text-xs font-semibold ${isDark ? 'text-zinc-100' : 'text-gray-900'}`}>
+                    {selected.label}
+                  </span>
                 </div>
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mt-3">
-                  <div>
-                    <label className={labelCls}>Cliente</label>
-                    <input className={readonlyCls} value={selected.cliente || '—'} readOnly />
-                  </div>
-                  <div>
-                    <label className={labelCls}>Marca</label>
-                    <input className={readonlyCls} value={selected.marca || '—'} readOnly />
-                  </div>
-                </div>
+                <button
+                  type="button"
+                  onClick={() => { setSelected(null); setSearch(''); }}
+                  className={`text-xs px-2 py-1 rounded shrink-0 ${isDark ? 'text-zinc-400 hover:bg-zinc-800' : 'text-gray-500 hover:bg-gray-100'}`}
+                >
+                  Quitar
+                </button>
               </div>
             )}
+
+            {/* Cliente y Marca — INDEPENDIENTES del selector de campaña.
+                Al elegir campaña/propuesta se autorellenan como sugerencia
+                pero el usuario puede editarlos o escribirlos a mano. */}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+              <div>
+                <label className={labelCls}>Cliente</label>
+                <input
+                  className={inputCls}
+                  placeholder="Nombre del cliente"
+                  value={cliente}
+                  onChange={(e) => setCliente(e.target.value)}
+                />
+              </div>
+              <div>
+                <label className={labelCls}>Marca</label>
+                <input
+                  className={inputCls}
+                  placeholder="Nombre de la marca"
+                  value={marca}
+                  onChange={(e) => setMarca(e.target.value)}
+                />
+              </div>
+            </div>
 
             {/* Descripcion */}
             <div>
