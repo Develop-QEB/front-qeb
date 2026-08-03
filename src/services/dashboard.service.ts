@@ -110,6 +110,26 @@ export interface PosteoStats {
   total: PosteoBucket;
 }
 
+// Catorcena "actual" efectiva a partir de filter-options. El back puede
+// regresar catorcenaActual null (hueco en la tabla o cache viejo); en ese caso
+// se deriva de la lista: la que contiene la fecha de hoy o, si no hay, la mas
+// reciente que ya inicio. Comparacion por fecha YYYY-MM-DD (las fechas vienen
+// como ISO a medianoche).
+export function resolveCatorcenaActual(opts?: FilterOptions): Catorcena | null {
+  if (!opts) return null;
+  if (opts.catorcenaActual) return opts.catorcenaActual;
+  const cats = opts.catorcenas || [];
+  if (cats.length === 0) return null;
+  const d = new Date();
+  const hoy = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+  const dia = (iso: string) => String(iso).slice(0, 10);
+  const contieneHoy = cats.find(c => dia(c.fecha_inicio) <= hoy && dia(c.fecha_fin) >= hoy);
+  if (contieneHoy) return contieneHoy;
+  const pasadas = cats.filter(c => dia(c.fecha_inicio) <= hoy);
+  if (pasadas.length === 0) return null;
+  return pasadas.reduce((a, b) => (dia(a.fecha_inicio) >= dia(b.fecha_inicio) ? a : b));
+}
+
 function appendMulti(params: URLSearchParams, key: string, value?: string[]): void {
   if (!value || value.length === 0) return;
   params.append(key, value.join(','));
