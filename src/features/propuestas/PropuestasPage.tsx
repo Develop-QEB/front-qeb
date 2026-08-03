@@ -83,6 +83,14 @@ const getStatusColor = (status: string, isDark: boolean): StatusColor => {
 
 const STATUS_OPTIONS = ['Atendido', 'Abierto', 'Ajuste Cto-Cliente', 'Ajuste Comercial', 'Pase a ventas', 'Liberada', 'Rechazada'];
 
+// Estatus que SOLO puede asignar el sistema, nunca un usuario. 'Liberada' es el
+// registro de que el job de liberación automática (criterio 30 días) quitó las
+// reservas; ponerlo a mano dejaría el estatus mintiendo sobre lo que pasó.
+// Sigue en STATUS_OPTIONS para poder filtrar el listado por él y para pintar su
+// color; solo se excluye del selector de cambio de estado. Salir de 'Liberada'
+// sí se permite (el estado actual se muestra deshabilitado como "(actual)").
+const STATUS_SOLO_SISTEMA = ['Liberada'];
+
 // Chart colors for dynamic status
 const CHART_COLORS = [
   '#8b5cf6', // violet-500
@@ -567,7 +575,8 @@ interface StatusModalProps {
 function StatusModal({ isOpen, onClose, propuesta, onStatusChange, allowedStatuses }: StatusModalProps) {
   const isDark = useThemeStore((s) => s.theme) === 'dark';
   // Filtrar opciones de estatus según permisos
-  const availableStatuses = allowedStatuses ? STATUS_OPTIONS.filter(s => allowedStatuses.includes(s)) : STATUS_OPTIONS;
+  const selectableStatuses = STATUS_OPTIONS.filter(s => !STATUS_SOLO_SISTEMA.includes(s));
+  const availableStatuses = allowedStatuses ? selectableStatuses.filter(s => allowedStatuses.includes(s)) : selectableStatuses;
   const queryClient = useQueryClient();
   const [newComment, setNewComment] = useState('');
   const [selectedStatus, setSelectedStatus] = useState('');
