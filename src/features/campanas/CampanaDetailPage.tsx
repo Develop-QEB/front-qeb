@@ -6,7 +6,7 @@ import { AssignInventarioCampanaModal } from './AssignInventarioCampanaModal';
 import { GoogleMap, useLoadScript, Marker } from '@react-google-maps/api';
 import { GOOGLE_MAPS_LOADER_OPTIONS } from '../../config/googleMaps';
 import { Header } from '../../components/layout/Header';
-import { campanasService, InventarioReservado, InventarioConAPS, SolicitudCara, buildDeliveryNote, postDeliveryNoteToSAP, patchDeliveryNoteToSAP, findExistingDeliveryNote, resolveBaseEntry, isMigratedCampaign, HistorialItem, SAPDeliveryNoteMigrated, PostLogItem } from '../../services/campanas.service';
+import { campanasService, InventarioReservado, InventarioConAPS, SolicitudCara, buildDeliveryNote, postDeliveryNoteToSAP, patchDeliveryNoteToSAP, findExistingDeliveryNote, resolveBaseEntry, isMigratedCampaign, HistorialItem, SAPDeliveryNoteMigrated } from '../../services/campanas.service';
 import { solicitudesService } from '../../services/solicitudes.service';
 import { Catorcena } from '../../types';
 import { Badge } from '../../components/ui/badge';
@@ -993,8 +993,6 @@ export function CampanaDetailPage() {
   const [alreadyPosted, setAlreadyPosted] = useState(false);
   const [previewDeliveryNote, setPreviewDeliveryNote] = useState<any>(null);
   const [postedAPSGroups, setPostedAPSGroups] = useState<Set<number>>(new Set());
-  // Modal "Historial de posteos" — bitácora de a quién se mandó cada APS.
-  const [showPostLogModal, setShowPostLogModal] = useState(false);
   // APS etiquetados Pre Factura — bloquea POST a SAP y muestra badge dorado.
   const [prefacturaAPSGroups, setPrefacturaAPSGroups] = useState<Set<number>>(new Set());
 
@@ -1072,26 +1070,6 @@ export function CampanaDetailPage() {
     staleTime: 1000 * 30,
     placeholderData: (prev) => prev,
   });
-
-  // Bitácora de POSTs a SAP: a quién se mandó cada APS (snapshot histórico).
-  const { data: postLog = [], refetch: refetchPostLog } = useQuery({
-    queryKey: ['campana-post-log', campanaId],
-    queryFn: () => campanasService.getPostLog(campanaId),
-    staleTime: 1000 * 30,
-    placeholderData: (prev) => prev,
-  });
-
-  // Último POST exitoso por APS — para el badge/tooltip de la lista.
-  const postLogByAPS = useMemo(() => {
-    const map = new Map<number, PostLogItem>();
-    // postLog viene ordenado por posted_at DESC, así que el primero de cada APS
-    // es el más reciente. Se prefiere el último EXITOSO para el badge.
-    for (const p of postLog) {
-      if (!p.success) continue;
-      if (!map.has(p.aps)) map.set(p.aps, p);
-    }
-    return map;
-  }, [postLog]);
 
   const { data: inventarioConAPS = [], isLoading: isLoadingAPS, error: errorAPS, refetch: refetchAPS } = useQuery({
     queryKey: ['campana-inventario-aps', campanaId],
@@ -1594,49 +1572,6 @@ export function CampanaDetailPage() {
 
         const result = await postDeliveryNoteToSAP(dn, campana.sap_database);
         results.push(result);
-      }
-
-      // Bitácora: guardar a QUIÉN se mandó cada APS con el snapshot del cliente
-      // que tenía la campaña en este momento. Si luego le cambian el cliente
-      // (ej. SABA -> Chevrolet para las siguientes catorcenas), este registro
-      // conserva el destino real de lo ya posteado. Se guardan también los
-      // intentos fallidos, para poder rastrear qué pasó.
-      try {
-        const logEntries = deliveryNotes.map((dn, idx) => {
-          const r = results[idx];
-          const apsNum = Number(dn.U_IMU_CotNum);
-          // Circuitos (solicitudCaras) que abarcó este APS
-          const carasIds = Array.from(new Set(
-            itemsToPost
-              .filter(i => String(i.aps) === String(dn.U_IMU_CotNum))
-              .map(i => i.solicitud_caras_id)
-              .filter((v): v is number => v != null)
-          ));
-          return {
-            aps: apsNum,
-            card_code: resolvedCampana.card_code ?? null,
-            cuic: resolvedCampana.cuic ?? null,
-            razon_social: resolvedCampana.T0_U_RazonSocial ?? resolvedCampana.cliente_razon_social ?? null,
-            marca: resolvedCampana.T2_U_Marca ?? null,
-            cliente_nombre: resolvedCampana.T0_U_Cliente ?? resolvedCampana.cliente_nombre ?? null,
-            sap_database: campana.sap_database ?? null,
-            salesperson_code: (dn as { SalesPersonCode?: number | string }).SalesPersonCode ?? null,
-            solicitud_caras_ids: carasIds,
-            success: !!r?.success,
-            doc_entry: (r?.data?.DocEntry as number | undefined) ?? (r?.data?.BaseEntry as number | undefined) ?? null,
-            doc_num: (r?.data?.DocNum as number | undefined) ?? null,
-            error_msg: r?.success ? null : (r?.error ?? null),
-            payload_json: JSON.stringify(dn),
-          };
-        }).filter(e => Number.isFinite(e.aps));
-
-        if (logEntries.length > 0) {
-          await campanasService.registrarPostLog(campana.id, logEntries);
-          refetchPostLog();
-        }
-      } catch (e) {
-        // No romper el flujo del POST por un fallo de bitácora.
-        console.error('Error registrando bitácora de POST:', e);
       }
 
       const allSuccess = results.every(r => r.success);
@@ -4009,18 +3944,6 @@ export function CampanaDetailPage() {
               <span className="text-[10px] sm:text-xs text-muted-foreground">
                 {filteredInventarioAPS.length} registros
               </span>
-              {/* Historial de posteos: a quién se mandó cada APS (bitácora) */}
-              {postLog.length > 0 && (
-                <button
-                  onClick={() => setShowPostLogModal(true)}
-                  className={`flex items-center justify-center w-6 sm:w-7 h-6 sm:h-7 rounded-lg border transition-colors ${
-                    isDark ? 'bg-purple-900/50 hover:bg-purple-900/70 border-purple-500/30' : 'bg-purple-100 hover:bg-purple-200 border-purple-300'
-                  }`}
-                  title="Historial de posteos a SAP (a quién se mandó cada APS)"
-                >
-                  <History className={`h-3.5 sm:h-4 w-3.5 sm:w-4 ${isDark ? 'text-purple-300' : 'text-purple-700'}`} />
-                </button>
-              )}
               {permissions.canEditDetalleCampana && (() => {
                 const selectedHavePosted = selectedItemsAPS.size > 0 &&
                   inventarioConAPS.filter(i => selectedItemsAPS.has(String(i.rsv_ids))).some(i => postedAPSGroups.has(i.aps));
@@ -4689,32 +4612,6 @@ export function CampanaDetailPage() {
                             {activeGroupingsAPS[0] === 'aps' && allGroupItemsAPS[0] && (postedAPSGroups.has(allGroupItemsAPS[0].aps) || alreadyPosted) && (
                               <span className="text-[9px] font-semibold px-1 py-0.5 rounded bg-green-500/20 text-green-400 border border-green-500/30 shrink-0">POST</span>
                             )}
-                            {/* Destino real del POST (snapshot). Sobrevive a que le
-                                cambien el cliente a la campaña después de postear. */}
-                            {activeGroupingsAPS[0] === 'aps' && allGroupItemsAPS[0] && (() => {
-                              const log = postLogByAPS.get(allGroupItemsAPS[0].aps);
-                              if (!log) return null;
-                              const destino = log.marca || log.razon_social || log.cliente_nombre || log.card_code || '—';
-                              const fecha = log.posted_at ? new Date(log.posted_at).toLocaleString('es-MX', { dateStyle: 'short', timeStyle: 'short' }) : '';
-                              const tip = [
-                                `Posteado a: ${destino}`,
-                                log.razon_social ? `Razón social: ${log.razon_social}` : '',
-                                log.cuic != null ? `CUIC: ${log.cuic}` : '',
-                                log.card_code ? `CardCode: ${log.card_code}` : '',
-                                log.sap_database ? `BD SAP: ${log.sap_database}` : '',
-                                log.doc_num != null ? `DocNum: ${log.doc_num}` : '',
-                                fecha ? `Fecha: ${fecha}` : '',
-                                log.usuario_nombre ? `Por: ${log.usuario_nombre}` : '',
-                              ].filter(Boolean).join('\n');
-                              return (
-                                <span
-                                  title={tip}
-                                  className="text-[9px] font-semibold px-1 py-0.5 rounded bg-purple-500/20 text-purple-300 border border-purple-500/30 shrink-0 max-w-[140px] truncate cursor-help"
-                                >
-                                  → {destino}
-                                </span>
-                              );
-                            })()}
                             {activeGroupingsAPS[0] === 'aps' && allGroupItemsAPS[0] && prefacturaAPSGroups.has(allGroupItemsAPS[0].aps) && (
                               <span className="text-[9px] font-semibold px-1 py-0.5 rounded bg-amber-500/20 text-amber-400 border border-amber-500/30 shrink-0">PRE FACTURA</span>
                             )}
@@ -5569,90 +5466,6 @@ export function CampanaDetailPage() {
                 </button>
               </div>
             )}
-          </div>
-        </div>
-      )}
-
-      {/* Modal Historial de posteos — bitácora de a quién se mandó cada APS.
-          Cada fila es un snapshot tomado al momento del POST, así que sigue
-          siendo correcto aunque después le cambien el cliente a la campaña. */}
-      {showPostLogModal && (
-        <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4" onClick={() => setShowPostLogModal(false)}>
-          <div
-            className={`rounded-xl shadow-2xl max-w-5xl w-full max-h-[85vh] flex flex-col ${isDark ? 'bg-zinc-900 border border-purple-500/20' : 'bg-white border border-purple-200'}`}
-            onClick={e => e.stopPropagation()}
-          >
-            <div className="flex items-center justify-between p-4 border-b border-border">
-              <div className="flex items-center gap-3">
-                <History className={`h-5 w-5 ${isDark ? 'text-purple-300' : 'text-purple-700'}`} />
-                <div>
-                  <h3 className={`text-sm font-semibold ${isDark ? 'text-white' : 'text-gray-900'}`}>Historial de posteos a SAP</h3>
-                  <p className="text-xs text-muted-foreground">
-                    A quién se mandó cada APS ({postLog.length} registro{postLog.length !== 1 ? 's' : ''})
-                  </p>
-                </div>
-              </div>
-              <button onClick={() => setShowPostLogModal(false)} className="p-1 rounded hover:bg-muted">
-                <X className="h-5 w-5 text-muted-foreground" />
-              </button>
-            </div>
-
-            <div className="overflow-auto p-4">
-              <table className="w-full text-xs">
-                <thead>
-                  <tr className={`${isDark ? 'text-purple-300' : 'text-purple-700'} text-left`}>
-                    <th className="px-2 py-2 font-semibold">APS</th>
-                    <th className="px-2 py-2 font-semibold">Posteado a</th>
-                    <th className="px-2 py-2 font-semibold">Razón social</th>
-                    <th className="px-2 py-2 font-semibold">CUIC</th>
-                    <th className="px-2 py-2 font-semibold">CardCode</th>
-                    <th className="px-2 py-2 font-semibold">BD</th>
-                    <th className="px-2 py-2 font-semibold">DocNum</th>
-                    <th className="px-2 py-2 font-semibold">Resultado</th>
-                    <th className="px-2 py-2 font-semibold">Fecha</th>
-                    <th className="px-2 py-2 font-semibold">Usuario</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {postLog.map(p => (
-                    <tr key={p.id} className={`border-t ${isDark ? 'border-zinc-800' : 'border-gray-100'}`}>
-                      <td className={`px-2 py-2 font-medium ${isDark ? 'text-white' : 'text-gray-900'}`}>{p.aps}</td>
-                      <td className={`px-2 py-2 ${isDark ? 'text-white' : 'text-gray-900'}`}>
-                        {p.marca || p.cliente_nombre || p.razon_social || '—'}
-                      </td>
-                      <td className="px-2 py-2 text-muted-foreground">{p.razon_social || '—'}</td>
-                      <td className="px-2 py-2 text-muted-foreground">{p.cuic ?? '—'}</td>
-                      <td className="px-2 py-2 text-muted-foreground">{p.card_code || '—'}</td>
-                      <td className="px-2 py-2 text-muted-foreground">{p.sap_database || '—'}</td>
-                      <td className="px-2 py-2 text-muted-foreground">{p.doc_num ?? '—'}</td>
-                      <td className="px-2 py-2">
-                        {p.success ? (
-                          <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded bg-green-500/20 text-green-400 border border-green-500/30">OK</span>
-                        ) : (
-                          <span
-                            title={p.error_msg || 'Error'}
-                            className="text-[10px] font-semibold px-1.5 py-0.5 rounded bg-red-500/20 text-red-400 border border-red-500/30 cursor-help"
-                          >
-                            ERROR
-                          </span>
-                        )}
-                      </td>
-                      <td className="px-2 py-2 text-muted-foreground whitespace-nowrap">
-                        {p.posted_at ? new Date(p.posted_at).toLocaleString('es-MX', { dateStyle: 'short', timeStyle: 'short' }) : '—'}
-                      </td>
-                      <td className="px-2 py-2 text-muted-foreground">{p.usuario_nombre || '—'}</td>
-                    </tr>
-                  ))}
-                  {postLog.length === 0 && (
-                    <tr>
-                      <td colSpan={10} className="px-2 py-6 text-center text-muted-foreground">
-                        Todavía no hay posteos registrados para esta campaña.
-                      </td>
-                    </tr>
-                  )}
-                </tbody>
-              </table>
-            </div>
           </div>
         </div>
       )}
