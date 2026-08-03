@@ -1061,7 +1061,7 @@ function InvGroupHeader({ groupName, count, expanded, onToggle, level = 1, isDar
           : `${isDark ? 'bg-fuchsia-500/10 border-fuchsia-500/20 hover:bg-fuchsia-500/15' : 'bg-fuchsia-50/50 border-fuchsia-100 hover:bg-fuchsia-50'}`
       }`}
     >
-      <td colSpan={9} className={`px-5 py-3 ${isLevel1 ? '' : 'pl-10'}`}>
+      <td colSpan={8} className={`px-5 py-3 ${isLevel1 ? '' : 'pl-10'}`}>
         <div className="flex items-center gap-2">
           {expanded ? (
             <ChevronDown className={`h-4 w-4 ${isLevel1 ? 'text-purple-500' : 'text-fuchsia-400'}`} />
@@ -1375,6 +1375,7 @@ function InventoryTable({ data, isLoading, page, totalPages, total, onPageChange
           </span>
         </td>
         <td className={`px-4 py-3 text-sm ${isDark ? 'text-zinc-400' : 'text-gray-500'} truncate max-w-[150px]`}>{item.cliente_nombre || '-'}</td>
+        {/* Columna APS oculta por el momento
         <td className="px-4 py-3">
           {item.APS ? (
             <span
@@ -1385,6 +1386,7 @@ function InventoryTable({ data, isLoading, page, totalPages, total, onPageChange
             <span className={isDark ? 'text-zinc-500' : 'text-gray-400'}>-</span>
           )}
         </td>
+        */}
       </tr>
     );
   };
@@ -1659,14 +1661,15 @@ function InventoryTable({ data, isLoading, page, totalPages, total, onPageChange
                           className={`w-4 h-4 rounded ${isDark ? 'border-purple-500/30' : 'border-purple-300'} bg-transparent text-purple-600 focus:ring-purple-500/30 focus:ring-offset-0 cursor-pointer`}
                         />
                       </th>
-                      {['ID', 'Plaza', 'Municipio', 'Mueble', 'Tipo', 'Estatus', 'Cliente', 'APS'].map((h) => (
+                      {/* Columna APS oculta por el momento (tambien su <td> y los colSpan) */}
+                      {['ID', 'Plaza', 'Municipio', 'Mueble', 'Tipo', 'Estatus', 'Cliente'].map((h) => (
                         <th key={h} className={`px-4 py-3 text-left text-[10px] font-semibold ${isDark ? 'text-purple-400' : 'text-purple-600'} uppercase tracking-wider`}>{h}</th>
                       ))}
                     </tr>
                   </thead>
                   <tbody>
                     {filteredData.length === 0 ? (
-                      <tr><td colSpan={9} className={`px-4 py-8 text-center ${isDark ? 'text-zinc-500' : 'text-gray-400'}`}>No hay inventarios</td></tr>
+                      <tr><td colSpan={8} className={`px-4 py-8 text-center ${isDark ? 'text-zinc-500' : 'text-gray-400'}`}>No hay inventarios</td></tr>
                     ) : groupedData ? (
                       groupedData.map(group => (
                         <React.Fragment key={`group-${group.name}`}>
@@ -1886,7 +1889,7 @@ function PosteoStatsCard({ data, isLoading, periodoLabel }: { data?: PosteoStats
         </h3>
         {data && (
           <span className={`text-[10px] ${isDark ? 'text-zinc-500' : 'text-gray-400'}`}>
-            {data.total.count.toLocaleString()} campañas · {formatMoneyMXN(data.total.monto)}
+            {data.total.count.toLocaleString()} circuitos · {formatMoneyMXN(data.total.monto)}
           </span>
         )}
       </div>
@@ -1904,7 +1907,7 @@ function PosteoStatsCard({ data, isLoading, periodoLabel }: { data?: PosteoStats
                 <>
                   <div className="flex items-baseline gap-2">
                     <span className={`text-3xl font-light ${isDark ? 'text-white' : 'text-gray-800'}`}>{cell.bucket.count.toLocaleString()}</span>
-                    <span className={`text-xs ${isDark ? 'text-zinc-400' : 'text-gray-500'}`}>campañas</span>
+                    <span className={`text-xs ${isDark ? 'text-zinc-400' : 'text-gray-500'}`}>circuitos</span>
                   </div>
                   <div className={`mt-1 text-sm font-semibold ${cell.accent}`} title={`$${cell.bucket.monto.toLocaleString('es-MX', { minimumFractionDigits: 2 })} MXN`}>
                     {formatMoneyMXN(cell.bucket.monto)}
@@ -2029,8 +2032,8 @@ export function DashboardPage() {
     queryFn: () => dashboardService.getPosteoStats(posteoFilters),
     // Espera al periodo default: con posteoFilters {} el back agrega TODO el
     // historico de solicitudCaras.
-    // `false &&`: la card de POST a SAP esta oculta por ahora — no pedir datos.
-    enabled: false && periodoListo,
+    // Card APS oculta por el momento; al restaurarla volver a `periodoListo`.
+    enabled: false,
   });
 
   // Etiqueta del periodo que refleja el bloque de posteo (para dejar claro que
@@ -2359,9 +2362,9 @@ export function DashboardPage() {
           <KPICard title="Bloqueado" value={stats?.kpis.bloqueados || 0} icon={Lock} color="pink" isActive={activeEstatus === 'Bloqueado'} onClick={() => handleEstatusChange('Bloqueado')} isLoading={loadingStats} total={kpiTotal} />
         </div>
 
-        {/* Estado de POST a SAP: pendientes por postear vs posteadas.
-            Oculto por ahora (y su query deshabilitada); para reactivarlo,
-            descomentar y quitar el `false &&` del enabled de posteo-stats. */}
+        {/* Estado de POST a SAP: pendientes por postear vs posteadas */}
+        {/* Oculto por el momento (APS). Para restaurar: descomentar y regresar
+            la query posteo-stats a `enabled: periodoListo`. */}
         {/* <PosteoStatsCard data={posteoStats} isLoading={loadingPosteo} periodoLabel={posteoPeriodoLabel} /> */}
 
         {/* Charts Row 1 */}
