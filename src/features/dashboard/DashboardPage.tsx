@@ -1826,8 +1826,11 @@ function CatorcenaIndicator({
       </div>
       {displayCatorcena.fecha_inicio && (
         <span className={`text-xs ${isFiltered ? (isDark ? 'text-purple-500/70' : 'text-purple-400') : (isDark ? 'text-emerald-400/70' : 'text-emerald-500')}`}>
-          {new Date(displayCatorcena.fecha_inicio).toLocaleDateString('es-MX', { day: 'numeric', month: 'short', timeZone: 'UTC' })} -
-          {new Date(displayCatorcena.fecha_fin).toLocaleDateString('es-MX', { day: 'numeric', month: 'short', timeZone: 'UTC' })}
+          {/* Hora local a proposito: las fechas de catorcenas vienen corridas
+              +1 dia (medianoche UTC = 6pm del dia anterior en MX), asi que el
+              formato local muestra las fechas REALES de operacion. */}
+          {new Date(displayCatorcena.fecha_inicio).toLocaleDateString('es-MX', { day: 'numeric', month: 'short' })} -
+          {new Date(displayCatorcena.fecha_fin).toLocaleDateString('es-MX', { day: 'numeric', month: 'short' })}
         </span>
       )}
     </div>
