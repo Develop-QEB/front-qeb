@@ -15,6 +15,7 @@ import { inventariosService, InventarioDisponible } from '../../services/inventa
 import { propuestasService, ReservaModalItem, CaraUpdateData } from '../../services/propuestas.service';
 import { formatCurrency } from '../../lib/utils';
 import { parseCircuitoDigital } from '../../lib/circuitos';
+import { getRequiredPeriodoForArticulo } from '../../lib/periodos';
 import { circuitosService } from '../../services/circuitos.service';
 import { clientesService } from '../../services/clientes.service';
 import { useEnvironmentStore, getEndpoints } from '../../store/environmentStore';
@@ -857,6 +858,12 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
   const [editingCaraId, setEditingCaraId] = useState<string | null>(null);
   // Track locally modified caras (caraDbId -> CaraUpdateData) for bulk save
   const [modifiedCaras, setModifiedCaras] = useState<Map<number, CaraUpdateData>>(new Map());
+  // Caras agregadas en ESTA sesión y aún no confirmadas con "Guardar Cambios".
+  // Se persisten con deferAuth (para tener id y poder reservar) pero SIN disparar
+  // autorización. Si el usuario cierra sin guardar, se borran (rollback) para que
+  // "no quede nada". Al guardar, se limpian (ya quedan confirmadas). No es estado
+  // de render (useRef) para no re-renderizar en cada agregado.
+  const sessionNewCaraIdsRef = useRef<Set<number>>(new Set());
 
   // New cara form
   const [newCara, setNewCara] = useState<Omit<CaraItem, 'localId'>>(EMPTY_CARA);
@@ -2267,6 +2274,8 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
           for (const id of dbIdsToRemove) next.delete(id);
           return next;
         });
+        // Ya se borraron de BD: sacarlas del set de rollback para no re-borrarlas al cerrar.
+        for (const id of dbIdsToRemove) sessionNewCaraIdsRef.current.delete(id);
         setCaras(prev => prev.filter(c => !idsToRemove.has(c.localId)));
         setReservas(prev => prev.filter(r =>
           ![...idsToRemove].some(id => r.id.startsWith(id)) &&
@@ -2587,6 +2596,10 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
       articulo: newCara.articulo,
       descuento: newCara.descuento,
       grupo_rt_bf: grupoRtBfVal,
+      // Agregar durante la edición NO debe disparar autorización: se difiere al
+      // "Guardar Cambios". La cara se persiste (para reservas) sin mandar tarea
+      // ni contaminar otras caras; si sale sin guardar, se hace rollback.
+      deferAuth: true,
     };
 
     // BF cara data (only built in pair mode)
@@ -2612,6 +2625,7 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
           articulo: newCara.articuloBf.ItemCode,
           descuento: 0,
           grupo_rt_bf: grupoRtBfVal,
+          deferAuth: true,
         }
       : null;
 
@@ -2735,6 +2749,7 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
               bfIdToRemove = existingBfPair.id ?? null;
               bfLocalIdToRemove = existingBfPair.localId;
               const createdBf = await propuestasService.createCara(propuesta.id, bfCaraData);
+              sessionNewCaraIdsRef.current.add(createdBf.id);
               newBfCaraItem = {
                 localId: `cara-${createdBf.id}`,
                 id: createdBf.id,
@@ -2787,6 +2802,7 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
           } else if (!existingBfPair && usePairMode && bfCaraData) {
             // Create new BF pair in DB
             const createdBf = await propuestasService.createCara(propuesta.id, bfCaraData);
+            sessionNewCaraIdsRef.current.add(createdBf.id);
             newBfCaraItem = {
               localId: `cara-${createdBf.id}`,
               id: createdBf.id,
@@ -3071,6 +3087,10 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
           if (createdBfItem?.id && bfCaraData) next.set(createdBfItem.id, bfCaraData);
           return next;
         });
+
+        // Registrar como cara(s) nueva(s) sin confirmar (para rollback si cierra sin guardar).
+        sessionNewCaraIdsRef.current.add(createdCara.id);
+        if (createdBfItem?.id) sessionNewCaraIdsRef.current.add(createdBfItem.id);
       }
 
       setNewCara(EMPTY_CARA);
@@ -3097,6 +3117,11 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
       ? caras.find(c => c.esBf && c.grupo_rt_bf === target.grupo_rt_bf && c.inicio_periodo === target.inicio_periodo && c.fin_periodo === target.fin_periodo)
       : null;
     const bonifEval = (target.bonificacion || 0) + (bfPair?.bonificacion || 0);
+    // Si la cara estaba en 'correccion' (rechazo del filtro DG), el reenvío
+    // fuerza autorización DG nueva independientemente de lo que devuelva
+    // evaluarAutorizacion — el asesor esta explicitamente pidiendo re-enviar.
+    // Feedback Jos 2026-07-17.
+    const eraCorreccion = target.autorizacion_dg === 'correccion';
     try {
       const resultado = await solicitudesService.evaluarAutorizacion({
         ciudad: target.ciudad,
@@ -3109,8 +3134,9 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
         tarifa_publica: target.tarifa_publica,
         articulo: target.articulo || null,
       });
+      const nuevoDg = eraCorreccion ? 'pendiente' : resultado.autorizacion_dg;
       setCaras(prev => prev.map(c => c.id === target.id
-        ? { ...c, autorizacion_dg: resultado.autorizacion_dg, autorizacion_dcm: resultado.autorizacion_dcm }
+        ? { ...c, autorizacion_dg: nuevoDg, autorizacion_dcm: resultado.autorizacion_dcm }
         : c));
       setModifiedCaras(prev => {
         const next = new Map(prev);
@@ -3168,7 +3194,11 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
     // Jos 2026-07-08/09 — la condicion se amplio para cubrir el caso de
     // propuestas que ya tenian circuitos 'pendiente' de antes.
     if (!skipNotaGate && propuesta.solicitud_id) {
-      const dgPending = caras.some(c => c.autorizacion_dg === 'pendiente' || (c as any)._originalDg === 'pendiente');
+      const dgPending = caras.some(c =>
+        c.autorizacion_dg === 'pendiente' ||
+        (c as any)._originalDg === 'pendiente' ||
+        (c as any)._originalDg === 'correccion'
+      );
       const dcmPending = caras.some(c => c.autorizacion_dcm === 'pendiente' || (c as any)._originalDcm === 'pendiente');
       if (dgPending || dcmPending) {
         setPendingAuthTipo(dgPending && dcmPending ? 'ambas' : dgPending ? 'dg' : 'dcm');
@@ -3290,6 +3320,10 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
         queryClient.invalidateQueries({ queryKey: ['solicitud-full-details', propuesta.solicitud_id] }),
         queryClient.invalidateQueries({ queryKey: ['propuesta-reservas-modal', propuesta.id] }),
       ]);
+
+      // Guardado OK: las caras agregadas quedaron confirmadas y su autorización se
+      // generó una sola vez en bulkUpdateCaras. Ya no son candidatas a rollback.
+      sessionNewCaraIdsRef.current.clear();
 
       showToast(messages.join(' | '), 'success');
     } catch (error) {
@@ -5294,7 +5328,7 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
         {toastJSX}
         <div className="absolute inset-0 bg-black/70 backdrop-blur-sm" onClick={handleBackToMain} />
 
-        <div className={`relative w-[95vw] max-w-[1600px] h-[90vh] ${isDark ? 'bg-zinc-900' : 'bg-white'} rounded-2xl border border-purple-500/20 shadow-2xl flex flex-col overflow-hidden`}>
+        <div className={`relative w-[97vw] max-w-[1800px] h-[92vh] ${isDark ? 'bg-zinc-900' : 'bg-white'} rounded-2xl border border-purple-500/20 shadow-2xl flex flex-col overflow-hidden`}>
           {/* Header */}
           <div className={`flex items-center justify-between px-6 py-4 border-b ${isDark ? 'border-zinc-800' : 'border-gray-200'}`}>
             <div className="flex items-center gap-4">
@@ -7507,20 +7541,40 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
   }
 
   // Handle close with unsaved changes warning
+  // Rollback de las caras agregadas en ESTA sesión y NO confirmadas con "Guardar
+  // Cambios". Se persistieron con deferAuth (sin disparar autorización) para tener
+  // id y poder reservar; si el usuario cierra sin guardar, se borran para que no
+  // quede nada (ni caras, ni autorización — que nunca se generó).
+  const rollbackCarasNuevasSinGuardar = async () => {
+    const ids = [...sessionNewCaraIdsRef.current];
+    if (ids.length === 0) return;
+    for (const id of ids) {
+      try {
+        await propuestasService.deleteCara(propuesta.id, id);
+      } catch (e) {
+        // Puede que ya no exista (p. ej. borrada como parte de su grupo): ignorar.
+        console.error('[rollback] no se pudo borrar cara nueva sin guardar', id, e);
+      }
+    }
+    sessionNewCaraIdsRef.current.clear();
+  };
+
   const handleClose = () => {
-    if (hasChanges || modifiedCaras.size > 0) {
+    const hayCarasNuevas = sessionNewCaraIdsRef.current.size > 0;
+    if (hasChanges || modifiedCaras.size > 0 || hayCarasNuevas) {
       setConfirmModal({
         isOpen: true,
         title: 'Cambios sin guardar',
         message: `Tienes ${[
           hasChanges ? 'cambios en la propuesta' : '',
-          modifiedCaras.size > 0 ? `${modifiedCaras.size} circuito(s) editado(s)` : '',
-        ].filter(Boolean).join(' y ')} sin guardar. ¿Seguro que quieres cerrar?`,
+          modifiedCaras.size > 0 ? `${modifiedCaras.size} circuito(s) sin guardar` : '',
+        ].filter(Boolean).join(' y ') || 'cambios'} sin guardar.${hayCarasNuevas ? ' Los circuitos agregados se descartarán.' : ''} ¿Seguro que quieres cerrar?`,
         confirmText: 'Cerrar sin guardar',
         cancelText: 'Volver',
         isDestructive: true,
-        onConfirm: () => {
+        onConfirm: async () => {
           setConfirmModal(prev => ({ ...prev, isOpen: false }));
+          await rollbackCarasNuevasSinGuardar();
           onClose();
         },
       });
@@ -7534,7 +7588,7 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
     <div className="fixed inset-0 z-50 flex items-center justify-center">
       <div className="absolute inset-0 bg-black/70 backdrop-blur-sm" onClick={handleClose} />
 
-      <div className={`relative w-[95vw] max-w-[1400px] h-[90vh] ${isDark ? 'bg-zinc-900' : 'bg-white'} rounded-2xl border border-purple-500/20 shadow-2xl flex flex-col overflow-hidden`}>
+      <div className={`relative w-[97vw] max-w-[1800px] h-[92vh] ${isDark ? 'bg-zinc-900' : 'bg-white'} rounded-2xl border border-purple-500/20 shadow-2xl flex flex-col overflow-hidden`}>
         {/* Header */}
         <div className={`flex items-center justify-between px-6 py-4 border-b ${isDark ? 'border-zinc-800' : 'border-gray-200'}`}>
           <div>
@@ -8103,7 +8157,10 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
                           options={(articulosData || []).filter(a => {
                             const code = a.ItemCode.toUpperCase();
                             // BF/CF solo aparecen en el dropdown de bonificación, no en el principal
-                            return !code.startsWith('BF') && !code.startsWith('CF');
+                            if (code.startsWith('BF') || code.startsWith('CF')) return false;
+                            // Gran Formato ↔ periodo: mensual solo muestra Gran Formato;
+                            // catorcena los excluye (mismo criterio que en solicitudes).
+                            return getRequiredPeriodoForArticulo(a.ItemName) === tipoPeriodo;
                           })}
                           value={selectedArticulo}
                           onChange={async (item: SAPArticulo) => {
@@ -9063,6 +9120,11 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
                                         {(dgDisplay === 'rechazado' || dcmDisplay === 'rechazado') && (
                                           <span className="text-[10px] px-1.5 py-0.5 rounded bg-red-600/30 text-red-400">Rechazado</span>
                                         )}
+                                        {/* Estado "corrección" — devuelto por el Gerente Comercial en el
+                                            filtro DG. Se muestra en naranja y permite editar+reenviar. */}
+                                        {dgDisplay === 'correccion' && (
+                                          <span className="text-[10px] px-1.5 py-0.5 rounded bg-orange-500/20 text-orange-300">Corrección</span>
+                                        )}
                                         {dgDisplay === 'pendiente' && dcmDisplay !== 'rechazado' && (
                                           <span className="text-[10px] px-1.5 py-0.5 rounded bg-red-500/20 text-red-300">Pend. DG</span>
                                         )}
@@ -9117,11 +9179,13 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
                                     })()}
                                     {effectiveCanEdit && (
                                       <>
-                                        {(cara.autorizacion_dg === 'rechazado' || cara.autorizacion_dcm === 'rechazado') && (
+                                        {(cara.autorizacion_dg === 'rechazado' || cara.autorizacion_dcm === 'rechazado' || cara.autorizacion_dg === 'correccion') && (
                                           <button
                                             onClick={(e) => { e.stopPropagation(); handleReenviarAutorizacionCara(cara); }}
                                             className="p-2 rounded-lg border bg-blue-500/10 text-blue-400 border-blue-500/20 hover:bg-blue-500/20 transition-colors"
-                                            title="Reenviar a autorización (reprocesar este circuito)"
+                                            title={cara.autorizacion_dg === 'correccion'
+                                              ? 'Reenviar a autorización tras corrección'
+                                              : 'Reenviar a autorización (reprocesar este circuito)'}
                                           >
                                             <RefreshCw className="h-4 w-4" />
                                           </button>
@@ -9934,7 +9998,11 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
                     // y DESPUÉS el confirmar cambios. Antes iba confirmar → nota,
                     // que se sentía confuso.
                     if (propuesta.solicitud_id) {
-                      const dgPending = caras.some(c => c.autorizacion_dg === 'pendiente' || (c as any)._originalDg === 'pendiente');
+                      const dgPending = caras.some(c =>
+                        c.autorizacion_dg === 'pendiente' ||
+                        (c as any)._originalDg === 'pendiente' ||
+                        (c as any)._originalDg === 'correccion'
+                      );
                       const dcmPending = caras.some(c => c.autorizacion_dcm === 'pendiente' || (c as any)._originalDcm === 'pendiente');
                       if (dgPending || dcmPending) {
                         setPendingAuthTipo(dgPending && dcmPending ? 'ambas' : dgPending ? 'dg' : 'dcm');

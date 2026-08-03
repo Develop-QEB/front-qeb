@@ -10,6 +10,7 @@ import {
 import { solicitudesService, SolicitudFullDetails, Comentario, SolicitudCara, UserOption } from '../../services/solicitudes.service';
 import { useSocketEquipos, useSocketSolicitud } from '../../hooks/useSocket';
 import { notificacionesService, ResumenAutorizacion } from '../../services/notificaciones.service';
+import { NotasDireccionBitacora } from '../notificaciones/NotasDireccionBitacora';
 import { Solicitud, Catorcena } from '../../types';
 import { formatCurrency, formatDate } from '../../lib/utils';
 import { formatHistorialDetalles } from '../../lib/historial';
@@ -690,7 +691,7 @@ export function ViewSolicitudModal({ isOpen, onClose, solicitudId, onEdit, onAte
 
   return (
     <div className="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center z-50 p-4 isolate">
-      <div className={`${isDark ? 'bg-gradient-to-br from-zinc-900 via-zinc-900 to-zinc-950 border-zinc-800/50' : 'bg-white border-gray-200'} border rounded-3xl w-full max-w-5xl max-h-[90vh] overflow-hidden flex flex-col shadow-2xl relative z-50`}>
+      <div className={`${isDark ? 'bg-gradient-to-br from-zinc-900 via-zinc-900 to-zinc-950 border-zinc-800/50' : 'bg-white border-gray-200'} border rounded-3xl w-[97vw] max-w-[1800px] max-h-[92vh] overflow-hidden flex flex-col shadow-2xl relative z-50`}>
         {/* Header - Estilo violeta consistente */}
         <div className="relative px-6 py-5 border-b border-violet-500/20 bg-gradient-to-r from-violet-600/20 via-purple-600/15 to-fuchsia-600/10">
           <div className="flex items-center justify-between">
@@ -835,12 +836,17 @@ export function ViewSolicitudModal({ isOpen, onClose, solicitudId, onEdit, onAte
                         <span className={`${isDark ? 'text-zinc-300' : 'text-gray-700'} text-sm`}>{data.solicitud.descripcion}</span>
                       </div>
                     )}
-                    {data.solicitud.notas && (
-                      <div className={`pt-2 border-t ${isDark ? 'border-zinc-700/50' : 'border-gray-200'}`}>
-                        <span className={`${isDark ? 'text-zinc-500' : 'text-gray-400'} text-sm block mb-1`}>Notas Dirección</span>
-                        <span className={`${isDark ? 'text-zinc-300' : 'text-gray-700'} text-sm`}>{data.solicitud.notas}</span>
-                      </div>
-                    )}
+                    {/* Bitácora completa de Notas Dirección — feedback Jos
+                        2026-07-31: antes solo se veía la nota inicial
+                        (solicitud.notas), ahora se muestra todo el historial
+                        con el mismo componente que usan los demás modales. */}
+                    <div className={`pt-2 border-t ${isDark ? 'border-zinc-700/50' : 'border-gray-200'}`}>
+                      <NotasDireccionBitacora
+                        idSolicitud={data.solicitud.id}
+                        isDark={isDark}
+                        variant="inline"
+                      />
+                    </div>
                   </div>
                 </div>
 
@@ -1064,6 +1070,12 @@ export function ViewSolicitudModal({ isOpen, onClose, solicitudId, onEdit, onAte
                                                   color: { bg: isDark ? 'bg-emerald-500/20' : 'bg-emerald-50', text: isDark ? 'text-emerald-300' : 'text-emerald-700', border: isDark ? 'border-emerald-500/30' : 'border-emerald-200' }
                                                 });
                                               } else {
+                                                if (authDg === 'correccion') {
+                                                  authBadges.push({
+                                                    label: 'Corrección',
+                                                    color: { bg: isDark ? 'bg-orange-500/20' : 'bg-orange-50', text: isDark ? 'text-orange-300' : 'text-orange-700', border: isDark ? 'border-orange-500/30' : 'border-orange-200' }
+                                                  });
+                                                }
                                                 if (authDg === 'pendiente') {
                                                   authBadges.push({
                                                     label: 'Pend. DG',

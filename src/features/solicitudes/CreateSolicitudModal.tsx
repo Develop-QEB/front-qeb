@@ -26,6 +26,7 @@ import { BULK_DELETE_ENABLED } from '../../config/featureFlags';
 import { NotasDireccionBitacora } from '../notificaciones/NotasDireccionBitacora';
 import { NuevaNotaDireccionModal } from '../notificaciones/NuevaNotaDireccionModal';
 import { notasDireccionService } from '../../services/notasDireccion.service';
+import { getRequiredPeriodoForArticulo } from '../../lib/periodos';
 
 // Tarifas now come from SAP (U_IMU_PublicPrice = tarifa publica, PriceList 11 = tarifa piso)
 
@@ -180,20 +181,7 @@ const isQuretaroArticle = (itemCode: string): boolean => {
   return (itemCode || '').toUpperCase().endsWith('-QR');
 };
 
-const getRequiredPeriodoForArticulo = (itemName: string): 'catorcena' | 'mensual' => {
-  if (!itemName) return 'catorcena';
-  const name = itemName.toUpperCase();
-  // Mensual: Kioscos, Boleros, Mi Macro, Puentes Peatonales, Carteleras/Unipolares, Bajo Puentes
-  if (name.includes('KIOSCO') || name.includes('KIOSKO')) return 'mensual';
-  if (name.includes('BOLERO')) return 'mensual';
-  if (name.includes('MI MACRO')) return 'mensual';
-  if (name.includes('PEATONAL')) return 'mensual';
-  if (name.includes('BAJO PUENTE')) return 'mensual';
-  if (name.includes('CARTELERA')) return 'mensual';
-  if (name.includes('UNIPOLAR')) return 'mensual';
-  // Catorcenal: PB y Columna, Digital PB y Columna (y todo lo demás)
-  return 'catorcena';
-};
+// getRequiredPeriodoForArticulo se importa de lib/periodos (fuente única de verdad)
 
 // Tipo auto-detection from article name (Tradicional or Digital)
 const getTipoFromName = (itemName: string): 'Tradicional' | 'Digital' => {
@@ -324,6 +312,12 @@ interface SAPArticulo {
 
 interface CaraEntry {
   id: string;
+  // ID real en solicitudCaras (BD). Presente solo si la cara ya existe en BD
+  // (modo edición). Undefined para caras agregadas localmente que aún no se
+  // guardan. Sin esto, el back no puede distinguir cuál cara es cuál en el
+  // guardado y termina borrando/recreando todo (bug reportado por Jos con la
+  // solicitud 81311 el 2026-07-29).
+  _dbId?: number;
   articulo: SAPArticulo;
   estado: string;
   ciudades: string[];
@@ -345,11 +339,11 @@ interface CaraEntry {
   tarifaEfectiva?: number;
   descuento: number;
   precioTotal: number;
-  autorizacion_dg?: 'aprobado' | 'pendiente' | 'rechazado';
-  autorizacion_dcm?: 'aprobado' | 'pendiente' | 'rechazado';
+  autorizacion_dg?: 'aprobado' | 'pendiente' | 'rechazado' | 'correccion';
+  autorizacion_dcm?: 'aprobado' | 'pendiente' | 'rechazado' | 'correccion';
   // Valores originales del backend (antes de contaminación)
-  _originalDg?: 'aprobado' | 'pendiente' | 'rechazado';
-  _originalDcm?: 'aprobado' | 'pendiente' | 'rechazado';
+  _originalDg?: 'aprobado' | 'pendiente' | 'rechazado' | 'correccion';
+  _originalDcm?: 'aprobado' | 'pendiente' | 'rechazado' | 'correccion';
   // Costo/caras tal como estaban en BD al cargar la solicitud. Sirven para
   // replicar en el front la regla "Direcciones Aprobadas": si la cara ya estaba
   // aprobada y no bajan costo/caras, la pre-evaluación conserva "aprobado".
@@ -374,10 +368,10 @@ interface Props {
 // "aprobado" en vez de mostrar "Pend. DG/DCM". Solo cuando decrementa (bajan caras,
 // o baja el costo > 3% de la tarifa) se muestra el estado recalculado.
 function conservarAprobacionFront(
-  estado: { autorizacion_dg?: 'aprobado' | 'pendiente' | 'rechazado'; autorizacion_dcm?: 'aprobado' | 'pendiente' | 'rechazado' },
-  prev: { dg?: 'aprobado' | 'pendiente' | 'rechazado'; dcm?: 'aprobado' | 'pendiente' | 'rechazado'; costo?: number; caras?: number },
+  estado: { autorizacion_dg?: 'aprobado' | 'pendiente' | 'rechazado' | 'correccion'; autorizacion_dcm?: 'aprobado' | 'pendiente' | 'rechazado' | 'correccion' },
+  prev: { dg?: 'aprobado' | 'pendiente' | 'rechazado' | 'correccion'; dcm?: 'aprobado' | 'pendiente' | 'rechazado' | 'correccion'; costo?: number; caras?: number },
   nuevo: { costo: number; caras: number; tarifa_publica?: number }
-): { autorizacion_dg?: 'aprobado' | 'pendiente' | 'rechazado'; autorizacion_dcm?: 'aprobado' | 'pendiente' | 'rechazado' } {
+): { autorizacion_dg?: 'aprobado' | 'pendiente' | 'rechazado' | 'correccion'; autorizacion_dcm?: 'aprobado' | 'pendiente' | 'rechazado' | 'correccion' } {
   const yaAprobada = prev.dg === 'aprobado' && prev.dcm === 'aprobado';
   if (!yaAprobada) return estado;
   // Si faltan los valores originales de BD, NO conservar a ciegas: mostrar la
@@ -1815,6 +1809,9 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
   const handleReenviarAutorizacion = async (id: string) => {
     const cara = caras.find(c => c.id === id);
     if (!cara) return;
+    // Reenvío tras corrección: forzar 'pendiente' independiente del evaluador.
+    // Feedback Jos 2026-07-17.
+    const eraCorreccion = cara.autorizacion_dg === 'correccion';
     try {
       const resultado = await solicitudesService.evaluarAutorizacion({
         ciudad: cara.ciudades.join(', '),
@@ -1827,12 +1824,13 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
         tarifa_publica: cara.tarifaPublica,
         articulo: cara.articulo?.ItemCode || null,
       });
+      const nuevoDg = eraCorreccion ? 'pendiente' : resultado.autorizacion_dg;
       // Solo se actualiza autorizacion_* (badge/local). _original* se mantiene
       // (estado de BD) para no interferir con el bloqueo de edición.
       setCaras(prev => prev.map(c => c.id === id
-        ? { ...c, autorizacion_dg: resultado.autorizacion_dg, autorizacion_dcm: resultado.autorizacion_dcm }
+        ? { ...c, autorizacion_dg: nuevoDg, autorizacion_dcm: resultado.autorizacion_dcm }
         : c));
-      const irAuth = resultado.autorizacion_dg === 'pendiente' || resultado.autorizacion_dcm === 'pendiente';
+      const irAuth = nuevoDg === 'pendiente' || resultado.autorizacion_dcm === 'pendiente';
       showToast(irAuth ? 'Circuito reenviado a autorización' : 'Circuito reprocesado: ya no requiere autorización', 'success');
     } catch {
       showToast('No se pudo reenviar a autorización', 'error');
@@ -2148,6 +2146,12 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
         const isBonifArt = articuloUp.startsWith('BF') || articuloUp.startsWith('CF');
         const treatAsBf = c.esBf || isBonifArt;
         return ({
+        // ID real de BD (undefined si la cara es nueva agregada localmente).
+        // Al back le sirve para hacer diff-based: si viene id, se actualiza en
+        // sitio; si no, se crea. Antes se mandaba todo sin id y el back hacía
+        // delete-all+recreate, lo que borraba líneas cuando el front (por
+        // cualquier bug) omitía una — bug reportado por Jos 2026-07-29.
+        id: c._dbId,
         ciudad: c.ciudades.join(', '),
         // Mandamos la plaza (ej. "GUADALAJARA") como `estado` porque el backend
         // guarda este campo en `solicitudCaras.estados` y la UI de propuestas
@@ -2212,7 +2216,11 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
       // Antes solo se miraba c.autorizacion_dg current — dejaba fuera el caso
       // frecuente de una solicitud con circuitos ya 'pendiente' de antes que
       // el usuario re-edita (feedback de Jos 2026-07-09).
-      const dgPending = caras.some(c => c.autorizacion_dg === 'pendiente' || (c as any)._originalDg === 'pendiente');
+      const dgPending = caras.some(c =>
+        c.autorizacion_dg === 'pendiente' ||
+        (c as any)._originalDg === 'pendiente' ||
+        (c as any)._originalDg === 'correccion'
+      );
       const dcmPending = caras.some(c => c.autorizacion_dcm === 'pendiente' || (c as any)._originalDcm === 'pendiente');
       if (dgPending || dcmPending) {
         setPendingUpdateData(data);
@@ -2405,6 +2413,7 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
 
           return {
             id: `edit-${idx}-${Date.now()}-${Math.random()}`,
+            _dbId: typeof cara.id === 'number' ? cara.id : (cara.id ? Number(cara.id) : undefined),
             articulo,
             estado: cara.estados || '',
             ciudades: cara.ciudad ? cara.ciudad.split(', ').map(c => c.trim()) : [],
@@ -2570,7 +2579,7 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center">
       <div className="absolute inset-0 bg-black/80 backdrop-blur-sm" />
-      <div className={`relative w-full max-w-5xl max-h-[95vh] h-[95vh] ${isDark ? 'bg-zinc-900 border-zinc-700' : 'bg-white border-gray-200'} rounded-2xl border shadow-2xl overflow-hidden flex flex-col`}>
+      <div className={`relative w-[97vw] max-w-[1800px] max-h-[95vh] h-[95vh] ${isDark ? 'bg-zinc-900 border-zinc-700' : 'bg-white border-gray-200'} rounded-2xl border shadow-2xl overflow-hidden flex flex-col`}>
         {/* Header */}
         <div className={`flex items-center justify-between px-6 py-4 border-b ${isDark ? 'border-zinc-800' : 'border-gray-200'}`}>
           <div className="flex items-center gap-4">
@@ -3868,6 +3877,12 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
                                                     Rechazado
                                                   </span>
                                                 )}
+                                                {/* Estado corrección — Gerente Comercial rechazó filtro DG */}
+                                                {dgEfectivo === 'correccion' && (
+                                                  <span className="text-[10px] px-1.5 py-0.5 rounded bg-orange-500/20 text-orange-300" title="Devuelto por Gerente Comercial — corregir y reenviar">
+                                                    Corrección
+                                                  </span>
+                                                )}
                                                 {dgEfectivo === 'pendiente' && dcmEfectivo !== 'rechazado' && (
                                                   <span className="text-[10px] px-1.5 py-0.5 rounded bg-red-500/20 text-red-300" title="Requiere autorización DG">
                                                     Pend. DG
@@ -3893,12 +3908,14 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
                                             const authBlocked = isEditMode && anyPendingSaved;
                                             return (
                                           <div className="flex items-center justify-center gap-1">
-                                            {(cara.autorizacion_dg === 'rechazado' || cara.autorizacion_dcm === 'rechazado') && (
+                                            {(cara.autorizacion_dg === 'rechazado' || cara.autorizacion_dcm === 'rechazado' || cara.autorizacion_dg === 'correccion') && (
                                               <button
                                                 type="button"
                                                 onClick={() => handleReenviarAutorizacion(cara.id)}
                                                 className="p-1 rounded text-[10px] hover:bg-blue-500/20 text-blue-400"
-                                                title="Reenviar a autorización (reprocesar este circuito)"
+                                                title={cara.autorizacion_dg === 'correccion'
+                                                  ? 'Reenviar a autorización tras corrección'
+                                                  : 'Reenviar a autorización (reprocesar este circuito)'}
                                               >
                                                 <RefreshCw className="h-3.5 w-3.5" />
                                               </button>

@@ -177,6 +177,15 @@ export const TIPO_CONFIG = {
     border: 'border-blue-500/30',
     icon: AtSign
   },
+
+  // Actividad Comercial (tarea manual del asesor) - Amber intenso.
+  // Se diferencia visualmente porque no viene de un flujo automático.
+  'Actividad Comercial': {
+    color: 'text-amber-500',
+    bg: 'bg-amber-500/25',
+    border: 'border-amber-500/50',
+    icon: Briefcase
+  },
 } as const;
 
 // Default para tipos no definidos

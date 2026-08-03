@@ -39,6 +39,17 @@ const MaintenancePage = lazy(() => import('./features/maintenance/MaintenancePag
 // IDs de usuarios programadores con acceso a /dev/tickets
 const DEV_USERS_IDS = [1057460, 1057462]; // Mario, Jos
 
+// Roles TI: gestionan tickets area='TI' desde el mismo board (/dev/tickets).
+// El backend filtra por area del usuario. Aquí ademas de los 3 roles TI
+// explicitos, permitimos a cualquiera con area='TI' (ej: 'Gerente de TI' con
+// rol Administrador en la BD — feedback Jos 2026-07-23).
+const TI_ROLES = ['Gerente de TI', 'Especialista de TI', 'Analista de TI'];
+function isUserTI(u?: { rol?: string; area?: string } | null): boolean {
+  if (!u) return false;
+  if (u.area === 'TI') return true;
+  return !!u.rol && TI_ROLES.includes(u.rol);
+}
+
 const HISTORIAL_TICKETS_EMAILS = [
   'akary.lopez@datistic.mx',
   'bladimir@qeb.mx',
@@ -147,7 +158,8 @@ function GestionArtesRoute() {
 // Componente para proteger ruta de Historial Tickets
 function HistorialTicketsRoute() {
   const user = useAuthStore((state) => state.user);
-  if (!user || !HISTORIAL_TICKETS_EMAILS.includes(user.email.toLowerCase())) {
+  const isWhitelistEmail = user && HISTORIAL_TICKETS_EMAILS.includes(user.email.toLowerCase());
+  if (!user || (!isWhitelistEmail && !isUserTI(user))) {
     return <Navigate to="/" replace />;
   }
   return <HistorialTicketsPage />;
@@ -180,11 +192,12 @@ function HistorialAccionesRoute() {
   return <HistorialAccionesPage />;
 }
 
-// Componente para proteger ruta de Dev Tickets (solo programadores)
+// Componente para proteger ruta de Dev Tickets (programadores + equipo TI)
 function DevTicketsRoute() {
   const user = useAuthStore((state) => state.user);
 
-  if (!user || !DEV_USERS_IDS.includes(user.id)) {
+  const isDev = user && DEV_USERS_IDS.includes(user.id);
+  if (!user || (!isDev && !isUserTI(user))) {
     return <Navigate to="/" replace />;
   }
   return <DevTicketsPage />;

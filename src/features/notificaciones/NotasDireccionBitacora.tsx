@@ -27,12 +27,9 @@ export function NotasDireccionBitacora({ idSolicitud, isDark, bitacoraCount, var
     queryKey: ['notas-direccion', idSolicitud],
     queryFn: () => notasDireccionService.getAll(idSolicitud),
     // Siempre que haya idSolicitud, hacer fetch. El bitacoraCount que viene
-    // del payload de la notificación puede ser 0 (sin bitácora nueva) aunque
-    // la solicitud SÍ tenga notas viejas en solicitud.notas — el endpoint
-    // devuelve una entrada "inicial" sintética con ese texto y hay que
-    // mostrarla. Antes: enabled: expanded || (bitacoraCount ?? 1) > 0
-    // saltaba el fetch cuando bitacoraCount=0 y Gerardo veía "Sin notas
-    // registradas" en todas las autorizaciones viejas.
+    // del payload de la notificación puede estar stale si el asesor agrega
+    // notas después de que el DG cargó su listado — no confiar en él.
+    // Feedback Jos 2026-07-17.
     enabled: idSolicitud > 0,
     staleTime: 30_000,
   });

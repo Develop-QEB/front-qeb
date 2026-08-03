@@ -1,7 +1,7 @@
 import React, { useState, useMemo, useCallback, useEffect, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import { useQuery } from '@tanstack/react-query';
-import { GoogleMap, useLoadScript, Circle, InfoWindow } from '@react-google-maps/api';
+import { GoogleMap, useLoadScript, InfoWindow } from '@react-google-maps/api';
 import { GOOGLE_MAPS_LOADER_OPTIONS } from '../../config/googleMaps';
 
 import { useSocketDashboard } from '../../hooks/useSocket';
@@ -33,6 +33,8 @@ import {
   Trash2,
   Download,
   Loader2,
+  Send,
+  Clock3,
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import api from '../../lib/api';
@@ -46,6 +48,7 @@ import {
   ChartData,
   PlazaMapData,
   InventoryCoord,
+  PosteoStats,
 } from '../../services/dashboard.service';
 import {
   BarChart,
@@ -57,6 +60,7 @@ import {
   PieChart,
   Pie,
   Cell,
+  LabelList,
 } from 'recharts';
 
 // Google Maps API Key
@@ -293,11 +297,23 @@ function MultiSelectFilter({ label, values, onChange, options, placeholder = 'To
   );
 }
 
+// Color solido de la barrita de proporcion de cada KPI
+const PCT_BAR_COLOR: Record<'pink' | 'cyan' | 'yellow' | 'green' | 'purple', string> = {
+  pink: '#ec4899',
+  cyan: '#06b6d4',
+  yellow: '#eab308',
+  green: '#22c55e',
+  purple: '#a855f7',
+};
+
 // KPI Card
-function KPICard({ title, value, icon: Icon, color, isActive, onClick, isLoading }: {
+function KPICard({ title, value, icon: Icon, color, isActive, onClick, isLoading, total }: {
   title: string; value: number; icon: React.ElementType;
   color: 'pink' | 'cyan' | 'yellow' | 'green' | 'purple';
   isActive: boolean; onClick: () => void; isLoading: boolean;
+  // Cuando se pasa `total`, la card muestra el % que este KPI representa sobre
+  // el total de inventarios. El KPI "Total" no lo recibe (seria siempre 100%).
+  total?: number;
 }) {
   const isDark = useThemeStore((s) => s.theme) === 'dark';
   const colors = {
@@ -333,6 +349,7 @@ function KPICard({ title, value, icon: Icon, color, isActive, onClick, isLoading
     },
   };
   const c = colors[color];
+  const pct = total && total > 0 ? (value / total) * 100 : null;
 
   return (
     <GlassCard
@@ -341,10 +358,24 @@ function KPICard({ title, value, icon: Icon, color, isActive, onClick, isLoading
     >
       <div className="p-5">
         <div className="flex items-center justify-between">
-          <div>
+          <div className="min-w-0">
             <p className={`text-[10px] ${isDark ? 'text-zinc-400' : 'text-gray-500'} uppercase tracking-wider mb-1 font-medium`}>{title}</p>
             {isLoading ? <Skeleton className={`h-8 w-20 ${isDark ? 'bg-purple-900/30' : 'bg-purple-100'}`} /> : (
-              <p className={`text-3xl font-light ${c.text}`}>{value.toLocaleString()}</p>
+              <div className="flex items-baseline gap-2">
+                <p className={`text-3xl font-light ${c.text}`}>{value.toLocaleString()}</p>
+                {pct !== null && (
+                  <span className={`text-sm font-semibold ${c.text} opacity-80`}>{pct.toFixed(1)}%</span>
+                )}
+              </div>
+            )}
+            {/* Barra de proporcion sobre el total */}
+            {!isLoading && pct !== null && (
+              <div className={`mt-2 h-1 w-full rounded-full overflow-hidden ${isDark ? 'bg-zinc-800' : 'bg-gray-100'}`}>
+                <div
+                  className="h-full rounded-full transition-all duration-500"
+                  style={{ width: `${Math.min(pct, 100)}%`, backgroundColor: PCT_BAR_COLOR[color] }}
+                />
+              </div>
             )}
           </div>
           <div className={`p-3 rounded-xl bg-gradient-to-br ${c.bg} ${isActive ? 'ring-2 ring-white/20' : ''}`}>
@@ -387,14 +418,11 @@ function GoogleMapsChart({
   const clustererRef = useRef<MarkerClusterer | null>(null);
   const markersRef = useRef<google.maps.Marker[]>([]);
   const [mapReady, setMapReady] = useState(false);
-  const [zoomLevel, setZoomLevel] = useState(5);
-  const [mapBounds, setMapBounds] = useState<google.maps.LatLngBounds | null>(null);
 
-  // Solo mostrar pins individuales cuando el zoom es suficiente para verlos
-  const MIN_ZOOM_FOR_PINS = 11;
-
-  // Umbral de zoom para ocultar circulos de densidad (cuando zoom > 7, ocultar circulos)
-  const ZOOM_THRESHOLD_HIDE_CIRCLES = 7;
+  // Tope de marcadores creados. El costo real no es agrupar (SuperCluster indexa
+  // los puntos una sola vez) sino instanciar google.maps.Marker; por encima de
+  // este numero el navegador empieza a sufrir en el render inicial.
+  const MAX_MARKERS = 15000;
 
   // Filtrar plazas que tengan coordenadas validas Y count > 0
   const validPlazas = useMemo(() => plazaData.filter(d => d.lat && d.lng && d.count > 0), [plazaData]);
@@ -408,13 +436,6 @@ function GoogleMapsChart({
     if (intensity > 0.4) return { fill: '#d946ef', stroke: '#c026d3', opacity: 0.5 };
     if (intensity > 0.2) return { fill: '#a855f7', stroke: '#9333ea', opacity: 0.4 };
     return { fill: '#8b5cf6', stroke: '#7c3aed', opacity: 0.3 };
-  }, [maxCount]);
-
-  // Radio del circulo segun cantidad (reducido para mejor visualizacion)
-  const getCircleRadius = useCallback((count: number) => {
-    const base = 3000; // 3km base
-    const scale = Math.sqrt(count / maxCount);
-    return base + (scale * 8000); // hasta 11km maximo
   }, [maxCount]);
 
   const mapOptions = useMemo(() => ({
@@ -435,17 +456,30 @@ function GoogleMapsChart({
     return allCoords.filter(coord => selectedInventoryIds.has(coord.id));
   }, [allCoords, selectedInventoryIds]);
 
-  // Solo renderizar los markers que están dentro del viewport visible
-  // Evita crear miles de markers cuando el mapa está muy alejado
-  const visibleCoords = useMemo(() => {
-    if (!mapBounds || zoomLevel < MIN_ZOOM_FOR_PINS) return [];
-    return filteredCoords.filter(coord =>
-      mapBounds.contains(new google.maps.LatLng(coord.lat, coord.lng))
-    );
-  }, [filteredCoords, mapBounds, zoomLevel]);
-// Auto-fit bounds when data changes (allCoords viene filtrado del backend)
+  // Antes se recortaba por viewport + zoom >= 11, lo que obligaba a hacer mucho
+  // zoom antes de ver nada y ademas recreaba TODOS los markers en cada paneo.
+  // Ahora se instancian una sola vez y el clusterer decide que dibujar segun el
+  // zoom, asi que hay burbujas visibles desde el nivel pais.
+  const markerCoords = useMemo(
+    () => (filteredCoords.length > MAX_MARKERS ? filteredCoords.slice(0, MAX_MARKERS) : filteredCoords),
+    [filteredCoords]
+  );
+  const coordsTruncados = filteredCoords.length > MAX_MARKERS;
+
+  // Firma estable del conjunto de plazas (nombre + coord). Cambia cuando cambian
+  // los FILTROS (otro set de plazas), pero NO cuando el usuario prende/apaga
+  // pines (ahi el back devuelve las mismas plazas). Se usa como unica dependencia
+  // del auto-encuadre para que el toggle de pines no reposicione el mapa.
+  const plazaSignature = useMemo(
+    () => validPlazas.map(p => `${p.plaza}:${p.lat},${p.lng}`).join('|'),
+    [validPlazas]
+  );
+
+  // Auto-encuadre SOLO cuando cambia el set de plazas (filtros) o al primer
+  // render. Antes dependia de allCoords, que se puebla al mostrar pines, y por
+  // eso el toggle hacia zoom a CDMX. Ahora encuadra a los centroides de plaza.
   useEffect(() => {
-    if (!mapRef.current || !mapReady) return;
+    if (!mapRef.current || !mapReady || validPlazas.length === 0) return;
 
     // Delay para asegurar que el mapa esta renderizado
     const timeoutId = setTimeout(() => {
@@ -453,16 +487,10 @@ function GoogleMapsChart({
 
       const bounds = new google.maps.LatLngBounds();
       let hasPoints = false;
-
-      // Usar allCoords (ya viene filtrado del backend por ciudad/estado)
-      if (allCoords.length > 0) {
-        // Limitar a primeros 1000 para calcular bounds mas rapido
-        const coordsForBounds = allCoords.slice(0, 1000);
-        coordsForBounds.forEach(coord => {
-          bounds.extend({ lat: coord.lat, lng: coord.lng });
-          hasPoints = true;
-        });
-      }
+      validPlazas.forEach(plaza => {
+        bounds.extend({ lat: plaza.lat!, lng: plaza.lng! });
+        hasPoints = true;
+      });
 
       if (hasPoints) {
         // Ajustar el mapa a los bounds con padding
@@ -492,7 +520,11 @@ function GoogleMapsChart({
     }, 200);
 
     return () => clearTimeout(timeoutId);
-  }, [allCoords, mapReady]);
+    // Depende SOLO de plazaSignature (no de allCoords) para que el toggle de
+    // pines no vuelva a encuadrar. validPlazas se lee dentro pero su contenido
+    // esta capturado por la firma.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [plazaSignature, mapReady]);
 
   // Auto-fit bounds when selection changes (checkboxes in table)
   useEffect(() => {
@@ -551,9 +583,10 @@ function GoogleMapsChart({
       clustererRef.current = null;
     }
 
-    if (showPins && filteredCoords.length > 0) {
-      // Crear marcadores para cada inventario (sin limite)
-      const markers = visibleCoords.map(coord => {
+    if (showPins && markerCoords.length > 0) {
+      // Se crean una unica vez por cambio de datos; el clusterer se encarga de
+      // mostrar/ocultar segun zoom y viewport.
+      const markers = markerCoords.map(coord => {
         const marker = new google.maps.Marker({
           position: { lat: coord.lat, lng: coord.lng },
           icon: {
@@ -578,8 +611,8 @@ function GoogleMapsChart({
         map: mapRef.current,
         markers,
         algorithm: new SuperClusterAlgorithm({
-          radius: 80,   // Radio moderado para ver mas clusters
-          maxZoom: 15,  // Nivel maximo de zoom para clustering
+          radius: 60,   // Radio mas chico = los grupos se abren antes al acercar
+          maxZoom: 16,  // A partir de este zoom se ven pines individuales
         }),
         onClusterClick: (event, cluster, map) => {
           // Al hacer click en un cluster, hacer zoom para ver los markers que contiene
@@ -627,25 +660,11 @@ function GoogleMapsChart({
         clustererRef.current = null;
       }
     };
-  }, [showPins, visibleCoords, isLoaded]);
+  }, [showPins, markerCoords, isLoaded, mapReady]);
 
   const onMapLoad = useCallback((map: google.maps.Map) => {
     mapRef.current = map;
     setMapReady(true);
-
-    // Listener para actualizar el nivel de zoom
-    map.addListener('zoom_changed', () => {
-      const currentZoom = map.getZoom();
-      if (currentZoom !== undefined) {
-        setZoomLevel(currentZoom);
-      }
-    });
-
-    // Actualizar bounds cuando el mapa termina de moverse/hacer zoom
-    map.addListener('idle', () => {
-      const bounds = map.getBounds();
-      if (bounds) setMapBounds(bounds);
-    });
   }, []);
 
   if (!isLoaded) {
@@ -672,14 +691,15 @@ function GoogleMapsChart({
           </div>
         </div>
         <div className="flex flex-wrap items-center gap-2">
-          {showPins && zoomLevel < MIN_ZOOM_FOR_PINS && (
-            <span className={`px-3 py-1.5 rounded-xl text-xs border ${isDark ? 'bg-zinc-700/60 text-zinc-400 border-zinc-600/40' : 'bg-gray-100 text-gray-500 border-gray-300'}`}>
-              Haz zoom para ver pines
+          {showPins && coordsTruncados && (
+            <span className={`px-3 py-1.5 rounded-xl text-xs border ${isDark ? 'bg-yellow-500/15 text-yellow-300 border-yellow-500/30' : 'bg-yellow-50 text-yellow-700 border-yellow-200'}`}
+              title={`Se dibujan los primeros ${MAX_MARKERS.toLocaleString()} de ${filteredCoords.length.toLocaleString()}. Filtra por estado o plaza para ver el resto.`}>
+              Mostrando {MAX_MARKERS.toLocaleString()} de {filteredCoords.length.toLocaleString()}
             </span>
           )}
-          {showPins && zoomLevel >= MIN_ZOOM_FOR_PINS && (
+          {showPins && !coordsTruncados && selectedInventoryIds.size === 0 && (
             <span className={`px-3 py-1.5 rounded-xl text-xs font-medium border ${isDark ? 'bg-pink-500/20 text-pink-300 border-pink-500/30' : 'bg-pink-50 text-pink-600 border-pink-200'}`}>
-              {visibleCoords.length} pines visibles
+              {markerCoords.length.toLocaleString()} pines
             </span>
           )}
           {selectedInventoryIds.size > 0 && (
@@ -763,30 +783,34 @@ function GoogleMapsChart({
   );
 }
 
-// Pie Chart for Municipio
-function MunicipioPieChart({ data, title }: { data: ChartData[]; title: string }) {
+// Pie Chart de distribucion generica (top 8) — se usa para "Por Plaza"
+function DistribucionPieChart({ data, title }: { data: ChartData[]; title: string }) {
   const isDark = useThemeStore((s) => s.theme) === 'dark';
+  // % calculado sobre el total real (todas las plazas), no solo el top 8.
+  const total = useMemo(() => data.reduce((sum, item) => sum + item.cantidad, 0), [data]);
   const chartData = useMemo(() => {
     const sorted = [...data].sort((a, b) => b.cantidad - a.cantidad).slice(0, 8);
-    const total = sorted.reduce((sum, item) => sum + item.cantidad, 0);
     return sorted.map((item, index) => ({
       label: item.nombre, name: item.nombre, value: item.cantidad,
       color: CHART_COLORS[index % CHART_COLORS.length], fill: CHART_COLORS[index % CHART_COLORS.length],
       percent: total > 0 ? ((item.cantidad / total) * 100).toFixed(1) : '0',
     }));
-  }, [data]);
+  }, [data, total]);
 
   return (
     <GlassCard className="h-full">
-      <div className={`p-4 border-b ${isDark ? 'border-purple-900/30' : 'border-purple-200/50'}`}>
+      <div className={`p-4 border-b ${isDark ? 'border-purple-900/30' : 'border-purple-200/50'} flex items-center justify-between gap-2`}>
         <h3 className={`text-sm font-medium ${isDark ? 'text-white' : 'text-gray-800'} uppercase tracking-wider`}>{title}</h3>
+        {data.length > chartData.length && (
+          <span className={`text-[10px] ${isDark ? 'text-zinc-500' : 'text-gray-400'}`}>Top {chartData.length} de {data.length}</span>
+        )}
       </div>
       <div className="p-4 h-[300px]">
         {chartData.length === 0 ? (
           <div className={`h-full flex items-center justify-center ${isDark ? 'text-zinc-500' : 'text-gray-400'} text-sm`}>Sin datos</div>
         ) : (
           <div className="w-full h-full flex items-center">
-            <div className="h-full w-[160px]">
+            <div className="h-full w-[160px] relative">
               <ResponsiveContainer width={160} height={268}>
                 <PieChart>
                   <Pie data={chartData} cx="50%" cy="50%" innerRadius={45} outerRadius={65} paddingAngle={3} dataKey="value" stroke="none">
@@ -795,13 +819,22 @@ function MunicipioPieChart({ data, title }: { data: ChartData[]; title: string }
                   <RechartsTooltip content={<CustomTooltip />} />
                 </PieChart>
               </ResponsiveContainer>
+              <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+                <div className="text-center">
+                  <span className={`text-xl font-bold ${isDark ? 'text-white' : 'text-gray-800'}`}>{total.toLocaleString()}</span>
+                  <span className={`block text-[9px] ${isDark ? 'text-purple-400' : 'text-purple-500'} uppercase`}>Total</span>
+                </div>
+              </div>
             </div>
             <div className="flex-1 grid grid-cols-2 gap-2 pl-4 overflow-y-auto max-h-[280px]">
               {chartData.map((item, i) => (
                 <div key={i} className={`flex items-center gap-2 p-2 rounded-lg ${isDark ? 'bg-zinc-800/50 border-purple-500/20' : 'bg-gray-50 border-purple-100'} border`}>
                   <div className="w-1.5 h-6 rounded-full" style={{ backgroundColor: item.color }} />
                   <div className="min-w-0">
-                    <div className={`text-sm font-bold ${isDark ? 'text-white' : 'text-gray-800'}`}>{item.value.toLocaleString()}</div>
+                    <div className="flex items-baseline gap-1.5">
+                      <span className={`text-sm font-bold ${isDark ? 'text-white' : 'text-gray-800'}`}>{item.value.toLocaleString()}</span>
+                      <span className={`text-[10px] font-medium ${isDark ? 'text-purple-400' : 'text-purple-500'}`}>{item.percent}%</span>
+                    </div>
                     <div className={`text-[9px] ${isDark ? 'text-zinc-400' : 'text-gray-500'} uppercase truncate`} title={item.label}>{item.label}</div>
                   </div>
                 </div>
@@ -876,6 +909,8 @@ function TipoPieChart({ data, title }: { data: ChartData[]; title: string }) {
 function HorizontalBarChart({ data, color, title }: { data: ChartData[]; color: string; title: string }) {
   const isDark = useThemeStore((s) => s.theme) === 'dark';
   const sortedData = useMemo(() => [...data].sort((a, b) => b.cantidad - a.cantidad).slice(0, 8), [data]);
+  // Total sobre TODOS los muebles (no solo el top 8) para que el % sea real.
+  const totalCantidad = useMemo(() => data.reduce((sum, d) => sum + d.cantidad, 0), [data]);
   const colorHex = { pink: '#ec4899', cyan: '#06b6d4', yellow: '#facc15', green: '#22c55e', purple: '#a855f7' }[color] || '#a855f7';
 
   return (
@@ -890,12 +925,27 @@ function HorizontalBarChart({ data, color, title }: { data: ChartData[]; color: 
           <div className={`h-full flex items-center justify-center ${isDark ? 'text-zinc-500' : 'text-gray-400'}`}>Sin datos</div>
         ) : (
           <ResponsiveContainer width="100%" height={268}>
-            <BarChart layout="vertical" data={sortedData} margin={{ top: 5, right: 30, left: 60, bottom: 5 }}>
+            <BarChart layout="vertical" data={sortedData} margin={{ top: 5, right: 70, left: 60, bottom: 5 }}>
               <XAxis type="number" hide />
               <YAxis type="category" dataKey="nombre" tick={{ fill: isDark ? '#a1a1aa' : '#6b7280', fontSize: 11 }} tickLine={false} axisLine={false} width={80} />
               <RechartsTooltip cursor={{ fill: 'rgba(139, 92, 246, 0.05)' }} content={<CustomTooltip />} />
               <Bar dataKey="cantidad" fill={colorHex} radius={[0, 6, 6, 0]} barSize={20}>
                 {sortedData.map((_, index) => (<Cell key={index} fillOpacity={0.7 + (index % 2) * 0.3} />))}
+                {/* Etiqueta al final de cada barra: cantidad + % sobre el total del grafico */}
+                <LabelList
+                  dataKey="cantidad"
+                  position="right"
+                  offset={8}
+                  fill={isDark ? '#e4e4e7' : '#374151'}
+                  fontSize={11}
+                  fontWeight={600}
+                  formatter={(v: unknown) => {
+                    const n = Number(v) || 0;
+                    return totalCantidad > 0
+                      ? `${n.toLocaleString()} (${((n / totalCantidad) * 100).toFixed(1)}%)`
+                      : n.toLocaleString();
+                  }}
+                />
               </Bar>
             </BarChart>
           </ResponsiveContainer>
@@ -1781,6 +1831,100 @@ function CatorcenaIndicator({
   );
 }
 
+// Formatea montos como moneda MXN compacta ($1.2M, $850.0K, $1,234)
+function formatMoneyMXN(n: number): string {
+  const abs = Math.abs(n);
+  if (abs >= 1_000_000) return `$${(n / 1_000_000).toFixed(1)}M`;
+  if (abs >= 1_000) return `$${(n / 1_000).toFixed(1)}K`;
+  return `$${n.toLocaleString('es-MX')}`;
+}
+
+// Bloque: estado de POST a SAP (pendientes por postear vs posteadas), con
+// conteo y monto. El monto total exacto se muestra en el tooltip.
+function PosteoStatsCard({ data, isLoading, periodoLabel }: { data?: PosteoStats; isLoading: boolean; periodoLabel?: string | null }) {
+  const isDark = useThemeStore((s) => s.theme) === 'dark';
+
+  const pendientes = data?.pendientes ?? { count: 0, monto: 0 };
+  const posteadas = data?.posteadas ?? { count: 0, monto: 0 };
+  const totalCount = (data?.total.count ?? 0) || 1; // evita /0 en la barra
+  const pctPosteadas = (posteadas.count / totalCount) * 100;
+
+  const cells: Array<{
+    key: string; label: string; icon: React.ElementType; bucket: { count: number; monto: number };
+    accent: string; bg: string; bar: string;
+  }> = [
+    {
+      key: 'pendientes', label: 'Pendientes por postear', icon: Clock3, bucket: pendientes,
+      accent: isDark ? 'text-amber-300' : 'text-amber-600',
+      bg: isDark ? 'bg-amber-500/10' : 'bg-amber-50',
+      bar: '#f59e0b',
+    },
+    {
+      key: 'posteadas', label: 'Posteadas a SAP', icon: Send, bucket: posteadas,
+      accent: isDark ? 'text-emerald-300' : 'text-emerald-600',
+      bg: isDark ? 'bg-emerald-500/10' : 'bg-emerald-50',
+      bar: '#10b981',
+    },
+  ];
+
+  return (
+    <GlassCard>
+      <div className={`p-4 border-b ${isDark ? 'border-purple-900/30' : 'border-purple-200/50'} flex flex-wrap items-center justify-between gap-2`}>
+        <h3 className={`text-sm font-medium ${isDark ? 'text-white' : 'text-gray-800'} uppercase tracking-wider flex items-center gap-2`}>
+          <Send className="h-4 w-4 text-emerald-500" /> Estado de POST a SAP
+          {periodoLabel && (
+            <span className={`normal-case tracking-normal text-[11px] font-medium px-2 py-0.5 rounded-full ${isDark ? 'bg-emerald-500/10 text-emerald-300' : 'bg-emerald-50 text-emerald-600'}`}>
+              {periodoLabel}
+            </span>
+          )}
+        </h3>
+        {data && (
+          <span className={`text-[10px] ${isDark ? 'text-zinc-500' : 'text-gray-400'}`}>
+            {data.total.count.toLocaleString()} campañas · {formatMoneyMXN(data.total.monto)}
+          </span>
+        )}
+      </div>
+      <div className="p-4">
+        <div className="grid gap-3 sm:grid-cols-2">
+          {cells.map((cell) => (
+            <div key={cell.key} className={`rounded-xl p-4 ${cell.bg} border ${isDark ? 'border-white/5' : 'border-black/5'}`}>
+              <div className="flex items-center gap-2 mb-2">
+                <cell.icon className={`h-4 w-4 ${cell.accent}`} />
+                <span className={`text-[11px] font-medium uppercase tracking-wider ${cell.accent}`}>{cell.label}</span>
+              </div>
+              {isLoading ? (
+                <Skeleton className={`h-9 w-24 ${isDark ? 'bg-purple-900/30' : 'bg-purple-100'}`} />
+              ) : (
+                <>
+                  <div className="flex items-baseline gap-2">
+                    <span className={`text-3xl font-light ${isDark ? 'text-white' : 'text-gray-800'}`}>{cell.bucket.count.toLocaleString()}</span>
+                    <span className={`text-xs ${isDark ? 'text-zinc-400' : 'text-gray-500'}`}>campañas</span>
+                  </div>
+                  <div className={`mt-1 text-sm font-semibold ${cell.accent}`} title={`$${cell.bucket.monto.toLocaleString('es-MX', { minimumFractionDigits: 2 })} MXN`}>
+                    {formatMoneyMXN(cell.bucket.monto)}
+                  </div>
+                </>
+              )}
+            </div>
+          ))}
+        </div>
+        {/* Barra de avance de posteo */}
+        {!isLoading && data && data.total.count > 0 && (
+          <div className="mt-4">
+            <div className="flex items-center justify-between mb-1">
+              <span className={`text-[10px] uppercase tracking-wider ${isDark ? 'text-zinc-500' : 'text-gray-400'}`}>Avance de posteo</span>
+              <span className={`text-xs font-semibold ${isDark ? 'text-emerald-300' : 'text-emerald-600'}`}>{pctPosteadas.toFixed(1)}%</span>
+            </div>
+            <div className={`h-2 w-full rounded-full overflow-hidden ${isDark ? 'bg-zinc-800' : 'bg-gray-100'}`}>
+              <div className="h-full rounded-full bg-emerald-500 transition-all duration-500" style={{ width: `${Math.min(pctPosteadas, 100)}%` }} />
+            </div>
+          </div>
+        )}
+      </div>
+    </GlassCard>
+  );
+}
+
 // Main Dashboard Component
 export function DashboardPage() {
   const isDark = useThemeStore((s) => s.theme) === 'dark';
@@ -1826,12 +1970,41 @@ export function DashboardPage() {
   });
 
 
-  const graficas = useMemo(() => activeEstatus !== 'total' && estatusStats ? estatusStats.graficas : stats?.graficas, [activeEstatus, estatusStats, stats]);
-
   const filteredCatorcena = useMemo(() => {
     if (!filters.catorcena_id || !filterOptions?.catorcenas) return null;
     return filterOptions.catorcenas.find(c => c.id === filters.catorcena_id) || null;
   }, [filters.catorcena_id, filterOptions]);
+
+  // Estado de POST a SAP — solo depende del periodo (catorcena / rango de fechas).
+  // El dashboard SIEMPRE opera sobre un periodo: si el usuario no eligio uno,
+  // usamos la catorcena actual (la que muestra el indicador "Periodo Actual"),
+  // no todo el historico.
+  const posteoFilters = useMemo(() => {
+    if (filters.catorcena_id) return { catorcena_id: filters.catorcena_id };
+    if (filters.fecha_inicio && filters.fecha_fin) return { fecha_inicio: filters.fecha_inicio, fecha_fin: filters.fecha_fin };
+    if (filterOptions?.catorcenaActual?.id) return { catorcena_id: filterOptions.catorcenaActual.id };
+    return {};
+  }, [filters.catorcena_id, filters.fecha_inicio, filters.fecha_fin, filterOptions?.catorcenaActual?.id]);
+  const { data: posteoStats, isLoading: loadingPosteo } = useQuery({
+    queryKey: ['dashboard', 'posteo-stats', posteoFilters],
+    queryFn: () => dashboardService.getPosteoStats(posteoFilters),
+  });
+
+  // Etiqueta del periodo que refleja el bloque de posteo (para dejar claro que
+  // los montos son de esa catorcena, no del historico completo).
+  const posteoPeriodoLabel = useMemo(() => {
+    if (filters.fecha_inicio && filters.fecha_fin) {
+      const fmt = (d: string) => new Date(d).toLocaleDateString('es-MX', { day: 'numeric', month: 'short' });
+      return `${fmt(filters.fecha_inicio)} – ${fmt(filters.fecha_fin)}`;
+    }
+    const cat = filteredCatorcena || filterOptions?.catorcenaActual;
+    return cat ? `Cat. ${cat.numero} / ${cat.ano}` : null;
+  }, [filters.fecha_inicio, filters.fecha_fin, filteredCatorcena, filterOptions?.catorcenaActual]);
+
+  const graficas = useMemo(() => activeEstatus !== 'total' && estatusStats ? estatusStats.graficas : stats?.graficas, [activeEstatus, estatusStats, stats]);
+
+  // Base para los % de los KPIs: el total de inventarios con los filtros activos.
+  const kpiTotal = stats?.kpis.total || 0;
 
   const handleClearFilters = () => { setFilters({}); setActiveEstatus('total'); setInventoryPage(1); setSelectedYear(null); setSelectedCatNum(null); setDateMode('catorcenal'); };
   const activeFilterCount =
@@ -2123,12 +2296,15 @@ export function DashboardPage() {
 
         {/* KPIs */}
         <div className="grid gap-3 md:gap-4 grid-cols-2 md:grid-cols-3 lg:grid-cols-5">
-          <KPICard title="Total" value={stats?.kpis.total || 0} icon={Package} color="purple" isActive={activeEstatus === 'total'} onClick={() => handleEstatusChange('total')} isLoading={loadingStats} />
-          <KPICard title="Disponible" value={stats?.kpis.disponibles || 0} icon={CheckCircle2} color="green" isActive={activeEstatus === 'Disponible'} onClick={() => handleEstatusChange('Disponible')} isLoading={loadingStats} />
-          <KPICard title="Reservado" value={stats?.kpis.reservados || 0} icon={Clock} color="yellow" isActive={activeEstatus === 'Reservado'} onClick={() => handleEstatusChange('Reservado')} isLoading={loadingStats} />
-          <KPICard title="Vendido" value={stats?.kpis.vendidos || 0} icon={ShoppingCart} color="cyan" isActive={activeEstatus === 'Vendido'} onClick={() => handleEstatusChange('Vendido')} isLoading={loadingStats} />
-          <KPICard title="Bloqueado" value={stats?.kpis.bloqueados || 0} icon={Lock} color="pink" isActive={activeEstatus === 'Bloqueado'} onClick={() => handleEstatusChange('Bloqueado')} isLoading={loadingStats} />
+          <KPICard title="Total" value={kpiTotal} icon={Package} color="purple" isActive={activeEstatus === 'total'} onClick={() => handleEstatusChange('total')} isLoading={loadingStats} />
+          <KPICard title="Disponible" value={stats?.kpis.disponibles || 0} icon={CheckCircle2} color="green" isActive={activeEstatus === 'Disponible'} onClick={() => handleEstatusChange('Disponible')} isLoading={loadingStats} total={kpiTotal} />
+          <KPICard title="Reservado" value={stats?.kpis.reservados || 0} icon={Clock} color="yellow" isActive={activeEstatus === 'Reservado'} onClick={() => handleEstatusChange('Reservado')} isLoading={loadingStats} total={kpiTotal} />
+          <KPICard title="Vendido" value={stats?.kpis.vendidos || 0} icon={ShoppingCart} color="cyan" isActive={activeEstatus === 'Vendido'} onClick={() => handleEstatusChange('Vendido')} isLoading={loadingStats} total={kpiTotal} />
+          <KPICard title="Bloqueado" value={stats?.kpis.bloqueados || 0} icon={Lock} color="pink" isActive={activeEstatus === 'Bloqueado'} onClick={() => handleEstatusChange('Bloqueado')} isLoading={loadingStats} total={kpiTotal} />
         </div>
+
+        {/* Estado de POST a SAP: pendientes por postear vs posteadas */}
+        <PosteoStatsCard data={posteoStats} isLoading={loadingPosteo} periodoLabel={posteoPeriodoLabel} />
 
         {/* Charts Row 1 */}
         {(loadingEstatus || loadingInventory) && (
@@ -2144,7 +2320,7 @@ export function DashboardPage() {
 
         {/* Charts Row 2 */}
         <div className="grid gap-4 lg:grid-cols-2">
-          <MunicipioPieChart data={graficas?.porMunicipio || []} title="Por Municipio" />
+          <DistribucionPieChart data={graficas?.porPlaza || []} title="Por Plaza" />
           <SimpleBarChart data={graficas?.porNSE || []} title="Por Nivel Socioeconomico" />
         </div>
 

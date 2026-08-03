@@ -36,6 +36,12 @@ const HISTORIAL_TICKETS_EMAILS = [
   'mario.salcido@deepia.dev',
 ];
 
+// Roles TI: gestionan tickets area='TI' via el board Historial de Tickets.
+// El back filtra por area del usuario. Aca ademas de los 3 roles TI incluimos
+// a cualquier usuario con area='TI' — ej: Gerente de TI con rol Administrador
+// (feedback Jos 2026-07-23).
+const TI_ROLES_HISTORIAL = ['Gerente de TI', 'Especialista de TI', 'Analista de TI'];
+
 interface SidebarProps {
   collapsed: boolean;
   onToggle: () => void;
@@ -83,7 +89,11 @@ export function Sidebar({ collapsed, onToggle }: SidebarProps) {
   };
 
   const permissions = getPermissions(user?.rol);
-  const canSeeHistorialTickets = user?.email && HISTORIAL_TICKETS_EMAILS.includes(user.email.toLowerCase());
+  const canSeeHistorialTickets = !!(
+    (user?.email && HISTORIAL_TICKETS_EMAILS.includes(user.email.toLowerCase())) ||
+    (user?.rol && TI_ROLES_HISTORIAL.includes(user.rol)) ||
+    user?.area === 'TI'
+  );
 
   const { data: ticketsUnreadCount = 0 } = useQuery({
     queryKey: ['tickets-unread-count'],

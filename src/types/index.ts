@@ -325,6 +325,10 @@ export interface Campana {
   catorcena_fin_anio: number | null;
   tipo_periodo: string | null;
   has_aps: boolean | number | null;
+  // true/1 si la campaña se marcó como enviada completa a SAP (posted_to_sap=1).
+  // Lo calcula el backend en getAll para el filtro rápido "Con/Sin POST".
+  // undefined = backend aún no lo manda (el filtro POST se ignora en ese caso).
+  has_post?: boolean | number | null;
   reservas_count?: number | null;
   reservas_count_ultima_cat?: number | null;
   caras_ultima_cat?: number | null;

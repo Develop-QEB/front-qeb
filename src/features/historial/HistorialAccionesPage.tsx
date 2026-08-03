@@ -596,12 +596,8 @@ export function HistorialAccionesPage() {
 
           <div className={`w-px h-8 ${isDark ? 'bg-zinc-700' : 'bg-gray-200'}`} />
 
-          {/* Acciones */}
-          <button onClick={() => setShowNotaModal(true)}
-            className="flex items-center gap-1.5 px-3 py-2 rounded-lg text-sm font-medium text-white bg-purple-600 hover:bg-purple-700 transition-colors">
-            <StickyNote className="h-4 w-4" />
-            Agregar acción
-          </button>
+          {/* Nota: el botón "Agregar acción" se movió a Notificaciones y Tareas
+              como "Actividad Comercial" (tarea manual del asesor). */}
 
           <button onClick={handleExport} disabled={isExporting}
             className={`flex items-center gap-1.5 px-3 py-2 rounded-lg text-sm border transition-colors ${btnSecondary} disabled:opacity-50`}

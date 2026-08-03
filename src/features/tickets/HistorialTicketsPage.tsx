@@ -13,7 +13,7 @@ import { useAuthStore } from '../../store/authStore';
 import { useThemeStore } from '../../store/themeStore';
 import { useSocketTicketsHistorial, useSocketTicketChat, useSocketTicketChatSoporte } from '../../hooks/useSocket';
 
-const STATUS_OPTIONS = ['Nuevo', 'En Progreso', 'Validación', 'Duda del Bot', 'Resuelto', 'Cerrado'];
+const STATUS_OPTIONS = ['Nuevo', 'En Progreso', 'Validación', 'Resuelto', 'Cerrado'];
 const PRIORIDAD_OPTIONS = ['Baja', 'Normal', 'Alta', 'Urgente'];
 const TEAM_MEMBERS = ['Jos', 'Akary', 'Mario', 'Bladi'];
 const TEAM_COLORS: Record<string, { text: string; bg: string; border: string }> = {
@@ -588,6 +588,17 @@ function TicketDetailModal({
               <span className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-medium border ${prioridadStyles[ticket.prioridad]?.text} ${prioridadStyles[ticket.prioridad]?.bg} ${prioridadStyles[ticket.prioridad]?.border}`}>
                 {ticket.prioridad}
               </span>
+              {ticket.area && (
+                <span className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-medium border ${
+                  ticket.area === 'TI'
+                    ? (isDark ? 'bg-cyan-500/10 text-cyan-300 border-cyan-500/30' : 'bg-cyan-50 text-cyan-700 border-cyan-200')
+                    : (isDark ? 'bg-purple-500/10 text-purple-300 border-purple-500/30' : 'bg-purple-50 text-purple-700 border-purple-200')
+                }`}
+                title={ticket.categoria || undefined}
+                >
+                  {ticket.area}{ticket.categoria ? ` · ${ticket.categoria}` : ''}
+                </span>
+              )}
             </div>
 
             <p className={`text-sm leading-relaxed whitespace-pre-wrap ${isDark ? 'text-zinc-300' : 'text-gray-600'}`}>
@@ -710,7 +721,7 @@ export function HistorialTicketsPage() {
   const [filterTecnico, setFilterTecnico] = useState('Todos');
   const [onlyUnread, setOnlyUnread] = useState(false);
   const [selectedTicket, setSelectedTicket] = useState<TicketHistorial | null>(null);
-  const [activeTab, setActiveTab] = useState<'Nuevo' | 'En Progreso' | 'Validación' | 'Duda del Bot' | 'Resuelto' | 'Cerrado'>('Nuevo');
+  const [activeTab, setActiveTab] = useState<'Nuevo' | 'En Progreso' | 'Validación' | 'Resuelto' | 'Cerrado'>('Nuevo');
 
   useSocketTicketsHistorial();
 
@@ -769,7 +780,6 @@ export function HistorialTicketsPage() {
     { key: 'Nuevo', label: 'Pendientes', showCount: true },
     { key: 'En Progreso', label: 'En Proceso', showCount: true },
     { key: 'Validación', label: 'Validación', showCount: true },
-    { key: 'Duda del Bot', label: 'Duda del Bot', showCount: true },
     { key: 'Resuelto', label: 'Resueltos', showCount: false },
     { key: 'Cerrado', label: 'Cerrados', showCount: false },
   ];
@@ -1000,6 +1010,18 @@ export function HistorialTicketsPage() {
                         <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-medium border ${ps.text} ${ps.bg} ${ps.border}`}>
                           {t.prioridad}
                         </span>
+                        {t.area && (
+                          <span
+                            title={t.categoria || undefined}
+                            className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-medium border ${
+                              t.area === 'TI'
+                                ? (isDark ? 'bg-cyan-500/10 text-cyan-300 border-cyan-500/30' : 'bg-cyan-50 text-cyan-700 border-cyan-200')
+                                : (isDark ? 'bg-purple-500/10 text-purple-300 border-purple-500/30' : 'bg-purple-50 text-purple-700 border-purple-200')
+                            }`}
+                          >
+                            {t.area}{t.categoria ? ` · ${t.categoria}` : ''}
+                          </span>
+                        )}
                         {t.usuario_area && (
                           <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-medium border ${isDark ? 'text-teal-400 bg-teal-500/10 border-teal-500/30' : 'text-teal-600 bg-teal-50 border-teal-200'}`}>
                             {t.usuario_area}

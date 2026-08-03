@@ -2,7 +2,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { Ticket, Loader2, Plus, X, Image, AlertTriangle, Clock, CheckCircle2, Send, MessageSquare, Paperclip, FileText, ShieldCheck, Archive } from 'lucide-react';
 import { useState, useRef, useEffect, useCallback } from 'react';
 import { Header } from '../../components/layout/Header';
-import { ticketsService, Ticket as TicketType, CreateTicketInput, TicketChatMessage } from '../../services/tickets.service';
+import { ticketsService, Ticket as TicketType, CreateTicketInput, TicketChatMessage, TICKET_CATEGORIAS_TI, TICKET_CATEGORIAS_QEB } from '../../services/tickets.service';
 import { useThemeStore } from '../../store/themeStore';
 import { useAuthStore } from '../../store/authStore';
 import { uploadsService } from '../../services/uploads.service';
@@ -41,6 +41,7 @@ function CreateTicketModal({
     descripcion: '',
     prioridad: 'Normal',
     imagen: null,
+    categoria: null,
   });
   const [error, setError] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -132,6 +133,30 @@ function CreateTicketModal({
               rows={5}
               required
             />
+          </div>
+
+          <div>
+            <label className={labelClasses}>Categoría (opcional)</label>
+            <select
+              value={form.categoria || ''}
+              onChange={(e) => setForm({ ...form, categoria: e.target.value || null })}
+              className={inputClasses}
+            >
+              <option value="">Sin categoría (equipo QEB)</option>
+              <optgroup label="TI - Sistemas / SAP">
+                {TICKET_CATEGORIAS_TI.map((c) => (
+                  <option key={c} value={c}>{c}</option>
+                ))}
+              </optgroup>
+              <optgroup label="QEB - Operativo">
+                {TICKET_CATEGORIAS_QEB.map((c) => (
+                  <option key={c} value={c}>{c}</option>
+                ))}
+              </optgroup>
+            </select>
+            <p className={`mt-1 text-xs ${isDark ? 'text-zinc-500' : 'text-gray-400'}`}>
+              La categoría enruta tu ticket al equipo indicado. Si no eliges, va al equipo QEB.
+            </p>
           </div>
 
           <div>

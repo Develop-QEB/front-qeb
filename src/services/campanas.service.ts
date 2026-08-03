@@ -169,6 +169,8 @@ export interface InventarioConAPS extends InventarioReservado {
   indicaciones_programacion?: string | null;
   indicaciones_instalacion?: string | null;
   archivo?: string | null;
+  // true si el APS de este item ya se posteó a SAP (campaña posteada o APS en posted_aps).
+  posted?: boolean;
 }
 
 export interface InventarioConArte {

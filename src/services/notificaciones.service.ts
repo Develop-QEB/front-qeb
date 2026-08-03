@@ -242,7 +242,115 @@ export const notificacionesService = {
     }
     return response.data.data;
   },
+
+  // ==================== ACTIVIDAD COMERCIAL ====================
+
+  async getCampanasParaActividad(search?: string): Promise<ActividadRef[]> {
+    const response = await api.get<ApiResponse<ActividadRefCampana[]>>(
+      '/notificaciones/actividad-comercial/campanas',
+      { params: search ? { search } : undefined }
+    );
+    if (!response.data.success || !response.data.data) {
+      throw new Error(response.data.error || 'Error al obtener campañas');
+    }
+    return response.data.data.map(c => ({
+      id: c.id,
+      label: `#${c.id} — ${c.nombre}`,
+      cliente: c.cliente,
+      marca: c.marca,
+      status: c.status,
+    }));
+  },
+
+  async getPropuestasParaActividad(search?: string): Promise<ActividadRef[]> {
+    const response = await api.get<ApiResponse<ActividadRefPropuesta[]>>(
+      '/notificaciones/actividad-comercial/propuestas',
+      { params: search ? { search } : undefined }
+    );
+    if (!response.data.success || !response.data.data) {
+      throw new Error(response.data.error || 'Error al obtener propuestas');
+    }
+    return response.data.data.map(p => ({
+      id: p.id,
+      label: `#${p.id}${p.cliente ? ' — ' + p.cliente : ''}`,
+      cliente: p.cliente,
+      marca: p.marca,
+      status: p.status,
+    }));
+  },
+
+  async crearActividadComercial(payload: CrearActividadComercialInput): Promise<ActividadComercialCreated> {
+    const response = await api.post<ApiResponse<ActividadComercialCreated>>(
+      '/notificaciones/actividad-comercial',
+      payload
+    );
+    if (!response.data.success || !response.data.data) {
+      throw new Error(response.data.error || 'Error al crear actividad comercial');
+    }
+    return response.data.data;
+  },
 };
+
+// ==================== TIPOS ACTIVIDAD COMERCIAL ====================
+
+export type ActividadSubtipo = 'Campaña' | 'Propuesta';
+
+export interface ActividadRefCampana {
+  id: number;
+  nombre: string;
+  status: string;
+  cliente: string | null;
+  marca: string | null;
+}
+
+export interface ActividadRefPropuesta {
+  id: number;
+  status: string;
+  cliente: string | null;
+  marca: string | null;
+}
+
+export interface ActividadRef {
+  id: number;
+  label: string;
+  cliente: string | null;
+  marca: string | null;
+  status: string;
+}
+
+export interface CrearActividadComercialInput {
+  // Campaña/Propuesta opcional (feedback Jos 2026-07-31). Si el usuario no
+  // seleccionó nada, se omiten subtipo y ref_id.
+  subtipo?: ActividadSubtipo;
+  ref_id?: number;
+  // Cliente y marca son campos independientes que el usuario puede escribir a
+  // mano o dejar en blanco. Si vienen del payload, mandan sobre lo que el back
+  // pudiera derivar del ref_id.
+  cliente?: string;
+  marca?: string;
+  descripcion: string;
+  fecha_fin?: string;
+  activar_recordatorio?: boolean;
+  recordar_dias_antes?: number;
+}
+
+export interface ActividadComercialCreated {
+  id: number;
+  titulo: string;
+  descripcion: string;
+  tipo: string;
+  categoria: string;
+  estatus: string;
+  fecha_creacion: string;
+  fecha_fin: string;
+  responsable: string;
+  asignado: string;
+  cliente: string | null;
+  marca: string | null;
+  // Opcionales: pueden venir null si no se seleccionó campaña/propuesta.
+  subtipo: ActividadSubtipo | null;
+  ref_id: number | null;
+}
 
 // Tipos de autorización
 export interface ResumenAutorizacion {

@@ -28,6 +28,18 @@ import { AssignInventarioCampanaModal } from '../campanas/AssignInventarioCampan
 import { propuestasService } from '../../services/propuestas.service';
 import { campanasService } from '../../services/campanas.service';
 import { NotasDireccionBitacora } from './NotasDireccionBitacora';
+import { NuevaActividadComercialModal } from './NuevaActividadComercialModal';
+
+// Roles que pueden crear tarea manual "Actividad Comercial".
+// Se muestra el boton solo a estos. El back re-valida.
+const ROLES_ACTIVIDAD_COMERCIAL = new Set([
+  'Asesor Comercial',
+  'Asesor Comercial Aeropuerto',
+  'Gerente Comercial',
+  'Director Comercial',
+  'Administrador',
+  'DEV',
+]);
 
 // ============ HELPERS ============
 // Tipos de tareas creadas desde el Gestor de Artes. Estas tareas se
@@ -2455,7 +2467,7 @@ function TaskDrawer({
           )}
 
           {/* Botón Ir a ver (oculto para directores en tareas de autorización) */}
-          {canNavigate && onNavigate && !(isAutorizacionTask && ['Director General', 'Director Comercial', 'Director General Adjunto'].includes(user?.rol || '')) && (
+          {canNavigate && onNavigate && !(isAutorizacionTask && ['Director General', 'Director Comercial', 'Gerente Comercial Vía Pública', 'Gerente Comercial Plazas', 'Gerente Comercial'].includes(user?.rol || '')) && (
             <button
               onClick={handleNavigate}
               className="mt-4 w-full flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl bg-gradient-to-r from-purple-600 to-pink-600 text-white text-sm font-medium hover:from-purple-500 hover:to-pink-500 transition-all hover:scale-[1.02] active:scale-[0.98] shadow-lg shadow-purple-500/20"
@@ -2466,7 +2478,7 @@ function TaskDrawer({
           )}
 
           {/* Botón Revisar y Autorizar para directores (visible incluso en finalizadas) */}
-          {isAutorizacionTask && ['Director General', 'Director Comercial', 'Director General Adjunto'].includes(user?.rol || '') && tarea.estatus !== 'Cancelado' && onOpenApprovalModal && (
+          {isAutorizacionTask && ['Director General', 'Director Comercial', 'Gerente Comercial Vía Pública', 'Gerente Comercial Plazas', 'Gerente Comercial'].includes(user?.rol || '') && tarea.estatus !== 'Cancelado' && onOpenApprovalModal && (
             <button
               onClick={() => onOpenApprovalModal()}
               className={`mt-4 w-full flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl text-sm font-bold transition-all hover:scale-[1.02] active:scale-[0.98] ${
@@ -2488,7 +2500,7 @@ function TaskDrawer({
               rotar roles, marcar reserva como instalada, etc). Feedback de
               Jos 2026-07-09 — antes solo se excluia 'Revisión de artes'. */}
           {contentType === 'tareas'
-            && !['Director General', 'Director General Adjunto'].includes(user?.rol || '')
+            && !['Director General', 'Gerente Comercial Vía Pública', 'Gerente Comercial Plazas', 'Gerente Comercial'].includes(user?.rol || '')
             && !isTareaGestorArtes(tarea.tipo) && (
             <button
               onClick={(e) => {
@@ -2893,7 +2905,7 @@ function TaskDrawer({
         )}
 
         {/* Comentarios (oculto para directores en tareas de autorización) */}
-        {!(isAutorizacionTask && ['Director General', 'Director Comercial', 'Director General Adjunto'].includes(user?.rol || '')) && <div className={`p-5 border-t ${isDark ? 'border-zinc-800/50' : 'border-gray-200'}`}>
+        {!(isAutorizacionTask && ['Director General', 'Director Comercial', 'Gerente Comercial Vía Pública', 'Gerente Comercial Plazas', 'Gerente Comercial'].includes(user?.rol || '')) && <div className={`p-5 border-t ${isDark ? 'border-zinc-800/50' : 'border-gray-200'}`}>
           <div className="flex items-center justify-between mb-4">
             <h3 className={`text-xs font-medium ${isDark ? 'text-zinc-500' : 'text-gray-400'} uppercase tracking-wider flex items-center gap-2`}>
               <MessageSquare className="h-3.5 w-3.5" />
@@ -2968,6 +2980,9 @@ export function NotificacionesPage() {
   const navigate = useNavigate();
   const isDark = useThemeStore((s) => s.theme) === 'dark';
   const currentUserId = useAuthStore((s) => s.user?.id);
+  const currentUserRol = useAuthStore((s) => s.user?.rol);
+  const puedeCrearActividadComercial = !!currentUserRol && ROLES_ACTIVIDAD_COMERCIAL.has(currentUserRol);
+  const [showActividadModal, setShowActividadModal] = useState(false);
 
   // Suscribirse a WebSocket para actualizaciones en tiempo real.
   // popups: false — los popups los dispara solo la instancia del Header.
@@ -3435,6 +3450,20 @@ export function NotificacionesPage() {
 
           {/* Botones de acción */}
           <div className="flex items-center gap-2">
+            {contentType === 'tareas' && puedeCrearActividadComercial && (
+              <button
+                onClick={() => setShowActividadModal(true)}
+                className={`flex items-center gap-2 px-3 py-2 rounded-lg text-sm font-medium transition-all ${
+                  isDark
+                    ? 'bg-amber-500/15 text-amber-300 border border-amber-500/30 hover:bg-amber-500/25'
+                    : 'bg-amber-50 text-amber-700 border border-amber-200 hover:bg-amber-100'
+                }`}
+                title="Nueva actividad comercial"
+              >
+                <Plus className="h-4 w-4" />
+                <span className="hidden sm:inline">Actividad comercial</span>
+              </button>
+            )}
             <button
               onClick={() => {
                 // Exportar a CSV
@@ -4181,6 +4210,14 @@ export function NotificacionesPage() {
           isOpen={!!editCampana}
           onClose={() => setEditCampana(null)}
           campana={editCampana}
+        />
+      )}
+
+      {/* Nueva Actividad Comercial (tarea manual asesor) */}
+      {puedeCrearActividadComercial && (
+        <NuevaActividadComercialModal
+          isOpen={showActividadModal}
+          onClose={() => setShowActividadModal(false)}
         />
       )}
 

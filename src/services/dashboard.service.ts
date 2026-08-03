@@ -99,6 +99,17 @@ export interface TopCliente {
   totalReservas: number;
 }
 
+export interface PosteoBucket {
+  count: number;
+  monto: number;
+}
+
+export interface PosteoStats {
+  pendientes: PosteoBucket;
+  posteadas: PosteoBucket;
+  total: PosteoBucket;
+}
+
 function appendMulti(params: URLSearchParams, key: string, value?: string[]): void {
   if (!value || value.length === 0) return;
   params.append(key, value.join(','));
@@ -164,6 +175,16 @@ class DashboardService {
 
   async getTopClientes(): Promise<TopCliente[]> {
     const response = await api.get('/dashboard/top-clientes');
+    return response.data.data;
+  }
+
+  async getPosteoStats(filters?: Pick<DashboardFilters, 'catorcena_id' | 'fecha_inicio' | 'fecha_fin'>): Promise<PosteoStats> {
+    const params = new URLSearchParams();
+    if (filters?.catorcena_id) params.append('catorcena_id', filters.catorcena_id.toString());
+    if (filters?.fecha_inicio) params.append('fecha_inicio', filters.fecha_inicio);
+    if (filters?.fecha_fin) params.append('fecha_fin', filters.fecha_fin);
+    const queryString = params.toString();
+    const response = await api.get(`/dashboard/posteo-stats${queryString ? `?${queryString}` : ''}`);
     return response.data.data;
   }
 

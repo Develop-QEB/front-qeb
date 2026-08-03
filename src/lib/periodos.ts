@@ -93,6 +93,24 @@ export function groupPeriodoLabel(
   return '';
 }
 
+// Periodo requerido por un artículo según su nombre SAP.
+// Gran Formato (Kioscos, Boleros, Mi Macro, Puentes Peatonales, Carteleras/
+// Unipolares, Bajo Puentes) es MENSUAL; PB/Columna y todo lo demás es catorcenal.
+// Se usa para filtrar el dropdown de artículos por el periodo de la solicitud/
+// propuesta/campaña (mensual → solo Gran Formato; catorcena → excluye Gran Formato).
+export function getRequiredPeriodoForArticulo(itemName: string): 'catorcena' | 'mensual' {
+  if (!itemName) return 'catorcena';
+  const name = itemName.toUpperCase();
+  if (name.includes('KIOSCO') || name.includes('KIOSKO')) return 'mensual';
+  if (name.includes('BOLERO')) return 'mensual';
+  if (name.includes('MI MACRO')) return 'mensual';
+  if (name.includes('PEATONAL')) return 'mensual';
+  if (name.includes('BAJO PUENTE')) return 'mensual';
+  if (name.includes('CARTELERA')) return 'mensual';
+  if (name.includes('UNIPOLAR')) return 'mensual';
+  return 'catorcena';
+}
+
 // Format a date range as "1 Abr – 30 Abr" (same month) or "1 Abr – 15 May" (cross month)
 export function dateRangeShort(from: unknown, to: unknown): string {
   const a = dayMonthShort(from);

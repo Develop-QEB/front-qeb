@@ -68,6 +68,8 @@ const PUESTOS_POR_AREA: Record<string, string[]> = {
     'Coordinador de trafico',
     'Especialista de trafico',
     'Auxiliar de trafico',
+    // Rol mixto BI + Tráfico (2026-07-23, ej: Miguel Blancas)
+    'Bi Trafico',
   ],
   'Direccion de Mercadotecnia': [
     'Coordinador de Diseno',
