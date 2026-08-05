@@ -2032,8 +2032,7 @@ export function DashboardPage() {
     queryFn: () => dashboardService.getPosteoStats(posteoFilters),
     // Espera al periodo default: con posteoFilters {} el back agrega TODO el
     // historico de solicitudCaras.
-    // Card APS oculta por el momento; al restaurarla volver a `periodoListo`.
-    enabled: false,
+    enabled: periodoListo,
   });
 
   // Etiqueta del periodo que refleja el bloque de posteo (para dejar claro que
@@ -2363,9 +2362,7 @@ export function DashboardPage() {
         </div>
 
         {/* Estado de POST a SAP: pendientes por postear vs posteadas */}
-        {/* Oculto por el momento (APS). Para restaurar: descomentar y regresar
-            la query posteo-stats a `enabled: periodoListo`. */}
-        {/* <PosteoStatsCard data={posteoStats} isLoading={loadingPosteo} periodoLabel={posteoPeriodoLabel} /> */}
+        <PosteoStatsCard data={posteoStats} isLoading={loadingPosteo} periodoLabel={posteoPeriodoLabel} />
 
         {/* Charts Row 1 */}
         {(loadingEstatus || loadingInventory) && (
