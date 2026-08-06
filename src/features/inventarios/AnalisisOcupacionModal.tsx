@@ -714,6 +714,13 @@ const labelForCampana = (c: CampanaEnCelda): string => {
   return `Propuesta #${c.propuesta_id}`;
 };
 
+// Estatus de reserva que cuentan como VENDIDO. Mismo mapeo que usa el dashboard
+// (expandEstatusFilter en el back); cualquier otro estatus se pinta como Reservado.
+// OJO: no sirve mirar si hay campana_id — propuesta, cotizacion y campania se
+// crean en la misma transaccion, asi que campana_id casi siempre viene lleno.
+const ESTATUS_VENDIDO = new Set(['Vendido', 'Vendido bonificado', 'Con Arte']);
+const esVendida = (c: CampanaEnCelda): boolean => ESTATUS_VENDIDO.has(c.reserva_estatus);
+
 // Un inventario Tradicional solo admite 1 campaña por catorcena; los Digitales admiten varias.
 const esDigital = (inv?: InventarioResumen): boolean => inv?.tradicional_digital === 'Digital';
 const conflictoKey = (invId: number, cellKey: string): string => `${invId}|${cellKey}`;
@@ -1343,24 +1350,31 @@ function MatrizView({
                         </div>
                       )}
                       {campanas.map(c => {
-                        const esPropuesta = !c.campana_id;
-                        const cardClass = esPropuesta
+                        // Reservado -> amarillo y enlaza a la propuesta.
+                        // Vendido   -> rojo y enlaza a la campaña.
+                        // El fallback cruzado cubre el caso raro de que falte el id
+                        // del lado que corresponde (dato huerfano).
+                        const vendida = esVendida(c);
+                        const cardClass = vendida
                           ? isDark
-                            ? 'bg-amber-500/10 border-amber-500/40 hover:bg-amber-500/20'
-                            : 'bg-amber-50 border-amber-200 hover:bg-amber-100'
-                          : isDark
                             ? 'bg-red-500/10 border-red-500/40 hover:bg-red-500/20'
-                            : 'bg-red-50 border-red-200 hover:bg-red-100';
-                        const statusLabel = esPropuesta ? 'Reservado' : 'Ocupado';
-                        const statusTextClass = esPropuesta
-                          ? isDark ? 'text-amber-300' : 'text-amber-700'
-                          : isDark ? 'text-red-300' : 'text-red-700';
-                        const href = esPropuesta
-                          ? `/propuestas?viewId=${c.propuesta_id}`
-                          : `/campanas/detail/${c.campana_id}`;
-                        const label = esPropuesta
-                          ? `Propuesta #${c.propuesta_id}`
-                          : c.campana_nombre || `Campaña #${c.campana_id}`;
+                            : 'bg-red-50 border-red-200 hover:bg-red-100'
+                          : isDark
+                            ? 'bg-amber-500/10 border-amber-500/40 hover:bg-amber-500/20'
+                            : 'bg-amber-50 border-amber-200 hover:bg-amber-100';
+                        const statusLabel = vendida ? 'Vendido' : 'Reservado';
+                        const statusTextClass = vendida
+                          ? isDark ? 'text-red-300' : 'text-red-700'
+                          : isDark ? 'text-amber-300' : 'text-amber-700';
+                        const hrefCampana = `/campanas/detail/${c.campana_id}`;
+                        const hrefPropuesta = `/propuestas?viewId=${c.propuesta_id}`;
+                        const href = vendida
+                          ? (c.campana_id ? hrefCampana : hrefPropuesta)
+                          : (c.propuesta_id ? hrefPropuesta : hrefCampana);
+                        const nombreCampana = c.campana_nombre || `Campaña #${c.campana_id}`;
+                        const label = vendida
+                          ? nombreCampana
+                          : (c.propuesta_id ? `Propuesta #${c.propuesta_id}` : nombreCampana);
                         const clienteLabel = c.cliente_nombre || 'Sin cliente';
                         const fmt = (d: string) => new Date(d).toLocaleDateString('es-MX', { day: '2-digit', month: 'short' });
                         const rangoLabel = c.inicio_periodo && c.fin_periodo
@@ -1381,7 +1395,7 @@ function MatrizView({
                               href={href}
                               target="_blank"
                               rel="noopener noreferrer"
-                              title={esPropuesta ? `Editar propuesta #${c.propuesta_id}` : `Abrir campaña: ${label}`}
+                              title={vendida ? `Abrir campaña: ${label}` : `Abrir propuesta #${c.propuesta_id}`}
                               className={`block w-full text-left rounded-md p-2 ${padLeft} ${padRight} border transition-all cursor-pointer ${cardClass}`}
                             >
                               <div className={`flex items-center gap-1 text-[10px] font-bold uppercase tracking-wide ${statusTextClass}`}>
@@ -1496,13 +1510,16 @@ function MatrizView({
             <div className={`p-5 space-y-2 text-xs ${isDark ? 'text-zinc-300' : 'text-gray-700'}`}>
               {(() => {
                 const { card, inventario, catorcena } = confirmRelease;
-                const esPropuesta = !card.campana_id;
+                // Mismo criterio que la tarjeta: el estatus de la reserva decide
+                // si esto es una venta o una reserva, no la presencia de campana_id.
+                const vendida = esVendida(card);
                 const fmt = (d: string) => new Date(d).toLocaleDateString('es-MX', { day: '2-digit', month: 'short', year: 'numeric' });
                 const rango = card.inicio_periodo && card.fin_periodo
                   ? `${fmt(card.inicio_periodo)} – ${fmt(card.fin_periodo)}`
                   : '';
                 const rows: { k: string; v: string }[] = [
-                  { k: esPropuesta ? 'Propuesta' : 'Campaña', v: esPropuesta ? `#${card.propuesta_id}` : (card.campana_nombre || `#${card.campana_id}`) },
+                  { k: 'Estatus', v: card.reserva_estatus || (vendida ? 'Vendido' : 'Reservado') },
+                  { k: vendida ? 'Campaña' : 'Propuesta', v: vendida ? (card.campana_nombre || `#${card.campana_id}`) : `#${card.propuesta_id}` },
                   { k: 'Cliente', v: card.cliente_nombre || 'Sin cliente' },
                   { k: 'Inventario', v: inventario.codigo_unico || `#${inventario.id}` },
                   { k: 'Catorcena', v: `C${catorcena.numero}-${catorcena.anio}` },
