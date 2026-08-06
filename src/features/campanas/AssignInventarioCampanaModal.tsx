@@ -94,6 +94,11 @@ interface CaraItem {
   autorizacion_dcm?: string;
   _originalDg?: string;
   _originalDcm?: string;
+  // Baseline INMUTABLE de BD (DG/DCM aprobados al cargar) para conservar aprobación.
+  // NO se sobrescribe al editar en el borrador (a diferencia de _originalDg). Evita que
+  // tras la 1ª edición que da "pendiente" se pierda el "estaba aprobado" y quede atorado.
+  _savedDg?: string;
+  _savedDcm?: string;
   // Costo/caras de BD al cargar (regla "Direcciones Aprobadas" en la pre-evaluación).
   _originalCosto?: number;
   _originalCaras?: number;
@@ -1471,6 +1476,9 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
           autorizacion_dcm: cara.autorizacion_dcm || 'aprobado',
           _originalDg: cara.autorizacion_dg || 'aprobado',
           _originalDcm: cara.autorizacion_dcm || 'aprobado',
+          // Baseline INMUTABLE para conservar aprobación (no drifta al reeditar).
+          _savedDg: cara.autorizacion_dg || 'aprobado',
+          _savedDcm: cara.autorizacion_dcm || 'aprobado',
           // Costo/caras de BD (para la regla "Direcciones Aprobadas"). caras = total
           // (flujo+contraflujo) en RT, o bonificacion en BF, igual que compara el edit.
           _originalCosto: Number(cara.costo) || 0,
@@ -2872,7 +2880,9 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
             // solo incrementar caras/tarifa.
             const conservado = conservarAprobacionFront(
               { autorizacion_dg, autorizacion_dcm },
-              { dg: caraToEdit._originalDg, dcm: caraToEdit._originalDcm, costo: caraToEdit._originalCosto, caras: caraToEdit._originalCaras },
+              // dg/dcm desde el baseline INMUTABLE (_saved), NO _original (que drifta al
+              // reeditar en el borrador y hacía que se quedara atorado en autorización).
+              { dg: caraToEdit._savedDg, dcm: caraToEdit._savedDcm, costo: caraToEdit._originalCosto, caras: caraToEdit._originalCaras },
               // CT/BF/CF: la cantidad va en `bonificacion` (caras=0), igual que
               // `_originalCaras`. Sin esto, comparaba newCara.caras(0) vs _originalCaras(10)
               // → parecía que "bajaron las caras" → no conservaba (CT editando solo NSE).
