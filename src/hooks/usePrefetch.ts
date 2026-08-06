@@ -8,7 +8,7 @@ import { proveedoresService } from '../services/proveedores.service';
 import { inventariosService } from '../services/inventarios.service';
 import { campanasService } from '../services/campanas.service';
 import { propuestasService } from '../services/propuestas.service';
-import { dashboardService } from '../services/dashboard.service';
+import { dashboardService, resolveCatorcenaActual, FilterOptions } from '../services/dashboard.service';
 import { getSapCache, setSapCache, SAP_CACHE_KEYS } from '../lib/sapCache';
 import { filterAllowedArticulos } from '../config/allowedDigitalArticles';
 
@@ -174,37 +174,35 @@ export function usePrefetch() {
     });
   }, [queryClient]);
 
-  // Prefetch ligero — solo dashboard, el resto carga lazy por ruta
-  const prefetchAll = useCallback(() => {
-    queryClient.prefetchQuery({
+  // Prefetch del dashboard: primero filter-options y con la catorcena actual
+  // se calienta stats con la MISMA key que usa DashboardPage (el dashboard
+  // arranca filtrado a la catorcena actual por default).
+  const prefetchDashboard = useCallback(async () => {
+    await queryClient.prefetchQuery({
       queryKey: ['dashboard', 'filter-options'],
       queryFn: () => dashboardService.getFilterOptions(),
       staleTime: 30 * 60 * 1000,
     });
-    queryClient.prefetchQuery({
-      queryKey: ['dashboard', 'stats', {}],
-      queryFn: () => dashboardService.getStats(),
+    const opts = queryClient.getQueryData<FilterOptions>(['dashboard', 'filter-options']);
+    const catId = resolveCatorcenaActual(opts)?.id;
+    const filters = catId ? { catorcena_id: catId } : {};
+    await queryClient.prefetchQuery({
+      queryKey: ['dashboard', 'stats', filters],
+      queryFn: () => dashboardService.getStats(filters),
       staleTime: 15 * 60 * 1000,
     });
   }, [queryClient]);
 
+  // Prefetch ligero — solo dashboard, el resto carga lazy por ruta
+  const prefetchAll = useCallback(() => {
+    void prefetchDashboard();
+  }, [prefetchDashboard]);
+
   // Async version — only prefetch essential dashboard data to reduce DB connections
   // Other pages load lazily when the user navigates to them
   const prefetchAllAsync = useCallback(async () => {
-    await Promise.all([
-      // Only dashboard essentials — filter-options is cached server-side (30min)
-      queryClient.prefetchQuery({
-        queryKey: ['dashboard', 'filter-options'],
-        queryFn: () => dashboardService.getFilterOptions(),
-        staleTime: 30 * 60 * 1000,
-      }),
-      queryClient.prefetchQuery({
-        queryKey: ['dashboard', 'stats', {}],
-        queryFn: () => dashboardService.getStats(),
-        staleTime: 15 * 60 * 1000,
-      }),
-    ]);
-  }, [queryClient]);
+    await prefetchDashboard();
+  }, [prefetchDashboard]);
 
   return {
     prefetchClientes,

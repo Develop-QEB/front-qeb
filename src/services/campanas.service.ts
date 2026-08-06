@@ -60,48 +60,6 @@ export interface SAPDeliveryNoteMigrated extends Omit<SAPDeliveryNote, 'Document
   DocumentLines: SAPDocumentLineMigrated[];
 }
 
-// --- Bitácora de POSTs a SAP (campania_post_log) ---
-// Snapshot de a quién se mandó cada APS. Necesario porque el Delivery Note se
-// arma con el cliente que tiene la campaña EN ESE MOMENTO: si después le cambian
-// el cliente (ej. SABA -> Chevrolet), se perdía el rastro de lo ya posteado.
-export interface PostLogEntryInput {
-  aps: number;
-  card_code?: string | null;
-  cuic?: number | null;
-  razon_social?: string | null;
-  marca?: string | null;
-  cliente_nombre?: string | null;
-  sap_database?: string | null;
-  salesperson_code?: number | string | null;
-  solicitud_caras_ids?: number[] | string | null;
-  success: boolean;
-  doc_entry?: number | null;
-  doc_num?: number | null;
-  error_msg?: string | null;
-  payload_json?: string | null;
-}
-
-export interface PostLogItem {
-  id: number;
-  campania_id: number;
-  aps: number;
-  card_code: string | null;
-  cuic: number | null;
-  razon_social: string | null;
-  marca: string | null;
-  cliente_nombre: string | null;
-  sap_database: string | null;
-  salesperson_code: number | null;
-  solicitud_caras_ids: string | null;
-  success: boolean;
-  doc_entry: number | null;
-  doc_num: number | null;
-  error_msg: string | null;
-  usuario_id: number | null;
-  usuario_nombre: string | null;
-  posted_at: string;
-}
-
 export interface SAPPostResponse {
   success: boolean;
   data?: {
@@ -977,20 +935,6 @@ export const campanasService = {
   async unmarkPostedAPS(id: number, aps?: number[]): Promise<number[]> {
     const response = await api.post<{ success: boolean; posted_aps: number[] }>(`/campanas/${id}/unmark-posted-aps`, { aps });
     return response.data.posted_aps;
-  },
-
-  // Bitácora de POSTs a SAP — guarda a QUIÉN se mandó cada APS (snapshot).
-  async registrarPostLog(id: number, entries: PostLogEntryInput[]): Promise<number> {
-    const response = await api.post<{ success: boolean; registradas: number }>(`/campanas/${id}/post-log`, { entries });
-    return response.data.registradas;
-  },
-
-  async getPostLog(id: number): Promise<PostLogItem[]> {
-    const response = await api.get<ApiResponse<PostLogItem[]>>(`/campanas/${id}/post-log`);
-    if (!response.data.success || !response.data.data) {
-      throw new Error(response.data.error || 'Error al obtener la bitácora de POST');
-    }
-    return response.data.data;
   },
 
   async getInventarioConAPS(id: number): Promise<InventarioConAPS[]> {

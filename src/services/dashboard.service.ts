@@ -110,6 +110,29 @@ export interface PosteoStats {
   total: PosteoBucket;
 }
 
+// Catorcena "actual" efectiva a partir de filter-options.
+// OJO: las fechas de la tabla `catorcenas` estan corridas +1 dia respecto a la
+// operacion real (la catorcena inicia en lunes, pero la tabla guarda el martes
+// como fecha_inicio). Por eso la catorcena vigente es la que contiene MANANA
+// en terminos de la tabla: p. ej. el lunes 3-ago ya corre la Cat 16 aunque su
+// fecha_inicio en tabla sea 4-ago. Comparacion por fecha YYYY-MM-DD (las
+// fechas vienen como ISO a medianoche UTC).
+export function resolveCatorcenaActual(opts?: FilterOptions): Catorcena | null {
+  if (!opts) return null;
+  const cats = opts.catorcenas || [];
+  const d = new Date();
+  d.setDate(d.getDate() + 1); // "manana": compensa el corrimiento de la tabla
+  const ref = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+  const dia = (iso: string) => String(iso).slice(0, 10);
+  const vigente = cats.find(c => dia(c.fecha_inicio) <= ref && dia(c.fecha_fin) >= ref);
+  if (vigente) return vigente;
+  // Fallbacks: lo que haya calculado el back, o la mas reciente ya iniciada.
+  if (opts.catorcenaActual) return opts.catorcenaActual;
+  const pasadas = cats.filter(c => dia(c.fecha_inicio) <= ref);
+  if (pasadas.length === 0) return null;
+  return pasadas.reduce((a, b) => (dia(a.fecha_inicio) >= dia(b.fecha_inicio) ? a : b));
+}
+
 function appendMulti(params: URLSearchParams, key: string, value?: string[]): void {
   if (!value || value.length === 0) return;
   params.append(key, value.join(','));

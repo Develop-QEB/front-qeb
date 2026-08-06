@@ -44,6 +44,7 @@ import { useThemeStore } from '../../store/themeStore';
 import { Button } from '../../components/ui/button';
 import {
   dashboardService,
+  resolveCatorcenaActual,
   DashboardFilters,
   ChartData,
   PlazaMapData,
@@ -1060,7 +1061,7 @@ function InvGroupHeader({ groupName, count, expanded, onToggle, level = 1, isDar
           : `${isDark ? 'bg-fuchsia-500/10 border-fuchsia-500/20 hover:bg-fuchsia-500/15' : 'bg-fuchsia-50/50 border-fuchsia-100 hover:bg-fuchsia-50'}`
       }`}
     >
-      <td colSpan={9} className={`px-5 py-3 ${isLevel1 ? '' : 'pl-10'}`}>
+      <td colSpan={8} className={`px-5 py-3 ${isLevel1 ? '' : 'pl-10'}`}>
         <div className="flex items-center gap-2">
           {expanded ? (
             <ChevronDown className={`h-4 w-4 ${isLevel1 ? 'text-purple-500' : 'text-fuchsia-400'}`} />
@@ -1374,6 +1375,7 @@ function InventoryTable({ data, isLoading, page, totalPages, total, onPageChange
           </span>
         </td>
         <td className={`px-4 py-3 text-sm ${isDark ? 'text-zinc-400' : 'text-gray-500'} truncate max-w-[150px]`}>{item.cliente_nombre || '-'}</td>
+        {/* Columna APS oculta por el momento
         <td className="px-4 py-3">
           {item.APS ? (
             <span
@@ -1384,6 +1386,7 @@ function InventoryTable({ data, isLoading, page, totalPages, total, onPageChange
             <span className={isDark ? 'text-zinc-500' : 'text-gray-400'}>-</span>
           )}
         </td>
+        */}
       </tr>
     );
   };
@@ -1658,14 +1661,15 @@ function InventoryTable({ data, isLoading, page, totalPages, total, onPageChange
                           className={`w-4 h-4 rounded ${isDark ? 'border-purple-500/30' : 'border-purple-300'} bg-transparent text-purple-600 focus:ring-purple-500/30 focus:ring-offset-0 cursor-pointer`}
                         />
                       </th>
-                      {['ID', 'Plaza', 'Municipio', 'Mueble', 'Tipo', 'Estatus', 'Cliente', 'APS'].map((h) => (
+                      {/* Columna APS oculta por el momento (tambien su <td> y los colSpan) */}
+                      {['ID', 'Plaza', 'Municipio', 'Mueble', 'Tipo', 'Estatus', 'Cliente'].map((h) => (
                         <th key={h} className={`px-4 py-3 text-left text-[10px] font-semibold ${isDark ? 'text-purple-400' : 'text-purple-600'} uppercase tracking-wider`}>{h}</th>
                       ))}
                     </tr>
                   </thead>
                   <tbody>
                     {filteredData.length === 0 ? (
-                      <tr><td colSpan={9} className={`px-4 py-8 text-center ${isDark ? 'text-zinc-500' : 'text-gray-400'}`}>No hay inventarios</td></tr>
+                      <tr><td colSpan={8} className={`px-4 py-8 text-center ${isDark ? 'text-zinc-500' : 'text-gray-400'}`}>No hay inventarios</td></tr>
                     ) : groupedData ? (
                       groupedData.map(group => (
                         <React.Fragment key={`group-${group.name}`}>
@@ -1792,10 +1796,12 @@ function CatorcenaIndicator({
 }) {
   const isDark = useThemeStore((s) => s.theme) === 'dark';
 
-  // si hay un rango de fechas manual filtrado, muéstralo en lugar de la catorcena
+  // si hay un rango de fechas manual filtrado, muéstralo en lugar de la catorcena.
+  // timeZone UTC: las fechas vienen a medianoche UTC; formatearlas en hora local
+  // (UTC-6) las corría un día hacia atrás ("20 jul" para una catorcena del 21).
   if (fechaInicio || fechaFin) {
-    const start = fechaInicio ? new Date(fechaInicio).toLocaleDateString('es-MX', { day: 'numeric', month: 'short' }) : '...';
-    const end = fechaFin ? new Date(fechaFin).toLocaleDateString('es-MX', { day: 'numeric', month: 'short' }) : '...';
+    const start = fechaInicio ? new Date(fechaInicio).toLocaleDateString('es-MX', { day: 'numeric', month: 'short', timeZone: 'UTC' }) : '...';
+    const end = fechaFin ? new Date(fechaFin).toLocaleDateString('es-MX', { day: 'numeric', month: 'short', timeZone: 'UTC' }) : '...';
     return (
       <div className="flex items-center gap-3 px-4 py-2 rounded-xl border backdrop-blur-sm bg-purple-500/10 border-purple-500/30">
         <Calendar className={`h-4 w-4 ${isDark ? 'text-purple-400' : 'text-purple-500'}`} />
@@ -1823,6 +1829,9 @@ function CatorcenaIndicator({
       </div>
       {displayCatorcena.fecha_inicio && (
         <span className={`text-xs ${isFiltered ? (isDark ? 'text-purple-500/70' : 'text-purple-400') : (isDark ? 'text-emerald-400/70' : 'text-emerald-500')}`}>
+          {/* Hora local a proposito: las fechas de catorcenas vienen corridas
+              +1 dia (medianoche UTC = 6pm del dia anterior en MX), asi que el
+              formato local muestra las fechas REALES de operacion. */}
           {new Date(displayCatorcena.fecha_inicio).toLocaleDateString('es-MX', { day: 'numeric', month: 'short' })} -
           {new Date(displayCatorcena.fecha_fin).toLocaleDateString('es-MX', { day: 'numeric', month: 'short' })}
         </span>
@@ -1880,7 +1889,7 @@ function PosteoStatsCard({ data, isLoading, periodoLabel }: { data?: PosteoStats
         </h3>
         {data && (
           <span className={`text-[10px] ${isDark ? 'text-zinc-500' : 'text-gray-400'}`}>
-            {data.total.count.toLocaleString()} campañas · {formatMoneyMXN(data.total.monto)}
+            {data.total.count.toLocaleString()} circuitos · {formatMoneyMXN(data.total.monto)}
           </span>
         )}
       </div>
@@ -1898,7 +1907,7 @@ function PosteoStatsCard({ data, isLoading, periodoLabel }: { data?: PosteoStats
                 <>
                   <div className="flex items-baseline gap-2">
                     <span className={`text-3xl font-light ${isDark ? 'text-white' : 'text-gray-800'}`}>{cell.bucket.count.toLocaleString()}</span>
-                    <span className={`text-xs ${isDark ? 'text-zinc-400' : 'text-gray-500'}`}>campañas</span>
+                    <span className={`text-xs ${isDark ? 'text-zinc-400' : 'text-gray-500'}`}>circuitos</span>
                   </div>
                   <div className={`mt-1 text-sm font-semibold ${cell.accent}`} title={`$${cell.bucket.monto.toLocaleString('es-MX', { minimumFractionDigits: 2 })} MXN`}>
                     {formatMoneyMXN(cell.bucket.monto)}
@@ -1942,20 +1951,53 @@ export function DashboardPage() {
   // WebSocket para actualizaciones en tiempo real
   useSocketDashboard();
 
-  const { data: filterOptions } = useQuery({
+  const { data: filterOptions, isError: filterOptionsError } = useQuery({
     queryKey: ['dashboard', 'filter-options'],
     queryFn: () => dashboardService.getFilterOptions(),
   });
 
+  // Catorcena "actual" efectiva. El back puede regresar catorcenaActual null
+  // (p. ej. el ultimo dia de la catorcena con el cache de 1h aun sin el fix de
+  // fecha, o un hueco en la tabla); resolveCatorcenaActual la deriva de la
+  // lista en ese caso.
+  const catorcenaDefault = useMemo(() => resolveCatorcenaActual(filterOptions), [filterOptions]);
+
+  // Filtro por defecto: la catorcena actual. Se aplica una sola vez cuando
+  // llegan las opciones de filtro y solo si el usuario aun no eligio periodo,
+  // para no pisar una seleccion manual hecha mientras cargaba la query.
+  // Las queries de datos esperan a `periodoListo` para no disparar primero la
+  // version sin periodo (todo el historico — las queries mas caras del back)
+  // y refetchear un instante despues con la catorcena.
+  const [periodoListo, setPeriodoListo] = useState(false);
+  const defaultCatorcenaAplicada = useRef(false);
+  useEffect(() => {
+    if (defaultCatorcenaAplicada.current) return;
+    // Aun cargando opciones: esperar (si fallo, seguimos sin default).
+    if (!filterOptions && !filterOptionsError) return;
+    defaultCatorcenaAplicada.current = true;
+    const actual = catorcenaDefault;
+    if (actual) {
+      setFilters(p => {
+        if (p.catorcena_id || p.fecha_inicio || p.fecha_fin) return p;
+        return { ...p, catorcena_id: actual.id };
+      });
+      setSelectedYear(prev => prev ?? actual.ano);
+      setSelectedCatNum(prev => prev ?? actual.numero);
+    }
+    // Mismo batch que setFilters: las queries se habilitan ya con la catorcena.
+    setPeriodoListo(true);
+  }, [filterOptions, filterOptionsError, catorcenaDefault]);
+
   const { data: stats, isLoading: loadingStats } = useQuery({
     queryKey: ['dashboard', 'stats', filters],
     queryFn: () => dashboardService.getStats(filters),
+    enabled: periodoListo,
   });
 
   const { data: estatusStats, isLoading: loadingEstatus } = useQuery({
     queryKey: ['dashboard', 'stats', activeEstatus, filters],
     queryFn: () => activeEstatus === 'total' ? Promise.resolve(null) : dashboardService.getStatsByEstatus(activeEstatus, filters),
-    enabled: activeEstatus !== 'total',
+    enabled: periodoListo && activeEstatus !== 'total',
   });
 
   const { data: inventoryData, isLoading: loadingInventory } = useQuery({
@@ -1967,8 +2009,8 @@ export function DashboardPage() {
       limit: 50,
       includeCoords: showPins,
     }),
+    enabled: periodoListo,
   });
-
 
   const filteredCatorcena = useMemo(() => {
     if (!filters.catorcena_id || !filterOptions?.catorcenas) return null;
@@ -1982,38 +2024,54 @@ export function DashboardPage() {
   const posteoFilters = useMemo(() => {
     if (filters.catorcena_id) return { catorcena_id: filters.catorcena_id };
     if (filters.fecha_inicio && filters.fecha_fin) return { fecha_inicio: filters.fecha_inicio, fecha_fin: filters.fecha_fin };
-    if (filterOptions?.catorcenaActual?.id) return { catorcena_id: filterOptions.catorcenaActual.id };
+    if (catorcenaDefault?.id) return { catorcena_id: catorcenaDefault.id };
     return {};
-  }, [filters.catorcena_id, filters.fecha_inicio, filters.fecha_fin, filterOptions?.catorcenaActual?.id]);
+  }, [filters.catorcena_id, filters.fecha_inicio, filters.fecha_fin, catorcenaDefault?.id]);
   const { data: posteoStats, isLoading: loadingPosteo } = useQuery({
     queryKey: ['dashboard', 'posteo-stats', posteoFilters],
     queryFn: () => dashboardService.getPosteoStats(posteoFilters),
+    // Espera al periodo default: con posteoFilters {} el back agrega TODO el
+    // historico de solicitudCaras.
+    enabled: periodoListo,
   });
 
   // Etiqueta del periodo que refleja el bloque de posteo (para dejar claro que
   // los montos son de esa catorcena, no del historico completo).
   const posteoPeriodoLabel = useMemo(() => {
     if (filters.fecha_inicio && filters.fecha_fin) {
-      const fmt = (d: string) => new Date(d).toLocaleDateString('es-MX', { day: 'numeric', month: 'short' });
+      // timeZone UTC: 'YYYY-MM-DD' se parsea como medianoche UTC; en hora local
+      // se mostraria un dia antes.
+      const fmt = (d: string) => new Date(d).toLocaleDateString('es-MX', { day: 'numeric', month: 'short', timeZone: 'UTC' });
       return `${fmt(filters.fecha_inicio)} – ${fmt(filters.fecha_fin)}`;
     }
-    const cat = filteredCatorcena || filterOptions?.catorcenaActual;
+    const cat = filteredCatorcena || catorcenaDefault;
     return cat ? `Cat. ${cat.numero} / ${cat.ano}` : null;
-  }, [filters.fecha_inicio, filters.fecha_fin, filteredCatorcena, filterOptions?.catorcenaActual]);
+  }, [filters.fecha_inicio, filters.fecha_fin, filteredCatorcena, catorcenaDefault]);
 
   const graficas = useMemo(() => activeEstatus !== 'total' && estatusStats ? estatusStats.graficas : stats?.graficas, [activeEstatus, estatusStats, stats]);
 
   // Base para los % de los KPIs: el total de inventarios con los filtros activos.
   const kpiTotal = stats?.kpis.total || 0;
 
-  const handleClearFilters = () => { setFilters({}); setActiveEstatus('total'); setInventoryPage(1); setSelectedYear(null); setSelectedCatNum(null); setDateMode('catorcenal'); };
+  // "Limpiar" regresa al estado por defecto: catorcena actual seleccionada.
+  const handleClearFilters = () => {
+    const actual = catorcenaDefault;
+    setFilters(actual ? { catorcena_id: actual.id } : {});
+    setActiveEstatus('total');
+    setInventoryPage(1);
+    setSelectedYear(actual?.ano ?? null);
+    setSelectedCatNum(actual?.numero ?? null);
+    setDateMode('catorcenal');
+  };
+  // La catorcena actual es el default, no cuenta como filtro activo.
+  const esCatorcenaDefault = !!filters.catorcena_id && filters.catorcena_id === catorcenaDefault?.id;
   const activeFilterCount =
     (filters.estado?.length || 0) +
     (filters.ciudad?.length || 0) +
     (filters.formato?.length || 0) +
     (filters.nse?.length || 0) +
     (filters.tipo?.length || 0) +
-    (filters.catorcena_id ? 1 : 0) +
+    (filters.catorcena_id && !esCatorcenaDefault ? 1 : 0) +
     (filters.fecha_inicio ? 1 : 0) +
     (filters.fecha_fin ? 1 : 0);
   const hasActiveFilters = activeFilterCount > 0;
@@ -2054,7 +2112,7 @@ export function DashboardPage() {
             <div className="flex items-center gap-3 md:gap-4 flex-wrap">
               <h2 className={`text-base md:text-lg font-light ${isDark ? 'text-white' : 'text-gray-800'}`}>Resumen de Inventario</h2>
               <CatorcenaIndicator
-                catorcena={filterOptions?.catorcenaActual}
+                catorcena={catorcenaDefault}
                 filteredCatorcena={filteredCatorcena}
                 fechaInicio={filters.fecha_inicio}
                 fechaFin={filters.fecha_fin}
