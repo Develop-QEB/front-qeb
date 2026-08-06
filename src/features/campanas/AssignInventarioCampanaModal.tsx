@@ -2890,6 +2890,17 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
             );
             autorizacion_dg = conservado.autorizacion_dg || 'aprobado';
             autorizacion_dcm = conservado.autorizacion_dcm || 'aprobado';
+            // TEMP DEBUG — quitar tras diagnosticar el badge de autorización (José/81227)
+            // Si NO aparece este log al dar "Actualizar", el build no trae el fix.
+            console.log('%c[CONSERVE-DG]', 'background:#8B3FD9;color:#fff;padding:2px 6px;border-radius:4px', {
+              caraId: caraToEdit.id,
+              savedDg: caraToEdit._savedDg, savedDcm: caraToEdit._savedDcm,
+              origCaras: caraToEdit._originalCaras, origCosto: caraToEdit._originalCosto,
+              newCaras: newCara.caras, tarifa: newCara.tarifa_publica, costoCalc: costoCalculado,
+              evalDg: resultado.autorizacion_dg, evalDcm: resultado.autorizacion_dcm,
+              conservadoDg: conservado.autorizacion_dg, conservadoDcm: conservado.autorizacion_dcm,
+              autorizacion_dg_final: autorizacion_dg, autorizacion_dcm_final: autorizacion_dcm,
+            });
           } catch (error) {
             console.error('Error evaluando autorización:', error);
           }
