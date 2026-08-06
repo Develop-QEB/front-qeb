@@ -1007,9 +1007,12 @@ const INV_FILTER_FIELDS: InvFilterFieldConfig[] = [
   { field: 'tradicional_digital', label: 'Tipo', type: 'string' },
   { field: 'estatus', label: 'Estatus', type: 'string' },
   { field: 'cliente_nombre', label: 'Cliente', type: 'string' },
+  { field: 'agencia', label: 'Agencia', type: 'string' },
+  { field: 'propuesta_id', label: 'ID Propuesta', type: 'number' },
+  { field: 'campana_id', label: 'ID Campaña', type: 'number' },
 ];
 
-type InvGroupByField = 'plaza' | 'municipio' | 'estatus' | 'tradicional_digital' | 'mueble';
+type InvGroupByField = 'plaza' | 'municipio' | 'estatus' | 'tradicional_digital' | 'mueble' | 'agencia';
 
 const INV_AVAILABLE_GROUPINGS: { field: InvGroupByField; label: string }[] = [
   { field: 'plaza', label: 'Plaza' },
@@ -1017,6 +1020,7 @@ const INV_AVAILABLE_GROUPINGS: { field: InvGroupByField; label: string }[] = [
   { field: 'estatus', label: 'Estatus' },
   { field: 'tradicional_digital', label: 'Tipo' },
   { field: 'mueble', label: 'Mueble' },
+  { field: 'agencia', label: 'Agencia' },
 ];
 
 const INV_OPERATORS: { value: InvFilterOperator; label: string }[] = [
@@ -1061,7 +1065,7 @@ function InvGroupHeader({ groupName, count, expanded, onToggle, level = 1, isDar
           : `${isDark ? 'bg-fuchsia-500/10 border-fuchsia-500/20 hover:bg-fuchsia-500/15' : 'bg-fuchsia-50/50 border-fuchsia-100 hover:bg-fuchsia-50'}`
       }`}
     >
-      <td colSpan={8} className={`px-5 py-3 ${isLevel1 ? '' : 'pl-10'}`}>
+      <td colSpan={11} className={`px-5 py-3 ${isLevel1 ? '' : 'pl-10'}`}>
         <div className="flex items-center gap-2">
           {expanded ? (
             <ChevronDown className={`h-4 w-4 ${isLevel1 ? 'text-purple-500' : 'text-fuchsia-400'}`} />
@@ -1173,7 +1177,7 @@ function InventoryTable({ data, isLoading, page, totalPages, total, onPageChange
 
   const downloadCSV = useCallback(async () => {
     const generateCSV = (items: any[]) => {
-      const headers = ['Codigo', 'Plaza', 'Municipio', 'Mueble', 'Tipo', 'Estatus', 'Cliente', 'CUIC', 'Marca', 'ID', 'Nombre', 'APS'];
+      const headers = ['Codigo', 'Plaza', 'Municipio', 'Mueble', 'Tipo', 'Estatus', 'Cliente', 'CUIC', 'Marca', 'Agencia', 'ID Propuesta', 'ID Campana', 'Nombre', 'APS'];
       const rows = items.map(item => [
         item.codigo_unico || item.id,
         item.plaza || '',
@@ -1184,7 +1188,9 @@ function InventoryTable({ data, isLoading, page, totalPages, total, onPageChange
         item.cliente || '',
         item.cuic || '',
         item.marca || '',
+        item.agencia || '',
         item.propuesta_id || '',
+        item.campana_id || '',
         item.nombre_campania || '',
         item.APS || '',
       ]);
@@ -1236,7 +1242,7 @@ function InventoryTable({ data, isLoading, page, totalPages, total, onPageChange
       });
       const items = allData.items;
       if (items.length === 0) return;
-      const headers = ['Codigo', 'Plaza', 'Municipio', 'Mueble', 'Tipo de Mueble', 'Tipo', 'Estatus', 'Cliente', 'CUIC', 'Marca', 'ID', 'Nombre', 'APS'];
+      const headers = ['Codigo', 'Plaza', 'Municipio', 'Mueble', 'Tipo de Mueble', 'Tipo', 'Estatus', 'Cliente', 'CUIC', 'Marca', 'Agencia', 'ID Propuesta', 'ID Campana', 'Nombre', 'APS'];
       const rows = items.map((item: any) => [
         item.codigo_unico || item.id,
         item.plaza || '',
@@ -1248,7 +1254,9 @@ function InventoryTable({ data, isLoading, page, totalPages, total, onPageChange
         item.cliente || '',
         item.cuic || '',
         item.marca || '',
+        item.agencia || '',
         item.propuesta_id || '',
+        item.campana_id || '',
         item.nombre_campania || '',
         item.APS || '',
       ]);
@@ -1375,6 +1383,35 @@ function InventoryTable({ data, isLoading, page, totalPages, total, onPageChange
           </span>
         </td>
         <td className={`px-4 py-3 text-sm ${isDark ? 'text-zinc-400' : 'text-gray-500'} truncate max-w-[150px]`}>{item.cliente_nombre || '-'}</td>
+        <td className={`px-4 py-3 text-sm ${isDark ? 'text-zinc-400' : 'text-gray-500'} truncate max-w-[150px]`} title={item.agencia || ''}>{item.agencia || '-'}</td>
+        {/* Propuesta y campaña son numeraciones distintas (tablas distintas),
+            por eso van en columnas separadas y no mezcladas en una sola celda.
+            No hay ruta de detalle de propuesta, asi que ese chip no navega. */}
+        <td className="px-4 py-3">
+          {item.propuesta_id ? (
+            <span
+              title={item.nombre_campania || `Propuesta ${item.propuesta_id}`}
+              className={`font-mono text-xs px-2 py-1 rounded-md ${isDark ? 'bg-fuchsia-500/20 text-fuchsia-300' : 'bg-fuchsia-50 text-fuchsia-600'}`}
+            >
+              {item.propuesta_id}
+            </span>
+          ) : (
+            <span className={isDark ? 'text-zinc-500' : 'text-gray-400'}>-</span>
+          )}
+        </td>
+        <td className="px-4 py-3">
+          {item.campana_id ? (
+            <span
+              onClick={(e) => { e.stopPropagation(); navigate(`/campanas/detail/${item.campana_id}`); }}
+              title={item.nombre_campania ? `Ver campaña: ${item.nombre_campania}` : `Ver campaña ${item.campana_id}`}
+              className={`font-mono text-xs px-2 py-1 rounded-md cursor-pointer hover:opacity-75 ${isDark ? 'bg-emerald-500/20 text-emerald-300' : 'bg-emerald-50 text-emerald-700'}`}
+            >
+              {item.campana_id}
+            </span>
+          ) : (
+            <span className={isDark ? 'text-zinc-500' : 'text-gray-400'}>-</span>
+          )}
+        </td>
         {/* Columna APS oculta por el momento
         <td className="px-4 py-3">
           {item.APS ? (
@@ -1649,7 +1686,7 @@ function InventoryTable({ data, isLoading, page, totalPages, total, onPageChange
           ) : (
             <>
               <div className="max-h-[400px] overflow-auto">
-                <table className="w-full min-w-[900px]">
+                <table className="w-full min-w-[1200px]">
                   <thead className={`sticky top-0 ${isDark ? 'bg-[#1a1025]/98' : 'bg-white/98'} backdrop-blur-sm z-10`}>
                     <tr className={`border-b ${isDark ? 'border-purple-900/30' : 'border-purple-200/50'}`}>
                       <th className="px-4 py-3 text-left">
@@ -1662,14 +1699,14 @@ function InventoryTable({ data, isLoading, page, totalPages, total, onPageChange
                         />
                       </th>
                       {/* Columna APS oculta por el momento (tambien su <td> y los colSpan) */}
-                      {['ID', 'Plaza', 'Municipio', 'Mueble', 'Tipo', 'Estatus', 'Cliente'].map((h) => (
+                      {['ID', 'Plaza', 'Municipio', 'Mueble', 'Tipo', 'Estatus', 'Cliente', 'Agencia', 'ID Propuesta', 'ID Campaña'].map((h) => (
                         <th key={h} className={`px-4 py-3 text-left text-[10px] font-semibold ${isDark ? 'text-purple-400' : 'text-purple-600'} uppercase tracking-wider`}>{h}</th>
                       ))}
                     </tr>
                   </thead>
                   <tbody>
                     {filteredData.length === 0 ? (
-                      <tr><td colSpan={8} className={`px-4 py-8 text-center ${isDark ? 'text-zinc-500' : 'text-gray-400'}`}>No hay inventarios</td></tr>
+                      <tr><td colSpan={11} className={`px-4 py-8 text-center ${isDark ? 'text-zinc-500' : 'text-gray-400'}`}>No hay inventarios</td></tr>
                     ) : groupedData ? (
                       groupedData.map(group => (
                         <React.Fragment key={`group-${group.name}`}>

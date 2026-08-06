@@ -248,6 +248,9 @@ export interface InventoryDetailItem {
   longitud: number | null;
   estatus: string;
   cliente_nombre: string | null;
+  agencia: string | null;
+  propuesta_id: number | null;
+  nombre_campania: string | null;
   APS?: number | null;
   campana_id?: number | null;
 }
