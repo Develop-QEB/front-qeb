@@ -4706,13 +4706,39 @@ export function CampanaDetailPage() {
                                 fecha ? `Fecha: ${fecha}` : '',
                                 log.usuario_nombre ? `Por: ${log.usuario_nombre}` : '',
                               ].filter(Boolean).join('\n');
+                              // BD SAP: mismo código de color que se usa en el resto del sistema
+                              // (CIMU azul, TEST ámbar, TRADE esmeralda).
+                              const sapCls = log.sap_database === 'CIMU' ? 'bg-blue-500/20 text-blue-300 border-blue-500/30'
+                                : log.sap_database === 'TEST' ? 'bg-amber-500/20 text-amber-300 border-amber-500/30'
+                                : log.sap_database === 'TRADE' ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500/30'
+                                : 'bg-zinc-500/20 text-zinc-300 border-zinc-500/30';
                               return (
-                                <span
-                                  title={tip}
-                                  className="text-[9px] font-semibold px-1 py-0.5 rounded bg-purple-500/20 text-purple-300 border border-purple-500/30 shrink-0 max-w-[140px] truncate cursor-help"
-                                >
-                                  → {destino}
-                                </span>
+                                <>
+                                  <span
+                                    title={tip}
+                                    className="text-[9px] font-semibold px-1 py-0.5 rounded bg-purple-500/20 text-purple-300 border border-purple-500/30 shrink-0 max-w-[140px] truncate cursor-help"
+                                  >
+                                    → {destino}
+                                  </span>
+                                  {/* Etiqueta BD SAP del post (congelada del snapshot) */}
+                                  {log.sap_database && (
+                                    <span
+                                      title={tip}
+                                      className={`text-[9px] font-semibold px-1 py-0.5 rounded border shrink-0 cursor-help ${sapCls}`}
+                                    >
+                                      {log.sap_database}
+                                    </span>
+                                  )}
+                                  {/* Etiqueta CUIC del post (congelada del snapshot) */}
+                                  {log.cuic != null && (
+                                    <span
+                                      title={tip}
+                                      className="text-[9px] font-semibold px-1 py-0.5 rounded bg-indigo-500/20 text-indigo-300 border border-indigo-500/30 shrink-0 cursor-help"
+                                    >
+                                      CUIC {log.cuic}
+                                    </span>
+                                  )}
+                                </>
                               );
                             })()}
                             {activeGroupingsAPS[0] === 'aps' && allGroupItemsAPS[0] && prefacturaAPSGroups.has(allGroupItemsAPS[0].aps) && (
