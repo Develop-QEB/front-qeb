@@ -444,6 +444,17 @@ const getNegociacionColorCls = (neg: string | null, isDark: boolean): NegColorCl
 // Mismos colores semánticos para operación/tipoDistribución en INVIANRow.
 const getOperacionColorCls = getNegociacionColorCls;
 
+// BD SAP badge — misma paleta que el resto del sistema (CIMU azul, TEST ámbar,
+// TRADE esmeralda; combinada "A/B" o desconocida = neutro).
+const getSapDbCls = (db: string | null | undefined, isDark: boolean): string => {
+  switch (db) {
+    case 'CIMU': return isDark ? 'bg-blue-500/20 text-blue-300 border-blue-500/30' : 'bg-blue-50 text-blue-700 border-blue-200';
+    case 'TEST': return isDark ? 'bg-amber-500/20 text-amber-300 border-amber-500/30' : 'bg-amber-50 text-amber-700 border-amber-200';
+    case 'TRADE': return isDark ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500/30' : 'bg-emerald-50 text-emerald-700 border-emerald-200';
+    default: return isDark ? 'bg-zinc-500/20 text-zinc-300 border-zinc-500/30' : 'bg-gray-100 text-gray-600 border-gray-200';
+  }
+};
+
 // Format date helper
 function formatDate(dateStr: string | null): string {
   if (!dateStr) return '-';
@@ -2101,6 +2112,7 @@ export function OrdenesMontajeModal({ isOpen, onClose, canExport = true }: Orden
                     <th className="px-3 py-3 text-left text-[10px] font-semibold text-purple-300 uppercase tracking-wider">APS Global</th>
                     <th className="px-3 py-3 text-left text-[10px] font-semibold text-purple-300 uppercase tracking-wider">APS Específico</th>
                     <th className="px-3 py-3 text-left text-[10px] font-semibold text-purple-300 uppercase tracking-wider">CUIC</th>
+                    <th className="px-3 py-3 text-left text-[10px] font-semibold text-purple-300 uppercase tracking-wider">BD SAP</th>
                     <th className="px-3 py-3 text-left text-[10px] font-semibold text-purple-300 uppercase tracking-wider">F. Inicio</th>
                     <th className="px-3 py-3 text-left text-[10px] font-semibold text-purple-300 uppercase tracking-wider">F. Fin</th>
                     <th className="px-3 py-3 text-left text-[10px] font-semibold text-purple-300 uppercase tracking-wider">Cliente</th>
@@ -2531,6 +2543,13 @@ const CATRow = React.memo(function CATRow({ item, isDark, showApsEspecifico = fa
         <td className="px-3 py-2 text-xs text-fuchsia-200 font-mono">{item.aps_especifico ?? '-'}</td>
       )}
       <td className="px-3 py-2 text-xs text-purple-300 font-mono">{item.cuic || '-'}</td>
+      <td className="px-3 py-2">
+        {item.bd_sap_post ? (
+          <span className={`px-2 py-0.5 rounded text-[10px] border font-semibold ${getSapDbCls(item.bd_sap_post, isDark)}`} title={`Posteado a BD SAP: ${item.bd_sap_post}`}>{item.bd_sap_post}</span>
+        ) : (
+          <span className={`text-xs ${isDark ? 'text-zinc-600' : 'text-gray-400'}`}>-</span>
+        )}
+      </td>
       <td className={`px-3 py-2 text-xs ${isDark ? 'text-zinc-400' : 'text-gray-500'}`}>{formatDate(item.fecha_inicio_periodo)}</td>
       <td className={`px-3 py-2 text-xs ${isDark ? 'text-zinc-400' : 'text-gray-500'}`}>{formatDate(item.fecha_fin_periodo)}</td>
       <td className={`px-3 py-2 text-xs ${isDark ? 'text-zinc-300' : 'text-gray-700'} max-w-[120px] truncate`} title={item.cliente || ''}>{item.cliente || '-'}</td>

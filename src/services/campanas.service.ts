@@ -393,6 +393,7 @@ export interface OrdenMontajeCAT {
   aps_global: number | null;
   tipo_periodo?: string | null;
   sap_database?: string | null;
+  bd_sap_post?: string | null; // BD SAP congelada del POST (por circuito); null si sin post
   cuic: number | null;
   fecha_inicio_periodo: string | null;
   fecha_fin_periodo: string | null;
@@ -459,6 +460,7 @@ export interface OrdenMontajeINVIAN {
   numero_articulo?: string | null;
   cto?: string | null;
   sap_database?: string | null;
+  bd_sap_post?: string | null; // BD SAP congelada del POST (por circuito); null si sin post
   posted?: boolean;
   // Para "Inventario UN+": formato (mueble) y tipo de periodo (mensual/catorcena).
   formato?: string | null;
