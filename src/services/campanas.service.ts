@@ -1050,8 +1050,8 @@ export const campanasService = {
     }
   },
 
-  async removeAPS(id: number, reservaIds: number[]): Promise<{ message: string; affected: number }> {
-    const response = await api.post<ApiResponse<{ message: string; affected: number }>>(`/campanas/${id}/remove-aps`, { reservaIds });
+  async removeAPS(id: number, reservaIds: number[], solicitudCarasIds: number[] = []): Promise<{ message: string; affected: number }> {
+    const response = await api.post<ApiResponse<{ message: string; affected: number }>>(`/campanas/${id}/remove-aps`, { reservaIds, solicitudCarasIds });
     if (!response.data.success || !response.data.data) {
       throw new Error(response.data.error || 'Error al quitar APS');
     }
