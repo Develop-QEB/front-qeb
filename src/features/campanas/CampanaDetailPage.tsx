@@ -2180,10 +2180,22 @@ export function CampanaDetailPage() {
 
     setQuitandoAPS(true);
     try {
-      // Convertir los rsv_ids a números
-      const reservaIds = Array.from(selectedItemsAPS).map(id => parseInt(id, 10));
+      // rsv_ids puede ser una lista "a,b,c" (grupos) o "sc_<caraId>" (IM). Hay que
+      // separarlos igual que al ASIGNAR (buildAPSPayloadFromSelection): normales por
+      // rsv id (todas las del grupo, no solo la 1ª), IM por solicitud_caras_id.
+      // Antes se hacía parseInt(id) → grupos perdían todas menos la 1ª y los IM daban
+      // NaN → el back no limpiaba nada y quedaban en "Con APS" (ticket 80531/APS 80969).
+      const selected = inventarioConAPS.filter(i => selectedItemsAPS.has(String(i.rsv_ids)));
+      const reservaIds = selected
+        .filter(i => !String(i.rsv_ids).startsWith('sc_'))
+        .flatMap(i => String(i.rsv_ids).split(',').map(s => parseInt(s.trim(), 10)).filter(n => !isNaN(n)));
+      const solicitudCarasIds = selected
+        .filter(i => String(i.rsv_ids).startsWith('sc_'))
+        .map(i => i.solicitud_caras_id)
+        .filter((id): id is number => id != null);
+      const totalSel = selected.length;
 
-      await campanasService.removeAPS(campanaId, reservaIds);
+      await campanasService.removeAPS(campanaId, reservaIds, solicitudCarasIds);
 
       // Refrescar las tablas
       queryClient.invalidateQueries({ queryKey: ['campana-inventario', campanaId] });
@@ -2193,7 +2205,7 @@ export function CampanaDetailPage() {
       // Limpiar selección
       setSelectedItemsAPS(new Set());
 
-      alert(`APS eliminado de ${reservaIds.length} inventario(s)`);
+      alert(`APS eliminado de ${totalSel} inventario(s)`);
     } catch (error) {
       console.error('Error al quitar APS:', error);
       setErrorPIN('Error al quitar APS. Intenta de nuevo.');
