@@ -3204,7 +3204,7 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
     // cada save re-envía la autorización → pedir Nota Dirección. Feedback
     // Jos 2026-07-08/09 — la condicion se amplio para cubrir el caso de
     // propuestas que ya tenian circuitos 'pendiente' de antes.
-    if (!skipNotaGate && propuesta.solicitud_id) {
+    if (!skipNotaGate) {
       const dgPending = caras.some(c =>
         c.autorizacion_dg === 'pendiente' ||
         (c as any)._originalDg === 'pendiente' ||
@@ -3212,6 +3212,12 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
       );
       const dcmPending = caras.some(c => c.autorizacion_dcm === 'pendiente' || (c as any)._originalDcm === 'pendiente');
       if (dgPending || dcmPending) {
+        // Blindaje: la Nota de Dirección es OBLIGATORIA al mandar a autorización.
+        // Si falta solicitud_id, NO guardar en silencio — avisar (así no se pierde la nota).
+        if (!propuesta.solicitud_id) {
+          showToast('No se pudo cargar la información de la solicitud para registrar la Nota de Dirección. Recarga la propuesta e intenta de nuevo.', 'error');
+          return;
+        }
         setPendingAuthTipo(dgPending && dcmPending ? 'ambas' : dgPending ? 'dg' : 'dcm');
         setShowNotaDireccionModal(true);
         return;
