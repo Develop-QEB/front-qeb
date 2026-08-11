@@ -2238,7 +2238,12 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
   // Confirm handler del mini-modal Nueva Nota Dirección — POST la nota y luego
   // dispara el update. Si la nota falla, no se envía el update.
   const handleNotaDireccionConfirm = async (texto: string) => {
-    if (!editSolicitudId || !pendingUpdateData) return;
+    // Blindaje: la Nota de Dirección es obligatoria al mandar a autorización.
+    // Si falta el id, avisar en vez de quedarse sin hacer nada en silencio.
+    if (!editSolicitudId || !pendingUpdateData) {
+      showToast('No se pudo registrar la Nota de Dirección (falta información de la solicitud). Recarga e intenta de nuevo.', 'error');
+      return;
+    }
     await notasDireccionService.create(editSolicitudId, texto);
     setShowNotaDireccionModal(false);
     isSubmittingRef.current = true;

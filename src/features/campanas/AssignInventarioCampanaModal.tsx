@@ -9696,18 +9696,24 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
                   onClick={() => {
                     // Flujo nuevo (feedback Jos 2026-07-15): nota primero,
                     // confirmar cambios después.
-                    if (campanaDetails?.solicitud_id) {
-                      const dgPending = caras.some(c =>
-                        c.autorizacion_dg === 'pendiente' ||
-                        (c as any)._originalDg === 'pendiente' ||
-                        (c as any)._originalDg === 'correccion'
-                      );
-                      const dcmPending = caras.some(c => c.autorizacion_dcm === 'pendiente' || (c as any)._originalDcm === 'pendiente');
-                      if (dgPending || dcmPending) {
-                        setPendingAuthTipo(dgPending && dcmPending ? 'ambas' : dgPending ? 'dg' : 'dcm');
-                        setShowNotaDireccionModal(true);
+                    const dgPending = caras.some(c =>
+                      c.autorizacion_dg === 'pendiente' ||
+                      (c as any)._originalDg === 'pendiente' ||
+                      (c as any)._originalDg === 'correccion'
+                    );
+                    const dcmPending = caras.some(c => c.autorizacion_dcm === 'pendiente' || (c as any)._originalDcm === 'pendiente');
+                    if (dgPending || dcmPending) {
+                      // Blindaje: la Nota de Dirección es OBLIGATORIA al mandar a autorización.
+                      // Antes, si faltaba campanaDetails.solicitud_id (fetch aún cargando o fallido)
+                      // se saltaba el mini-modal y se guardaba SIN nota → autorización sin nota
+                      // (notas perdidas en campañas). Ahora NO se guarda en silencio: se avisa.
+                      if (!campanaDetails?.solicitud_id) {
+                        showToast('No se pudo cargar la información de la solicitud para registrar la Nota de Dirección. Recarga la campaña e intenta de nuevo.', 'error');
                         return;
                       }
+                      setPendingAuthTipo(dgPending && dcmPending ? 'ambas' : dgPending ? 'dg' : 'dcm');
+                      setShowNotaDireccionModal(true);
+                      return;
                     }
                     setShowSaveConfirm(true);
                   }}
