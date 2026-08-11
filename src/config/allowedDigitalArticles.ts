@@ -49,6 +49,8 @@ export const ALLOWED_DIGITAL_ITEM_CODES = new Set([
   'IN-DIG-02-MX',
   'IN-DIG-03-MX',
   'IN-DIG-04-MX',
+  'IN-DIG-05-MX',
+  'IN-DIG-05-GD',
   'IN-DIG-MX',
   'IN-DIG-PRG-PB',
   'IN-ES-DIG-EM',
