@@ -430,6 +430,9 @@ function TareaRow({
 
   const getAuthStatusBadge = () => {
     if (isCancelado) return { bg: 'bg-zinc-500/20', border: 'border-zinc-500/30', color: 'text-zinc-400', label: 'Cancelado' };
+    // Filtro DG devuelto a corrección: se marca 'Rechazado' en BD, pero NO es un rechazo
+    // total — el Gerente lo devolvió al asesor para corregir. Badge ámbar, no rojo/verde.
+    if (tarea.tipo === 'Filtro Autorización DG' && isRechazado) return { bg: 'bg-amber-500/20', border: 'border-amber-500/30', color: 'text-amber-400', label: 'Devuelta a corrección' };
     if (isRechazo) return { bg: 'bg-red-500/20', border: 'border-red-500/30', color: 'text-red-400', label: 'Rechazo' };
     if (isAprobacion) return { bg: 'bg-emerald-500/20', border: 'border-emerald-500/30', color: 'text-emerald-400', label: 'Aprobada' };
     if (isRechazado) return { bg: 'bg-red-500/20', border: 'border-red-500/30', color: 'text-red-400', label: 'Rechazo' };
@@ -3888,6 +3891,9 @@ export function NotificacionesPage() {
                   const isCanceladoInline = tarea.estatus === 'Cancelado';
                   const getInlineAuthBadge = () => {
                     if (isCanceladoInline) return { bg: 'bg-zinc-500/20', border: 'border-zinc-500/30', color: 'text-zinc-400', label: 'Cancelado' };
+                    // Filtro DG devuelto a corrección: 'Rechazado' en BD pero NO es rechazo total
+                    // (el Gerente lo devolvió al asesor para corregir). Badge ámbar, no rojo/verde.
+                    if (tarea.tipo === 'Filtro Autorización DG' && isRechazadoInline) return { bg: 'bg-amber-500/20', border: 'border-amber-500/30', color: 'text-amber-400', label: 'Devuelta a corrección' };
                     if (isRechazoInline) return { bg: 'bg-red-500/20', border: 'border-red-500/30', color: 'text-red-400', label: 'Rechazo' };
                     if (isAprobacionInline) return { bg: 'bg-emerald-500/20', border: 'border-emerald-500/30', color: 'text-emerald-400', label: 'Aprobada' };
                     if (isRechazadoInline) return { bg: 'bg-red-500/20', border: 'border-red-500/30', color: 'text-red-400', label: 'Rechazo' };
