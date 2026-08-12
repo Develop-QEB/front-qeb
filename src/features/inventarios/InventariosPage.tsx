@@ -22,6 +22,7 @@ import { BloqueoModal, BloqueoData } from './BloqueoModal';
 import { BloqueoBulkModal, BloqueoBulkData } from './BloqueoBulkModal';
 import { AnalisisOcupacionModal } from './AnalisisOcupacionModal';
 import { AnalisisOcupacionListModal } from './AnalisisOcupacionListModal';
+import { AuditoriaConflictosModal } from './AuditoriaConflictosModal';
 import { ReorganizarOcupacionModal } from './ReorganizarOcupacionModal';
 import { BloqueoMasivoModal } from './BloqueoMasivoModal';
 
@@ -172,6 +173,7 @@ export function InventariosPage() {
   const [analisisInicial, setAnalisisInicial] = useState<AnalisisOcupacion | undefined>(undefined);
   const [analisisInicialInventarios, setAnalisisInicialInventarios] = useState<InventarioResumen[]>([]);
   const [isAnalisisListOpen, setIsAnalisisListOpen] = useState(false);
+  const [isAuditoriaOpen, setIsAuditoriaOpen] = useState(false);
   const [openingAnalisis, setOpeningAnalisis] = useState(false);
   const [isReorganizarOpen, setIsReorganizarOpen] = useState(false);
   const [isBloqueoMasivoOpen, setIsBloqueoMasivoOpen] = useState(false);
@@ -602,6 +604,15 @@ export function InventariosPage() {
     setAnalisisInicial(a);
     setAnalisisInicialInventarios([]);
     setIsAnalisisListOpen(false);
+    setIsAnalisisOpen(true);
+  };
+
+  // Desde la auditoría: abre el análisis de ocupación precargado con los sitios
+  // en conflicto. Los periodos se eligen en el wizard como siempre.
+  const openAnalisisDesdeAuditoria = (invs: InventarioResumen[]) => {
+    setAnalisisInicial(undefined);
+    setAnalisisInicialInventarios(invs);
+    setIsAuditoriaOpen(false);
     setIsAnalisisOpen(true);
   };
 
@@ -1257,6 +1268,18 @@ export function InventariosPage() {
                         <div className={`text-[11px] ${isDark ? 'text-zinc-500' : 'text-gray-500'}`}>Abrir un análisis guardado</div>
                       </div>
                     </button>
+                    {isDev && (
+                      <button
+                        onClick={() => { setAnalisisMenuOpen(false); setIsAuditoriaOpen(true); }}
+                        className={`w-full flex items-start gap-2.5 px-3 py-2.5 text-left text-sm transition-colors border-t ${isDark ? 'text-amber-300 hover:bg-amber-500/10 border-zinc-800' : 'text-amber-700 hover:bg-amber-50 border-gray-100'}`}
+                      >
+                        <AlertTriangle className="h-4 w-4 mt-0.5 shrink-0" />
+                        <div className="flex-1 min-w-0">
+                          <div className="font-medium">Auditoría de conflictos <span className={`ml-1 text-[10px] font-semibold ${isDark ? 'text-amber-500/80' : 'text-amber-600'}`}>DEV</span></div>
+                          <div className={`text-[11px] ${isDark ? 'text-zinc-500' : 'text-gray-500'}`}>Tradicionales con 2+ reservas, en todo el inventario</div>
+                        </div>
+                      </button>
+                    )}
                     {isDev && (
                       <button
                         onClick={() => { setAnalisisMenuOpen(false); setIsReorganizarOpen(true); }}
@@ -2466,6 +2489,15 @@ export function InventariosPage() {
         initialInventarios={analisisInicialInventarios}
         initialAnalisis={analisisInicial}
       />
+
+      {/* Auditoría de conflictos sobre todo el inventario (solo DEV) */}
+      {isDev && (
+        <AuditoriaConflictosModal
+          open={isAuditoriaOpen}
+          onClose={() => setIsAuditoriaOpen(false)}
+          onOpenEnMatriz={openAnalisisDesdeAuditoria}
+        />
+      )}
 
       {/* Lista de análisis guardados */}
       <AnalisisOcupacionListModal

@@ -77,6 +77,24 @@ export interface DisponiblesResponse {
   filtros_aplicados: DisponiblesParams;
 }
 
+/** Fila de `/inventarios/conflictos`: una celda sitio × catorcena con 2+ reservas. */
+export interface ConflictoOcupacionRow {
+  inventario_id: number;
+  codigo_unico: string | null;
+  plaza: string | null;
+  mueble: string | null;
+  ubicacion: string | null;
+  tradicional_digital: string | null;
+  anio: number;
+  numero_catorcena: number;
+  /** Reservas vivas en la celda. */
+  n: number;
+  /** Campañas (o propuestas) distintas que la ocupan. `origenes >= 2` es un
+   *  choque real entre ventas; `origenes === 1` con `n > 1` son reservas
+   *  duplicadas dentro de la misma campaña. */
+  origenes: number;
+}
+
 export const inventariosService = {
   async getAll(params: InventariosParams = {}): Promise<PaginatedResponse<Inventario>> {
     const response = await api.get<PaginatedResponse<Inventario>>('/inventarios', { params });
@@ -281,6 +299,27 @@ export const inventariosService = {
       throw new Error(response.data.error || 'Error al obtener historial');
     }
     return response.data.data;
+  },
+
+  /**
+   * Celdas (sitio × catorcena) donde un inventario Tradicional tiene 2+ reservas.
+   * Sin `ids` audita todo el inventario en una sola query agregada.
+   * Solo rol DEV: el backend responde 403 al resto.
+   */
+  async getConflictosOcupacion(
+    catorcenas: { numero: number; anio: number }[],
+    ids?: number[],
+    opts?: { signal?: AbortSignal; timeout?: number }
+  ): Promise<ConflictoOcupacionRow[]> {
+    const response = await api.post<ApiResponse<{ conflictos: ConflictoOcupacionRow[] }>>(
+      '/inventarios/conflictos',
+      ids ? { catorcenas, ids } : { catorcenas },
+      { signal: opts?.signal, timeout: opts?.timeout ?? 120_000 }
+    );
+    if (!response.data.success || !response.data.data) {
+      throw new Error(response.data.error || 'Error al obtener conflictos');
+    }
+    return response.data.data.conflictos;
   },
 
   async getAcciones(id: number): Promise<AccionInventario[]> {
