@@ -1,6 +1,25 @@
 import api from '../lib/api';
 import { Propuesta, PaginatedResponse, ApiResponse } from '../types';
 
+// Conflicto de venta al aprobar: una o más piezas tradicionales ya se vendieron
+// en otra campaña en el período. El back responde 409 con la lista.
+export interface ConflictoVenta {
+  reservaId: number;
+  espacioId: number;
+  codigoUnico: string | null;
+  inicioPeriodo: string;
+  finPeriodo: string;
+}
+
+export class ConflictoVentaError extends Error {
+  conflictos: ConflictoVenta[];
+  constructor(message: string, conflictos: ConflictoVenta[]) {
+    super(message);
+    this.name = 'ConflictoVentaError';
+    this.conflictos = conflictos;
+  }
+}
+
 export interface PropuestasParams {
   page?: number;
   limit?: number;
@@ -195,9 +214,18 @@ export const propuestasService = {
   },
 
   async approve(id: number, params: ApproveParams): Promise<void> {
-    const response = await api.post<ApiResponse<void>>(`/propuestas/${id}/approve`, params);
-    if (!response.data.success) {
-      throw new Error(response.data.error || 'Error al aprobar propuesta');
+    try {
+      const response = await api.post<ApiResponse<void>>(`/propuestas/${id}/approve`, params);
+      if (!response.data.success) {
+        throw new Error(response.data.error || 'Error al aprobar propuesta');
+      }
+    } catch (err: unknown) {
+      // 409 = guardián de venta: piezas ya vendidas en otra campaña.
+      const resp = (err as { response?: { status?: number; data?: { error?: string; conflictos?: ConflictoVenta[] } } }).response;
+      if (resp?.status === 409 && Array.isArray(resp.data?.conflictos)) {
+        throw new ConflictoVentaError(resp.data?.error || 'Piezas ya vendidas en otra campaña', resp.data.conflictos);
+      }
+      throw err;
     }
   },
 

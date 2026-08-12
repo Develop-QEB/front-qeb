@@ -10,7 +10,7 @@ import {
 } from 'lucide-react';
 import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip as RechartsTooltip } from 'recharts';
 import { Header } from '../../components/layout/Header';
-import { propuestasService, PropuestaComentario } from '../../services/propuestas.service';
+import { propuestasService, PropuestaComentario, ConflictoVentaError } from '../../services/propuestas.service';
 import { solicitudesService, UserOption } from '../../services/solicitudes.service';
 import { Propuesta, Catorcena } from '../../types';
 import { formatCurrency, formatDate } from '../../lib/utils';
@@ -1144,6 +1144,23 @@ function ApproveModal({ isOpen, onClose, propuesta, onSuccess }: ApproveModalPro
                 : carasRechazadasAprobar.dg > 0 ? ` (${carasRechazadasAprobar.dg} por DG)` : ` (${carasRechazadasAprobar.dcm} por DCM)`}
               . Edita o quita esos circuitos primero.
             </span>
+          </div>
+        )}
+        {/* Conflicto de venta (409): piezas ya vendidas en otra campaña */}
+        {approveMutation.error instanceof ConflictoVentaError && (
+          <div className={`mx-4 sm:mx-6 mb-2 flex items-start gap-2 p-3 rounded-lg border ${isDark ? 'bg-red-900/20 border-red-500/30' : 'bg-red-50 border-red-200'}`}>
+            <AlertTriangle className="h-5 w-5 text-red-400 flex-shrink-0 mt-0.5" />
+            <div className="min-w-0">
+              <p className={`text-sm font-medium ${isDark ? 'text-red-200' : 'text-red-700'}`}>
+                No se pudo aprobar: {approveMutation.error.conflictos.length} pieza(s) ya se vendieron en otra campaña
+              </p>
+              <p className={`text-xs mt-1 break-words ${isDark ? 'text-red-300/70' : 'text-red-600/70'}`}>
+                {approveMutation.error.conflictos.map(c => c.codigoUnico || `espacio ${c.espacioId}`).join(', ')}
+              </p>
+              <p className={`text-xs mt-1 ${isDark ? 'text-red-300/70' : 'text-red-600/70'}`}>
+                Edita el inventario de la propuesta (esas piezas ya no aparecen disponibles) y reintenta.
+              </p>
+            </div>
           </div>
         )}
         {/* Footer */}
