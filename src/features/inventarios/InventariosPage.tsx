@@ -999,12 +999,15 @@ export function InventariosPage() {
         </div>
         {/* Body */}
         <div className="flex-1 overflow-auto p-5">
+          {/* Aviso informativo: antes esto bloqueaba la edición (inputs disabled +
+              botón Guardar oculto). Ahora solo advierte — se permite editar un
+              inventario con reservas activas. */}
           {isEdit && editItemOcupado && (
-            <div className={`mb-4 flex items-center gap-3 px-4 py-3 rounded-xl ${isDark ? 'bg-red-500/10 border-red-500/20' : 'bg-red-50 border-red-200'} border`}>
-              <AlertTriangle className={`h-5 w-5 flex-shrink-0 ${isDark ? 'text-red-400' : 'text-red-600'}`} />
+            <div className={`mb-4 flex items-center gap-3 px-4 py-3 rounded-xl ${isDark ? 'bg-amber-500/10 border-amber-500/20' : 'bg-amber-50 border-amber-200'} border`}>
+              <AlertTriangle className={`h-5 w-5 flex-shrink-0 ${isDark ? 'text-amber-400' : 'text-amber-600'}`} />
               <div>
-                <p className={`text-sm font-medium ${isDark ? 'text-red-300' : 'text-red-700'}`}>Inventario Ocupado/Reservado</p>
-                <p className={`text-xs ${isDark ? 'text-red-400/70' : 'text-red-500'}`}>Este inventario tiene reservas activas. No se permite editar.</p>
+                <p className={`text-sm font-medium ${isDark ? 'text-amber-300' : 'text-amber-700'}`}>Inventario Ocupado/Reservado</p>
+                <p className={`text-xs ${isDark ? 'text-amber-400/70' : 'text-amber-600'}`}>Este inventario tiene reservas activas. Los cambios afectarán campañas en curso.</p>
               </div>
             </div>
           )}
@@ -1016,7 +1019,6 @@ export function InventariosPage() {
                   <select
                     value={formData[f.key] || ''}
                     onChange={e => setFormData({ ...formData, [f.key]: e.target.value })}
-                    disabled={isEdit && editItemOcupado}
                     className={`w-full px-3 py-2.5 ${isDark ? 'bg-zinc-800/80 border-zinc-700/50 text-white' : 'bg-gray-50 border-gray-200 text-gray-900'} border rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-purple-500/30 focus:border-purple-500/40 transition-all disabled:opacity-50 disabled:cursor-not-allowed`}
                   >
                     <option value="">— Seleccionar —</option>
@@ -1027,7 +1029,6 @@ export function InventariosPage() {
                     type={f.type || 'text'}
                     value={formData[f.key] || ''}
                     onChange={e => setFormData({ ...formData, [f.key]: e.target.value })}
-                    disabled={isEdit && editItemOcupado}
                     step={f.type === 'number' ? 'any' : undefined}
                     className={`w-full px-3 py-2.5 ${isDark ? 'bg-zinc-800/80 border-zinc-700/50 text-white placeholder:text-zinc-600' : 'bg-gray-50 border-gray-200 text-gray-900 placeholder:text-gray-400'} border rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-purple-500/30 focus:border-purple-500/40 transition-all disabled:opacity-50 disabled:cursor-not-allowed`}
                   />
@@ -1042,16 +1043,14 @@ export function InventariosPage() {
             className={`px-4 py-2.5 rounded-xl text-sm ${isDark ? 'text-zinc-400 hover:text-white border-zinc-700/50 hover:bg-zinc-800' : 'text-gray-500 hover:text-gray-900 border-gray-200 hover:bg-gray-100'} border transition-all`}>
             Cancelar
           </button>
-          {!(isEdit && editItemOcupado) && (
-            <button
-              onClick={() => handleSave(isEdit)}
-              disabled={saving}
-              className="px-5 py-2.5 bg-purple-600 hover:bg-purple-700 disabled:opacity-50 text-white rounded-xl text-sm font-medium transition-all flex items-center gap-2 shadow-lg shadow-purple-500/20"
-            >
-              {saving && <Loader2 className="h-4 w-4 animate-spin" />}
-              {isEdit ? 'Guardar Cambios' : 'Crear Inventario'}
-            </button>
-          )}
+          <button
+            onClick={() => handleSave(isEdit)}
+            disabled={saving}
+            className="px-5 py-2.5 bg-purple-600 hover:bg-purple-700 disabled:opacity-50 text-white rounded-xl text-sm font-medium transition-all flex items-center gap-2 shadow-lg shadow-purple-500/20"
+          >
+            {saving && <Loader2 className="h-4 w-4 animate-spin" />}
+            {isEdit ? 'Guardar Cambios' : 'Crear Inventario'}
+          </button>
         </div>
       </div>
     </div>
