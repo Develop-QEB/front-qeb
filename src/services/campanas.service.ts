@@ -934,16 +934,7 @@ export const campanasService = {
     return response.data.data;
   },
 
-  async getStats(params?: {
-    status?: string;
-    search?: string;
-    yearInicio?: number;
-    yearFin?: number;
-    catorcenaInicio?: number;
-    catorcenaFin?: number;
-    tipoPeriodo?: string;
-    excludeRechazadas?: boolean;
-  }): Promise<CampanaStats> {
+  async getStats(params?: Omit<CampanasParams, 'page' | 'limit'>): Promise<CampanaStats> {
     const response = await api.get<ApiResponse<CampanaStats>>('/campanas/stats', { params });
     if (!response.data.success || !response.data.data) {
       throw new Error(response.data.error || 'Error al obtener estadisticas');

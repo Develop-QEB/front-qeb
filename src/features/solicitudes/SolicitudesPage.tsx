@@ -854,25 +854,6 @@ export function SolicitudesPage() {
   // "todo MENOS rechazadas", así que el chip de Rechazada no mostraba nada.
   const excludeRechazadas = !statusInAdvanced && status !== 'Rechazada';
 
-  // Fetch stats with all active filters.
-  // staleTime corto: el WebSocket invalida la query en cambios reales, así
-  // evitamos refetches innecesarios en cada re-render del padre.
-  // Cuando search lo hace el backend, también lo mandamos a stats para que
-  // el total y el chart reflejen los resultados filtrados.
-  const { data: stats } = useQuery({
-    queryKey: ['solicitudes-stats', yearInicio, yearFin, catorcenaInicio, catorcenaFin, status, searchForBackend, excludeRechazadas],
-    queryFn: () => solicitudesService.getStats({
-      yearInicio,
-      yearFin,
-      catorcenaInicio,
-      catorcenaFin,
-      status: status || undefined,
-      search: searchForBackend,
-      excludeRechazadas,
-    }),
-    staleTime: 1000 * 30, // 30 s
-  });
-
   // Fetch ALL data sólo cuando hay groupBy o filtros avanzados (esos siguen
   // siendo cliente-side). Search ya va al backend con paginación normal.
   const needsAllData = !!groupBy || advancedFilters.length > 0;
@@ -884,6 +865,28 @@ export function SolicitudesPage() {
   const effectiveExcludeRechazadas = (
     historialFilter.modo === 'cambio_estatus' && historialFilter.estatusValor === 'Rechazada'
   ) ? false : excludeRechazadas;
+
+  // Fetch stats with all active filters.
+  // staleTime corto: el WebSocket invalida la query en cambios reales, así
+  // evitamos refetches innecesarios en cada re-render del padre.
+  // Mismos filtros que el listado (search, tipoPeriodo, historial y el
+  // exclude efectivo): si alguno falta, el total y el chart quedan en un
+  // universo distinto al de la tabla.
+  const { data: stats } = useQuery({
+    queryKey: ['solicitudes-stats', yearInicio, yearFin, catorcenaInicio, catorcenaFin, status, searchForBackend, tipoPeriodo, historialFilter, effectiveExcludeRechazadas],
+    queryFn: () => solicitudesService.getStats({
+      yearInicio,
+      yearFin,
+      catorcenaInicio,
+      catorcenaFin,
+      status: status || undefined,
+      search: searchForBackend,
+      tipoPeriodo: tipoPeriodo || undefined,
+      excludeRechazadas: effectiveExcludeRechazadas,
+      ...historialFilter,
+    }),
+    staleTime: 1000 * 30, // 30 s
+  });
 
   // Fetch solicitudes
   const { data, isLoading } = useQuery({

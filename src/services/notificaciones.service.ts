@@ -301,7 +301,7 @@ export const notificacionesService = {
 
 // ==================== TIPOS ACTIVIDAD COMERCIAL ====================
 
-export type ActividadSubtipo = 'Campaña' | 'Propuesta';
+export type ActividadSubtipo = 'Campaña' | 'Propuesta' | 'Lead';
 
 export interface ActividadRefCampana {
   id: number;
