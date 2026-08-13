@@ -1500,11 +1500,20 @@ export function PropuestasPage() {
   );
   const excludeRechazadas = !statusInAdvanced;
 
+  // Si el filtro de historial pide "cambió a Rechazada", desactivamos el
+  // exclude por default — si no, el filtro daria 0 porque la pagina oculta
+  // todo lo que tiene status='Rechazada' actual.
+  const effectiveExcludeRechazadas = (
+    historialFilter.modo === 'cambio_estatus' && historialFilter.estatusValor === 'Rechazada'
+  ) ? false : excludeRechazadas;
+
   // Stats: WS invalida en cambios reales; staleTime corto evita refetches en
   // re-renders del padre. Pasamos `search` para que total/chart reflejen los
-  // resultados filtrados aunque estemos en la página 1 de N.
+  // resultados filtrados aunque estemos en la página 1 de N, y `historialFilter`
+  // + `effectiveExcludeRechazadas` para que los KPIs no queden en un universo
+  // distinto al del listado.
   const { data: stats } = useQuery({
-    queryKey: ['propuestas-stats', status, yearInicio, yearFin, catorcenaInicio, catorcenaFin, tipoPeriodo, serverSearch, excludeRechazadas],
+    queryKey: ['propuestas-stats', status, yearInicio, yearFin, catorcenaInicio, catorcenaFin, tipoPeriodo, serverSearch, historialFilter, effectiveExcludeRechazadas],
     queryFn: () => propuestasService.getStats({
       status: status || undefined,
       yearInicio,
@@ -1513,17 +1522,11 @@ export function PropuestasPage() {
       catorcenaFin,
       tipoPeriodo: tipoPeriodo || undefined,
       search: serverSearch,
-      excludeRechazadas,
+      excludeRechazadas: effectiveExcludeRechazadas,
+      ...historialFilter,
     }),
     staleTime: 1000 * 30,
   });
-
-  // Si el filtro de historial pide "cambió a Rechazada", desactivamos el
-  // exclude por default — si no, el filtro daria 0 porque la pagina oculta
-  // todo lo que tiene status='Rechazada' actual.
-  const effectiveExcludeRechazadas = (
-    historialFilter.modo === 'cambio_estatus' && historialFilter.estatusValor === 'Rechazada'
-  ) ? false : excludeRechazadas;
 
   const { data, isLoading } = useQuery({
     queryKey: ['propuestas', needsAllData ? 1 : page, status, serverSearch, yearInicio, yearFin, catorcenaInicio, catorcenaFin, sortBy, sortOrder, groupBy, tipoPeriodo, needsAllData, historialFilter, effectiveExcludeRechazadas],

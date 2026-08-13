@@ -1301,9 +1301,11 @@ export function CampanasPage() {
 
   // Stats query — global KPIs with same filters.
   // Incluimos serverSearch para que total/chart reflejen los resultados
-  // filtrados aunque estemos en la página 1 de N.
+  // filtrados aunque estemos en la página 1 de N, e historialFilter +
+  // effectiveExcludeRechazadas para que los KPIs no queden en un universo
+  // distinto al del listado.
   const { data: statsData, isLoading: isLoadingStats } = useQuery({
-    queryKey: ['campanas-stats', status, yearInicio, yearFin, catorcenaInicio, catorcenaFin, tipoPeriodo, serverSearch, excludeRechazadas],
+    queryKey: ['campanas-stats', status, yearInicio, yearFin, catorcenaInicio, catorcenaFin, tipoPeriodo, serverSearch, historialFilter, effectiveExcludeRechazadas],
     queryFn: () =>
       campanasService.getStats({
         status: (status && status !== 'Incompleta') ? status : undefined,
@@ -1313,7 +1315,8 @@ export function CampanasPage() {
         catorcenaInicio,
         catorcenaFin,
         tipoPeriodo: tipoPeriodo || undefined,
-        excludeRechazadas,
+        excludeRechazadas: effectiveExcludeRechazadas,
+        ...historialFilter,
       }),
     staleTime: 1000 * 30,
   });
