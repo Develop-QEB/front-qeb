@@ -1216,7 +1216,9 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
         const matchingCara = caras.find(c => c.id === r.solicitud_cara_id);
         // Mensual = todo cuenta como Flujo (regla Gran Formato), aunque el inventario
         // físico sea Contraflujo (caso de circuitos digitales).
-        const tipo = r.estatus === 'Bonificado'
+        // Bonificación firme de campaña llega como 'Vendido bonificado' (antes 'Bonificado');
+        // ambas deben clasificarse como Bonificacion para que las barras KPI cuenten.
+        const tipo = (r.estatus === 'Bonificado' || r.estatus === 'Vendido bonificado')
           ? 'Bonificacion'
           : (tipoPeriodo === 'mensual' ? 'Flujo' : (String(r.tipo_de_cara).startsWith('Flujo') ? 'Flujo' : 'Contraflujo'));
 
