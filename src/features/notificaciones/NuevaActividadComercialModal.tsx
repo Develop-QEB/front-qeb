@@ -70,7 +70,8 @@ export function NuevaActividadComercialModal({ isOpen, onClose }: Props) {
     queryFn: () => subtipo === 'Campaña'
       ? notificacionesService.getCampanasParaActividad(debouncedSearch || undefined)
       : notificacionesService.getPropuestasParaActividad(debouncedSearch || undefined),
-    enabled: isOpen,
+    // Lead no tiene busqueda (no hay campaña/propuesta que traer).
+    enabled: isOpen && subtipo !== 'Lead',
   });
 
   const createMutation = useMutation({
@@ -100,11 +101,14 @@ export function NuevaActividadComercialModal({ isOpen, onClose }: Props) {
     const dias = activarRecordatorio && fechaEntrega
       ? Math.max(0, Math.min(365, parseInt(diasAntes || '0', 10) || 0))
       : undefined;
+    // Payload:
+    //   - Lead: manda subtipo='Lead' sin ref_id (siempre, aunque no haya selected).
+    //   - Campaña/Propuesta con seleccion: manda subtipo + ref_id.
+    //   - Campaña/Propuesta sin seleccion: omite ambos (actividad libre).
+    const isLead = subtipo === 'Lead';
     createMutation.mutate({
-      // Campaña/Propuesta ahora es OPCIONAL. Si no hay selección, subtipo/ref_id
-      // se omiten. Cliente y marca se mandan tal como los editó el usuario.
-      subtipo: selected ? subtipo : undefined,
-      ref_id: selected?.id,
+      subtipo: isLead ? 'Lead' : (selected ? subtipo : undefined),
+      ref_id: isLead ? undefined : selected?.id,
       cliente: cliente.trim() || undefined,
       marca: marca.trim() || undefined,
       descripcion: desc,
@@ -210,17 +214,26 @@ export function NuevaActividadComercialModal({ isOpen, onClose }: Props) {
                 >
                   <option value="Campaña">Campaña</option>
                   <option value="Propuesta">Propuesta</option>
+                  <option value="Lead">Lead</option>
                 </select>
               </div>
               <div>
-                <label className={labelCls}>Buscar {subtipo.toLowerCase()} (opcional)</label>
+                {/* Lead no tiene campaña ni propuesta asociada: el buscador se
+                    bloquea (ajuste 2026-08-13). El usuario captura cliente y
+                    marca a mano en los inputs de abajo. */}
+                <label className={labelCls}>
+                  {subtipo === 'Lead'
+                    ? 'Buscar (no aplica para Lead)'
+                    : `Buscar ${subtipo.toLowerCase()} (opcional)`}
+                </label>
                 <div className="relative">
                   <Search className={`absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 ${isDark ? 'text-zinc-500' : 'text-gray-400'}`} />
                   <input
-                    className={`${inputCls} pl-9`}
-                    placeholder={`Nombre, ID, cliente o marca...`}
-                    value={search}
+                    className={`${inputCls} pl-9 ${subtipo === 'Lead' ? 'opacity-50 cursor-not-allowed' : ''}`}
+                    placeholder={subtipo === 'Lead' ? 'Lead — captura cliente/marca abajo' : 'Nombre, ID, cliente o marca...'}
+                    value={subtipo === 'Lead' ? '' : search}
                     onChange={(e) => { setSearch(e.target.value); setSelected(null); }}
+                    disabled={subtipo === 'Lead'}
                   />
                 </div>
               </div>
@@ -229,7 +242,7 @@ export function NuevaActividadComercialModal({ isOpen, onClose }: Props) {
             {/* Resultados (solo cuando el usuario esta buscando y aun no ha
                 seleccionado). Al elegir uno, se autorellenan Cliente/Marca abajo
                 sin bloquearlos. */}
-            {!selected && search.trim().length > 0 && (
+            {subtipo !== 'Lead' && !selected && search.trim().length > 0 && (
               <div className={`rounded-lg border max-h-52 overflow-y-auto ${isDark ? 'border-zinc-800' : 'border-gray-200'}`}>
                 {listQuery.isLoading && (
                   <div className={`px-3 py-3 text-xs flex items-center gap-2 ${isDark ? 'text-zinc-500' : 'text-gray-400'}`}>
