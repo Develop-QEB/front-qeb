@@ -22,6 +22,7 @@ import { BloqueoModal, BloqueoData } from './BloqueoModal';
 import { BloqueoBulkModal, BloqueoBulkData } from './BloqueoBulkModal';
 import { AnalisisOcupacionModal } from './AnalisisOcupacionModal';
 import { AnalisisOcupacionListModal } from './AnalisisOcupacionListModal';
+import { AuditoriaConflictosModal } from './AuditoriaConflictosModal';
 import { ReorganizarOcupacionModal } from './ReorganizarOcupacionModal';
 import { BloqueoMasivoModal } from './BloqueoMasivoModal';
 
@@ -172,6 +173,7 @@ export function InventariosPage() {
   const [analisisInicial, setAnalisisInicial] = useState<AnalisisOcupacion | undefined>(undefined);
   const [analisisInicialInventarios, setAnalisisInicialInventarios] = useState<InventarioResumen[]>([]);
   const [isAnalisisListOpen, setIsAnalisisListOpen] = useState(false);
+  const [isAuditoriaOpen, setIsAuditoriaOpen] = useState(false);
   const [openingAnalisis, setOpeningAnalisis] = useState(false);
   const [isReorganizarOpen, setIsReorganizarOpen] = useState(false);
   const [isBloqueoMasivoOpen, setIsBloqueoMasivoOpen] = useState(false);
@@ -605,6 +607,15 @@ export function InventariosPage() {
     setIsAnalisisOpen(true);
   };
 
+  // Desde la auditoría: abre el análisis de ocupación precargado con los sitios
+  // en conflicto. Los periodos se eligen en el wizard como siempre.
+  const openAnalisisDesdeAuditoria = (invs: InventarioResumen[]) => {
+    setAnalisisInicial(undefined);
+    setAnalisisInicialInventarios(invs);
+    setIsAuditoriaOpen(false);
+    setIsAnalisisOpen(true);
+  };
+
   const SortIcon = ({ col }: { col: SortCol }) => {
     if (sortCol !== col) return <ArrowUpDown className={`h-3 w-3 ${isDark ? 'text-zinc-600' : 'text-gray-400'} ml-1`} />;
     return sortDir === 'asc' ? <ArrowUp className={`h-3 w-3 ${isDark ? 'text-purple-400' : 'text-purple-600'} ml-1`} /> : <ArrowDown className={`h-3 w-3 ${isDark ? 'text-purple-400' : 'text-purple-600'} ml-1`} />;
@@ -988,12 +999,15 @@ export function InventariosPage() {
         </div>
         {/* Body */}
         <div className="flex-1 overflow-auto p-5">
+          {/* Aviso informativo: antes esto bloqueaba la edición (inputs disabled +
+              botón Guardar oculto). Ahora solo advierte — se permite editar un
+              inventario con reservas activas. */}
           {isEdit && editItemOcupado && (
-            <div className={`mb-4 flex items-center gap-3 px-4 py-3 rounded-xl ${isDark ? 'bg-red-500/10 border-red-500/20' : 'bg-red-50 border-red-200'} border`}>
-              <AlertTriangle className={`h-5 w-5 flex-shrink-0 ${isDark ? 'text-red-400' : 'text-red-600'}`} />
+            <div className={`mb-4 flex items-center gap-3 px-4 py-3 rounded-xl ${isDark ? 'bg-amber-500/10 border-amber-500/20' : 'bg-amber-50 border-amber-200'} border`}>
+              <AlertTriangle className={`h-5 w-5 flex-shrink-0 ${isDark ? 'text-amber-400' : 'text-amber-600'}`} />
               <div>
-                <p className={`text-sm font-medium ${isDark ? 'text-red-300' : 'text-red-700'}`}>Inventario Ocupado/Reservado</p>
-                <p className={`text-xs ${isDark ? 'text-red-400/70' : 'text-red-500'}`}>Este inventario tiene reservas activas. No se permite editar.</p>
+                <p className={`text-sm font-medium ${isDark ? 'text-amber-300' : 'text-amber-700'}`}>Inventario Ocupado/Reservado</p>
+                <p className={`text-xs ${isDark ? 'text-amber-400/70' : 'text-amber-600'}`}>Este inventario tiene reservas activas. Los cambios afectarán campañas en curso.</p>
               </div>
             </div>
           )}
@@ -1005,7 +1019,6 @@ export function InventariosPage() {
                   <select
                     value={formData[f.key] || ''}
                     onChange={e => setFormData({ ...formData, [f.key]: e.target.value })}
-                    disabled={isEdit && editItemOcupado}
                     className={`w-full px-3 py-2.5 ${isDark ? 'bg-zinc-800/80 border-zinc-700/50 text-white' : 'bg-gray-50 border-gray-200 text-gray-900'} border rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-purple-500/30 focus:border-purple-500/40 transition-all disabled:opacity-50 disabled:cursor-not-allowed`}
                   >
                     <option value="">— Seleccionar —</option>
@@ -1016,7 +1029,6 @@ export function InventariosPage() {
                     type={f.type || 'text'}
                     value={formData[f.key] || ''}
                     onChange={e => setFormData({ ...formData, [f.key]: e.target.value })}
-                    disabled={isEdit && editItemOcupado}
                     step={f.type === 'number' ? 'any' : undefined}
                     className={`w-full px-3 py-2.5 ${isDark ? 'bg-zinc-800/80 border-zinc-700/50 text-white placeholder:text-zinc-600' : 'bg-gray-50 border-gray-200 text-gray-900 placeholder:text-gray-400'} border rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-purple-500/30 focus:border-purple-500/40 transition-all disabled:opacity-50 disabled:cursor-not-allowed`}
                   />
@@ -1031,16 +1043,14 @@ export function InventariosPage() {
             className={`px-4 py-2.5 rounded-xl text-sm ${isDark ? 'text-zinc-400 hover:text-white border-zinc-700/50 hover:bg-zinc-800' : 'text-gray-500 hover:text-gray-900 border-gray-200 hover:bg-gray-100'} border transition-all`}>
             Cancelar
           </button>
-          {!(isEdit && editItemOcupado) && (
-            <button
-              onClick={() => handleSave(isEdit)}
-              disabled={saving}
-              className="px-5 py-2.5 bg-purple-600 hover:bg-purple-700 disabled:opacity-50 text-white rounded-xl text-sm font-medium transition-all flex items-center gap-2 shadow-lg shadow-purple-500/20"
-            >
-              {saving && <Loader2 className="h-4 w-4 animate-spin" />}
-              {isEdit ? 'Guardar Cambios' : 'Crear Inventario'}
-            </button>
-          )}
+          <button
+            onClick={() => handleSave(isEdit)}
+            disabled={saving}
+            className="px-5 py-2.5 bg-purple-600 hover:bg-purple-700 disabled:opacity-50 text-white rounded-xl text-sm font-medium transition-all flex items-center gap-2 shadow-lg shadow-purple-500/20"
+          >
+            {saving && <Loader2 className="h-4 w-4 animate-spin" />}
+            {isEdit ? 'Guardar Cambios' : 'Crear Inventario'}
+          </button>
         </div>
       </div>
     </div>
@@ -1257,6 +1267,18 @@ export function InventariosPage() {
                         <div className={`text-[11px] ${isDark ? 'text-zinc-500' : 'text-gray-500'}`}>Abrir un análisis guardado</div>
                       </div>
                     </button>
+                    {isDev && (
+                      <button
+                        onClick={() => { setAnalisisMenuOpen(false); setIsAuditoriaOpen(true); }}
+                        className={`w-full flex items-start gap-2.5 px-3 py-2.5 text-left text-sm transition-colors border-t ${isDark ? 'text-amber-300 hover:bg-amber-500/10 border-zinc-800' : 'text-amber-700 hover:bg-amber-50 border-gray-100'}`}
+                      >
+                        <AlertTriangle className="h-4 w-4 mt-0.5 shrink-0" />
+                        <div className="flex-1 min-w-0">
+                          <div className="font-medium">Auditoría de conflictos <span className={`ml-1 text-[10px] font-semibold ${isDark ? 'text-amber-500/80' : 'text-amber-600'}`}>DEV</span></div>
+                          <div className={`text-[11px] ${isDark ? 'text-zinc-500' : 'text-gray-500'}`}>Tradicionales con 2+ reservas, en todo el inventario</div>
+                        </div>
+                      </button>
+                    )}
                     {isDev && (
                       <button
                         onClick={() => { setAnalisisMenuOpen(false); setIsReorganizarOpen(true); }}
@@ -2466,6 +2488,15 @@ export function InventariosPage() {
         initialInventarios={analisisInicialInventarios}
         initialAnalisis={analisisInicial}
       />
+
+      {/* Auditoría de conflictos sobre todo el inventario (solo DEV) */}
+      {isDev && (
+        <AuditoriaConflictosModal
+          open={isAuditoriaOpen}
+          onClose={() => setIsAuditoriaOpen(false)}
+          onOpenEnMatriz={openAnalisisDesdeAuditoria}
+        />
+      )}
 
       {/* Lista de análisis guardados */}
       <AnalisisOcupacionListModal

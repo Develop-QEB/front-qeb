@@ -10,6 +10,14 @@ export interface NotificacionesParams {
   search?: string;
   orderBy?: string;
   orderDir?: 'asc' | 'desc';
+  /**
+   * Pestaña de /notificaciones. El back aplica el MISMO criterio de destinatario
+   * que el badge de la campanita, de modo que el `total` que regresa es el conteo
+   * real y no depende de cuántas filas alcance a bajar el `limit`.
+   */
+  vista?: 'notificaciones' | 'tareas';
+  /** Filtro rápido resuelto en servidor: 'pendientes' | 'finalizadas' | 'no_leidas' | 'leidas' */
+  quick?: string;
 }
 
 export interface CreateTareaParams {

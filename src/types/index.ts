@@ -454,6 +454,9 @@ export interface NotificacionStats {
   atendidas?: number;
   /** Conteo exacto para la burbuja roja del header. */
   badge_count?: number;
+  /** Desglose del badge por pestaña. badge_count = notificaciones + tareas. */
+  badge_notificaciones?: number;
+  badge_tareas?: number;
   por_tipo: Record<string, number>;
   por_estatus?: Record<string, number>;
 }
