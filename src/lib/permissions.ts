@@ -548,7 +548,10 @@ const rolePermissions: Partial<Record<UserRole, Partial<RolePermissions>>> = {
     canSeeGestionArtes: true,
     canEditGestionArtes: false,
     canResolveProduccionTasks: false,
-    canSeeOrdenesMontajeButton: false,
+    // Feedback 2026-08-13 (Juan Manuel López Rodríguez): habilitar botón
+    // y descarga de Órdenes de Montaje para Gerente Comercial (antes en
+    // false). Alineado con Director Comercial y demás roles gerenciales.
+    canSeeOrdenesMontajeButton: true,
 
     canSeeTabProgramacion: true,
     canSeeTabImpresiones: true,
@@ -564,7 +567,7 @@ const rolePermissions: Partial<Record<UserRole, Partial<RolePermissions>>> = {
     canEditInventarios: false,
     canDeleteInventarios: false,
 
-    canExportOrdenesMontaje: false,
+    canExportOrdenesMontaje: true,
   },
   // ============================================================================
   // COMERCIAL - NUEVOS
