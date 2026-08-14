@@ -8249,8 +8249,8 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
                             // físicos donde corre la pantalla rotando ambos formatos).
                             const formato = tipo === 'Digital'
                               ? (formatoBase && formatoBase !== 'PARABUS'
-                                  ? `${formatoBase}, PARABUS, MUPIS`
-                                  : 'PARABUS, MUPIS')
+                                  ? `${formatoBase}, PARABUS, MUPIS, COLUMNA`
+                                  : 'PARABUS, MUPIS, COLUMNA')
                               : formatoBase;
                             const isCortesia = item.ItemCode.toUpperCase().startsWith('CT');
                             const isIntercambio = item.ItemCode.toUpperCase().startsWith('IN');
