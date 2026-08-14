@@ -8255,12 +8255,12 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
                             const plazaPorNombre = plazasBackend?.find(p => itemNameNorm.includes(stripAccents(p.plaza.toUpperCase())));
                             const formatoBase = getFormatoFromArticulo(item.ItemName, item.ItemCode);
                             const tipo = getTipoFromName(item.ItemName);
-                            // Para artículos digitales: incluir PARABUS y MUPIS (los muebles
-                            // físicos donde corre la pantalla rotando ambos formatos).
+                            // Para artículos digitales: incluir PARABUS, MUPIS y COLUMNA (los
+                            // muebles físicos donde corre la pantalla rotando los formatos).
                             const formato = tipo === 'Digital'
                               ? (formatoBase && formatoBase !== 'PARABUS'
-                                  ? `${formatoBase}, PARABUS, MUPIS`
-                                  : 'PARABUS, MUPIS')
+                                  ? `${formatoBase}, PARABUS, MUPIS, COLUMNA`
+                                  : 'PARABUS, MUPIS, COLUMNA')
                               : formatoBase;
                             const isCortesia = item.ItemCode.toUpperCase().startsWith('CT');
                             const isIntercambio = item.ItemCode.toUpperCase().startsWith('IN');

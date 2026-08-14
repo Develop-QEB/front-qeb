@@ -3237,8 +3237,8 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
                       // Si el formato detectado es otro (ej. COLUMNA), agregar MUPIS además.
                       const formato = tipo === 'Digital'
                         ? (formatoBase && formatoBase !== 'PARABUS'
-                            ? `${formatoBase}, PARABUS, MUPIS`
-                            : 'PARABUS, MUPIS')
+                            ? `${formatoBase}, PARABUS, MUPIS, COLUMNA`
+                            : 'PARABUS, MUPIS, COLUMNA')
                         : formatoBase;
                       // Detect CT (cortesia) articles
                       const isCortesia = item.ItemCode.toUpperCase().startsWith('CT');
