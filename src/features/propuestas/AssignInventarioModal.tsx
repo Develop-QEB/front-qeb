@@ -2306,10 +2306,11 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
   };
 
   // ── Selección masiva de circuitos ──────────────────────────────────────────
-  // Una cara es seleccionable si se puede eliminar: sin autorizaciones pendientes
-  // guardadas y sin reservas (salvo permiso). Mismo criterio que el bote individual.
+  // Una cara es seleccionable si se puede eliminar: sin reservas (salvo permiso).
+  // Feedback 2026-08-13: no bloqueamos por autorizacion pendiente guardada —
+  // eliminar no invalida aprobaciones (las quita), mismo criterio que el bote
+  // individual.
   const isCaraSelectable = (cara: CaraItem) => {
-    if (hasSavedPendingAuth) return false;
     const tieneReservas = caraHasReservas(cara.localId, cara.id);
     if (tieneReservas && !permissions.canDeleteCaraConReservas) return false;
     return true;
@@ -9233,8 +9234,12 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
                                           </button>
                                         )}
                                         {canEditResumen && permissions.canEditCircuitoExistente && (() => {
+                                            // Feedback 2026-08-13: el bote de basura siempre debe permitir eliminar
+                                            // circuitos con reservas (libera inventario). Solo se bloquea si el rol
+                                            // no puede eliminar caras con reservas. NO bloqueamos por autorizacion
+                                            // pendiente guardada — eliminar NO invalida aprobaciones (las quita).
                                             const reservaBlocked = hasReservas && !permissions.canDeleteCaraConReservas;
-                                            const isDisabled = reservaBlocked || hasSavedPendingAuth;
+                                            const isDisabled = reservaBlocked;
                                             return (
                                           <button
                                             onClick={(e) => { e.stopPropagation(); if (!isDisabled) handleDeleteCara(cara.localId); }}
@@ -9243,7 +9248,7 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
                                               ? `bg-zinc-500/10 ${isDark ? 'text-zinc-500' : 'text-gray-400'} border-zinc-500/20 cursor-not-allowed`
                                               : 'bg-red-500/10 text-red-400 border-red-500/20 hover:bg-red-500/20'
                                               }`}
-                                            title={hasSavedPendingAuth ? 'Hay circuitos pendientes de autorizacion - no se pueden eliminar otros' : reservaBlocked ? 'No se puede eliminar (tiene reservas)' : 'Eliminar'}
+                                            title={reservaBlocked ? 'No se puede eliminar (tiene reservas)' : 'Eliminar'}
                                           >
                                             <Trash2 className="h-4 w-4" />
                                           </button>

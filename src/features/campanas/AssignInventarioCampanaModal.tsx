@@ -2467,11 +2467,12 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
     return caraReservas.some(r => r.aps && r.aps > 0);
   };
 
-  // Una cara es seleccionable si se puede eliminar: sin autorizaciones pendientes
-  // guardadas, sin APS asignado, y sin reservas (salvo permiso). El inventario
-  // (reservas) sí se libera al borrar. Mismo criterio que el bote individual.
+  // Una cara es seleccionable si se puede eliminar: sin APS asignado y sin
+  // reservas (salvo permiso). El inventario (reservas) sí se libera al borrar.
+  // Feedback 2026-08-13: no se bloquea por autorizacion pendiente guardada —
+  // eliminar no invalida aprobaciones (las quita), mismo criterio que el bote
+  // individual.
   const isCaraSelectable = (cara: CaraItem) => {
-    if (hasSavedPendingAuth) return false;
     if (isCaraAPSBlocked(cara)) return false;
     const tieneReservas = caraHasReservas(cara.localId, cara.id);
     if (tieneReservas && !permissions.canDeleteCaraConReservas) return false;
@@ -9019,8 +9020,13 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
                                           </button>
                                         )}
                                         {canEditResumen && permissions.canEditCircuitoExistente && (() => {
+                                          // Feedback 2026-08-13: el bote siempre permite eliminar circuitos
+                                          // con reservas (libera inventario). Solo se bloquea si el circuito
+                                          // ya tiene APS asignado o si el rol no puede eliminar caras con
+                                          // reservas. NO bloqueamos por autorizacion pendiente guardada —
+                                          // eliminar no invalida aprobaciones (las quita).
                                           const reservaBlocked = hasReservas && !permissions.canDeleteCaraConReservas;
-                                          const isDisabled = reservaBlocked || hasSavedPendingAuth || caraAPSBlocked || !!loadingCaraAction;
+                                          const isDisabled = reservaBlocked || caraAPSBlocked || !!loadingCaraAction;
                                           return (
                                           <button
                                             onClick={(e) => { e.stopPropagation(); if (!isDisabled) handleDeleteCara(cara.localId); }}
@@ -9029,7 +9035,7 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
                                               ? 'bg-zinc-500/10 text-zinc-500 border-zinc-500/20 cursor-not-allowed'
                                               : 'bg-red-500/10 text-red-400 border-red-500/20 hover:bg-red-500/20'
                                               }`}
-                                            title={caraAPSBlocked ? 'Grupo con APS asignado - no se puede eliminar' : hasSavedPendingAuth ? 'Hay circuitos pendientes de autorizacion - no se pueden eliminar otros' : reservaBlocked ? 'No se puede eliminar (tiene reservas)' : 'Eliminar'}
+                                            title={caraAPSBlocked ? 'Grupo con APS asignado - no se puede eliminar' : reservaBlocked ? 'No se puede eliminar (tiene reservas)' : 'Eliminar'}
                                           >
                                             <Trash2 className="h-4 w-4" />
                                           </button>

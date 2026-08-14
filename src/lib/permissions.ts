@@ -240,7 +240,10 @@ const defaultPermissions: RolePermissions = {
 
   canCancelPostSAP: false,
 
-  canSeeHistorialAcciones: true,
+  // Historial de Acciones — feedback 2026-08-13: solo roles de Dirección
+  // y Admin/DEV ven el módulo. El default queda en false y cada rol de
+  // dirección lo habilita explícitamente (junto con canSeeAllHistorial).
+  canSeeHistorialAcciones: false,
   canSeeAllHistorial: false,
 };
 
@@ -447,6 +450,10 @@ const rolePermissions: Partial<Record<UserRole, Partial<RolePermissions>>> = {
     canDeleteInventarios: false,
 
     canExportOrdenesMontaje: false,
+
+    // Historial de Acciones — feedback 2026-08-13: Dirección ve todo.
+    canSeeHistorialAcciones: true,
+    canSeeAllHistorial: true,
   },
   'Director Comercial': {
     // CSV (Matriz QEB 2026-01-28): ve todo (Dashboard, Clientes, Proveedores,
@@ -506,6 +513,10 @@ const rolePermissions: Partial<Record<UserRole, Partial<RolePermissions>>> = {
     canDeleteInventarios: false,
 
     canExportOrdenesMontaje: true, // CSV: descarga ODM/versionario
+
+    // Historial de Acciones — feedback 2026-08-13: Dirección ve todo.
+    canSeeHistorialAcciones: true,
+    canSeeAllHistorial: true,
   },
   // Gerente Comercial: mismos permisos que Director Comercial PERO no recibe
   // tareas de autorización DCM (se filtra explícitamente en
@@ -548,7 +559,10 @@ const rolePermissions: Partial<Record<UserRole, Partial<RolePermissions>>> = {
     canSeeGestionArtes: true,
     canEditGestionArtes: false,
     canResolveProduccionTasks: false,
-    canSeeOrdenesMontajeButton: false,
+    // Feedback 2026-08-13 (Juan Manuel López Rodríguez): habilitar botón
+    // y descarga de Órdenes de Montaje para Gerente Comercial (antes en
+    // false). Alineado con Director Comercial y demás roles gerenciales.
+    canSeeOrdenesMontajeButton: true,
 
     canSeeTabProgramacion: true,
     canSeeTabImpresiones: true,
@@ -564,7 +578,7 @@ const rolePermissions: Partial<Record<UserRole, Partial<RolePermissions>>> = {
     canEditInventarios: false,
     canDeleteInventarios: false,
 
-    canExportOrdenesMontaje: false,
+    canExportOrdenesMontaje: true,
   },
   // ============================================================================
   // COMERCIAL - NUEVOS
@@ -739,6 +753,10 @@ const rolePermissions: Partial<Record<UserRole, Partial<RolePermissions>>> = {
     canDeleteInventarios: false,
 
     canExportOrdenesMontaje: false,
+
+    // Historial de Acciones — feedback 2026-08-13: Dirección ve todo.
+    canSeeHistorialAcciones: true,
+    canSeeAllHistorial: true,
   },
   // ============================================================================
   // AEROPUERTO
@@ -775,6 +793,10 @@ const rolePermissions: Partial<Record<UserRole, Partial<RolePermissions>>> = {
     canCreateInventarios: false,
     canEditInventarios: false,
     canDeleteInventarios: false,
+
+    // Historial de Acciones — feedback 2026-08-13: Dirección ve todo.
+    canSeeHistorialAcciones: true,
+    canSeeAllHistorial: true,
   },
   'Gerente Comercial Aeropuerto': {
     // Mismo perfil que Asesor Comercial
@@ -1153,6 +1175,8 @@ const rolePermissions: Partial<Record<UserRole, Partial<RolePermissions>>> = {
     canEditCaraFiltersOnEdit: true,
     canEditArticuloOnEdit: true,
     canCancelPostSAP: true,
+    // Historial de Acciones — feedback 2026-08-13: Admin ve todo.
+    canSeeHistorialAcciones: true,
     canSeeAllHistorial: true,
     canApproveArteSinRevisar: true,
   },
@@ -1776,6 +1800,10 @@ const rolePermissions: Partial<Record<UserRole, Partial<RolePermissions>>> = {
 
     // Órdenes de Montaje
     canExportOrdenesMontaje: true, // CSV: descarga ODM/versionario
+
+    // Historial de Acciones — feedback 2026-08-13: Dirección ve todo.
+    canSeeHistorialAcciones: true,
+    canSeeAllHistorial: true,
   },
   'Gerentes de Operaciones Plazas (GDL y MTY)': {
     // Secciones visibles
@@ -2305,6 +2333,8 @@ const rolePermissions: Partial<Record<UserRole, Partial<RolePermissions>>> = {
     canCreateTareasGestionArtes: false, canResolveRevisionArtesTasks: false,
     canCreateInventarios: false, canEditInventarios: false, canDeleteInventarios: false,
     canExportOrdenesMontaje: true,
+    // Historial de Acciones — feedback 2026-08-13: Dirección ve todo.
+    canSeeHistorialAcciones: true, canSeeAllHistorial: true,
   },
   'Director Desarrollo de Nuevos Negocios': {
     canSeeAdminUsuarios: false,
@@ -2322,6 +2352,8 @@ const rolePermissions: Partial<Record<UserRole, Partial<RolePermissions>>> = {
     canCreateTareasGestionArtes: false, canResolveRevisionArtesTasks: false,
     canCreateInventarios: false, canEditInventarios: false, canDeleteInventarios: false,
     canExportOrdenesMontaje: true,
+    // Historial de Acciones — feedback 2026-08-13: Dirección ve todo.
+    canSeeHistorialAcciones: true, canSeeAllHistorial: true,
   },
   'Gerente Comercial Vía Pública': {
     canSeeAdminUsuarios: false,
