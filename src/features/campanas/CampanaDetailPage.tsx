@@ -1185,48 +1185,60 @@ export function CampanaDetailPage() {
     fitMapToInventarioAPS(mapRefAPS.current);
   }, [fitMapToInventarioAPS]);
 
-  // Mapa de completitud por grupo (solicitudCaras)
+  // Mapa de completitud por grupo (solicitudCaras).
+  // Las cortesías (articulo CT*, sc.cortesia = 1) SÍ entran al mapa: antes se
+  // excluían y el resultado era que un circuito CT incompleto no se marcaba, y
+  // uno sin ninguna reserva no aparecía en la tabla Sin APS. Se marcan con el
+  // flag `cortesia` para que sigan siendo seleccionables (ver
+  // isItemFromIncompleteGroup) — el bloqueo es sólo visual para ellas.
+  // En CT las caras esperadas viven en `bonificacion` (caras = 0).
   const groupCompletenessMap = useMemo(() => {
-    const map = new Map<number, { esperadas: number; reservadas: number; completo: boolean; exceso: boolean }>();
+    const map = new Map<number, { esperadas: number; reservadas: number; completo: boolean; exceso: boolean; cortesia: boolean }>();
     solicitudCaras.forEach((sc: SolicitudCara) => {
-      if (sc.cortesia === 1) return;
       const esperadas = (sc.caras || 0) + (Number(sc.bonificacion) || 0);
       const reservasSinAPS = inventarioReservado.filter(i => i.solicitud_caras_id === sc.id)
         .reduce((sum, i) => sum + (i.caras_totales || 1), 0);
       const reservasConAPS = inventarioConAPS.filter(i => i.solicitud_caras_id === sc.id)
         .reduce((sum, i) => sum + (i.caras_totales || 1), 0);
       const reservadas = reservasSinAPS + reservasConAPS;
+      // esperadas = 0 es "sin dato de caras", no un grupo incompleto ni con
+      // exceso: marcarlo bloquearía circuitos mal capturados para siempre.
+      const sinDato = esperadas === 0;
       map.set(sc.id, {
         esperadas,
         reservadas,
-        completo: esperadas > 0 && reservadas >= esperadas,
-        exceso: reservadas > esperadas,
+        completo: sinDato || reservadas >= esperadas,
+        exceso: !sinDato && reservadas > esperadas,
+        cortesia: sc.cortesia === 1,
       });
     });
     return map;
   }, [solicitudCaras, inventarioReservado, inventarioConAPS]);
 
-  // Grupos sin inventario (solicitudCaras sin ninguna reserva, excluye cortesías)
+  // Grupos sin inventario (solicitudCaras sin ninguna reserva). Incluye
+  // cortesías: un CT sin reservas no tiene fila en el inventario, así que si no
+  // se lista aquí no se ve en ningún lado de la tabla Sin APS.
   const gruposSinInventario = useMemo(() => {
     return solicitudCaras.filter((sc: SolicitudCara) => {
-      if (sc.cortesia === 1) return false;
       const info = groupCompletenessMap.get(sc.id);
       return info && info.reservadas === 0 && info.esperadas > 0;
     });
   }, [solicitudCaras, groupCompletenessMap]);
 
-  // Helper: verificar si un item pertenece a un grupo incompleto
+  // Helper: verificar si un item pertenece a un grupo incompleto.
+  // Las cortesías se marcan visualmente pero NO se bloquean: siguen pudiendo
+  // seleccionarse para mandarlas al gestor de artes sin APS.
   const isItemFromIncompleteGroup = (item: InventarioReservado): boolean => {
     if (!item.solicitud_caras_id) return false;
     const info = groupCompletenessMap.get(item.solicitud_caras_id);
-    return !!info && !info.completo;
+    return !!info && !info.completo && !info.cortesia;
   };
 
   // Helper: verificar si un item pertenece a un grupo con exceso de caras
   const isItemFromExcessGroup = (item: InventarioReservado): boolean => {
     if (!item.solicitud_caras_id) return false;
     const info = groupCompletenessMap.get(item.solicitud_caras_id);
-    return !!info && info.exceso;
+    return !!info && info.exceso && !info.cortesia;
   };
 
   // Hay algún item seleccionado en grupo incompleto o con exceso → deshabilita botón APS
@@ -1237,7 +1249,8 @@ export function CampanaDetailPage() {
       .some(item => {
         if (!item.solicitud_caras_id) return false;
         const info = groupCompletenessMap.get(item.solicitud_caras_id);
-        return !!info && (!info.completo || info.exceso);
+        // Cortesías: se marcan incompletas en la tabla pero no bloquean el botón.
+        return !!info && !info.cortesia && (!info.completo || info.exceso);
       });
   }, [selectedItems, inventarioReservado, groupCompletenessMap]);
 
@@ -2055,19 +2068,23 @@ export function CampanaDetailPage() {
   const buildAPSPayloadFromSelection = (): { inventarioIds: number[]; solicitudCarasIds: number[]; rsvIds: number[] } | null => {
     const selectedReservado = inventarioReservado.filter(item => selectedItems.has(item.rsv_ids));
 
+    // La completitud se lee de groupCompletenessMap, que cuenta las caras de
+    // AMBAS tablas (sin APS + con APS). Antes se recontaba aquí sobre
+    // inventarioReservado (sólo sin APS), así que un circuito repartido en
+    // varios APS se veía completo en la tabla pero al asignar el resto saltaba
+    // "incompleto (2/5)" y las caras quedaban atrapadas en Sin APS.
     const selectedCaraIds = new Set(selectedReservado.map(item => item.solicitud_caras_id).filter(Boolean));
     for (const caraId of selectedCaraIds) {
+      const info = groupCompletenessMap.get(caraId as number);
+      if (!info) continue;
       const cara = solicitudCaras.find((c: any) => c.id === caraId);
-      if (!cara) continue;
-      const reservasDelGrupo = inventarioReservado.filter(item => item.solicitud_caras_id === caraId);
-      const carasReservadas = reservasDelGrupo.reduce((sum, item) => sum + (item.caras_totales || 1), 0);
-      const carasEsperadas = (cara.caras || 0) + (Number(cara.bonificacion) || 0);
-      if (carasEsperadas > 0 && carasReservadas < carasEsperadas) {
-        alert(`No se puede asignar APS: el grupo "${cara.articulo || ''} - ${cara.ciudad || ''}" está incompleto (${carasReservadas}/${carasEsperadas} caras asignadas)`);
+      const label = `${cara?.articulo || ''} - ${cara?.ciudad || ''}`;
+      if (!info.completo) {
+        alert(`No se puede asignar APS: el grupo "${label}" está incompleto (${info.reservadas}/${info.esperadas} caras asignadas)`);
         return null;
       }
-      if (carasEsperadas > 0 && carasReservadas > carasEsperadas) {
-        alert(`No se puede asignar APS: el grupo "${cara.articulo || ''} - ${cara.ciudad || ''}" tiene exceso de caras (${carasReservadas}/${carasEsperadas})`);
+      if (info.exceso) {
+        alert(`No se puede asignar APS: el grupo "${label}" tiene exceso de caras (${info.reservadas}/${info.esperadas})`);
         return null;
       }
     }
