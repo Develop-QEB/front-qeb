@@ -2937,7 +2937,7 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
           } else {
             // Create a new BF row in DB (needs a DB id to tie reservas later)
             const bfData = buildBfCaraData(articuloBf.ItemCode, bfCount, grupoRtBf);
-            const createdBf = await campanasService.createCara(campana!.id, bfData as any);
+            const createdBf = await campanasService.createCara(campana!.id, { ...bfData, deferAuth: true } as any);
             createdBfItem = {
               localId: `cara-${createdBf.id}`,
               id: createdBf.id,
@@ -3164,7 +3164,7 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
         if (wantsPair && articuloBf && grupoRtBf) {
           const bfCount = newCara.bonificacion || 0;
           const bfData = buildBfCaraData(articuloBf.ItemCode, bfCount, grupoRtBf);
-          const createdBf = await campanasService.createCara(campana!.id, bfData as any);
+          const createdBf = await campanasService.createCara(campana!.id, { ...bfData, deferAuth: true } as any);
           newBfItem = {
             localId: `cara-${createdBf.id}`,
             id: createdBf.id,
@@ -3198,7 +3198,7 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
         }
 
         // Create RT cara after BF (so backend auth lookup finds BF pair)
-        const createdCara = await campanasService.createCara(campana!.id, rtCaraData as any);
+        const createdCara = await campanasService.createCara(campana!.id, { ...rtCaraData, deferAuth: true } as any);
         const newRtItem: CaraItem = {
           ...newCara,
           id: createdCara.id,
