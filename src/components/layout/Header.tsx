@@ -16,6 +16,16 @@ interface HeaderProps {
   badgeCount?: number;
 }
 
+// Etiqueta del ambiente según el dominio del front (mismo mapeo que los orígenes
+// CORS): pruebas.qeb.mx = develop · jos.qeb.mx = stage · resto (app.qeb.mx / local
+// / previews) = 'Activo'. Se calcula del hostname, sin depender de env vars de build.
+function getAmbienteLabel(): string {
+  const host = typeof window !== 'undefined' ? window.location.hostname : '';
+  if (host.includes('pruebas')) return 'develop';
+  if (host.includes('jos')) return 'stage';
+  return 'Activo';
+}
+
 export function Header({ title, badgeCount }: HeaderProps) {
   const user = useAuthStore((state) => state.user);
   const isDark = useThemeStore((s) => s.theme) === 'dark';
@@ -80,7 +90,7 @@ export function Header({ title, badgeCount }: HeaderProps) {
             ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500/30'
             : 'bg-emerald-50 text-emerald-600 border-emerald-200'
         }`}>
-          Activo
+          {getAmbienteLabel()}
         </span>
         <div className="hidden sm:block">
           <VersionBadge isDark={isDark} />
