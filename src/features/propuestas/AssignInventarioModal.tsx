@@ -885,16 +885,26 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
   // Reservas state
   const [reservas, setReservas] = useState<ReservaItem[]>([]);
 
-  // Check if the cara being edited has reservas (to block certain fields)
+  // ¿El CIRCUITO que se está editando tiene inventario reservado?
+  // Se mira el grupo RT/BF completo (no solo la fila editada): el inventario es
+  // del circuito, y la bonificada comparte reservas con su renta.
   const editingCaraHasReservas = useMemo(() => {
     if (!editingCaraId) return false;
     const editingCara = caras.find(c => c.localId === editingCaraId);
     if (!editingCara) return false;
-    // Check if there are any reservas for this cara
+    const grupoLocal = editingCara.grupo_rt_bf
+      ? caras.filter(c => c.grupo_rt_bf === editingCara.grupo_rt_bf)
+      : [editingCara];
     return reservas.some(r =>
-      r.id.startsWith(editingCaraId) || r.solicitudCaraId === editingCara.id
+      grupoLocal.some(g => r.id.startsWith(g.localId) || (!!g.id && r.solicitudCaraId === g.id))
     );
   }, [editingCaraId, caras, reservas]);
+
+  // Filtros del circuito (plazas / ciudades / formatos): con inventario reservado
+  // quedan bloqueados SIEMPRE —aunque el rol tenga canEditCaraFiltersOnEdit—
+  // porque el inventario ya reservado se eligió justo con esos filtros; cambiarlos
+  // dejaría reservas que no corresponden a la plaza/formato de la cara.
+  const caraFiltersLocked = editingCaraHasReservas || (!!editingCaraId && !permissions.canEditCaraFiltersOnEdit);
 
   // Inventory search state
   const [searchFilters, setSearchFilters] = useState({
@@ -2646,15 +2656,16 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
         // ---- LOCAL-ONLY UPDATE (no API call for the RT cara itself) ----
         const caraToEdit = caras.find(c => c.localId === editingCaraId);
         if (caraToEdit?.id) {
-          // Cambio de periodo con reservas: avisar que se borrarán. Al guardar, el
-          // backend libera las reservas del circuito (cara + pareja RT/BF) y lo
-          // reubica en el nuevo periodo con reservas en 0.
+          // Cambio de periodo o de ARTÍCULO con reservas: avisar que se liberará el
+          // inventario. Al guardar, el backend libera las reservas del circuito
+          // (cara + pareja RT/BF) y lo deja en el nuevo periodo/artículo con 0.
           // Comparar en formato YYYY-MM-DD (handleEditCara trunca a 10 chars, la cara
           // guardada conserva el timestamp completo).
           const periodoCambio =
             String(newCara.inicio_periodo || '').slice(0, 10) !== String(caraToEdit.inicio_periodo || '').slice(0, 10) ||
             String(newCara.fin_periodo || '').slice(0, 10) !== String(caraToEdit.fin_periodo || '').slice(0, 10);
-          if (periodoCambio) {
+          const articuloCambio = (newCara.articulo || '') !== (caraToEdit.articulo || '');
+          if (periodoCambio || articuloCambio) {
             const grupoLocal = caraToEdit.grupo_rt_bf
               ? caras.filter(c => c.grupo_rt_bf === caraToEdit.grupo_rt_bf)
               : [caraToEdit];
@@ -2662,8 +2673,9 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
               grupoLocal.some(g => r.id.startsWith(g.localId) || (g.id && r.solicitudCaraId === g.id))
             );
             if (tieneReservasPeriodo) {
+              const queCambia = [periodoCambio && 'el periodo', articuloCambio && 'el artículo'].filter(Boolean).join(' y ');
               const ok = window.confirm(
-                'Este circuito tiene inventario reservado. Al cambiar el periodo se borrarán las reservas del circuito y se moverá al nuevo periodo con las reservas en 0. ¿Deseas continuar?'
+                `Este circuito tiene inventario reservado.\n\nAl cambiar ${queCambia} se liberará TODO el inventario reservado del circuito (renta y bonificada): las reservas quedan en 0 y hay que volver a reservar el inventario.\n\n¿Deseas continuar?`
               );
               if (!ok) return;
               // Reflejar las reservas en 0 de inmediato (al Aceptar), sin esperar al
@@ -8245,8 +8257,8 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
                             const plazaPorNombre = plazasBackend?.find(p => itemNameNorm.includes(stripAccents(p.plaza.toUpperCase())));
                             const formatoBase = getFormatoFromArticulo(item.ItemName, item.ItemCode);
                             const tipo = getTipoFromName(item.ItemName);
-                            // Para artículos digitales: incluir PARABUS y MUPIS (los muebles
-                            // físicos donde corre la pantalla rotando ambos formatos).
+                            // Para artículos digitales: incluir PARABUS, MUPIS y COLUMNA (los
+                            // muebles físicos donde corre la pantalla rotando los formatos).
                             const formato = tipo === 'Digital'
                               ? (formatoBase && formatoBase !== 'PARABUS'
                                   ? `${formatoBase}, PARABUS, MUPIS, COLUMNA`
@@ -8612,8 +8624,8 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
 
                     <div className="grid grid-cols-4 gap-4 mb-4">
                       <div className="space-y-1">
-                        <label className={`text-xs ${((editingCaraHasReservas && !permissions.canEditCaraFiltersOnEdit) || (editingCaraId && !permissions.canEditCaraFiltersOnEdit)) ? 'text-zinc-800' : `${isDark ? 'text-zinc-500' : 'text-gray-400'}`}`}>Plazas {newCara.estados && (!editingCaraId || permissions.canEditCaraFiltersOnEdit) && <span className="text-purple-400">({newCara.estados.split(',').filter(Boolean).length})</span>}</label>
-                        {canEditResumen && (!editingCaraHasReservas || permissions.canEditCaraFiltersOnEdit) && (!editingCaraId || permissions.canEditCaraFiltersOnEdit) ? (
+                        <label title={editingCaraHasReservas ? 'Bloqueado: el circuito tiene inventario reservado' : undefined} className={`text-xs ${(!editingCaraHasReservas && caraFiltersLocked) ? 'text-zinc-800' : `${isDark ? 'text-zinc-500' : 'text-gray-400'}`}`}>Plazas {editingCaraHasReservas ? <span className="text-amber-400 text-[10px]">(bloqueado)</span> : newCara.estados && !caraFiltersLocked && <span className="text-purple-400">({newCara.estados.split(',').filter(Boolean).length})</span>}</label>
+                        {canEditResumen && !caraFiltersLocked ? (
                           <MultiSelectDropdown
                             options={(() => {
                               // Preferir lista de plazas del inventario si está disponible
@@ -8651,8 +8663,8 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
                         )}
                       </div>
                       <div className="space-y-1">
-                        <label className={`text-xs ${((editingCaraHasReservas && !permissions.canEditCaraFiltersOnEdit) || (editingCaraId && !permissions.canEditCaraFiltersOnEdit)) ? 'text-zinc-800' : `${isDark ? 'text-zinc-500' : 'text-gray-400'}`}`}>Ciudades {newCara.ciudad && (!editingCaraId || permissions.canEditCaraFiltersOnEdit) && <span className="text-purple-400">({newCara.ciudad.split(',').filter(Boolean).length})</span>}</label>
-                        {canEditResumen && (!editingCaraHasReservas || permissions.canEditCaraFiltersOnEdit) && (!editingCaraId || permissions.canEditCaraFiltersOnEdit) ? (
+                        <label title={editingCaraHasReservas ? 'Bloqueado: el circuito tiene inventario reservado' : undefined} className={`text-xs ${(!editingCaraHasReservas && caraFiltersLocked) ? 'text-zinc-800' : `${isDark ? 'text-zinc-500' : 'text-gray-400'}`}`}>Ciudades {editingCaraHasReservas ? <span className="text-amber-400 text-[10px]">(bloqueado)</span> : newCara.ciudad && !caraFiltersLocked && <span className="text-purple-400">({newCara.ciudad.split(',').filter(Boolean).length})</span>}</label>
+                        {canEditResumen && !caraFiltersLocked ? (
                           <MultiSelectDropdown
                             options={
                               (() => {
@@ -8686,8 +8698,8 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
                         )}
                       </div>
                       <div className="space-y-1">
-                        <label className={`text-xs ${((editingCaraHasReservas && !permissions.canEditCaraFiltersOnEdit) || (editingCaraId && !permissions.canEditCaraFiltersOnEdit)) ? 'text-zinc-800' : `${isDark ? 'text-zinc-500' : 'text-gray-400'}`}`}>Formatos {newCara.formato && (!editingCaraId || permissions.canEditCaraFiltersOnEdit) && <span className="text-purple-400">({newCara.formato.split(',').filter(Boolean).length})</span>}</label>
-                        {canEditResumen && (!editingCaraHasReservas || permissions.canEditCaraFiltersOnEdit) && (!editingCaraId || permissions.canEditCaraFiltersOnEdit) ? (
+                        <label title={editingCaraHasReservas ? 'Bloqueado: el circuito tiene inventario reservado' : undefined} className={`text-xs ${(!editingCaraHasReservas && caraFiltersLocked) ? 'text-zinc-800' : `${isDark ? 'text-zinc-500' : 'text-gray-400'}`}`}>Formatos {editingCaraHasReservas ? <span className="text-amber-400 text-[10px]">(bloqueado)</span> : newCara.formato && !caraFiltersLocked && <span className="text-purple-400">({newCara.formato.split(',').filter(Boolean).length})</span>}</label>
+                        {canEditResumen && !caraFiltersLocked ? (
                           <MultiSelectDropdown
                             options={solicitudFilters?.formatos || []}
                             selected={newCara.formato ? newCara.formato.split(',').map(s => s.trim()).filter(Boolean) : []}
