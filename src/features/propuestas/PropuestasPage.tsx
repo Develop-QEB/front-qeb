@@ -595,6 +595,17 @@ function StatusModal({ isOpen, onClose, propuesta, onStatusChange, allowedStatus
   const pendientesDcm = caras?.filter(c => c.autorizacion_dcm === 'pendiente').length || 0;
   const tienePendientes = pendientesDg > 0 || pendientesDcm > 0;
 
+  // Feedback 2026-08-15: circuitos en 'correccion' o 'rechazado' tambien
+  // bloquean el avance (Pase a ventas / Aprobada). Antes solo se checaba
+  // 'pendiente' y una cara en correccion dejaba pasar sin alerta.
+  const correccionDg = caras?.filter(c => c.autorizacion_dg === 'correccion').length || 0;
+  const correccionDcm = caras?.filter(c => c.autorizacion_dcm === 'correccion').length || 0;
+  const rechazadasDg = caras?.filter(c => c.autorizacion_dg === 'rechazado').length || 0;
+  const rechazadasDcm = caras?.filter(c => c.autorizacion_dcm === 'rechazado').length || 0;
+  const tieneCorreccion = correccionDg > 0 || correccionDcm > 0;
+  const tieneRechazadas = rechazadasDg > 0 || rechazadasDcm > 0;
+  const bloqueaAvance = tienePendientes || tieneCorreccion || tieneRechazadas;
+
   // Obtener propuesta fresca para verificar cliente_id (que almacena el CUIC)
   const { data: propuestaFresh } = useQuery({
     queryKey: ['propuesta-fresh', propuesta?.id],
@@ -748,17 +759,29 @@ function StatusModal({ isOpen, onClose, propuesta, onStatusChange, allowedStatus
 
         {/* Status Selector */}
         <div className={`px-6 py-4 border-b ${isDark ? 'border-zinc-800 bg-zinc-800/30' : 'border-gray-200 bg-gray-50'}`}>
-          {/* Alerta de autorizaciones pendientes */}
-          {tienePendientes && (
+          {/* Alerta de autorizaciones pendientes / en correccion / rechazadas */}
+          {bloqueaAvance && (
             <div className={`mb-4 p-3 rounded-lg ${isDark ? 'bg-amber-500/10 border-amber-500/30' : 'bg-amber-50 border-amber-200'} border flex items-start gap-3`}>
               <AlertTriangle className={`h-5 w-5 ${isDark ? 'text-amber-400' : 'text-amber-600'} flex-shrink-0 mt-0.5`} />
               <div>
-                <p className={`text-sm font-medium ${isDark ? 'text-amber-200' : 'text-amber-800'}`}>Autorización pendiente</p>
+                <p className={`text-sm font-medium ${isDark ? 'text-amber-200' : 'text-amber-800'}`}>Autorización abierta</p>
                 <p className={`text-xs mt-1 ${isDark ? 'text-amber-300/70' : 'text-amber-700'}`}>
-                  Esta propuesta tiene {pendientesDg + pendientesDcm} cara(s) pendientes de autorización.
-                  {pendientesDg > 0 && ` DG: ${pendientesDg}.`}
-                  {pendientesDcm > 0 && ` DCM: ${pendientesDcm}.`}
-                  {' '}No se puede cambiar a "Pase a ventas" o "Aprobada" hasta que todas las caras sean autorizadas.
+                  {tienePendientes && (<>
+                    {pendientesDg + pendientesDcm} pendiente(s)
+                    {pendientesDg > 0 && ` — DG: ${pendientesDg}`}
+                    {pendientesDcm > 0 && `${pendientesDg > 0 ? ',' : ' —'} DCM: ${pendientesDcm}`}.{' '}
+                  </>)}
+                  {tieneCorreccion && (<>
+                    {correccionDg + correccionDcm} en corrección
+                    {correccionDg > 0 && ` — DG: ${correccionDg}`}
+                    {correccionDcm > 0 && `${correccionDg > 0 ? ',' : ' —'} DCM: ${correccionDcm}`}.{' '}
+                  </>)}
+                  {tieneRechazadas && (<>
+                    {rechazadasDg + rechazadasDcm} rechazada(s)
+                    {rechazadasDg > 0 && ` — DG: ${rechazadasDg}`}
+                    {rechazadasDcm > 0 && `${rechazadasDg > 0 ? ',' : ' —'} DCM: ${rechazadasDcm}`}.{' '}
+                  </>)}
+                  No se puede cambiar a "Pase a ventas" o "Aprobada" hasta que todas las caras estén autorizadas.
                 </p>
               </div>
             </div>
@@ -797,7 +820,7 @@ function StatusModal({ isOpen, onClose, propuesta, onStatusChange, allowedStatus
                 <option value={propuesta.status} disabled>{propuesta.status} (actual)</option>
               )}
               {availableStatuses.map(s => {
-                const isBlockedByAuth = (tienePendientes || reservasIncompletas) && (s === 'Aprobada' || s === 'Pase a ventas');
+                const isBlockedByAuth = (bloqueaAvance || reservasIncompletas) && (s === 'Aprobada' || s === 'Pase a ventas');
                 const isBlockedByCuic = esClienteLead && s === 'Pase a ventas';
                 const isBlocked = isBlockedByAuth || isBlockedByCuic;
                 return (
@@ -813,7 +836,7 @@ function StatusModal({ isOpen, onClose, propuesta, onStatusChange, allowedStatus
             </select>
             <button
               onClick={handleChangeStatus}
-              disabled={selectedStatus === propuesta.status || updateStatusMutation.isPending || ((tienePendientes || reservasIncompletas) && (selectedStatus === 'Aprobada' || selectedStatus === 'Pase a ventas')) || (esClienteLead && selectedStatus === 'Pase a ventas')}
+              disabled={selectedStatus === propuesta.status || updateStatusMutation.isPending || ((bloqueaAvance || reservasIncompletas) && (selectedStatus === 'Aprobada' || selectedStatus === 'Pase a ventas')) || (esClienteLead && selectedStatus === 'Pase a ventas')}
               className="flex items-center gap-2 px-4 py-2 rounded-lg bg-purple-600 text-white text-sm hover:bg-purple-700 disabled:opacity-50 disabled:cursor-not-allowed min-w-[120px] justify-center"
             >
               {updateStatusMutation.isPending ? (
