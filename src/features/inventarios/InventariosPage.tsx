@@ -129,6 +129,8 @@ export function InventariosPage() {
   const [estatus, setEstatus] = useState('');
   const [plaza, setPlaza] = useState('');
   const [cto, setCto] = useState('');
+  const [tradicional, setTradicional] = useState('');
+  const [micromacro, setMicromacro] = useState(''); // '' | 'Excluir Mi Macro' | 'Solo Mi Macro'
   const [viewMode, setViewMode] = useState<'table' | 'map'>('table');
   const [sortCol, setSortCol] = useState<SortCol>('id');
   const [sortDir, setSortDir] = useState<'asc' | 'desc'>('asc');
@@ -260,10 +262,13 @@ export function InventariosPage() {
   }, [debouncedSearchTags, debouncedSearchInput]);
   const serverSearch = allSearchTerms.length > 0 ? allSearchTerms.join('|') : undefined;
 
+  // Mapea la etiqueta del chip Mi Macro al valor que espera el backend
+  const micromacroParam = micromacro === 'Excluir Mi Macro' ? 'excluir' : micromacro === 'Solo Mi Macro' ? 'solo' : undefined;
+
   const { data, isLoading } = useQuery({
-    queryKey: ['inventarios', page, serverSearch, tipo, estatus, plaza, cto, campanaIdNum],
+    queryKey: ['inventarios', page, serverSearch, tipo, estatus, plaza, cto, tradicional, micromacro, campanaIdNum],
     queryFn: () =>
-      inventariosService.getAll({ page, limit, search: serverSearch, tipo: tipo || undefined, estatus: estatus || undefined, plaza: plaza || undefined, cto: cto || undefined, campanaId: campanaIdNum }),
+      inventariosService.getAll({ page, limit, search: serverSearch, tipo: tipo || undefined, estatus: estatus || undefined, plaza: plaza || undefined, cto: cto || undefined, tradicional: tradicional || undefined, micromacro: micromacroParam, campanaId: campanaIdNum }),
   });
 
   const { data: tipos } = useQuery({ queryKey: ['inventarios', 'tipos'], queryFn: () => inventariosService.getTipos(), staleTime: 30 * 60 * 1000 });
@@ -273,13 +278,15 @@ export function InventariosPage() {
 
   // Stats query — global KPIs with same filters
   const { data: statsData, isLoading: isLoadingStats } = useQuery({
-    queryKey: ['inventarios-stats', serverSearch, tipo, estatus, plaza, campanaIdNum],
+    queryKey: ['inventarios-stats', serverSearch, tipo, estatus, plaza, tradicional, micromacro, campanaIdNum],
     queryFn: () =>
       inventariosService.getStats({
         search: serverSearch,
         tipo: tipo || undefined,
         estatus: estatus || undefined,
         plaza: plaza || undefined,
+        tradicional: tradicional || undefined,
+        micromacro: micromacroParam,
         campanaId: campanaIdNum,
       }),
   });
@@ -946,7 +953,7 @@ export function InventariosPage() {
 
   const totalPages = data?.pagination?.totalPages || 1;
   const totalItems = data?.pagination?.total || 0;
-  const hasActiveFilters = !!(tipo || plaza || cto || estatus || searchTags.length > 0 || searchInput || campanaIdParam);
+  const hasActiveFilters = !!(tipo || plaza || cto || estatus || tradicional || micromacro || searchTags.length > 0 || searchInput || campanaIdParam);
 
   // Form fields for create/edit
   const FORM_FIELDS: { key: string; label: string; type?: string; options?: string[]; span?: number }[] = [
@@ -1394,13 +1401,15 @@ export function InventariosPage() {
             {showFilters && (
               <div className={`flex flex-wrap items-center gap-2 pt-3 border-t ${isDark ? 'border-zinc-800/50' : 'border-gray-200'} relative z-50`}>
                 <FilterChip label="Tipo" options={tipos || []} value={tipo} onChange={v => { setTipo(v); setPage(1); }} onClear={() => { setTipo(''); setPage(1); }} />
+                <FilterChip label="Trad / Digital" options={['Tradicional', 'Digital']} value={tradicional} onChange={v => { setTradicional(v); setPage(1); }} onClear={() => { setTradicional(''); setPage(1); }} />
+                <FilterChip label="Mi Macro" options={['Excluir Mi Macro', 'Solo Mi Macro']} value={micromacro} onChange={v => { setMicromacro(v); setPage(1); }} onClear={() => { setMicromacro(''); setPage(1); }} />
                 <FilterChip label="Plaza" options={plazas || []} value={plaza} onChange={v => { setPlaza(v); setPage(1); }} onClear={() => { setPlaza(''); setPage(1); }} />
                 <FilterChip label="CTO" options={ctos || []} value={cto} onChange={v => { setCto(v); setPage(1); }} onClear={() => { setCto(''); setPage(1); }} />
                 <FilterChip label="Estatus" options={estatusList || []} value={estatus} onChange={v => { setEstatus(v); setPage(1); }} onClear={() => { setEstatus(''); setPage(1); }} />
 
                 {hasActiveFilters && (
                   <button
-                    onClick={() => { setSearchTags([]); setSearchInput(''); setTipo(''); setPlaza(''); setCto(''); setEstatus(''); setPage(1); }}
+                    onClick={() => { setSearchTags([]); setSearchInput(''); setTipo(''); setPlaza(''); setCto(''); setEstatus(''); setTradicional(''); setMicromacro(''); setPage(1); }}
                     className={`flex items-center gap-1 px-2 py-1 rounded-full text-xs ${isDark ? 'bg-red-500/10 text-red-400 border-red-500/30 hover:bg-red-500/20' : 'bg-red-50 text-red-600 border-red-200 hover:bg-red-100'} border transition-all`}
                   >
                     <X className="h-3 w-3" /> Limpiar todo

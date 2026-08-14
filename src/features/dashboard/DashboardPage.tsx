@@ -2108,6 +2108,7 @@ export function DashboardPage() {
     (filters.formato?.length || 0) +
     (filters.nse?.length || 0) +
     (filters.tipo?.length || 0) +
+    (filters.micromacro ? 1 : 0) +
     (filters.catorcena_id && !esCatorcenaDefault ? 1 : 0) +
     (filters.fecha_inicio ? 1 : 0) +
     (filters.fecha_fin ? 1 : 0);
@@ -2248,6 +2249,18 @@ export function DashboardPage() {
                     setInventoryPage(1);
                   }}
                   options={filterOptions?.tipos || []}
+                />
+                <MultiSelectFilter
+                  label="Mi Macro (circuito)"
+                  values={filters.micromacro ? [filters.micromacro === 'solo' ? 'Solo Mi Macro' : 'Excluir Mi Macro'] : []}
+                  onChange={(v) => {
+                    // Selección única: toma la última opción marcada
+                    const last = v[v.length - 1];
+                    const mm = last === 'Solo Mi Macro' ? 'solo' : last === 'Excluir Mi Macro' ? 'excluir' : undefined;
+                    setFilters(p => ({ ...p, micromacro: mm }));
+                    setInventoryPage(1);
+                  }}
+                  options={['Excluir Mi Macro', 'Solo Mi Macro']}
                 />
                 <MultiSelectFilter
                   label="NSE"
