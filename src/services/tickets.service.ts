@@ -180,6 +180,16 @@ export const ticketsService = {
     return response.data;
   },
 
+  // Acciones masivas. Feedback 2026-08-15.
+  bulkUpdateStatus: async (ids: number[], status: string): Promise<{ updated: number; saltados: number }> => {
+    const response = await api.patch('/tickets/bulk/status', { ids, status });
+    return response.data;
+  },
+  bulkUpdateArea: async (ids: number[], area: 'QEB' | 'TI'): Promise<{ updated: number; saltados: number }> => {
+    const response = await api.patch('/tickets/bulk/area', { ids, area });
+    return response.data;
+  },
+
   // Obtener estadisticas
   getStats: async (): Promise<TicketStats> => {
     const response = await api.get('/tickets/stats');

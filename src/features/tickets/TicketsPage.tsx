@@ -7,6 +7,7 @@ import { useThemeStore } from '../../store/themeStore';
 import { useAuthStore } from '../../store/authStore';
 import { uploadsService } from '../../services/uploads.service';
 import { useSocketTicketChatSoporte, useSocketChatNotifications } from '../../hooks/useSocket';
+import { TicketBulkBar } from './TicketBulkBar';
 
 const getInputClasses = (isDark: boolean) =>
   `w-full px-4 py-2.5 rounded-xl border ${isDark ? 'border-purple-500/20 bg-zinc-800/50 text-white placeholder-zinc-500 focus:border-purple-500/50' : 'border-purple-200 bg-white text-gray-900 placeholder-gray-400 focus:border-purple-400'} focus:outline-none focus:ring-1 ${isDark ? 'focus:ring-purple-500/30' : 'focus:ring-purple-300'} transition-colors`;
@@ -488,6 +489,12 @@ export function TicketsPage() {
   const queryClient = useQueryClient();
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [selectedTicket, setSelectedTicket] = useState<TicketType | null>(null);
+  const [selectedTicketIds, setSelectedTicketIds] = useState<Set<number>>(new Set());
+  const toggleSelect = (id: number) => setSelectedTicketIds(prev => {
+    const next = new Set(prev);
+    if (next.has(id)) next.delete(id); else next.add(id);
+    return next;
+  });
   const [activeTab, setActiveTab] = useState<'Nuevo' | 'En Progreso' | 'Validación' | 'Resuelto' | 'Cerrado'>('Nuevo');
 
   useSocketChatNotifications(user?.id ?? null);
@@ -569,15 +576,31 @@ export function TicketsPage() {
           </div>
         ) : filteredTickets.length > 0 ? (
           <div className="space-y-3">
+            <TicketBulkBar
+              selectedIds={[...selectedTicketIds]}
+              onClear={() => setSelectedTicketIds(new Set())}
+              isDark={isDark}
+              invalidateKeys={[['tickets']]}
+              statusOptions={['Nuevo', 'En Progreso', 'Validación', 'Resuelto', 'Cerrado']}
+            />
             {filteredTickets.map((ticket) => {
               const statusConfig = STATUS_CONFIG[ticket.status] || STATUS_CONFIG['Nuevo'];
               const prioridadConfig = PRIORIDAD_CONFIG[ticket.prioridad] || PRIORIDAD_CONFIG['Normal'];
               const StatusIcon = statusConfig.icon;
+              const isChecked = selectedTicketIds.has(ticket.id);
 
               return (
+                <div key={ticket.id} className="flex items-start gap-2">
+                  <input
+                    type="checkbox"
+                    checked={isChecked}
+                    onChange={(e) => { e.stopPropagation(); toggleSelect(ticket.id); }}
+                    onClick={(e) => e.stopPropagation()}
+                    className="mt-6 h-4 w-4 rounded border-purple-500/40 text-purple-600 focus:ring-purple-500/50 cursor-pointer"
+                    title="Seleccionar para acción masiva"
+                  />
                 <div
-                  key={ticket.id}
-                  className={`relative rounded-2xl border ${isDark ? 'border-purple-500/20' : 'border-purple-200'} ${isDark ? 'bg-gradient-to-br from-zinc-900/90 via-purple-950/20 to-zinc-900/90' : 'bg-white'} p-5 ${isDark ? 'hover:border-purple-500/40' : 'hover:border-purple-300'} transition-all cursor-pointer`}
+                  className={`flex-1 relative rounded-2xl border ${isDark ? 'border-purple-500/20' : 'border-purple-200'} ${isDark ? 'bg-gradient-to-br from-zinc-900/90 via-purple-950/20 to-zinc-900/90' : 'bg-white'} p-5 ${isDark ? 'hover:border-purple-500/40' : 'hover:border-purple-300'} transition-all cursor-pointer ${isChecked ? (isDark ? 'ring-2 ring-purple-500/50' : 'ring-2 ring-purple-400/60') : ''}`}
                   onClick={() => setSelectedTicket(ticket)}
                 >
                   {ticket.has_chat_unread && (
@@ -619,6 +642,7 @@ export function TicketsPage() {
                       )}
                     </div>
                   )}
+                </div>
                 </div>
               );
             })}

@@ -8,6 +8,7 @@ import {
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { Header } from '../../components/layout/Header';
 import { ticketsService, TicketHistorial, TicketMensaje, TicketChatMessage, DevUser } from '../../services/tickets.service';
+import { TicketBulkBar } from './TicketBulkBar';
 import { uploadsService } from '../../services/uploads.service';
 import { useAuthStore } from '../../store/authStore';
 import { useThemeStore } from '../../store/themeStore';
@@ -735,6 +736,12 @@ export function HistorialTicketsPage() {
   const [onlyUnread, setOnlyUnread] = useState(false);
   const [selectedTicket, setSelectedTicket] = useState<TicketHistorial | null>(null);
   const [activeTab, setActiveTab] = useState<'Nuevo' | 'En Progreso' | 'Validación' | 'Resuelto' | 'Cerrado'>('Nuevo');
+  const [selectedTicketIds, setSelectedTicketIds] = useState<Set<number>>(new Set());
+  const toggleSelect = (id: number) => setSelectedTicketIds(prev => {
+    const next = new Set(prev);
+    if (next.has(id)) next.delete(id); else next.add(id);
+    return next;
+  });
 
   useSocketTicketsHistorial();
 
@@ -971,16 +978,32 @@ export function HistorialTicketsPage() {
           </div>
         ) : (
           <div className="space-y-2">
+            <TicketBulkBar
+              selectedIds={[...selectedTicketIds]}
+              onClear={() => setSelectedTicketIds(new Set())}
+              isDark={isDark}
+              invalidateKeys={[['tickets-historial'], ['tickets-unread-count']]}
+              statusOptions={STATUS_OPTIONS}
+            />
             {displayTickets.map((t) => {
               const ss = statusStyles[t.status] || statusStyles['Nuevo'];
               const ps = prioridadStyles[t.prioridad] || prioridadStyles['Normal'];
               const isNew = !t.is_opened;
+              const isChecked = selectedTicketIds.has(t.id);
 
               return (
+                <div key={t.id} className="flex items-start gap-2">
+                  <input
+                    type="checkbox"
+                    checked={isChecked}
+                    onChange={(e) => { e.stopPropagation(); toggleSelect(t.id); }}
+                    onClick={(e) => e.stopPropagation()}
+                    className="mt-5 h-4 w-4 rounded border-purple-500/40 text-purple-600 focus:ring-purple-500/50 cursor-pointer"
+                    title="Seleccionar para acción masiva"
+                  />
                 <button
-                  key={t.id}
                   onClick={() => setSelectedTicket(t)}
-                  className={`w-full text-left rounded-xl border p-4 transition-all duration-200 ${
+                  className={`flex-1 text-left rounded-xl border p-4 transition-all duration-200 ${
                     isNew
                       ? isDark
                         ? 'border-purple-500/40 bg-gradient-to-r from-purple-900/30 via-fuchsia-900/20 to-purple-900/30 hover:border-purple-400/60 shadow-lg shadow-purple-500/10'
@@ -988,7 +1011,7 @@ export function HistorialTicketsPage() {
                       : isDark
                         ? 'border-purple-500/10 bg-zinc-900/50 hover:border-purple-500/30 hover:bg-zinc-900/80'
                         : 'border-gray-200 bg-white hover:border-purple-200 hover:shadow-sm'
-                  }`}
+                  } ${isChecked ? (isDark ? 'ring-2 ring-purple-500/50' : 'ring-2 ring-purple-400/60') : ''}`}
                 >
                   <div className="flex items-start gap-3">
                     {/* Unread / new / mention indicators */}
@@ -1080,6 +1103,7 @@ export function HistorialTicketsPage() {
                     </div>
                   </div>
                 </button>
+                </div>
               );
             })}
           </div>
