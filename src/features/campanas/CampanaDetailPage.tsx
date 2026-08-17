@@ -17,6 +17,7 @@ import { useAuthStore } from '../../store/authStore';
 import { useThemeStore } from '../../store/themeStore';
 import { getPermissions } from '../../lib/permissions';
 import { useSocketCampana } from '../../hooks/useSocket';
+import { NotasDireccionBitacora } from '../notificaciones/NotasDireccionBitacora';
 
 const statusVariants: Record<string, 'secondary' | 'success' | 'warning' | 'info'> = {
   Aprobada: 'success',
@@ -2498,12 +2499,25 @@ export function CampanaDetailPage() {
                 )}
               </>
             )}
-            {campana.notas && (
+            {/* Feedback 2026-08-15: mostrar el historial completo de Notas
+                Dirección (bitácora), no solo campana.notas (que era el texto
+                de la nota mas reciente). Reutiliza el mismo componente que
+                ya usa el modal de edicion de campaña, en variant 'inline'
+                para que se integre visualmente con la columna. */}
+            {campana.solicitud_id ? (
+              <div className="mt-4">
+                <NotasDireccionBitacora
+                  idSolicitud={campana.solicitud_id}
+                  isDark={isDark}
+                  variant="inline"
+                />
+              </div>
+            ) : campana.notas ? (
               <>
                 <h3 className={`text-sm font-semibold mb-2 mt-4 ${isDark ? 'text-purple-300' : 'text-purple-700'} uppercase tracking-wide`}>Notas Dirección</h3>
                 <p className="text-sm text-muted-foreground">{campana.notas}</p>
               </>
-            )}
+            ) : null}
           </div>
         </div>
 
