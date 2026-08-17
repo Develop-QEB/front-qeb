@@ -430,9 +430,9 @@ function TareaRow({
 
   const getAuthStatusBadge = () => {
     if (isCancelado) return { bg: 'bg-zinc-500/20', border: 'border-zinc-500/30', color: 'text-zinc-400', label: 'Cancelado' };
-    // Filtro DG devuelto a corrección: se marca 'Rechazado' en BD, pero NO es un rechazo
+    // Filtro DG/DCM devuelto a corrección: se marca 'Rechazado' en BD, pero NO es un rechazo
     // total — el Gerente lo devolvió al asesor para corregir. Badge ámbar, no rojo/verde.
-    if (tarea.tipo === 'Filtro Autorización DG' && isRechazado) return { bg: 'bg-amber-500/20', border: 'border-amber-500/30', color: 'text-amber-400', label: 'Devuelta a corrección' };
+    if ((tarea.tipo === 'Filtro Autorización DG' || tarea.tipo === 'Filtro Autorización DCM') && isRechazado) return { bg: 'bg-amber-500/20', border: 'border-amber-500/30', color: 'text-amber-400', label: 'Devuelta a corrección' };
     if (isRechazo) return { bg: 'bg-red-500/20', border: 'border-red-500/30', color: 'text-red-400', label: 'Rechazo' };
     if (isAprobacion) return { bg: 'bg-emerald-500/20', border: 'border-emerald-500/30', color: 'text-emerald-400', label: 'Aprobada' };
     if (isRechazado) return { bg: 'bg-red-500/20', border: 'border-red-500/30', color: 'text-red-400', label: 'Rechazo' };
@@ -1703,20 +1703,33 @@ function ApprovalModal({
     },
   });
 
-  // Filtro DG (paso previo con Director General Adjunto) — no aprueba/rechaza
-  // caras, solo decide "Enviar a DG" o "Rechazar como Corrección" a nivel tarea.
+  // Filtro DG / DCM (paso previo con Gerente Comercial) — no aprueba/rechaza
+  // caras, solo decide "Enviar a Dirección" o "Rechazar como Corrección" a
+  // nivel tarea. Feedback 2026-08-15: espejo del flujo DG para DCM +
+  // comentario opcional al aprobar.
   const isFiltroDgTask = tarea.tipo === 'Filtro Autorización DG';
-  const aprobarFiltroDgMutation = useMutation({
-    mutationFn: () => notificacionesService.aprobarFiltroDg(tarea.id),
+  const isFiltroDcmTask = tarea.tipo === 'Filtro Autorización DCM';
+  const isFiltroTask = isFiltroDgTask || isFiltroDcmTask;
+  const filtroDireccion: 'DG' | 'DCM' = isFiltroDcmTask ? 'DCM' : 'DG';
+  const filtroDireccionLabel = filtroDireccion === 'DG' ? 'Dirección General' : 'Dirección Comercial';
+  const [comentarioAprobacionFiltro, setComentarioAprobacionFiltro] = useState('');
+
+  const aprobarFiltroMutation = useMutation({
+    mutationFn: (comentario?: string) => filtroDireccion === 'DG'
+      ? notificacionesService.aprobarFiltroDg(tarea.id, comentario)
+      : notificacionesService.aprobarFiltroDcm(tarea.id, comentario),
     onSuccess: () => {
+      setComentarioAprobacionFiltro('');
       queryClient.invalidateQueries({ queryKey: ['notificaciones'] });
       queryClient.invalidateQueries({ queryKey: ['notificaciones-stats'] });
       onAction();
       onClose();
     },
   });
-  const rechazarFiltroDgMutation = useMutation({
-    mutationFn: (motivo: string) => notificacionesService.rechazarFiltroDg(tarea.id, motivo),
+  const rechazarFiltroMutation = useMutation({
+    mutationFn: (motivo: string) => filtroDireccion === 'DG'
+      ? notificacionesService.rechazarFiltroDg(tarea.id, motivo)
+      : notificacionesService.rechazarFiltroDcm(tarea.id, motivo),
     onSuccess: () => {
       setShowRechazoInput(false);
       setRechazoMotivo('');
@@ -1736,8 +1749,8 @@ function ApprovalModal({
 
   const [autoFinalized, setAutoFinalized] = useState(false);
   useEffect(() => {
-    // No auto-finalizar para Filtro DG — el DGA debe decidir explicitamente.
-    if (isFiltroDgTask) return;
+    // No auto-finalizar para Filtro DG/DCM — el GC debe decidir explicitamente.
+    if (isFiltroTask) return;
     if (
       carasData &&
       carasData.length > 0 &&
@@ -2037,54 +2050,74 @@ function ApprovalModal({
         {isAutorizacionTask && tarea.estatus !== 'Atendido' && tarea.estatus !== 'Cancelado' && (
           <div className={`p-4 sm:p-6 border-t ${isDark ? 'border-zinc-800' : 'border-gray-200'}`}>
             {!showRechazoInput ? (
-              <div className="flex gap-2 sm:gap-3">
-                <button
-                  onClick={() => isFiltroDgTask ? aprobarFiltroDgMutation.mutate() : aprobarMutation.mutate()}
-                  disabled={isFiltroDgTask
-                    ? aprobarFiltroDgMutation.isPending
-                    : (aprobarMutation.isPending || carasPendientes.length === 0)}
-                  className="flex-1 flex items-center justify-center gap-2 px-3 sm:px-4 py-3 rounded-xl bg-emerald-600 text-white text-sm font-medium hover:bg-emerald-700 disabled:opacity-50 disabled:cursor-not-allowed transition-all"
-                >
-                  {(isFiltroDgTask ? aprobarFiltroDgMutation.isPending : aprobarMutation.isPending) ? (
-                    <Loader2 className="h-4 w-4 animate-spin" />
-                  ) : (
-                    <CheckCircle className="h-4 w-4" />
-                  )}
-                  <span className="truncate">
-                    {isFiltroDgTask
-                      ? (aprobarFiltroDgMutation.isPending ? 'Enviando...' : 'Enviar a Dirección General')
-                      : (aprobarMutation.isPending ? 'Aprobando...' : `Aprobar ${carasPendientes.length} circuito${carasPendientes.length !== 1 ? 's' : ''}`)}
-                  </span>
-                </button>
-                <button
-                  onClick={() => setShowRechazoInput(true)}
-                  disabled={!isFiltroDgTask && carasPendientes.length === 0}
-                  className="flex items-center justify-center gap-2 px-4 sm:px-6 py-3 rounded-xl bg-red-600/20 text-red-400 text-sm font-medium hover:bg-red-600/30 border border-red-500/30 disabled:opacity-50 disabled:cursor-not-allowed transition-all"
-                >
-                  <X className="h-4 w-4" />
-                  {isFiltroDgTask ? 'Rechazar como Corrección' : 'Rechazar'}
-                </button>
-              </div>
+              <>
+                {/* Feedback 2026-08-15: comentario opcional para filtros DG/DCM.
+                    Si el gerente pone algo, el back crea una tarea 'Notificación'
+                    al asesor con el mensaje. Si lo deja vacío, comportamiento
+                    igual que antes (no rompe nada). */}
+                {isFiltroTask && (
+                  <div className="mb-3">
+                    <label className={`text-xs ${isDark ? 'text-zinc-500' : 'text-gray-500'} block mb-1`}>Comentario (opcional)</label>
+                    <textarea
+                      value={comentarioAprobacionFiltro}
+                      onChange={(e) => setComentarioAprobacionFiltro(e.target.value)}
+                      placeholder={`Notas para el asesor al enviar a ${filtroDireccionLabel}...`}
+                      rows={2}
+                      className={`w-full px-3 py-2 rounded-xl ${isDark ? 'bg-zinc-800/50 text-white placeholder:text-zinc-600 border-zinc-700' : 'bg-gray-50 text-gray-900 placeholder:text-gray-400 border-gray-300'} border text-sm focus:outline-none focus:border-emerald-500/50 resize-none`}
+                    />
+                  </div>
+                )}
+                <div className="flex gap-2 sm:gap-3">
+                  <button
+                    onClick={() => isFiltroTask
+                      ? aprobarFiltroMutation.mutate(comentarioAprobacionFiltro.trim() || undefined)
+                      : aprobarMutation.mutate()}
+                    disabled={isFiltroTask
+                      ? aprobarFiltroMutation.isPending
+                      : (aprobarMutation.isPending || carasPendientes.length === 0)}
+                    className="flex-1 flex items-center justify-center gap-2 px-3 sm:px-4 py-3 rounded-xl bg-emerald-600 text-white text-sm font-medium hover:bg-emerald-700 disabled:opacity-50 disabled:cursor-not-allowed transition-all"
+                  >
+                    {(isFiltroTask ? aprobarFiltroMutation.isPending : aprobarMutation.isPending) ? (
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                    ) : (
+                      <CheckCircle className="h-4 w-4" />
+                    )}
+                    <span className="truncate">
+                      {isFiltroTask
+                        ? (aprobarFiltroMutation.isPending ? 'Enviando...' : `Enviar a ${filtroDireccionLabel}`)
+                        : (aprobarMutation.isPending ? 'Aprobando...' : `Aprobar ${carasPendientes.length} circuito${carasPendientes.length !== 1 ? 's' : ''}`)}
+                    </span>
+                  </button>
+                  <button
+                    onClick={() => setShowRechazoInput(true)}
+                    disabled={!isFiltroTask && carasPendientes.length === 0}
+                    className="flex items-center justify-center gap-2 px-4 sm:px-6 py-3 rounded-xl bg-red-600/20 text-red-400 text-sm font-medium hover:bg-red-600/30 border border-red-500/30 disabled:opacity-50 disabled:cursor-not-allowed transition-all"
+                  >
+                    <X className="h-4 w-4" />
+                    {isFiltroTask ? 'Rechazar como Corrección' : 'Rechazar'}
+                  </button>
+                </div>
+              </>
             ) : (
               <div className="space-y-3">
                 <textarea
                   value={rechazoMotivo}
                   onChange={(e) => setRechazoMotivo(e.target.value)}
-                  placeholder={isFiltroDgTask
-                    ? 'Describe qué necesita corregir el creador antes de enviar a Dirección General...'
+                  placeholder={isFiltroTask
+                    ? `Describe qué necesita corregir el creador antes de enviar a ${filtroDireccionLabel}...`
                     : 'Escribe el motivo del rechazo...'}
                   rows={3}
                   className={`w-full px-4 py-3 rounded-xl ${isDark ? 'bg-zinc-800/50 text-white placeholder:text-zinc-600' : 'bg-gray-50 text-gray-900 placeholder:text-gray-400'} border border-red-500/30 text-sm focus:outline-none focus:border-red-500/50 resize-none`}
                 />
                 <div className="flex gap-2">
                   <button
-                    onClick={() => isFiltroDgTask ? rechazarFiltroDgMutation.mutate(rechazoMotivo) : rechazarMutation.mutate(rechazoMotivo)}
-                    disabled={(isFiltroDgTask ? rechazarFiltroDgMutation.isPending : rechazarMutation.isPending) || !rechazoMotivo.trim()}
+                    onClick={() => isFiltroTask ? rechazarFiltroMutation.mutate(rechazoMotivo) : rechazarMutation.mutate(rechazoMotivo)}
+                    disabled={(isFiltroTask ? rechazarFiltroMutation.isPending : rechazarMutation.isPending) || !rechazoMotivo.trim()}
                     className="flex-1 flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl bg-red-600 text-white text-sm font-medium hover:bg-red-700 disabled:opacity-50 disabled:cursor-not-allowed transition-all"
                   >
-                    {(isFiltroDgTask ? rechazarFiltroDgMutation.isPending : rechazarMutation.isPending) && <Loader2 className="h-4 w-4 animate-spin" />}
-                    {isFiltroDgTask
-                      ? (rechazarFiltroDgMutation.isPending ? 'Enviando corrección...' : 'Confirmar Corrección')
+                    {(isFiltroTask ? rechazarFiltroMutation.isPending : rechazarMutation.isPending) && <Loader2 className="h-4 w-4 animate-spin" />}
+                    {isFiltroTask
+                      ? (rechazarFiltroMutation.isPending ? 'Enviando corrección...' : 'Confirmar Corrección')
                       : (rechazarMutation.isPending ? 'Rechazando...' : 'Confirmar Rechazo')}
                   </button>
                   <button
@@ -3891,9 +3924,9 @@ export function NotificacionesPage() {
                   const isCanceladoInline = tarea.estatus === 'Cancelado';
                   const getInlineAuthBadge = () => {
                     if (isCanceladoInline) return { bg: 'bg-zinc-500/20', border: 'border-zinc-500/30', color: 'text-zinc-400', label: 'Cancelado' };
-                    // Filtro DG devuelto a corrección: 'Rechazado' en BD pero NO es rechazo total
+                    // Filtro DG/DCM devuelto a corrección: 'Rechazado' en BD pero NO es rechazo total
                     // (el Gerente lo devolvió al asesor para corregir). Badge ámbar, no rojo/verde.
-                    if (tarea.tipo === 'Filtro Autorización DG' && isRechazadoInline) return { bg: 'bg-amber-500/20', border: 'border-amber-500/30', color: 'text-amber-400', label: 'Devuelta a corrección' };
+                    if ((tarea.tipo === 'Filtro Autorización DG' || tarea.tipo === 'Filtro Autorización DCM') && isRechazadoInline) return { bg: 'bg-amber-500/20', border: 'border-amber-500/30', color: 'text-amber-400', label: 'Devuelta a corrección' };
                     if (isRechazoInline) return { bg: 'bg-red-500/20', border: 'border-red-500/30', color: 'text-red-400', label: 'Rechazo' };
                     if (isAprobacionInline) return { bg: 'bg-emerald-500/20', border: 'border-emerald-500/30', color: 'text-emerald-400', label: 'Aprobada' };
                     if (isRechazadoInline) return { bg: 'bg-red-500/20', border: 'border-red-500/30', color: 'text-red-400', label: 'Rechazo' };
