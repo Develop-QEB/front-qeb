@@ -786,7 +786,10 @@ export function OrdenesMontajeModal({ isOpen, onClose, canExport = true }: Orden
 
     // Filtros globales: SAP DB + APS Específico
     if (sapDbFilter !== 'todas') {
-      items = items.filter(item => (item.sap_database || '').toUpperCase() === sapDbFilter);
+      // Filtro BD SAP POR CIRCUITO: si el circuito ya tiene POST, filtra por su BD
+      // congelada (bd_sap_post); si no, cae a la BD actual de la campaña (sap_database).
+      // Así una campaña con 2 bases filtra bien por circuito según su post.
+      items = items.filter(item => ((item.bd_sap_post || item.sap_database) || '').toUpperCase() === sapDbFilter);
     }
     if (apsEspecificoFilter === 'con') {
       items = items.filter(item => item.aps_especifico !== null && item.aps_especifico !== '');
@@ -862,7 +865,10 @@ export function OrdenesMontajeModal({ isOpen, onClose, canExport = true }: Orden
 
     // Filtros globales
     if (sapDbFilter !== 'todas') {
-      items = items.filter(item => (item.sap_database || '').toUpperCase() === sapDbFilter);
+      // Filtro BD SAP POR CIRCUITO: si el circuito ya tiene POST, filtra por su BD
+      // congelada (bd_sap_post); si no, cae a la BD actual de la campaña (sap_database).
+      // Así una campaña con 2 bases filtra bien por circuito según su post.
+      items = items.filter(item => ((item.bd_sap_post || item.sap_database) || '').toUpperCase() === sapDbFilter);
     }
     if (apsEspecificoFilter === 'con') {
       items = items.filter(item => item.aps_especifico !== null && item.aps_especifico !== '');
@@ -934,7 +940,10 @@ export function OrdenesMontajeModal({ isOpen, onClose, canExport = true }: Orden
 
     // Filtros globales
     if (sapDbFilter !== 'todas') {
-      items = items.filter(item => (item.sap_database || '').toUpperCase() === sapDbFilter);
+      // Filtro BD SAP POR CIRCUITO: si el circuito ya tiene POST, filtra por su BD
+      // congelada (bd_sap_post); si no, cae a la BD actual de la campaña (sap_database).
+      // Así una campaña con 2 bases filtra bien por circuito según su post.
+      items = items.filter(item => ((item.bd_sap_post || item.sap_database) || '').toUpperCase() === sapDbFilter);
     }
     if (apsEspecificoFilter === 'con') {
       items = items.filter(item => item.aps_especifico !== null && item.aps_especifico !== '');
@@ -1064,7 +1073,10 @@ export function OrdenesMontajeModal({ isOpen, onClose, canExport = true }: Orden
 
     // Filtro global SAP DB
     if (sapDbFilter !== 'todas') {
-      items = items.filter(item => (item.sap_database || '').toUpperCase() === sapDbFilter);
+      // Filtro BD SAP POR CIRCUITO: si el circuito ya tiene POST, filtra por su BD
+      // congelada (bd_sap_post); si no, cae a la BD actual de la campaña (sap_database).
+      // Así una campaña con 2 bases filtra bien por circuito según su post.
+      items = items.filter(item => ((item.bd_sap_post || item.sap_database) || '').toUpperCase() === sapDbFilter);
     }
     if (postFilter === 'con') {
       items = items.filter(item => item.posted === true);
@@ -1163,7 +1175,10 @@ export function OrdenesMontajeModal({ isOpen, onClose, canExport = true }: Orden
 
     // Filtro global SAP DB
     if (sapDbFilter !== 'todas') {
-      items = items.filter(item => (item.sap_database || '').toUpperCase() === sapDbFilter);
+      // Filtro BD SAP POR CIRCUITO: si el circuito ya tiene POST, filtra por su BD
+      // congelada (bd_sap_post); si no, cae a la BD actual de la campaña (sap_database).
+      // Así una campaña con 2 bases filtra bien por circuito según su post.
+      items = items.filter(item => ((item.bd_sap_post || item.sap_database) || '').toUpperCase() === sapDbFilter);
     }
     if (postFilter === 'con') {
       items = items.filter(item => item.posted === true);
@@ -2206,6 +2221,7 @@ export function OrdenesMontajeModal({ isOpen, onClose, canExport = true }: Orden
                     <th className="px-3 py-3 text-left text-[10px] font-semibold text-sky-300 uppercase tracking-wider">Asesor</th>
                     <th className="px-3 py-3 text-left text-[10px] font-semibold text-sky-300 uppercase tracking-wider">APS Global</th>
                     <th className="px-3 py-3 text-left text-[10px] font-semibold text-sky-300 uppercase tracking-wider">APS Específico</th>
+                    <th className="px-3 py-3 text-left text-[10px] font-semibold text-sky-300 uppercase tracking-wider">BD SAP</th>
                     <th className="px-3 py-3 text-left text-[10px] font-semibold text-sky-300 uppercase tracking-wider">F. Inicio</th>
                     <th className="px-3 py-3 text-left text-[10px] font-semibold text-sky-300 uppercase tracking-wider">F. Fin</th>
                     <th className="px-3 py-3 text-left text-[10px] font-semibold text-sky-300 uppercase tracking-wider">Cliente</th>
@@ -2300,6 +2316,7 @@ export function OrdenesMontajeModal({ isOpen, onClose, canExport = true }: Orden
                     <th className="px-3 py-3 text-left text-[10px] font-semibold text-orange-300 uppercase tracking-wider">APS Global</th>
                     <th className="px-3 py-3 text-left text-[10px] font-semibold text-orange-300 uppercase tracking-wider">APS Específico</th>
                     <th className="px-3 py-3 text-left text-[10px] font-semibold text-orange-300 uppercase tracking-wider">CUIC</th>
+                    <th className="px-3 py-3 text-left text-[10px] font-semibold text-orange-300 uppercase tracking-wider">BD SAP</th>
                     <th className="px-3 py-3 text-left text-[10px] font-semibold text-orange-300 uppercase tracking-wider">F. Inicio</th>
                     <th className="px-3 py-3 text-left text-[10px] font-semibold text-orange-300 uppercase tracking-wider">F. Fin</th>
                     <th className="px-3 py-3 text-left text-[10px] font-semibold text-orange-300 uppercase tracking-wider">Cliente</th>
@@ -2356,6 +2373,7 @@ export function OrdenesMontajeModal({ isOpen, onClose, canExport = true }: Orden
                     <th className="px-3 py-3 text-left text-[10px] font-semibold text-purple-300 uppercase tracking-wider">Anunciante</th>
                     <th className="px-3 py-3 text-left text-[10px] font-semibold text-purple-300 uppercase tracking-wider">Operación</th>
                     <th className="px-3 py-3 text-left text-[10px] font-semibold text-purple-300 uppercase tracking-wider">Cód. Contrato</th>
+                    <th className="px-3 py-3 text-left text-[10px] font-semibold text-purple-300 uppercase tracking-wider">BD SAP</th>
                     <th className="px-3 py-3 text-right text-[10px] font-semibold text-purple-300 uppercase tracking-wider">Precio/Cara</th>
                     <th className="px-3 py-3 text-left text-[10px] font-semibold text-purple-300 uppercase tracking-wider">Vendedor</th>
                     <th className="px-3 py-3 text-left text-[10px] font-semibold text-purple-300 uppercase tracking-wider">Inicio/Periodo</th>
@@ -2596,6 +2614,13 @@ const INVIANRow = React.memo(function INVIANRow({ item, isDark, onOpenGallery, s
         </span>
       </td>
       <td className={`px-3 py-2 text-xs ${isDark ? 'text-zinc-400' : 'text-gray-500'} font-mono`}>{item.CodigoContrato || '-'}</td>
+      <td className="px-3 py-2">
+        {item.bd_sap_post ? (
+          <span className={`px-2 py-0.5 rounded text-[10px] border font-semibold ${getSapDbCls(item.bd_sap_post, isDark)}`} title={`Posteado a BD SAP: ${item.bd_sap_post}`}>{item.bd_sap_post}</span>
+        ) : (
+          <span className={`text-xs ${isDark ? 'text-zinc-600' : 'text-gray-400'}`}>-</span>
+        )}
+      </td>
       <td className="px-3 py-2 text-xs text-right text-emerald-400 font-medium">${(Number(item.PrecioPorCara) || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
       <td className="px-3 py-2">
         {item.Vendedor ? (
