@@ -3313,6 +3313,15 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
       return;
     }
 
+    // No permitir guardar con circuitos fuera del rango de catorcenas. Este check
+    // ya existía en handleUpdateCampana y en el gemelo de propuestas, pero faltaba
+    // aquí — y este es el botón que se usa. Por eso el desfase (encabezado en una
+    // catorcena, circuitos en otra) se alcanzaba a guardar aunque saliera la alerta.
+    if (invalidCaras.length > 0) {
+      showToast(`No se puede guardar: ${invalidCaras.length} cara(s) tienen catorcenas fuera del rango configurado`, 'error');
+      return;
+    }
+
     // No permitir guardar si quedan circuitos rechazados sin resolver.
     const rechazadasSinResolver = caras.filter(c => c.autorizacion_dg === 'rechazado' || c.autorizacion_dcm === 'rechazado');
     if (rechazadasSinResolver.length > 0) {
@@ -9716,7 +9725,10 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
               </button>
               {effectiveCanEdit && (
                 <button
-                  disabled={(!hasChanges && modifiedCaras.size === 0) || isSaving}
+                  disabled={(!hasChanges && modifiedCaras.size === 0) || isSaving || invalidCaras.length > 0}
+                  title={invalidCaras.length > 0
+                    ? `${invalidCaras.length} cara(s) tienen catorcenas fuera del rango actual. Ajusta el rango o elimínalas para poder guardar.`
+                    : undefined}
                   onClick={() => {
                     // Flujo nuevo (feedback Jos 2026-07-15): nota primero,
                     // confirmar cambios después.
@@ -9742,7 +9754,7 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
                     setShowSaveConfirm(true);
                   }}
                   className={`px-6 py-2 rounded-lg text-sm font-medium transition-all ${
-                    (hasChanges || modifiedCaras.size > 0) && !isSaving
+                    (hasChanges || modifiedCaras.size > 0) && !isSaving && invalidCaras.length === 0
                       ? 'bg-purple-500 text-white hover:bg-purple-600 shadow-lg shadow-purple-500/25'
                       : `${isDark ? 'bg-zinc-700 text-zinc-500' : 'bg-gray-200 text-gray-400'} cursor-not-allowed`
                   }`}

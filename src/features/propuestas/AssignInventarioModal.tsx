@@ -10020,7 +10020,10 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
               </button>
               {effectiveCanEdit && (
                 <button
-                  disabled={(!hasChanges && modifiedCaras.size === 0) || isSaving}
+                  disabled={(!hasChanges && modifiedCaras.size === 0) || isSaving || invalidCaras.length > 0}
+                  title={invalidCaras.length > 0
+                    ? `${invalidCaras.length} cara(s) tienen catorcenas fuera del rango actual. Ajusta el rango o elimínalas para poder guardar.`
+                    : undefined}
                   onClick={() => {
                     // Flujo nuevo (feedback Jos 2026-07-15): si hay autorización
                     // pendiente, mostrar PRIMERO la ventana de Nueva Nota Dirección
@@ -10042,7 +10045,7 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
                     setShowSaveConfirm(true);
                   }}
                   className={`px-6 py-2 rounded-lg text-sm font-medium transition-all ${
-                    (hasChanges || modifiedCaras.size > 0) && !isSaving
+                    (hasChanges || modifiedCaras.size > 0) && !isSaving && invalidCaras.length === 0
                       ? 'bg-purple-500 text-white hover:bg-purple-600 shadow-lg shadow-purple-500/25'
                       : `${isDark ? 'bg-zinc-700' : 'bg-gray-200'} ${isDark ? 'text-zinc-500' : 'text-gray-400'} cursor-not-allowed`
                   }`}
