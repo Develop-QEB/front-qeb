@@ -372,11 +372,13 @@ function TicketDetailModal({
   onClose,
   onStatusChange,
   onAssigneeChange,
+  onAreaChange,
 }: {
   ticket: TicketHistorial;
   onClose: () => void;
   onStatusChange: (status: string) => void;
   onAssigneeChange: (assignee: string) => void;
+  onAreaChange: (area: 'QEB' | 'TI') => void;
 }) {
   const isDark = useThemeStore((s) => s.theme) === 'dark';
   const user = useAuthStore((s) => s.user);
@@ -589,15 +591,26 @@ function TicketDetailModal({
                 {ticket.prioridad}
               </span>
               {ticket.area && (
-                <span className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-medium border ${
-                  ticket.area === 'TI'
-                    ? (isDark ? 'bg-cyan-500/10 text-cyan-300 border-cyan-500/30' : 'bg-cyan-50 text-cyan-700 border-cyan-200')
-                    : (isDark ? 'bg-purple-500/10 text-purple-300 border-purple-500/30' : 'bg-purple-50 text-purple-700 border-purple-200')
-                }`}
-                title={ticket.categoria || undefined}
+                // Feedback 2026-08-15: el chip de area ahora es un dropdown
+                // que permite reasignar entre QEB y TI. La categoria se
+                // conserva tal cual (se muestra al lado como badge visual).
+                <select
+                  value={ticket.area}
+                  onChange={(e) => {
+                    const next = e.target.value as 'QEB' | 'TI';
+                    if (next !== ticket.area) onAreaChange(next);
+                  }}
+                  onClick={(e) => e.stopPropagation()}
+                  className={`inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium border cursor-pointer focus:outline-none focus:ring-1 focus:ring-purple-500/50 ${
+                    ticket.area === 'TI'
+                      ? (isDark ? 'bg-cyan-500/10 text-cyan-300 border-cyan-500/30' : 'bg-cyan-50 text-cyan-700 border-cyan-200')
+                      : (isDark ? 'bg-purple-500/10 text-purple-300 border-purple-500/30' : 'bg-purple-50 text-purple-700 border-purple-200')
+                  }`}
+                  title={ticket.categoria ? `Categoría: ${ticket.categoria} — clic para reasignar entre QEB y TI` : 'Clic para reasignar entre QEB y TI'}
                 >
-                  {ticket.area}{ticket.categoria ? ` · ${ticket.categoria}` : ''}
-                </span>
+                  <option value="QEB">QEB{ticket.categoria ? ` · ${ticket.categoria}` : ''}</option>
+                  <option value="TI">TI{ticket.categoria ? ` · ${ticket.categoria}` : ''}</option>
+                </select>
               )}
             </div>
 
@@ -759,6 +772,21 @@ export function HistorialTicketsPage() {
       queryClient.invalidateQueries({ queryKey: ['tickets-historial'] });
       if (selectedTicket) {
         // Refresh the selected ticket data
+        ticketsService.getHistorial().then((all) => {
+          const updated = all.find((t) => t.id === selectedTicket.id);
+          if (updated) setSelectedTicket(updated);
+        });
+      }
+    },
+  });
+
+  // Reasignar entre QEB / TI. Feedback 2026-08-15.
+  const areaMutation = useMutation({
+    mutationFn: ({ id, area }: { id: number; area: 'QEB' | 'TI' }) =>
+      ticketsService.updateArea(id, area),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['tickets-historial'] });
+      if (selectedTicket) {
         ticketsService.getHistorial().then((all) => {
           const updated = all.find((t) => t.id === selectedTicket.id);
           if (updated) setSelectedTicket(updated);
@@ -1069,6 +1097,7 @@ export function HistorialTicketsPage() {
           }}
           onStatusChange={(status) => statusMutation.mutate({ id: selectedTicket.id, status })}
           onAssigneeChange={(assignee) => statusMutation.mutate({ id: selectedTicket.id, status: selectedTicket.status, status_cambiado_por: assignee || undefined })}
+          onAreaChange={(area) => areaMutation.mutate({ id: selectedTicket.id, area })}
         />
       )}
     </div>

@@ -174,6 +174,12 @@ export const ticketsService = {
     return response.data;
   },
 
+  // Reasignar entre QEB y TI. Feedback 2026-08-15.
+  updateArea: async (id: number, area: 'QEB' | 'TI'): Promise<Ticket> => {
+    const response = await api.patch(`/tickets/${id}/area`, { area });
+    return response.data;
+  },
+
   // Obtener estadisticas
   getStats: async (): Promise<TicketStats> => {
     const response = await api.get('/tickets/stats');
