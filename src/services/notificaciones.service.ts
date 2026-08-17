@@ -209,11 +209,11 @@ export const notificacionesService = {
     return response.data.data;
   },
 
-  // Filtro DG (Director General Adjunto) — paso previo a Autorización DG.
-  // El DGA aprueba (crea Autorización DG real) o rechaza como Corrección
-  // (crea tarea Corrección al creador). Feedback 2026-07-15.
-  async aprobarFiltroDg(tareaId: number): Promise<{ tareaDgId: number }> {
-    const response = await api.post<ApiResponse<{ tareaDgId: number }>>(`/solicitudes/filtro-dg/${tareaId}/aprobar`);
+  // Filtro DG (Gerente Comercial VP/Plazas) — paso previo a Autorización DG.
+  // Feedback 2026-08-15: aprobar acepta comentario opcional. Si viene con
+  // texto, el back crea una tarea 'Notificación' al asesor con el comentario.
+  async aprobarFiltroDg(tareaId: number, comentario?: string): Promise<{ tareaDgId: number; tareaNotifAsesorId: number | null }> {
+    const response = await api.post<ApiResponse<{ tareaDgId: number; tareaNotifAsesorId: number | null }>>(`/solicitudes/filtro-dg/${tareaId}/aprobar`, { comentario });
     if (!response.data.success || !response.data.data) {
       throw new Error(response.data.error || 'Error al aprobar filtro DG');
     }
@@ -224,6 +224,24 @@ export const notificacionesService = {
     const response = await api.post<ApiResponse<{ tareaCorreccionId: number }>>(`/solicitudes/filtro-dg/${tareaId}/rechazar`, { motivo });
     if (!response.data.success || !response.data.data) {
       throw new Error(response.data.error || 'Error al rechazar filtro DG');
+    }
+    return response.data.data;
+  },
+
+  // Filtro DCM (Gerente Comercial Aeropuerto) — espejo del filtro DG para
+  // la dimensión DCM. Feedback 2026-08-15.
+  async aprobarFiltroDcm(tareaId: number, comentario?: string): Promise<{ tareaDcmId: number; tareaNotifAsesorId: number | null }> {
+    const response = await api.post<ApiResponse<{ tareaDcmId: number; tareaNotifAsesorId: number | null }>>(`/solicitudes/filtro-dcm/${tareaId}/aprobar`, { comentario });
+    if (!response.data.success || !response.data.data) {
+      throw new Error(response.data.error || 'Error al aprobar filtro DCM');
+    }
+    return response.data.data;
+  },
+
+  async rechazarFiltroDcm(tareaId: number, motivo: string): Promise<{ tareaCorreccionId: number }> {
+    const response = await api.post<ApiResponse<{ tareaCorreccionId: number }>>(`/solicitudes/filtro-dcm/${tareaId}/rechazar`, { motivo });
+    if (!response.data.success || !response.data.data) {
+      throw new Error(response.data.error || 'Error al rechazar filtro DCM');
     }
     return response.data.data;
   },
