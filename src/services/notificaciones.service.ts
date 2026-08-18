@@ -358,6 +358,12 @@ export interface CrearActividadComercialInput {
   fecha_fin?: string;
   activar_recordatorio?: boolean;
   recordar_dias_antes?: number;
+  // Ajuste feedback 2026-08-15: campos manuales que clasifican la actividad.
+  // Todos opcionales para no romper el submit sin ellos.
+  anio?: number;                        // Año
+  catorcena?: number;                   // Periodo (1..26)
+  estatus_actividad?: 'Abierto' | 'Cerrado';
+  base?: 'CIMU' | 'TRADE';              // Base SAP
 }
 
 export interface ActividadComercialCreated {

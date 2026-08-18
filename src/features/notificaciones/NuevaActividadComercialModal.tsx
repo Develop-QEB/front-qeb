@@ -45,6 +45,11 @@ export function NuevaActividadComercialModal({ isOpen, onClose }: Props) {
   const [diasAntes, setDiasAntes] = useState('1');
   const [error, setError] = useState<string | null>(null);
   const [createdId, setCreatedId] = useState<number | null>(null);
+  // Ajuste feedback 2026-08-15: selectores manuales adicionales.
+  const [anio, setAnio] = useState<string>('');
+  const [catorcena, setCatorcena] = useState<string>('');
+  const [estatusActividad, setEstatusActividad] = useState<'' | 'Abierto' | 'Cerrado'>('');
+  const [base, setBase] = useState<'' | 'CIMU' | 'TRADE'>('');
 
   const debouncedSearch = useDebounced(search, 300);
 
@@ -62,8 +67,20 @@ export function NuevaActividadComercialModal({ isOpen, onClose }: Props) {
       setDiasAntes('1');
       setError(null);
       setCreatedId(null);
+      setAnio('');
+      setCatorcena('');
+      setEstatusActividad('');
+      setBase('');
     }
   }, [isOpen]);
+
+  // Rango de años: actual - 1 hasta actual + 1. Cubre actividades atrasadas
+  // y las que se planifican con anticipacion sin desbordar el select.
+  const anios = useMemo(() => {
+    const y = new Date().getFullYear();
+    return [y - 1, y, y + 1];
+  }, []);
+  const catorcenas = useMemo(() => Array.from({ length: 26 }, (_, i) => i + 1), []);
 
   const listQuery = useQuery({
     queryKey: ['actividad-comercial-refs', subtipo, debouncedSearch],
@@ -115,6 +132,10 @@ export function NuevaActividadComercialModal({ isOpen, onClose }: Props) {
       fecha_fin: fechaEntrega || undefined,
       activar_recordatorio: activarRecordatorio,
       recordar_dias_antes: dias,
+      anio: anio ? Number(anio) : undefined,
+      catorcena: catorcena ? Number(catorcena) : undefined,
+      estatus_actividad: estatusActividad || undefined,
+      base: base || undefined,
     });
   };
 
@@ -328,6 +349,56 @@ export function NuevaActividadComercialModal({ isOpen, onClose }: Props) {
                   value={marca}
                   onChange={(e) => setMarca(e.target.value)}
                 />
+              </div>
+            </div>
+
+            {/* Clasificacion manual — ajuste feedback 2026-08-15 */}
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+              <div>
+                <label className={labelCls}>Año</label>
+                <select
+                  className={inputCls}
+                  value={anio}
+                  onChange={(e) => setAnio(e.target.value)}
+                >
+                  <option value="">—</option>
+                  {anios.map(y => <option key={y} value={y}>{y}</option>)}
+                </select>
+              </div>
+              <div>
+                <label className={labelCls}>Periodo (catorcena)</label>
+                <select
+                  className={inputCls}
+                  value={catorcena}
+                  onChange={(e) => setCatorcena(e.target.value)}
+                >
+                  <option value="">—</option>
+                  {catorcenas.map(c => <option key={c} value={c}>Cat {c}</option>)}
+                </select>
+              </div>
+              <div>
+                <label className={labelCls}>Estatus</label>
+                <select
+                  className={inputCls}
+                  value={estatusActividad}
+                  onChange={(e) => setEstatusActividad(e.target.value as '' | 'Abierto' | 'Cerrado')}
+                >
+                  <option value="">—</option>
+                  <option value="Abierto">Abierto</option>
+                  <option value="Cerrado">Cerrado</option>
+                </select>
+              </div>
+              <div>
+                <label className={labelCls}>Base</label>
+                <select
+                  className={inputCls}
+                  value={base}
+                  onChange={(e) => setBase(e.target.value as '' | 'CIMU' | 'TRADE')}
+                >
+                  <option value="">—</option>
+                  <option value="CIMU">CIMU</option>
+                  <option value="TRADE">TRADE</option>
+                </select>
               </div>
             </div>
 
