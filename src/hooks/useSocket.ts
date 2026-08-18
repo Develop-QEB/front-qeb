@@ -471,6 +471,9 @@ export function useSocketPropuesta(propuestaId: number | null) {
       queryClient.invalidateQueries({ queryKey: ['propuesta-inventario', data.propuestaId] });
       queryClient.invalidateQueries({ queryKey: ['propuesta-full', data.propuestaId] });
       queryClient.invalidateQueries({ queryKey: ['propuesta', data.propuestaId] });
+      // Refrescar el historial: cuando desplazan reservas de esta propuesta (venta en
+      // otra campaña), queda un registro nuevo que debe aparecer al momento.
+      queryClient.invalidateQueries({ queryKey: ['propuesta-historial', data.propuestaId] });
       queryClient.invalidateQueries({ queryKey: ['inventario'] });
     };
 
