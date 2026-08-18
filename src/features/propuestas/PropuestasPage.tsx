@@ -1759,13 +1759,16 @@ export function PropuestasPage() {
     try {
       const exportData = await propuestasService.getVersionarioData({
         status: status || undefined,
-        search: debouncedSearchTags.length > 0 ? debouncedSearchTags.join('|') : debouncedSearchInput || undefined,
+        search: serverSearch,
         yearInicio,
         yearFin,
         catorcenaInicio,
         catorcenaFin,
         tipoPeriodo: tipoPeriodo || undefined,
-        excludeRechazadas: true,
+        excludeRechazadas: effectiveExcludeRechazadas,
+        // El export debe salir con los mismos filtros que la vista, incluido
+        // el de Historial.
+        ...historialFilter,
         page: 1,
         limit: 100,
       });
@@ -1859,13 +1862,16 @@ export function PropuestasPage() {
     try {
       const exportData = await propuestasService.getVersionarioData({
         status: status || undefined,
-        search: debouncedSearchTags.length > 0 ? debouncedSearchTags.join('|') : debouncedSearchInput || undefined,
+        search: serverSearch,
         yearInicio,
         yearFin,
         catorcenaInicio,
         catorcenaFin,
         tipoPeriodo: tipoPeriodo || undefined,
-        excludeRechazadas: true,
+        excludeRechazadas: effectiveExcludeRechazadas,
+        // El export debe salir con los mismos filtros que la vista, incluido
+        // el de Historial.
+        ...historialFilter,
         page: 1,
         limit: 100,
       });
@@ -2561,13 +2567,20 @@ export function PropuestasPage() {
             isDark={isDark}
             filters={{
               status: status || undefined,
-              search: debouncedSearchTags.length > 0 ? debouncedSearchTags.join('|') : debouncedSearchInput || undefined,
+              // Mismo `serverSearch` que usa la tabla: si hay tags Y texto
+              // escrito, viajan los dos (antes el texto se perdia).
+              search: serverSearch,
               yearInicio,
               yearFin,
               catorcenaInicio,
               catorcenaFin,
               tipoPeriodo: tipoPeriodo || undefined,
-              excludeRechazadas,
+              // effective*: si el filtro de historial pide "cambio a Rechazada"
+              // hay que dejar de excluirlas, igual que en la tabla.
+              excludeRechazadas: effectiveExcludeRechazadas,
+              // Filtro de Historial — el desglose lo ignoraba por completo, por
+              // eso la vista seguia mostrando casi todas las catorcenas.
+              ...historialFilter,
             }}
             advancedFilters={advancedFilters}
             activeGroupings={versionarioGroupings}
