@@ -996,6 +996,9 @@ export function CampanaDetailPage() {
   const [postedAPSGroups, setPostedAPSGroups] = useState<Set<number>>(new Set());
   // Modal "Historial de posteos" — bitácora de a quién se mandó cada APS.
   const [showPostLogModal, setShowPostLogModal] = useState(false);
+  // Modal de detalle de UN post (al picar el badge "POST" de un APS): muestra a
+  // dónde se mandó ese post (BD SAP, CUIC, razón social, DocNum, fecha, usuario).
+  const [postDetailAPS, setPostDetailAPS] = useState<number | null>(null);
   // APS etiquetados Pre Factura — bloquea POST a SAP y muestra badge dorado.
   const [prefacturaAPSGroups, setPrefacturaAPSGroups] = useState<Set<number>>(new Set());
 
@@ -4730,7 +4733,11 @@ export function CampanaDetailPage() {
                             </span>
                             <span className={`text-xs ${isDark ? 'text-white' : 'text-gray-900'}`}>{groupKey}</span>
                             {activeGroupingsAPS[0] === 'aps' && allGroupItemsAPS[0] && (postedAPSGroups.has(allGroupItemsAPS[0].aps) || alreadyPosted) && (
-                              <span className="text-[9px] font-semibold px-1 py-0.5 rounded bg-green-500/20 text-green-400 border border-green-500/30 shrink-0">POST</span>
+                              <span
+                                onClick={postLogByAPS.has(allGroupItemsAPS[0].aps) ? (e) => { e.stopPropagation(); setPostDetailAPS(allGroupItemsAPS[0].aps); } : undefined}
+                                title={postLogByAPS.has(allGroupItemsAPS[0].aps) ? 'Ver datos del post (BD SAP, CUIC, destino)' : undefined}
+                                className={`text-[9px] font-semibold px-1 py-0.5 rounded bg-green-500/20 text-green-400 border border-green-500/30 shrink-0 ${postLogByAPS.has(allGroupItemsAPS[0].aps) ? 'cursor-pointer hover:bg-green-500/40 underline decoration-dotted underline-offset-2' : ''}`}
+                              >POST</span>
                             )}
                             {/* Destino real del POST (snapshot). Sobrevive a que le
                                 cambien el cliente a la campaña después de postear. */}
@@ -4931,7 +4938,11 @@ export function CampanaDetailPage() {
                                           </span>
                                           <span className={`text-[10px] ${isDark ? 'text-white' : 'text-gray-900'}`}>{subGroupKey}</span>
                                           {activeGroupingsAPS[1] === 'aps' && allSubItemsAPS[0] && postedAPSGroups.has(allSubItemsAPS[0].aps) && (
-                                            <span className="text-[9px] font-semibold px-1 py-0.5 rounded bg-green-500/20 text-green-400 border border-green-500/30 shrink-0">POST</span>
+                                            <span
+                                              onClick={postLogByAPS.has(allSubItemsAPS[0].aps) ? (e) => { e.stopPropagation(); setPostDetailAPS(allSubItemsAPS[0].aps); } : undefined}
+                                              title={postLogByAPS.has(allSubItemsAPS[0].aps) ? 'Ver datos del post' : undefined}
+                                              className={`text-[9px] font-semibold px-1 py-0.5 rounded bg-green-500/20 text-green-400 border border-green-500/30 shrink-0 ${postLogByAPS.has(allSubItemsAPS[0].aps) ? 'cursor-pointer hover:bg-green-500/40 underline decoration-dotted underline-offset-2' : ''}`}
+                                            >POST</span>
                                           )}
                                           {activeGroupingsAPS[1] === 'aps' && allSubItemsAPS[0] && prefacturaAPSGroups.has(allSubItemsAPS[0].aps) && (
                                             <span className="text-[9px] font-semibold px-1 py-0.5 rounded bg-amber-500/20 text-amber-400 border border-amber-500/30 shrink-0">PRE FACTURA</span>
@@ -5075,7 +5086,11 @@ export function CampanaDetailPage() {
                                                         </span>
                                                         <span className={`text-[10px] ${isDark ? 'text-white' : 'text-gray-900'}`}>{thirdGroupKey}</span>
                                                         {activeGroupingsAPS[2] === 'aps' && thirdItems[0] && postedAPSGroups.has(thirdItems[0].aps) && (
-                                                          <span className="text-[9px] font-semibold px-1 py-0.5 rounded bg-green-500/20 text-green-400 border border-green-500/30 shrink-0">POST</span>
+                                                          <span
+                                                            onClick={postLogByAPS.has(thirdItems[0].aps) ? (e) => { e.stopPropagation(); setPostDetailAPS(thirdItems[0].aps); } : undefined}
+                                                            title={postLogByAPS.has(thirdItems[0].aps) ? 'Ver datos del post' : undefined}
+                                                            className={`text-[9px] font-semibold px-1 py-0.5 rounded bg-green-500/20 text-green-400 border border-green-500/30 shrink-0 ${postLogByAPS.has(thirdItems[0].aps) ? 'cursor-pointer hover:bg-green-500/40 underline decoration-dotted underline-offset-2' : ''}`}
+                                                          >POST</span>
                                                         )}
                                                         {activeGroupingsAPS[2] === 'aps' && thirdItems[0] && prefacturaAPSGroups.has(thirdItems[0].aps) && (
                                                           <span className="text-[9px] font-semibold px-1 py-0.5 rounded bg-amber-500/20 text-amber-400 border border-amber-500/30 shrink-0">PRE FACTURA</span>
@@ -5641,6 +5656,60 @@ export function CampanaDetailPage() {
           </div>
         </div>
       )}
+
+      {/* Modal de detalle de UN post — se abre al picar el badge "POST" de un APS.
+          Muestra a dónde se mandó ese post (snapshot congelado por circuito). */}
+      {postDetailAPS != null && (() => {
+        const p = postLogByAPS.get(postDetailAPS);
+        if (!p) return null;
+        const sapCls = p.sap_database === 'CIMU' ? 'bg-blue-500/20 text-blue-300 border-blue-500/30'
+          : p.sap_database === 'TEST' ? 'bg-amber-500/20 text-amber-300 border-amber-500/30'
+          : p.sap_database === 'TRADE' ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500/30'
+          : 'bg-zinc-500/20 text-zinc-300 border-zinc-500/30';
+        const row = (label: string, value: React.ReactNode) => (
+          <div className="flex justify-between gap-4 py-1.5 border-t border-border first:border-t-0">
+            <span className="text-xs text-muted-foreground">{label}</span>
+            <span className={`text-xs font-medium text-right ${isDark ? 'text-white' : 'text-gray-900'}`}>{value}</span>
+          </div>
+        );
+        return (
+          <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4" onClick={() => setPostDetailAPS(null)}>
+            <div
+              className={`rounded-xl shadow-2xl max-w-md w-full ${isDark ? 'bg-zinc-900 border border-purple-500/20' : 'bg-white border border-purple-200'}`}
+              onClick={e => e.stopPropagation()}
+            >
+              <div className="flex items-center justify-between p-4 border-b border-border">
+                <div>
+                  <h3 className={`text-sm font-semibold ${isDark ? 'text-white' : 'text-gray-900'}`}>Datos del POST — APS {p.aps}</h3>
+                  <p className="text-xs text-muted-foreground">A dónde se mandó este circuito (snapshot congelado)</p>
+                </div>
+                <button onClick={() => setPostDetailAPS(null)} className="p-1 rounded hover:bg-muted">
+                  <X className="h-5 w-5 text-muted-foreground" />
+                </button>
+              </div>
+              <div className="p-4">
+                <div className="flex items-center gap-2 mb-3 flex-wrap">
+                  {p.sap_database && <span className={`text-[11px] font-semibold px-2 py-0.5 rounded border ${sapCls}`}>{p.sap_database}</span>}
+                  {p.cuic != null && <span className="text-[11px] font-semibold px-2 py-0.5 rounded bg-indigo-500/20 text-indigo-300 border border-indigo-500/30">CUIC {p.cuic}</span>}
+                  {p.success
+                    ? <span className="text-[11px] font-semibold px-2 py-0.5 rounded bg-green-500/20 text-green-400 border border-green-500/30">OK</span>
+                    : <span title={p.error_msg || 'Error'} className="text-[11px] font-semibold px-2 py-0.5 rounded bg-red-500/20 text-red-400 border border-red-500/30 cursor-help">ERROR</span>}
+                </div>
+                {row('BD SAP', p.sap_database || '—')}
+                {row('CUIC', p.cuic ?? '—')}
+                {row('Razón social', p.razon_social || '—')}
+                {row('Marca / Cliente', p.marca || p.cliente_nombre || '—')}
+                {row('CardCode', p.card_code || '—')}
+                {row('DocNum', p.doc_num ?? '—')}
+                {row('DocEntry', p.doc_entry ?? '—')}
+                {row('Fecha', p.posted_at ? new Date(p.posted_at).toLocaleString('es-MX', { dateStyle: 'medium', timeStyle: 'short' }) : '—')}
+                {row('Posteó', p.usuario_nombre || '—')}
+                {!p.success && p.error_msg && row('Error', <span className="text-red-400">{p.error_msg}</span>)}
+              </div>
+            </div>
+          </div>
+        );
+      })()}
 
       {/* Modal Historial de posteos — bitácora de a quién se mandó cada APS.
           Cada fila es un snapshot tomado al momento del POST, así que sigue
