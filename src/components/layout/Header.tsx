@@ -16,13 +16,15 @@ interface HeaderProps {
   badgeCount?: number;
 }
 
-// Etiqueta del ambiente según el dominio del front (mismo mapeo que los orígenes
-// CORS): pruebas.qeb.mx = develop · jos.qeb.mx = stage · resto (app.qeb.mx / local
-// / previews) = 'Activo'. Se calcula del hostname, sin depender de env vars de build.
+// Etiqueta del ambiente según el dominio del front:
+//   develop-qeb.vercel.app (o dominios con 'develop'/'pruebas') = develop
+//   jos.qeb.mx (o con 'stage')                                  = stage
+//   resto (app.qeb.mx prod, localhost, otros previews)          = 'Activo'
+// Se calcula del hostname, sin depender de env vars de build.
 function getAmbienteLabel(): string {
-  const host = typeof window !== 'undefined' ? window.location.hostname : '';
-  if (host.includes('pruebas')) return 'develop';
-  if (host.includes('jos')) return 'stage';
+  const host = (typeof window !== 'undefined' ? window.location.hostname : '').toLowerCase();
+  if (host.includes('develop') || host.includes('pruebas')) return 'develop';
+  if (host.includes('jos') || host.includes('stage')) return 'stage';
   return 'Activo';
 }
 
