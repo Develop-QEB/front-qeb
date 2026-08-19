@@ -964,18 +964,33 @@ function ApproveModal({ isOpen, onClose, propuesta, onSuccess }: ApproveModalPro
     enabled: isOpen,
   });
 
-  // Caras de la propuesta — detectar circuitos rechazados por DG/DCM y
-  // bloquear el botón Aprobar antes de que el back devuelva 400.
+  // Caras de la propuesta — detectar circuitos que impiden avance por DG/DCM.
+  // Ajuste feedback 2026-08-18: antes solo se contaban 'rechazado'. Ahora
+  // tambien 'correccion' y 'pendiente' bloquean el boton (mismo criterio que
+  // el guard del back). Antes el usuario podia clickar 'Aprobar Propuesta'
+  // con una cara en correccion y el back devolvia 400 pero sin onError la
+  // UI no mostraba nada.
   const { data: carasAprobar } = useQuery({
-    queryKey: ['propuesta-caras', propuesta?.id, 'approve-modal-rechazadas'],
+    queryKey: ['propuesta-caras', propuesta?.id, 'approve-modal-bloqueo'],
     queryFn: () => propuestasService.getCaras(propuesta!.id),
     enabled: isOpen && !!propuesta,
   });
-  const carasRechazadasAprobar = useMemo(() => {
+  const carasBloqueoAprobar = useMemo(() => {
     const cs = carasAprobar || [];
-    const dg = cs.filter(c => c.autorizacion_dg === 'rechazado').length;
-    const dcm = cs.filter(c => c.autorizacion_dcm === 'rechazado').length;
-    return { total: dg + dcm, dg, dcm, hasAny: dg > 0 || dcm > 0 };
+    const rechDg = cs.filter(c => c.autorizacion_dg === 'rechazado').length;
+    const rechDcm = cs.filter(c => c.autorizacion_dcm === 'rechazado').length;
+    const corrDg = cs.filter(c => c.autorizacion_dg === 'correccion').length;
+    const corrDcm = cs.filter(c => c.autorizacion_dcm === 'correccion').length;
+    const pendDg = cs.filter(c => c.autorizacion_dg === 'pendiente').length;
+    const pendDcm = cs.filter(c => c.autorizacion_dcm === 'pendiente').length;
+    const totalRech = rechDg + rechDcm;
+    const totalCorr = corrDg + corrDcm;
+    const totalPend = pendDg + pendDcm;
+    return {
+      rechDg, rechDcm, corrDg, corrDcm, pendDg, pendDcm,
+      totalRech, totalCorr, totalPend,
+      hasAny: totalRech > 0 || totalCorr > 0 || totalPend > 0,
+    };
   }, [carasAprobar]);
 
   const approveMutation = useMutation({
@@ -990,6 +1005,15 @@ function ApproveModal({ isOpen, onClose, propuesta, onSuccess }: ApproveModalPro
       queryClient.invalidateQueries({ queryKey: ['campanas'] });
       onSuccess();
       onClose();
+    },
+    // Ajuste feedback 2026-08-18: sin onError el usuario clickaba y "no
+    // pasaba nada" cuando el back devolvia 400 (ej. correccion pendiente).
+    // Ademas de ConflictoVentaError que ya se pinta abajo, mostramos alert
+    // para cualquier otro error del backend.
+    onError: (err: any) => {
+      if (err instanceof ConflictoVentaError) return; // ya se pinta abajo
+      const msg = err?.response?.data?.error || err?.message || 'No se pudo aprobar la propuesta.';
+      alert(msg);
     },
   });
 
@@ -1157,18 +1181,20 @@ function ApproveModal({ isOpen, onClose, propuesta, onSuccess }: ApproveModalPro
           </div>
         </div>
 
-        {carasRechazadasAprobar.hasAny && (
-          <div className={`mx-4 sm:mx-6 mb-3 p-3 rounded-lg border ${isDark ? 'bg-rose-500/10 border-rose-500/30 text-rose-200' : 'bg-rose-50 border-rose-200 text-rose-800'} text-sm flex items-start gap-2`}>
-            <XCircle className="h-4 w-4 mt-0.5 shrink-0" />
-            <span>
-              No se puede aprobar: hay <b>{carasRechazadasAprobar.total}</b> circuito(s) rechazado(s) por DG/DCM
-              {carasRechazadasAprobar.dg > 0 && carasRechazadasAprobar.dcm > 0
-                ? ` (${carasRechazadasAprobar.dg} por DG, ${carasRechazadasAprobar.dcm} por DCM)`
-                : carasRechazadasAprobar.dg > 0 ? ` (${carasRechazadasAprobar.dg} por DG)` : ` (${carasRechazadasAprobar.dcm} por DCM)`}
-              . Edita o quita esos circuitos primero.
-            </span>
-          </div>
-        )}
+        {carasBloqueoAprobar.hasAny && (() => {
+          const partes: string[] = [];
+          if (carasBloqueoAprobar.totalPend > 0) partes.push(`${carasBloqueoAprobar.totalPend} pendiente(s)`);
+          if (carasBloqueoAprobar.totalRech > 0) partes.push(`${carasBloqueoAprobar.totalRech} rechazado(s)`);
+          if (carasBloqueoAprobar.totalCorr > 0) partes.push(`${carasBloqueoAprobar.totalCorr} en corrección`);
+          return (
+            <div className={`mx-4 sm:mx-6 mb-3 p-3 rounded-lg border ${isDark ? 'bg-rose-500/10 border-rose-500/30 text-rose-200' : 'bg-rose-50 border-rose-200 text-rose-800'} text-sm flex items-start gap-2`}>
+              <XCircle className="h-4 w-4 mt-0.5 shrink-0" />
+              <span>
+                No se puede aprobar: hay circuitos que impiden el avance — {partes.join(', ')}. Corrige y espera la autorización antes de continuar.
+              </span>
+            </div>
+          );
+        })()}
         {/* Footer */}
         <div className={`px-4 sm:px-6 py-3 sm:py-4 border-t ${isDark ? 'border-zinc-800' : 'border-gray-200'} flex flex-col-reverse sm:flex-row sm:justify-end gap-2 sm:gap-3`}>
           <button
@@ -1179,8 +1205,10 @@ function ApproveModal({ isOpen, onClose, propuesta, onSuccess }: ApproveModalPro
           </button>
           <button
             onClick={() => approveMutation.mutate()}
-            disabled={approveMutation.isPending || carasRechazadasAprobar.hasAny}
-            title={carasRechazadasAprobar.hasAny ? `${carasRechazadasAprobar.total} circuito(s) rechazado(s) por DG/DCM — edita o quita esos circuitos primero` : undefined}
+            disabled={approveMutation.isPending || carasBloqueoAprobar.hasAny}
+            title={carasBloqueoAprobar.hasAny
+              ? `Hay circuitos con autorización abierta (pendiente/corrección/rechazado). Espera a que dirección los resuelva.`
+              : undefined}
             className="w-full sm:w-auto justify-center px-6 py-2.5 sm:py-2 rounded-lg bg-gradient-to-r from-emerald-600 to-green-600 text-white text-sm font-medium hover:from-emerald-500 hover:to-green-500 disabled:opacity-50 flex items-center gap-2"
           >
             {approveMutation.isPending ? (
