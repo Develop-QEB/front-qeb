@@ -97,6 +97,28 @@ export interface ConflictoOcupacionRow {
   origenes: number;
 }
 
+/** Celda a limpiar en `/inventarios/conflictos/limpiar-duplicados`. */
+export interface CeldaRef {
+  inventario_id: number;
+  anio: number;
+  numero_catorcena: number;
+}
+
+export interface LimpiezaDuplicadosResult {
+  celdas_pedidas: number;
+  celdas_limpiadas: number;
+  reservas_liberadas: number;
+  omitidas: { inventario_id: number; anio: number; numero_catorcena: number; motivo: string }[];
+  detalle: {
+    inventario_id: number;
+    codigo_unico: string | null;
+    anio: number;
+    numero_catorcena: number;
+    conservada: number;
+    liberadas: number[];
+  }[];
+}
+
 export const inventariosService = {
   async getAll(params: InventariosParams = {}): Promise<PaginatedResponse<Inventario>> {
     const response = await api.get<PaginatedResponse<Inventario>>('/inventarios', { params });
@@ -324,6 +346,27 @@ export const inventariosService = {
       throw new Error(response.data.error || 'Error al obtener conflictos');
     }
     return response.data.data.conflictos;
+  },
+
+  /**
+   * Limpia duplicados: conserva una reserva por celda y suelta las demás.
+   * El backend re-verifica que cada celda siga siendo duplicado y nunca toca
+   * choques ni reservas con APS.
+   */
+  async limpiarDuplicadosOcupacion(
+    catorcenas: { numero: number; anio: number }[],
+    celdas: CeldaRef[],
+    opts?: { timeout?: number }
+  ): Promise<LimpiezaDuplicadosResult> {
+    const response = await api.post<ApiResponse<LimpiezaDuplicadosResult>>(
+      '/inventarios/conflictos/limpiar-duplicados',
+      { catorcenas, celdas },
+      { timeout: opts?.timeout ?? 120_000 }
+    );
+    if (!response.data.success || !response.data.data) {
+      throw new Error(response.data.error || 'Error al limpiar duplicados');
+    }
+    return response.data.data;
   },
 
   async getAcciones(id: number): Promise<AccionInventario[]> {
