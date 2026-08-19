@@ -1,7 +1,7 @@
 import api from '../lib/api';
 import { Campana, CampanaStats, PaginatedResponse, ApiResponse, ComentarioTarea, CampanaWithComments } from '../types';
 
-import { useEnvironmentStore, getEndpoints, getDeliveryNotesEndpoint, getSeriesForSapDatabase } from '../store/environmentStore';
+import { useEnvironmentStore, getEndpoints, getDeliveryNotesEndpoint, getSeriesForSapDatabase, usaSapPruebas } from '../store/environmentStore';
 import type { SapDatabase } from '../store/environmentStore';
 export type { CampanaWithComments };
 
@@ -659,7 +659,7 @@ export async function resolveBaseEntry(
     'CIMU': 'SBOCIMU',
     'TEST': 'PB_SBOCIMU',
   };
-  const db = dbMap[sapDatabase] || 'PB_SBOCIMU';
+  const db = usaSapPruebas(sapDatabase as SapDatabase) ? 'PB_SBOCIMU' : (dbMap[sapDatabase] || 'PB_SBOCIMU');
 
   const response = await fetch(`${SAP_BASE_URL}/order-by-docnum/${db}/${docNum}`);
   if (!response.ok) {
@@ -806,7 +806,7 @@ export interface ExistingDeliveryNote {
 // con su DocEntry para que el caller decida POST (crear) o PATCH (actualizar).
 // 404 ⇒ null. Cualquier otro error vuela como excepción.
 export async function findExistingDeliveryNote(numAtCard: string | number, sapDatabase?: string | null): Promise<ExistingDeliveryNote | null> {
-  const db = SAP_DB_NAME_MAP[sapDatabase || 'TEST'] || 'PB_SBOCIMU';
+  const db = usaSapPruebas((sapDatabase || 'TEST') as SapDatabase) ? 'PB_SBOCIMU' : (SAP_DB_NAME_MAP[sapDatabase || 'TEST'] || 'PB_SBOCIMU');
   const url = `${SAP_BASE_URL}/delivery-note-by-numatcard/${db}/${numAtCard}`;
   const response = await fetch(url);
   if (response.status === 404) return null;
@@ -818,7 +818,7 @@ export async function findExistingDeliveryNote(numAtCard: string | number, sapDa
 
 // PATCH a un DN existente en SAP. Mismo manejo defensivo de errores que POST.
 export async function patchDeliveryNoteToSAP(docEntry: number, deliveryNote: SAPDeliveryNote | SAPDeliveryNoteMigrated, sapDatabase?: string | null): Promise<SAPPostResponse> {
-  const db = SAP_DB_NAME_MAP[sapDatabase || 'TEST'] || 'PB_SBOCIMU';
+  const db = usaSapPruebas((sapDatabase || 'TEST') as SapDatabase) ? 'PB_SBOCIMU' : (SAP_DB_NAME_MAP[sapDatabase || 'TEST'] || 'PB_SBOCIMU');
   const endpoint = `${SAP_BASE_URL}/delivery-notes/${db}/${docEntry}`;
 
   let response: Response;
