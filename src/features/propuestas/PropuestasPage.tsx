@@ -1008,10 +1008,8 @@ function ApproveModal({ isOpen, onClose, propuesta, onSuccess }: ApproveModalPro
     },
     // Ajuste feedback 2026-08-18: sin onError el usuario clickaba y "no
     // pasaba nada" cuando el back devolvia 400 (ej. correccion pendiente).
-    // Ademas de ConflictoVentaError que ya se pinta abajo, mostramos alert
-    // para cualquier otro error del backend.
+    // Mostramos alert para cualquier error del backend.
     onError: (err: any) => {
-      if (err instanceof ConflictoVentaError) return; // ya se pinta abajo
       const msg = err?.response?.data?.error || err?.message || 'No se pudo aprobar la propuesta.';
       alert(msg);
     },
