@@ -789,6 +789,8 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
 
   const effectiveCanEdit = permissions.canAsignarInventario;
   const canEditResumen = permissions.canEditResumenPropuesta;
+  // Tráfico NO puede editar tarifa ni cantidad de caras de circuitos (aunque sí otros campos).
+  const canEditTarifaCaras = canEditResumen && permissions.canEditTarifaCaras;
   const canEditCliente = permissions.canEditClienteEnFormularios;
 
   // Client editing state
@@ -8524,7 +8526,7 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
                           type="number"
                           value={newCara.caras || ''}
                           onChange={(e) => {
-                            if (!canEditResumen) return;
+                            if (!canEditTarifaCaras) return;
                             const val = parseInt(e.target.value) || 0;
                             // Mensual = solo Flujo (Gran Formato).
                             // Catorcena = split 50/50 flujo/contraflujo (ceil/floor).
@@ -8532,8 +8534,8 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
                             const contraflujo = tipoPeriodo === 'mensual' ? 0 : Math.floor(val / 2);
                             setNewCara({ ...newCara, caras: val, caras_flujo: flujo, caras_contraflujo: contraflujo });
                           }}
-                          disabled={!canEditResumen || newCara.articulo?.toUpperCase().startsWith('CT')}
-                          className={`w-full px-3 py-2 ${isDark ? 'bg-zinc-800 border-zinc-700 text-white' : 'bg-white border-gray-300 text-gray-900'} border rounded-lg text-sm focus:outline-none focus:ring-1 focus:ring-purple-500/50 ${(!canEditResumen || newCara.articulo?.toUpperCase().startsWith('CT')) ? 'opacity-40 cursor-not-allowed' : ''}`}
+                          disabled={!canEditTarifaCaras || newCara.articulo?.toUpperCase().startsWith('CT')}
+                          className={`w-full px-3 py-2 ${isDark ? 'bg-zinc-800 border-zinc-700 text-white' : 'bg-white border-gray-300 text-gray-900'} border rounded-lg text-sm focus:outline-none focus:ring-1 focus:ring-purple-500/50 ${(!canEditTarifaCaras || newCara.articulo?.toUpperCase().startsWith('CT')) ? 'opacity-40 cursor-not-allowed' : ''}`}
                           min="0"
                         />
                         <span className="text-[10px] text-zinc-600">Flujo: {newCara.caras_flujo || 0} | Contraflujo: {newCara.caras_contraflujo || 0}</span>
@@ -8567,7 +8569,7 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
                           }}
                           onBlur={() => setTarifaPublicaFocused(false)}
                           onChange={(e) => {
-                            if (!canEditResumen) return;
+                            if (!canEditTarifaCaras) return;
                             const cleaned = e.target.value.replace(/[^\d.]/g, '');
                             const parts = cleaned.split('.');
                             const normalized = parts.length > 1 ? `${parts[0]}.${parts.slice(1).join('').slice(0, 2)}` : cleaned;
@@ -8575,8 +8577,8 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
                             setNewCara({ ...newCara, tarifa_publica: parseFloat(normalized) || 0 });
                           }}
                           placeholder="0.00"
-                          disabled={!canEditResumen || newCara.articulo?.toUpperCase().startsWith('CT')}
-                          className={`w-full px-3 py-2 ${isDark ? 'bg-zinc-800 border-zinc-700 text-white' : 'bg-white border-gray-300 text-gray-900'} border rounded-lg text-sm focus:outline-none focus:ring-1 focus:ring-purple-500/50 ${(!canEditResumen || newCara.articulo?.toUpperCase().startsWith('CT')) ? 'opacity-40 cursor-not-allowed' : ''}`}
+                          disabled={!canEditTarifaCaras || newCara.articulo?.toUpperCase().startsWith('CT')}
+                          className={`w-full px-3 py-2 ${isDark ? 'bg-zinc-800 border-zinc-700 text-white' : 'bg-white border-gray-300 text-gray-900'} border rounded-lg text-sm focus:outline-none focus:ring-1 focus:ring-purple-500/50 ${(!canEditTarifaCaras || newCara.articulo?.toUpperCase().startsWith('CT')) ? 'opacity-40 cursor-not-allowed' : ''}`}
                         />
                       </div>
                       <div className="space-y-1">

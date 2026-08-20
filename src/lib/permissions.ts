@@ -104,6 +104,7 @@ export interface RolePermissions {
   canAprobarPropuesta: boolean;
   canAsignarInventario: boolean;
   canEditResumenPropuesta: boolean; // Editar campos en Resumen de Propuesta del modal
+  canEditTarifaCaras: boolean; // Editar tarifa y cantidad de caras de circuitos (Tráfico = false)
   canCompartirPropuesta: boolean;
   canBuscarInventarioEnModal: boolean;
   canEditCircuitoExistente: boolean; // Mostrar plumita (editar) en cada cara/circuito del modal Asignar Inventario
@@ -192,6 +193,7 @@ const defaultPermissions: RolePermissions = {
   canAprobarPropuesta: true,
   canAsignarInventario: true,
   canEditResumenPropuesta: true,
+  canEditTarifaCaras: true,
   canCompartirPropuesta: true,
   canBuscarInventarioEnModal: true,
   canEditCircuitoExistente: true,
@@ -2808,10 +2810,14 @@ export function getPermissions(role: string | undefined | null): RolePermissions
     };
   }
 
-  return {
+  const merged = {
     ...defaultPermissions,
     ...specificPermissions,
   };
+  // Tráfico (cualquier rol de tráfico) NO puede editar tarifa ni cantidad de caras
+  // de circuitos, ni en propuestas ni en campañas.
+  const esTrafico = /trafico/i.test(role);
+  return { ...merged, canEditTarifaCaras: merged.canEditTarifaCaras && !esTrafico };
 }
 
 // Hook para usar en componentes
