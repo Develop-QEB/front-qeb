@@ -1734,9 +1734,13 @@ function ApprovalModal({
   const [comentarioAprobacionFiltro, setComentarioAprobacionFiltro] = useState('');
 
   const aprobarFiltroMutation = useMutation({
-    mutationFn: (comentario?: string) => filtroDireccion === 'DG'
-      ? notificacionesService.aprobarFiltroDg(tarea.id, comentario)
-      : notificacionesService.aprobarFiltroDcm(tarea.id, comentario),
+    // Ambas funciones devuelven objetos con propiedades distintas
+    // (tareaDgId vs tareaDcmId). Como onSuccess no usa el retorno, se envuelve
+    // en Promise<void> para que TS reconcilie los tipos del union.
+    mutationFn: async (comentario?: string): Promise<void> => {
+      if (filtroDireccion === 'DG') await notificacionesService.aprobarFiltroDg(tarea.id, comentario);
+      else await notificacionesService.aprobarFiltroDcm(tarea.id, comentario);
+    },
     onSuccess: () => {
       setComentarioAprobacionFiltro('');
       queryClient.invalidateQueries({ queryKey: ['notificaciones'] });
@@ -1746,9 +1750,10 @@ function ApprovalModal({
     },
   });
   const rechazarFiltroMutation = useMutation({
-    mutationFn: (motivo: string) => filtroDireccion === 'DG'
-      ? notificacionesService.rechazarFiltroDg(tarea.id, motivo)
-      : notificacionesService.rechazarFiltroDcm(tarea.id, motivo),
+    mutationFn: async (motivo: string): Promise<void> => {
+      if (filtroDireccion === 'DG') await notificacionesService.rechazarFiltroDg(tarea.id, motivo);
+      else await notificacionesService.rechazarFiltroDcm(tarea.id, motivo);
+    },
     onSuccess: () => {
       setShowRechazoInput(false);
       setRechazoMotivo('');
