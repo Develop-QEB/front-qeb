@@ -723,6 +723,12 @@ function StatusModal({ isOpen, onClose, propuesta, onStatusChange, allowedStatus
 
   const handleChangeStatus = () => {
     if (!propuesta || selectedStatus === propuesta.status) return;
+    // Ajuste feedback 2026-08-19: salvaguarda en el handler para que ni
+    // aunque se salte el disabled del boton se abra el modal de rechazo /
+    // se dispare el mutation cuando hay autorizacion abierta.
+    if (bloqueaAvance && (selectedStatus === 'Aprobada' || selectedStatus === 'Pase a ventas' || selectedStatus === 'Rechazada' || selectedStatus === 'Cancelada')) {
+      return;
+    }
     if (selectedStatus === 'Rechazada') {
       setShowRechazoConfirm(true);
       return;
@@ -781,7 +787,7 @@ function StatusModal({ isOpen, onClose, propuesta, onStatusChange, allowedStatus
                     {rechazadasDg > 0 && ` — DG: ${rechazadasDg}`}
                     {rechazadasDcm > 0 && `${rechazadasDg > 0 ? ',' : ' —'} DCM: ${rechazadasDcm}`}.{' '}
                   </>)}
-                  No se puede cambiar a "Pase a ventas" o "Aprobada" hasta que todas las caras estén autorizadas.
+                  No se puede cambiar a "Pase a ventas", "Aprobada", "Rechazada" ni "Cancelada" hasta que todas las caras estén autorizadas.
                 </p>
               </div>
             </div>
@@ -820,23 +826,43 @@ function StatusModal({ isOpen, onClose, propuesta, onStatusChange, allowedStatus
                 <option value={propuesta.status} disabled>{propuesta.status} (actual)</option>
               )}
               {availableStatuses.map(s => {
-                const isBlockedByAuth = (bloqueaAvance || reservasIncompletas) && (s === 'Aprobada' || s === 'Pase a ventas');
+                // Ajuste feedback 2026-08-19: bloquear tambien Rechazada /
+                // Cancelada cuando hay autorizacion abierta. El back ya
+                // rechaza estos casos (fix 2026-08-18) pero el UI seguia
+                // dejando pasar 'Rechazada' — se veia el mensaje amber
+                // pero el select y el boton "Actualizar" estaban activos.
+                // reservasIncompletas solo aplica al AVANCE (Aprobada/Pase
+                // a ventas), no a Rechazada.
+                const bloqueaAvanceStatus = s === 'Aprobada' || s === 'Pase a ventas';
+                const bloqueaSalidaStatus = s === 'Rechazada' || s === 'Cancelada';
+                const isBlockedByAuth = bloqueaAvance && (bloqueaAvanceStatus || bloqueaSalidaStatus);
+                const isBlockedByReservas = reservasIncompletas && bloqueaAvanceStatus;
                 const isBlockedByCuic = esClienteLead && s === 'Pase a ventas';
-                const isBlocked = isBlockedByAuth || isBlockedByCuic;
+                const isBlocked = isBlockedByAuth || isBlockedByReservas || isBlockedByCuic;
+                const etiquetaExtra = isBlockedByCuic
+                  ? ' (Cliente Lead - CUIC 0)'
+                  : isBlockedByReservas
+                    ? ' (Reservas incompletas)'
+                    : isBlockedByAuth
+                      ? ' (Autorización abierta)'
+                      : '';
                 return (
                   <option
                     key={s}
                     value={s}
                     disabled={isBlocked}
                   >
-                    {s}{isBlocked ? (isBlockedByCuic ? ' (Cliente Lead - CUIC 0)' : reservasIncompletas ? ' (Reservas incompletas)' : ' (Requiere autorización)') : ''}
+                    {s}{etiquetaExtra}
                   </option>
                 );
               })}
             </select>
             <button
               onClick={handleChangeStatus}
-              disabled={selectedStatus === propuesta.status || updateStatusMutation.isPending || ((bloqueaAvance || reservasIncompletas) && (selectedStatus === 'Aprobada' || selectedStatus === 'Pase a ventas')) || (esClienteLead && selectedStatus === 'Pase a ventas')}
+              disabled={selectedStatus === propuesta.status || updateStatusMutation.isPending
+                || (bloqueaAvance && (selectedStatus === 'Aprobada' || selectedStatus === 'Pase a ventas' || selectedStatus === 'Rechazada' || selectedStatus === 'Cancelada'))
+                || (reservasIncompletas && (selectedStatus === 'Aprobada' || selectedStatus === 'Pase a ventas'))
+                || (esClienteLead && selectedStatus === 'Pase a ventas')}
               className="flex items-center gap-2 px-4 py-2 rounded-lg bg-purple-600 text-white text-sm hover:bg-purple-700 disabled:opacity-50 disabled:cursor-not-allowed min-w-[120px] justify-center"
             >
               {updateStatusMutation.isPending ? (

@@ -923,6 +923,15 @@ export function SolicitudesPage() {
       queryClient.invalidateQueries({ queryKey: ['solicitudes-stats'] });
       setDeleteId(null);
     },
+    // Ajuste feedback 2026-08-19: el back rechaza el cambio a 'Rechazada'
+    // si la solicitud tiene autorizacion abierta (pendiente/correccion/
+    // rechazado). Sin onError la papelera se veia silenciosa y el usuario
+    // no sabia por que "no pasaba nada".
+    onError: (err: any) => {
+      setDeleteId(null);
+      const msg = err?.response?.data?.error || err?.message || 'No se pudo rechazar la solicitud.';
+      alert(msg);
+    },
   });
 
   // Estatus válidos de una solicitud. Se ofrecen SIEMPRE en el filtro simple
