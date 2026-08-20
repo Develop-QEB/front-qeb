@@ -95,6 +95,11 @@ export interface ConflictoOcupacionRow {
    *  choque real entre ventas; `origenes === 1` con `n > 1` son reservas
    *  duplicadas dentro de la misma campaña. */
   origenes: number;
+  /** Campañas que ocupan la celda (para enlazar a /campanas/detail/:id).
+   *  Opcionales: un backend anterior no los manda. */
+  campanas?: { id: number; nombre: string }[];
+  /** Propuestas (idquote) con reservas sin campaña (enlazan a /propuestas?viewId=). */
+  propuestas?: number[];
 }
 
 /** Celda a limpiar en `/inventarios/conflictos/limpiar-duplicados`. */

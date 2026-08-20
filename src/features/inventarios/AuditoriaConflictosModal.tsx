@@ -1,7 +1,7 @@
 import { useState, useMemo, useEffect, useRef, useCallback } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import {
-  X, AlertTriangle, Loader2, Calendar, Search, Download, BarChart3, CheckCircle2, Trash2,
+  X, AlertTriangle, Loader2, Calendar, Search, Download, BarChart3, CheckCircle2, Trash2, ExternalLink,
 } from 'lucide-react';
 import { useThemeStore } from '../../store/themeStore';
 import { solicitudesService } from '../../services/solicitudes.service';
@@ -64,7 +64,10 @@ export function AuditoriaConflictosModal({ open, onClose, onOpenEnMatriz, autoIn
   const [error, setError] = useState<string | null>(null);
   const [busqueda, setBusqueda] = useState('');
   const [exportando, setExportando] = useState(false);
-  const [confirmLimpieza, setConfirmLimpieza] = useState(false);
+  // Celdas que el diálogo de confirmación va a limpiar: una sola (botón de la
+  // fila, para probar caso por caso) o todos los duplicados visibles (botón
+  // masivo). null = diálogo cerrado.
+  const [objetivoLimpieza, setObjetivoLimpieza] = useState<ConflictoOcupacionRow[] | null>(null);
   const [limpiando, setLimpiando] = useState(false);
   const [resultadoLimpieza, setResultadoLimpieza] = useState<LimpiezaDuplicadosResult | null>(null);
   // "choque" = 2+ campañas distintas peleando la cara (problema de venta).
@@ -182,30 +185,32 @@ export function AuditoriaConflictosModal({ open, onClose, onOpenEnMatriz, autoIn
   // Un sitio puede chocar en varias catorcenas: para el análisis interesa una
   // fila por inventario, no una por celda.
   /**
-   * Limpia SOLO los duplicados visibles. Los choques nunca entran: ahí hay
-   * campañas distintas y cuál se queda es una decisión comercial.
+   * Limpia las celdas confirmadas en el diálogo (una sola o todas las
+   * visibles). Solo duplicados: los choques nunca entran, ahí hay campañas
+   * distintas y cuál se queda es una decisión comercial.
    */
   const handleLimpiarDuplicados = async () => {
-    if (duplicadosVisibles.length === 0) return;
+    const objetivo = objetivoLimpieza;
+    if (!objetivo || objetivo.length === 0) return;
     setLimpiando(true);
     setError(null);
     try {
       const res = await inventariosService.limpiarDuplicadosOcupacion(
         catorcenasSelected,
-        duplicadosVisibles.map(r => ({
+        objetivo.map(r => ({
           inventario_id: r.inventario_id,
           anio: r.anio,
           numero_catorcena: r.numero_catorcena,
         }))
       );
       setResultadoLimpieza(res);
-      setConfirmLimpieza(false);
+      setObjetivoLimpieza(null);
       // Re-auditar para que la tabla refleje el estado real tras la limpieza.
       const rows = await inventariosService.getConflictosOcupacion(catorcenasSelected);
       setResultado(rows);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Error al limpiar duplicados');
-      setConfirmLimpieza(false);
+      setObjetivoLimpieza(null);
     } finally {
       setLimpiando(false);
     }
@@ -498,13 +503,13 @@ export function AuditoriaConflictosModal({ open, onClose, onOpenEnMatriz, autoIn
                 <div className="ml-auto flex items-center gap-2">
                   {duplicadosVisibles.length > 0 && (
                     <button
-                      onClick={() => setConfirmLimpieza(true)}
+                      onClick={() => setObjetivoLimpieza(duplicadosVisibles)}
                       disabled={limpiando}
                       title="Conserva una reserva por celda y suelta las sobrantes. Solo duplicados; los choques no se tocan."
                       className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium ${isDark ? 'bg-red-500/20 text-red-300 border border-red-500/30 hover:bg-red-500/30' : 'bg-red-50 text-red-700 border border-red-200 hover:bg-red-100'} disabled:opacity-40`}
                     >
                       {limpiando ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Trash2 className="h-3.5 w-3.5" />}
-                      Limpiar duplicados ({duplicadosVisibles.length.toLocaleString('es-MX')})
+                      Limpiar todos ({duplicadosVisibles.length.toLocaleString('es-MX')})
                     </button>
                   )}
                   <button
@@ -569,6 +574,7 @@ export function AuditoriaConflictosModal({ open, onClose, onOpenEnMatriz, autoIn
                       <th className="px-3 py-2 text-left font-semibold">Plaza</th>
                       <th className="px-3 py-2 text-left font-semibold">Mueble</th>
                       <th className="px-3 py-2 text-left font-semibold">Ubicación</th>
+                      <th className="px-3 py-2 w-12"></th>
                     </tr>
                   </thead>
                   <tbody>
@@ -605,11 +611,23 @@ export function AuditoriaConflictosModal({ open, onClose, onOpenEnMatriz, autoIn
                         <td className={`px-3 py-1.5 ${isDark ? 'text-zinc-400' : 'text-gray-600'}`}>{r.plaza || '-'}</td>
                         <td className={`px-3 py-1.5 ${isDark ? 'text-zinc-400' : 'text-gray-600'}`}>{r.mueble || '-'}</td>
                         <td className={`px-3 py-1.5 ${isDark ? 'text-zinc-500' : 'text-gray-500'} max-w-[280px] truncate`} title={r.ubicacion || undefined}>{r.ubicacion || '-'}</td>
+                        <td className="px-2 py-1.5 text-center">
+                          {r.origenes < 2 && (
+                            <button
+                              onClick={() => setObjetivoLimpieza([r])}
+                              disabled={limpiando}
+                              title="Limpiar solo esta celda: conserva una reserva y suelta las sobrantes"
+                              className={`p-1.5 rounded-md ${isDark ? 'text-zinc-500 hover:text-red-300 hover:bg-red-500/15' : 'text-gray-400 hover:text-red-600 hover:bg-red-50'} disabled:opacity-40`}
+                            >
+                              <Trash2 className="h-3.5 w-3.5" />
+                            </button>
+                          )}
+                        </td>
                       </tr>
                     ))}
                     {filtrados.length === 0 && (
                       <tr>
-                        <td colSpan={8} className={`px-3 py-8 text-center ${isDark ? 'text-zinc-500' : 'text-gray-400'}`}>
+                        <td colSpan={9} className={`px-3 py-8 text-center ${isDark ? 'text-zinc-500' : 'text-gray-400'}`}>
                           {busqueda ? `Sin coincidencias para "${busqueda}"` : 'Sin celdas de este tipo'}
                         </td>
                       </tr>
@@ -622,10 +640,10 @@ export function AuditoriaConflictosModal({ open, onClose, onOpenEnMatriz, autoIn
         </div>
       </div>
 
-      {confirmLimpieza && (
+      {objetivoLimpieza && (
         <div
           className="fixed inset-0 bg-black/70 z-[60] flex items-center justify-center p-4"
-          onClick={() => !limpiando && setConfirmLimpieza(false)}
+          onClick={() => !limpiando && setObjetivoLimpieza(null)}
         >
           <div
             className={`rounded-2xl border ${isDark ? 'bg-zinc-900 border-red-500/30' : 'bg-white border-red-200'} w-full max-w-lg shadow-2xl flex flex-col max-h-[80vh]`}
@@ -637,7 +655,9 @@ export function AuditoriaConflictosModal({ open, onClose, onOpenEnMatriz, autoIn
               </div>
               <div className="flex-1 min-w-0">
                 <h3 className={`text-base font-semibold ${isDark ? 'text-white' : 'text-gray-900'}`}>
-                  ¿Limpiar {duplicadosVisibles.length} duplicado(s)?
+                  {objetivoLimpieza.length === 1
+                    ? `¿Limpiar el duplicado de ${objetivoLimpieza[0].codigo_unico || `#${objetivoLimpieza[0].inventario_id}`}?`
+                    : `¿Limpiar ${objetivoLimpieza.length} duplicados?`}
                 </h3>
                 <p className={`text-xs mt-1 ${isDark ? 'text-zinc-400' : 'text-gray-500'}`}>
                   En cada celda se conserva una reserva y se sueltan las sobrantes.
@@ -657,7 +677,7 @@ export function AuditoriaConflictosModal({ open, onClose, onOpenEnMatriz, autoIn
               <div>
                 <div className="font-semibold mb-1">Celdas a limpiar</div>
                 <ul className="space-y-1">
-                  {duplicadosVisibles.slice(0, 12).map(r => (
+                  {objetivoLimpieza.slice(0, 12).map(r => (
                     <li key={`${r.inventario_id}-${r.anio}-${r.numero_catorcena}`} className="flex items-start gap-2">
                       <span className="shrink-0 inline-block w-1.5 h-1.5 mt-1.5 rounded-full bg-zinc-400" />
                       <div className="flex-1 min-w-0">
@@ -665,12 +685,42 @@ export function AuditoriaConflictosModal({ open, onClose, onOpenEnMatriz, autoIn
                         <span className={isDark ? 'text-zinc-500' : 'text-gray-500'}>
                           {' '}· C{r.numero_catorcena}-{r.anio} · {r.n} reservas → queda 1
                         </span>
+                        {((r.campanas?.length ?? 0) > 0 || (r.propuestas?.length ?? 0) > 0) && (
+                          <div className="mt-0.5 flex flex-wrap gap-x-3 gap-y-0.5">
+                            {(r.campanas || []).map(c => (
+                              <a
+                                key={`c${c.id}`}
+                                href={`/campanas/detail/${c.id}`}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                title={`Abrir campaña #${c.id} en otra pestaña`}
+                                className={`inline-flex items-center gap-1 underline underline-offset-2 ${isDark ? 'text-purple-300 hover:text-purple-200' : 'text-purple-700 hover:text-purple-900'}`}
+                              >
+                                {c.nombre || `Campaña #${c.id}`}
+                                <ExternalLink className="h-3 w-3 opacity-70" />
+                              </a>
+                            ))}
+                            {(r.propuestas || []).map(pid => (
+                              <a
+                                key={`p${pid}`}
+                                href={`/propuestas?viewId=${pid}`}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                title={`Abrir propuesta #${pid} en otra pestaña`}
+                                className={`inline-flex items-center gap-1 underline underline-offset-2 ${isDark ? 'text-amber-300 hover:text-amber-200' : 'text-amber-700 hover:text-amber-900'}`}
+                              >
+                                Propuesta #{pid}
+                                <ExternalLink className="h-3 w-3 opacity-70" />
+                              </a>
+                            ))}
+                          </div>
+                        )}
                       </div>
                     </li>
                   ))}
-                  {duplicadosVisibles.length > 12 && (
+                  {objetivoLimpieza.length > 12 && (
                     <li className={`italic ${isDark ? 'text-zinc-500' : 'text-gray-500'}`}>
-                      … y {duplicadosVisibles.length - 12} más
+                      … y {objetivoLimpieza.length - 12} más
                     </li>
                   )}
                 </ul>
@@ -679,7 +729,7 @@ export function AuditoriaConflictosModal({ open, onClose, onOpenEnMatriz, autoIn
 
             <div className={`p-4 border-t ${isDark ? 'border-zinc-800 bg-zinc-900/50' : 'border-gray-200 bg-gray-50'} flex items-center justify-end gap-2`}>
               <button
-                onClick={() => setConfirmLimpieza(false)}
+                onClick={() => setObjetivoLimpieza(null)}
                 disabled={limpiando}
                 className={`px-3 py-1.5 rounded-lg text-sm ${isDark ? 'text-zinc-300 hover:bg-zinc-800' : 'text-gray-700 hover:bg-gray-100'} disabled:opacity-50`}
               >
@@ -691,7 +741,7 @@ export function AuditoriaConflictosModal({ open, onClose, onOpenEnMatriz, autoIn
                 className={`flex items-center gap-2 px-3 py-1.5 rounded-lg text-sm font-medium ${isDark ? 'bg-red-500/20 text-red-300 border border-red-500/40 hover:bg-red-500/30' : 'bg-red-600 text-white hover:bg-red-700'} disabled:opacity-50`}
               >
                 {limpiando ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Trash2 className="h-3.5 w-3.5" />}
-                {limpiando ? 'Limpiando...' : `Sí, limpiar ${duplicadosVisibles.length}`}
+                {limpiando ? 'Limpiando...' : `Sí, limpiar ${objetivoLimpieza.length}`}
               </button>
             </div>
           </div>
