@@ -1734,7 +1734,7 @@ function ApprovalModal({
   const [comentarioAprobacionFiltro, setComentarioAprobacionFiltro] = useState('');
 
   const aprobarFiltroMutation = useMutation({
-    mutationFn: (comentario?: string) => filtroDireccion === 'DG'
+    mutationFn: (comentario?: string): Promise<{ tareaDgId: number; tareaNotifAsesorId: number | null } | { tareaDcmId: number; tareaNotifAsesorId: number | null }> => filtroDireccion === 'DG'
       ? notificacionesService.aprobarFiltroDg(tarea.id, comentario)
       : notificacionesService.aprobarFiltroDcm(tarea.id, comentario),
     onSuccess: () => {
