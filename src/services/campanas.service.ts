@@ -100,6 +100,9 @@ export interface PostLogItem {
   usuario_id: number | null;
   usuario_nombre: string | null;
   posted_at: string;
+  catorcena_numero?: number | null; // derivada en getPostLog desde el periodo de la 1ª cara
+  catorcena_anio?: number | null;
+  accion?: string | null; // 'POST' | 'CANCELACION'
 }
 
 export interface SAPPostResponse {

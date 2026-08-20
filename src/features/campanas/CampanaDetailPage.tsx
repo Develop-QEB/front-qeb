@@ -5740,6 +5740,8 @@ export function CampanaDetailPage() {
                 <thead>
                   <tr className={`${isDark ? 'text-purple-300' : 'text-purple-700'} text-left`}>
                     <th className="px-2 py-2 font-semibold">APS</th>
+                    <th className="px-2 py-2 font-semibold">Catorcena</th>
+                    <th className="px-2 py-2 font-semibold">Acción</th>
                     <th className="px-2 py-2 font-semibold">Posteado a</th>
                     <th className="px-2 py-2 font-semibold">Razón social</th>
                     <th className="px-2 py-2 font-semibold">CUIC</th>
@@ -5755,6 +5757,14 @@ export function CampanaDetailPage() {
                   {postLog.map(p => (
                     <tr key={p.id} className={`border-t ${isDark ? 'border-zinc-800' : 'border-gray-100'}`}>
                       <td className={`px-2 py-2 font-medium ${isDark ? 'text-white' : 'text-gray-900'}`}>{p.aps}</td>
+                      <td className="px-2 py-2 text-muted-foreground whitespace-nowrap">
+                        {p.catorcena_numero != null ? `C${p.catorcena_numero}${p.catorcena_anio ? '/' + p.catorcena_anio : ''}` : '—'}
+                      </td>
+                      <td className="px-2 py-2">
+                        {p.accion === 'CANCELACION'
+                          ? <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded bg-amber-500/20 text-amber-400 border border-amber-500/30">CANCELADO</span>
+                          : <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded bg-green-500/20 text-green-400 border border-green-500/30">POST</span>}
+                      </td>
                       <td className={`px-2 py-2 ${isDark ? 'text-white' : 'text-gray-900'}`}>
                         {p.marca || p.cliente_nombre || p.razon_social || '—'}
                       </td>
