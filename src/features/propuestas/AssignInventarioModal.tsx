@@ -792,6 +792,8 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
   const isDescartada = propuesta.status === 'Descartada' || propuesta.status === 'Rechazada';
   const effectiveCanEdit = !readOnly && permissions.canAsignarInventario && !isDescartada;
   const canEditResumen = !readOnly && permissions.canEditResumenPropuesta && !isDescartada;
+  // Tráfico NO puede editar tarifa ni cantidad de caras de circuitos (aunque sí otros campos).
+  const canEditTarifaCaras = canEditResumen && permissions.canEditTarifaCaras;
   const canEditCliente = !readOnly && permissions.canEditClienteEnFormularios && !isDescartada;
   const mapRef = useRef<google.maps.Map | null>(null);
   const reservadosMapRef = useRef<google.maps.Map | null>(null);
@@ -8742,7 +8744,7 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
                           type="number"
                           value={newCara.caras || ''}
                           onChange={(e) => {
-                            if (!canEditResumen) return;
+                            if (!canEditTarifaCaras) return;
                             const val = parseInt(e.target.value) || 0;
                             // Mensual = solo Flujo (Gran Formato: kioscos, boleros, mi macro, etc).
                             // Catorcena = split 50/50 flujo/contraflujo (ceil/floor).
@@ -8750,8 +8752,8 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
                             const contraflujo = tipoPeriodo === 'mensual' ? 0 : Math.floor(val / 2);
                             setNewCara({ ...newCara, caras: val, caras_flujo: flujo, caras_contraflujo: contraflujo });
                           }}
-                          disabled={!canEditResumen || newCara.articulo?.toUpperCase().startsWith('CT')}
-                          className={`w-full px-3 py-2 ${isDark ? 'bg-zinc-800' : 'bg-gray-50'} border ${isDark ? 'border-zinc-700' : 'border-gray-200'} rounded-lg text-sm ${isDark ? 'text-white' : 'text-gray-900'} focus:outline-none focus:ring-1 focus:ring-purple-500/50 ${(!canEditResumen || newCara.articulo?.toUpperCase().startsWith('CT')) ? 'opacity-40 cursor-not-allowed' : ''}`}
+                          disabled={!canEditTarifaCaras || newCara.articulo?.toUpperCase().startsWith('CT')}
+                          className={`w-full px-3 py-2 ${isDark ? 'bg-zinc-800' : 'bg-gray-50'} border ${isDark ? 'border-zinc-700' : 'border-gray-200'} rounded-lg text-sm ${isDark ? 'text-white' : 'text-gray-900'} focus:outline-none focus:ring-1 focus:ring-purple-500/50 ${(!canEditTarifaCaras || newCara.articulo?.toUpperCase().startsWith('CT')) ? 'opacity-40 cursor-not-allowed' : ''}`}
                           min="0"
                         />
                         <span className={`text-[10px] ${isDark ? 'text-zinc-600' : 'text-gray-400'}`}>Flujo: {newCara.caras_flujo || 0} | Contraflujo: {newCara.caras_contraflujo || 0}</span>
@@ -8785,7 +8787,7 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
                           }}
                           onBlur={() => setTarifaPublicaFocused(false)}
                           onChange={(e) => {
-                            if (!canEditResumen) return;
+                            if (!canEditTarifaCaras) return;
                             const cleaned = e.target.value.replace(/[^\d.]/g, '');
                             const parts = cleaned.split('.');
                             const normalized = parts.length > 1 ? `${parts[0]}.${parts.slice(1).join('').slice(0, 2)}` : cleaned;
@@ -8793,8 +8795,8 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
                             setNewCara({ ...newCara, tarifa_publica: parseFloat(normalized) || 0 });
                           }}
                           placeholder="0.00"
-                          disabled={!canEditResumen || newCara.articulo?.toUpperCase().startsWith('CT')}
-                          className={`w-full px-3 py-2 ${isDark ? 'bg-zinc-800' : 'bg-gray-50'} border ${isDark ? 'border-zinc-700' : 'border-gray-200'} rounded-lg text-sm ${isDark ? 'text-white' : 'text-gray-900'} focus:outline-none focus:ring-1 focus:ring-purple-500/50 ${(!canEditResumen || newCara.articulo?.toUpperCase().startsWith('CT')) ? 'opacity-40 cursor-not-allowed' : ''}`}
+                          disabled={!canEditTarifaCaras || newCara.articulo?.toUpperCase().startsWith('CT')}
+                          className={`w-full px-3 py-2 ${isDark ? 'bg-zinc-800' : 'bg-gray-50'} border ${isDark ? 'border-zinc-700' : 'border-gray-200'} rounded-lg text-sm ${isDark ? 'text-white' : 'text-gray-900'} focus:outline-none focus:ring-1 focus:ring-purple-500/50 ${(!canEditTarifaCaras || newCara.articulo?.toUpperCase().startsWith('CT')) ? 'opacity-40 cursor-not-allowed' : ''}`}
                         />
                       </div>
                       <div className="space-y-1">
