@@ -11,6 +11,7 @@ import { useSidebarStore } from '../../store/sidebarStore';
 import { LightThemeNotificationModal } from './LightThemeNotificationModal';
 import { UpdateNotificationModal } from './UpdateNotificationModal';
 import { NotificacionToaster } from '../ui/NotificacionToaster';
+import { ConflictoAlertaModal } from '../ui/ConflictoAlertaModal';
 
 export function MainLayout() {
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
@@ -79,6 +80,9 @@ export function MainLayout() {
 
       {/* Toasts de notificación in-app (sin depender del navegador) */}
       <NotificacionToaster />
+
+      {/* Alerta modal de conflictos de ocupación (centro de pantalla) */}
+      <ConflictoAlertaModal />
 
       {user && user.light_theme_notified !== true && (
         <LightThemeNotificationModal />

@@ -2,6 +2,7 @@ import { useEffect, useRef, useCallback } from 'react';
 import { io, Socket } from 'socket.io-client';
 import { useQueryClient } from '@tanstack/react-query';
 import { useNotifToastStore } from '../store/notifToastStore';
+import { useConflictoAlertaStore } from '../store/conflictoAlertaStore';
 import type { PreferenciasNotif } from '../services/notificaciones.service';
 
 const SOCKET_URL = import.meta.env.VITE_API_URL?.replace('/api', '') || 'http://localhost:3000';
@@ -356,6 +357,18 @@ export function useSocketNotificaciones(
       // `destinatarios` refrescan la lista pero no disparan popup (evita popups
       // masivos a todos los usuarios conectados).
       if (!popups || !paraMi) return;
+
+      // Conflictos de ocupación: modal centrado en vez de toast. No pasa por
+      // las preferencias de popup (opt-in, default OFF): es un aviso operativo
+      // raro y accionable que sus destinatarios deben ver sí o sí.
+      if (payload?.categoria === 'conflicto_ocupacion') {
+        useConflictoAlertaStore.getState().show({
+          titulo: payload?.titulo || 'Conflictos de ocupación detectados',
+          descripcion: payload?.descripcion,
+          tareaId: payload?.tarea_id,
+        });
+        return;
+      }
 
       // El popup es OPT-IN (default OFF): solo se muestra si la preferencia
       // efectiva del usuario es true. La matriz ya resuelve la herencia
