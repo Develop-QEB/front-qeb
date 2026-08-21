@@ -1,7 +1,7 @@
 import { useState, useMemo, useEffect, useRef, useCallback } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import {
-  X, AlertTriangle, Loader2, Calendar, Search, Download, BarChart3, CheckCircle2, Trash2, ExternalLink,
+  X, AlertTriangle, Loader2, Calendar, Search, Download, BarChart3, CheckCircle2, Trash2, ExternalLink, History,
 } from 'lucide-react';
 import { useThemeStore } from '../../store/themeStore';
 import { solicitudesService } from '../../services/solicitudes.service';
@@ -74,6 +74,9 @@ export function AuditoriaConflictosModal({ open, onClose, onOpenEnMatriz, autoIn
   // "duplicado" = una sola campaña con varias reservas sobre la misma cara
   // (problema de armado). Se limpian distinto, conviene no mezclarlos.
   const [tipo, setTipo] = useState<'todos' | 'choque' | 'duplicado'>('todos');
+  // 'conflictos' = auditar y limpiar; 'limpiezas' = bitacora de lo ya limpiado
+  // (automatico y manual), para tener registro consultable.
+  const [vista, setVista] = useState<'conflictos' | 'limpiezas'>('conflictos');
 
   const { data: catorcenasYear, isLoading: loadingCatorcenas } = useQuery({
     queryKey: ['catorcenas', yearSelected],
@@ -93,6 +96,12 @@ export function AuditoriaConflictosModal({ open, onClose, onOpenEnMatriz, autoIn
     queryKey: ['catorcenas', anioActual + 1],
     queryFn: () => solicitudesService.getCatorcenas(anioActual + 1),
     enabled: open && autoIniciar,
+  });
+
+  const { data: limpiezas, isLoading: loadingLimpiezas, refetch: refetchLimpiezas } = useQuery({
+    queryKey: ['conflictos-limpiezas'],
+    queryFn: () => inventariosService.getLimpiezasOcupacion(),
+    enabled: open && vista === 'limpiezas',
   });
 
   const toggleCatorcena = (c: CatorcenaRef) => {
@@ -361,8 +370,107 @@ export function AuditoriaConflictosModal({ open, onClose, onOpenEnMatriz, autoIn
           </button>
         </div>
 
+        {/* Selector de vista: auditoria vs bitacora de limpiezas */}
+        <div className={`px-4 pt-3 flex items-center gap-1 border-b-0`}>
+          {([
+            { k: 'conflictos' as const, label: 'Auditoría', icon: AlertTriangle },
+            { k: 'limpiezas' as const, label: 'Registro de limpiezas', icon: History },
+          ]).map(v => (
+            <button
+              key={v.k}
+              onClick={() => setVista(v.k)}
+              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-t-lg text-xs font-medium border border-b-0 transition-colors ${
+                vista === v.k
+                  ? isDark ? 'bg-zinc-800 border-zinc-700 text-amber-300' : 'bg-white border-gray-300 text-amber-700 shadow-sm'
+                  : isDark ? 'bg-transparent border-transparent text-zinc-500 hover:text-zinc-300' : 'bg-transparent border-transparent text-gray-500 hover:text-gray-700'
+              }`}
+            >
+              <v.icon className="h-3.5 w-3.5" />
+              {v.label}
+            </button>
+          ))}
+        </div>
+
+        {vista === 'limpiezas' && (
+          <div className="flex-1 overflow-hidden flex flex-col min-h-0">
+            <div className={`px-4 py-2.5 border-y ${isDark ? 'border-zinc-800' : 'border-gray-200'} flex items-center gap-2`}>
+              <span className={`text-sm font-semibold ${isDark ? 'text-emerald-300' : 'text-emerald-700'}`}>
+                {(limpiezas?.length ?? 0).toLocaleString('es-MX')} limpiezas registradas
+              </span>
+              <span className={`text-xs ${isDark ? 'text-zinc-500' : 'text-gray-500'}`}>
+                automáticas y manuales · más reciente primero
+              </span>
+              <button
+                onClick={() => void refetchLimpiezas()}
+                className={`ml-auto px-2.5 py-1 rounded-lg text-xs font-medium ${isDark ? 'bg-zinc-800 text-zinc-300 border border-zinc-700 hover:bg-zinc-700' : 'bg-white text-gray-700 border border-gray-300 hover:bg-gray-100'}`}
+              >
+                Actualizar
+              </button>
+            </div>
+            {loadingLimpiezas ? (
+              <div className="flex-1 flex items-center justify-center py-16">
+                <Loader2 className="h-6 w-6 animate-spin text-emerald-500" />
+              </div>
+            ) : (limpiezas?.length ?? 0) === 0 ? (
+              <div className={`flex-1 flex flex-col items-center justify-center gap-2 py-16 ${isDark ? 'text-zinc-500' : 'text-gray-400'}`}>
+                <History className="h-8 w-8 opacity-40" />
+                <p className="text-sm">Aún no hay limpiezas registradas.</p>
+              </div>
+            ) : (
+              <div className="flex-1 overflow-auto min-h-0">
+                <table className="w-full text-xs">
+                  <thead className={`${isDark ? 'bg-zinc-900 text-emerald-300' : 'bg-white text-emerald-700'} sticky top-0 z-10`}>
+                    <tr className={`border-b ${isDark ? 'border-zinc-800' : 'border-gray-200'}`}>
+                      <th className="px-3 py-2 text-left font-semibold w-36">Fecha</th>
+                      <th className="px-3 py-2 text-left font-semibold">Código</th>
+                      <th className="px-3 py-2 text-left font-semibold w-24">Catorcena</th>
+                      <th className="px-3 py-2 text-left font-semibold w-32">Limpiado por</th>
+                      <th className="px-3 py-2 text-center font-semibold w-28" title="Reserva que se conservó">Conservada</th>
+                      <th className="px-3 py-2 text-left font-semibold" title="Reservas soft-borradas">Liberadas</th>
+                      <th className="px-3 py-2 text-left font-semibold">Plaza</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {(limpiezas ?? []).map(l => (
+                      <tr
+                        key={`${l.inventario_id}-${l.anio}-${l.numero_catorcena}-${l.limpiado_at}`}
+                        className={`border-b ${isDark ? 'border-zinc-800/60 hover:bg-zinc-800/40' : 'border-gray-100 hover:bg-gray-50'}`}
+                      >
+                        <td className={`px-3 py-1.5 ${isDark ? 'text-zinc-400' : 'text-gray-600'}`}>
+                          {new Date(l.limpiado_at).toLocaleString('es-MX', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' })}
+                        </td>
+                        <td className={`px-3 py-1.5 font-mono font-medium ${isDark ? 'text-white' : 'text-gray-900'}`}>
+                          {l.codigo_unico || `#${l.inventario_id}`}
+                        </td>
+                        <td className={`px-3 py-1.5 ${isDark ? 'text-zinc-300' : 'text-gray-700'}`}>C{l.numero_catorcena}-{l.anio}</td>
+                        <td className="px-3 py-1.5">
+                          <span className={`px-1.5 py-0.5 rounded-full text-[10px] font-medium border ${
+                            l.limpiado_por === 'Automático'
+                              ? isDark ? 'bg-emerald-500/15 text-emerald-300 border-emerald-500/30' : 'bg-emerald-50 text-emerald-700 border-emerald-200'
+                              : isDark ? 'bg-purple-500/15 text-purple-300 border-purple-500/30' : 'bg-purple-50 text-purple-700 border-purple-200'
+                          }`}>
+                            {l.limpiado_por || '-'}
+                          </span>
+                        </td>
+                        <td className={`px-3 py-1.5 text-center font-mono ${isDark ? 'text-zinc-300' : 'text-gray-700'}`}>
+                          {l.reserva_conservada ? `#${l.reserva_conservada}` : '-'}
+                        </td>
+                        <td className={`px-3 py-1.5 font-mono ${isDark ? 'text-zinc-400' : 'text-gray-600'}`}>
+                          {l.reservas_liberadas ? l.reservas_liberadas.split(',').map(x => `#${x}`).join(', ') : '-'}
+                        </td>
+                        <td className={`px-3 py-1.5 ${isDark ? 'text-zinc-400' : 'text-gray-600'}`}>{l.plaza || '-'}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
+        )}
+
+        {vista === 'conflictos' && (<>
         {/* Selección de periodos */}
-        <div className={`p-4 border-b ${isDark ? 'border-zinc-800' : 'border-gray-200'} space-y-3`}>
+        <div className={`p-4 border-t ${isDark ? 'border-zinc-800' : 'border-gray-200'} border-b space-y-3`}>
           <div className="flex items-center gap-3 flex-wrap">
             <Calendar className={`h-4 w-4 ${isDark ? 'text-amber-400' : 'text-amber-600'}`} />
             <span className={`text-sm font-medium ${isDark ? 'text-white' : 'text-gray-900'}`}>Año:</span>
@@ -638,6 +746,7 @@ export function AuditoriaConflictosModal({ open, onClose, onOpenEnMatriz, autoIn
             </>
           )}
         </div>
+        </>)}
       </div>
 
       {objetivoLimpieza && (
