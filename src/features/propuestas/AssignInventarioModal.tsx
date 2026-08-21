@@ -792,7 +792,7 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
   const isDescartada = propuesta.status === 'Descartada' || propuesta.status === 'Rechazada';
   // Bloqueo Edición Asesores — Estatus Ajuste CTO: los asesores comerciales no pueden
   // editar circuitos existentes mientras la propuesta esté en "Ajuste Cto-Cliente".
-  const bloqueoCircuitoAjusteCto = esAsesorComercial(user?.rol) && propuesta.status === 'Ajuste Cto-Cliente';
+  const bloqueoCircuitoAjusteCto = esAsesorComercial(user?.rol) && (propuesta.status === 'Ajuste Cto-Cliente' || propuesta.status === 'Ajuste Inventario');
   const puedeEditarCircuito = permissions.canEditCircuitoExistente && !bloqueoCircuitoAjusteCto;
   const effectiveCanEdit = !readOnly && permissions.canAsignarInventario && !isDescartada;
   const canEditResumen = !readOnly && permissions.canEditResumenPropuesta && !isDescartada;

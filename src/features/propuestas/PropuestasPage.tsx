@@ -45,6 +45,7 @@ type StatusColor = { bg: string; text: string; border: string };
 const STATUS_COLORS_DARK: Record<string, StatusColor> = {
   'Abierto': { bg: 'bg-blue-500/20', text: 'text-blue-300', border: 'border-blue-500/30' },
   'Ajuste Cto-Cliente': { bg: 'bg-orange-500/20', text: 'text-orange-300', border: 'border-orange-500/30' },
+  'Ajuste Inventario': { bg: 'bg-rose-500/20', text: 'text-rose-300', border: 'border-rose-500/30' },
   'Ajuste Comercial': { bg: 'bg-amber-500/20', text: 'text-amber-300', border: 'border-amber-500/30' },
   'Pase a ventas': { bg: 'bg-emerald-500/20', text: 'text-emerald-300', border: 'border-emerald-500/30' },
   'Atendido': { bg: 'bg-cyan-500/20', text: 'text-cyan-300', border: 'border-cyan-500/30' },
@@ -61,6 +62,7 @@ const STATUS_COLORS_DARK: Record<string, StatusColor> = {
 const STATUS_COLORS_LIGHT: Record<string, StatusColor> = {
   'Abierto': { bg: 'bg-blue-50', text: 'text-blue-700', border: 'border-blue-500/30' },
   'Ajuste Cto-Cliente': { bg: 'bg-orange-50', text: 'text-orange-700', border: 'border-orange-500/30' },
+  'Ajuste Inventario': { bg: 'bg-rose-50', text: 'text-rose-700', border: 'border-rose-500/30' },
   'Ajuste Comercial': { bg: 'bg-amber-50', text: 'text-amber-700', border: 'border-amber-500/30' },
   'Pase a ventas': { bg: 'bg-emerald-50', text: 'text-emerald-700', border: 'border-emerald-500/30' },
   'Atendido': { bg: 'bg-cyan-50', text: 'text-cyan-700', border: 'border-cyan-500/30' },
@@ -81,7 +83,7 @@ const getStatusColor = (status: string, isDark: boolean): StatusColor => {
   return map[status] || (isDark ? DEFAULT_STATUS_COLOR_DARK : DEFAULT_STATUS_COLOR_LIGHT);
 };
 
-const STATUS_OPTIONS = ['Atendido', 'Abierto', 'Ajuste Cto-Cliente', 'Ajuste Comercial', 'Pase a ventas', 'Liberada', 'Rechazada'];
+const STATUS_OPTIONS = ['Atendido', 'Abierto', 'Ajuste Cto-Cliente', 'Ajuste Inventario', 'Ajuste Comercial', 'Pase a ventas', 'Liberada', 'Rechazada'];
 
 // Estatus que SOLO puede asignar el sistema, nunca un usuario. 'Liberada' es el
 // registro de que el job de liberación automática (criterio 30 días) quitó las
@@ -89,7 +91,7 @@ const STATUS_OPTIONS = ['Atendido', 'Abierto', 'Ajuste Cto-Cliente', 'Ajuste Com
 // Sigue en STATUS_OPTIONS para poder filtrar el listado por él y para pintar su
 // color; solo se excluye del selector de cambio de estado. Salir de 'Liberada'
 // sí se permite (el estado actual se muestra deshabilitado como "(actual)").
-const STATUS_SOLO_SISTEMA = ['Liberada'];
+const STATUS_SOLO_SISTEMA = ['Liberada', 'Ajuste Inventario'];
 
 // Chart colors for dynamic status
 const CHART_COLORS = [
