@@ -6449,7 +6449,7 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
                                         className="checkbox-purple"
                                       />
                                     </td>
-                                    <td className="px-3 py-2 text-zinc-300 font-mono text-xs">{inv.codigo_unico}</td>
+                                    <td className="px-3 py-2 text-zinc-300 font-mono text-xs">{inv.codigo_unico}{(inv as any).reservas_tentativas_count > 0 && (<span title="Veces apartado (tentativo) por otras propuestas en el periodo" className="ml-1.5 inline-flex items-center px-1.5 py-0.5 rounded-full text-[10px] font-semibold bg-amber-500/20 text-amber-300">{(inv as any).reservas_tentativas_count}×</span>)}</td>
                                     {hasDigitalInventory && (
                                       <td className="px-3 py-2 text-zinc-400 text-xs">
                                         {inv.tradicional_digital === 'Digital' ? (
@@ -6505,7 +6505,7 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
                                     className="checkbox-purple"
                                   />
                                 </td>
-                                <td className="px-3 py-2 text-zinc-300 font-mono text-xs">{inv.codigo_unico}</td>
+                                <td className="px-3 py-2 text-zinc-300 font-mono text-xs">{inv.codigo_unico}{(inv as any).reservas_tentativas_count > 0 && (<span title="Veces apartado (tentativo) por otras propuestas en el periodo" className="ml-1.5 inline-flex items-center px-1.5 py-0.5 rounded-full text-[10px] font-semibold bg-amber-500/20 text-amber-300">{(inv as any).reservas_tentativas_count}×</span>)}</td>
                                 {hasDigitalInventory && (
                                   <td className="px-3 py-2 text-zinc-400 text-xs">
                                     {inv.tradicional_digital === 'Digital' ? (

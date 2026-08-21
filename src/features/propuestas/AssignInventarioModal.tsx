@@ -6567,7 +6567,7 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
                                         className="checkbox-purple"
                                       />
                                     </td>
-                                    <td className={`px-3 py-2 ${isDark ? 'text-zinc-300' : 'text-gray-700'} font-mono text-xs`}>{inv.codigo_unico}</td>
+                                    <td className={`px-3 py-2 ${isDark ? 'text-zinc-300' : 'text-gray-700'} font-mono text-xs`}>{inv.codigo_unico}{(inv as any).reservas_tentativas_count > 0 && (<span title="Veces apartado (tentativo) por otras propuestas en el periodo" className={`ml-1.5 inline-flex items-center px-1.5 py-0.5 rounded-full text-[10px] font-semibold ${isDark ? 'bg-amber-500/20 text-amber-300' : 'bg-amber-100 text-amber-700'}`}>{(inv as any).reservas_tentativas_count}×</span>)}</td>
                                     {hasDigitalInventory && (
                                       <td className={`px-3 py-2 ${isDark ? 'text-zinc-400' : 'text-gray-500'} text-xs`}>
                                         {inv.tradicional_digital === 'Digital' ? (
@@ -6623,7 +6623,7 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
                                     className="checkbox-purple"
                                   />
                                 </td>
-                                <td className={`px-3 py-2 ${isDark ? 'text-zinc-300' : 'text-gray-700'} font-mono text-xs`}>{inv.codigo_unico}</td>
+                                <td className={`px-3 py-2 ${isDark ? 'text-zinc-300' : 'text-gray-700'} font-mono text-xs`}>{inv.codigo_unico}{(inv as any).reservas_tentativas_count > 0 && (<span title="Veces apartado (tentativo) por otras propuestas en el periodo" className={`ml-1.5 inline-flex items-center px-1.5 py-0.5 rounded-full text-[10px] font-semibold ${isDark ? 'bg-amber-500/20 text-amber-300' : 'bg-amber-100 text-amber-700'}`}>{(inv as any).reservas_tentativas_count}×</span>)}</td>
                                 {hasDigitalInventory && (
                                   <td className={`px-3 py-2 ${isDark ? 'text-zinc-400' : 'text-gray-500'} text-xs`}>
                                     {inv.tradicional_digital === 'Digital' ? (
