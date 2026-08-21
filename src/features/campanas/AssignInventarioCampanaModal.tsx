@@ -789,6 +789,8 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
 
   const effectiveCanEdit = permissions.canAsignarInventario;
   const canEditResumen = permissions.canEditResumenPropuesta;
+  // Tráfico NO puede editar tarifa ni cantidad de caras de circuitos (aunque sí otros campos).
+  const canEditTarifaCaras = canEditResumen && permissions.canEditTarifaCaras;
   const canEditCliente = permissions.canEditClienteEnFormularios;
 
   // Client editing state
@@ -1123,6 +1125,27 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
     const hasAPS = caraReservas.some(r => r.aps && r.aps > 0);
     return hasAPS;
   }, [editingCaraId, caras, reservas, postedAPSGroups]);
+
+  // ¿El CIRCUITO que se está editando tiene inventario reservado? (con o sin APS)
+  // Se mira el grupo RT/BF completo: el inventario es del circuito, y la
+  // bonificada comparte reservas con su renta.
+  const editingCaraGrupoConReservas = useMemo(() => {
+    if (!editingCaraId) return false;
+    const editingCara = caras.find(c => c.localId === editingCaraId);
+    if (!editingCara) return false;
+    const grupoLocal = editingCara.grupo_rt_bf
+      ? caras.filter(c => c.grupo_rt_bf === editingCara.grupo_rt_bf)
+      : [editingCara];
+    return reservas.some(r =>
+      grupoLocal.some(g => r.id.startsWith(g.localId) || (!!g.id && r.solicitudCaraId === g.id))
+    );
+  }, [editingCaraId, caras, reservas]);
+
+  // Filtros del circuito (plazas / ciudades / formatos): con inventario reservado
+  // quedan bloqueados SIEMPRE —aunque el rol tenga canEditCaraFiltersOnEdit—
+  // porque el inventario ya reservado se eligió justo con esos filtros; cambiarlos
+  // dejaría reservas que no corresponden a la plaza/formato de la cara.
+  const caraFiltersLocked = editingCaraGrupoConReservas || (!!editingCaraId && !permissions.canEditCaraFiltersOnEdit);
 
   // Check if the selected cara for search/reservas view is APS blocked
   const selectedCaraAPSBlocked = useMemo(() => {
@@ -2777,16 +2800,18 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
           return;
         }
 
-        // Cambio de periodo con reservas: avisar que se borrarán. Al guardar, el
-        // backend libera las reservas del circuito (cara + pareja RT/BF) y lo
-        // reubica en el nuevo periodo con reservas en 0. (Las caras con APS ya
-        // tienen el periodo bloqueado, así que aquí solo aplica sin APS.)
+        // Cambio de periodo o de ARTÍCULO con reservas: avisar que se liberará el
+        // inventario. Al guardar, el backend libera las reservas del circuito
+        // (cara + pareja RT/BF) y lo deja en el nuevo periodo/artículo con 0.
+        // (Las caras con APS ya tienen periodo y artículo bloqueados, así que aquí
+        // solo aplica sin APS.)
         // Comparar en formato YYYY-MM-DD (handleEditCara trunca a 10 chars, la cara
         // guardada conserva el timestamp completo).
         const periodoCambio =
           String(newCara.inicio_periodo || '').slice(0, 10) !== String(caraToEdit.inicio_periodo || '').slice(0, 10) ||
           String(newCara.fin_periodo || '').slice(0, 10) !== String(caraToEdit.fin_periodo || '').slice(0, 10);
-        if (periodoCambio) {
+        const articuloCambio = (newCara.articulo || '') !== (caraToEdit.articulo || '');
+        if (periodoCambio || articuloCambio) {
           const grupoLocal = caraToEdit.grupo_rt_bf
             ? caras.filter(c => c.grupo_rt_bf === caraToEdit.grupo_rt_bf)
             : [caraToEdit];
@@ -2794,8 +2819,9 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
             grupoLocal.some(g => r.id.startsWith(g.localId) || (g.id && r.solicitudCaraId === g.id))
           );
           if (tieneReservasPeriodo) {
+            const queCambia = [periodoCambio && 'el periodo', articuloCambio && 'el artículo'].filter(Boolean).join(' y ');
             const ok = window.confirm(
-              'Este circuito tiene inventario reservado. Al cambiar el periodo se borrarán las reservas del circuito y se moverá al nuevo periodo con las reservas en 0. ¿Deseas continuar?'
+              `Este circuito tiene inventario reservado.\n\nAl cambiar ${queCambia} se liberará TODO el inventario reservado del circuito (renta y bonificada): las reservas quedan en 0 y hay que volver a reservar el inventario.\n\n¿Deseas continuar?`
             );
             if (!ok) return;
             // Reflejar las reservas en 0 de inmediato (al Aceptar), sin esperar al
@@ -2913,7 +2939,7 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
           } else {
             // Create a new BF row in DB (needs a DB id to tie reservas later)
             const bfData = buildBfCaraData(articuloBf.ItemCode, bfCount, grupoRtBf);
-            const createdBf = await campanasService.createCara(campana!.id, bfData as any);
+            const createdBf = await campanasService.createCara(campana!.id, { ...bfData, deferAuth: true } as any);
             createdBfItem = {
               localId: `cara-${createdBf.id}`,
               id: createdBf.id,
@@ -3140,7 +3166,7 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
         if (wantsPair && articuloBf && grupoRtBf) {
           const bfCount = newCara.bonificacion || 0;
           const bfData = buildBfCaraData(articuloBf.ItemCode, bfCount, grupoRtBf);
-          const createdBf = await campanasService.createCara(campana!.id, bfData as any);
+          const createdBf = await campanasService.createCara(campana!.id, { ...bfData, deferAuth: true } as any);
           newBfItem = {
             localId: `cara-${createdBf.id}`,
             id: createdBf.id,
@@ -3174,7 +3200,7 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
         }
 
         // Create RT cara after BF (so backend auth lookup finds BF pair)
-        const createdCara = await campanasService.createCara(campana!.id, rtCaraData as any);
+        const createdCara = await campanasService.createCara(campana!.id, { ...rtCaraData, deferAuth: true } as any);
         const newRtItem: CaraItem = {
           ...newCara,
           id: createdCara.id,
@@ -3286,6 +3312,15 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
 
     if (!hasCampanaChanges && !hasCaraChanges) {
       showToast('No hay cambios pendientes', 'info');
+      return;
+    }
+
+    // No permitir guardar con circuitos fuera del rango de catorcenas. Este check
+    // ya existía en handleUpdateCampana y en el gemelo de propuestas, pero faltaba
+    // aquí — y este es el botón que se usa. Por eso el desfase (encabezado en una
+    // catorcena, circuitos en otra) se alcanzaba a guardar aunque saliera la alerta.
+    if (invalidCaras.length > 0) {
+      showToast(`No se puede guardar: ${invalidCaras.length} cara(s) tienen catorcenas fuera del rango configurado`, 'error');
       return;
     }
 
@@ -8363,8 +8398,8 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
 
                     <div className="grid grid-cols-4 gap-4 mb-4">
                       <div className="space-y-1">
-                        <label className={`text-xs ${((editingCaraHasReservas && !permissions.canEditCaraFiltersOnEdit) || (editingCaraId && !permissions.canEditCaraFiltersOnEdit)) ? 'text-zinc-800' : 'text-zinc-500'}`}>Plazas {newCara.estados && (!editingCaraId || permissions.canEditCaraFiltersOnEdit) && <span className="text-purple-400">({newCara.estados.split(',').filter(Boolean).length})</span>}</label>
-                        {canEditResumen && (!editingCaraHasReservas || permissions.canEditCaraFiltersOnEdit) && (!editingCaraId || permissions.canEditCaraFiltersOnEdit) ? (
+                        <label title={editingCaraGrupoConReservas ? 'Bloqueado: el circuito tiene inventario reservado' : undefined} className={`text-xs ${(!editingCaraGrupoConReservas && caraFiltersLocked) ? 'text-zinc-800' : 'text-zinc-500'}`}>Plazas {editingCaraGrupoConReservas ? <span className="text-amber-400 text-[10px]">(bloqueado)</span> : newCara.estados && !caraFiltersLocked && <span className="text-purple-400">({newCara.estados.split(',').filter(Boolean).length})</span>}</label>
+                        {canEditResumen && !caraFiltersLocked ? (
                           <MultiSelectDropdown
                             options={(() => {
                               const plazas = (solicitudFilters as any)?.plazas?.map((p: any) => p.plaza) as string[] | undefined;
@@ -8407,8 +8442,8 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
                         )}
                       </div>
                       <div className="space-y-1">
-                        <label className={`text-xs ${((editingCaraHasReservas && !permissions.canEditCaraFiltersOnEdit) || (editingCaraId && !permissions.canEditCaraFiltersOnEdit)) ? 'text-zinc-800' : 'text-zinc-500'}`}>Ciudades {newCara.ciudad && (!editingCaraId || permissions.canEditCaraFiltersOnEdit) && <span className="text-purple-400">({newCara.ciudad.split(',').filter(Boolean).length})</span>}</label>
-                        {canEditResumen && (!editingCaraHasReservas || permissions.canEditCaraFiltersOnEdit) && (!editingCaraId || permissions.canEditCaraFiltersOnEdit) ? (
+                        <label title={editingCaraGrupoConReservas ? 'Bloqueado: el circuito tiene inventario reservado' : undefined} className={`text-xs ${(!editingCaraGrupoConReservas && caraFiltersLocked) ? 'text-zinc-800' : 'text-zinc-500'}`}>Ciudades {editingCaraGrupoConReservas ? <span className="text-amber-400 text-[10px]">(bloqueado)</span> : newCara.ciudad && !caraFiltersLocked && <span className="text-purple-400">({newCara.ciudad.split(',').filter(Boolean).length})</span>}</label>
+                        {canEditResumen && !caraFiltersLocked ? (
                           <MultiSelectDropdown
                             options={
                               (() => {
@@ -8441,8 +8476,8 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
                         )}
                       </div>
                       <div className="space-y-1">
-                        <label className={`text-xs ${((editingCaraHasReservas && !permissions.canEditCaraFiltersOnEdit) || (editingCaraId && !permissions.canEditCaraFiltersOnEdit)) ? 'text-zinc-800' : 'text-zinc-500'}`}>Formatos {newCara.formato && (!editingCaraId || permissions.canEditCaraFiltersOnEdit) && <span className="text-purple-400">({newCara.formato.split(',').filter(Boolean).length})</span>}</label>
-                        {canEditResumen && (!editingCaraHasReservas || permissions.canEditCaraFiltersOnEdit) && (!editingCaraId || permissions.canEditCaraFiltersOnEdit) ? (
+                        <label title={editingCaraGrupoConReservas ? 'Bloqueado: el circuito tiene inventario reservado' : undefined} className={`text-xs ${(!editingCaraGrupoConReservas && caraFiltersLocked) ? 'text-zinc-800' : 'text-zinc-500'}`}>Formatos {editingCaraGrupoConReservas ? <span className="text-amber-400 text-[10px]">(bloqueado)</span> : newCara.formato && !caraFiltersLocked && <span className="text-purple-400">({newCara.formato.split(',').filter(Boolean).length})</span>}</label>
+                        {canEditResumen && !caraFiltersLocked ? (
                           <MultiSelectDropdown
                             options={solicitudFilters?.formatos || []}
                             selected={newCara.formato ? newCara.formato.split(',').map(s => s.trim()).filter(Boolean) : []}
@@ -8488,7 +8523,7 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
                           type="number"
                           value={newCara.caras || ''}
                           onChange={(e) => {
-                            if (!canEditResumen) return;
+                            if (!canEditTarifaCaras) return;
                             const val = parseInt(e.target.value) || 0;
                             // Mensual = solo Flujo (Gran Formato).
                             // Catorcena = split 50/50 flujo/contraflujo (ceil/floor).
@@ -8496,8 +8531,8 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
                             const contraflujo = tipoPeriodo === 'mensual' ? 0 : Math.floor(val / 2);
                             setNewCara({ ...newCara, caras: val, caras_flujo: flujo, caras_contraflujo: contraflujo });
                           }}
-                          disabled={!canEditResumen || newCara.articulo?.toUpperCase().startsWith('CT')}
-                          className={`w-full px-3 py-2 ${isDark ? 'bg-zinc-800 border-zinc-700 text-white' : 'bg-white border-gray-300 text-gray-900'} border rounded-lg text-sm focus:outline-none focus:ring-1 focus:ring-purple-500/50 ${(!canEditResumen || newCara.articulo?.toUpperCase().startsWith('CT')) ? 'opacity-40 cursor-not-allowed' : ''}`}
+                          disabled={!canEditTarifaCaras || newCara.articulo?.toUpperCase().startsWith('CT')}
+                          className={`w-full px-3 py-2 ${isDark ? 'bg-zinc-800 border-zinc-700 text-white' : 'bg-white border-gray-300 text-gray-900'} border rounded-lg text-sm focus:outline-none focus:ring-1 focus:ring-purple-500/50 ${(!canEditTarifaCaras || newCara.articulo?.toUpperCase().startsWith('CT')) ? 'opacity-40 cursor-not-allowed' : ''}`}
                           min="0"
                         />
                         <span className="text-[10px] text-zinc-600">Flujo: {newCara.caras_flujo || 0} | Contraflujo: {newCara.caras_contraflujo || 0}</span>
@@ -8531,7 +8566,7 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
                           }}
                           onBlur={() => setTarifaPublicaFocused(false)}
                           onChange={(e) => {
-                            if (!canEditResumen) return;
+                            if (!canEditTarifaCaras) return;
                             const cleaned = e.target.value.replace(/[^\d.]/g, '');
                             const parts = cleaned.split('.');
                             const normalized = parts.length > 1 ? `${parts[0]}.${parts.slice(1).join('').slice(0, 2)}` : cleaned;
@@ -8539,8 +8574,8 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
                             setNewCara({ ...newCara, tarifa_publica: parseFloat(normalized) || 0 });
                           }}
                           placeholder="0.00"
-                          disabled={!canEditResumen || newCara.articulo?.toUpperCase().startsWith('CT')}
-                          className={`w-full px-3 py-2 ${isDark ? 'bg-zinc-800 border-zinc-700 text-white' : 'bg-white border-gray-300 text-gray-900'} border rounded-lg text-sm focus:outline-none focus:ring-1 focus:ring-purple-500/50 ${(!canEditResumen || newCara.articulo?.toUpperCase().startsWith('CT')) ? 'opacity-40 cursor-not-allowed' : ''}`}
+                          disabled={!canEditTarifaCaras || newCara.articulo?.toUpperCase().startsWith('CT')}
+                          className={`w-full px-3 py-2 ${isDark ? 'bg-zinc-800 border-zinc-700 text-white' : 'bg-white border-gray-300 text-gray-900'} border rounded-lg text-sm focus:outline-none focus:ring-1 focus:ring-purple-500/50 ${(!canEditTarifaCaras || newCara.articulo?.toUpperCase().startsWith('CT')) ? 'opacity-40 cursor-not-allowed' : ''}`}
                         />
                       </div>
                       <div className="space-y-1">
@@ -9692,7 +9727,10 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
               </button>
               {effectiveCanEdit && (
                 <button
-                  disabled={(!hasChanges && modifiedCaras.size === 0) || isSaving}
+                  disabled={(!hasChanges && modifiedCaras.size === 0) || isSaving || invalidCaras.length > 0}
+                  title={invalidCaras.length > 0
+                    ? `${invalidCaras.length} cara(s) tienen catorcenas fuera del rango actual. Ajusta el rango o elimínalas para poder guardar.`
+                    : undefined}
                   onClick={() => {
                     // Flujo nuevo (feedback Jos 2026-07-15): nota primero,
                     // confirmar cambios después.
@@ -9718,7 +9756,7 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
                     setShowSaveConfirm(true);
                   }}
                   className={`px-6 py-2 rounded-lg text-sm font-medium transition-all ${
-                    (hasChanges || modifiedCaras.size > 0) && !isSaving
+                    (hasChanges || modifiedCaras.size > 0) && !isSaving && invalidCaras.length === 0
                       ? 'bg-purple-500 text-white hover:bg-purple-600 shadow-lg shadow-purple-500/25'
                       : `${isDark ? 'bg-zinc-700 text-zinc-500' : 'bg-gray-200 text-gray-400'} cursor-not-allowed`
                   }`}

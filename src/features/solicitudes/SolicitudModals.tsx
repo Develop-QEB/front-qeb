@@ -1289,6 +1289,28 @@ export function StatusModal({ isOpen, onClose, solicitud, onStatusChange, status
   // Verificar si hay caras pendientes de autorización
   const tienePendientes = autorizacionResumen && (autorizacionResumen.pendientesDg > 0 || autorizacionResumen.pendientesDcm > 0);
 
+  // Ajuste feedback 2026-08-18: contar tambien 'correccion' y 'rechazado'
+  // para bloquear cualquier avance / rechazo mientras haya autorizacion
+  // abierta. El resumen actual no trae correccion — se cuenta directo desde
+  // solicitudDetails.caras (mismo pattern que PropuestasPage).
+  const bloqueoAutorizacion = (() => {
+    const cs = solicitudDetails?.caras || [];
+    const pendDg = cs.filter(c => (c as any).autorizacion_dg === 'pendiente').length;
+    const pendDcm = cs.filter(c => (c as any).autorizacion_dcm === 'pendiente').length;
+    const corrDg = cs.filter(c => (c as any).autorizacion_dg === 'correccion').length;
+    const corrDcm = cs.filter(c => (c as any).autorizacion_dcm === 'correccion').length;
+    const rechDg = cs.filter(c => (c as any).autorizacion_dg === 'rechazado').length;
+    const rechDcm = cs.filter(c => (c as any).autorizacion_dcm === 'rechazado').length;
+    const totalPend = pendDg + pendDcm;
+    const totalCorr = corrDg + corrDcm;
+    const totalRech = rechDg + rechDcm;
+    return {
+      pendDg, pendDcm, corrDg, corrDcm, rechDg, rechDcm,
+      totalPend, totalCorr, totalRech,
+      hasAny: totalPend > 0 || totalCorr > 0 || totalRech > 0,
+    };
+  })();
+
   const { data: comments, refetch: refetchComments } = useQuery({
     queryKey: ['solicitud-comments', solicitud?.id],
     queryFn: () => solicitudesService.getComments(solicitud!.id),
@@ -1319,6 +1341,13 @@ export function StatusModal({ isOpen, onClose, solicitud, onStatusChange, status
       queryClient.invalidateQueries({ queryKey: ['solicitudes'] });
       queryClient.invalidateQueries({ queryKey: ['solicitudes-stats'] });
       onStatusChange();
+    },
+    // Ajuste feedback 2026-08-18: mostrar alert si el back rechaza el
+    // cambio de estatus (ej. bloqueo por autorizacion pendiente /
+    // correccion / rechazado). Antes la mutation fallaba en silencio.
+    onError: (err: any) => {
+      const msg = err?.response?.data?.error || err?.message || 'No se pudo cambiar el estatus de la solicitud.';
+      alert(msg);
     },
   });
 
@@ -1367,21 +1396,25 @@ export function StatusModal({ isOpen, onClose, solicitud, onStatusChange, status
 
         {/* Status Selector */}
         <div className={`px-6 py-4 border-b ${isDark ? 'border-zinc-800 bg-zinc-800/30' : 'border-gray-200 bg-gray-50'}`}>
-          {/* Alerta de autorización pendiente */}
-          {tienePendientes && (
-            <div className="mb-4 p-3 rounded-lg bg-amber-500/10 border border-amber-500/30 flex items-start gap-3">
-              <AlertTriangle className="h-5 w-5 text-amber-400 flex-shrink-0 mt-0.5" />
-              <div>
-                <p className={`text-sm ${isDark ? 'text-amber-200' : 'text-amber-800'} font-medium`}>Autorización pendiente</p>
-                <p className={`text-xs ${isDark ? 'text-amber-300/70' : 'text-amber-700'} mt-1`}>
-                  Esta solicitud tiene {(autorizacionResumen?.pendientesDg || 0) + (autorizacionResumen?.pendientesDcm || 0)} cara(s) pendientes de autorización.
-                  {autorizacionResumen?.pendientesDg ? ` DG: ${autorizacionResumen.pendientesDg}.` : ''}
-                  {autorizacionResumen?.pendientesDcm ? ` DCM: ${autorizacionResumen.pendientesDcm}.` : ''}
-                  {' '}No se puede aprobar hasta que todas las caras sean autorizadas.
-                </p>
+          {/* Alerta de autorización abierta — pendiente / correccion / rechazado.
+              Ajuste feedback 2026-08-18: antes solo mostraba pendientes. */}
+          {bloqueoAutorizacion.hasAny && (() => {
+            const partes: string[] = [];
+            if (bloqueoAutorizacion.totalPend > 0) partes.push(`${bloqueoAutorizacion.totalPend} pendiente(s)`);
+            if (bloqueoAutorizacion.totalCorr > 0) partes.push(`${bloqueoAutorizacion.totalCorr} en corrección`);
+            if (bloqueoAutorizacion.totalRech > 0) partes.push(`${bloqueoAutorizacion.totalRech} rechazada(s)`);
+            return (
+              <div className="mb-4 p-3 rounded-lg bg-amber-500/10 border border-amber-500/30 flex items-start gap-3">
+                <AlertTriangle className="h-5 w-5 text-amber-400 flex-shrink-0 mt-0.5" />
+                <div>
+                  <p className={`text-sm ${isDark ? 'text-amber-200' : 'text-amber-800'} font-medium`}>Autorización abierta</p>
+                  <p className={`text-xs ${isDark ? 'text-amber-300/70' : 'text-amber-700'} mt-1`}>
+                    Esta solicitud tiene circuitos que impiden avanzar: {partes.join(', ')}. No se puede cambiar a "Aprobada", "Rechazada" ni "Cancelada" hasta que dirección resuelva.
+                  </p>
+                </div>
               </div>
-            </div>
-          )}
+            );
+          })()}
           {statusReadOnly ? (
             <>
               <label className={`block text-sm ${isDark ? 'text-zinc-400' : 'text-gray-500'} mb-2`}>Estado actual:</label>
@@ -1398,19 +1431,25 @@ export function StatusModal({ isOpen, onClose, solicitud, onStatusChange, status
                   onChange={(e) => setSelectedStatus(e.target.value)}
                   className={`flex-1 px-4 py-2 rounded-lg ${isDark ? 'bg-zinc-800 border-zinc-700 text-white' : 'bg-gray-100 border-gray-200 text-gray-900'} border text-sm focus:outline-none focus:ring-2 focus:ring-purple-500/50`}
                 >
-                  {statusOptions.map(s => (
-                    <option
-                      key={s}
-                      value={s}
-                      disabled={s === 'Aprobada' && tienePendientes}
-                    >
-                      {s}{s === 'Aprobada' && tienePendientes ? ' (Requiere autorización)' : ''}
-                    </option>
-                  ))}
+                  {statusOptions.map(s => {
+                    // Ajuste feedback 2026-08-18: bloquear tambien 'Rechazada'
+                    // cuando hay autorizacion abierta (pendiente/correccion/
+                    // rechazado). El back ya rechaza estos casos.
+                    const bloqueaEsteStatus = bloqueoAutorizacion.hasAny && (s === 'Aprobada' || s === 'Rechazada');
+                    return (
+                      <option
+                        key={s}
+                        value={s}
+                        disabled={bloqueaEsteStatus}
+                      >
+                        {s}{bloqueaEsteStatus ? ' (Autorización abierta)' : ''}
+                      </option>
+                    );
+                  })}
                 </select>
                 <button
                   onClick={handleChangeStatus}
-                  disabled={selectedStatus === solicitud.status || updateStatusMutation.isPending || (selectedStatus === 'Aprobada' && tienePendientes)}
+                  disabled={selectedStatus === solicitud.status || updateStatusMutation.isPending || (bloqueoAutorizacion.hasAny && (selectedStatus === 'Aprobada' || selectedStatus === 'Rechazada'))}
                   className="flex items-center gap-2 px-4 py-2 rounded-lg bg-purple-600 text-white text-sm hover:bg-purple-700 disabled:opacity-50 disabled:cursor-not-allowed min-w-[120px] justify-center"
                 >
                   {updateStatusMutation.isPending ? (
