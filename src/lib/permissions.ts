@@ -2824,3 +2824,20 @@ export function getPermissions(role: string | undefined | null): RolePermissions
 export function usePermissions(role: string | undefined | null): RolePermissions {
   return getPermissions(role);
 }
+
+/**
+ * Roles "asesor comercial" (incluye variantes de Aeropuerto y Asesor Analista).
+ * Se usa para reglas de negocio que aplican a la familia de asesores, p. ej. el
+ * bloqueo de edición de circuitos cuando la propuesta/campaña está en "Ajuste CTO".
+ */
+export const ROLES_ASESOR_COMERCIAL: string[] = [
+  'Asesor Comercial',
+  'Asesor Comercial Aeropuerto',
+  'Gerente Comercial Aeropuerto',
+  'Director Comercial Aeropuerto',
+  'Asesor Analista',
+];
+
+export function esAsesorComercial(rol?: string | null): boolean {
+  return !!rol && ROLES_ASESOR_COMERCIAL.includes(rol);
+}

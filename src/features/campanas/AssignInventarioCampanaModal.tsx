@@ -20,7 +20,7 @@ import { parseCircuitoDigital } from '../../lib/circuitos';
 import { circuitosService } from '../../services/circuitos.service';
 import { useEnvironmentStore, getEndpoints } from '../../store/environmentStore';
 import { useAuthStore } from '../../store/authStore';
-import { usePermissions } from '../../lib/permissions';
+import { usePermissions, esAsesorComercial } from '../../lib/permissions';
 import { filterAllowedArticulos } from '../../config/allowedDigitalArticles';
 import { useSocketEquipos, useSocketCampana, useSocketInventarioRealtime, type InventarioRealtimePayload } from '../../hooks/useSocket';
 import { useThemeStore } from '../../store/themeStore';
@@ -792,6 +792,10 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
   // Tráfico NO puede editar tarifa ni cantidad de caras de circuitos (aunque sí otros campos).
   const canEditTarifaCaras = canEditResumen && permissions.canEditTarifaCaras;
   const canEditCliente = permissions.canEditClienteEnFormularios;
+  // Bloqueo Edición Asesores — Estatus Ajuste CTO: los asesores comerciales no pueden
+  // editar circuitos existentes mientras la campaña esté en "Ajuste CTO Cliente".
+  const bloqueoCircuitoAjusteCto = esAsesorComercial(user?.rol) && campana?.status === 'Ajuste CTO Cliente';
+  const puedeEditarCircuito = permissions.canEditCircuitoExistente && !bloqueoCircuitoAjusteCto;
 
   // Client editing state
   interface CuicItem {
@@ -9019,7 +9023,7 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
                                             <RefreshCw className="h-4 w-4" />
                                           </button>
                                         )}
-                                        {permissions.canEditCircuitoExistente && (
+                                        {puedeEditarCircuito && (
                                           <button
                                             onClick={(e) => { e.stopPropagation(); if (!editBlocked && !loadingCaraAction) handleEditCara(cara); }}
                                             disabled={editBlocked || !!loadingCaraAction}

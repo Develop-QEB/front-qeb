@@ -20,7 +20,7 @@ import { circuitosService } from '../../services/circuitos.service';
 import { clientesService } from '../../services/clientes.service';
 import { useEnvironmentStore, getEndpoints } from '../../store/environmentStore';
 import { useAuthStore } from '../../store/authStore';
-import { getPermissions } from '../../lib/permissions';
+import { getPermissions, esAsesorComercial } from '../../lib/permissions';
 import { filterAllowedArticulos } from '../../config/allowedDigitalArticles';
 import { useSocketPropuesta, useSocketEquipos, useSocketInventarioRealtime, type InventarioRealtimePayload } from '../../hooks/useSocket';
 import { useThemeStore } from '../../store/themeStore';
@@ -790,6 +790,10 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
 
   // Si readOnly es true, sobrescribir permisos para modo visualización
   const isDescartada = propuesta.status === 'Descartada' || propuesta.status === 'Rechazada';
+  // Bloqueo Edición Asesores — Estatus Ajuste CTO: los asesores comerciales no pueden
+  // editar circuitos existentes mientras la propuesta esté en "Ajuste Cto-Cliente".
+  const bloqueoCircuitoAjusteCto = esAsesorComercial(user?.rol) && propuesta.status === 'Ajuste Cto-Cliente';
+  const puedeEditarCircuito = permissions.canEditCircuitoExistente && !bloqueoCircuitoAjusteCto;
   const effectiveCanEdit = !readOnly && permissions.canAsignarInventario && !isDescartada;
   const canEditResumen = !readOnly && permissions.canEditResumenPropuesta && !isDescartada;
   // Tráfico NO puede editar tarifa ni cantidad de caras de circuitos (aunque sí otros campos).
@@ -9224,7 +9228,7 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
                                             <RefreshCw className="h-4 w-4" />
                                           </button>
                                         )}
-                                        {permissions.canEditCircuitoExistente && (
+                                        {puedeEditarCircuito && (
                                           <button
                                             onClick={(e) => { e.stopPropagation(); if (!hasSavedPendingAuth) handleEditCara(cara); }}
                                             disabled={hasSavedPendingAuth}
