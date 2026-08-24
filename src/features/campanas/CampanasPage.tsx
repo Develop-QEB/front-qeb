@@ -2993,7 +2993,8 @@ export function CampanasPage() {
   // Callbacks estables para el `CampanaRow` memoizado. `useCallback` mantiene
   // la misma identidad entre renders del padre para que React.memo no aborte.
   const handleRowOpen = useCallback((id: number) => handleOpenCampana(id), [handleOpenCampana]);
-  const handleRowShare = useCallback((propId: number) => navigate(`/propuestas/compartir/${propId}`), [navigate]);
+  // ctx=campana: la vista compartir muestra "Circuitos Confirmados" (desde Propuestas, sin ctx, muestra "Circuitos Muestra")
+  const handleRowShare = useCallback((propId: number) => navigate(`/propuestas/compartir/${propId}?ctx=campana`), [navigate]);
   const handleRowEdit = useCallback((c: Campana) => handleEditCampana(c), [handleEditCampana]);
   const handleRowIncidencia = useCallback((c: Campana) => {
     setIncidenciaCampana(c);
@@ -4036,7 +4037,7 @@ export function CampanasPage() {
                             </button>
                             {campana.propuesta_id && (
                               <button
-                                onClick={() => navigate(`/propuestas/compartir/${campana.propuesta_id}`)}
+                                onClick={() => navigate(`/propuestas/compartir/${campana.propuesta_id}?ctx=campana`)}
                                 className={`p-1.5 rounded-lg ${isDark ? 'bg-cyan-500/10 text-cyan-400 hover:bg-cyan-500/20 border-cyan-500/20' : 'bg-cyan-50 text-cyan-600 hover:bg-cyan-100 border-cyan-200'} border transition-all`}
                                 title="Compartir campaña"
                               >
