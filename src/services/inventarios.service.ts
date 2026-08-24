@@ -124,6 +124,22 @@ export interface LimpiezaDuplicadosResult {
   }[];
 }
 
+/** Fila del registro de limpiezas de duplicados (automaticas y manuales). */
+export interface LimpiezaRegistroRow {
+  inventario_id: number;
+  codigo_unico: string | null;
+  plaza: string | null;
+  mueble: string | null;
+  anio: number;
+  numero_catorcena: number;
+  limpiado_at: string;
+  /** 'Automático' o el nombre del usuario que usó el botón. */
+  limpiado_por: string | null;
+  reserva_conservada: number | null;
+  /** Ids liberados, separados por coma. */
+  reservas_liberadas: string | null;
+}
+
 export const inventariosService = {
   async getAll(params: InventariosParams = {}): Promise<PaginatedResponse<Inventario>> {
     const response = await api.get<PaginatedResponse<Inventario>>('/inventarios', { params });
@@ -372,6 +388,18 @@ export const inventariosService = {
       throw new Error(response.data.error || 'Error al limpiar duplicados');
     }
     return response.data.data;
+  },
+
+  /** Bitácora de limpiezas de duplicados, más reciente primero. Solo DEV. */
+  async getLimpiezasOcupacion(limit = 200): Promise<LimpiezaRegistroRow[]> {
+    const response = await api.get<ApiResponse<{ limpiezas: LimpiezaRegistroRow[] }>>(
+      '/inventarios/conflictos/limpiezas',
+      { params: { limit } }
+    );
+    if (!response.data.success || !response.data.data) {
+      throw new Error(response.data.error || 'Error al obtener limpiezas');
+    }
+    return response.data.data.limpiezas;
   },
 
   async getAcciones(id: number): Promise<AccionInventario[]> {
