@@ -428,12 +428,16 @@ const NEGOCIACION_COLORS_DARK: Record<string, NegColorClasses> = {
   BONIFICACION: 'bg-amber-500/20 text-amber-300 border-amber-500/30',
   CORTESIA:     'bg-cyan-500/20 text-cyan-300 border-cyan-500/30',
   INTERCAMBIO:  'bg-purple-500/20 text-purple-300 border-purple-500/30',
+  RESERVADO:    'bg-orange-500/20 text-orange-300 border-orange-500/30',
+  DISPONIBLE:   'bg-teal-500/20 text-teal-300 border-teal-500/30',
   __default:    'bg-emerald-500/20 text-emerald-300 border-emerald-500/30',
 };
 const NEGOCIACION_COLORS_LIGHT: Record<string, NegColorClasses> = {
   BONIFICACION: 'bg-amber-50 text-amber-700 border-amber-200',
   CORTESIA:     'bg-cyan-50 text-cyan-700 border-cyan-200',
   INTERCAMBIO:  'bg-purple-50 text-purple-700 border-purple-200',
+  RESERVADO:    'bg-orange-50 text-orange-700 border-orange-200',
+  DISPONIBLE:   'bg-teal-50 text-teal-700 border-teal-200',
   __default:    'bg-emerald-50 text-emerald-700 border-emerald-200',
 };
 const getNegociacionColorCls = (neg: string | null, isDark: boolean): NegColorClasses => {
@@ -494,6 +498,22 @@ export function OrdenesMontajeModal({ isOpen, onClose, canExport = true }: Orden
   const [sapDbFilter, setSapDbFilter] = useState<'todas' | 'TRADE' | 'CIMU'>('todas');
   const [apsEspecificoFilter, setApsEspecificoFilter] = useState<'todas' | 'con' | 'sin'>('todas');
   const [postFilter, setPostFilter] = useState<'todas' | 'con' | 'sin'>('todas');
+  // Ocupación: 'vendido' (default = lo que ya está en campañas), 'disponible'
+  // (inventario libre/reservado) o 'todo' (ambos). Los filtros de APS/POST/BD SAP
+  // solo tienen sentido con 'vendido' (viven en las reservas ya vendidas).
+  const [ocupacionFilter, setOcupacionFilter] = useState<'vendido' | 'disponible' | 'todo'>('vendido');
+  const ocupacionSoloVendido = ocupacionFilter === 'vendido';
+  // Cambiar de ocupación resetea los filtros que dependen de la venta para que no
+  // dejen la tabla vacía al pasar a disponible/todo.
+  const cambiarOcupacion = (v: 'vendido' | 'disponible' | 'todo') => {
+    setOcupacionFilter(v);
+    if (v !== 'vendido') {
+      setSapDbFilter('todas');
+      setApsEspecificoFilter('todas');
+      setPostFilter('todas');
+    }
+    setCurrentPage(1);
+  };
 
   // Búsqueda de texto con tags (estilo Solicitudes/Propuestas/Campañas)
   const [searchInput, setSearchInput] = useState('');
@@ -672,10 +692,11 @@ export function OrdenesMontajeModal({ isOpen, onClose, canExport = true }: Orden
 
   // Query for CAT data
   const { data: catData, isLoading: isLoadingCAT } = useQuery({
-    queryKey: ['ordenes-montaje-cat', status, apiCatorcenaRange, selectedCatorcenas],
+    queryKey: ['ordenes-montaje-cat', status, apiCatorcenaRange, selectedCatorcenas, ocupacionFilter],
     queryFn: () => campanasService.getOrdenMontajeCAT({
       status: status || undefined,
       ...apiCatorcenaRange,
+      ocupacion: ocupacionFilter,
     }),
     enabled: isOpen && (activeTab === 'cat' || activeTab === 'digital' || activeTab === 'ocupacion-digital'),
   });
@@ -685,10 +706,11 @@ export function OrdenesMontajeModal({ isOpen, onClose, canExport = true }: Orden
 
   // Query for INVIAN data
   const { data: invianData, isLoading: isLoadingINVIAN } = useQuery({
-    queryKey: ['ordenes-montaje-invian', status, apiCatorcenaRange, selectedCatorcenas],
+    queryKey: ['ordenes-montaje-invian', status, apiCatorcenaRange, selectedCatorcenas, ocupacionFilter],
     queryFn: () => campanasService.getOrdenMontajeINVIAN({
       status: status || undefined,
       ...apiCatorcenaRange,
+      ocupacion: ocupacionFilter,
     }),
     enabled: isOpen && (activeTab === 'invian' || activeTab === 'invian-digital' || activeTab === 'invian-unmas'),
   });
@@ -1613,7 +1635,7 @@ export function OrdenesMontajeModal({ isOpen, onClose, canExport = true }: Orden
   const currentSortOptions = activeTab === 'cat' || activeTab === 'digital' || activeTab === 'ocupacion-digital' ? CAT_SORT_FIELDS : INVIAN_SORT_FIELDS;
   const currentUniqueValues = activeTab === 'cat' || activeTab === 'digital' || activeTab === 'ocupacion-digital' ? getCATUniqueValues : activeTab === 'invian-digital' ? getINVIANDigitalUniqueValues : getINVIANUniqueValues;
 
-  const hasActiveFilters = currentFilters.length > 0 || currentGroupings.length > 0 || currentSortField !== null || selectedCatorcenas.length > 0 || fechaInicio || fechaFin || sapDbFilter !== 'todas' || apsEspecificoFilter !== 'todas' || postFilter !== 'todas';
+  const hasActiveFilters = currentFilters.length > 0 || currentGroupings.length > 0 || currentSortField !== null || selectedCatorcenas.length > 0 || fechaInicio || fechaFin || sapDbFilter !== 'todas' || apsEspecificoFilter !== 'todas' || postFilter !== 'todas' || ocupacionFilter !== 'vendido';
 
   if (!isOpen) return null;
 
@@ -1757,7 +1779,7 @@ export function OrdenesMontajeModal({ isOpen, onClose, canExport = true }: Orden
                 Filtros
                 {hasActiveFilters && (
                   <span className="ml-1 px-1.5 py-0.5 rounded-full bg-white/20 text-[10px]">
-                    {(selectedCatorcenas.length > 0 ? 1 : 0) + (fechaInicio ? 1 : 0) + (sapDbFilter !== 'todas' ? 1 : 0) + (apsEspecificoFilter !== 'todas' ? 1 : 0) + (postFilter !== 'todas' ? 1 : 0) + currentFilters.length + currentGroupings.length + (currentSortField ? 1 : 0)}
+                    {(selectedCatorcenas.length > 0 ? 1 : 0) + (fechaInicio ? 1 : 0) + (ocupacionFilter !== 'vendido' ? 1 : 0) + (sapDbFilter !== 'todas' ? 1 : 0) + (apsEspecificoFilter !== 'todas' ? 1 : 0) + (postFilter !== 'todas' ? 1 : 0) + currentFilters.length + currentGroupings.length + (currentSortField ? 1 : 0)}
                   </span>
                 )}
               </button>
@@ -1772,13 +1794,45 @@ export function OrdenesMontajeModal({ isOpen, onClose, canExport = true }: Orden
                   </div>
 
                   <div className="p-4 space-y-4 max-h-[50vh] overflow-y-auto">
-                    {/* BDD SAP */}
+                    {/* Ocupación */}
                     <div>
-                      <label className="text-xs font-medium text-zinc-400 mb-2 block">BDD SAP</label>
+                      <label className="text-xs font-medium text-zinc-400 mb-2 block">Ocupación</label>
+                      <div className="flex gap-2">
+                        {([
+                          { v: 'vendido', label: 'Vendido' },
+                          { v: 'disponible', label: 'Disponible' },
+                          { v: 'todo', label: 'Todo' },
+                        ] as const).map(opt => (
+                          <button
+                            key={opt.v}
+                            onClick={() => cambiarOcupacion(opt.v)}
+                            className={`flex-1 px-3 py-2 rounded-lg text-xs font-medium transition-colors ${
+                              ocupacionFilter === opt.v
+                                ? 'bg-emerald-600 text-white border border-emerald-500'
+                                : 'bg-zinc-800 text-zinc-300 border border-zinc-700 hover:bg-zinc-700'
+                            }`}
+                          >
+                            {opt.label}
+                          </button>
+                        ))}
+                      </div>
+                      <p className="text-[10px] text-zinc-500 mt-1.5 leading-snug">
+                        {ocupacionSoloVendido
+                          ? 'Muestra lo que ya está en campañas (vendido). Los filtros de APS/POST/BD SAP aplican aquí.'
+                          : 'Incluye inventario libre/reservado del período. La columna Estado muestra RESERVADO / DISPONIBLE.'}
+                      </p>
+                    </div>
+
+                    {/* BDD SAP */}
+                    <div className={ocupacionSoloVendido ? '' : 'opacity-40 pointer-events-none'}>
+                      <label className="text-xs font-medium text-zinc-400 mb-2 block">
+                        BDD SAP {!ocupacionSoloVendido && <span className="text-[10px] text-zinc-500">(solo en Vendido)</span>}
+                      </label>
                       <div className="flex gap-2">
                         {(['todas', 'TRADE', 'CIMU'] as const).map(opt => (
                           <button
                             key={opt}
+                            disabled={!ocupacionSoloVendido}
                             onClick={() => setSapDbFilter(opt)}
                             className={`flex-1 px-3 py-2 rounded-lg text-xs font-medium transition-colors ${
                               sapDbFilter === opt
@@ -1793,12 +1847,15 @@ export function OrdenesMontajeModal({ isOpen, onClose, canExport = true }: Orden
                     </div>
 
                     {/* APS Específico */}
-                    <div>
-                      <label className="text-xs font-medium text-zinc-400 mb-2 block">APS Específico</label>
+                    <div className={ocupacionSoloVendido ? '' : 'opacity-40 pointer-events-none'}>
+                      <label className="text-xs font-medium text-zinc-400 mb-2 block">
+                        APS Específico {!ocupacionSoloVendido && <span className="text-[10px] text-zinc-500">(solo en Vendido)</span>}
+                      </label>
                       <div className="flex gap-2">
                         {(['todas', 'con', 'sin'] as const).map(opt => (
                           <button
                             key={opt}
+                            disabled={!ocupacionSoloVendido}
                             onClick={() => setApsEspecificoFilter(opt)}
                             className={`flex-1 px-3 py-2 rounded-lg text-xs font-medium transition-colors ${
                               apsEspecificoFilter === opt
@@ -1813,12 +1870,15 @@ export function OrdenesMontajeModal({ isOpen, onClose, canExport = true }: Orden
                     </div>
 
                     {/* POST a SAP */}
-                    <div>
-                      <label className="text-xs font-medium text-zinc-400 mb-2 block">POST a SAP</label>
+                    <div className={ocupacionSoloVendido ? '' : 'opacity-40 pointer-events-none'}>
+                      <label className="text-xs font-medium text-zinc-400 mb-2 block">
+                        POST a SAP {!ocupacionSoloVendido && <span className="text-[10px] text-zinc-500">(solo en Vendido)</span>}
+                      </label>
                       <div className="flex gap-2">
                         {(['todas', 'con', 'sin'] as const).map(opt => (
                           <button
                             key={opt}
+                            disabled={!ocupacionSoloVendido}
                             onClick={() => setPostFilter(opt)}
                             className={`flex-1 px-3 py-2 rounded-lg text-xs font-medium transition-colors ${
                               postFilter === opt

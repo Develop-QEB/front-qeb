@@ -405,7 +405,7 @@ export interface OrdenMontajeCAT {
   unidad_negocio: string | null;
   campania: string | null;
   numero_articulo: string | null;
-  negociacion: 'BONIFICACION' | 'RENTA' | 'CORTESIA' | 'INTERCAMBIO' | 'IMPRESION';
+  negociacion: 'BONIFICACION' | 'RENTA' | 'CORTESIA' | 'INTERCAMBIO' | 'IMPRESION' | 'RESERVADO' | 'DISPONIBLE';
   caras: number;
   tarifa: number | null;
   monto_total: number | null;
@@ -417,6 +417,9 @@ export interface OrdenMontajeCAT {
   catorcena_year: number | null;
   tradicional_digital: string | null;
   posted?: boolean;
+  // Ocupación de la pieza en el período: 'vendido' (fila de campaña), 'reservado'
+  // (hold de propuesta) o 'disponible' (libre). Presente en modos disponible/todo.
+  ocupacion_estado?: 'vendido' | 'reservado' | 'disponible' | null;
 }
 
 export interface OrdenMontajeINVIAN {
@@ -468,6 +471,9 @@ export interface OrdenMontajeINVIAN {
   // Para "Inventario UN+": formato (mueble) y tipo de periodo (mensual/catorcena).
   formato?: string | null;
   tipo_periodo?: string | null;
+  // Ocupación de la pieza en el período: 'vendido' (fila de campaña), 'reservado'
+  // (hold de propuesta) o 'disponible' (libre). Presente en modos disponible/todo.
+  ocupacion_estado?: 'vendido' | 'reservado' | 'disponible' | null;
 }
 
 export interface ComentarioRevisionArte {
@@ -1552,6 +1558,7 @@ async getUsuarios(): Promise<{ id: number; nombre: string }[]> {
     catorcenaFin?: number;
     yearInicio?: number;
     yearFin?: number;
+    ocupacion?: 'vendido' | 'disponible' | 'todo';
   } = {}): Promise<OrdenMontajeCAT[]> {
     const response = await api.get<ApiResponse<OrdenMontajeCAT[]>>('/campanas/ordenes-montaje/cat', { params });
     if (!response.data.success || !response.data.data) {
@@ -1566,6 +1573,7 @@ async getUsuarios(): Promise<{ id: number; nombre: string }[]> {
     catorcenaFin?: number;
     yearInicio?: number;
     yearFin?: number;
+    ocupacion?: 'vendido' | 'disponible' | 'todo';
   } = {}): Promise<OrdenMontajeINVIAN[]> {
     const response = await api.get<ApiResponse<OrdenMontajeINVIAN[]>>('/campanas/ordenes-montaje/invian', { params });
     if (!response.data.success || !response.data.data) {
