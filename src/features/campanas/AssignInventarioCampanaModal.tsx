@@ -3569,21 +3569,29 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
       groups[key].push(inv);
     });
 
-    // Merge pairs into single "completo" rows
+    // Emparejar por SENTIDO exacto: AB = Flujo+Contraflujo, CD = Flujo2+Contraflujo2.
+    // Un mueble de 4 caras produce DOS completos (AB y CD), no uno solo de 4.
+    // (Antes se usaba startsWith('Flujo'), que capturaba Flujo y Flujo2 juntos y
+    // solo formaba un par ignorando el segundo.)
+    const norm = (t: unknown) => String(t ?? '').trim().toLowerCase();
+    const PARES = [
+      { sufijo: 'AB', flujo: 'flujo', contra: 'contraflujo' },
+      { sufijo: 'CD', flujo: 'flujo2', contra: 'contraflujo2' },
+    ] as const;
     const result: (InventarioDisponible & { isCompleto?: boolean; flujoId?: number; contraflujoId?: number })[] = [];
     Object.entries(groups).forEach(([key, group]) => {
-      if (group.length >= 2) {
-        const baseCode = key.split('|')[0];
-        const flujoItem = group.find(g => String(g.tipo_de_cara).startsWith('Flujo'));
-        const contraflujoItem = group.find(g => String(g.tipo_de_cara).startsWith('Contraflujo'));
-
+      if (group.length < 2) return;
+      const baseCode = key.split('|')[0];
+      for (const par of PARES) {
+        const flujoItem = group.find(g => norm(g.tipo_de_cara) === par.flujo);
+        const contraflujoItem = group.find(g => norm(g.tipo_de_cara) === par.contra);
         if (flujoItem && contraflujoItem) {
-          // Create merged "completo" item - use a virtual ID
+          // Merged "completo" item con ID virtual único por par.
           const virtualId = flujoItem.id * 100000 + contraflujoItem.id;
           result.push({
             ...flujoItem,
             id: virtualId,
-            codigo_unico: `${baseCode}_completo`,
+            codigo_unico: `${baseCode}_completo_${par.sufijo}`,
             tipo_de_cara: 'Completo' as any,
             isCompleto: true,
             flujoId: flujoItem.id,
