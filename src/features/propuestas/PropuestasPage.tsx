@@ -624,7 +624,9 @@ function StatusModal({ isOpen, onClose, propuesta, onStatusChange, allowedStatus
     enabled: isOpen && !!propuesta,
   });
 
-  // Verificar si todas las caras tienen sus reservas completas
+  // Verificar si todas las caras tienen sus reservas completas. Desde el ajuste
+  // 2026-08-25 esto es SOLO informativo (aviso amber): reservas incompletas (de
+  // menos o de más) ya no bloquean el Pase a ventas / Aprobada.
   const reservasIncompletas = useMemo(() => {
     if (!caras || !reservas) return false;
     // Mensual = Gran Formato / Mi Macro: solo Flujo, sin Contraflujo. El modal
@@ -794,13 +796,15 @@ function StatusModal({ isOpen, onClose, propuesta, onStatusChange, allowedStatus
               </div>
             </div>
           )}
+          {/* Ajuste 2026-08-25: reservas incompletas YA NO bloquean el avance
+              (Pase a ventas / Aprobada) — el aviso queda solo informativo. */}
           {reservasIncompletas && (
-            <div className="mb-4 p-3 rounded-lg bg-red-500/10 border border-red-500/30 flex items-start gap-3">
-              <AlertTriangle className="h-5 w-5 text-red-400 flex-shrink-0 mt-0.5" />
+            <div className={`mb-4 p-3 rounded-lg ${isDark ? 'bg-amber-500/10 border-amber-500/30' : 'bg-amber-50 border-amber-200'} border flex items-start gap-3`}>
+              <AlertTriangle className={`h-5 w-5 ${isDark ? 'text-amber-400' : 'text-amber-600'} flex-shrink-0 mt-0.5`} />
               <div>
-                <p className={`text-sm ${isDark ? 'text-red-200' : 'text-red-700'} font-medium`}>Reservas incompletas</p>
-                <p className={`text-xs ${isDark ? 'text-red-300/70' : 'text-red-600/70'} mt-1`}>
-                  No todos los grupos tienen sus reservas completas. No se puede cambiar a "Pase a ventas" o "Aprobada" hasta completar el inventario.
+                <p className={`text-sm font-medium ${isDark ? 'text-amber-200' : 'text-amber-800'}`}>Reservas incompletas</p>
+                <p className={`text-xs mt-1 ${isDark ? 'text-amber-300/70' : 'text-amber-700'}`}>
+                  Hay circuitos sin sus reservas completas (de menos o de más). Aviso informativo: no impide cambiar a "Pase a ventas" ni "Aprobada".
                 </p>
               </div>
             </div>
@@ -833,21 +837,18 @@ function StatusModal({ isOpen, onClose, propuesta, onStatusChange, allowedStatus
                 // rechaza estos casos (fix 2026-08-18) pero el UI seguia
                 // dejando pasar 'Rechazada' — se veia el mensaje amber
                 // pero el select y el boton "Actualizar" estaban activos.
-                // reservasIncompletas solo aplica al AVANCE (Aprobada/Pase
-                // a ventas), no a Rechazada.
+                // Ajuste 2026-08-25: reservasIncompletas ya NO bloquea el
+                // avance (Aprobada/Pase a ventas) — solo queda el aviso.
                 const bloqueaAvanceStatus = s === 'Aprobada' || s === 'Pase a ventas';
                 const bloqueaSalidaStatus = s === 'Rechazada' || s === 'Cancelada';
                 const isBlockedByAuth = bloqueaAvance && (bloqueaAvanceStatus || bloqueaSalidaStatus);
-                const isBlockedByReservas = reservasIncompletas && bloqueaAvanceStatus;
                 const isBlockedByCuic = esClienteLead && s === 'Pase a ventas';
-                const isBlocked = isBlockedByAuth || isBlockedByReservas || isBlockedByCuic;
+                const isBlocked = isBlockedByAuth || isBlockedByCuic;
                 const etiquetaExtra = isBlockedByCuic
                   ? ' (Cliente Lead - CUIC 0)'
-                  : isBlockedByReservas
-                    ? ' (Reservas incompletas)'
-                    : isBlockedByAuth
-                      ? ' (Autorización abierta)'
-                      : '';
+                  : isBlockedByAuth
+                    ? ' (Autorización abierta)'
+                    : '';
                 return (
                   <option
                     key={s}
@@ -863,7 +864,6 @@ function StatusModal({ isOpen, onClose, propuesta, onStatusChange, allowedStatus
               onClick={handleChangeStatus}
               disabled={selectedStatus === propuesta.status || updateStatusMutation.isPending
                 || (bloqueaAvance && (selectedStatus === 'Aprobada' || selectedStatus === 'Pase a ventas' || selectedStatus === 'Rechazada' || selectedStatus === 'Cancelada'))
-                || (reservasIncompletas && (selectedStatus === 'Aprobada' || selectedStatus === 'Pase a ventas'))
                 || (esClienteLead && selectedStatus === 'Pase a ventas')}
               className="flex items-center gap-2 px-4 py-2 rounded-lg bg-purple-600 text-white text-sm hover:bg-purple-700 disabled:opacity-50 disabled:cursor-not-allowed min-w-[120px] justify-center"
             >
