@@ -132,6 +132,7 @@ export interface ImagenDigital {
   tipo: 'image' | 'video';
   nombre_arte?: string | null; // Nombre manual capturado en la carga (reemplaza al slug del archivo)
   estatus_operaciones?: string | null; // Texto manual de Estatus Operaciones (ficha)
+  nombre_generico?: string | null; // Valor único compartido por todos los artes del batch (modo Genérico)
 }
 
 export interface DigitalFileSummary {
@@ -150,6 +151,7 @@ export interface ArteTradicional {
   createdAt: string | null;
   nombre_arte?: string | null; // Nombre manual capturado en la carga (reemplaza al slug del archivo)
   estatus_operaciones?: string | null; // Texto manual de Estatus Operaciones (ficha)
+  nombre_generico?: string | null; // Valor único compartido por todos los artes del batch (modo Genérico)
 }
 
 export interface TradicionalFileSummary {
@@ -383,6 +385,8 @@ export interface ArteExistente {
   // Para artes recien subidos via addedArtes (sin guardar aun), vienen null/undefined.
   nombre_arte?: string | null; // nombre manual capturado en el modal de carga
   nota?: string | null;        // nota asociada (artes_tradicionales.nota o imagenes_digitales.comentario)
+  estatus_operaciones?: string | null; // texto manual de Estatus Operaciones (ficha)
+  nombre_generico?: string | null;     // valor único compartido por el batch (modo Genérico)
   estatus?: string | null;     // estatus del arte (Aprobado / Rechazado / Pendiente / etc.)
   tiene_instalado?: boolean;   // true si alguna reserva que usa este arte ya esta instalada
 }
@@ -1158,7 +1162,7 @@ export const campanasService = {
   async assignArteDigital(
     id: number,
     reservaIds: number[],
-    archivos: { archivo: string; spot: number; nombre: string; tipo: string; nota?: string; nombre_arte?: string | null; estatus_operaciones?: string | null }[],
+    archivos: { archivo: string; spot: number; nombre: string; tipo: string; nota?: string; nombre_arte?: string | null; estatus_operaciones?: string | null; nombre_generico?: string | null }[],
     markInstalado: boolean = false,
     instalacionMode?: 'instalado' | 'rotacion',
     operacionesAsignados?: { ids: number[]; nombres: string[] } | null
@@ -1271,7 +1275,7 @@ export const campanasService = {
   async assignArteTradicional(
     id: number,
     reservaIds: number[],
-    archivos: { archivo: string; nota: string; spot: number; nombre_arte?: string | null; estatus_operaciones?: string | null }[],
+    archivos: { archivo: string; nota: string; spot: number; nombre_arte?: string | null; estatus_operaciones?: string | null; nombre_generico?: string | null }[],
     markInstalado: boolean = false,
     instalacionMode?: 'instalado' | 'rotacion',
     operacionesAsignados?: { ids: number[]; nombres: string[] } | null

@@ -733,6 +733,7 @@ export function HistorialTicketsPage() {
   const [filterStatus, setFilterStatus] = useState('Todos');
   const [filterPrioridad, setFilterPrioridad] = useState('Todos');
   const [filterTecnico, setFilterTecnico] = useState('Todos');
+  const [filterArea, setFilterArea] = useState<'Todos' | 'TI' | 'QEB'>('Todos');
   const [onlyUnread, setOnlyUnread] = useState(false);
   const [selectedTicket, setSelectedTicket] = useState<TicketHistorial | null>(null);
   const [activeTab, setActiveTab] = useState<'Nuevo' | 'En Progreso' | 'Validación' | 'Resuelto' | 'Cerrado'>('Nuevo');
@@ -807,6 +808,7 @@ export function HistorialTicketsPage() {
   const displayTickets = tickets.filter((t) => {
     if (t.status !== activeTab) return false;
     if (filterTecnico !== 'Todos' && t.status_cambiado_por !== filterTecnico) return false;
+    if (filterArea !== 'Todos' && t.area !== filterArea) return false;
     if (onlyUnread && !t.has_unread && !t.has_chat_unread) return false;
     return true;
   });
@@ -819,7 +821,11 @@ export function HistorialTicketsPage() {
     { key: 'Cerrado', label: 'Cerrados', showCount: false },
   ];
 
-  const filteredByTecnico = filterTecnico !== 'Todos' ? tickets.filter(t => t.status_cambiado_por === filterTecnico) : tickets;
+  const filteredByTecnico = tickets.filter(t => {
+    if (filterTecnico !== 'Todos' && t.status_cambiado_por !== filterTecnico) return false;
+    if (filterArea !== 'Todos' && t.area !== filterArea) return false;
+    return true;
+  });
   const stats = {
     total: filteredByTecnico.length,
     nuevo: filteredByTecnico.filter((t) => t.status === 'Nuevo').length,
@@ -924,6 +930,15 @@ export function HistorialTicketsPage() {
             >
               <option value="Todos">Técnico: Todos</option>
               {tecnicos.map((t) => <option key={t} value={t}>{t}</option>)}
+            </select>
+            <select
+              value={filterArea}
+              onChange={(e) => setFilterArea(e.target.value as 'Todos' | 'TI' | 'QEB')}
+              className={`px-3 py-2.5 rounded-xl border text-sm ${isDark ? 'border-purple-500/20 bg-zinc-900/80 text-white' : 'border-purple-200 bg-gray-50 text-gray-900'} focus:outline-none focus:ring-2 focus:ring-purple-500/30`}
+            >
+              <option value="Todos">Área: Todas</option>
+              <option value="TI">TI</option>
+              <option value="QEB">QEB</option>
             </select>
             <button
               onClick={() => setOnlyUnread(!onlyUnread)}
