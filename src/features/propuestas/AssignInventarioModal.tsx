@@ -3167,7 +3167,13 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
         articulo: target.articulo || null,
       });
       const nuevoDg = eraCorreccion ? 'pendiente' : resultado.autorizacion_dg;
-      setCaras(prev => prev.map(c => c.id === target.id
+      // Espejear el nuevo estado de autorización al BF del par. El backend ya
+      // propaga RT->BF al guardar, PERO el candado de "circuitos rechazados sin
+      // resolver" del guardado revisa el estado LOCAL de cada cara: si el BF se
+      // queda en 'rechazado', bloquea el Guardar y el reenvío nunca se aplica
+      // (caso 81403: coberturas RT/BF quedaban trabadas en rechazado). Fix front.
+      const bfPairId = bfPair?.id;
+      setCaras(prev => prev.map(c => (c.id === target.id || (bfPairId != null && c.id === bfPairId))
         ? { ...c, autorizacion_dg: nuevoDg, autorizacion_dcm: resultado.autorizacion_dcm }
         : c));
       setModifiedCaras(prev => {
