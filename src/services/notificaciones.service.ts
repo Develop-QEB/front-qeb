@@ -201,6 +201,24 @@ export const notificacionesService = {
     }
   },
 
+  // Autorización de ELIMINACIÓN de circuitos (por tareaId, solo campañas).
+  // Aprobar: si es Filtro → pasa a DG; si es DG → ejecuta el borrado real.
+  // Rechazar: no borra, guarda el motivo.
+  async aprobarEliminacion(tareaId: number, comentario?: string): Promise<{ accion: string; eliminadas?: number }> {
+    const response = await api.post<ApiResponse<{ accion: string; eliminadas?: number }>>(`/notificaciones/autorizacion/eliminacion/${tareaId}/aprobar`, { comentario });
+    if (!response.data.success) {
+      throw new Error(response.data.error || 'Error al aprobar eliminación');
+    }
+    return response.data.data || { accion: 'ok' };
+  },
+
+  async rechazarEliminacion(tareaId: number, motivo: string): Promise<void> {
+    const response = await api.post<ApiResponse<null>>(`/notificaciones/autorizacion/eliminacion/${tareaId}/rechazar`, { motivo });
+    if (!response.data.success) {
+      throw new Error(response.data.error || 'Error al rechazar eliminación');
+    }
+  },
+
   async getHistorialAutorizacion(idquote: string): Promise<HistorialAutorizacion[]> {
     const response = await api.get<ApiResponse<HistorialAutorizacion[]>>(`/notificaciones/autorizacion/${idquote}/historial`);
     if (!response.data.success || !response.data.data) {
