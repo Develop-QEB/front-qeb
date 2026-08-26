@@ -901,13 +901,10 @@ export function ClientePropuestaPage() {
               </h2>
                {/* <p className="text-gray-600">{data?.propuesta?.descripcion || ''}</p> */}
             </div>
-            <div className="flex items-center gap-2 flex-wrap justify-end">
-              <div className={`px-3 py-1 rounded-full text-sm font-medium border ${esCampana ? 'bg-[#0054A6]/10 text-[#0054A6] border-[#0054A6]/30' : 'bg-amber-100 text-amber-700 border-amber-300'}`}>
-                {leyendaCircuitos}
-              </div>
-              <div className="bg-[#7AB800]/10 text-[#7AB800] px-3 py-1 rounded-full text-sm font-medium">
-                {data?.propuesta?.status || 'Propuesta'}
-              </div>
+            {/* Solo la leyenda de contexto — el estatus interno (Atendido/Aprobada)
+                no se muestra al cliente. */}
+            <div className={`px-3 py-1 rounded-full text-sm font-medium border ${esCampana ? 'bg-[#0054A6]/10 text-[#0054A6] border-[#0054A6]/30' : 'bg-amber-100 text-amber-700 border-amber-300'}`}>
+              {leyendaCircuitos}
             </div>
           </div>
           <div className={`flex gap-6 mt-4 text-sm border-t pt-4 ${isDark ? 'text-zinc-400 border-zinc-700' : 'text-gray-500 border-gray-100'}`}>
