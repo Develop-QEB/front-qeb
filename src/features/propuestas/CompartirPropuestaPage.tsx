@@ -1,4 +1,4 @@
-import { useParams, useNavigate } from 'react-router-dom';
+import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { useState, useMemo, useRef, useCallback, memo } from 'react';
 import {
@@ -239,6 +239,7 @@ const DetailRow = memo(function DetailRow({ item, isSelected, isDark, onToggle }
 export function CompartirPropuestaPage() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
   const isDark = useThemeStore((s) => s.theme) === 'dark';
   const propuestaId = id ? parseInt(id, 10) : 0;
   const mapRef = useRef<google.maps.Map | null>(null);
@@ -289,6 +290,15 @@ export function CompartirPropuestaPage() {
   });
 
   const tipoPeriodo = (details?.cotizacion as any)?.tipo_periodo || 'catorcena';
+
+  // Leyenda de contexto: la misma vista sirve para compartir desde PROPUESTAS
+  // ("Circuitos Muestra") y desde CAMPAÑAS ("Circuitos Confirmados"). La decide
+  // el punto de entrada vía ?ctx=campana (lo agrega CampanasPage al navegar), NO
+  // los datos: una propuesta con campaña compartida desde Propuestas sigue siendo
+  // muestra. Aplica en UI, PDF (pie de TODAS las páginas, no removible), Excel
+  // (todas las hojas) y se propaga a los enlaces públicos del cliente.
+  const esCampana = searchParams.get('ctx') === 'campana';
+  const leyendaCircuitos = esCampana ? 'Circuitos Confirmados' : 'Circuitos Muestra';
 
   // Master catorcena-filtered inventario (affects everything: KPIs, charts, map, resumen)
   const catorcenaFilteredInventario = useMemo(() => {
@@ -534,6 +544,9 @@ export function CompartirPropuestaPage() {
   // Handlers
   const handleCopyLink = () => {
     const params = new URLSearchParams();
+    if (esCampana) {
+      params.set('ctx', 'campana');
+    }
     if (selectedCatorcenas.size > 0) {
       params.set('catorcenas', Array.from(selectedCatorcenas).join(','));
     }
@@ -585,9 +598,11 @@ export function CompartirPropuestaPage() {
           toNum(i.longitud),
           ''
         ]);
-        const ws = XLSX.utils.aoa_to_sheet([headers, ...rows]);
+        // Fila 1: leyenda de contexto en TODAS las hojas (para que no se pierda si
+        // borran alguna pestaña). Headers pasan a la fila 2 (headerRows = 2 abajo).
+        const ws = XLSX.utils.aoa_to_sheet([[leyendaCircuitos], headers, ...rows]);
         // Lat (col 8) y Long (col 9) como celdas tipo número
-        applyNumberFormats(XLSX, ws, rows.length, { 8: FMT_COORD, 9: FMT_COORD });
+        applyNumberFormats(XLSX, ws, rows.length, { 8: FMT_COORD, 9: FMT_COORD }, 2);
         const sheetName = plaza.substring(0, 31);
         XLSX.utils.book_append_sheet(wb, ws, sheetName);
       }
@@ -861,7 +876,7 @@ export function CompartirPropuestaPage() {
     doc.setFontSize(9);
     doc.setFont('helvetica', 'normal');
     doc.setTextColor(100, 100, 100);
-    doc.text('Documento Interno', pageWidth / 2, 20, { align: 'center' });
+    doc.text(`Documento Interno  |  ${leyendaCircuitos}`, pageWidth / 2, 20, { align: 'center' });
 
     // Right side info
     const fechaActual = new Date().toLocaleDateString('es-MX', { year: 'numeric', month: 'long', day: 'numeric' });
@@ -873,7 +888,7 @@ export function CompartirPropuestaPage() {
     doc.text(`Propuesta #${propuestaId}`, pageWidth - marginX, 16, { align: 'right' });
 
     // Link styled as button
-    const clientViewUrl = `${window.location.origin}/cliente/propuesta/${propuestaId}`;
+    const clientViewUrl = `${window.location.origin}/cliente/propuesta/${propuestaId}${esCampana ? '?ctx=campana' : ''}`;
     doc.setFillColor(...IMU_GREEN);
     doc.roundedRect(pageWidth - marginX - 45, 19, 45, 6, 1, 1, 'F');
     doc.setFontSize(7);
@@ -1120,6 +1135,9 @@ export function CompartirPropuestaPage() {
       doc.setFontSize(8);
       doc.setFont('helvetica', 'normal');
       doc.text('Grupo IMU | Documento generado automaticamente', marginX, pageHeight - 4);
+      doc.setFont('helvetica', 'bold');
+      doc.text(leyendaCircuitos, pageWidth / 2, pageHeight - 4, { align: 'center' });
+      doc.setFont('helvetica', 'normal');
       doc.text(`Pagina ${i} de ${totalPages}`, pageWidth - marginX, pageHeight - 4, { align: 'right' });
     }
 
@@ -1180,7 +1198,7 @@ export function CompartirPropuestaPage() {
 
           <div className="flex items-center gap-2">
             <a
-              href={`/cliente/propuesta/${propuestaId}`}
+              href={`/cliente/propuesta/${propuestaId}${esCampana ? '?ctx=campana' : ''}`}
               target="_blank"
               rel="noopener noreferrer"
               className="flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-pink-500 to-purple-500 hover:from-pink-400 hover:to-purple-400 text-white rounded-lg text-sm font-medium transition-all shadow-lg shadow-purple-500/20"
@@ -1226,9 +1244,17 @@ export function CompartirPropuestaPage() {
       <main className="max-w-7xl mx-auto px-4 py-6 space-y-6">
         {/* Campaign Header */}
         <div className={`rounded-2xl p-6 border shadow-xl ${isDark ? 'bg-gradient-to-r from-purple-900/40 via-violet-900/30 to-pink-900/20 border-purple-500/30 shadow-purple-500/10' : 'bg-gradient-to-r from-purple-50 via-violet-50 to-pink-50 border-gray-200 shadow-gray-200/50'}`}>
-          <h2 className={`text-2xl font-bold bg-gradient-to-r bg-clip-text text-transparent mb-2 ${isDark ? 'from-white to-purple-200' : 'from-gray-900 to-purple-700'}`}>
-            {details?.cotizacion?.nombre_campania || 'Propuesta sin nombre'}
-          </h2>
+          <div className="flex items-center gap-3 flex-wrap mb-2">
+            <h2 className={`text-2xl font-bold bg-gradient-to-r bg-clip-text text-transparent ${isDark ? 'from-white to-purple-200' : 'from-gray-900 to-purple-700'}`}>
+              {details?.cotizacion?.nombre_campania || 'Propuesta sin nombre'}
+            </h2>
+            <span className={`px-3 py-1 rounded-full text-xs font-semibold border ${esCampana
+              ? (isDark ? 'bg-emerald-500/20 text-emerald-300 border-emerald-400/30' : 'bg-emerald-100 text-emerald-700 border-emerald-300')
+              : (isDark ? 'bg-amber-500/20 text-amber-300 border-amber-400/30' : 'bg-amber-100 text-amber-700 border-amber-300')
+            }`}>
+              {leyendaCircuitos}
+            </span>
+          </div>
           <p className={isDark ? 'text-zinc-400' : 'text-gray-500'}>{details?.propuesta?.descripcion || 'Sin descripción'}</p>
           <div className="flex gap-4 mt-4 text-sm">
             <span className={isDark ? 'text-purple-300' : 'text-purple-600'}>

@@ -57,6 +57,96 @@ const getImageUrl = (url: string | undefined | null): string | null => {
   return `${STATIC_URL}/${url}`;
 };
 
+// Campaña con reservas por debajo de las caras esperadas (totales del listado,
+// mismo criterio/exclusiones que el badge "Incompleta" del detalle de campaña).
+function esCampanaIncompleta(c: Campana): boolean {
+  return c.caras_esperadas_total != null
+    && Number(c.caras_esperadas_total) > 0
+    && Number(c.reservas_validas_total ?? 0) < Number(c.caras_esperadas_total);
+}
+
+// Badge "Incompleta (X/Y caras)" para la tabla de campañas. Al dar clic abre el
+// MISMO desglose por catorcena que el detalle de campaña (incompleteness_detail);
+// el detalle se pide con getById solo cuando se abre, no en el render de la lista.
+// Popover con position:fixed para que no lo recorte el overflow de la tabla.
+function IncompletaBadge({ campana, isDark }: { campana: Campana; isDark: boolean }) {
+  const [open, setOpen] = useState(false);
+  const [pos, setPos] = useState<{ top: number; left: number } | null>(null);
+  const btnRef = useRef<HTMLButtonElement>(null);
+
+  const { data: detalle, isLoading } = useQuery({
+    queryKey: ['campana-incompleteness', campana.id],
+    queryFn: () => campanasService.getById(campana.id),
+    enabled: open,
+    staleTime: 60000,
+  });
+
+  const esperadas = Number(campana.caras_esperadas_total) || 0;
+  const reservadas = Number(campana.reservas_validas_total) || 0;
+  const detail = (detalle as any)?.incompleteness_detail as
+    { catorcena: number; anio: number; caras_esperadas: number; reservas_count: number; completa: boolean }[] | undefined;
+
+  const toggle = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (!open && btnRef.current) {
+      const r = btnRef.current.getBoundingClientRect();
+      setPos({ top: r.bottom + 6, left: Math.max(8, Math.min(r.left, window.innerWidth - 260)) });
+    }
+    setOpen(v => !v);
+  };
+
+  return (
+    <>
+      <button
+        ref={btnRef}
+        onClick={toggle}
+        className={`px-1.5 py-0.5 rounded-full text-[9px] flex items-center gap-1 cursor-pointer hover:opacity-80 transition-opacity ${isDark ? 'bg-yellow-500/20 text-yellow-300' : 'bg-yellow-50 text-yellow-700'} border border-yellow-500/30`}
+        title="Ver desglose por catorcena"
+      >
+        <AlertTriangle className="h-3 w-3" />
+        Incompleta ({reservadas}/{esperadas})
+      </button>
+      {open && pos && (
+        <>
+          <div className="fixed inset-0 z-40" onClick={(e) => { e.stopPropagation(); setOpen(false); }} />
+          <div
+            className={`fixed z-50 rounded-lg border shadow-xl p-3 min-w-[220px] ${isDark ? 'bg-zinc-900 border-zinc-700' : 'bg-white border-gray-200'}`}
+            style={{ top: pos.top, left: pos.left }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <p className={`text-xs font-semibold mb-2 ${isDark ? 'text-zinc-300' : 'text-gray-600'}`}>Desglose por catorcena:</p>
+            {isLoading ? (
+              <div className="flex items-center gap-2 py-1">
+                <Loader2 className="h-3.5 w-3.5 animate-spin text-yellow-400" />
+                <span className={`text-xs ${isDark ? 'text-zinc-400' : 'text-gray-500'}`}>Cargando...</span>
+              </div>
+            ) : detail && detail.length > 0 ? (
+              <div className="space-y-1.5">
+                {detail.map(d => (
+                  <div key={`${d.anio}-${d.catorcena}`} className="flex items-center justify-between gap-4">
+                    <span className={`text-xs ${isDark ? 'text-zinc-400' : 'text-gray-500'}`}>
+                      Cat {String(d.catorcena).padStart(2, '0')}
+                    </span>
+                    <span className={`text-xs font-bold px-2 py-0.5 rounded-full ${
+                      d.completa
+                        ? (isDark ? 'text-green-300 bg-green-500/20 border border-green-500/30' : 'text-green-700 bg-green-50 border border-green-200')
+                        : (isDark ? 'text-yellow-300 bg-yellow-500/20 border border-yellow-500/30' : 'text-yellow-700 bg-yellow-50 border border-yellow-200')
+                    }`}>
+                      {d.reservas_count}/{d.caras_esperadas} {d.completa ? '✓' : `— faltan ${d.caras_esperadas - d.reservas_count}`}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <p className={`text-xs ${isDark ? 'text-zinc-400' : 'text-gray-500'}`}>Sin desglose disponible</p>
+            )}
+          </div>
+        </>
+      )}
+    </>
+  );
+}
+
 interface ImagenDigitalView {
   id: number;
   archivo: string;
@@ -993,10 +1083,8 @@ const CampanaRow = React.memo(function CampanaRow({
           >
             {item.status}
           </button>
-          {item.caras_ultima_cat != null && Number(item.caras_ultima_cat) > 0 && Number(item.reservas_count_ultima_cat) < Number(item.caras_ultima_cat) && (
-            <span className={`px-1.5 py-0.5 rounded-full text-[9px] ${isDark ? 'bg-yellow-500/20 text-yellow-300' : 'bg-yellow-50 text-yellow-700'} border border-yellow-500/30`}>
-              Incompleta
-            </span>
+          {esCampanaIncompleta(item) && (
+            <IncompletaBadge campana={item} isDark={isDark} />
           )}
         </div>
       </td>
@@ -1372,9 +1460,7 @@ export function CampanasPage() {
 
     // Filter by "Incompleta" status (frontend-only)
     if (status === 'Incompleta') {
-      items = items.filter(c =>
-        c.caras_ultima_cat != null && Number(c.caras_ultima_cat) > 0 && Number(c.reservas_count_ultima_cat) < Number(c.caras_ultima_cat)
-      );
+      items = items.filter(esCampanaIncompleta);
     }
 
     // Apply advanced filters (con soporte extendido para codigos_inventario desde inventarios cargados)
@@ -2333,9 +2419,7 @@ export function CampanasPage() {
       if (c.status) statusSet.add(c.status);
     });
     // Add "Incompleta" if any campaign has incomplete inventory
-    const hasIncompletas = data.data.some(c =>
-      c.caras_ultima_cat != null && Number(c.caras_ultima_cat) > 0 && Number(c.reservas_count_ultima_cat) < Number(c.caras_ultima_cat)
-    );
+    const hasIncompletas = data.data.some(esCampanaIncompleta);
     if (hasIncompletas) statusSet.add('Incompleta');
     return Array.from(statusSet).sort();
   }, [data?.data]);
@@ -2993,7 +3077,8 @@ export function CampanasPage() {
   // Callbacks estables para el `CampanaRow` memoizado. `useCallback` mantiene
   // la misma identidad entre renders del padre para que React.memo no aborte.
   const handleRowOpen = useCallback((id: number) => handleOpenCampana(id), [handleOpenCampana]);
-  const handleRowShare = useCallback((propId: number) => navigate(`/propuestas/compartir/${propId}`), [navigate]);
+  // ctx=campana: la vista compartir muestra "Circuitos Confirmados" (desde Propuestas, sin ctx, muestra "Circuitos Muestra")
+  const handleRowShare = useCallback((propId: number) => navigate(`/propuestas/compartir/${propId}?ctx=campana`), [navigate]);
   const handleRowEdit = useCallback((c: Campana) => handleEditCampana(c), [handleEditCampana]);
   const handleRowIncidencia = useCallback((c: Campana) => {
     setIncidenciaCampana(c);
@@ -4036,7 +4121,7 @@ export function CampanasPage() {
                             </button>
                             {campana.propuesta_id && (
                               <button
-                                onClick={() => navigate(`/propuestas/compartir/${campana.propuesta_id}`)}
+                                onClick={() => navigate(`/propuestas/compartir/${campana.propuesta_id}?ctx=campana`)}
                                 className={`p-1.5 rounded-lg ${isDark ? 'bg-cyan-500/10 text-cyan-400 hover:bg-cyan-500/20 border-cyan-500/20' : 'bg-cyan-50 text-cyan-600 hover:bg-cyan-100 border-cyan-200'} border transition-all`}
                                 title="Compartir campaña"
                               >
