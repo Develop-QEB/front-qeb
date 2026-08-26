@@ -144,6 +144,38 @@ const buildEstatusOpText = (urls: string[], estatusByUrl?: Map<string, string>):
   return vals.join('\n');
 };
 
+// Extrae nombre_generico por URL desde items.artes_detalle. En modo Genérico
+// todos los artes del batch comparten el mismo valor, por eso lo colapsamos
+// a un solo string por circuito en buildGenericoText.
+const extractGenericoByUrl = (arr: any[]): Map<string, string> => {
+  const m = new Map<string, string>();
+  for (const it of arr) {
+    const detalle = it.artes_detalle;
+    if (!detalle) continue;
+    try {
+      const parsed = typeof detalle === 'string' ? JSON.parse(detalle) : detalle;
+      if (Array.isArray(parsed)) {
+        for (const entry of parsed) {
+          const archivo = (entry.archivo || '').trim();
+          const gen = (entry.nombre_generico || '').trim();
+          if (archivo && gen && !m.has(archivo)) m.set(archivo, gen);
+        }
+      }
+    } catch { /* ignore */ }
+  }
+  return m;
+};
+
+const buildGenericoText = (urls: string[], genericoByUrl?: Map<string, string>): string => {
+  if (!urls || urls.length === 0 || !genericoByUrl) return '';
+  const vals: string[] = [];
+  for (const u of urls) {
+    const v = genericoByUrl.get(u)?.trim();
+    if (v && !vals.includes(v)) vals.push(v);
+  }
+  return vals.join('\n');
+};
+
 // Reescala a una miniatura chica y la re-codifica como JPEG de baja calidad.
 // En el Excel el arte es solo simbólico (miniatura), no HD: esto baja muchísimo
 // el peso del archivo y el tiempo de addImage/escritura del xlsx.
@@ -541,6 +573,7 @@ export interface VersionarioArtesPreviewRow {
   notas: string;
   nombreArte: string;
   estatusOperaciones: string; // texto manual de Estatus Operaciones (ficha)
+  nombreGenerico: string;     // valor único compartido por el batch (modo Genérico)
   artesUrls: string[];
   posted: boolean;
 }
@@ -845,6 +878,7 @@ export function buildVersionarioArtesPreview({ campanas }: { campanas: Versionar
         notas: notasResumen,
         nombreArte: buildNombresArtesText(urls, extractNamesByUrl(arr)),
         estatusOperaciones: buildEstatusOpText(urls, extractEstatusOpByUrl(arr)),
+        nombreGenerico: buildGenericoText(urls, extractGenericoByUrl(arr)),
         artesUrls: urls,
         posted,
       });
@@ -855,7 +889,7 @@ export function buildVersionarioArtesPreview({ campanas }: { campanas: Versionar
     headers: [
       'ID Campaña', 'Plaza', 'Tipo', 'Formato', 'Asesor Comercial', 'APS QEB',
       'Fecha Inicio Periodo', 'Fecha Fin Periodo', 'Cliente',
-      'Marca', 'Campaña', 'Caras', 'Observaciones', 'Nombre Arte', 'Estatus Operaciones', 'URL Arte',
+      'Marca', 'Campaña', 'Caras', 'Observaciones', 'Nombre Arte', 'Estatus Operaciones', 'Genérico', 'URL Arte',
     ],
     arteCols: maxArtesUnicos,
     rows,
@@ -959,12 +993,13 @@ export async function exportVersionarioArtesMulti({ campanas, fileNameSuffix, fi
     'Observaciones',
     'Nombre Arte',
     'Estatus Operaciones',
+    'Genérico',
     'URL Arte',
   ];
   const arteHeaders = Array.from({ length: maxArtesUnicos }, (_, i) => `Arte ${i + 1}`);
   const headers = [...baseHeaders, ...arteHeaders];
 
-  const baseWidths = [12, 22, 14, 14, 26, 14, 14, 14, 30, 18, 26, 8, 50, 40, 30, 60];
+  const baseWidths = [12, 22, 14, 14, 26, 14, 14, 14, 30, 18, 26, 8, 50, 40, 30, 30, 60];
   sheet.columns = [
     ...baseWidths.map(w => ({ width: w })),
     ...Array(maxArtesUnicos).fill(null).map(() => ({ width: 22 })),
@@ -1170,6 +1205,7 @@ export async function exportVersionarioArtesMulti({ campanas, fileNameSuffix, fi
       notasResumen,
       buildNombresArtesText(artesUrls, extractNamesByUrl(arr)),
       buildEstatusOpText(artesUrls, extractEstatusOpByUrl(arr)),
+      buildGenericoText(artesUrls, extractGenericoByUrl(arr)),
       urlArteText,
     ];
     for (let i = 0; i < maxArtesUnicos; i++) rowValues.push('');
