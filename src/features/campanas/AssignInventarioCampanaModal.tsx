@@ -2444,27 +2444,33 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
       onConfirm: async () => {
         setDeleteCircuitoModal(prev => ({ ...prev, isDeleting: true }));
         const toDelete = [caraToDelete, ...pairedCaras].filter(Boolean) as CaraItem[];
-        for (const c of toDelete) {
-          if (c.id) {
-            try {
-              await campanasService.deleteCara(campana!.id, c.id);
-            } catch (error) {
-              console.error('Error deleting cara:', error);
-              alert('Error al eliminar el formato de la base de datos');
-              setDeleteCircuitoModal(prev => ({ ...prev, isOpen: false, isDeleting: false }));
-              return;
-            }
-          }
+        const conId = toDelete.filter(c => c.id) as (CaraItem & { id: number })[];
+        const sinId = toDelete.filter(c => !c.id);
+
+        // Caras locales aún no guardadas (sin id): se quitan directo, no están en BD.
+        if (sinId.length > 0) {
+          const localIds = new Set(sinId.map(c => c.localId));
+          setCaras(prev => prev.filter(c => !localIds.has(c.localId)));
+          setReservas(prev => prev.filter(r => !sinId.some(c => r.id.startsWith(c.localId))));
         }
-        const deletedLocalIds = new Set(toDelete.map(c => c.localId));
-        setCaras(prev => prev.filter(c => !deletedLocalIds.has(c.localId)));
-        setReservas(prev => prev.filter(r => !toDelete.some(c => r.id.startsWith(c.localId))));
-        setModifiedCaras(prev => {
-          const next = new Map(prev);
-          for (const c of toDelete) if (c.id) next.delete(c.id);
-          return next;
-        });
-        setDeleteCircuitoModal(prev => ({ ...prev, isOpen: false, isDeleting: false }));
+
+        if (conId.length > 0) {
+          // En CAMPAÑAS eliminar NO borra al momento: crea una solicitud de
+          // autorización (Filtro GC → DG). La(s) cara(s) quedan en el listado hasta
+          // que DG apruebe. Se manda 1 sola solicitud con la pareja RT/BF incluida.
+          try {
+            const [primero, ...resto] = conId;
+            const resp = await campanasService.deleteCara(campana!.id, primero.id, false, resto.map(c => c.id));
+            setDeleteCircuitoModal(prev => ({ ...prev, isOpen: false, isDeleting: false }));
+            alert(resp?.message || 'Solicitud de eliminación enviada a autorización de Dirección General.');
+          } catch (error) {
+            console.error('Error solicitando eliminación:', error);
+            alert(error instanceof Error ? error.message : 'Error al solicitar la eliminación');
+            setDeleteCircuitoModal(prev => ({ ...prev, isOpen: false, isDeleting: false }));
+          }
+        } else {
+          setDeleteCircuitoModal(prev => ({ ...prev, isOpen: false, isDeleting: false }));
+        }
       }
     });
   };
@@ -2560,36 +2566,34 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
       onConfirm: async () => {
         setDeleteCircuitoModal(prev => ({ ...prev, isDeleting: true }));
 
-        // Eliminar primero las persistidas en BD; si una falla, detener y limpiar solo lo borrado
-        const removedLocalIds = new Set<string>();
-        const removedDbIds = new Set<number>();
-        let failed: CaraItem | null = null;
-        for (const cara of carasToDelete) {
-          if (cara.id) {
-            try {
-              await campanasService.deleteCara(campana!.id, cara.id);
-              removedDbIds.add(cara.id);
-            } catch (error) {
-              console.error('Error deleting cara (bulk):', error);
-              failed = cara;
-              break;
-            }
-          }
-          removedLocalIds.add(cara.localId);
+        const conId = carasToDelete.filter(c => c.id) as (CaraItem & { id: number })[];
+        const sinId = carasToDelete.filter(c => !c.id);
+
+        // Caras locales sin guardar (sin id): se quitan directo, no están en BD.
+        if (sinId.length > 0) {
+          const localIds = new Set(sinId.map(c => c.localId));
+          setCaras(prev => prev.filter(c => !localIds.has(c.localId)));
+          setReservas(prev => prev.filter(r => ![...localIds].some(id => r.id.startsWith(id))));
         }
 
-        setCaras(prev => prev.filter(c => !removedLocalIds.has(c.localId)));
-        setReservas(prev => prev.filter(r => ![...removedLocalIds].some(id => r.id.startsWith(id))));
-        setModifiedCaras(prev => {
-          const next = new Map(prev);
-          for (const id of removedDbIds) next.delete(id);
-          return next;
-        });
-        setSelectedCaraIds(new Set());
-        setDeleteCircuitoModal(prev => ({ ...prev, isOpen: false, isDeleting: false }));
-
-        if (failed) {
-          alert(`No se pudo eliminar "${failed.articulo || failed.localId}". Se eliminaron ${removedLocalIds.size} de ${carasToDelete.length} circuitos.`);
+        if (conId.length > 0) {
+          // Campañas: eliminar NO borra al momento → UNA sola solicitud de
+          // autorización (Filtro GC → DG) con todas las caras seleccionadas.
+          // Quedan en el listado hasta que DG apruebe.
+          try {
+            const [primero, ...resto] = conId;
+            const resp = await campanasService.deleteCara(campana!.id, primero.id, false, resto.map(c => c.id));
+            setSelectedCaraIds(new Set());
+            setDeleteCircuitoModal(prev => ({ ...prev, isOpen: false, isDeleting: false }));
+            alert(resp?.message || 'Solicitud de eliminación enviada a autorización de Dirección General.');
+          } catch (error) {
+            console.error('Error solicitando eliminación (bulk):', error);
+            alert(error instanceof Error ? error.message : 'Error al solicitar la eliminación');
+            setDeleteCircuitoModal(prev => ({ ...prev, isOpen: false, isDeleting: false }));
+          }
+        } else {
+          setSelectedCaraIds(new Set());
+          setDeleteCircuitoModal(prev => ({ ...prev, isOpen: false, isDeleting: false }));
         }
       },
     });
@@ -2984,9 +2988,10 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
             };
           }
         } else if (!wantsPair && existingBfPair?.id) {
-          // User removed BF pairing: delete BF row from DB
+          // User removed BF pairing: delete BF row from DB. Es parte de una edición
+          // (no un "eliminar circuito"), así que se borra al momento SIN autorización.
           try {
-            await campanasService.deleteCara(campana!.id, existingBfPair.id);
+            await campanasService.deleteCara(campana!.id, existingBfPair.id, false, undefined, true);
             deletedBfId = existingBfPair.id;
           } catch (error) {
             console.error('Error deleting BF pair:', error);
@@ -3285,7 +3290,13 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
         articulo: target.articulo || null,
       });
       const nuevoDg = eraCorreccion ? 'pendiente' : resultado.autorizacion_dg;
-      setCaras(prev => prev.map(c => c.id === target.id
+      // Espejear el nuevo estado de autorización al BF del par. El backend ya
+      // propaga RT->BF al guardar, PERO el candado de "circuitos rechazados sin
+      // resolver" del guardado revisa el estado LOCAL de cada cara: si el BF se
+      // queda en 'rechazado', bloquea el Guardar y el reenvío nunca se aplica
+      // (caso 81403: coberturas RT/BF quedaban trabadas en rechazado). Fix front.
+      const bfPairId = bfPair?.id;
+      setCaras(prev => prev.map(c => (c.id === target.id || (bfPairId != null && c.id === bfPairId))
         ? { ...c, autorizacion_dg: nuevoDg, autorizacion_dcm: resultado.autorizacion_dcm }
         : c));
       setModifiedCaras(prev => {

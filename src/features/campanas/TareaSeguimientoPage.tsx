@@ -1565,6 +1565,11 @@ function UploadArtModal({
   // Estatus Operaciones (texto manual opcional) por imagen — digital
   const [digitalImageEstatusOps, setDigitalImageEstatusOps] = useState<Map<string, string>>(new Map());
   const [isUploadingDigitalFile, setIsUploadingDigitalFile] = useState(false);
+  // Modo del step 2 (Notas) — digital. En modo 'generico' aparece un input
+  // adicional compartido por todos los artes seleccionados que se guarda como
+  // nombre_generico. Default 'versionado' = comportamiento actual.
+  const [digitalWizardModo, setDigitalWizardModo] = useState<'versionado' | 'generico'>('versionado');
+  const [digitalNombreGenerico, setDigitalNombreGenerico] = useState('');
 
   // Estado para wizard de artes tradicionales (2 pasos)
   const [wizardStep, setWizardStep] = useState<1 | 2>(1);
@@ -1574,6 +1579,9 @@ function UploadArtModal({
   const [imageNames, setImageNames] = useState<Map<string, string>>(new Map());
   // Estatus Operaciones (texto manual opcional) por imagen — tradicional
   const [imageEstatusOps, setImageEstatusOps] = useState<Map<string, string>>(new Map());
+  // Modo del step 2 — tradicional. Espejo del digital.
+  const [wizardModo, setWizardModo] = useState<'versionado' | 'generico'>('versionado');
+  const [nombreGenerico, setNombreGenerico] = useState('');
 
   // Estado para fichas técnicas (browser de carpetas)
   const [expandedFichaFolders, setExpandedFichaFolders] = useState<Set<string>>(new Set());
@@ -1611,6 +1619,10 @@ function UploadArtModal({
     setDigitalImageNotes(new Map());
     setDigitalImageNames(new Map());
     setDigitalImageEstatusOps(new Map());
+    setWizardModo('versionado');
+    setNombreGenerico('');
+    setDigitalWizardModo('versionado');
+    setDigitalNombreGenerico('');
     setModalTab('artes');
     setExpandedFichaFolders(new Set());
   }, [isOpen]);
@@ -1907,6 +1919,10 @@ function UploadArtModal({
     if (isProcessingFinal) return;
     // Flujo digital con wizard - enviar archivos seleccionados de la biblioteca con notas
     if (isDigitalInventory && digitalWizardStep === 2 && onSubmitDigitalFromLibrary) {
+      // Modo Genérico: el input compartido es obligatorio y se copia en cada
+      // arte como nombre_generico. En Versionado el campo queda null.
+      const digitalGenericoVal = digitalWizardModo === 'generico' ? digitalNombreGenerico.trim() : '';
+      if (digitalWizardModo === 'generico' && !digitalGenericoVal) return;
       const archivos = Array.from(selectedDigitalImages.entries()).map(([key, img], idx) => ({
         archivo: img.url,
         nota: digitalImageNotes.get(key)?.trim() || '',
@@ -1914,6 +1930,7 @@ function UploadArtModal({
         tipo: img.isVideo ? 'video' : 'image',
         nombre_arte: digitalImageNames.get(key)?.trim() || null,
         estatus_operaciones: digitalImageEstatusOps.get(key)?.trim() || null,
+        nombre_generico: digitalGenericoVal || null,
       }));
       const { proceed, markInstalado, instalacionMode, operacionesAsignados } = await checkAndConfirmInstalado(archivos.map(a => a.archivo));
       if (!proceed) return;
@@ -1940,12 +1957,15 @@ function UploadArtModal({
 
     // Flujo tradicional con wizard
     if (!isDigitalInventory && onSubmitTradicional && wizardStep === 2) {
+      const genericoVal = wizardModo === 'generico' ? nombreGenerico.trim() : '';
+      if (wizardModo === 'generico' && !genericoVal) return;
       const archivos = Array.from(selectedGalleryImages.entries()).map(([key, img], idx) => ({
         archivo: img.url,
         nota: imageNotes.get(key)?.trim() || '',
         spot: idx + 1,
         nombre_arte: imageNames.get(key)?.trim() || null,
         estatus_operaciones: imageEstatusOps.get(key)?.trim() || null,
+        nombre_generico: genericoVal || null,
       }));
       const { proceed, markInstalado, instalacionMode, operacionesAsignados } = await checkAndConfirmInstalado(archivos.map(a => a.archivo));
       if (!proceed) return;
@@ -2037,6 +2057,8 @@ function UploadArtModal({
           const nombre = digitalImageNames.get(key);
           if (!nombre || nombre.trim() === '') return true;
         }
+        // Modo Genérico: el input compartido es obligatorio
+        if (digitalWizardModo === 'generico' && !digitalNombreGenerico.trim()) return true;
         return false;
       }
       // En paso 1 no se usa el botón submit (se usa "Siguiente")
@@ -2054,6 +2076,8 @@ function UploadArtModal({
           if (!nombre || nombre.trim() === '') return true;
           if (!nota || nota.trim() === '') return true;
         }
+        // Modo Genérico: el input compartido es obligatorio
+        if (wizardModo === 'generico' && !nombreGenerico.trim()) return true;
         return false;
       }
       // En paso 1: no usar este botón (se usa "Siguiente")
@@ -2576,6 +2600,46 @@ function UploadArtModal({
                     /* ===== PASO 2: Notas opcionales por archivo ===== */
                     <>
                       <div className="overflow-y-auto pr-1" style={{ maxHeight: 'calc(90vh - 280px)' }}>
+                        {/* Toggle Versionado / Generico. En Generico se pide un
+                            valor unico obligatorio que se copia como nombre_generico
+                            en todos los artes; en Versionado los campos por-arte
+                            se comportan como siempre. */}
+                        <div className="mb-2 flex items-center gap-2">
+                          <div className="inline-flex rounded-lg border border-border overflow-hidden">
+                            <button
+                              type="button"
+                              onClick={() => setDigitalWizardModo('versionado')}
+                              className={`px-3 py-1 text-[10px] font-medium transition-colors ${digitalWizardModo === 'versionado' ? 'bg-cyan-600 text-white' : 'bg-transparent text-zinc-400 hover:text-zinc-200'}`}
+                            >
+                              Versionado
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => setDigitalWizardModo('generico')}
+                              className={`px-3 py-1 text-[10px] font-medium transition-colors ${digitalWizardModo === 'generico' ? 'bg-cyan-600 text-white' : 'bg-transparent text-zinc-400 hover:text-zinc-200'}`}
+                            >
+                              Genérico
+                            </button>
+                          </div>
+                        </div>
+                        {digitalWizardModo === 'generico' && (
+                          <div className="mb-3 p-2 rounded-lg border border-cyan-500/30 bg-cyan-500/10">
+                            <label className="block text-[10px] font-medium text-cyan-300 mb-1">
+                              Genérico <span className="text-red-400">*</span>
+                              <span className="ml-1 text-zinc-400 font-normal">(se aplica a todos los artes seleccionados)</span>
+                            </label>
+                            <input
+                              type="text"
+                              value={digitalNombreGenerico}
+                              onChange={(e) => setDigitalNombreGenerico(e.target.value)}
+                              className="w-full px-2 py-1.5 text-xs bg-background border border-border rounded-lg focus:outline-none focus:ring-1 focus:ring-cyan-500"
+                              placeholder="Ej. GENERICO"
+                            />
+                            {!digitalNombreGenerico.trim() && (
+                              <p className="mt-1 text-[9px] text-red-400">Obligatorio en modo Genérico</p>
+                            )}
+                          </div>
+                        )}
                         <label className="block text-xs font-medium text-muted-foreground mb-2">
                           Nombre y nota por archivo — {selectedDigitalImages.size} archivo{selectedDigitalImages.size !== 1 ? 's' : ''}
                         </label>
@@ -2852,6 +2916,43 @@ function UploadArtModal({
                           Agrega una nota obligatoria para cada imagen seleccionada.
                         </p>
                       </div>
+                      {/* Toggle Versionado / Generico. Espejo del bloque digital. */}
+                      <div className="mb-2 flex items-center gap-2">
+                        <div className="inline-flex rounded-lg border border-border overflow-hidden">
+                          <button
+                            type="button"
+                            onClick={() => setWizardModo('versionado')}
+                            className={`px-3 py-1 text-[10px] font-medium transition-colors ${wizardModo === 'versionado' ? 'bg-purple-600 text-white' : 'bg-transparent text-zinc-400 hover:text-zinc-200'}`}
+                          >
+                            Versionado
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => setWizardModo('generico')}
+                            className={`px-3 py-1 text-[10px] font-medium transition-colors ${wizardModo === 'generico' ? 'bg-purple-600 text-white' : 'bg-transparent text-zinc-400 hover:text-zinc-200'}`}
+                          >
+                            Genérico
+                          </button>
+                        </div>
+                      </div>
+                      {wizardModo === 'generico' && (
+                        <div className="mb-3 p-2 rounded-lg border border-purple-500/30 bg-purple-500/10">
+                          <label className="block text-[10px] font-medium text-purple-300 mb-1">
+                            Genérico <span className="text-red-400">*</span>
+                            <span className="ml-1 text-zinc-400 font-normal">(se aplica a todos los artes seleccionados)</span>
+                          </label>
+                          <input
+                            type="text"
+                            value={nombreGenerico}
+                            onChange={(e) => setNombreGenerico(e.target.value)}
+                            className="w-full px-2 py-1.5 text-xs bg-background border border-border rounded-lg focus:outline-none focus:ring-1 focus:ring-purple-500"
+                            placeholder="Ej. GENERICO"
+                          />
+                          {!nombreGenerico.trim() && (
+                            <p className="mt-1 text-[9px] text-red-400">Obligatorio en modo Genérico</p>
+                          )}
+                        </div>
+                      )}
                       <div className="overflow-y-auto space-y-3 pr-1" style={{ maxHeight: 'calc(90vh - 280px)' }}>
                         {Array.from(selectedGalleryImages.entries()).map(([id, img], idx) => (
                           <div key={id} className={`flex gap-3 p-3 border border-border rounded-lg ${isDark ? 'bg-zinc-900/50' : 'bg-gray-50'}`}>

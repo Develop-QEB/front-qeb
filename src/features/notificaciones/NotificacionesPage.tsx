@@ -1629,6 +1629,9 @@ function ApprovalModal({
 
   const isAutorizacionTask = tarea.tipo?.includes('Autorización');
   const tipoAutorizacion = tarea.tipo?.includes('DG') ? 'dg' : tarea.tipo?.includes('DCM') ? 'dcm' : null;
+  // Autorización de ELIMINACIÓN de circuitos (campañas): aprobar = borrar, rechazar
+  // = no borrar + motivo. Va por tareaId (endpoint dedicado), no por idquote.
+  const isEliminacionTask = tarea.tipo === 'Autorización Eliminación' || tarea.tipo === 'Filtro Autorización Eliminación';
 
   const [idPropuestaState, setIdPropuestaState] = useState<string | null>(tarea.id_propuesta || null);
   const [solicitudFallbackTried, setSolicitudFallbackTried] = useState(false);
@@ -1699,7 +1702,10 @@ function ApprovalModal({
   });
 
   const aprobarMutation = useMutation({
-    mutationFn: () => notificacionesService.aprobarAutorizacion(idPropuesta || '', tipoAutorizacion as 'dg' | 'dcm'),
+    mutationFn: async () => {
+      if (isEliminacionTask) { await notificacionesService.aprobarEliminacion(tarea.id); return; }
+      await notificacionesService.aprobarAutorizacion(idPropuesta || '', tipoAutorizacion as 'dg' | 'dcm');
+    },
     onSuccess: () => {
       refetchCaras();
       refetchResumen();
@@ -1711,7 +1717,10 @@ function ApprovalModal({
   });
 
   const rechazarMutation = useMutation({
-    mutationFn: (motivo: string) => notificacionesService.rechazarAutorizacion(idPropuesta || '', motivo),
+    mutationFn: async (motivo: string) => {
+      if (isEliminacionTask) { await notificacionesService.rechazarEliminacion(tarea.id, motivo); return; }
+      await notificacionesService.rechazarAutorizacion(idPropuesta || '', motivo);
+    },
     onSuccess: () => {
       setShowRechazoInput(false);
       setRechazoMotivo('');
@@ -2098,7 +2107,7 @@ function ApprovalModal({
                       : aprobarMutation.mutate()}
                     disabled={isFiltroTask
                       ? aprobarFiltroMutation.isPending
-                      : (aprobarMutation.isPending || carasPendientes.length === 0)}
+                      : (aprobarMutation.isPending || (!isEliminacionTask && carasPendientes.length === 0))}
                     className="flex-1 flex items-center justify-center gap-2 px-3 sm:px-4 py-3 rounded-xl bg-emerald-600 text-white text-sm font-medium hover:bg-emerald-700 disabled:opacity-50 disabled:cursor-not-allowed transition-all"
                   >
                     {(isFiltroTask ? aprobarFiltroMutation.isPending : aprobarMutation.isPending) ? (
@@ -2109,12 +2118,14 @@ function ApprovalModal({
                     <span className="truncate">
                       {isFiltroTask
                         ? (aprobarFiltroMutation.isPending ? 'Enviando...' : `Enviar a ${filtroDireccionLabel}`)
-                        : (aprobarMutation.isPending ? 'Aprobando...' : `Aprobar ${carasPendientes.length} circuito${carasPendientes.length !== 1 ? 's' : ''}`)}
+                        : isEliminacionTask
+                          ? (aprobarMutation.isPending ? 'Autorizando...' : 'Autorizar eliminación')
+                          : (aprobarMutation.isPending ? 'Aprobando...' : `Aprobar ${carasPendientes.length} circuito${carasPendientes.length !== 1 ? 's' : ''}`)}
                     </span>
                   </button>
                   <button
                     onClick={() => setShowRechazoInput(true)}
-                    disabled={!isFiltroTask && carasPendientes.length === 0}
+                    disabled={!isFiltroTask && !isEliminacionTask && carasPendientes.length === 0}
                     className="flex items-center justify-center gap-2 px-4 sm:px-6 py-3 rounded-xl bg-red-600/20 text-red-400 text-sm font-medium hover:bg-red-600/30 border border-red-500/30 disabled:opacity-50 disabled:cursor-not-allowed transition-all"
                   >
                     <X className="h-4 w-4" />

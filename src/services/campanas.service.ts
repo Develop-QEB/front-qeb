@@ -140,6 +140,7 @@ export interface ImagenDigital {
   tipo: 'image' | 'video';
   nombre_arte?: string | null; // Nombre manual capturado en la carga (reemplaza al slug del archivo)
   estatus_operaciones?: string | null; // Texto manual de Estatus Operaciones (ficha)
+  nombre_generico?: string | null; // Valor único compartido por todos los artes del batch (modo Genérico)
 }
 
 export interface DigitalFileSummary {
@@ -158,6 +159,7 @@ export interface ArteTradicional {
   createdAt: string | null;
   nombre_arte?: string | null; // Nombre manual capturado en la carga (reemplaza al slug del archivo)
   estatus_operaciones?: string | null; // Texto manual de Estatus Operaciones (ficha)
+  nombre_generico?: string | null; // Valor único compartido por todos los artes del batch (modo Genérico)
 }
 
 export interface TradicionalFileSummary {
@@ -391,6 +393,8 @@ export interface ArteExistente {
   // Para artes recien subidos via addedArtes (sin guardar aun), vienen null/undefined.
   nombre_arte?: string | null; // nombre manual capturado en el modal de carga
   nota?: string | null;        // nota asociada (artes_tradicionales.nota o imagenes_digitales.comentario)
+  estatus_operaciones?: string | null; // texto manual de Estatus Operaciones (ficha)
+  nombre_generico?: string | null;     // valor único compartido por el batch (modo Genérico)
   estatus?: string | null;     // estatus del arte (Aprobado / Rechazado / Pendiente / etc.)
   tiene_instalado?: boolean;   // true si alguna reserva que usa este arte ya esta instalada
 }
@@ -1166,7 +1170,7 @@ export const campanasService = {
   async assignArteDigital(
     id: number,
     reservaIds: number[],
-    archivos: { archivo: string; spot: number; nombre: string; tipo: string; nota?: string; nombre_arte?: string | null; estatus_operaciones?: string | null }[],
+    archivos: { archivo: string; spot: number; nombre: string; tipo: string; nota?: string; nombre_arte?: string | null; estatus_operaciones?: string | null; nombre_generico?: string | null }[],
     markInstalado: boolean = false,
     instalacionMode?: 'instalado' | 'rotacion',
     operacionesAsignados?: { ids: number[]; nombres: string[] } | null
@@ -1279,7 +1283,7 @@ export const campanasService = {
   async assignArteTradicional(
     id: number,
     reservaIds: number[],
-    archivos: { archivo: string; nota: string; spot: number; nombre_arte?: string | null; estatus_operaciones?: string | null }[],
+    archivos: { archivo: string; nota: string; spot: number; nombre_arte?: string | null; estatus_operaciones?: string | null; nombre_generico?: string | null }[],
     markInstalado: boolean = false,
     instalacionMode?: 'instalado' | 'rotacion',
     operacionesAsignados?: { ids: number[]; nombres: string[] } | null
@@ -1685,12 +1689,23 @@ async getUsuarios(): Promise<{ id: number; nombre: string }[]> {
     return response.data.data;
   },
 
-  async deleteCara(campanaId: number, caraId: number, eliminarGrupo?: boolean): Promise<void> {
-    const url = `/campanas/${campanaId}/caras/${caraId}${eliminarGrupo ? '?eliminarGrupo=true' : ''}`;
-    const response = await api.delete<ApiResponse<void>>(url);
+  // En CAMPAÑAS, eliminar caras crea una solicitud de autorización (Filtro GC → DG)
+  // en vez de borrar; la respuesta trae requiereAutorizacion + message. Se pueden
+  // pasar cara-ids adicionales (ej. la pareja RT/BF) para que UNA sola solicitud
+  // cubra todas y no se generen tareas separadas.
+  async deleteCara(campanaId: number, caraId: number, eliminarGrupo?: boolean, caraIdsAdicionales?: number[], sinAutorizacion?: boolean): Promise<{ requiereAutorizacion?: boolean; message?: string; caras?: number }> {
+    // sinAutorizacion=true: borra al momento (uso INTERNO: reemplazo de par BF en
+    // edición). El borrado normal del usuario NO lo pasa → va por autorización.
+    const qs = new URLSearchParams();
+    if (eliminarGrupo) qs.set('eliminarGrupo', 'true');
+    if (sinAutorizacion) qs.set('sinAutorizacion', 'true');
+    const url = `/campanas/${campanaId}/caras/${caraId}${qs.toString() ? `?${qs.toString()}` : ''}`;
+    const body = (caraIdsAdicionales && caraIdsAdicionales.length > 0) ? { caraIdsAdicionales } : undefined;
+    const response = await api.delete<ApiResponse<void> & { requiereAutorizacion?: boolean; message?: string; caras?: number }>(url, body ? { data: body } : undefined);
     if (!response.data.success) {
       throw new Error(response.data.error || 'Error al eliminar cara');
     }
+    return (response.data as unknown) as { requiereAutorizacion?: boolean; message?: string; caras?: number };
   },
 };
 

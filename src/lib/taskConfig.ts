@@ -186,6 +186,26 @@ export const TIPO_CONFIG = {
     border: 'border-amber-500/50',
     icon: Briefcase
   },
+
+  // Autorización de ELIMINACIÓN de circuitos (campañas) - Naranja (auth) / Rojo (rechazo)
+  'Filtro Autorización Eliminación': {
+    color: 'text-orange-400',
+    bg: 'bg-orange-500/20',
+    border: 'border-orange-500/30',
+    icon: ShieldCheck
+  },
+  'Autorización Eliminación': {
+    color: 'text-orange-400',
+    bg: 'bg-orange-500/20',
+    border: 'border-orange-500/30',
+    icon: ShieldCheck
+  },
+  'Rechazo Eliminación': {
+    color: 'text-red-400',
+    bg: 'bg-red-500/20',
+    border: 'border-red-500/30',
+    icon: ShieldX
+  },
 } as const;
 
 // Default para tipos no definidos
