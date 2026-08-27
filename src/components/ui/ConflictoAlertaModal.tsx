@@ -18,6 +18,10 @@ export function ConflictoAlertaModal() {
   const navigate = useNavigate();
 
   if (!alerta) return null;
+  // TEMPORAL (soft-launch): el modal emergente solo se muestra a DEV mientras
+  // se prueba el módulo. El backend ya restringe los destinatarios, esto es el
+  // cinturón extra en el cliente. Para liberar: quitar este guard.
+  if (userRol !== 'DEV') return null;
 
   const irAuditoria = () => {
     dismiss();
