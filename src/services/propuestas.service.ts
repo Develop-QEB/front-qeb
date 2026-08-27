@@ -3,6 +3,14 @@ import { Propuesta, PaginatedResponse, ApiResponse } from '../types';
 
 // Conflicto de venta al aprobar: una o más piezas tradicionales ya se vendieron
 // en otra campaña en el período. El back responde 409 con la lista.
+/** Pieza que el backend NO pudo reservar, con su motivo. Permite decirle al
+ *  usuario exactamente qué falló en vez de solo un contador. */
+export interface ReservaOmitida {
+  inventario_id: number;
+  codigo_unico: string | null;
+  motivo: string;
+}
+
 export interface ConflictoVenta {
   reservaId: number;
   espacioId: number;
@@ -292,8 +300,8 @@ export const propuestasService = {
       fechaFin: string;
       agruparComoCompleto?: boolean;
     }
-  ): Promise<{ calendarioId: number; reservasCreadas: number; reservasOmitidas?: number }> {
-    const response = await api.post<ApiResponse<{ calendarioId: number; reservasCreadas: number; reservasOmitidas?: number }>>(
+  ): Promise<{ calendarioId: number; reservasCreadas: number; reservasOmitidas?: number; omitidos?: ReservaOmitida[] }> {
+    const response = await api.post<ApiResponse<{ calendarioId: number; reservasCreadas: number; reservasOmitidas?: number; omitidos?: ReservaOmitida[] }>>(
       `/propuestas/${propuestaId}/reservas`,
       data
     );

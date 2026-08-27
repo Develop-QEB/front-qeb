@@ -701,6 +701,9 @@ export function CompartirPropuestaPage() {
   const handleExpandMap = () => {
     const base = catorcenaFilteredInventario; // respeta los chips de catorcena
     const params = new URLSearchParams();
+    if (esCampana) {
+      params.set('ctx', 'campana');
+    }
 
     if (selectedItems.size > 0) {
       const chosen = base.filter(i => selectedItems.has(itemKey(i)) && i.latitud && i.longitud);
@@ -1210,7 +1213,7 @@ export function CompartirPropuestaPage() {
               Ver en navegador
             </a>
             <a
-              href={`/cliente/propuesta/${propuestaId}/mapa`}
+              href={`/cliente/propuesta/${propuestaId}/mapa${esCampana ? '?ctx=campana' : ''}`}
               target="_blank"
               rel="noopener noreferrer"
               className="flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-blue-500 to-cyan-500 hover:from-blue-400 hover:to-cyan-400 text-white rounded-lg text-sm font-medium transition-all shadow-lg shadow-blue-500/20"

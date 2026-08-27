@@ -132,6 +132,7 @@ export interface LimpiezaRegistroRow {
   mueble: string | null;
   anio: number;
   numero_catorcena: number;
+  tipo: 'choque' | 'duplicado';
   limpiado_at: string;
   /** 'Automático' o el nombre del usuario que usó el botón. */
   limpiado_por: string | null;

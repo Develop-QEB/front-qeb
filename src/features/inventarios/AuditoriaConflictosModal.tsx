@@ -361,7 +361,7 @@ export function AuditoriaConflictosModal({ open, onClose, onOpenEnMatriz, autoIn
             <div>
               <h2 className={`text-lg font-semibold ${isDark ? 'text-white' : 'text-gray-900'}`}>Auditoría de Conflictos</h2>
               <p className={`text-xs ${isDark ? 'text-amber-300/50' : 'text-amber-500'}`}>
-                Tradicionales con 2+ reservas en la misma catorcena · todo el inventario
+                Tradicionales con 2+ reservas FIRMES (ventas) en la misma catorcena · todo el inventario
               </p>
             </div>
           </div>
@@ -424,6 +424,7 @@ export function AuditoriaConflictosModal({ open, onClose, onOpenEnMatriz, autoIn
                       <th className="px-3 py-2 text-left font-semibold w-36">Fecha</th>
                       <th className="px-3 py-2 text-left font-semibold">Código</th>
                       <th className="px-3 py-2 text-left font-semibold w-24">Catorcena</th>
+                      <th className="px-3 py-2 text-center font-semibold w-24">Tipo</th>
                       <th className="px-3 py-2 text-left font-semibold w-32">Limpiado por</th>
                       <th className="px-3 py-2 text-center font-semibold w-28" title="Reserva que se conservó">Conservada</th>
                       <th className="px-3 py-2 text-left font-semibold" title="Reservas soft-borradas">Liberadas</th>
@@ -443,6 +444,15 @@ export function AuditoriaConflictosModal({ open, onClose, onOpenEnMatriz, autoIn
                           {l.codigo_unico || `#${l.inventario_id}`}
                         </td>
                         <td className={`px-3 py-1.5 ${isDark ? 'text-zinc-300' : 'text-gray-700'}`}>C{l.numero_catorcena}-{l.anio}</td>
+                        <td className="px-3 py-1.5 text-center">
+                          <span className={`px-1.5 py-0.5 rounded-full text-[10px] font-medium border ${
+                            l.tipo === 'choque'
+                              ? isDark ? 'bg-red-500/15 text-red-300 border-red-500/30' : 'bg-red-50 text-red-700 border-red-200'
+                              : isDark ? 'bg-zinc-700/50 text-zinc-300 border-zinc-600' : 'bg-gray-100 text-gray-600 border-gray-300'
+                          }`}>
+                            {l.tipo === 'choque' ? 'Choque' : 'Duplicado'}
+                          </span>
+                        </td>
                         <td className="px-3 py-1.5">
                           <span className={`px-1.5 py-0.5 rounded-full text-[10px] font-medium border ${
                             l.limpiado_por === 'Automático'
@@ -561,7 +571,7 @@ export function AuditoriaConflictosModal({ open, onClose, onOpenEnMatriz, autoIn
               <CheckCircle2 className="h-10 w-10" />
               <p className="text-sm font-medium">Sin conflictos en los periodos seleccionados</p>
               <p className={`text-xs ${isDark ? 'text-zinc-500' : 'text-gray-400'}`}>
-                Ningún inventario Tradicional tiene más de una reserva por catorcena.
+                Ningún inventario Tradicional tiene más de una venta firme por catorcena. (Las tentativas de propuestas no cuentan: pueden encimarse por diseño.)
               </p>
             </div>
           ) : (
@@ -575,8 +585,8 @@ export function AuditoriaConflictosModal({ open, onClose, onOpenEnMatriz, autoIn
                 </span>
                 <div className={`flex items-center rounded-lg border overflow-hidden ${isDark ? 'border-zinc-700' : 'border-gray-300'}`}>
                   {([
-                    { k: 'todos' as const, label: 'Todos', n: conteos.todos, title: 'Todas las celdas con 2+ reservas' },
-                    { k: 'choque' as const, label: 'Choque de campañas', n: conteos.choque, title: 'Dos o más campañas distintas peleando la misma cara: hay que liberar una' },
+                    { k: 'todos' as const, label: 'Todos', n: conteos.todos, title: 'Todas las celdas con 2+ reservas firmes' },
+                    { k: 'choque' as const, label: 'Choque de campañas', n: conteos.choque, title: 'Campañas distintas en la misma cara. El monitor lo resuelve solo: conserva la venta más antigua y libera la más nueva (salvo APS)' },
                     { k: 'duplicado' as const, label: 'Duplicados', n: conteos.duplicado, title: 'Una sola campaña con varias reservas sobre la misma cara: error de armado' },
                   ]).map(opt => (
                     <button
@@ -696,7 +706,7 @@ export function AuditoriaConflictosModal({ open, onClose, onOpenEnMatriz, autoIn
                         <td className="px-3 py-1.5 text-center">
                           {r.origenes >= 2 ? (
                             <span
-                              title="Campañas distintas peleando la misma cara"
+                              title="Campañas distintas en la misma cara. Se resuelve solo: se conserva la venta más antigua (salvo APS)"
                               className={`px-1.5 py-0.5 rounded-full text-[10px] font-medium border ${isDark ? 'bg-red-500/15 text-red-300 border-red-500/30' : 'bg-red-50 text-red-700 border-red-200'}`}
                             >
                               Choque
@@ -777,7 +787,7 @@ export function AuditoriaConflictosModal({ open, onClose, onOpenEnMatriz, autoIn
             <div className={`p-5 overflow-y-auto text-xs space-y-3 ${isDark ? 'text-zinc-300' : 'text-gray-700'}`}>
               <div className={`rounded-lg border px-3 py-2 space-y-1 ${isDark ? 'border-zinc-700 bg-zinc-800/40' : 'border-gray-200 bg-gray-50'}`}>
                 <div className="font-semibold">Qué se respeta</div>
-                <div>· Los <strong>choques</strong> no se tocan: ahí hay campañas distintas y esa decisión es comercial.</div>
+                <div>· Los <strong>choques</strong> no entran por este botón (el monitor los resuelve solo: conserva la venta más antigua).</div>
                 <div>· Nunca se borra una reserva con <strong>APS</strong>. Si hay dos con APS, la celda se omite.</div>
                 <div>· Se conserva la que tiene APS; si ninguna tiene, la más antigua.</div>
                 <div>· El borrado es <strong>reversible</strong> (soft-delete) y queda en el historial.</div>

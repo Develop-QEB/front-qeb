@@ -1298,7 +1298,7 @@ export function InventariosPage() {
                         <AlertTriangle className="h-4 w-4 mt-0.5 shrink-0" />
                         <div className="flex-1 min-w-0">
                           <div className="font-medium">Auditoría de conflictos <span className={`ml-1 text-[10px] font-semibold ${isDark ? 'text-amber-500/80' : 'text-amber-600'}`}>DEV</span></div>
-                          <div className={`text-[11px] ${isDark ? 'text-zinc-500' : 'text-gray-500'}`}>Tradicionales con 2+ reservas, en todo el inventario</div>
+                          <div className={`text-[11px] ${isDark ? 'text-zinc-500' : 'text-gray-500'}`}>Tradicionales con 2+ ventas firmes, en todo el inventario</div>
                         </div>
                       </button>
                     )}
