@@ -359,11 +359,13 @@ export function useSocketNotificaciones(
       // masivos a todos los usuarios conectados).
       if (!popups || !paraMi) return;
 
-      // Conflictos de ocupación: para DEV, modal centrado (sin pasar por las
-      // preferencias de popup: es un aviso operativo raro y accionable).
-      // TEMPORAL (soft-launch): otros roles no ven el modal; su aviso sigue el
-      // camino normal de abajo (campanita/toast según preferencias), igual que
-      // las notificaciones de "Reserva desplazada".
+      // Conflictos de ocupación: aviso operativo raro y accionable, NO pasa por
+      // las preferencias de popup (la clave no tiene fila en la matriz y el
+      // default del handler es OFF: el aviso se perdería en silencio).
+      // TEMPORAL (soft-launch): DEV ve el modal centrado; los demás roles
+      // (dueños de campañas avisados por la limpieza) reciben un toast que no
+      // se cierra solo. ESTE es el único punto a tocar al liberar: cambiar el
+      // check de rol para que todos reciban el modal.
       if (payload?.categoria === 'conflicto_ocupacion') {
         if (useAuthStore.getState().user?.rol === 'DEV') {
           useConflictoAlertaStore.getState().show({
@@ -371,9 +373,16 @@ export function useSocketNotificaciones(
             descripcion: payload?.descripcion,
             tareaId: payload?.tarea_id,
           });
-          return;
+        } else {
+          useNotifToastStore.getState().push({
+            titulo: payload?.titulo || 'Conflictos de ocupación',
+            descripcion: payload?.descripcion,
+            tareaId: payload?.tarea_id,
+            tipo: payload?.tipo,
+            requireInteraction: true,
+          });
         }
-        // sin return: cae al flujo estándar (la campanita siempre se actualiza)
+        return;
       }
 
       // El popup es OPT-IN (default OFF): solo se muestra si la preferencia

@@ -1,3 +1,4 @@
+import { useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { AlertTriangle, ExternalLink, X, Bell } from 'lucide-react';
 import { useConflictoAlertaStore } from '../../store/conflictoAlertaStore';
@@ -5,10 +6,11 @@ import { useThemeStore } from '../../store/themeStore';
 import { useAuthStore } from '../../store/authStore';
 
 /**
- * Modal emergente (centro de pantalla) cuando llega una notificación de
- * conflictos de ocupación dirigida a este usuario. La empuja el hook de socket;
- * a diferencia del toast, no se cierra sola y no depende de las preferencias
- * de popup: es un aviso operativo raro que amerita interrupción.
+ * Modal emergente (centro de pantalla) para notificaciones de conflictos de
+ * ocupación. Quién lo ve lo decide el ÚNICO productor (useSocket): durante el
+ * soft-launch solo DEV recibe el modal — los demás roles reciben un toast
+ * persistente por el mismo hook. No depende de las preferencias de popup: es
+ * un aviso operativo raro que amerita interrupción.
  */
 export function ConflictoAlertaModal() {
   const isDark = useThemeStore((s) => s.theme) === 'dark';
@@ -16,12 +18,20 @@ export function ConflictoAlertaModal() {
   const dismiss = useConflictoAlertaStore((s) => s.dismiss);
   const userRol = useAuthStore((s) => s.user?.rol);
   const navigate = useNavigate();
+  const userId = useAuthStore((s) => s.user?.id);
+
+  // El logout del sidebar no recarga la página, así que una alerta pendiente
+  // sobreviviría el cambio de usuario y se mostraría a la siguiente sesión
+  // (contenido de otro usuario). Al cambiar el usuario, se descarta.
+  const prevUserRef = useRef(userId);
+  useEffect(() => {
+    if (prevUserRef.current !== userId) {
+      prevUserRef.current = userId;
+      dismiss();
+    }
+  }, [userId, dismiss]);
 
   if (!alerta) return null;
-  // TEMPORAL (soft-launch): el modal emergente solo se muestra a DEV mientras
-  // se prueba el módulo. El backend ya restringe los destinatarios, esto es el
-  // cinturón extra en el cliente. Para liberar: quitar este guard.
-  if (userRol !== 'DEV') return null;
 
   const irAuditoria = () => {
     dismiss();
@@ -85,6 +95,9 @@ export function ConflictoAlertaModal() {
             <Bell className="h-4 w-4" />
             Ver notificación
           </button>
+          {/* Guard PERMANENTE (no es del soft-launch): la Auditoría es un
+              módulo solo-DEV, este botón se queda restringido aunque el modal
+              se libere a otros roles. */}
           {userRol === 'DEV' && (
             <button
               onClick={irAuditoria}
