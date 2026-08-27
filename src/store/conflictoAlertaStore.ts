@@ -14,9 +14,9 @@ interface ConflictoAlertaState {
 
 /**
  * Alerta modal (centro de pantalla) para notificaciones de conflictos de
- * ocupación. Separada del toaster a propósito: el toast es opt-in por
- * preferencias y se cierra solo; un choque/duplicado de reservas es raro y
- * accionable, así que se muestra siempre a sus destinatarios y espera un clic.
+ * ocupación. Separada del toaster a propósito: no pasa por las preferencias
+ * de popup y espera un clic. Su único productor es useSocket, que decide el
+ * ruteo (soft-launch: DEV → este modal; otros roles → toast persistente).
  */
 export const useConflictoAlertaStore = create<ConflictoAlertaState>((set) => ({
   alerta: null,
