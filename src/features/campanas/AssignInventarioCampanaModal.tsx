@@ -985,6 +985,11 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
   });
 
   // Toast notification state
+  // Piezas que NO se reservaron (descartadas por el backend o truncadas aquí
+  // mismo por los límites de la cara), con su motivo. Antes solo había un
+  // contador en el toast: el usuario no sabía CUÁLES fallaron y re-reservaba
+  // a ciegas.
+  const [omitidosReserva, setOmitidosReserva] = useState<{ codigo: string; motivo: string }[] | null>(null);
   const [toast, setToast] = useState<{ show: boolean; message: string; type: 'success' | 'error' | 'info' }>({
     show: false,
     message: '',
@@ -4370,6 +4375,9 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
 
     const runReservation = async (shouldGroup: boolean) => {
       const newReservas: { inventario_id: number; espacio_id?: number; tipo: string; latitud: number; longitud: number }[] = [];
+      // Piezas seleccionadas que se descartan AQUÍ (exceden lo requerido de la
+      // cara): antes desaparecían del POST sin ningún aviso.
+      const noEnviados: { codigo: string; motivo: string }[] = [];
       let flujoCount = 0;
       let contraflujoCount = 0;
 
@@ -4408,8 +4416,14 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
               longitud: contraflujoOrig!.longitud || 0,
             });
             contraflujoCount++;
+          } else {
+            // Solo cabe un lado del par: se salta completo para mantener el
+            // emparejamiento, pero ahora se avisa en vez de descartar en silencio.
+            noEnviados.push({
+              codigo: String(flujoOrig?.codigo_unico || `#${inv.flujoId}`),
+              motivo: 'No enviado: el par Completo ya no cabe en lo requerido (Flujo/Contraflujo llenos)',
+            });
           }
-          // If only one has space, skip this completo item entirely to maintain pairing
         } else {
           // Regular item - reserve based on tipo_de_cara.
           // Mensual = todo cuenta como Flujo (regla Gran Formato).
@@ -4432,6 +4446,11 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
             });
             if (tipo === 'Flujo') flujoCount++;
             else contraflujoCount++;
+          } else {
+            noEnviados.push({
+              codigo: String(inv.codigo_unico || `#${inv.id}`),
+              motivo: tipo === 'Flujo' ? 'No enviado: Flujo ya está completo' : 'No enviado: Contraflujo ya está completo',
+            });
           }
         }
       });
@@ -4464,6 +4483,7 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
 
         let totalReservasCreadas = 0;
         let totalReservasOmitidas = 0;
+        const omitidosBackend: { codigo: string; motivo: string }[] = [];
         for (const cTarget of carasObjetivo) {
           const fIni = cTarget.inicio_periodo || fechaInicio;
           const fFin = cTarget.fin_periodo || fechaFin;
@@ -4477,6 +4497,9 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
           });
           totalReservasCreadas += result.reservasCreadas;
           totalReservasOmitidas += result.reservasOmitidas ?? 0;
+          for (const o of result.omitidos ?? []) {
+            omitidosBackend.push({ codigo: o.codigo_unico || `#${o.inventario_id}`, motivo: o.motivo });
+          }
         }
 
         queryClient.invalidateQueries({ queryKey: ['campana-reservas-modal', campana!.id] });
@@ -4486,15 +4509,16 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
         handleRefetchDisponibles();
 
         const sufijo = carasObjetivo.length > 1 ? ` en ${carasObjetivo.length} periodos` : '';
+        // El motivo real por pieza viene del backend; ya no se inventa un
+        // "porque ya estaban ocupados" generico (podia ser falso).
+        const detallesOmitidos = [...omitidosBackend, ...noEnviados];
+        if (detallesOmitidos.length > 0) setOmitidosReserva(detallesOmitidos);
         if (totalReservasOmitidas > 0 && totalReservasCreadas === 0) {
+          showToast(`No se reservó ningún espacio${sufijo}. Revisa el detalle de lo omitido`, 'error');
+        } else if (detallesOmitidos.length > 0) {
           showToast(
-            `No se reservó ningún espacio${sufijo}. ${totalReservasOmitidas} se omitieron porque ya estaban ocupados`,
-            'error'
-          );
-        } else if (totalReservasOmitidas > 0) {
-          showToast(
-            `Se reservaron ${totalReservasCreadas} espacios${sufijo}. ${totalReservasOmitidas} se omitieron porque ya estaban ocupados`,
-            'success'
+            `Se reservaron ${totalReservasCreadas} espacio(s)${sufijo}. ${detallesOmitidos.length} pieza(s) no se reservaron — revisa el detalle`,
+            'info'
           );
         } else {
           showToast(`Se guardaron ${totalReservasCreadas} reservas exitosamente${sufijo}`, 'success');
@@ -4632,6 +4656,7 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
 
         let totalReservasCreadas = 0;
         let totalReservasOmitidas = 0;
+        const omitidosBackend: { codigo: string; motivo: string }[] = [];
         for (const cTarget of carasObjetivo) {
           const fIni = cTarget.inicio_periodo || fechaInicio;
           const fFin = cTarget.fin_periodo || fechaFin;
@@ -4645,6 +4670,9 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
           });
           totalReservasCreadas += result.reservasCreadas;
           totalReservasOmitidas += result.reservasOmitidas ?? 0;
+          for (const o of result.omitidos ?? []) {
+            omitidosBackend.push({ codigo: o.codigo_unico || `#${o.inventario_id}`, motivo: o.motivo });
+          }
         }
 
         queryClient.invalidateQueries({ queryKey: ['campana-reservas-modal', campana!.id] });
@@ -4653,15 +4681,13 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
         handleRefetchDisponibles();
 
         const sufijo = carasObjetivo.length > 1 ? ` en ${carasObjetivo.length} periodos` : '';
+        if (omitidosBackend.length > 0) setOmitidosReserva([...omitidosBackend]);
         if (totalReservasOmitidas > 0 && totalReservasCreadas === 0) {
+          showToast(`No se aplicó ninguna bonificación${sufijo}. Revisa el detalle de lo omitido`, 'error');
+        } else if (omitidosBackend.length > 0) {
           showToast(
-            `No se aplicó ninguna bonificación${sufijo}. ${totalReservasOmitidas} se omitieron porque ya estaban ocupadas`,
-            'error'
-          );
-        } else if (totalReservasOmitidas > 0) {
-          showToast(
-            `Se aplicaron ${totalReservasCreadas} bonificaciones${sufijo}. ${totalReservasOmitidas} se omitieron porque ya estaban ocupadas`,
-            'success'
+            `Se aplicaron ${totalReservasCreadas} bonificación(es)${sufijo}. ${omitidosBackend.length} pieza(s) no se aplicaron — revisa el detalle`,
+            'info'
           );
         } else {
           showToast(`Se guardaron ${totalReservasCreadas} bonificaciones exitosamente${sufijo}`, 'success');
@@ -5309,6 +5335,53 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
   );
 
   // Toast notification JSX
+  // Aviso centrado con el detalle de piezas no reservadas. El toast se cierra
+  // solo y no alcanza para una lista: esto se queda hasta que el usuario lo
+  // lea. Sin esto, el usuario re-reservaba a ciegas lo que "desaparecia".
+  const omitidosReservaJSX = omitidosReserva && omitidosReserva.length > 0 && (
+    <div className="fixed inset-0 bg-black/70 z-[95] flex items-center justify-center p-4" onClick={() => setOmitidosReserva(null)}>
+      <div
+        className={`w-full max-w-lg rounded-2xl border shadow-2xl flex flex-col max-h-[80vh] ${isDark ? 'bg-zinc-900 border-amber-500/30' : 'bg-white border-amber-300'}`}
+        onClick={e => e.stopPropagation()}
+      >
+        <div className={`p-4 border-b flex items-start gap-3 ${isDark ? 'border-zinc-800' : 'border-gray-200'}`}>
+          <div className="flex-1 min-w-0">
+            <h3 className={`text-base font-semibold ${isDark ? 'text-amber-300' : 'text-amber-700'}`}>
+              {omitidosReserva.length} pieza{omitidosReserva.length === 1 ? '' : 's'} no reservada{omitidosReserva.length === 1 ? '' : 's'}
+            </h3>
+            <p className={`text-xs mt-1 ${isDark ? 'text-zinc-400' : 'text-gray-500'}`}>
+              Estas piezas NO quedaron reservadas. Si el motivo dice "ocupado", reintentarlas no va a funcionar: elige otras piezas.
+            </p>
+          </div>
+          <button onClick={() => setOmitidosReserva(null)} className={`p-1.5 rounded-lg shrink-0 ${isDark ? 'text-zinc-400 hover:bg-zinc-800' : 'text-gray-400 hover:bg-gray-100'}`}>
+            <X className="h-4 w-4" />
+          </button>
+        </div>
+        <div className="p-4 overflow-y-auto min-h-0">
+          <ul className="space-y-1.5 text-xs">
+            {omitidosReserva.map((o, i) => (
+              <li key={`${o.codigo}-${i}`} className="flex items-start gap-2">
+                <span className={`shrink-0 inline-block w-1.5 h-1.5 mt-1.5 rounded-full ${isDark ? 'bg-amber-400' : 'bg-amber-500'}`} />
+                <div className="flex-1 min-w-0">
+                  <span className={`font-mono font-medium ${isDark ? 'text-white' : 'text-gray-900'}`}>{o.codigo}</span>
+                  <span className={isDark ? 'text-zinc-400' : 'text-gray-600'}> — {o.motivo}</span>
+                </div>
+              </li>
+            ))}
+          </ul>
+        </div>
+        <div className={`p-3 border-t flex justify-end ${isDark ? 'border-zinc-800' : 'border-gray-200'}`}>
+          <button
+            onClick={() => setOmitidosReserva(null)}
+            className={`px-4 py-2 rounded-lg text-sm font-medium ${isDark ? 'bg-amber-500/20 text-amber-300 border border-amber-500/30 hover:bg-amber-500/30' : 'bg-amber-50 text-amber-700 border border-amber-200 hover:bg-amber-100'}`}
+          >
+            Entendido
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+
   const toastJSX = toast.show && (
     <div className={`fixed top-4 right-4 z-[70] animate-in slide-in-from-top fade-in duration-300 max-w-md`}>
       <div className={`flex items-center gap-3 px-4 py-3 rounded-lg shadow-lg border ${
@@ -5337,6 +5410,7 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
         {savingOverlayJSX}
         {confirmModalJSX}
         {toastJSX}
+      {omitidosReservaJSX}
         <div className="absolute inset-0 bg-black/70 backdrop-blur-sm" onClick={handleBackToMain} />
 
         <div className={`relative w-[97vw] max-w-[1800px] h-[92vh] ${isDark ? 'bg-zinc-900' : 'bg-white'} rounded-2xl border border-purple-500/20 shadow-2xl flex flex-col overflow-hidden`}>
@@ -9833,6 +9907,7 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
       />
       {/* Toast Notification */}
       {toastJSX}
+      {omitidosReservaJSX}
 
       {/* Loading Overlay */}
       {isSaving && (

@@ -2,6 +2,8 @@ import { useEffect, useRef, useCallback } from 'react';
 import { io, Socket } from 'socket.io-client';
 import { useQueryClient } from '@tanstack/react-query';
 import { useNotifToastStore } from '../store/notifToastStore';
+import { useConflictoAlertaStore } from '../store/conflictoAlertaStore';
+import { useAuthStore } from '../store/authStore';
 import type { PreferenciasNotif } from '../services/notificaciones.service';
 
 const SOCKET_URL = import.meta.env.VITE_API_URL?.replace('/api', '') || 'http://localhost:3000';
@@ -356,6 +358,32 @@ export function useSocketNotificaciones(
       // `destinatarios` refrescan la lista pero no disparan popup (evita popups
       // masivos a todos los usuarios conectados).
       if (!popups || !paraMi) return;
+
+      // Conflictos de ocupación: aviso operativo raro y accionable, NO pasa por
+      // las preferencias de popup (la clave no tiene fila en la matriz y el
+      // default del handler es OFF: el aviso se perdería en silencio).
+      // TEMPORAL (soft-launch): DEV ve el modal centrado; los demás roles
+      // (dueños de campañas avisados por la limpieza) reciben un toast que no
+      // se cierra solo. ESTE es el único punto a tocar al liberar: cambiar el
+      // check de rol para que todos reciban el modal.
+      if (payload?.categoria === 'conflicto_ocupacion') {
+        if (useAuthStore.getState().user?.rol === 'DEV') {
+          useConflictoAlertaStore.getState().show({
+            titulo: payload?.titulo || 'Conflictos de ocupación detectados',
+            descripcion: payload?.descripcion,
+            tareaId: payload?.tarea_id,
+          });
+        } else {
+          useNotifToastStore.getState().push({
+            titulo: payload?.titulo || 'Conflictos de ocupación',
+            descripcion: payload?.descripcion,
+            tareaId: payload?.tarea_id,
+            tipo: payload?.tipo,
+            requireInteraction: true,
+          });
+        }
+        return;
+      }
 
       // El popup es OPT-IN (default OFF): solo se muestra si la preferencia
       // efectiva del usuario es true. La matriz ya resuelve la herencia

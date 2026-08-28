@@ -174,6 +174,9 @@ export function InventariosPage() {
   const [analisisInicialInventarios, setAnalisisInicialInventarios] = useState<InventarioResumen[]>([]);
   const [isAnalisisListOpen, setIsAnalisisListOpen] = useState(false);
   const [isAuditoriaOpen, setIsAuditoriaOpen] = useState(false);
+  // Enlace directo desde la notificación del monitor: abre la auditoría con
+  // las catorcenas vigentes ya puestas y corriendo.
+  const [auditoriaAutoIniciar, setAuditoriaAutoIniciar] = useState(false);
   const [openingAnalisis, setOpeningAnalisis] = useState(false);
   const [isReorganizarOpen, setIsReorganizarOpen] = useState(false);
   const [isBloqueoMasivoOpen, setIsBloqueoMasivoOpen] = useState(false);
@@ -216,6 +219,19 @@ export function InventariosPage() {
     })();
     return () => { cancelled = true; };
   }, [analisisIdParam]);
+
+  // ?auditoria=1 → abrir la Auditoría de conflictos y correrla sola. Solo DEV,
+  // igual que el módulo. El parámetro se limpia para que un refresh no reabra.
+  useEffect(() => {
+    if (searchParams.get('auditoria') !== '1') return;
+    if (user?.rol === 'DEV') {
+      setAuditoriaAutoIniciar(true);
+      setIsAuditoriaOpen(true);
+    }
+    const next = new URLSearchParams(searchParams);
+    next.delete('auditoria');
+    setSearchParams(next, { replace: true });
+  }, [searchParams, setSearchParams, user?.rol]);
 
   const handleCloseAnalisis = () => {
     setIsAnalisisOpen(false);
@@ -1270,7 +1286,7 @@ export function InventariosPage() {
                     </button>
                     {isDev && (
                       <button
-                        onClick={() => { setAnalisisMenuOpen(false); setIsAuditoriaOpen(true); }}
+                        onClick={() => { setAnalisisMenuOpen(false); setAuditoriaAutoIniciar(false); setIsAuditoriaOpen(true); }}
                         className={`w-full flex items-start gap-2.5 px-3 py-2.5 text-left text-sm transition-colors border-t ${isDark ? 'text-amber-300 hover:bg-amber-500/10 border-zinc-800' : 'text-amber-700 hover:bg-amber-50 border-gray-100'}`}
                       >
                         <AlertTriangle className="h-4 w-4 mt-0.5 shrink-0" />
@@ -2494,8 +2510,9 @@ export function InventariosPage() {
       {isDev && (
         <AuditoriaConflictosModal
           open={isAuditoriaOpen}
-          onClose={() => setIsAuditoriaOpen(false)}
+          onClose={() => { setIsAuditoriaOpen(false); setAuditoriaAutoIniciar(false); }}
           onOpenEnMatriz={openAnalisisDesdeAuditoria}
+          autoIniciar={auditoriaAutoIniciar}
         />
       )}
 

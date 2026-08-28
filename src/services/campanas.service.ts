@@ -9,6 +9,14 @@ export type { CampanaWithComments };
 const SAP_BASE_URL = 'https://workflow-namely-changes-nothing.trycloudflare.com';
 
 // Interfaces para SAP Delivery Note
+/** Pieza que el backend NO pudo reservar, con su motivo. Permite decirle al
+ *  usuario exactamente qué falló en vez de solo un contador. */
+export interface ReservaOmitida {
+  inventario_id: number;
+  codigo_unico: string | null;
+  motivo: string;
+}
+
 export interface SAPDocumentLine {
   LineNum: string;
   ItemCode: string;
@@ -1573,8 +1581,8 @@ async getUsuarios(): Promise<{ id: number; nombre: string }[]> {
       fechaFin: string;
       agruparComoCompleto?: boolean;
     }
-  ): Promise<{ calendarioId: number; reservasCreadas: number; reservasOmitidas?: number }> {
-    const response = await api.post<ApiResponse<{ calendarioId: number; reservasCreadas: number; reservasOmitidas?: number }>>(
+  ): Promise<{ calendarioId: number; reservasCreadas: number; reservasOmitidas?: number; omitidos?: ReservaOmitida[] }> {
+    const response = await api.post<ApiResponse<{ calendarioId: number; reservasCreadas: number; reservasOmitidas?: number; omitidos?: ReservaOmitida[] }>>(
       `/campanas/${campanaId}/reservas`,
       data
     );

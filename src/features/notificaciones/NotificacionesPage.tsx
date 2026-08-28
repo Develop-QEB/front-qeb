@@ -1400,6 +1400,17 @@ function isArtesNotification(titulo?: string | null): boolean {
   return lower.startsWith('artes aprobados') || lower.startsWith('artes rechazados');
 }
 
+/**
+ * Notificación del monitor de conflictos de ocupación. Se detecta por título
+ * porque el payload de notificaciones no expone `categoria`. Su botón es
+ * propio y no pasa por hasNavigationRoute: apunta a la Auditoría, no a una
+ * propuesta/campaña/solicitud.
+ */
+function isConflictoOcupacionNotification(titulo?: string | null): boolean {
+  if (!titulo) return false;
+  return /conflictos? de ocupaci[oó]n/i.test(titulo);
+}
+
 // Función para verificar si hay navegación disponible
 function hasNavigationRoute(tarea: Notificacion): boolean {
   // Tareas de Ajuste Inventario Bloqueado no tienen navegación
@@ -2500,6 +2511,18 @@ function TaskDrawer({
                 )}
               </button>
             </div>
+          )}
+
+          {/* Conflictos de ocupación → Auditoría con las catorcenas vigentes ya
+              corriendo. Solo DEV: el módulo está restringido a ese rol. */}
+          {isConflictoOcupacionNotification(tarea.titulo) && onNavigate && user?.rol === 'DEV' && (
+            <button
+              onClick={() => onNavigate('/inventarios?auditoria=1')}
+              className="mt-4 w-full flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl bg-gradient-to-r from-amber-600 to-orange-600 text-white text-sm font-medium hover:from-amber-500 hover:to-orange-500 transition-all hover:scale-[1.02] active:scale-[0.98] shadow-lg shadow-amber-500/20"
+            >
+              <ExternalLink className="h-4 w-4" />
+              Ver Auditoría de Conflictos
+            </button>
           )}
 
           {/* Botón Ir a ver (oculto para directores en tareas de autorización) */}

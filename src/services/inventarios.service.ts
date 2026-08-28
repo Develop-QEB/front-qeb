@@ -93,6 +93,50 @@ export interface ConflictoOcupacionRow {
    *  choque real entre ventas; `origenes === 1` con `n > 1` son reservas
    *  duplicadas dentro de la misma campaña. */
   origenes: number;
+  /** Campañas que ocupan la celda (para enlazar a /campanas/detail/:id).
+   *  Opcionales: un backend anterior no los manda. */
+  campanas?: { id: number; nombre: string }[];
+  /** Propuestas (idquote) con reservas sin campaña (enlazan a /propuestas?viewId=). */
+  propuestas?: number[];
+}
+
+/** Celda a limpiar en `/inventarios/conflictos/limpiar-duplicados`. */
+export interface CeldaRef {
+  inventario_id: number;
+  anio: number;
+  numero_catorcena: number;
+}
+
+export interface LimpiezaDuplicadosResult {
+  celdas_pedidas: number;
+  celdas_limpiadas: number;
+  reservas_liberadas: number;
+  omitidas: { inventario_id: number; anio: number; numero_catorcena: number; motivo: string }[];
+  detalle: {
+    inventario_id: number;
+    codigo_unico: string | null;
+    anio: number;
+    numero_catorcena: number;
+    conservada: number;
+    liberadas: number[];
+  }[];
+}
+
+/** Fila del registro de limpiezas de duplicados (automaticas y manuales). */
+export interface LimpiezaRegistroRow {
+  inventario_id: number;
+  codigo_unico: string | null;
+  plaza: string | null;
+  mueble: string | null;
+  anio: number;
+  numero_catorcena: number;
+  tipo: 'choque' | 'duplicado';
+  limpiado_at: string;
+  /** 'Automático' o el nombre del usuario que usó el botón. */
+  limpiado_por: string | null;
+  reserva_conservada: number | null;
+  /** Ids liberados, separados por coma. */
+  reservas_liberadas: string | null;
 }
 
 export const inventariosService = {
@@ -320,6 +364,39 @@ export const inventariosService = {
       throw new Error(response.data.error || 'Error al obtener conflictos');
     }
     return response.data.data.conflictos;
+  },
+
+  /**
+   * Limpia duplicados: conserva una reserva por celda y suelta las demás.
+   * El backend re-verifica que cada celda siga siendo duplicado y nunca toca
+   * choques ni reservas con APS.
+   */
+  async limpiarDuplicadosOcupacion(
+    catorcenas: { numero: number; anio: number }[],
+    celdas: CeldaRef[],
+    opts?: { timeout?: number }
+  ): Promise<LimpiezaDuplicadosResult> {
+    const response = await api.post<ApiResponse<LimpiezaDuplicadosResult>>(
+      '/inventarios/conflictos/limpiar-duplicados',
+      { catorcenas, celdas },
+      { timeout: opts?.timeout ?? 120_000 }
+    );
+    if (!response.data.success || !response.data.data) {
+      throw new Error(response.data.error || 'Error al limpiar duplicados');
+    }
+    return response.data.data;
+  },
+
+  /** Bitácora de limpiezas de duplicados, más reciente primero. Solo DEV. */
+  async getLimpiezasOcupacion(limit = 200): Promise<LimpiezaRegistroRow[]> {
+    const response = await api.get<ApiResponse<{ limpiezas: LimpiezaRegistroRow[] }>>(
+      '/inventarios/conflictos/limpiezas',
+      { params: { limit } }
+    );
+    if (!response.data.success || !response.data.data) {
+      throw new Error(response.data.error || 'Error al obtener limpiezas');
+    }
+    return response.data.data.limpiezas;
   },
 
   async getAcciones(id: number): Promise<AccionInventario[]> {
