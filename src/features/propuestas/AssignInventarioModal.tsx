@@ -10056,6 +10056,7 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
                         }
                         if (obj.motivo && !obj.rechazadoPor) parts.push(`Motivo: ${obj.motivo}`);
                         if (obj.campaña) parts.push(`Campaña: ${obj.campaña}`);
+                        if (obj.articulo) parts.push(`Artículo: ${obj.articulo}`);
                         if (obj.reservas_eliminadas != null) parts.push(`${obj.reservas_eliminadas} reserva(s) eliminada(s)`);
                         if (parts.length) detailText = parts.join(' | ');
                       } catch { /* plain text */ }

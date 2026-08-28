@@ -876,6 +876,12 @@ export function HistorialAccionesPage() {
                           <p className={`text-sm mt-1 ${headerText}`}>{obj.motivo}</p>
                         </div>
                       )}
+                      {obj.articulo && (
+                        <div>
+                          <span className={`text-xs font-medium ${subText}`}>Artículo</span>
+                          <p className={`text-sm mt-1 ${headerText}`}>{obj.articulo}</p>
+                        </div>
+                      )}
                       {obj.reservas_eliminadas != null && (
                         <div>
                           <span className={`text-xs font-medium ${subText}`}>Reservas eliminadas</span>
