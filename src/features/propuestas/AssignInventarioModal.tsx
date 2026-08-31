@@ -3236,11 +3236,15 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
     // cada save re-envía la autorización → pedir Nota Dirección. Feedback
     // Jos 2026-07-08/09 — la condicion se amplio para cubrir el caso de
     // propuestas que ya tenian circuitos 'pendiente' de antes.
+    // Ajuste 2026-08-31: se elimina `_originalDg === 'correccion'` porque daba
+    // falso positivo cuando el usuario resolvia la correccion editando el
+    // circuito (bajaba tarifa/caras). El estado final ya venia en
+    // `autorizacion_dg` como 'aprobado' pero se seguia pidiendo la nota.
     if (!skipNotaGate) {
       const dgPending = caras.some(c =>
         c.autorizacion_dg === 'pendiente' ||
-        (c as any)._originalDg === 'pendiente' ||
-        (c as any)._originalDg === 'correccion'
+        c.autorizacion_dg === 'correccion' ||
+        (c as any)._originalDg === 'pendiente'
       );
       const dcmPending = caras.some(c => c.autorizacion_dcm === 'pendiente' || (c as any)._originalDcm === 'pendiente');
       if (dgPending || dcmPending) {
@@ -10131,11 +10135,14 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
                     // pendiente, mostrar PRIMERO la ventana de Nueva Nota Dirección
                     // y DESPUÉS el confirmar cambios. Antes iba confirmar → nota,
                     // que se sentía confuso.
+                    // Ajuste 2026-08-31: mismo cambio que el gate de más arriba
+                    // — se elimina _originalDg==='correccion' que daba falso
+                    // positivo tras resolver la correccion.
                     if (propuesta.solicitud_id) {
                       const dgPending = caras.some(c =>
                         c.autorizacion_dg === 'pendiente' ||
-                        (c as any)._originalDg === 'pendiente' ||
-                        (c as any)._originalDg === 'correccion'
+                        c.autorizacion_dg === 'correccion' ||
+                        (c as any)._originalDg === 'pendiente'
                       );
                       const dcmPending = caras.some(c => c.autorizacion_dcm === 'pendiente' || (c as any)._originalDcm === 'pendiente');
                       if (dgPending || dcmPending) {

@@ -2234,10 +2234,16 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
       // Antes solo se miraba c.autorizacion_dg current — dejaba fuera el caso
       // frecuente de una solicitud con circuitos ya 'pendiente' de antes que
       // el usuario re-edita (feedback de Jos 2026-07-09).
+      // Ajuste 2026-08-31: quitado el chequeo de `_originalDg === 'correccion'`
+      // — daba falso positivo cuando el usuario resolvia la correccion (bajaba
+      // caras/tarifa para salir del rango de autorizacion). El estado final ya
+      // se reflejaba en `c.autorizacion_dg` como 'aprobado' pero seguiamos
+      // pidiendo la nota. La condicion sobre `autorizacion_dg` current cubre
+      // los casos donde tras el recalculo la cara se queda en correccion.
       const dgPending = caras.some(c =>
         c.autorizacion_dg === 'pendiente' ||
-        (c as any)._originalDg === 'pendiente' ||
-        (c as any)._originalDg === 'correccion'
+        c.autorizacion_dg === 'correccion' ||
+        (c as any)._originalDg === 'pendiente'
       );
       const dcmPending = caras.some(c => c.autorizacion_dcm === 'pendiente' || (c as any)._originalDcm === 'pendiente');
       if (dgPending || dcmPending) {
