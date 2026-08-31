@@ -2421,11 +2421,19 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
         c.localId !== caraToDelete.localId &&
         c.inicio_periodo === caraToDelete.inicio_periodo
       );
-      // Block the delete if any paired cara has reservas
-      for (const p of pair) {
-        if (caraHasReservas(p.localId, p.id)) {
-          alert('No puedes eliminar esta cara: su cara pareja (RT/BF) tiene reservas. Primero elimina las reservas.');
-          return;
+      // Ajuste feedback 2026-08-31: el bloqueo por reservas en la pareja
+      // RT/BF debe respetar el permiso canDeleteCaraConReservas — igual que
+      // el guard de la propia cara arriba. Antes era incondicional y
+      // volvia a romper la funcionalidad que se habia arreglado el 15 ago
+      // (memoria qeb-bote-circuitos-con-reservas). Regresion introducida
+      // en el commit 52f0ebe (RT/BF grouping, 17 abr) que no propago el
+      // guard de permiso a la pareja.
+      if (!permissions.canDeleteCaraConReservas) {
+        for (const p of pair) {
+          if (caraHasReservas(p.localId, p.id)) {
+            alert('No puedes eliminar esta cara: su cara pareja (RT/BF) tiene reservas. Primero elimina las reservas.');
+            return;
+          }
         }
       }
       pairedCaras.push(...pair);
