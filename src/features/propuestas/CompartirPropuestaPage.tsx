@@ -834,6 +834,23 @@ export function CompartirPropuestaPage() {
     const IMU_DARK: [number, number, number] = [0, 61, 122]; // Darker blue
     const WHITE: [number, number, number] = [255, 255, 255];
 
+    // Píldora resaltada para la leyenda de contexto: ámbar = Circuitos Muestra,
+    // verde IMU = Circuitos Confirmados. Se pinta en el header (pág. 1) y en el
+    // pie de TODAS las páginas.
+    const LEY_BG: [number, number, number] = esCampana ? IMU_GREEN : [255, 193, 7];
+    const LEY_TX: [number, number, number] = esCampana ? WHITE : [102, 60, 0];
+    const drawLeyendaPill = (centerX: number, topY: number) => {
+      doc.setFontSize(8);
+      doc.setFont('helvetica', 'bold');
+      const h = 5.6;
+      const w = doc.getTextWidth(leyendaCircuitos) + 8;
+      doc.setFillColor(...LEY_BG);
+      doc.roundedRect(centerX - w / 2, topY, w, h, h / 2, h / 2, 'F');
+      doc.setTextColor(...LEY_TX);
+      doc.text(leyendaCircuitos, centerX, topY + h / 2 + 1.2, { align: 'center' });
+      return w;
+    };
+
     // Header - Clean white background with colored accents
     doc.setFillColor(...WHITE);
     doc.rect(0, 0, pageWidth, 30, 'F');
@@ -876,10 +893,20 @@ export function CompartirPropuestaPage() {
     doc.setTextColor(...IMU_DARK);
     doc.text('PROPUESTA DE CAMPAÑA PUBLICITARIA', pageWidth / 2, 14, { align: 'center' });
 
+    // "Documento Interno" + píldora resaltada con la leyenda, centrados como grupo
+    doc.setFontSize(9);
+    doc.setFont('helvetica', 'normal');
+    const diText = 'Documento Interno';
+    const diW = doc.getTextWidth(diText);
+    doc.setFontSize(8);
+    doc.setFont('helvetica', 'bold');
+    const leyPillW = doc.getTextWidth(leyendaCircuitos) + 8;
+    const grupoStartX = (pageWidth - (diW + 4 + leyPillW)) / 2;
     doc.setFontSize(9);
     doc.setFont('helvetica', 'normal');
     doc.setTextColor(100, 100, 100);
-    doc.text(`Documento Interno  |  ${leyendaCircuitos}`, pageWidth / 2, 20, { align: 'center' });
+    doc.text(diText, grupoStartX, 20);
+    drawLeyendaPill(grupoStartX + diW + 4 + leyPillW / 2, 16.2);
 
     // Right side info
     const fechaActual = new Date().toLocaleDateString('es-MX', { year: 'numeric', month: 'long', day: 'numeric' });
@@ -1138,9 +1165,10 @@ export function CompartirPropuestaPage() {
       doc.setFontSize(8);
       doc.setFont('helvetica', 'normal');
       doc.text('Grupo IMU | Documento generado automaticamente', marginX, pageHeight - 4);
-      doc.setFont('helvetica', 'bold');
-      doc.text(leyendaCircuitos, pageWidth / 2, pageHeight - 4, { align: 'center' });
+      drawLeyendaPill(pageWidth / 2, pageHeight - 8.3);
+      doc.setFontSize(8);
       doc.setFont('helvetica', 'normal');
+      doc.setTextColor(...WHITE);
       doc.text(`Pagina ${i} de ${totalPages}`, pageWidth - marginX, pageHeight - 4, { align: 'right' });
     }
 

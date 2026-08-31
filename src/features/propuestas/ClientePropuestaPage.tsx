@@ -589,6 +589,22 @@ export function ClientePropuestaPage() {
     const PDF_BLUE = [0, 84, 166] as const;
     const PDF_GREEN = [122, 184, 0] as const;
 
+    // Píldora resaltada para la leyenda de contexto: ámbar = Circuitos Muestra,
+    // verde IMU = Circuitos Confirmados. Header (pág. 1) + pie de TODAS las páginas.
+    const LEY_BG = esCampana ? PDF_GREEN : ([255, 193, 7] as const);
+    const LEY_TX = esCampana ? ([255, 255, 255] as const) : ([102, 60, 0] as const);
+    const drawLeyendaPill = (centerX: number, topY: number) => {
+      doc.setFontSize(8);
+      doc.setFont('helvetica', 'bold');
+      const h = 5.6;
+      const w = doc.getTextWidth(leyendaCircuitos) + 8;
+      doc.setFillColor(LEY_BG[0], LEY_BG[1], LEY_BG[2]);
+      doc.roundedRect(centerX - w / 2, topY, w, h, h / 2, h / 2, 'F');
+      doc.setTextColor(LEY_TX[0], LEY_TX[1], LEY_TX[2]);
+      doc.text(leyendaCircuitos, centerX, topY + h / 2 + 1.2, { align: 'center' });
+      return w;
+    };
+
     const clientViewUrl = `${window.location.origin}/cliente/propuesta/${propuestaId}${esCampana ? '?ctx=campana' : ''}`;
 
     const addSectionTitle = (title: string, yPos: number) => {
@@ -630,8 +646,14 @@ export function ClientePropuestaPage() {
     doc.setFont('helvetica', 'bold');
     doc.setTextColor(255, 255, 255);
     doc.text('PROPUESTA DE CAMPAÑA PUBLICITARIA', pageWidth / 2, 13, { align: 'center' });
-    doc.setFontSize(9);
-    doc.text(leyendaCircuitos, marginX, 13);
+    // Píldora de leyenda a la izquierda del header (centrada vertical en la banda azul)
+    {
+      doc.setFontSize(8);
+      doc.setFont('helvetica', 'bold');
+      const leyW = doc.getTextWidth(leyendaCircuitos) + 8;
+      drawLeyendaPill(marginX + leyW / 2, 7.2);
+      doc.setTextColor(255, 255, 255); // restaurar blanco para la fecha
+    }
     const fechaActual = new Date().toLocaleDateString('es-MX', { year: 'numeric', month: 'long', day: 'numeric' });
     doc.setFontSize(8);
     doc.setFont('helvetica', 'normal');
@@ -804,10 +826,10 @@ export function ClientePropuestaPage() {
       doc.setFontSize(7);
       doc.setFont('helvetica', 'normal');
       doc.text('Desarrollado por QEB', marginX + 5, pageHeight - 2);
+      drawLeyendaPill(pageWidth / 2, pageHeight - 9.8);
       doc.setFontSize(8);
-      doc.setFont('helvetica', 'bold');
-      doc.text(leyendaCircuitos, pageWidth / 2, pageHeight - 5, { align: 'center' });
       doc.setFont('helvetica', 'normal');
+      doc.setTextColor(255, 255, 255);
       doc.text(`Pagina ${i} de ${totalPages}`, pageWidth - marginX, pageHeight - 5, { align: 'right' });
     }
 
