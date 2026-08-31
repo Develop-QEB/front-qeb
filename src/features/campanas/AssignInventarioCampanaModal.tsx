@@ -3366,11 +3366,15 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
     // cada save re-envía la autorización → pedir Nota Dirección. Feedback
     // Jos 2026-07-08/09 — la condicion se amplio para cubrir campañas con
     // circuitos ya 'pendiente' de antes.
+    // Ajuste 2026-08-31: se elimina `_originalDg === 'correccion'` — daba
+    // falso positivo cuando el usuario resolvia la correccion editando
+    // (bajaba tarifa/caras). El estado final ya venia en `autorizacion_dg`
+    // como 'aprobado' pero seguiamos pidiendo la nota.
     if (!skipNotaGate && campanaDetails?.solicitud_id) {
       const dgPending = caras.some(c =>
         c.autorizacion_dg === 'pendiente' ||
-        (c as any)._originalDg === 'pendiente' ||
-        (c as any)._originalDg === 'correccion'
+        c.autorizacion_dg === 'correccion' ||
+        (c as any)._originalDg === 'pendiente'
       );
       const dcmPending = caras.some(c => c.autorizacion_dcm === 'pendiente' || (c as any)._originalDcm === 'pendiente');
       if (dgPending || dcmPending) {
@@ -9847,10 +9851,13 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
                   onClick={() => {
                     // Flujo nuevo (feedback Jos 2026-07-15): nota primero,
                     // confirmar cambios después.
+                    // Ajuste 2026-08-31: mismo cambio que el gate de más arriba
+                    // — se elimina _originalDg==='correccion' que daba falso
+                    // positivo tras resolver la correccion.
                     const dgPending = caras.some(c =>
                       c.autorizacion_dg === 'pendiente' ||
-                      (c as any)._originalDg === 'pendiente' ||
-                      (c as any)._originalDg === 'correccion'
+                      c.autorizacion_dg === 'correccion' ||
+                      (c as any)._originalDg === 'pendiente'
                     );
                     const dcmPending = caras.some(c => c.autorizacion_dcm === 'pendiente' || (c as any)._originalDcm === 'pendiente');
                     if (dgPending || dcmPending) {
