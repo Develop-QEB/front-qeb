@@ -7,7 +7,7 @@ import {
   Calendar, Clock, Eye, Megaphone, Edit2, Check, Minus, ArrowUpDown, User,
   List, LayoutGrid, Building2, MapPin, Loader2, Package, ClipboardList, Plus, Trash2,
   ArrowUp, ArrowDown, Lock, SlidersHorizontal, Upload, Printer, Monitor, Camera, Share2,
-  Image, FileText, DollarSign, Hash, Gift, AlertTriangle, Film, Play, Zap
+  Image, FileText, DollarSign, Hash, Gift, AlertTriangle, Film, Play, Zap, Paintbrush
 } from 'lucide-react';
 import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip, Legend } from 'recharts';
 import { Header } from '../../components/layout/Header';
@@ -31,6 +31,8 @@ import { getPermissions } from '../../lib/permissions';
 import { useSocketCampanas } from '../../hooks/useSocket';
 import { HistorialFilterPopover, type HistorialFilterValues } from '../../components/HistorialFilterPopover';
 import { IncidenciaModal } from './IncidenciaModal';
+import { PruebasColorModal } from '../pruebas-color/PruebasColorModal';
+import { puedeGestionarPruebaColor } from '../../services/pruebasColor.service';
 import { exportVersionarioArtesMulti } from '../../utils/exportVersionarioArtes';
 
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3000/api';
@@ -1052,12 +1054,14 @@ interface CampanaRowProps {
   hayFiltroPeriodo: boolean;
   canEditPerm: boolean;
   canSeeGestionArtesPerm: boolean;
+  canPruebaColor: boolean;
   isEditDisabled: boolean;
   onOpen: (id: number) => void;
   onShare: (propuestaId: number) => void;
   onEdit: (item: Campana) => void;
   onIncidencia: (item: Campana) => void;
   onStatus: (item: Campana) => void;
+  onPruebaColor: (item: Campana) => void;
 }
 
 const CampanaRow = React.memo(function CampanaRow({
@@ -1068,12 +1072,14 @@ const CampanaRow = React.memo(function CampanaRow({
   hayFiltroPeriodo,
   canEditPerm,
   canSeeGestionArtesPerm,
+  canPruebaColor,
   isEditDisabled,
   onOpen,
   onShare,
   onEdit,
   onIncidencia,
   onStatus,
+  onPruebaColor,
 }: CampanaRowProps) {
   const statusColor = getStatusColor(item.status, isDark);
   const periodStatus = getPeriodStatus(item.fecha_inicio, item.fecha_fin);
@@ -1228,6 +1234,18 @@ const CampanaRow = React.memo(function CampanaRow({
               <Share2 className="h-3.5 w-3.5" />
             </button>
           )}
+          {canPruebaColor && item.propuesta_id && (
+            <button
+              onClick={() => onPruebaColor(item)}
+              className={`p-2 rounded-lg border transition-all ${isDark
+                ? 'bg-fuchsia-500/10 text-fuchsia-400 hover:bg-fuchsia-500/20 hover:text-fuchsia-300 border-fuchsia-500/20 hover:border-fuchsia-500/40'
+                : 'bg-fuchsia-50 text-fuchsia-600 hover:bg-fuchsia-100 hover:text-fuchsia-700 border-fuchsia-200 hover:border-fuchsia-300'
+              }`}
+              title="Solicitar prueba de color"
+            >
+              <Paintbrush className="h-3.5 w-3.5" />
+            </button>
+          )}
           {canEditPerm && (
             <button
               onClick={() => onEdit(item)}
@@ -1316,6 +1334,8 @@ export function CampanasPage() {
   const [statusCampana, setStatusCampana] = useState<Campana | null>(null);
   const [incidenciaModalOpen, setIncidenciaModalOpen] = useState(false);
   const [incidenciaCampana, setIncidenciaCampana] = useState<Campana | null>(null);
+  const [pruebaColorCampana, setPruebaColorCampana] = useState<Campana | null>(null);
+  const puedePruebaColor = puedeGestionarPruebaColor(user?.rol);
 
   // Estado para galería de artes en versionario
   const [isArtGalleryOpen, setIsArtGalleryOpen] = useState(false);
@@ -3160,6 +3180,7 @@ export function CampanasPage() {
     setStatusCampana(c);
     setStatusModalOpen(true);
   }, []);
+  const handleRowPruebaColor = useCallback((c: Campana) => setPruebaColorCampana(c), []);
 
   const hayFiltroPeriodo = !!(catorcenaInicio && catorcenaFin && yearInicio && yearFin);
 
@@ -3179,12 +3200,14 @@ export function CampanasPage() {
         hayFiltroPeriodo={hayFiltroPeriodo}
         canEditPerm={permissions.canEditCampanas}
         canSeeGestionArtesPerm={permissions.canSeeGestionArtes}
+        canPruebaColor={puedePruebaColor}
         isEditDisabled={isEditDisabled(item)}
         onOpen={handleRowOpen}
         onShare={handleRowShare}
         onEdit={handleRowEdit}
         onIncidencia={handleRowIncidencia}
         onStatus={handleRowStatus}
+        onPruebaColor={handleRowPruebaColor}
       />
     );
   };
@@ -4778,6 +4801,16 @@ export function CampanasPage() {
           onClose={() => { setIncidenciaModalOpen(false); setIncidenciaCampana(null); }}
           campanaId={incidenciaCampana.id}
           campanaNombre={incidenciaCampana.nombre}
+        />
+      )}
+
+      {/* Prueba de color */}
+      {pruebaColorCampana && pruebaColorCampana.propuesta_id && (
+        <PruebasColorModal
+          isOpen={!!pruebaColorCampana}
+          onClose={() => setPruebaColorCampana(null)}
+          propuestaId={pruebaColorCampana.propuesta_id}
+          contextoNombre={pruebaColorCampana.nombre}
         />
       )}
 

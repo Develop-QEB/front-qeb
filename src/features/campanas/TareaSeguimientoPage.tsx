@@ -54,6 +54,7 @@ import {
   AlertTriangle,
   ImageOff,
   Save,
+  Paintbrush,
 } from 'lucide-react';
 import { Header } from '../../components/layout/Header';
 import { campanasService, InventarioConArte, InventarioConAPS, TareaCampana, ArteExistente, DigitalFileSummary, TradicionalFileSummary, FichasTecnicasNode } from '../../services/campanas.service';
@@ -82,6 +83,8 @@ function getPeriodoShort(item: { catorcena: number; anio: number; inicio_periodo
 import { Badge } from '../../components/ui/badge';
 import { ConfirmModal } from '../../components/ui/confirm-modal';
 import { useAuthStore } from '../../store/authStore';
+import { PruebasColorModal } from '../pruebas-color/PruebasColorModal';
+import { puedeGestionarPruebaColor } from '../../services/pruebasColor.service';
 import { useThemeStore } from '../../store/themeStore';
 import { getPermissions } from '../../lib/permissions';
 import { useSocketCampana, useSocketEquipos } from '../../hooks/useSocket';
@@ -14953,6 +14956,9 @@ export function TareaSeguimientoPage() {
   const user = useAuthStore((state) => state.user);
   const permissions = getPermissions(user?.rol);
   const isDark = useThemeStore((s) => s.theme) === 'dark';
+  // Prueba de color — feedback 2026-08-15.
+  const [pruebaColorOpen, setPruebaColorOpen] = useState(false);
+  const puedePruebaColor = puedeGestionarPruebaColor(user?.rol);
 
   // WebSocket para sincronización en tiempo real
   useSocketCampana(campanaId);
@@ -18463,6 +18469,16 @@ export function TareaSeguimientoPage() {
             <span className="text-sm font-medium">{campana.nombre}</span>
             <Badge variant="outline" className="text-[10px]">#{campana.id}</Badge>
           </div>
+          {puedePruebaColor && campana.propuesta_id && (
+            <button
+              onClick={() => setPruebaColorOpen(true)}
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium bg-fuchsia-500/10 text-fuchsia-300 hover:bg-fuchsia-500/20 border border-fuchsia-500/30 transition-colors"
+              title="Consultar o solicitar prueba de color para un circuito"
+            >
+              <Paintbrush className="h-3.5 w-3.5" />
+              Prueba de color
+            </button>
+          )}
         </div>
 
         {/* Re-impresión success banner */}
@@ -22262,6 +22278,16 @@ Por favor registra la cantidad de impresiones recibidas.`,
           </div>
         );
       })()}
+
+      {/* Prueba de color — feedback 2026-08-15 */}
+      {pruebaColorOpen && campana?.propuesta_id && (
+        <PruebasColorModal
+          isOpen={pruebaColorOpen}
+          onClose={() => setPruebaColorOpen(false)}
+          propuestaId={campana.propuesta_id}
+          contextoNombre={campana.nombre}
+        />
+      )}
 
     </div>
   );

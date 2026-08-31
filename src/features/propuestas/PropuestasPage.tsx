@@ -4,7 +4,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import {
   Search, Download, Filter, ChevronDown, ChevronRight, X, SlidersHorizontal,
   ArrowUpDown, Calendar, DollarSign, FileText, Building2, MessageSquare,
-  CheckCircle, Users, Send, Loader2, User, Share2, MapPinned, Wrench, Clock,
+  CheckCircle, Users, Send, Loader2, User, Share2, MapPinned, Wrench, Clock, Paintbrush,
   Pencil, Trash2, Package, MapPin, Eye, Plus, AlertTriangle, List, LayoutGrid,
   Layers, Check, XCircle
 } from 'lucide-react';
@@ -15,6 +15,8 @@ import { solicitudesService, UserOption } from '../../services/solicitudes.servi
 import { Propuesta, Catorcena } from '../../types';
 import { formatCurrency, formatDate } from '../../lib/utils';
 import { AssignInventarioModal } from './AssignInventarioModal';
+import { PruebasColorModal } from '../pruebas-color/PruebasColorModal';
+import { puedeGestionarPruebaColor } from '../../services/pruebasColor.service';
 import PropuestasVersionarioView, {
   AVAILABLE_GROUPINGS as VERSIONARIO_GROUPINGS,
   DEFAULT_GROUPINGS as VERSIONARIO_DEFAULT_GROUPINGS,
@@ -1290,10 +1292,12 @@ interface PropuestaRowProps {
   canAprobarPerm: boolean;
   canAsignarInventarioPerm: boolean;
   canCompartirPerm: boolean;
+  canPruebaColor: boolean;
   onStatus: (item: Propuesta) => void;
   onApprove: (item: Propuesta) => void;
   onAssign: (item: Propuesta) => void;
   onShare: (id: number) => void;
+  onPruebaColor: (item: Propuesta) => void;
 }
 
 const PropuestaRow = React.memo(function PropuestaRow({
@@ -1305,10 +1309,12 @@ const PropuestaRow = React.memo(function PropuestaRow({
   canAprobarPerm,
   canAsignarInventarioPerm,
   canCompartirPerm,
+  canPruebaColor,
   onStatus,
   onApprove,
   onAssign,
   onShare,
+  onPruebaColor,
 }: PropuestaRowProps) {
   const statusColor = getStatusColor(item.status, isDark);
   const isActiva = item.status === 'Activa';
@@ -1436,6 +1442,18 @@ const PropuestaRow = React.memo(function PropuestaRow({
           >
             {canAsignarInventarioPerm && item.status !== 'Pase a ventas' ? <MapPinned className="h-3.5 w-3.5" /> : <Eye className="h-3.5 w-3.5" />}
           </button>
+          {canPruebaColor && (
+            <button
+              onClick={() => onPruebaColor(item)}
+              className={`p-2 rounded-lg border transition-all ${isDark
+                ? 'bg-fuchsia-500/10 text-fuchsia-400 hover:bg-fuchsia-500/20 hover:text-fuchsia-300 border-fuchsia-500/20 hover:border-fuchsia-500/40'
+                : 'bg-fuchsia-50 text-fuchsia-600 hover:bg-fuchsia-100 hover:text-fuchsia-700 border-fuchsia-200 hover:border-fuchsia-300'
+              }`}
+              title="Solicitar prueba de color"
+            >
+              <Paintbrush className="h-3.5 w-3.5" />
+            </button>
+          )}
           {canCompartirPerm && (
             <button
               disabled={(item.status !== 'Aprobada' && item.status !== 'Atendido' && item.status !== 'Pase a ventas') || isLocked}
@@ -1514,6 +1532,8 @@ export function PropuestasPage() {
   const [statusPropuesta, setStatusPropuesta] = useState<Propuesta | null>(null);
   const [approvePropuesta, setApprovePropuesta] = useState<Propuesta | null>(null);
   const [showAssignModal, setShowAssignModal] = useState(false);
+  const [pruebaColorPropuesta, setPruebaColorPropuesta] = useState<Propuesta | null>(null);
+  const puedePruebaColor = puedeGestionarPruebaColor(user?.rol);
   const [selectedPropuestaForAssign, setSelectedPropuestaForAssign] = useState<Propuesta | null>(null);
 
   // Handle URL params: viewId opens modal, search fills search bar
@@ -2050,6 +2070,7 @@ export function PropuestasPage() {
   const handleRowShare = React.useCallback((id: number) => {
     navigate(`/propuestas/compartir/${id}`);
   }, [navigate]);
+  const handleRowPruebaColor = React.useCallback((p: Propuesta) => setPruebaColorPropuesta(p), []);
 
   // Calcular paginación basada en si hay filtros locales activos
   // El search ya viaja al backend, así que la paginación del servidor sigue
@@ -2730,10 +2751,12 @@ export function PropuestasPage() {
                           canAprobarPerm={permissions.canAprobarPropuesta}
                           canAsignarInventarioPerm={permissions.canAsignarInventario}
                           canCompartirPerm={permissions.canCompartirPropuesta}
+                          canPruebaColor={puedePruebaColor}
                           onStatus={handleRowStatus}
                           onApprove={handleRowApprove}
                           onAssign={handleRowAssign}
                           onShare={handleRowShare}
+                          onPruebaColor={handleRowPruebaColor}
                         />
                       ))}
                     </React.Fragment>
@@ -2756,10 +2779,12 @@ export function PropuestasPage() {
                       canAprobarPerm={permissions.canAprobarPropuesta}
                       canAsignarInventarioPerm={permissions.canAsignarInventario}
                       canCompartirPerm={permissions.canCompartirPropuesta}
+                      canPruebaColor={puedePruebaColor}
                       onStatus={handleRowStatus}
                       onApprove={handleRowApprove}
                       onAssign={handleRowAssign}
                       onShare={handleRowShare}
+                      onPruebaColor={handleRowPruebaColor}
                     />
                   ))
                 )}
@@ -2829,6 +2854,15 @@ export function PropuestasPage() {
           onClose={() => { setShowAssignModal(false); queryClient.invalidateQueries({ queryKey: ['propuesta-caras', selectedPropuestaForAssign?.id] }); queryClient.invalidateQueries({ queryKey: ['propuesta-reservas-modal', selectedPropuestaForAssign?.id] }); queryClient.invalidateQueries({ queryKey: ['propuesta-fresh'] }); queryClient.invalidateQueries({ queryKey: ['propuestas'] }); setSelectedPropuestaForAssign(null); }}
           propuesta={selectedPropuestaForAssign}
           readOnly={!permissions.canAsignarInventario || selectedPropuestaForAssign.status === 'Pase a ventas'}
+        />
+      )}
+
+      {pruebaColorPropuesta && (
+        <PruebasColorModal
+          isOpen={!!pruebaColorPropuesta}
+          onClose={() => setPruebaColorPropuesta(null)}
+          propuestaId={pruebaColorPropuesta.id}
+          contextoNombre={pruebaColorPropuesta.nombre_campania || undefined}
         />
       )}
     </div>
