@@ -1695,15 +1695,19 @@ async getUsuarios(): Promise<{ id: number; nombre: string }[]> {
   // en vez de borrar; la respuesta trae requiereAutorizacion + message. Se pueden
   // pasar cara-ids adicionales (ej. la pareja RT/BF) para que UNA sola solicitud
   // cubra todas y no se generen tareas separadas.
-  async deleteCara(campanaId: number, caraId: number, eliminarGrupo?: boolean, caraIdsAdicionales?: number[], sinAutorizacion?: boolean): Promise<{ requiereAutorizacion?: boolean; message?: string; caras?: number }> {
+  async deleteCara(campanaId: number, caraId: number, eliminarGrupo?: boolean, caraIdsAdicionales?: number[], sinAutorizacion?: boolean, motivoEliminacion?: string): Promise<{ requiereAutorizacion?: boolean; message?: string; caras?: number }> {
     // sinAutorizacion=true: borra al momento (uso INTERNO: reemplazo de par BF en
     // edición). El borrado normal del usuario NO lo pasa → va por autorización.
+    // motivoEliminacion: la "nota de eliminación" (por qué se borra) → viaja en la tarea.
     const qs = new URLSearchParams();
     if (eliminarGrupo) qs.set('eliminarGrupo', 'true');
     if (sinAutorizacion) qs.set('sinAutorizacion', 'true');
     const url = `/campanas/${campanaId}/caras/${caraId}${qs.toString() ? `?${qs.toString()}` : ''}`;
-    const body = (caraIdsAdicionales && caraIdsAdicionales.length > 0) ? { caraIdsAdicionales } : undefined;
-    const response = await api.delete<ApiResponse<void> & { requiereAutorizacion?: boolean; message?: string; caras?: number }>(url, body ? { data: body } : undefined);
+    const body: Record<string, unknown> = {};
+    if (caraIdsAdicionales && caraIdsAdicionales.length > 0) body.caraIdsAdicionales = caraIdsAdicionales;
+    if (motivoEliminacion && motivoEliminacion.trim()) body.motivoEliminacion = motivoEliminacion.trim();
+    const hasBody = Object.keys(body).length > 0;
+    const response = await api.delete<ApiResponse<void> & { requiereAutorizacion?: boolean; message?: string; caras?: number }>(url, hasBody ? { data: body } : undefined);
     if (!response.data.success) {
       throw new Error(response.data.error || 'Error al eliminar cara');
     }

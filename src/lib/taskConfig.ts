@@ -1,4 +1,4 @@
-import { Circle, Clock, CheckCircle, AlertCircle, FileText, Send, Bell, Briefcase, Target, ClipboardList, ShieldCheck, ShieldX, XCircle, AtSign } from 'lucide-react';
+import { Circle, Clock, CheckCircle, AlertCircle, FileText, Send, Bell, Briefcase, Target, ClipboardList, ShieldCheck, ShieldX, XCircle, AtSign, Trash2 } from 'lucide-react';
 
 // ============ CONFIGURACIÓN DE ESTATUS ============
 export const STATUS_CONFIG = {
@@ -188,17 +188,18 @@ export const TIPO_CONFIG = {
   },
 
   // Autorización de ELIMINACIÓN de circuitos (campañas) - Naranja (auth) / Rojo (rechazo)
+  // Distintivo de ELIMINACIÓN: rojo + papelera (se diferencia de las auth naranja).
   'Filtro Autorización Eliminación': {
-    color: 'text-orange-400',
-    bg: 'bg-orange-500/20',
-    border: 'border-orange-500/30',
-    icon: ShieldCheck
+    color: 'text-red-400',
+    bg: 'bg-red-500/20',
+    border: 'border-red-500/30',
+    icon: Trash2
   },
   'Autorización Eliminación': {
-    color: 'text-orange-400',
-    bg: 'bg-orange-500/20',
-    border: 'border-orange-500/30',
-    icon: ShieldCheck
+    color: 'text-red-400',
+    bg: 'bg-red-500/20',
+    border: 'border-red-500/30',
+    icon: Trash2
   },
   'Rechazo Eliminación': {
     color: 'text-red-400',

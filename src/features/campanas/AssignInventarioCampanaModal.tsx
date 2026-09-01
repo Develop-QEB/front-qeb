@@ -2471,14 +2471,10 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
         setDeleteCircuitoModal(prev => ({ ...prev, isOpen: false, isDeleting: false }));
 
         if (conId.length > 0) {
-          // Eliminar en campaña requiere autorización DG con Nota de Dirección
-          // OBLIGATORIA (igual que el flujo normal). Blindaje: sin solicitud_id no se
-          // puede capturar la nota → no se manda a auth. Se abre el modal de nota y,
-          // al confirmarla, se manda la solicitud de eliminación (1 sola, con pareja).
-          if (!campanaDetails?.solicitud_id) {
-            alert('No se puede solicitar la eliminación: falta la solicitud asociada para capturar la Nota de Dirección. Avisa a soporte.');
-            return;
-          }
+          // Eliminar en campaña requiere autorización (Gerente → DG) con MOTIVO de
+          // eliminación obligatorio. Se abre el modal de motivo y, al confirmarlo, se
+          // manda 1 sola solicitud (con la pareja RT/BF incluida). El motivo viaja en
+          // la tarea (lo ve el Gerente y DG).
           setDeleteNota({ open: true, caraIds: conId.map(c => c.id) });
         }
       }
@@ -2588,13 +2584,8 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
         setDeleteCircuitoModal(prev => ({ ...prev, isOpen: false, isDeleting: false }));
 
         if (conId.length > 0) {
-          // Igual que el bote individual: se captura la Nota de Dirección (obligatoria)
-          // y al confirmarla se manda UNA sola solicitud de eliminación con toda la
-          // selección. Blindaje por solicitud_id.
-          if (!campanaDetails?.solicitud_id) {
-            alert('No se puede solicitar la eliminación: falta la solicitud asociada para capturar la Nota de Dirección. Avisa a soporte.');
-            return;
-          }
+          // Igual que el bote individual: se captura el MOTIVO de eliminación
+          // (obligatorio) y al confirmarlo se manda UNA sola solicitud con toda la selección.
           setDeleteNota({ open: true, caraIds: conId.map(c => c.id) });
         }
       },
@@ -9931,27 +9922,28 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
           setShowSaveConfirm(true);
         }}
       />
-      {/* Nota de Dirección para ELIMINACIÓN — obligatoria antes de mandar la baja a
-          autorización DG. Al confirmar: guarda la nota y crea la solicitud (1 sola,
-          con pareja/selección incluida). El aprobador la ve en su bitácora (la tarea
-          lleva id_solicitud). */}
+      {/* Nota de ELIMINACIÓN (distintivo rojo/papelera) — obligatoria: por qué se
+          borra. El motivo viaja en la TAREA de autorización, así lo ve el Gerente
+          (filtro) y DG (no es la nota general de Dirección). 1 sola solicitud con
+          pareja/selección incluida. */}
       <NuevaNotaDireccionModal
         isOpen={deleteNota.open}
+        variant="eliminacion"
         contexto="campana"
-        referenciaLabel={campana?.id ? `#${campana.id} (eliminación)` : undefined}
+        referenciaLabel={campana?.id ? `#${campana.id}` : undefined}
         tipoAutorizacion="dg"
         onCancel={() => setDeleteNota({ open: false, caraIds: [] })}
         onConfirm={async (texto) => {
           const ids = deleteNota.caraIds;
-          if (!campanaDetails?.solicitud_id || ids.length === 0) { setDeleteNota({ open: false, caraIds: [] }); return; }
+          if (ids.length === 0) { setDeleteNota({ open: false, caraIds: [] }); return; }
           try {
-            await notasDireccionService.create(campanaDetails.solicitud_id, texto);
             const [primero, ...resto] = ids;
-            const resp = await campanasService.deleteCara(campana!.id, primero, false, resto);
+            // El motivo (texto) viaja en la solicitud de eliminación → descripción de la tarea.
+            const resp = await campanasService.deleteCara(campana!.id, primero, false, resto, false, texto);
             setDeleteNota({ open: false, caraIds: [] });
             // Optimista: marcar las caras como pendientes de eliminación → badge "Pend. DG (elim.)".
             setCaras(prev => prev.map(c => (c.id && ids.includes(c.id)) ? { ...c, pendiente_eliminacion: true } : c));
-            alert(resp?.message || 'Solicitud de eliminación enviada a autorización de Dirección General.');
+            alert(resp?.message || 'Solicitud de eliminación enviada a autorización.');
           } catch (error) {
             console.error('Error solicitando eliminación:', error);
             alert(error instanceof Error ? error.message : 'Error al solicitar la eliminación');
