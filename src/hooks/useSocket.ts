@@ -385,6 +385,20 @@ export function useSocketNotificaciones(
         return;
       }
 
+      // Desplazamiento de reservas (multireservas): aviso operativo accionable a
+      // asesores + Tráfico. Salta las preferencias opt-in (como conflicto_ocupacion):
+      // toast que no se cierra solo, para que el aviso no se pierda.
+      if (payload?.categoria === 'reserva_desplazada') {
+        useNotifToastStore.getState().push({
+          titulo: payload?.titulo || 'Reservas desplazadas',
+          descripcion: payload?.descripcion,
+          tareaId: payload?.tarea_id,
+          tipo: payload?.tipo,
+          requireInteraction: true,
+        });
+        return;
+      }
+
       // El popup es OPT-IN (default OFF): solo se muestra si la preferencia
       // efectiva del usuario es true. La matriz ya resuelve la herencia
       // (específico → master de clase → master de canal → default del canal).
