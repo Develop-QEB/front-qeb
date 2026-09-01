@@ -496,6 +496,13 @@ const isIMArticle = (item: InventarioReservado | InventarioConAPS): boolean => {
   return String(item.rsv_ids).startsWith('sc_');
 };
 
+// Artículos que NO requieren inventario físico: impresión (IM) y ejecución especial
+// (ES/ESP). Se consideran siempre completos, igual que IM (no piden inventario).
+const esArticuloSinInventario = (articulo?: string | null): boolean => {
+  const a = String(articulo || '').toUpperCase();
+  return a.startsWith('IM') || a.startsWith('ESP') || a.startsWith('ES-');
+};
+
 const TABLE_COLUMNS_IM_APS: TableColumn[] = [
   { field: 'articulo', label: 'Artículo' },
   { field: 'formato', label: 'Formato' },
@@ -1230,11 +1237,14 @@ export function CampanaDetailPage() {
       // esperadas = 0 es "sin dato de caras", no un grupo incompleto ni con
       // exceso: marcarlo bloquearía circuitos mal capturados para siempre.
       const sinDato = esperadas === 0;
+      // IM y ES/ESP no requieren inventario → siempre completos (blindaje por si un
+      // ES viejo tuviera reservas físicas; lo normal es que el back les dé fila virtual).
+      const sinInventario = esArticuloSinInventario(sc.articulo);
       map.set(sc.id, {
         esperadas,
         reservadas,
-        completo: sinDato || reservadas >= esperadas,
-        exceso: !sinDato && reservadas > esperadas,
+        completo: sinInventario || sinDato || reservadas >= esperadas,
+        exceso: !sinInventario && !sinDato && reservadas > esperadas,
         cortesia: sc.cortesia === 1,
       });
     });
