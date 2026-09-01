@@ -92,6 +92,8 @@ interface CaraItem {
   anio_fin?: number;
   autorizacion_dg?: string;
   autorizacion_dcm?: string;
+  // Cara con una tarea de eliminación abierta (Filtro GC o DG) → badge "Pend. DG (elim.)".
+  pendiente_eliminacion?: boolean;
   _originalDg?: string;
   _originalDcm?: string;
   // Baseline INMUTABLE de BD (DG/DCM aprobados al cargar) para conservar aprobación.
@@ -1028,6 +1030,10 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
   // disparan autorización DG/DCM en la campaña). Feedback Jos 2026-07-08.
   const [showNotaDireccionModal, setShowNotaDireccionModal] = useState(false);
   const [pendingAuthTipo, setPendingAuthTipo] = useState<'dg' | 'dcm' | 'ambas' | null>(null);
+  // Nota de Dirección para ELIMINACIÓN: al solicitar la baja de circuitos se captura
+  // la nota (obligatoria, igual que el flujo normal de autorización) antes de mandar
+  // la eliminación a DG. Guarda las cara-ids a eliminar mientras se escribe la nota.
+  const [deleteNota, setDeleteNota] = useState<{ open: boolean; caraIds: number[] }>({ open: false, caraIds: [] });
 
   // Real-time: cuando OTRO usuario reserva un espacio cuyo período se solapa
   // con la cara que estoy buscando, lo quito de mi listado en vivo.
@@ -1508,6 +1514,7 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
           anio_inicio: anioInicioCara,
           autorizacion_dg: cara.autorizacion_dg || 'aprobado',
           autorizacion_dcm: cara.autorizacion_dcm || 'aprobado',
+          pendiente_eliminacion: (cara as any).pendiente_eliminacion === true,
           _originalDg: cara.autorizacion_dg || 'aprobado',
           _originalDcm: cara.autorizacion_dcm || 'aprobado',
           // Baseline INMUTABLE para conservar aprobación (no drifta al reeditar).
@@ -2450,7 +2457,6 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
       tienePareja: isPair,
       isDeleting: false,
       onConfirm: async () => {
-        setDeleteCircuitoModal(prev => ({ ...prev, isDeleting: true }));
         const toDelete = [caraToDelete, ...pairedCaras].filter(Boolean) as CaraItem[];
         const conId = toDelete.filter(c => c.id) as (CaraItem & { id: number })[];
         const sinId = toDelete.filter(c => !c.id);
@@ -2462,22 +2468,18 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
           setReservas(prev => prev.filter(r => !sinId.some(c => r.id.startsWith(c.localId))));
         }
 
+        setDeleteCircuitoModal(prev => ({ ...prev, isOpen: false, isDeleting: false }));
+
         if (conId.length > 0) {
-          // En CAMPAÑAS eliminar NO borra al momento: crea una solicitud de
-          // autorización (Filtro GC → DG). La(s) cara(s) quedan en el listado hasta
-          // que DG apruebe. Se manda 1 sola solicitud con la pareja RT/BF incluida.
-          try {
-            const [primero, ...resto] = conId;
-            const resp = await campanasService.deleteCara(campana!.id, primero.id, false, resto.map(c => c.id));
-            setDeleteCircuitoModal(prev => ({ ...prev, isOpen: false, isDeleting: false }));
-            alert(resp?.message || 'Solicitud de eliminación enviada a autorización de Dirección General.');
-          } catch (error) {
-            console.error('Error solicitando eliminación:', error);
-            alert(error instanceof Error ? error.message : 'Error al solicitar la eliminación');
-            setDeleteCircuitoModal(prev => ({ ...prev, isOpen: false, isDeleting: false }));
+          // Eliminar en campaña requiere autorización DG con Nota de Dirección
+          // OBLIGATORIA (igual que el flujo normal). Blindaje: sin solicitud_id no se
+          // puede capturar la nota → no se manda a auth. Se abre el modal de nota y,
+          // al confirmarla, se manda la solicitud de eliminación (1 sola, con pareja).
+          if (!campanaDetails?.solicitud_id) {
+            alert('No se puede solicitar la eliminación: falta la solicitud asociada para capturar la Nota de Dirección. Avisa a soporte.');
+            return;
           }
-        } else {
-          setDeleteCircuitoModal(prev => ({ ...prev, isOpen: false, isDeleting: false }));
+          setDeleteNota({ open: true, caraIds: conId.map(c => c.id) });
         }
       }
     });
@@ -2572,8 +2574,6 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
       isDeleting: false,
       count: circuitCount,
       onConfirm: async () => {
-        setDeleteCircuitoModal(prev => ({ ...prev, isDeleting: true }));
-
         const conId = carasToDelete.filter(c => c.id) as (CaraItem & { id: number })[];
         const sinId = carasToDelete.filter(c => !c.id);
 
@@ -2584,24 +2584,18 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
           setReservas(prev => prev.filter(r => ![...localIds].some(id => r.id.startsWith(id))));
         }
 
+        setSelectedCaraIds(new Set());
+        setDeleteCircuitoModal(prev => ({ ...prev, isOpen: false, isDeleting: false }));
+
         if (conId.length > 0) {
-          // Campañas: eliminar NO borra al momento → UNA sola solicitud de
-          // autorización (Filtro GC → DG) con todas las caras seleccionadas.
-          // Quedan en el listado hasta que DG apruebe.
-          try {
-            const [primero, ...resto] = conId;
-            const resp = await campanasService.deleteCara(campana!.id, primero.id, false, resto.map(c => c.id));
-            setSelectedCaraIds(new Set());
-            setDeleteCircuitoModal(prev => ({ ...prev, isOpen: false, isDeleting: false }));
-            alert(resp?.message || 'Solicitud de eliminación enviada a autorización de Dirección General.');
-          } catch (error) {
-            console.error('Error solicitando eliminación (bulk):', error);
-            alert(error instanceof Error ? error.message : 'Error al solicitar la eliminación');
-            setDeleteCircuitoModal(prev => ({ ...prev, isOpen: false, isDeleting: false }));
+          // Igual que el bote individual: se captura la Nota de Dirección (obligatoria)
+          // y al confirmarla se manda UNA sola solicitud de eliminación con toda la
+          // selección. Blindaje por solicitud_id.
+          if (!campanaDetails?.solicitud_id) {
+            alert('No se puede solicitar la eliminación: falta la solicitud asociada para capturar la Nota de Dirección. Avisa a soporte.');
+            return;
           }
-        } else {
-          setSelectedCaraIds(new Set());
-          setDeleteCircuitoModal(prev => ({ ...prev, isOpen: false, isDeleting: false }));
+          setDeleteNota({ open: true, caraIds: conId.map(c => c.id) });
         }
       },
     });
@@ -9065,6 +9059,11 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
                                         {dcmDisplay === 'pendiente' && dgDisplay !== 'rechazado' && (
                                           <span className={`text-[10px] px-1.5 py-0.5 rounded ${isDark ? 'bg-amber-500/20 text-amber-300' : 'bg-amber-100 text-amber-700'}`}>Pend. DCM</span>
                                         )}
+                                        {/* Eliminación pendiente de autorización DG — la cara sigue viva hasta
+                                            que DG apruebe el borrado. Mismo estilo que el Pend. DG normal. */}
+                                        {cara.pendiente_eliminacion && (
+                                          <span className={`text-[10px] px-1.5 py-0.5 rounded ${isDark ? 'bg-red-500/20 text-red-300' : 'bg-red-100 text-red-700'}`} title="Eliminación pendiente de autorización de Dirección General">Pend. DG (elim.)</span>
+                                        )}
                                       </div>
                                         );
                                       })()}
@@ -9930,6 +9929,34 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
           setShowNotaDireccionModal(false);
           setPendingAuthTipo(null);
           setShowSaveConfirm(true);
+        }}
+      />
+      {/* Nota de Dirección para ELIMINACIÓN — obligatoria antes de mandar la baja a
+          autorización DG. Al confirmar: guarda la nota y crea la solicitud (1 sola,
+          con pareja/selección incluida). El aprobador la ve en su bitácora (la tarea
+          lleva id_solicitud). */}
+      <NuevaNotaDireccionModal
+        isOpen={deleteNota.open}
+        contexto="campana"
+        referenciaLabel={campana?.id ? `#${campana.id} (eliminación)` : undefined}
+        tipoAutorizacion="dg"
+        onCancel={() => setDeleteNota({ open: false, caraIds: [] })}
+        onConfirm={async (texto) => {
+          const ids = deleteNota.caraIds;
+          if (!campanaDetails?.solicitud_id || ids.length === 0) { setDeleteNota({ open: false, caraIds: [] }); return; }
+          try {
+            await notasDireccionService.create(campanaDetails.solicitud_id, texto);
+            const [primero, ...resto] = ids;
+            const resp = await campanasService.deleteCara(campana!.id, primero, false, resto);
+            setDeleteNota({ open: false, caraIds: [] });
+            // Optimista: marcar las caras como pendientes de eliminación → badge "Pend. DG (elim.)".
+            setCaras(prev => prev.map(c => (c.id && ids.includes(c.id)) ? { ...c, pendiente_eliminacion: true } : c));
+            alert(resp?.message || 'Solicitud de eliminación enviada a autorización de Dirección General.');
+          } catch (error) {
+            console.error('Error solicitando eliminación:', error);
+            alert(error instanceof Error ? error.message : 'Error al solicitar la eliminación');
+            setDeleteNota({ open: false, caraIds: [] });
+          }
         }}
       />
       {/* Delete Circuito Confirm Modal — confirmación al usar bote de basura */}

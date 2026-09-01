@@ -298,6 +298,8 @@ export interface SolicitudCara {
   descuento: number | null;
   autorizacion_dg?: string | null;
   autorizacion_dcm?: string | null;
+  // true si la cara tiene una tarea de eliminación abierta (Filtro GC o DG).
+  pendiente_eliminacion?: boolean;
   grupo_rt_bf?: number | null;
   cortesia?: number | null;
 }
