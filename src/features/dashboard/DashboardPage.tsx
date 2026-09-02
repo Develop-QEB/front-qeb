@@ -2054,23 +2054,38 @@ export function DashboardPage() {
     return filterOptions.catorcenas.find(c => c.id === filters.catorcena_id) || null;
   }, [filters.catorcena_id, filterOptions]);
 
-  // Estado de POST a SAP — solo depende del periodo (catorcena / rango de fechas).
-  // El dashboard SIEMPRE opera sobre un periodo: si el usuario no eligio uno,
-  // usamos la catorcena actual (la que muestra el indicador "Periodo Actual"),
-  // no todo el historico.
+  // Estado de POST a SAP — depende del periodo (catorcena / rango de fechas) y
+  // de los filtros de inventario (estado/plaza/formato/nse/tipo), igual que los
+  // KPIs. El dashboard SIEMPRE opera sobre un periodo: si el usuario no eligio
+  // uno, usamos la catorcena actual (la que muestra el indicador "Periodo
+  // Actual"), no todo el historico.
+  //
+  // Al filtrar por plaza el back prorratea el monto por caras: un circuito con
+  // caras en varias plazas aporta solo la fraccion que cae en la plaza filtrada,
+  // asi que la suma de todas las plazas cuadra con el total sin filtro. El
+  // conteo de circuitos no se parte, por lo que si suma mas que el total.
   const posteoFilters = useMemo(() => {
-    if (filters.catorcena_id) return { catorcena_id: filters.catorcena_id };
-    if (filters.fecha_inicio && filters.fecha_fin) return { fecha_inicio: filters.fecha_inicio, fecha_fin: filters.fecha_fin };
-    if (catorcenaDefault?.id) return { catorcena_id: catorcenaDefault.id };
-    return {};
-  }, [filters.catorcena_id, filters.fecha_inicio, filters.fecha_fin, catorcenaDefault?.id]);
+    const inventario = {
+      estado: filters.estado,
+      ciudad: filters.ciudad,
+      formato: filters.formato,
+      nse: filters.nse,
+      tipo: filters.tipo,
+    };
+    if (filters.catorcena_id) return { ...inventario, catorcena_id: filters.catorcena_id };
+    if (filters.fecha_inicio && filters.fecha_fin) return { ...inventario, fecha_inicio: filters.fecha_inicio, fecha_fin: filters.fecha_fin };
+    if (catorcenaDefault?.id) return { ...inventario, catorcena_id: catorcenaDefault.id };
+    return inventario;
+  }, [
+    filters.catorcena_id, filters.fecha_inicio, filters.fecha_fin, catorcenaDefault?.id,
+    filters.estado, filters.ciudad, filters.formato, filters.nse, filters.tipo,
+  ]);
   const { data: posteoStats, isLoading: loadingPosteo } = useQuery({
     queryKey: ['dashboard', 'posteo-stats', posteoFilters],
     queryFn: () => dashboardService.getPosteoStats(posteoFilters),
     // Espera al periodo default: con posteoFilters {} el back agrega TODO el
     // historico de solicitudCaras.
-    // Card APS oculta por el momento; al restaurarla volver a `periodoListo`.
-    enabled: false,
+    enabled: periodoListo,
   });
 
   // Etiqueta del periodo que refleja el bloque de posteo (para dejar claro que
@@ -2109,6 +2124,7 @@ export function DashboardPage() {
     (filters.formato?.length || 0) +
     (filters.nse?.length || 0) +
     (filters.tipo?.length || 0) +
+    (filters.micromacro ? 1 : 0) +
     (filters.catorcena_id && !esCatorcenaDefault ? 1 : 0) +
     (filters.fecha_inicio ? 1 : 0) +
     (filters.fecha_fin ? 1 : 0);
@@ -2249,6 +2265,18 @@ export function DashboardPage() {
                     setInventoryPage(1);
                   }}
                   options={filterOptions?.tipos || []}
+                />
+                <MultiSelectFilter
+                  label="Mi Macro (circuito)"
+                  values={filters.micromacro ? [filters.micromacro === 'solo' ? 'Solo Mi Macro' : 'Excluir Mi Macro'] : []}
+                  onChange={(v) => {
+                    // Selección única: toma la última opción marcada
+                    const last = v[v.length - 1];
+                    const mm = last === 'Solo Mi Macro' ? 'solo' : last === 'Excluir Mi Macro' ? 'excluir' : undefined;
+                    setFilters(p => ({ ...p, micromacro: mm }));
+                    setInventoryPage(1);
+                  }}
+                  options={['Excluir Mi Macro', 'Solo Mi Macro']}
                 />
                 <MultiSelectFilter
                   label="NSE"
@@ -2400,9 +2428,7 @@ export function DashboardPage() {
         </div>
 
         {/* Estado de POST a SAP: pendientes por postear vs posteadas */}
-        {/* Oculto por el momento (APS). Para restaurar: descomentar y regresar
-            la query posteo-stats a `enabled: periodoListo`. */}
-        {/* <PosteoStatsCard data={posteoStats} isLoading={loadingPosteo} periodoLabel={posteoPeriodoLabel} /> */}
+        <PosteoStatsCard data={posteoStats} isLoading={loadingPosteo} periodoLabel={posteoPeriodoLabel} />
 
         {/* Charts Row 1 */}
         {(loadingEstatus || loadingInventory) && (

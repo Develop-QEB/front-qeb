@@ -2,6 +2,8 @@ import { useEffect, useRef, useCallback } from 'react';
 import { io, Socket } from 'socket.io-client';
 import { useQueryClient } from '@tanstack/react-query';
 import { useNotifToastStore } from '../store/notifToastStore';
+import { useConflictoAlertaStore } from '../store/conflictoAlertaStore';
+import { useAuthStore } from '../store/authStore';
 import type { PreferenciasNotif } from '../services/notificaciones.service';
 
 const SOCKET_URL = import.meta.env.VITE_API_URL?.replace('/api', '') || 'http://localhost:3000';
@@ -357,6 +359,46 @@ export function useSocketNotificaciones(
       // masivos a todos los usuarios conectados).
       if (!popups || !paraMi) return;
 
+      // Conflictos de ocupación: aviso operativo raro y accionable, NO pasa por
+      // las preferencias de popup (la clave no tiene fila en la matriz y el
+      // default del handler es OFF: el aviso se perdería en silencio).
+      // TEMPORAL (soft-launch): DEV ve el modal centrado; los demás roles
+      // (dueños de campañas avisados por la limpieza) reciben un toast que no
+      // se cierra solo. ESTE es el único punto a tocar al liberar: cambiar el
+      // check de rol para que todos reciban el modal.
+      if (payload?.categoria === 'conflicto_ocupacion') {
+        if (useAuthStore.getState().user?.rol === 'DEV') {
+          useConflictoAlertaStore.getState().show({
+            titulo: payload?.titulo || 'Conflictos de ocupación detectados',
+            descripcion: payload?.descripcion,
+            tareaId: payload?.tarea_id,
+          });
+        } else {
+          useNotifToastStore.getState().push({
+            titulo: payload?.titulo || 'Conflictos de ocupación',
+            descripcion: payload?.descripcion,
+            tareaId: payload?.tarea_id,
+            tipo: payload?.tipo,
+            requireInteraction: true,
+          });
+        }
+        return;
+      }
+
+      // Desplazamiento de reservas (multireservas): aviso operativo accionable a
+      // asesores + Tráfico. Salta las preferencias opt-in (como conflicto_ocupacion):
+      // toast que no se cierra solo, para que el aviso no se pierda.
+      if (payload?.categoria === 'reserva_desplazada') {
+        useNotifToastStore.getState().push({
+          titulo: payload?.titulo || 'Reservas desplazadas',
+          descripcion: payload?.descripcion,
+          tareaId: payload?.tarea_id,
+          tipo: payload?.tipo,
+          requireInteraction: true,
+        });
+        return;
+      }
+
       // El popup es OPT-IN (default OFF): solo se muestra si la preferencia
       // efectiva del usuario es true. La matriz ya resuelve la herencia
       // (específico → master de clase → master de canal → default del canal).
@@ -471,6 +513,9 @@ export function useSocketPropuesta(propuestaId: number | null) {
       queryClient.invalidateQueries({ queryKey: ['propuesta-inventario', data.propuestaId] });
       queryClient.invalidateQueries({ queryKey: ['propuesta-full', data.propuestaId] });
       queryClient.invalidateQueries({ queryKey: ['propuesta', data.propuestaId] });
+      // Refrescar el historial: cuando desplazan reservas de esta propuesta (venta en
+      // otra campaña), queda un registro nuevo que debe aparecer al momento.
+      queryClient.invalidateQueries({ queryKey: ['propuesta-historial', data.propuestaId] });
       queryClient.invalidateQueries({ queryKey: ['inventario'] });
     };
 

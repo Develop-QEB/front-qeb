@@ -138,6 +138,12 @@ type QuickFilterKey =
   | 'leidas'      
   | 'no_leidas';  
 
+// Estatus "resueltos": no cuentan en la campanita ni en "Sin finalizar" / "No
+// leídas". Debe coincidir con ESTATUS_RESUELTOS del backend
+// (notificaciones.controller.ts) o el conteo de la lista se descuadra del badge.
+const ESTATUS_RESUELTOS = ['Atendido', 'Rechazado', 'Cancelado'];
+const esResuelta = (estatus?: string | null) => !!estatus && ESTATUS_RESUELTOS.includes(estatus);
+
 const QUICK_FILTERS_NOTIFICACIONES: { key: QuickFilter; label: string }[] = [
   { key: 'all', label: 'Todas' },
   { key: 'leidas', label: 'Leídas' },
@@ -1400,6 +1406,19 @@ function isArtesNotification(titulo?: string | null): boolean {
   return lower.startsWith('artes aprobados') || lower.startsWith('artes rechazados');
 }
 
+/**
+ * Notificación del monitor de conflictos de ocupación. Se detecta por título
+ * porque el payload de notificaciones no expone `categoria`; es el mismo
+ * criterio que usa isArtesNotification.
+ *
+ * Su botón es propio y no pasa por hasNavigationRoute/handleNavigate: no apunta
+ * a una propuesta/campaña/solicitud, sino a la Auditoría de conflictos.
+ */
+function isConflictoOcupacionNotification(titulo?: string | null): boolean {
+  if (!titulo) return false;
+  return /conflictos? de ocupaci[oó]n/i.test(titulo);
+}
+
 // Función para verificar si hay navegación disponible
 function hasNavigationRoute(tarea: Notificacion): boolean {
   // Tareas de Ajuste Inventario Bloqueado no tienen navegación
@@ -1610,6 +1629,9 @@ function ApprovalModal({
 
   const isAutorizacionTask = tarea.tipo?.includes('Autorización');
   const tipoAutorizacion = tarea.tipo?.includes('DG') ? 'dg' : tarea.tipo?.includes('DCM') ? 'dcm' : null;
+  // Autorización de ELIMINACIÓN de circuitos (campañas): aprobar = borrar, rechazar
+  // = no borrar + motivo. Va por tareaId (endpoint dedicado), no por idquote.
+  const isEliminacionTask = tarea.tipo === 'Autorización Eliminación' || tarea.tipo === 'Filtro Autorización Eliminación';
 
   const [idPropuestaState, setIdPropuestaState] = useState<string | null>(tarea.id_propuesta || null);
   const [solicitudFallbackTried, setSolicitudFallbackTried] = useState(false);
@@ -1680,7 +1702,10 @@ function ApprovalModal({
   });
 
   const aprobarMutation = useMutation({
-    mutationFn: () => notificacionesService.aprobarAutorizacion(idPropuesta || '', tipoAutorizacion as 'dg' | 'dcm'),
+    mutationFn: async () => {
+      if (isEliminacionTask) { await notificacionesService.aprobarEliminacion(tarea.id); return; }
+      await notificacionesService.aprobarAutorizacion(idPropuesta || '', tipoAutorizacion as 'dg' | 'dcm');
+    },
     onSuccess: () => {
       refetchCaras();
       refetchResumen();
@@ -1692,7 +1717,10 @@ function ApprovalModal({
   });
 
   const rechazarMutation = useMutation({
-    mutationFn: (motivo: string) => notificacionesService.rechazarAutorizacion(idPropuesta || '', motivo),
+    mutationFn: async (motivo: string) => {
+      if (isEliminacionTask) { await notificacionesService.rechazarEliminacion(tarea.id, motivo); return; }
+      await notificacionesService.rechazarAutorizacion(idPropuesta || '', motivo);
+    },
     onSuccess: () => {
       setShowRechazoInput(false);
       setRechazoMotivo('');
@@ -1715,9 +1743,13 @@ function ApprovalModal({
   const [comentarioAprobacionFiltro, setComentarioAprobacionFiltro] = useState('');
 
   const aprobarFiltroMutation = useMutation({
-    mutationFn: (comentario?: string): Promise<{ tareaDgId: number; tareaNotifAsesorId: number | null } | { tareaDcmId: number; tareaNotifAsesorId: number | null }> => filtroDireccion === 'DG'
-      ? notificacionesService.aprobarFiltroDg(tarea.id, comentario)
-      : notificacionesService.aprobarFiltroDcm(tarea.id, comentario),
+    // Ambas funciones devuelven objetos con propiedades distintas
+    // (tareaDgId vs tareaDcmId). Como onSuccess no usa el retorno, se envuelve
+    // en Promise<void> para que TS reconcilie los tipos del union.
+    mutationFn: async (comentario?: string): Promise<void> => {
+      if (filtroDireccion === 'DG') await notificacionesService.aprobarFiltroDg(tarea.id, comentario);
+      else await notificacionesService.aprobarFiltroDcm(tarea.id, comentario);
+    },
     onSuccess: () => {
       setComentarioAprobacionFiltro('');
       queryClient.invalidateQueries({ queryKey: ['notificaciones'] });
@@ -1727,9 +1759,10 @@ function ApprovalModal({
     },
   });
   const rechazarFiltroMutation = useMutation({
-    mutationFn: (motivo: string) => filtroDireccion === 'DG'
-      ? notificacionesService.rechazarFiltroDg(tarea.id, motivo)
-      : notificacionesService.rechazarFiltroDcm(tarea.id, motivo),
+    mutationFn: async (motivo: string): Promise<void> => {
+      if (filtroDireccion === 'DG') await notificacionesService.rechazarFiltroDg(tarea.id, motivo);
+      else await notificacionesService.rechazarFiltroDcm(tarea.id, motivo);
+    },
     onSuccess: () => {
       setShowRechazoInput(false);
       setRechazoMotivo('');
@@ -2074,7 +2107,7 @@ function ApprovalModal({
                       : aprobarMutation.mutate()}
                     disabled={isFiltroTask
                       ? aprobarFiltroMutation.isPending
-                      : (aprobarMutation.isPending || carasPendientes.length === 0)}
+                      : (aprobarMutation.isPending || (!isEliminacionTask && carasPendientes.length === 0))}
                     className="flex-1 flex items-center justify-center gap-2 px-3 sm:px-4 py-3 rounded-xl bg-emerald-600 text-white text-sm font-medium hover:bg-emerald-700 disabled:opacity-50 disabled:cursor-not-allowed transition-all"
                   >
                     {(isFiltroTask ? aprobarFiltroMutation.isPending : aprobarMutation.isPending) ? (
@@ -2085,12 +2118,14 @@ function ApprovalModal({
                     <span className="truncate">
                       {isFiltroTask
                         ? (aprobarFiltroMutation.isPending ? 'Enviando...' : `Enviar a ${filtroDireccionLabel}`)
-                        : (aprobarMutation.isPending ? 'Aprobando...' : `Aprobar ${carasPendientes.length} circuito${carasPendientes.length !== 1 ? 's' : ''}`)}
+                        : isEliminacionTask
+                          ? (aprobarMutation.isPending ? 'Autorizando...' : 'Autorizar eliminación')
+                          : (aprobarMutation.isPending ? 'Aprobando...' : `Aprobar ${carasPendientes.length} circuito${carasPendientes.length !== 1 ? 's' : ''}`)}
                     </span>
                   </button>
                   <button
                     onClick={() => setShowRechazoInput(true)}
-                    disabled={!isFiltroTask && carasPendientes.length === 0}
+                    disabled={!isFiltroTask && !isEliminacionTask && carasPendientes.length === 0}
                     className="flex items-center justify-center gap-2 px-4 sm:px-6 py-3 rounded-xl bg-red-600/20 text-red-400 text-sm font-medium hover:bg-red-600/30 border border-red-500/30 disabled:opacity-50 disabled:cursor-not-allowed transition-all"
                   >
                     <X className="h-4 w-4" />
@@ -2500,6 +2535,18 @@ function TaskDrawer({
                 )}
               </button>
             </div>
+          )}
+
+          {/* Conflictos de ocupación → Auditoría con las catorcenas vigentes ya
+              corriendo. Solo DEV: el módulo está restringido a ese rol. */}
+          {isConflictoOcupacionNotification(tarea.titulo) && onNavigate && user?.rol === 'DEV' && (
+            <button
+              onClick={() => onNavigate('/inventarios?auditoria=1')}
+              className="mt-4 w-full flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl bg-gradient-to-r from-amber-600 to-orange-600 text-white text-sm font-medium hover:from-amber-500 hover:to-orange-500 transition-all hover:scale-[1.02] active:scale-[0.98] shadow-lg shadow-amber-500/20"
+            >
+              <ExternalLink className="h-4 w-4" />
+              Ver Auditoría de Conflictos
+            </button>
           )}
 
           {/* Botón Ir a ver (oculto para directores en tareas de autorización) */}
@@ -3119,14 +3166,20 @@ export function NotificacionesPage() {
     staleTime: 5 * 60 * 1000, // 5 minutos
   });
 
-  // Fetch notificaciones o tareas según contentType
+  // Fetch notificaciones o tareas según contentType.
+  // El filtro por destinatario y por estatus vive en el SERVIDOR (`vista` +
+  // `quick`). Antes se bajaban 200 filas "de todo" y se filtraba en cliente:
+  // lo que caía fuera de esas 200 desaparecía de la vista aunque la campanita
+  // sí lo contara (ej. Autorización DG #97479, posición 276 de 912 filas del
+  // Director General). Ahora `data.total` es el conteo real del servidor.
   const { data, isLoading } = useQuery({
-    queryKey: ['notificaciones', contentType, filterEstatus, orderBy, orderDir],
+    queryKey: ['notificaciones', contentType, filterEstatus, orderBy, orderDir, quickFilter],
     queryFn: () =>
       notificacionesService.getAll({
         limit: 200,
         estatus: filterEstatus || undefined,
-        tipo: contentType === 'notificaciones' ? 'Notificación' : undefined,
+        vista: contentType === 'notificaciones' ? 'notificaciones' : 'tareas',
+        quick: quickFilter && quickFilter !== 'all' ? quickFilter : undefined,
         orderBy,
         orderDir,
       }),
@@ -3188,41 +3241,12 @@ export function NotificacionesPage() {
   const baseTareas = useMemo(() => {
     if (!data?.data || !user) return [];
     let items = data.data;
-    const userId = String(user.id);
 
-    // Roles que ven tareas/notificaciones propias + de subordinados (backend ya las trae)
-    const isCoordinadorDiseno = user.rol === 'Coordinador de Diseño';
-    const isGerenteDigitalOps = user.rol === 'Gerente Digital (Operaciones)';
-    const canSeeAllFromBackend = isCoordinadorDiseno || isGerenteDigitalOps;
-
-    if (contentType === 'notificaciones') {
-      // Para notificaciones: filtrar donde soy el destinatario (id_responsable)
-      items = items.filter(item => {
-        if (canSeeAllFromBackend) return true; // Ve todas las que devuelve el backend
-        if (item.id_responsable !== undefined && item.id_responsable !== null) {
-          return String(item.id_responsable) === userId;
-        }
-        return false;
-      });
-    } else {
-      // Para tareas: excluir notificaciones y filtrar donde estoy asignado
-      items = items.filter(item => {
-        // Excluir notificaciones
-        if (item.tipo === 'Notificación') return false;
-        if (canSeeAllFromBackend) return true; // Ve todas las tareas que devuelve el backend
-        // Filtrar donde estoy asignado
-        if (item.id_asignado !== undefined && item.id_asignado !== null) {
-          const idAsignadoStr = String(item.id_asignado);
-          const idsAsignados = idAsignadoStr.split(',').map(id => id.trim());
-          return idsAsignados.includes(userId);
-        }
-        // También incluir donde soy responsable
-        if (item.id_responsable !== undefined && item.id_responsable !== null) {
-          return String(item.id_responsable) === userId;
-        }
-        return false;
-      });
-    }
+    // El filtro por destinatario (y la exclusión de 'Notificación' en la pestaña
+    // de tareas) ya lo aplicó el backend vía `vista`, con el MISMO criterio del
+    // badge y sobre la tabla completa — no sobre las 200 filas que alcanzó a
+    // bajar el cliente. Filtrar otra vez aquí es lo que ocultaba pendientes y
+    // descuadraba el conteo contra la campanita.
 
     // Filtrar por fecha (solo si no es 'all')
     if (filterFecha !== 'all') {
@@ -3283,21 +3307,16 @@ export function NotificacionesPage() {
         });
       }
 
+      // El servidor ya aplicó este mismo filtro (param `quick`); esto queda como
+      // red de seguridad y usa EXACTAMENTE el mismo criterio de "resuelta" para
+      // no volver a introducir diferencias con el badge.
       return baseTareas.filter(item => {
-        if (quickFilter === 'pendientes') {
-          return item.estatus !== 'Atendido' && item.estatus !== 'Rechazado' && item.estatus !== 'Cancelado';
+        if (quickFilter === 'pendientes' || quickFilter === 'no_leidas') {
+          return !esResuelta(item.estatus);
         }
 
-        if (quickFilter === 'finalizadas') {
-          return item.estatus === 'Atendido' || item.estatus === 'Rechazado' || item.estatus === 'Cancelado';
-        }
-
-        if (quickFilter === 'leidas') {
-          return item.estatus === 'Atendido' || item.estatus === 'Rechazado';
-        }
-
-        if (quickFilter === 'no_leidas') {
-          return item.estatus !== 'Atendido';
+        if (quickFilter === 'finalizadas' || quickFilter === 'leidas') {
+          return esResuelta(item.estatus);
         }
 
         return true;
@@ -3326,8 +3345,28 @@ export function NotificacionesPage() {
     }
   }, [allFilteredIds, allFilteredSelected]);
 
-  const countActivas = useMemo(() => baseTareas.filter(t => t.estatus !== 'Atendido' && t.estatus !== 'Rechazado' && t.estatus !== 'Cancelado').length, [baseTareas]);
-  const countAtendidas = useMemo(() => baseTareas.filter(t => t.estatus === 'Atendido' || t.estatus === 'Rechazado' || t.estatus === 'Cancelado').length, [baseTareas]);
+  // Contadores EXACTOS, derivados de /notificaciones/stats (COUNT en BD sobre el
+  // conjunto completo), no de las filas que alcanzó a bajar el cliente. Es la
+  // misma fuente que alimenta la campanita, así que por construcción cuadran:
+  //   badge_count = badge_notificaciones + badge_tareas
+  // El total por pestaña se deriva sin queries extra: por_tipo['Notificación'] es
+  // el total de la pestaña Notificaciones, y el resto es el de Mis Tareas.
+  const badgeNotificaciones = stats?.badge_notificaciones ?? 0;
+  const badgeTareas = stats?.badge_tareas ?? 0;
+  const totalTabNotificaciones = stats?.por_tipo?.['Notificación'] ?? 0;
+  const totalTabTareas = Math.max(0, (stats?.total ?? 0) - totalTabNotificaciones);
+
+  const countActivas = contentType === 'notificaciones' ? badgeNotificaciones : badgeTareas;
+  const countAtendidas = Math.max(
+    0,
+    (contentType === 'notificaciones' ? totalTabNotificaciones : totalTabTareas) - countActivas
+  );
+
+  // Cuántas filas coinciden en el servidor con el filtro actual vs cuántas se
+  // están renderizando. Si el `limit` recorta, se avisa en pantalla en lugar de
+  // mostrar un número corto como si fuera el total.
+  const totalServidor = data?.pagination?.total ?? 0;
+  const hayRecorte = totalServidor > filteredTareas.length;
 
   // Agrupar tareas (soporta múltiples agrupaciones anidadas)
   const nestedGroups = useMemo<NestedGroup[]>(() => {
@@ -3446,11 +3485,15 @@ export function NotificacionesPage() {
           >
             <Bell className="h-4 w-4" />
             Notificaciones
-            {/* {!!stats?.por_tipo?.['Notificación'] && contentType !== 'notificaciones' && (
-              <span className="ml-1 px-1.5 py-0.5 rounded-full bg-purple-500/30 text-[10px]">
-                {stats.por_tipo['Notificación']}
+            {/* Mismo número que aporta esta pestaña a la campanita del header. */}
+            {badgeNotificaciones > 0 && (
+              <span
+                className="ml-1 px-1.5 py-0.5 rounded-full bg-purple-500/30 text-[10px] font-bold"
+                title="Notificaciones sin leer (parte del contador de la campana)"
+              >
+                {badgeNotificaciones}
               </span>
-            )} */}
+            )}
           </button>
           <button
             onClick={() => setContentType('tareas')}
@@ -3462,7 +3505,24 @@ export function NotificacionesPage() {
           >
             <ClipboardList className="h-4 w-4" />
             Mis Tareas
+            {badgeTareas > 0 && (
+              <span
+                className="ml-1 px-1.5 py-0.5 rounded-full bg-pink-500/30 text-[10px] font-bold"
+                title="Tareas sin finalizar (parte del contador de la campana)"
+              >
+                {badgeTareas}
+              </span>
+            )}
           </button>
+
+          {/* Trazabilidad del badge: la campanita es la suma de las dos pestañas.
+              Con esto el usuario ve de dónde sale el número y deja de leerse como
+              un descuadre cuando abre una sola pestaña. */}
+          {(badgeNotificaciones > 0 || badgeTareas > 0) && (
+            <span className={`hidden md:inline ml-auto text-[11px] ${isDark ? 'text-zinc-500' : 'text-gray-400'}`}>
+              Campana: {badgeNotificaciones + badgeTareas} ({badgeNotificaciones} sin leer + {badgeTareas} sin finalizar)
+            </span>
+          )}
         </div>
 
         {/* Navegación de vistas */}
@@ -3820,8 +3880,20 @@ export function NotificacionesPage() {
               )}
             </div>
 
-            {/* Estadísticas rápidas */}
+            {/* Estadísticas rápidas — conteos exactos del servidor (misma fuente
+                que la campanita), no el largo de la página descargada. */}
             <div className="flex items-center gap-3 ml-auto">
+              {hayRecorte && (
+                <div
+                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-sky-500/20 border border-sky-500/30"
+                  title="La lista muestra solo las más recientes. Usa la búsqueda o los filtros para llegar a las demás."
+                >
+                  <AlertCircle className="h-3 w-3 text-sky-400" />
+                  <span className="text-xs text-sky-300">
+                    mostrando {filteredTareas.length} de {totalServidor}
+                  </span>
+                </div>
+              )}
               <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-amber-500/20 border border-amber-500/30">
                 <Clock className="h-3 w-3 text-amber-400" />
                 <span className="text-xs text-amber-300">{countActivas} activas</span>

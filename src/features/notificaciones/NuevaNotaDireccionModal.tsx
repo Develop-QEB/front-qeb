@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { AlertCircle, Loader2, ShieldCheck, X } from 'lucide-react';
+import { AlertCircle, Loader2, ShieldCheck, Trash2, X } from 'lucide-react';
 import { useThemeStore } from '../../store/themeStore';
 
 interface Props {
@@ -15,6 +15,9 @@ interface Props {
   referenciaLabel?: string;
   // Autorizacion que se va a disparar (DG / DCM / DG y DCM).
   tipoAutorizacion?: 'dg' | 'dcm' | 'ambas' | null;
+  // 'direccion' (default) = nota general de Dirección; 'eliminacion' = nota de por
+  // qué se borra un circuito (distintivo rojo/papelera, va a Gerente → DG).
+  variant?: 'direccion' | 'eliminacion';
 }
 
 const CONTEXTO_LABEL: Record<NonNullable<Props['contexto']>, string> = {
@@ -26,11 +29,38 @@ const CONTEXTO_LABEL: Record<NonNullable<Props['contexto']>, string> = {
 // Mini-modal que se dispara al Guardar cambios cuando la edicion genera una
 // autorizacion nueva (DG o DCM). La nota es OBLIGATORIA — sin ella no se
 // puede continuar con el guardado. Feedback de Jos 2026-07-08.
-export function NuevaNotaDireccionModal({ isOpen, onCancel, onConfirm, contexto, referenciaLabel, tipoAutorizacion }: Props) {
+export function NuevaNotaDireccionModal({ isOpen, onCancel, onConfirm, contexto, referenciaLabel, tipoAutorizacion, variant = 'direccion' }: Props) {
   const isDark = useThemeStore(s => s.theme) === 'dark';
   const [texto, setTexto] = useState('');
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  // Distintivo por variante: 'eliminacion' usa rojo + papelera; 'direccion' naranja + escudo.
+  const esElim = variant === 'eliminacion';
+  const Icon = esElim ? Trash2 : ShieldCheck;
+  const ui = esElim
+    ? {
+        iconBg: isDark ? 'bg-red-500/15' : 'bg-red-50',
+        iconText: isDark ? 'text-red-300' : 'text-red-600',
+        focus: 'focus:border-red-500/60',
+        btn: 'bg-red-600 hover:bg-red-700',
+        titulo: 'Motivo de eliminación',
+        label: 'Motivo de la eliminación',
+        placeholder: '¿Por qué se elimina este circuito? (lo verá el Gerente y Dirección)',
+        footer: 'Se enviará junto con la solicitud de eliminación.',
+        btnLabel: 'Solicitar eliminación',
+      }
+    : {
+        iconBg: isDark ? 'bg-orange-500/15' : 'bg-orange-50',
+        iconText: isDark ? 'text-orange-300' : 'text-orange-600',
+        focus: 'focus:border-orange-500/60',
+        btn: 'bg-orange-600 hover:bg-orange-700',
+        titulo: 'Nueva nota de Dirección',
+        label: 'Nota para esta autorización',
+        placeholder: 'Describe qué cambió y qué necesita Dirección aprobar...',
+        footer: 'Se guardará en la bitácora del registro.',
+        btnLabel: 'Guardar y enviar',
+      };
 
   useEffect(() => {
     if (isOpen) {
@@ -50,7 +80,7 @@ export function NuevaNotaDireccionModal({ isOpen, onCancel, onConfirm, contexto,
   const handleConfirm = async () => {
     const clean = texto.trim();
     if (!clean) {
-      setError('La nota es obligatoria para enviar la autorización.');
+      setError(esElim ? 'El motivo de eliminación es obligatorio.' : 'La nota es obligatoria para enviar la autorización.');
       return;
     }
     setSubmitting(true);
@@ -69,19 +99,21 @@ export function NuevaNotaDireccionModal({ isOpen, onCancel, onConfirm, contexto,
       <div className={`w-full max-w-lg rounded-2xl shadow-2xl ${isDark ? 'bg-zinc-900 border-zinc-800' : 'bg-white border-gray-200'} border`}>
         <div className={`flex items-start justify-between px-5 py-4 border-b ${isDark ? 'border-zinc-800' : 'border-gray-200'}`}>
           <div className="flex items-start gap-3">
-            <div className={`h-9 w-9 shrink-0 rounded-lg flex items-center justify-center ${isDark ? 'bg-orange-500/15' : 'bg-orange-50'}`}>
-              <ShieldCheck className={`h-5 w-5 ${isDark ? 'text-orange-300' : 'text-orange-600'}`} />
+            <div className={`h-9 w-9 shrink-0 rounded-lg flex items-center justify-center ${ui.iconBg}`}>
+              <Icon className={`h-5 w-5 ${ui.iconText}`} />
             </div>
             <div>
               <h3 className={`text-base font-semibold ${isDark ? 'text-zinc-100' : 'text-gray-900'}`}>
-                Nueva nota de Dirección
+                {ui.titulo}
               </h3>
               <p className={`mt-0.5 text-xs ${isDark ? 'text-zinc-400' : 'text-gray-500'}`}>
-                {tipoLabel
-                  ? `Se enviará una autorización ${tipoLabel} tras guardar.`
-                  : 'Se enviará una autorización tras guardar.'}
+                {esElim
+                  ? 'Se enviará a autorización de eliminación (Gerente → Dirección).'
+                  : (tipoLabel
+                    ? `Se enviará una autorización ${tipoLabel} tras guardar.`
+                    : 'Se enviará una autorización tras guardar.')}
                 {contexto && referenciaLabel ? ` (${CONTEXTO_LABEL[contexto]} ${referenciaLabel})` : null}
-                {' '}Escribe la nota que verá Dirección.
+                {esElim ? ' Escribe por qué se elimina.' : ' Escribe la nota que verá Dirección.'}
               </p>
             </div>
           </div>
@@ -98,7 +130,7 @@ export function NuevaNotaDireccionModal({ isOpen, onCancel, onConfirm, contexto,
 
         <div className="p-5">
           <label className={`block text-xs font-medium ${isDark ? 'text-zinc-400' : 'text-gray-600'} mb-1.5`}>
-            Nota para esta autorización <span className="text-red-400">*</span>
+            {ui.label} <span className="text-red-400">*</span>
           </label>
           <textarea
             autoFocus
@@ -106,15 +138,15 @@ export function NuevaNotaDireccionModal({ isOpen, onCancel, onConfirm, contexto,
             onChange={e => { setTexto(e.target.value); if (error) setError(null); }}
             rows={5}
             maxLength={2000}
-            placeholder="Describe qué cambió y qué necesita Dirección aprobar..."
+            placeholder={ui.placeholder}
             className={`w-full text-sm rounded-lg px-3 py-2 resize-none ${isDark
               ? 'bg-zinc-950/60 border-zinc-800 text-zinc-100 placeholder:text-zinc-600'
-              : 'bg-white border-gray-200 text-gray-800 placeholder:text-gray-400'} border focus:outline-none focus:border-orange-500/60`}
+              : 'bg-white border-gray-200 text-gray-800 placeholder:text-gray-400'} border focus:outline-none ${ui.focus}`}
             disabled={submitting}
           />
           <div className={`mt-1 flex items-center justify-between text-[11px] ${isDark ? 'text-zinc-500' : 'text-gray-500'}`}>
             <span>{texto.length}/2000</span>
-            <span className="italic">Se guardará en la bitácora del registro.</span>
+            <span className="italic">{ui.footer}</span>
           </div>
 
           {error && (
@@ -140,10 +172,10 @@ export function NuevaNotaDireccionModal({ isOpen, onCancel, onConfirm, contexto,
             disabled={submitting || !texto.trim()}
             className={`inline-flex items-center gap-1.5 px-4 py-1.5 text-sm rounded-lg transition-colors ${submitting || !texto.trim()
               ? (isDark ? 'bg-zinc-800/60 text-zinc-500 cursor-not-allowed' : 'bg-gray-100 text-gray-400 cursor-not-allowed')
-              : 'bg-orange-600 hover:bg-orange-700 text-white'}`}
+              : `${ui.btn} text-white`}`}
           >
-            {submitting ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <ShieldCheck className="h-3.5 w-3.5" />}
-            Guardar y enviar
+            {submitting ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Icon className="h-3.5 w-3.5" />}
+            {ui.btnLabel}
           </button>
         </div>
       </div>

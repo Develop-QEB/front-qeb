@@ -129,6 +129,8 @@ export function InventariosPage() {
   const [estatus, setEstatus] = useState('');
   const [plaza, setPlaza] = useState('');
   const [cto, setCto] = useState('');
+  const [tradicional, setTradicional] = useState('');
+  const [micromacro, setMicromacro] = useState(''); // '' | 'Excluir Mi Macro' | 'Solo Mi Macro'
   const [viewMode, setViewMode] = useState<'table' | 'map'>('table');
   const [sortCol, setSortCol] = useState<SortCol>('id');
   const [sortDir, setSortDir] = useState<'asc' | 'desc'>('asc');
@@ -174,6 +176,9 @@ export function InventariosPage() {
   const [analisisInicialInventarios, setAnalisisInicialInventarios] = useState<InventarioResumen[]>([]);
   const [isAnalisisListOpen, setIsAnalisisListOpen] = useState(false);
   const [isAuditoriaOpen, setIsAuditoriaOpen] = useState(false);
+  // Enlace directo desde la notificación del monitor: abre la auditoría con las
+  // catorcenas vigentes ya puestas y corriendo.
+  const [auditoriaAutoIniciar, setAuditoriaAutoIniciar] = useState(false);
   const [openingAnalisis, setOpeningAnalisis] = useState(false);
   const [isReorganizarOpen, setIsReorganizarOpen] = useState(false);
   const [isBloqueoMasivoOpen, setIsBloqueoMasivoOpen] = useState(false);
@@ -216,6 +221,19 @@ export function InventariosPage() {
     })();
     return () => { cancelled = true; };
   }, [analisisIdParam]);
+
+  // ?auditoria=1 → abrir la Auditoría de conflictos y correrla sola. Solo DEV,
+  // igual que el módulo. El parámetro se limpia para que un refresh no reabra.
+  useEffect(() => {
+    if (searchParams.get('auditoria') !== '1') return;
+    if (user?.rol === 'DEV') {
+      setAuditoriaAutoIniciar(true);
+      setIsAuditoriaOpen(true);
+    }
+    const next = new URLSearchParams(searchParams);
+    next.delete('auditoria');
+    setSearchParams(next, { replace: true });
+  }, [searchParams, setSearchParams, user?.rol]);
 
   const handleCloseAnalisis = () => {
     setIsAnalisisOpen(false);
@@ -260,10 +278,13 @@ export function InventariosPage() {
   }, [debouncedSearchTags, debouncedSearchInput]);
   const serverSearch = allSearchTerms.length > 0 ? allSearchTerms.join('|') : undefined;
 
+  // Mapea la etiqueta del chip Mi Macro al valor que espera el backend
+  const micromacroParam = micromacro === 'Excluir Mi Macro' ? 'excluir' : micromacro === 'Solo Mi Macro' ? 'solo' : undefined;
+
   const { data, isLoading } = useQuery({
-    queryKey: ['inventarios', page, serverSearch, tipo, estatus, plaza, cto, campanaIdNum],
+    queryKey: ['inventarios', page, serverSearch, tipo, estatus, plaza, cto, tradicional, micromacro, campanaIdNum],
     queryFn: () =>
-      inventariosService.getAll({ page, limit, search: serverSearch, tipo: tipo || undefined, estatus: estatus || undefined, plaza: plaza || undefined, cto: cto || undefined, campanaId: campanaIdNum }),
+      inventariosService.getAll({ page, limit, search: serverSearch, tipo: tipo || undefined, estatus: estatus || undefined, plaza: plaza || undefined, cto: cto || undefined, tradicional: tradicional || undefined, micromacro: micromacroParam, campanaId: campanaIdNum }),
   });
 
   const { data: tipos } = useQuery({ queryKey: ['inventarios', 'tipos'], queryFn: () => inventariosService.getTipos(), staleTime: 30 * 60 * 1000 });
@@ -273,13 +294,15 @@ export function InventariosPage() {
 
   // Stats query — global KPIs with same filters
   const { data: statsData, isLoading: isLoadingStats } = useQuery({
-    queryKey: ['inventarios-stats', serverSearch, tipo, estatus, plaza, campanaIdNum],
+    queryKey: ['inventarios-stats', serverSearch, tipo, estatus, plaza, tradicional, micromacro, campanaIdNum],
     queryFn: () =>
       inventariosService.getStats({
         search: serverSearch,
         tipo: tipo || undefined,
         estatus: estatus || undefined,
         plaza: plaza || undefined,
+        tradicional: tradicional || undefined,
+        micromacro: micromacroParam,
         campanaId: campanaIdNum,
       }),
   });
@@ -946,7 +969,7 @@ export function InventariosPage() {
 
   const totalPages = data?.pagination?.totalPages || 1;
   const totalItems = data?.pagination?.total || 0;
-  const hasActiveFilters = !!(tipo || plaza || cto || estatus || searchTags.length > 0 || searchInput || campanaIdParam);
+  const hasActiveFilters = !!(tipo || plaza || cto || estatus || tradicional || micromacro || searchTags.length > 0 || searchInput || campanaIdParam);
 
   // Form fields for create/edit
   const FORM_FIELDS: { key: string; label: string; type?: string; options?: string[]; span?: number }[] = [
@@ -999,12 +1022,15 @@ export function InventariosPage() {
         </div>
         {/* Body */}
         <div className="flex-1 overflow-auto p-5">
+          {/* Aviso informativo: antes esto bloqueaba la edición (inputs disabled +
+              botón Guardar oculto). Ahora solo advierte — se permite editar un
+              inventario con reservas activas. */}
           {isEdit && editItemOcupado && (
-            <div className={`mb-4 flex items-center gap-3 px-4 py-3 rounded-xl ${isDark ? 'bg-red-500/10 border-red-500/20' : 'bg-red-50 border-red-200'} border`}>
-              <AlertTriangle className={`h-5 w-5 flex-shrink-0 ${isDark ? 'text-red-400' : 'text-red-600'}`} />
+            <div className={`mb-4 flex items-center gap-3 px-4 py-3 rounded-xl ${isDark ? 'bg-amber-500/10 border-amber-500/20' : 'bg-amber-50 border-amber-200'} border`}>
+              <AlertTriangle className={`h-5 w-5 flex-shrink-0 ${isDark ? 'text-amber-400' : 'text-amber-600'}`} />
               <div>
-                <p className={`text-sm font-medium ${isDark ? 'text-red-300' : 'text-red-700'}`}>Inventario Ocupado/Reservado</p>
-                <p className={`text-xs ${isDark ? 'text-red-400/70' : 'text-red-500'}`}>Este inventario tiene reservas activas. No se permite editar.</p>
+                <p className={`text-sm font-medium ${isDark ? 'text-amber-300' : 'text-amber-700'}`}>Inventario Ocupado/Reservado</p>
+                <p className={`text-xs ${isDark ? 'text-amber-400/70' : 'text-amber-600'}`}>Este inventario tiene reservas activas. Los cambios afectarán campañas en curso.</p>
               </div>
             </div>
           )}
@@ -1016,7 +1042,6 @@ export function InventariosPage() {
                   <select
                     value={formData[f.key] || ''}
                     onChange={e => setFormData({ ...formData, [f.key]: e.target.value })}
-                    disabled={isEdit && editItemOcupado}
                     className={`w-full px-3 py-2.5 ${isDark ? 'bg-zinc-800/80 border-zinc-700/50 text-white' : 'bg-gray-50 border-gray-200 text-gray-900'} border rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-purple-500/30 focus:border-purple-500/40 transition-all disabled:opacity-50 disabled:cursor-not-allowed`}
                   >
                     <option value="">— Seleccionar —</option>
@@ -1027,7 +1052,6 @@ export function InventariosPage() {
                     type={f.type || 'text'}
                     value={formData[f.key] || ''}
                     onChange={e => setFormData({ ...formData, [f.key]: e.target.value })}
-                    disabled={isEdit && editItemOcupado}
                     step={f.type === 'number' ? 'any' : undefined}
                     className={`w-full px-3 py-2.5 ${isDark ? 'bg-zinc-800/80 border-zinc-700/50 text-white placeholder:text-zinc-600' : 'bg-gray-50 border-gray-200 text-gray-900 placeholder:text-gray-400'} border rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-purple-500/30 focus:border-purple-500/40 transition-all disabled:opacity-50 disabled:cursor-not-allowed`}
                   />
@@ -1042,16 +1066,14 @@ export function InventariosPage() {
             className={`px-4 py-2.5 rounded-xl text-sm ${isDark ? 'text-zinc-400 hover:text-white border-zinc-700/50 hover:bg-zinc-800' : 'text-gray-500 hover:text-gray-900 border-gray-200 hover:bg-gray-100'} border transition-all`}>
             Cancelar
           </button>
-          {!(isEdit && editItemOcupado) && (
-            <button
-              onClick={() => handleSave(isEdit)}
-              disabled={saving}
-              className="px-5 py-2.5 bg-purple-600 hover:bg-purple-700 disabled:opacity-50 text-white rounded-xl text-sm font-medium transition-all flex items-center gap-2 shadow-lg shadow-purple-500/20"
-            >
-              {saving && <Loader2 className="h-4 w-4 animate-spin" />}
-              {isEdit ? 'Guardar Cambios' : 'Crear Inventario'}
-            </button>
-          )}
+          <button
+            onClick={() => handleSave(isEdit)}
+            disabled={saving}
+            className="px-5 py-2.5 bg-purple-600 hover:bg-purple-700 disabled:opacity-50 text-white rounded-xl text-sm font-medium transition-all flex items-center gap-2 shadow-lg shadow-purple-500/20"
+          >
+            {saving && <Loader2 className="h-4 w-4 animate-spin" />}
+            {isEdit ? 'Guardar Cambios' : 'Crear Inventario'}
+          </button>
         </div>
       </div>
     </div>
@@ -1270,13 +1292,13 @@ export function InventariosPage() {
                     </button>
                     {isDev && (
                       <button
-                        onClick={() => { setAnalisisMenuOpen(false); setIsAuditoriaOpen(true); }}
+                        onClick={() => { setAnalisisMenuOpen(false); setAuditoriaAutoIniciar(false); setIsAuditoriaOpen(true); }}
                         className={`w-full flex items-start gap-2.5 px-3 py-2.5 text-left text-sm transition-colors border-t ${isDark ? 'text-amber-300 hover:bg-amber-500/10 border-zinc-800' : 'text-amber-700 hover:bg-amber-50 border-gray-100'}`}
                       >
                         <AlertTriangle className="h-4 w-4 mt-0.5 shrink-0" />
                         <div className="flex-1 min-w-0">
                           <div className="font-medium">Auditoría de conflictos <span className={`ml-1 text-[10px] font-semibold ${isDark ? 'text-amber-500/80' : 'text-amber-600'}`}>DEV</span></div>
-                          <div className={`text-[11px] ${isDark ? 'text-zinc-500' : 'text-gray-500'}`}>Tradicionales con 2+ reservas, en todo el inventario</div>
+                          <div className={`text-[11px] ${isDark ? 'text-zinc-500' : 'text-gray-500'}`}>Tradicionales con 2+ ventas firmes, en todo el inventario</div>
                         </div>
                       </button>
                     )}
@@ -1395,13 +1417,15 @@ export function InventariosPage() {
             {showFilters && (
               <div className={`flex flex-wrap items-center gap-2 pt-3 border-t ${isDark ? 'border-zinc-800/50' : 'border-gray-200'} relative z-50`}>
                 <FilterChip label="Tipo" options={tipos || []} value={tipo} onChange={v => { setTipo(v); setPage(1); }} onClear={() => { setTipo(''); setPage(1); }} />
+                <FilterChip label="Trad / Digital" options={['Tradicional', 'Digital']} value={tradicional} onChange={v => { setTradicional(v); setPage(1); }} onClear={() => { setTradicional(''); setPage(1); }} />
+                <FilterChip label="Mi Macro" options={['Excluir Mi Macro', 'Solo Mi Macro']} value={micromacro} onChange={v => { setMicromacro(v); setPage(1); }} onClear={() => { setMicromacro(''); setPage(1); }} />
                 <FilterChip label="Plaza" options={plazas || []} value={plaza} onChange={v => { setPlaza(v); setPage(1); }} onClear={() => { setPlaza(''); setPage(1); }} />
                 <FilterChip label="CTO" options={ctos || []} value={cto} onChange={v => { setCto(v); setPage(1); }} onClear={() => { setCto(''); setPage(1); }} />
                 <FilterChip label="Estatus" options={estatusList || []} value={estatus} onChange={v => { setEstatus(v); setPage(1); }} onClear={() => { setEstatus(''); setPage(1); }} />
 
                 {hasActiveFilters && (
                   <button
-                    onClick={() => { setSearchTags([]); setSearchInput(''); setTipo(''); setPlaza(''); setCto(''); setEstatus(''); setPage(1); }}
+                    onClick={() => { setSearchTags([]); setSearchInput(''); setTipo(''); setPlaza(''); setCto(''); setEstatus(''); setTradicional(''); setMicromacro(''); setPage(1); }}
                     className={`flex items-center gap-1 px-2 py-1 rounded-full text-xs ${isDark ? 'bg-red-500/10 text-red-400 border-red-500/30 hover:bg-red-500/20' : 'bg-red-50 text-red-600 border-red-200 hover:bg-red-100'} border transition-all`}
                   >
                     <X className="h-3 w-3" /> Limpiar todo
@@ -2494,8 +2518,9 @@ export function InventariosPage() {
       {isDev && (
         <AuditoriaConflictosModal
           open={isAuditoriaOpen}
-          onClose={() => setIsAuditoriaOpen(false)}
+          onClose={() => { setIsAuditoriaOpen(false); setAuditoriaAutoIniciar(false); }}
           onOpenEnMatriz={openAnalisisDesdeAuditoria}
+          autoIniciar={auditoriaAutoIniciar}
         />
       )}
 

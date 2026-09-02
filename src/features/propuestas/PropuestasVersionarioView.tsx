@@ -22,6 +22,12 @@ interface PropuestasVersionarioViewProps {
     catorcenaFin?: number;
     tipoPeriodo?: string;
     excludeRechazadas?: boolean;
+    // Filtro por historial (HistorialFilterPopover). Viaja tal cual al back,
+    // que aplica el EXISTS sobre la tabla `historial`.
+    modo?: 'creacion' | 'cambio_estatus';
+    fechaDesde?: string;
+    fechaHasta?: string;
+    estatusValor?: string;
   };
   advancedFilters?: AdvancedFilter[];
   activeGroupings: GroupByField[];
@@ -53,6 +59,7 @@ interface PropuestaInfo {
   status: string;
   descripcion: string;
   inversion: number;
+  asignado?: string | null;
   anunciante: string;
   cuic: string;
   vendedor: string;
@@ -332,6 +339,20 @@ export default function PropuestasVersionarioView({ isDark, filters, advancedFil
   // reventar el back con 270k reservas.
   const hasCatFilter = !!(filters.yearInicio && filters.yearFin && filters.catorcenaInicio && filters.catorcenaFin);
 
+  // Los filtros avanzados se evaluan cliente-side sobre `propuestasInfo`, que
+  // NO trae formatos en modo lite (sin filtro de catorcena el back no manda
+  // caras). Si se evaluaran igual, el campo saldria undefined y la vista
+  // quedaria vacia; se omiten y se avisa en el header.
+  const formatosDisponibles = hasCatFilter;
+  const advancedFiltersOmitidos = useMemo(
+    () => (formatosDisponibles ? [] : advancedFilters.filter(f => f.field === 'formatos' && f.value.trim() !== '')),
+    [advancedFilters, formatosDisponibles],
+  );
+  const effectiveAdvancedFilters = useMemo(
+    () => (formatosDisponibles ? advancedFilters : advancedFilters.filter(f => f.field !== 'formatos')),
+    [advancedFilters, formatosDisponibles],
+  );
+
   const { data, isLoading, isFetching, error, refetch } = useQuery({
     queryKey: ['propuestas-versionario', filters],
     queryFn: () => propuestasService.getVersionarioData({ ...filters, page: 1, limit, lite: !hasCatFilter }),
@@ -377,8 +398,28 @@ export default function PropuestasVersionarioView({ isDark, filters, advancedFil
       invByKey.get(k)!.push(inv);
     }
 
+    // Formatos por propuesta (solo hay caras cuando el back manda full data).
+    const formatosByProp = new Map<number, Set<string>>();
+    for (const c of carasInfo) {
+      if (!c.formato) continue;
+      let set = formatosByProp.get(c.propuesta_id);
+      if (!set) { set = new Set(); formatosByProp.set(c.propuesta_id, set); }
+      set.add(c.formato);
+    }
+
+    // Los campos del filtro avanzado usan los nombres de la TABLA (id,
+    // cliente_nombre, formatos) y aqui el back devuelve otros (propuesta_id,
+    // anunciante). Sin este alias esos filtros vaciaban el desglose en vez de
+    // acotarlo.
+    const advSubject = (info: PropuestaInfo): Record<string, unknown> => ({
+      ...(info as unknown as Record<string, unknown>),
+      id: info.propuesta_id,
+      cliente_nombre: info.anunciante,
+      formatos: Array.from(formatosByProp.get(info.propuesta_id) || []).join(', '),
+    });
+
     const isAllowed = (info: PropuestaInfo) =>
-      advancedFilters.length === 0 || matchesAdvancedFilters(info as unknown as Record<string, unknown>, advancedFilters);
+      effectiveAdvancedFilters.length === 0 || matchesAdvancedFilters(advSubject(info), effectiveAdvancedFilters);
 
     const hasRangeFilter = !!(filters.yearInicio && filters.yearFin && filters.catorcenaInicio && filters.catorcenaFin);
 
@@ -614,7 +655,7 @@ export default function PropuestasVersionarioView({ isDark, filters, advancedFil
     }
 
     return buildTree(filteredRows, effectiveGroupings, '', null);
-  }, [data, filters.yearInicio, filters.yearFin, filters.catorcenaInicio, filters.catorcenaFin, advancedFilters, effectiveGroupings, propuestaDetails]);
+  }, [data, filters.yearInicio, filters.yearFin, filters.catorcenaInicio, filters.catorcenaFin, effectiveAdvancedFilters, effectiveGroupings, propuestaDetails]);
 
   // Al expandir un nodo de nivel "propuesta", lazy-load su detalle (caras+inv)
   // si todavía no se ha cargado. Igual que la UX de versionario de campañas.
@@ -958,6 +999,10 @@ export default function PropuestasVersionarioView({ isDark, filters, advancedFil
     );
   };
 
+  // El back capea a `limit` propuestas por request. Si el filtro deja más que
+  // eso, el desglose está mostrando un subconjunto silencioso — se avisa.
+  const truncado = !!data && data.total > (data.propuestasInfo?.length || 0);
+
   // Suppress unused var warnings (kept for potential future use)
   void expandedCircuitInventories;
   void toggleCircuitInventory;
@@ -974,6 +1019,16 @@ export default function PropuestasVersionarioView({ isDark, filters, advancedFil
             <div>
               <h3 className={`text-sm font-semibold ${isDark ? 'text-white' : 'text-gray-900'}`}>Versionario de Propuestas</h3>
               <p className={`text-xs ${isDark ? 'text-zinc-500' : 'text-gray-400'}`}>Propuestas desglosadas — agrupado por {effectiveGroupings.map(f => AVAILABLE_GROUPINGS.find(g => g.field === f)?.label).filter(Boolean).join(' › ')}</p>
+              {truncado && (
+                <p className={`text-[11px] mt-1 ${isDark ? 'text-amber-400' : 'text-amber-600'}`}>
+                  
+                </p>
+              )}
+              {advancedFiltersOmitidos.length > 0 && (
+                <p className={`text-[11px] mt-1 ${isDark ? 'text-amber-400' : 'text-amber-600'}`}>
+                  El filtro avanzado por Formato no aplica en Desglose sin un filtro de Periodo — selecciona un rango de catorcenas para usarlo.
+                </p>
+              )}
             </div>
           </div>
           <div className="flex items-center gap-3">

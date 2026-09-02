@@ -20,7 +20,7 @@ import { parseCircuitoDigital } from '../../lib/circuitos';
 import { circuitosService } from '../../services/circuitos.service';
 import { useEnvironmentStore, getEndpoints } from '../../store/environmentStore';
 import { useAuthStore } from '../../store/authStore';
-import { usePermissions } from '../../lib/permissions';
+import { usePermissions, esAsesorComercial } from '../../lib/permissions';
 import { filterAllowedArticulos } from '../../config/allowedDigitalArticles';
 import { useSocketEquipos, useSocketCampana, useSocketInventarioRealtime, type InventarioRealtimePayload } from '../../hooks/useSocket';
 import { useThemeStore } from '../../store/themeStore';
@@ -92,6 +92,8 @@ interface CaraItem {
   anio_fin?: number;
   autorizacion_dg?: string;
   autorizacion_dcm?: string;
+  // Cara con una tarea de eliminación abierta (Filtro GC o DG) → badge "Pend. DG (elim.)".
+  pendiente_eliminacion?: boolean;
   _originalDg?: string;
   _originalDcm?: string;
   // Baseline INMUTABLE de BD (DG/DCM aprobados al cargar) para conservar aprobación.
@@ -792,6 +794,10 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
   // Tráfico NO puede editar tarifa ni cantidad de caras de circuitos (aunque sí otros campos).
   const canEditTarifaCaras = canEditResumen && permissions.canEditTarifaCaras;
   const canEditCliente = permissions.canEditClienteEnFormularios;
+  // Bloqueo Edición Asesores — Estatus Ajuste CTO: los asesores comerciales no pueden
+  // editar circuitos existentes mientras la campaña esté en "Ajuste CTO Cliente".
+  const bloqueoCircuitoAjusteCto = esAsesorComercial(user?.rol) && campana?.status === 'Ajuste CTO Cliente';
+  const puedeEditarCircuito = permissions.canEditCircuitoExistente && !bloqueoCircuitoAjusteCto;
 
   // Client editing state
   interface CuicItem {
@@ -985,6 +991,11 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
   });
 
   // Toast notification state
+  // Piezas que NO se reservaron (descartadas por el backend o truncadas aquí
+  // mismo por los límites de la cara), con su motivo. Antes solo había un
+  // contador en el toast: el usuario no sabía CUÁLES fallaron y re-reservaba
+  // a ciegas.
+  const [omitidosReserva, setOmitidosReserva] = useState<{ codigo: string; motivo: string }[] | null>(null);
   const [toast, setToast] = useState<{ show: boolean; message: string; type: 'success' | 'error' | 'info' }>({
     show: false,
     message: '',
@@ -1019,6 +1030,10 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
   // disparan autorización DG/DCM en la campaña). Feedback Jos 2026-07-08.
   const [showNotaDireccionModal, setShowNotaDireccionModal] = useState(false);
   const [pendingAuthTipo, setPendingAuthTipo] = useState<'dg' | 'dcm' | 'ambas' | null>(null);
+  // Nota de Dirección para ELIMINACIÓN: al solicitar la baja de circuitos se captura
+  // la nota (obligatoria, igual que el flujo normal de autorización) antes de mandar
+  // la eliminación a DG. Guarda las cara-ids a eliminar mientras se escribe la nota.
+  const [deleteNota, setDeleteNota] = useState<{ open: boolean; caraIds: number[] }>({ open: false, caraIds: [] });
 
   // Real-time: cuando OTRO usuario reserva un espacio cuyo período se solapa
   // con la cara que estoy buscando, lo quito de mi listado en vivo.
@@ -1207,7 +1222,9 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
         const matchingCara = caras.find(c => c.id === r.solicitud_cara_id);
         // Mensual = todo cuenta como Flujo (regla Gran Formato), aunque el inventario
         // físico sea Contraflujo (caso de circuitos digitales).
-        const tipo = r.estatus === 'Bonificado'
+        // Bonificación firme de campaña llega como 'Vendido bonificado' (antes 'Bonificado');
+        // ambas deben clasificarse como Bonificacion para que las barras KPI cuenten.
+        const tipo = (r.estatus === 'Bonificado' || r.estatus === 'Vendido bonificado')
           ? 'Bonificacion'
           : (tipoPeriodo === 'mensual' ? 'Flujo' : (String(r.tipo_de_cara).startsWith('Flujo') ? 'Flujo' : 'Contraflujo'));
 
@@ -1497,6 +1514,7 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
           anio_inicio: anioInicioCara,
           autorizacion_dg: cara.autorizacion_dg || 'aprobado',
           autorizacion_dcm: cara.autorizacion_dcm || 'aprobado',
+          pendiente_eliminacion: (cara as any).pendiente_eliminacion === true,
           _originalDg: cara.autorizacion_dg || 'aprobado',
           _originalDcm: cara.autorizacion_dcm || 'aprobado',
           // Baseline INMUTABLE para conservar aprobación (no drifta al reeditar).
@@ -2410,11 +2428,19 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
         c.localId !== caraToDelete.localId &&
         c.inicio_periodo === caraToDelete.inicio_periodo
       );
-      // Block the delete if any paired cara has reservas
-      for (const p of pair) {
-        if (caraHasReservas(p.localId, p.id)) {
-          alert('No puedes eliminar esta cara: su cara pareja (RT/BF) tiene reservas. Primero elimina las reservas.');
-          return;
+      // Ajuste feedback 2026-08-31: el bloqueo por reservas en la pareja
+      // RT/BF debe respetar el permiso canDeleteCaraConReservas — igual que
+      // el guard de la propia cara arriba. Antes era incondicional y
+      // volvia a romper la funcionalidad que se habia arreglado el 15 ago
+      // (memoria qeb-bote-circuitos-con-reservas). Regresion introducida
+      // en el commit 52f0ebe (RT/BF grouping, 17 abr) que no propago el
+      // guard de permiso a la pareja.
+      if (!permissions.canDeleteCaraConReservas) {
+        for (const p of pair) {
+          if (caraHasReservas(p.localId, p.id)) {
+            alert('No puedes eliminar esta cara: su cara pareja (RT/BF) tiene reservas. Primero elimina las reservas.');
+            return;
+          }
         }
       }
       pairedCaras.push(...pair);
@@ -2431,29 +2457,26 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
       tienePareja: isPair,
       isDeleting: false,
       onConfirm: async () => {
-        setDeleteCircuitoModal(prev => ({ ...prev, isDeleting: true }));
         const toDelete = [caraToDelete, ...pairedCaras].filter(Boolean) as CaraItem[];
-        for (const c of toDelete) {
-          if (c.id) {
-            try {
-              await campanasService.deleteCara(campana!.id, c.id);
-            } catch (error) {
-              console.error('Error deleting cara:', error);
-              alert('Error al eliminar el formato de la base de datos');
-              setDeleteCircuitoModal(prev => ({ ...prev, isOpen: false, isDeleting: false }));
-              return;
-            }
-          }
+        const conId = toDelete.filter(c => c.id) as (CaraItem & { id: number })[];
+        const sinId = toDelete.filter(c => !c.id);
+
+        // Caras locales aún no guardadas (sin id): se quitan directo, no están en BD.
+        if (sinId.length > 0) {
+          const localIds = new Set(sinId.map(c => c.localId));
+          setCaras(prev => prev.filter(c => !localIds.has(c.localId)));
+          setReservas(prev => prev.filter(r => !sinId.some(c => r.id.startsWith(c.localId))));
         }
-        const deletedLocalIds = new Set(toDelete.map(c => c.localId));
-        setCaras(prev => prev.filter(c => !deletedLocalIds.has(c.localId)));
-        setReservas(prev => prev.filter(r => !toDelete.some(c => r.id.startsWith(c.localId))));
-        setModifiedCaras(prev => {
-          const next = new Map(prev);
-          for (const c of toDelete) if (c.id) next.delete(c.id);
-          return next;
-        });
+
         setDeleteCircuitoModal(prev => ({ ...prev, isOpen: false, isDeleting: false }));
+
+        if (conId.length > 0) {
+          // Eliminar en campaña requiere autorización (Gerente → DG) con MOTIVO de
+          // eliminación obligatorio. Se abre el modal de motivo y, al confirmarlo, se
+          // manda 1 sola solicitud (con la pareja RT/BF incluida). El motivo viaja en
+          // la tarea (lo ve el Gerente y DG).
+          setDeleteNota({ open: true, caraIds: conId.map(c => c.id) });
+        }
       }
     });
   };
@@ -2469,11 +2492,12 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
     return caraReservas.some(r => r.aps && r.aps > 0);
   };
 
-  // Una cara es seleccionable si se puede eliminar: sin autorizaciones pendientes
-  // guardadas, sin APS asignado, y sin reservas (salvo permiso). El inventario
-  // (reservas) sí se libera al borrar. Mismo criterio que el bote individual.
+  // Una cara es seleccionable si se puede eliminar: sin APS asignado y sin
+  // reservas (salvo permiso). El inventario (reservas) sí se libera al borrar.
+  // Feedback 2026-08-13: no se bloquea por autorizacion pendiente guardada —
+  // eliminar no invalida aprobaciones (las quita), mismo criterio que el bote
+  // individual.
   const isCaraSelectable = (cara: CaraItem) => {
-    if (hasSavedPendingAuth) return false;
     if (isCaraAPSBlocked(cara)) return false;
     const tieneReservas = caraHasReservas(cara.localId, cara.id);
     if (tieneReservas && !permissions.canDeleteCaraConReservas) return false;
@@ -2546,38 +2570,23 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
       isDeleting: false,
       count: circuitCount,
       onConfirm: async () => {
-        setDeleteCircuitoModal(prev => ({ ...prev, isDeleting: true }));
+        const conId = carasToDelete.filter(c => c.id) as (CaraItem & { id: number })[];
+        const sinId = carasToDelete.filter(c => !c.id);
 
-        // Eliminar primero las persistidas en BD; si una falla, detener y limpiar solo lo borrado
-        const removedLocalIds = new Set<string>();
-        const removedDbIds = new Set<number>();
-        let failed: CaraItem | null = null;
-        for (const cara of carasToDelete) {
-          if (cara.id) {
-            try {
-              await campanasService.deleteCara(campana!.id, cara.id);
-              removedDbIds.add(cara.id);
-            } catch (error) {
-              console.error('Error deleting cara (bulk):', error);
-              failed = cara;
-              break;
-            }
-          }
-          removedLocalIds.add(cara.localId);
+        // Caras locales sin guardar (sin id): se quitan directo, no están en BD.
+        if (sinId.length > 0) {
+          const localIds = new Set(sinId.map(c => c.localId));
+          setCaras(prev => prev.filter(c => !localIds.has(c.localId)));
+          setReservas(prev => prev.filter(r => ![...localIds].some(id => r.id.startsWith(id))));
         }
 
-        setCaras(prev => prev.filter(c => !removedLocalIds.has(c.localId)));
-        setReservas(prev => prev.filter(r => ![...removedLocalIds].some(id => r.id.startsWith(id))));
-        setModifiedCaras(prev => {
-          const next = new Map(prev);
-          for (const id of removedDbIds) next.delete(id);
-          return next;
-        });
         setSelectedCaraIds(new Set());
         setDeleteCircuitoModal(prev => ({ ...prev, isOpen: false, isDeleting: false }));
 
-        if (failed) {
-          alert(`No se pudo eliminar "${failed.articulo || failed.localId}". Se eliminaron ${removedLocalIds.size} de ${carasToDelete.length} circuitos.`);
+        if (conId.length > 0) {
+          // Igual que el bote individual: se captura el MOTIVO de eliminación
+          // (obligatorio) y al confirmarlo se manda UNA sola solicitud con toda la selección.
+          setDeleteNota({ open: true, caraIds: conId.map(c => c.id) });
         }
       },
     });
@@ -2972,9 +2981,10 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
             };
           }
         } else if (!wantsPair && existingBfPair?.id) {
-          // User removed BF pairing: delete BF row from DB
+          // User removed BF pairing: delete BF row from DB. Es parte de una edición
+          // (no un "eliminar circuito"), así que se borra al momento SIN autorización.
           try {
-            await campanasService.deleteCara(campana!.id, existingBfPair.id);
+            await campanasService.deleteCara(campana!.id, existingBfPair.id, false, undefined, true);
             deletedBfId = existingBfPair.id;
           } catch (error) {
             console.error('Error deleting BF pair:', error);
@@ -3341,11 +3351,15 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
     // cada save re-envía la autorización → pedir Nota Dirección. Feedback
     // Jos 2026-07-08/09 — la condicion se amplio para cubrir campañas con
     // circuitos ya 'pendiente' de antes.
+    // Ajuste 2026-08-31: se elimina `_originalDg === 'correccion'` — daba
+    // falso positivo cuando el usuario resolvia la correccion editando
+    // (bajaba tarifa/caras). El estado final ya venia en `autorizacion_dg`
+    // como 'aprobado' pero seguiamos pidiendo la nota.
     if (!skipNotaGate && campanaDetails?.solicitud_id) {
       const dgPending = caras.some(c =>
         c.autorizacion_dg === 'pendiente' ||
-        (c as any)._originalDg === 'pendiente' ||
-        (c as any)._originalDg === 'correccion'
+        c.autorizacion_dg === 'correccion' ||
+        (c as any)._originalDg === 'pendiente'
       );
       const dcmPending = caras.some(c => c.autorizacion_dcm === 'pendiente' || (c as any)._originalDcm === 'pendiente');
       if (dgPending || dcmPending) {
@@ -3568,21 +3582,29 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
       groups[key].push(inv);
     });
 
-    // Merge pairs into single "completo" rows
+    // Emparejar por SENTIDO exacto: AB = Flujo+Contraflujo, CD = Flujo2+Contraflujo2.
+    // Un mueble de 4 caras produce DOS completos (AB y CD), no uno solo de 4.
+    // (Antes se usaba startsWith('Flujo'), que capturaba Flujo y Flujo2 juntos y
+    // solo formaba un par ignorando el segundo.)
+    const norm = (t: unknown) => String(t ?? '').trim().toLowerCase();
+    const PARES = [
+      { sufijo: 'AB', flujo: 'flujo', contra: 'contraflujo' },
+      { sufijo: 'CD', flujo: 'flujo2', contra: 'contraflujo2' },
+    ] as const;
     const result: (InventarioDisponible & { isCompleto?: boolean; flujoId?: number; contraflujoId?: number })[] = [];
     Object.entries(groups).forEach(([key, group]) => {
-      if (group.length >= 2) {
-        const baseCode = key.split('|')[0];
-        const flujoItem = group.find(g => String(g.tipo_de_cara).startsWith('Flujo'));
-        const contraflujoItem = group.find(g => String(g.tipo_de_cara).startsWith('Contraflujo'));
-
+      if (group.length < 2) return;
+      const baseCode = key.split('|')[0];
+      for (const par of PARES) {
+        const flujoItem = group.find(g => norm(g.tipo_de_cara) === par.flujo);
+        const contraflujoItem = group.find(g => norm(g.tipo_de_cara) === par.contra);
         if (flujoItem && contraflujoItem) {
-          // Create merged "completo" item - use a virtual ID
+          // Merged "completo" item con ID virtual único por par.
           const virtualId = flujoItem.id * 100000 + contraflujoItem.id;
           result.push({
             ...flujoItem,
             id: virtualId,
-            codigo_unico: `${baseCode}_completo`,
+            codigo_unico: `${baseCode}_completo_${par.sufijo}`,
             tipo_de_cara: 'Completo' as any,
             isCompleto: true,
             flujoId: flujoItem.id,
@@ -4370,6 +4392,9 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
 
     const runReservation = async (shouldGroup: boolean) => {
       const newReservas: { inventario_id: number; espacio_id?: number; tipo: string; latitud: number; longitud: number }[] = [];
+      // Piezas seleccionadas que se descartan AQUÍ (exceden lo requerido de la
+      // cara): antes desaparecían del POST sin ningún aviso.
+      const noEnviados: { codigo: string; motivo: string }[] = [];
       let flujoCount = 0;
       let contraflujoCount = 0;
 
@@ -4408,8 +4433,14 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
               longitud: contraflujoOrig!.longitud || 0,
             });
             contraflujoCount++;
+          } else {
+            // Solo cabe un lado del par: se salta completo para mantener el
+            // emparejamiento, pero ahora se avisa en vez de descartar en silencio.
+            noEnviados.push({
+              codigo: String(flujoOrig?.codigo_unico || `#${inv.flujoId}`),
+              motivo: 'No enviado: el par Completo ya no cabe en lo requerido (Flujo/Contraflujo llenos)',
+            });
           }
-          // If only one has space, skip this completo item entirely to maintain pairing
         } else {
           // Regular item - reserve based on tipo_de_cara.
           // Mensual = todo cuenta como Flujo (regla Gran Formato).
@@ -4432,6 +4463,11 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
             });
             if (tipo === 'Flujo') flujoCount++;
             else contraflujoCount++;
+          } else {
+            noEnviados.push({
+              codigo: String(inv.codigo_unico || `#${inv.id}`),
+              motivo: tipo === 'Flujo' ? 'No enviado: Flujo ya está completo' : 'No enviado: Contraflujo ya está completo',
+            });
           }
         }
       });
@@ -4464,6 +4500,7 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
 
         let totalReservasCreadas = 0;
         let totalReservasOmitidas = 0;
+        const omitidosBackend: { codigo: string; motivo: string }[] = [];
         for (const cTarget of carasObjetivo) {
           const fIni = cTarget.inicio_periodo || fechaInicio;
           const fFin = cTarget.fin_periodo || fechaFin;
@@ -4477,6 +4514,9 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
           });
           totalReservasCreadas += result.reservasCreadas;
           totalReservasOmitidas += result.reservasOmitidas ?? 0;
+          for (const o of result.omitidos ?? []) {
+            omitidosBackend.push({ codigo: o.codigo_unico || `#${o.inventario_id}`, motivo: o.motivo });
+          }
         }
 
         queryClient.invalidateQueries({ queryKey: ['campana-reservas-modal', campana!.id] });
@@ -4486,15 +4526,16 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
         handleRefetchDisponibles();
 
         const sufijo = carasObjetivo.length > 1 ? ` en ${carasObjetivo.length} periodos` : '';
+        // El motivo real por pieza viene del backend; ya no se inventa un
+        // "porque ya estaban ocupados" generico (podia ser falso).
+        const detallesOmitidos = [...omitidosBackend, ...noEnviados];
+        if (detallesOmitidos.length > 0) setOmitidosReserva(detallesOmitidos);
         if (totalReservasOmitidas > 0 && totalReservasCreadas === 0) {
+          showToast(`No se reservó ningún espacio${sufijo}. Revisa el detalle de lo omitido`, 'error');
+        } else if (detallesOmitidos.length > 0) {
           showToast(
-            `No se reservó ningún espacio${sufijo}. ${totalReservasOmitidas} se omitieron porque ya estaban ocupados`,
-            'error'
-          );
-        } else if (totalReservasOmitidas > 0) {
-          showToast(
-            `Se reservaron ${totalReservasCreadas} espacios${sufijo}. ${totalReservasOmitidas} se omitieron porque ya estaban ocupados`,
-            'success'
+            `Se reservaron ${totalReservasCreadas} espacio(s)${sufijo}. ${detallesOmitidos.length} pieza(s) no se reservaron — revisa el detalle`,
+            'info'
           );
         } else {
           showToast(`Se guardaron ${totalReservasCreadas} reservas exitosamente${sufijo}`, 'success');
@@ -4632,6 +4673,7 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
 
         let totalReservasCreadas = 0;
         let totalReservasOmitidas = 0;
+        const omitidosBackend: { codigo: string; motivo: string }[] = [];
         for (const cTarget of carasObjetivo) {
           const fIni = cTarget.inicio_periodo || fechaInicio;
           const fFin = cTarget.fin_periodo || fechaFin;
@@ -4645,6 +4687,9 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
           });
           totalReservasCreadas += result.reservasCreadas;
           totalReservasOmitidas += result.reservasOmitidas ?? 0;
+          for (const o of result.omitidos ?? []) {
+            omitidosBackend.push({ codigo: o.codigo_unico || `#${o.inventario_id}`, motivo: o.motivo });
+          }
         }
 
         queryClient.invalidateQueries({ queryKey: ['campana-reservas-modal', campana!.id] });
@@ -4653,15 +4698,13 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
         handleRefetchDisponibles();
 
         const sufijo = carasObjetivo.length > 1 ? ` en ${carasObjetivo.length} periodos` : '';
+        if (omitidosBackend.length > 0) setOmitidosReserva([...omitidosBackend]);
         if (totalReservasOmitidas > 0 && totalReservasCreadas === 0) {
+          showToast(`No se aplicó ninguna bonificación${sufijo}. Revisa el detalle de lo omitido`, 'error');
+        } else if (omitidosBackend.length > 0) {
           showToast(
-            `No se aplicó ninguna bonificación${sufijo}. ${totalReservasOmitidas} se omitieron porque ya estaban ocupadas`,
-            'error'
-          );
-        } else if (totalReservasOmitidas > 0) {
-          showToast(
-            `Se aplicaron ${totalReservasCreadas} bonificaciones${sufijo}. ${totalReservasOmitidas} se omitieron porque ya estaban ocupadas`,
-            'success'
+            `Se aplicaron ${totalReservasCreadas} bonificación(es)${sufijo}. ${omitidosBackend.length} pieza(s) no se aplicaron — revisa el detalle`,
+            'info'
           );
         } else {
           showToast(`Se guardaron ${totalReservasCreadas} bonificaciones exitosamente${sufijo}`, 'success');
@@ -5309,6 +5352,53 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
   );
 
   // Toast notification JSX
+  // Aviso centrado con el detalle de piezas no reservadas. El toast se cierra
+  // solo y no alcanza para una lista: esto se queda hasta que el usuario lo
+  // lea. Sin esto, el usuario re-reservaba a ciegas lo que "desaparecia".
+  const omitidosReservaJSX = omitidosReserva && omitidosReserva.length > 0 && (
+    <div className="fixed inset-0 bg-black/70 z-[95] flex items-center justify-center p-4" onClick={() => setOmitidosReserva(null)}>
+      <div
+        className={`w-full max-w-lg rounded-2xl border shadow-2xl flex flex-col max-h-[80vh] ${isDark ? 'bg-zinc-900 border-amber-500/30' : 'bg-white border-amber-300'}`}
+        onClick={e => e.stopPropagation()}
+      >
+        <div className={`p-4 border-b flex items-start gap-3 ${isDark ? 'border-zinc-800' : 'border-gray-200'}`}>
+          <div className="flex-1 min-w-0">
+            <h3 className={`text-base font-semibold ${isDark ? 'text-amber-300' : 'text-amber-700'}`}>
+              {omitidosReserva.length} pieza{omitidosReserva.length === 1 ? '' : 's'} no reservada{omitidosReserva.length === 1 ? '' : 's'}
+            </h3>
+            <p className={`text-xs mt-1 ${isDark ? 'text-zinc-400' : 'text-gray-500'}`}>
+              Estas piezas NO quedaron reservadas. Si el motivo dice "ocupado", reintentarlas no va a funcionar: elige otras piezas.
+            </p>
+          </div>
+          <button onClick={() => setOmitidosReserva(null)} className={`p-1.5 rounded-lg shrink-0 ${isDark ? 'text-zinc-400 hover:bg-zinc-800' : 'text-gray-400 hover:bg-gray-100'}`}>
+            <X className="h-4 w-4" />
+          </button>
+        </div>
+        <div className="p-4 overflow-y-auto min-h-0">
+          <ul className="space-y-1.5 text-xs">
+            {omitidosReserva.map((o, i) => (
+              <li key={`${o.codigo}-${i}`} className="flex items-start gap-2">
+                <span className={`shrink-0 inline-block w-1.5 h-1.5 mt-1.5 rounded-full ${isDark ? 'bg-amber-400' : 'bg-amber-500'}`} />
+                <div className="flex-1 min-w-0">
+                  <span className={`font-mono font-medium ${isDark ? 'text-white' : 'text-gray-900'}`}>{o.codigo}</span>
+                  <span className={isDark ? 'text-zinc-400' : 'text-gray-600'}> — {o.motivo}</span>
+                </div>
+              </li>
+            ))}
+          </ul>
+        </div>
+        <div className={`p-3 border-t flex justify-end ${isDark ? 'border-zinc-800' : 'border-gray-200'}`}>
+          <button
+            onClick={() => setOmitidosReserva(null)}
+            className={`px-4 py-2 rounded-lg text-sm font-medium ${isDark ? 'bg-amber-500/20 text-amber-300 border border-amber-500/30 hover:bg-amber-500/30' : 'bg-amber-50 text-amber-700 border border-amber-200 hover:bg-amber-100'}`}
+          >
+            Entendido
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+
   const toastJSX = toast.show && (
     <div className={`fixed top-4 right-4 z-[70] animate-in slide-in-from-top fade-in duration-300 max-w-md`}>
       <div className={`flex items-center gap-3 px-4 py-3 rounded-lg shadow-lg border ${
@@ -5337,6 +5427,7 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
         {savingOverlayJSX}
         {confirmModalJSX}
         {toastJSX}
+      {omitidosReservaJSX}
         <div className="absolute inset-0 bg-black/70 backdrop-blur-sm" onClick={handleBackToMain} />
 
         <div className={`relative w-[97vw] max-w-[1800px] h-[92vh] ${isDark ? 'bg-zinc-900' : 'bg-white'} rounded-2xl border border-purple-500/20 shadow-2xl flex flex-col overflow-hidden`}>
@@ -6448,7 +6539,7 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
                                         className="checkbox-purple"
                                       />
                                     </td>
-                                    <td className="px-3 py-2 text-zinc-300 font-mono text-xs">{inv.codigo_unico}</td>
+                                    <td className="px-3 py-2 text-zinc-300 font-mono text-xs">{inv.codigo_unico}{(inv as any).reservas_tentativas_count > 0 && (<span title="Veces apartado (tentativo) por otras propuestas en el periodo" className="ml-1.5 inline-flex items-center px-1.5 py-0.5 rounded-full text-[10px] font-semibold bg-amber-500/20 text-amber-300">{(inv as any).reservas_tentativas_count}×</span>)}</td>
                                     {hasDigitalInventory && (
                                       <td className="px-3 py-2 text-zinc-400 text-xs">
                                         {inv.tradicional_digital === 'Digital' ? (
@@ -6504,7 +6595,7 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
                                     className="checkbox-purple"
                                   />
                                 </td>
-                                <td className="px-3 py-2 text-zinc-300 font-mono text-xs">{inv.codigo_unico}</td>
+                                <td className="px-3 py-2 text-zinc-300 font-mono text-xs">{inv.codigo_unico}{(inv as any).reservas_tentativas_count > 0 && (<span title="Veces apartado (tentativo) por otras propuestas en el periodo" className="ml-1.5 inline-flex items-center px-1.5 py-0.5 rounded-full text-[10px] font-semibold bg-amber-500/20 text-amber-300">{(inv as any).reservas_tentativas_count}×</span>)}</td>
                                 {hasDigitalInventory && (
                                   <td className="px-3 py-2 text-zinc-400 text-xs">
                                     {inv.tradicional_digital === 'Digital' ? (
@@ -8123,8 +8214,8 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
                             // físicos donde corre la pantalla rotando ambos formatos).
                             const formato = tipo === 'Digital'
                               ? (formatoBase && formatoBase !== 'PARABUS'
-                                  ? `${formatoBase}, PARABUS, MUPIS`
-                                  : 'PARABUS, MUPIS')
+                                  ? `${formatoBase}, PARABUS, MUPIS, COLUMNA`
+                                  : 'PARABUS, MUPIS, COLUMNA')
                               : formatoBase;
                             const isCortesia = item.ItemCode.toUpperCase().startsWith('CT');
                             const isIntercambio = item.ItemCode.toUpperCase().startsWith('IN');
@@ -8959,6 +9050,11 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
                                         {dcmDisplay === 'pendiente' && dgDisplay !== 'rechazado' && (
                                           <span className={`text-[10px] px-1.5 py-0.5 rounded ${isDark ? 'bg-amber-500/20 text-amber-300' : 'bg-amber-100 text-amber-700'}`}>Pend. DCM</span>
                                         )}
+                                        {/* Eliminación pendiente de autorización DG — la cara sigue viva hasta
+                                            que DG apruebe el borrado. Mismo estilo que el Pend. DG normal. */}
+                                        {cara.pendiente_eliminacion && (
+                                          <span className={`text-[10px] px-1.5 py-0.5 rounded ${isDark ? 'bg-red-500/20 text-red-300' : 'bg-red-100 text-red-700'}`} title="Eliminación pendiente de autorización de Dirección General">Pend. DG (elim.)</span>
+                                        )}
                                       </div>
                                         );
                                       })()}
@@ -9022,7 +9118,7 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
                                             <RefreshCw className="h-4 w-4" />
                                           </button>
                                         )}
-                                        {permissions.canEditCircuitoExistente && (
+                                        {puedeEditarCircuito && (
                                           <button
                                             onClick={(e) => { e.stopPropagation(); if (!editBlocked && !loadingCaraAction) handleEditCara(cara); }}
                                             disabled={editBlocked || !!loadingCaraAction}
@@ -9036,8 +9132,13 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
                                           </button>
                                         )}
                                         {canEditResumen && permissions.canEditCircuitoExistente && (() => {
+                                          // Feedback 2026-08-13: el bote siempre permite eliminar circuitos
+                                          // con reservas (libera inventario). Solo se bloquea si el circuito
+                                          // ya tiene APS asignado o si el rol no puede eliminar caras con
+                                          // reservas. NO bloqueamos por autorizacion pendiente guardada —
+                                          // eliminar no invalida aprobaciones (las quita).
                                           const reservaBlocked = hasReservas && !permissions.canDeleteCaraConReservas;
-                                          const isDisabled = reservaBlocked || hasSavedPendingAuth || caraAPSBlocked || !!loadingCaraAction;
+                                          const isDisabled = reservaBlocked || caraAPSBlocked || !!loadingCaraAction;
                                           return (
                                           <button
                                             onClick={(e) => { e.stopPropagation(); if (!isDisabled) handleDeleteCara(cara.localId); }}
@@ -9046,7 +9147,7 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
                                               ? 'bg-zinc-500/10 text-zinc-500 border-zinc-500/20 cursor-not-allowed'
                                               : 'bg-red-500/10 text-red-400 border-red-500/20 hover:bg-red-500/20'
                                               }`}
-                                            title={caraAPSBlocked ? 'Grupo con APS asignado - no se puede eliminar' : hasSavedPendingAuth ? 'Hay circuitos pendientes de autorizacion - no se pueden eliminar otros' : reservaBlocked ? 'No se puede eliminar (tiene reservas)' : 'Eliminar'}
+                                            title={caraAPSBlocked ? 'Grupo con APS asignado - no se puede eliminar' : reservaBlocked ? 'No se puede eliminar (tiene reservas)' : 'Eliminar'}
                                           >
                                             <Trash2 className="h-4 w-4" />
                                           </button>
@@ -9740,10 +9841,13 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
                   onClick={() => {
                     // Flujo nuevo (feedback Jos 2026-07-15): nota primero,
                     // confirmar cambios después.
+                    // Ajuste 2026-08-31: mismo cambio que el gate de más arriba
+                    // — se elimina _originalDg==='correccion' que daba falso
+                    // positivo tras resolver la correccion.
                     const dgPending = caras.some(c =>
                       c.autorizacion_dg === 'pendiente' ||
-                      (c as any)._originalDg === 'pendiente' ||
-                      (c as any)._originalDg === 'correccion'
+                      c.autorizacion_dg === 'correccion' ||
+                      (c as any)._originalDg === 'pendiente'
                     );
                     const dcmPending = caras.some(c => c.autorizacion_dcm === 'pendiente' || (c as any)._originalDcm === 'pendiente');
                     if (dgPending || dcmPending) {
@@ -9818,6 +9922,35 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
           setShowSaveConfirm(true);
         }}
       />
+      {/* Nota de ELIMINACIÓN (distintivo rojo/papelera) — obligatoria: por qué se
+          borra. El motivo viaja en la TAREA de autorización, así lo ve el Gerente
+          (filtro) y DG (no es la nota general de Dirección). 1 sola solicitud con
+          pareja/selección incluida. */}
+      <NuevaNotaDireccionModal
+        isOpen={deleteNota.open}
+        variant="eliminacion"
+        contexto="campana"
+        referenciaLabel={campana?.id ? `#${campana.id}` : undefined}
+        tipoAutorizacion="dg"
+        onCancel={() => setDeleteNota({ open: false, caraIds: [] })}
+        onConfirm={async (texto) => {
+          const ids = deleteNota.caraIds;
+          if (ids.length === 0) { setDeleteNota({ open: false, caraIds: [] }); return; }
+          try {
+            const [primero, ...resto] = ids;
+            // El motivo (texto) viaja en la solicitud de eliminación → descripción de la tarea.
+            const resp = await campanasService.deleteCara(campana!.id, primero, false, resto, false, texto);
+            setDeleteNota({ open: false, caraIds: [] });
+            // Optimista: marcar las caras como pendientes de eliminación → badge "Pend. DG (elim.)".
+            setCaras(prev => prev.map(c => (c.id && ids.includes(c.id)) ? { ...c, pendiente_eliminacion: true } : c));
+            alert(resp?.message || 'Solicitud de eliminación enviada a autorización.');
+          } catch (error) {
+            console.error('Error solicitando eliminación:', error);
+            alert(error instanceof Error ? error.message : 'Error al solicitar la eliminación');
+            setDeleteNota({ open: false, caraIds: [] });
+          }
+        }}
+      />
       {/* Delete Circuito Confirm Modal — confirmación al usar bote de basura */}
       <DeleteCircuitoConfirmModal
         isOpen={deleteCircuitoModal.isOpen}
@@ -9833,6 +9966,7 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
       />
       {/* Toast Notification */}
       {toastJSX}
+      {omitidosReservaJSX}
 
       {/* Loading Overlay */}
       {isSaving && (

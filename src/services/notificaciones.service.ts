@@ -10,6 +10,14 @@ export interface NotificacionesParams {
   search?: string;
   orderBy?: string;
   orderDir?: 'asc' | 'desc';
+  /**
+   * Pestaña de /notificaciones. El back aplica el MISMO criterio de destinatario
+   * que el badge de la campanita, de modo que el `total` que regresa es el conteo
+   * real y no depende de cuántas filas alcance a bajar el `limit`.
+   */
+  vista?: 'notificaciones' | 'tareas';
+  /** Filtro rápido resuelto en servidor: 'pendientes' | 'finalizadas' | 'no_leidas' | 'leidas' */
+  quick?: string;
 }
 
 export interface CreateTareaParams {
@@ -193,6 +201,24 @@ export const notificacionesService = {
     }
   },
 
+  // Autorización de ELIMINACIÓN de circuitos (por tareaId, solo campañas).
+  // Aprobar: si es Filtro → pasa a DG; si es DG → ejecuta el borrado real.
+  // Rechazar: no borra, guarda el motivo.
+  async aprobarEliminacion(tareaId: number, comentario?: string): Promise<{ accion: string; eliminadas?: number }> {
+    const response = await api.post<ApiResponse<{ accion: string; eliminadas?: number }>>(`/notificaciones/autorizacion/eliminacion/${tareaId}/aprobar`, { comentario });
+    if (!response.data.success) {
+      throw new Error(response.data.error || 'Error al aprobar eliminación');
+    }
+    return response.data.data || { accion: 'ok' };
+  },
+
+  async rechazarEliminacion(tareaId: number, motivo: string): Promise<void> {
+    const response = await api.post<ApiResponse<null>>(`/notificaciones/autorizacion/eliminacion/${tareaId}/rechazar`, { motivo });
+    if (!response.data.success) {
+      throw new Error(response.data.error || 'Error al rechazar eliminación');
+    }
+  },
+
   async getHistorialAutorizacion(idquote: string): Promise<HistorialAutorizacion[]> {
     const response = await api.get<ApiResponse<HistorialAutorizacion[]>>(`/notificaciones/autorizacion/${idquote}/historial`);
     if (!response.data.success || !response.data.data) {
@@ -311,7 +337,7 @@ export const notificacionesService = {
 
 // ==================== TIPOS ACTIVIDAD COMERCIAL ====================
 
-export type ActividadSubtipo = 'Campaña' | 'Propuesta';
+export type ActividadSubtipo = 'Campaña' | 'Propuesta' | 'Lead';
 
 export interface ActividadRefCampana {
   id: number;
@@ -350,6 +376,12 @@ export interface CrearActividadComercialInput {
   fecha_fin?: string;
   activar_recordatorio?: boolean;
   recordar_dias_antes?: number;
+  // Ajuste feedback 2026-08-15: campos manuales que clasifican la actividad.
+  // Todos opcionales para no romper el submit sin ellos.
+  anio?: number;                        // Año
+  catorcena?: number;                   // Periodo (1..26)
+  estatus_actividad?: 'Abierto' | 'Cerrado';
+  base?: 'CIMU' | 'TRADE';              // Base SAP
 }
 
 export interface ActividadComercialCreated {

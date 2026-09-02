@@ -1,11 +1,15 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect, useRef, useCallback } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import {
-  X, AlertTriangle, Loader2, Calendar, Search, Download, BarChart3, CheckCircle2,
+  X, AlertTriangle, Loader2, Calendar, Search, Download, BarChart3, CheckCircle2, Trash2, ExternalLink, History,
 } from 'lucide-react';
 import { useThemeStore } from '../../store/themeStore';
 import { solicitudesService } from '../../services/solicitudes.service';
-import { inventariosService, ConflictoOcupacionRow } from '../../services/inventarios.service';
+import {
+  inventariosService,
+  ConflictoOcupacionRow,
+  LimpiezaDuplicadosResult,
+} from '../../services/inventarios.service';
 import { CatorcenaRef, InventarioResumen } from '../../services/analisisOcupacion.service';
 
 interface Props {
@@ -13,6 +17,30 @@ interface Props {
   onClose: () => void;
   /** Abre el análisis de ocupación precargado con los sitios en conflicto. */
   onOpenEnMatriz: (inventarios: InventarioResumen[]) => void;
+  /**
+   * Al abrir, preselecciona las catorcenas vigentes y corre la auditoría sola.
+   * Lo usa el enlace directo desde la notificación del monitor: son las mismas
+   * catorcenas que barre el cron, así que el usuario aterriza viendo justo lo
+   * que le avisaron, sin volver a elegir periodos.
+   */
+  autoIniciar?: boolean;
+}
+
+/** Catorcenas vigentes: la actual y las siguientes.
+ *  La tabla `catorcenas` va corrida un día respecto a la operación real, así que
+ *  la vigente es la que contiene MAÑANA, no hoy. */
+function calcularVigentes(
+  filas: { numero_catorcena: number; a_o: number; fecha_fin: string }[],
+  cantidad = 8
+): CatorcenaRef[] {
+  const manana = new Date();
+  manana.setHours(0, 0, 0, 0);
+  manana.setDate(manana.getDate() + 1);
+  return filas
+    .filter(c => new Date(c.fecha_fin) >= manana)
+    .sort((a, b) => a.a_o - b.a_o || a.numero_catorcena - b.numero_catorcena)
+    .slice(0, cantidad)
+    .map(c => ({ numero: c.numero_catorcena, anio: c.a_o }));
 }
 
 /**
@@ -24,8 +52,10 @@ interface Props {
  * (`/inventarios/conflictos`), sin construir matriz ni pedir una lista de
  * inventarios.
  */
-export function AuditoriaConflictosModal({ open, onClose, onOpenEnMatriz }: Props) {
+export function AuditoriaConflictosModal({ open, onClose, onOpenEnMatriz, autoIniciar = false }: Props) {
   const isDark = useThemeStore(s => s.theme) === 'dark';
+  // Evita que el arranque automático se repita si el componente re-renderiza.
+  const autoIniciado = useRef(false);
 
   const [yearSelected, setYearSelected] = useState<number>(new Date().getFullYear());
   const [catorcenasSelected, setCatorcenasSelected] = useState<CatorcenaRef[]>([]);
@@ -34,15 +64,44 @@ export function AuditoriaConflictosModal({ open, onClose, onOpenEnMatriz }: Prop
   const [error, setError] = useState<string | null>(null);
   const [busqueda, setBusqueda] = useState('');
   const [exportando, setExportando] = useState(false);
+  // Celdas que el diálogo de confirmación va a limpiar: una sola (botón de la
+  // fila, para probar caso por caso) o todos los duplicados visibles (botón
+  // masivo). null = diálogo cerrado.
+  const [objetivoLimpieza, setObjetivoLimpieza] = useState<ConflictoOcupacionRow[] | null>(null);
+  const [limpiando, setLimpiando] = useState(false);
+  const [resultadoLimpieza, setResultadoLimpieza] = useState<LimpiezaDuplicadosResult | null>(null);
   // "choque" = 2+ campañas distintas peleando la cara (problema de venta).
   // "duplicado" = una sola campaña con varias reservas sobre la misma cara
   // (problema de armado). Se limpian distinto, conviene no mezclarlos.
   const [tipo, setTipo] = useState<'todos' | 'choque' | 'duplicado'>('todos');
+  // 'conflictos' = auditar y limpiar; 'limpiezas' = bitacora de lo ya limpiado
+  // (automatico y manual), para tener registro consultable.
+  const [vista, setVista] = useState<'conflictos' | 'limpiezas'>('conflictos');
 
   const { data: catorcenasYear, isLoading: loadingCatorcenas } = useQuery({
     queryKey: ['catorcenas', yearSelected],
     queryFn: () => solicitudesService.getCatorcenas(yearSelected),
     enabled: open,
+  });
+
+  // Las vigentes pueden cruzar el fin de año, así que el arranque automático
+  // necesita también las del año siguiente. Solo se pide en ese caso.
+  const anioActual = new Date().getFullYear();
+  const { data: catorcenasEsteAnio } = useQuery({
+    queryKey: ['catorcenas', anioActual],
+    queryFn: () => solicitudesService.getCatorcenas(anioActual),
+    enabled: open && autoIniciar,
+  });
+  const { data: catorcenasSiguiente } = useQuery({
+    queryKey: ['catorcenas', anioActual + 1],
+    queryFn: () => solicitudesService.getCatorcenas(anioActual + 1),
+    enabled: open && autoIniciar,
+  });
+
+  const { data: limpiezas, isLoading: loadingLimpiezas, refetch: refetchLimpiezas } = useQuery({
+    queryKey: ['conflictos-limpiezas'],
+    queryFn: () => inventariosService.getLimpiezasOcupacion(),
+    enabled: open && vista === 'limpiezas',
   });
 
   const toggleCatorcena = (c: CatorcenaRef) => {
@@ -64,21 +123,42 @@ export function AuditoriaConflictosModal({ open, onClose, onOpenEnMatriz }: Prop
     });
   };
 
-  const handleAuditar = async () => {
-    if (catorcenasSelected.length === 0) return;
+  const auditar = useCallback(async (cats: CatorcenaRef[]) => {
+    if (cats.length === 0) return;
     setCorriendo(true);
     setError(null);
     setResultado(null);
+    setResultadoLimpieza(null);
     try {
       // Sin `ids`: el backend audita el inventario completo.
-      const rows = await inventariosService.getConflictosOcupacion(catorcenasSelected);
+      const rows = await inventariosService.getConflictosOcupacion(cats);
       setResultado(rows);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Error al auditar conflictos');
     } finally {
       setCorriendo(false);
     }
-  };
+  }, []);
+
+  const handleAuditar = () => void auditar(catorcenasSelected);
+
+  // Arranque automático desde la notificación: en cuanto lleguen las catorcenas,
+  // preselecciona las vigentes y corre. `autoIniciado` evita repetirlo.
+  useEffect(() => {
+    if (!open) {
+      autoIniciado.current = false;
+      return;
+    }
+    if (!autoIniciar || autoIniciado.current) return;
+    const filas = [...(catorcenasEsteAnio?.data || []), ...(catorcenasSiguiente?.data || [])];
+    if (filas.length === 0) return;
+    const vigentes = calcularVigentes(filas);
+    if (vigentes.length === 0) return;
+    autoIniciado.current = true;
+    setCatorcenasSelected(vigentes);
+    setYearSelected(vigentes[0].anio);
+    void auditar(vigentes);
+  }, [open, autoIniciar, catorcenasEsteAnio, catorcenasSiguiente, auditar]);
 
   const conteos = useMemo(() => {
     const base = { todos: 0, choque: 0, duplicado: 0 };
@@ -105,8 +185,46 @@ export function AuditoriaConflictosModal({ open, onClose, onOpenEnMatriz }: Prop
     });
   }, [resultado, busqueda, tipo]);
 
+  /** Duplicados dentro de lo que está viendo el usuario: es lo que limpia el botón. */
+  const duplicadosVisibles = useMemo(
+    () => filtrados.filter(r => r.origenes < 2),
+    [filtrados]
+  );
+
   // Un sitio puede chocar en varias catorcenas: para el análisis interesa una
   // fila por inventario, no una por celda.
+  /**
+   * Limpia las celdas confirmadas en el diálogo (una sola o todas las
+   * visibles). Solo duplicados: los choques nunca entran, ahí hay campañas
+   * distintas y cuál se queda es una decisión comercial.
+   */
+  const handleLimpiarDuplicados = async () => {
+    const objetivo = objetivoLimpieza;
+    if (!objetivo || objetivo.length === 0) return;
+    setLimpiando(true);
+    setError(null);
+    try {
+      const res = await inventariosService.limpiarDuplicadosOcupacion(
+        catorcenasSelected,
+        objetivo.map(r => ({
+          inventario_id: r.inventario_id,
+          anio: r.anio,
+          numero_catorcena: r.numero_catorcena,
+        }))
+      );
+      setResultadoLimpieza(res);
+      setObjetivoLimpieza(null);
+      // Re-auditar para que la tabla refleje el estado real tras la limpieza.
+      const rows = await inventariosService.getConflictosOcupacion(catorcenasSelected);
+      setResultado(rows);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Error al limpiar duplicados');
+      setObjetivoLimpieza(null);
+    } finally {
+      setLimpiando(false);
+    }
+  };
+
   const inventariosUnicos = useMemo(() => {
     const map = new Map<number, InventarioResumen>();
     for (const r of filtrados) {
@@ -243,7 +361,7 @@ export function AuditoriaConflictosModal({ open, onClose, onOpenEnMatriz }: Prop
             <div>
               <h2 className={`text-lg font-semibold ${isDark ? 'text-white' : 'text-gray-900'}`}>Auditoría de Conflictos</h2>
               <p className={`text-xs ${isDark ? 'text-amber-300/50' : 'text-amber-500'}`}>
-                Tradicionales con 2+ reservas en la misma catorcena · todo el inventario
+                Tradicionales con 2+ reservas FIRMES (ventas) en la misma catorcena · todo el inventario
               </p>
             </div>
           </div>
@@ -252,8 +370,117 @@ export function AuditoriaConflictosModal({ open, onClose, onOpenEnMatriz }: Prop
           </button>
         </div>
 
+        {/* Selector de vista: auditoria vs bitacora de limpiezas */}
+        <div className={`px-4 pt-3 flex items-center gap-1 border-b-0`}>
+          {([
+            { k: 'conflictos' as const, label: 'Auditoría', icon: AlertTriangle },
+            { k: 'limpiezas' as const, label: 'Registro de limpiezas', icon: History },
+          ]).map(v => (
+            <button
+              key={v.k}
+              onClick={() => setVista(v.k)}
+              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-t-lg text-xs font-medium border border-b-0 transition-colors ${
+                vista === v.k
+                  ? isDark ? 'bg-zinc-800 border-zinc-700 text-amber-300' : 'bg-white border-gray-300 text-amber-700 shadow-sm'
+                  : isDark ? 'bg-transparent border-transparent text-zinc-500 hover:text-zinc-300' : 'bg-transparent border-transparent text-gray-500 hover:text-gray-700'
+              }`}
+            >
+              <v.icon className="h-3.5 w-3.5" />
+              {v.label}
+            </button>
+          ))}
+        </div>
+
+        {vista === 'limpiezas' && (
+          <div className="flex-1 overflow-hidden flex flex-col min-h-0">
+            <div className={`px-4 py-2.5 border-y ${isDark ? 'border-zinc-800' : 'border-gray-200'} flex items-center gap-2`}>
+              <span className={`text-sm font-semibold ${isDark ? 'text-emerald-300' : 'text-emerald-700'}`}>
+                {(limpiezas?.length ?? 0).toLocaleString('es-MX')} limpiezas registradas
+              </span>
+              <span className={`text-xs ${isDark ? 'text-zinc-500' : 'text-gray-500'}`}>
+                automáticas y manuales · más reciente primero
+              </span>
+              <button
+                onClick={() => void refetchLimpiezas()}
+                className={`ml-auto px-2.5 py-1 rounded-lg text-xs font-medium ${isDark ? 'bg-zinc-800 text-zinc-300 border border-zinc-700 hover:bg-zinc-700' : 'bg-white text-gray-700 border border-gray-300 hover:bg-gray-100'}`}
+              >
+                Actualizar
+              </button>
+            </div>
+            {loadingLimpiezas ? (
+              <div className="flex-1 flex items-center justify-center py-16">
+                <Loader2 className="h-6 w-6 animate-spin text-emerald-500" />
+              </div>
+            ) : (limpiezas?.length ?? 0) === 0 ? (
+              <div className={`flex-1 flex flex-col items-center justify-center gap-2 py-16 ${isDark ? 'text-zinc-500' : 'text-gray-400'}`}>
+                <History className="h-8 w-8 opacity-40" />
+                <p className="text-sm">Aún no hay limpiezas registradas.</p>
+              </div>
+            ) : (
+              <div className="flex-1 overflow-auto min-h-0">
+                <table className="w-full text-xs">
+                  <thead className={`${isDark ? 'bg-zinc-900 text-emerald-300' : 'bg-white text-emerald-700'} sticky top-0 z-10`}>
+                    <tr className={`border-b ${isDark ? 'border-zinc-800' : 'border-gray-200'}`}>
+                      <th className="px-3 py-2 text-left font-semibold w-36">Fecha</th>
+                      <th className="px-3 py-2 text-left font-semibold">Código</th>
+                      <th className="px-3 py-2 text-left font-semibold w-24">Catorcena</th>
+                      <th className="px-3 py-2 text-center font-semibold w-24">Tipo</th>
+                      <th className="px-3 py-2 text-left font-semibold w-32">Limpiado por</th>
+                      <th className="px-3 py-2 text-center font-semibold w-28" title="Reserva que se conservó">Conservada</th>
+                      <th className="px-3 py-2 text-left font-semibold" title="Reservas soft-borradas">Liberadas</th>
+                      <th className="px-3 py-2 text-left font-semibold">Plaza</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {(limpiezas ?? []).map(l => (
+                      <tr
+                        key={`${l.inventario_id}-${l.anio}-${l.numero_catorcena}-${l.limpiado_at}`}
+                        className={`border-b ${isDark ? 'border-zinc-800/60 hover:bg-zinc-800/40' : 'border-gray-100 hover:bg-gray-50'}`}
+                      >
+                        <td className={`px-3 py-1.5 ${isDark ? 'text-zinc-400' : 'text-gray-600'}`}>
+                          {new Date(l.limpiado_at).toLocaleString('es-MX', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' })}
+                        </td>
+                        <td className={`px-3 py-1.5 font-mono font-medium ${isDark ? 'text-white' : 'text-gray-900'}`}>
+                          {l.codigo_unico || `#${l.inventario_id}`}
+                        </td>
+                        <td className={`px-3 py-1.5 ${isDark ? 'text-zinc-300' : 'text-gray-700'}`}>C{l.numero_catorcena}-{l.anio}</td>
+                        <td className="px-3 py-1.5 text-center">
+                          <span className={`px-1.5 py-0.5 rounded-full text-[10px] font-medium border ${
+                            l.tipo === 'choque'
+                              ? isDark ? 'bg-red-500/15 text-red-300 border-red-500/30' : 'bg-red-50 text-red-700 border-red-200'
+                              : isDark ? 'bg-zinc-700/50 text-zinc-300 border-zinc-600' : 'bg-gray-100 text-gray-600 border-gray-300'
+                          }`}>
+                            {l.tipo === 'choque' ? 'Choque' : 'Duplicado'}
+                          </span>
+                        </td>
+                        <td className="px-3 py-1.5">
+                          <span className={`px-1.5 py-0.5 rounded-full text-[10px] font-medium border ${
+                            l.limpiado_por === 'Automático'
+                              ? isDark ? 'bg-emerald-500/15 text-emerald-300 border-emerald-500/30' : 'bg-emerald-50 text-emerald-700 border-emerald-200'
+                              : isDark ? 'bg-purple-500/15 text-purple-300 border-purple-500/30' : 'bg-purple-50 text-purple-700 border-purple-200'
+                          }`}>
+                            {l.limpiado_por || '-'}
+                          </span>
+                        </td>
+                        <td className={`px-3 py-1.5 text-center font-mono ${isDark ? 'text-zinc-300' : 'text-gray-700'}`}>
+                          {l.reserva_conservada ? `#${l.reserva_conservada}` : '-'}
+                        </td>
+                        <td className={`px-3 py-1.5 font-mono ${isDark ? 'text-zinc-400' : 'text-gray-600'}`}>
+                          {l.reservas_liberadas ? l.reservas_liberadas.split(',').map(x => `#${x}`).join(', ') : '-'}
+                        </td>
+                        <td className={`px-3 py-1.5 ${isDark ? 'text-zinc-400' : 'text-gray-600'}`}>{l.plaza || '-'}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
+        )}
+
+        {vista === 'conflictos' && (<>
         {/* Selección de periodos */}
-        <div className={`p-4 border-b ${isDark ? 'border-zinc-800' : 'border-gray-200'} space-y-3`}>
+        <div className={`p-4 border-t ${isDark ? 'border-zinc-800' : 'border-gray-200'} border-b space-y-3`}>
           <div className="flex items-center gap-3 flex-wrap">
             <Calendar className={`h-4 w-4 ${isDark ? 'text-amber-400' : 'text-amber-600'}`} />
             <span className={`text-sm font-medium ${isDark ? 'text-white' : 'text-gray-900'}`}>Año:</span>
@@ -344,7 +571,7 @@ export function AuditoriaConflictosModal({ open, onClose, onOpenEnMatriz }: Prop
               <CheckCircle2 className="h-10 w-10" />
               <p className="text-sm font-medium">Sin conflictos en los periodos seleccionados</p>
               <p className={`text-xs ${isDark ? 'text-zinc-500' : 'text-gray-400'}`}>
-                Ningún inventario Tradicional tiene más de una reserva por catorcena.
+                Ningún inventario Tradicional tiene más de una venta firme por catorcena. (Las tentativas de propuestas no cuentan: pueden encimarse por diseño.)
               </p>
             </div>
           ) : (
@@ -358,8 +585,8 @@ export function AuditoriaConflictosModal({ open, onClose, onOpenEnMatriz }: Prop
                 </span>
                 <div className={`flex items-center rounded-lg border overflow-hidden ${isDark ? 'border-zinc-700' : 'border-gray-300'}`}>
                   {([
-                    { k: 'todos' as const, label: 'Todos', n: conteos.todos, title: 'Todas las celdas con 2+ reservas' },
-                    { k: 'choque' as const, label: 'Choque de campañas', n: conteos.choque, title: 'Dos o más campañas distintas peleando la misma cara: hay que liberar una' },
+                    { k: 'todos' as const, label: 'Todos', n: conteos.todos, title: 'Todas las celdas con 2+ reservas firmes' },
+                    { k: 'choque' as const, label: 'Choque de campañas', n: conteos.choque, title: 'Campañas distintas en la misma cara. El monitor lo resuelve solo: conserva la venta más antigua y libera la más nueva (salvo APS)' },
                     { k: 'duplicado' as const, label: 'Duplicados', n: conteos.duplicado, title: 'Una sola campaña con varias reservas sobre la misma cara: error de armado' },
                   ]).map(opt => (
                     <button
@@ -392,6 +619,17 @@ export function AuditoriaConflictosModal({ open, onClose, onOpenEnMatriz }: Prop
                   )}
                 </div>
                 <div className="ml-auto flex items-center gap-2">
+                  {duplicadosVisibles.length > 0 && (
+                    <button
+                      onClick={() => setObjetivoLimpieza(duplicadosVisibles)}
+                      disabled={limpiando}
+                      title="Conserva una reserva por celda y suelta las sobrantes. Solo duplicados; los choques no se tocan."
+                      className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium ${isDark ? 'bg-red-500/20 text-red-300 border border-red-500/30 hover:bg-red-500/30' : 'bg-red-50 text-red-700 border border-red-200 hover:bg-red-100'} disabled:opacity-40`}
+                    >
+                      {limpiando ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Trash2 className="h-3.5 w-3.5" />}
+                      Limpiar todos ({duplicadosVisibles.length.toLocaleString('es-MX')})
+                    </button>
+                  )}
                   <button
                     onClick={() => void handleExportExcel()}
                     disabled={exportando || filtrados.length === 0}
@@ -413,6 +651,35 @@ export function AuditoriaConflictosModal({ open, onClose, onOpenEnMatriz }: Prop
                 </div>
               </div>
 
+              {resultadoLimpieza && (
+                <div className={`px-4 py-2 border-b text-xs flex items-start gap-2 ${isDark ? 'border-zinc-800 bg-emerald-500/5 text-emerald-300' : 'border-gray-200 bg-emerald-50 text-emerald-700'}`}>
+                  <CheckCircle2 className="h-3.5 w-3.5 mt-0.5 shrink-0" />
+                  <div className="flex-1">
+                    <span className="font-semibold">
+                      {resultadoLimpieza.celdas_limpiadas} celda(s) limpiada(s) · {resultadoLimpieza.reservas_liberadas} reserva(s) liberada(s)
+                    </span>
+                    {resultadoLimpieza.omitidas.length > 0 && (
+                      <div className={`mt-1 ${isDark ? 'text-amber-300' : 'text-amber-700'}`}>
+                        {resultadoLimpieza.omitidas.length} omitida(s):
+                        <ul className="mt-0.5 space-y-0.5">
+                          {resultadoLimpieza.omitidas.slice(0, 4).map(o => (
+                            <li key={`${o.inventario_id}-${o.anio}-${o.numero_catorcena}`}>
+                              · #{o.inventario_id} C{o.numero_catorcena}-{o.anio} — {o.motivo}
+                            </li>
+                          ))}
+                          {resultadoLimpieza.omitidas.length > 4 && (
+                            <li>· … y {resultadoLimpieza.omitidas.length - 4} más</li>
+                          )}
+                        </ul>
+                      </div>
+                    )}
+                  </div>
+                  <button onClick={() => setResultadoLimpieza(null)} className="shrink-0 opacity-60 hover:opacity-100">
+                    <X className="h-3.5 w-3.5" />
+                  </button>
+                </div>
+              )}
+
               <div className="flex-1 overflow-auto min-h-0">
                 <table className="w-full text-xs">
                   <thead className={`${isDark ? 'bg-zinc-900 text-amber-300' : 'bg-white text-amber-700'} sticky top-0 z-10`}>
@@ -425,6 +692,7 @@ export function AuditoriaConflictosModal({ open, onClose, onOpenEnMatriz }: Prop
                       <th className="px-3 py-2 text-left font-semibold">Plaza</th>
                       <th className="px-3 py-2 text-left font-semibold">Mueble</th>
                       <th className="px-3 py-2 text-left font-semibold">Ubicación</th>
+                      <th className="px-3 py-2 w-12"></th>
                     </tr>
                   </thead>
                   <tbody>
@@ -438,7 +706,7 @@ export function AuditoriaConflictosModal({ open, onClose, onOpenEnMatriz }: Prop
                         <td className="px-3 py-1.5 text-center">
                           {r.origenes >= 2 ? (
                             <span
-                              title="Campañas distintas peleando la misma cara"
+                              title="Campañas distintas en la misma cara. Se resuelve solo: se conserva la venta más antigua (salvo APS)"
                               className={`px-1.5 py-0.5 rounded-full text-[10px] font-medium border ${isDark ? 'bg-red-500/15 text-red-300 border-red-500/30' : 'bg-red-50 text-red-700 border-red-200'}`}
                             >
                               Choque
@@ -461,11 +729,23 @@ export function AuditoriaConflictosModal({ open, onClose, onOpenEnMatriz }: Prop
                         <td className={`px-3 py-1.5 ${isDark ? 'text-zinc-400' : 'text-gray-600'}`}>{r.plaza || '-'}</td>
                         <td className={`px-3 py-1.5 ${isDark ? 'text-zinc-400' : 'text-gray-600'}`}>{r.mueble || '-'}</td>
                         <td className={`px-3 py-1.5 ${isDark ? 'text-zinc-500' : 'text-gray-500'} max-w-[280px] truncate`} title={r.ubicacion || undefined}>{r.ubicacion || '-'}</td>
+                        <td className="px-2 py-1.5 text-center">
+                          {r.origenes < 2 && (
+                            <button
+                              onClick={() => setObjetivoLimpieza([r])}
+                              disabled={limpiando}
+                              title="Limpiar solo esta celda: conserva una reserva y suelta las sobrantes"
+                              className={`p-1.5 rounded-md ${isDark ? 'text-zinc-500 hover:text-red-300 hover:bg-red-500/15' : 'text-gray-400 hover:text-red-600 hover:bg-red-50'} disabled:opacity-40`}
+                            >
+                              <Trash2 className="h-3.5 w-3.5" />
+                            </button>
+                          )}
+                        </td>
                       </tr>
                     ))}
                     {filtrados.length === 0 && (
                       <tr>
-                        <td colSpan={8} className={`px-3 py-8 text-center ${isDark ? 'text-zinc-500' : 'text-gray-400'}`}>
+                        <td colSpan={9} className={`px-3 py-8 text-center ${isDark ? 'text-zinc-500' : 'text-gray-400'}`}>
                           {busqueda ? `Sin coincidencias para "${busqueda}"` : 'Sin celdas de este tipo'}
                         </td>
                       </tr>
@@ -476,7 +756,116 @@ export function AuditoriaConflictosModal({ open, onClose, onOpenEnMatriz }: Prop
             </>
           )}
         </div>
+        </>)}
       </div>
+
+      {objetivoLimpieza && (
+        <div
+          className="fixed inset-0 bg-black/70 z-[60] flex items-center justify-center p-4"
+          onClick={() => !limpiando && setObjetivoLimpieza(null)}
+        >
+          <div
+            className={`rounded-2xl border ${isDark ? 'bg-zinc-900 border-red-500/30' : 'bg-white border-red-200'} w-full max-w-lg shadow-2xl flex flex-col max-h-[80vh]`}
+            onClick={e => e.stopPropagation()}
+          >
+            <div className={`p-5 border-b ${isDark ? 'border-zinc-800' : 'border-gray-200'} flex items-start gap-3`}>
+              <div className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 ${isDark ? 'bg-red-500/20' : 'bg-red-50'}`}>
+                <AlertTriangle className={`h-5 w-5 ${isDark ? 'text-red-300' : 'text-red-600'}`} />
+              </div>
+              <div className="flex-1 min-w-0">
+                <h3 className={`text-base font-semibold ${isDark ? 'text-white' : 'text-gray-900'}`}>
+                  {objetivoLimpieza.length === 1
+                    ? `¿Limpiar el duplicado de ${objetivoLimpieza[0].codigo_unico || `#${objetivoLimpieza[0].inventario_id}`}?`
+                    : `¿Limpiar ${objetivoLimpieza.length} duplicados?`}
+                </h3>
+                <p className={`text-xs mt-1 ${isDark ? 'text-zinc-400' : 'text-gray-500'}`}>
+                  En cada celda se conserva una reserva y se sueltan las sobrantes.
+                </p>
+              </div>
+            </div>
+
+            <div className={`p-5 overflow-y-auto text-xs space-y-3 ${isDark ? 'text-zinc-300' : 'text-gray-700'}`}>
+              <div className={`rounded-lg border px-3 py-2 space-y-1 ${isDark ? 'border-zinc-700 bg-zinc-800/40' : 'border-gray-200 bg-gray-50'}`}>
+                <div className="font-semibold">Qué se respeta</div>
+                <div>· Los <strong>choques</strong> no entran por este botón (el monitor los resuelve solo: conserva la venta más antigua).</div>
+                <div>· Nunca se borra una reserva con <strong>APS</strong>. Si hay dos con APS, la celda se omite.</div>
+                <div>· Se conserva la que tiene APS; si ninguna tiene, la más antigua.</div>
+                <div>· El borrado es <strong>reversible</strong> (soft-delete) y queda en el historial.</div>
+              </div>
+
+              <div>
+                <div className="font-semibold mb-1">Celdas a limpiar</div>
+                <ul className="space-y-1">
+                  {objetivoLimpieza.slice(0, 12).map(r => (
+                    <li key={`${r.inventario_id}-${r.anio}-${r.numero_catorcena}`} className="flex items-start gap-2">
+                      <span className="shrink-0 inline-block w-1.5 h-1.5 mt-1.5 rounded-full bg-zinc-400" />
+                      <div className="flex-1 min-w-0">
+                        <span className="font-mono">{r.codigo_unico || `#${r.inventario_id}`}</span>
+                        <span className={isDark ? 'text-zinc-500' : 'text-gray-500'}>
+                          {' '}· C{r.numero_catorcena}-{r.anio} · {r.n} reservas → queda 1
+                        </span>
+                        {((r.campanas?.length ?? 0) > 0 || (r.propuestas?.length ?? 0) > 0) && (
+                          <div className="mt-0.5 flex flex-wrap gap-x-3 gap-y-0.5">
+                            {(r.campanas || []).map(c => (
+                              <a
+                                key={`c${c.id}`}
+                                href={`/campanas/detail/${c.id}`}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                title={`Abrir campaña #${c.id} en otra pestaña`}
+                                className={`inline-flex items-center gap-1 underline underline-offset-2 ${isDark ? 'text-purple-300 hover:text-purple-200' : 'text-purple-700 hover:text-purple-900'}`}
+                              >
+                                {c.nombre || `Campaña #${c.id}`}
+                                <ExternalLink className="h-3 w-3 opacity-70" />
+                              </a>
+                            ))}
+                            {(r.propuestas || []).map(pid => (
+                              <a
+                                key={`p${pid}`}
+                                href={`/propuestas?viewId=${pid}`}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                title={`Abrir propuesta #${pid} en otra pestaña`}
+                                className={`inline-flex items-center gap-1 underline underline-offset-2 ${isDark ? 'text-amber-300 hover:text-amber-200' : 'text-amber-700 hover:text-amber-900'}`}
+                              >
+                                Propuesta #{pid}
+                                <ExternalLink className="h-3 w-3 opacity-70" />
+                              </a>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    </li>
+                  ))}
+                  {objetivoLimpieza.length > 12 && (
+                    <li className={`italic ${isDark ? 'text-zinc-500' : 'text-gray-500'}`}>
+                      … y {objetivoLimpieza.length - 12} más
+                    </li>
+                  )}
+                </ul>
+              </div>
+            </div>
+
+            <div className={`p-4 border-t ${isDark ? 'border-zinc-800 bg-zinc-900/50' : 'border-gray-200 bg-gray-50'} flex items-center justify-end gap-2`}>
+              <button
+                onClick={() => setObjetivoLimpieza(null)}
+                disabled={limpiando}
+                className={`px-3 py-1.5 rounded-lg text-sm ${isDark ? 'text-zinc-300 hover:bg-zinc-800' : 'text-gray-700 hover:bg-gray-100'} disabled:opacity-50`}
+              >
+                Cancelar
+              </button>
+              <button
+                onClick={() => void handleLimpiarDuplicados()}
+                disabled={limpiando}
+                className={`flex items-center gap-2 px-3 py-1.5 rounded-lg text-sm font-medium ${isDark ? 'bg-red-500/20 text-red-300 border border-red-500/40 hover:bg-red-500/30' : 'bg-red-600 text-white hover:bg-red-700'} disabled:opacity-50`}
+              >
+                {limpiando ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Trash2 className="h-3.5 w-3.5" />}
+                {limpiando ? 'Limpiando...' : `Sí, limpiar ${objetivoLimpieza.length}`}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

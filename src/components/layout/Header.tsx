@@ -16,6 +16,18 @@ interface HeaderProps {
   badgeCount?: number;
 }
 
+// Etiqueta del ambiente según el dominio del front:
+//   develop-qeb.vercel.app (o dominios con 'develop'/'pruebas') = develop
+//   jos.qeb.mx (o con 'stage')                                  = stage
+//   resto (app.qeb.mx prod, localhost, otros previews)          = 'Activo'
+// Se calcula del hostname, sin depender de env vars de build.
+function getAmbienteLabel(): string {
+  const host = (typeof window !== 'undefined' ? window.location.hostname : '').toLowerCase();
+  if (host.includes('develop') || host.includes('pruebas')) return 'develop';
+  if (host.includes('jos') || host.includes('stage')) return 'stage';
+  return 'Activo';
+}
+
 export function Header({ title, badgeCount }: HeaderProps) {
   const user = useAuthStore((state) => state.user);
   const isDark = useThemeStore((s) => s.theme) === 'dark';
@@ -80,7 +92,7 @@ export function Header({ title, badgeCount }: HeaderProps) {
             ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500/30'
             : 'bg-emerald-50 text-emerald-600 border-emerald-200'
         }`}>
-          Activo
+          {getAmbienteLabel()}
         </span>
         <div className="hidden sm:block">
           <VersionBadge isDark={isDark} />

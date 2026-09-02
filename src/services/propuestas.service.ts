@@ -1,6 +1,33 @@
 import api from '../lib/api';
 import { Propuesta, PaginatedResponse, ApiResponse } from '../types';
 
+// Conflicto de venta al aprobar: una o más piezas tradicionales ya se vendieron
+// en otra campaña en el período. El back responde 409 con la lista.
+/** Pieza que el backend NO pudo reservar, con su motivo. Permite decirle al
+ *  usuario exactamente qué falló en vez de solo un contador. */
+export interface ReservaOmitida {
+  inventario_id: number;
+  codigo_unico: string | null;
+  motivo: string;
+}
+
+export interface ConflictoVenta {
+  reservaId: number;
+  espacioId: number;
+  codigoUnico: string | null;
+  inicioPeriodo: string;
+  finPeriodo: string;
+}
+
+export class ConflictoVentaError extends Error {
+  conflictos: ConflictoVenta[];
+  constructor(message: string, conflictos: ConflictoVenta[]) {
+    super(message);
+    this.name = 'ConflictoVentaError';
+    this.conflictos = conflictos;
+  }
+}
+
 export interface PropuestasParams {
   page?: number;
   limit?: number;
@@ -195,9 +222,18 @@ export const propuestasService = {
   },
 
   async approve(id: number, params: ApproveParams): Promise<void> {
-    const response = await api.post<ApiResponse<void>>(`/propuestas/${id}/approve`, params);
-    if (!response.data.success) {
-      throw new Error(response.data.error || 'Error al aprobar propuesta');
+    try {
+      const response = await api.post<ApiResponse<void>>(`/propuestas/${id}/approve`, params);
+      if (!response.data.success) {
+        throw new Error(response.data.error || 'Error al aprobar propuesta');
+      }
+    } catch (err: unknown) {
+      // 409 = guardián de venta: piezas ya vendidas en otra campaña.
+      const resp = (err as { response?: { status?: number; data?: { error?: string; conflictos?: ConflictoVenta[] } } }).response;
+      if (resp?.status === 409 && Array.isArray(resp.data?.conflictos)) {
+        throw new ConflictoVentaError(resp.data?.error || 'Piezas ya vendidas en otra campaña', resp.data.conflictos);
+      }
+      throw err;
     }
   },
 
@@ -264,8 +300,8 @@ export const propuestasService = {
       fechaFin: string;
       agruparComoCompleto?: boolean;
     }
-  ): Promise<{ calendarioId: number; reservasCreadas: number; reservasOmitidas?: number }> {
-    const response = await api.post<ApiResponse<{ calendarioId: number; reservasCreadas: number; reservasOmitidas?: number }>>(
+  ): Promise<{ calendarioId: number; reservasCreadas: number; reservasOmitidas?: number; omitidos?: ReservaOmitida[] }> {
+    const response = await api.post<ApiResponse<{ calendarioId: number; reservasCreadas: number; reservasOmitidas?: number; omitidos?: ReservaOmitida[] }>>(
       `/propuestas/${propuestaId}/reservas`,
       data
     );

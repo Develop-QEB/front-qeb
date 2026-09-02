@@ -9,6 +9,7 @@ import { Header } from '../../components/layout/Header';
 import { ticketsService, Ticket as TicketType, UpdateTicketStatusInput } from '../../services/tickets.service';
 import { UserAvatar } from '../../components/ui/user-avatar';
 import { useThemeStore } from '../../store/themeStore';
+import { TicketBulkBar } from './TicketBulkBar';
 
 const STATUS_CONFIG = {
   'Nuevo': { color: 'bg-blue-500', textColor: 'text-blue-400', bgColor: 'bg-blue-500/10', borderColor: 'border-blue-500/30', icon: Ticket },
@@ -273,6 +274,12 @@ export function DevTicketsPage() {
   const queryClient = useQueryClient();
   const isDark = useThemeStore((s) => s.theme) === 'dark';
   const [selectedTicket, setSelectedTicket] = useState<TicketType | null>(null);
+  const [selectedTicketIds, setSelectedTicketIds] = useState<Set<number>>(new Set());
+  const toggleSelect = (id: number) => setSelectedTicketIds(prev => {
+    const next = new Set(prev);
+    if (next.has(id)) next.delete(id); else next.add(id);
+    return next;
+  });
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState('Todos');
   const [prioridadFilter, setPrioridadFilter] = useState('Todos');
@@ -409,15 +416,38 @@ export function DevTicketsPage() {
                   <p className={isDark ? 'text-zinc-400' : 'text-gray-500'}>No hay tickets</p>
                 </div>
               ) : (
-                tickets.map((ticket) => (
-                  <TicketCard
-                    key={ticket.id}
-                    ticket={ticket}
-                    onSelect={() => setSelectedTicket(ticket)}
-                    isSelected={selectedTicket?.id === ticket.id}
+                <>
+                  <TicketBulkBar
+                    selectedIds={[...selectedTicketIds]}
+                    onClear={() => setSelectedTicketIds(new Set())}
                     isDark={isDark}
+                    invalidateKeys={[['dev-tickets'], ['tickets']]}
+                    statusOptions={['Nuevo', 'En Progreso', 'Validación', 'Resuelto', 'Cerrado']}
                   />
-                ))
+                  {tickets.map((ticket) => {
+                    const isChecked = selectedTicketIds.has(ticket.id);
+                    return (
+                      <div key={ticket.id} className="flex items-start gap-2">
+                        <input
+                          type="checkbox"
+                          checked={isChecked}
+                          onChange={(e) => { e.stopPropagation(); toggleSelect(ticket.id); }}
+                          onClick={(e) => e.stopPropagation()}
+                          className="mt-4 h-4 w-4 rounded border-purple-500/40 text-purple-600 focus:ring-purple-500/50 cursor-pointer"
+                          title="Seleccionar para acción masiva"
+                        />
+                        <div className={`flex-1 ${isChecked ? (isDark ? 'ring-2 ring-purple-500/50 rounded-xl' : 'ring-2 ring-purple-400/60 rounded-xl') : ''}`}>
+                          <TicketCard
+                            ticket={ticket}
+                            onSelect={() => setSelectedTicket(ticket)}
+                            isSelected={selectedTicket?.id === ticket.id}
+                            isDark={isDark}
+                          />
+                        </div>
+                      </div>
+                    );
+                  })}
+                </>
               )}
             </div>
           </div>

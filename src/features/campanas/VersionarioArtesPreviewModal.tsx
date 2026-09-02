@@ -523,7 +523,7 @@ function ArteThumb({ url, onClick }: { url: string; onClick?: () => void }) {
 // que comparten el mismo archivo dentro de la campaña).
 function ArtesGalleryModal({ urls, initialIndex, onClose, isDark, ficha, campanaId }: {
   urls: string[]; initialIndex: number; onClose: () => void; isDark: boolean;
-  ficha?: { nombreArte: string; notas: string; estatusOperaciones: string } | null;
+  ficha?: { nombreArte: string; notas: string; estatusOperaciones: string; nombreGenerico?: string } | null;
   campanaId?: number;
 }) {
   const [idx, setIdx] = useState(initialIndex);
@@ -680,6 +680,12 @@ function ArtesGalleryModal({ urls, initialIndex, onClose, isDark, ficha, campana
                 <p className={`whitespace-pre-wrap ${isDark ? 'text-zinc-300' : 'text-gray-700'}`}>{ficha.nombreArte}</p>
               </div>
             )}
+            {ficha?.nombreGenerico && (
+              <div>
+                <p className={`font-medium mb-0.5 ${isDark ? 'text-purple-300' : 'text-purple-600'}`}>Genérico:</p>
+                <p className={`whitespace-pre-wrap ${isDark ? 'text-zinc-300' : 'text-gray-700'}`}>{ficha.nombreGenerico}</p>
+              </div>
+            )}
             {ficha?.notas && (
               <div>
                 <p className={`font-medium mb-0.5 ${isDark ? 'text-purple-300' : 'text-purple-600'}`}>Observaciones:</p>
@@ -764,8 +770,8 @@ export function VersionarioArtesPreviewModal({ isOpen, onClose, preview, isLoadi
   // Galería de artes que abre al clickear una miniatura
   const [galleryUrls, setGalleryUrls] = useState<string[] | null>(null);
   const [galleryIndex, setGalleryIndex] = useState(0);
-  const [galleryFicha, setGalleryFicha] = useState<{ nombreArte: string; notas: string; estatusOperaciones: string } | null>(null);
-  const openGallery = (urls: string[], idx: number, ficha?: { nombreArte: string; notas: string; estatusOperaciones: string }) => { setGalleryUrls(urls); setGalleryIndex(idx); setGalleryFicha(ficha || null); };
+  const [galleryFicha, setGalleryFicha] = useState<{ nombreArte: string; notas: string; estatusOperaciones: string; nombreGenerico?: string } | null>(null);
+  const openGallery = (urls: string[], idx: number, ficha?: { nombreArte: string; notas: string; estatusOperaciones: string; nombreGenerico?: string }) => { setGalleryUrls(urls); setGalleryIndex(idx); setGalleryFicha(ficha || null); };
   const closeGallery = () => setGalleryUrls(null);
   const [search, setSearch] = useState('');
 
@@ -957,7 +963,7 @@ export function VersionarioArtesPreviewModal({ isOpen, onClose, preview, isLoadi
     const q = search.trim().toLowerCase();
     if (q) {
       rows = rows.filter(r => {
-        const haystack = [String(r.idCampana), r.plaza, r.tipo, r.formato, r.asesor, r.cliente, r.marca, r.campania, r.estatus, r.notas, r.nombreArte, r.estatusOperaciones, String(r.apsQebId)]
+        const haystack = [String(r.idCampana), r.plaza, r.tipo, r.formato, r.asesor, r.cliente, r.marca, r.campania, r.estatus, r.notas, r.nombreArte, r.estatusOperaciones, r.nombreGenerico, String(r.apsQebId)]
           .join(' | ').toLowerCase();
         return haystack.includes(q);
       });
@@ -1271,6 +1277,13 @@ export function VersionarioArtesPreviewModal({ isOpen, onClose, preview, isLoadi
                         <span className={`text-xs ${isDark ? 'text-zinc-600' : 'text-gray-400'}`}>-</span>
                       )}
                     </td>
+                    <td className="p-2 max-w-[160px]">
+                      {r.nombreGenerico ? (
+                        <span className="text-xs whitespace-pre-wrap break-words" title={r.nombreGenerico}>{r.nombreGenerico}</span>
+                      ) : (
+                        <span className={`text-xs ${isDark ? 'text-zinc-600' : 'text-gray-400'}`}>-</span>
+                      )}
+                    </td>
                     <td className="p-2 max-w-[240px]">
                       {r.artesUrls.length === 0 ? (
                         <span className={`text-xs ${isDark ? 'text-zinc-600' : 'text-gray-400'}`}>-</span>
@@ -1294,7 +1307,7 @@ export function VersionarioArtesPreviewModal({ isOpen, onClose, preview, isLoadi
                     {Array.from({ length: arteCols }).map((_, i) => (
                       <td key={`a-${idx}-${i}`} className="p-2">
                         {r.artesUrls[i]
-                          ? <ArteThumb url={r.artesUrls[i]} onClick={() => openGallery(r.artesUrls, i, { nombreArte: r.nombreArte, notas: r.notas, estatusOperaciones: r.estatusOperaciones })} />
+                          ? <ArteThumb url={r.artesUrls[i]} onClick={() => openGallery(r.artesUrls, i, { nombreArte: r.nombreArte, notas: r.notas, estatusOperaciones: r.estatusOperaciones, nombreGenerico: r.nombreGenerico })} />
                           : <span className="text-zinc-600">-</span>}
                       </td>
                     ))}

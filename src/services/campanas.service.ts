@@ -1,7 +1,7 @@
 import api from '../lib/api';
 import { Campana, CampanaStats, PaginatedResponse, ApiResponse, ComentarioTarea, CampanaWithComments } from '../types';
 
-import { useEnvironmentStore, getEndpoints, getDeliveryNotesEndpoint, getSeriesForSapDatabase } from '../store/environmentStore';
+import { useEnvironmentStore, getEndpoints, getDeliveryNotesEndpoint, getSeriesForSapDatabase, usaSapPruebas } from '../store/environmentStore';
 import type { SapDatabase } from '../store/environmentStore';
 export type { CampanaWithComments };
 
@@ -9,6 +9,14 @@ export type { CampanaWithComments };
 const SAP_BASE_URL = 'https://workflow-namely-changes-nothing.trycloudflare.com';
 
 // Interfaces para SAP Delivery Note
+/** Pieza que el backend NO pudo reservar, con su motivo. Permite decirle al
+ *  usuario exactamente qué falló en vez de solo un contador. */
+export interface ReservaOmitida {
+  inventario_id: number;
+  codigo_unico: string | null;
+  motivo: string;
+}
+
 export interface SAPDocumentLine {
   LineNum: string;
   ItemCode: string;
@@ -60,6 +68,51 @@ export interface SAPDeliveryNoteMigrated extends Omit<SAPDeliveryNote, 'Document
   DocumentLines: SAPDocumentLineMigrated[];
 }
 
+// --- Bitácora de POSTs a SAP (campania_post_log) ---
+// Snapshot de a quién se mandó cada APS. Necesario porque el Delivery Note se
+// arma con el cliente que tiene la campaña EN ESE MOMENTO: si después le cambian
+// el cliente (ej. SABA -> Chevrolet), se perdía el rastro de lo ya posteado.
+export interface PostLogEntryInput {
+  aps: number;
+  card_code?: string | null;
+  cuic?: number | null;
+  razon_social?: string | null;
+  marca?: string | null;
+  cliente_nombre?: string | null;
+  sap_database?: string | null;
+  salesperson_code?: number | string | null;
+  solicitud_caras_ids?: number[] | string | null;
+  success: boolean;
+  doc_entry?: number | null;
+  doc_num?: number | null;
+  error_msg?: string | null;
+  payload_json?: string | null;
+}
+
+export interface PostLogItem {
+  id: number;
+  campania_id: number;
+  aps: number;
+  card_code: string | null;
+  cuic: number | null;
+  razon_social: string | null;
+  marca: string | null;
+  cliente_nombre: string | null;
+  sap_database: string | null;
+  salesperson_code: number | null;
+  solicitud_caras_ids: string | null;
+  success: boolean;
+  doc_entry: number | null;
+  doc_num: number | null;
+  error_msg: string | null;
+  usuario_id: number | null;
+  usuario_nombre: string | null;
+  posted_at: string;
+  catorcena_numero?: number | null; // derivada en getPostLog desde el periodo de la 1ª cara
+  catorcena_anio?: number | null;
+  accion?: string | null; // 'POST' | 'CANCELACION'
+}
+
 export interface SAPPostResponse {
   success: boolean;
   data?: {
@@ -87,6 +140,7 @@ export interface ImagenDigital {
   tipo: 'image' | 'video';
   nombre_arte?: string | null; // Nombre manual capturado en la carga (reemplaza al slug del archivo)
   estatus_operaciones?: string | null; // Texto manual de Estatus Operaciones (ficha)
+  nombre_generico?: string | null; // Valor único compartido por todos los artes del batch (modo Genérico)
 }
 
 export interface DigitalFileSummary {
@@ -105,6 +159,7 @@ export interface ArteTradicional {
   createdAt: string | null;
   nombre_arte?: string | null; // Nombre manual capturado en la carga (reemplaza al slug del archivo)
   estatus_operaciones?: string | null; // Texto manual de Estatus Operaciones (ficha)
+  nombre_generico?: string | null; // Valor único compartido por todos los artes del batch (modo Genérico)
 }
 
 export interface TradicionalFileSummary {
@@ -243,6 +298,8 @@ export interface SolicitudCara {
   descuento: number | null;
   autorizacion_dg?: string | null;
   autorizacion_dcm?: string | null;
+  // true si la cara tiene una tarea de eliminación abierta (Filtro GC o DG).
+  pendiente_eliminacion?: boolean;
   grupo_rt_bf?: number | null;
   cortesia?: number | null;
 }
@@ -338,6 +395,8 @@ export interface ArteExistente {
   // Para artes recien subidos via addedArtes (sin guardar aun), vienen null/undefined.
   nombre_arte?: string | null; // nombre manual capturado en el modal de carga
   nota?: string | null;        // nota asociada (artes_tradicionales.nota o imagenes_digitales.comentario)
+  estatus_operaciones?: string | null; // texto manual de Estatus Operaciones (ficha)
+  nombre_generico?: string | null;     // valor único compartido por el batch (modo Genérico)
   estatus?: string | null;     // estatus del arte (Aprobado / Rechazado / Pendiente / etc.)
   tiene_instalado?: boolean;   // true si alguna reserva que usa este arte ya esta instalada
 }
@@ -351,6 +410,7 @@ export interface OrdenMontajeCAT {
   aps_global: number | null;
   tipo_periodo?: string | null;
   sap_database?: string | null;
+  bd_sap_post?: string | null; // BD SAP congelada del POST (por circuito); null si sin post
   cuic: number | null;
   fecha_inicio_periodo: string | null;
   fecha_fin_periodo: string | null;
@@ -359,7 +419,7 @@ export interface OrdenMontajeCAT {
   unidad_negocio: string | null;
   campania: string | null;
   numero_articulo: string | null;
-  negociacion: 'BONIFICACION' | 'RENTA' | 'CORTESIA' | 'INTERCAMBIO' | 'IMPRESION';
+  negociacion: 'BONIFICACION' | 'RENTA' | 'CORTESIA' | 'INTERCAMBIO' | 'IMPRESION' | 'RESERVADO' | 'DISPONIBLE';
   caras: number;
   tarifa: number | null;
   monto_total: number | null;
@@ -371,6 +431,9 @@ export interface OrdenMontajeCAT {
   catorcena_year: number | null;
   tradicional_digital: string | null;
   posted?: boolean;
+  // Ocupación de la pieza en el período: 'vendido' (fila de campaña), 'reservado'
+  // (hold de propuesta) o 'disponible' (libre). Presente en modos disponible/todo.
+  ocupacion_estado?: 'vendido' | 'reservado' | 'disponible' | null;
 }
 
 export interface OrdenMontajeINVIAN {
@@ -417,10 +480,14 @@ export interface OrdenMontajeINVIAN {
   numero_articulo?: string | null;
   cto?: string | null;
   sap_database?: string | null;
+  bd_sap_post?: string | null; // BD SAP congelada del POST (por circuito); null si sin post
   posted?: boolean;
   // Para "Inventario UN+": formato (mueble) y tipo de periodo (mensual/catorcena).
   formato?: string | null;
   tipo_periodo?: string | null;
+  // Ocupación de la pieza en el período: 'vendido' (fila de campaña), 'reservado'
+  // (hold de propuesta) o 'disponible' (libre). Presente en modos disponible/todo.
+  ocupacion_estado?: 'vendido' | 'reservado' | 'disponible' | null;
 }
 
 export interface ComentarioRevisionArte {
@@ -615,7 +682,7 @@ export async function resolveBaseEntry(
     'CIMU': 'SBOCIMU',
     'TEST': 'PB_SBOCIMU',
   };
-  const db = dbMap[sapDatabase] || 'PB_SBOCIMU';
+  const db = usaSapPruebas(sapDatabase as SapDatabase) ? 'PB_SBOCIMU' : (dbMap[sapDatabase] || 'PB_SBOCIMU');
 
   const response = await fetch(`${SAP_BASE_URL}/order-by-docnum/${db}/${docNum}`);
   if (!response.ok) {
@@ -762,7 +829,7 @@ export interface ExistingDeliveryNote {
 // con su DocEntry para que el caller decida POST (crear) o PATCH (actualizar).
 // 404 ⇒ null. Cualquier otro error vuela como excepción.
 export async function findExistingDeliveryNote(numAtCard: string | number, sapDatabase?: string | null): Promise<ExistingDeliveryNote | null> {
-  const db = SAP_DB_NAME_MAP[sapDatabase || 'TEST'] || 'PB_SBOCIMU';
+  const db = usaSapPruebas((sapDatabase || 'TEST') as SapDatabase) ? 'PB_SBOCIMU' : (SAP_DB_NAME_MAP[sapDatabase || 'TEST'] || 'PB_SBOCIMU');
   const url = `${SAP_BASE_URL}/delivery-note-by-numatcard/${db}/${numAtCard}`;
   const response = await fetch(url);
   if (response.status === 404) return null;
@@ -774,7 +841,7 @@ export async function findExistingDeliveryNote(numAtCard: string | number, sapDa
 
 // PATCH a un DN existente en SAP. Mismo manejo defensivo de errores que POST.
 export async function patchDeliveryNoteToSAP(docEntry: number, deliveryNote: SAPDeliveryNote | SAPDeliveryNoteMigrated, sapDatabase?: string | null): Promise<SAPPostResponse> {
-  const db = SAP_DB_NAME_MAP[sapDatabase || 'TEST'] || 'PB_SBOCIMU';
+  const db = usaSapPruebas((sapDatabase || 'TEST') as SapDatabase) ? 'PB_SBOCIMU' : (SAP_DB_NAME_MAP[sapDatabase || 'TEST'] || 'PB_SBOCIMU');
   const endpoint = `${SAP_BASE_URL}/delivery-notes/${db}/${docEntry}`;
 
   let response: Response;
@@ -890,16 +957,7 @@ export const campanasService = {
     return response.data.data;
   },
 
-  async getStats(params?: {
-    status?: string;
-    search?: string;
-    yearInicio?: number;
-    yearFin?: number;
-    catorcenaInicio?: number;
-    catorcenaFin?: number;
-    tipoPeriodo?: string;
-    excludeRechazadas?: boolean;
-  }): Promise<CampanaStats> {
+  async getStats(params?: Omit<CampanasParams, 'page' | 'limit'>): Promise<CampanaStats> {
     const response = await api.get<ApiResponse<CampanaStats>>('/campanas/stats', { params });
     if (!response.data.success || !response.data.data) {
       throw new Error(response.data.error || 'Error al obtener estadisticas');
@@ -935,6 +993,20 @@ export const campanasService = {
   async unmarkPostedAPS(id: number, aps?: number[]): Promise<number[]> {
     const response = await api.post<{ success: boolean; posted_aps: number[] }>(`/campanas/${id}/unmark-posted-aps`, { aps });
     return response.data.posted_aps;
+  },
+
+  // Bitácora de POSTs a SAP — guarda a QUIÉN se mandó cada APS (snapshot).
+  async registrarPostLog(id: number, entries: PostLogEntryInput[]): Promise<number> {
+    const response = await api.post<{ success: boolean; registradas: number }>(`/campanas/${id}/post-log`, { entries });
+    return response.data.registradas;
+  },
+
+  async getPostLog(id: number): Promise<PostLogItem[]> {
+    const response = await api.get<ApiResponse<PostLogItem[]>>(`/campanas/${id}/post-log`);
+    if (!response.data.success || !response.data.data) {
+      throw new Error(response.data.error || 'Error al obtener la bitácora de POST');
+    }
+    return response.data.data;
   },
 
   async getInventarioConAPS(id: number): Promise<InventarioConAPS[]> {
@@ -1100,7 +1172,7 @@ export const campanasService = {
   async assignArteDigital(
     id: number,
     reservaIds: number[],
-    archivos: { archivo: string; spot: number; nombre: string; tipo: string; nota?: string; nombre_arte?: string | null; estatus_operaciones?: string | null }[],
+    archivos: { archivo: string; spot: number; nombre: string; tipo: string; nota?: string; nombre_arte?: string | null; estatus_operaciones?: string | null; nombre_generico?: string | null }[],
     markInstalado: boolean = false,
     instalacionMode?: 'instalado' | 'rotacion',
     operacionesAsignados?: { ids: number[]; nombres: string[] } | null
@@ -1213,7 +1285,7 @@ export const campanasService = {
   async assignArteTradicional(
     id: number,
     reservaIds: number[],
-    archivos: { archivo: string; nota: string; spot: number; nombre_arte?: string | null; estatus_operaciones?: string | null }[],
+    archivos: { archivo: string; nota: string; spot: number; nombre_arte?: string | null; estatus_operaciones?: string | null; nombre_generico?: string | null }[],
     markInstalado: boolean = false,
     instalacionMode?: 'instalado' | 'rotacion',
     operacionesAsignados?: { ids: number[]; nombres: string[] } | null
@@ -1500,6 +1572,7 @@ async getUsuarios(): Promise<{ id: number; nombre: string }[]> {
     catorcenaFin?: number;
     yearInicio?: number;
     yearFin?: number;
+    ocupacion?: 'vendido' | 'disponible' | 'todo';
   } = {}): Promise<OrdenMontajeCAT[]> {
     const response = await api.get<ApiResponse<OrdenMontajeCAT[]>>('/campanas/ordenes-montaje/cat', { params });
     if (!response.data.success || !response.data.data) {
@@ -1514,6 +1587,7 @@ async getUsuarios(): Promise<{ id: number; nombre: string }[]> {
     catorcenaFin?: number;
     yearInicio?: number;
     yearFin?: number;
+    ocupacion?: 'vendido' | 'disponible' | 'todo';
   } = {}): Promise<OrdenMontajeINVIAN[]> {
     const response = await api.get<ApiResponse<OrdenMontajeINVIAN[]>>('/campanas/ordenes-montaje/invian', { params });
     if (!response.data.success || !response.data.data) {
@@ -1573,8 +1647,8 @@ async getUsuarios(): Promise<{ id: number; nombre: string }[]> {
       fechaFin: string;
       agruparComoCompleto?: boolean;
     }
-  ): Promise<{ calendarioId: number; reservasCreadas: number; reservasOmitidas?: number }> {
-    const response = await api.post<ApiResponse<{ calendarioId: number; reservasCreadas: number; reservasOmitidas?: number }>>(
+  ): Promise<{ calendarioId: number; reservasCreadas: number; reservasOmitidas?: number; omitidos?: ReservaOmitida[] }> {
+    const response = await api.post<ApiResponse<{ calendarioId: number; reservasCreadas: number; reservasOmitidas?: number; omitidos?: ReservaOmitida[] }>>(
       `/campanas/${campanaId}/reservas`,
       data
     );
@@ -1617,12 +1691,27 @@ async getUsuarios(): Promise<{ id: number; nombre: string }[]> {
     return response.data.data;
   },
 
-  async deleteCara(campanaId: number, caraId: number, eliminarGrupo?: boolean): Promise<void> {
-    const url = `/campanas/${campanaId}/caras/${caraId}${eliminarGrupo ? '?eliminarGrupo=true' : ''}`;
-    const response = await api.delete<ApiResponse<void>>(url);
+  // En CAMPAÑAS, eliminar caras crea una solicitud de autorización (Filtro GC → DG)
+  // en vez de borrar; la respuesta trae requiereAutorizacion + message. Se pueden
+  // pasar cara-ids adicionales (ej. la pareja RT/BF) para que UNA sola solicitud
+  // cubra todas y no se generen tareas separadas.
+  async deleteCara(campanaId: number, caraId: number, eliminarGrupo?: boolean, caraIdsAdicionales?: number[], sinAutorizacion?: boolean, motivoEliminacion?: string): Promise<{ requiereAutorizacion?: boolean; message?: string; caras?: number }> {
+    // sinAutorizacion=true: borra al momento (uso INTERNO: reemplazo de par BF en
+    // edición). El borrado normal del usuario NO lo pasa → va por autorización.
+    // motivoEliminacion: la "nota de eliminación" (por qué se borra) → viaja en la tarea.
+    const qs = new URLSearchParams();
+    if (eliminarGrupo) qs.set('eliminarGrupo', 'true');
+    if (sinAutorizacion) qs.set('sinAutorizacion', 'true');
+    const url = `/campanas/${campanaId}/caras/${caraId}${qs.toString() ? `?${qs.toString()}` : ''}`;
+    const body: Record<string, unknown> = {};
+    if (caraIdsAdicionales && caraIdsAdicionales.length > 0) body.caraIdsAdicionales = caraIdsAdicionales;
+    if (motivoEliminacion && motivoEliminacion.trim()) body.motivoEliminacion = motivoEliminacion.trim();
+    const hasBody = Object.keys(body).length > 0;
+    const response = await api.delete<ApiResponse<void> & { requiereAutorizacion?: boolean; message?: string; caras?: number }>(url, hasBody ? { data: body } : undefined);
     if (!response.data.success) {
       throw new Error(response.data.error || 'Error al eliminar cara');
     }
+    return (response.data as unknown) as { requiereAutorizacion?: boolean; message?: string; caras?: number };
   },
 };
 
