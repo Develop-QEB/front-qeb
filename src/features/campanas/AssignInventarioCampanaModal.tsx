@@ -5364,10 +5364,10 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
         <div className={`p-4 border-b flex items-start gap-3 ${isDark ? 'border-zinc-800' : 'border-gray-200'}`}>
           <div className="flex-1 min-w-0">
             <h3 className={`text-base font-semibold ${isDark ? 'text-amber-300' : 'text-amber-700'}`}>
-              {omitidosReserva.length} pieza{omitidosReserva.length === 1 ? '' : 's'} no reservada{omitidosReserva.length === 1 ? '' : 's'}
+              {omitidosReserva.length} {omitidosReserva.length === 1 ? 'ubicación no reservada' : 'ubicaciones no reservadas'}
             </h3>
             <p className={`text-xs mt-1 ${isDark ? 'text-zinc-400' : 'text-gray-500'}`}>
-              Estas piezas NO quedaron reservadas. Si el motivo dice "ocupado", reintentarlas no va a funcionar: elige otras piezas.
+              Estas ubicaciones NO quedaron reservadas. Si el motivo dice "ocupado", reintentarlas no va a funcionar: elige otras ubicaciones.
             </p>
           </div>
           <button onClick={() => setOmitidosReserva(null)} className={`p-1.5 rounded-lg shrink-0 ${isDark ? 'text-zinc-400 hover:bg-zinc-800' : 'text-gray-400 hover:bg-gray-100'}`}>
