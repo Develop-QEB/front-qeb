@@ -9053,7 +9053,7 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
                                         {/* Eliminación pendiente de autorización DG — la cara sigue viva hasta
                                             que DG apruebe el borrado. Mismo estilo que el Pend. DG normal. */}
                                         {cara.pendiente_eliminacion && (
-                                          <span className={`text-[10px] px-1.5 py-0.5 rounded ${isDark ? 'bg-red-500/20 text-red-300' : 'bg-red-100 text-red-700'}`} title="Eliminación pendiente de autorización de Dirección General">Pend. DG (elim.)</span>
+                                          <span className={`text-[10px] px-1.5 py-0.5 rounded ${isDark ? 'bg-red-500/20 text-red-300' : 'bg-red-100 text-red-700'}`} title="Eliminación pendiente de autorización de Gerencia">Pend. Ger. (elim.)</span>
                                         )}
                                       </div>
                                         );

@@ -449,6 +449,8 @@ export interface Notificacion {
   notas_direccion_bitacora_count?: number;
   descripcion_trafico?: string | null;
   formatos?: string | null;
+  // Cara-ids relacionadas a la tarea (CSV). En tareas de eliminación = circuitos a borrar.
+  ids_reservas?: string | null;
 }
 
 export interface NotificacionStats {
