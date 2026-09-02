@@ -1819,6 +1819,15 @@ function ApprovalModal({
     return sorted;
   }, [allCaras]);
 
+  // Circuitos que se solicitan ELIMINAR (solo tareas de eliminación): sus cara-ids
+  // viajan en tarea.ids_reservas. Se usan para el aviso y para marcar las filas.
+  const caraIdsAEliminar = useMemo(() => {
+    if (!isEliminacionTask) return new Set<number>();
+    return new Set((tarea.ids_reservas || '').split(',').map(s => parseInt(s.trim())).filter(n => !isNaN(n)));
+  }, [isEliminacionTask, tarea.ids_reservas]);
+  const carasAEliminar = useMemo(() => allCaras.filter(c => caraIdsAEliminar.has(Number(c.id))), [allCaras, caraIdsAEliminar]);
+  const totalAEliminar = carasAEliminar.length || (tarea.ids_reservas || '').split(',').filter(Boolean).length;
+
   const totals = useMemo(() => {
     let totalCaras = 0, totalBonif = 0, totalInversion = 0;
     allCaras.forEach(c => {
@@ -1875,7 +1884,9 @@ function ApprovalModal({
         {/* Resumen + Inversión — compactas en móvil */}
         <div className={`px-3 sm:px-6 py-2 sm:py-4 border-b ${isDark ? 'border-zinc-800' : 'border-gray-200'}`}>
           <div className="grid grid-cols-3 md:grid-cols-5 gap-1.5 sm:gap-3">
-            {resumenData && (
+            {/* Stats de tarifa (Aprobadas / Pend. DG) — no aplican a eliminación (esa
+                va a Gerencia y es sobre circuitos puntuales, no aprobación de caras). */}
+            {resumenData && !isEliminacionTask && (
               <>
                 <div className="px-1.5 py-1 sm:p-2 rounded-md sm:rounded-lg bg-emerald-500/10 border border-emerald-500/20 text-center">
                   <div className="text-sm sm:text-lg font-bold text-emerald-400 leading-tight">{resumenData.aprobadas}</div>
@@ -1886,6 +1897,12 @@ function ApprovalModal({
                   <div className={`text-[9px] sm:text-[10px] ${isDark ? 'text-zinc-500' : 'text-gray-400'}`}>Pend. {tipoAutorizacion === 'dcm' ? 'DCM' : 'DG'}</div>
                 </div>
               </>
+            )}
+            {isEliminacionTask && (
+              <div className="px-1.5 py-1 sm:p-2 rounded-md sm:rounded-lg bg-red-500/10 border border-red-500/20 text-center col-span-2">
+                <div className="text-sm sm:text-lg font-bold text-red-400 leading-tight">{totalAEliminar}</div>
+                <div className={`text-[9px] sm:text-[10px] ${isDark ? 'text-zinc-500' : 'text-gray-400'}`}>A eliminar</div>
+              </div>
             )}
             <div className="px-1.5 py-1 sm:p-2 rounded-md sm:rounded-lg bg-cyan-500/10 border border-cyan-500/20 text-center">
               <div className="text-sm sm:text-lg font-bold text-cyan-400 leading-tight">{totals.totalGeneral}</div>
@@ -1901,6 +1918,30 @@ function ApprovalModal({
             </div>
           </div>
         </div>
+
+        {/* Aviso de ELIMINACIÓN — qué circuito(s) se solicitan borrar (para que el
+            Gerente vea exactamente qué está autorizando, no solo el total de la campaña). */}
+        {isEliminacionTask && (
+          <div className={`px-3 sm:px-6 py-2.5 sm:py-3 border-b ${isDark ? 'border-zinc-800 bg-red-500/5' : 'border-gray-200 bg-red-50/60'}`}>
+            <div className="flex items-center gap-2 mb-1.5">
+              <Trash2 className="h-4 w-4 text-red-400 shrink-0" />
+              <span className={`text-xs sm:text-sm font-semibold ${isDark ? 'text-red-300' : 'text-red-700'}`}>
+                Se solicita ELIMINAR {totalAEliminar} circuito(s) de esta campaña
+              </span>
+            </div>
+            {carasAEliminar.length > 0 ? (
+              <div className="flex flex-wrap gap-1.5">
+                {carasAEliminar.map(c => (
+                  <span key={c.id} className={`text-[10px] sm:text-xs px-2 py-0.5 rounded border font-medium ${isDark ? 'bg-red-500/10 border-red-500/30 text-red-200' : 'bg-white border-red-200 text-red-700'}`}>
+                    {c.articulo || c.clave || `#${c.id}`}{c.ciudad ? ` · ${c.ciudad}` : ''}{c.catorcena ? ` · ${c.catorcena}` : ''}
+                  </span>
+                ))}
+              </div>
+            ) : (
+              <span className={`text-[10px] sm:text-xs italic ${isDark ? 'text-zinc-500' : 'text-gray-500'}`}>Los circuitos marcados abajo con "A eliminar".</span>
+            )}
+          </div>
+        )}
 
         {/* Tabla de caras organizada por catorcenas */}
         <div className="flex-1 overflow-y-auto px-3 sm:px-6 py-3 sm:py-4">
@@ -1953,7 +1994,7 @@ function ApprovalModal({
                     </thead>
                     <tbody className={`divide-y ${isDark ? 'divide-zinc-800/50' : 'divide-gray-100'}`}>
                       {caras.map((cara) => (
-                        <tr key={cara.id} className={isDark ? 'hover:bg-zinc-800/30' : 'hover:bg-gray-50'}>
+                        <tr key={cara.id} className={`${caraIdsAEliminar.has(Number(cara.id)) ? (isDark ? 'bg-red-500/10' : 'bg-red-50') : ''} ${isDark ? 'hover:bg-zinc-800/30' : 'hover:bg-gray-50'}`}>
                           <td className="px-3 py-2.5">
                             <div className={`text-xs ${isDark ? 'text-white' : 'text-gray-900'} font-medium`}>{cara.articulo || '—'}</div>
                             <div className={`text-[10px] ${isDark ? 'text-zinc-500' : 'text-gray-400'}`}>{cara.formato}</div>
@@ -1978,6 +2019,9 @@ function ApprovalModal({
                           </td>
                           <td className="px-3 py-2.5 text-center">
                             <div className="flex flex-col gap-0.5 items-center">
+                              {caraIdsAEliminar.has(Number(cara.id)) && (
+                                <span className="text-[10px] px-1.5 py-0.5 rounded bg-red-500/20 text-red-300 font-semibold">A eliminar</span>
+                              )}
                               {cara.autorizacion_dg === 'aprobado' && cara.autorizacion_dcm === 'aprobado' && (
                                 <span className="text-[10px] px-1.5 py-0.5 rounded bg-emerald-500/20 text-emerald-300">OK</span>
                               )}
