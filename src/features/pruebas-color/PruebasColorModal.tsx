@@ -1,6 +1,6 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { AlertCircle, CheckCircle2, Loader2, Paintbrush, Send, Trash2, X, Upload, FileImage } from 'lucide-react';
+import { AlertCircle, Check, CheckCircle2, ChevronDown, Loader2, Paintbrush, Search, Send, Trash2, X, Upload, FileImage } from 'lucide-react';
 import { useThemeStore } from '../../store/themeStore';
 import { useAuthStore } from '../../store/authStore';
 import {
@@ -11,7 +11,7 @@ import {
   TRANSICIONES,
   puedeGestionarPruebaColor,
 } from '../../services/pruebasColor.service';
-import { propuestasService } from '../../services/propuestas.service';
+import { propuestasService, SolicitudCara } from '../../services/propuestas.service';
 import { uploadsService } from '../../services/uploads.service';
 import { formatDate } from '../../lib/utils';
 
@@ -190,18 +190,13 @@ export function PruebasColorModal({ isOpen, onClose, propuestaId, contextoNombre
                 {circuitoLabel || `Circuito #${initialScId}`}
               </div>
             ) : (
-              <select
-                className={inputCls}
-                value={scId ?? ''}
-                onChange={e => setScId(e.target.value ? Number(e.target.value) : null)}
-              >
-                <option value="">Selecciona un circuito...</option>
-                {(carasQuery.data || []).map(c => (
-                  <option key={c.id} value={c.id}>
-                    #{c.id} — {c.articulo || 'Sin articulo'} · {c.formato || 'Sin formato'} · {c.ciudad || c.estados || 'Sin ciudad'}
-                  </option>
-                ))}
-              </select>
+              <CircuitoCombobox
+                caras={carasQuery.data || []}
+                isLoading={carasQuery.isLoading}
+                selectedId={scId}
+                onChange={setScId}
+                isDark={isDark}
+              />
             )}
           </div>
 
@@ -402,6 +397,146 @@ function PruebaCard({
           </div>
         )}
       </div>
+    </div>
+  );
+}
+
+// ─── Combobox de circuitos con búsqueda ─────────────────────────────────
+// Selector custom (no select nativo) con input de búsqueda. Filtra por ID,
+// artículo, formato, ciudad y estado. Cierra con click afuera o Escape.
+function CircuitoCombobox({
+  caras,
+  isLoading,
+  selectedId,
+  onChange,
+  isDark,
+}: {
+  caras: SolicitudCara[];
+  isLoading: boolean;
+  selectedId: number | null;
+  onChange: (id: number | null) => void;
+  isDark: boolean;
+}) {
+  const [open, setOpen] = useState(false);
+  const [query, setQuery] = useState('');
+  const containerRef = useRef<HTMLDivElement>(null);
+  const inputRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    if (!open) return;
+    const onDown = (e: MouseEvent) => {
+      if (containerRef.current && !containerRef.current.contains(e.target as Node)) setOpen(false);
+    };
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') setOpen(false); };
+    document.addEventListener('mousedown', onDown);
+    document.addEventListener('keydown', onKey);
+    // Auto-focus del input de búsqueda al abrir.
+    setTimeout(() => inputRef.current?.focus(), 0);
+    return () => {
+      document.removeEventListener('mousedown', onDown);
+      document.removeEventListener('keydown', onKey);
+    };
+  }, [open]);
+
+  const filtered = useMemo(() => {
+    const q = query.trim().toLowerCase();
+    if (!q) return caras;
+    return caras.filter(c => {
+      const parts = [
+        String(c.id),
+        c.articulo || '',
+        c.formato || '',
+        c.ciudad || '',
+        c.estados || '',
+        c.tipo || '',
+      ].join(' ').toLowerCase();
+      return parts.includes(q);
+    });
+  }, [caras, query]);
+
+  const selected = useMemo(() => caras.find(c => c.id === selectedId), [caras, selectedId]);
+  const labelFor = (c: SolicitudCara) =>
+    `#${c.id} — ${c.articulo || 'Sin articulo'} · ${c.formato || 'Sin formato'} · ${c.ciudad || c.estados || 'Sin ciudad'}`;
+
+  const btnCls = `w-full flex items-center justify-between gap-2 rounded-lg border px-3 py-2 text-sm text-left ${
+    isDark ? 'bg-zinc-800 border-zinc-700 text-white hover:bg-zinc-800/80'
+           : 'bg-white border-gray-300 text-gray-900 hover:bg-gray-50'
+  }`;
+  const panelCls = `absolute z-20 mt-1 w-full rounded-lg border shadow-xl overflow-hidden ${
+    isDark ? 'bg-zinc-900 border-zinc-700' : 'bg-white border-gray-200'
+  }`;
+  const searchCls = `w-full bg-transparent outline-none text-sm ${
+    isDark ? 'text-white placeholder:text-zinc-500' : 'text-gray-900 placeholder:text-gray-400'
+  }`;
+
+  return (
+    <div ref={containerRef} className="relative">
+      <button type="button" onClick={() => setOpen(o => !o)} className={btnCls}>
+        <span className={`truncate ${!selected ? (isDark ? 'text-zinc-500' : 'text-gray-400') : ''}`}>
+          {selected ? labelFor(selected) : (isLoading ? 'Cargando circuitos...' : 'Selecciona un circuito...')}
+        </span>
+        <ChevronDown className={`h-4 w-4 shrink-0 transition-transform ${open ? 'rotate-180' : ''} ${isDark ? 'text-zinc-500' : 'text-gray-400'}`} />
+      </button>
+
+      {open && (
+        <div className={panelCls}>
+          <div className={`flex items-center gap-2 px-3 py-2 border-b ${isDark ? 'border-zinc-800' : 'border-gray-200'}`}>
+            <Search className={`h-4 w-4 shrink-0 ${isDark ? 'text-zinc-500' : 'text-gray-400'}`} />
+            <input
+              ref={inputRef}
+              value={query}
+              onChange={e => setQuery(e.target.value)}
+              placeholder="Buscar por #ID, articulo, formato, ciudad..."
+              className={searchCls}
+            />
+            {query && (
+              <button type="button" onClick={() => setQuery('')} className={isDark ? 'text-zinc-500 hover:text-zinc-300' : 'text-gray-400 hover:text-gray-600'} title="Limpiar">
+                <X className="h-3.5 w-3.5" />
+              </button>
+            )}
+          </div>
+
+          <div className="max-h-72 overflow-y-auto py-1">
+            {isLoading && (
+              <div className={`px-3 py-4 text-xs text-center flex items-center justify-center gap-2 ${isDark ? 'text-zinc-500' : 'text-gray-400'}`}>
+                <Loader2 className="h-3 w-3 animate-spin" /> Cargando circuitos...
+              </div>
+            )}
+            {!isLoading && filtered.length === 0 && (
+              <div className={`px-3 py-4 text-xs text-center ${isDark ? 'text-zinc-500' : 'text-gray-400'}`}>
+                {caras.length === 0 ? 'La propuesta no tiene circuitos.' : 'Sin coincidencias.'}
+              </div>
+            )}
+            {filtered.map(c => {
+              const isSel = c.id === selectedId;
+              return (
+                <button
+                  type="button"
+                  key={c.id}
+                  onClick={() => { onChange(c.id); setOpen(false); setQuery(''); }}
+                  className={`w-full text-left px-3 py-2 text-xs flex items-start gap-2 transition-colors ${
+                    isSel
+                      ? (isDark ? 'bg-fuchsia-500/15 text-fuchsia-200' : 'bg-fuchsia-50 text-fuchsia-900')
+                      : (isDark ? 'text-zinc-200 hover:bg-zinc-800' : 'text-gray-800 hover:bg-gray-50')
+                  }`}
+                >
+                  <span className="w-4 shrink-0 mt-0.5">{isSel && <Check className="h-3.5 w-3.5" />}</span>
+                  <span className="truncate">
+                    <span className={`font-medium ${isDark ? 'text-fuchsia-300' : 'text-fuchsia-700'}`}>#{c.id}</span>
+                    {' — '}
+                    <span>{c.articulo || 'Sin articulo'}</span>
+                    <span className={isDark ? 'text-zinc-500' : 'text-gray-500'}> · {c.formato || 'Sin formato'} · {c.ciudad || c.estados || 'Sin ciudad'}</span>
+                  </span>
+                </button>
+              );
+            })}
+          </div>
+
+          <div className={`px-3 py-1.5 text-[10px] border-t ${isDark ? 'border-zinc-800 text-zinc-500' : 'border-gray-200 text-gray-400'}`}>
+            {filtered.length} de {caras.length} circuito(s)
+          </div>
+        </div>
+      )}
     </div>
   );
 }

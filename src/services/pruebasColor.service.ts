@@ -1,4 +1,16 @@
+import { AxiosError } from 'axios';
 import api from '../lib/api';
+
+// Extrae el `error` que devuelve el back en `{success:false, error:'...'}`
+// cuando axios ya lanzó por status >=400. Cae al mensaje default si no lo hay.
+function extractApiError(err: unknown, fallback: string): Error {
+  if (err instanceof AxiosError) {
+    const serverError = err.response?.data as { error?: string } | undefined;
+    if (serverError?.error) return new Error(serverError.error);
+  }
+  if (err instanceof Error) return err;
+  return new Error(fallback);
+}
 
 // Estatus posibles de una prueba de color.
 // Transiciones: solicitada -> enviada_proveedor -> aprobada | rechazada.
@@ -42,30 +54,46 @@ export interface ListarPruebaColorParams {
 
 export const pruebasColorService = {
   async listar(params: ListarPruebaColorParams): Promise<PruebaColor[]> {
-    const query = new URLSearchParams();
-    if (params.propuesta_id) query.set('propuesta_id', String(params.propuesta_id));
-    if (params.campania_id) query.set('campania_id', String(params.campania_id));
-    if (params.sc_id) query.set('sc_id', String(params.sc_id));
-    const { data } = await api.get(`/pruebas-color?${query.toString()}`);
-    if (!data.success) throw new Error(data.error || 'Error al listar pruebas de color');
-    return data.data as PruebaColor[];
+    try {
+      const query = new URLSearchParams();
+      if (params.propuesta_id) query.set('propuesta_id', String(params.propuesta_id));
+      if (params.campania_id) query.set('campania_id', String(params.campania_id));
+      if (params.sc_id) query.set('sc_id', String(params.sc_id));
+      const { data } = await api.get(`/pruebas-color?${query.toString()}`);
+      if (!data.success) throw new Error(data.error || 'Error al listar pruebas de color');
+      return data.data as PruebaColor[];
+    } catch (err) {
+      throw extractApiError(err, 'Error al listar pruebas de color');
+    }
   },
 
   async crear(input: CrearPruebaColorInput): Promise<PruebaColor> {
-    const { data } = await api.post('/pruebas-color', input);
-    if (!data.success) throw new Error(data.error || 'Error al crear prueba de color');
-    return data.data as PruebaColor;
+    try {
+      const { data } = await api.post('/pruebas-color', input);
+      if (!data.success) throw new Error(data.error || 'Error al crear prueba de color');
+      return data.data as PruebaColor;
+    } catch (err) {
+      throw extractApiError(err, 'Error al crear prueba de color');
+    }
   },
 
   async actualizarEstatus(id: number, estatus: EstatusPruebaColor): Promise<PruebaColor> {
-    const { data } = await api.patch(`/pruebas-color/${id}/estatus`, { estatus });
-    if (!data.success) throw new Error(data.error || 'Error al actualizar estatus');
-    return data.data as PruebaColor;
+    try {
+      const { data } = await api.patch(`/pruebas-color/${id}/estatus`, { estatus });
+      if (!data.success) throw new Error(data.error || 'Error al actualizar estatus');
+      return data.data as PruebaColor;
+    } catch (err) {
+      throw extractApiError(err, 'Error al actualizar estatus');
+    }
   },
 
   async eliminar(id: number): Promise<void> {
-    const { data } = await api.delete(`/pruebas-color/${id}`);
-    if (!data.success) throw new Error(data.error || 'Error al eliminar prueba de color');
+    try {
+      const { data } = await api.delete(`/pruebas-color/${id}`);
+      if (!data.success) throw new Error(data.error || 'Error al eliminar prueba de color');
+    } catch (err) {
+      throw extractApiError(err, 'Error al eliminar prueba de color');
+    }
   },
 };
 
