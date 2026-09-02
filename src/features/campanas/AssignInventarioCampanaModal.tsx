@@ -5104,7 +5104,7 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
             showToast('Mueble completo eliminado correctamente', 'success');
           } catch (error) {
             console.error('Error deleting grupo completo:', error);
-            showToast('Error al eliminar mueble completo', 'error');
+            showToast((error as any)?.response?.data?.error || 'Error al eliminar mueble completo', 'error');
           } finally {
             setIsSaving(false);
             setConfirmModal(prev => ({ ...prev, isOpen: false }));
@@ -5128,14 +5128,18 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
       const caraDuenia = caras.find(c => c.id === reserva.solicitudCaraId);
       if (caraDuenia?.grupo_masivo_id) {
         const carasGrupo = caras.filter(c => c.grupo_masivo_id === caraDuenia.grupo_masivo_id && c.id);
-        const equivalentes = reservas.filter(r =>
+        // Los equivalentes con APS asignado quedan FUERA del arrastre masivo:
+        // pueden ser de catorcenas ya posteadas y el back los rechaza (409).
+        const todosEquivalentes = reservas.filter(r =>
           r.codigo_unico === reserva.codigo_unico &&
           carasGrupo.some(c => c.id === r.solicitudCaraId) &&
           r.reservaId
         );
-        if (equivalentes.length > 1) {
+        const equivalentes = todosEquivalentes.filter(r => !(r.aps && r.aps > 0));
+        const omitidasAps = todosEquivalentes.length - equivalentes.length;
+        if (equivalentes.length > 1 || omitidasAps > 0) {
           reservasAEliminar = equivalentes;
-          masivoLabel = ` (${equivalentes.length} reservas en grupo masivo)`;
+          masivoLabel = ` (${equivalentes.length} reservas en grupo masivo${omitidasAps > 0 ? `; ${omitidasAps} omitida(s) por tener APS` : ''})`;
         }
       }
     }
@@ -5161,7 +5165,7 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
           showToast(`${reservasAEliminar.length} reserva(s) eliminada(s) correctamente`, 'success');
         } catch (error) {
           console.error('Error deleting reserva:', error);
-          showToast('Error al eliminar reserva', 'error');
+          showToast((error as any)?.response?.data?.error || 'Error al eliminar reserva', 'error');
         } finally {
           setIsSaving(false);
           setConfirmModal(prev => ({ ...prev, isOpen: false }));
@@ -5225,23 +5229,31 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
     let masivoLabel = '';
     if (eliminarMasivoC) {
       const expanded = new Map<string, typeof selectedReservasList[0]>();
+      let omitidasAps = 0;
       for (const r of selectedReservasList) {
         expanded.set(r.id, r);
         if (r.solicitudCaraId) {
           const caraDuenia = caras.find(c => c.id === r.solicitudCaraId);
           if (caraDuenia?.grupo_masivo_id) {
             const carasGrupo = caras.filter(c => c.grupo_masivo_id === caraDuenia.grupo_masivo_id && c.id);
+            // Equivalentes con APS asignado NO se arrastran: pueden ser de
+            // catorcenas ya posteadas y el back los rechaza (409).
             const equivalentes = reservas.filter(r2 =>
               r2.codigo_unico === r.codigo_unico &&
               carasGrupo.some(c => c.id === r2.solicitudCaraId)
             );
-            equivalentes.forEach(eq => expanded.set(eq.id, eq));
+            for (const eq of equivalentes) {
+              if (eq.aps && eq.aps > 0) { omitidasAps += 1; continue; }
+              expanded.set(eq.id, eq);
+            }
           }
         }
       }
       finalSelected = Array.from(expanded.values());
       const replicadas = finalSelected.length - selectedReservasList.length;
-      if (replicadas > 0) masivoLabel = ` (+ ${replicadas} replicadas en grupo masivo)`;
+      if (replicadas > 0 || omitidasAps > 0) {
+        masivoLabel = ` (+ ${replicadas} replicadas en grupo masivo${omitidasAps > 0 ? `; ${omitidasAps} omitida(s) por tener APS` : ''})`;
+      }
     }
 
     // Separate reservas with backend IDs from those without
@@ -5283,7 +5295,7 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
           showToast(`${finalSelected.length} reserva(s) eliminada(s) correctamente${masivoLabel}`, 'success');
         } catch (error) {
           console.error('Error deleting reservas:', error);
-          showToast('Error al eliminar reservas', 'error');
+          showToast((error as any)?.response?.data?.error || 'Error al eliminar reservas', 'error');
         } finally {
           setIsSaving(false);
           setConfirmModal(prev => ({ ...prev, isOpen: false }));

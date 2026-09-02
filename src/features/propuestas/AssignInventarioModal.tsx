@@ -5140,7 +5140,7 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
             showToast('Mueble completo eliminado correctamente', 'success');
           } catch (error) {
             console.error('Error deleting grupo completo:', error);
-            showToast('Error al eliminar mueble completo', 'error');
+            showToast((error as any)?.response?.data?.error || 'Error al eliminar mueble completo', 'error');
           } finally {
             setIsSaving(false);
             setConfirmModal(prev => ({ ...prev, isOpen: false }));
@@ -5196,7 +5196,7 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
           showToast(`${reservasAEliminar.length} reserva(s) eliminada(s) correctamente`, 'success');
         } catch (error) {
           console.error('Error deleting reserva:', error);
-          showToast('Error al eliminar reserva', 'error');
+          showToast((error as any)?.response?.data?.error || 'Error al eliminar reserva', 'error');
         } finally {
           setIsSaving(false);
           setConfirmModal(prev => ({ ...prev, isOpen: false }));
@@ -5311,7 +5311,7 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
           showToast(`${finalSelected.length} reserva(s) eliminada(s) correctamente${masivoLabel}`, 'success');
         } catch (error) {
           console.error('Error deleting reservas:', error);
-          showToast('Error al eliminar reservas', 'error');
+          showToast((error as any)?.response?.data?.error || 'Error al eliminar reservas', 'error');
         } finally {
           setIsSaving(false);
           setConfirmModal(prev => ({ ...prev, isOpen: false }));
