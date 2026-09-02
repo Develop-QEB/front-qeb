@@ -1933,7 +1933,7 @@ function ApprovalModal({
               <div className="flex flex-wrap gap-1.5">
                 {carasAEliminar.map(c => (
                   <span key={c.id} className={`text-[10px] sm:text-xs px-2 py-0.5 rounded border font-medium ${isDark ? 'bg-red-500/10 border-red-500/30 text-red-200' : 'bg-white border-red-200 text-red-700'}`}>
-                    {c.articulo || c.clave || `#${c.id}`}{c.ciudad ? ` · ${c.ciudad}` : ''}{c.catorcena ? ` · ${c.catorcena}` : ''}
+                    {c.articulo || c.clave || `#${c.id}`}{(c.estados || c.ciudad) ? ` · ${c.estados || c.ciudad}` : ''}{c.catorcena ? ` · ${c.catorcena}` : ''}
                   </span>
                 ))}
               </div>
