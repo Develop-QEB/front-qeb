@@ -108,7 +108,7 @@ export function NuevaNotaDireccionModal({ isOpen, onCancel, onConfirm, contexto,
               </h3>
               <p className={`mt-0.5 text-xs ${isDark ? 'text-zinc-400' : 'text-gray-500'}`}>
                 {esElim
-                  ? 'Se enviará a autorización de eliminación (Gerente → Dirección).'
+                  ? 'Se enviará a autorización de eliminación de Gerencia.'
                   : (tipoLabel
                     ? `Se enviará una autorización ${tipoLabel} tras guardar.`
                     : 'Se enviará una autorización tras guardar.')}

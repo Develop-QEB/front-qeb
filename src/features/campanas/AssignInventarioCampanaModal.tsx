@@ -92,7 +92,7 @@ interface CaraItem {
   anio_fin?: number;
   autorizacion_dg?: string;
   autorizacion_dcm?: string;
-  // Cara con una tarea de eliminación abierta (Filtro GC o DG) → badge "Pend. DG (elim.)".
+  // Cara con una tarea de eliminación abierta (autorización de Gerencia) → badge "Pend. Ger. (elim.)".
   pendiente_eliminacion?: boolean;
   _originalDg?: string;
   _originalDcm?: string;
@@ -9050,8 +9050,8 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
                                         {dcmDisplay === 'pendiente' && dgDisplay !== 'rechazado' && (
                                           <span className={`text-[10px] px-1.5 py-0.5 rounded ${isDark ? 'bg-amber-500/20 text-amber-300' : 'bg-amber-100 text-amber-700'}`}>Pend. DCM</span>
                                         )}
-                                        {/* Eliminación pendiente de autorización DG — la cara sigue viva hasta
-                                            que DG apruebe el borrado. Mismo estilo que el Pend. DG normal. */}
+                                        {/* Eliminación pendiente de autorización de Gerencia — la cara sigue
+                                            viva hasta que el Gerente apruebe el borrado. */}
                                         {cara.pendiente_eliminacion && (
                                           <span className={`text-[10px] px-1.5 py-0.5 rounded ${isDark ? 'bg-red-500/20 text-red-300' : 'bg-red-100 text-red-700'}`} title="Eliminación pendiente de autorización de Gerencia">Pend. Ger. (elim.)</span>
                                         )}
@@ -9941,7 +9941,7 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
             // El motivo (texto) viaja en la solicitud de eliminación → descripción de la tarea.
             const resp = await campanasService.deleteCara(campana!.id, primero, false, resto, false, texto);
             setDeleteNota({ open: false, caraIds: [] });
-            // Optimista: marcar las caras como pendientes de eliminación → badge "Pend. DG (elim.)".
+            // Optimista: marcar las caras como pendientes de eliminación → badge "Pend. Ger. (elim.)".
             setCaras(prev => prev.map(c => (c.id && ids.includes(c.id)) ? { ...c, pendiente_eliminacion: true } : c));
             alert(resp?.message || 'Solicitud de eliminación enviada a autorización.');
           } catch (error) {
