@@ -1018,7 +1018,7 @@ export function HistorialTicketsPage() {
                   />
                 <button
                   onClick={() => setSelectedTicket(t)}
-                  className={`flex-1 text-left rounded-xl border p-4 transition-all duration-200 ${
+                  className={`flex-1 min-w-0 text-left rounded-xl border p-4 transition-all duration-200 ${
                     isNew
                       ? isDark
                         ? 'border-purple-500/40 bg-gradient-to-r from-purple-900/30 via-fuchsia-900/20 to-purple-900/30 hover:border-purple-400/60 shadow-lg shadow-purple-500/10'
