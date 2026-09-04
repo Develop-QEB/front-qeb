@@ -9,8 +9,9 @@ import { solicitudesService, UserOption } from '../../services/solicitudes.servi
 import { clientesService } from '../../services/clientes.service';
 import { formatCurrency } from '../../lib/utils';
 import { getSapCache, setSapCache, SAP_CACHE_KEYS, clearSapCache } from '../../lib/sapCache';
-import { SAP_BASE_URL } from '../../store/environmentStore';
+import { SAP_BASE_URL, getEndpoints } from '../../store/environmentStore';
 import { filterAllowedArticulos } from '../../config/allowedDigitalArticles';
+import { parseArticuloUDC, esArticuloUDCBasura } from '../../lib/udc';
 import type { SapDatabase } from '../../store/environmentStore';
 import { useSocketEquipos } from '../../hooks/useSocket';
 import { useAuthStore } from '../../store/authStore';
@@ -915,10 +916,38 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
     return cuicDataRaw.filter(c => c.sap_database === sapDbFilter);
   }, [cuicDataRaw, sapDbFilter]);
 
+  // BD SAP del catálogo: UDC (aeropuerto) si el cliente seleccionado es UDC.
+  const sapDbArticulos = ((selectedCuic?.sap_database || '') as string).toUpperCase() === 'UDC' ? ('UDC' as const) : null;
+  // UDC = periodos SIEMPRE mensuales (inventario aeropuerto AICM, todo digital,
+  // dispo ilimitada como parabús digital). Al elegir BD/cliente UDC forzamos
+  // 'mensual' y ocultamos la opción Catorcena del toggle.
+  const esUDC = sapDbFilter === 'UDC' || ((selectedCuic?.sap_database || '') as string).toUpperCase() === 'UDC';
+  useEffect(() => {
+    if (esUDC && tipoPeriodo !== 'mensual') {
+      setTipoPeriodo('mensual');
+      setCatorcenaInicio(undefined);
+      setCatorcenaFin(undefined);
+    }
+  }, [esUDC, tipoPeriodo]);
+  // UDC: el tipo SIEMPRE es Digital (inventario aeropuerto, sin variante Tradicional).
+  useEffect(() => {
+    if (esUDC && newCara.tipo !== 'Digital') {
+      setNewCara(prev => ({ ...prev, tipo: 'Digital' }));
+    }
+  }, [esUDC, newCara.tipo]);
   // Fetch ALL articulos from SAP with cache
   const { data: articulosData, isLoading: articulosLoading, refetch: refetchArticulos, isFetching: articulosFetching } = useQuery({
-    queryKey: ['sap-articulos-all', forceRefreshSap],
+    queryKey: ['sap-articulos-all', forceRefreshSap, sapDbArticulos],
     queryFn: async () => {
+      // UDC (aeropuerto AICM): catálogo aparte (/articulos-udc), sin la caché
+      // compartida de CIMU y filtrando las filas basura del catálogo.
+      if (sapDbArticulos === 'UDC') {
+        const response = await fetch(getEndpoints('UDC').articulos);
+        if (!response.ok) throw new Error('Error fetching articulos UDC');
+        const data = await response.json();
+        const raw = (data.value || data) as SAPArticulo[];
+        return filterAllowedArticulos(raw.filter(a => !esArticuloUDCBasura(a.ItemCode)));
+      }
       // Try cache first (unless forcing refresh)
       if (forceRefreshSap === 0) {
         const cached = getSapCache<SAPArticulo[]>(SAP_CACHE_KEYS.ARTICULOS);
@@ -960,7 +989,7 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
     return articulosData.filter(a => {
       const code = a.ItemCode.toUpperCase();
       if (code.startsWith('BF') || code.startsWith('CF')) return false;
-      return getRequiredPeriodoForArticulo(a.ItemName) === tipoPeriodo;
+      return getRequiredPeriodoForArticulo(a.ItemName, a.ItemCode) === tipoPeriodo;
     });
   }, [articulosData, tipoPeriodo]);
 
@@ -2699,7 +2728,7 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
                 </label>
                 {/* SAP Database filter buttons */}
                 <div className="flex items-center gap-1.5">
-                  {(['ALL', 'CIMU', 'TRADE'] as const).map(db => (
+                  {(['ALL', 'CIMU', 'TRADE', 'UDC'] as const).map(db => (
                     <button
                       key={db}
                       type="button"
@@ -2708,6 +2737,7 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
                         sapDbFilter === db
                           ? db === 'ALL' ? 'bg-purple-600 text-white border-purple-500'
                           : db === 'CIMU' ? 'bg-blue-600 text-white border-blue-500'
+                          : db === 'UDC' ? 'bg-cyan-600 text-white border-cyan-500'
                           : 'bg-emerald-600 text-white border-emerald-500'
                           : isDark ? 'bg-zinc-800/60 text-zinc-400 border-zinc-700/50 hover:bg-zinc-800 hover:text-zinc-200' : 'bg-gray-50 text-gray-500 border-gray-200 hover:bg-gray-100 hover:text-gray-700'
                       }`}
@@ -2753,6 +2783,7 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
                           item.sap_database === 'CIMU' ? isDark ? 'bg-blue-500/20 text-blue-300 border-blue-500/30' : 'bg-blue-50 text-blue-700 border-blue-200' :
                           item.sap_database === 'TEST' ? isDark ? 'bg-amber-500/20 text-amber-300 border-amber-500/30' : 'bg-amber-50 text-amber-700 border-amber-200' :
                           item.sap_database === 'TRADE' ? isDark ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500/30' : 'bg-emerald-50 text-emerald-700 border-emerald-200' :
+                          item.sap_database === 'UDC' ? isDark ? 'bg-cyan-500/20 text-cyan-300 border-cyan-500/30' : 'bg-cyan-50 text-cyan-700 border-cyan-200' :
                           isDark ? 'bg-zinc-500/20 text-zinc-300 border-zinc-500/30' : 'bg-gray-50 text-gray-700 border-gray-200'
                         }`}>{item.sap_database}</span>
                       )}
@@ -2769,6 +2800,7 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
                           item.sap_database === 'CIMU' ? isDark ? 'bg-blue-500/20 text-blue-300 border-blue-500/30' : 'bg-blue-50 text-blue-700 border-blue-200' :
                           item.sap_database === 'TEST' ? isDark ? 'bg-amber-500/20 text-amber-300 border-amber-500/30' : 'bg-amber-50 text-amber-700 border-amber-200' :
                           item.sap_database === 'TRADE' ? isDark ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500/30' : 'bg-emerald-50 text-emerald-700 border-emerald-200' :
+                          item.sap_database === 'UDC' ? isDark ? 'bg-cyan-500/20 text-cyan-300 border-cyan-500/30' : 'bg-cyan-50 text-cyan-700 border-cyan-200' :
                           isDark ? 'bg-zinc-500/20 text-zinc-300 border-zinc-500/30' : 'bg-gray-50 text-gray-700 border-gray-200'
                         }`}>{item.sap_database}</span>
                       )}
@@ -2792,6 +2824,7 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
                           selectedCuic.sap_database === 'CIMU' ? isDark ? 'bg-blue-500/20 text-blue-300 border-blue-500/30' : 'bg-blue-50 text-blue-700 border-blue-200' :
                           selectedCuic.sap_database === 'TEST' ? isDark ? 'bg-amber-500/20 text-amber-300 border-amber-500/30' : 'bg-amber-50 text-amber-700 border-amber-200' :
                           selectedCuic.sap_database === 'TRADE' ? isDark ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500/30' : 'bg-emerald-50 text-emerald-700 border-emerald-200' :
+                          selectedCuic.sap_database === 'UDC' ? isDark ? 'bg-cyan-500/20 text-cyan-300 border-cyan-500/30' : 'bg-cyan-50 text-cyan-700 border-cyan-200' :
                           isDark ? 'bg-zinc-500/20 text-zinc-300 border-zinc-500/30' : 'bg-gray-50 text-gray-700 border-gray-200'
                         }`}>{selectedCuic.sap_database}</span>
                       )}
@@ -2894,8 +2927,9 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
                     <Calendar className="h-4 w-4 text-purple-400" />
                     Rango de Fechas
                   </label>
-                  {/* Toggle Catorcena / Mensual */}
+                  {/* Toggle Catorcena / Mensual — UDC (aeropuerto) es SOLO mensual */}
                   <div className={`flex items-center ${isDark ? 'bg-zinc-800 border-zinc-700' : 'bg-gray-100 border-gray-200'} rounded-lg border p-0.5`}>
+                    {!esUDC && (
                     <button
                       type="button"
                       onClick={() => {
@@ -2904,7 +2938,7 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
                         setMesFin(undefined);
                         setCaras([]);
                         // Clear articulo/formato if incompatible with new period type
-                        if (newCara.articulo && getRequiredPeriodoForArticulo(newCara.articulo.ItemName) !== 'catorcena') {
+                        if (newCara.articulo && getRequiredPeriodoForArticulo(newCara.articulo.ItemName, newCara.articulo.ItemCode) !== 'catorcena') {
                           setNewCara(prev => ({ ...prev, articulo: null, formato: '', tipo: '', plaza: '', estado: '', ciudades: [], tarifaPublica: 0 }));
                         } else if (newCara.formato && getRequiredPeriodoForFormato(newCara.formato) !== 'catorcena') {
                           setNewCara(prev => ({ ...prev, formato: '' }));
@@ -2914,6 +2948,7 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
                     >
                       Catorcena
                     </button>
+                    )}
                     <button
                       type="button"
                       onClick={() => {
@@ -2922,7 +2957,7 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
                         setCatorcenaFin(undefined);
                         setCaras([]);
                         // Clear articulo/formato if incompatible with new period type
-                        if (newCara.articulo && getRequiredPeriodoForArticulo(newCara.articulo.ItemName) !== 'mensual') {
+                        if (newCara.articulo && getRequiredPeriodoForArticulo(newCara.articulo.ItemName, newCara.articulo.ItemCode) !== 'mensual') {
                           setNewCara(prev => ({ ...prev, articulo: null, formato: '', tipo: '', plaza: '', estado: '', ciudades: [], tarifaPublica: 0 }));
                         } else if (newCara.formato && getRequiredPeriodoForFormato(newCara.formato) !== 'mensual') {
                           setNewCara(prev => ({ ...prev, formato: '' }));
@@ -3224,6 +3259,29 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
                         }
                       }
 
+                      // UDC (aeropuerto AICM): todo Digital, mensual, plaza AICM.
+                      if (sapDbArticulos === 'UDC') {
+                        const udc = parseArticuloUDC(item.ItemCode, item.ItemName);
+                        const tarifaUdc = getTarifaFromArticulo(item);
+                        const esCT = item.ItemCode.toUpperCase().startsWith('CT');
+                        const esIN = item.ItemCode.toUpperCase().startsWith('IN');
+                        const esIM = item.ItemCode.toUpperCase().startsWith('IM');
+                        const esESP = isEspecialArticle(item.ItemCode);
+                        setNewCara({
+                          ...newCara,
+                          articulo: item,
+                          tarifaPublica: esCT ? 0 : tarifaUdc.tarifa_publica,
+                          renta: esCT ? 0 : newCara.renta,
+                          bonificacion: (esIM || esIN || esESP) ? 0 : newCara.bonificacion,
+                          plaza: udc?.plazaLabel || 'Ciudad de México / AM',
+                          estado: udc?.plazaLabel || 'Ciudad de México / AM',
+                          ciudades: udc?.ciudad ? [udc.ciudad] : newCara.ciudades,
+                          formato: udc?.familiaLabel || newCara.formato,
+                          tipo: 'Digital',
+                        });
+                        return;
+                      }
+
                       // Auto-set tarifa publica from ItemCode mapping
                       const tarifa = getTarifaFromArticulo(item);
                       // Auto-set estado and ciudades from ItemName (fallback to ItemCode)
@@ -3400,15 +3458,21 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
                   <div>
                     <label className={`text-xs ${isDark ? 'text-zinc-500' : 'text-gray-500'}`}>Tipo</label>
                     <select
-                      value={newCara.tipo}
-                      onChange={(e) => editingCaraId && setNewCara({ ...newCara, tipo: e.target.value as 'Tradicional' | 'Digital' | '' })}
-                      disabled={!editingCaraId}
-                      className={`w-full px-3 py-2 ${isDark ? 'bg-zinc-800 border-zinc-700 text-white' : 'bg-gray-100 border-gray-200 text-gray-900'} border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-purple-500/50 ${!editingCaraId ? 'opacity-60 cursor-not-allowed' : ''}`}
+                      value={esUDC ? 'Digital' : newCara.tipo}
+                      onChange={(e) => editingCaraId && !esUDC && setNewCara({ ...newCara, tipo: e.target.value as 'Tradicional' | 'Digital' | '' })}
+                      disabled={!editingCaraId || esUDC}
+                      className={`w-full px-3 py-2 ${isDark ? 'bg-zinc-800 border-zinc-700 text-white' : 'bg-gray-100 border-gray-200 text-gray-900'} border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-purple-500/50 ${(!editingCaraId || esUDC) ? 'opacity-60 cursor-not-allowed' : ''}`}
                     >
-                      <option value="">Seleccionar</option>
-                      {filteredTipos.map(t => (
-                        <option key={t} value={t}>{t}</option>
-                      ))}
+                      {esUDC ? (
+                        <option value="Digital">Digital</option>
+                      ) : (
+                        <>
+                          <option value="">Seleccionar</option>
+                          {filteredTipos.map(t => (
+                            <option key={t} value={t}>{t}</option>
+                          ))}
+                        </>
+                      )}
                     </select>
                   </div>
                 </div>

@@ -9,6 +9,7 @@ import {
 import { GoogleMap, useLoadScript, Marker } from '@react-google-maps/api';
 import { GOOGLE_MAPS_LOADER_OPTIONS } from '../../config/googleMaps';
 import { AdvancedMapComponent } from './AdvancedMapComponent';
+import { UdcFichaTecnicaPanel } from './UdcFichaTecnicaPanel';
 import { Propuesta } from '../../types';
 import { solicitudesService, UserOption } from '../../services/solicitudes.service';
 import { inventariosService, InventarioDisponible } from '../../services/inventarios.service';
@@ -22,6 +23,7 @@ import { useEnvironmentStore, getEndpoints } from '../../store/environmentStore'
 import { useAuthStore } from '../../store/authStore';
 import { getPermissions, esAsesorComercial } from '../../lib/permissions';
 import { filterAllowedArticulos } from '../../config/allowedDigitalArticles';
+import { parseArticuloUDC, esArticuloUDCBasura } from '../../lib/udc';
 import { useSocketPropuesta, useSocketEquipos, useSocketInventarioRealtime, type InventarioRealtimePayload } from '../../hooks/useSocket';
 import { useThemeStore } from '../../store/themeStore';
 import { SaveChangesConfirmModal, type ModifiedCircuito } from '../../components/SaveChangesConfirmModal';
@@ -1152,15 +1154,25 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
     enabled: isOpen,
   });
 
+  // BD SAP del catálogo: UDC (aeropuerto) si el cliente seleccionado o la
+  // propuesta son UDC; si no, ambiente global (CIMU/TRADE intactos).
+  const sapDbArticulos = (((selectedClienteCuic as any)?.sap_database || propuesta?.sap_database || '') as string).toUpperCase() === 'UDC'
+    ? ('UDC' as const)
+    : useEnvironmentStore.getState().environment;
+  // UDC (aeropuerto): inventario sin geolocalización/plaza → en el buscador se
+  // oculta el mapa y el panel de ubicación (POI/radio/KML/leyenda).
+  const esUDC = sapDbArticulos === 'UDC';
   // Fetch articulos from SAP
   const { data: articulosData, isLoading: articulosLoading } = useQuery({
-    queryKey: ['sap-articulos'],
+    queryKey: ['sap-articulos', sapDbArticulos],
     queryFn: async () => {
       try {
-        const response = await fetch(getEndpoints(useEnvironmentStore.getState().environment).articulos);
+        const response = await fetch(getEndpoints(sapDbArticulos).articulos);
         if (!response.ok) throw new Error('Error fetching articulos');
         const data = await response.json();
-        return filterAllowedArticulos((data.value || data) as SAPArticulo[]);
+        let list = (data.value || data) as SAPArticulo[];
+        if (sapDbArticulos === 'UDC') list = list.filter(a => !esArticuloUDCBasura(a.ItemCode));
+        return filterAllowedArticulos(list);
       } catch {
         return [] as SAPArticulo[];
       }
@@ -5906,6 +5918,8 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
                     </button>
                   )}
 
+                  {/* Mundialista + Chico: no aplican a UDC (aeropuerto) → ocultos */}
+                  {!esUDC && (<>
                   {/* Mundialista filter - 3-state toggle: off → SI → NO → off */}
                   <button
                     onClick={() => {
@@ -5943,6 +5957,7 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
                     <Package className="h-3.5 w-3.5" />
                     {muebleChicoFilter === 'si' ? 'Chico ✓' : muebleChicoFilter === 'no' ? 'Chico ✗' : 'Chico'}
                   </button>
+                  </>)}
 
                   {/* Filtros avanzados (embudo) */}
                   <div className="relative">
@@ -6797,9 +6812,11 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
                   </div>
                 </div>
 
-                {/* Advanced Map */}
+                {/* Panel derecho: UDC = ficha técnica (aeropuerto sin geo); resto = mapa */}
                 <div className="w-1/2">
-                  {mapsLoaded ? (
+                  {esUDC ? (
+                    <UdcFichaTecnicaPanel isDark={isDark} />
+                  ) : mapsLoaded ? (
                     <AdvancedMapComponent
                       inventarios={processedInventory}
                       selectedInventory={new Set(Array.from(selectedInventory).map(key => parseInt(key.split('_')[0])))}
@@ -6822,8 +6839,8 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
           ) : (
             /* RESERVADOS TAB CONTENT */
             <div className="flex-1 flex overflow-hidden">
-              {/* Reservados Table */}
-              <div className={`w-1/2 flex flex-col border-r ${isDark ? 'border-zinc-800' : 'border-gray-200'}`}>
+              {/* Reservados Table — UDC ocupa todo el ancho (sin mapa) */}
+              <div className={`${esUDC ? 'w-full' : `w-1/2 border-r ${isDark ? 'border-zinc-800' : 'border-gray-200'}`} flex flex-col`}>
                 {/* Search Bar and Tools for Reservados */}
                 <div className={`p-3 border-b ${isDark ? 'border-zinc-800' : 'border-gray-200'} ${isDark ? 'bg-zinc-900' : 'bg-white'}/50 space-y-2`}>
                   {/* Row 1: Search and Delete */}
@@ -7568,8 +7585,8 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
                 )}
               </div>
 
-              {/* Map of Reservados */}
-              <div className="w-1/2 relative">
+              {/* Map of Reservados — oculto para UDC (aeropuerto sin geolocalización) */}
+              <div className={esUDC ? 'hidden' : 'w-1/2 relative'}>
                 {mapsLoaded ? (
                   <>
                     <GoogleMap
@@ -7827,6 +7844,7 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
                                             item.sap_database === 'CIMU' ? isDark ? 'bg-blue-500/20 text-blue-300 border-blue-500/30' : 'bg-blue-50 text-blue-700 border-blue-200' :
                                             item.sap_database === 'TEST' ? isDark ? 'bg-amber-500/20 text-amber-300 border-amber-500/30' : 'bg-amber-50 text-amber-700 border-amber-200' :
                                             item.sap_database === 'TRADE' ? isDark ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500/30' : 'bg-emerald-50 text-emerald-700 border-emerald-200' :
+                                            item.sap_database === 'UDC' ? isDark ? 'bg-cyan-500/20 text-cyan-300 border-cyan-500/30' : 'bg-cyan-50 text-cyan-700 border-cyan-200' :
                                             isDark ? 'bg-zinc-500/20 text-zinc-300 border-zinc-500/30' : 'bg-gray-50 text-gray-700 border-gray-200'
                                           }`}>{item.sap_database}</span>
                                         )}
@@ -8290,7 +8308,7 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
                             if (code.startsWith('BF') || code.startsWith('CF')) return false;
                             // Gran Formato ↔ periodo: mensual solo muestra Gran Formato;
                             // catorcena los excluye (mismo criterio que en solicitudes).
-                            return getRequiredPeriodoForArticulo(a.ItemName) === tipoPeriodo;
+                            return getRequiredPeriodoForArticulo(a.ItemName, a.ItemCode) === tipoPeriodo;
                           })}
                           value={selectedArticulo}
                           onChange={async (item: SAPArticulo) => {
@@ -8341,6 +8359,32 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
                                 setSelectedArticulo(null);
                                 return;
                               }
+                            }
+
+                            // UDC (aeropuerto AICM): todo Digital, mensual, plaza AICM.
+                            if (sapDbArticulos === 'UDC') {
+                              const udc = parseArticuloUDC(item.ItemCode, item.ItemName);
+                              const tarifaUdc = getTarifaPublicaFromArticulo(item);
+                              const tarifaPisoUdc = getTarifaPisoFromArticulo(item);
+                              const esCT = item.ItemCode.toUpperCase().startsWith('CT');
+                              const esIN = item.ItemCode.toUpperCase().startsWith('IN');
+                              const esIM = item.ItemCode.toUpperCase().startsWith('IM');
+                              const esESP = isEspecialArticle(item.ItemCode.toUpperCase());
+                              setNewCara({
+                                ...newCara,
+                                articulo: item.ItemCode,
+                                tarifa_publica: esCT ? 0 : tarifaUdc,
+                                costo: esCT ? 0 : tarifaPisoUdc,
+                                caras: esCT ? 0 : newCara.caras,
+                                caras_flujo: esCT ? 0 : newCara.caras_flujo,
+                                caras_contraflujo: esCT ? 0 : newCara.caras_contraflujo,
+                                bonificacion: (esIM || esIN || esESP) ? 0 : newCara.bonificacion,
+                                estados: udc?.plazaLabel || 'Ciudad de México / AM',
+                                ciudad: udc?.ciudad || 'AICM',
+                                formato: udc?.familiaLabel || newCara.formato,
+                                tipo: 'Digital',
+                              });
+                              return;
                             }
 
                             // Auto-complete all fields from article

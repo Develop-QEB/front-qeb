@@ -2542,6 +2542,7 @@ export function CampanaDetailPage() {
                     campana.sap_database === 'CIMU' ? (isDark ? 'bg-blue-500/20 text-blue-300 border-blue-500/30' : 'bg-blue-50 text-blue-700 border-blue-200') :
                     campana.sap_database === 'TEST' ? (isDark ? 'bg-amber-500/20 text-amber-300 border-amber-500/30' : 'bg-amber-50 text-amber-700 border-amber-200') :
                     campana.sap_database === 'TRADE' ? (isDark ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500/30' : 'bg-emerald-50 text-emerald-700 border-emerald-200') :
+                    campana.sap_database === 'UDC' ? (isDark ? 'bg-cyan-500/20 text-cyan-300 border-cyan-500/30' : 'bg-cyan-50 text-cyan-700 border-cyan-200') :
                     (isDark ? 'bg-zinc-500/20 text-zinc-300 border-zinc-500/30' : 'bg-gray-100 text-gray-700 border-gray-200')
                   }`}>{campana.sap_database}</span>
                 </div>
@@ -4771,6 +4772,7 @@ export function CampanaDetailPage() {
                               const sapCls = log.sap_database === 'CIMU' ? 'bg-blue-500/20 text-blue-300 border-blue-500/30'
                                 : log.sap_database === 'TEST' ? 'bg-amber-500/20 text-amber-300 border-amber-500/30'
                                 : log.sap_database === 'TRADE' ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500/30'
+                                : log.sap_database === 'UDC' ? 'bg-cyan-500/20 text-cyan-300 border-cyan-500/30'
                                 : 'bg-zinc-500/20 text-zinc-300 border-zinc-500/30';
                               return (
                                 <>
@@ -5675,6 +5677,7 @@ export function CampanaDetailPage() {
         const sapCls = p.sap_database === 'CIMU' ? 'bg-blue-500/20 text-blue-300 border-blue-500/30'
           : p.sap_database === 'TEST' ? 'bg-amber-500/20 text-amber-300 border-amber-500/30'
           : p.sap_database === 'TRADE' ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500/30'
+          : p.sap_database === 'UDC' ? 'bg-cyan-500/20 text-cyan-300 border-cyan-500/30'
           : 'bg-zinc-500/20 text-zinc-300 border-zinc-500/30';
         const row = (label: string, value: React.ReactNode) => (
           <div className="flex justify-between gap-4 py-1.5 border-t border-border first:border-t-0">

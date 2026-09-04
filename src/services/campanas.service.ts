@@ -632,10 +632,10 @@ export function buildDeliveryNote(
       NumAtCard: campana.id?.toString() || '',
       Comments: campana.comentario_cambio_status || '',
       DocDueDate: (campana.fecha_fin || new Date().toISOString()).split('T')[0],
-      // TRADE: SAP espera siempre -1 ("directo / sin asesor"), sin importar
+      // TRADE/UDC: SAP espera siempre -1 ("directo / sin asesor"), sin importar
       // el salesperson_code del cliente (regla de negocio IMU). CIMU/TEST sí
       // usan el real, fallback a -1 si null.
-      SalesPersonCode: sapDatabase === 'TRADE' ? -1 : ((campana as any).salesperson_code || -1),
+      SalesPersonCode: (sapDatabase === 'TRADE' || sapDatabase === 'UDC') ? -1 : ((campana as any).salesperson_code || -1),
       U_CIC: String(campana.cuic || ''),
       U_CRM_Asesor: campana.T0_U_Asesor || '',
       U_CRM_Producto: campana.T2_U_Producto || '',
@@ -681,6 +681,7 @@ export async function resolveBaseEntry(
     'TRADE': 'SBOIMUTRADE',
     'CIMU': 'SBOCIMU',
     'TEST': 'PB_SBOCIMU',
+    'UDC': 'SBOUDC',
   };
   const db = usaSapPruebas(sapDatabase as SapDatabase) ? 'PB_SBOCIMU' : (dbMap[sapDatabase] || 'PB_SBOCIMU');
 
@@ -713,6 +714,17 @@ export async function resolveBaseEntry(
 // Cuando se devuelve `success: false` el caller puede usar `errorType`,
 // `endpoint`, `status`, `rawResponse` para mostrar info útil al usuario.
 export async function postDeliveryNoteToSAP(deliveryNote: SAPDeliveryNote | SAPDeliveryNoteMigrated, sapDatabase?: string | null): Promise<SAPPostResponse> {
+  // Guard UDC: la serie de documento SAP de UDC aún es <PENDIENTE> (SERIES_PENDIENTE).
+  // Postear sin serie real crearía el documento en la serie equivocada, así que
+  // bloqueamos hasta que IMU confirme el número. TODO(UDC): quitar al setear serie.
+  if ((sapDatabase || '').toUpperCase() === 'UDC') {
+    return {
+      success: false,
+      error: 'Serie SAP de UDC pendiente. Pídele a IMU el número de serie del aeropuerto (AICM) antes de mandar delivery notes de UDC.',
+      errorType: 'sap-rejected',
+      endpoint: getDeliveryNotesEndpoint('UDC'),
+    };
+  }
   const endpoint = sapDatabase
     ? getDeliveryNotesEndpoint(sapDatabase as SapDatabase)
     : `${SAP_BASE_URL}/delivery-notes-test`;
@@ -815,6 +827,7 @@ const SAP_DB_NAME_MAP: Record<string, string> = {
   TRADE: 'SBOIMUTRADE',
   CIMU: 'SBOCIMU',
   TEST: 'PB_SBOCIMU',
+  UDC: 'SBOUDC',
 };
 
 export interface ExistingDeliveryNote {
@@ -841,6 +854,14 @@ export async function findExistingDeliveryNote(numAtCard: string | number, sapDa
 
 // PATCH a un DN existente en SAP. Mismo manejo defensivo de errores que POST.
 export async function patchDeliveryNoteToSAP(docEntry: number, deliveryNote: SAPDeliveryNote | SAPDeliveryNoteMigrated, sapDatabase?: string | null): Promise<SAPPostResponse> {
+  // Guard UDC: serie <PENDIENTE> — ver postDeliveryNoteToSAP. TODO(UDC): quitar al setear serie.
+  if ((sapDatabase || '').toUpperCase() === 'UDC') {
+    return {
+      success: false,
+      error: 'Serie SAP de UDC pendiente. Pídele a IMU el número de serie del aeropuerto (AICM) antes de mandar delivery notes de UDC.',
+      errorType: 'sap-rejected',
+    };
+  }
   const db = usaSapPruebas((sapDatabase || 'TEST') as SapDatabase) ? 'PB_SBOCIMU' : (SAP_DB_NAME_MAP[sapDatabase || 'TEST'] || 'PB_SBOCIMU');
   const endpoint = `${SAP_BASE_URL}/delivery-notes/${db}/${docEntry}`;
 

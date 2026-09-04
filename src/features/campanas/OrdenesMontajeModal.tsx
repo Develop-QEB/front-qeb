@@ -455,6 +455,7 @@ const getSapDbCls = (db: string | null | undefined, isDark: boolean): string => 
     case 'CIMU': return isDark ? 'bg-blue-500/20 text-blue-300 border-blue-500/30' : 'bg-blue-50 text-blue-700 border-blue-200';
     case 'TEST': return isDark ? 'bg-amber-500/20 text-amber-300 border-amber-500/30' : 'bg-amber-50 text-amber-700 border-amber-200';
     case 'TRADE': return isDark ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500/30' : 'bg-emerald-50 text-emerald-700 border-emerald-200';
+    case 'UDC': return isDark ? 'bg-cyan-500/20 text-cyan-300 border-cyan-500/30' : 'bg-cyan-50 text-cyan-700 border-cyan-200';
     default: return isDark ? 'bg-zinc-500/20 text-zinc-300 border-zinc-500/30' : 'bg-gray-100 text-gray-600 border-gray-200';
   }
 };
@@ -495,7 +496,7 @@ export function OrdenesMontajeModal({ isOpen, onClose, canExport = true }: Orden
   const [showCatorcenaPopup, setShowCatorcenaPopup] = useState(false);
 
   // Filtros globales (aplican en todas las pestañas)
-  const [sapDbFilter, setSapDbFilter] = useState<'todas' | 'TRADE' | 'CIMU'>('todas');
+  const [sapDbFilter, setSapDbFilter] = useState<'todas' | 'TRADE' | 'CIMU' | 'UDC'>('todas');
   const [apsEspecificoFilter, setApsEspecificoFilter] = useState<'todas' | 'con' | 'sin'>('todas');
   const [postFilter, setPostFilter] = useState<'todas' | 'con' | 'sin'>('todas');
   // Ocupación: 'vendido' (default = lo que ya está en campañas), 'disponible'
@@ -1829,7 +1830,7 @@ export function OrdenesMontajeModal({ isOpen, onClose, canExport = true }: Orden
                         BDD SAP {!ocupacionSoloVendido && <span className="text-[10px] text-zinc-500">(solo en Vendido)</span>}
                       </label>
                       <div className="flex gap-2">
-                        {(['todas', 'TRADE', 'CIMU'] as const).map(opt => (
+                        {(['todas', 'TRADE', 'CIMU', 'UDC'] as const).map(opt => (
                           <button
                             key={opt}
                             disabled={!ocupacionSoloVendido}

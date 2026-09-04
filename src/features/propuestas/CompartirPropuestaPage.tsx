@@ -8,6 +8,8 @@ import {
 import { GoogleMap, useLoadScript, Marker, Circle, Autocomplete, InfoWindow } from '@react-google-maps/api';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell } from 'recharts';
 import { propuestasService, InventarioReservado, PropuestaFullDetails } from '../../services/propuestas.service';
+import { UdcReservadosTable } from './UdcReservadosTable';
+import udcMapaAicm from './assets/udc-mapa-aicm-t1.jpg';
 import { formatCurrency, formatDate } from '../../lib/utils';
 import { toNum, applyNumberFormats, FMT_COORD } from '../../utils/excelFormat';
 import { useThemeStore } from '../../store/themeStore';
@@ -290,6 +292,9 @@ export function CompartirPropuestaPage() {
   });
 
   const tipoPeriodo = (details?.cotizacion as any)?.tipo_periodo || 'catorcena';
+  // UDC (aeropuerto AICM): sin geolocalización → en compartir se oculta el
+  // "Resumen de Circuitos" + mapa y se muestra la ficha técnica de reservados.
+  const esUDC = ((details?.propuesta as any)?.sap_database || (details?.solicitud as any)?.sap_database || '').toString().toUpperCase() === 'UDC';
 
   // Leyenda de contexto: la misma vista sirve para compartir desde PROPUESTAS
   // ("Circuitos Muestra") y desde CAMPAÑAS ("Circuitos Confirmados"). La decide
@@ -1446,7 +1451,23 @@ export function CompartirPropuestaPage() {
           ))}
         </div>
 
-        {/* Resumen de Caras - Tabla principal */}
+        {/* Resumen de Caras - Tabla principal (UDC = ficha técnica de reservados + mapa AICM) */}
+        {esUDC ? (
+          <div className="space-y-6">
+            <UdcReservadosTable items={filteredInventario} isDark={isDark} tipoPeriodo={tipoPeriodo} />
+            {/* Mapa del aeropuerto (estático) — ubicación de las pantallas en Planta Alta */}
+            <div className={`rounded-2xl border overflow-hidden ${isDark ? 'bg-zinc-900 border-cyan-500/20' : 'bg-white border-cyan-200'}`}>
+              <div className={`px-5 py-4 border-b flex items-center gap-2 ${isDark ? 'border-cyan-500/20 bg-gradient-to-r from-cyan-600/10 to-sky-600/10' : 'border-cyan-100 bg-cyan-50/60'}`}>
+                <MapIcon className={`h-4 w-4 ${isDark ? 'text-cyan-300' : 'text-cyan-600'}`} />
+                <h3 className={`text-sm font-semibold ${isDark ? 'text-cyan-300' : 'text-cyan-700'}`}>Ubicación en el aeropuerto</h3>
+                <span className={`text-xs ${isDark ? 'text-zinc-500' : 'text-gray-400'}`}>AICM · Terminal 1 · Planta Alta</span>
+              </div>
+              <div className="p-3 sm:p-4 overflow-x-auto">
+                <img src={udcMapaAicm} alt="Mapa del Aeropuerto Internacional de la Ciudad de México, Terminal 1 (Planta Alta), con la ubicación de las pantallas digitales" className={`w-full min-w-[560px] rounded-lg ${isDark ? 'bg-white/90 p-2' : ''}`} />
+              </div>
+            </div>
+          </div>
+        ) : (
         <div className={`rounded-2xl border overflow-hidden ${isDark ? 'bg-gradient-to-br from-zinc-900 to-purple-900/10 border-purple-500/20' : 'bg-white border-gray-200'}`}>
           {/* Toolbar */}
           <div className={`px-5 py-4 border-b ${isDark ? 'border-purple-500/20 bg-gradient-to-r from-purple-600/10 to-violet-600/10' : 'border-gray-200 bg-gray-50'}`}>
@@ -1772,9 +1793,10 @@ export function CompartirPropuestaPage() {
             })}
           </div>
         </div>
+        )}
 
-        {/* Map */}
-        <div className={`rounded-2xl border overflow-hidden ${isDark ? 'bg-zinc-900 border-zinc-800' : 'bg-white border-gray-200'}`}>
+        {/* Mapa de Reservas — oculto para UDC (aeropuerto sin geolocalización) */}
+        <div className={esUDC ? 'hidden' : `rounded-2xl border overflow-hidden ${isDark ? 'bg-zinc-900 border-zinc-800' : 'bg-white border-gray-200'}`}>
           <div className={`p-4 border-b flex items-center gap-4 ${isDark ? 'border-zinc-800' : 'border-gray-200'}`}>
             <MapIcon className="h-5 w-5 text-blue-500" />
             <h3 className={`text-lg font-semibold ${isDark ? 'text-white' : 'text-gray-900'}`}>Mapa de Reservas</h3>

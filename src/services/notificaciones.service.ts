@@ -381,7 +381,7 @@ export interface CrearActividadComercialInput {
   anio?: number;                        // Año
   catorcena?: number;                   // Periodo (1..26)
   estatus_actividad?: 'Abierto' | 'Cerrado';
-  base?: 'CIMU' | 'TRADE';              // Base SAP
+  base?: 'CIMU' | 'TRADE' | 'UDC';      // Base SAP
 }
 
 export interface ActividadComercialCreated {
