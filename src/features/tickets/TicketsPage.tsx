@@ -593,15 +593,15 @@ export function TicketsPage() {
                     title="Seleccionar para acción masiva"
                   />
                 <div
-                  className={`flex-1 relative rounded-2xl border ${isDark ? 'border-purple-500/20' : 'border-purple-200'} ${isDark ? 'bg-gradient-to-br from-zinc-900/90 via-purple-950/20 to-zinc-900/90' : 'bg-white'} p-5 ${isDark ? 'hover:border-purple-500/40' : 'hover:border-purple-300'} transition-all cursor-pointer ${isChecked ? (isDark ? 'ring-2 ring-purple-500/50' : 'ring-2 ring-purple-400/60') : ''}`}
+                  className={`flex-1 min-w-0 relative rounded-2xl border ${isDark ? 'border-purple-500/20' : 'border-purple-200'} ${isDark ? 'bg-gradient-to-br from-zinc-900/90 via-purple-950/20 to-zinc-900/90' : 'bg-white'} p-5 ${isDark ? 'hover:border-purple-500/40' : 'hover:border-purple-300'} transition-all cursor-pointer ${isChecked ? (isDark ? 'ring-2 ring-purple-500/50' : 'ring-2 ring-purple-400/60') : ''}`}
                   onClick={() => setSelectedTicket(ticket)}
                 >
                   {ticket.has_chat_unread && (
                     <span className="absolute top-3 right-3 h-3 w-3 rounded-full bg-red-500 animate-pulse ring-2 ring-red-500/30" />
                   )}
                   <div className="flex items-start justify-between gap-4">
-                    <div className="flex-1">
-                      <div className="flex items-center gap-2 mb-2">
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2 mb-2 flex-wrap">
                         <span className={`text-xs ${isDark ? 'text-zinc-500' : 'text-gray-400'}`}>#{ticket.id}</span>
                         <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium border ${statusConfig.bgColor} ${statusConfig.textColor} ${statusConfig.borderColor}`}>
                           <StatusIcon className="h-3 w-3" />
@@ -611,7 +611,7 @@ export function TicketsPage() {
                           {ticket.prioridad}
                         </span>
                       </div>
-                      <h3 className={`text-lg font-semibold ${isDark ? 'text-white' : 'text-gray-900'} mb-1`}>{ticket.titulo}</h3>
+                      <h3 className={`text-lg font-semibold truncate ${isDark ? 'text-white' : 'text-gray-900'} mb-1`}>{ticket.titulo}</h3>
                       <p className={`text-sm ${isDark ? 'text-zinc-400' : 'text-gray-500'} line-clamp-2`}>{ticket.descripcion}</p>
                       <p className={`text-xs ${isDark ? 'text-zinc-500' : 'text-gray-400'} mt-2`}>
                         Creado: {new Date(ticket.created_at).toLocaleString('es-MX')}
