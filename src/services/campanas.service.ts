@@ -990,8 +990,14 @@ export const campanasService = {
     return response.data.posted_aps;
   },
 
-  async unmarkPostedAPS(id: number, aps?: number[]): Promise<number[]> {
-    const response = await api.post<{ success: boolean; posted_aps: number[] }>(`/campanas/${id}/unmark-posted-aps`, { aps });
+  async unmarkPostedAPS(id: number, aps?: number[], bypassMotivo?: string): Promise<number[]> {
+    // Back requiere aps especificos y valida solicitud de desposteo aprobada.
+    // DEV/Admin pueden pasar bypass_motivo para saltar el check — queda
+    // registrado con sin_autorizacion=true en desposteo_solicitudes.
+    const response = await api.post<{ success: boolean; posted_aps: number[] }>(
+      `/campanas/${id}/unmark-posted-aps`,
+      { aps, bypass_motivo: bypassMotivo || undefined },
+    );
     return response.data.posted_aps;
   },
 
