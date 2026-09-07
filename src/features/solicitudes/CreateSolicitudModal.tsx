@@ -184,7 +184,11 @@ const isQuretaroArticle = (itemCode: string): boolean => {
 // getRequiredPeriodoForArticulo se importa de lib/periodos (fuente única de verdad)
 
 // Tipo auto-detection from article name (Tradicional or Digital)
-const getTipoFromName = (itemName: string): 'Tradicional' | 'Digital' => {
+const getTipoFromName = (itemName: string, itemCode?: string): 'Tradicional' | 'Digital' => {
+  // "Digital" se detecta por CÓDIGO (contiene DIG), igual que el gate de
+  // allowedDigitalArticles. El NOMBRE a veces NO lo trae (ej. RT-ES-DIG-EM =
+  // "RENTA DE ESPACIOS UNIPOLARES EDOMEX"), por eso revisamos el código primero.
+  if ((itemCode || '').toUpperCase().includes('DIG')) return 'Digital';
   if (!itemName) return 'Tradicional';
   const name = itemName.toUpperCase();
   if (name.includes('DIGITAL') || name.includes('DIG')) return 'Digital';
@@ -3255,7 +3259,7 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
                       // Auto-set formato from ItemName (fallback to ItemCode)
                       const formatoBase = getFormatoFromArticulo(item.ItemName, item.ItemCode);
                       // Auto-set tipo from ItemName
-                      const tipo = getTipoFromName(item.ItemName);
+                      const tipo = getTipoFromName(item.ItemName, item.ItemCode);
                       // Para artículos digitales: incluir PARABUS y MUPIS (los muebles físicos
                       // donde corre la pantalla digital rotando ambos formatos).
                       // Si el formato detectado es otro (ej. COLUMNA), agregar MUPIS además.
