@@ -458,8 +458,16 @@ export function buildDeliveryNote(
 
   const deliveryNotes = uniqueAPS.map(apsValue => {
     const itemsForAPS = inventarioAPS.filter(item => item.aps === apsValue);
-    // Dentro de cada APS, agrupar por artículo para las DocumentLines
-    const uniqueArticulos = [...new Set(itemsForAPS.map(item => item.articulo))];
+    // Dentro de cada APS, agrupar por artículo + TARIFA para las DocumentLines.
+    // Dos circuitos con el MISMO artículo pero DISTINTA tarifa (ej. ES-P1-COB-MX
+    // a $27,400 y a $12,000) deben ir en LÍNEAS SEPARADAS. Antes se agrupaba solo
+    // por artículo y se fusionaban usando la tarifa del PRIMER item → cobraba de
+    // más (bug campaña 81219: 3@$27,400 + 4@$12,000 salían como 7@$27,400 = $191,800
+    // en vez de $130,200). Al meter la tarifa en la llave, cada tarifa va en su línea.
+    const tarifaLinea = (it: typeof itemsForAPS[number]): number =>
+      Number(it.tarifa_bruta_sc) || Number(it.tarifa_publica_sc) || Number(it.tarifa_publica) || 0;
+    const lineaKey = (it: typeof itemsForAPS[number]): string => `${it.articulo || ''}||${tarifaLinea(it)}`;
+    const uniqueLineKeys = [...new Set(itemsForAPS.map(lineaKey))];
 
     // Detectar tipo de período una vez por DN. Ambos (catorcena y mensual)
     // tienen su tabla de IDs SAP — fallback a 1746 si llega un año sin mapeo.
@@ -478,8 +486,8 @@ export function buildDeliveryNote(
       2026: { 1: 2882, 2: 2883, 3: 2884, 4: 2885, 5: 2886, 6: 2887, 7: 2888, 8: 2889, 9: 2890, 10: 2891, 11: 2892, 12: 2893 },
     };
 
-    const documentLines: SAPDocumentLine[] = uniqueArticulos.map((articulo, index) => {
-      const itemsWithArticulo = itemsForAPS.filter(item => item.articulo === articulo);
+    const documentLines: SAPDocumentLine[] = uniqueLineKeys.map((lineKey, index) => {
+      const itemsWithArticulo = itemsForAPS.filter(item => lineaKey(item) === lineKey);
       const firstItem = itemsWithArticulo[0];
       // UnitPrice = tarifa BRUTA (costo/caras). El campo tarifa_publica_sc guarda
       // la tarifa DILUIDA (costo/(renta+bonificacion)) — usarla × solo las caras
