@@ -1,7 +1,7 @@
 import { useState, useRef, useEffect } from 'react';
 import { useModalTracker } from '../../hooks/useModalTracker';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { X, MessageSquare, Send, Loader2, MessageSquareOff } from 'lucide-react';
+import { X, MessageSquare, Send, Loader2, MessageSquareOff, AlertTriangle } from 'lucide-react';
 import { campanasService } from '../../services/campanas.service';
 import { Campana } from '../../types';
 import { UserAvatar } from '../../components/ui/user-avatar';
@@ -66,6 +66,34 @@ export function StatusCampanaModal({ isOpen, onClose, campana, statusReadOnly = 
 
   const comentarios = campanaData?.comentarios || [];
 
+  // Ajuste feedback 2026-08-19: bloquear cambio de estatus a Aprobada /
+  // Rechazada / Cancelada cuando la campaña tiene circuitos con
+  // autorizacion abierta (pendiente / correccion / rechazado). Mismo
+  // pattern que PropuestasPage y SolicitudModals.
+  const { data: carasCampana } = useQuery({
+    queryKey: ['campana-caras-status', campana.id],
+    queryFn: () => campanasService.getCaras(campana.id),
+    enabled: isOpen,
+  });
+  const bloqueoAutorizacion = (() => {
+    const cs = carasCampana || [];
+    const pendDg = cs.filter(c => (c as any).autorizacion_dg === 'pendiente').length;
+    const pendDcm = cs.filter(c => (c as any).autorizacion_dcm === 'pendiente').length;
+    const corrDg = cs.filter(c => (c as any).autorizacion_dg === 'correccion').length;
+    const corrDcm = cs.filter(c => (c as any).autorizacion_dcm === 'correccion').length;
+    const rechDg = cs.filter(c => (c as any).autorizacion_dg === 'rechazado').length;
+    const rechDcm = cs.filter(c => (c as any).autorizacion_dcm === 'rechazado').length;
+    const totalPend = pendDg + pendDcm;
+    const totalCorr = corrDg + corrDcm;
+    const totalRech = rechDg + rechDcm;
+    return {
+      pendDg, pendDcm, corrDg, corrDcm, rechDg, rechDcm,
+      totalPend, totalCorr, totalRech,
+      hasAny: totalPend > 0 || totalCorr > 0 || totalRech > 0,
+    };
+  })();
+  const isStatusBloqueadoAuth = (s: string) => bloqueoAutorizacion.hasAny && (s === 'Aprobada' || s === 'Rechazada' || s === 'Cancelada');
+
   // Scroll al final cuando se agregan nuevos comentarios
   useEffect(() => {
     if (commentsEndRef.current) {
@@ -78,6 +106,12 @@ export function StatusCampanaModal({ isOpen, onClose, campana, statusReadOnly = 
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['campanas'] });
       queryClient.invalidateQueries({ queryKey: ['campana', campana.id] });
+    },
+    // Ajuste feedback 2026-08-19: mostrar alert cuando el back rechaza
+    // el cambio de estatus (ej. autorizacion abierta, APS asignado).
+    onError: (err: any) => {
+      const msg = err?.response?.data?.error || err?.message || 'No se pudo cambiar el estatus de la campaña.';
+      alert(msg);
     },
   });
 
@@ -115,6 +149,12 @@ export function StatusCampanaModal({ isOpen, onClose, campana, statusReadOnly = 
   });
 
   const handleSave = async () => {
+    // Ajuste feedback 2026-08-19: salvaguarda para que ni aunque se salte
+    // el disabled del boton se abra el modal de rechazo / se dispare el
+    // mutation cuando hay autorizacion abierta.
+    if (isStatusBloqueadoAuth(selectedStatus) && selectedStatus !== campana.status) {
+      return;
+    }
     if (selectedStatus === 'Rechazada' && selectedStatus !== campana.status) {
       setShowRechazoConfirm(true);
       return;
@@ -177,6 +217,24 @@ export function StatusCampanaModal({ isOpen, onClose, campana, statusReadOnly = 
 
         {/* Content */}
         <div className="p-4 space-y-4">
+          {/* Alerta autorizacion abierta — feedback 2026-08-19 */}
+          {!statusReadOnly && bloqueoAutorizacion.hasAny && (() => {
+            const partes: string[] = [];
+            if (bloqueoAutorizacion.totalPend > 0) partes.push(`${bloqueoAutorizacion.totalPend} pendiente(s)`);
+            if (bloqueoAutorizacion.totalCorr > 0) partes.push(`${bloqueoAutorizacion.totalCorr} en corrección`);
+            if (bloqueoAutorizacion.totalRech > 0) partes.push(`${bloqueoAutorizacion.totalRech} rechazada(s)`);
+            return (
+              <div className={`p-3 rounded-lg ${isDark ? 'bg-amber-500/10 border-amber-500/30' : 'bg-amber-50 border-amber-200'} border flex items-start gap-3`}>
+                <AlertTriangle className={`h-5 w-5 ${isDark ? 'text-amber-400' : 'text-amber-600'} flex-shrink-0 mt-0.5`} />
+                <div>
+                  <p className={`text-sm font-medium ${isDark ? 'text-amber-200' : 'text-amber-800'}`}>Autorización abierta</p>
+                  <p className={`text-xs mt-1 ${isDark ? 'text-amber-300/70' : 'text-amber-700'}`}>
+                    Esta campaña tiene circuitos que impiden cambiar de estatus: {partes.join(', ')}. No se puede cambiar a "Aprobada", "Rechazada" ni "Cancelada" hasta que dirección resuelva.
+                  </p>
+                </div>
+              </div>
+            );
+          })()}
           {/* Status Select */}
           {!statusReadOnly && (
             <div>
@@ -192,11 +250,14 @@ export function StatusCampanaModal({ isOpen, onClose, campana, statusReadOnly = 
                 {STATUS_OPTIONS
                   .filter((option) => !permissions.allowedCampanaStatuses || permissions.allowedCampanaStatuses.includes(option.value))
                   .filter((option) => !(option.value === 'Rechazada' && (campana as any).has_aps))
-                  .map((option) => (
-                  <option key={option.value} value={option.value}>
-                    {option.label}
-                  </option>
-                ))}
+                  .map((option) => {
+                    const bloqueado = isStatusBloqueadoAuth(option.value);
+                    return (
+                      <option key={option.value} value={option.value} disabled={bloqueado}>
+                        {option.label}{bloqueado ? ' (Autorización abierta)' : ''}
+                      </option>
+                    );
+                  })}
               </select>
 
               {/* Status preview */}
@@ -299,7 +360,8 @@ export function StatusCampanaModal({ isOpen, onClose, campana, statusReadOnly = 
             </button>
             <button
               onClick={handleSave}
-              disabled={isLoading || !selectedStatus || selectedStatus === campana.status}
+              disabled={isLoading || !selectedStatus || selectedStatus === campana.status || isStatusBloqueadoAuth(selectedStatus)}
+              title={isStatusBloqueadoAuth(selectedStatus) ? 'Hay circuitos con autorización abierta — dirección debe resolver antes' : undefined}
               className="px-4 py-2 rounded-lg bg-purple-600 text-white hover:bg-purple-500 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
             >
               {isLoading ? (

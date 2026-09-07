@@ -272,6 +272,13 @@ export function ClientePropuestaPage() {
   const inventario = data?.inventario || [];
   const tipoPeriodo = (data?.cotizacion as any)?.tipo_periodo || 'catorcena';
 
+  // Leyenda de contexto: la decide el punto de entrada — el enlace compartido
+  // desde Campañas trae ?ctx=campana ("Circuitos Confirmados"); sin él, es una
+  // propuesta compartida ("Circuitos Muestra"). Aplica en UI, PDF (pie de TODAS
+  // las páginas, no removible) y Excel.
+  const esCampana = searchParams.get('ctx') === 'campana';
+  const leyendaCircuitos = esCampana ? 'Circuitos Confirmados' : 'Circuitos Muestra';
+
   // Master catorcena-filtered inventario (affects KPIs, charts, map, resumen)
   const catorcenaFilteredInventario = useMemo(() => {
     if (!inventario.length) return inventario;
@@ -476,9 +483,10 @@ export function ClientePropuestaPage() {
         i.codigo_unico, i.plaza, i.ubicacion, i.tipo_de_cara, i.mueble, i.tradicional_digital || '', i.articulo,
         toNum(i.caras_totales), tarifaBruta(i), formatInicioPeriodo(i, tipoPeriodo), toNum(i.latitud), toNum(i.longitud)
       ]);
-      const ws = XLSX.utils.aoa_to_sheet([headers, ...rows]);
+      // Fila 1: leyenda de contexto; headers pasan a la fila 2 (headerRows = 2 abajo).
+      const ws = XLSX.utils.aoa_to_sheet([[leyendaCircuitos], headers, ...rows]);
       // Caras (7), Tarifa (8), Latitud (10), Longitud (11) como celdas tipo número
-      applyNumberFormats(XLSX, ws, rows.length, { 7: FMT_ENTERO, 8: FMT_MONEDA, 10: FMT_COORD, 11: FMT_COORD });
+      applyNumberFormats(XLSX, ws, rows.length, { 7: FMT_ENTERO, 8: FMT_MONEDA, 10: FMT_COORD, 11: FMT_COORD }, 2);
       const wb = XLSX.utils.book_new();
       XLSX.utils.book_append_sheet(wb, ws, 'Reservas');
       XLSX.writeFile(wb, `reservas_propuesta_${propuestaId}.xlsx`);
@@ -581,7 +589,23 @@ export function ClientePropuestaPage() {
     const PDF_BLUE = [0, 84, 166] as const;
     const PDF_GREEN = [122, 184, 0] as const;
 
-    const clientViewUrl = `${window.location.origin}/cliente/propuesta/${propuestaId}`;
+    // Píldora resaltada para la leyenda de contexto: ámbar = Circuitos Muestra,
+    // verde IMU = Circuitos Confirmados. Header (pág. 1) + pie de TODAS las páginas.
+    const LEY_BG = esCampana ? PDF_GREEN : ([255, 193, 7] as const);
+    const LEY_TX = esCampana ? ([255, 255, 255] as const) : ([102, 60, 0] as const);
+    const drawLeyendaPill = (centerX: number, topY: number) => {
+      doc.setFontSize(8);
+      doc.setFont('helvetica', 'bold');
+      const h = 5.6;
+      const w = doc.getTextWidth(leyendaCircuitos) + 8;
+      doc.setFillColor(LEY_BG[0], LEY_BG[1], LEY_BG[2]);
+      doc.roundedRect(centerX - w / 2, topY, w, h, h / 2, h / 2, 'F');
+      doc.setTextColor(LEY_TX[0], LEY_TX[1], LEY_TX[2]);
+      doc.text(leyendaCircuitos, centerX, topY + h / 2 + 1.2, { align: 'center' });
+      return w;
+    };
+
+    const clientViewUrl = `${window.location.origin}/cliente/propuesta/${propuestaId}${esCampana ? '?ctx=campana' : ''}`;
 
     const addSectionTitle = (title: string, yPos: number) => {
       doc.setFillColor(PDF_BLUE[0], PDF_BLUE[1], PDF_BLUE[2]);
@@ -622,6 +646,14 @@ export function ClientePropuestaPage() {
     doc.setFont('helvetica', 'bold');
     doc.setTextColor(255, 255, 255);
     doc.text('PROPUESTA DE CAMPAÑA PUBLICITARIA', pageWidth / 2, 13, { align: 'center' });
+    // Píldora de leyenda a la izquierda del header (centrada vertical en la banda azul)
+    {
+      doc.setFontSize(8);
+      doc.setFont('helvetica', 'bold');
+      const leyW = doc.getTextWidth(leyendaCircuitos) + 8;
+      drawLeyendaPill(marginX + leyW / 2, 7.2);
+      doc.setTextColor(255, 255, 255); // restaurar blanco para la fecha
+    }
     const fechaActual = new Date().toLocaleDateString('es-MX', { year: 'numeric', month: 'long', day: 'numeric' });
     doc.setFontSize(8);
     doc.setFont('helvetica', 'normal');
@@ -794,7 +826,10 @@ export function ClientePropuestaPage() {
       doc.setFontSize(7);
       doc.setFont('helvetica', 'normal');
       doc.text('Desarrollado por QEB', marginX + 5, pageHeight - 2);
+      drawLeyendaPill(pageWidth / 2, pageHeight - 9.8);
       doc.setFontSize(8);
+      doc.setFont('helvetica', 'normal');
+      doc.setTextColor(255, 255, 255);
       doc.text(`Pagina ${i} de ${totalPages}`, pageWidth - marginX, pageHeight - 5, { align: 'right' });
     }
 
@@ -888,8 +923,10 @@ export function ClientePropuestaPage() {
               </h2>
                {/* <p className="text-gray-600">{data?.propuesta?.descripcion || ''}</p> */}
             </div>
-            <div className="bg-[#7AB800]/10 text-[#7AB800] px-3 py-1 rounded-full text-sm font-medium">
-              {data?.propuesta?.status || 'Propuesta'}
+            {/* Solo la leyenda de contexto — el estatus interno (Atendido/Aprobada)
+                no se muestra al cliente. */}
+            <div className={`px-3 py-1 rounded-full text-sm font-medium border ${esCampana ? 'bg-[#0054A6]/10 text-[#0054A6] border-[#0054A6]/30' : 'bg-amber-100 text-amber-700 border-amber-300'}`}>
+              {leyendaCircuitos}
             </div>
           </div>
           <div className={`flex gap-6 mt-4 text-sm border-t pt-4 ${isDark ? 'text-zinc-400 border-zinc-700' : 'text-gray-500 border-gray-100'}`}>

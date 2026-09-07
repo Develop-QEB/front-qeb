@@ -1,5 +1,5 @@
 import React, { useState, useMemo, useEffect, useCallback, useRef } from 'react';
-import { flushSync } from 'react-dom';
+import { flushSync, createPortal } from 'react-dom';
 import { useQuery } from '@tanstack/react-query';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import {
@@ -7,7 +7,7 @@ import {
   Calendar, Clock, Eye, Megaphone, Edit2, Check, Minus, ArrowUpDown, User,
   List, LayoutGrid, Building2, MapPin, Loader2, Package, ClipboardList, Plus, Trash2,
   ArrowUp, ArrowDown, Lock, SlidersHorizontal, Upload, Printer, Monitor, Camera, Share2,
-  Image, FileText, DollarSign, Hash, Gift, AlertTriangle, Film, Play, Zap
+  Image, FileText, DollarSign, Hash, Gift, AlertTriangle, Film, Play, Zap, Paintbrush
 } from 'lucide-react';
 import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip, Legend } from 'recharts';
 import { Header } from '../../components/layout/Header';
@@ -31,6 +31,8 @@ import { getPermissions } from '../../lib/permissions';
 import { useSocketCampanas } from '../../hooks/useSocket';
 import { HistorialFilterPopover, type HistorialFilterValues } from '../../components/HistorialFilterPopover';
 import { IncidenciaModal } from './IncidenciaModal';
+import { PruebasColorModal } from '../pruebas-color/PruebasColorModal';
+import { puedeGestionarPruebaColor } from '../../services/pruebasColor.service';
 import { exportVersionarioArtesMulti } from '../../utils/exportVersionarioArtes';
 
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3000/api';
@@ -56,6 +58,150 @@ const getImageUrl = (url: string | undefined | null): string | null => {
   if (url.includes('.') && !url.includes('/')) return `${STATIC_URL}/uploads/artes/${url}`;
   return `${STATIC_URL}/${url}`;
 };
+
+// Campaña con reservas por debajo de las caras esperadas (totales del listado,
+// mismo criterio/exclusiones que el badge "Incompleta" del detalle de campaña).
+function esCampanaIncompleta(c: Campana): boolean {
+  return c.caras_esperadas_total != null
+    && Number(c.caras_esperadas_total) > 0
+    && Number(c.reservas_validas_total ?? 0) < Number(c.caras_esperadas_total);
+}
+
+// Badge "Incompleta (X/Y caras)" para la tabla de campañas. Al dar clic abre el
+// MISMO desglose por catorcena que el detalle de campaña (incompleteness_detail);
+// el detalle se pide con getById solo cuando se abre, no en el render de la lista.
+// Popover con position:fixed para que no lo recorte el overflow de la tabla.
+function IncompletaBadge({ campana, isDark }: { campana: Campana; isDark: boolean }) {
+  const [open, setOpen] = useState(false);
+  const [pos, setPos] = useState<{ top: number; left: number } | null>(null);
+  const btnRef = useRef<HTMLButtonElement>(null);
+  const popRef = useRef<HTMLDivElement>(null);
+
+  const { data: detalle, isLoading } = useQuery({
+    queryKey: ['campana-incompleteness', campana.id],
+    queryFn: () => campanasService.getById(campana.id),
+    enabled: open,
+    staleTime: 60000,
+  });
+
+  const esperadas = Number(campana.caras_esperadas_total) || 0;
+  const reservadas = Number(campana.reservas_validas_total) || 0;
+  const detail = (detalle as any)?.incompleteness_detail as
+    { catorcena: number; anio: number; caras_esperadas: number; reservas_count: number; completa: boolean }[] | undefined;
+
+  const POPOVER_W = 260;
+  const toggle = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (!open && btnRef.current) {
+      const r = btnRef.current.getBoundingClientRect();
+      // Anclado bajo el badge, alineado a su izquierda sin salirse del viewport.
+      setPos({
+        top: r.bottom + 8,
+        left: Math.max(8, Math.min(r.left, window.innerWidth - POPOVER_W - 8)),
+      });
+    }
+    setOpen(v => !v);
+  };
+
+  // El popover es position:fixed (para que no lo recorte el overflow de la
+  // tabla), así que al hacer scroll DE LA PÁGINA quedaría "volando" lejos del
+  // badge: cerrarlo en cuanto se scrollea o cambia el tamaño de la ventana.
+  // EXCEPCIÓN: el scroll de la lista interna del propio popover (desglose con
+  // muchas catorcenas) no debe cerrarlo.
+  useEffect(() => {
+    if (!open) return;
+    const closeOnScroll = (e: Event) => {
+      if (popRef.current && e.target instanceof Node && popRef.current.contains(e.target)) return;
+      setOpen(false);
+    };
+    const closeOnResize = () => setOpen(false);
+    window.addEventListener('scroll', closeOnScroll, true);
+    window.addEventListener('resize', closeOnResize);
+    return () => {
+      window.removeEventListener('scroll', closeOnScroll, true);
+      window.removeEventListener('resize', closeOnResize);
+    };
+  }, [open]);
+
+  return (
+    <>
+      <button
+        ref={btnRef}
+        onClick={toggle}
+        className={`px-1.5 py-0.5 rounded-full text-[9px] flex items-center gap-1 cursor-pointer hover:opacity-80 transition-opacity ${isDark ? 'bg-yellow-500/20 text-yellow-300' : 'bg-yellow-50 text-yellow-700'} border border-yellow-500/30`}
+        title="Ver desglose por catorcena"
+      >
+        <AlertTriangle className="h-3 w-3" />
+        Incompleta ({reservadas}/{esperadas})
+      </button>
+      {/* Portal a document.body: si el popover se renderiza dentro de la fila,
+          cualquier ancestro con transform/backdrop-filter cambia el containing
+          block de position:fixed y el popover aparece lejos del badge. */}
+      {open && pos && createPortal(
+        <>
+          <div className="fixed inset-0 z-40" onClick={(e) => { e.stopPropagation(); setOpen(false); }} />
+          <div
+            ref={popRef}
+            className={`fixed z-50 rounded-xl border shadow-2xl overflow-hidden ${isDark ? 'bg-zinc-900 border-yellow-500/40 shadow-black/60' : 'bg-white border-yellow-400 shadow-gray-400/40'}`}
+            style={{ top: pos.top, left: pos.left, width: POPOVER_W }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* Flecha apuntando al badge */}
+            <div
+              className={`absolute -top-[7px] left-6 w-3 h-3 rotate-45 border-l border-t ${isDark ? 'bg-zinc-900 border-yellow-500/40' : 'bg-yellow-50 border-yellow-400'}`}
+            />
+            {/* Header */}
+            <div className={`flex items-center justify-between gap-2 px-3 py-2 border-b ${isDark ? 'bg-yellow-500/10 border-yellow-500/20' : 'bg-yellow-50 border-yellow-200'}`}>
+              <div className="flex items-center gap-1.5 min-w-0">
+                <AlertTriangle className={`h-3.5 w-3.5 shrink-0 ${isDark ? 'text-yellow-400' : 'text-yellow-600'}`} />
+                <span className={`text-xs font-semibold truncate ${isDark ? 'text-yellow-300' : 'text-yellow-700'}`}>
+                  Incompleta — {reservadas}/{esperadas} caras
+                </span>
+              </div>
+              <button
+                onClick={(e) => { e.stopPropagation(); setOpen(false); }}
+                className={`p-0.5 rounded transition-colors shrink-0 ${isDark ? 'text-zinc-400 hover:text-white hover:bg-zinc-700' : 'text-gray-400 hover:text-gray-700 hover:bg-gray-100'}`}
+                title="Cerrar"
+              >
+                <X className="h-3.5 w-3.5" />
+              </button>
+            </div>
+            {/* Body */}
+            <div className="p-3">
+              <p className={`text-[10px] uppercase tracking-wide font-semibold mb-2 ${isDark ? 'text-zinc-500' : 'text-gray-400'}`}>Desglose por catorcena</p>
+              {isLoading ? (
+                <div className="flex items-center gap-2 py-1">
+                  <Loader2 className="h-3.5 w-3.5 animate-spin text-yellow-400" />
+                  <span className={`text-xs ${isDark ? 'text-zinc-400' : 'text-gray-500'}`}>Cargando...</span>
+                </div>
+              ) : detail && detail.length > 0 ? (
+                <div className="space-y-1.5 max-h-56 overflow-y-auto pr-1">
+                  {detail.map(d => (
+                    <div key={`${d.anio}-${d.catorcena}`} className="flex items-center justify-between gap-4">
+                      <span className={`text-xs ${isDark ? 'text-zinc-400' : 'text-gray-500'}`}>
+                        Cat {String(d.catorcena).padStart(2, '0')} / {d.anio}
+                      </span>
+                      <span className={`text-xs font-bold px-2 py-0.5 rounded-full ${
+                        d.completa
+                          ? (isDark ? 'text-green-300 bg-green-500/20 border border-green-500/30' : 'text-green-700 bg-green-50 border border-green-200')
+                          : (isDark ? 'text-yellow-300 bg-yellow-500/20 border border-yellow-500/30' : 'text-yellow-700 bg-yellow-50 border border-yellow-200')
+                      }`}>
+                        {d.reservas_count}/{d.caras_esperadas} {d.completa ? '✓' : `— faltan ${d.caras_esperadas - d.reservas_count}`}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <p className={`text-xs ${isDark ? 'text-zinc-400' : 'text-gray-500'}`}>Sin desglose disponible</p>
+              )}
+            </div>
+          </div>
+        </>,
+        document.body
+      )}
+    </>
+  );
+}
 
 interface ImagenDigitalView {
   id: number;
@@ -272,7 +418,12 @@ const CAMPANA_FILTER_FIELDS: FilterFieldConfig[] = [
   // con ese estatus_arte. Evaluado contra inventarios cargados en el cliente
   // (campanaInventarios). Valores expuestos en getUniqueFieldValues.
   { field: 'etapa', label: 'Etapa', type: 'string' },
+  // Completitud de reservas (badge "Incompleta" del listado): Incompleta =
+  // reservas por debajo de las caras esperadas; Completa = el resto.
+  { field: 'completitud', label: 'Completitud', type: 'string' },
 ];
+
+const COMPLETITUD_VALUES = ['Incompleta', 'Completa'];
 
 // Etapas (estatus_arte computado en back) que pueden filtrarse.
 // Mapping label visible -> valor real de estatus_arte.
@@ -903,12 +1054,14 @@ interface CampanaRowProps {
   hayFiltroPeriodo: boolean;
   canEditPerm: boolean;
   canSeeGestionArtesPerm: boolean;
+  canPruebaColor: boolean;
   isEditDisabled: boolean;
   onOpen: (id: number) => void;
   onShare: (propuestaId: number) => void;
   onEdit: (item: Campana) => void;
   onIncidencia: (item: Campana) => void;
   onStatus: (item: Campana) => void;
+  onPruebaColor: (item: Campana) => void;
 }
 
 const CampanaRow = React.memo(function CampanaRow({
@@ -919,12 +1072,14 @@ const CampanaRow = React.memo(function CampanaRow({
   hayFiltroPeriodo,
   canEditPerm,
   canSeeGestionArtesPerm,
+  canPruebaColor,
   isEditDisabled,
   onOpen,
   onShare,
   onEdit,
   onIncidencia,
   onStatus,
+  onPruebaColor,
 }: CampanaRowProps) {
   const statusColor = getStatusColor(item.status, isDark);
   const periodStatus = getPeriodStatus(item.fecha_inicio, item.fecha_fin);
@@ -993,10 +1148,8 @@ const CampanaRow = React.memo(function CampanaRow({
           >
             {item.status}
           </button>
-          {item.caras_ultima_cat != null && Number(item.caras_ultima_cat) > 0 && Number(item.reservas_count_ultima_cat) < Number(item.caras_ultima_cat) && (
-            <span className={`px-1.5 py-0.5 rounded-full text-[9px] ${isDark ? 'bg-yellow-500/20 text-yellow-300' : 'bg-yellow-50 text-yellow-700'} border border-yellow-500/30`}>
-              Incompleta
-            </span>
+          {esCampanaIncompleta(item) && (
+            <IncompletaBadge campana={item} isDark={isDark} />
           )}
         </div>
       </td>
@@ -1079,6 +1232,18 @@ const CampanaRow = React.memo(function CampanaRow({
               title="Compartir campaña"
             >
               <Share2 className="h-3.5 w-3.5" />
+            </button>
+          )}
+          {canPruebaColor && item.propuesta_id && (
+            <button
+              onClick={() => onPruebaColor(item)}
+              className={`p-2 rounded-lg border transition-all ${isDark
+                ? 'bg-fuchsia-500/10 text-fuchsia-400 hover:bg-fuchsia-500/20 hover:text-fuchsia-300 border-fuchsia-500/20 hover:border-fuchsia-500/40'
+                : 'bg-fuchsia-50 text-fuchsia-600 hover:bg-fuchsia-100 hover:text-fuchsia-700 border-fuchsia-200 hover:border-fuchsia-300'
+              }`}
+              title="Solicitar prueba de color"
+            >
+              <Paintbrush className="h-3.5 w-3.5" />
             </button>
           )}
           {canEditPerm && (
@@ -1169,6 +1334,8 @@ export function CampanasPage() {
   const [statusCampana, setStatusCampana] = useState<Campana | null>(null);
   const [incidenciaModalOpen, setIncidenciaModalOpen] = useState(false);
   const [incidenciaCampana, setIncidenciaCampana] = useState<Campana | null>(null);
+  const [pruebaColorCampana, setPruebaColorCampana] = useState<Campana | null>(null);
+  const puedePruebaColor = puedeGestionarPruebaColor(user?.rol);
 
   // Estado para galería de artes en versionario
   const [isArtGalleryOpen, setIsArtGalleryOpen] = useState(false);
@@ -1301,9 +1468,11 @@ export function CampanasPage() {
 
   // Stats query — global KPIs with same filters.
   // Incluimos serverSearch para que total/chart reflejen los resultados
-  // filtrados aunque estemos en la página 1 de N.
+  // filtrados aunque estemos en la página 1 de N, e historialFilter +
+  // effectiveExcludeRechazadas para que los KPIs no queden en un universo
+  // distinto al del listado.
   const { data: statsData, isLoading: isLoadingStats } = useQuery({
-    queryKey: ['campanas-stats', status, yearInicio, yearFin, catorcenaInicio, catorcenaFin, tipoPeriodo, serverSearch, excludeRechazadas],
+    queryKey: ['campanas-stats', status, yearInicio, yearFin, catorcenaInicio, catorcenaFin, tipoPeriodo, serverSearch, historialFilter, effectiveExcludeRechazadas],
     queryFn: () =>
       campanasService.getStats({
         status: (status && status !== 'Incompleta') ? status : undefined,
@@ -1313,7 +1482,8 @@ export function CampanasPage() {
         catorcenaInicio,
         catorcenaFin,
         tipoPeriodo: tipoPeriodo || undefined,
-        excludeRechazadas,
+        excludeRechazadas: effectiveExcludeRechazadas,
+        ...historialFilter,
       }),
     staleTime: 1000 * 30,
   });
@@ -1369,9 +1539,7 @@ export function CampanasPage() {
 
     // Filter by "Incompleta" status (frontend-only)
     if (status === 'Incompleta') {
-      items = items.filter(c =>
-        c.caras_ultima_cat != null && Number(c.caras_ultima_cat) > 0 && Number(c.reservas_count_ultima_cat) < Number(c.caras_ultima_cat)
-      );
+      items = items.filter(esCampanaIncompleta);
     }
 
     // Apply advanced filters (con soporte extendido para codigos_inventario desde inventarios cargados)
@@ -1392,6 +1560,14 @@ export function CampanasPage() {
       // Filtro por etapa del gestor de artes (estatus_arte de los inventarios).
       // El valor del filtro es el label visible (ej. "En Revisión"); lo mapeamos
       // al estatus_arte real ("Revision Artes"). Operadores soportados: = / !=.
+      // Filtro por completitud de reservas — mismo criterio que el badge
+      // "Incompleta" de la tabla (esCampanaIncompleta). Operadores: = / !=.
+      if (filter.field === 'completitud') {
+        if (!filter.value) return true;
+        const incompleta = esCampanaIncompleta(item);
+        const matches = filter.value === 'Incompleta' ? incompleta : !incompleta;
+        return (filter.operator === '!=' || filter.operator === 'not_contains') ? !matches : matches;
+      }
       if (filter.field === 'etapa') {
         if (!filter.value) return true;
         const mapped = ETAPA_VALUES.find(e => e.label === filter.value)?.value;
@@ -2303,6 +2479,11 @@ export function CampanasPage() {
         valuesMap[fieldConfig.field] = ETAPA_VALUES.map(e => e.label);
         return;
       }
+      // 'completitud' también es un set fijo (se evalúa con esCampanaIncompleta).
+      if (fieldConfig.field === 'completitud') {
+        valuesMap[fieldConfig.field] = COMPLETITUD_VALUES;
+        return;
+      }
       const values = new Set<string>();
       data.data.forEach(item => {
         const val = item[fieldConfig.field as keyof Campana];
@@ -2330,9 +2511,7 @@ export function CampanasPage() {
       if (c.status) statusSet.add(c.status);
     });
     // Add "Incompleta" if any campaign has incomplete inventory
-    const hasIncompletas = data.data.some(c =>
-      c.caras_ultima_cat != null && Number(c.caras_ultima_cat) > 0 && Number(c.reservas_count_ultima_cat) < Number(c.caras_ultima_cat)
-    );
+    const hasIncompletas = data.data.some(esCampanaIncompleta);
     if (hasIncompletas) statusSet.add('Incompleta');
     return Array.from(statusSet).sort();
   }, [data?.data]);
@@ -2990,7 +3169,8 @@ export function CampanasPage() {
   // Callbacks estables para el `CampanaRow` memoizado. `useCallback` mantiene
   // la misma identidad entre renders del padre para que React.memo no aborte.
   const handleRowOpen = useCallback((id: number) => handleOpenCampana(id), [handleOpenCampana]);
-  const handleRowShare = useCallback((propId: number) => navigate(`/propuestas/compartir/${propId}`), [navigate]);
+  // ctx=campana: la vista compartir muestra "Circuitos Confirmados" (desde Propuestas, sin ctx, muestra "Circuitos Muestra")
+  const handleRowShare = useCallback((propId: number) => navigate(`/propuestas/compartir/${propId}?ctx=campana`), [navigate]);
   const handleRowEdit = useCallback((c: Campana) => handleEditCampana(c), [handleEditCampana]);
   const handleRowIncidencia = useCallback((c: Campana) => {
     setIncidenciaCampana(c);
@@ -3000,6 +3180,7 @@ export function CampanasPage() {
     setStatusCampana(c);
     setStatusModalOpen(true);
   }, []);
+  const handleRowPruebaColor = useCallback((c: Campana) => setPruebaColorCampana(c), []);
 
   const hayFiltroPeriodo = !!(catorcenaInicio && catorcenaFin && yearInicio && yearFin);
 
@@ -3019,12 +3200,14 @@ export function CampanasPage() {
         hayFiltroPeriodo={hayFiltroPeriodo}
         canEditPerm={permissions.canEditCampanas}
         canSeeGestionArtesPerm={permissions.canSeeGestionArtes}
+        canPruebaColor={puedePruebaColor}
         isEditDisabled={isEditDisabled(item)}
         onOpen={handleRowOpen}
         onShare={handleRowShare}
         onEdit={handleRowEdit}
         onIncidencia={handleRowIncidencia}
         onStatus={handleRowStatus}
+        onPruebaColor={handleRowPruebaColor}
       />
     );
   };
@@ -4033,7 +4216,7 @@ export function CampanasPage() {
                             </button>
                             {campana.propuesta_id && (
                               <button
-                                onClick={() => navigate(`/propuestas/compartir/${campana.propuesta_id}`)}
+                                onClick={() => navigate(`/propuestas/compartir/${campana.propuesta_id}?ctx=campana`)}
                                 className={`p-1.5 rounded-lg ${isDark ? 'bg-cyan-500/10 text-cyan-400 hover:bg-cyan-500/20 border-cyan-500/20' : 'bg-cyan-50 text-cyan-600 hover:bg-cyan-100 border-cyan-200'} border transition-all`}
                                 title="Compartir campaña"
                               >
@@ -4618,6 +4801,16 @@ export function CampanasPage() {
           onClose={() => { setIncidenciaModalOpen(false); setIncidenciaCampana(null); }}
           campanaId={incidenciaCampana.id}
           campanaNombre={incidenciaCampana.nombre}
+        />
+      )}
+
+      {/* Prueba de color */}
+      {pruebaColorCampana && pruebaColorCampana.propuesta_id && (
+        <PruebasColorModal
+          isOpen={!!pruebaColorCampana}
+          onClose={() => setPruebaColorCampana(null)}
+          propuestaId={pruebaColorCampana.propuesta_id}
+          contextoNombre={pruebaColorCampana.nombre}
         />
       )}
 

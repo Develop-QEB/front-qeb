@@ -51,6 +51,7 @@ export interface DashboardFilters {
   formato?: string[];
   nse?: string[];
   tipo?: string[];
+  micromacro?: string; // '' | 'excluir' | 'solo' (circuito Mi Macro Periférico)
   catorcena_id?: number;
   fecha_inicio?: string;
   fecha_fin?: string;
@@ -147,6 +148,7 @@ class DashboardService {
     appendMulti(params, 'formato', filters?.formato);
     appendMulti(params, 'nse', filters?.nse);
     appendMulti(params, 'tipo', filters?.tipo);
+    if (filters?.micromacro) params.append('micromacro', filters.micromacro);
     if (filters?.catorcena_id) params.append('catorcena_id', filters.catorcena_id.toString());
     if (filters?.fecha_inicio) params.append('fecha_inicio', filters.fecha_inicio);
     if (filters?.fecha_fin) params.append('fecha_fin', filters.fecha_fin);
@@ -170,6 +172,7 @@ class DashboardService {
     appendMulti(params, 'formato', filters?.formato);
     appendMulti(params, 'nse', filters?.nse);
     appendMulti(params, 'tipo', filters?.tipo);
+    if (filters?.micromacro) params.append('micromacro', filters.micromacro);
     if (filters?.catorcena_id) params.append('catorcena_id', filters.catorcena_id.toString());
     if (filters?.fecha_inicio) params.append('fecha_inicio', filters.fecha_inicio);
     if (filters?.fecha_fin) params.append('fecha_fin', filters.fecha_fin);
@@ -201,8 +204,13 @@ class DashboardService {
     return response.data.data;
   }
 
-  async getPosteoStats(filters?: Pick<DashboardFilters, 'catorcena_id' | 'fecha_inicio' | 'fecha_fin'>): Promise<PosteoStats> {
+  async getPosteoStats(filters?: DashboardFilters): Promise<PosteoStats> {
     const params = new URLSearchParams();
+    appendMulti(params, 'estado', filters?.estado);
+    appendMulti(params, 'ciudad', filters?.ciudad);
+    appendMulti(params, 'formato', filters?.formato);
+    appendMulti(params, 'nse', filters?.nse);
+    appendMulti(params, 'tipo', filters?.tipo);
     if (filters?.catorcena_id) params.append('catorcena_id', filters.catorcena_id.toString());
     if (filters?.fecha_inicio) params.append('fecha_inicio', filters.fecha_inicio);
     if (filters?.fecha_fin) params.append('fecha_fin', filters.fecha_fin);
@@ -219,6 +227,7 @@ class DashboardService {
     appendMulti(params, 'formato', filters?.formato);
     appendMulti(params, 'nse', filters?.nse);
     appendMulti(params, 'tipo', filters?.tipo);
+    if (filters?.micromacro) params.append('micromacro', filters.micromacro);
     if (filters?.catorcena_id) params.append('catorcena_id', filters.catorcena_id.toString());
     if (filters?.fecha_inicio) params.append('fecha_inicio', filters.fecha_inicio);
     if (filters?.fecha_fin) params.append('fecha_fin', filters.fecha_fin);

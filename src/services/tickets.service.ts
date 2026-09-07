@@ -1,14 +1,11 @@
 import api from '../lib/api';
 
-// Categorías hardcoded — deben coincidir con back CATEGORIAS_TI.
-// TI => routa a equipo TI. QEB => routa a equipo QEB (default si no se elige).
+// Categorías hardcoded. Todas rutean a TI por default; TI reasigna a QEB
+// desde el dropdown de la fila cuando requiere apoyo del equipo QEB.
 export const TICKET_CATEGORIAS_TI = [
   'Desposteo SAP',
   'Posteo SAP',
   'Ajuste de Usuario',
-] as const;
-
-export const TICKET_CATEGORIAS_QEB = [
   'Autorización DG/DCM',
   'Asignación de circuitos/inventario',
   'Edición de propuesta o campaña',
@@ -16,9 +13,7 @@ export const TICKET_CATEGORIAS_QEB = [
   'Otro',
 ] as const;
 
-export type TicketCategoria =
-  | (typeof TICKET_CATEGORIAS_TI)[number]
-  | (typeof TICKET_CATEGORIAS_QEB)[number];
+export type TicketCategoria = (typeof TICKET_CATEGORIAS_TI)[number];
 
 export type TicketArea = 'TI' | 'QEB';
 
@@ -171,6 +166,22 @@ export const ticketsService = {
   // Actualizar status del ticket
   updateStatus: async (id: number, data: UpdateTicketStatusInput): Promise<Ticket> => {
     const response = await api.patch(`/tickets/${id}/status`, data);
+    return response.data;
+  },
+
+  // Reasignar entre QEB y TI. Feedback 2026-08-15.
+  updateArea: async (id: number, area: 'QEB' | 'TI'): Promise<Ticket> => {
+    const response = await api.patch(`/tickets/${id}/area`, { area });
+    return response.data;
+  },
+
+  // Acciones masivas. Feedback 2026-08-15.
+  bulkUpdateStatus: async (ids: number[], status: string): Promise<{ updated: number; saltados: number }> => {
+    const response = await api.patch('/tickets/bulk/status', { ids, status });
+    return response.data;
+  },
+  bulkUpdateArea: async (ids: number[], area: 'QEB' | 'TI'): Promise<{ updated: number; saltados: number }> => {
+    const response = await api.patch('/tickets/bulk/area', { ids, area });
     return response.data;
   },
 

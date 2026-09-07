@@ -332,6 +332,10 @@ export interface Campana {
   reservas_count?: number | null;
   reservas_count_ultima_cat?: number | null;
   caras_ultima_cat?: number | null;
+  // Totales de completitud del listado (mismo criterio y exclusiones que
+  // incompleteness_detail del detalle) — para el badge "Incompleta" de la tabla.
+  caras_esperadas_total?: number | null;
+  reservas_validas_total?: number | null;
   incompleteness_detail?: { catorcena: number; anio: number; caras_esperadas: number; reservas_count: number; completa: boolean }[];
   propuesta_id: number | null;
   // SAP integration fields
@@ -454,6 +458,9 @@ export interface NotificacionStats {
   atendidas?: number;
   /** Conteo exacto para la burbuja roja del header. */
   badge_count?: number;
+  /** Desglose del badge por pestaña. badge_count = notificaciones + tareas. */
+  badge_notificaciones?: number;
+  badge_tareas?: number;
   por_tipo: Record<string, number>;
   por_estatus?: Record<string, number>;
 }

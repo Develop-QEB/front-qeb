@@ -41,6 +41,8 @@ export interface InventariosParams {
   estatus?: string;
   plaza?: string;
   cto?: string;
+  tradicional?: string;
+  micromacro?: string;
   campanaId?: number;
 }
 
@@ -183,6 +185,8 @@ export const inventariosService = {
     tipo?: string;
     estatus?: string;
     plaza?: string;
+    tradicional?: string;
+    micromacro?: string;
     campanaId?: number;
   }): Promise<InventarioStats> {
     const response = await api.get<ApiResponse<InventarioStats>>('/inventarios/stats', { params });

@@ -20,9 +20,17 @@ export const getEndpoints = (env: Environment) => ({
   deliveryNotes: ENDPOINT_CONFIG[env].deliveryNotes,
 });
 
+// En dev/stage (NO prod) los POST de CIMU se mandan a la SAP de PRUEBAS
+// (PB_SBOCIMU) usando el endpoint/serie de TEST, para no tocar la CIMU real de
+// producción. Prod (app.qeb.mx) se comporta normal. TRADE aún no tiene BD de
+// prueba en SAP, así que por ahora solo aplica a CIMU.
+const IS_PROD = typeof window !== 'undefined' && window.location.hostname === 'app.qeb.mx';
+export const usaSapPruebas = (sapDb: SapDatabase): boolean => !IS_PROD && sapDb === 'CIMU';
+const resolveSapEnv = (sapDb: SapDatabase): SapDatabase => usaSapPruebas(sapDb) ? 'TEST' : sapDb;
+
 // Helpers para SAP POST
-export const getDeliveryNotesEndpoint = (sapDb: SapDatabase): string => ENDPOINT_CONFIG[sapDb].deliveryNotes;
-export const getSeriesForSapDatabase = (sapDb: SapDatabase): number => ENDPOINT_CONFIG[sapDb].series;
+export const getDeliveryNotesEndpoint = (sapDb: SapDatabase): string => ENDPOINT_CONFIG[resolveSapEnv(sapDb)].deliveryNotes;
+export const getSeriesForSapDatabase = (sapDb: SapDatabase): number => ENDPOINT_CONFIG[resolveSapEnv(sapDb)].series;
 
 interface EnvironmentState {
   environment: Environment;

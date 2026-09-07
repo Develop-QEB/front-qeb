@@ -168,6 +168,13 @@ export function ClientePropuestaMapPage() {
   const [searchParams] = useSearchParams();
   const propuestaId = id ? parseInt(id, 10) : 0;
 
+  // Leyenda de contexto (misma señal que ClientePropuestaPage): el enlace desde
+  // Campañas trae ?ctx=campana -> "Circuitos Confirmados"; sin él -> "Circuitos
+  // Muestra". Reemplaza al chip de estatus interno (Atendido/Aprobada), que no
+  // debe verse en la vista pública.
+  const esCampana = searchParams.get('ctx') === 'campana';
+  const leyendaCircuitos = esCampana ? 'Circuitos Confirmados' : 'Circuitos Muestra';
+
   // Alcance inicial compartido desde "Compartir" / "Expandir Mapa". Prioridad:
   //   ?sel=id@catorcena,...  -> subconjunto EXACTO por reserva (id + catorcena). Es la
   //      clave que evita arrastrar otras catorcenas del mismo inventario.
@@ -462,12 +469,15 @@ export function ClientePropuestaMapPage() {
   // el alcance con el que se abrió el mapa (sel / periodos / ids).
   const handleCopyLink = () => {
     const params = new URLSearchParams();
+    if (esCampana) {
+      params.set('ctx', 'campana');
+    }
     if (selected.size > 0) {
       const chosen = baseRows.filter(r => selected.has(r._rk) && r.latitud && r.longitud);
       const sel = Array.from(new Set(chosen.map(r => `${r.id}@${r._catKey}`)));
       if (sel.length > 0) params.set('sel', sel.join(','));
     } else {
-      for (const k of ['sel', 'periodos', 'ids'] as const) {
+      for (const k of ['sel', 'periodos', 'ids', 'ctx'] as const) {
         const v = searchParams.get(k);
         if (v) params.set(k, v);
       }
@@ -530,15 +540,15 @@ export function ClientePropuestaMapPage() {
               <p className="text-xs text-gray-500">Cliente</p>
               <p className="text-sm font-medium text-gray-800">{data?.solicitud?.cliente || 'N/A'}</p>
             </div>
-            <div className="bg-[#7AB800]/10 text-[#7AB800] px-3 py-1 rounded-full text-sm font-medium">
-              {data?.propuesta?.status || 'Propuesta'}
+            <div className={`px-3 py-1 rounded-full text-sm font-medium border ${esCampana ? 'bg-[#0054A6]/10 text-[#0054A6] border-[#0054A6]/30' : 'bg-amber-100 text-amber-700 border-amber-300'}`}>
+              {leyendaCircuitos}
             </div>
           </div>
 
           {/* Botones de accion */}
           <div className="flex items-center gap-1.5 sm:gap-2 shrink-0">
             <a
-              href={`/cliente/propuesta/${propuestaId}`}
+              href={`/cliente/propuesta/${propuestaId}${esCampana ? '?ctx=campana' : ''}`}
               target="_blank"
               rel="noopener noreferrer"
               className="flex items-center gap-1.5 px-2.5 sm:px-4 py-2 border rounded-lg text-xs sm:text-sm font-medium shadow-sm transition-colors bg-white hover:bg-gray-50 text-gray-700 border-gray-300"

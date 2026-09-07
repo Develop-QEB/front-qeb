@@ -385,6 +385,20 @@ export function useSocketNotificaciones(
         return;
       }
 
+      // Desplazamiento de reservas (multireservas): aviso operativo accionable a
+      // asesores + Tráfico. Salta las preferencias opt-in (como conflicto_ocupacion):
+      // toast que no se cierra solo, para que el aviso no se pierda.
+      if (payload?.categoria === 'reserva_desplazada') {
+        useNotifToastStore.getState().push({
+          titulo: payload?.titulo || 'Reservas desplazadas',
+          descripcion: payload?.descripcion,
+          tareaId: payload?.tarea_id,
+          tipo: payload?.tipo,
+          requireInteraction: true,
+        });
+        return;
+      }
+
       // El popup es OPT-IN (default OFF): solo se muestra si la preferencia
       // efectiva del usuario es true. La matriz ya resuelve la herencia
       // (específico → master de clase → master de canal → default del canal).
@@ -499,6 +513,9 @@ export function useSocketPropuesta(propuestaId: number | null) {
       queryClient.invalidateQueries({ queryKey: ['propuesta-inventario', data.propuestaId] });
       queryClient.invalidateQueries({ queryKey: ['propuesta-full', data.propuestaId] });
       queryClient.invalidateQueries({ queryKey: ['propuesta', data.propuestaId] });
+      // Refrescar el historial: cuando desplazan reservas de esta propuesta (venta en
+      // otra campaña), queda un registro nuevo que debe aparecer al momento.
+      queryClient.invalidateQueries({ queryKey: ['propuesta-historial', data.propuestaId] });
       queryClient.invalidateQueries({ queryKey: ['inventario'] });
     };
 

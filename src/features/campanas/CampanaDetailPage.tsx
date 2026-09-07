@@ -6,7 +6,7 @@ import { AssignInventarioCampanaModal } from './AssignInventarioCampanaModal';
 import { GoogleMap, useLoadScript, Marker } from '@react-google-maps/api';
 import { GOOGLE_MAPS_LOADER_OPTIONS } from '../../config/googleMaps';
 import { Header } from '../../components/layout/Header';
-import { campanasService, InventarioReservado, InventarioConAPS, SolicitudCara, buildDeliveryNote, postDeliveryNoteToSAP, patchDeliveryNoteToSAP, findExistingDeliveryNote, resolveBaseEntry, isMigratedCampaign, HistorialItem, SAPDeliveryNoteMigrated } from '../../services/campanas.service';
+import { campanasService, InventarioReservado, InventarioConAPS, SolicitudCara, buildDeliveryNote, postDeliveryNoteToSAP, patchDeliveryNoteToSAP, findExistingDeliveryNote, resolveBaseEntry, isMigratedCampaign, HistorialItem, SAPDeliveryNoteMigrated, PostLogItem } from '../../services/campanas.service';
 import { solicitudesService } from '../../services/solicitudes.service';
 import { Catorcena } from '../../types';
 import { Badge } from '../../components/ui/badge';
@@ -494,6 +494,13 @@ const TABLE_COLUMNS_IM: TableColumn[] = [
 // Helper para detectar artículos de impresión
 const isIMArticle = (item: InventarioReservado | InventarioConAPS): boolean => {
   return String(item.rsv_ids).startsWith('sc_');
+};
+
+// Artículos que NO requieren inventario físico: impresión (IM) y ejecución especial
+// (ES/ESP). Se consideran siempre completos, igual que IM (no piden inventario).
+const esArticuloSinInventario = (articulo?: string | null): boolean => {
+  const a = String(articulo || '').toUpperCase();
+  return a.startsWith('IM') || a.startsWith('ESP') || a.startsWith('ES-');
 };
 
 const TABLE_COLUMNS_IM_APS: TableColumn[] = [
@@ -994,6 +1001,11 @@ export function CampanaDetailPage() {
   const [alreadyPosted, setAlreadyPosted] = useState(false);
   const [previewDeliveryNote, setPreviewDeliveryNote] = useState<any>(null);
   const [postedAPSGroups, setPostedAPSGroups] = useState<Set<number>>(new Set());
+  // Modal "Historial de posteos" — bitácora de a quién se mandó cada APS.
+  const [showPostLogModal, setShowPostLogModal] = useState(false);
+  // Modal de detalle de UN post (al picar el badge "POST" de un APS): muestra a
+  // dónde se mandó ese post (BD SAP, CUIC, razón social, DocNum, fecha, usuario).
+  const [postDetailAPS, setPostDetailAPS] = useState<number | null>(null);
   // APS etiquetados Pre Factura — bloquea POST a SAP y muestra badge dorado.
   const [prefacturaAPSGroups, setPrefacturaAPSGroups] = useState<Set<number>>(new Set());
 
@@ -1071,6 +1083,26 @@ export function CampanaDetailPage() {
     staleTime: 1000 * 30,
     placeholderData: (prev) => prev,
   });
+
+  // Bitácora de POSTs a SAP: a quién se mandó cada APS (snapshot histórico).
+  const { data: postLog = [], refetch: refetchPostLog } = useQuery({
+    queryKey: ['campana-post-log', campanaId],
+    queryFn: () => campanasService.getPostLog(campanaId),
+    staleTime: 1000 * 30,
+    placeholderData: (prev) => prev,
+  });
+
+  // Último POST exitoso por APS — para el badge/tooltip de la lista.
+  const postLogByAPS = useMemo(() => {
+    const map = new Map<number, PostLogItem>();
+    // postLog viene ordenado por posted_at DESC, así que el primero de cada APS
+    // es el más reciente. Se prefiere el último EXITOSO para el badge.
+    for (const p of postLog) {
+      if (!p.success) continue;
+      if (!map.has(p.aps)) map.set(p.aps, p);
+    }
+    return map;
+  }, [postLog]);
 
   const { data: inventarioConAPS = [], isLoading: isLoadingAPS, error: errorAPS, refetch: refetchAPS } = useQuery({
     queryKey: ['campana-inventario-aps', campanaId],
@@ -1205,11 +1237,14 @@ export function CampanaDetailPage() {
       // esperadas = 0 es "sin dato de caras", no un grupo incompleto ni con
       // exceso: marcarlo bloquearía circuitos mal capturados para siempre.
       const sinDato = esperadas === 0;
+      // IM y ES/ESP no requieren inventario → siempre completos (blindaje por si un
+      // ES viejo tuviera reservas físicas; lo normal es que el back les dé fila virtual).
+      const sinInventario = esArticuloSinInventario(sc.articulo);
       map.set(sc.id, {
         esperadas,
         reservadas,
-        completo: sinDato || reservadas >= esperadas,
-        exceso: !sinDato && reservadas > esperadas,
+        completo: sinInventario || sinDato || reservadas >= esperadas,
+        exceso: !sinInventario && !sinDato && reservadas > esperadas,
         cortesia: sc.cortesia === 1,
       });
     });
@@ -1586,6 +1621,49 @@ export function CampanaDetailPage() {
 
         const result = await postDeliveryNoteToSAP(dn, campana.sap_database);
         results.push(result);
+      }
+
+      // Bitácora: guardar a QUIÉN se mandó cada APS con el snapshot del cliente
+      // que tenía la campaña en este momento. Si luego le cambian el cliente
+      // (ej. SABA -> Chevrolet para las siguientes catorcenas), este registro
+      // conserva el destino real de lo ya posteado. Se guardan también los
+      // intentos fallidos, para poder rastrear qué pasó.
+      try {
+        const logEntries = deliveryNotes.map((dn, idx) => {
+          const r = results[idx];
+          const apsNum = Number(dn.U_IMU_CotNum);
+          // Circuitos (solicitudCaras) que abarcó este APS
+          const carasIds = Array.from(new Set(
+            itemsToPost
+              .filter(i => String(i.aps) === String(dn.U_IMU_CotNum))
+              .map(i => i.solicitud_caras_id)
+              .filter((v): v is number => v != null)
+          ));
+          return {
+            aps: apsNum,
+            card_code: resolvedCampana.card_code ?? null,
+            cuic: resolvedCampana.cuic ?? null,
+            razon_social: resolvedCampana.T0_U_RazonSocial ?? resolvedCampana.cliente_razon_social ?? null,
+            marca: resolvedCampana.T2_U_Marca ?? null,
+            cliente_nombre: resolvedCampana.T0_U_Cliente ?? resolvedCampana.cliente_nombre ?? null,
+            sap_database: campana.sap_database ?? null,
+            salesperson_code: (dn as { SalesPersonCode?: number | string }).SalesPersonCode ?? null,
+            solicitud_caras_ids: carasIds,
+            success: !!r?.success,
+            doc_entry: (r?.data?.DocEntry as number | undefined) ?? (r?.data?.BaseEntry as number | undefined) ?? null,
+            doc_num: (r?.data?.DocNum as number | undefined) ?? null,
+            error_msg: r?.success ? null : (r?.error ?? null),
+            payload_json: JSON.stringify(dn),
+          };
+        }).filter(e => Number.isFinite(e.aps));
+
+        if (logEntries.length > 0) {
+          await campanasService.registrarPostLog(campana.id, logEntries);
+          refetchPostLog();
+        }
+      } catch (e) {
+        // No romper el flujo del POST por un fallo de bitácora.
+        console.error('Error registrando bitácora de POST:', e);
       }
 
       const allSuccess = results.every(r => r.success);
@@ -3987,6 +4065,18 @@ export function CampanaDetailPage() {
               <span className="text-[10px] sm:text-xs text-muted-foreground">
                 {filteredInventarioAPS.length} registros
               </span>
+              {/* Historial de posteos: a quién se mandó cada APS (bitácora) */}
+              {postLog.length > 0 && (
+                <button
+                  onClick={() => setShowPostLogModal(true)}
+                  className={`flex items-center justify-center w-6 sm:w-7 h-6 sm:h-7 rounded-lg border transition-colors ${
+                    isDark ? 'bg-purple-900/50 hover:bg-purple-900/70 border-purple-500/30' : 'bg-purple-100 hover:bg-purple-200 border-purple-300'
+                  }`}
+                  title="Historial de posteos a SAP (a quién se mandó cada APS)"
+                >
+                  <History className={`h-3.5 sm:h-4 w-3.5 sm:w-4 ${isDark ? 'text-purple-300' : 'text-purple-700'}`} />
+                </button>
+              )}
               {permissions.canEditDetalleCampana && (() => {
                 const selectedHavePosted = selectedItemsAPS.size > 0 &&
                   inventarioConAPS.filter(i => selectedItemsAPS.has(String(i.rsv_ids))).some(i => postedAPSGroups.has(i.aps));
@@ -4653,8 +4743,64 @@ export function CampanaDetailPage() {
                             </span>
                             <span className={`text-xs ${isDark ? 'text-white' : 'text-gray-900'}`}>{groupKey}</span>
                             {activeGroupingsAPS[0] === 'aps' && allGroupItemsAPS[0] && (postedAPSGroups.has(allGroupItemsAPS[0].aps) || alreadyPosted) && (
-                              <span className="text-[9px] font-semibold px-1 py-0.5 rounded bg-green-500/20 text-green-400 border border-green-500/30 shrink-0">POST</span>
+                              <span
+                                onClick={postLogByAPS.has(allGroupItemsAPS[0].aps) ? (e) => { e.stopPropagation(); setPostDetailAPS(allGroupItemsAPS[0].aps); } : undefined}
+                                title={postLogByAPS.has(allGroupItemsAPS[0].aps) ? 'Ver datos del post (BD SAP, CUIC, destino)' : undefined}
+                                className={`text-[9px] font-semibold px-1 py-0.5 rounded bg-green-500/20 text-green-400 border border-green-500/30 shrink-0 ${postLogByAPS.has(allGroupItemsAPS[0].aps) ? 'cursor-pointer hover:bg-green-500/40 underline decoration-dotted underline-offset-2' : ''}`}
+                              >POST</span>
                             )}
+                            {/* Destino real del POST (snapshot). Sobrevive a que le
+                                cambien el cliente a la campaña después de postear. */}
+                            {activeGroupingsAPS[0] === 'aps' && allGroupItemsAPS[0] && (() => {
+                              const log = postLogByAPS.get(allGroupItemsAPS[0].aps);
+                              if (!log) return null;
+                              const destino = log.marca || log.razon_social || log.cliente_nombre || log.card_code || '—';
+                              const fecha = log.posted_at ? new Date(log.posted_at).toLocaleString('es-MX', { dateStyle: 'short', timeStyle: 'short' }) : '';
+                              const tip = [
+                                `Posteado a: ${destino}`,
+                                log.razon_social ? `Razón social: ${log.razon_social}` : '',
+                                log.cuic != null ? `CUIC: ${log.cuic}` : '',
+                                log.card_code ? `CardCode: ${log.card_code}` : '',
+                                log.sap_database ? `BD SAP: ${log.sap_database}` : '',
+                                log.doc_num != null ? `DocNum: ${log.doc_num}` : '',
+                                fecha ? `Fecha: ${fecha}` : '',
+                                log.usuario_nombre ? `Por: ${log.usuario_nombre}` : '',
+                              ].filter(Boolean).join('\n');
+                              // BD SAP: mismo código de color que se usa en el resto del sistema
+                              // (CIMU azul, TEST ámbar, TRADE esmeralda).
+                              const sapCls = log.sap_database === 'CIMU' ? 'bg-blue-500/20 text-blue-300 border-blue-500/30'
+                                : log.sap_database === 'TEST' ? 'bg-amber-500/20 text-amber-300 border-amber-500/30'
+                                : log.sap_database === 'TRADE' ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500/30'
+                                : 'bg-zinc-500/20 text-zinc-300 border-zinc-500/30';
+                              return (
+                                <>
+                                  <span
+                                    title={tip}
+                                    className="text-[9px] font-semibold px-1 py-0.5 rounded bg-purple-500/20 text-purple-300 border border-purple-500/30 shrink-0 max-w-[140px] truncate cursor-help"
+                                  >
+                                    → {destino}
+                                  </span>
+                                  {/* Etiqueta BD SAP del post (congelada del snapshot) */}
+                                  {log.sap_database && (
+                                    <span
+                                      title={tip}
+                                      className={`text-[9px] font-semibold px-1 py-0.5 rounded border shrink-0 cursor-help ${sapCls}`}
+                                    >
+                                      {log.sap_database}
+                                    </span>
+                                  )}
+                                  {/* Etiqueta CUIC del post (congelada del snapshot) */}
+                                  {log.cuic != null && (
+                                    <span
+                                      title={tip}
+                                      className="text-[9px] font-semibold px-1 py-0.5 rounded bg-indigo-500/20 text-indigo-300 border border-indigo-500/30 shrink-0 cursor-help"
+                                    >
+                                      CUIC {log.cuic}
+                                    </span>
+                                  )}
+                                </>
+                              );
+                            })()}
                             {activeGroupingsAPS[0] === 'aps' && allGroupItemsAPS[0] && prefacturaAPSGroups.has(allGroupItemsAPS[0].aps) && (
                               <span className="text-[9px] font-semibold px-1 py-0.5 rounded bg-amber-500/20 text-amber-400 border border-amber-500/30 shrink-0">PRE FACTURA</span>
                             )}
@@ -4802,7 +4948,11 @@ export function CampanaDetailPage() {
                                           </span>
                                           <span className={`text-[10px] ${isDark ? 'text-white' : 'text-gray-900'}`}>{subGroupKey}</span>
                                           {activeGroupingsAPS[1] === 'aps' && allSubItemsAPS[0] && postedAPSGroups.has(allSubItemsAPS[0].aps) && (
-                                            <span className="text-[9px] font-semibold px-1 py-0.5 rounded bg-green-500/20 text-green-400 border border-green-500/30 shrink-0">POST</span>
+                                            <span
+                                              onClick={postLogByAPS.has(allSubItemsAPS[0].aps) ? (e) => { e.stopPropagation(); setPostDetailAPS(allSubItemsAPS[0].aps); } : undefined}
+                                              title={postLogByAPS.has(allSubItemsAPS[0].aps) ? 'Ver datos del post' : undefined}
+                                              className={`text-[9px] font-semibold px-1 py-0.5 rounded bg-green-500/20 text-green-400 border border-green-500/30 shrink-0 ${postLogByAPS.has(allSubItemsAPS[0].aps) ? 'cursor-pointer hover:bg-green-500/40 underline decoration-dotted underline-offset-2' : ''}`}
+                                            >POST</span>
                                           )}
                                           {activeGroupingsAPS[1] === 'aps' && allSubItemsAPS[0] && prefacturaAPSGroups.has(allSubItemsAPS[0].aps) && (
                                             <span className="text-[9px] font-semibold px-1 py-0.5 rounded bg-amber-500/20 text-amber-400 border border-amber-500/30 shrink-0">PRE FACTURA</span>
@@ -4946,7 +5096,11 @@ export function CampanaDetailPage() {
                                                         </span>
                                                         <span className={`text-[10px] ${isDark ? 'text-white' : 'text-gray-900'}`}>{thirdGroupKey}</span>
                                                         {activeGroupingsAPS[2] === 'aps' && thirdItems[0] && postedAPSGroups.has(thirdItems[0].aps) && (
-                                                          <span className="text-[9px] font-semibold px-1 py-0.5 rounded bg-green-500/20 text-green-400 border border-green-500/30 shrink-0">POST</span>
+                                                          <span
+                                                            onClick={postLogByAPS.has(thirdItems[0].aps) ? (e) => { e.stopPropagation(); setPostDetailAPS(thirdItems[0].aps); } : undefined}
+                                                            title={postLogByAPS.has(thirdItems[0].aps) ? 'Ver datos del post' : undefined}
+                                                            className={`text-[9px] font-semibold px-1 py-0.5 rounded bg-green-500/20 text-green-400 border border-green-500/30 shrink-0 ${postLogByAPS.has(thirdItems[0].aps) ? 'cursor-pointer hover:bg-green-500/40 underline decoration-dotted underline-offset-2' : ''}`}
+                                                          >POST</span>
                                                         )}
                                                         {activeGroupingsAPS[2] === 'aps' && thirdItems[0] && prefacturaAPSGroups.has(thirdItems[0].aps) && (
                                                           <span className="text-[9px] font-semibold px-1 py-0.5 rounded bg-amber-500/20 text-amber-400 border border-amber-500/30 shrink-0">PRE FACTURA</span>
@@ -5509,6 +5663,154 @@ export function CampanaDetailPage() {
                 </button>
               </div>
             )}
+          </div>
+        </div>
+      )}
+
+      {/* Modal de detalle de UN post — se abre al picar el badge "POST" de un APS.
+          Muestra a dónde se mandó ese post (snapshot congelado por circuito). */}
+      {postDetailAPS != null && (() => {
+        const p = postLogByAPS.get(postDetailAPS);
+        if (!p) return null;
+        const sapCls = p.sap_database === 'CIMU' ? 'bg-blue-500/20 text-blue-300 border-blue-500/30'
+          : p.sap_database === 'TEST' ? 'bg-amber-500/20 text-amber-300 border-amber-500/30'
+          : p.sap_database === 'TRADE' ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500/30'
+          : 'bg-zinc-500/20 text-zinc-300 border-zinc-500/30';
+        const row = (label: string, value: React.ReactNode) => (
+          <div className="flex justify-between gap-4 py-1.5 border-t border-border first:border-t-0">
+            <span className="text-xs text-muted-foreground">{label}</span>
+            <span className={`text-xs font-medium text-right ${isDark ? 'text-white' : 'text-gray-900'}`}>{value}</span>
+          </div>
+        );
+        return (
+          <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4" onClick={() => setPostDetailAPS(null)}>
+            <div
+              className={`rounded-xl shadow-2xl max-w-md w-full ${isDark ? 'bg-zinc-900 border border-purple-500/20' : 'bg-white border border-purple-200'}`}
+              onClick={e => e.stopPropagation()}
+            >
+              <div className="flex items-center justify-between p-4 border-b border-border">
+                <div>
+                  <h3 className={`text-sm font-semibold ${isDark ? 'text-white' : 'text-gray-900'}`}>Datos del POST — APS {p.aps}</h3>
+                  <p className="text-xs text-muted-foreground">A dónde se mandó este circuito (snapshot congelado)</p>
+                </div>
+                <button onClick={() => setPostDetailAPS(null)} className="p-1 rounded hover:bg-muted">
+                  <X className="h-5 w-5 text-muted-foreground" />
+                </button>
+              </div>
+              <div className="p-4">
+                <div className="flex items-center gap-2 mb-3 flex-wrap">
+                  {p.sap_database && <span className={`text-[11px] font-semibold px-2 py-0.5 rounded border ${sapCls}`}>{p.sap_database}</span>}
+                  {p.cuic != null && <span className="text-[11px] font-semibold px-2 py-0.5 rounded bg-indigo-500/20 text-indigo-300 border border-indigo-500/30">CUIC {p.cuic}</span>}
+                  {p.success
+                    ? <span className="text-[11px] font-semibold px-2 py-0.5 rounded bg-green-500/20 text-green-400 border border-green-500/30">OK</span>
+                    : <span title={p.error_msg || 'Error'} className="text-[11px] font-semibold px-2 py-0.5 rounded bg-red-500/20 text-red-400 border border-red-500/30 cursor-help">ERROR</span>}
+                </div>
+                {row('BD SAP', p.sap_database || '—')}
+                {row('CUIC', p.cuic ?? '—')}
+                {row('Razón social', p.razon_social || '—')}
+                {row('Marca / Cliente', p.marca || p.cliente_nombre || '—')}
+                {row('CardCode', p.card_code || '—')}
+                {row('DocNum', p.doc_num ?? '—')}
+                {row('DocEntry', p.doc_entry ?? '—')}
+                {row('Fecha', p.posted_at ? new Date(p.posted_at).toLocaleString('es-MX', { dateStyle: 'medium', timeStyle: 'short' }) : '—')}
+                {row('Posteó', p.usuario_nombre || '—')}
+                {!p.success && p.error_msg && row('Error', <span className="text-red-400">{p.error_msg}</span>)}
+              </div>
+            </div>
+          </div>
+        );
+      })()}
+
+      {/* Modal Historial de posteos — bitácora de a quién se mandó cada APS.
+          Cada fila es un snapshot tomado al momento del POST, así que sigue
+          siendo correcto aunque después le cambien el cliente a la campaña. */}
+      {showPostLogModal && (
+        <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4" onClick={() => setShowPostLogModal(false)}>
+          <div
+            className={`rounded-xl shadow-2xl max-w-5xl w-full max-h-[85vh] flex flex-col ${isDark ? 'bg-zinc-900 border border-purple-500/20' : 'bg-white border border-purple-200'}`}
+            onClick={e => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-between p-4 border-b border-border">
+              <div className="flex items-center gap-3">
+                <History className={`h-5 w-5 ${isDark ? 'text-purple-300' : 'text-purple-700'}`} />
+                <div>
+                  <h3 className={`text-sm font-semibold ${isDark ? 'text-white' : 'text-gray-900'}`}>Historial de posteos a SAP</h3>
+                  <p className="text-xs text-muted-foreground">
+                    A quién se mandó cada APS ({postLog.length} registro{postLog.length !== 1 ? 's' : ''})
+                  </p>
+                </div>
+              </div>
+              <button onClick={() => setShowPostLogModal(false)} className="p-1 rounded hover:bg-muted">
+                <X className="h-5 w-5 text-muted-foreground" />
+              </button>
+            </div>
+
+            <div className="overflow-auto p-4">
+              <table className="w-full text-xs">
+                <thead>
+                  <tr className={`${isDark ? 'text-purple-300' : 'text-purple-700'} text-left`}>
+                    <th className="px-2 py-2 font-semibold">APS</th>
+                    <th className="px-2 py-2 font-semibold">Catorcena</th>
+                    <th className="px-2 py-2 font-semibold">Acción</th>
+                    <th className="px-2 py-2 font-semibold">Posteado a</th>
+                    <th className="px-2 py-2 font-semibold">Razón social</th>
+                    <th className="px-2 py-2 font-semibold">CUIC</th>
+                    <th className="px-2 py-2 font-semibold">CardCode</th>
+                    <th className="px-2 py-2 font-semibold">BD</th>
+                    <th className="px-2 py-2 font-semibold">DocNum</th>
+                    <th className="px-2 py-2 font-semibold">Resultado</th>
+                    <th className="px-2 py-2 font-semibold">Fecha</th>
+                    <th className="px-2 py-2 font-semibold">Usuario</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {postLog.map(p => (
+                    <tr key={p.id} className={`border-t ${isDark ? 'border-zinc-800' : 'border-gray-100'}`}>
+                      <td className={`px-2 py-2 font-medium ${isDark ? 'text-white' : 'text-gray-900'}`}>{p.aps}</td>
+                      <td className="px-2 py-2 text-muted-foreground whitespace-nowrap">
+                        {p.catorcena_numero != null ? `C${p.catorcena_numero}${p.catorcena_anio ? '/' + p.catorcena_anio : ''}` : '—'}
+                      </td>
+                      <td className="px-2 py-2">
+                        {p.accion === 'CANCELACION'
+                          ? <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded bg-amber-500/20 text-amber-400 border border-amber-500/30">CANCELADO</span>
+                          : <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded bg-green-500/20 text-green-400 border border-green-500/30">POST</span>}
+                      </td>
+                      <td className={`px-2 py-2 ${isDark ? 'text-white' : 'text-gray-900'}`}>
+                        {p.marca || p.cliente_nombre || p.razon_social || '—'}
+                      </td>
+                      <td className="px-2 py-2 text-muted-foreground">{p.razon_social || '—'}</td>
+                      <td className="px-2 py-2 text-muted-foreground">{p.cuic ?? '—'}</td>
+                      <td className="px-2 py-2 text-muted-foreground">{p.card_code || '—'}</td>
+                      <td className="px-2 py-2 text-muted-foreground">{p.sap_database || '—'}</td>
+                      <td className="px-2 py-2 text-muted-foreground">{p.doc_num ?? '—'}</td>
+                      <td className="px-2 py-2">
+                        {p.success ? (
+                          <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded bg-green-500/20 text-green-400 border border-green-500/30">OK</span>
+                        ) : (
+                          <span
+                            title={p.error_msg || 'Error'}
+                            className="text-[10px] font-semibold px-1.5 py-0.5 rounded bg-red-500/20 text-red-400 border border-red-500/30 cursor-help"
+                          >
+                            ERROR
+                          </span>
+                        )}
+                      </td>
+                      <td className="px-2 py-2 text-muted-foreground whitespace-nowrap">
+                        {p.posted_at ? new Date(p.posted_at).toLocaleString('es-MX', { dateStyle: 'short', timeStyle: 'short' }) : '—'}
+                      </td>
+                      <td className="px-2 py-2 text-muted-foreground">{p.usuario_nombre || '—'}</td>
+                    </tr>
+                  ))}
+                  {postLog.length === 0 && (
+                    <tr>
+                      <td colSpan={10} className="px-2 py-6 text-center text-muted-foreground">
+                        Todavía no hay posteos registrados para esta campaña.
+                      </td>
+                    </tr>
+                  )}
+                </tbody>
+              </table>
+            </div>
           </div>
         </div>
       )}

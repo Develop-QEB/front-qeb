@@ -52,6 +52,7 @@ function isUserTI(u?: { rol?: string; area?: string } | null): boolean {
 
 const HISTORIAL_TICKETS_EMAILS = [
   'akary.lopez@datistic.mx',
+  'akary@qeb.mx',
   'bladimir@qeb.mx',
   'contacto@qeb.mx',
   'mario.salcido@deepia.dev',

@@ -20,7 +20,7 @@ import { circuitosService } from '../../services/circuitos.service';
 import { clientesService } from '../../services/clientes.service';
 import { useEnvironmentStore, getEndpoints } from '../../store/environmentStore';
 import { useAuthStore } from '../../store/authStore';
-import { getPermissions } from '../../lib/permissions';
+import { getPermissions, esAsesorComercial } from '../../lib/permissions';
 import { filterAllowedArticulos } from '../../config/allowedDigitalArticles';
 import { useSocketPropuesta, useSocketEquipos, useSocketInventarioRealtime, type InventarioRealtimePayload } from '../../hooks/useSocket';
 import { useThemeStore } from '../../store/themeStore';
@@ -790,6 +790,10 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
 
   // Si readOnly es true, sobrescribir permisos para modo visualización
   const isDescartada = propuesta.status === 'Descartada' || propuesta.status === 'Rechazada';
+  // Bloqueo Edición Asesores — Estatus Ajuste CTO: los asesores comerciales no pueden
+  // editar circuitos existentes mientras la propuesta esté en "Ajuste Cto-Cliente".
+  const bloqueoCircuitoAjusteCto = esAsesorComercial(user?.rol) && (propuesta.status === 'Ajuste Cto-Cliente' || propuesta.status === 'Ajuste Inventario');
+  const puedeEditarCircuito = permissions.canEditCircuitoExistente && !bloqueoCircuitoAjusteCto;
   const effectiveCanEdit = !readOnly && permissions.canAsignarInventario && !isDescartada;
   const canEditResumen = !readOnly && permissions.canEditResumenPropuesta && !isDescartada;
   // Tráfico NO puede editar tarifa ni cantidad de caras de circuitos (aunque sí otros campos).
@@ -1233,7 +1237,9 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
         const matchingCara = caras.find(c => c.id === r.solicitud_cara_id);
         // Mensual = todo cuenta como Flujo (regla Gran Formato), aunque el inventario
         // físico sea Contraflujo (caso de circuitos digitales).
-        const tipo = r.estatus === 'Bonificado'
+        // Bonificación firme de campaña llega como 'Vendido bonificado' (antes 'Bonificado');
+        // ambas deben clasificarse como Bonificacion para que las barras KPI cuenten.
+        const tipo = (r.estatus === 'Bonificado' || r.estatus === 'Vendido bonificado')
           ? 'Bonificacion'
           : (tipoPeriodo === 'mensual' ? 'Flujo' : (String(r.tipo_de_cara).startsWith('Flujo') ? 'Flujo' : 'Contraflujo'));
 
@@ -2313,10 +2319,11 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
   };
 
   // ── Selección masiva de circuitos ──────────────────────────────────────────
-  // Una cara es seleccionable si se puede eliminar: sin autorizaciones pendientes
-  // guardadas y sin reservas (salvo permiso). Mismo criterio que el bote individual.
+  // Una cara es seleccionable si se puede eliminar: sin reservas (salvo permiso).
+  // Feedback 2026-08-13: no bloqueamos por autorizacion pendiente guardada —
+  // eliminar no invalida aprobaciones (las quita), mismo criterio que el bote
+  // individual.
   const isCaraSelectable = (cara: CaraItem) => {
-    if (hasSavedPendingAuth) return false;
     const tieneReservas = caraHasReservas(cara.localId, cara.id);
     if (tieneReservas && !permissions.canDeleteCaraConReservas) return false;
     return true;
@@ -3229,11 +3236,15 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
     // cada save re-envía la autorización → pedir Nota Dirección. Feedback
     // Jos 2026-07-08/09 — la condicion se amplio para cubrir el caso de
     // propuestas que ya tenian circuitos 'pendiente' de antes.
+    // Ajuste 2026-08-31: se elimina `_originalDg === 'correccion'` porque daba
+    // falso positivo cuando el usuario resolvia la correccion editando el
+    // circuito (bajaba tarifa/caras). El estado final ya venia en
+    // `autorizacion_dg` como 'aprobado' pero se seguia pidiendo la nota.
     if (!skipNotaGate) {
       const dgPending = caras.some(c =>
         c.autorizacion_dg === 'pendiente' ||
-        (c as any)._originalDg === 'pendiente' ||
-        (c as any)._originalDg === 'correccion'
+        c.autorizacion_dg === 'correccion' ||
+        (c as any)._originalDg === 'pendiente'
       );
       const dcmPending = caras.some(c => c.autorizacion_dcm === 'pendiente' || (c as any)._originalDcm === 'pendiente');
       if (dgPending || dcmPending) {
@@ -3486,21 +3497,29 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
       groups[key].push(inv);
     });
 
-    // Merge pairs into single "completo" rows
+    // Emparejar por SENTIDO exacto: AB = Flujo+Contraflujo, CD = Flujo2+Contraflujo2.
+    // Un mueble de 4 caras produce DOS completos (AB y CD), no uno solo de 4.
+    // (Antes se usaba startsWith('Flujo'), que capturaba Flujo y Flujo2 juntos y
+    // solo formaba un par ignorando el segundo.)
+    const norm = (t: unknown) => String(t ?? '').trim().toLowerCase();
+    const PARES = [
+      { sufijo: 'AB', flujo: 'flujo', contra: 'contraflujo' },
+      { sufijo: 'CD', flujo: 'flujo2', contra: 'contraflujo2' },
+    ] as const;
     const result: (InventarioDisponible & { isCompleto?: boolean; flujoId?: number; contraflujoId?: number })[] = [];
     Object.entries(groups).forEach(([key, group]) => {
-      if (group.length >= 2) {
-        const baseCode = key.split('|')[0];
-        const flujoItem = group.find(g => String(g.tipo_de_cara).startsWith('Flujo'));
-        const contraflujoItem = group.find(g => String(g.tipo_de_cara).startsWith('Contraflujo'));
-
+      if (group.length < 2) return;
+      const baseCode = key.split('|')[0];
+      for (const par of PARES) {
+        const flujoItem = group.find(g => norm(g.tipo_de_cara) === par.flujo);
+        const contraflujoItem = group.find(g => norm(g.tipo_de_cara) === par.contra);
         if (flujoItem && contraflujoItem) {
-          // Create merged "completo" item - use a virtual ID
+          // Merged "completo" item con ID virtual único por par.
           const virtualId = flujoItem.id * 100000 + contraflujoItem.id;
           result.push({
             ...flujoItem,
             id: virtualId,
-            codigo_unico: `${baseCode}_completo`,
+            codigo_unico: `${baseCode}_completo_${par.sufijo}`,
             tipo_de_cara: 'Completo' as any,
             isCompleto: true,
             flujoId: flujoItem.id,
@@ -5121,7 +5140,7 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
             showToast('Mueble completo eliminado correctamente', 'success');
           } catch (error) {
             console.error('Error deleting grupo completo:', error);
-            showToast('Error al eliminar mueble completo', 'error');
+            showToast((error as any)?.response?.data?.error || 'Error al eliminar mueble completo', 'error');
           } finally {
             setIsSaving(false);
             setConfirmModal(prev => ({ ...prev, isOpen: false }));
@@ -5177,7 +5196,7 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
           showToast(`${reservasAEliminar.length} reserva(s) eliminada(s) correctamente`, 'success');
         } catch (error) {
           console.error('Error deleting reserva:', error);
-          showToast('Error al eliminar reserva', 'error');
+          showToast((error as any)?.response?.data?.error || 'Error al eliminar reserva', 'error');
         } finally {
           setIsSaving(false);
           setConfirmModal(prev => ({ ...prev, isOpen: false }));
@@ -5292,7 +5311,7 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
           showToast(`${finalSelected.length} reserva(s) eliminada(s) correctamente${masivoLabel}`, 'success');
         } catch (error) {
           console.error('Error deleting reservas:', error);
-          showToast('Error al eliminar reservas', 'error');
+          showToast((error as any)?.response?.data?.error || 'Error al eliminar reservas', 'error');
         } finally {
           setIsSaving(false);
           setConfirmModal(prev => ({ ...prev, isOpen: false }));
@@ -6640,7 +6659,7 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
                                         className="checkbox-purple"
                                       />
                                     </td>
-                                    <td className={`px-3 py-2 ${isDark ? 'text-zinc-300' : 'text-gray-700'} font-mono text-xs`}>{inv.codigo_unico}</td>
+                                    <td className={`px-3 py-2 ${isDark ? 'text-zinc-300' : 'text-gray-700'} font-mono text-xs`}>{inv.codigo_unico}{(inv as any).reservas_tentativas_count > 0 && (<span title="Veces apartado (tentativo) por otras propuestas en el periodo" className={`ml-1.5 inline-flex items-center px-1.5 py-0.5 rounded-full text-[10px] font-semibold ${isDark ? 'bg-amber-500/20 text-amber-300' : 'bg-amber-100 text-amber-700'}`}>{(inv as any).reservas_tentativas_count}×</span>)}</td>
                                     {hasDigitalInventory && (
                                       <td className={`px-3 py-2 ${isDark ? 'text-zinc-400' : 'text-gray-500'} text-xs`}>
                                         {inv.tradicional_digital === 'Digital' ? (
@@ -6696,7 +6715,7 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
                                     className="checkbox-purple"
                                   />
                                 </td>
-                                <td className={`px-3 py-2 ${isDark ? 'text-zinc-300' : 'text-gray-700'} font-mono text-xs`}>{inv.codigo_unico}</td>
+                                <td className={`px-3 py-2 ${isDark ? 'text-zinc-300' : 'text-gray-700'} font-mono text-xs`}>{inv.codigo_unico}{(inv as any).reservas_tentativas_count > 0 && (<span title="Veces apartado (tentativo) por otras propuestas en el periodo" className={`ml-1.5 inline-flex items-center px-1.5 py-0.5 rounded-full text-[10px] font-semibold ${isDark ? 'bg-amber-500/20 text-amber-300' : 'bg-amber-100 text-amber-700'}`}>{(inv as any).reservas_tentativas_count}×</span>)}</td>
                                 {hasDigitalInventory && (
                                   <td className={`px-3 py-2 ${isDark ? 'text-zinc-400' : 'text-gray-500'} text-xs`}>
                                     {inv.tradicional_digital === 'Digital' ? (
@@ -8336,12 +8355,12 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
                             const plazaPorNombre = plazasBackend?.find(p => itemNameNorm.includes(stripAccents(p.plaza.toUpperCase())));
                             const formatoBase = getFormatoFromArticulo(item.ItemName, item.ItemCode);
                             const tipo = getTipoFromName(item.ItemName);
-                            // Para artículos digitales: incluir PARABUS y MUPIS (los muebles
-                            // físicos donde corre la pantalla rotando ambos formatos).
+                            // Para artículos digitales: incluir PARABUS, MUPIS y COLUMNA (los
+                            // muebles físicos donde corre la pantalla rotando los formatos).
                             const formato = tipo === 'Digital'
                               ? (formatoBase && formatoBase !== 'PARABUS'
-                                  ? `${formatoBase}, PARABUS, MUPIS`
-                                  : 'PARABUS, MUPIS')
+                                  ? `${formatoBase}, PARABUS, MUPIS, COLUMNA`
+                                  : 'PARABUS, MUPIS, COLUMNA')
                               : formatoBase;
                             const isCortesia = item.ItemCode.toUpperCase().startsWith('CT');
                             const isIntercambio = item.ItemCode.toUpperCase().startsWith('IN');
@@ -9301,7 +9320,7 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
                                             <RefreshCw className="h-4 w-4" />
                                           </button>
                                         )}
-                                        {permissions.canEditCircuitoExistente && (
+                                        {puedeEditarCircuito && (
                                           <button
                                             onClick={(e) => { e.stopPropagation(); if (!hasSavedPendingAuth) handleEditCara(cara); }}
                                             disabled={hasSavedPendingAuth}
@@ -9315,8 +9334,12 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
                                           </button>
                                         )}
                                         {canEditResumen && permissions.canEditCircuitoExistente && (() => {
+                                            // Feedback 2026-08-13: el bote de basura siempre debe permitir eliminar
+                                            // circuitos con reservas (libera inventario). Solo se bloquea si el rol
+                                            // no puede eliminar caras con reservas. NO bloqueamos por autorizacion
+                                            // pendiente guardada — eliminar NO invalida aprobaciones (las quita).
                                             const reservaBlocked = hasReservas && !permissions.canDeleteCaraConReservas;
-                                            const isDisabled = reservaBlocked || hasSavedPendingAuth;
+                                            const isDisabled = reservaBlocked;
                                             return (
                                           <button
                                             onClick={(e) => { e.stopPropagation(); if (!isDisabled) handleDeleteCara(cara.localId); }}
@@ -9325,7 +9348,7 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
                                               ? `bg-zinc-500/10 ${isDark ? 'text-zinc-500' : 'text-gray-400'} border-zinc-500/20 cursor-not-allowed`
                                               : 'bg-red-500/10 text-red-400 border-red-500/20 hover:bg-red-500/20'
                                               }`}
-                                            title={hasSavedPendingAuth ? 'Hay circuitos pendientes de autorizacion - no se pueden eliminar otros' : reservaBlocked ? 'No se puede eliminar (tiene reservas)' : 'Eliminar'}
+                                            title={reservaBlocked ? 'No se puede eliminar (tiene reservas)' : 'Eliminar'}
                                           >
                                             <Trash2 className="h-4 w-4" />
                                           </button>
@@ -10037,6 +10060,7 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
                         }
                         if (obj.motivo && !obj.rechazadoPor) parts.push(`Motivo: ${obj.motivo}`);
                         if (obj.campaña) parts.push(`Campaña: ${obj.campaña}`);
+                        if (obj.articulo) parts.push(`Artículo: ${obj.articulo}`);
                         if (obj.reservas_eliminadas != null) parts.push(`${obj.reservas_eliminadas} reserva(s) eliminada(s)`);
                         if (parts.length) detailText = parts.join(' | ');
                       } catch { /* plain text */ }
@@ -10111,11 +10135,14 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
                     // pendiente, mostrar PRIMERO la ventana de Nueva Nota Dirección
                     // y DESPUÉS el confirmar cambios. Antes iba confirmar → nota,
                     // que se sentía confuso.
+                    // Ajuste 2026-08-31: mismo cambio que el gate de más arriba
+                    // — se elimina _originalDg==='correccion' que daba falso
+                    // positivo tras resolver la correccion.
                     if (propuesta.solicitud_id) {
                       const dgPending = caras.some(c =>
                         c.autorizacion_dg === 'pendiente' ||
-                        (c as any)._originalDg === 'pendiente' ||
-                        (c as any)._originalDg === 'correccion'
+                        c.autorizacion_dg === 'correccion' ||
+                        (c as any)._originalDg === 'pendiente'
                       );
                       const dcmPending = caras.some(c => c.autorizacion_dcm === 'pendiente' || (c as any)._originalDcm === 'pendiente');
                       if (dgPending || dcmPending) {

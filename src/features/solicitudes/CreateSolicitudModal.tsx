@@ -2031,6 +2031,13 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
       onClose();
       resetForm();
     },
+    // Feedback 2026-08-27: sin onError el 400 del back se comia en silencio.
+    // Como la Nota de Direccion se crea antes del update (handleNotaDireccionConfirm),
+    // el usuario percibia "guardo pero no avanzo" — ahora al menos ve el motivo.
+    onError: (err: any) => {
+      const msg = err?.response?.data?.error || err?.message || 'No se pudo actualizar la solicitud';
+      showToast(msg, 'error');
+    },
     onSettled: () => { isSubmittingRef.current = false; },
   });
 
@@ -2077,11 +2084,22 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
       return;
     }
 
-    // No permitir guardar si quedan circuitos rechazados sin resolver. El usuario
-    // debe editarlos o usar "Reenviar a autorización" en TODOS antes de guardar.
-    const rechazadasSinResolver = caras.filter(c => c.autorizacion_dg === 'rechazado' || c.autorizacion_dcm === 'rechazado');
-    if (rechazadasSinResolver.length > 0) {
-      showToast(`Tienes ${rechazadasSinResolver.length} circuito(s) rechazado(s) sin resolver. Edítalos o usa "Reenviar a autorización" antes de guardar.`, 'error');
+    // No permitir guardar si quedan circuitos rechazados o en correccion sin
+    // resolver. El usuario debe editarlos o usar "Reenviar a autorizacion" en
+    // TODOS antes de guardar. Feedback 2026-08-27: antes solo se bloqueaba
+    // 'rechazado' — dejaba pasar 'correccion' y el update aparentaba avanzar
+    // pero los circuitos quedaban en el mismo estatus previo.
+    const bloqueadas = caras.filter(c =>
+      c.autorizacion_dg === 'rechazado' || c.autorizacion_dcm === 'rechazado' ||
+      c.autorizacion_dg === 'correccion' || c.autorizacion_dcm === 'correccion'
+    );
+    if (bloqueadas.length > 0) {
+      const rech = bloqueadas.filter(c => c.autorizacion_dg === 'rechazado' || c.autorizacion_dcm === 'rechazado').length;
+      const corr = bloqueadas.filter(c => c.autorizacion_dg === 'correccion' || c.autorizacion_dcm === 'correccion').length;
+      const partes: string[] = [];
+      if (rech > 0) partes.push(`${rech} rechazado(s)`);
+      if (corr > 0) partes.push(`${corr} en correccion`);
+      showToast(`Tienes ${partes.join(' y ')} sin resolver. Editalos o usa "Reenviar a autorizacion" antes de guardar.`, 'error');
       isSubmittingRef.current = false;
       return;
     }
@@ -2216,10 +2234,16 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
       // Antes solo se miraba c.autorizacion_dg current — dejaba fuera el caso
       // frecuente de una solicitud con circuitos ya 'pendiente' de antes que
       // el usuario re-edita (feedback de Jos 2026-07-09).
+      // Ajuste 2026-08-31: quitado el chequeo de `_originalDg === 'correccion'`
+      // — daba falso positivo cuando el usuario resolvia la correccion (bajaba
+      // caras/tarifa para salir del rango de autorizacion). El estado final ya
+      // se reflejaba en `c.autorizacion_dg` como 'aprobado' pero seguiamos
+      // pidiendo la nota. La condicion sobre `autorizacion_dg` current cubre
+      // los casos donde tras el recalculo la cara se queda en correccion.
       const dgPending = caras.some(c =>
         c.autorizacion_dg === 'pendiente' ||
-        (c as any)._originalDg === 'pendiente' ||
-        (c as any)._originalDg === 'correccion'
+        c.autorizacion_dg === 'correccion' ||
+        (c as any)._originalDg === 'pendiente'
       );
       const dcmPending = caras.some(c => c.autorizacion_dcm === 'pendiente' || (c as any)._originalDcm === 'pendiente');
       if (dgPending || dcmPending) {
@@ -3237,8 +3261,8 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
                       // Si el formato detectado es otro (ej. COLUMNA), agregar MUPIS además.
                       const formato = tipo === 'Digital'
                         ? (formatoBase && formatoBase !== 'PARABUS'
-                            ? `${formatoBase}, PARABUS, MUPIS`
-                            : 'PARABUS, MUPIS')
+                            ? `${formatoBase}, PARABUS, MUPIS, COLUMNA`
+                            : 'PARABUS, MUPIS, COLUMNA')
                         : formatoBase;
                       // Detect CT (cortesia) articles
                       const isCortesia = item.ItemCode.toUpperCase().startsWith('CT');

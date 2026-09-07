@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { NavLink } from 'react-router-dom';
+import { NavLink, useLocation } from 'react-router-dom';
 import {
   LayoutDashboard,
   Users,
@@ -64,6 +64,12 @@ const navigation: { name: string; href: string; icon: React.ElementType; prefetc
 
 export function Sidebar({ collapsed, onToggle }: SidebarProps) {
   const queryClient = useQueryClient();
+  // La Vista Compartir de una CAMPAÑA vive bajo /propuestas/compartir pero se
+  // entra desde Campañas (?ctx=campana): el tab activo debe ser Campañas, no
+  // Propuestas (NavLink activa por prefijo de ruta y marcaría Propuestas).
+  const location = useLocation();
+  const compartirDesdeCampanas = location.pathname.startsWith('/propuestas/compartir')
+    && new URLSearchParams(location.search).get('ctx') === 'campana';
   const logout = useAuthStore((state) => state.logout);
   const user = useAuthStore((state) => state.user);
   const isDark = useThemeStore((s) => s.theme) === 'dark';
@@ -202,10 +208,11 @@ export function Sidebar({ collapsed, onToggle }: SidebarProps) {
                 <NavLink
                   to={item.href}
                   onMouseEnter={() => handleMouseEnter(item.prefetchKey)}
-                  className={({ isActive }) =>
-                    cn(
+                  className={({ isActive }) => {
+                    const active = compartirDesdeCampanas ? item.href === '/campanas' : isActive;
+                    return cn(
                       'flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-light transition-all duration-200',
-                      isActive
+                      active
                         ? isDark
                           ? 'bg-gradient-to-r from-purple-500/20 to-pink-500/10 text-purple-300 border border-purple-500/30'
                           : 'bg-gradient-to-r from-purple-100 to-pink-50 text-purple-700 border border-purple-200'
@@ -213,8 +220,8 @@ export function Sidebar({ collapsed, onToggle }: SidebarProps) {
                           ? 'text-zinc-400 hover:bg-purple-900/30 hover:text-purple-300'
                           : 'text-gray-500 hover:bg-purple-50 hover:text-purple-700',
                       effectiveCollapsed && 'justify-center px-2'
-                    )
-                  }
+                    );
+                  }}
                   title={effectiveCollapsed ? item.name : undefined}
                 >
                   <item.icon className="h-5 w-5 flex-shrink-0" />

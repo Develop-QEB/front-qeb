@@ -4,17 +4,19 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import {
   Search, Download, Filter, ChevronDown, ChevronRight, X, SlidersHorizontal,
   ArrowUpDown, Calendar, DollarSign, FileText, Building2, MessageSquare,
-  CheckCircle, Users, Send, Loader2, User, Share2, MapPinned, Wrench, Clock,
+  CheckCircle, Users, Send, Loader2, User, Share2, MapPinned, Wrench, Clock, Paintbrush,
   Pencil, Trash2, Package, MapPin, Eye, Plus, AlertTriangle, List, LayoutGrid,
   Layers, Check, XCircle
 } from 'lucide-react';
 import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip as RechartsTooltip } from 'recharts';
 import { Header } from '../../components/layout/Header';
-import { propuestasService, PropuestaComentario } from '../../services/propuestas.service';
+import { propuestasService, PropuestaComentario, ConflictoVentaError } from '../../services/propuestas.service';
 import { solicitudesService, UserOption } from '../../services/solicitudes.service';
 import { Propuesta, Catorcena } from '../../types';
 import { formatCurrency, formatDate } from '../../lib/utils';
 import { AssignInventarioModal } from './AssignInventarioModal';
+import { PruebasColorModal } from '../pruebas-color/PruebasColorModal';
+import { puedeGestionarPruebaColor } from '../../services/pruebasColor.service';
 import PropuestasVersionarioView, {
   AVAILABLE_GROUPINGS as VERSIONARIO_GROUPINGS,
   DEFAULT_GROUPINGS as VERSIONARIO_DEFAULT_GROUPINGS,
@@ -45,6 +47,7 @@ type StatusColor = { bg: string; text: string; border: string };
 const STATUS_COLORS_DARK: Record<string, StatusColor> = {
   'Abierto': { bg: 'bg-blue-500/20', text: 'text-blue-300', border: 'border-blue-500/30' },
   'Ajuste Cto-Cliente': { bg: 'bg-orange-500/20', text: 'text-orange-300', border: 'border-orange-500/30' },
+  'Ajuste Inventario': { bg: 'bg-rose-500/20', text: 'text-rose-300', border: 'border-rose-500/30' },
   'Ajuste Comercial': { bg: 'bg-amber-500/20', text: 'text-amber-300', border: 'border-amber-500/30' },
   'Pase a ventas': { bg: 'bg-emerald-500/20', text: 'text-emerald-300', border: 'border-emerald-500/30' },
   'Atendido': { bg: 'bg-cyan-500/20', text: 'text-cyan-300', border: 'border-cyan-500/30' },
@@ -61,6 +64,7 @@ const STATUS_COLORS_DARK: Record<string, StatusColor> = {
 const STATUS_COLORS_LIGHT: Record<string, StatusColor> = {
   'Abierto': { bg: 'bg-blue-50', text: 'text-blue-700', border: 'border-blue-500/30' },
   'Ajuste Cto-Cliente': { bg: 'bg-orange-50', text: 'text-orange-700', border: 'border-orange-500/30' },
+  'Ajuste Inventario': { bg: 'bg-rose-50', text: 'text-rose-700', border: 'border-rose-500/30' },
   'Ajuste Comercial': { bg: 'bg-amber-50', text: 'text-amber-700', border: 'border-amber-500/30' },
   'Pase a ventas': { bg: 'bg-emerald-50', text: 'text-emerald-700', border: 'border-emerald-500/30' },
   'Atendido': { bg: 'bg-cyan-50', text: 'text-cyan-700', border: 'border-cyan-500/30' },
@@ -81,7 +85,7 @@ const getStatusColor = (status: string, isDark: boolean): StatusColor => {
   return map[status] || (isDark ? DEFAULT_STATUS_COLOR_DARK : DEFAULT_STATUS_COLOR_LIGHT);
 };
 
-const STATUS_OPTIONS = ['Atendido', 'Abierto', 'Ajuste Cto-Cliente', 'Ajuste Comercial', 'Pase a ventas', 'Liberada', 'Rechazada'];
+const STATUS_OPTIONS = ['Atendido', 'Abierto', 'Ajuste Cto-Cliente', 'Ajuste Inventario', 'Ajuste Comercial', 'Pase a ventas', 'Liberada', 'Rechazada'];
 
 // Estatus que SOLO puede asignar el sistema, nunca un usuario. 'Liberada' es el
 // registro de que el job de liberación automática (criterio 30 días) quitó las
@@ -89,7 +93,7 @@ const STATUS_OPTIONS = ['Atendido', 'Abierto', 'Ajuste Cto-Cliente', 'Ajuste Com
 // Sigue en STATUS_OPTIONS para poder filtrar el listado por él y para pintar su
 // color; solo se excluye del selector de cambio de estado. Salir de 'Liberada'
 // sí se permite (el estado actual se muestra deshabilitado como "(actual)").
-const STATUS_SOLO_SISTEMA = ['Liberada'];
+const STATUS_SOLO_SISTEMA = ['Liberada', 'Ajuste Inventario'];
 
 // Chart colors for dynamic status
 const CHART_COLORS = [
@@ -622,7 +626,9 @@ function StatusModal({ isOpen, onClose, propuesta, onStatusChange, allowedStatus
     enabled: isOpen && !!propuesta,
   });
 
-  // Verificar si todas las caras tienen sus reservas completas
+  // Verificar si todas las caras tienen sus reservas completas. Desde el ajuste
+  // 2026-08-25 esto es SOLO informativo (aviso amber): reservas incompletas (de
+  // menos o de más) ya no bloquean el Pase a ventas / Aprobada.
   const reservasIncompletas = useMemo(() => {
     if (!caras || !reservas) return false;
     // Mensual = Gran Formato / Mi Macro: solo Flujo, sin Contraflujo. El modal
@@ -723,6 +729,12 @@ function StatusModal({ isOpen, onClose, propuesta, onStatusChange, allowedStatus
 
   const handleChangeStatus = () => {
     if (!propuesta || selectedStatus === propuesta.status) return;
+    // Ajuste feedback 2026-08-19: salvaguarda en el handler para que ni
+    // aunque se salte el disabled del boton se abra el modal de rechazo /
+    // se dispare el mutation cuando hay autorizacion abierta.
+    if (bloqueaAvance && (selectedStatus === 'Aprobada' || selectedStatus === 'Pase a ventas' || selectedStatus === 'Rechazada' || selectedStatus === 'Cancelada')) {
+      return;
+    }
     if (selectedStatus === 'Rechazada') {
       setShowRechazoConfirm(true);
       return;
@@ -781,18 +793,20 @@ function StatusModal({ isOpen, onClose, propuesta, onStatusChange, allowedStatus
                     {rechazadasDg > 0 && ` — DG: ${rechazadasDg}`}
                     {rechazadasDcm > 0 && `${rechazadasDg > 0 ? ',' : ' —'} DCM: ${rechazadasDcm}`}.{' '}
                   </>)}
-                  No se puede cambiar a "Pase a ventas" o "Aprobada" hasta que todas las caras estén autorizadas.
+                  No se puede cambiar a "Pase a ventas", "Aprobada", "Rechazada" ni "Cancelada" hasta que todas las caras estén autorizadas.
                 </p>
               </div>
             </div>
           )}
+          {/* Ajuste 2026-08-25: reservas incompletas YA NO bloquean el avance
+              (Pase a ventas / Aprobada) — el aviso queda solo informativo. */}
           {reservasIncompletas && (
-            <div className="mb-4 p-3 rounded-lg bg-red-500/10 border border-red-500/30 flex items-start gap-3">
-              <AlertTriangle className="h-5 w-5 text-red-400 flex-shrink-0 mt-0.5" />
+            <div className={`mb-4 p-3 rounded-lg ${isDark ? 'bg-amber-500/10 border-amber-500/30' : 'bg-amber-50 border-amber-200'} border flex items-start gap-3`}>
+              <AlertTriangle className={`h-5 w-5 ${isDark ? 'text-amber-400' : 'text-amber-600'} flex-shrink-0 mt-0.5`} />
               <div>
-                <p className={`text-sm ${isDark ? 'text-red-200' : 'text-red-700'} font-medium`}>Reservas incompletas</p>
-                <p className={`text-xs ${isDark ? 'text-red-300/70' : 'text-red-600/70'} mt-1`}>
-                  No todos los grupos tienen sus reservas completas. No se puede cambiar a "Pase a ventas" o "Aprobada" hasta completar el inventario.
+                <p className={`text-sm font-medium ${isDark ? 'text-amber-200' : 'text-amber-800'}`}>Reservas incompletas</p>
+                <p className={`text-xs mt-1 ${isDark ? 'text-amber-300/70' : 'text-amber-700'}`}>
+                  Hay circuitos sin sus reservas completas (de menos o de más). Aviso informativo: no impide cambiar a "Pase a ventas" ni "Aprobada".
                 </p>
               </div>
             </div>
@@ -820,23 +834,39 @@ function StatusModal({ isOpen, onClose, propuesta, onStatusChange, allowedStatus
                 <option value={propuesta.status} disabled>{propuesta.status} (actual)</option>
               )}
               {availableStatuses.map(s => {
-                const isBlockedByAuth = (bloqueaAvance || reservasIncompletas) && (s === 'Aprobada' || s === 'Pase a ventas');
+                // Ajuste feedback 2026-08-19: bloquear tambien Rechazada /
+                // Cancelada cuando hay autorizacion abierta. El back ya
+                // rechaza estos casos (fix 2026-08-18) pero el UI seguia
+                // dejando pasar 'Rechazada' — se veia el mensaje amber
+                // pero el select y el boton "Actualizar" estaban activos.
+                // Ajuste 2026-08-25: reservasIncompletas ya NO bloquea el
+                // avance (Aprobada/Pase a ventas) — solo queda el aviso.
+                const bloqueaAvanceStatus = s === 'Aprobada' || s === 'Pase a ventas';
+                const bloqueaSalidaStatus = s === 'Rechazada' || s === 'Cancelada';
+                const isBlockedByAuth = bloqueaAvance && (bloqueaAvanceStatus || bloqueaSalidaStatus);
                 const isBlockedByCuic = esClienteLead && s === 'Pase a ventas';
                 const isBlocked = isBlockedByAuth || isBlockedByCuic;
+                const etiquetaExtra = isBlockedByCuic
+                  ? ' (Cliente Lead - CUIC 0)'
+                  : isBlockedByAuth
+                    ? ' (Autorización abierta)'
+                    : '';
                 return (
                   <option
                     key={s}
                     value={s}
                     disabled={isBlocked}
                   >
-                    {s}{isBlocked ? (isBlockedByCuic ? ' (Cliente Lead - CUIC 0)' : reservasIncompletas ? ' (Reservas incompletas)' : ' (Requiere autorización)') : ''}
+                    {s}{etiquetaExtra}
                   </option>
                 );
               })}
             </select>
             <button
               onClick={handleChangeStatus}
-              disabled={selectedStatus === propuesta.status || updateStatusMutation.isPending || ((bloqueaAvance || reservasIncompletas) && (selectedStatus === 'Aprobada' || selectedStatus === 'Pase a ventas')) || (esClienteLead && selectedStatus === 'Pase a ventas')}
+              disabled={selectedStatus === propuesta.status || updateStatusMutation.isPending
+                || (bloqueaAvance && (selectedStatus === 'Aprobada' || selectedStatus === 'Pase a ventas' || selectedStatus === 'Rechazada' || selectedStatus === 'Cancelada'))
+                || (esClienteLead && selectedStatus === 'Pase a ventas')}
               className="flex items-center gap-2 px-4 py-2 rounded-lg bg-purple-600 text-white text-sm hover:bg-purple-700 disabled:opacity-50 disabled:cursor-not-allowed min-w-[120px] justify-center"
             >
               {updateStatusMutation.isPending ? (
@@ -1008,8 +1038,10 @@ function ApproveModal({ isOpen, onClose, propuesta, onSuccess }: ApproveModalPro
     },
     // Ajuste feedback 2026-08-18: sin onError el usuario clickaba y "no
     // pasaba nada" cuando el back devolvia 400 (ej. correccion pendiente).
-    // Mostramos alert para cualquier error del backend.
+    // Ademas de ConflictoVentaError que ya se pinta abajo, mostramos alert
+    // para cualquier otro error del backend.
     onError: (err: any) => {
+      if (err instanceof ConflictoVentaError) return; // ya se pinta abajo
       const msg = err?.response?.data?.error || err?.message || 'No se pudo aprobar la propuesta.';
       alert(msg);
     },
@@ -1193,6 +1225,23 @@ function ApproveModal({ isOpen, onClose, propuesta, onSuccess }: ApproveModalPro
             </div>
           );
         })()}
+        {/* Conflicto de venta (409): piezas ya vendidas en otra campaña */}
+        {approveMutation.error instanceof ConflictoVentaError && (
+          <div className={`mx-4 sm:mx-6 mb-2 flex items-start gap-2 p-3 rounded-lg border ${isDark ? 'bg-red-900/20 border-red-500/30' : 'bg-red-50 border-red-200'}`}>
+            <AlertTriangle className="h-5 w-5 text-red-400 flex-shrink-0 mt-0.5" />
+            <div className="min-w-0">
+              <p className={`text-sm font-medium ${isDark ? 'text-red-200' : 'text-red-700'}`}>
+                No se pudo aprobar: {approveMutation.error.conflictos.length} pieza(s) ya se vendieron en otra campaña
+              </p>
+              <p className={`text-xs mt-1 break-words ${isDark ? 'text-red-300/70' : 'text-red-600/70'}`}>
+                {approveMutation.error.conflictos.map(c => c.codigoUnico || `espacio ${c.espacioId}`).join(', ')}
+              </p>
+              <p className={`text-xs mt-1 ${isDark ? 'text-red-300/70' : 'text-red-600/70'}`}>
+                Edita el inventario de la propuesta (esas piezas ya no aparecen disponibles) y reintenta.
+              </p>
+            </div>
+          </div>
+        )}
         {/* Footer */}
         <div className={`px-4 sm:px-6 py-3 sm:py-4 border-t ${isDark ? 'border-zinc-800' : 'border-gray-200'} flex flex-col-reverse sm:flex-row sm:justify-end gap-2 sm:gap-3`}>
           <button
@@ -1243,10 +1292,12 @@ interface PropuestaRowProps {
   canAprobarPerm: boolean;
   canAsignarInventarioPerm: boolean;
   canCompartirPerm: boolean;
+  canPruebaColor: boolean;
   onStatus: (item: Propuesta) => void;
   onApprove: (item: Propuesta) => void;
   onAssign: (item: Propuesta) => void;
   onShare: (id: number) => void;
+  onPruebaColor: (item: Propuesta) => void;
 }
 
 const PropuestaRow = React.memo(function PropuestaRow({
@@ -1258,10 +1309,12 @@ const PropuestaRow = React.memo(function PropuestaRow({
   canAprobarPerm,
   canAsignarInventarioPerm,
   canCompartirPerm,
+  canPruebaColor,
   onStatus,
   onApprove,
   onAssign,
   onShare,
+  onPruebaColor,
 }: PropuestaRowProps) {
   const statusColor = getStatusColor(item.status, isDark);
   const isActiva = item.status === 'Activa';
@@ -1389,6 +1442,18 @@ const PropuestaRow = React.memo(function PropuestaRow({
           >
             {canAsignarInventarioPerm && item.status !== 'Pase a ventas' ? <MapPinned className="h-3.5 w-3.5" /> : <Eye className="h-3.5 w-3.5" />}
           </button>
+          {canPruebaColor && (
+            <button
+              onClick={() => onPruebaColor(item)}
+              className={`p-2 rounded-lg border transition-all ${isDark
+                ? 'bg-fuchsia-500/10 text-fuchsia-400 hover:bg-fuchsia-500/20 hover:text-fuchsia-300 border-fuchsia-500/20 hover:border-fuchsia-500/40'
+                : 'bg-fuchsia-50 text-fuchsia-600 hover:bg-fuchsia-100 hover:text-fuchsia-700 border-fuchsia-200 hover:border-fuchsia-300'
+              }`}
+              title="Solicitar prueba de color"
+            >
+              <Paintbrush className="h-3.5 w-3.5" />
+            </button>
+          )}
           {canCompartirPerm && (
             <button
               disabled={(item.status !== 'Aprobada' && item.status !== 'Atendido' && item.status !== 'Pase a ventas') || isLocked}
@@ -1467,6 +1532,8 @@ export function PropuestasPage() {
   const [statusPropuesta, setStatusPropuesta] = useState<Propuesta | null>(null);
   const [approvePropuesta, setApprovePropuesta] = useState<Propuesta | null>(null);
   const [showAssignModal, setShowAssignModal] = useState(false);
+  const [pruebaColorPropuesta, setPruebaColorPropuesta] = useState<Propuesta | null>(null);
+  const puedePruebaColor = puedeGestionarPruebaColor(user?.rol);
   const [selectedPropuestaForAssign, setSelectedPropuestaForAssign] = useState<Propuesta | null>(null);
 
   // Handle URL params: viewId opens modal, search fills search bar
@@ -1549,11 +1616,20 @@ export function PropuestasPage() {
   );
   const excludeRechazadas = !statusInAdvanced;
 
+  // Si el filtro de historial pide "cambió a Rechazada", desactivamos el
+  // exclude por default — si no, el filtro daria 0 porque la pagina oculta
+  // todo lo que tiene status='Rechazada' actual.
+  const effectiveExcludeRechazadas = (
+    historialFilter.modo === 'cambio_estatus' && historialFilter.estatusValor === 'Rechazada'
+  ) ? false : excludeRechazadas;
+
   // Stats: WS invalida en cambios reales; staleTime corto evita refetches en
   // re-renders del padre. Pasamos `search` para que total/chart reflejen los
-  // resultados filtrados aunque estemos en la página 1 de N.
+  // resultados filtrados aunque estemos en la página 1 de N, y `historialFilter`
+  // + `effectiveExcludeRechazadas` para que los KPIs no queden en un universo
+  // distinto al del listado.
   const { data: stats } = useQuery({
-    queryKey: ['propuestas-stats', status, yearInicio, yearFin, catorcenaInicio, catorcenaFin, tipoPeriodo, serverSearch, excludeRechazadas],
+    queryKey: ['propuestas-stats', status, yearInicio, yearFin, catorcenaInicio, catorcenaFin, tipoPeriodo, serverSearch, historialFilter, effectiveExcludeRechazadas],
     queryFn: () => propuestasService.getStats({
       status: status || undefined,
       yearInicio,
@@ -1562,17 +1638,11 @@ export function PropuestasPage() {
       catorcenaFin,
       tipoPeriodo: tipoPeriodo || undefined,
       search: serverSearch,
-      excludeRechazadas,
+      excludeRechazadas: effectiveExcludeRechazadas,
+      ...historialFilter,
     }),
     staleTime: 1000 * 30,
   });
-
-  // Si el filtro de historial pide "cambió a Rechazada", desactivamos el
-  // exclude por default — si no, el filtro daria 0 porque la pagina oculta
-  // todo lo que tiene status='Rechazada' actual.
-  const effectiveExcludeRechazadas = (
-    historialFilter.modo === 'cambio_estatus' && historialFilter.estatusValor === 'Rechazada'
-  ) ? false : excludeRechazadas;
 
   const { data, isLoading } = useQuery({
     queryKey: ['propuestas', needsAllData ? 1 : page, status, serverSearch, yearInicio, yearFin, catorcenaInicio, catorcenaFin, sortBy, sortOrder, groupBy, tipoPeriodo, needsAllData, historialFilter, effectiveExcludeRechazadas],
@@ -1765,13 +1835,16 @@ export function PropuestasPage() {
     try {
       const exportData = await propuestasService.getVersionarioData({
         status: status || undefined,
-        search: debouncedSearchTags.length > 0 ? debouncedSearchTags.join('|') : debouncedSearchInput || undefined,
+        search: serverSearch,
         yearInicio,
         yearFin,
         catorcenaInicio,
         catorcenaFin,
         tipoPeriodo: tipoPeriodo || undefined,
-        excludeRechazadas: true,
+        excludeRechazadas: effectiveExcludeRechazadas,
+        // El export debe salir con los mismos filtros que la vista, incluido
+        // el de Historial.
+        ...historialFilter,
         page: 1,
         limit: 100,
       });
@@ -1865,13 +1938,16 @@ export function PropuestasPage() {
     try {
       const exportData = await propuestasService.getVersionarioData({
         status: status || undefined,
-        search: debouncedSearchTags.length > 0 ? debouncedSearchTags.join('|') : debouncedSearchInput || undefined,
+        search: serverSearch,
         yearInicio,
         yearFin,
         catorcenaInicio,
         catorcenaFin,
         tipoPeriodo: tipoPeriodo || undefined,
-        excludeRechazadas: true,
+        excludeRechazadas: effectiveExcludeRechazadas,
+        // El export debe salir con los mismos filtros que la vista, incluido
+        // el de Historial.
+        ...historialFilter,
         page: 1,
         limit: 100,
       });
@@ -1994,6 +2070,7 @@ export function PropuestasPage() {
   const handleRowShare = React.useCallback((id: number) => {
     navigate(`/propuestas/compartir/${id}`);
   }, [navigate]);
+  const handleRowPruebaColor = React.useCallback((p: Propuesta) => setPruebaColorPropuesta(p), []);
 
   // Calcular paginación basada en si hay filtros locales activos
   // El search ya viaja al backend, así que la paginación del servidor sigue
@@ -2567,13 +2644,20 @@ export function PropuestasPage() {
             isDark={isDark}
             filters={{
               status: status || undefined,
-              search: debouncedSearchTags.length > 0 ? debouncedSearchTags.join('|') : debouncedSearchInput || undefined,
+              // Mismo `serverSearch` que usa la tabla: si hay tags Y texto
+              // escrito, viajan los dos (antes el texto se perdia).
+              search: serverSearch,
               yearInicio,
               yearFin,
               catorcenaInicio,
               catorcenaFin,
               tipoPeriodo: tipoPeriodo || undefined,
-              excludeRechazadas,
+              // effective*: si el filtro de historial pide "cambio a Rechazada"
+              // hay que dejar de excluirlas, igual que en la tabla.
+              excludeRechazadas: effectiveExcludeRechazadas,
+              // Filtro de Historial — el desglose lo ignoraba por completo, por
+              // eso la vista seguia mostrando casi todas las catorcenas.
+              ...historialFilter,
             }}
             advancedFilters={advancedFilters}
             activeGroupings={versionarioGroupings}
@@ -2667,10 +2751,12 @@ export function PropuestasPage() {
                           canAprobarPerm={permissions.canAprobarPropuesta}
                           canAsignarInventarioPerm={permissions.canAsignarInventario}
                           canCompartirPerm={permissions.canCompartirPropuesta}
+                          canPruebaColor={puedePruebaColor}
                           onStatus={handleRowStatus}
                           onApprove={handleRowApprove}
                           onAssign={handleRowAssign}
                           onShare={handleRowShare}
+                          onPruebaColor={handleRowPruebaColor}
                         />
                       ))}
                     </React.Fragment>
@@ -2693,10 +2779,12 @@ export function PropuestasPage() {
                       canAprobarPerm={permissions.canAprobarPropuesta}
                       canAsignarInventarioPerm={permissions.canAsignarInventario}
                       canCompartirPerm={permissions.canCompartirPropuesta}
+                      canPruebaColor={puedePruebaColor}
                       onStatus={handleRowStatus}
                       onApprove={handleRowApprove}
                       onAssign={handleRowAssign}
                       onShare={handleRowShare}
+                      onPruebaColor={handleRowPruebaColor}
                     />
                   ))
                 )}
@@ -2766,6 +2854,15 @@ export function PropuestasPage() {
           onClose={() => { setShowAssignModal(false); queryClient.invalidateQueries({ queryKey: ['propuesta-caras', selectedPropuestaForAssign?.id] }); queryClient.invalidateQueries({ queryKey: ['propuesta-reservas-modal', selectedPropuestaForAssign?.id] }); queryClient.invalidateQueries({ queryKey: ['propuesta-fresh'] }); queryClient.invalidateQueries({ queryKey: ['propuestas'] }); setSelectedPropuestaForAssign(null); }}
           propuesta={selectedPropuestaForAssign}
           readOnly={!permissions.canAsignarInventario || selectedPropuestaForAssign.status === 'Pase a ventas'}
+        />
+      )}
+
+      {pruebaColorPropuesta && (
+        <PruebasColorModal
+          isOpen={!!pruebaColorPropuesta}
+          onClose={() => setPruebaColorPropuesta(null)}
+          propuestaId={pruebaColorPropuesta.id}
+          contextoNombre={pruebaColorPropuesta.nombre_campania || undefined}
         />
       )}
     </div>
