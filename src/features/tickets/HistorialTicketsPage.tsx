@@ -999,6 +999,12 @@ export function HistorialTicketsPage() {
               isDark={isDark}
               invalidateKeys={[['tickets-historial'], ['tickets-unread-count']]}
               statusOptions={STATUS_OPTIONS}
+              allVisibleIds={displayTickets.map(t => t.id)}
+              onToggleSelectAll={() => {
+                const visibleIds = displayTickets.map(t => t.id);
+                const allSel = visibleIds.length > 0 && visibleIds.every(id => selectedTicketIds.has(id));
+                setSelectedTicketIds(allSel ? new Set() : new Set(visibleIds));
+              }}
             />
             {displayTickets.map((t) => {
               const ss = statusStyles[t.status] || statusStyles['Nuevo'];
