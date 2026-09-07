@@ -2728,7 +2728,8 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
                 </label>
                 {/* SAP Database filter buttons */}
                 <div className="flex items-center gap-1.5">
-                  {(['ALL', 'CIMU', 'TRADE', 'UDC'] as const).map(db => (
+                  {/* UDC solo visible para roles de Aeropuerto (canVerUDC) */}
+                  {((permissions.canVerUDC ? ['ALL', 'CIMU', 'TRADE', 'UDC'] : ['ALL', 'CIMU', 'TRADE']) as (SapDatabase | 'ALL')[]).map(db => (
                     <button
                       key={db}
                       type="button"

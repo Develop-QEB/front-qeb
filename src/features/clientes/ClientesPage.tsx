@@ -624,6 +624,7 @@ export function ClientesPage() {
     queryKey: ['clientes-sap-UDC', debouncedSearch],
     queryFn: () => clientesService.getSAPClientesByDB('UDC', debouncedSearch || undefined),
     staleTime: 10 * 60 * 1000,
+    enabled: permissions.canVerUDC, // solo roles de Aeropuerto ven/consultan UDC
   });
 
   // Helper to get the active SAP query data/refetch
@@ -1051,6 +1052,7 @@ export function ClientesPage() {
                   count={tradeTotal}
                   loading={activeTab === 'TRADE' && tradeLoading}
                 />
+                {permissions.canVerUDC && (
                 <TabButton
                   active={activeTab === 'UDC'}
                   onClick={() => { setActiveTab('UDC'); setSapPage(1); clearAllFilters(); }}
@@ -1059,6 +1061,7 @@ export function ClientesPage() {
                   count={udcTotal}
                   loading={activeTab === 'UDC' && udcLoading}
                 />
+                )}
                 {isSapTab && (
                   <button
                     onClick={handleRefreshSap}
