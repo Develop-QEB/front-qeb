@@ -575,6 +575,12 @@ export function TicketsPage() {
               isDark={isDark}
               invalidateKeys={[['tickets']]}
               statusOptions={['Nuevo', 'En Progreso', 'Validación', 'Resuelto', 'Cerrado']}
+              allVisibleIds={filteredTickets.map(t => t.id)}
+              onToggleSelectAll={() => {
+                const visibleIds = filteredTickets.map(t => t.id);
+                const allSel = visibleIds.length > 0 && visibleIds.every(id => selectedTicketIds.has(id));
+                setSelectedTicketIds(allSel ? new Set() : new Set(visibleIds));
+              }}
             />
             {filteredTickets.map((ticket) => {
               const statusConfig = STATUS_CONFIG[ticket.status] || STATUS_CONFIG['Nuevo'];
