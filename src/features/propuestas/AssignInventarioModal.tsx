@@ -268,7 +268,11 @@ const getFormatoFromArticulo = (itemName: string, itemCode?: string): string => 
 };
 
 // Tipo auto-detection from article name
-const getTipoFromName = (itemName: string): 'Tradicional' | 'Digital' => {
+const getTipoFromName = (itemName: string, itemCode?: string): 'Tradicional' | 'Digital' => {
+  // "Digital" se detecta por CÓDIGO (contiene DIG), igual que el gate de
+  // allowedDigitalArticles. El NOMBRE a veces NO lo trae (ej. RT-ES-DIG-EM =
+  // "RENTA DE ESPACIOS UNIPOLARES EDOMEX"), por eso revisamos el código primero.
+  if ((itemCode || '').toUpperCase().includes('DIG')) return 'Digital';
   if (!itemName) return 'Tradicional';
   const name = itemName.toUpperCase();
   if (name.includes('DIGITAL') || name.includes('DIG')) return 'Digital';
@@ -8354,7 +8358,7 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
                             const plazasBackend = (solicitudFilters as any)?.plazas as { plaza: string }[] | undefined;
                             const plazaPorNombre = plazasBackend?.find(p => itemNameNorm.includes(stripAccents(p.plaza.toUpperCase())));
                             const formatoBase = getFormatoFromArticulo(item.ItemName, item.ItemCode);
-                            const tipo = getTipoFromName(item.ItemName);
+                            const tipo = getTipoFromName(item.ItemName, item.ItemCode);
                             // Para artículos digitales: incluir PARABUS, MUPIS y COLUMNA (los
                             // muebles físicos donde corre la pantalla rotando los formatos).
                             const formato = tipo === 'Digital'
