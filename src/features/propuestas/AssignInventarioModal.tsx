@@ -910,10 +910,11 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
     );
   }, [editingCaraId, caras, reservas]);
 
-  // Filtros del circuito (plazas / ciudades / formatos): con inventario reservado
-  // quedan bloqueados SIEMPRE —aunque el rol tenga canEditCaraFiltersOnEdit—
-  // porque el inventario ya reservado se eligió justo con esos filtros; cambiarlos
-  // dejaría reservas que no corresponden a la plaza/formato de la cara.
+  // Filtros del circuito (plazas / formatos): con inventario reservado quedan
+  // bloqueados SIEMPRE —aunque el rol tenga canEditCaraFiltersOnEdit— porque el
+  // inventario ya reservado se eligió justo con esos filtros; cambiarlos dejaría
+  // reservas que no corresponden a la plaza/formato de la cara.
+  // Ciudades queda FUERA de este bloqueo: es editable siempre (ver campo Ciudades).
   const caraFiltersLocked = editingCaraHasReservas || (!!editingCaraId && !permissions.canEditCaraFiltersOnEdit);
 
   // Inventory search state
@@ -8765,8 +8766,8 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
                         )}
                       </div>
                       <div className="space-y-1">
-                        <label title={editingCaraHasReservas ? 'Bloqueado: el circuito tiene inventario reservado' : undefined} className={`text-xs ${(!editingCaraHasReservas && caraFiltersLocked) ? 'text-zinc-800' : `${isDark ? 'text-zinc-500' : 'text-gray-400'}`}`}>Ciudades {editingCaraHasReservas ? <span className="text-amber-400 text-[10px]">(bloqueado)</span> : newCara.ciudad && !caraFiltersLocked && <span className="text-purple-400">({newCara.ciudad.split(',').filter(Boolean).length})</span>}</label>
-                        {canEditResumen && !caraFiltersLocked ? (
+                        <label className={`text-xs ${isDark ? 'text-zinc-500' : 'text-gray-400'}`}>Ciudades {newCara.ciudad && <span className="text-purple-400">({newCara.ciudad.split(',').filter(Boolean).length})</span>}</label>
+                        {canEditResumen ? (
                           <MultiSelectDropdown
                             options={
                               (() => {
