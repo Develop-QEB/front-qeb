@@ -80,6 +80,37 @@ export interface DisponiblesResponse {
 }
 
 /** Fila de `/inventarios/conflictos`: una celda sitio × catorcena con 2+ reservas. */
+/**
+ * Una reserva concreta de las que forman el conflicto. Responde las dos
+ * preguntas que la tabla sola no contestaba: QUE estatus tiene (y por tanto por
+ * que ocupa) y DONDE vive (campaña o propuesta, circuito, espacio y periodo).
+ */
+export interface ReservaEnCelda {
+  reserva_id: number;
+  /** Estatus crudo de la columna `estatus` (puede traer 'Con Arte'/'Sin Arte'). */
+  estatus: string;
+  /** La VENTA real. 'Con Arte'/'Sin Arte' son estado del ARTE que se colo en la
+   *  columna estatus; la venta de esas reservas vive aqui. */
+  estatus_original?: string | null;
+  /** Estado del arte. Es del gestor de artes, no de la ocupacion. */
+  arte_aprobado?: string | null;
+  /** Ya tiene archivo de arte cargado. */
+  tiene_arte?: boolean;
+  articulo: string | null;
+  aps: number | null;
+  /** El APS ya se posteo a SAP: la reserva no se debe tocar. */
+  posted: boolean;
+  campana_id: number | null;
+  campana_nombre: string | null;
+  propuesta_id: number | null;
+  /** solicitudCaras.id — el circuito exacto donde vive la reserva. */
+  solicitud_cara_id: number;
+  /** espacio_inventario.id — la pieza fisica reservada. */
+  espacio_id: number;
+  inicio_periodo: string | null;
+  fin_periodo: string | null;
+}
+
 export interface ConflictoOcupacionRow {
   inventario_id: number;
   codigo_unico: string | null;
@@ -100,6 +131,8 @@ export interface ConflictoOcupacionRow {
   campanas?: { id: number; nombre: string }[];
   /** Propuestas (idquote) con reservas sin campaña (enlazan a /propuestas?viewId=). */
   propuestas?: number[];
+  /** Detalle por reserva. Opcional: un backend anterior no lo manda. */
+  reservas?: ReservaEnCelda[];
 }
 
 /** Celda a limpiar en `/inventarios/conflictos/limpiar-duplicados`. */
