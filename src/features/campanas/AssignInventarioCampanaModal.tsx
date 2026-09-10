@@ -793,15 +793,19 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
   // Socket para escuchar cambios en la campaña (autorizaciones, reservas, etc.)
   useSocketCampana(campana?.id || null);
 
-  const effectiveCanEdit = permissions.canAsignarInventario;
-  const canEditResumen = permissions.canEditResumenPropuesta;
   // Tráfico NO puede editar tarifa ni cantidad de caras de circuitos (aunque sí otros campos).
-  const canEditTarifaCaras = canEditResumen && permissions.canEditTarifaCaras;
   const canEditCliente = permissions.canEditClienteEnFormularios;
   // Bloqueo Edición Asesores — Estatus Ajuste CTO: los asesores comerciales no pueden
   // editar circuitos existentes mientras la campaña esté en "Ajuste CTO Cliente".
   const bloqueoCircuitoAjusteCto = esAsesorComercial(user?.rol) && campana?.status === 'Ajuste CTO Cliente';
-  const puedeEditarCircuito = permissions.canEditCircuitoExistente && !bloqueoCircuitoAjusteCto;
+  // Bloqueo No-Asesores en Ajuste Comercial: trafico y demas no deben tocar
+  // circuitos mientras el asesor esta resolviendo. Feedback 2026-09-10 (Jos):
+  // simetrico a Ajuste CTO (que bloquea a asesores), pero al reves.
+  const bloqueoCircuitoAjusteComercial = !esAsesorComercial(user?.rol) && campana?.status === 'Ajuste Comercial';
+  const effectiveCanEdit = permissions.canAsignarInventario && !bloqueoCircuitoAjusteComercial;
+  const canEditResumen = permissions.canEditResumenPropuesta && !bloqueoCircuitoAjusteComercial;
+  const canEditTarifaCaras = canEditResumen && permissions.canEditTarifaCaras;
+  const puedeEditarCircuito = permissions.canEditCircuitoExistente && !bloqueoCircuitoAjusteCto && !bloqueoCircuitoAjusteComercial;
 
   // Client editing state
   interface CuicItem {
