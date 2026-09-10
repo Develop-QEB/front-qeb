@@ -797,9 +797,15 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
   // Bloqueo Edición Asesores — Estatus Ajuste CTO: los asesores comerciales no pueden
   // editar circuitos existentes mientras la propuesta esté en "Ajuste Cto-Cliente".
   const bloqueoCircuitoAjusteCto = esAsesorComercial(user?.rol) && (propuesta.status === 'Ajuste Cto-Cliente' || propuesta.status === 'Ajuste Inventario');
-  const puedeEditarCircuito = permissions.canEditCircuitoExistente && !bloqueoCircuitoAjusteCto;
-  const effectiveCanEdit = !readOnly && permissions.canAsignarInventario && !isDescartada;
-  const canEditResumen = !readOnly && permissions.canEditResumenPropuesta && !isDescartada;
+  // Bloqueo Edición No-Asesores — Estatus Ajuste Comercial: cuando la propuesta
+  // esta en Ajuste Comercial el balón está del lado del asesor; trafico y
+  // demás roles no deben tocar circuitos hasta que el asesor lo resuelva.
+  // Feedback 2026-09-10 (Jos): simetrico al bloqueo Ajuste CTO (que bloquea a
+  // asesores), pero al reves.
+  const bloqueoCircuitoAjusteComercial = !esAsesorComercial(user?.rol) && propuesta.status === 'Ajuste Comercial';
+  const puedeEditarCircuito = permissions.canEditCircuitoExistente && !bloqueoCircuitoAjusteCto && !bloqueoCircuitoAjusteComercial;
+  const effectiveCanEdit = !readOnly && permissions.canAsignarInventario && !isDescartada && !bloqueoCircuitoAjusteComercial;
+  const canEditResumen = !readOnly && permissions.canEditResumenPropuesta && !isDescartada && !bloqueoCircuitoAjusteComercial;
   // Tráfico NO puede editar tarifa ni cantidad de caras de circuitos (aunque sí otros campos).
   const canEditTarifaCaras = canEditResumen && permissions.canEditTarifaCaras;
   const canEditCliente = !readOnly && permissions.canEditClienteEnFormularios && !isDescartada;
