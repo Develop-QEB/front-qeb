@@ -1289,10 +1289,10 @@ export function StatusModal({ isOpen, onClose, solicitud, onStatusChange, status
   // Verificar si hay caras pendientes de autorización
   const tienePendientes = autorizacionResumen && (autorizacionResumen.pendientesDg > 0 || autorizacionResumen.pendientesDcm > 0);
 
-  // Ajuste feedback 2026-08-18: contar tambien 'correccion' y 'rechazado'
-  // para bloquear cualquier avance / rechazo mientras haya autorizacion
-  // abierta. El resumen actual no trae correccion — se cuenta directo desde
-  // solicitudDetails.caras (mismo pattern que PropuestasPage).
+  // Ajuste feedback 2026-08-18: contar 'correccion' y 'rechazado' para
+  // bloquear avance. Feedback Jos 2026-09-11: para el CIERRE
+  // (Rechazada/Cancelada) solo bloquea 'pendiente' — rechazado, correccion
+  // y aprobado en cualquier mezcla si permiten cerrar.
   const bloqueoAutorizacion = (() => {
     const cs = solicitudDetails?.caras || [];
     const pendDg = cs.filter(c => (c as any).autorizacion_dg === 'pendiente').length;
@@ -1307,7 +1307,10 @@ export function StatusModal({ isOpen, onClose, solicitud, onStatusChange, status
     return {
       pendDg, pendDcm, corrDg, corrDcm, rechDg, rechDcm,
       totalPend, totalCorr, totalRech,
+      // Avance (Aprobada / Atendida): bloquea cualquier cosa abierta.
       hasAny: totalPend > 0 || totalCorr > 0 || totalRech > 0,
+      // Cierre (Rechazada / Cancelada): solo bloquea 'pendiente'.
+      bloqueaCierre: totalPend > 0,
     };
   })();
 
@@ -1403,13 +1406,17 @@ export function StatusModal({ isOpen, onClose, solicitud, onStatusChange, status
             if (bloqueoAutorizacion.totalPend > 0) partes.push(`${bloqueoAutorizacion.totalPend} pendiente(s)`);
             if (bloqueoAutorizacion.totalCorr > 0) partes.push(`${bloqueoAutorizacion.totalCorr} en corrección`);
             if (bloqueoAutorizacion.totalRech > 0) partes.push(`${bloqueoAutorizacion.totalRech} rechazada(s)`);
+            // Solo mostrar alerta si realmente bloquea algo: 'pendiente' bloquea
+            // todos los cambios; correccion/rechazado bloquean solo el avance.
             return (
               <div className="mb-4 p-3 rounded-lg bg-amber-500/10 border border-amber-500/30 flex items-start gap-3">
                 <AlertTriangle className="h-5 w-5 text-amber-400 flex-shrink-0 mt-0.5" />
                 <div>
                   <p className={`text-sm ${isDark ? 'text-amber-200' : 'text-amber-800'} font-medium`}>Autorización abierta</p>
                   <p className={`text-xs ${isDark ? 'text-amber-300/70' : 'text-amber-700'} mt-1`}>
-                    Esta solicitud tiene circuitos que impiden avanzar: {partes.join(', ')}. No se puede cambiar a "Aprobada", "Rechazada" ni "Cancelada" hasta que dirección resuelva.
+                    {bloqueoAutorizacion.bloqueaCierre
+                      ? `Esta solicitud tiene circuitos que impiden avanzar y cerrar: ${partes.join(', ')}. Espera a que dirección resuelva los pendientes.`
+                      : `Esta solicitud tiene circuitos abiertos: ${partes.join(', ')}. No se puede cambiar a "Aprobada" hasta que todos estén aprobados, pero sí se puede rechazar o cancelar.`}
                   </p>
                 </div>
               </div>
@@ -1432,10 +1439,11 @@ export function StatusModal({ isOpen, onClose, solicitud, onStatusChange, status
                   className={`flex-1 px-4 py-2 rounded-lg ${isDark ? 'bg-zinc-800 border-zinc-700 text-white' : 'bg-gray-100 border-gray-200 text-gray-900'} border text-sm focus:outline-none focus:ring-2 focus:ring-purple-500/50`}
                 >
                   {statusOptions.map(s => {
-                    // Ajuste feedback 2026-08-18: bloquear tambien 'Rechazada'
-                    // cuando hay autorizacion abierta (pendiente/correccion/
-                    // rechazado). El back ya rechaza estos casos.
-                    const bloqueaEsteStatus = bloqueoAutorizacion.hasAny && (s === 'Aprobada' || s === 'Rechazada');
+                    // Feedback Jos 2026-09-11: 'Aprobada' se bloquea con cualquier
+                    // cosa abierta (pend/corr/rech). 'Rechazada' solo con pendiente.
+                    const bloqueaEsteStatus =
+                      (s === 'Aprobada' && bloqueoAutorizacion.hasAny) ||
+                      (s === 'Rechazada' && bloqueoAutorizacion.bloqueaCierre);
                     return (
                       <option
                         key={s}
@@ -1449,7 +1457,12 @@ export function StatusModal({ isOpen, onClose, solicitud, onStatusChange, status
                 </select>
                 <button
                   onClick={handleChangeStatus}
-                  disabled={selectedStatus === solicitud.status || updateStatusMutation.isPending || (bloqueoAutorizacion.hasAny && (selectedStatus === 'Aprobada' || selectedStatus === 'Rechazada'))}
+                  disabled={
+                    selectedStatus === solicitud.status ||
+                    updateStatusMutation.isPending ||
+                    (selectedStatus === 'Aprobada' && bloqueoAutorizacion.hasAny) ||
+                    (selectedStatus === 'Rechazada' && bloqueoAutorizacion.bloqueaCierre)
+                  }
                   className="flex items-center gap-2 px-4 py-2 rounded-lg bg-purple-600 text-white text-sm hover:bg-purple-700 disabled:opacity-50 disabled:cursor-not-allowed min-w-[120px] justify-center"
                 >
                   {updateStatusMutation.isPending ? (
