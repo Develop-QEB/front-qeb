@@ -75,6 +75,7 @@ export function StatusCampanaModal({ isOpen, onClose, campana, statusReadOnly = 
     queryFn: () => campanasService.getCaras(campana.id),
     enabled: isOpen,
   });
+  // Feedback Jos 2026-09-11: avance bloquea todo abierto; cierre solo pendiente.
   const bloqueoAutorizacion = (() => {
     const cs = carasCampana || [];
     const pendDg = cs.filter(c => (c as any).autorizacion_dg === 'pendiente').length;
@@ -90,9 +91,14 @@ export function StatusCampanaModal({ isOpen, onClose, campana, statusReadOnly = 
       pendDg, pendDcm, corrDg, corrDcm, rechDg, rechDcm,
       totalPend, totalCorr, totalRech,
       hasAny: totalPend > 0 || totalCorr > 0 || totalRech > 0,
+      bloqueaCierre: totalPend > 0,
     };
   })();
-  const isStatusBloqueadoAuth = (s: string) => bloqueoAutorizacion.hasAny && (s === 'Aprobada' || s === 'Rechazada' || s === 'Cancelada');
+  const isStatusBloqueadoAuth = (s: string) => {
+    if (s === 'Aprobada') return bloqueoAutorizacion.hasAny;
+    if (s === 'Rechazada' || s === 'Cancelada') return bloqueoAutorizacion.bloqueaCierre;
+    return false;
+  };
 
   // Scroll al final cuando se agregan nuevos comentarios
   useEffect(() => {
