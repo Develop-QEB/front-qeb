@@ -336,6 +336,67 @@ export function AuditoriaConflictosModal({ open, onClose, onOpenEnMatriz, autoIn
     }
   };
 
+  // Sitios únicos de los apartados sobre venta, para mandarlos al análisis de
+  // ocupación con el mismo shape que usa la tabla de conflictos.
+  const apartadosInventariosUnicos = useMemo(() => {
+    const map = new Map<number, InventarioResumen>();
+    for (const r of resultadoApartados ?? []) {
+      if (map.has(r.inventario_id)) continue;
+      map.set(r.inventario_id, {
+        id: r.inventario_id,
+        codigo_unico: r.codigo_unico,
+        ubicacion: r.ubicacion,
+        mueble: r.mueble,
+        plaza: r.plaza,
+        tradicional_digital: r.tradicional_digital,
+      });
+    }
+    return Array.from(map.values());
+  }, [resultadoApartados]);
+
+  /**
+   * CSV de los apartados sobre venta: una fila por celda, con el inventario, la
+   * catorcena, quién vendió y quién sigue apartando. Pensado para llevarlo al
+   * análisis de ocupación y gestionarlo ahí.
+   */
+  const descargarCsvApartados = useCallback(() => {
+    const filas = resultadoApartados ?? [];
+    if (filas.length === 0) return;
+    const esc = (v: unknown) => {
+      const s = v === null || v === undefined ? '' : String(v);
+      return /[",;\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
+    };
+    const headers = [
+      'inventario_id', 'codigo_unico', 'plaza', 'mueble', 'ubicacion',
+      'catorcena', 'anio', 'vendida_por_campana_id', 'vendida_por_campana',
+      'apartada_por_propuestas', 'reservas_firmes', 'apartados',
+    ];
+    const lineas = filas.map(r => [
+      r.inventario_id,
+      r.codigo_unico ?? '',
+      r.plaza ?? '',
+      r.mueble ?? '',
+      r.ubicacion ?? '',
+      r.numero_catorcena,
+      r.anio,
+      (r.campanas ?? []).map(c => c.id).join(' | '),
+      (r.campanas ?? []).map(c => c.nombre).join(' | '),
+      (r.propuestas ?? []).join(' | '),
+      r.firmes ?? '',
+      r.apartados ?? '',
+    ].map(esc).join(','));
+    // BOM para que Excel respete los acentos al abrirlo de doble clic.
+    const blob = new Blob(['﻿' + [headers.join(','), ...lineas].join('\n')], {
+      type: 'text/csv;charset=utf-8;',
+    });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `apartados_sobre_venta_${new Date().toISOString().slice(0, 10)}.csv`;
+    a.click();
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
+  }, [resultadoApartados]);
+
   const inventariosUnicos = useMemo(() => {
     const map = new Map<number, InventarioResumen>();
     for (const r of filtrados) {
@@ -804,6 +865,27 @@ export function AuditoriaConflictosModal({ open, onClose, onOpenEnMatriz, autoIn
               </span>
               <ChevronRight className={`h-4 w-4 ml-auto shrink-0 transition-transform ${verApartados ? 'rotate-90' : ''} ${isDark ? 'text-orange-300' : 'text-orange-600'}`} />
             </button>
+            {/* Acciones: llevarse los sitios al análisis de ocupación (donde sí
+                se gestionan) o bajarlos en CSV. El panel en sí es de solo lectura. */}
+            <div className="px-3 pb-2 flex items-center gap-2 flex-wrap">
+              <button
+                onClick={() => onOpenEnMatriz(apartadosInventariosUnicos)}
+                disabled={apartadosInventariosUnicos.length === 0}
+                title="Abre el análisis de ocupación con estos sitios ya cargados"
+                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium ${isDark ? 'bg-purple-500/20 text-purple-300 border border-purple-500/30 hover:bg-purple-500/30' : 'bg-purple-50 text-purple-700 border border-purple-200 hover:bg-purple-100'} disabled:opacity-40`}
+              >
+                <BarChart3 className="h-3.5 w-3.5" />
+                Abrir en análisis ({apartadosInventariosUnicos.length.toLocaleString('es-MX')})
+              </button>
+              <button
+                onClick={descargarCsvApartados}
+                title="Descarga la lista completa en CSV"
+                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium ${isDark ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 hover:bg-emerald-500/30' : 'bg-emerald-50 text-emerald-700 border border-emerald-200 hover:bg-emerald-100'}`}
+              >
+                <Download className="h-3.5 w-3.5" />
+                Descargar CSV
+              </button>
+            </div>
             {verApartados && (
               <div className={`max-h-64 overflow-auto border-t ${isDark ? 'border-orange-500/20' : 'border-orange-200'}`}>
                 <table className="w-full text-[11px]">
