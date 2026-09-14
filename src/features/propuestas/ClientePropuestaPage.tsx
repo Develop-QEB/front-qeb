@@ -15,7 +15,7 @@ import { useThemeStore } from '../../store/themeStore';
 // desplazadas/quitadas en gris). Mismos helpers que la Vista Compartir interna.
 import {
   ConVersion, esNoVigente, hayNoVigentes, estadoTexto, leyendaVersion,
-  NO_VIGENTE_LABEL, NO_VIGENTE_LEYENDA, MAPA_GRIS, PDF_GRIS_FONDO,
+  NO_VIGENTE_LABEL, NO_VIGENTE_LEYENDA, NO_VIGENTE_CHIP, MAPA_GRIS, PDF_GRIS_FONDO,
 } from './versionCompletado';
 // Origen en campañas: azul = se vino de la propuesta en el pase a ventas,
 // verde = se agrego despues dentro de la campaña.
@@ -525,7 +525,7 @@ export function ClientePropuestaPage() {
       .filter(i => i.latitud && i.longitud)
       .map(i => `
         <Placemark>
-          <name>${i.codigo_unico}${esNoVigente(i) ? ' (No vigente)' : ''}${mostrarOrigen && origenDe(i) === 'campana' ? ' [Nuevo en campaña]' : ''}</name>
+          <name>${i.codigo_unico}${esNoVigente(i) ? ` (${NO_VIGENTE_LABEL})` : ''}${mostrarOrigen && origenDe(i) === 'campana' ? ' [Nuevo en campaña]' : ''}</name>
           <description>
             <![CDATA[
               Plaza: ${i.plaza || 'N/A'}<br/>
@@ -557,7 +557,7 @@ export function ClientePropuestaPage() {
       .filter(i => i.latitud && i.longitud)
       .map(i => `
         <Placemark>
-          <name>${i.codigo_unico}${esNoVigente(i) ? ' (No vigente)' : ''}${mostrarOrigen && origenDe(i) === 'campana' ? ' [Nuevo en campaña]' : ''}</name>
+          <name>${i.codigo_unico}${esNoVigente(i) ? ` (${NO_VIGENTE_LABEL})` : ''}${mostrarOrigen && origenDe(i) === 'campana' ? ' [Nuevo en campaña]' : ''}</name>
           <description><![CDATA[Plaza: ${i.plaza || 'N/A'}<br/>Tipo: ${i.tipo_de_cara || 'N/A'}<br/>Formato: ${i.mueble || 'N/A'}<br/>Caras: ${i.caras_totales}<br/>Tarifa: ${formatCurrency(tarifaBruta(i))}]]></description>
           <Point><coordinates>${i.longitud},${i.latitud},0</coordinates></Point>
         </Placemark>`).join('');
@@ -1007,7 +1007,7 @@ export function ClientePropuestaPage() {
               {hayNoVigentes(inventario) && (
                 <div title={NO_VIGENTE_LEYENDA} className="px-3 py-1 rounded-full text-xs font-medium border bg-gray-100 text-gray-600 border-gray-300">
                   <span className="inline-block h-2 w-2 rounded-full bg-gray-400 mr-1.5 align-middle" />
-                  En gris: desplazado o quitado tras completar el circuito
+                  {NO_VIGENTE_CHIP}
                 </div>
               )}
               {/* Origen (solo campañas): qué se vino de la propuesta y qué se
@@ -1407,7 +1407,7 @@ export function ClientePropuestaPage() {
                                         return (
                                           <tr
                                             key={idx}
-                                            title={noVigente ? (item.motivo_no_vigente || NO_VIGENTE_LEYENDA) : (origen ? ORIGEN_LABEL[origen] : undefined)}
+                                            title={noVigente ? NO_VIGENTE_LEYENDA : (origen ? ORIGEN_LABEL[origen] : undefined)}
                                             // Barra de color a la izquierda = origen en la campaña.
                                             style={colorOrigen ? { boxShadow: `inset 4px 0 0 0 ${colorOrigen}` } : undefined}
                                             className={`hover:bg-blue-50/30 transition-colors ${noVigente ? 'opacity-50 grayscale italic' : ''}`}
@@ -1580,7 +1580,7 @@ export function ClientePropuestaPage() {
                         <p><strong>{(selectedMarker.mueble || '').toUpperCase().includes('PUENTE PEATONAL') ? 'Puentes' : 'Caras'}:</strong> {selectedMarker.caras_totales}</p>
                         <p><strong>Tarifa:</strong> {formatCurrency(tarifaBruta(selectedMarker))}</p>
                         {esNoVigente(selectedMarker) && (
-                          <p className="text-gray-500 italic"><strong>Estado:</strong> {NO_VIGENTE_LABEL}{selectedMarker.motivo_no_vigente ? ` (${selectedMarker.motivo_no_vigente})` : ''}</p>
+                          <p className="text-gray-500 italic"><strong>Estado:</strong> {NO_VIGENTE_LABEL}</p>
                         )}
                         {mostrarOrigen && origenDe(selectedMarker) && (
                           <p><strong>Origen:</strong>{' '}

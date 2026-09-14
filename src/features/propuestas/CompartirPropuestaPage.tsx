@@ -16,7 +16,7 @@ import { useThemeStore } from '../../store/themeStore';
 // leyenda "Última versión completada", estilos de PDF/Excel.
 import {
   esNoVigente, hayNoVigentes, estadoTexto, leyendaVersion,
-  NO_VIGENTE_LABEL, NO_VIGENTE_LEYENDA, MAPA_GRIS, PDF_GRIS_FONDO,
+  NO_VIGENTE_LABEL, NO_VIGENTE_LEYENDA, NO_VIGENTE_CHIP, MAPA_GRIS, PDF_GRIS_FONDO,
 } from './versionCompletado';
 // Origen en campañas: azul = se vino de la propuesta en el pase a ventas,
 // verde = se agrego despues dentro de la campaña (pase a ventas incompleto).
@@ -684,7 +684,7 @@ export function CompartirPropuestaPage() {
       .filter(i => i.latitud && i.longitud)
       .map(i => `
         <Placemark>
-          <name>${i.codigo_unico}${esNoVigente(i) ? ' (No vigente)' : ''}${mostrarOrigen && origenDe(i) === 'campana' ? ' [Nuevo en campaña]' : ''}</name>
+          <name>${i.codigo_unico}${esNoVigente(i) ? ` (${NO_VIGENTE_LABEL})` : ''}${mostrarOrigen && origenDe(i) === 'campana' ? ' [Nuevo en campaña]' : ''}</name>
           <description>
             <![CDATA[
               Plaza: ${i.plaza || 'N/A'}<br/>
@@ -725,7 +725,7 @@ export function CompartirPropuestaPage() {
       .filter(i => i.latitud && i.longitud)
       .map(i => `
         <Placemark>
-          <name>${i.codigo_unico}${esNoVigente(i) ? ' (No vigente)' : ''}${mostrarOrigen && origenDe(i) === 'campana' ? ' [Nuevo en campaña]' : ''}</name>
+          <name>${i.codigo_unico}${esNoVigente(i) ? ` (${NO_VIGENTE_LABEL})` : ''}${mostrarOrigen && origenDe(i) === 'campana' ? ' [Nuevo en campaña]' : ''}</name>
           <description>
             <![CDATA[
               Plaza: ${i.plaza || 'N/A'}<br/>
@@ -788,7 +788,7 @@ export function CompartirPropuestaPage() {
       .filter(i => i.latitud && i.longitud)
       .map(i => `
         <Placemark>
-          <name>${i.codigo_unico}${esNoVigente(i) ? ' (No vigente)' : ''}${mostrarOrigen && origenDe(i) === 'campana' ? ' [Nuevo en campaña]' : ''}</name>
+          <name>${i.codigo_unico}${esNoVigente(i) ? ` (${NO_VIGENTE_LABEL})` : ''}${mostrarOrigen && origenDe(i) === 'campana' ? ' [Nuevo en campaña]' : ''}</name>
           <description>
             <![CDATA[
               Plaza: ${i.plaza || 'N/A'}<br/>
@@ -1407,7 +1407,7 @@ export function CompartirPropuestaPage() {
                 className={`px-3 py-1 rounded-full text-xs font-medium border ${isDark ? 'bg-zinc-700/40 text-zinc-300 border-zinc-500/40' : 'bg-gray-100 text-gray-600 border-gray-300'}`}
               >
                 <span className="inline-block h-2 w-2 rounded-full bg-gray-400 mr-1.5 align-middle" />
-                En gris: desplazado o quitado tras completar el circuito
+                {NO_VIGENTE_CHIP}
               </span>
             )}
             {/* Origen (solo campañas): de dónde salió cada pieza. Útil cuando el

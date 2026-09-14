@@ -14,6 +14,7 @@ import {
   ConVersion, esNoVigente, hayNoVigentes, estadoTexto, leyendaVersion,
   NO_VIGENTE_LABEL, NO_VIGENTE_LEYENDA, MAPA_GRIS,
 } from './versionCompletado';
+// (la leyenda corta del mapa se redacta aparte, va más apretada en el header)
 // Origen en campañas: azul = se vino de la propuesta en el pase a ventas,
 // verde = se agrego despues dentro de la campaña.
 import {
@@ -441,9 +442,9 @@ export function ClientePropuestaMapPage() {
       const label = catorcenas.find(c => c.key === k)?.label || k;
       const placemarks = byCat.get(k)!.map(i => `
       <Placemark>
-        <name>${kmlEscape(i.codigo_unico)}${esNoVigente(i) ? ' (No vigente)' : ''}${mostrarOrigen && origenDe(i) === 'campana' ? ' [Nuevo en campaña]' : ''}</name>
+        <name>${kmlEscape(i.codigo_unico)}${esNoVigente(i) ? ` (${NO_VIGENTE_LABEL})` : ''}${mostrarOrigen && origenDe(i) === 'campana' ? ' [Nuevo en campaña]' : ''}</name>
         <styleUrl>#${esNoVigente(i) ? 'no_vigente' : mostrarOrigen && origenDe(i) ? `origen_${origenDe(i)}` : styleId}</styleUrl>
-        <description><![CDATA[Catorcena: ${kmlEscape(label)}<br/>Plaza: ${i.plaza || 'N/A'}<br/>Circuito: ${i.articulo || 'N/A'}<br/>Tipo: ${i.tipo_de_cara || 'N/A'}<br/>Formato: ${i.mueble || 'N/A'}<br/>Ubicacion: ${i.ubicacion || 'N/A'}<br/>Caras: ${i.caras_totales}<br/>Tarifa: ${formatCurrency(tarifaBruta(i))}${esNoVigente(i) ? `<br/><b>${NO_VIGENTE_LABEL}:</b> ${kmlEscape(i.motivo_no_vigente || 'desplazada o quitada tras completar el circuito')}` : ''}]]></description>
+        <description><![CDATA[Catorcena: ${kmlEscape(label)}<br/>Plaza: ${i.plaza || 'N/A'}<br/>Circuito: ${i.articulo || 'N/A'}<br/>Tipo: ${i.tipo_de_cara || 'N/A'}<br/>Formato: ${i.mueble || 'N/A'}<br/>Ubicacion: ${i.ubicacion || 'N/A'}<br/>Caras: ${i.caras_totales}<br/>Tarifa: ${formatCurrency(tarifaBruta(i))}${esNoVigente(i) ? `<br/><b>Estado:</b> ${NO_VIGENTE_LABEL}` : ''}]]></description>
         <Point><coordinates>${i.longitud},${i.latitud},0</coordinates></Point>
       </Placemark>`).join('');
       return `<Folder><name>${kmlEscape(label)} (${byCat.get(k)!.length})</name>${placemarks}</Folder>`;
@@ -584,7 +585,7 @@ export function ClientePropuestaMapPage() {
               {hayNoVigentes(baseRows) && (
                 <div title={NO_VIGENTE_LEYENDA} className="px-2.5 py-0.5 rounded-full text-[11px] font-medium border bg-gray-100 text-gray-600 border-gray-300">
                   <span className="inline-block h-2 w-2 rounded-full bg-gray-400 mr-1.5 align-middle" />
-                  Gris: desplazado o quitado tras completar
+                  Gris: en reasignación
                 </div>
               )}
               {/* Origen (solo campañas): azul de propuesta, verde agregado en campaña. */}
@@ -788,7 +789,7 @@ export function ClientePropuestaMapPage() {
                               return (
                                 <div
                                   key={item._rk}
-                                  title={noVigente ? (item.motivo_no_vigente || NO_VIGENTE_LEYENDA) : (origen ? ORIGEN_LABEL[origen] : undefined)}
+                                  title={noVigente ? NO_VIGENTE_LEYENDA : (origen ? ORIGEN_LABEL[origen] : undefined)}
                                   className={`flex items-center gap-2 pl-3 pr-2 py-1.5 border-l-2 cursor-pointer ${isActive ? 'bg-[#0054A6]/10' : 'hover:bg-gray-50'} ${noVigente ? 'opacity-50 grayscale italic' : ''}`}
                                   style={{ borderColor: noVigente ? MAPA_GRIS : colorOrigen || cat.color }}
                                   onClick={() => handleFocusLocation(item)}
@@ -896,7 +897,7 @@ export function ClientePropuestaMapPage() {
                     <p><strong>{(selectedMarker.mueble || '').toUpperCase().includes('PUENTE PEATONAL') ? 'Puentes' : 'Caras'}:</strong> {selectedMarker.caras_totales}</p>
                     <p><strong>Tarifa:</strong> {formatCurrency(tarifaBruta(selectedMarker))}</p>
                     {esNoVigente(selectedMarker) && (
-                      <p className="text-gray-500 italic"><strong>Estado:</strong> {NO_VIGENTE_LABEL}{selectedMarker.motivo_no_vigente ? ` (${selectedMarker.motivo_no_vigente})` : ''}</p>
+                      <p className="text-gray-500 italic"><strong>Estado:</strong> {NO_VIGENTE_LABEL}</p>
                     )}
                     {mostrarOrigen && origenDe(selectedMarker) && (
                       <p><strong>Origen:</strong>{' '}

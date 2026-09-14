@@ -21,9 +21,15 @@ export interface ConVersion {
   motivo_no_vigente?: string | null;
 }
 
-export const NO_VIGENTE_LABEL = 'No vigente';
+// Redacción pensada para el CLIENTE: no se le dice que una pieza "se desplazó" o
+// "se quitó" (suena a que la perdió), solo que esa ubicación se está reasignando.
+// El motivo técnico (desplazada, eliminada, reasignada) sigue viniendo del back en
+// `motivo_no_vigente` y solo se muestra en la vista interna del asesor.
+export const NO_VIGENTE_LABEL = 'Reasignando';
 export const NO_VIGENTE_LEYENDA =
-  'En gris: inventario desplazado o quitado después de completar el circuito. Se muestra la última versión completada de cada circuito.';
+  'En gris: ubicaciones en proceso de reasignación. Se muestra la última versión completada de cada circuito.';
+/** Texto corto para chips de leyenda. */
+export const NO_VIGENTE_CHIP = 'Gris: ubicación en reasignación';
 
 export function esNoVigente(item: ConVersion | null | undefined): boolean {
   return item?.estado_version === 'no_vigente';
@@ -33,10 +39,12 @@ export function hayNoVigentes(items: ConVersion[] | null | undefined): boolean {
   return !!items && items.some(esNoVigente);
 }
 
-/** Texto para columnas "Estado" en PDF/Excel. Vacio si la pieza esta vigente. */
+/**
+ * Texto para columnas "Estado" en PDF/Excel. Vacio si la pieza esta vigente.
+ * A propósito SIN el motivo técnico: esos archivos se le mandan al cliente.
+ */
 export function estadoTexto(item: ConVersion): string {
-  if (!esNoVigente(item)) return '';
-  return item.motivo_no_vigente ? `${NO_VIGENTE_LABEL} (${item.motivo_no_vigente})` : NO_VIGENTE_LABEL;
+  return esNoVigente(item) ? NO_VIGENTE_LABEL : '';
 }
 
 /** Fecha ISO de la version completada mas reciente entre las filas, o null. */
