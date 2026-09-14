@@ -2,7 +2,7 @@ import { useParams, useSearchParams } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { useState, useMemo, useRef, useEffect } from 'react';
 import {
-  Map as MapIcon, Loader2, ExternalLink, Copy, Check, Download, ChevronDown, ChevronRight,
+  Map as MapIcon, Loader2, Copy, Check, Download, ChevronDown, ChevronRight,
   Search, FileSpreadsheet, SlidersHorizontal, X, Layers,
 } from 'lucide-react';
 import { GoogleMap, useLoadScript, Marker, Circle, Autocomplete, InfoWindow } from '@react-google-maps/api';
@@ -596,17 +596,12 @@ export function ClientePropuestaMapPage() {
             </div>
           </div>
 
-          {/* Botones de accion */}
+          {/* Botones de accion.
+              NOTA: aquí vivía "Ver Completa", que llevaba de este mapa a la vista
+              completa de la propuesta. Se quitó a propósito: el enlace del mapa se
+              comparte solo cuando se quiere que el cliente vea el mapa, y ese botón
+              lo mandaba al listado con tarifas e inversión. */}
           <div className="flex items-center gap-1.5 sm:gap-2 shrink-0">
-            <a
-              href={`/cliente/propuesta/${propuestaId}${esCampana ? '?ctx=campana' : ''}`}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="flex items-center gap-1.5 px-2.5 sm:px-4 py-2 border rounded-lg text-xs sm:text-sm font-medium shadow-sm transition-colors bg-white hover:bg-gray-50 text-gray-700 border-gray-300"
-              title="Ver propuesta completa"
-            >
-              <ExternalLink className="h-4 w-4" /> <span className="hidden sm:inline">Ver Completa</span>
-            </a>
             <button
               onClick={handleDownloadXLSX}
               className="flex items-center gap-1.5 px-2.5 sm:px-4 py-2 bg-[#7AB800] hover:bg-[#689c00] text-white rounded-lg text-xs sm:text-sm font-medium shadow-sm transition-colors"
