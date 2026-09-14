@@ -155,6 +155,13 @@ export function AuditoriaConflictosModal({ open, onClose, onOpenEnMatriz, autoIn
   // 'conflictos' = auditar y limpiar; 'limpiezas' = bitacora de lo ya limpiado
   // (automatico y manual), para tener registro consultable.
   const [vista, setVista] = useState<'conflictos' | 'limpiezas'>('conflictos');
+  // Segunda categoría de la auditoría: apartados de propuesta encima de
+  // inventario YA VENDIDO. No son "2 ventas firmes" (por eso no salen en la
+  // tabla de arriba), pero sí son inventario que la propuesta cree tener y no
+  // va a poder llevarse. Normalmente el desalojo los libera al vender; lo que
+  // cae aquí es lo que quedó colgado.
+  const [resultadoApartados, setResultadoApartados] = useState<ConflictoOcupacionRow[] | null>(null);
+  const [verApartados, setVerApartados] = useState(false);
   // Celdas expandidas para ver el detalle por reserva (estatus + dónde vive).
   const [expandidas, setExpandidas] = useState<Set<string>>(new Set());
   const [showLeyenda, setShowLeyenda] = useState(false);
@@ -196,6 +203,7 @@ export function AuditoriaConflictosModal({ open, onClose, onOpenEnMatriz, autoIn
 
   const toggleCatorcena = (c: CatorcenaRef) => {
     setResultado(null);
+    setResultadoApartados(null);
     setCatorcenasSelected(prev => {
       const exists = prev.some(p => p.numero === c.numero && p.anio === c.anio);
       if (exists) return prev.filter(p => !(p.numero === c.numero && p.anio === c.anio));
@@ -205,6 +213,7 @@ export function AuditoriaConflictosModal({ open, onClose, onOpenEnMatriz, autoIn
 
   const seleccionarTodasDelAnio = () => {
     setResultado(null);
+    setResultadoApartados(null);
     const todas = (catorcenasYear?.data || []).map(c => ({ numero: c.numero_catorcena, anio: c.a_o }));
     setCatorcenasSelected(prev => {
       const map = new Map(prev.map(p => [`${p.anio}-${p.numero}`, p]));
@@ -218,12 +227,23 @@ export function AuditoriaConflictosModal({ open, onClose, onOpenEnMatriz, autoIn
     setCorriendo(true);
     setError(null);
     setResultado(null);
+    setResultadoApartados(null);
     setResultadoLimpieza(null);
     setExpandidas(new Set());
     try {
       // Sin `ids`: el backend audita el inventario completo.
-      const rows = await inventariosService.getConflictosOcupacion(cats);
+      // Las dos categorías se piden en paralelo: son consultas independientes y
+      // así la auditoría no tarda el doble.
+      const [rows, apartados] = await Promise.all([
+        inventariosService.getConflictosOcupacion(cats),
+        // Si falla la categoría nueva no se pierde la auditoría de siempre.
+        inventariosService.getApartadosSobreVenta(cats).catch(err => {
+          console.error('Error al auditar apartados sobre venta:', err);
+          return null;
+        }),
+      ]);
       setResultado(rows);
+      setResultadoApartados(apartados);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Error al auditar conflictos');
     } finally {
@@ -517,7 +537,7 @@ export function AuditoriaConflictosModal({ open, onClose, onOpenEnMatriz, autoIn
             <div>
               <h2 className={`text-lg font-semibold ${isDark ? 'text-white' : 'text-gray-900'}`}>Auditoría de Conflictos</h2>
               <p className={`text-xs ${isDark ? 'text-amber-300/50' : 'text-amber-500'}`}>
-                Tradicionales con 2+ ventas firmes en la misma catorcena · los apartados de propuestas, la impresión (IM-) y los Digitales no cuentan
+                Tradicionales con 2+ ventas firmes en la misma catorcena · la impresión (IM-) y los Digitales no cuentan · aparte se listan los apartados de propuesta sobre inventario ya vendido
               </p>
             </div>
           </div>
@@ -659,7 +679,7 @@ export function AuditoriaConflictosModal({ open, onClose, onOpenEnMatriz, autoIn
             </button>
             {catorcenasSelected.length > 0 && (
               <button
-                onClick={() => { setCatorcenasSelected([]); setResultado(null); }}
+                onClick={() => { setCatorcenasSelected([]); setResultado(null); setResultadoApartados(null); }}
                 className={`px-2.5 py-1 rounded-lg text-xs ${isDark ? 'text-zinc-400 hover:bg-zinc-800' : 'text-gray-600 hover:bg-gray-100'}`}
               >
                 Limpiar
@@ -764,6 +784,78 @@ export function AuditoriaConflictosModal({ open, onClose, onOpenEnMatriz, autoIn
             </div>
           )}
         </div>
+
+        {/* Categoría 2: apartados de propuesta sobre inventario YA VENDIDO.
+            Va aparte de la tabla de arriba porque no es "2 ventas firmes": es
+            inventario que la propuesta cree tener y que al aprobar va a perder.
+            Se muestra aunque la auditoría de ventas firmes salga limpia. */}
+        {!corriendo && resultadoApartados !== null && resultadoApartados.length > 0 && (
+          <div className={`mx-4 mb-2 rounded-lg border overflow-hidden ${isDark ? 'bg-orange-500/10 border-orange-500/30' : 'bg-orange-50 border-orange-200'}`}>
+            <button
+              onClick={() => setVerApartados(v => !v)}
+              className="w-full flex items-center gap-2 px-3 py-2 text-left"
+            >
+              <AlertTriangle className={`h-4 w-4 shrink-0 ${isDark ? 'text-orange-300' : 'text-orange-600'}`} />
+              <span className={`text-sm font-semibold ${isDark ? 'text-orange-200' : 'text-orange-800'}`}>
+                {resultadoApartados.length.toLocaleString('es-MX')} {resultadoApartados.length === 1 ? 'celda apartada' : 'celdas apartadas'} sobre inventario ya vendido
+              </span>
+              <span className={`text-xs ${isDark ? 'text-orange-300/70' : 'text-orange-700/80'}`}>
+                {new Set(resultadoApartados.flatMap(r => r.propuestas ?? [])).size} propuesta(s) siguen apartando piezas que ya se vendieron
+              </span>
+              <ChevronRight className={`h-4 w-4 ml-auto shrink-0 transition-transform ${verApartados ? 'rotate-90' : ''} ${isDark ? 'text-orange-300' : 'text-orange-600'}`} />
+            </button>
+            {verApartados && (
+              <div className={`max-h-64 overflow-auto border-t ${isDark ? 'border-orange-500/20' : 'border-orange-200'}`}>
+                <table className="w-full text-[11px]">
+                  <thead className={`sticky top-0 ${isDark ? 'bg-zinc-900' : 'bg-white'}`}>
+                    <tr className={isDark ? 'text-zinc-400' : 'text-gray-500'}>
+                      <th className="px-2 py-1.5 text-left font-medium">Código</th>
+                      <th className="px-2 py-1.5 text-left font-medium">Plaza</th>
+                      <th className="px-2 py-1.5 text-left font-medium">Cat</th>
+                      <th className="px-2 py-1.5 text-left font-medium">Vendida por</th>
+                      <th className="px-2 py-1.5 text-left font-medium">Sigue apartada por</th>
+                      <th className="px-2 py-1.5 text-center font-medium">Apartados</th>
+                    </tr>
+                  </thead>
+                  <tbody className={isDark ? 'divide-y divide-zinc-800' : 'divide-y divide-gray-100'}>
+                    {resultadoApartados.map(r => (
+                      <tr key={`${r.inventario_id}|${r.anio}|${r.numero_catorcena}`} className={isDark ? 'hover:bg-zinc-800/50' : 'hover:bg-gray-50'}>
+                        <td className={`px-2 py-1.5 font-mono ${isDark ? 'text-zinc-300' : 'text-gray-700'}`}>{r.codigo_unico || `#${r.inventario_id}`}</td>
+                        <td className={`px-2 py-1.5 ${isDark ? 'text-zinc-400' : 'text-gray-600'}`}>{r.plaza || '-'}</td>
+                        <td className={`px-2 py-1.5 ${isDark ? 'text-zinc-400' : 'text-gray-600'}`}>{r.numero_catorcena}/{r.anio}</td>
+                        <td className="px-2 py-1.5">
+                          {(r.campanas ?? []).length === 0 ? <span className={isDark ? 'text-zinc-500' : 'text-gray-400'}>-</span> : (r.campanas ?? []).map(c => (
+                            <a key={c.id} href={`/campanas/detail/${c.id}`} target="_blank" rel="noopener noreferrer"
+                               className={`inline-flex items-center gap-1 mr-2 underline ${isDark ? 'text-emerald-300' : 'text-emerald-700'}`}>
+                              {c.nombre || `Campaña #${c.id}`}<ExternalLink className="h-3 w-3" />
+                            </a>
+                          ))}
+                        </td>
+                        <td className="px-2 py-1.5">
+                          {(r.propuestas ?? []).map(pid => (
+                            <a key={pid} href={`/propuestas?viewId=${pid}`} target="_blank" rel="noopener noreferrer"
+                               className={`inline-flex items-center gap-1 mr-2 underline ${isDark ? 'text-amber-300' : 'text-amber-700'}`}>
+                              Propuesta #{pid}<ExternalLink className="h-3 w-3" />
+                            </a>
+                          ))}
+                        </td>
+                        <td className={`px-2 py-1.5 text-center font-semibold ${isDark ? 'text-orange-300' : 'text-orange-700'}`}>{r.apartados ?? 0}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+            <p className={`px-3 pb-2 text-[11px] ${isDark ? 'text-orange-300/60' : 'text-orange-700/70'}`}>
+              No es doble venta: al aprobar, el sistema descarta esas piezas. Pero la propuesta las muestra como suyas hasta ese momento.
+            </p>
+          </div>
+        )}
+        {!corriendo && resultado !== null && resultadoApartados !== null && resultadoApartados.length === 0 && (
+          <div className={`mx-4 mb-2 px-3 py-1.5 rounded-lg border text-[11px] ${isDark ? 'bg-emerald-500/5 border-emerald-500/20 text-emerald-300/80' : 'bg-emerald-50 border-emerald-200 text-emerald-700'}`}>
+            Sin apartados de propuesta sobre inventario ya vendido en estos periodos.
+          </div>
+        )}
 
         {/* Resultados */}
         <div className="flex-1 overflow-hidden flex flex-col min-h-0">

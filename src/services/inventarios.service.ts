@@ -86,6 +86,8 @@ export interface DisponiblesResponse {
  * que ocupa) y DONDE vive (campaña o propuesta, circuito, espacio y periodo).
  */
 export interface ReservaEnCelda {
+  /** true = apartado tentativo de propuesta. Solo viene en "apartados sobre venta". */
+  es_apartado?: boolean;
   reserva_id: number;
   /** Estatus crudo de la columna `estatus` (puede traer 'Con Arte'/'Sin Arte'). */
   estatus: string;
@@ -133,6 +135,10 @@ export interface ConflictoOcupacionRow {
   propuestas?: number[];
   /** Detalle por reserva. Opcional: un backend anterior no lo manda. */
   reservas?: ReservaEnCelda[];
+  /** Solo en "apartados sobre venta": reservas firmes de la celda. */
+  firmes?: number;
+  /** Solo en "apartados sobre venta": apartados tentativos encima. */
+  apartados?: number;
 }
 
 /** Celda a limpiar en `/inventarios/conflictos/limpiar-duplicados`. */
@@ -408,6 +414,28 @@ export const inventariosService = {
    * El backend re-verifica que cada celda siga siendo duplicado y nunca toca
    * choques ni reservas con APS.
    */
+  /**
+   * Apartados de propuesta encima de inventario YA VENDIDO. Es una categoría
+   * distinta de `getConflictosOcupacion`: ahí solo cuentan las ventas firmes
+   * (dos apartados pueden encimarse por diseño), aquí el apartado está sobre
+   * algo ya vendido y la propuesta no va a poder llevárselo.
+   */
+  async getApartadosSobreVenta(
+    catorcenas: { numero: number; anio: number }[],
+    ids?: number[],
+    opts?: { signal?: AbortSignal; timeout?: number }
+  ): Promise<ConflictoOcupacionRow[]> {
+    const response = await api.post<ApiResponse<{ conflictos: ConflictoOcupacionRow[] }>>(
+      '/inventarios/conflictos/apartados',
+      ids ? { catorcenas, ids } : { catorcenas },
+      { signal: opts?.signal, timeout: opts?.timeout ?? 120_000 }
+    );
+    if (!response.data.success || !response.data.data) {
+      throw new Error(response.data.error || 'Error al obtener apartados sobre venta');
+    }
+    return response.data.data.conflictos;
+  },
+
   async limpiarDuplicadosOcupacion(
     catorcenas: { numero: number; anio: number }[],
     celdas: CeldaRef[],
