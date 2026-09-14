@@ -10,11 +10,10 @@ import { formatCurrency } from '../../lib/utils';
 import { toNum } from '../../utils/excelFormat';
 import { descargarExcelCompartir, FMT_ENTERO, FMT_MONEDA, FMT_COORD } from '../../utils/excelCompartir';
 // Versionado de circuitos completados: pines/filas 'no_vigente' en gris.
-import {
-  ConVersion, esNoVigente, hayNoVigentes, estadoTexto, leyendaVersion,
-  NO_VIGENTE_LABEL, NO_VIGENTE_LEYENDA, MAPA_GRIS,
-} from './versionCompletado';
-// (la leyenda corta del mapa se redacta aparte, va más apretada en el header)
+// Vista del CLIENTE: las piezas en reasignación solo se atenúan en gris, sin
+// etiqueta ni leyenda ni columna de estado. La explicación vive únicamente en
+// la Vista Compartir interna del asesor.
+import { ConVersion, esNoVigente, leyendaVersion, MAPA_GRIS } from './versionCompletado';
 // Origen en campañas: azul = se vino de la propuesta en el pase a ventas,
 // verde = se agrego despues dentro de la campaña.
 import {
@@ -391,8 +390,9 @@ export function ClientePropuestaMapPage() {
 
   // ----- Descargas (respetan seleccion / visible) -----
   const handleDownloadXLSX = () => {
-    // "Estado" marca las piezas no vigentes; ademas la fila completa va en gris.
-    const headers = ['Catorcena', 'Circuito', 'Codigo', 'Plaza', 'Ubicacion', 'Tipo Cara', 'Formato', 'Tipo Inventario', 'Articulo', 'Caras', 'Tarifa', 'Latitud', 'Longitud', 'Estado', ...(mostrarOrigen ? ['Origen'] : [])];
+    // Sin columna "Estado" para el cliente: la pieza en reasignación solo va con
+    // la fila atenuada en gris.
+    const headers = ['Catorcena', 'Circuito', 'Codigo', 'Plaza', 'Ubicacion', 'Tipo Cara', 'Formato', 'Tipo Inventario', 'Articulo', 'Caras', 'Tarifa', 'Latitud', 'Longitud', ...(mostrarOrigen ? ['Origen'] : [])];
     const filas = downloadRows.map(i => ({
       noVigente: esNoVigente(i),
       // Tinte azul/verde por origen (solo campañas); el gris de no vigente gana.
@@ -400,7 +400,6 @@ export function ClientePropuestaMapPage() {
       valores: [
         i._catLabel, i.articulo || '', i.codigo_unico, i.plaza, i.ubicacion, i.tipo_de_cara, i.mueble,
         i.tradicional_digital || '', i.articulo, toNum(i.caras_totales), tarifaBruta(i), toNum(i.latitud), toNum(i.longitud),
-        estadoTexto(i),
         ...(mostrarOrigen ? [origenTexto(i, true)] : []),
       ],
     }));
@@ -412,7 +411,7 @@ export function ClientePropuestaMapPage() {
       filas,
       // Caras (9), Tarifa (10), Latitud (11), Longitud (12) como celdas tipo número
       formatos: { 9: FMT_ENTERO, 10: FMT_MONEDA, 11: FMT_COORD, 12: FMT_COORD },
-    }], mostrarOrigen ? `${NO_VIGENTE_LEYENDA}  ·  ${ORIGEN_LEYENDA}` : NO_VIGENTE_LEYENDA)
+    }], mostrarOrigen ? ORIGEN_LEYENDA : undefined)
       .catch(err => console.error('Error generando Excel:', err));
   };
 
@@ -442,9 +441,9 @@ export function ClientePropuestaMapPage() {
       const label = catorcenas.find(c => c.key === k)?.label || k;
       const placemarks = byCat.get(k)!.map(i => `
       <Placemark>
-        <name>${kmlEscape(i.codigo_unico)}${esNoVigente(i) ? ` (${NO_VIGENTE_LABEL})` : ''}${mostrarOrigen && origenDe(i) === 'campana' ? ' [Nuevo en campaña]' : ''}</name>
+        <name>${kmlEscape(i.codigo_unico)}${mostrarOrigen && origenDe(i) === 'campana' ? ' [Nuevo en campaña]' : ''}</name>
         <styleUrl>#${esNoVigente(i) ? 'no_vigente' : mostrarOrigen && origenDe(i) ? `origen_${origenDe(i)}` : styleId}</styleUrl>
-        <description><![CDATA[Catorcena: ${kmlEscape(label)}<br/>Plaza: ${i.plaza || 'N/A'}<br/>Circuito: ${i.articulo || 'N/A'}<br/>Tipo: ${i.tipo_de_cara || 'N/A'}<br/>Formato: ${i.mueble || 'N/A'}<br/>Ubicacion: ${i.ubicacion || 'N/A'}<br/>Caras: ${i.caras_totales}<br/>Tarifa: ${formatCurrency(tarifaBruta(i))}${esNoVigente(i) ? `<br/><b>Estado:</b> ${NO_VIGENTE_LABEL}` : ''}]]></description>
+        <description><![CDATA[Catorcena: ${kmlEscape(label)}<br/>Plaza: ${i.plaza || 'N/A'}<br/>Circuito: ${i.articulo || 'N/A'}<br/>Tipo: ${i.tipo_de_cara || 'N/A'}<br/>Formato: ${i.mueble || 'N/A'}<br/>Ubicacion: ${i.ubicacion || 'N/A'}<br/>Caras: ${i.caras_totales}<br/>Tarifa: ${formatCurrency(tarifaBruta(i))}]]></description>
         <Point><coordinates>${i.longitud},${i.latitud},0</coordinates></Point>
       </Placemark>`).join('');
       return `<Folder><name>${kmlEscape(label)} (${byCat.get(k)!.length})</name>${placemarks}</Folder>`;
@@ -580,12 +579,6 @@ export function ClientePropuestaMapPage() {
               {leyendaVersion(baseRows) && (
                 <div className="px-2.5 py-0.5 rounded-full text-[11px] font-medium border bg-sky-50 text-sky-700 border-sky-200">
                   {leyendaVersion(baseRows)}
-                </div>
-              )}
-              {hayNoVigentes(baseRows) && (
-                <div title={NO_VIGENTE_LEYENDA} className="px-2.5 py-0.5 rounded-full text-[11px] font-medium border bg-gray-100 text-gray-600 border-gray-300">
-                  <span className="inline-block h-2 w-2 rounded-full bg-gray-400 mr-1.5 align-middle" />
-                  Gris: en reasignación
                 </div>
               )}
               {/* Origen (solo campañas): azul de propuesta, verde agregado en campaña. */}
@@ -789,7 +782,7 @@ export function ClientePropuestaMapPage() {
                               return (
                                 <div
                                   key={item._rk}
-                                  title={noVigente ? NO_VIGENTE_LEYENDA : (origen ? ORIGEN_LABEL[origen] : undefined)}
+                                  title={origen ? ORIGEN_LABEL[origen] : undefined}
                                   className={`flex items-center gap-2 pl-3 pr-2 py-1.5 border-l-2 cursor-pointer ${isActive ? 'bg-[#0054A6]/10' : 'hover:bg-gray-50'} ${noVigente ? 'opacity-50 grayscale italic' : ''}`}
                                   style={{ borderColor: noVigente ? MAPA_GRIS : colorOrigen || cat.color }}
                                   onClick={() => handleFocusLocation(item)}
@@ -798,7 +791,6 @@ export function ClientePropuestaMapPage() {
                                   <div className="min-w-0 flex-1">
                                     <div className="text-[11px] font-semibold text-gray-800 truncate">
                                       {item.codigo_unico}
-                                      {noVigente && <span className="ml-1.5 px-1 py-px rounded text-[9px] font-semibold not-italic border bg-gray-200 text-gray-700 border-gray-400">{NO_VIGENTE_LABEL}</span>}
                                       {origen === 'campana' && (
                                         <span className="ml-1.5 px-1 py-px rounded text-[9px] font-semibold not-italic border" style={{ backgroundColor: `${ORIGEN_COLOR.campana}22`, color: ORIGEN_COLOR.campana, borderColor: `${ORIGEN_COLOR.campana}66` }}>Campaña</span>
                                       )}
@@ -896,9 +888,6 @@ export function ClientePropuestaMapPage() {
                     <p><strong>Ubicacion:</strong> {selectedMarker.ubicacion || 'N/A'}</p>
                     <p><strong>{(selectedMarker.mueble || '').toUpperCase().includes('PUENTE PEATONAL') ? 'Puentes' : 'Caras'}:</strong> {selectedMarker.caras_totales}</p>
                     <p><strong>Tarifa:</strong> {formatCurrency(tarifaBruta(selectedMarker))}</p>
-                    {esNoVigente(selectedMarker) && (
-                      <p className="text-gray-500 italic"><strong>Estado:</strong> {NO_VIGENTE_LABEL}</p>
-                    )}
                     {mostrarOrigen && origenDe(selectedMarker) && (
                       <p><strong>Origen:</strong>{' '}
                         <span style={{ color: ORIGEN_COLOR[origenDe(selectedMarker)!] }}>{ORIGEN_LABEL[origenDe(selectedMarker)!]}</span>

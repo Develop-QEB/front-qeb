@@ -13,10 +13,10 @@ import { descargarExcelCompartir, FMT_ENTERO, FMT_MONEDA, FMT_COORD } from '../.
 import { useThemeStore } from '../../store/themeStore';
 // Versionado de circuitos completados (ultima version completada; piezas
 // desplazadas/quitadas en gris). Mismos helpers que la Vista Compartir interna.
-import {
-  ConVersion, esNoVigente, hayNoVigentes, estadoTexto, leyendaVersion,
-  NO_VIGENTE_LABEL, NO_VIGENTE_LEYENDA, NO_VIGENTE_CHIP, MAPA_GRIS, PDF_GRIS_FONDO,
-} from './versionCompletado';
+// Vista del CLIENTE: las piezas en reasignación solo se atenúan en gris, sin
+// etiqueta ni leyenda ni columna de estado. Esa explicación vive únicamente en la
+// Vista Compartir interna del asesor.
+import { ConVersion, esNoVigente, leyendaVersion, MAPA_GRIS } from './versionCompletado';
 // Origen en campañas: azul = se vino de la propuesta en el pase a ventas,
 // verde = se agrego despues dentro de la campaña.
 import {
@@ -494,8 +494,9 @@ export function ClientePropuestaPage() {
 
   // Handlers
   const handleDownloadXLSX = () => {
-    // "Estado" marca las piezas no vigentes; ademas la fila completa va en gris.
-    const headers = ['Codigo', 'Plaza', 'Ubicacion', 'Tipo Cara', 'Formato', 'Tipo Inventario', 'Articulo', 'Caras', 'Tarifa', 'Periodo', 'Latitud', 'Longitud', 'Estado', ...(mostrarOrigen ? ['Origen'] : [])];
+    // Sin columna "Estado" para el cliente: la pieza en reasignación solo va con
+    // la fila atenuada en gris.
+    const headers = ['Codigo', 'Plaza', 'Ubicacion', 'Tipo Cara', 'Formato', 'Tipo Inventario', 'Articulo', 'Caras', 'Tarifa', 'Periodo', 'Latitud', 'Longitud', ...(mostrarOrigen ? ['Origen'] : [])];
     const filas = inventario.map(i => ({
       noVigente: esNoVigente(i),
       // Tinte azul/verde por origen (solo campañas); el gris de no vigente gana.
@@ -503,7 +504,6 @@ export function ClientePropuestaPage() {
       valores: [
         i.codigo_unico, i.plaza, i.ubicacion, i.tipo_de_cara, i.mueble, i.tradicional_digital || '', i.articulo,
         toNum(i.caras_totales), tarifaBruta(i), formatInicioPeriodo(i, tipoPeriodo), toNum(i.latitud), toNum(i.longitud),
-        estadoTexto(i),
         ...(mostrarOrigen ? [origenTexto(i, true)] : []),
       ],
     }));
@@ -516,7 +516,7 @@ export function ClientePropuestaPage() {
       filas,
       // Caras (7), Tarifa (8), Latitud (10), Longitud (11) como celdas tipo número
       formatos: { 7: FMT_ENTERO, 8: FMT_MONEDA, 10: FMT_COORD, 11: FMT_COORD },
-    }], mostrarOrigen ? `${NO_VIGENTE_LEYENDA}  ·  ${ORIGEN_LEYENDA}` : NO_VIGENTE_LEYENDA)
+    }], mostrarOrigen ? ORIGEN_LEYENDA : undefined)
       .catch(err => console.error('Error generando Excel:', err));
   };
 
@@ -525,7 +525,7 @@ export function ClientePropuestaPage() {
       .filter(i => i.latitud && i.longitud)
       .map(i => `
         <Placemark>
-          <name>${i.codigo_unico}${esNoVigente(i) ? ` (${NO_VIGENTE_LABEL})` : ''}${mostrarOrigen && origenDe(i) === 'campana' ? ' [Nuevo en campaña]' : ''}</name>
+          <name>${i.codigo_unico}${mostrarOrigen && origenDe(i) === 'campana' ? ' [Nuevo en campaña]' : ''}</name>
           <description>
             <![CDATA[
               Plaza: ${i.plaza || 'N/A'}<br/>
@@ -557,7 +557,7 @@ export function ClientePropuestaPage() {
       .filter(i => i.latitud && i.longitud)
       .map(i => `
         <Placemark>
-          <name>${i.codigo_unico}${esNoVigente(i) ? ` (${NO_VIGENTE_LABEL})` : ''}${mostrarOrigen && origenDe(i) === 'campana' ? ' [Nuevo en campaña]' : ''}</name>
+          <name>${i.codigo_unico}${mostrarOrigen && origenDe(i) === 'campana' ? ' [Nuevo en campaña]' : ''}</name>
           <description><![CDATA[Plaza: ${i.plaza || 'N/A'}<br/>Tipo: ${i.tipo_de_cara || 'N/A'}<br/>Formato: ${i.mueble || 'N/A'}<br/>Caras: ${i.caras_totales}<br/>Tarifa: ${formatCurrency(tarifaBruta(i))}]]></description>
           <Point><coordinates>${i.longitud},${i.latitud},0</coordinates></Point>
         </Placemark>`).join('');
@@ -752,23 +752,16 @@ export function ClientePropuestaPage() {
     });
     y += 30;
 
-    // Leyenda de versionado: ultima version completada y significado del gris.
+    // Leyenda de versionado: solo la fecha de la ultima version completada. El
+    // gris de reasignación NO se explica al cliente (queda como simple atenuado).
     {
       const leyVer = leyendaVersion(inventario);
-      const hayGris = hayNoVigentes(inventario);
-      if (leyVer || hayGris) {
+      if (leyVer) {
         doc.setFontSize(8);
         doc.setFont('helvetica', 'italic');
         doc.setTextColor(90, 90, 90);
-        if (leyVer) { doc.text(leyVer, marginX, y); y += 4.5; }
-        if (hayGris) {
-          doc.setFillColor(PDF_GRIS_FONDO[0], PDF_GRIS_FONDO[1], PDF_GRIS_FONDO[2]);
-          doc.setDrawColor(180, 180, 180);
-          doc.rect(marginX, y - 3, 6, 3.5, 'FD');
-          doc.text(NO_VIGENTE_LEYENDA, marginX + 8, y);
-          y += 4.5;
-        }
-        y += 2;
+        doc.text(leyVer, marginX, y);
+        y += 6.5;
       }
       // Leyenda de origen (solo campañas): azul de propuesta, verde agregado.
       if (mostrarOrigen) {
@@ -840,7 +833,7 @@ export function ClientePropuestaPage() {
           // Si todos los items del grupo son puente peatonal, usar "Puentes"
           const groupAllPP = items.length > 0 && items.every(i => (i.mueble || '').toUpperCase().includes('PUENTE PEATONAL'));
           autoTable(doc, {
-            head: [['Ciudad', 'Ubicacion', 'Formato', groupAllPP ? 'Puentes' : 'Caras', 'Latitud', 'Longitud', 'Periodo', 'Estado', ...(mostrarOrigen ? ['Origen'] : [])]],
+            head: [['Ciudad', 'Ubicacion', 'Formato', groupAllPP ? 'Puentes' : 'Caras', 'Latitud', 'Longitud', 'Periodo', ...(mostrarOrigen ? ['Origen'] : [])]],
             body: items.map(i => [
               i.plaza || '-',
               (i.ubicacion || '-').substring(0, 50),
@@ -849,7 +842,6 @@ export function ClientePropuestaPage() {
               i.latitud?.toFixed(6) || '-',
               i.longitud?.toFixed(6) || '-',
               formatInicioPeriodo(i, tipoPeriodo),
-              estadoTexto(i),
               ...(mostrarOrigen ? [origenTexto(i, true)] : []),
             ]),
             startY: y,
@@ -865,10 +857,9 @@ export function ClientePropuestaPage() {
               4: { cellWidth: 28 },
               5: { cellWidth: 28 },
               6: { cellWidth: 40 },
-              7: { cellWidth: 45 },
-              8: { cellWidth: 40 },
+              7: { cellWidth: 40 },
             },
-            // Gris = no vigente (desplazada/quitada tras completar el circuito).
+            // Gris = pieza en reasignación (solo atenuado, sin texto para el cliente).
             // Azul/verde = origen en la campaña (propuesta vs agregado despues).
             didParseCell: pdfEstiloCompartir(items, mostrarOrigen),
           });
@@ -1002,12 +993,6 @@ export function ClientePropuestaPage() {
               {leyendaVersion(inventario) && (
                 <div className="px-3 py-1 rounded-full text-xs font-medium border bg-sky-50 text-sky-700 border-sky-200">
                   {leyendaVersion(inventario)}
-                </div>
-              )}
-              {hayNoVigentes(inventario) && (
-                <div title={NO_VIGENTE_LEYENDA} className="px-3 py-1 rounded-full text-xs font-medium border bg-gray-100 text-gray-600 border-gray-300">
-                  <span className="inline-block h-2 w-2 rounded-full bg-gray-400 mr-1.5 align-middle" />
-                  {NO_VIGENTE_CHIP}
                 </div>
               )}
               {/* Origen (solo campañas): qué se vino de la propuesta y qué se
@@ -1407,7 +1392,7 @@ export function ClientePropuestaPage() {
                                         return (
                                           <tr
                                             key={idx}
-                                            title={noVigente ? NO_VIGENTE_LEYENDA : (origen ? ORIGEN_LABEL[origen] : undefined)}
+                                            title={origen ? ORIGEN_LABEL[origen] : undefined}
                                             // Barra de color a la izquierda = origen en la campaña.
                                             style={colorOrigen ? { boxShadow: `inset 4px 0 0 0 ${colorOrigen}` } : undefined}
                                             className={`hover:bg-blue-50/30 transition-colors ${noVigente ? 'opacity-50 grayscale italic' : ''}`}
@@ -1420,9 +1405,6 @@ export function ClientePropuestaPage() {
                                                 <span className="inline-block h-2 w-2 rounded-full mr-1.5 align-middle" style={{ backgroundColor: colorOrigen }} />
                                               )}
                                               {item.plaza || '-'}
-                                              {noVigente && (
-                                                <span className="ml-2 px-1.5 py-0.5 rounded text-[10px] font-semibold not-italic border bg-gray-200 text-gray-700 border-gray-400">{NO_VIGENTE_LABEL}</span>
-                                              )}
                                             </td>
                                             <td className="px-3 py-2 text-gray-600 text-xs">
                                               {item.mueble || '-'}
@@ -1579,9 +1561,6 @@ export function ClientePropuestaPage() {
                         <p><strong>Ubicacion:</strong> {selectedMarker.ubicacion || 'N/A'}</p>
                         <p><strong>{(selectedMarker.mueble || '').toUpperCase().includes('PUENTE PEATONAL') ? 'Puentes' : 'Caras'}:</strong> {selectedMarker.caras_totales}</p>
                         <p><strong>Tarifa:</strong> {formatCurrency(tarifaBruta(selectedMarker))}</p>
-                        {esNoVigente(selectedMarker) && (
-                          <p className="text-gray-500 italic"><strong>Estado:</strong> {NO_VIGENTE_LABEL}</p>
-                        )}
                         {mostrarOrigen && origenDe(selectedMarker) && (
                           <p><strong>Origen:</strong>{' '}
                             <span style={{ color: ORIGEN_COLOR[origenDe(selectedMarker)!] }}>{ORIGEN_LABEL[origenDe(selectedMarker)!]}</span>

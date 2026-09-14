@@ -1454,19 +1454,27 @@ const PropuestaRow = React.memo(function PropuestaRow({
               <Paintbrush className="h-3.5 w-3.5" />
             </button>
           )}
-          {canCompartirPerm && (
+          {canCompartirPerm && (() => {
+            // Estatus desde los que tiene sentido compartir con el cliente. Los de
+            // ajuste entran porque el asesor manda la vista compartir mientras
+            // corrige inventario o costos con el cliente. Se aceptan las dos
+            // grafías de "Cto Cliente" que conviven en el sistema.
+            const ESTATUS_COMPARTIR = ['Aprobada', 'Atendido', 'Pase a ventas', 'Ajuste Inventario', 'Ajuste Cto-Cliente', 'Ajuste CTO Cliente'];
+            const puedeCompartir = ESTATUS_COMPARTIR.includes(item.status) && !isLocked;
+            return (
             <button
-              disabled={(item.status !== 'Aprobada' && item.status !== 'Atendido' && item.status !== 'Pase a ventas') || isLocked}
-              onClick={() => !isLocked && (item.status === 'Aprobada' || item.status === 'Atendido' || item.status === 'Pase a ventas') && onShare(item.id)}
-              className={`p-2 rounded-lg border transition-all ${(item.status === 'Aprobada' || item.status === 'Atendido' || item.status === 'Pase a ventas') && !isLocked
+              disabled={!puedeCompartir}
+              onClick={() => puedeCompartir && onShare(item.id)}
+              className={`p-2 rounded-lg border transition-all ${puedeCompartir
                 ? isDark ? 'bg-cyan-500/10 text-cyan-400 hover:bg-cyan-500/20 hover:text-cyan-300 border-cyan-500/20 hover:border-cyan-500/40' : 'bg-cyan-50 text-cyan-600 hover:bg-cyan-100 hover:text-cyan-700 border-cyan-200 hover:border-cyan-300'
                 : isDark ? 'bg-zinc-500/10 text-zinc-500 border-zinc-500/20 cursor-not-allowed opacity-50' : 'bg-gray-50 text-gray-400 border-gray-200 cursor-not-allowed opacity-50'
                 }`}
-              title={isLocked ? 'No disponible en este estatus' : (item.status === 'Aprobada' || item.status === 'Atendido' || item.status === 'Pase a ventas' ? 'Compartir propuesta' : 'Solo disponible en status Aprobada o Pase a ventas')}
+              title={isLocked ? 'No disponible en este estatus' : (puedeCompartir ? 'Compartir propuesta' : 'Disponible en Aprobada, Atendido, Pase a ventas, Ajuste Inventario y Ajuste Cto-Cliente')}
             >
               <Share2 className="h-3.5 w-3.5" />
             </button>
-          )}
+            );
+          })()}
         </div>
       </td>
     </tr>
