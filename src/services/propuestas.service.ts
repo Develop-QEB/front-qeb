@@ -105,6 +105,15 @@ export interface InventarioReservado {
   numero_catorcena?: number | null;
   anio_catorcena?: number | null;
   formato?: string | null;
+  // Versionado de circuitos completados (Vista Compartir). Ver
+  // features/propuestas/versionCompletado.ts.
+  estado_version?: 'vigente' | 'no_vigente' | 'sin_version' | null;
+  version_completado?: number | null;
+  fecha_completado?: string | null;
+  motivo_no_vigente?: string | null;
+  // Origen en campañas: 'propuesta' cruzo en el pase a ventas, 'campana' se
+  // agrego despues. Ver features/propuestas/origenReserva.ts.
+  origen_reserva?: 'propuesta' | 'campana' | null;
 }
 
 export interface PropuestaFullDetails {
