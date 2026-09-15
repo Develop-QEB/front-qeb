@@ -2,12 +2,24 @@ import { useParams, useSearchParams } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { useState, useMemo, useRef, useEffect } from 'react';
 import {
-  Map as MapIcon, Loader2, ExternalLink, Copy, Check, Download, ChevronDown, ChevronRight,
+  Map as MapIcon, Loader2, Copy, Check, Download, ChevronDown, ChevronRight,
   Search, FileSpreadsheet, SlidersHorizontal, X, Layers,
 } from 'lucide-react';
 import { GoogleMap, useLoadScript, Marker, Circle, Autocomplete, InfoWindow } from '@react-google-maps/api';
 import { formatCurrency } from '../../lib/utils';
-import { toNum, applyNumberFormats, FMT_ENTERO, FMT_MONEDA, FMT_COORD } from '../../utils/excelFormat';
+import { toNum } from '../../utils/excelFormat';
+import { descargarExcelCompartir, FMT_ENTERO, FMT_MONEDA, FMT_COORD } from '../../utils/excelCompartir';
+// Versionado de circuitos completados: pines/filas 'no_vigente' en gris.
+// Vista del CLIENTE: las piezas en reasignación solo se atenúan en gris, sin
+// etiqueta ni leyenda ni columna de estado. La explicación vive únicamente en
+// la Vista Compartir interna del asesor.
+import { ConVersion, esNoVigente, leyendaVersion, MAPA_GRIS } from './versionCompletado';
+// Origen en campañas: azul = se vino de la propuesta en el pase a ventas,
+// verde = se agrego despues dentro de la campaña.
+import {
+  ConOrigen, origenColor, origenTexto, origenDe, tieneOrigen, contarPorOrigen,
+  excelFondoOrigen, ORIGEN_COLOR, ORIGEN_LABEL, ORIGEN_LEYENDA,
+} from './origenReserva';
 
 // Config UNICA de Google Maps (mismo id/key/libraries en toda la app) para
 // que el script se inyecte una sola vez. Ver src/config/googleMaps.ts.
@@ -44,7 +56,7 @@ const IMU_MAP_STYLES = [
   { featureType: 'water', elementType: 'labels.text.fill', stylers: [{ color: '#0054A6' }] },
 ];
 
-interface InventarioReservado {
+interface InventarioReservado extends ConVersion, ConOrigen {
   id: number;
   codigo_unico: string;
   mueble: string | null;
@@ -249,6 +261,10 @@ export function ClientePropuestaMapPage() {
     }));
   }, [data, selKeySet, periodoSet, selectedIdSet, tipoPeriodo]);
 
+  // Colorear por origen SOLO en campañas y solo si el backend pudo clasificar
+  // (hay foto del pase a ventas). Sustituye al color por catorcena en los pines.
+  const mostrarOrigen = esCampana && tieneOrigen(baseRows);
+
   // Catorcenas presentes, ordenadas, con color asignado.
   const catorcenas = useMemo(() => {
     const map = new Map<string, string>();
@@ -374,19 +390,29 @@ export function ClientePropuestaMapPage() {
 
   // ----- Descargas (respetan seleccion / visible) -----
   const handleDownloadXLSX = () => {
-    import('xlsx').then(XLSX => {
-      const headers = ['Catorcena', 'Circuito', 'Codigo', 'Plaza', 'Ubicacion', 'Tipo Cara', 'Formato', 'Tipo Inventario', 'Articulo', 'Caras', 'Tarifa', 'Latitud', 'Longitud'];
-      const rows = downloadRows.map(i => [
+    // Sin columna "Estado" para el cliente: la pieza en reasignación solo va con
+    // la fila atenuada en gris.
+    const headers = ['Catorcena', 'Circuito', 'Codigo', 'Plaza', 'Ubicacion', 'Tipo Cara', 'Formato', 'Tipo Inventario', 'Articulo', 'Caras', 'Tarifa', 'Latitud', 'Longitud', ...(mostrarOrigen ? ['Origen'] : [])];
+    const filas = downloadRows.map(i => ({
+      noVigente: esNoVigente(i),
+      // Tinte azul/verde por origen (solo campañas); el gris de no vigente gana.
+      fondoArgb: excelFondoOrigen(i, mostrarOrigen),
+      valores: [
         i._catLabel, i.articulo || '', i.codigo_unico, i.plaza, i.ubicacion, i.tipo_de_cara, i.mueble,
         i.tradicional_digital || '', i.articulo, toNum(i.caras_totales), tarifaBruta(i), toNum(i.latitud), toNum(i.longitud),
-      ]);
-      const ws = XLSX.utils.aoa_to_sheet([headers, ...rows]);
+        ...(mostrarOrigen ? [origenTexto(i, true)] : []),
+      ],
+    }));
+    descargarExcelCompartir(`reservas_propuesta_${propuestaId}.xlsx`, [{
+      nombre: 'Reservas',
+      leyenda: leyendaCircuitos,
+      subLeyenda: leyendaVersion(baseRows) || undefined,
+      headers,
+      filas,
       // Caras (9), Tarifa (10), Latitud (11), Longitud (12) como celdas tipo número
-      applyNumberFormats(XLSX, ws, rows.length, { 9: FMT_ENTERO, 10: FMT_MONEDA, 11: FMT_COORD, 12: FMT_COORD });
-      const wb = XLSX.utils.book_new();
-      XLSX.utils.book_append_sheet(wb, ws, 'Reservas');
-      XLSX.writeFile(wb, `reservas_propuesta_${propuestaId}.xlsx`);
-    });
+      formatos: { 9: FMT_ENTERO, 10: FMT_MONEDA, 11: FMT_COORD, 12: FMT_COORD },
+    }], mostrarOrigen ? ORIGEN_LEYENDA : undefined)
+      .catch(err => console.error('Error generando Excel:', err));
   };
 
   // KML agrupado por catorcena: un <Folder> y color por catorcena. Al importarlo
@@ -400,18 +426,23 @@ export function ClientePropuestaMapPage() {
     });
     const orderedKeys = catorcenas.map(c => c.key).filter(k => byCat.has(k));
 
+    // Estilo extra gris para piezas no vigentes (desplazadas/quitadas tras completar).
     const styles = orderedKeys.map(k => {
       const styleId = `cat_${k.replace(/[^a-z0-9]/gi, '_')}`;
       return `<Style id="${styleId}"><IconStyle><color>${hexToKmlColor(colorFor(k))}</color><scale>1.1</scale><Icon><href>http://maps.google.com/mapfiles/kml/paddle/wht-blank.png</href></Icon></IconStyle></Style>`;
-    }).join('');
+    }).join('')
+      + `<Style id="no_vigente"><IconStyle><color>${hexToKmlColor(MAPA_GRIS)}</color><scale>0.9</scale><Icon><href>http://maps.google.com/mapfiles/kml/paddle/wht-blank.png</href></Icon></IconStyle></Style>`
+      // Estilos de origen (campañas): azul propuesta / verde agregado en campaña.
+      + `<Style id="origen_propuesta"><IconStyle><color>${hexToKmlColor(ORIGEN_COLOR.propuesta)}</color><scale>1.1</scale><Icon><href>http://maps.google.com/mapfiles/kml/paddle/wht-blank.png</href></Icon></IconStyle></Style>`
+      + `<Style id="origen_campana"><IconStyle><color>${hexToKmlColor(ORIGEN_COLOR.campana)}</color><scale>1.1</scale><Icon><href>http://maps.google.com/mapfiles/kml/paddle/wht-blank.png</href></Icon></IconStyle></Style>`;
 
     const folders = orderedKeys.map(k => {
       const styleId = `cat_${k.replace(/[^a-z0-9]/gi, '_')}`;
       const label = catorcenas.find(c => c.key === k)?.label || k;
       const placemarks = byCat.get(k)!.map(i => `
       <Placemark>
-        <name>${kmlEscape(i.codigo_unico)}</name>
-        <styleUrl>#${styleId}</styleUrl>
+        <name>${kmlEscape(i.codigo_unico)}${mostrarOrigen && origenDe(i) === 'campana' ? ' [Nuevo en campaña]' : ''}</name>
+        <styleUrl>#${esNoVigente(i) ? 'no_vigente' : mostrarOrigen && origenDe(i) ? `origen_${origenDe(i)}` : styleId}</styleUrl>
         <description><![CDATA[Catorcena: ${kmlEscape(label)}<br/>Plaza: ${i.plaza || 'N/A'}<br/>Circuito: ${i.articulo || 'N/A'}<br/>Tipo: ${i.tipo_de_cara || 'N/A'}<br/>Formato: ${i.mueble || 'N/A'}<br/>Ubicacion: ${i.ubicacion || 'N/A'}<br/>Caras: ${i.caras_totales}<br/>Tarifa: ${formatCurrency(tarifaBruta(i))}]]></description>
         <Point><coordinates>${i.longitud},${i.latitud},0</coordinates></Point>
       </Placemark>`).join('');
@@ -540,22 +571,37 @@ export function ClientePropuestaMapPage() {
               <p className="text-xs text-gray-500">Cliente</p>
               <p className="text-sm font-medium text-gray-800">{data?.solicitud?.cliente || 'N/A'}</p>
             </div>
-            <div className={`px-3 py-1 rounded-full text-sm font-medium border ${esCampana ? 'bg-[#0054A6]/10 text-[#0054A6] border-[#0054A6]/30' : 'bg-amber-100 text-amber-700 border-amber-300'}`}>
-              {leyendaCircuitos}
+            <div className="flex flex-col items-end gap-1">
+              <div className={`px-3 py-1 rounded-full text-sm font-medium border ${esCampana ? 'bg-[#0054A6]/10 text-[#0054A6] border-[#0054A6]/30' : 'bg-amber-100 text-amber-700 border-amber-300'}`}>
+                {leyendaCircuitos}
+              </div>
+              {/* Versionado: ultima version completada + leyenda del gris */}
+              {leyendaVersion(baseRows) && (
+                <div className="px-2.5 py-0.5 rounded-full text-[11px] font-medium border bg-sky-50 text-sky-700 border-sky-200">
+                  {leyendaVersion(baseRows)}
+                </div>
+              )}
+              {/* Origen (solo campañas): azul de propuesta, verde agregado en campaña. */}
+              {mostrarOrigen && (() => {
+                const conteo = contarPorOrigen(baseRows);
+                return (
+                  <div title={ORIGEN_LEYENDA} className="px-2.5 py-0.5 rounded-full text-[11px] font-medium border bg-white text-gray-700 border-gray-300">
+                    <span className="inline-block h-2 w-2 rounded-full mr-1.5 align-middle" style={{ backgroundColor: ORIGEN_COLOR.propuesta }} />
+                    Propuesta: {conteo.propuesta}
+                    <span className="inline-block h-2 w-2 rounded-full ml-2.5 mr-1.5 align-middle" style={{ backgroundColor: ORIGEN_COLOR.campana }} />
+                    Campaña: {conteo.campana}
+                  </div>
+                );
+              })()}
             </div>
           </div>
 
-          {/* Botones de accion */}
+          {/* Botones de accion.
+              NOTA: aquí vivía "Ver Completa", que llevaba de este mapa a la vista
+              completa de la propuesta. Se quitó a propósito: el enlace del mapa se
+              comparte solo cuando se quiere que el cliente vea el mapa, y ese botón
+              lo mandaba al listado con tarifas e inversión. */}
           <div className="flex items-center gap-1.5 sm:gap-2 shrink-0">
-            <a
-              href={`/cliente/propuesta/${propuestaId}${esCampana ? '?ctx=campana' : ''}`}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="flex items-center gap-1.5 px-2.5 sm:px-4 py-2 border rounded-lg text-xs sm:text-sm font-medium shadow-sm transition-colors bg-white hover:bg-gray-50 text-gray-700 border-gray-300"
-              title="Ver propuesta completa"
-            >
-              <ExternalLink className="h-4 w-4" /> <span className="hidden sm:inline">Ver Completa</span>
-            </a>
             <button
               onClick={handleDownloadXLSX}
               className="flex items-center gap-1.5 px-2.5 sm:px-4 py-2 bg-[#7AB800] hover:bg-[#689c00] text-white rounded-lg text-xs sm:text-sm font-medium shadow-sm transition-colors"
@@ -725,16 +771,25 @@ export function ClientePropuestaMapPage() {
                             {/* Inventarios */}
                             {ci.rows.map(item => {
                               const isActive = selectedMarker?._rk === item._rk;
+                              const noVigente = esNoVigente(item);
+                              const colorOrigen = noVigente ? null : origenColor(item, mostrarOrigen);
+                              const origen = mostrarOrigen ? origenDe(item) : null;
                               return (
                                 <div
                                   key={item._rk}
-                                  className={`flex items-center gap-2 pl-3 pr-2 py-1.5 border-l-2 cursor-pointer ${isActive ? 'bg-[#0054A6]/10' : 'hover:bg-gray-50'}`}
-                                  style={{ borderColor: cat.color }}
+                                  title={origen ? ORIGEN_LABEL[origen] : undefined}
+                                  className={`flex items-center gap-2 pl-3 pr-2 py-1.5 border-l-2 cursor-pointer ${isActive ? 'bg-[#0054A6]/10' : 'hover:bg-gray-50'} ${noVigente ? 'opacity-50 grayscale italic' : ''}`}
+                                  style={{ borderColor: noVigente ? MAPA_GRIS : colorOrigen || cat.color }}
                                   onClick={() => handleFocusLocation(item)}
                                 >
                                   <TriCheckbox checked={selected.has(item._rk)} indeterminate={false} onChange={() => toggleRow(item._rk)} />
                                   <div className="min-w-0 flex-1">
-                                    <div className="text-[11px] font-semibold text-gray-800 truncate">{item.codigo_unico}</div>
+                                    <div className="text-[11px] font-semibold text-gray-800 truncate">
+                                      {item.codigo_unico}
+                                      {origen === 'campana' && (
+                                        <span className="ml-1.5 px-1 py-px rounded text-[9px] font-semibold not-italic border" style={{ backgroundColor: `${ORIGEN_COLOR.campana}22`, color: ORIGEN_COLOR.campana, borderColor: `${ORIGEN_COLOR.campana}66` }}>Campaña</span>
+                                      )}
+                                    </div>
                                     <div className="text-[10px] text-gray-400 truncate">{[item.mueble, item.plaza].filter(Boolean).join(' · ') || item.ubicacion || 'Sin ubicacion'}</div>
                                   </div>
                                 </div>
@@ -799,9 +854,11 @@ export function ClientePropuestaMapPage() {
                   icon={{
                     path: google.maps.SymbolPath.CIRCLE,
                     scale: isActive ? 11 : 7,
-                    fillColor: colorFor(item._catKey),
-                    fillOpacity: 0.9,
-                    strokeColor: isActive ? IMU_DARK : '#ffffff',
+                    // Prioridad: no vigente (gris) > origen en campaña > catorcena.
+                    fillColor: esNoVigente(item) ? MAPA_GRIS
+                      : origenColor(item, mostrarOrigen) || colorFor(item._catKey),
+                    fillOpacity: esNoVigente(item) ? 0.75 : 0.9,
+                    strokeColor: isActive ? IMU_DARK : esNoVigente(item) ? '#6b7280' : '#ffffff',
                     strokeWeight: isActive ? 3 : 1.5,
                   }}
                 />
@@ -826,6 +883,11 @@ export function ClientePropuestaMapPage() {
                     <p><strong>Ubicacion:</strong> {selectedMarker.ubicacion || 'N/A'}</p>
                     <p><strong>{(selectedMarker.mueble || '').toUpperCase().includes('PUENTE PEATONAL') ? 'Puentes' : 'Caras'}:</strong> {selectedMarker.caras_totales}</p>
                     <p><strong>Tarifa:</strong> {formatCurrency(tarifaBruta(selectedMarker))}</p>
+                    {mostrarOrigen && origenDe(selectedMarker) && (
+                      <p><strong>Origen:</strong>{' '}
+                        <span style={{ color: ORIGEN_COLOR[origenDe(selectedMarker)!] }}>{ORIGEN_LABEL[origenDe(selectedMarker)!]}</span>
+                      </p>
+                    )}
                   </div>
                 </div>
               </InfoWindow>

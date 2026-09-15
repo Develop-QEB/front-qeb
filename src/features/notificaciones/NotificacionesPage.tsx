@@ -28,6 +28,7 @@ import { AssignInventarioCampanaModal } from '../campanas/AssignInventarioCampan
 import { propuestasService } from '../../services/propuestas.service';
 import { campanasService } from '../../services/campanas.service';
 import { NotasDireccionBitacora } from './NotasDireccionBitacora';
+import { DesposteoModal, ModoDesposteo } from '../desposteo/DesposteoModal';
 import { NuevaActividadComercialModal } from './NuevaActividadComercialModal';
 
 // Roles que pueden crear tarea manual "Actividad Comercial".
@@ -3156,6 +3157,8 @@ export function NotificacionesPage() {
 
   // Estado de selección y drawer
   const [selectedTarea, setSelectedTarea] = useState<(Notificacion & { comentarios?: ComentarioTarea[] }) | null>(null);
+  // Desposteo Fase 2: modal reusable para tareas Filtro Desposteo / Autorización Desposteo.
+  const [desposteoModal, setDesposteoModal] = useState<{ desposteoId: number; modo: ModoDesposteo } | null>(null);
   const [isDrawerClosing, setIsDrawerClosing] = useState(false);
   const [approvalModalTarea, setApprovalModalTarea] = useState<Notificacion | null>(null);
   const [editSolicitudId, setEditSolicitudId] = useState<number | null>(null);
@@ -3493,6 +3496,23 @@ export function NotificacionesPage() {
 
   // Handlers
   const handleSelectTarea = useCallback(async (tarea: Notificacion) => {
+    // Desposteo Fase 2: Filtro Desposteo (GC) y Autorización Desposteo
+    // (Facturación) usan el DesposteoModal en vez del TaskDrawer. El
+    // desposteoId viene en el JSON de `contenido` de la tarea.
+    if (tarea.tipo === 'Filtro Desposteo' || tarea.tipo === 'Autorización Desposteo') {
+      try {
+        const raw = typeof tarea.contenido === 'string' ? tarea.contenido : '';
+        const parsed = raw ? JSON.parse(raw) : {};
+        const desposteoId = Number(parsed?.desposteoId);
+        if (Number.isFinite(desposteoId) && desposteoId > 0) {
+          setDesposteoModal({
+            desposteoId,
+            modo: tarea.tipo === 'Filtro Desposteo' ? 'filtro' : 'facturacion',
+          });
+          return;
+        }
+      } catch { /* fallthrough al TaskDrawer normal */ }
+    }
     const isDirectorUser = ['Director General', 'Director Comercial'].includes(user?.rol || '');
     const isAuthTask = tarea.tipo?.includes('Autorización');
     if (isDirectorUser && isAuthTask) {
@@ -4325,6 +4345,19 @@ export function NotificacionesPage() {
             onOpenApprovalModal={selectedTarea.tipo?.includes('Autorización') ? () => setApprovalModalTarea(selectedTarea) : undefined}
           />
         </>
+      )}
+
+      {desposteoModal && (
+        <DesposteoModal
+          isOpen={!!desposteoModal}
+          onClose={() => setDesposteoModal(null)}
+          modo={desposteoModal.modo}
+          solicitudId={desposteoModal.desposteoId}
+          onDone={() => {
+            queryClient.invalidateQueries({ queryKey: ['notificaciones'] });
+            queryClient.invalidateQueries({ queryKey: ['notificaciones-stats'] });
+          }}
+        />
       )}
 
       {/* Modal de Aprobación */}
