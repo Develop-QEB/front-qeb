@@ -84,6 +84,56 @@ export interface VerificarResult {
   motivo?: string;
 }
 
+// Desglose enriquecido del APS (catorcena -> plaza/formato -> articulos)
+export interface DesgloseArticulo {
+  id: number;
+  articulo: string | null;
+  grupo_masivo_id: number | null;
+  tipo: string | null;
+  caras: number;
+  tarifa_publica: number;
+  inversion: number;
+  costo: number;
+}
+export interface DesglosePlazaFormato {
+  plaza: string;
+  formato: string;
+  caras_total: number;
+  inversion_total: number;
+  articulos: DesgloseArticulo[];
+}
+export interface DesgloseCatorcena {
+  numero: number | null;
+  anio: number | null;
+  inicio_periodo: string | null;
+  caras_total: number;
+  inversion_total: number;
+  plazas: DesglosePlazaFormato[];
+}
+export interface DesgloseAps {
+  campania_id: number;
+  campania_nombre: string;
+  aps: number;
+  razon_social: string | null;
+  cliente_nombre: string | null;
+  cuic: number | null;
+  marca: string | null;
+  post_log_id: number | null;
+  posted_at: string | null;
+  doc_entry: number | null;
+  doc_num: number | null;
+  caras_total: number;
+  inversion_total: number;
+  catorcenas: DesgloseCatorcena[];
+}
+
+// Estado de desposteo por APS (para badges en el listado)
+export type EstadoAps = {
+  estatus: 'solicitado' | 'filtro_aprobado' | 'aprobado' | 'ejecutado' | 'rechazado';
+  solicitud_id: number;
+};
+export type EstadosApsMap = Record<number, EstadoAps>;
+
 function extractApiError(err: unknown, fallback: string): Error {
   if (err instanceof AxiosError) {
     const serverError = err.response?.data as { error?: string; detalles?: unknown } | undefined;
@@ -135,6 +185,26 @@ export const desposteoService = {
       return data.data as DesposteoNota[];
     } catch (err) {
       throw extractApiError(err, 'Error al obtener historial de notas');
+    }
+  },
+
+  async apsDetalle(campania_id: number, aps: number): Promise<DesgloseAps> {
+    try {
+      const { data } = await api.get(`/desposteo/aps-detalle?campania_id=${campania_id}&aps=${aps}`);
+      if (!data.success) throw new Error(data.error || 'Error al obtener desglose');
+      return data.data as DesgloseAps;
+    } catch (err) {
+      throw extractApiError(err, 'Error al obtener desglose de APS');
+    }
+  },
+
+  async estadosAps(campania_id: number): Promise<EstadosApsMap> {
+    try {
+      const { data } = await api.get(`/desposteo/estados-aps?campania_id=${campania_id}`);
+      if (!data.success) throw new Error(data.error || 'Error al obtener estados');
+      return data.data as EstadosApsMap;
+    } catch (err) {
+      throw extractApiError(err, 'Error al obtener estados de APS');
     }
   },
 
@@ -208,13 +278,16 @@ export const TIPO_NOTA_LABEL: Record<TipoNota, string> = {
   ejecucion: 'Ejecutado en SAP',
 };
 
+// Feature flag: si false, oculta boton de solicitar desposteo hasta cerrar
+// el paquete de ajustes pendientes con Jos (drawer + finalizar tarea, badges,
+// tabulador). Reactivar poniendo en true cuando este todo listo.
+export const FEATURE_SOLICITAR_DESPOSTEO_ACTIVE = false;
+
 // Roles con permisos (deben coincidir con back).
-const ROLES_SOLICITA = new Set([
-  'Asesor Comercial',
-  'Asesor Comercial Aeropuerto',
-  'Administrador',
-  'DEV',
-]);
+// Feedback Jos: Asesores + Analistas pueden iniciar; Admin/TI no.
+const ROLES_ASESOR = ['Asesor Comercial', 'Asesor Comercial Aeropuerto'];
+const ROLES_ANALISTA = ['Asesor Analista', 'Analista de Servicio al Cliente', 'Analista de Aeropuerto'];
+const ROLES_SOLICITA = new Set([...ROLES_ASESOR, ...ROLES_ANALISTA]);
 const ROLES_FILTRO_GC = new Set([
   'Gerente Comercial Vía Pública',
   'Gerente Comercial Via Publica',
@@ -231,13 +304,11 @@ const ROLES_FACTURACION = new Set([
   'DEV',
 ]);
 const ROLES_BYPASS = new Set(['Administrador', 'DEV']);
+const ROLES_TI = new Set(['Gerente de TI', 'Especialista de TI', 'Analista de TI']);
 
-// Flujo desposteo temporalmente oculto en UI mientras se cierran ajustes
-// pendientes (drawer + finalizar tarea, enriquecer modal, indicadores, rol
-// Analista, permisos finales, tabulador). Al terminar esos ajustes, regresar
-// a la implementacion basada en ROLES_SOLICITA.
-export function puedeSolicitarDesposteo(_rol?: string | null): boolean {
-  return false;
+export function puedeSolicitarDesposteo(rol?: string | null): boolean {
+  if (!FEATURE_SOLICITAR_DESPOSTEO_ACTIVE) return false;
+  return !!rol && ROLES_SOLICITA.has(rol);
 }
 export function puedeFiltrarDesposteo(rol?: string | null): boolean {
   return !!rol && ROLES_FILTRO_GC.has(rol);
@@ -247,4 +318,7 @@ export function puedeAprobarDesposteoFacturacion(rol?: string | null): boolean {
 }
 export function puedeBypassearDesposteo(rol?: string | null): boolean {
   return !!rol && ROLES_BYPASS.has(rol);
+}
+export function esRolTIDesposteo(rol?: string | null): boolean {
+  return !!rol && ROLES_TI.has(rol);
 }

@@ -19,7 +19,7 @@ import { getPermissions } from '../../lib/permissions';
 import { useSocketCampana } from '../../hooks/useSocket';
 import { NotasDireccionBitacora } from '../notificaciones/NotasDireccionBitacora';
 import { DesposteoModal } from '../desposteo/DesposteoModal';
-import { puedeSolicitarDesposteo, puedeBypassearDesposteo } from '../../services/desposteo.service';
+import { puedeSolicitarDesposteo, puedeBypassearDesposteo, desposteoService, EstadoAps } from '../../services/desposteo.service';
 
 const statusVariants: Record<string, 'secondary' | 'success' | 'warning' | 'info'> = {
   Aprobada: 'success',
@@ -547,6 +547,46 @@ const OPERATORS: { value: FilterOperator; label: string; forTypes: ('string' | '
 
 function fmtMoney(n: number): string {
   return `$${n.toLocaleString('es-MX', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+}
+
+// Badge para el estado de solicitud desposteo por APS. Se muestra a todos los
+// roles en el listado con APS — la accion (Cancelar POST) sigue reservada a TI.
+function DesposteoBadge({ estado }: { estado: EstadoAps | undefined }) {
+  if (!estado) return null;
+  // aprobado = listo para TI = mas prominente
+  const cfg: Record<EstadoAps['estatus'], { label: string; cls: string; title: string }> = {
+    solicitado: {
+      label: 'DESPOSTEO SOLICITADO',
+      cls: 'bg-amber-500/20 text-amber-300 border-amber-500/30',
+      title: 'Solicitud de desposteo enviada al gerente comercial',
+    },
+    filtro_aprobado: {
+      label: 'DESPOSTEO EN FACTURACION',
+      cls: 'bg-blue-500/20 text-blue-300 border-blue-500/30',
+      title: 'Gerente comercial dio check, esperando aprobacion de Facturacion',
+    },
+    aprobado: {
+      label: 'LISTO PARA DESPOSTEAR',
+      cls: 'bg-emerald-500/25 text-emerald-200 border-emerald-500/40 animate-pulse',
+      title: 'Facturacion aprobo. TI puede cancelar el POST.',
+    },
+    ejecutado: {
+      label: 'DESPOSTEADO',
+      cls: 'bg-zinc-500/20 text-zinc-300 border-zinc-500/30',
+      title: 'El POST ya se cancelo tras autorizacion.',
+    },
+    rechazado: {
+      label: 'DESPOSTEO RECHAZADO',
+      cls: 'bg-red-500/20 text-red-300 border-red-500/30',
+      title: 'La solicitud fue rechazada.',
+    },
+  };
+  const c = cfg[estado.estatus];
+  return (
+    <span title={c.title} className={`text-[9px] font-semibold px-1 py-0.5 rounded border shrink-0 cursor-help ${c.cls}`}>
+      {c.label}
+    </span>
+  );
 }
 
 function GroupSummaryInline({ items, groupField, isDark: isDarkProp }: { items: InventarioReservado[]; groupField: string; isDark?: boolean }) {
@@ -1109,6 +1149,15 @@ export function CampanaDetailPage() {
     }
     return map;
   }, [postLog]);
+
+  // Estados de desposteo por APS — para pintar badges "en curso" / "listo TI"
+  // en el listado con APS. Se muestra a todos los roles; solo TI puede accionar.
+  const { data: estadosDesposteoAps = {} } = useQuery({
+    queryKey: ['desposteo-estados-aps', campanaId],
+    queryFn: () => desposteoService.estadosAps(campanaId),
+    staleTime: 1000 * 30,
+    placeholderData: (prev) => prev,
+  });
 
   const { data: inventarioConAPS = [], isLoading: isLoadingAPS, error: errorAPS, refetch: refetchAPS } = useQuery({
     queryKey: ['campana-inventario-aps', campanaId],
@@ -4829,6 +4878,9 @@ export function CampanaDetailPage() {
                             {activeGroupingsAPS[0] === 'aps' && allGroupItemsAPS[0] && prefacturaAPSGroups.has(allGroupItemsAPS[0].aps) && (
                               <span className="text-[9px] font-semibold px-1 py-0.5 rounded bg-amber-500/20 text-amber-400 border border-amber-500/30 shrink-0">PRE FACTURA</span>
                             )}
+                            {activeGroupingsAPS[0] === 'aps' && allGroupItemsAPS[0] && (
+                              <DesposteoBadge estado={estadosDesposteoAps[allGroupItemsAPS[0].aps]} />
+                            )}
                             <GroupSummaryInline items={allGroupItemsAPS} groupField={activeGroupingsAPS[0]} />
                             <span className="ml-auto text-[10px] text-muted-foreground shrink-0">
                               {totalItems} items
@@ -4982,6 +5034,9 @@ export function CampanaDetailPage() {
                                           {activeGroupingsAPS[1] === 'aps' && allSubItemsAPS[0] && prefacturaAPSGroups.has(allSubItemsAPS[0].aps) && (
                                             <span className="text-[9px] font-semibold px-1 py-0.5 rounded bg-amber-500/20 text-amber-400 border border-amber-500/30 shrink-0">PRE FACTURA</span>
                                           )}
+                                          {activeGroupingsAPS[1] === 'aps' && allSubItemsAPS[0] && (
+                                            <DesposteoBadge estado={estadosDesposteoAps[allSubItemsAPS[0].aps]} />
+                                          )}
                                           <GroupSummaryInline items={allSubItemsAPS} groupField={activeGroupingsAPS[1]} />
                                           <span className="ml-auto text-[10px] text-muted-foreground shrink-0">
                                             {subTotalItems}
@@ -5129,6 +5184,9 @@ export function CampanaDetailPage() {
                                                         )}
                                                         {activeGroupingsAPS[2] === 'aps' && thirdItems[0] && prefacturaAPSGroups.has(thirdItems[0].aps) && (
                                                           <span className="text-[9px] font-semibold px-1 py-0.5 rounded bg-amber-500/20 text-amber-400 border border-amber-500/30 shrink-0">PRE FACTURA</span>
+                                                        )}
+                                                        {activeGroupingsAPS[2] === 'aps' && thirdItems[0] && (
+                                                          <DesposteoBadge estado={estadosDesposteoAps[thirdItems[0].aps]} />
                                                         )}
                                                         <GroupSummaryInline items={thirdItems} groupField={activeGroupingsAPS[2]} />
                                                         <span className="ml-auto text-[10px] text-muted-foreground shrink-0">
