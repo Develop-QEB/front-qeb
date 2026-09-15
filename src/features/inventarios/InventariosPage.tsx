@@ -1838,25 +1838,77 @@ export function InventariosPage() {
                       ) : (
                         <div className="space-y-2">
                           {accionesData.map((accion) => {
-                            const accionStyles: Record<string, { bg: string; text: string; border: string }> = {
-                              reservado: { bg: isDark ? 'bg-amber-500/20' : 'bg-amber-50', text: isDark ? 'text-amber-300' : 'text-amber-700', border: 'border-amber-500/30' },
-                              quitado_de_campana: { bg: isDark ? 'bg-red-500/20' : 'bg-red-50', text: isDark ? 'text-red-300' : 'text-red-700', border: 'border-red-500/30' },
-                              bloqueado: { bg: isDark ? 'bg-red-500/20' : 'bg-red-50', text: isDark ? 'text-red-300' : 'text-red-700', border: 'border-red-500/30' },
-                              desbloqueado: { bg: isDark ? 'bg-emerald-500/20' : 'bg-emerald-50', text: isDark ? 'text-emerald-300' : 'text-emerald-700', border: 'border-emerald-500/30' },
-                              actualizado: { bg: isDark ? 'bg-cyan-500/20' : 'bg-cyan-50', text: isDark ? 'text-cyan-300' : 'text-cyan-700', border: 'border-cyan-500/30' },
-                              creado: { bg: isDark ? 'bg-blue-500/20' : 'bg-blue-50', text: isDark ? 'text-blue-300' : 'text-blue-700', border: 'border-blue-500/30' },
+                            // El color sale de la accion (mas especifica) y cae al
+                            // tipo_evento que manda el back. Vendida/venta en rojo,
+                            // apartado en ambar, liberacion en gris: el mismo
+                            // codigo de color que usa el resto del modulo.
+                            const paleta = {
+                              rojo: { bg: isDark ? 'bg-red-500/20' : 'bg-red-50', text: isDark ? 'text-red-300' : 'text-red-700', border: 'border-red-500/30' },
+                              ambar: { bg: isDark ? 'bg-amber-500/20' : 'bg-amber-50', text: isDark ? 'text-amber-300' : 'text-amber-700', border: 'border-amber-500/30' },
+                              verde: { bg: isDark ? 'bg-emerald-500/20' : 'bg-emerald-50', text: isDark ? 'text-emerald-300' : 'text-emerald-700', border: 'border-emerald-500/30' },
+                              cyan: { bg: isDark ? 'bg-cyan-500/20' : 'bg-cyan-50', text: isDark ? 'text-cyan-300' : 'text-cyan-700', border: 'border-cyan-500/30' },
+                              azul: { bg: isDark ? 'bg-blue-500/20' : 'bg-blue-50', text: isDark ? 'text-blue-300' : 'text-blue-700', border: 'border-blue-500/30' },
+                              gris: { bg: isDark ? 'bg-zinc-500/20' : 'bg-zinc-100', text: isDark ? 'text-zinc-300' : 'text-zinc-700', border: 'border-zinc-500/30' },
                             };
-                            const style = accionStyles[accion.accion.toLowerCase()] || { bg: isDark ? 'bg-zinc-500/20' : 'bg-zinc-50', text: isDark ? 'text-zinc-300' : 'text-zinc-700', border: 'border-zinc-500/30' };
+                            const a = accion.accion.toLowerCase();
+                            const style =
+                              a.startsWith('vendida') || a.startsWith('pasó a ventas') ? paleta.rojo
+                              : a.startsWith('reservada') ? paleta.ambar
+                              : a.startsWith('liberada') ? paleta.gris
+                              : a.startsWith('bloqueado') ? paleta.rojo
+                              : a.startsWith('desbloqueado') ? paleta.verde
+                              : a.startsWith('actualizado') ? paleta.cyan
+                              : a.startsWith('creado') ? paleta.azul
+                              : a.includes('conflicto') || a.includes('limpieza') ? paleta.ambar
+                              : accion.tipo_evento === 'venta' ? paleta.rojo
+                              : accion.tipo_evento === 'reserva' ? paleta.ambar
+                              : accion.tipo_evento === 'liberacion' ? paleta.gris
+                              : accion.tipo_evento === 'conflicto' ? paleta.ambar
+                              : paleta.gris;
+                            const href = accion.campana_id
+                              ? `/campanas/detail/${accion.campana_id}`
+                              : accion.propuesta_id
+                                ? `/propuestas?viewId=${accion.propuesta_id}`
+                                : null;
+                            const dondeLabel = accion.campana_id
+                              ? (accion.campana_nombre || `Campaña #${accion.campana_id}`)
+                              : accion.propuesta_id
+                                ? `Propuesta #${accion.propuesta_id}`
+                                : null;
                             return (
                               <div key={accion.id} className={`p-4 rounded-xl ${isDark ? 'bg-zinc-800/30 border-zinc-800/50' : 'bg-gray-50 border-gray-200'} border`}>
-                                <div className="flex items-center justify-between gap-3">
-                                  <div className="flex items-center gap-2 flex-1 min-w-0">
+                                <div className="flex items-start justify-between gap-3">
+                                  <div className="flex items-start gap-2 flex-1 min-w-0">
                                     <span className={`px-2 py-0.5 rounded-full text-[10px] font-medium ${style.bg} ${style.text} border ${style.border} shrink-0`}>
                                       {accion.accion}
                                     </span>
-                                    {accion.detalles && (
-                                      <p className={`text-xs ${isDark ? 'text-zinc-400' : 'text-gray-500'} truncate`}>{accion.detalles}</p>
-                                    )}
+                                    <div className="min-w-0 flex-1">
+                                      {accion.detalles && (
+                                        <p className={`text-xs ${isDark ? 'text-zinc-400' : 'text-gray-500'}`}>{accion.detalles}</p>
+                                      )}
+                                      {(dondeLabel || accion.catorcena || accion.articulo) && (
+                                        <div className="flex flex-wrap items-center gap-x-2 gap-y-1 mt-1">
+                                          {dondeLabel && href && (
+                                            <a
+                                              href={href}
+                                              target="_blank"
+                                              rel="noopener noreferrer"
+                                              className={`text-[10px] underline underline-offset-2 ${accion.campana_id ? (isDark ? 'text-purple-300 hover:text-purple-200' : 'text-purple-700') : (isDark ? 'text-amber-300 hover:text-amber-200' : 'text-amber-700')}`}
+                                            >
+                                              {dondeLabel}
+                                            </a>
+                                          )}
+                                          {accion.catorcena && (
+                                            <span className={`text-[10px] px-1.5 py-0.5 rounded-full border ${isDark ? 'border-zinc-700 text-zinc-400' : 'border-gray-300 text-gray-500'}`}>
+                                              {accion.catorcena}
+                                            </span>
+                                          )}
+                                          {accion.articulo && (
+                                            <span className={`text-[10px] font-mono ${isDark ? 'text-zinc-500' : 'text-gray-500'}`}>{accion.articulo}</span>
+                                          )}
+                                        </div>
+                                      )}
+                                    </div>
                                   </div>
                                   <div className="text-right shrink-0">
                                     <p className={`text-[10px] ${isDark ? 'text-zinc-500' : 'text-gray-400'}`}>
