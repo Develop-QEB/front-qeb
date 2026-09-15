@@ -1,13 +1,28 @@
 import api from '../lib/api';
 import { Inventario, InventarioMapItem, InventarioStats, PaginatedResponse, ApiResponse } from '../types';
 
+/**
+ * Un evento de la timeline de un inventario. La arma el back combinando varias
+ * fuentes (historial propio, reservas, pase a ventas, conflictos), asi que el
+ * `id` es una clave compuesta ('hist-12', 'rsv-99-alta', 'conf-3-limp'), no un
+ * autoincremental.
+ */
 export interface AccionInventario {
-  id: number;
+  id: string;
   inventario_id: number;
+  /** Para agrupar/colorear sin parsear el texto. */
+  tipo_evento?: 'inventario' | 'reserva' | 'venta' | 'liberacion' | 'conflicto';
   accion: string;
   detalles: string | null;
   usuario_nombre: string | null;
   fecha: string;
+  reserva_id?: number | null;
+  propuesta_id?: number | null;
+  campana_id?: number | null;
+  campana_nombre?: string | null;
+  catorcena?: string | null;
+  articulo?: string | null;
+  estatus?: string | null;
 }
 
 export interface BulkCreateResult {
