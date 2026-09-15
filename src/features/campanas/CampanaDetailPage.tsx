@@ -19,7 +19,7 @@ import { getPermissions } from '../../lib/permissions';
 import { useSocketCampana } from '../../hooks/useSocket';
 import { NotasDireccionBitacora } from '../notificaciones/NotasDireccionBitacora';
 import { DesposteoModal } from '../desposteo/DesposteoModal';
-import { puedeSolicitarDesposteo, puedeBypassearDesposteo, desposteoService, EstadoAps } from '../../services/desposteo.service';
+import { puedeSolicitarDesposteo, puedeBypassearDesposteo, esRolTIDesposteo, desposteoService, EstadoAps } from '../../services/desposteo.service';
 
 const statusVariants: Record<string, 'secondary' | 'success' | 'warning' | 'info'> = {
   Aprobada: 'success',
