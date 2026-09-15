@@ -232,8 +232,12 @@ const ROLES_FACTURACION = new Set([
 ]);
 const ROLES_BYPASS = new Set(['Administrador', 'DEV']);
 
-export function puedeSolicitarDesposteo(rol?: string | null): boolean {
-  return !!rol && ROLES_SOLICITA.has(rol);
+// Flujo desposteo temporalmente oculto en UI mientras se cierran ajustes
+// pendientes (drawer + finalizar tarea, enriquecer modal, indicadores, rol
+// Analista, permisos finales, tabulador). Al terminar esos ajustes, regresar
+// a la implementacion basada en ROLES_SOLICITA.
+export function puedeSolicitarDesposteo(_rol?: string | null): boolean {
+  return false;
 }
 export function puedeFiltrarDesposteo(rol?: string | null): boolean {
   return !!rol && ROLES_FILTRO_GC.has(rol);
