@@ -4208,16 +4208,36 @@ export function CampanaDetailPage() {
                   <span className={`text-[10px] sm:text-xs font-medium ${isDark ? 'text-rose-300' : 'text-rose-700'}`}>Solicitar desposteo</span>
                 </button>
               )}
-              {(permissions.canCancelPostSAP || user?.area === 'TI') && inventarioConAPS.length > 0 && (
-                <button
-                  onClick={() => { setCancelPostSAPResult(null); setShowCancelPostSAPModal(true); }}
-                  className={`flex items-center justify-center px-2 sm:px-3 py-1 sm:py-1.5 rounded-lg border transition-colors ${isDark ? 'bg-red-900/30 border-red-500/20 hover:bg-red-500/20 hover:border-red-500/40' : 'bg-red-50 border-red-200 hover:bg-red-100'}`}
-                  title={puedeBypassearDesposteo(user?.rol) ? 'Cancelar POST a SAP (DEV/Admin: bypass sin solicitud aprobada)' : 'Cancelar POST a SAP - requiere solicitud de desposteo aprobada'}
-                >
-                  <XCircle className={`h-3 sm:h-3.5 w-3 sm:w-3.5 mr-1 ${isDark ? 'text-red-400' : 'text-red-600'}`} />
-                  <span className={`text-[10px] sm:text-xs font-medium ${isDark ? 'text-red-300' : 'text-red-700'}`}>Cancelar POST</span>
-                </button>
-              )}
+              {/* Cancelar POST — visible solo para Admin/DEV (bypass emergencia)
+                  y roles TI. Para TI, deshabilitado si no hay ningun APS con
+                  desposteo aprobado por Facturacion. Feedback Jos: cualquier
+                  otro rol no debe ver el boton (aunque el back siempre valida). */}
+              {(puedeBypassearDesposteo(user?.rol) || esRolTIDesposteo(user?.rol)) && inventarioConAPS.length > 0 && (() => {
+                const isTI = esRolTIDesposteo(user?.rol) && !puedeBypassearDesposteo(user?.rol);
+                const hayApsAprobado = Object.values(estadosDesposteoAps).some(e => e.estatus === 'aprobado');
+                const tiBloqueado = isTI && !hayApsAprobado;
+                return (
+                  <button
+                    onClick={() => { if (tiBloqueado) return; setCancelPostSAPResult(null); setShowCancelPostSAPModal(true); }}
+                    disabled={tiBloqueado}
+                    className={`flex items-center justify-center px-2 sm:px-3 py-1 sm:py-1.5 rounded-lg border transition-colors ${
+                      tiBloqueado
+                        ? (isDark ? 'bg-red-900/10 border-red-500/10 opacity-50 cursor-not-allowed' : 'bg-red-50/50 border-red-100 opacity-50 cursor-not-allowed')
+                        : (isDark ? 'bg-red-900/30 border-red-500/20 hover:bg-red-500/20 hover:border-red-500/40' : 'bg-red-50 border-red-200 hover:bg-red-100')
+                    }`}
+                    title={
+                      puedeBypassearDesposteo(user?.rol)
+                        ? 'Cancelar POST a SAP (Admin/DEV: bypass sin solicitud aprobada, queda auditado)'
+                        : tiBloqueado
+                          ? 'No hay ningun APS con desposteo aprobado por Facturacion. Espera la autorizacion para poder cancelar.'
+                          : 'Cancelar POST a SAP — requiere solicitud de desposteo aprobada'
+                    }
+                  >
+                    <XCircle className={`h-3 sm:h-3.5 w-3 sm:w-3.5 mr-1 ${isDark ? 'text-red-400' : 'text-red-600'}`} />
+                    <span className={`text-[10px] sm:text-xs font-medium ${isDark ? 'text-red-300' : 'text-red-700'}`}>Cancelar POST</span>
+                  </button>
+                );
+              })()}
             </div>
           </div>
           <div className="grid grid-cols-1 lg:grid-cols-[1fr_2fr] gap-3 md:gap-4 p-3 md:p-4">
