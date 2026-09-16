@@ -9,7 +9,7 @@ import { GoogleMap, useLoadScript, Marker, Circle, Autocomplete, InfoWindow } fr
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell } from 'recharts';
 import { formatCurrency, formatDate } from '../../lib/utils';
 import { toNum } from '../../utils/excelFormat';
-import { descargarExcelCompartir, FMT_ENTERO, FMT_MONEDA, FMT_COORD } from '../../utils/excelCompartir';
+import { descargarExcelCompartir, FMT_ENTERO, FMT_COORD } from '../../utils/excelCompartir';
 import { useThemeStore } from '../../store/themeStore';
 // Versionado de circuitos completados (ultima version completada; piezas
 // desplazadas/quitadas en gris). Mismos helpers que la Vista Compartir interna.
@@ -496,14 +496,16 @@ export function ClientePropuestaPage() {
   const handleDownloadXLSX = () => {
     // Sin columna "Estado" para el cliente: la pieza en reasignación solo va con
     // la fila atenuada en gris.
-    const headers = ['Codigo', 'Plaza', 'Ubicacion', 'Tipo Cara', 'Formato', 'Tipo Inventario', 'Articulo', 'Caras', 'Tarifa', 'Periodo', 'Latitud', 'Longitud', ...(mostrarOrigen ? ['Origen'] : [])];
+    // Mismas columnas acordadas que el Excel del mapa: fuera Tipo Cara, Articulo
+    // y Tarifa; "Codigo" se llama "Clave única".
+    const headers = ['Clave única', 'Plaza', 'Ubicacion', 'Formato', 'Tipo Inventario', 'Caras', 'Periodo', 'Latitud', 'Longitud', ...(mostrarOrigen ? ['Origen'] : [])];
     const filas = inventario.map(i => ({
       noVigente: esNoVigente(i),
       // Tinte azul/verde por origen (solo campañas); el gris de no vigente gana.
       fondoArgb: excelFondoOrigen(i, mostrarOrigen),
       valores: [
-        i.codigo_unico, i.plaza, i.ubicacion, i.tipo_de_cara, i.mueble, i.tradicional_digital || '', i.articulo,
-        toNum(i.caras_totales), tarifaBruta(i), formatInicioPeriodo(i, tipoPeriodo), toNum(i.latitud), toNum(i.longitud),
+        i.codigo_unico, i.plaza, i.ubicacion, i.mueble, i.tradicional_digital || '',
+        toNum(i.caras_totales), formatInicioPeriodo(i, tipoPeriodo), toNum(i.latitud), toNum(i.longitud),
         ...(mostrarOrigen ? [origenTexto(i, true)] : []),
       ],
     }));
@@ -514,8 +516,8 @@ export function ClientePropuestaPage() {
       subLeyenda: leyendaVersion(inventario) || undefined,
       headers,
       filas,
-      // Caras (7), Tarifa (8), Latitud (10), Longitud (11) como celdas tipo número
-      formatos: { 7: FMT_ENTERO, 8: FMT_MONEDA, 10: FMT_COORD, 11: FMT_COORD },
+      // Caras (5), Latitud (7), Longitud (8) como celdas tipo número
+      formatos: { 5: FMT_ENTERO, 7: FMT_COORD, 8: FMT_COORD },
     }], mostrarOrigen ? ORIGEN_LEYENDA : undefined)
       .catch(err => console.error('Error generando Excel:', err));
   };
