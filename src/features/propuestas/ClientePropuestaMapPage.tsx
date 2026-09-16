@@ -8,7 +8,7 @@ import {
 import { GoogleMap, useLoadScript, Marker, Circle, Autocomplete, InfoWindow } from '@react-google-maps/api';
 import { formatCurrency } from '../../lib/utils';
 import { toNum } from '../../utils/excelFormat';
-import { descargarExcelCompartir, FMT_ENTERO, FMT_MONEDA, FMT_COORD } from '../../utils/excelCompartir';
+import { descargarExcelCompartir, FMT_ENTERO, FMT_COORD } from '../../utils/excelCompartir';
 // Versionado de circuitos completados: pines/filas 'no_vigente' en gris.
 // Vista del CLIENTE: las piezas en reasignación solo se atenúan en gris, sin
 // etiqueta ni leyenda ni columna de estado. La explicación vive únicamente en
@@ -392,14 +392,17 @@ export function ClientePropuestaMapPage() {
   const handleDownloadXLSX = () => {
     // Sin columna "Estado" para el cliente: la pieza en reasignación solo va con
     // la fila atenuada en gris.
-    const headers = ['Catorcena', 'Circuito', 'Codigo', 'Plaza', 'Ubicacion', 'Tipo Cara', 'Formato', 'Tipo Inventario', 'Articulo', 'Caras', 'Tarifa', 'Latitud', 'Longitud', ...(mostrarOrigen ? ['Origen'] : [])];
+    // Columnas acordadas con el cliente: fuera Circuito, Tipo Cara, Articulo y
+    // Tarifa (nomenclatura interna y dato comercial); "Codigo" se llama
+    // "Clave única", que es como le dice el cliente.
+    const headers = ['Catorcena', 'Clave única', 'Plaza', 'Ubicacion', 'Formato', 'Tipo Inventario', 'Caras', 'Latitud', 'Longitud', ...(mostrarOrigen ? ['Origen'] : [])];
     const filas = downloadRows.map(i => ({
       noVigente: esNoVigente(i),
       // Tinte azul/verde por origen (solo campañas); el gris de no vigente gana.
       fondoArgb: excelFondoOrigen(i, mostrarOrigen),
       valores: [
-        i._catLabel, i.articulo || '', i.codigo_unico, i.plaza, i.ubicacion, i.tipo_de_cara, i.mueble,
-        i.tradicional_digital || '', i.articulo, toNum(i.caras_totales), tarifaBruta(i), toNum(i.latitud), toNum(i.longitud),
+        i._catLabel, i.codigo_unico, i.plaza, i.ubicacion, i.mueble,
+        i.tradicional_digital || '', toNum(i.caras_totales), toNum(i.latitud), toNum(i.longitud),
         ...(mostrarOrigen ? [origenTexto(i, true)] : []),
       ],
     }));
@@ -409,8 +412,8 @@ export function ClientePropuestaMapPage() {
       subLeyenda: leyendaVersion(baseRows) || undefined,
       headers,
       filas,
-      // Caras (9), Tarifa (10), Latitud (11), Longitud (12) como celdas tipo número
-      formatos: { 9: FMT_ENTERO, 10: FMT_MONEDA, 11: FMT_COORD, 12: FMT_COORD },
+      // Caras (6), Latitud (7), Longitud (8) como celdas tipo número
+      formatos: { 6: FMT_ENTERO, 7: FMT_COORD, 8: FMT_COORD },
     }], mostrarOrigen ? ORIGEN_LEYENDA : undefined)
       .catch(err => console.error('Error generando Excel:', err));
   };
@@ -874,15 +877,15 @@ export function ClientePropuestaMapPage() {
                     <span className="h-2.5 w-2.5 rounded-full" style={{ backgroundColor: colorFor(selectedMarker._catKey) }} />
                     <h4 className="font-bold text-sm" style={{ color: IMU_DARK }}>{selectedMarker.codigo_unico}</h4>
                   </div>
+                  {/* Tarjeta de pin para el CLIENTE: se omiten a propósito
+                      Circuito (nomenclatura interna), Tipo de cara y Tarifa
+                      (dato comercial). El resto sí le sirve para ubicar la pieza. */}
                   <div className="text-xs space-y-1">
                     <p><strong>Catorcena:</strong> {selectedMarker._catLabel}</p>
-                    <p><strong>Circuito:</strong> {selectedMarker.articulo || 'N/A'}</p>
                     <p><strong>Plaza:</strong> {selectedMarker.plaza || 'N/A'}</p>
-                    <p><strong>Tipo:</strong> {selectedMarker.tipo_de_cara || 'N/A'}</p>
                     <p><strong>Formato:</strong> {selectedMarker.mueble || 'N/A'}</p>
                     <p><strong>Ubicacion:</strong> {selectedMarker.ubicacion || 'N/A'}</p>
                     <p><strong>{(selectedMarker.mueble || '').toUpperCase().includes('PUENTE PEATONAL') ? 'Puentes' : 'Caras'}:</strong> {selectedMarker.caras_totales}</p>
-                    <p><strong>Tarifa:</strong> {formatCurrency(tarifaBruta(selectedMarker))}</p>
                     {mostrarOrigen && origenDe(selectedMarker) && (
                       <p><strong>Origen:</strong>{' '}
                         <span style={{ color: ORIGEN_COLOR[origenDe(selectedMarker)!] }}>{ORIGEN_LABEL[origenDe(selectedMarker)!]}</span>
