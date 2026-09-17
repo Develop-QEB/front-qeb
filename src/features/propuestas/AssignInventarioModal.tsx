@@ -4,15 +4,16 @@ import { useQuery, useQueryClient, useMutation } from '@tanstack/react-query';
 import {
   X, Search, Plus, Trash2, ChevronDown, ChevronRight, ChevronUp, Users,
   FileText, MapPin, Layers, Pencil, Map as MapIcon, Package, Calendar,
-  Gift, Target, Save, ArrowLeft, Filter, Grid, LayoutGrid, Ruler, ArrowUpDown, ArrowUp, ArrowDown, Download, Eye, Funnel, Check, Upload, Monitor, AlertTriangle, Trophy, Loader2, Clock, RefreshCw
+  Gift, Target, Save, ArrowLeft, Filter, Grid, LayoutGrid, Ruler, ArrowUpDown, ArrowUp, ArrowDown, Download, Eye, Funnel, Check, Upload, Monitor, AlertTriangle, Trophy, Loader2, Clock, RefreshCw, History
 } from 'lucide-react';
 import { GoogleMap, useLoadScript, Marker } from '@react-google-maps/api';
 import { GOOGLE_MAPS_LOADER_OPTIONS } from '../../config/googleMaps';
 import { AdvancedMapComponent } from './AdvancedMapComponent';
+import { HistorialInventarioPanel } from './HistorialInventarioPanel';
 import { Propuesta } from '../../types';
 import { solicitudesService, UserOption } from '../../services/solicitudes.service';
 import { inventariosService, InventarioDisponible } from '../../services/inventarios.service';
-import { propuestasService, ReservaModalItem, CaraUpdateData } from '../../services/propuestas.service';
+import { propuestasService, ReservaModalItem, CaraUpdateData, type ReservaHistorialItem } from '../../services/propuestas.service';
 import { formatCurrency } from '../../lib/utils';
 import { parseCircuitoDigital } from '../../lib/circuitos';
 import { getRequiredPeriodoForArticulo } from '../../lib/periodos';
@@ -1076,7 +1077,7 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
   const [expandedGroups, setExpandedGroups] = useState<Set<string>>(new Set(['Grupo 1']));
 
   // Tab state for search view (buscar / reservados)
-  const [searchViewTab, setSearchViewTab] = useState<'buscar' | 'reservados'>('buscar');
+  const [searchViewTab, setSearchViewTab] = useState<'buscar' | 'reservados' | 'historial'>('buscar');
 
   // Disponibles data
   const [inventarioDisponible, setInventarioDisponible] = useState<InventarioDisponible[]>([]);
@@ -1184,6 +1185,14 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
   const { data: existingReservas, isLoading: reservasLoading } = useQuery({
     queryKey: ['propuesta-reservas-modal', propuesta.id],
     queryFn: () => propuestasService.getReservasForModal(propuesta.id),
+    enabled: isOpen && !!propuesta.id,
+    refetchOnMount: 'always',
+  });
+
+  // Historial del circuito (reservas que salieron: quitadas/desplazadas/bloqueo)
+  const { data: historialInventario } = useQuery({
+    queryKey: ['propuesta-reservas-historial', propuesta.id],
+    queryFn: () => propuestasService.getReservasHistorial(propuesta.id),
     enabled: isOpen && !!propuesta.id,
     refetchOnMount: 'always',
   });
@@ -4843,6 +4852,49 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
     );
   }, [reservas, selectedCaraForSearch]);
 
+  // Historial (reservas que salieron) de la cara seleccionada — para el tab Historial.
+  const currentCaraHistorial = useMemo(() => {
+    if (!selectedCaraForSearch?.id) return [];
+    return (historialInventario || []).filter(h => h.solicitud_cara_id === selectedCaraForSearch.id);
+  }, [historialInventario, selectedCaraForSearch]);
+
+  const [reReservandoHistId, setReReservandoHistId] = useState<number | null>(null);
+  // Regresar a reservados un inventario del historial (solo si sigue disponible).
+  const handleReReservarHistorial = async (item: ReservaHistorialItem) => {
+    if (!item.disponible) return;
+    const cara = caras.find(c => c.id === item.solicitud_cara_id) || selectedCaraForSearch;
+    if (!cara?.id) { showToast('No se encontró el circuito de esta reserva', 'error'); return; }
+    const clienteId = solicitudDetails?.propuesta?.cliente_id ?? propuesta.cliente_id;
+    if (clienteId === undefined || clienteId === null) { showToast('Cliente ID no encontrado', 'error'); return; }
+    const fechaInicio = cara.inicio_periodo || item.inicio_periodo || solicitudDetails?.cotizacion?.fecha_inicio || new Date().toISOString();
+    const fechaFin = cara.fin_periodo || item.fin_periodo || solicitudDetails?.cotizacion?.fecha_fin || new Date().toISOString();
+    const esBonif = /bonific/i.test(item.estatus || '') || /bonific/i.test(item.estatus_original || '');
+    const tipo: 'Flujo' | 'Bonificacion' = esBonif ? 'Bonificacion' : 'Flujo';
+    setReReservandoHistId(item.reserva_id);
+    try {
+      const result = await propuestasService.createReservas(propuesta.id, {
+        reservas: [{ inventario_id: item.inventario_id, tipo, latitud: 0, longitud: 0 }],
+        solicitudCaraId: cara.id,
+        clienteId,
+        fechaInicio,
+        fechaFin,
+        agruparComoCompleto: false,
+      });
+      if ((result.reservasCreadas ?? 0) > 0) {
+        showToast(`${item.codigo_unico} regresó a reservados`, 'success');
+      } else {
+        showToast(result.omitidos?.[0]?.motivo || 'No se pudo regresar (quizá ya está ocupado)', 'error');
+      }
+      queryClient.invalidateQueries({ queryKey: ['propuesta-reservas-modal', propuesta.id] });
+      queryClient.invalidateQueries({ queryKey: ['propuesta-reservas-historial', propuesta.id] });
+      queryClient.invalidateQueries({ queryKey: ['propuesta-inventario', propuesta.id] });
+    } catch (e) {
+      showToast(e instanceof Error ? e.message : 'Error al regresar la reserva', 'error');
+    } finally {
+      setReReservandoHistId(null);
+    }
+  };
+
   // Group reservas by grupo_completo_id - shows pairs as single "Completo" item
   const currentCaraReservasMerged = useMemo(() => {
     const result: ReservaItem[] = [];
@@ -5770,6 +5822,21 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
                 {currentCaraReservas.length > 0 && (
                   <span className="px-1.5 py-0.5 bg-emerald-500/30 text-emerald-300 rounded-full text-xs">
                     {currentCaraReservas.length}
+                  </span>
+                )}
+              </button>
+              <button
+                onClick={() => setSearchViewTab('historial')}
+                className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all ${searchViewTab === 'historial'
+                  ? 'bg-purple-500/20 text-purple-300 border border-purple-500/40'
+                  : `${isDark ? 'text-zinc-400' : 'text-gray-500'} ${isDark ? 'hover:text-white' : 'hover:text-gray-900'} ${isDark ? 'hover:bg-zinc-800' : 'hover:bg-gray-100'}`
+                  }`}
+              >
+                <History className="h-4 w-4" />
+                Historial
+                {currentCaraHistorial.length > 0 && (
+                  <span className="px-1.5 py-0.5 bg-purple-500/30 text-purple-300 rounded-full text-xs">
+                    {currentCaraHistorial.length}
                   </span>
                 )}
               </button>
@@ -6830,6 +6897,16 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
                 </div>
               </div>
             </>
+          ) : searchViewTab === 'historial' ? (
+            /* HISTORIAL TAB CONTENT */
+            <HistorialInventarioPanel
+              items={currentCaraHistorial}
+              isDark={isDark}
+              tipoPeriodo={tipoPeriodo}
+              canEdit={effectiveCanEdit}
+              reReservandoId={reReservandoHistId}
+              onReReservar={handleReReservarHistorial}
+            />
           ) : (
             /* RESERVADOS TAB CONTENT */
             <div className="flex-1 flex overflow-hidden">
