@@ -1,4 +1,4 @@
-import { useEffect, useRef, useCallback } from 'react';
+import { useEffect, useRef, useCallback, useState } from 'react';
 import { io, Socket } from 'socket.io-client';
 import { useQueryClient } from '@tanstack/react-query';
 import { useNotifToastStore } from '../store/notifToastStore';
@@ -579,6 +579,56 @@ export function useSocketPropuesta(propuestaId: number | null) {
   }, []);
 
   return { emit };
+}
+
+/**
+ * Estatus EN VIVO de una propuesta o campaña.
+ *
+ * Por qué existe: los modales reciben el registro como prop y ese objeto se
+ * congela al abrirlo. Si alguien cambia el estatus mientras el modal está
+ * abierto, la pantalla sigue creyendo el estatus viejo. Eso importa para el
+ * bloqueo de "Ajuste Comercial": Tráfico podía estar dentro del buscador de
+ * formatos reservando y no enterarse de que el asesor ya se la llevó.
+ * Feedback 2026-09-17 (Jos).
+ *
+ * El back ya emite `propuesta:status:changed` / `campana:status:changed` al
+ * room del registro, y los modales ya están unidos a ese room vía
+ * useSocketPropuesta / useSocketCampana — este hook solo los escucha.
+ *
+ * Devuelve `statusInicial` hasta que llegue un evento; se re-sincroniza si el
+ * prop cambia (p. ej. el modal se reabre con otro registro).
+ */
+export function useEstatusEnVivo(
+  entidad: 'propuesta' | 'campana',
+  id: number | null | undefined,
+  statusInicial?: string | null
+): string | null | undefined {
+  const [status, setStatus] = useState(statusInicial);
+
+  useEffect(() => {
+    setStatus(statusInicial);
+  }, [statusInicial, id]);
+
+  useEffect(() => {
+    if (!id || id <= 0) return;
+
+    const socket = getSocket();
+    const evento = entidad === 'propuesta'
+      ? SOCKET_EVENTS.PROPUESTA_STATUS_CHANGED
+      : SOCKET_EVENTS.CAMPANA_STATUS_CHANGED;
+
+    const handler = (data: { propuestaId?: number; campanaId?: number; statusNuevo?: string }) => {
+      const idEvento = entidad === 'propuesta' ? data.propuestaId : data.campanaId;
+      if (idEvento !== id || !data.statusNuevo) return;
+      console.log(`[Socket] Estatus en vivo de ${entidad} ${id}:`, data.statusNuevo);
+      setStatus(data.statusNuevo);
+    };
+
+    socket.on(evento, handler);
+    return () => { socket.off(evento, handler); };
+  }, [entidad, id]);
+
+  return status;
 }
 
 /**
