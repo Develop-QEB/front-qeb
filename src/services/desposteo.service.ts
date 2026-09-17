@@ -278,10 +278,14 @@ export const TIPO_NOTA_LABEL: Record<TipoNota, string> = {
   ejecucion: 'Ejecutado en SAP',
 };
 
-// Feature flag: si false, oculta boton de solicitar desposteo hasta cerrar
-// el paquete de ajustes pendientes con Jos (drawer + finalizar tarea, badges,
-// tabulador). Reactivar poniendo en true cuando este todo listo.
-export const FEATURE_SOLICITAR_DESPOSTEO_ACTIVE = false;
+// Feature flag: si false, oculta el boton de solicitar desposteo.
+//
+// PRENDIDO el 2026-09-17 junto con el del back (deben ir iguales): ya estan
+// el drawer con finalizar tarea, el modal enriquecido, los badges por APS y
+// la matriz de roles. Falta solo el escalado por tabulador, que mientras Jos
+// no defina los rangos corre con el comportamiento actual (siempre pasa por
+// el filtro del gerente comercial).
+export const FEATURE_SOLICITAR_DESPOSTEO_ACTIVE = true;
 
 // Roles con permisos (deben coincidir con back).
 // Feedback Jos: Asesores + Analistas pueden iniciar; Admin/TI no.
