@@ -337,6 +337,14 @@ export const propuestasService = {
     return response.data.data;
   },
 
+  async getReservasHistorial(propuestaId: number): Promise<ReservaHistorialItem[]> {
+    const response = await api.get<ApiResponse<ReservaHistorialItem[]>>(`/propuestas/${propuestaId}/reservas-historial`);
+    if (!response.data.success || !response.data.data) {
+      throw new Error(response.data.error || 'Error al obtener historial');
+    }
+    return response.data.data;
+  },
+
   async updatePropuesta(
     id: number,
     data: {
@@ -501,4 +509,35 @@ export interface ReservaModalItem {
   grupo_completo_id: number | null;
   solicitud_cara_id: number;
   articulo: string | null;
+}
+
+// Fila del tab "Historial" del buscador: reserva que salió del circuito
+// (quitada / desplazada / por bloqueo). Reserva soft-eliminada + estado actual
+// del inventario + si se puede volver a reservar.
+export interface ReservaHistorialItem {
+  reserva_id: number;
+  espacio_id: number;
+  inventario_id: number;
+  codigo_unico: string;
+  tipo_de_cara: string | null;
+  formato: string | null;      // = inventarios.mueble
+  ubicacion: string | null;
+  isla: string | null;
+  plaza: string | null;
+  municipio: string | null;
+  ancho: number | null;
+  alto: number | null;
+  tradicional_digital: string | null;
+  estatus_inventario: string | null;
+  estatus: string;             // estatus que tenía la reserva al salir
+  estatus_original: string | null;
+  deleted_at: string | null;   // cuándo salió
+  aps?: number | null;
+  solicitud_cara_id: number;
+  articulo: string | null;
+  inicio_periodo: string | null;
+  fin_periodo: string | null;
+  disponible: boolean;         // ¿se puede volver a reservar hoy?
+  motivo_salida: 'Bloqueado' | 'Desplazado' | 'Quitado' | string;
+  motivo_no_disponible: string | null;
 }
