@@ -287,8 +287,8 @@ export const FEATURE_SOLICITAR_DESPOSTEO_ACTIVE = false;
 // Feedback Jos: Asesores + Analistas pueden iniciar; Admin/TI no.
 const ROLES_ASESOR = ['Asesor Comercial', 'Asesor Comercial Aeropuerto'];
 const ROLES_ANALISTA = ['Asesor Analista', 'Analista de Servicio al Cliente', 'Analista de Aeropuerto'];
-const ROLES_SOLICITA = new Set([...ROLES_ASESOR, ...ROLES_ANALISTA]);
-const ROLES_FILTRO_GC = new Set([
+const ROLES_SOLICITA = [...ROLES_ASESOR, ...ROLES_ANALISTA];
+const ROLES_FILTRO_GC = [
   'Gerente Comercial Vía Pública',
   'Gerente Comercial Via Publica',
   'Gerente Comercial Plazas',
@@ -296,29 +296,59 @@ const ROLES_FILTRO_GC = new Set([
   'Gerente Comercial',
   'Administrador',
   'DEV',
-]);
-const ROLES_FACTURACION = new Set([
+];
+// Fix 2026-09-17: faltaban 'Analista de Facturación y Cobranza' y
+// 'Especialista de Facturación'. Con solo los coordinadores, un analista de
+// facturación abría el modal en solo lectura y no podía aprobar. Los 4 roles
+// son los que el resto del sistema ya trata como facturación.
+const ROLES_FACTURACION = [
   'Coordinador de Facturación y Cobranza',
   'Coordinador de Facturación',
+  'Analista de Facturación y Cobranza',
+  'Especialista de Facturación',
   'Administrador',
   'DEV',
-]);
-const ROLES_BYPASS = new Set(['Administrador', 'DEV']);
-const ROLES_TI = new Set(['Gerente de TI', 'Especialista de TI', 'Analista de TI']);
+];
+const ROLES_BYPASS = ['Administrador', 'DEV'];
+const ROLES_TI = ['Gerente de TI', 'Especialista de TI', 'Analista de TI'];
+
+/**
+ * Compara roles sin depender de acentos ni mayúsculas.
+ *
+ * Los `user_role` de la BD no están normalizados y las dos bases difieren:
+ * en PROD el coordinador de facturación está guardado SIN acento
+ * ('Coordinador de Facturacion y Cobranza') y en PRUEBAS CON acento. Con una
+ * comparación exacta, en producción no pasaba ningún guard de facturación.
+ * Espejo de `rolEnLista()` del back (`utils/permissions.ts`).
+ */
+function normalizarRol(rol?: string | null): string {
+  return (rol || '')
+    .normalize('NFD')
+    .replace(/[̀-ͯ]/g, '')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .toLowerCase();
+}
+
+function rolEnLista(rol: string | null | undefined, lista: readonly string[]): boolean {
+  const objetivo = normalizarRol(rol);
+  if (!objetivo) return false;
+  return lista.some(r => normalizarRol(r) === objetivo);
+}
 
 export function puedeSolicitarDesposteo(rol?: string | null): boolean {
   if (!FEATURE_SOLICITAR_DESPOSTEO_ACTIVE) return false;
-  return !!rol && ROLES_SOLICITA.has(rol);
+  return rolEnLista(rol, ROLES_SOLICITA);
 }
 export function puedeFiltrarDesposteo(rol?: string | null): boolean {
-  return !!rol && ROLES_FILTRO_GC.has(rol);
+  return rolEnLista(rol, ROLES_FILTRO_GC);
 }
 export function puedeAprobarDesposteoFacturacion(rol?: string | null): boolean {
-  return !!rol && ROLES_FACTURACION.has(rol);
+  return rolEnLista(rol, ROLES_FACTURACION);
 }
 export function puedeBypassearDesposteo(rol?: string | null): boolean {
-  return !!rol && ROLES_BYPASS.has(rol);
+  return rolEnLista(rol, ROLES_BYPASS);
 }
 export function esRolTIDesposteo(rol?: string | null): boolean {
-  return !!rol && ROLES_TI.has(rol);
+  return rolEnLista(rol, ROLES_TI);
 }

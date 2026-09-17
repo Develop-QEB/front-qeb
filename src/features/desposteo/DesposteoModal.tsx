@@ -102,6 +102,11 @@ export function DesposteoModal({ isOpen, onClose, modo, campaniaId, aps, solicit
     // Refrescar tareas/notificaciones que muestran esta solicitud
     qc.invalidateQueries({ queryKey: ['notificaciones'] });
     qc.invalidateQueries({ queryKey: ['tareas'] });
+    // Badges de estado por APS en el detalle de campaña. Sin esto el badge
+    // ("DESPOSTEO SOLICITADO" / "LISTO PARA DESPOSTEAR") se quedaba hasta 30s
+    // con el estado viejo tras aprobar o rechazar, porque esa query tiene
+    // staleTime de 30s y vive en otra pantalla.
+    qc.invalidateQueries({ queryKey: ['desposteo-estados-aps'] });
   };
 
   const solicitarMut = useMutation({

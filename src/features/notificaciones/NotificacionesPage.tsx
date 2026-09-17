@@ -8,7 +8,7 @@ import {
   MessageSquare, Send, Plus, Pencil, Trash2, StickyNote,
   Users, Tag, Building2, Download, Table2, ExternalLink, Bell, ClipboardList,
   Filter, Layers, ArrowUpDown, ArrowUp, ArrowDown, Check, Loader2, UserCheck, UserPlus,
-  ShieldCheck, DollarSign
+  ShieldCheck, DollarSign, Ban
 } from 'lucide-react';
 import { Header } from '../../components/layout/Header';
 import { notificacionesService, CaraAutorizacion, ResumenAutorizacion, HistorialAutorizacion } from '../../services/notificaciones.service';
@@ -29,6 +29,7 @@ import { propuestasService } from '../../services/propuestas.service';
 import { campanasService } from '../../services/campanas.service';
 import { NotasDireccionBitacora } from './NotasDireccionBitacora';
 import { DesposteoModal, ModoDesposteo } from '../desposteo/DesposteoModal';
+import { puedeFiltrarDesposteo, puedeAprobarDesposteoFacturacion } from '../../services/desposteo.service';
 import { NuevaActividadComercialModal } from './NuevaActividadComercialModal';
 
 // Roles que pueden crear tarea manual "Actividad Comercial".
@@ -43,6 +44,20 @@ const ROLES_ACTIVIDAD_COMERCIAL = new Set([
 ]);
 
 // ============ HELPERS ============
+// El id de la solicitud de desposteo viaja serializado en `contenido` de la
+// tarea ({"desposteoId":N}), no en una columna propia. Si el JSON viene mal
+// devolvemos null y el botón simplemente no se pinta, en vez de tronar.
+function getDesposteoIdDeTarea(tarea: { contenido?: string | null }): number | null {
+  try {
+    const raw = typeof tarea.contenido === 'string' ? tarea.contenido : '';
+    if (!raw) return null;
+    const id = Number(JSON.parse(raw)?.desposteoId);
+    return Number.isFinite(id) && id > 0 ? id : null;
+  } catch {
+    return null;
+  }
+}
+
 // Tipos de tareas creadas desde el Gestor de Artes. Estas tareas se
 // atienden en su modal real (con side-effects: aprobar arte, subir foto,
 // rotar roles, marcar instalado, etc). NUNCA deben cerrarse via el boton
@@ -2227,6 +2242,7 @@ function TaskDrawer({
   onAutorizacionAction,
   contentType,
   onOpenApprovalModal,
+  onOpenDesposteoModal,
 }: {
   tarea: Notificacion & { comentarios?: ComentarioTarea[] };
   onClose: () => void;
@@ -2237,6 +2253,7 @@ function TaskDrawer({
   onAutorizacionAction?: () => void;
   contentType: ContentType;
   onOpenApprovalModal?: () => void;
+  onOpenDesposteoModal?: () => void;
 }) {
   const isDark = useThemeStore((s) => s.theme) === 'dark';
   const [comment, setComment] = useState('');
@@ -2308,8 +2325,19 @@ function TaskDrawer({
     },
   });
 
+  // Tareas del flujo de desposteo. Se evalúan ANTES que isAutorizacionTask
+  // porque 'Autorización Desposteo' también contiene la palabra
+  // "Autorización" y no debe entrar por el camino del ApprovalModal (que
+  // consulta caras/resumen de una propuesta y aquí no aplica).
+  const esDesposteoTask = tarea.tipo === 'Filtro Desposteo' || tarea.tipo === 'Autorización Desposteo';
+  const puedeActuarDesposteo = esDesposteoTask && (
+    tarea.tipo === 'Filtro Desposteo'
+      ? puedeFiltrarDesposteo(user?.rol)
+      : puedeAprobarDesposteoFacturacion(user?.rol)
+  );
+
   // Detectar si es tarea de autorización
-  const isAutorizacionTask = tarea.tipo?.includes('Autorización');
+  const isAutorizacionTask = !esDesposteoTask && tarea.tipo?.includes('Autorización');
   const tipoAutorizacion = tarea.tipo?.includes('DG') ? 'dg' : tarea.tipo?.includes('DCM') ? 'dcm' : null;
 
   const [idPropuestaState, setIdPropuestaState] = useState<string | null>(tarea.id_propuesta || null);
@@ -2620,16 +2648,43 @@ function TaskDrawer({
             </button>
           )}
 
+          {/* Desposteo: abre el modal de autorización del desposteo desde la
+              ventana lateral (antes la tarea abría el modal directo y se
+              saltaba este panel). La tarea NO se finaliza a mano: el back la
+              cierra al aprobar o rechazar. Feedback 2026-09-17 (Jos). */}
+          {esDesposteoTask && puedeActuarDesposteo && tarea.estatus === 'Pendiente' && onOpenDesposteoModal && (
+            <button
+              onClick={() => onOpenDesposteoModal()}
+              className="mt-4 w-full flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl text-sm font-bold transition-all hover:scale-[1.02] active:scale-[0.98] bg-gradient-to-r from-rose-500 to-red-500 text-white hover:from-rose-400 hover:to-red-400 shadow-lg shadow-rose-500/20"
+            >
+              <Ban className="h-4 w-4" />
+              {tarea.tipo === 'Filtro Desposteo' ? 'Revisar y dar check' : 'Revisar y autorizar desposteo'}
+            </button>
+          )}
+          {esDesposteoTask && onOpenDesposteoModal && tarea.estatus !== 'Pendiente' && (
+            <button
+              onClick={() => onOpenDesposteoModal()}
+              className={`mt-4 w-full flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl text-sm font-bold transition-all ${isDark ? 'bg-zinc-700 text-zinc-200 hover:bg-zinc-600' : 'bg-gray-200 text-gray-700 hover:bg-gray-300'}`}
+            >
+              <Ban className="h-4 w-4" />
+              Ver desposteo
+            </button>
+          )}
+
           {/* Botón finalizar tarea.
               Oculto para todas las tareas generadas en Gestor de Artes: se
               atienden en la tarea real del modal de Gestor, no en el preview
               lateral. Finalizar aquí solo marcaria estatus=Atendido sin
               disparar los side-effects reales (aprobar arte, subir foto,
               rotar roles, marcar reserva como instalada, etc). Feedback de
-              Jos 2026-07-09 — antes solo se excluia 'Revisión de artes'. */}
+              Jos 2026-07-09 — antes solo se excluia 'Revisión de artes'.
+              Mismo criterio para las tareas de desposteo (2026-09-17): el
+              back las cierra al aprobar/rechazar, y marcarlas Atendido a mano
+              dejaria la solicitud sin resolver. */}
           {contentType === 'tareas'
             && !['Director General', 'Gerente Comercial Vía Pública', 'Gerente Comercial Plazas', 'Gerente Comercial'].includes(user?.rol || '')
-            && !isTareaGestorArtes(tarea.tipo) && (
+            && !isTareaGestorArtes(tarea.tipo)
+            && !esDesposteoTask && (
             <button
               onClick={(e) => {
                 e.stopPropagation();
@@ -3496,23 +3551,13 @@ export function NotificacionesPage() {
 
   // Handlers
   const handleSelectTarea = useCallback(async (tarea: Notificacion) => {
-    // Desposteo Fase 2: Filtro Desposteo (GC) y Autorización Desposteo
-    // (Facturación) usan el DesposteoModal en vez del TaskDrawer. El
-    // desposteoId viene en el JSON de `contenido` de la tarea.
-    if (tarea.tipo === 'Filtro Desposteo' || tarea.tipo === 'Autorización Desposteo') {
-      try {
-        const raw = typeof tarea.contenido === 'string' ? tarea.contenido : '';
-        const parsed = raw ? JSON.parse(raw) : {};
-        const desposteoId = Number(parsed?.desposteoId);
-        if (Number.isFinite(desposteoId) && desposteoId > 0) {
-          setDesposteoModal({
-            desposteoId,
-            modo: tarea.tipo === 'Filtro Desposteo' ? 'filtro' : 'facturacion',
-          });
-          return;
-        }
-      } catch { /* fallthrough al TaskDrawer normal */ }
-    }
+    // Desposteo: ANTES estas dos tareas abrían el DesposteoModal directo y se
+    // saltaban el TaskDrawer con un `return`. Consecuencia: no había panel
+    // lateral, ni comentarios, ni botón de finalizar, así que la tarea se
+    // quedaba activa aunque el gerente ya hubiera dado check.
+    // Feedback 2026-09-17 (Jos): abrir la ventana lateral y desde ahí el modal.
+    // Ahora cae al flujo normal de abajo y el drawer pinta el botón "Revisar
+    // desposteo" (ver esDesposteoTask en el TaskDrawer).
     const isDirectorUser = ['Director General', 'Director Comercial'].includes(user?.rol || '');
     const isAuthTask = tarea.tipo?.includes('Autorización');
     if (isDirectorUser && isAuthTask) {
@@ -4342,7 +4387,25 @@ export function NotificacionesPage() {
               queryClient.invalidateQueries({ queryKey: ['notificaciones-stats'] });
             }}
             contentType={contentType}
-            onOpenApprovalModal={selectedTarea.tipo?.includes('Autorización') ? () => setApprovalModalTarea(selectedTarea) : undefined}
+            onOpenApprovalModal={
+              selectedTarea.tipo?.includes('Autorización') && selectedTarea.tipo !== 'Autorización Desposteo'
+                ? () => setApprovalModalTarea(selectedTarea)
+                : undefined
+            }
+            onOpenDesposteoModal={
+              (selectedTarea.tipo === 'Filtro Desposteo' || selectedTarea.tipo === 'Autorización Desposteo')
+                ? () => {
+                    // El desposteoId viaja en el JSON de `contenido` de la tarea.
+                    const desposteoId = getDesposteoIdDeTarea(selectedTarea);
+                    if (desposteoId) {
+                      setDesposteoModal({
+                        desposteoId,
+                        modo: selectedTarea.tipo === 'Filtro Desposteo' ? 'filtro' : 'facturacion',
+                      });
+                    }
+                  }
+                : undefined
+            }
           />
         </>
       )}
@@ -4356,6 +4419,14 @@ export function NotificacionesPage() {
           onDone={() => {
             queryClient.invalidateQueries({ queryKey: ['notificaciones'] });
             queryClient.invalidateQueries({ queryKey: ['notificaciones-stats'] });
+            // Refrescar la tarea abierta en el drawer: el back la cierra al
+            // aprobar/rechazar, así que sin esto el panel lateral seguiría
+            // mostrándola como Pendiente. Mismo patrón que el ApprovalModal.
+            if (selectedTarea) {
+              notificacionesService.getById(selectedTarea.id)
+                .then(updated => setSelectedTarea(updated))
+                .catch(console.error);
+            }
           }}
         />
       )}
