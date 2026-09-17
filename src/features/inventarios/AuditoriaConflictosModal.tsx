@@ -1,7 +1,8 @@
-import { useState, useMemo, useEffect, useRef, useCallback } from 'react';
+import { Fragment, useState, useMemo, useEffect, useRef, useCallback } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import {
   X, AlertTriangle, Loader2, Calendar, Search, Download, BarChart3, CheckCircle2, Trash2, ExternalLink, History,
+  ChevronRight, Info, Lock,
 } from 'lucide-react';
 import { useThemeStore } from '../../store/themeStore';
 import { solicitudesService } from '../../services/solicitudes.service';
@@ -9,6 +10,7 @@ import {
   inventariosService,
   ConflictoOcupacionRow,
   LimpiezaDuplicadosResult,
+  ReservaEnCelda,
 } from '../../services/inventarios.service';
 import { CatorcenaRef, InventarioResumen } from '../../services/analisisOcupacion.service';
 
@@ -41,6 +43,82 @@ function calcularVigentes(
     .sort((a, b) => a.a_o - b.a_o || a.numero_catorcena - b.numero_catorcena)
     .slice(0, cantidad)
     .map(c => ({ numero: c.numero_catorcena, anio: c.a_o }));
+}
+
+// ── Lógica de ocupación ─────────────────────────────────────────────────────
+// Espejo de ESTATUS_FIRME / ESTATUS_TENTATIVO en inventario-bloqueo.service.ts
+// del back. Es la partición que decide qué ocupa una cara, y por tanto qué
+// puede ser conflicto. Si cambia allá, cambia aquí.
+const ESTATUS_FIRME = ['Vendido', 'Vendido bonificado', 'Con Arte', 'Sin Arte'] as const;
+const ESTATUS_TENTATIVO = ['Reservado', 'Bonificado'] as const;
+// 'Con Arte' / 'Sin Arte' NO son estatus de ocupación: son estado del ARTE que
+// se coló en la columna `estatus`. Son ventas (su venta real está en
+// `estatus_original`), asi que ocupan igual, pero no se muestran como si fueran
+// una forma de estar vendido: aquí se normalizan a su venta y el estado del
+// arte se muestra aparte, que es de dónde viene (gestor de artes).
+const ESTATUS_DE_ARTE = ['Con Arte', 'Sin Arte'] as const;
+// Las ventas de verdad, para los textos de la UI: 'Con Arte'/'Sin Arte' quedan
+// fuera porque son estado del arte, no una forma distinta de estar vendido.
+const ESTATUS_VENTA = ['Vendido', 'Vendido bonificado'] as const;
+
+/** Qué significa cada estatus de OCUPACIÓN y si ocupa la cara. Alimenta la leyenda. */
+const SIGNIFICADO_ESTATUS: { estatus: string; ocupa: boolean; que_es: string }[] = [
+  { estatus: 'Vendido', ocupa: true, que_es: 'Venta firme de renta.' },
+  { estatus: 'Vendido bonificado', ocupa: true, que_es: 'Venta firme de una cara bonificada.' },
+  { estatus: 'Reservado', ocupa: false, que_es: 'Apartado de una propuesta. Varias propuestas pueden apartar la misma cara: el ganador se define al vender.' },
+  { estatus: 'Bonificado', ocupa: false, que_es: 'Apartado de una bonificación en propuesta. Tampoco ocupa.' },
+];
+
+const esFirme = (estatus: string): boolean => (ESTATUS_FIRME as readonly string[]).includes(estatus);
+const esEstatusDeArte = (estatus: string): boolean => (ESTATUS_DE_ARTE as readonly string[]).includes(estatus);
+
+/**
+ * La venta real de la reserva, sin el ruido del arte: si la columna `estatus`
+ * trae 'Con Arte'/'Sin Arte', la venta está en `estatus_original`.
+ */
+function estatusVenta(res: { estatus: string; estatus_original?: string | null }): string {
+  if (!esEstatusDeArte(res.estatus)) return res.estatus;
+  return res.estatus_original || 'Vendido';
+}
+
+/** Estado del arte de la reserva. Informativo: no influye en la ocupación. */
+function estadoArte(res: ReservaEnCelda): string {
+  const cargado = res.estatus === 'Con Arte' || res.tiene_arte === true;
+  const base = esEstatusDeArte(res.estatus)
+    ? (res.estatus === 'Con Arte' ? 'Con arte' : 'Sin arte')
+    : (cargado ? 'Con arte' : '');
+  const aprobado = (res.arte_aprobado || '').trim();
+  if (base && aprobado) return `${base} · ${aprobado}`;
+  return base || aprobado || '-';
+}
+
+/** Clave de celda (sitio × catorcena), para expandir/colapsar filas. */
+const claveCelda = (r: { inventario_id: number; anio: number; numero_catorcena: number }): string =>
+  `${r.inventario_id}|${r.anio}|${r.numero_catorcena}`;
+
+/**
+ * Cuenta las reservas por estatus de VENTA (normalizado: 'Con Arte'/'Sin Arte'
+ * se cuentan como la venta que son). El estado del arte no entra aquí.
+ */
+function resumenEstatus(reservas: ReservaEnCelda[] | undefined): { estatus: string; n: number }[] {
+  if (!reservas || reservas.length === 0) return [];
+  const map = new Map<string, number>();
+  for (const r of reservas) {
+    const e = estatusVenta(r);
+    map.set(e, (map.get(e) || 0) + 1);
+  }
+  return [...map.entries()].map(([estatus, n]) => ({ estatus, n }));
+}
+
+/** Dónde vive la reserva: campaña si ya lo es, propuesta si sigue en propuestas. */
+function dondeVive(r: ReservaEnCelda): { label: string; href: string | null } {
+  if (r.campana_id) {
+    return { label: r.campana_nombre || `Campaña #${r.campana_id}`, href: `/campanas/detail/${r.campana_id}` };
+  }
+  if (r.propuesta_id) {
+    return { label: `Propuesta #${r.propuesta_id}`, href: `/propuestas?viewId=${r.propuesta_id}` };
+  }
+  return { label: 'Sin campaña ni propuesta', href: null };
 }
 
 /**
@@ -77,6 +155,25 @@ export function AuditoriaConflictosModal({ open, onClose, onOpenEnMatriz, autoIn
   // 'conflictos' = auditar y limpiar; 'limpiezas' = bitacora de lo ya limpiado
   // (automatico y manual), para tener registro consultable.
   const [vista, setVista] = useState<'conflictos' | 'limpiezas'>('conflictos');
+  // Segunda categoría de la auditoría: apartados de propuesta encima de
+  // inventario YA VENDIDO. No son "2 ventas firmes" (por eso no salen en la
+  // tabla de arriba), pero sí son inventario que la propuesta cree tener y no
+  // va a poder llevarse. Normalmente el desalojo los libera al vender; lo que
+  // cae aquí es lo que quedó colgado.
+  const [resultadoApartados, setResultadoApartados] = useState<ConflictoOcupacionRow[] | null>(null);
+  const [verApartados, setVerApartados] = useState(false);
+  // Celdas expandidas para ver el detalle por reserva (estatus + dónde vive).
+  const [expandidas, setExpandidas] = useState<Set<string>>(new Set());
+  const [showLeyenda, setShowLeyenda] = useState(false);
+
+  const toggleExpandida = (k: string) => {
+    setExpandidas(prev => {
+      const next = new Set(prev);
+      if (next.has(k)) next.delete(k);
+      else next.add(k);
+      return next;
+    });
+  };
 
   const { data: catorcenasYear, isLoading: loadingCatorcenas } = useQuery({
     queryKey: ['catorcenas', yearSelected],
@@ -106,6 +203,7 @@ export function AuditoriaConflictosModal({ open, onClose, onOpenEnMatriz, autoIn
 
   const toggleCatorcena = (c: CatorcenaRef) => {
     setResultado(null);
+    setResultadoApartados(null);
     setCatorcenasSelected(prev => {
       const exists = prev.some(p => p.numero === c.numero && p.anio === c.anio);
       if (exists) return prev.filter(p => !(p.numero === c.numero && p.anio === c.anio));
@@ -115,6 +213,7 @@ export function AuditoriaConflictosModal({ open, onClose, onOpenEnMatriz, autoIn
 
   const seleccionarTodasDelAnio = () => {
     setResultado(null);
+    setResultadoApartados(null);
     const todas = (catorcenasYear?.data || []).map(c => ({ numero: c.numero_catorcena, anio: c.a_o }));
     setCatorcenasSelected(prev => {
       const map = new Map(prev.map(p => [`${p.anio}-${p.numero}`, p]));
@@ -128,11 +227,23 @@ export function AuditoriaConflictosModal({ open, onClose, onOpenEnMatriz, autoIn
     setCorriendo(true);
     setError(null);
     setResultado(null);
+    setResultadoApartados(null);
     setResultadoLimpieza(null);
+    setExpandidas(new Set());
     try {
       // Sin `ids`: el backend audita el inventario completo.
-      const rows = await inventariosService.getConflictosOcupacion(cats);
+      // Las dos categorías se piden en paralelo: son consultas independientes y
+      // así la auditoría no tarda el doble.
+      const [rows, apartados] = await Promise.all([
+        inventariosService.getConflictosOcupacion(cats),
+        // Si falla la categoría nueva no se pierde la auditoría de siempre.
+        inventariosService.getApartadosSobreVenta(cats).catch(err => {
+          console.error('Error al auditar apartados sobre venta:', err);
+          return null;
+        }),
+      ]);
       setResultado(rows);
+      setResultadoApartados(apartados);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Error al auditar conflictos');
     } finally {
@@ -225,6 +336,67 @@ export function AuditoriaConflictosModal({ open, onClose, onOpenEnMatriz, autoIn
     }
   };
 
+  // Sitios únicos de los apartados sobre venta, para mandarlos al análisis de
+  // ocupación con el mismo shape que usa la tabla de conflictos.
+  const apartadosInventariosUnicos = useMemo(() => {
+    const map = new Map<number, InventarioResumen>();
+    for (const r of resultadoApartados ?? []) {
+      if (map.has(r.inventario_id)) continue;
+      map.set(r.inventario_id, {
+        id: r.inventario_id,
+        codigo_unico: r.codigo_unico,
+        ubicacion: r.ubicacion,
+        mueble: r.mueble,
+        plaza: r.plaza,
+        tradicional_digital: r.tradicional_digital,
+      });
+    }
+    return Array.from(map.values());
+  }, [resultadoApartados]);
+
+  /**
+   * CSV de los apartados sobre venta: una fila por celda, con el inventario, la
+   * catorcena, quién vendió y quién sigue apartando. Pensado para llevarlo al
+   * análisis de ocupación y gestionarlo ahí.
+   */
+  const descargarCsvApartados = useCallback(() => {
+    const filas = resultadoApartados ?? [];
+    if (filas.length === 0) return;
+    const esc = (v: unknown) => {
+      const s = v === null || v === undefined ? '' : String(v);
+      return /[",;\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
+    };
+    const headers = [
+      'inventario_id', 'codigo_unico', 'plaza', 'mueble', 'ubicacion',
+      'catorcena', 'anio', 'vendida_por_campana_id', 'vendida_por_campana',
+      'apartada_por_propuestas', 'reservas_firmes', 'apartados',
+    ];
+    const lineas = filas.map(r => [
+      r.inventario_id,
+      r.codigo_unico ?? '',
+      r.plaza ?? '',
+      r.mueble ?? '',
+      r.ubicacion ?? '',
+      r.numero_catorcena,
+      r.anio,
+      (r.campanas ?? []).map(c => c.id).join(' | '),
+      (r.campanas ?? []).map(c => c.nombre).join(' | '),
+      (r.propuestas ?? []).join(' | '),
+      r.firmes ?? '',
+      r.apartados ?? '',
+    ].map(esc).join(','));
+    // BOM para que Excel respete los acentos al abrirlo de doble clic.
+    const blob = new Blob(['﻿' + [headers.join(','), ...lineas].join('\n')], {
+      type: 'text/csv;charset=utf-8;',
+    });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `apartados_sobre_venta_${new Date().toISOString().slice(0, 10)}.csv`;
+    a.click();
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
+  }, [resultadoApartados]);
+
   const inventariosUnicos = useMemo(() => {
     const map = new Map<number, InventarioResumen>();
     for (const r of filtrados) {
@@ -263,6 +435,7 @@ export function AuditoriaConflictosModal({ open, onClose, onOpenEnMatriz, autoIn
         { header: 'Año', key: 'anio', width: 8 },
         { header: 'Tipo', key: 'tipo', width: 12 },
         { header: 'Reservas', key: 'n', width: 10 },
+        { header: 'Estatus', key: 'estatus', width: 34 },
         { header: 'Campañas', key: 'origenes', width: 11 },
         { header: 'Plaza', key: 'plaza', width: 22 },
         { header: 'Mueble', key: 'mueble', width: 16 },
@@ -284,6 +457,9 @@ export function AuditoriaConflictosModal({ open, onClose, onOpenEnMatriz, autoIn
           tipo: esChoque ? 'Choque' : 'Duplicado',
           // Numéricos de verdad, para poder ordenar y filtrar en Excel.
           n: r.n,
+          // Desglose de estatus: todas ocupan, pero no es lo mismo un 'Vendido'
+          // que un 'Sin Arte' cuando hay que decidir a quién reclamarle.
+          estatus: resumenEstatus(r.reservas).map(e => (e.n > 1 ? `${e.n}x ${e.estatus}` : e.estatus)).join(', '),
           origenes: r.origenes,
           plaza: r.plaza || '',
           mueble: r.mueble || '',
@@ -295,8 +471,59 @@ export function AuditoriaConflictosModal({ open, onClose, onOpenEnMatriz, autoIn
         }
       }
 
-      sheet.autoFilter = { from: 'A1', to: `I${filtrados.length + 1}` };
+      sheet.autoFilter = { from: 'A1', to: `J${filtrados.length + 1}` };
       sheet.views = [{ state: 'frozen', ySplit: 1 }];
+
+      // Hoja de detalle: una fila POR RESERVA, con su estatus y dónde vive.
+      // Es la que sirve para repartir el trabajo: dice a qué campaña/propuesta
+      // y a qué circuito hay que ir por cada pieza en conflicto.
+      const filasDetalle = filtrados.flatMap(r =>
+        (r.reservas ?? []).map(res => ({
+          codigo: r.codigo_unico || `#${r.inventario_id}`,
+          cat: `C${r.numero_catorcena}-${r.anio}`,
+          estatus: estatusVenta(res),
+          ocupa: esFirme(res.estatus) ? 'Sí' : 'No',
+          arte: estadoArte(res),
+          articulo: res.articulo || '',
+          donde: dondeVive(res).label,
+          campana_id: res.campana_id ?? '',
+          propuesta_id: res.propuesta_id ?? '',
+          circuito: res.solicitud_cara_id,
+          espacio: res.espacio_id,
+          periodo: res.inicio_periodo && res.fin_periodo ? `${res.inicio_periodo} a ${res.fin_periodo}` : '',
+          aps: res.aps && res.aps > 0 ? res.aps : '',
+          post: res.posted ? 'Sí' : '',
+          reserva: res.reserva_id,
+        }))
+      );
+      if (filasDetalle.length > 0) {
+        const det = wb.addWorksheet('Reservas');
+        det.columns = [
+          { header: 'Código', key: 'codigo', width: 36 },
+          { header: 'Catorcena', key: 'cat', width: 12 },
+          { header: 'Estatus', key: 'estatus', width: 18 },
+          { header: '¿Ocupa?', key: 'ocupa', width: 9 },
+          { header: 'Arte', key: 'arte', width: 22 },
+          { header: 'Artículo', key: 'articulo', width: 16 },
+          { header: 'Dónde está', key: 'donde', width: 40 },
+          { header: 'Campaña ID', key: 'campana_id', width: 12 },
+          { header: 'Propuesta ID', key: 'propuesta_id', width: 13 },
+          { header: 'Circuito', key: 'circuito', width: 10 },
+          { header: 'Espacio', key: 'espacio', width: 10 },
+          { header: 'Periodo del circuito', key: 'periodo', width: 26 },
+          { header: 'APS', key: 'aps', width: 10 },
+          { header: 'POST', key: 'post', width: 8 },
+          { header: 'Reserva', key: 'reserva', width: 10 },
+        ];
+        const detHeader = det.getRow(1);
+        detHeader.font = { bold: true, color: { argb: 'FFFFFFFF' } };
+        detHeader.alignment = { vertical: 'middle', horizontal: 'center' };
+        detHeader.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF7C3AED' } };
+        detHeader.height = 22;
+        filasDetalle.forEach(f => det.addRow(f));
+        det.autoFilter = { from: 'A1', to: `O${filasDetalle.length + 1}` };
+        det.views = [{ state: 'frozen', ySplit: 1 }];
+      }
 
       // Hoja de contexto: sin esto el archivo no dice sobre qué se corrió.
       const resumen = wb.addWorksheet('Resumen');
@@ -319,6 +546,16 @@ export function AuditoriaConflictosModal({ open, onClose, onOpenEnMatriz, autoIn
         ['', ''],
         ['Choque', 'Campañas distintas ocupando la misma cara: hay que liberar una.'],
         ['Duplicado', 'Una sola campaña con varias reservas sobre la misma cara: error de armado.'],
+        ['', ''],
+        ['QUÉ CUENTA COMO OCUPACIÓN', ''],
+        ...SIGNIFICADO_ESTATUS.map(e => [
+          e.estatus,
+          `${e.ocupa ? 'OCUPA la cara' : 'NO ocupa'} — ${e.que_es}`,
+        ] as [string, string]),
+        ['Con Arte / Sin Arte', 'NO son estatus de ocupación: son estado del arte guardado en la columna del estatus. Son ventas; se reportan como la venta que son y el arte va en su columna.'],
+        ['Impresión (IM-)', 'NO ocupa: es producción, no renta de la cara. Fuera del conteo y la limpieza nunca la toca.'],
+        ['Digital', 'Fuera del conteo: varias campañas comparten pantalla.'],
+        ['Reserva con APS', 'Nunca se borra. Con dos APS en la misma celda, se omite y se revisa con SAP.'],
       ];
       filas.forEach(([k, v]) => resumen.addRow([k, v]));
       resumen.getRow(1).font = { bold: true, size: 13 };
@@ -361,7 +598,7 @@ export function AuditoriaConflictosModal({ open, onClose, onOpenEnMatriz, autoIn
             <div>
               <h2 className={`text-lg font-semibold ${isDark ? 'text-white' : 'text-gray-900'}`}>Auditoría de Conflictos</h2>
               <p className={`text-xs ${isDark ? 'text-amber-300/50' : 'text-amber-500'}`}>
-                Tradicionales con 2+ reservas FIRMES (ventas) en la misma catorcena · todo el inventario
+                Tradicionales con 2+ ventas firmes en la misma catorcena · la impresión (IM-) y los Digitales no cuentan · aparte se listan los apartados de propuesta sobre inventario ya vendido
               </p>
             </div>
           </div>
@@ -503,7 +740,7 @@ export function AuditoriaConflictosModal({ open, onClose, onOpenEnMatriz, autoIn
             </button>
             {catorcenasSelected.length > 0 && (
               <button
-                onClick={() => { setCatorcenasSelected([]); setResultado(null); }}
+                onClick={() => { setCatorcenasSelected([]); setResultado(null); setResultadoApartados(null); }}
                 className={`px-2.5 py-1 rounded-lg text-xs ${isDark ? 'text-zinc-400 hover:bg-zinc-800' : 'text-gray-600 hover:bg-gray-100'}`}
               >
                 Limpiar
@@ -545,12 +782,162 @@ export function AuditoriaConflictosModal({ open, onClose, onOpenEnMatriz, autoIn
               disabled={catorcenasSelected.length === 0 || corriendo}
               className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium ${isDark ? 'bg-amber-500 text-zinc-900 hover:bg-amber-400' : 'bg-amber-600 text-white hover:bg-amber-700'} disabled:opacity-40 disabled:cursor-not-allowed`}
             >
-              {corriendo ? <Loader2 className="h-4 w-4 animate-spin" /> : <AlertTriangle className="h-4 w-4" />}
+                {corriendo ? <Loader2 className="h-4 w-4 animate-spin" /> : <AlertTriangle className="h-4 w-4" />}
               {corriendo ? 'Auditando...' : 'Auditar todo el inventario'}
+            </button>
+            <button
+              onClick={() => setShowLeyenda(v => !v)}
+              title="Qué estatus ocupan una cara y cuáles no"
+              className={`flex items-center gap-1.5 px-3 py-2 rounded-lg text-xs font-medium border transition-colors ${
+                showLeyenda
+                  ? isDark ? 'bg-amber-500/20 border-amber-500/40 text-amber-200' : 'bg-amber-50 border-amber-300 text-amber-800'
+                  : isDark ? 'bg-zinc-800 border-zinc-700 text-zinc-300 hover:bg-zinc-700' : 'bg-white border-gray-300 text-gray-700 hover:bg-gray-50'
+              }`}
+            >
+              <Info className="h-3.5 w-3.5" />
+              ¿Qué cuenta como ocupación?
             </button>
             {error && <span className={`text-xs ${isDark ? 'text-red-400' : 'text-red-600'}`}>{error}</span>}
           </div>
+
+          {/* Leyenda de estatus: la partición firme/tentativo es la que decide
+              qué ocupa una cara, y es la fuente de casi toda la confusión al
+              leer la auditoría. Se explica aquí en vez de en un tooltip. */}
+          {showLeyenda && (
+            <div className={`rounded-lg border text-xs ${isDark ? 'border-zinc-700 bg-zinc-800/40' : 'border-gray-200 bg-gray-50'} p-3 space-y-2.5`}>
+              <div className={`font-semibold ${isDark ? 'text-white' : 'text-gray-900'}`}>
+                Una cara Tradicional sólo admite UNA venta por catorcena. Eso es lo que audita esta pantalla.
+              </div>
+              <div className="grid gap-1">
+                {SIGNIFICADO_ESTATUS.map(e => (
+                  <div key={e.estatus} className="flex items-start gap-2">
+                    <span
+                      className={`shrink-0 mt-0.5 px-1.5 py-0.5 rounded-full text-[10px] font-medium border w-[130px] text-center ${
+                        e.ocupa
+                          ? isDark ? 'bg-red-500/15 text-red-300 border-red-500/30' : 'bg-red-50 text-red-700 border-red-200'
+                          : isDark ? 'bg-zinc-700/50 text-zinc-300 border-zinc-600' : 'bg-white text-gray-600 border-gray-300'
+                      }`}
+                    >
+                      {e.estatus}
+                    </span>
+                    <span className={`shrink-0 font-semibold ${e.ocupa ? (isDark ? 'text-red-300' : 'text-red-700') : (isDark ? 'text-zinc-500' : 'text-gray-500')}`}>
+                      {e.ocupa ? 'OCUPA' : 'no ocupa'}
+                    </span>
+                    <span className={isDark ? 'text-zinc-400' : 'text-gray-600'}>{e.que_es}</span>
+                  </div>
+                ))}
+              </div>
+              <div className={`pt-1.5 border-t space-y-1 ${isDark ? 'border-zinc-700 text-zinc-400' : 'border-gray-200 text-gray-600'}`}>
+                <div>
+                  · <strong>Sólo las ventas ({ESTATUS_VENTA.join(' / ')}) cuentan aquí.</strong> Los {ESTATUS_TENTATIVO.length} apartados
+                  {' '}({ESTATUS_TENTATIVO.join(' / ')}) no bloquean nada y pueden encimarse a propósito: eso no es conflicto.
+                </div>
+                <div>· <strong>Impresión (artículos IM-)</strong> no ocupa la cara: es producción, no renta. Queda fuera del conteo y el botón de limpieza nunca la toca.</div>
+                <div>· <strong>Digitales</strong> quedan fuera: varias campañas comparten pantalla, es normal.</div>
+                <div>
+                  · <strong>«Con Arte» y «Sin Arte» no son formas de ocupar:</strong> son estado del arte
+                  {' '}(gestión de artes) que quedó guardado en la misma columna del estatus. Son ventas, así que
+                  {' '}cuentan como tal, pero aquí se muestran como la venta que son y el estado del arte va en su
+                  {' '}propia columna del detalle.
+                </div>
+                <div>· Una reserva con <strong>APS</strong> nunca se borra; si hay dos con APS, la celda se omite y se revisa a mano con SAP.</div>
+              </div>
+            </div>
+          )}
         </div>
+
+        {/* Categoría 2: apartados de propuesta sobre inventario YA VENDIDO.
+            Va aparte de la tabla de arriba porque no es "2 ventas firmes": es
+            inventario que la propuesta cree tener y que al aprobar va a perder.
+            Se muestra aunque la auditoría de ventas firmes salga limpia. */}
+        {!corriendo && resultadoApartados !== null && resultadoApartados.length > 0 && (
+          <div className={`mx-4 mb-2 rounded-lg border overflow-hidden ${isDark ? 'bg-orange-500/10 border-orange-500/30' : 'bg-orange-50 border-orange-200'}`}>
+            <button
+              onClick={() => setVerApartados(v => !v)}
+              className="w-full flex items-center gap-2 px-3 py-2 text-left"
+            >
+              <AlertTriangle className={`h-4 w-4 shrink-0 ${isDark ? 'text-orange-300' : 'text-orange-600'}`} />
+              <span className={`text-sm font-semibold ${isDark ? 'text-orange-200' : 'text-orange-800'}`}>
+                {resultadoApartados.length.toLocaleString('es-MX')} {resultadoApartados.length === 1 ? 'celda apartada' : 'celdas apartadas'} sobre inventario ya vendido
+              </span>
+              <span className={`text-xs ${isDark ? 'text-orange-300/70' : 'text-orange-700/80'}`}>
+                {new Set(resultadoApartados.flatMap(r => r.propuestas ?? [])).size} propuesta(s) siguen apartando piezas que ya se vendieron
+              </span>
+              <ChevronRight className={`h-4 w-4 ml-auto shrink-0 transition-transform ${verApartados ? 'rotate-90' : ''} ${isDark ? 'text-orange-300' : 'text-orange-600'}`} />
+            </button>
+            {/* Acciones: llevarse los sitios al análisis de ocupación (donde sí
+                se gestionan) o bajarlos en CSV. El panel en sí es de solo lectura. */}
+            <div className="px-3 pb-2 flex items-center gap-2 flex-wrap">
+              <button
+                onClick={() => onOpenEnMatriz(apartadosInventariosUnicos)}
+                disabled={apartadosInventariosUnicos.length === 0}
+                title="Abre el análisis de ocupación con estos sitios ya cargados"
+                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium ${isDark ? 'bg-purple-500/20 text-purple-300 border border-purple-500/30 hover:bg-purple-500/30' : 'bg-purple-50 text-purple-700 border border-purple-200 hover:bg-purple-100'} disabled:opacity-40`}
+              >
+                <BarChart3 className="h-3.5 w-3.5" />
+                Abrir en análisis ({apartadosInventariosUnicos.length.toLocaleString('es-MX')})
+              </button>
+              <button
+                onClick={descargarCsvApartados}
+                title="Descarga la lista completa en CSV"
+                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium ${isDark ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 hover:bg-emerald-500/30' : 'bg-emerald-50 text-emerald-700 border border-emerald-200 hover:bg-emerald-100'}`}
+              >
+                <Download className="h-3.5 w-3.5" />
+                Descargar CSV
+              </button>
+            </div>
+            {verApartados && (
+              <div className={`max-h-64 overflow-auto border-t ${isDark ? 'border-orange-500/20' : 'border-orange-200'}`}>
+                <table className="w-full text-[11px]">
+                  <thead className={`sticky top-0 ${isDark ? 'bg-zinc-900' : 'bg-white'}`}>
+                    <tr className={isDark ? 'text-zinc-400' : 'text-gray-500'}>
+                      <th className="px-2 py-1.5 text-left font-medium">Código</th>
+                      <th className="px-2 py-1.5 text-left font-medium">Plaza</th>
+                      <th className="px-2 py-1.5 text-left font-medium">Cat</th>
+                      <th className="px-2 py-1.5 text-left font-medium">Vendida por</th>
+                      <th className="px-2 py-1.5 text-left font-medium">Sigue apartada por</th>
+                      <th className="px-2 py-1.5 text-center font-medium">Apartados</th>
+                    </tr>
+                  </thead>
+                  <tbody className={isDark ? 'divide-y divide-zinc-800' : 'divide-y divide-gray-100'}>
+                    {resultadoApartados.map(r => (
+                      <tr key={`${r.inventario_id}|${r.anio}|${r.numero_catorcena}`} className={isDark ? 'hover:bg-zinc-800/50' : 'hover:bg-gray-50'}>
+                        <td className={`px-2 py-1.5 font-mono ${isDark ? 'text-zinc-300' : 'text-gray-700'}`}>{r.codigo_unico || `#${r.inventario_id}`}</td>
+                        <td className={`px-2 py-1.5 ${isDark ? 'text-zinc-400' : 'text-gray-600'}`}>{r.plaza || '-'}</td>
+                        <td className={`px-2 py-1.5 ${isDark ? 'text-zinc-400' : 'text-gray-600'}`}>{r.numero_catorcena}/{r.anio}</td>
+                        <td className="px-2 py-1.5">
+                          {(r.campanas ?? []).length === 0 ? <span className={isDark ? 'text-zinc-500' : 'text-gray-400'}>-</span> : (r.campanas ?? []).map(c => (
+                            <a key={c.id} href={`/campanas/detail/${c.id}`} target="_blank" rel="noopener noreferrer"
+                               className={`inline-flex items-center gap-1 mr-2 underline ${isDark ? 'text-emerald-300' : 'text-emerald-700'}`}>
+                              {c.nombre || `Campaña #${c.id}`}<ExternalLink className="h-3 w-3" />
+                            </a>
+                          ))}
+                        </td>
+                        <td className="px-2 py-1.5">
+                          {(r.propuestas ?? []).map(pid => (
+                            <a key={pid} href={`/propuestas?viewId=${pid}`} target="_blank" rel="noopener noreferrer"
+                               className={`inline-flex items-center gap-1 mr-2 underline ${isDark ? 'text-amber-300' : 'text-amber-700'}`}>
+                              Propuesta #{pid}<ExternalLink className="h-3 w-3" />
+                            </a>
+                          ))}
+                        </td>
+                        <td className={`px-2 py-1.5 text-center font-semibold ${isDark ? 'text-orange-300' : 'text-orange-700'}`}>{r.apartados ?? 0}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+            <p className={`px-3 pb-2 text-[11px] ${isDark ? 'text-orange-300/60' : 'text-orange-700/70'}`}>
+              No es doble venta: al aprobar, el sistema descarta esas piezas. Pero la propuesta las muestra como suyas hasta ese momento.
+            </p>
+          </div>
+        )}
+        {!corriendo && resultado !== null && resultadoApartados !== null && resultadoApartados.length === 0 && (
+          <div className={`mx-4 mb-2 px-3 py-1.5 rounded-lg border text-[11px] ${isDark ? 'bg-emerald-500/5 border-emerald-500/20 text-emerald-300/80' : 'bg-emerald-50 border-emerald-200 text-emerald-700'}`}>
+            Sin apartados de propuesta sobre inventario ya vendido en estos periodos.
+          </div>
+        )}
 
         {/* Resultados */}
         <div className="flex-1 overflow-hidden flex flex-col min-h-0">
@@ -684,10 +1071,12 @@ export function AuditoriaConflictosModal({ open, onClose, onOpenEnMatriz, autoIn
                 <table className="w-full text-xs">
                   <thead className={`${isDark ? 'bg-zinc-900 text-amber-300' : 'bg-white text-amber-700'} sticky top-0 z-10`}>
                     <tr className={`border-b ${isDark ? 'border-zinc-800' : 'border-gray-200'}`}>
+                      <th className="px-2 py-2 w-8" title="Ver el detalle de las reservas"></th>
                       <th className="px-3 py-2 text-left font-semibold">Código</th>
                       <th className="px-3 py-2 text-left font-semibold w-28">Catorcena</th>
                       <th className="px-3 py-2 text-center font-semibold w-32">Tipo</th>
-                      <th className="px-3 py-2 text-center font-semibold w-20" title="Reservas vivas en la celda">Reservas</th>
+                      <th className="px-3 py-2 text-center font-semibold w-20" title="Ventas firmes vivas en la celda (los apartados de propuestas y la impresión no cuentan)">Reservas</th>
+                      <th className="px-3 py-2 text-left font-semibold w-56" title="Estatus de esas reservas: todas ocupan la cara">Estatus</th>
                       <th className="px-3 py-2 text-center font-semibold w-24" title="Campañas o propuestas distintas">Campañas</th>
                       <th className="px-3 py-2 text-left font-semibold">Plaza</th>
                       <th className="px-3 py-2 text-left font-semibold">Mueble</th>
@@ -696,11 +1085,24 @@ export function AuditoriaConflictosModal({ open, onClose, onOpenEnMatriz, autoIn
                     </tr>
                   </thead>
                   <tbody>
-                    {filtrados.map(r => (
+                    {filtrados.map(r => {
+                      const k = claveCelda(r);
+                      const abierta = expandidas.has(k);
+                      const detalle = r.reservas ?? [];
+                      const estatuses = resumenEstatus(detalle);
+                      return (
+                      <Fragment key={k}>
                       <tr
-                        key={`${r.inventario_id}-${r.anio}-${r.numero_catorcena}`}
-                        className={`border-b ${isDark ? 'border-zinc-800/60 hover:bg-zinc-800/40' : 'border-gray-100 hover:bg-gray-50'}`}
+                        onClick={() => detalle.length > 0 && toggleExpandida(k)}
+                        className={`border-b ${isDark ? 'border-zinc-800/60 hover:bg-zinc-800/40' : 'border-gray-100 hover:bg-gray-50'} ${detalle.length > 0 ? 'cursor-pointer' : ''}`}
                       >
+                        <td className="px-2 py-1.5 text-center">
+                          {detalle.length > 0 && (
+                            <ChevronRight
+                              className={`h-3.5 w-3.5 transition-transform ${abierta ? 'rotate-90' : ''} ${isDark ? 'text-zinc-500' : 'text-gray-400'}`}
+                            />
+                          )}
+                        </td>
                         <td className={`px-3 py-1.5 font-mono font-medium ${isDark ? 'text-white' : 'text-gray-900'}`}>{r.codigo_unico || `#${r.inventario_id}`}</td>
                         <td className={`px-3 py-1.5 ${isDark ? 'text-zinc-300' : 'text-gray-700'}`}>C{r.numero_catorcena}-{r.anio}</td>
                         <td className="px-3 py-1.5 text-center">
@@ -725,6 +1127,27 @@ export function AuditoriaConflictosModal({ open, onClose, onOpenEnMatriz, autoIn
                             {r.n}
                           </span>
                         </td>
+                        <td className="px-3 py-1.5">
+                          {estatuses.length === 0 ? (
+                            <span className={isDark ? 'text-zinc-600' : 'text-gray-400'}>—</span>
+                          ) : (
+                            <div className="flex flex-wrap gap-1">
+                              {estatuses.map(e => (
+                                <span
+                                  key={e.estatus}
+                                  title={`${e.estatus}: ${SIGNIFICADO_ESTATUS.find(x => x.estatus === e.estatus)?.que_es || 'Estatus no catalogado'}`}
+                                  className={`px-1.5 py-0.5 rounded-full text-[10px] font-medium border whitespace-nowrap ${
+                                    esFirme(e.estatus)
+                                      ? isDark ? 'bg-red-500/15 text-red-300 border-red-500/30' : 'bg-red-50 text-red-700 border-red-200'
+                                      : isDark ? 'bg-zinc-700/50 text-zinc-300 border-zinc-600' : 'bg-white text-gray-600 border-gray-300'
+                                  }`}
+                                >
+                                  {e.n > 1 ? `${e.n}× ` : ''}{e.estatus}
+                                </span>
+                              ))}
+                            </div>
+                          )}
+                        </td>
                         <td className={`px-3 py-1.5 text-center font-medium ${isDark ? 'text-zinc-300' : 'text-gray-700'}`}>{r.origenes}</td>
                         <td className={`px-3 py-1.5 ${isDark ? 'text-zinc-400' : 'text-gray-600'}`}>{r.plaza || '-'}</td>
                         <td className={`px-3 py-1.5 ${isDark ? 'text-zinc-400' : 'text-gray-600'}`}>{r.mueble || '-'}</td>
@@ -732,7 +1155,7 @@ export function AuditoriaConflictosModal({ open, onClose, onOpenEnMatriz, autoIn
                         <td className="px-2 py-1.5 text-center">
                           {r.origenes < 2 && (
                             <button
-                              onClick={() => setObjetivoLimpieza([r])}
+                              onClick={e => { e.stopPropagation(); setObjetivoLimpieza([r]); }}
                               disabled={limpiando}
                               title="Limpiar solo esta celda: conserva una reserva y suelta las sobrantes"
                               className={`p-1.5 rounded-md ${isDark ? 'text-zinc-500 hover:text-red-300 hover:bg-red-500/15' : 'text-gray-400 hover:text-red-600 hover:bg-red-50'} disabled:opacity-40`}
@@ -742,10 +1165,120 @@ export function AuditoriaConflictosModal({ open, onClose, onOpenEnMatriz, autoIn
                           )}
                         </td>
                       </tr>
-                    ))}
+
+                      {/* Detalle: que reservas forman el conflicto y DONDE viven.
+                          Sin esto la tabla decia "2 reservas" sin decir de quien,
+                          y habia que ir a buscarlas al analisis de ocupacion. */}
+                      {abierta && (
+                        <tr className={isDark ? 'bg-zinc-950/60' : 'bg-gray-50/80'}>
+                          <td colSpan={11} className="px-3 py-2">
+                            <div className={`rounded-lg border overflow-hidden ${isDark ? 'border-zinc-700' : 'border-gray-200'}`}>
+                              <table className="w-full text-[11px]">
+                                <thead className={isDark ? 'bg-zinc-800/70 text-zinc-400' : 'bg-gray-100 text-gray-500'}>
+                                  <tr>
+                                    <th className="px-2 py-1.5 text-left font-medium w-32" title="Como esta vendida la cara. Es lo unico que define la ocupacion.">Estatus</th>
+                                    <th className="px-2 py-1.5 text-left font-medium w-32" title="Estado del arte (gestor de artes). No influye en la ocupacion.">Arte</th>
+                                    <th className="px-2 py-1.5 text-left font-medium w-28">Articulo</th>
+                                    <th className="px-2 py-1.5 text-left font-medium">Donde esta</th>
+                                    <th className="px-2 py-1.5 text-left font-medium w-44">Periodo del circuito</th>
+                                    <th className="px-2 py-1.5 text-left font-medium w-24">Circuito</th>
+                                    <th className="px-2 py-1.5 text-left font-medium w-24">Espacio</th>
+                                    <th className="px-2 py-1.5 text-left font-medium w-28">APS</th>
+                                    <th className="px-2 py-1.5 text-left font-medium w-24">Reserva</th>
+                                  </tr>
+                                </thead>
+                                <tbody>
+                                  {detalle.map(res => {
+                                    const donde = dondeVive(res);
+                                    return (
+                                      <tr key={res.reserva_id} className={`border-t ${isDark ? 'border-zinc-800' : 'border-gray-100'}`}>
+                                        <td className="px-2 py-1.5">
+                                          <span
+                                            title={
+                                              (SIGNIFICADO_ESTATUS.find(x => x.estatus === estatusVenta(res))?.que_es || 'Estatus no catalogado')
+                                              + (esEstatusDeArte(res.estatus) ? ` (en la base está como '${res.estatus}': eso es estado del arte, no de ocupación)` : '')
+                                            }
+                                            className={`px-1.5 py-0.5 rounded-full text-[10px] font-medium border whitespace-nowrap ${
+                                              esFirme(res.estatus)
+                                                ? isDark ? 'bg-red-500/15 text-red-300 border-red-500/30' : 'bg-red-50 text-red-700 border-red-200'
+                                                : isDark ? 'bg-zinc-700/50 text-zinc-300 border-zinc-600' : 'bg-white text-gray-600 border-gray-300'
+                                            }`}
+                                          >
+                                            {estatusVenta(res) || '(sin estatus)'}
+                                          </span>
+                                        </td>
+                                        <td className={`px-2 py-1.5 ${isDark ? 'text-zinc-400' : 'text-gray-600'}`}>
+                                          {estadoArte(res)}
+                                        </td>
+                                        <td className={`px-2 py-1.5 font-mono ${isDark ? 'text-purple-300' : 'text-purple-700'}`}>{res.articulo || '-'}</td>
+                                        <td className="px-2 py-1.5">
+                                          {donde.href ? (
+                                            <a
+                                              href={donde.href}
+                                              target="_blank"
+                                              rel="noopener noreferrer"
+                                              onClick={e => e.stopPropagation()}
+                                              title={res.campana_id ? `Abrir campana #${res.campana_id}` : 'Abrir propuesta'}
+                                              className={`inline-flex items-center gap-1 underline underline-offset-2 ${
+                                                res.campana_id
+                                                  ? isDark ? 'text-purple-300 hover:text-purple-200' : 'text-purple-700 hover:text-purple-900'
+                                                  : isDark ? 'text-amber-300 hover:text-amber-200' : 'text-amber-700 hover:text-amber-900'
+                                              }`}
+                                            >
+                                              {donde.label}
+                                              <ExternalLink className="h-3 w-3 opacity-70" />
+                                            </a>
+                                          ) : (
+                                            <span className={isDark ? 'text-zinc-500' : 'text-gray-400'}>{donde.label}</span>
+                                          )}
+                                          {res.campana_id && res.propuesta_id && (
+                                            <span className={`ml-1.5 ${isDark ? 'text-zinc-600' : 'text-gray-400'}`}>
+                                              (prop. #{res.propuesta_id})
+                                            </span>
+                                          )}
+                                        </td>
+                                        <td className={`px-2 py-1.5 font-mono ${isDark ? 'text-zinc-400' : 'text-gray-600'}`}>
+                                          {res.inicio_periodo && res.fin_periodo ? `${res.inicio_periodo} a ${res.fin_periodo}` : '-'}
+                                        </td>
+                                        <td className={`px-2 py-1.5 font-mono ${isDark ? 'text-zinc-500' : 'text-gray-500'}`} title="solicitudCaras.id">
+                                          #{res.solicitud_cara_id}
+                                        </td>
+                                        <td className={`px-2 py-1.5 font-mono ${isDark ? 'text-zinc-500' : 'text-gray-500'}`} title="espacio_inventario.id: la pieza fisica reservada">
+                                          #{res.espacio_id}
+                                        </td>
+                                        <td className="px-2 py-1.5">
+                                          {res.aps && res.aps > 0 ? (
+                                            <span
+                                              title={res.posted ? 'APS ya posteado a SAP: esta reserva no se toca' : 'Tiene APS asignado: no se puede borrar'}
+                                              className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full text-[10px] font-medium border ${
+                                                res.posted
+                                                  ? isDark ? 'bg-red-500/20 text-red-200 border-red-500/40' : 'bg-red-100 text-red-800 border-red-300'
+                                                  : isDark ? 'bg-amber-500/15 text-amber-300 border-amber-500/30' : 'bg-amber-50 text-amber-700 border-amber-200'
+                                              }`}
+                                            >
+                                              <Lock className="h-2.5 w-2.5" />
+                                              #{res.aps}{res.posted ? ' - POST' : ''}
+                                            </span>
+                                          ) : (
+                                            <span className={isDark ? 'text-zinc-600' : 'text-gray-400'}>-</span>
+                                          )}
+                                        </td>
+                                        <td className={`px-2 py-1.5 font-mono ${isDark ? 'text-zinc-500' : 'text-gray-500'}`}>#{res.reserva_id}</td>
+                                      </tr>
+                                    );
+                                  })}
+                                </tbody>
+                              </table>
+                            </div>
+                          </td>
+                        </tr>
+                      )}
+                      </Fragment>
+                      );
+                    })}
                     {filtrados.length === 0 && (
                       <tr>
-                        <td colSpan={9} className={`px-3 py-8 text-center ${isDark ? 'text-zinc-500' : 'text-gray-400'}`}>
+                        <td colSpan={11} className={`px-3 py-8 text-center ${isDark ? 'text-zinc-500' : 'text-gray-400'}`}>
                           {busqueda ? `Sin coincidencias para "${busqueda}"` : 'Sin celdas de este tipo'}
                         </td>
                       </tr>
@@ -788,6 +1321,8 @@ export function AuditoriaConflictosModal({ open, onClose, onOpenEnMatriz, autoIn
               <div className={`rounded-lg border px-3 py-2 space-y-1 ${isDark ? 'border-zinc-700 bg-zinc-800/40' : 'border-gray-200 bg-gray-50'}`}>
                 <div className="font-semibold">Qué se respeta</div>
                 <div>· Los <strong>choques</strong> no entran por este botón (el monitor los resuelve solo: conserva la venta más antigua).</div>
+                <div>· Solo se cuentan y se tocan <strong>ventas firmes</strong> ({ESTATUS_VENTA.join(' / ')}). Los apartados de propuestas ({ESTATUS_TENTATIVO.join(' / ')}) no ocupan y quedan intactos.</div>
+                <div>· Las reservas de <strong>impresión (IM-)</strong> no ocupan la cara: no entran al conteo ni se borran.</div>
                 <div>· Nunca se borra una reserva con <strong>APS</strong>. Si hay dos con APS, la celda se omite.</div>
                 <div>· Se conserva la que tiene APS; si ninguna tiene, la más antigua.</div>
                 <div>· El borrado es <strong>reversible</strong> (soft-delete) y queda en el historial.</div>
@@ -804,6 +1339,11 @@ export function AuditoriaConflictosModal({ open, onClose, onOpenEnMatriz, autoIn
                         <span className={isDark ? 'text-zinc-500' : 'text-gray-500'}>
                           {' '}· C{r.numero_catorcena}-{r.anio} · {r.n} reservas → queda 1
                         </span>
+                        {resumenEstatus(r.reservas).length > 0 && (
+                          <span className={`ml-1.5 ${isDark ? 'text-zinc-500' : 'text-gray-500'}`}>
+                            ({resumenEstatus(r.reservas).map(e => (e.n > 1 ? `${e.n}× ${e.estatus}` : e.estatus)).join(' + ')})
+                          </span>
+                        )}
                         {((r.campanas?.length ?? 0) > 0 || (r.propuestas?.length ?? 0) > 0) && (
                           <div className="mt-0.5 flex flex-wrap gap-x-3 gap-y-0.5">
                             {(r.campanas || []).map(c => (

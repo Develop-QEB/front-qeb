@@ -9,8 +9,21 @@ import { GoogleMap, useLoadScript, Marker, Circle, Autocomplete, InfoWindow } fr
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell } from 'recharts';
 import { propuestasService, InventarioReservado, PropuestaFullDetails } from '../../services/propuestas.service';
 import { formatCurrency, formatDate } from '../../lib/utils';
-import { toNum, applyNumberFormats, FMT_COORD } from '../../utils/excelFormat';
+import { toNum } from '../../utils/excelFormat';
+import { descargarExcelCompartir, FMT_COORD } from '../../utils/excelCompartir';
 import { useThemeStore } from '../../store/themeStore';
+// Versionado de circuitos completados: filas/pines 'no_vigente' en gris,
+// leyenda "Última versión completada", estilos de PDF/Excel.
+import {
+  esNoVigente, hayNoVigentes, estadoTexto, leyendaVersion,
+  NO_VIGENTE_LABEL, NO_VIGENTE_LEYENDA, NO_VIGENTE_CHIP, MAPA_GRIS, PDF_GRIS_FONDO,
+} from './versionCompletado';
+// Origen en campañas: azul = se vino de la propuesta en el pase a ventas,
+// verde = se agrego despues dentro de la campaña (pase a ventas incompleto).
+import {
+  origenColor, origenTexto, origenDe, tieneOrigen, hayAgregadasEnCampana, contarPorOrigen,
+  excelFondoOrigen, pdfEstiloCompartir, ORIGEN_COLOR, ORIGEN_LABEL, ORIGEN_LEYENDA, PDF_ORIGEN_FONDO,
+} from './origenReserva';
 
 // Config UNICA de Google Maps (mismo id/key/libraries en toda la app) para
 // que el script se inyecte una sola vez. Ver src/config/googleMaps.ts.
@@ -180,12 +193,18 @@ function applyFilters<T>(data: T[], filters: FilterCondition[]): T[] {
 // cada toggle de checkbox recreaba las ~5010 instancias de google.maps.Marker en el
 // hilo principal (freeze/crash en propuestas grandes). Con memo + onSelect estable,
 // togglear un item solo actualiza los markers cuyo isSelected cambió.
-const MapMarker = memo(function MapMarker({ item, isSelected, onSelect }: {
+const MapMarker = memo(function MapMarker({ item, isSelected, mostrarOrigen, onSelect }: {
   item: InventarioReservado;
   isSelected: boolean;
+  /** Contexto campaña: colorear por origen (azul propuesta / verde campaña). */
+  mostrarOrigen: boolean;
   onSelect: (item: InventarioReservado) => void;
 }) {
   if (!item.latitud || !item.longitud) return null;
+  // Pieza desplazada/quitada despues de completar el circuito: pin gris.
+  const noVigente = esNoVigente(item);
+  // Prioridad de color: seleccion > no vigente (gris) > origen > tipo de cara.
+  const colorOrigen = origenColor(item, mostrarOrigen);
   return (
     <Marker
       position={{ lat: item.latitud, lng: item.longitud }}
@@ -195,9 +214,11 @@ const MapMarker = memo(function MapMarker({ item, isSelected, onSelect }: {
         scale: isSelected ? 10 : 7,
         fillColor: isSelected
           ? '#22c55e' // Verde si está seleccionado
-          : String(item.tipo_de_cara).startsWith('Flujo') ? '#ef4444' : String(item.tipo_de_cara).startsWith('Contraflujo') ? '#3b82f6' : '#a855f7',
-        fillOpacity: isSelected ? 1 : 0.9,
-        strokeColor: '#fff',
+          : noVigente ? MAPA_GRIS
+          : colorOrigen
+          || (String(item.tipo_de_cara).startsWith('Flujo') ? '#ef4444' : String(item.tipo_de_cara).startsWith('Contraflujo') ? '#3b82f6' : '#a855f7'),
+        fillOpacity: isSelected ? 1 : noVigente ? 0.75 : 0.9,
+        strokeColor: noVigente && !isSelected ? '#6b7280' : '#fff',
         strokeWeight: isSelected ? 3 : 1.5,
       }}
     />
@@ -206,20 +227,51 @@ const MapMarker = memo(function MapMarker({ item, isSelected, onSelect }: {
 
 // Fila de detalle memoizada: togglear un checkbox solo re-renderiza la fila afectada,
 // no las miles de filas de los grupos expandidos.
-const DetailRow = memo(function DetailRow({ item, isSelected, isDark, onToggle }: {
+const DetailRow = memo(function DetailRow({ item, isSelected, isDark, mostrarOrigen, onToggle }: {
   item: InventarioReservado;
   isSelected: boolean;
   isDark: boolean;
+  /** Contexto campaña: marcar origen (azul propuesta / verde campaña). */
+  mostrarOrigen: boolean;
   onToggle: (key: string) => void;
 }) {
   const inv = inversionBruta(item);
   const key = item.rsv_ids;
+  // 'no_vigente' = estaba en la ultima version completada del circuito pero se
+  // desplazo (multireservas) o se quito a mano: fila en gris + etiqueta.
+  const noVigente = esNoVigente(item);
+  const colorOrigen = noVigente ? null : origenColor(item, mostrarOrigen);
+  const origen = mostrarOrigen ? origenDe(item) : null;
   return (
-    <tr onClick={() => onToggle(key)} className={`cursor-pointer transition-colors ${isSelected ? 'bg-purple-500/10' : 'hover:bg-purple-500/5'}`}>
+    <tr
+      onClick={() => onToggle(key)}
+      title={noVigente ? (item.motivo_no_vigente || NO_VIGENTE_LEYENDA) : (origen ? ORIGEN_LABEL[origen] : undefined)}
+      // Barra de color a la izquierda = origen del inventario en la campaña.
+      style={colorOrigen ? { boxShadow: `inset 4px 0 0 0 ${colorOrigen}` } : undefined}
+      className={`cursor-pointer transition-colors ${isSelected ? 'bg-purple-500/10' : 'hover:bg-purple-500/5'} ${noVigente ? 'opacity-50 grayscale italic' : ''}`}
+    >
       <td className="px-3 py-2" onClick={(e) => e.stopPropagation()}>
         <input type="checkbox" checked={isSelected} onChange={() => onToggle(key)} className="checkbox-purple" />
       </td>
-      <td className={`px-3 py-2 font-mono text-xs ${isDark ? 'text-blue-300' : 'text-blue-600'}`}>{item.codigo_unico}</td>
+      <td className={`px-3 py-2 font-mono text-xs ${isDark ? 'text-blue-300' : 'text-blue-600'}`}>
+        {colorOrigen && (
+          <span
+            className="inline-block h-2 w-2 rounded-full mr-1.5 align-middle"
+            style={{ backgroundColor: colorOrigen }}
+          />
+        )}
+        {item.codigo_unico}
+        {noVigente && (
+          <span className={`ml-2 px-1.5 py-0.5 rounded text-[10px] font-semibold not-italic font-sans border ${isDark ? 'bg-zinc-700 text-zinc-200 border-zinc-500' : 'bg-gray-200 text-gray-700 border-gray-400'}`}>
+            {NO_VIGENTE_LABEL}
+          </span>
+        )}
+        {origen === 'campana' && (
+          <span className="ml-2 px-1.5 py-0.5 rounded text-[10px] font-semibold not-italic font-sans border" style={{ backgroundColor: `${ORIGEN_COLOR.campana}22`, color: ORIGEN_COLOR.campana, borderColor: `${ORIGEN_COLOR.campana}66` }}>
+            Nuevo en campaña
+          </span>
+        )}
+      </td>
       <td className={`px-3 py-2 text-xs ${isDark ? 'text-zinc-300' : 'text-gray-700'}`}>{item.plaza || '-'}</td>
       <td className={`px-3 py-2 text-xs ${isDark ? 'text-zinc-400' : 'text-gray-600'}`}>
         {item.mueble || '-'}
@@ -299,6 +351,10 @@ export function CompartirPropuestaPage() {
   // (todas las hojas) y se propaga a los enlaces públicos del cliente.
   const esCampana = searchParams.get('ctx') === 'campana';
   const leyendaCircuitos = esCampana ? 'Circuitos Confirmados' : 'Circuitos Muestra';
+
+  // Colorear por origen SOLO en campañas y solo si el backend pudo clasificar
+  // (hay foto del pase a ventas). En propuestas no aplica: todo viene de ahi.
+  const mostrarOrigen = esCampana && tieneOrigen(inventario);
 
   // Master catorcena-filtered inventario (affects everything: KPIs, charts, map, resumen)
   const catorcenaFilteredInventario = useMemo(() => {
@@ -574,18 +630,28 @@ export function CompartirPropuestaPage() {
       ? inventario.filter(i => selectedItems.has(itemKey(i)))
       : inventario;
     if (source.length === 0) return;
-    import('xlsx').then(XLSX => {
-      // codigo_unico (completo) va ANTES de Clave (que es solo el prefijo).
-      const headers = ['codigo_unico', 'Clave', 'Plaza', 'Ubicación', 'Tipo de Cara', 'Formato', 'Tipo Inventario', 'Periodo', 'Lat', 'Long', 'NOTAS'];
-      const byPlaza: Record<string, typeof inventario> = {};
-      for (const i of source) {
-        const plaza = i.plaza || 'Sin Plaza';
-        if (!byPlaza[plaza]) byPlaza[plaza] = [];
-        byPlaza[plaza].push(i);
-      }
-      const wb = XLSX.utils.book_new();
-      for (const plaza of Object.keys(byPlaza).sort()) {
-        const rows = byPlaza[plaza].map(i => [
+    // codigo_unico (completo) va ANTES de Clave (que es solo el prefijo).
+    // "Estado" marca las piezas no vigentes (ademas la fila va en gris).
+    const headers = ['codigo_unico', 'Clave', 'Plaza', 'Ubicación', 'Tipo de Cara', 'Formato', 'Tipo Inventario', 'Periodo', 'Lat', 'Long', 'Estado', ...(mostrarOrigen ? ['Origen'] : []), 'NOTAS'];
+    const byPlaza: Record<string, InventarioReservado[]> = {};
+    for (const i of source) {
+      const plaza = i.plaza || 'Sin Plaza';
+      if (!byPlaza[plaza]) byPlaza[plaza] = [];
+      byPlaza[plaza].push(i);
+    }
+    const subLeyenda = leyendaVersion(inventario) || undefined;
+    // Fila 1: leyenda de contexto en TODAS las hojas (para que no se pierda si
+    // borran alguna pestaña). Fila 2: ultima version completada. Luego headers.
+    const hojas = Object.keys(byPlaza).sort().map(plaza => ({
+      nombre: plaza,
+      leyenda: leyendaCircuitos,
+      subLeyenda,
+      headers,
+      filas: byPlaza[plaza].map(i => ({
+        noVigente: esNoVigente(i),
+        // Tinte azul/verde por origen (solo campañas); el gris de no vigente gana.
+        fondoArgb: excelFondoOrigen(i, mostrarOrigen),
+        valores: [
           i.codigo_unico || '',
           (i.codigo_unico || '').split('_')[0],
           i.plaza || '',
@@ -596,19 +662,18 @@ export function CompartirPropuestaPage() {
           formatInicioPeriodo(i, tipoPeriodo),
           toNum(i.latitud),
           toNum(i.longitud),
-          ''
-        ]);
-        // Fila 1: leyenda de contexto en TODAS las hojas (para que no se pierda si
-        // borran alguna pestaña). Headers pasan a la fila 2 (headerRows = 2 abajo).
-        const ws = XLSX.utils.aoa_to_sheet([[leyendaCircuitos], headers, ...rows]);
-        // Lat (col 8) y Long (col 9) como celdas tipo número
-        applyNumberFormats(XLSX, ws, rows.length, { 8: FMT_COORD, 9: FMT_COORD }, 2);
-        const sheetName = plaza.substring(0, 31);
-        XLSX.utils.book_append_sheet(wb, ws, sheetName);
-      }
-      const sufijo = selectedItems.size > 0 ? '_seleccion' : '';
-      XLSX.writeFile(wb, `reservas_propuesta_${propuestaId}${sufijo}.xlsx`);
-    });
+          estadoTexto(i),
+          ...(mostrarOrigen ? [origenTexto(i, true)] : []),
+          '',
+        ],
+      })),
+      // Lat (col 8) y Long (col 9) como celdas tipo número
+      formatos: { 8: FMT_COORD, 9: FMT_COORD },
+    }));
+    const sufijo = selectedItems.size > 0 ? '_seleccion' : '';
+    const notaPie = mostrarOrigen ? `${NO_VIGENTE_LEYENDA}  ·  ${ORIGEN_LEYENDA}` : NO_VIGENTE_LEYENDA;
+    descargarExcelCompartir(`reservas_propuesta_${propuestaId}${sufijo}.xlsx`, hojas, notaPie)
+      .catch(err => console.error('Error generando Excel:', err));
   };
 
   // Download ALL items as KML
@@ -619,7 +684,7 @@ export function CompartirPropuestaPage() {
       .filter(i => i.latitud && i.longitud)
       .map(i => `
         <Placemark>
-          <name>${i.codigo_unico}</name>
+          <name>${i.codigo_unico}${esNoVigente(i) ? ` (${NO_VIGENTE_LABEL})` : ''}${mostrarOrigen && origenDe(i) === 'campana' ? ' [Nuevo en campaña]' : ''}</name>
           <description>
             <![CDATA[
               Plaza: ${i.plaza || 'N/A'}<br/>
@@ -660,7 +725,7 @@ export function CompartirPropuestaPage() {
       .filter(i => i.latitud && i.longitud)
       .map(i => `
         <Placemark>
-          <name>${i.codigo_unico}</name>
+          <name>${i.codigo_unico}${esNoVigente(i) ? ` (${NO_VIGENTE_LABEL})` : ''}${mostrarOrigen && origenDe(i) === 'campana' ? ' [Nuevo en campaña]' : ''}</name>
           <description>
             <![CDATA[
               Plaza: ${i.plaza || 'N/A'}<br/>
@@ -723,7 +788,7 @@ export function CompartirPropuestaPage() {
       .filter(i => i.latitud && i.longitud)
       .map(i => `
         <Placemark>
-          <name>${i.codigo_unico}</name>
+          <name>${i.codigo_unico}${esNoVigente(i) ? ` (${NO_VIGENTE_LABEL})` : ''}${mostrarOrigen && origenDe(i) === 'campana' ? ' [Nuevo en campaña]' : ''}</name>
           <description>
             <![CDATA[
               Plaza: ${i.plaza || 'N/A'}<br/>
@@ -1064,6 +1129,41 @@ export function CompartirPropuestaPage() {
     });
     y += 25;
 
+    // Leyenda de versionado: ultima version completada y significado del gris.
+    {
+      const leyVer = leyendaVersion(inventario);
+      const hayGris = hayNoVigentes(inventario);
+      if (leyVer || hayGris) {
+        doc.setFontSize(8);
+        doc.setFont('helvetica', 'italic');
+        doc.setTextColor(90, 90, 90);
+        if (leyVer) { doc.text(leyVer, marginX, y); y += 4.5; }
+        if (hayGris) {
+          doc.setFillColor(...PDF_GRIS_FONDO);
+          doc.setDrawColor(180, 180, 180);
+          doc.rect(marginX, y - 3, 6, 3.5, 'FD');
+          doc.text(NO_VIGENTE_LEYENDA, marginX + 8, y);
+          y += 4.5;
+        }
+        y += 2;
+      }
+      // Leyenda de origen (solo campañas): azul de propuesta, verde agregado.
+      if (mostrarOrigen) {
+        doc.setFontSize(8);
+        doc.setFont('helvetica', 'italic');
+        doc.setTextColor(90, 90, 90);
+        doc.setDrawColor(180, 180, 180);
+        doc.setFillColor(...PDF_ORIGEN_FONDO.propuesta);
+        doc.rect(marginX, y - 3, 6, 3.5, 'FD');
+        doc.text(ORIGEN_LABEL.propuesta, marginX + 8, y);
+        const anchoIzq = doc.getTextWidth(ORIGEN_LABEL.propuesta) + 16;
+        doc.setFillColor(...PDF_ORIGEN_FONDO.campana);
+        doc.rect(marginX + anchoIzq, y - 3, 6, 3.5, 'FD');
+        doc.text(ORIGEN_LABEL.campana, marginX + anchoIzq + 8, y);
+        y += 6.5;
+      }
+    }
+
     // Table grouped by Catorcena > Artículo (separate rows)
     if (inventario && inventario.length > 0) {
       // Group by catorcena first, then by articulo
@@ -1120,10 +1220,12 @@ export function CompartirPropuestaPage() {
             i.municipio || '',
             i.latitud?.toFixed(6) || '-',
             i.longitud?.toFixed(6) || '-',
+            estadoTexto(i),
+            ...(mostrarOrigen ? [origenTexto(i, true)] : []),
           ]);
 
           autoTable(doc, {
-            head: [['ID', 'Ubicación', 'Mueble', 'Municipio', 'Latitud', 'Longitud']],
+            head: [['ID', 'Ubicación', 'Mueble', 'Municipio', 'Latitud', 'Longitud', 'Estado', ...(mostrarOrigen ? ['Origen'] : [])]],
             body: tableData,
             startY: y,
             margin: { left: marginX + 5, right: marginX + 5 },
@@ -1137,7 +1239,12 @@ export function CompartirPropuestaPage() {
               3: { cellWidth: 35 },
               4: { cellWidth: 28 },
               5: { cellWidth: 28 },
+              6: { cellWidth: 45 },
+              7: { cellWidth: 40 },
             },
+            // Gris = no vigente (desplazada/quitada tras completar el circuito).
+            // Azul/verde = origen en la campaña (propuesta vs agregado despues).
+            didParseCell: pdfEstiloCompartir(items, mostrarOrigen),
           });
 
           y = (doc as any).lastAutoTable.finalY + 5;
@@ -1288,6 +1395,39 @@ export function CompartirPropuestaPage() {
             }`}>
               {leyendaCircuitos}
             </span>
+            {/* Versionado: fecha de la ultima version completada y leyenda del gris */}
+            {leyendaVersion(inventario) && (
+              <span className={`px-3 py-1 rounded-full text-xs font-medium border ${isDark ? 'bg-sky-500/15 text-sky-300 border-sky-400/30' : 'bg-sky-50 text-sky-700 border-sky-200'}`}>
+                {leyendaVersion(inventario)}
+              </span>
+            )}
+            {hayNoVigentes(inventario) && (
+              <span
+                title={NO_VIGENTE_LEYENDA}
+                className={`px-3 py-1 rounded-full text-xs font-medium border ${isDark ? 'bg-zinc-700/40 text-zinc-300 border-zinc-500/40' : 'bg-gray-100 text-gray-600 border-gray-300'}`}
+              >
+                <span className="inline-block h-2 w-2 rounded-full bg-gray-400 mr-1.5 align-middle" />
+                {NO_VIGENTE_CHIP}
+              </span>
+            )}
+            {/* Origen (solo campañas): de dónde salió cada pieza. Útil cuando el
+                pase a ventas quedó incompleto y se repuso dentro de la campaña. */}
+            {mostrarOrigen && (() => {
+              const conteo = contarPorOrigen(inventario);
+              return (
+                <span title={ORIGEN_LEYENDA} className={`px-3 py-1 rounded-full text-xs font-medium border ${isDark ? 'bg-zinc-800/60 border-zinc-600/50 text-zinc-300' : 'bg-white border-gray-300 text-gray-700'}`}>
+                  <span className="inline-block h-2 w-2 rounded-full mr-1.5 align-middle" style={{ backgroundColor: ORIGEN_COLOR.propuesta }} />
+                  {ORIGEN_LABEL.propuesta}: {conteo.propuesta}
+                  <span className="inline-block h-2 w-2 rounded-full ml-3 mr-1.5 align-middle" style={{ backgroundColor: ORIGEN_COLOR.campana }} />
+                  {ORIGEN_LABEL.campana}: {conteo.campana}
+                </span>
+              );
+            })()}
+            {mostrarOrigen && hayAgregadasEnCampana(inventario) && (
+              <span className={`px-3 py-1 rounded-full text-xs font-semibold border ${isDark ? 'bg-amber-500/15 text-amber-300 border-amber-400/30' : 'bg-amber-50 text-amber-700 border-amber-200'}`}>
+                Pase a ventas incompleto: se repuso inventario en campaña
+              </span>
+            )}
           </div>
           <p className={isDark ? 'text-zinc-400' : 'text-gray-500'}>{details?.propuesta?.descripcion || 'Sin descripción'}</p>
           <div className="flex gap-4 mt-4 text-sm">
@@ -1753,6 +1893,7 @@ export function CompartirPropuestaPage() {
                                             item={item}
                                             isSelected={selectedItems.has(key)}
                                             isDark={isDark}
+                                            mostrarOrigen={mostrarOrigen}
                                             onToggle={toggleItemSelection}
                                           />
                                         );
@@ -1880,6 +2021,7 @@ export function CompartirPropuestaPage() {
                     key={itemKey(item)}
                     item={item}
                     isSelected={selectedItems.has(itemKey(item))}
+                    mostrarOrigen={mostrarOrigen}
                     onSelect={handleMarkerClick}
                   />
                 ))}
@@ -1897,6 +2039,14 @@ export function CompartirPropuestaPage() {
                         <p><strong>Ubicación:</strong> {selectedMarker.ubicacion || 'N/A'}</p>
                         <p><strong>{(selectedMarker.mueble || '').toUpperCase().includes('PUENTE PEATONAL') ? 'Puentes' : 'Caras'}:</strong> {selectedMarker.caras_totales}</p>
                         <p><strong>Tarifa:</strong> {formatCurrency(tarifaBruta(selectedMarker))}</p>
+                        {esNoVigente(selectedMarker) && (
+                          <p className="text-gray-500 italic"><strong>Estado:</strong> {NO_VIGENTE_LABEL}{selectedMarker.motivo_no_vigente ? ` (${selectedMarker.motivo_no_vigente})` : ''}</p>
+                        )}
+                        {mostrarOrigen && origenDe(selectedMarker) && (
+                          <p><strong>Origen:</strong>{' '}
+                            <span style={{ color: ORIGEN_COLOR[origenDe(selectedMarker)!] }}>{ORIGEN_LABEL[origenDe(selectedMarker)!]}</span>
+                          </p>
+                        )}
                         {selectedMarker.numero_catorcena && (
                           <p><strong>Periodo:</strong> {tipoPeriodo === 'mensual' && selectedMarker.inicio_periodo ? (() => { const parts = selectedMarker.inicio_periodo.split('-'); return parts.length >= 2 ? `${MESES_LABEL[parseInt(parts[1]) - 1]} ${parts[0]}` : `Cat ${selectedMarker.numero_catorcena} / ${selectedMarker.anio_catorcena}`; })() : `Cat ${selectedMarker.numero_catorcena} / ${selectedMarker.anio_catorcena}`}</p>
                         )}

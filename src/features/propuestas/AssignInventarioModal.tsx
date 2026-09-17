@@ -22,7 +22,7 @@ import { useEnvironmentStore, getEndpoints } from '../../store/environmentStore'
 import { useAuthStore } from '../../store/authStore';
 import { getPermissions, esAsesorComercial } from '../../lib/permissions';
 import { filterAllowedArticulos } from '../../config/allowedDigitalArticles';
-import { useSocketPropuesta, useSocketEquipos, useSocketInventarioRealtime, type InventarioRealtimePayload } from '../../hooks/useSocket';
+import { useSocketPropuesta, useSocketEquipos, useSocketInventarioRealtime, useEstatusEnVivo, type InventarioRealtimePayload } from '../../hooks/useSocket';
 import { useThemeStore } from '../../store/themeStore';
 import { SaveChangesConfirmModal, type ModifiedCircuito } from '../../components/SaveChangesConfirmModal';
 import { DeleteCircuitoConfirmModal } from '../../components/DeleteCircuitoConfirmModal';
@@ -792,17 +792,23 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
   // Socket para actualizar usuarios en tiempo real
   useSocketEquipos();
 
+  // Estatus EN VIVO: `propuesta` es un snapshot congelado al abrir el modal, así
+  // que si el asesor cambia el estatus mientras Tráfico está aquí adentro (por
+  // ejemplo dentro del buscador de formatos) el bloqueo nunca se activaba.
+  // Feedback 2026-09-17 (Jos). El guard de servidor lo respalda de todos modos.
+  const statusActual = useEstatusEnVivo('propuesta', propuesta?.id, propuesta.status) ?? propuesta.status;
+
   // Si readOnly es true, sobrescribir permisos para modo visualización
-  const isDescartada = propuesta.status === 'Descartada' || propuesta.status === 'Rechazada';
+  const isDescartada = statusActual === 'Descartada' || statusActual === 'Rechazada';
   // Bloqueo Edición Asesores — Estatus Ajuste CTO: los asesores comerciales no pueden
   // editar circuitos existentes mientras la propuesta esté en "Ajuste Cto-Cliente".
-  const bloqueoCircuitoAjusteCto = esAsesorComercial(user?.rol) && (propuesta.status === 'Ajuste Cto-Cliente' || propuesta.status === 'Ajuste Inventario');
+  const bloqueoCircuitoAjusteCto = esAsesorComercial(user?.rol) && (statusActual === 'Ajuste Cto-Cliente' || statusActual === 'Ajuste Inventario');
   // Bloqueo Edición No-Asesores — Estatus Ajuste Comercial: cuando la propuesta
   // esta en Ajuste Comercial el balón está del lado del asesor; trafico y
   // demás roles no deben tocar circuitos hasta que el asesor lo resuelva.
   // Feedback 2026-09-10 (Jos): simetrico al bloqueo Ajuste CTO (que bloquea a
   // asesores), pero al reves.
-  const bloqueoCircuitoAjusteComercial = !esAsesorComercial(user?.rol) && propuesta.status === 'Ajuste Comercial';
+  const bloqueoCircuitoAjusteComercial = !esAsesorComercial(user?.rol) && statusActual === 'Ajuste Comercial';
   const puedeEditarCircuito = permissions.canEditCircuitoExistente && !bloqueoCircuitoAjusteCto && !bloqueoCircuitoAjusteComercial;
   const effectiveCanEdit = !readOnly && permissions.canAsignarInventario && !isDescartada && !bloqueoCircuitoAjusteComercial;
   const canEditResumen = !readOnly && permissions.canEditResumenPropuesta && !isDescartada && !bloqueoCircuitoAjusteComercial;
@@ -5403,10 +5409,10 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
         <div className={`p-4 border-b flex items-start gap-3 ${isDark ? 'border-zinc-800' : 'border-gray-200'}`}>
           <div className="flex-1 min-w-0">
             <h3 className={`text-base font-semibold ${isDark ? 'text-amber-300' : 'text-amber-700'}`}>
-              {omitidosReserva.length} pieza{omitidosReserva.length === 1 ? '' : 's'} no reservada{omitidosReserva.length === 1 ? '' : 's'}
+              {omitidosReserva.length} {omitidosReserva.length === 1 ? 'ubicación no reservada' : 'ubicaciones no reservadas'}
             </h3>
             <p className={`text-xs mt-1 ${isDark ? 'text-zinc-400' : 'text-gray-500'}`}>
-              Estas piezas NO quedaron reservadas. Si el motivo dice "ocupado", reintentarlas no va a funcionar: elige otras piezas.
+              Estas ubicaciones NO quedaron reservadas. Si el motivo dice "ocupado", reintentarlas no va a funcionar: elige otras ubicaciones.
             </p>
           </div>
           <button onClick={() => setOmitidosReserva(null)} className={`p-1.5 rounded-lg shrink-0 ${isDark ? 'text-zinc-400 hover:bg-zinc-800' : 'text-gray-400 hover:bg-gray-100'}`}>
@@ -5459,6 +5465,23 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
     </div>
   );
 
+  // Aviso para Tráfico cuando la propuesta está en "Ajuste Comercial": explica por
+  // qué todo está deshabilitado y qué tiene que pasar para poder continuar. Se
+  // muestra en las DOS vistas del modal (principal y buscador de inventario),
+  // porque el estatus puede cambiar estando Tráfico ya dentro del buscador.
+  // Feedback 2026-09-17 (Jos).
+  const avisoAjusteComercialJSX = bloqueoCircuitoAjusteComercial && (
+    <div className={`px-6 py-3 border-b flex items-start gap-3 ${isDark ? 'bg-amber-500/10 border-amber-500/30' : 'bg-amber-50 border-amber-300'}`}>
+      <AlertTriangle className={`h-5 w-5 flex-shrink-0 mt-0.5 ${isDark ? 'text-amber-400' : 'text-amber-600'}`} />
+      <div className={`text-sm ${isDark ? 'text-amber-200' : 'text-amber-800'}`}>
+        <span className="font-semibold">La propuesta está en “Ajuste Comercial”.</span>{' '}
+        La tiene el asesor comercial para revisión, así que no puedes reservar ni eliminar inventario.
+        Podrás continuar cuando te la regresen a <span className="font-medium">“Ajuste Cto-Cliente”</span> o{' '}
+        <span className="font-medium">“Ajuste Inventario”</span>.
+      </div>
+    </div>
+  );
+
   // Render inventory search view
   if (viewState === 'search-inventory') {
     return (
@@ -5490,6 +5513,8 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
               <X className="h-5 w-5" />
             </button>
           </div>
+
+          {avisoAjusteComercialJSX}
 
           {/* Compact KPIs with progress bars */}
           <div className={`px-6 py-3 border-b ${isDark ? 'border-zinc-800' : 'border-gray-200'} ${isDark ? 'bg-gradient-to-r from-zinc-900 via-zinc-900/95 to-zinc-900/90' : 'bg-gradient-to-r from-gray-50 via-gray-50/95 to-gray-50/90'}`}>
@@ -7737,12 +7762,14 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
             <p className={`text-sm ${isDark ? 'text-zinc-400' : 'text-gray-500'}`}>Propuesta #{propuesta.id}</p>
           </div>
           <div className="flex items-center gap-3">
-            
+
             <button onClick={handleClose} className={`p-2 rounded-lg ${isDark ? 'text-zinc-400' : 'text-gray-500'} ${isDark ? 'hover:text-white' : 'hover:text-gray-900'}`}>
               <X className="h-5 w-5" />
             </button>
           </div>
         </div>
+
+        {avisoAjusteComercialJSX}
 
         {/* Content */}
         <div className="flex-1 overflow-auto p-6 space-y-6">

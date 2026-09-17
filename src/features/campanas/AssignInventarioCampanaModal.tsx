@@ -22,7 +22,7 @@ import { useEnvironmentStore, getEndpoints } from '../../store/environmentStore'
 import { useAuthStore } from '../../store/authStore';
 import { usePermissions, esAsesorComercial } from '../../lib/permissions';
 import { filterAllowedArticulos } from '../../config/allowedDigitalArticles';
-import { useSocketEquipos, useSocketCampana, useSocketInventarioRealtime, type InventarioRealtimePayload } from '../../hooks/useSocket';
+import { useSocketEquipos, useSocketCampana, useSocketInventarioRealtime, useEstatusEnVivo, type InventarioRealtimePayload } from '../../hooks/useSocket';
 import { useThemeStore } from '../../store/themeStore';
 import { SaveChangesConfirmModal, type ModifiedCircuito } from '../../components/SaveChangesConfirmModal';
 import { DeleteCircuitoConfirmModal } from '../../components/DeleteCircuitoConfirmModal';
@@ -793,15 +793,21 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
   // Socket para escuchar cambios en la campaña (autorizaciones, reservas, etc.)
   useSocketCampana(campana?.id || null);
 
+  // Estatus EN VIVO: `campana` es un snapshot congelado al abrir el modal, así que
+  // si el asesor cambia el estatus mientras Tráfico está aquí adentro (por ejemplo
+  // dentro del buscador de formatos) el bloqueo nunca se activaba.
+  // Feedback 2026-09-17 (Jos). El guard de servidor lo respalda de todos modos.
+  const statusActual = useEstatusEnVivo('campana', campana?.id, campana?.status) ?? campana?.status;
+
   // Tráfico NO puede editar tarifa ni cantidad de caras de circuitos (aunque sí otros campos).
   const canEditCliente = permissions.canEditClienteEnFormularios;
   // Bloqueo Edición Asesores — Estatus Ajuste CTO: los asesores comerciales no pueden
   // editar circuitos existentes mientras la campaña esté en "Ajuste CTO Cliente".
-  const bloqueoCircuitoAjusteCto = esAsesorComercial(user?.rol) && campana?.status === 'Ajuste CTO Cliente';
+  const bloqueoCircuitoAjusteCto = esAsesorComercial(user?.rol) && statusActual === 'Ajuste CTO Cliente';
   // Bloqueo No-Asesores en Ajuste Comercial: trafico y demas no deben tocar
   // circuitos mientras el asesor esta resolviendo. Feedback 2026-09-10 (Jos):
   // simetrico a Ajuste CTO (que bloquea a asesores), pero al reves.
-  const bloqueoCircuitoAjusteComercial = !esAsesorComercial(user?.rol) && campana?.status === 'Ajuste Comercial';
+  const bloqueoCircuitoAjusteComercial = !esAsesorComercial(user?.rol) && statusActual === 'Ajuste Comercial';
   const effectiveCanEdit = permissions.canAsignarInventario && !bloqueoCircuitoAjusteComercial;
   const canEditResumen = permissions.canEditResumenPropuesta && !bloqueoCircuitoAjusteComercial;
   const canEditTarifaCaras = canEditResumen && permissions.canEditTarifaCaras;
@@ -5385,10 +5391,10 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
         <div className={`p-4 border-b flex items-start gap-3 ${isDark ? 'border-zinc-800' : 'border-gray-200'}`}>
           <div className="flex-1 min-w-0">
             <h3 className={`text-base font-semibold ${isDark ? 'text-amber-300' : 'text-amber-700'}`}>
-              {omitidosReserva.length} pieza{omitidosReserva.length === 1 ? '' : 's'} no reservada{omitidosReserva.length === 1 ? '' : 's'}
+              {omitidosReserva.length} {omitidosReserva.length === 1 ? 'ubicación no reservada' : 'ubicaciones no reservadas'}
             </h3>
             <p className={`text-xs mt-1 ${isDark ? 'text-zinc-400' : 'text-gray-500'}`}>
-              Estas piezas NO quedaron reservadas. Si el motivo dice "ocupado", reintentarlas no va a funcionar: elige otras piezas.
+              Estas ubicaciones NO quedaron reservadas. Si el motivo dice "ocupado", reintentarlas no va a funcionar: elige otras ubicaciones.
             </p>
           </div>
           <button onClick={() => setOmitidosReserva(null)} className={`p-1.5 rounded-lg shrink-0 ${isDark ? 'text-zinc-400 hover:bg-zinc-800' : 'text-gray-400 hover:bg-gray-100'}`}>
@@ -5441,6 +5447,22 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
     </div>
   );
 
+  // Aviso para Tráfico cuando la campaña está en "Ajuste Comercial": explica por
+  // qué todo está deshabilitado y qué tiene que pasar para poder continuar. Se
+  // muestra en las DOS vistas del modal (principal y buscador de inventario),
+  // porque el estatus puede cambiar estando Tráfico ya dentro del buscador.
+  // Feedback 2026-09-17 (Jos).
+  const avisoAjusteComercialJSX = bloqueoCircuitoAjusteComercial && (
+    <div className={`px-6 py-3 border-b flex items-start gap-3 ${isDark ? 'bg-amber-500/10 border-amber-500/30' : 'bg-amber-50 border-amber-300'}`}>
+      <AlertTriangle className={`h-5 w-5 flex-shrink-0 mt-0.5 ${isDark ? 'text-amber-400' : 'text-amber-600'}`} />
+      <div className={`text-sm ${isDark ? 'text-amber-200' : 'text-amber-800'}`}>
+        <span className="font-semibold">La campaña está en “Ajuste Comercial”.</span>{' '}
+        La tiene el asesor comercial para revisión, así que no puedes reservar ni eliminar inventario.
+        Podrás continuar cuando te la regresen a <span className="font-medium">“Ajuste CTO Cliente”</span>.
+      </div>
+    </div>
+  );
+
   // Render inventory search view
   if (viewState === 'search-inventory') {
     return (
@@ -5472,6 +5494,8 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
               <X className="h-5 w-5" />
             </button>
           </div>
+
+          {avisoAjusteComercialJSX}
 
           {/* Compact KPIs with progress bars */}
           <div className="px-6 py-3 border-b border-zinc-800 bg-gradient-to-r from-zinc-900 via-zinc-900/95 to-zinc-900/90">
@@ -7618,6 +7642,8 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
             </button>
           </div>
         </div>
+
+        {avisoAjusteComercialJSX}
 
         {/* Content */}
         <div className="flex-1 overflow-auto p-6 space-y-6">
