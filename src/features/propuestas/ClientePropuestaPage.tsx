@@ -8,8 +8,21 @@ import {
 import { GoogleMap, useLoadScript, Marker, Circle, Autocomplete, InfoWindow } from '@react-google-maps/api';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell } from 'recharts';
 import { formatCurrency, formatDate } from '../../lib/utils';
-import { toNum, applyNumberFormats, FMT_ENTERO, FMT_MONEDA, FMT_COORD } from '../../utils/excelFormat';
+import { toNum } from '../../utils/excelFormat';
+import { descargarExcelCompartir, FMT_ENTERO, FMT_MONEDA, FMT_COORD } from '../../utils/excelCompartir';
 import { useThemeStore } from '../../store/themeStore';
+// Versionado de circuitos completados (ultima version completada; piezas
+// desplazadas/quitadas en gris). Mismos helpers que la Vista Compartir interna.
+// Vista del CLIENTE: las piezas en reasignación solo se atenúan en gris, sin
+// etiqueta ni leyenda ni columna de estado. Esa explicación vive únicamente en la
+// Vista Compartir interna del asesor.
+import { ConVersion, esNoVigente, leyendaVersion, MAPA_GRIS } from './versionCompletado';
+// Origen en campañas: azul = se vino de la propuesta en el pase a ventas,
+// verde = se agrego despues dentro de la campaña.
+import {
+  ConOrigen, origenColor, origenTexto, origenDe, tieneOrigen, contarPorOrigen,
+  excelFondoOrigen, pdfEstiloCompartir, ORIGEN_COLOR, ORIGEN_LABEL, ORIGEN_LEYENDA, PDF_ORIGEN_FONDO,
+} from './origenReserva';
 
 // Config UNICA de Google Maps (mismo id/key/libraries en toda la app) para
 // que el script se inyecte una sola vez. Ver src/config/googleMaps.ts.
@@ -44,7 +57,7 @@ const IMU_MAP_STYLES = [
   { featureType: 'water', elementType: 'labels.text.fill', stylers: [{ color: '#0054A6' }] },
 ];
 
-interface InventarioReservado {
+interface InventarioReservado extends ConVersion, ConOrigen {
   id: number;
   codigo_unico: string;
   mueble: string | null;
@@ -279,6 +292,10 @@ export function ClientePropuestaPage() {
   const esCampana = searchParams.get('ctx') === 'campana';
   const leyendaCircuitos = esCampana ? 'Circuitos Confirmados' : 'Circuitos Muestra';
 
+  // Colorear por origen SOLO en campañas y solo si el backend pudo clasificar
+  // (hay foto del pase a ventas). En propuestas no aplica.
+  const mostrarOrigen = esCampana && tieneOrigen(inventario);
+
   // Master catorcena-filtered inventario (affects KPIs, charts, map, resumen)
   const catorcenaFilteredInventario = useMemo(() => {
     if (!inventario.length) return inventario;
@@ -477,20 +494,30 @@ export function ClientePropuestaPage() {
 
   // Handlers
   const handleDownloadXLSX = () => {
-    import('xlsx').then(XLSX => {
-      const headers = ['Codigo', 'Plaza', 'Ubicacion', 'Tipo Cara', 'Formato', 'Tipo Inventario', 'Articulo', 'Caras', 'Tarifa', 'Periodo', 'Latitud', 'Longitud'];
-      const rows = inventario.map(i => [
+    // Sin columna "Estado" para el cliente: la pieza en reasignación solo va con
+    // la fila atenuada en gris.
+    const headers = ['Codigo', 'Plaza', 'Ubicacion', 'Tipo Cara', 'Formato', 'Tipo Inventario', 'Articulo', 'Caras', 'Tarifa', 'Periodo', 'Latitud', 'Longitud', ...(mostrarOrigen ? ['Origen'] : [])];
+    const filas = inventario.map(i => ({
+      noVigente: esNoVigente(i),
+      // Tinte azul/verde por origen (solo campañas); el gris de no vigente gana.
+      fondoArgb: excelFondoOrigen(i, mostrarOrigen),
+      valores: [
         i.codigo_unico, i.plaza, i.ubicacion, i.tipo_de_cara, i.mueble, i.tradicional_digital || '', i.articulo,
-        toNum(i.caras_totales), tarifaBruta(i), formatInicioPeriodo(i, tipoPeriodo), toNum(i.latitud), toNum(i.longitud)
-      ]);
-      // Fila 1: leyenda de contexto; headers pasan a la fila 2 (headerRows = 2 abajo).
-      const ws = XLSX.utils.aoa_to_sheet([[leyendaCircuitos], headers, ...rows]);
+        toNum(i.caras_totales), tarifaBruta(i), formatInicioPeriodo(i, tipoPeriodo), toNum(i.latitud), toNum(i.longitud),
+        ...(mostrarOrigen ? [origenTexto(i, true)] : []),
+      ],
+    }));
+    // Fila 1: leyenda de contexto; fila 2: ultima version completada; luego headers.
+    descargarExcelCompartir(`reservas_propuesta_${propuestaId}.xlsx`, [{
+      nombre: 'Reservas',
+      leyenda: leyendaCircuitos,
+      subLeyenda: leyendaVersion(inventario) || undefined,
+      headers,
+      filas,
       // Caras (7), Tarifa (8), Latitud (10), Longitud (11) como celdas tipo número
-      applyNumberFormats(XLSX, ws, rows.length, { 7: FMT_ENTERO, 8: FMT_MONEDA, 10: FMT_COORD, 11: FMT_COORD }, 2);
-      const wb = XLSX.utils.book_new();
-      XLSX.utils.book_append_sheet(wb, ws, 'Reservas');
-      XLSX.writeFile(wb, `reservas_propuesta_${propuestaId}.xlsx`);
-    });
+      formatos: { 7: FMT_ENTERO, 8: FMT_MONEDA, 10: FMT_COORD, 11: FMT_COORD },
+    }], mostrarOrigen ? ORIGEN_LEYENDA : undefined)
+      .catch(err => console.error('Error generando Excel:', err));
   };
 
   const handleDownloadKML = () => {
@@ -498,7 +525,7 @@ export function ClientePropuestaPage() {
       .filter(i => i.latitud && i.longitud)
       .map(i => `
         <Placemark>
-          <name>${i.codigo_unico}</name>
+          <name>${i.codigo_unico}${mostrarOrigen && origenDe(i) === 'campana' ? ' [Nuevo en campaña]' : ''}</name>
           <description>
             <![CDATA[
               Plaza: ${i.plaza || 'N/A'}<br/>
@@ -530,7 +557,7 @@ export function ClientePropuestaPage() {
       .filter(i => i.latitud && i.longitud)
       .map(i => `
         <Placemark>
-          <name>${i.codigo_unico}</name>
+          <name>${i.codigo_unico}${mostrarOrigen && origenDe(i) === 'campana' ? ' [Nuevo en campaña]' : ''}</name>
           <description><![CDATA[Plaza: ${i.plaza || 'N/A'}<br/>Tipo: ${i.tipo_de_cara || 'N/A'}<br/>Formato: ${i.mueble || 'N/A'}<br/>Caras: ${i.caras_totales}<br/>Tarifa: ${formatCurrency(tarifaBruta(i))}]]></description>
           <Point><coordinates>${i.longitud},${i.latitud},0</coordinates></Point>
         </Placemark>`).join('');
@@ -725,6 +752,34 @@ export function ClientePropuestaPage() {
     });
     y += 30;
 
+    // Leyenda de versionado: solo la fecha de la ultima version completada. El
+    // gris de reasignación NO se explica al cliente (queda como simple atenuado).
+    {
+      const leyVer = leyendaVersion(inventario);
+      if (leyVer) {
+        doc.setFontSize(8);
+        doc.setFont('helvetica', 'italic');
+        doc.setTextColor(90, 90, 90);
+        doc.text(leyVer, marginX, y);
+        y += 6.5;
+      }
+      // Leyenda de origen (solo campañas): azul de propuesta, verde agregado.
+      if (mostrarOrigen) {
+        doc.setFontSize(8);
+        doc.setFont('helvetica', 'italic');
+        doc.setTextColor(90, 90, 90);
+        doc.setDrawColor(180, 180, 180);
+        doc.setFillColor(PDF_ORIGEN_FONDO.propuesta[0], PDF_ORIGEN_FONDO.propuesta[1], PDF_ORIGEN_FONDO.propuesta[2]);
+        doc.rect(marginX, y - 3, 6, 3.5, 'FD');
+        doc.text(ORIGEN_LABEL.propuesta, marginX + 8, y);
+        const anchoIzq = doc.getTextWidth(ORIGEN_LABEL.propuesta) + 16;
+        doc.setFillColor(PDF_ORIGEN_FONDO.campana[0], PDF_ORIGEN_FONDO.campana[1], PDF_ORIGEN_FONDO.campana[2]);
+        doc.rect(marginX + anchoIzq, y - 3, 6, 3.5, 'FD');
+        doc.text(ORIGEN_LABEL.campana, marginX + anchoIzq + 8, y);
+        y += 6.5;
+      }
+    }
+
     // Grouped inventory table
     if (inventario.length > 0) {
       const grouped: Record<string, Record<string, typeof inventario>> = {};
@@ -778,7 +833,7 @@ export function ClientePropuestaPage() {
           // Si todos los items del grupo son puente peatonal, usar "Puentes"
           const groupAllPP = items.length > 0 && items.every(i => (i.mueble || '').toUpperCase().includes('PUENTE PEATONAL'));
           autoTable(doc, {
-            head: [['Ciudad', 'Ubicacion', 'Formato', groupAllPP ? 'Puentes' : 'Caras', 'Latitud', 'Longitud', 'Periodo']],
+            head: [['Ciudad', 'Ubicacion', 'Formato', groupAllPP ? 'Puentes' : 'Caras', 'Latitud', 'Longitud', 'Periodo', ...(mostrarOrigen ? ['Origen'] : [])]],
             body: items.map(i => [
               i.plaza || '-',
               (i.ubicacion || '-').substring(0, 50),
@@ -787,6 +842,7 @@ export function ClientePropuestaPage() {
               i.latitud?.toFixed(6) || '-',
               i.longitud?.toFixed(6) || '-',
               formatInicioPeriodo(i, tipoPeriodo),
+              ...(mostrarOrigen ? [origenTexto(i, true)] : []),
             ]),
             startY: y,
             margin: { left: marginX + 5, right: marginX + 5 },
@@ -801,7 +857,11 @@ export function ClientePropuestaPage() {
               4: { cellWidth: 28 },
               5: { cellWidth: 28 },
               6: { cellWidth: 40 },
+              7: { cellWidth: 40 },
             },
+            // Gris = pieza en reasignación (solo atenuado, sin texto para el cliente).
+            // Azul/verde = origen en la campaña (propuesta vs agregado despues).
+            didParseCell: pdfEstiloCompartir(items, mostrarOrigen),
           });
 
           y = (doc as any).lastAutoTable.finalY + 5;
@@ -924,9 +984,30 @@ export function ClientePropuestaPage() {
                {/* <p className="text-gray-600">{data?.propuesta?.descripcion || ''}</p> */}
             </div>
             {/* Solo la leyenda de contexto — el estatus interno (Atendido/Aprobada)
-                no se muestra al cliente. */}
-            <div className={`px-3 py-1 rounded-full text-sm font-medium border ${esCampana ? 'bg-[#0054A6]/10 text-[#0054A6] border-[#0054A6]/30' : 'bg-amber-100 text-amber-700 border-amber-300'}`}>
-              {leyendaCircuitos}
+                no se muestra al cliente. Debajo, la fecha de la ultima version
+                completada y la leyenda del gris (si aplica). */}
+            <div className="flex flex-col items-end gap-1.5">
+              <div className={`px-3 py-1 rounded-full text-sm font-medium border ${esCampana ? 'bg-[#0054A6]/10 text-[#0054A6] border-[#0054A6]/30' : 'bg-amber-100 text-amber-700 border-amber-300'}`}>
+                {leyendaCircuitos}
+              </div>
+              {leyendaVersion(inventario) && (
+                <div className="px-3 py-1 rounded-full text-xs font-medium border bg-sky-50 text-sky-700 border-sky-200">
+                  {leyendaVersion(inventario)}
+                </div>
+              )}
+              {/* Origen (solo campañas): qué se vino de la propuesta y qué se
+                  agregó ya dentro de la campaña. */}
+              {mostrarOrigen && (() => {
+                const conteo = contarPorOrigen(inventario);
+                return (
+                  <div title={ORIGEN_LEYENDA} className="px-3 py-1 rounded-full text-xs font-medium border bg-white text-gray-700 border-gray-300">
+                    <span className="inline-block h-2 w-2 rounded-full mr-1.5 align-middle" style={{ backgroundColor: ORIGEN_COLOR.propuesta }} />
+                    {ORIGEN_LABEL.propuesta}: {conteo.propuesta}
+                    <span className="inline-block h-2 w-2 rounded-full ml-3 mr-1.5 align-middle" style={{ backgroundColor: ORIGEN_COLOR.campana }} />
+                    {ORIGEN_LABEL.campana}: {conteo.campana}
+                  </div>
+                );
+              })()}
             </div>
           </div>
           <div className={`flex gap-6 mt-4 text-sm border-t pt-4 ${isDark ? 'text-zinc-400 border-zinc-700' : 'text-gray-500 border-gray-100'}`}>
@@ -1305,12 +1386,26 @@ export function ClientePropuestaPage() {
                                     <tbody className="divide-y divide-gray-100">
                                       {artGroup.items.map((item, idx) => {
                                         const inv = inversionBruta(item);
+                                        const noVigente = esNoVigente(item);
+                                        const colorOrigen = noVigente ? null : origenColor(item, mostrarOrigen);
+                                        const origen = mostrarOrigen ? origenDe(item) : null;
                                         return (
-                                          <tr key={idx} className="hover:bg-blue-50/30 transition-colors">
+                                          <tr
+                                            key={idx}
+                                            title={origen ? ORIGEN_LABEL[origen] : undefined}
+                                            // Barra de color a la izquierda = origen en la campaña.
+                                            style={colorOrigen ? { boxShadow: `inset 4px 0 0 0 ${colorOrigen}` } : undefined}
+                                            className={`hover:bg-blue-50/30 transition-colors ${noVigente ? 'opacity-50 grayscale italic' : ''}`}
+                                          >
                                             <td className="px-3 py-2" onClick={(e) => e.stopPropagation()}>
                                               <input type="checkbox" checked={selectedItems.has(item.id)} onChange={() => toggleItemSelection(item.id)} className="checkbox-purple" />
                                             </td>
-                                            <td className="px-3 py-2 text-gray-700 text-xs">{item.plaza || '-'}</td>
+                                            <td className="px-3 py-2 text-gray-700 text-xs">
+                                              {colorOrigen && (
+                                                <span className="inline-block h-2 w-2 rounded-full mr-1.5 align-middle" style={{ backgroundColor: colorOrigen }} />
+                                              )}
+                                              {item.plaza || '-'}
+                                            </td>
                                             <td className="px-3 py-2 text-gray-600 text-xs">
                                               {item.mueble || '-'}
                                               {item.tipo_de_mueble && item.tipo_de_mueble?.toUpperCase() !== item.mueble?.toUpperCase() && (
@@ -1441,9 +1536,12 @@ export function ClientePropuestaPage() {
                       icon={{
                         path: google.maps.SymbolPath.CIRCLE,
                         scale: 8,
-                        fillColor: String(item.tipo_de_cara).startsWith('Flujo') ? '#ef4444' : String(item.tipo_de_cara).startsWith('Contraflujo') ? '#3b82f6' : IMU_BLUE,
-                        fillOpacity: 0.9,
-                        strokeColor: '#ffffff',
+                        // Prioridad: no vigente (gris) > origen en campaña > tipo de cara.
+                        fillColor: esNoVigente(item) ? MAPA_GRIS
+                          : origenColor(item, mostrarOrigen)
+                          || (String(item.tipo_de_cara).startsWith('Flujo') ? '#ef4444' : String(item.tipo_de_cara).startsWith('Contraflujo') ? '#3b82f6' : IMU_BLUE),
+                        fillOpacity: esNoVigente(item) ? 0.75 : 0.9,
+                        strokeColor: esNoVigente(item) ? '#6b7280' : '#ffffff',
                         strokeWeight: 2,
                       }}
                     />
@@ -1463,6 +1561,11 @@ export function ClientePropuestaPage() {
                         <p><strong>Ubicacion:</strong> {selectedMarker.ubicacion || 'N/A'}</p>
                         <p><strong>{(selectedMarker.mueble || '').toUpperCase().includes('PUENTE PEATONAL') ? 'Puentes' : 'Caras'}:</strong> {selectedMarker.caras_totales}</p>
                         <p><strong>Tarifa:</strong> {formatCurrency(tarifaBruta(selectedMarker))}</p>
+                        {mostrarOrigen && origenDe(selectedMarker) && (
+                          <p><strong>Origen:</strong>{' '}
+                            <span style={{ color: ORIGEN_COLOR[origenDe(selectedMarker)!] }}>{ORIGEN_LABEL[origenDe(selectedMarker)!]}</span>
+                          </p>
+                        )}
                         {selectedMarker.numero_catorcena && (
                           <p><strong>Periodo:</strong> {tipoPeriodo === 'mensual' && selectedMarker.inicio_periodo ? (() => { const parts = selectedMarker.inicio_periodo.split('-'); return parts.length >= 2 ? `${MESES_LABEL[parseInt(parts[1]) - 1]} ${parts[0]}` : `Cat ${selectedMarker.numero_catorcena} / ${selectedMarker.anio_catorcena}`; })() : `Cat ${selectedMarker.numero_catorcena} / ${selectedMarker.anio_catorcena}`}</p>
                         )}

@@ -80,6 +80,39 @@ export interface DisponiblesResponse {
 }
 
 /** Fila de `/inventarios/conflictos`: una celda sitio × catorcena con 2+ reservas. */
+/**
+ * Una reserva concreta de las que forman el conflicto. Responde las dos
+ * preguntas que la tabla sola no contestaba: QUE estatus tiene (y por tanto por
+ * que ocupa) y DONDE vive (campaña o propuesta, circuito, espacio y periodo).
+ */
+export interface ReservaEnCelda {
+  /** true = apartado tentativo de propuesta. Solo viene en "apartados sobre venta". */
+  es_apartado?: boolean;
+  reserva_id: number;
+  /** Estatus crudo de la columna `estatus` (puede traer 'Con Arte'/'Sin Arte'). */
+  estatus: string;
+  /** La VENTA real. 'Con Arte'/'Sin Arte' son estado del ARTE que se colo en la
+   *  columna estatus; la venta de esas reservas vive aqui. */
+  estatus_original?: string | null;
+  /** Estado del arte. Es del gestor de artes, no de la ocupacion. */
+  arte_aprobado?: string | null;
+  /** Ya tiene archivo de arte cargado. */
+  tiene_arte?: boolean;
+  articulo: string | null;
+  aps: number | null;
+  /** El APS ya se posteo a SAP: la reserva no se debe tocar. */
+  posted: boolean;
+  campana_id: number | null;
+  campana_nombre: string | null;
+  propuesta_id: number | null;
+  /** solicitudCaras.id — el circuito exacto donde vive la reserva. */
+  solicitud_cara_id: number;
+  /** espacio_inventario.id — la pieza fisica reservada. */
+  espacio_id: number;
+  inicio_periodo: string | null;
+  fin_periodo: string | null;
+}
+
 export interface ConflictoOcupacionRow {
   inventario_id: number;
   codigo_unico: string | null;
@@ -100,6 +133,12 @@ export interface ConflictoOcupacionRow {
   campanas?: { id: number; nombre: string }[];
   /** Propuestas (idquote) con reservas sin campaña (enlazan a /propuestas?viewId=). */
   propuestas?: number[];
+  /** Detalle por reserva. Opcional: un backend anterior no lo manda. */
+  reservas?: ReservaEnCelda[];
+  /** Solo en "apartados sobre venta": reservas firmes de la celda. */
+  firmes?: number;
+  /** Solo en "apartados sobre venta": apartados tentativos encima. */
+  apartados?: number;
 }
 
 /** Celda a limpiar en `/inventarios/conflictos/limpiar-duplicados`. */
@@ -375,6 +414,28 @@ export const inventariosService = {
    * El backend re-verifica que cada celda siga siendo duplicado y nunca toca
    * choques ni reservas con APS.
    */
+  /**
+   * Apartados de propuesta encima de inventario YA VENDIDO. Es una categoría
+   * distinta de `getConflictosOcupacion`: ahí solo cuentan las ventas firmes
+   * (dos apartados pueden encimarse por diseño), aquí el apartado está sobre
+   * algo ya vendido y la propuesta no va a poder llevárselo.
+   */
+  async getApartadosSobreVenta(
+    catorcenas: { numero: number; anio: number }[],
+    ids?: number[],
+    opts?: { signal?: AbortSignal; timeout?: number }
+  ): Promise<ConflictoOcupacionRow[]> {
+    const response = await api.post<ApiResponse<{ conflictos: ConflictoOcupacionRow[] }>>(
+      '/inventarios/conflictos/apartados',
+      ids ? { catorcenas, ids } : { catorcenas },
+      { signal: opts?.signal, timeout: opts?.timeout ?? 120_000 }
+    );
+    if (!response.data.success || !response.data.data) {
+      throw new Error(response.data.error || 'Error al obtener apartados sobre venta');
+    }
+    return response.data.data.conflictos;
+  },
+
   async limpiarDuplicadosOcupacion(
     catorcenas: { numero: number; anio: number }[],
     celdas: CeldaRef[],

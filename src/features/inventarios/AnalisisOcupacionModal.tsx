@@ -714,16 +714,33 @@ const labelForCampana = (c: CampanaEnCelda): string => {
   return `Propuesta #${c.propuesta_id}`;
 };
 
-// Estatus de reserva que cuentan como VENDIDO. Mismo mapeo que usa el dashboard
-// (expandEstatusFilter en el back); cualquier otro estatus se pinta como Reservado.
-// OJO: no sirve mirar si hay campana_id — propuesta, cotizacion y campania se
+// Estatus de reserva que cuentan como VENDIDO (venta firme). Espejo de
+// ESTATUS_FIRME en inventario-bloqueo.service.ts del back — esa es la lista que
+// gobierna ocupacion, bloqueo y el detector de conflictos, y es la que hay que
+// mantener en sync. 'Con Arte'/'Sin Arte' son ventas con/sin arte cargado: el
+// cliente sigue teniendo el espacio, asi que ocupan igual.
+// OJO: el dashboard usa una lista distinta (expandEstatusFilter, sin 'Sin Arte')
+// porque ahi es un filtro de reporte, no la definicion de ocupacion.
+// OJO 2: no sirve mirar si hay campana_id — propuesta, cotizacion y campania se
 // crean en la misma transaccion, asi que campana_id casi siempre viene lleno.
-const ESTATUS_VENDIDO = new Set(['Vendido', 'Vendido bonificado', 'Con Arte']);
+const ESTATUS_VENDIDO = new Set(['Vendido', 'Vendido bonificado', 'Con Arte', 'Sin Arte']);
 const esVendida = (c: CampanaEnCelda): boolean => ESTATUS_VENDIDO.has(c.reserva_estatus);
 
-// Un inventario Tradicional solo admite 1 campaña por catorcena; los Digitales admiten varias.
+// Un inventario Tradicional solo admite 1 VENTA por catorcena; los Digitales admiten varias.
 const esDigital = (inv?: InventarioResumen): boolean => inv?.tradicional_digital === 'Digital';
 const conflictoKey = (invId: number, cellKey: string): string => `${invId}|${cellKey}`;
+
+// Regla de conflicto (multireservas): varias reservas sobre la misma cara y
+// catorcena son válidas y esperadas — el equipo reserva de más y luego define.
+// Lo que no puede convivir es una venta con cualquier otra cosa:
+//   reserva + reserva   -> OK, no es conflicto
+//   campaña + reserva   -> conflicto
+//   campaña + campaña   -> conflicto
+// "Campaña" = reserva con estatus vendido (ver ESTATUS_VENDIDO); no basta con
+// que traiga campana_id, que casi siempre viene lleno.
+const contarVendidas = (campanas: CampanaEnCelda[]): number => campanas.filter(esVendida).length;
+const hayConflicto = (campanas: CampanaEnCelda[]): boolean =>
+  campanas.length >= 2 && contarVendidas(campanas) >= 1;
 
 function MatrizView({
   matriz,
@@ -955,7 +972,7 @@ function MatrizView({
     for (const [invIdStr, invCeldas] of Object.entries(matriz.celdas)) {
       if (esDigital(invById.get(Number(invIdStr)))) continue;
       for (const [cellKey, celda] of Object.entries(invCeldas)) {
-        if (celda.campanas.length >= 2) set.add(conflictoKey(Number(invIdStr), cellKey));
+        if (hayConflicto(celda.campanas)) set.add(conflictoKey(Number(invIdStr), cellKey));
       }
     }
     return set;
@@ -963,15 +980,18 @@ function MatrizView({
 
   // Lista de conflictos (sitio × catorcena) para el panel informativo.
   const conflictos = useMemo(() => {
-    if (!matriz) return [] as { inv: InventarioResumen; cat: CatorcenaRef; count: number }[];
-    const out: { inv: InventarioResumen; cat: CatorcenaRef; count: number }[] = [];
+    if (!matriz) return [] as { inv: InventarioResumen; cat: CatorcenaRef; vendidas: number; reservadas: number }[];
+    const out: { inv: InventarioResumen; cat: CatorcenaRef; vendidas: number; reservadas: number }[] = [];
     for (const inv of matriz.inventarios) {
       if (esDigital(inv)) continue;
       const invCeldas = matriz.celdas[inv.id];
       if (!invCeldas) continue;
       for (const cat of matriz.catorcenas) {
         const celda = invCeldas[cellKeyOf(cat)];
-        if (celda && celda.campanas.length >= 2) out.push({ inv, cat, count: celda.campanas.length });
+        if (celda && hayConflicto(celda.campanas)) {
+          const vendidas = contarVendidas(celda.campanas);
+          out.push({ inv, cat, vendidas, reservadas: celda.campanas.length - vendidas });
+        }
       }
     }
     return out;
@@ -1209,14 +1229,14 @@ function MatrizView({
             <button
               onClick={() => setShowDuplicados(s => !s)}
               className={`flex-1 flex items-center gap-2 px-3 py-2 ${isDark ? 'text-amber-300 hover:bg-amber-500/10' : 'text-amber-700 hover:bg-amber-100/50'} rounded-l-lg transition-colors`}
-              title="Inventarios Tradicionales con 2 o más campañas en la misma catorcena"
+              title="Inventarios Tradicionales con una venta que convive con otra venta o con reservas en la misma catorcena"
             >
               <AlertCircle className="h-3.5 w-3.5" />
               <span className="font-semibold">
                 {conflictos.length} {conflictos.length === 1 ? 'celda con conflicto' : 'celdas con conflicto'}
               </span>
               <span className={`${isDark ? 'text-amber-400/70' : 'text-amber-600/80'}`}>
-                (Tradicional con 2+ campañas en una catorcena)
+                (Tradicional vendido que comparte catorcena con otra venta o reserva)
               </span>
               <ChevronDown className={`h-3.5 w-3.5 ml-auto transition-transform ${showDuplicados ? 'rotate-180' : ''}`} />
             </button>
@@ -1240,16 +1260,17 @@ function MatrizView({
           {showDuplicados && (
             <div className={`px-3 pb-2 pt-1 max-h-44 overflow-y-auto border-t ${isDark ? 'border-amber-500/20' : 'border-amber-200/60'}`}>
               <ul className="space-y-1">
-                {conflictos.map(({ inv, cat, count }) => (
+                {conflictos.map(({ inv, cat, vendidas, reservadas }) => (
                   <li key={`${inv.id}-${cellKeyOf(cat)}`} className={`flex flex-wrap items-center gap-x-2 gap-y-0.5 ${isDark ? 'text-zinc-300' : 'text-gray-700'}`}>
                     <span className="font-mono font-medium">{inv.codigo_unico || `#${inv.id}`}</span>
                     <span className={isDark ? 'text-zinc-500' : 'text-gray-500'}>· C{cat.numero}-{cat.anio}</span>
                     <span className={isDark ? 'text-zinc-500' : 'text-gray-500'}>· {inv.plaza || '-'}</span>
                     <span
-                      title="Cantidad de campañas en esta celda (un Tradicional solo debería tener una)"
+                      title="Ventas y reservas que conviven en esta celda (un Tradicional solo debería tener una venta y nada más)"
                       className={`px-1.5 py-0.5 rounded-full text-[10px] font-medium border ${isDark ? 'bg-amber-500/15 text-amber-300 border-amber-500/30' : 'bg-white text-amber-700 border-amber-200'}`}
                     >
-                      {count} campañas
+                      {vendidas} vendida{vendidas === 1 ? '' : 's'}
+                      {reservadas > 0 ? ` + ${reservadas} reservada${reservadas === 1 ? '' : 's'}` : ''}
                     </span>
                   </li>
                 ))}
@@ -1343,7 +1364,7 @@ function MatrizView({
                       {esConflicto && (
                         <div
                           className={`flex items-center gap-1 px-1.5 py-0.5 rounded text-[9px] font-bold uppercase tracking-wide ${isDark ? 'bg-amber-500/20 text-amber-300' : 'bg-amber-100 text-amber-700'}`}
-                          title="Inventario Tradicional con más de una campaña en esta catorcena"
+                          title="Inventario Tradicional vendido que comparte esta catorcena con otra venta o con reservas"
                         >
                           <AlertCircle className="h-2.5 w-2.5" />
                           Conflicto · {todasCampanas.length}

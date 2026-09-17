@@ -18,6 +18,8 @@ import { useThemeStore } from '../../store/themeStore';
 import { getPermissions } from '../../lib/permissions';
 import { useSocketCampana } from '../../hooks/useSocket';
 import { NotasDireccionBitacora } from '../notificaciones/NotasDireccionBitacora';
+import { DesposteoModal } from '../desposteo/DesposteoModal';
+import { puedeSolicitarDesposteo, puedeBypassearDesposteo } from '../../services/desposteo.service';
 
 const statusVariants: Record<string, 'secondary' | 'success' | 'warning' | 'info'> = {
   Aprobada: 'success',
@@ -998,6 +1000,10 @@ export function CampanaDetailPage() {
   const [showCancelPostSAPModal, setShowCancelPostSAPModal] = useState(false);
   const [cancellingPostSAP, setCancellingPostSAP] = useState(false);
   const [cancelPostSAPResult, setCancelPostSAPResult] = useState<{ success: boolean; message: string } | null>(null);
+  // Desposteo Fase 2: comercial abre DesposteoModal en modo 'solicitar' con
+  // el APS elegido. Solo se muestra el boton cuando hay APS posteados.
+  const [showSolicitarDesposteoModal, setShowSolicitarDesposteoModal] = useState(false);
+  const [desposteoAPSSelected, setDesposteoAPSSelected] = useState<number | null>(null);
   const [alreadyPosted, setAlreadyPosted] = useState(false);
   const [previewDeliveryNote, setPreviewDeliveryNote] = useState<any>(null);
   const [postedAPSGroups, setPostedAPSGroups] = useState<Set<number>>(new Set());
@@ -4134,11 +4140,30 @@ export function CampanaDetailPage() {
                   </button>
                 );
               })()}
+              {puedeSolicitarDesposteo(user?.rol) && postedAPSGroups.size > 0 && (
+                <button
+                  onClick={() => {
+                    // Preseleccionar el primer APS que el usuario haya marcado
+                    // en la tabla, o el primero posteado si no hay seleccion.
+                    const selectedPosted = Array.from(selectedItemsAPS)
+                      .map(k => inventarioConAPS.find(i => String(i.rsv_ids) === k)?.aps)
+                      .filter((a): a is number => !!a && postedAPSGroups.has(a));
+                    const apsPrefill = selectedPosted[0] ?? Array.from(postedAPSGroups)[0];
+                    setDesposteoAPSSelected(apsPrefill);
+                    setShowSolicitarDesposteoModal(true);
+                  }}
+                  className={`flex items-center justify-center px-2 sm:px-3 py-1 sm:py-1.5 rounded-lg border transition-colors ${isDark ? 'bg-rose-900/30 border-rose-500/20 hover:bg-rose-500/20 hover:border-rose-500/40' : 'bg-rose-50 border-rose-200 hover:bg-rose-100'}`}
+                  title="Solicitar quitar posteo — inicia flujo comercial > gerente > facturacion"
+                >
+                  <Send className={`h-3 sm:h-3.5 w-3 sm:w-3.5 mr-1 ${isDark ? 'text-rose-400' : 'text-rose-600'}`} />
+                  <span className={`text-[10px] sm:text-xs font-medium ${isDark ? 'text-rose-300' : 'text-rose-700'}`}>Solicitar desposteo</span>
+                </button>
+              )}
               {(permissions.canCancelPostSAP || user?.area === 'TI') && inventarioConAPS.length > 0 && (
                 <button
                   onClick={() => { setCancelPostSAPResult(null); setShowCancelPostSAPModal(true); }}
                   className={`flex items-center justify-center px-2 sm:px-3 py-1 sm:py-1.5 rounded-lg border transition-colors ${isDark ? 'bg-red-900/30 border-red-500/20 hover:bg-red-500/20 hover:border-red-500/40' : 'bg-red-50 border-red-200 hover:bg-red-100'}`}
-                  title="Cancelar POST a SAP (solo TI)"
+                  title={puedeBypassearDesposteo(user?.rol) ? 'Cancelar POST a SAP (DEV/Admin: bypass sin solicitud aprobada)' : 'Cancelar POST a SAP - requiere solicitud de desposteo aprobada'}
                 >
                   <XCircle className={`h-3 sm:h-3.5 w-3 sm:w-3.5 mr-1 ${isDark ? 'text-red-400' : 'text-red-600'}`} />
                   <span className={`text-[10px] sm:text-xs font-medium ${isDark ? 'text-red-300' : 'text-red-700'}`}>Cancelar POST</span>
@@ -5813,6 +5838,18 @@ export function CampanaDetailPage() {
             </div>
           </div>
         </div>
+      )}
+
+      {/* Modal Solicitar desposteo (Fase 2 - comercial) */}
+      {showSolicitarDesposteoModal && desposteoAPSSelected !== null && campana && (
+        <DesposteoModal
+          isOpen={showSolicitarDesposteoModal}
+          onClose={() => { setShowSolicitarDesposteoModal(false); setDesposteoAPSSelected(null); }}
+          modo="solicitar"
+          campaniaId={campana.id}
+          aps={desposteoAPSSelected}
+          onDone={() => queryClient.invalidateQueries({ queryKey: ['campana', campanaId] })}
+        />
       )}
 
       {/* Modal Cancelar POST SAP */}
