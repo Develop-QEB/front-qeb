@@ -263,7 +263,11 @@ const rolePermissions: Partial<Record<UserRole, Partial<RolePermissions>>> = {
     canDeleteProveedores: false,
 
     // Puede cambiar estatus pero solo a estos valores
-    allowedPropuestaStatuses: ['Pase a ventas', 'Ajuste Cto-Cliente', 'Descartada', 'Rechazada'],
+    // 'Ajuste Comercial' (2026-09-17, Jos): el asesor puede regresarse la
+    // propuesta en CUALQUIER momento, sin importar el estatus actual — antes
+    // dependía de que Tráfico se la devolviera y quedaba atorado en Ajuste
+    // Cto-Cliente sin poder editar. Al ponerlo, Tráfico queda bloqueado.
+    allowedPropuestaStatuses: ['Pase a ventas', 'Ajuste Cto-Cliente', 'Ajuste Comercial', 'Descartada', 'Rechazada'],
     canBuscarInventarioEnModal: false,
     canEditClienteEnFormularios: true, // Puede editar campo cliente en solicitudes y propuestas
     canEditArticuloOnEdit: true, // Puede editar artículo SAP al editar circuito (si no hay reservas)
@@ -306,7 +310,11 @@ const rolePermissions: Partial<Record<UserRole, Partial<RolePermissions>>> = {
     // canChangeEstadoSolicitud: true (default)
 
     // Propuestas: permisos de Asesor
-    allowedPropuestaStatuses: ['Pase a ventas', 'Ajuste Cto-Cliente', 'Descartada', 'Rechazada'],
+    // 'Ajuste Comercial' (2026-09-17, Jos): el asesor puede regresarse la
+    // propuesta en CUALQUIER momento, sin importar el estatus actual — antes
+    // dependía de que Tráfico se la devolviera y quedaba atorado en Ajuste
+    // Cto-Cliente sin poder editar. Al ponerlo, Tráfico queda bloqueado.
+    allowedPropuestaStatuses: ['Pase a ventas', 'Ajuste Cto-Cliente', 'Ajuste Comercial', 'Descartada', 'Rechazada'],
     canCompartirPropuesta: true,
     canBuscarInventarioEnModal: false,
     canEditClienteEnFormularios: true, // Asesor: puede editar campo cliente
@@ -776,7 +784,11 @@ const rolePermissions: Partial<Record<UserRole, Partial<RolePermissions>>> = {
     canDeleteProveedores: false,
 
     // Puede cambiar estatus pero solo a estos valores
-    allowedPropuestaStatuses: ['Pase a ventas', 'Ajuste Cto-Cliente', 'Descartada', 'Rechazada'],
+    // 'Ajuste Comercial' (2026-09-17, Jos): el asesor puede regresarse la
+    // propuesta en CUALQUIER momento, sin importar el estatus actual — antes
+    // dependía de que Tráfico se la devolviera y quedaba atorado en Ajuste
+    // Cto-Cliente sin poder editar. Al ponerlo, Tráfico queda bloqueado.
+    allowedPropuestaStatuses: ['Pase a ventas', 'Ajuste Cto-Cliente', 'Ajuste Comercial', 'Descartada', 'Rechazada'],
     canBuscarInventarioEnModal: false,
 
     canEditCampanas: true,
@@ -819,7 +831,11 @@ const rolePermissions: Partial<Record<UserRole, Partial<RolePermissions>>> = {
     canAtenderSolicitudes: true,
     canChangeEstadoSolicitud: true,
 
-    allowedPropuestaStatuses: ['Pase a ventas', 'Ajuste Cto-Cliente', 'Descartada', 'Rechazada'],
+    // 'Ajuste Comercial' (2026-09-17, Jos): el asesor puede regresarse la
+    // propuesta en CUALQUIER momento, sin importar el estatus actual — antes
+    // dependía de que Tráfico se la devolviera y quedaba atorado en Ajuste
+    // Cto-Cliente sin poder editar. Al ponerlo, Tráfico queda bloqueado.
+    allowedPropuestaStatuses: ['Pase a ventas', 'Ajuste Cto-Cliente', 'Ajuste Comercial', 'Descartada', 'Rechazada'],
     canBuscarInventarioEnModal: false,
 
     canEditCampanas: true,
@@ -862,7 +878,11 @@ const rolePermissions: Partial<Record<UserRole, Partial<RolePermissions>>> = {
     canChangeEstadoSolicitud: true,
 
     // Propuestas: mismos permisos que Asesor Comercial
-    allowedPropuestaStatuses: ['Pase a ventas', 'Ajuste Cto-Cliente', 'Descartada', 'Rechazada'],
+    // 'Ajuste Comercial' (2026-09-17, Jos): el asesor puede regresarse la
+    // propuesta en CUALQUIER momento, sin importar el estatus actual — antes
+    // dependía de que Tráfico se la devolviera y quedaba atorado en Ajuste
+    // Cto-Cliente sin poder editar. Al ponerlo, Tráfico queda bloqueado.
+    allowedPropuestaStatuses: ['Pase a ventas', 'Ajuste Cto-Cliente', 'Ajuste Comercial', 'Descartada', 'Rechazada'],
     canBuscarInventarioEnModal: false,
     canEditClienteEnFormularios: true, // Puede editar campo cliente en solicitudes y propuestas
     canEditArticuloOnEdit: true, // Puede editar artículo SAP al editar circuito (si no hay reservas)
