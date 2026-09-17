@@ -498,6 +498,10 @@ export function OrdenesMontajeModal({ isOpen, onClose, canExport = true }: Orden
   const [sapDbFilter, setSapDbFilter] = useState<'todas' | 'TRADE' | 'CIMU'>('todas');
   const [apsEspecificoFilter, setApsEspecificoFilter] = useState<'todas' | 'con' | 'sin'>('todas');
   const [postFilter, setPostFilter] = useState<'todas' | 'con' | 'sin'>('todas');
+  // Filtro Formato (multiselect) — aplica en TODAS las pestañas. Vacío = todos.
+  const [formatoFilter, setFormatoFilter] = useState<string[]>([]);
+  const [showFormatoPopup, setShowFormatoPopup] = useState(false);
+  const [formatoSearch, setFormatoSearch] = useState('');
   // Ocupación: 'vendido' (default = lo que ya está en campañas), 'disponible'
   // (inventario libre/reservado) o 'todo' (ambos). Los filtros de APS/POST/BD SAP
   // solo tienen sentido con 'vendido' (viven en las reservas ya vendidas).
@@ -715,6 +719,18 @@ export function OrdenesMontajeModal({ isOpen, onClose, canExport = true }: Orden
     enabled: isOpen && (activeTab === 'invian' || activeTab === 'invian-digital' || activeTab === 'invian-unmas'),
   });
 
+  // Opciones del filtro Formato: formatos distintos presentes en los datos (CAT + INVIAN).
+  const formatoOptions = useMemo(() => {
+    const set = new Set<string>();
+    const push = (arr: unknown) => { if (Array.isArray(arr)) arr.forEach((it) => {
+      const f = String((it as { formato?: string | null }).formato || '').trim();
+      if (f) set.add(f);
+    }); };
+    push(catData); push(invianData);
+    return Array.from(set).sort((a, b) => a.localeCompare(b, 'es'));
+  }, [catData, invianData]);
+  const toggleFormato = (f: string) => setFormatoFilter(prev => prev.includes(f) ? prev.filter(x => x !== f) : [...prev, f]);
+
   // Haystack precalculado por item — antes `buildHaystack` se ejecutaba en
   // CADA filtrado × CADA item, y los 3-5 useMemo de filtros lo recorrían cada
   // uno. Con N=1000 items × 5 vistas = 5000 reconstrucciones por keystroke.
@@ -823,6 +839,9 @@ export function OrdenesMontajeModal({ isOpen, onClose, canExport = true }: Orden
     } else if (postFilter === 'sin') {
       items = items.filter(item => item.posted !== true);
     }
+    if (formatoFilter.length > 0) {
+      items = items.filter(item => formatoFilter.includes(String((item as { formato?: string | null }).formato || '').trim()));
+    }
 
     // Filter by date range if set
     if (fechaInicio || fechaFin) {
@@ -867,7 +886,7 @@ export function OrdenesMontajeModal({ isOpen, onClose, canExport = true }: Orden
     }
 
     return items;
-  }, [catData, selectedCatorcenas, fechaInicio, fechaFin, catFilters, catSortField, catSortDirection, sapDbFilter, apsEspecificoFilter, postFilter, allSearchTerms, matchesSearchCAT]);
+  }, [catData, selectedCatorcenas, fechaInicio, fechaFin, catFilters, catSortField, catSortDirection, sapDbFilter, apsEspecificoFilter, postFilter, formatoFilter, allSearchTerms, matchesSearchCAT]);
 
   // Filtered Ocupacion Digital data (CAT only digital items)
   const filteredOcupacionDigitalData = useMemo(() => {
@@ -901,6 +920,9 @@ export function OrdenesMontajeModal({ isOpen, onClose, canExport = true }: Orden
       items = items.filter(item => item.posted === true);
     } else if (postFilter === 'sin') {
       items = items.filter(item => item.posted !== true);
+    }
+    if (formatoFilter.length > 0) {
+      items = items.filter(item => formatoFilter.includes(String((item as { formato?: string | null }).formato || '').trim()));
     }
 
     // Filter by date range if set
@@ -948,7 +970,7 @@ export function OrdenesMontajeModal({ isOpen, onClose, canExport = true }: Orden
     }
 
     return items;
-  }, [catData, selectedCatorcenas, fechaInicio, fechaFin, catFilters, catSortField, catSortDirection, sapDbFilter, apsEspecificoFilter, postFilter, allSearchTerms, matchesSearchCAT]);
+  }, [catData, selectedCatorcenas, fechaInicio, fechaFin, catFilters, catSortField, catSortDirection, sapDbFilter, apsEspecificoFilter, postFilter, formatoFilter, allSearchTerms, matchesSearchCAT]);
 
   // Filter Ocupacion UN+ data: solo gran formato (mi macro, kioscos, boleros,
   // bajo puentes, puentes peatonales) Y solo periodos mensuales.
@@ -976,6 +998,9 @@ export function OrdenesMontajeModal({ isOpen, onClose, canExport = true }: Orden
       items = items.filter(item => item.posted === true);
     } else if (postFilter === 'sin') {
       items = items.filter(item => item.posted !== true);
+    }
+    if (formatoFilter.length > 0) {
+      items = items.filter(item => formatoFilter.includes(String((item as { formato?: string | null }).formato || '').trim()));
     }
 
     // Excluir digital (tradicional_digital === 'Digital')
@@ -1035,7 +1060,7 @@ export function OrdenesMontajeModal({ isOpen, onClose, canExport = true }: Orden
     }
 
     return items;
-  }, [catData, selectedCatorcenas, fechaInicio, fechaFin, catFilters, catSortField, catSortDirection, sapDbFilter, apsEspecificoFilter, postFilter, allSearchTerms, matchesSearchCAT]);
+  }, [catData, selectedCatorcenas, fechaInicio, fechaFin, catFilters, catSortField, catSortDirection, sapDbFilter, apsEspecificoFilter, postFilter, formatoFilter, allSearchTerms, matchesSearchCAT]);
 
   // Group CAT data
   const getCATGroupValue = (item: OrdenMontajeCAT, field: CATGroupByField): string => {
@@ -1105,6 +1130,9 @@ export function OrdenesMontajeModal({ isOpen, onClose, canExport = true }: Orden
     } else if (postFilter === 'sin') {
       items = items.filter(item => item.posted !== true);
     }
+    if (formatoFilter.length > 0) {
+      items = items.filter(item => formatoFilter.includes(String((item as { formato?: string | null }).formato || '').trim()));
+    }
     // Filtro APS: en INVIAN la APS vive en CodigoContrato (back: rsv.APS AS rsv_aps).
     // "sin APS" = null o 0 (mismo criterio que el back: APS IS NULL OR APS = 0).
     if (apsEspecificoFilter === 'con') {
@@ -1156,7 +1184,7 @@ export function OrdenesMontajeModal({ isOpen, onClose, canExport = true }: Orden
     }
 
     return items;
-  }, [invianData, selectedCatorcenas, fechaInicio, fechaFin, invianFilters, invianSortField, invianSortDirection, sapDbFilter, apsEspecificoFilter, postFilter, allSearchTerms, matchesSearchINVIAN]);
+  }, [invianData, selectedCatorcenas, fechaInicio, fechaFin, invianFilters, invianSortField, invianSortDirection, sapDbFilter, apsEspecificoFilter, postFilter, formatoFilter, allSearchTerms, matchesSearchINVIAN]);
 
   // Group INVIAN data
   const getINVIANGroupValue = (item: OrdenMontajeINVIAN, field: INVIANGroupByField): string => {
@@ -1207,6 +1235,9 @@ export function OrdenesMontajeModal({ isOpen, onClose, canExport = true }: Orden
     } else if (postFilter === 'sin') {
       items = items.filter(item => item.posted !== true);
     }
+    if (formatoFilter.length > 0) {
+      items = items.filter(item => formatoFilter.includes(String((item as { formato?: string | null }).formato || '').trim()));
+    }
     // Filtro APS: en INVIAN la APS vive en CodigoContrato (back: rsv.APS AS rsv_aps).
     // "sin APS" = null o 0 (mismo criterio que el back: APS IS NULL OR APS = 0).
     if (apsEspecificoFilter === 'con') {
@@ -1254,7 +1285,7 @@ export function OrdenesMontajeModal({ isOpen, onClose, canExport = true }: Orden
     }
 
     return items;
-  }, [invianData, selectedCatorcenas, fechaInicio, fechaFin, invianFilters, invianSortField, invianSortDirection, sapDbFilter, apsEspecificoFilter, postFilter, allSearchTerms, matchesSearchINVIAN]);
+  }, [invianData, selectedCatorcenas, fechaInicio, fechaFin, invianFilters, invianSortField, invianSortDirection, sapDbFilter, apsEspecificoFilter, postFilter, formatoFilter, allSearchTerms, matchesSearchINVIAN]);
 
   // Group INVIAN Digital data
   const groupedINVIANDigitalData = useMemo(() => {
@@ -1622,6 +1653,7 @@ export function OrdenesMontajeModal({ isOpen, onClose, canExport = true }: Orden
     setInvianFilters([]);
     setInvianGroupings([]);
     setInvianSortField(null);
+    setFormatoFilter([]);
     setCurrentPage(1);
   }, []);
 
@@ -1635,7 +1667,7 @@ export function OrdenesMontajeModal({ isOpen, onClose, canExport = true }: Orden
   const currentSortOptions = activeTab === 'cat' || activeTab === 'digital' || activeTab === 'ocupacion-digital' ? CAT_SORT_FIELDS : INVIAN_SORT_FIELDS;
   const currentUniqueValues = activeTab === 'cat' || activeTab === 'digital' || activeTab === 'ocupacion-digital' ? getCATUniqueValues : activeTab === 'invian-digital' ? getINVIANDigitalUniqueValues : getINVIANUniqueValues;
 
-  const hasActiveFilters = currentFilters.length > 0 || currentGroupings.length > 0 || currentSortField !== null || selectedCatorcenas.length > 0 || fechaInicio || fechaFin || sapDbFilter !== 'todas' || apsEspecificoFilter !== 'todas' || postFilter !== 'todas' || ocupacionFilter !== 'vendido';
+  const hasActiveFilters = currentFilters.length > 0 || currentGroupings.length > 0 || currentSortField !== null || selectedCatorcenas.length > 0 || fechaInicio || fechaFin || sapDbFilter !== 'todas' || apsEspecificoFilter !== 'todas' || postFilter !== 'todas' || ocupacionFilter !== 'vendido' || formatoFilter.length > 0;
 
   if (!isOpen) return null;
 
@@ -1779,7 +1811,7 @@ export function OrdenesMontajeModal({ isOpen, onClose, canExport = true }: Orden
                 Filtros
                 {hasActiveFilters && (
                   <span className="ml-1 px-1.5 py-0.5 rounded-full bg-white/20 text-[10px]">
-                    {(selectedCatorcenas.length > 0 ? 1 : 0) + (fechaInicio ? 1 : 0) + (ocupacionFilter !== 'vendido' ? 1 : 0) + (sapDbFilter !== 'todas' ? 1 : 0) + (apsEspecificoFilter !== 'todas' ? 1 : 0) + (postFilter !== 'todas' ? 1 : 0) + currentFilters.length + currentGroupings.length + (currentSortField ? 1 : 0)}
+                    {(selectedCatorcenas.length > 0 ? 1 : 0) + (fechaInicio ? 1 : 0) + (ocupacionFilter !== 'vendido' ? 1 : 0) + (sapDbFilter !== 'todas' ? 1 : 0) + (apsEspecificoFilter !== 'todas' ? 1 : 0) + (postFilter !== 'todas' ? 1 : 0) + (formatoFilter.length > 0 ? 1 : 0) + currentFilters.length + currentGroupings.length + (currentSortField ? 1 : 0)}
                   </span>
                 )}
               </button>
@@ -1821,6 +1853,50 @@ export function OrdenesMontajeModal({ isOpen, onClose, canExport = true }: Orden
                           ? 'Muestra lo que ya está en campañas (vendido). Los filtros de APS/POST/BD SAP aplican aquí.'
                           : 'Incluye inventario libre/reservado del período. La columna Estado muestra RESERVADO / DISPONIBLE.'}
                       </p>
+                    </div>
+
+                    {/* Formato (multiselect) — aplica en TODAS las pestañas */}
+                    <div>
+                      <label className="text-xs font-medium text-zinc-400 mb-2 block">
+                        Formatos {formatoFilter.length > 0 && <span className="text-purple-400">({formatoFilter.length})</span>}
+                      </label>
+                      <div className="relative">
+                        <button
+                          type="button"
+                          onClick={() => setShowFormatoPopup(v => !v)}
+                          className="w-full flex items-center justify-between gap-2 px-3 py-2 rounded-lg text-xs bg-zinc-800 text-zinc-200 border border-zinc-700 hover:bg-zinc-700 transition-colors"
+                        >
+                          <span className="truncate">
+                            {formatoFilter.length === 0 ? 'Todos los formatos' : formatoFilter.length === 1 ? formatoFilter[0] : `${formatoFilter.length} formatos`}
+                          </span>
+                          <ChevronDown className="h-4 w-4 shrink-0 text-zinc-400" />
+                        </button>
+                        {showFormatoPopup && (
+                          <div className="absolute z-30 mt-1 w-full rounded-lg border border-zinc-700 bg-zinc-900 shadow-xl max-h-64 overflow-hidden flex flex-col">
+                            <div className="p-2 border-b border-zinc-800">
+                              <input
+                                autoFocus
+                                value={formatoSearch}
+                                onChange={e => setFormatoSearch(e.target.value)}
+                                placeholder="Buscar formato…"
+                                className="w-full px-2 py-1.5 text-xs rounded bg-zinc-800 border border-zinc-700 text-zinc-100 placeholder:text-zinc-500 focus:outline-none focus:ring-1 focus:ring-purple-500/50"
+                              />
+                              {formatoFilter.length > 0 && (
+                                <button type="button" onClick={() => setFormatoFilter([])} className="mt-1.5 text-[11px] text-red-400 hover:text-red-300">Limpiar selección</button>
+                              )}
+                            </div>
+                            <div className="overflow-y-auto">
+                              {formatoOptions.filter(f => f.toLowerCase().includes(formatoSearch.trim().toLowerCase())).map(f => (
+                                <label key={f} className="flex items-center gap-2 px-3 py-1.5 text-xs text-zinc-200 hover:bg-zinc-800 cursor-pointer">
+                                  <input type="checkbox" checked={formatoFilter.includes(f)} onChange={() => toggleFormato(f)} className="accent-purple-500" />
+                                  <span className="truncate">{f}</span>
+                                </label>
+                              ))}
+                              {formatoOptions.length === 0 && <div className="px-3 py-2 text-[11px] text-zinc-500">Sin formatos en los datos</div>}
+                            </div>
+                          </div>
+                        )}
+                      </div>
                     </div>
 
                     {/* BDD SAP */}
