@@ -441,6 +441,14 @@ export const propuestasService = {
     }
     return response.data.data;
   },
+
+  async getReservasHistorial(propuestaId: number): Promise<ReservaHistorialItem[]> {
+    const response = await api.get<ApiResponse<ReservaHistorialItem[]>>(`/propuestas/${propuestaId}/reservas-historial`);
+    if (!response.data.success || !response.data.data) {
+      throw new Error(response.data.error || 'Error al obtener historial');
+    }
+    return response.data.data;
+  },
 };
 
 export interface CaraUpdateData {

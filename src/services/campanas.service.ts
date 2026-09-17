@@ -1,5 +1,6 @@
 import api from '../lib/api';
 import { Campana, CampanaStats, PaginatedResponse, ApiResponse, ComentarioTarea, CampanaWithComments } from '../types';
+import type { ReservaHistorialItem } from './propuestas.service';
 
 import { useEnvironmentStore, getEndpoints, getDeliveryNotesEndpoint, getSeriesForSapDatabase, usaSapPruebas } from '../store/environmentStore';
 import type { SapDatabase } from '../store/environmentStore';
@@ -1098,6 +1099,14 @@ export const campanasService = {
 
   async getHistorial(id: number): Promise<HistorialItem[]> {
     const response = await api.get<ApiResponse<HistorialItem[]>>(`/campanas/${id}/historial`);
+    if (!response.data.success || !response.data.data) {
+      throw new Error(response.data.error || 'Error al obtener historial');
+    }
+    return response.data.data;
+  },
+
+  async getReservasHistorial(campanaId: number): Promise<ReservaHistorialItem[]> {
+    const response = await api.get<ApiResponse<ReservaHistorialItem[]>>(`/campanas/${campanaId}/reservas-historial`);
     if (!response.data.success || !response.data.data) {
       throw new Error(response.data.error || 'Error al obtener historial');
     }
