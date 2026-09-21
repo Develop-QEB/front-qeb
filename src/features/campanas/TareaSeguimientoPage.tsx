@@ -1555,17 +1555,6 @@ function UploadArtModal({
     return out;
   }, [artesExistentes, addedArtes]);
 
-  // Biblioteca visible aplicando el filtro (todos / visibles / ocultos).
-  // Los artes ocultos NO desaparecen del sistema — solo se filtran en la UI
-  // segun el toggle. La seleccion de un arte ya seleccionado sigue activa
-  // aunque el usuario lo oculte despues.
-  const visibleArtes = useMemo(() => {
-    if (visibilityFilter === 'todos') return localArtes;
-    if (visibilityFilter === 'ocultos') return localArtes.filter(a => hiddenArteIds.has(a.id));
-    return localArtes.filter(a => !hiddenArteIds.has(a.id));
-  }, [localArtes, visibilityFilter, hiddenArteIds]);
-  const hiddenCount = useMemo(() => localArtes.filter(a => hiddenArteIds.has(a.id)).length, [localArtes, hiddenArteIds]);
-
   // Tab del modal: Artes o Fichas Técnicas
   const [modalTab, setModalTab] = useState<'artes' | 'fichas'>('artes');
 
@@ -1605,6 +1594,17 @@ function UploadArtModal({
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
   }, [previewArte]);
+
+  // Biblioteca visible aplicando el filtro (todos / visibles / ocultos).
+  // Los artes ocultos NO desaparecen del sistema — solo se filtran en la UI
+  // segun el toggle. La seleccion de un arte ya seleccionado sigue activa
+  // aunque el usuario lo oculte despues.
+  const visibleArtes = useMemo(() => {
+    if (visibilityFilter === 'todos') return localArtes;
+    if (visibilityFilter === 'ocultos') return localArtes.filter(a => hiddenArteIds.has(a.id));
+    return localArtes.filter(a => !hiddenArteIds.has(a.id));
+  }, [localArtes, visibilityFilter, hiddenArteIds]);
+  const hiddenCount = useMemo(() => localArtes.filter(a => hiddenArteIds.has(a.id)).length, [localArtes, hiddenArteIds]);
 
   // Estado para archivos digitales (múltiples)
   const [digitalFiles, setDigitalFiles] = useState<DigitalFile[]>([]);
