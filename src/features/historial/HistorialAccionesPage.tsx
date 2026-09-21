@@ -26,6 +26,7 @@ function normalizeTipo(raw: string): string {
   const map: Record<string, string> = {
     'Campaña': 'Campaña', 'Propuesta': 'Propuesta', 'Solicitud': 'Solicitud',
     'Inventario': 'Inventario', 'Nota': 'Nota', 'Tarea': 'Tarea',
+    'Desposteo': 'Desposteo',
   };
   return map[raw] || raw;
 }
@@ -58,6 +59,7 @@ const tipoColors: Record<string, { bg: string; text: string; darkBg: string; dar
   'Nota': { bg: 'bg-yellow-100', text: 'text-yellow-700', darkBg: 'bg-yellow-900/30', darkText: 'text-yellow-300' },
   'Arte': { bg: 'bg-pink-100', text: 'text-pink-700', darkBg: 'bg-pink-900/30', darkText: 'text-pink-300' },
   'Tarea': { bg: 'bg-cyan-100', text: 'text-cyan-700', darkBg: 'bg-cyan-900/30', darkText: 'text-cyan-300' },
+  'Desposteo': { bg: 'bg-amber-100', text: 'text-amber-700', darkBg: 'bg-amber-900/30', darkText: 'text-amber-300' },
 };
 
 function TipoBadge({ tipo, isDark }: { tipo: string; isDark: boolean }) {
