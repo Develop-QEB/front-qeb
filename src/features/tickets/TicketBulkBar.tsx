@@ -42,6 +42,12 @@ export function TicketBulkBar({ selectedIds, onClear, isDark, invalidateKeys, st
     onError: (err: any) => {
       alert(err?.response?.data?.message || err?.message || 'Error al aplicar cambio masivo');
     },
+    // Feedback Jos 2026-09-17: sin este reset el select se queda con el ultimo
+    // valor y para volver a aplicar el mismo estatus habia que elegir otro y
+    // regresar. onSettled corre tanto en success como en error.
+    onSettled: () => {
+      setStatus('');
+    },
   });
   const areaMutation = useMutation({
     mutationFn: (a: 'QEB' | 'TI') => ticketsService.bulkUpdateArea(selectedIds, a),
@@ -52,6 +58,9 @@ export function TicketBulkBar({ selectedIds, onClear, isDark, invalidateKeys, st
     },
     onError: (err: any) => {
       alert(err?.response?.data?.message || err?.message || 'Error al reasignar en masa');
+    },
+    onSettled: () => {
+      setArea('');
     },
   });
 
