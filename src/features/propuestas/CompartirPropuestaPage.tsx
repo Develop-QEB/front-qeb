@@ -9,7 +9,8 @@ import { GoogleMap, useLoadScript, Marker, Circle, Autocomplete, InfoWindow } fr
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell } from 'recharts';
 import { propuestasService, InventarioReservado, PropuestaFullDetails } from '../../services/propuestas.service';
 import { UdcReservadosTable } from './UdcReservadosTable';
-import udcMapaAicm from './assets/udc-mapa-aicm-t1.jpg';
+import { UdcMapaAeropuerto } from './UdcMapaAeropuerto';
+import { udcFichaImg, udcFichaDe, udcMapaCoord } from '../../lib/udc';
 import { formatCurrency, formatDate } from '../../lib/utils';
 import { toNum, applyNumberFormats, FMT_COORD } from '../../utils/excelFormat';
 import { useThemeStore } from '../../store/themeStore';
@@ -1069,6 +1070,20 @@ export function CompartirPropuestaPage() {
     });
     y += 25;
 
+    // UDC: precargar las fichas técnicas (imágenes) para incrustarlas en el PDF,
+    // y un índice de la ficha por nombre de pantalla (para los datos básicos).
+    const fichaImgCache = new Map<string, HTMLImageElement>();
+    if (esUDC && inventario && inventario.length > 0) {
+      const urls = new Set<string>();
+      inventario.forEach(it => { const u = udcFichaImg(it.codigo_unico); if (u) urls.add(u); });
+      await Promise.all(Array.from(urls).map(u => new Promise<void>(resolve => {
+        const img = new Image();
+        img.onload = () => { fichaImgCache.set(u, img); resolve(); };
+        img.onerror = () => resolve();
+        img.src = u;
+      })));
+    }
+
     // Table grouped by Catorcena > Artículo (separate rows)
     if (inventario && inventario.length > 0) {
       // Group by catorcena first, then by articulo
@@ -1117,6 +1132,61 @@ export function CompartirPropuestaPage() {
           doc.text(`Renta: ${groupCaras}${groupBonif > 0 ? `  |  Bonif: ${groupBonif}` : ''}  |  Tarifa: ${formatCurrency(groupTarifaUnit)}  |  Inversion: ${formatCurrency(groupTarifa)}`, pageWidth - marginX - 10, y + 4, { align: 'right' });
           y += 8;
 
+          if (esUDC) {
+            // === UDC: FICHAS TÉCNICAS (imágenes) + datos básicos, 2 por fila ===
+            const gap = 6;
+            const colW = (pageWidth - marginX * 2 - 10 - gap) / 2;
+            let col = 0;
+            let rowTop = y;
+            let rowMaxH = 0;
+            for (const it of items) {
+              const f = udcFichaDe(it.codigo_unico);
+              const url = udcFichaImg(it.codigo_unico);
+              const img = url ? fichaImgCache.get(url) : undefined;
+              const ratio = img && img.naturalWidth > 0 ? img.naturalWidth / img.naturalHeight : 1.647;
+              const imgH = colW / ratio;
+              const cellH = imgH + 11;
+              // Salto de página si la ficha no cabe
+              if (rowTop + cellH > pageHeight - 16) {
+                doc.addPage();
+                rowTop = 20;
+                col = 0;
+                rowMaxH = 0;
+              }
+              const x = marginX + 5 + col * (colW + gap);
+              if (img) {
+                doc.addImage(img, 'JPEG', x, rowTop, colW, imgH);
+                doc.setDrawColor(210);
+                doc.rect(x, rowTop, colW, imgH);
+              } else {
+                doc.setFillColor(245, 245, 245);
+                doc.rect(x, rowTop, colW, imgH, 'F');
+                doc.setFontSize(8);
+                doc.setTextColor(150, 150, 150);
+                doc.text('Ficha técnica no disponible', x + colW / 2, rowTop + imgH / 2, { align: 'center' });
+              }
+              // Datos básicos debajo de la ficha
+              const nombre = it.codigo_unico || 'Pantalla';
+              const zona = f?.zona || it.ubicacion || '';
+              const medida = (it.ancho && it.alto) ? `${it.ancho}x${it.alto}px` : (f ? f.medida : '');
+              const dur = f ? `${f.duracion} seg` : '';
+              const tarifaStr = `Tarifa: ${formatCurrency(tarifaBruta(it))}`;
+              const tipo = (Number(it.caras_bonificadas) || 0) > 0 && (Number(it.caras_renta) || 0) === 0 ? 'Bonificación' : 'Renta';
+              doc.setFontSize(9);
+              doc.setFont('helvetica', 'bold');
+              doc.setTextColor(...IMU_DARK);
+              doc.text(`${nombre}${zona ? `   ·   ${zona}` : ''}`, x + 1, rowTop + imgH + 5);
+              doc.setFontSize(7.5);
+              doc.setFont('helvetica', 'normal');
+              doc.setTextColor(90, 90, 90);
+              doc.text([medida, dur, tipo, tarifaStr].filter(Boolean).join('   ·   '), x + 1, rowTop + imgH + 9);
+              rowMaxH = Math.max(rowMaxH, cellH);
+              col++;
+              if (col === 2) { col = 0; rowTop += rowMaxH + gap; rowMaxH = 0; }
+            }
+            if (col === 1) rowTop += rowMaxH + gap; // cerrar fila incompleta
+            y = rowTop + 2;
+          } else {
           // === TABLE FOR THIS ARTICULO ===
           const tableData = items.map(i => [
             String(i.id),
@@ -1151,6 +1221,7 @@ export function CompartirPropuestaPage() {
           if (y > pageHeight - 40) {
             doc.addPage();
             y = 20;
+          }
           }
         });
 
@@ -1245,6 +1316,8 @@ export function CompartirPropuestaPage() {
               <ExternalLink className="h-4 w-4" />
               Ver en navegador
             </a>
+            {/* UDC (aeropuerto): sin mapa geográfico ni KML */}
+            {!esUDC && (
             <a
               href={`/cliente/propuesta/${propuestaId}/mapa${esCampana ? '?ctx=campana' : ''}`}
               target="_blank"
@@ -1254,6 +1327,7 @@ export function CompartirPropuestaPage() {
               <MapIcon className="h-4 w-4" />
               Ver Mapa
             </a>
+            )}
             <button
               onClick={handleCopyLink}
               className="flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-purple-600 to-purple-700 hover:from-purple-500 hover:to-purple-600 text-white rounded-lg text-sm font-medium transition-all shadow-lg shadow-purple-500/20"
@@ -1261,6 +1335,7 @@ export function CompartirPropuestaPage() {
               {copied ? <Check className="h-4 w-4" /> : <Copy className="h-4 w-4" />}
               {copied ? 'Copiado!' : 'Copiar Enlace'}
             </button>
+            {!esUDC && (
             <button
               onClick={handleDownloadKMLAll}
               className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-colors border ${isDark ? 'bg-zinc-800/80 hover:bg-purple-500/20 text-white border-purple-500/30' : 'bg-gray-100 hover:bg-gray-200 text-gray-900 border-gray-200'}`}
@@ -1269,6 +1344,7 @@ export function CompartirPropuestaPage() {
               <MapIcon className="h-4 w-4" />
               KML Todo
             </button>
+            )}
             <button
               onClick={handleGeneratePDF}
               className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-colors border ${isDark ? 'bg-zinc-800/80 hover:bg-purple-500/20 text-white border-purple-500/30' : 'bg-gray-100 hover:bg-gray-200 text-gray-900 border-gray-200'}`}
@@ -1455,17 +1531,24 @@ export function CompartirPropuestaPage() {
         {esUDC ? (
           <div className="space-y-6">
             <UdcReservadosTable items={filteredInventario} isDark={isDark} tipoPeriodo={tipoPeriodo} />
-            {/* Mapa del aeropuerto (estático) — ubicación de las pantallas en Planta Alta */}
+            {/* Mapa del aeropuerto — solo se muestra si alguna pantalla reservada
+                cae en este plano (T1 Planta Alta). Si ninguna está, no aporta
+                (saldría todo gris), así que se oculta. */}
+            {filteredInventario.some(i => udcMapaCoord(i.codigo_unico)) && (
             <div className={`rounded-2xl border overflow-hidden ${isDark ? 'bg-zinc-900 border-cyan-500/20' : 'bg-white border-cyan-200'}`}>
               <div className={`px-5 py-4 border-b flex items-center gap-2 ${isDark ? 'border-cyan-500/20 bg-gradient-to-r from-cyan-600/10 to-sky-600/10' : 'border-cyan-100 bg-cyan-50/60'}`}>
                 <MapIcon className={`h-4 w-4 ${isDark ? 'text-cyan-300' : 'text-cyan-600'}`} />
                 <h3 className={`text-sm font-semibold ${isDark ? 'text-cyan-300' : 'text-cyan-700'}`}>Ubicación en el aeropuerto</h3>
-                <span className={`text-xs ${isDark ? 'text-zinc-500' : 'text-gray-400'}`}>AICM · Terminal 1 · Planta Alta</span>
+                <span className={`text-xs ${isDark ? 'text-zinc-500' : 'text-gray-400'}`}>AICM · Terminal 1</span>
               </div>
               <div className="p-3 sm:p-4 overflow-x-auto">
-                <img src={udcMapaAicm} alt="Mapa del Aeropuerto Internacional de la Ciudad de México, Terminal 1 (Planta Alta), con la ubicación de las pantallas digitales" className={`w-full min-w-[560px] rounded-lg ${isDark ? 'bg-white/90 p-2' : ''}`} />
+                <UdcMapaAeropuerto
+                  reservados={new Set(filteredInventario.map(i => i.codigo_unico || ''))}
+                  isDark={isDark}
+                />
               </div>
             </div>
+            )}
           </div>
         ) : (
         <div className={`rounded-2xl border overflow-hidden ${isDark ? 'bg-gradient-to-br from-zinc-900 to-purple-900/10 border-purple-500/20' : 'bg-white border-gray-200'}`}>

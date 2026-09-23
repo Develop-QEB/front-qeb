@@ -4,16 +4,18 @@ import { useQuery, useQueryClient, useMutation } from '@tanstack/react-query';
 import {
   X, Search, Plus, Trash2, ChevronDown, ChevronRight, ChevronUp, Users,
   FileText, MapPin, Layers, Pencil, Map as MapIcon, Package, Calendar,
-  Gift, Target, Save, ArrowLeft, Filter, Grid, LayoutGrid, Ruler, ArrowUpDown, ArrowUp, ArrowDown, Download, Eye, Funnel, Check, Upload, Monitor, AlertTriangle, Trophy, Loader2, Clock, RefreshCw
+  Gift, Target, Save, ArrowLeft, Filter, Grid, LayoutGrid, Ruler, ArrowUpDown, ArrowUp, ArrowDown, Download, Eye, Funnel, Check, Upload, Monitor, AlertTriangle, Trophy, Loader2, Clock, RefreshCw, History
 } from 'lucide-react';
 import { GoogleMap, useLoadScript, Marker } from '@react-google-maps/api';
 import { GOOGLE_MAPS_LOADER_OPTIONS } from '../../config/googleMaps';
 import { AdvancedMapComponent } from './AdvancedMapComponent';
 import { UdcFichaTecnicaPanel } from './UdcFichaTecnicaPanel';
+import { UdcReservadosPanel } from './UdcReservadosPanel';
+import { HistorialInventarioPanel } from './HistorialInventarioPanel';
 import { Propuesta } from '../../types';
 import { solicitudesService, UserOption } from '../../services/solicitudes.service';
 import { inventariosService, InventarioDisponible } from '../../services/inventarios.service';
-import { propuestasService, ReservaModalItem, CaraUpdateData } from '../../services/propuestas.service';
+import { propuestasService, ReservaModalItem, CaraUpdateData, type ReservaHistorialItem } from '../../services/propuestas.service';
 import { formatCurrency } from '../../lib/utils';
 import { parseCircuitoDigital } from '../../lib/circuitos';
 import { getRequiredPeriodoForArticulo } from '../../lib/periodos';
@@ -23,7 +25,23 @@ import { useEnvironmentStore, getEndpoints } from '../../store/environmentStore'
 import { useAuthStore } from '../../store/authStore';
 import { getPermissions, esAsesorComercial } from '../../lib/permissions';
 import { filterAllowedArticulos } from '../../config/allowedDigitalArticles';
-import { parseArticuloUDC, esArticuloUDCBasura } from '../../lib/udc';
+import { parseArticuloUDC, esArticuloUDCBasura, buildUdcInventarioDisponible, udcPantallaNum, udcFichaDe } from '../../lib/udc';
+
+// Mini-preview (cuadrito cyan con el aspect-ratio real) para las filas UDC.
+// Solo se pinta si el código corresponde a una pantalla UDC (udcFichaDe la halla).
+function UdcPreview({ codigo }: { codigo?: string | null }) {
+  const f = udcFichaDe(codigo);
+  if (!f || !f.ancho || !f.alto) return null;
+  const BW = 34, BH = 20;
+  const ratio = f.ancho / f.alto;
+  let w = BW, h = BW / ratio;
+  if (h > BH) { h = BH; w = BH * ratio; }
+  return (
+    <span className="inline-flex items-center justify-center shrink-0" style={{ width: BW, height: BH }} title={`${f.ancho} × ${f.alto}px · ${f.duracion} seg`}>
+      <span className="rounded-[2px] bg-gradient-to-br from-cyan-400 to-cyan-600 ring-1 ring-cyan-300/40 shadow-sm" style={{ width: Math.max(6, w), height: Math.max(5, h) }} />
+    </span>
+  );
+}
 import { useSocketPropuesta, useSocketEquipos, useSocketInventarioRealtime, type InventarioRealtimePayload } from '../../hooks/useSocket';
 import { useThemeStore } from '../../store/themeStore';
 import { SaveChangesConfirmModal, type ModifiedCircuito } from '../../components/SaveChangesConfirmModal';
@@ -181,11 +199,12 @@ const isBonifSplitArticle = (articulo?: string | null): boolean => {
   return a.startsWith('BF') || a.startsWith('CF') || a.startsWith('CT');
 };
 
-// Feature flag: el switch "Disponibilidad multi-periodo" del buscador se oculta
-// por pedido del negocio (jun-2026). La lógica (intersectarMultiPeriodo, estados)
-// queda intacta y neutralizada — como el toggle nunca se prende, la intersección
-// regresa la data sin tocar. Para reactivarlo, poner en true. Ver commit 576a7bc.
-const SHOW_DISPONIBILIDAD_MULTIPERIODO = false;
+// Feature flag: el switch "Disponibilidad multi-periodo" del buscador.
+// Se ocultó por pedido del negocio (jun-2026) y se REACTIVÓ (sep-2026) a pedido
+// del negocio (ver reserva masiva por circuito / multi-catorcena). La lógica
+// (intersectarMultiPeriodo, estados) queda intacta; con el flag en true el toggle
+// aparece y filtra la disponibilidad por intersección de periodos. Ver commit 576a7bc.
+const SHOW_DISPONIBILIDAD_MULTIPERIODO = true;
 
 // Tarifa publica now comes from SAP (U_IMU_PublicPrice field on each article)
 
@@ -1071,7 +1090,7 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
   const [expandedGroups, setExpandedGroups] = useState<Set<string>>(new Set(['Grupo 1']));
 
   // Tab state for search view (buscar / reservados)
-  const [searchViewTab, setSearchViewTab] = useState<'buscar' | 'reservados'>('buscar');
+  const [searchViewTab, setSearchViewTab] = useState<'buscar' | 'reservados' | 'historial'>('buscar');
 
   // Disponibles data
   const [inventarioDisponible, setInventarioDisponible] = useState<InventarioDisponible[]>([]);
@@ -1165,7 +1184,10 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
     : useEnvironmentStore.getState().environment;
   // UDC (aeropuerto): inventario sin geolocalización/plaza → en el buscador se
   // oculta el mapa y el panel de ubicación (POI/radio/KML/leyenda).
-  const esUDC = sapDbArticulos === 'UDC';
+  // OJO: depende de que la PROPUESTA/CLIENTE sea UDC — NO del ambiente global
+  // (`sapDbArticulos` cae al ambiente): antes, navegar en ambiente UDC ocultaba
+  // el mapa en TODAS las propuestas, no solo en las UDC.
+  const esUDC = (((selectedClienteCuic as any)?.sap_database || propuesta?.sap_database || '') as string).toUpperCase() === 'UDC';
   // Fetch articulos from SAP
   const { data: articulosData, isLoading: articulosLoading } = useQuery({
     queryKey: ['sap-articulos', sapDbArticulos],
@@ -1189,6 +1211,14 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
   const { data: existingReservas, isLoading: reservasLoading } = useQuery({
     queryKey: ['propuesta-reservas-modal', propuesta.id],
     queryFn: () => propuestasService.getReservasForModal(propuesta.id),
+    enabled: isOpen && !!propuesta.id,
+    refetchOnMount: 'always',
+  });
+
+  // Historial del circuito (reservas que salieron: quitadas/desplazadas/bloqueo)
+  const { data: historialInventario } = useQuery({
+    queryKey: ['propuesta-reservas-historial', propuesta.id],
+    queryFn: () => propuestasService.getReservasHistorial(propuesta.id),
     enabled: isOpen && !!propuesta.id,
     refetchOnMount: 'always',
   });
@@ -3814,6 +3844,26 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
     setCsvData([]);
     setShowCsvSection(false);
 
+    // UDC (aeropuerto AICM): las pantallas viven en `inventarios` con marca
+    // plaza='AICM' (sembradas aparte, con sus espacios). Las leemos por esa
+    // plaza para tener ids REALES y poder reservar. Si el entorno no está
+    // sembrado (0 filas), caemos al inventario sintético (solo visual).
+    if (esUDC) {
+      setIsSearching(true);
+      try {
+        const resp = await inventariosService.getAll({ plaza: 'AICM', limit: 100 });
+        const rows = resp.data || [];
+        setInventarioDisponible(rows.length > 0
+          ? rows.map(inv => ({ ...inv, espacios: [], espacios_count: 0, ya_reservado_para_cara: false, espacio_id: null, numero_espacio: null }))
+          : buildUdcInventarioDisponible());
+      } catch {
+        setInventarioDisponible(buildUdcInventarioDisponible());
+      } finally {
+        setIsSearching(false);
+      }
+      return;
+    }
+
     // Fetch disponibles based on cara characteristics (gets all, filter in frontend)
     setIsSearching(true);
     try {
@@ -3902,6 +3952,20 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
   // Refetch disponibles with current filters
   const handleRefetchDisponibles = async () => {
     if (!selectedCaraForSearch) return;
+
+    // UDC: releer inventario real por plaza='AICM' (ver handleSearchInventory).
+    if (esUDC) {
+      try {
+        const resp = await inventariosService.getAll({ plaza: 'AICM', limit: 100 });
+        const rows = resp.data || [];
+        setInventarioDisponible(rows.length > 0
+          ? rows.map(inv => ({ ...inv, espacios: [], espacios_count: 0, ya_reservado_para_cara: false, espacio_id: null, numero_espacio: null }))
+          : buildUdcInventarioDisponible());
+      } catch {
+        setInventarioDisponible(buildUdcInventarioDisponible());
+      }
+      return;
+    }
 
     setIsSearching(true);
     try {
@@ -4105,6 +4169,16 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
 
     return data;
   }, [inventarioDisponible, disponiblesSearchTerm, poiFilterIds, flujoFilter, showOnlyUnicos, showOnlyCompletos, showOnlyUnicosDigitales, showSpotUnico, islaFilter, islaVipFilter, mundialistaFilter, muebleChicoFilter, disponiblesAdvFilters, groupByDistance, groupMode, filterUnicos, filterCompletos, filterUnicosDigitales, filterSpotUnico, groupByDistanceFunc, groupByListFunc, sortColumn, sortDirection, reservas]);
+
+  // UDC: mapa nombre-de-pantalla → key de selección (para pintar checkboxes en
+  // la ficha técnica sincronizados con selectedInventory).
+  const udcKeyByNombre = useMemo(() => {
+    const m = new Map<string, string>();
+    if (esUDC) for (const inv of inventarioDisponible) {
+      if (inv.codigo_unico) m.set(udcPantallaNum(inv.codigo_unico), getInventoryKey(inv));
+    }
+    return m;
+  }, [esUDC, inventarioDisponible, getInventoryKey]);
 
   // Check if an inventory item is selected
   const isInventorySelected = useCallback((inv: InventarioDisponible | ProcessedInventoryItem): boolean => {
@@ -4848,6 +4922,51 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
     );
   }, [reservas, selectedCaraForSearch]);
 
+  // Historial (reservas que salieron) de la cara seleccionada — para el tab Historial.
+  const currentCaraHistorial = useMemo(() => {
+    if (!selectedCaraForSearch?.id) return [];
+    return (historialInventario || []).filter(h => h.solicitud_cara_id === selectedCaraForSearch.id);
+  }, [historialInventario, selectedCaraForSearch]);
+
+  const [reReservandoHistId, setReReservandoHistId] = useState<number | null>(null);
+  // Regresar a reservados un inventario del historial (solo si sigue disponible).
+  // Reusa createReservas: el backend valida disponibilidad con lock y omite si ya
+  // está ocupado/bloqueado.
+  const handleReReservarHistorial = async (item: ReservaHistorialItem) => {
+    if (!item.disponible) return;
+    const cara = caras.find(c => c.id === item.solicitud_cara_id) || selectedCaraForSearch;
+    if (!cara?.id) { showToast('No se encontró el circuito de esta reserva', 'error'); return; }
+    const clienteId = solicitudDetails?.propuesta?.cliente_id ?? propuesta.cliente_id;
+    if (clienteId === undefined || clienteId === null) { showToast('Cliente ID no encontrado', 'error'); return; }
+    const fechaInicio = cara.inicio_periodo || item.inicio_periodo || solicitudDetails?.cotizacion?.fecha_inicio || new Date().toISOString();
+    const fechaFin = cara.fin_periodo || item.fin_periodo || solicitudDetails?.cotizacion?.fecha_fin || new Date().toISOString();
+    const esBonif = /bonific/i.test(item.estatus || '') || /bonific/i.test(item.estatus_original || '');
+    const tipo: 'Flujo' | 'Bonificacion' = esBonif ? 'Bonificacion' : 'Flujo';
+    setReReservandoHistId(item.reserva_id);
+    try {
+      const result = await propuestasService.createReservas(propuesta.id, {
+        reservas: [{ inventario_id: item.inventario_id, tipo, latitud: 0, longitud: 0 }],
+        solicitudCaraId: cara.id,
+        clienteId,
+        fechaInicio,
+        fechaFin,
+        agruparComoCompleto: false,
+      });
+      if ((result.reservasCreadas ?? 0) > 0) {
+        showToast(`${item.codigo_unico} regresó a reservados`, 'success');
+      } else {
+        showToast(result.omitidos?.[0]?.motivo || 'No se pudo regresar (quizá ya está ocupado)', 'error');
+      }
+      queryClient.invalidateQueries({ queryKey: ['propuesta-reservas-modal', propuesta.id] });
+      queryClient.invalidateQueries({ queryKey: ['propuesta-reservas-historial', propuesta.id] });
+      queryClient.invalidateQueries({ queryKey: ['propuesta-inventario', propuesta.id] });
+    } catch (e) {
+      showToast(e instanceof Error ? e.message : 'Error al regresar la reserva', 'error');
+    } finally {
+      setReReservandoHistId(null);
+    }
+  };
+
   // Group reservas by grupo_completo_id - shows pairs as single "Completo" item
   const currentCaraReservasMerged = useMemo(() => {
     const result: ReservaItem[] = [];
@@ -5487,7 +5606,8 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
               <div>
                 <h2 className={`text-lg font-semibold ${isDark ? 'text-white' : 'text-gray-900'}`}>Buscar Inventario</h2>
                 <p className={`text-sm ${isDark ? 'text-zinc-400' : 'text-gray-500'}`}>
-                  {selectedCaraForSearch?.formato} - {selectedCaraForSearch?.ciudad || selectedCaraForSearch?.estados}
+                  {/* UDC: solo la plaza (aeropuerto), no la lista de ciudades */}
+                  {selectedCaraForSearch?.formato} - {esUDC ? (selectedCaraForSearch?.estados || 'AICM') : (selectedCaraForSearch?.ciudad || selectedCaraForSearch?.estados)}
                 </p>
               </div>
             </div>
@@ -5778,14 +5898,32 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
                   </span>
                 )}
               </button>
+              <button
+                onClick={() => setSearchViewTab('historial')}
+                className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all ${searchViewTab === 'historial'
+                  ? 'bg-purple-500/20 text-purple-300 border border-purple-500/40'
+                  : `${isDark ? 'text-zinc-400' : 'text-gray-500'} ${isDark ? 'hover:text-white' : 'hover:text-gray-900'} ${isDark ? 'hover:bg-zinc-800' : 'hover:bg-gray-100'}`
+                  }`}
+              >
+                <History className="h-4 w-4" />
+                Historial
+                {currentCaraHistorial.length > 0 && (
+                  <span className="px-1.5 py-0.5 bg-purple-500/30 text-purple-300 rounded-full text-xs">
+                    {currentCaraHistorial.length}
+                  </span>
+                )}
+              </button>
             </div>
           </div>
 
           {/* Conditional Content based on tab */}
           {searchViewTab === 'buscar' ? (
             <>
-              {/* Filters */}
-              <div className={`px-6 py-2.5 border-b ${isDark ? 'border-zinc-800' : 'border-gray-200'} ${isDark ? 'bg-zinc-900/50' : 'bg-gray-50/50'}`}>
+              {/* Filters — se ocultan en UDC: la ficha técnica trae su propia
+                  barra (título + búsqueda + zona/duración + seleccionar todo),
+                  así no duplicamos búsqueda ni mostramos filtros que no aplican
+                  al aeropuerto (Únicos/Isla/Agrupar/CSV/Excluir…). */}
+              <div className={`px-6 py-2.5 border-b ${isDark ? 'border-zinc-800' : 'border-gray-200'} ${isDark ? 'bg-zinc-900/50' : 'bg-gray-50/50'} ${esUDC ? 'hidden' : ''}`}>
                 <div className="flex items-center gap-2 flex-wrap">
                   {/* Flujo Toggle — para mensual solo Flujo (no Contraflujo) */}
                   {tipoPeriodo === 'mensual' ? (
@@ -6497,10 +6635,33 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
                 );
               })()}
 
-              {/* Content - Map and Table */}
+              {/* Content - Map and Table. UDC: la ficha técnica ES el inventario
+                  (checkbox) y ocupa todo el ancho; se oculta la tabla estándar
+                  (que estaría vacía porque el aeropuerto no vive en `inventarios`). */}
               <div className="flex-1 flex overflow-hidden">
-                {/* Table */}
-                <div className={`w-1/2 border-r ${isDark ? 'border-zinc-800' : 'border-gray-200'} flex flex-col`}>
+                {/* Columna principal: tabla estándar; en UDC = ficha técnica
+                    (el inventario del aeropuerto) a todo lo ancho. El footer de
+                    acciones (Reservar/Bonificar) vive en esta columna, así que
+                    en UDC sigue visible. */}
+                <div className={`${esUDC ? 'w-full' : `w-1/2 border-r ${isDark ? 'border-zinc-800' : 'border-gray-200'}`} flex flex-col`}>
+                  {esUDC ? (
+                    <div className="flex-1 overflow-hidden">
+                      <UdcFichaTecnicaPanel
+                        isDark={isDark}
+                        selected={selectedInventory}
+                        keyByNombre={udcKeyByNombre}
+                        onToggle={toggleInventorySelection}
+                        onToggleVisible={(keys, allSelected) => {
+                          setSelectedInventory(prev => {
+                            const next = new Set(prev);
+                            if (allSelected) keys.forEach(k => next.delete(k));
+                            else keys.forEach(k => next.add(k));
+                            return next;
+                          });
+                        }}
+                      />
+                    </div>
+                  ) : (
                   <div className="flex-1 overflow-auto">
                     {isSearching ? (
                       <div className="flex items-center justify-center h-full">
@@ -6771,6 +6932,7 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
                       </table>
                     )}
                   </div>
+                  )}
 
                   {/* Action buttons */}
                   <div className={`p-4 border-t ${isDark ? 'border-zinc-800' : 'border-gray-200'} ${isDark ? 'bg-zinc-900' : 'bg-white'}/50 space-y-3`}>
@@ -6816,11 +6978,10 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
                   </div>
                 </div>
 
-                {/* Panel derecho: UDC = ficha técnica (aeropuerto sin geo); resto = mapa */}
-                <div className="w-1/2">
-                  {esUDC ? (
-                    <UdcFichaTecnicaPanel isDark={isDark} />
-                  ) : mapsLoaded ? (
+                {/* Panel derecho = mapa. En UDC se oculta (la ficha técnica ya
+                    ocupa la columna principal a todo lo ancho). */}
+                <div className={esUDC ? 'hidden' : 'w-1/2'}>
+                  {mapsLoaded ? (
                     <AdvancedMapComponent
                       inventarios={processedInventory}
                       selectedInventory={new Set(Array.from(selectedInventory).map(key => parseInt(key.split('_')[0])))}
@@ -6840,11 +7001,43 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
                 </div>
               </div>
             </>
+          ) : searchViewTab === 'historial' ? (
+            /* HISTORIAL TAB CONTENT */
+            <HistorialInventarioPanel
+              items={currentCaraHistorial}
+              isDark={isDark}
+              tipoPeriodo={tipoPeriodo}
+              canEdit={effectiveCanEdit}
+              reReservandoId={reReservandoHistId}
+              onReReservar={handleReReservarHistorial}
+            />
           ) : (
             /* RESERVADOS TAB CONTENT */
             <div className="flex-1 flex overflow-hidden">
-              {/* Reservados Table — UDC ocupa todo el ancho (sin mapa) */}
+              {/* Reservados Table — UDC ocupa todo el ancho (sin mapa) y usa el
+                  panel de tarjetas (mismo look que "Buscar disponible"). */}
               <div className={`${esUDC ? 'w-full' : `w-1/2 border-r ${isDark ? 'border-zinc-800' : 'border-gray-200'}`} flex flex-col`}>
+                {esUDC ? (
+                  <UdcReservadosPanel
+                    items={currentCaraReservasMerged}
+                    isDark={isDark}
+                    selected={selectedReservados}
+                    onToggle={handleToggleReservadoSelection}
+                    onToggleVisible={(ids, allSelected) => {
+                      setSelectedReservados(prev => {
+                        const next = new Set(prev);
+                        if (allSelected) ids.forEach(i => next.delete(i));
+                        else ids.forEach(i => next.add(i));
+                        return next;
+                      });
+                    }}
+                    onDelete={effectiveCanEdit ? handleRemoveReserva : undefined}
+                    onBulkDelete={effectiveCanEdit ? handleBulkDeleteReservas : undefined}
+                    canEdit={effectiveCanEdit}
+                    esCortesia={(selectedCaraForSearch?.articulo || '').toUpperCase().startsWith('CT')}
+                  />
+                ) : (
+                <>
                 {/* Search Bar and Tools for Reservados */}
                 <div className={`p-3 border-b ${isDark ? 'border-zinc-800' : 'border-gray-200'} ${isDark ? 'bg-zinc-900' : 'bg-white'}/50 space-y-2`}>
                   {/* Row 1: Search and Delete */}
@@ -7586,6 +7779,8 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
                       </span>
                     </div>
                   </div>
+                )}
+                </>
                 )}
               </div>
 
@@ -9765,7 +9960,7 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
                     </div>
                     <div className="flex h-[520px]">
                       {/* Selection Panel */}
-                      <div className={`w-96 border-r ${isDark ? 'border-zinc-700/50' : 'border-gray-200/50'} ${isDark ? 'bg-zinc-900' : 'bg-white'}/30 flex flex-col flex-shrink-0`}>
+                      <div className={`${esUDC ? 'w-full' : 'w-96 border-r flex-shrink-0'} ${isDark ? 'border-zinc-700/50' : 'border-gray-200/50'} ${isDark ? 'bg-zinc-900' : 'bg-white'}/30 flex flex-col`}>
                         {/* Select All Header */}
                         <div className={`px-4 py-2.5 border-b ${isDark ? 'border-zinc-700/50' : 'border-gray-200/50'} ${isDark ? 'bg-zinc-800/50' : 'bg-gray-50/50'}`}>
                           <div className="flex items-center justify-between">
@@ -9843,6 +10038,7 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
                                           }`}
                                         >
                                           <input type="checkbox" checked={selectedMapReservas.has(reserva.id)} onChange={() => toggleSingleMapReserva(reserva.id)} className="checkbox-purple" />
+                                          <UdcPreview codigo={reserva.codigo_unico} />
                                           <span className={`${isDark ? 'text-zinc-400' : 'text-gray-500'} font-mono text-[11px]`}>{reserva.codigo_unico}</span>
                                           <span className={`${isDark ? 'text-zinc-500' : 'text-gray-400'} text-[11px] truncate max-w-[80px]`}>{reserva.plaza}</span>
                                           <span className={`${isDark ? 'text-zinc-500' : 'text-gray-400'} text-[11px]`}>{reserva.formato}</span>
@@ -9894,6 +10090,7 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
                                                       }`}
                                                     >
                                                       <input type="checkbox" checked={selectedMapReservas.has(reserva.id)} onChange={() => toggleSingleMapReserva(reserva.id)} className="checkbox-purple" />
+                                          <UdcPreview codigo={reserva.codigo_unico} />
                                                       <span className={`${isDark ? 'text-zinc-400' : 'text-gray-500'} font-mono`}>{reserva.codigo_unico}</span>
                                                       <span className={`ml-auto px-1.5 py-0.5 rounded text-[10px] ${
                                                         reserva.codigo_unico?.includes('_Completo') ? 'bg-purple-500/20 text-purple-300' :
@@ -9927,6 +10124,7 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
                                                             }`}
                                                           >
                                                             <input type="checkbox" checked={selectedMapReservas.has(reserva.id)} onChange={() => toggleSingleMapReserva(reserva.id)} className="checkbox-purple" />
+                                          <UdcPreview codigo={reserva.codigo_unico} />
                                                             <span className={`${isDark ? 'text-zinc-400' : 'text-gray-500'} font-mono`}>{reserva.codigo_unico}</span>
                                                           </label>
                                                         ))}
@@ -9971,8 +10169,8 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
                         </div>
                       </div>
 
-                      {/* Map */}
-                      <div className="flex-1 relative">
+                      {/* Map (oculto en UDC: aeropuerto sin geolocalización) */}
+                      <div className={`flex-1 relative ${esUDC ? 'hidden' : ''}`}>
                         {mapsLoaded ? (
                           <>
                             <GoogleMap

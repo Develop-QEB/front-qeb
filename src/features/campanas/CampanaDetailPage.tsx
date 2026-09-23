@@ -20,6 +20,24 @@ import { useSocketCampana } from '../../hooks/useSocket';
 import { NotasDireccionBitacora } from '../notificaciones/NotasDireccionBitacora';
 import { DesposteoModal } from '../desposteo/DesposteoModal';
 import { puedeSolicitarDesposteo, puedeBypassearDesposteo } from '../../services/desposteo.service';
+import { udcFichaDe } from '../../lib/udc';
+
+// Mini-preview (cuadrito cyan con el aspect-ratio real de la pantalla) para las
+// listas UDC del aeropuerto. Solo se pinta si el código corresponde a una
+// pantalla UDC (udcFichaDe la encuentra); si no, no renderiza nada.
+function UdcPreview({ codigo }: { codigo?: string | null }) {
+  const f = udcFichaDe(codigo);
+  if (!f || !f.ancho || !f.alto) return null;
+  const BW = 40, BH = 24;
+  const ratio = f.ancho / f.alto;
+  let w = BW, h = BW / ratio;
+  if (h > BH) { h = BH; w = BH * ratio; }
+  return (
+    <span className="inline-flex items-center justify-center shrink-0" style={{ width: BW, height: BH }} title={`${f.ancho} × ${f.alto}px · ${f.duracion} seg`}>
+      <span className="rounded-[2px] bg-gradient-to-br from-cyan-400 to-cyan-600 ring-1 ring-cyan-300/40 shadow-sm" style={{ width: Math.max(6, w), height: Math.max(5, h) }} />
+    </span>
+  );
+}
 
 const statusVariants: Record<string, 'secondary' | 'success' | 'warning' | 'info'> = {
   Aprobada: 'success',
@@ -607,6 +625,7 @@ function renderReservadoCell(item: InventarioReservado, col: TableColumn, p = 'p
   if (col.field === 'codigo_unico') return (
     <td key={col.field} className={`${p} ${isDark ? 'text-white' : 'text-gray-900'} font-medium`}>
       <div className="flex items-center gap-1.5">
+        <UdcPreview codigo={item.codigo_unico} />
         {item.codigo_unico || '-'}
         {item.estatus_inventario === 'Bloqueado' && (
           <span className="px-1.5 py-0.5 rounded text-[9px] font-semibold bg-red-500/20 text-red-400 border border-red-500/30">Bloqueado</span>
@@ -638,7 +657,11 @@ function renderReservadoCell(item: InventarioReservado, col: TableColumn, p = 'p
   }
   if (col.field === 'latitud') return <td key={col.field} className={`${p} ${isDark ? 'text-zinc-500' : 'text-gray-400'} font-mono text-[10px]`}>{item.latitud != null ? item.latitud.toFixed(5) : '-'}</td>;
   if (col.field === 'longitud') return <td key={col.field} className={`${p} ${isDark ? 'text-zinc-500' : 'text-gray-400'} font-mono text-[10px]`}>{item.longitud != null ? item.longitud.toFixed(5) : '-'}</td>;
-  if (col.field === 'medidas') return <td key={col.field} className={`${p} ${isDark ? 'text-zinc-400' : 'text-gray-500'} text-[10px]`}>{item.ancho && item.alto ? `${item.ancho}×${item.alto}` : '-'}</td>;
+  if (col.field === 'medidas') {
+    const f = udcFichaDe(item.codigo_unico);
+    const anchoM = item.ancho || f?.ancho; const altoM = item.alto || f?.alto;
+    return <td key={col.field} className={`${p} ${isDark ? 'text-zinc-400' : 'text-gray-500'} text-[10px]`}>{anchoM && altoM ? `${anchoM}×${altoM}` : '-'}</td>;
+  }
   const value = item[col.field as keyof InventarioReservado];
   return <td key={col.field} className={`${p} ${isDark ? 'text-zinc-300' : 'text-gray-700'}`}>{value !== null && value !== undefined ? String(value) : '-'}</td>;
 }
@@ -1075,6 +1098,10 @@ export function CampanaDetailPage() {
     staleTime: 1000 * 30, // 30 s — WS invalida en cambios reales
     placeholderData: (prev) => prev, // evita parpadeo al refrescar
   });
+
+  // UDC (aeropuerto): sin geolocalización → en los paneles Sin APS / Con APS se
+  // oculta el mapa y la lista ocupa todo el ancho (con la ficha de la pantalla).
+  const esUDC = (campana?.sap_database || '').toUpperCase() === 'UDC';
 
   // Inicializar alreadyPosted, postedAPSGroups y prefacturaAPSGroups desde la DB
   useEffect(() => {
@@ -2769,9 +2796,9 @@ export function CampanaDetailPage() {
               )}
             </div>
           </div>
-          <div className="grid grid-cols-1 lg:grid-cols-[1fr_2fr] gap-3 md:gap-4 p-3 md:p-4">
-            {/* Columna izquierda: Mapa */}
-            <div className={`h-[280px] sm:h-[320px] md:h-[360px] lg:h-[400px] rounded-lg overflow-hidden border border-border relative ${isDark ? 'map-dark-controls' : ''}`}>
+          <div className={`grid ${esUDC ? 'grid-cols-1' : 'grid-cols-1 lg:grid-cols-[1fr_2fr]'} gap-3 md:gap-4 p-3 md:p-4`}>
+            {/* Columna izquierda: Mapa (oculto en UDC: aeropuerto sin geo) */}
+            <div className={`h-[280px] sm:h-[320px] md:h-[360px] lg:h-[400px] rounded-lg overflow-hidden border border-border relative ${esUDC ? 'hidden' : ''} ${isDark ? 'map-dark-controls' : ''}`}>
               {!isLoaded || isLoadingInventario ? (
                 <MapSkeleton />
               ) : errorInventario ? (
@@ -4172,9 +4199,9 @@ export function CampanaDetailPage() {
               )}
             </div>
           </div>
-          <div className="grid grid-cols-1 lg:grid-cols-[1fr_2fr] gap-3 md:gap-4 p-3 md:p-4">
-            {/* Columna izquierda: Mapa */}
-            <div className={`h-[280px] sm:h-[320px] md:h-[360px] lg:h-[400px] rounded-lg overflow-hidden border border-border relative ${isDark ? 'map-dark-controls' : ''}`}>
+          <div className={`grid ${esUDC ? 'grid-cols-1' : 'grid-cols-1 lg:grid-cols-[1fr_2fr]'} gap-3 md:gap-4 p-3 md:p-4`}>
+            {/* Columna izquierda: Mapa (oculto en UDC: aeropuerto sin geo) */}
+            <div className={`h-[280px] sm:h-[320px] md:h-[360px] lg:h-[400px] rounded-lg overflow-hidden border border-border relative ${esUDC ? 'hidden' : ''} ${isDark ? 'map-dark-controls' : ''}`}>
               {!isLoaded || isLoadingAPS ? (
                 <MapSkeleton />
               ) : errorAPS ? (
