@@ -226,6 +226,10 @@ function ViewClienteModal({ isOpen, onClose, cliente }: ViewClienteModalProps) {
                     <span className={`${isDark ? 'text-zinc-500' : 'text-gray-500'} text-sm`}>Razón Social</span>
                     <span className={`${isDark ? 'text-white' : 'text-gray-900'} text-sm truncate ml-4 max-w-[200px]`}>{cliente.T0_U_RazonSocial || '-'}</span>
                   </div>
+                  <div className="flex justify-between">
+                    <span className={`${isDark ? 'text-zinc-500' : 'text-gray-500'} text-sm`}>CardCode SAP</span>
+                    <span className={`${isDark ? 'text-cyan-300' : 'text-cyan-700'} text-sm font-mono font-medium`}>{cliente.card_code || cliente.ACA_U_SAPCode || '-'}</span>
+                  </div>
                 </div>
               </div>
 
@@ -245,7 +249,7 @@ function ViewClienteModal({ isOpen, onClose, cliente }: ViewClienteModalProps) {
                     <span className={`${isDark ? 'text-white' : 'text-gray-900'} text-sm font-mono`}>{cliente.ASESOR_U_IDAsesor || cliente.T0_U_IDAsesor || '-'}</span>
                   </div>
                   <div className="flex justify-between">
-                    <span className={`${isDark ? 'text-zinc-500' : 'text-gray-500'} text-sm`}>Código SAP</span>
+                    <span className={`${isDark ? 'text-zinc-500' : 'text-gray-500'} text-sm`}>Código SAP Asesor</span>
                     <span className={`${isDark ? 'text-white' : 'text-gray-900'} text-sm font-mono`}>{cliente.ASESOR_U_SAPCode || '-'}</span>
                   </div>
                   <div className="flex justify-between">
