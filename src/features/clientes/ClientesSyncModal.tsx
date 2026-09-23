@@ -265,7 +265,7 @@ export function ClientesSyncModal({ isOpen, onClose }: { isOpen: boolean; onClos
                             <span className={`text-[10px] px-2 py-0.5 rounded ${isDark ? 'bg-zinc-700 text-zinc-300' : 'bg-gray-200 text-gray-700'}`}>
                               CUIC {d.cuic}
                             </span>
-                            <span className={`text-[10px] px-2 py-0.5 rounded ${d.sap_database === 'CIMU' ? 'bg-blue-500/20 text-blue-400' : 'bg-purple-500/20 text-purple-400'}`}>
+                            <span className={`text-[10px] px-2 py-0.5 rounded ${d.sap_database === 'CIMU' ? 'bg-blue-500/20 text-blue-400' : d.sap_database === 'UDC' ? 'bg-cyan-500/20 text-cyan-400' : d.sap_database === 'TRADE' ? 'bg-emerald-500/20 text-emerald-400' : 'bg-purple-500/20 text-purple-400'}`}>
                               {d.sap_database}
                             </span>
                             {d.es_huerfano ? (

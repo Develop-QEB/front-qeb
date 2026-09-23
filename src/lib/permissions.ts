@@ -80,6 +80,10 @@ export interface RolePermissions {
   canSeeCampanas: boolean;
   canSeeInventarios: boolean;
   canSeeAdminUsuarios: boolean;
+  // UDC (aeropuerto AICM): solo roles de Aeropuerto (+ Admin/DEV) ven y usan la
+  // BD UDC — pestaña UDC en Clientes, filtro UDC en Solicitudes, etc. Vía Pública
+  // y Plazas NO la ven. Se calcula por rol en getPermissions (esRolUDC).
+  canVerUDC: boolean;
 
   // Clientes
   canCreateClientes: boolean;
@@ -173,6 +177,7 @@ const defaultPermissions: RolePermissions = {
   canSeeCampanas: true,
   canSeeInventarios: true,
   canSeeAdminUsuarios: true,
+  canVerUDC: false, // se calcula por rol en getPermissions (esRolUDC)
 
   canCreateClientes: true,
   canEditClientes: true,
@@ -2837,7 +2842,7 @@ export function getPermissions(role: string | undefined | null): RolePermissions
   // Tráfico (cualquier rol de tráfico) NO puede editar tarifa ni cantidad de caras
   // de circuitos, ni en propuestas ni en campañas.
   const esTrafico = /trafico/i.test(role);
-  return { ...merged, canEditTarifaCaras: merged.canEditTarifaCaras && !esTrafico };
+  return { ...merged, canEditTarifaCaras: merged.canEditTarifaCaras && !esTrafico, canVerUDC: esRolUDC(role) };
 }
 
 // Hook para usar en componentes
@@ -2860,4 +2865,22 @@ export const ROLES_ASESOR_COMERCIAL: string[] = [
 
 export function esAsesorComercial(rol?: string | null): boolean {
   return !!rol && ROLES_ASESOR_COMERCIAL.includes(rol);
+}
+
+/**
+ * Roles que pueden ver y usar la BD UDC (aeropuerto AICM): los roles de
+ * Aeropuerto + Admin/DEV. Vía Pública, Plazas y el resto NO ven UDC.
+ * Se usa para `canVerUDC` (pestaña UDC en Clientes, filtro UDC en Solicitudes, etc.).
+ */
+export const ROLES_UDC: string[] = [
+  'Director Comercial Aeropuerto',
+  'Gerente Comercial Aeropuerto',
+  'Asesor Comercial Aeropuerto',
+  'Analista de Aeropuerto',
+  'Administrador',
+  'DEV',
+];
+
+export function esRolUDC(rol?: string | null): boolean {
+  return !!rol && ROLES_UDC.includes(rol);
 }

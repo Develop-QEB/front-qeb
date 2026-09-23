@@ -9,6 +9,8 @@ import {
 import { GoogleMap, useLoadScript, Marker } from '@react-google-maps/api';
 import { GOOGLE_MAPS_LOADER_OPTIONS } from '../../config/googleMaps';
 import { AdvancedMapComponent } from '../propuestas/AdvancedMapComponent';
+import { UdcFichaTecnicaPanel } from '../propuestas/UdcFichaTecnicaPanel';
+import { UdcReservadosPanel } from '../propuestas/UdcReservadosPanel';
 import { HistorialInventarioPanel } from '../propuestas/HistorialInventarioPanel';
 import { Campana, CampanaWithComments } from '../../types';
 import { solicitudesService, UserOption } from '../../services/solicitudes.service';
@@ -24,6 +26,22 @@ import { useEnvironmentStore, getEndpoints } from '../../store/environmentStore'
 import { useAuthStore } from '../../store/authStore';
 import { usePermissions, esAsesorComercial } from '../../lib/permissions';
 import { filterAllowedArticulos } from '../../config/allowedDigitalArticles';
+import { parseArticuloUDC, esArticuloUDCBasura, buildUdcInventarioDisponible, udcPantallaNum, udcFichaDe } from '../../lib/udc';
+
+// Mini-preview (cuadrito cyan con el aspect-ratio real) para las filas UDC.
+function UdcPreview({ codigo }: { codigo?: string | null }) {
+  const f = udcFichaDe(codigo);
+  if (!f || !f.ancho || !f.alto) return null;
+  const BW = 34, BH = 20;
+  const ratio = f.ancho / f.alto;
+  let w = BW, h = BW / ratio;
+  if (h > BH) { h = BH; w = BH * ratio; }
+  return (
+    <span className="inline-flex items-center justify-center shrink-0" style={{ width: BW, height: BH }} title={`${f.ancho} × ${f.alto}px · ${f.duracion} seg`}>
+      <span className="rounded-[2px] bg-gradient-to-br from-cyan-400 to-cyan-600 ring-1 ring-cyan-300/40 shadow-sm" style={{ width: Math.max(6, w), height: Math.max(5, h) }} />
+    </span>
+  );
+}
 import { useSocketEquipos, useSocketCampana, useSocketInventarioRealtime, useEstatusEnVivo, type InventarioRealtimePayload } from '../../hooks/useSocket';
 import { useThemeStore } from '../../store/themeStore';
 import { SaveChangesConfirmModal, type ModifiedCircuito } from '../../components/SaveChangesConfirmModal';
@@ -776,6 +794,14 @@ function SearchableSelect({
 
 const MESES_LABEL = ['Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio', 'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre'];
 
+// Feature flag: switch "Disponibilidad multi-periodo" del buscador (paridad con
+// propuestas). Aplica SOLO al circuito que se reserva: al prenderlo se eligen
+// catorcenas/periodos extra y la disponibilidad mostrada = inventario libre en
+// la cat del circuito Y en TODOS los periodos elegidos (intersección por
+// codigo_unico). Solo filtra la vista; la reserva se sigue creando en la cat del
+// circuito. Reactivado sep-2026 a pedido del negocio.
+const SHOW_DISPONIBILIDAD_MULTIPERIODO = true;
+
 export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props) {
   useModalTracker('Editar Campaña', isOpen);
   const isDark = useThemeStore((s) => s.theme) === 'dark';
@@ -1075,6 +1101,10 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
   );
   // Reserva Masiva: toggle (solo aparece cuando la cara tiene grupo_masivo_id)
   const [reservaMasivaC, setReservaMasivaC] = useState<boolean>(false);
+  // Disponibilidad multi-periodo (switch del buscador, solo este circuito).
+  const [disponibilidadMultiC, setDisponibilidadMultiC] = useState<boolean>(false);
+  const [periodosExtraC, setPeriodosExtraC] = useState<Set<string>>(new Set());
+  const [showPeriodosDropdownC, setShowPeriodosDropdownC] = useState<boolean>(false);
   // Exclusión por categoría de cliente: oculta inventario disponible cerca de
   // piezas reservadas por clientes de la categoría seleccionada.
   const [excluirCategoria, setExcluirCategoria] = useState<string>('');
@@ -1207,15 +1237,28 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
     enabled: isOpen,
   });
 
+  // BD SAP del catálogo de artículos: si la campaña es UDC (aeropuerto AICM),
+  // trae /articulos-udc; si no, respeta el ambiente global (CIMU/TRADE intactos).
+  const sapDbArticulos = (campana?.sap_database || '').toUpperCase() === 'UDC'
+    ? ('UDC' as const)
+    : useEnvironmentStore.getState().environment;
+  // UDC (aeropuerto): el inventario no tiene geolocalización/plaza, así que en el
+  // buscador se oculta el mapa y todo el panel de ubicación (POI/radio/KML/leyenda).
+  // Depende de que la CAMPAÑA/CLIENTE sea UDC — NO del ambiente global, para no
+  // ocultar el mapa en campañas normales cuando navegas en ambiente UDC.
+  const esUDC = (((selectedClienteCuic as any)?.sap_database || campana?.sap_database || '') as string).toUpperCase() === 'UDC';
   // Fetch articulos from SAP
   const { data: articulosData, isLoading: articulosLoading } = useQuery({
-    queryKey: ['sap-articulos'],
+    queryKey: ['sap-articulos', sapDbArticulos],
     queryFn: async () => {
       try {
-        const response = await fetch(getEndpoints(useEnvironmentStore.getState().environment).articulos);
+        const response = await fetch(getEndpoints(sapDbArticulos).articulos);
         if (!response.ok) throw new Error('Error fetching articulos');
         const data = await response.json();
-        return filterAllowedArticulos((data.value || data) as SAPArticulo[]);
+        let list = (data.value || data) as SAPArticulo[];
+        // UDC: quitar filas basura del catálogo (merch/reembolsos/activos).
+        if (sapDbArticulos === 'UDC') list = list.filter(a => !esArticuloUDCBasura(a.ItemCode));
+        return filterAllowedArticulos(list);
       } catch {
         return [] as SAPArticulo[];
       }
@@ -3865,6 +3908,81 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
     }));
   }, [tamanoGrupoReservados]);
 
+  // Catálogo de periodos seleccionables para la disponibilidad multi-periodo.
+  // Catorcena: tabla `catorcenas` (numero · año). Mensual: los 12 meses del año
+  // base y el siguiente (por si cruza año). Igual que en propuestas.
+  const periodosCatalogoC = useMemo((): { key: string; label: string; fecha_inicio: string; fecha_fin: string }[] => {
+    if (tipoPeriodo === 'mensual') {
+      const baseIni = selectedCaraForSearch?.inicio_periodo;
+      const baseYear = baseIni ? Number(String(baseIni).slice(0, 4)) : (yearInicio || new Date().getFullYear());
+      const out: { key: string; label: string; fecha_inicio: string; fecha_fin: string }[] = [];
+      for (const y of [baseYear, baseYear + 1]) {
+        for (let m = 0; m < 12; m++) {
+          const ini = `${y}-${String(m + 1).padStart(2, '0')}-01`;
+          const finDate = new Date(y, m + 1, 0);
+          const fin = `${y}-${String(m + 1).padStart(2, '0')}-${String(finDate.getDate()).padStart(2, '0')}`;
+          out.push({ key: ini, label: `${MESES_LABEL[m]} ${y}`, fecha_inicio: ini, fecha_fin: fin });
+        }
+      }
+      return out;
+    }
+    return (catorcenasData?.data || [])
+      .slice()
+      .sort((a, b) => String(a.fecha_inicio).localeCompare(String(b.fecha_inicio)))
+      .map(c => ({
+        key: String(c.fecha_inicio).slice(0, 10),
+        label: `Cat ${c.numero_catorcena} · ${c.a_o}`,
+        fecha_inicio: String(c.fecha_inicio).slice(0, 10),
+        fecha_fin: String(c.fecha_fin).slice(0, 10),
+      }));
+  }, [tipoPeriodo, catorcenasData, selectedCaraForSearch?.inicio_periodo, yearInicio]);
+
+  // Clave del periodo base (el del propio circuito): siempre cuenta en la
+  // intersección y no se ofrece como "extra".
+  const periodoBaseKeyC = useMemo(
+    () => String(selectedCaraForSearch?.inicio_periodo || '').slice(0, 10),
+    [selectedCaraForSearch?.inicio_periodo]
+  );
+
+  // Intersecta la data del periodo del circuito con la disponibilidad de cada
+  // periodo extra (una llamada a getDisponibles por periodo, SIN solicitudCaraId)
+  // y conserva solo el inventario libre en TODOS (por codigo_unico).
+  const intersectarMultiPeriodoC = useCallback(async (
+    baseData: InventarioDisponible[],
+    cara: CaraItem,
+  ): Promise<InventarioDisponible[]> => {
+    if (!disponibilidadMultiC || periodosExtraC.size === 0) return baseData;
+    const periodos = periodosCatalogoC.filter(p => periodosExtraC.has(p.key) && p.key !== periodoBaseKeyC);
+    if (periodos.length === 0) return baseData;
+
+    let ciudadFilter = cara.ciudad || undefined;
+    if (ciudadFilter && ciudadFilter.split(',').length > 3) ciudadFilter = undefined;
+    const estadoParam = cara.estados === 'Ciudad de México / AM' ? 'Ciudad de México,Estado de México' : cara.estados;
+    const isAM = cara.estados === 'Ciudad de México / AM';
+
+    const respuestas = await Promise.all(periodos.map(p =>
+      inventariosService.getDisponibles({
+        ciudad: ciudadFilter,
+        estado: estadoParam || undefined,
+        formato: cara.formato || undefined,
+        nse: cara.nivel_socioeconomico || undefined,
+        tipo: cara.tipo || undefined,
+        fecha_inicio: p.fecha_inicio,
+        fecha_fin: p.fecha_fin,
+        excluir_mi_macro: tipoPeriodo === 'catorcena' ? 1 : undefined,
+      })
+        .then(r => (r.data || []).filter(inv => !isAM || (inv.plaza || '').toUpperCase() !== 'TOLUCA'))
+        .catch(() => [] as InventarioDisponible[])
+    ));
+
+    let claves = new Set(baseData.map(i => String(i.codigo_unico)));
+    for (const resp of respuestas) {
+      const libres = new Set(resp.map(i => String(i.codigo_unico)));
+      claves = new Set([...claves].filter(c => libres.has(c)));
+    }
+    return baseData.filter(i => claves.has(String(i.codigo_unico)));
+  }, [disponibilidadMultiC, periodosExtraC, periodosCatalogoC, periodoBaseKeyC, tipoPeriodo]);
+
   // Handle search inventory - open search view and fetch disponibles
   const handleSearchInventory = async (cara: CaraItem) => {
     setLoadingCaraAction({ caraId: cara.localId, action: 'search' });
@@ -3877,6 +3995,27 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
     setFlujoFilter(tipoPeriodo === 'mensual' ? 'Flujo' : 'Todos');
     setSortColumn('codigo_unico');
     setSortDirection('asc');
+
+    // UDC (aeropuerto AICM): las pantallas viven en `inventarios` con marca
+    // plaza='AICM' (sembradas aparte, con sus espacios). Las leemos por esa
+    // plaza para tener ids REALES y poder reservar. Fallback sintético si el
+    // entorno no está sembrado.
+    if (esUDC) {
+      setLoadingCaraAction(null);
+      setIsSearching(true);
+      try {
+        const resp = await inventariosService.getAll({ plaza: 'AICM', limit: 100 });
+        const rows = resp.data || [];
+        setInventarioDisponible(rows.length > 0
+          ? rows.map(inv => ({ ...inv, espacios: [], espacios_count: 0, ya_reservado_para_cara: false, espacio_id: null, numero_espacio: null }))
+          : buildUdcInventarioDisponible());
+      } catch {
+        setInventarioDisponible(buildUdcInventarioDisponible());
+      } finally {
+        setIsSearching(false);
+      }
+      return;
+    }
 
     // Fetch disponibles based on cara characteristics (gets all, filter in frontend)
     setIsSearching(true);
@@ -3926,7 +4065,8 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
       const data = (response.data || []).filter(inv =>
         !isAM || (inv.plaza || '').toUpperCase() !== 'TOLUCA'
       );
-      setInventarioDisponible(data);
+      const dataFinal = await intersectarMultiPeriodoC(data, cara);
+      setInventarioDisponible(dataFinal);
     } catch (error) {
       console.error('Error fetching disponibles:', error);
       setInventarioDisponible([]);
@@ -3944,6 +4084,13 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [reservaMasivaC]);
 
+  // Al cambiar de circuito en el buscador, reiniciar la disponibilidad multi-periodo.
+  useEffect(() => {
+    setDisponibilidadMultiC(false);
+    setPeriodosExtraC(new Set());
+    setShowPeriodosDropdownC(false);
+  }, [selectedCaraForSearch?.id]);
+
   // Re-search cuando cambia exclusión por categoría o distancia
   useEffect(() => {
     if (viewState === 'search-inventory' && selectedCaraForSearch) {
@@ -3955,6 +4102,20 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
   // Refetch disponibles with current filters
   const handleRefetchDisponibles = async () => {
     if (!selectedCaraForSearch) return;
+
+    // UDC: releer inventario real por plaza='AICM' (ver handleSearchInventory).
+    if (esUDC) {
+      try {
+        const resp = await inventariosService.getAll({ plaza: 'AICM', limit: 100 });
+        const rows = resp.data || [];
+        setInventarioDisponible(rows.length > 0
+          ? rows.map(inv => ({ ...inv, espacios: [], espacios_count: 0, ya_reservado_para_cara: false, espacio_id: null, numero_espacio: null }))
+          : buildUdcInventarioDisponible());
+      } catch {
+        setInventarioDisponible(buildUdcInventarioDisponible());
+      }
+      return;
+    }
 
     setIsSearching(true);
     try {
@@ -3998,13 +4159,23 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
       const data2 = (response.data || []).filter(inv =>
         !isAM2 || (inv.plaza || '').toUpperCase() !== 'TOLUCA'
       );
-      setInventarioDisponible(data2);
+      const data2Final = await intersectarMultiPeriodoC(data2, selectedCaraForSearch);
+      setInventarioDisponible(data2Final);
     } catch (error) {
       console.error('Error fetching disponibles:', error);
     } finally {
       setIsSearching(false);
     }
   };
+
+  // Re-filtrar cuando se prende/apaga el switch o cambian los periodos extra.
+  // Usa refetch (no handleSearchInventory) para no resetear filtros/selección.
+  useEffect(() => {
+    if (viewState === 'search-inventory' && selectedCaraForSearch) {
+      handleRefetchDisponibles();
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [disponibilidadMultiC, periodosExtraC]);
 
   // Filtered and processed inventory data
   const processedInventory = useMemo((): ProcessedInventoryItem[] => {
@@ -4432,6 +4603,16 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
       return next;
     });
   };
+
+  // UDC: mapa nombre-de-pantalla → key de selección (checkboxes de la ficha
+  // técnica sincronizados con selectedInventory).
+  const udcKeyByNombre = useMemo(() => {
+    const m = new Map<string, string>();
+    if (esUDC) for (const inv of inventarioDisponible) {
+      if (inv.codigo_unico) m.set(udcPantallaNum(inv.codigo_unico), getInventoryKey(inv));
+    }
+    return m;
+  }, [esUDC, inventarioDisponible, getInventoryKey]);
 
   // Handle inventory selection (uses unique key for digital items)
   const toggleInventorySelection = (key: string) => {
@@ -4878,6 +5059,7 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
   }, [historialInventario, selectedCaraForSearch]);
 
   const [reReservandoHistId, setReReservandoHistId] = useState<number | null>(null);
+  // Regresar a reservados un inventario del historial (solo si sigue disponible).
   const handleReReservarHistorial = async (item: ReservaHistorialItem) => {
     if (!item.disponible) return;
     const cara = caras.find(c => c.id === item.solicitud_cara_id) || selectedCaraForSearch;
@@ -5594,7 +5776,8 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
               <div>
                 <h2 className={`text-lg font-semibold ${isDark ? 'text-white' : 'text-gray-900'}`}>Buscar Inventario</h2>
                 <p className={`text-sm ${isDark ? 'text-zinc-400' : 'text-gray-500'}`}>
-                  {selectedCaraForSearch?.formato} - {selectedCaraForSearch?.ciudad || selectedCaraForSearch?.estados}
+                  {/* UDC: solo la plaza (aeropuerto), no la lista de ciudades */}
+                  {selectedCaraForSearch?.formato} - {esUDC ? (selectedCaraForSearch?.estados || 'AICM') : (selectedCaraForSearch?.ciudad || selectedCaraForSearch?.estados)}
                 </p>
               </div>
             </div>
@@ -5908,8 +6091,10 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
           {/* Conditional Content based on tab */}
           {searchViewTab === 'buscar' ? (
             <>
-              {/* Filters */}
-              <div className={`px-6 py-2.5 border-b ${isDark ? 'border-zinc-800 bg-zinc-900/50' : 'border-gray-200 bg-gray-50/50'}`}>
+              {/* Filters — se ocultan en UDC: la ficha técnica trae su propia
+                  barra (título + búsqueda + zona/duración + seleccionar todo),
+                  así no duplicamos búsqueda ni filtros que no aplican al aeropuerto. */}
+              <div className={`px-6 py-2.5 border-b ${isDark ? 'border-zinc-800 bg-zinc-900/50' : 'border-gray-200 bg-gray-50/50'} ${esUDC ? 'hidden' : ''}`}>
                 <div className="flex items-center gap-2 flex-wrap">
                   {/* Flujo Toggle — para mensual solo Flujo (no Contraflujo) */}
                   {tipoPeriodo === 'mensual' ? (
@@ -6045,6 +6230,8 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
                     </button>
                   )}
 
+                  {/* Mundialista + Chico: no aplican a UDC (aeropuerto) → ocultos */}
+                  {!esUDC && (<>
                   {/* Mundialista filter - 3-state toggle: off → SI → NO → off */}
                   <button
                     onClick={() => {
@@ -6082,6 +6269,7 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
                     <Package className="h-3.5 w-3.5" />
                     {muebleChicoFilter === 'si' ? 'Chico ✓' : muebleChicoFilter === 'no' ? 'Chico ✗' : 'Chico'}
                   </button>
+                  </>)}
 
                   {/* Filtros avanzados (embudo) */}
                   <div className="relative">
@@ -6364,6 +6552,78 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
                     );
                   })()}
 
+                  {/* Disponibilidad multi-periodo: switch del buscador que aplica
+                      solo a este circuito. Al activarlo se eligen periodos extra
+                      y la disponibilidad = inventario libre en la cat del circuito
+                      Y en TODOS los elegidos. Flag SHOW_DISPONIBILIDAD_MULTIPERIODO. */}
+                  {SHOW_DISPONIBILIDAD_MULTIPERIODO && (
+                  <div className="relative">
+                    <label className={`flex items-center gap-2 text-xs cursor-pointer select-none px-2 py-1.5 rounded-lg border ${disponibilidadMultiC ? 'bg-purple-500/20 border-purple-500/40 text-purple-300' : 'bg-zinc-800 border-zinc-700 text-zinc-300'}`}>
+                      <Calendar className="h-3.5 w-3.5" />
+                      <span>Disponibilidad multi-periodo{disponibilidadMultiC && periodosExtraC.size > 0 ? ` (+${periodosExtraC.size})` : ''}</span>
+                      <button
+                        type="button"
+                        onClick={() => setDisponibilidadMultiC(v => !v)}
+                        className={`relative inline-flex h-4 w-7 items-center rounded-full transition-colors ${disponibilidadMultiC ? 'bg-purple-500' : 'bg-zinc-700'}`}
+                        title="Filtra el inventario que esté disponible en la cat/periodo del circuito Y en los periodos extra que selecciones"
+                      >
+                        <span className={`inline-block h-3 w-3 transform rounded-full bg-white transition-transform ${disponibilidadMultiC ? 'translate-x-3.5' : 'translate-x-0.5'}`} />
+                      </button>
+                      {disponibilidadMultiC && (
+                        <button
+                          type="button"
+                          onClick={() => setShowPeriodosDropdownC(v => !v)}
+                          className="flex items-center gap-1 -mr-1 pl-1 text-purple-300"
+                          title="Elegir periodos extra"
+                        >
+                          <span className="text-[10px] uppercase">Periodos</span>
+                          <ChevronDown className={`h-3 w-3 transition-transform ${showPeriodosDropdownC ? 'rotate-180' : ''}`} />
+                        </button>
+                      )}
+                    </label>
+
+                    {disponibilidadMultiC && showPeriodosDropdownC && (
+                      <>
+                        <div className="fixed inset-0 z-40" onClick={() => setShowPeriodosDropdownC(false)} />
+                        <div className="absolute left-0 top-full mt-1 z-50 w-64 max-h-72 overflow-y-auto rounded-lg border shadow-xl bg-zinc-900 border-zinc-700">
+                          <div className="sticky top-0 px-3 py-2 text-[11px] border-b bg-zinc-900 border-zinc-800 text-zinc-400">
+                            Periodos extra (además del circuito)
+                            {periodosExtraC.size > 0 && (
+                              <button
+                                type="button"
+                                onClick={() => setPeriodosExtraC(new Set())}
+                                className="ml-2 text-red-400 hover:text-red-300"
+                              >
+                                limpiar
+                              </button>
+                            )}
+                          </div>
+                          {periodosCatalogoC.filter(p => p.key !== periodoBaseKeyC).map(p => {
+                            const checked = periodosExtraC.has(p.key);
+                            return (
+                              <button
+                                key={p.key}
+                                type="button"
+                                onClick={() => setPeriodosExtraC(prev => {
+                                  const next = new Set(prev);
+                                  if (next.has(p.key)) next.delete(p.key); else next.add(p.key);
+                                  return next;
+                                })}
+                                className={`w-full flex items-center gap-2 px-3 py-2 text-left text-xs border-b border-zinc-800/50 last:border-0 ${checked ? 'bg-purple-500/15 text-purple-300' : 'text-zinc-300 hover:bg-zinc-800'}`}
+                              >
+                                <span className={`flex items-center justify-center h-4 w-4 rounded border ${checked ? 'bg-purple-500 border-purple-500' : 'border-zinc-600'}`}>
+                                  {checked && <Check className="h-3 w-3 text-white" />}
+                                </span>
+                                {p.label}
+                              </button>
+                            );
+                          })}
+                        </div>
+                      </>
+                    )}
+                  </div>
+                  )}
+
                   {/* Exclusión por categoría de cliente — esconde inventario
                       cercano a piezas reservadas por clientes de una categoría
                       X dentro del radio elegido (Haversine en back). */}
@@ -6526,10 +6786,32 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
                 );
               })()}
 
-              {/* Content - Map and Table */}
+              {/* Content - Map and Table. UDC: la ficha técnica ES el inventario
+                  (checkbox) y ocupa todo el ancho; se oculta la tabla estándar
+                  (vacía porque el aeropuerto no vive en `inventarios`). */}
               <div className="flex-1 flex overflow-hidden">
-                {/* Table */}
-                <div className="w-1/2 border-r border-zinc-800 flex flex-col">
+                {/* Columna principal: tabla estándar; en UDC = ficha técnica
+                    (el inventario del aeropuerto) full-width. El footer de
+                    acciones (Reservar/Bonificar) vive aquí → visible en UDC. */}
+                <div className={`${esUDC ? 'w-full' : 'w-1/2 border-r border-zinc-800'} flex flex-col`}>
+                  {esUDC ? (
+                    <div className="flex-1 overflow-hidden">
+                      <UdcFichaTecnicaPanel
+                        isDark={isDark}
+                        selected={selectedInventory}
+                        keyByNombre={udcKeyByNombre}
+                        onToggle={toggleInventorySelection}
+                        onToggleVisible={(keys, allSelected) => {
+                          setSelectedInventory(prev => {
+                            const next = new Set(prev);
+                            if (allSelected) keys.forEach(k => next.delete(k));
+                            else keys.forEach(k => next.add(k));
+                            return next;
+                          });
+                        }}
+                      />
+                    </div>
+                  ) : (
                   <div className="flex-1 overflow-auto">
                     {isSearching ? (
                       <div className="flex items-center justify-center h-full">
@@ -6800,6 +7082,7 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
                       </table>
                     )}
                   </div>
+                  )}
 
                   {/* Action buttons */}
                   <div className={`p-4 border-t ${isDark ? 'border-zinc-800 bg-zinc-900/50' : 'border-gray-200 bg-gray-50/50'} space-y-3`}>
@@ -6845,8 +7128,9 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
                   </div>
                 </div>
 
-                {/* Advanced Map */}
-                <div className="w-1/2">
+                {/* Panel derecho = mapa. En UDC se oculta (la ficha técnica ya
+                    ocupa la columna principal a todo lo ancho). */}
+                <div className={esUDC ? 'hidden' : 'w-1/2'}>
                   {mapsLoaded ? (
                     <AdvancedMapComponent
                       inventarios={processedInventory}
@@ -6880,8 +7164,30 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
           ) : (
             /* RESERVADOS TAB CONTENT */
             <div className="flex-1 flex overflow-hidden">
-              {/* Reservados Table */}
-              <div className="w-1/2 flex flex-col border-r border-zinc-800">
+              {/* Reservados Table — UDC ocupa todo el ancho (sin mapa) y usa el
+                  panel de tarjetas (mismo look que "Buscar disponible"). */}
+              <div className={`${esUDC ? 'w-full' : 'w-1/2 border-r border-zinc-800'} flex flex-col`}>
+                {esUDC ? (
+                  <UdcReservadosPanel
+                    items={currentCaraReservasMerged}
+                    isDark={isDark}
+                    selected={selectedReservados}
+                    onToggle={handleToggleReservadoSelection}
+                    onToggleVisible={(ids, allSelected) => {
+                      setSelectedReservados(prev => {
+                        const next = new Set(prev);
+                        if (allSelected) ids.forEach(i => next.delete(i));
+                        else ids.forEach(i => next.add(i));
+                        return next;
+                      });
+                    }}
+                    onDelete={effectiveCanEdit && !selectedCaraAPSBlocked ? handleRemoveReserva : undefined}
+                    onBulkDelete={effectiveCanEdit && !selectedCaraAPSBlocked ? handleBulkDeleteReservas : undefined}
+                    canEdit={effectiveCanEdit}
+                    esCortesia={(selectedCaraForSearch?.articulo || '').toUpperCase().startsWith('CT')}
+                  />
+                ) : (
+                <>
                 {/* Search Bar and Tools for Reservados */}
                 <div className="p-3 border-b border-zinc-800 bg-zinc-900/50 space-y-2">
                   {/* Row 1: Search and Delete */}
@@ -7629,10 +7935,12 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
                     </div>
                   </div>
                 )}
+                </>
+                )}
               </div>
 
-              {/* Map of Reservados */}
-              <div className="w-1/2 relative">
+              {/* Map of Reservados — oculto para UDC (aeropuerto sin geolocalización) */}
+              <div className={esUDC ? 'hidden' : 'w-1/2 relative'}>
                 {mapsLoaded ? (
                   <>
                     <GoogleMap
@@ -7893,6 +8201,7 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
                                             item.sap_database === 'CIMU' ? isDark ? 'bg-blue-500/20 text-blue-300 border-blue-500/30' : 'bg-blue-50 text-blue-700 border-blue-200' :
                                             item.sap_database === 'TEST' ? isDark ? 'bg-amber-500/20 text-amber-300 border-amber-500/30' : 'bg-amber-50 text-amber-700 border-amber-200' :
                                             item.sap_database === 'TRADE' ? isDark ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500/30' : 'bg-emerald-50 text-emerald-700 border-emerald-200' :
+                                            item.sap_database === 'UDC' ? isDark ? 'bg-cyan-500/20 text-cyan-300 border-cyan-500/30' : 'bg-cyan-50 text-cyan-700 border-cyan-200' :
                                             isDark ? 'bg-zinc-500/20 text-zinc-300 border-zinc-500/30' : 'bg-gray-50 text-gray-700 border-gray-200'
                                           }`}>{item.sap_database}</span>
                                         )}
@@ -8346,7 +8655,7 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
                             if (code.startsWith('BF') || code.startsWith('CF')) return false;
                             // Gran Formato ↔ periodo: mensual solo muestra Gran Formato;
                             // catorcena los excluye (mismo criterio que en solicitudes).
-                            return getRequiredPeriodoForArticulo(a.ItemName) === tipoPeriodo;
+                            return getRequiredPeriodoForArticulo(a.ItemName, a.ItemCode) === tipoPeriodo;
                           })}
                           value={selectedArticulo}
                           onChange={async (item: SAPArticulo) => {
@@ -8397,6 +8706,34 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
                                 setSelectedArticulo(null);
                                 return;
                               }
+                            }
+
+                            // UDC (aeropuerto AICM): todo Digital, mensual, plaza AICM.
+                            // La zona (terminal/familia) viene en el ItemCode/ItemName;
+                            // usamos el parser UDC en vez del autorrelleno genérico.
+                            if ((campana?.sap_database || '').toUpperCase() === 'UDC') {
+                              const udc = parseArticuloUDC(item.ItemCode, item.ItemName);
+                              const tarifaUdc = getTarifaPublicaFromArticulo(item);
+                              const tarifaPisoUdc = getTarifaPisoFromArticulo(item);
+                              const esCT = item.ItemCode.toUpperCase().startsWith('CT');
+                              const esIN = item.ItemCode.toUpperCase().startsWith('IN');
+                              const esIM = item.ItemCode.toUpperCase().startsWith('IM');
+                              const esESP = isEspecialArticle(item.ItemCode);
+                              setNewCara({
+                                ...newCara,
+                                articulo: item.ItemCode,
+                                tarifa_publica: esCT ? 0 : tarifaUdc,
+                                costo: esCT ? 0 : tarifaPisoUdc,
+                                caras: esCT ? 0 : newCara.caras,
+                                caras_flujo: esCT ? 0 : newCara.caras_flujo,
+                                caras_contraflujo: esCT ? 0 : newCara.caras_contraflujo,
+                                bonificacion: (esIM || esIN || esESP) ? 0 : newCara.bonificacion,
+                                estados: udc?.plazaLabel || 'Ciudad de México / AM',
+                                ciudad: udc?.ciudad || 'AICM',
+                                formato: udc?.familiaLabel || newCara.formato,
+                                tipo: 'Digital',
+                              });
+                              return;
                             }
 
                             // Auto-complete all fields from article
@@ -9652,7 +9989,7 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
                     </div>
                     <div className="flex h-[520px]">
                       {/* Selection Panel */}
-                      <div className={`w-96 border-r ${isDark ? 'border-zinc-700/50 bg-zinc-900/30' : 'border-gray-200 bg-gray-50/30'} flex flex-col flex-shrink-0`}>
+                      <div className={`${esUDC ? 'w-full' : 'w-96 border-r flex-shrink-0'} ${isDark ? 'border-zinc-700/50 bg-zinc-900/30' : 'border-gray-200 bg-gray-50/30'} flex flex-col`}>
                         {/* Select All Header */}
                         <div className={`px-4 py-2.5 border-b ${isDark ? 'border-zinc-700/50 bg-zinc-800/50' : 'border-gray-200 bg-gray-100/50'}`}>
                           <div className="flex items-center justify-between">
@@ -9731,6 +10068,7 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
                                           }`}
                                         >
                                           <input type="checkbox" checked={selectedMapReservas.has(reserva.id)} onChange={() => toggleSingleMapReserva(reserva.id)} className="checkbox-purple" />
+                                          <UdcPreview codigo={reserva.codigo_unico} />
                                           <span className="text-zinc-400 font-mono text-[11px]">{reserva.codigo_unico}</span>
                                           {reserva.estatus_inventario === 'Bloqueado' && (
                                             <span className="px-1 py-0.5 rounded text-[9px] font-semibold bg-red-500/20 text-red-400 border border-red-500/30">Bloqueado</span>
@@ -9785,6 +10123,7 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
                                                       }`}
                                                     >
                                                       <input type="checkbox" checked={selectedMapReservas.has(reserva.id)} onChange={() => toggleSingleMapReserva(reserva.id)} className="checkbox-purple" />
+                                          <UdcPreview codigo={reserva.codigo_unico} />
                                                       <span className="text-zinc-400 font-mono">{reserva.codigo_unico}</span>
                                                       {reserva.estatus_inventario === 'Bloqueado' && (
                                                         <span className="px-1 py-0.5 rounded text-[9px] font-semibold bg-red-500/20 text-red-400 border border-red-500/30">Bloqueado</span>
@@ -9821,6 +10160,7 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
                                                             }`}
                                                           >
                                                             <input type="checkbox" checked={selectedMapReservas.has(reserva.id)} onChange={() => toggleSingleMapReserva(reserva.id)} className="checkbox-purple" />
+                                          <UdcPreview codigo={reserva.codigo_unico} />
                                                             <span className="text-zinc-400 font-mono">{reserva.codigo_unico}</span>
                                                             {reserva.estatus_inventario === 'Bloqueado' && (
                                                               <span className="px-1 py-0.5 rounded text-[9px] font-semibold bg-red-500/20 text-red-400 border border-red-500/30">Bloqueado</span>
@@ -9868,8 +10208,8 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
                         </div>
                       </div>
 
-                      {/* Map */}
-                      <div className="flex-1 relative">
+                      {/* Map (oculto en UDC: aeropuerto sin geolocalización) */}
+                      <div className={`flex-1 relative ${esUDC ? 'hidden' : ''}`}>
                         {mapsLoaded ? (
                           <>
                             <GoogleMap

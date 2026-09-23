@@ -159,6 +159,8 @@ function ViewClienteModal({ isOpen, onClose, cliente }: ViewClienteModalProps) {
                         ? (isDark ? 'bg-amber-500/20 text-amber-300 border-amber-500/30' : 'bg-amber-50 text-amber-700 border-amber-200')
                         : cliente.sap_database === 'TRADE'
                         ? (isDark ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500/30' : 'bg-emerald-50 text-emerald-700 border-emerald-200')
+                        : cliente.sap_database === 'UDC'
+                        ? (isDark ? 'bg-cyan-500/20 text-cyan-300 border-cyan-500/30' : 'bg-cyan-50 text-cyan-700 border-cyan-200')
                         : (isDark ? 'bg-zinc-500/20 text-zinc-300 border-zinc-500/30' : 'bg-gray-100 text-gray-600 border-gray-200')
                     }`}>
                       {cliente.sap_database}
@@ -536,7 +538,7 @@ export function ClientesPage() {
   // WebSocket para actualizaciones en tiempo real
   useSocketClientes();
 
-  const [activeTab, setActiveTab] = useState<'db' | 'CIMU' | 'TEST' | 'TRADE'>('db');
+  const [activeTab, setActiveTab] = useState<'db' | 'CIMU' | 'TEST' | 'TRADE' | 'UDC'>('db');
   const [search, setSearch] = useState('');
   const [debouncedSearch, setDebouncedSearch] = useState('');
   const [expandedGroups, setExpandedGroups] = useState<Set<string>>(new Set());
@@ -617,11 +619,19 @@ export function ClientesPage() {
     staleTime: 10 * 60 * 1000,
   });
 
+  // UDC (aeropuerto AICM, compañía SBOUDC).
+  const { data: udcData, isLoading: udcLoading, refetch: refetchUdc, isFetching: udcFetching } = useQuery({
+    queryKey: ['clientes-sap-UDC', debouncedSearch],
+    queryFn: () => clientesService.getSAPClientesByDB('UDC', debouncedSearch || undefined),
+    staleTime: 10 * 60 * 1000,
+    enabled: permissions.canVerUDC, // solo roles de Aeropuerto ven/consultan UDC
+  });
+
   // Helper to get the active SAP query data/refetch
-  const activeSapData = activeTab === 'CIMU' ? cimuData : activeTab === 'TEST' ? testData : activeTab === 'TRADE' ? tradeData : null;
-  const activeSapLoading = activeTab === 'CIMU' ? cimuLoading : activeTab === 'TEST' ? testLoading : activeTab === 'TRADE' ? tradeLoading : false;
-  const activeSapFetching = activeTab === 'CIMU' ? cimuFetching : activeTab === 'TEST' ? testFetching : activeTab === 'TRADE' ? tradeFetching : false;
-  const activeSapRefetch = activeTab === 'CIMU' ? refetchCimu : activeTab === 'TEST' ? refetchTest : activeTab === 'TRADE' ? refetchTrade : null;
+  const activeSapData = activeTab === 'CIMU' ? cimuData : activeTab === 'TEST' ? testData : activeTab === 'TRADE' ? tradeData : activeTab === 'UDC' ? udcData : null;
+  const activeSapLoading = activeTab === 'CIMU' ? cimuLoading : activeTab === 'TEST' ? testLoading : activeTab === 'TRADE' ? tradeLoading : activeTab === 'UDC' ? udcLoading : false;
+  const activeSapFetching = activeTab === 'CIMU' ? cimuFetching : activeTab === 'TEST' ? testFetching : activeTab === 'TRADE' ? tradeFetching : activeTab === 'UDC' ? udcFetching : false;
+  const activeSapRefetch = activeTab === 'CIMU' ? refetchCimu : activeTab === 'TEST' ? refetchTest : activeTab === 'TRADE' ? refetchTrade : activeTab === 'UDC' ? refetchUdc : null;
 
   // Refresh SAP data (clear cache on backend)
   const handleRefreshSap = async () => {
@@ -631,6 +641,7 @@ export function ClientesPage() {
         fetch(`${SAP_BASE_URL}/clear-cache?key=cuic`),
         fetch(`${SAP_BASE_URL}/clear-cache?key=cuic-test`),
         fetch(`${SAP_BASE_URL}/clear-cache?key=cuic-trade`),
+        fetch(`${SAP_BASE_URL}/clear-cache?key=cuic-udc`),
       ]);
     } catch (e) { /* ignore */ }
     if (activeSapRefetch) {
@@ -647,6 +658,7 @@ export function ClientesPage() {
       queryClient.invalidateQueries({ queryKey: ['clientes-sap-CIMU'] });
       queryClient.invalidateQueries({ queryKey: ['clientes-sap-TEST'] });
       queryClient.invalidateQueries({ queryKey: ['clientes-sap-TRADE'] });
+      queryClient.invalidateQueries({ queryKey: ['clientes-sap-UDC'] });
       queryClient.invalidateQueries({ queryKey: ['clientes-stats'] });
     },
   });
@@ -660,13 +672,14 @@ export function ClientesPage() {
       queryClient.invalidateQueries({ queryKey: ['clientes-sap-CIMU'] });
       queryClient.invalidateQueries({ queryKey: ['clientes-sap-TEST'] });
       queryClient.invalidateQueries({ queryKey: ['clientes-sap-TRADE'] });
+      queryClient.invalidateQueries({ queryKey: ['clientes-sap-UDC'] });
       queryClient.invalidateQueries({ queryKey: ['clientes-stats'] });
     },
   });
 
   // Get current data based on tab and filters
   const isDb = activeTab === 'db';
-  const isSapTab = activeTab === 'CIMU' || activeTab === 'TEST' || activeTab === 'TRADE';
+  const isSapTab = activeTab === 'CIMU' || activeTab === 'TEST' || activeTab === 'TRADE' || activeTab === 'UDC';
 
   // All SAP data (for total count + filtering)
   const allSapData = useMemo(() => {
@@ -880,6 +893,7 @@ export function ClientesPage() {
     CIMU: isDark ? 'bg-blue-500/20 text-blue-300 border-blue-500/30' : 'bg-blue-50 text-blue-700 border-blue-200',
     TEST: isDark ? 'bg-amber-500/20 text-amber-300 border-amber-500/30' : 'bg-amber-50 text-amber-700 border-amber-200',
     TRADE: isDark ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500/30' : 'bg-emerald-50 text-emerald-700 border-emerald-200',
+    UDC: isDark ? 'bg-cyan-500/20 text-cyan-300 border-cyan-500/30' : 'bg-cyan-50 text-cyan-700 border-cyan-200',
   };
 
   const renderClientRow = (item: Cliente, isDbRow: boolean, index: number) => (
@@ -967,6 +981,7 @@ export function ClientesPage() {
   const cimuTotal = cimuData?.total ?? 0;
   const testTotal = testData?.total ?? 0;
   const tradeTotal = tradeData?.total ?? 0;
+  const udcTotal = udcData?.total ?? 0;
   const dbTotal = dbData?.pagination?.total ?? 0;
 
   return (
@@ -1037,6 +1052,16 @@ export function ClientesPage() {
                   count={tradeTotal}
                   loading={activeTab === 'TRADE' && tradeLoading}
                 />
+                {permissions.canVerUDC && (
+                <TabButton
+                  active={activeTab === 'UDC'}
+                  onClick={() => { setActiveTab('UDC'); setSapPage(1); clearAllFilters(); }}
+                  icon={Cloud}
+                  label="UDC"
+                  count={udcTotal}
+                  loading={activeTab === 'UDC' && udcLoading}
+                />
+                )}
                 {isSapTab && (
                   <button
                     onClick={handleRefreshSap}
