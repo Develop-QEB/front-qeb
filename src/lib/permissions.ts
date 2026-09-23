@@ -2861,3 +2861,15 @@ export const ROLES_ASESOR_COMERCIAL: string[] = [
 export function esAsesorComercial(rol?: string | null): boolean {
   return !!rol && ROLES_ASESOR_COMERCIAL.includes(rol);
 }
+
+/**
+ * Roles de tráfico (Gerente, Coordinador, Especialista, Auxiliar, Bi).
+ * Se detecta por el token "trafico" en el nombre del rol para ser tolerante
+ * a variantes futuras. Se usa en reglas de negocio dedicadas a tráfico, p. ej.
+ * el bloqueo de edición de circuitos cuando la campaña/propuesta está en
+ * "Ajuste Comercial" (el balón está del lado del asesor y sólo tráfico debe
+ * quedar detenido — no admins, gerentes ni directores).
+ */
+export function esTrafico(rol?: string | null): boolean {
+  return !!rol && /trafico/i.test(rol);
+}
