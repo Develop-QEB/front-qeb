@@ -8,7 +8,7 @@ import {
   MessageSquare, Send, Plus, Pencil, Trash2, StickyNote,
   Users, Tag, Building2, Download, Table2, ExternalLink, Bell, ClipboardList,
   Filter, Layers, ArrowUpDown, ArrowUp, ArrowDown, Check, Loader2, UserCheck, UserPlus,
-  ShieldCheck, DollarSign
+  ShieldCheck, DollarSign, Ban
 } from 'lucide-react';
 import { Header } from '../../components/layout/Header';
 import { notificacionesService, CaraAutorizacion, ResumenAutorizacion, HistorialAutorizacion } from '../../services/notificaciones.service';
@@ -29,6 +29,7 @@ import { propuestasService } from '../../services/propuestas.service';
 import { campanasService } from '../../services/campanas.service';
 import { NotasDireccionBitacora } from './NotasDireccionBitacora';
 import { DesposteoModal, ModoDesposteo } from '../desposteo/DesposteoModal';
+import { puedeFiltrarDesposteo, puedeAprobarDesposteoFacturacion } from '../../services/desposteo.service';
 import { NuevaActividadComercialModal } from './NuevaActividadComercialModal';
 
 // Roles que pueden crear tarea manual "Actividad Comercial".
@@ -43,6 +44,20 @@ const ROLES_ACTIVIDAD_COMERCIAL = new Set([
 ]);
 
 // ============ HELPERS ============
+// El id de la solicitud de desposteo viaja serializado en `contenido` de la
+// tarea ({"desposteoId":N}), no en una columna propia. Si el JSON viene mal
+// devolvemos null y el botón simplemente no se pinta, en vez de tronar.
+function getDesposteoIdDeTarea(tarea: { contenido?: string | null }): number | null {
+  try {
+    const raw = typeof tarea.contenido === 'string' ? tarea.contenido : '';
+    if (!raw) return null;
+    const id = Number(JSON.parse(raw)?.desposteoId);
+    return Number.isFinite(id) && id > 0 ? id : null;
+  } catch {
+    return null;
+  }
+}
+
 // Tipos de tareas creadas desde el Gestor de Artes. Estas tareas se
 // atienden en su modal real (con side-effects: aprobar arte, subir foto,
 // rotar roles, marcar instalado, etc). NUNCA deben cerrarse via el boton
@@ -1840,11 +1855,16 @@ function ApprovalModal({
   }, [allCaras]);
 
   return (
-    <div className="fixed inset-0 z-[60] flex items-center justify-center">
+    <div className="fixed inset-0 z-[60] flex items-stretch sm:items-center justify-center">
       <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={onClose} />
-      <div className={`relative w-full max-w-4xl max-h-[95vh] sm:max-h-[90vh] mx-2 sm:mx-4 rounded-2xl ${isDark ? 'bg-zinc-900 border-zinc-700' : 'bg-white border-gray-200'} border shadow-2xl flex flex-col overflow-hidden`}>
+      {/* Mobile: modal a pantalla completa (h + w) para que se vea todo el contenido
+          al rotar entre portrait/landscape sin cortar. Feedback usuario 2026-09-21.
+          Desktop: se conserva max-w-4xl y max-h-[90vh] centrado. dvh (dynamic
+          viewport) mide bien el alto real cuando el teclado o la barra del
+          navegador aparecen. */}
+      <div className={`relative w-full h-[100dvh] sm:h-auto max-w-4xl sm:max-h-[90vh] mx-0 sm:mx-4 rounded-none sm:rounded-2xl ${isDark ? 'bg-zinc-900 border-zinc-700' : 'bg-white border-gray-200'} border-0 sm:border shadow-2xl flex flex-col overflow-hidden`}>
         {/* Header */}
-        <div className={`p-4 sm:p-6 border-b ${isDark ? 'border-zinc-800' : 'border-gray-200'}`}>
+        <div className={`p-4 sm:p-6 border-b flex-shrink-0 ${isDark ? 'border-zinc-800' : 'border-gray-200'}`}>
           <div className="flex items-center justify-between mb-4 gap-3">
             <div className="flex items-center gap-3 min-w-0">
               <div className="p-2 rounded-xl bg-orange-500/20 border border-orange-500/30 flex-shrink-0">
@@ -1944,8 +1964,11 @@ function ApprovalModal({
           </div>
         )}
 
-        {/* Tabla de caras organizada por catorcenas */}
-        <div className="flex-1 overflow-y-auto px-3 sm:px-6 py-3 sm:py-4">
+        {/* Tabla de caras organizada por catorcenas.
+            min-h-0 obligatorio para que el flex-1 respete la altura del padre
+            flex-col: sin esto, en landscape movil el header + footer empujan y
+            el body scroll se sale del contenedor (sintoma: "no navega bien"). */}
+        <div className="flex-1 min-h-0 overflow-y-auto px-3 sm:px-6 py-3 sm:py-4">
           {Array.from(catorcenaGroups.entries()).map(([catorcena, caras]) => {
             const periodoInfo = caras[0]?.inicio_periodo && caras[0]?.fin_periodo
               ? `${formatDate(caras[0].inicio_periodo)} → ${formatDate(caras[0].fin_periodo)}`
@@ -1975,7 +1998,16 @@ function ApprovalModal({
                 </button>
 
                 {!isCollapsed && (
-                <div className={`mt-2 rounded-xl border ${isDark ? 'border-zinc-700/50' : 'border-gray-200'} overflow-x-auto scrollbar-purple`}>
+                <div className={`mt-2 rounded-xl border ${isDark ? 'border-zinc-700/50' : 'border-gray-200'} overflow-hidden`}>
+                  {/* Hint de scroll horizontal — solo en movil (< sm) porque la
+                      tabla tiene min-w-[820px] y en pantallas chicas el
+                      overflow-x no era obvio; el usuario se quejo de que "se
+                      corta info". Feedback usuario 2026-09-21. */}
+                  <div className={`sm:hidden flex items-center justify-center gap-1.5 px-3 py-1 text-[10px] border-b ${isDark ? 'border-zinc-700/50 bg-zinc-800/50 text-zinc-500' : 'border-gray-200 bg-gray-50 text-gray-500'}`}>
+                    <span>Desliza la tabla</span>
+                    <ChevronRight className="h-3 w-3 animate-pulse" />
+                  </div>
+                  <div className="overflow-x-auto scrollbar-purple">
                   {/* min-w para forzar scroll horizontal en móvil (10 columnas
                       no caben en <640px). Feedback Jos 2026-07-15. */}
                   <table className="w-full min-w-[820px]">
@@ -2041,6 +2073,7 @@ function ApprovalModal({
                       ))}
                     </tbody>
                   </table>
+                  </div>
                 </div>
                 )}
               </div>
@@ -2126,7 +2159,7 @@ function ApprovalModal({
 
         {/* Footer con acciones */}
         {isAutorizacionTask && tarea.estatus !== 'Atendido' && tarea.estatus !== 'Cancelado' && (
-          <div className={`p-4 sm:p-6 border-t ${isDark ? 'border-zinc-800' : 'border-gray-200'}`}>
+          <div className={`p-4 sm:p-6 border-t flex-shrink-0 ${isDark ? 'border-zinc-800' : 'border-gray-200'}`}>
             {!showRechazoInput ? (
               <>
                 {/* Feedback 2026-08-15: comentario opcional para filtros DG/DCM.
@@ -2227,6 +2260,7 @@ function TaskDrawer({
   onAutorizacionAction,
   contentType,
   onOpenApprovalModal,
+  onOpenDesposteoModal,
 }: {
   tarea: Notificacion & { comentarios?: ComentarioTarea[] };
   onClose: () => void;
@@ -2237,6 +2271,7 @@ function TaskDrawer({
   onAutorizacionAction?: () => void;
   contentType: ContentType;
   onOpenApprovalModal?: () => void;
+  onOpenDesposteoModal?: () => void;
 }) {
   const isDark = useThemeStore((s) => s.theme) === 'dark';
   const [comment, setComment] = useState('');
@@ -2308,8 +2343,19 @@ function TaskDrawer({
     },
   });
 
+  // Tareas del flujo de desposteo. Se evalúan ANTES que isAutorizacionTask
+  // porque 'Autorización Desposteo' también contiene la palabra
+  // "Autorización" y no debe entrar por el camino del ApprovalModal (que
+  // consulta caras/resumen de una propuesta y aquí no aplica).
+  const esDesposteoTask = tarea.tipo === 'Filtro Desposteo' || tarea.tipo === 'Autorización Desposteo';
+  const puedeActuarDesposteo = esDesposteoTask && (
+    tarea.tipo === 'Filtro Desposteo'
+      ? puedeFiltrarDesposteo(user?.rol)
+      : puedeAprobarDesposteoFacturacion(user?.rol)
+  );
+
   // Detectar si es tarea de autorización
-  const isAutorizacionTask = tarea.tipo?.includes('Autorización');
+  const isAutorizacionTask = !esDesposteoTask && tarea.tipo?.includes('Autorización');
   const tipoAutorizacion = tarea.tipo?.includes('DG') ? 'dg' : tarea.tipo?.includes('DCM') ? 'dcm' : null;
 
   const [idPropuestaState, setIdPropuestaState] = useState<string | null>(tarea.id_propuesta || null);
@@ -2620,16 +2666,43 @@ function TaskDrawer({
             </button>
           )}
 
+          {/* Desposteo: abre el modal de autorización del desposteo desde la
+              ventana lateral (antes la tarea abría el modal directo y se
+              saltaba este panel). La tarea NO se finaliza a mano: el back la
+              cierra al aprobar o rechazar. Feedback 2026-09-17 (Jos). */}
+          {esDesposteoTask && puedeActuarDesposteo && tarea.estatus === 'Pendiente' && onOpenDesposteoModal && (
+            <button
+              onClick={() => onOpenDesposteoModal()}
+              className="mt-4 w-full flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl text-sm font-bold transition-all hover:scale-[1.02] active:scale-[0.98] bg-gradient-to-r from-rose-500 to-red-500 text-white hover:from-rose-400 hover:to-red-400 shadow-lg shadow-rose-500/20"
+            >
+              <Ban className="h-4 w-4" />
+              {tarea.tipo === 'Filtro Desposteo' ? 'Revisar y dar check' : 'Revisar y autorizar desposteo'}
+            </button>
+          )}
+          {esDesposteoTask && onOpenDesposteoModal && tarea.estatus !== 'Pendiente' && (
+            <button
+              onClick={() => onOpenDesposteoModal()}
+              className={`mt-4 w-full flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl text-sm font-bold transition-all ${isDark ? 'bg-zinc-700 text-zinc-200 hover:bg-zinc-600' : 'bg-gray-200 text-gray-700 hover:bg-gray-300'}`}
+            >
+              <Ban className="h-4 w-4" />
+              Ver desposteo
+            </button>
+          )}
+
           {/* Botón finalizar tarea.
               Oculto para todas las tareas generadas en Gestor de Artes: se
               atienden en la tarea real del modal de Gestor, no en el preview
               lateral. Finalizar aquí solo marcaria estatus=Atendido sin
               disparar los side-effects reales (aprobar arte, subir foto,
               rotar roles, marcar reserva como instalada, etc). Feedback de
-              Jos 2026-07-09 — antes solo se excluia 'Revisión de artes'. */}
+              Jos 2026-07-09 — antes solo se excluia 'Revisión de artes'.
+              Mismo criterio para las tareas de desposteo (2026-09-17): el
+              back las cierra al aprobar/rechazar, y marcarlas Atendido a mano
+              dejaria la solicitud sin resolver. */}
           {contentType === 'tareas'
             && !['Director General', 'Gerente Comercial Vía Pública', 'Gerente Comercial Plazas', 'Gerente Comercial'].includes(user?.rol || '')
-            && !isTareaGestorArtes(tarea.tipo) && (
+            && !isTareaGestorArtes(tarea.tipo)
+            && !esDesposteoTask && (
             <button
               onClick={(e) => {
                 e.stopPropagation();
@@ -3496,23 +3569,13 @@ export function NotificacionesPage() {
 
   // Handlers
   const handleSelectTarea = useCallback(async (tarea: Notificacion) => {
-    // Desposteo Fase 2: Filtro Desposteo (GC) y Autorización Desposteo
-    // (Facturación) usan el DesposteoModal en vez del TaskDrawer. El
-    // desposteoId viene en el JSON de `contenido` de la tarea.
-    if (tarea.tipo === 'Filtro Desposteo' || tarea.tipo === 'Autorización Desposteo') {
-      try {
-        const raw = typeof tarea.contenido === 'string' ? tarea.contenido : '';
-        const parsed = raw ? JSON.parse(raw) : {};
-        const desposteoId = Number(parsed?.desposteoId);
-        if (Number.isFinite(desposteoId) && desposteoId > 0) {
-          setDesposteoModal({
-            desposteoId,
-            modo: tarea.tipo === 'Filtro Desposteo' ? 'filtro' : 'facturacion',
-          });
-          return;
-        }
-      } catch { /* fallthrough al TaskDrawer normal */ }
-    }
+    // Desposteo: ANTES estas dos tareas abrían el DesposteoModal directo y se
+    // saltaban el TaskDrawer con un `return`. Consecuencia: no había panel
+    // lateral, ni comentarios, ni botón de finalizar, así que la tarea se
+    // quedaba activa aunque el gerente ya hubiera dado check.
+    // Feedback 2026-09-17 (Jos): abrir la ventana lateral y desde ahí el modal.
+    // Ahora cae al flujo normal de abajo y el drawer pinta el botón "Revisar
+    // desposteo" (ver esDesposteoTask en el TaskDrawer).
     const isDirectorUser = ['Director General', 'Director Comercial'].includes(user?.rol || '');
     const isAuthTask = tarea.tipo?.includes('Autorización');
     if (isDirectorUser && isAuthTask) {
@@ -3727,13 +3790,15 @@ export function NotificacionesPage() {
                     </div>
                     <div className="space-y-3 max-h-[300px] overflow-y-auto pr-1">
                       {filters.map((filter, index) => (
-                        <div key={filter.id} className="flex items-center gap-2">
-                          {index > 0 && <span className="text-[10px] text-purple-400 font-medium w-8">AND</span>}
-                          {index === 0 && <span className="w-8"></span>}
+                        // Movil: campo/operador/valor apilados en columna para que no
+                        // se corten (feedback usuario 2026-09-21). Desktop mantiene fila.
+                        <div key={filter.id} className="flex flex-col sm:flex-row sm:items-center gap-2">
+                          {index > 0 && <span className="text-[10px] text-purple-400 font-medium w-full sm:w-8">AND</span>}
+                          {index === 0 && <span className="hidden sm:inline sm:w-8"></span>}
                           <select
                             value={filter.field}
                             onChange={(e) => updateFilter(filter.id, { field: e.target.value })}
-                            className={`w-[130px] text-xs ${isDark ? 'bg-zinc-900 border-zinc-700 text-white' : 'bg-gray-50 border-gray-200 text-gray-900'} border rounded px-2 py-1.5`}
+                            className={`w-full sm:w-[130px] text-xs ${isDark ? 'bg-zinc-900 border-zinc-700 text-white' : 'bg-gray-50 border-gray-200 text-gray-900'} border rounded px-2 py-1.5`}
                           >
                             {FILTER_FIELDS.map((f) => (
                               <option key={f.field} value={f.field}>{f.label}</option>
@@ -3742,7 +3807,7 @@ export function NotificacionesPage() {
                           <select
                             value={filter.operator}
                             onChange={(e) => updateFilter(filter.id, { operator: e.target.value as FilterOperator })}
-                            className={`w-[110px] text-xs ${isDark ? 'bg-zinc-900 border-zinc-700 text-white' : 'bg-gray-50 border-gray-200 text-gray-900'} border rounded px-2 py-1.5`}
+                            className={`w-full sm:w-[110px] text-xs ${isDark ? 'bg-zinc-900 border-zinc-700 text-white' : 'bg-gray-50 border-gray-200 text-gray-900'} border rounded px-2 py-1.5`}
                           >
                             {DATE_FIELDS.includes(filter.field) ? (
                               <>
@@ -3759,7 +3824,7 @@ export function NotificacionesPage() {
                           <select
                             value={filter.value}
                             onChange={(e) => updateFilter(filter.id, { value: e.target.value })}
-                            className={`flex-1 text-xs ${isDark ? 'bg-zinc-900 border-zinc-700 text-white' : 'bg-gray-50 border-gray-200 text-gray-900'} border rounded px-2 py-1.5 focus:outline-none focus:border-purple-500`}
+                            className={`w-full sm:flex-1 min-w-0 text-xs ${isDark ? 'bg-zinc-900 border-zinc-700 text-white' : 'bg-gray-50 border-gray-200 text-gray-900'} border rounded px-2 py-1.5 focus:outline-none focus:border-purple-500`}
                           >
                             <option value="">Selecciona...</option>
                             {DATE_PRESET_OPTIONS.map((opt) => (
@@ -3774,7 +3839,7 @@ export function NotificacionesPage() {
                               value={filter.value}
                               onChange={(e) => updateFilter(filter.id, { value: e.target.value })}
                               placeholder="Escribe o selecciona..."
-                              className={`flex-1 text-xs ${isDark ? 'bg-zinc-900 border-zinc-700 text-white placeholder:text-zinc-500' : 'bg-gray-50 border-gray-200 text-gray-900 placeholder:text-gray-400'} border rounded px-2 py-1.5 focus:outline-none focus:border-purple-500`}
+                              className={`w-full sm:flex-1 min-w-0 text-xs ${isDark ? 'bg-zinc-900 border-zinc-700 text-white placeholder:text-zinc-500' : 'bg-gray-50 border-gray-200 text-gray-900 placeholder:text-gray-400'} border rounded px-2 py-1.5 focus:outline-none focus:border-purple-500`}
                             />
                             <datalist id={`datalist-${filter.id}`}>
                               {getUniqueValues[filter.field]?.map((val) => (
@@ -3783,7 +3848,7 @@ export function NotificacionesPage() {
                             </datalist>
                           </>
                         )}
-                          <button onClick={() => removeFilter(filter.id)} className="text-red-400 hover:text-red-300 p-0.5">
+                          <button onClick={() => removeFilter(filter.id)} className="text-red-400 hover:text-red-300 p-0.5 self-end sm:self-auto">
                             <Trash2 className="h-3 w-3" />
                           </button>
                         </div>
@@ -4342,7 +4407,25 @@ export function NotificacionesPage() {
               queryClient.invalidateQueries({ queryKey: ['notificaciones-stats'] });
             }}
             contentType={contentType}
-            onOpenApprovalModal={selectedTarea.tipo?.includes('Autorización') ? () => setApprovalModalTarea(selectedTarea) : undefined}
+            onOpenApprovalModal={
+              selectedTarea.tipo?.includes('Autorización') && selectedTarea.tipo !== 'Autorización Desposteo'
+                ? () => setApprovalModalTarea(selectedTarea)
+                : undefined
+            }
+            onOpenDesposteoModal={
+              (selectedTarea.tipo === 'Filtro Desposteo' || selectedTarea.tipo === 'Autorización Desposteo')
+                ? () => {
+                    // El desposteoId viaja en el JSON de `contenido` de la tarea.
+                    const desposteoId = getDesposteoIdDeTarea(selectedTarea);
+                    if (desposteoId) {
+                      setDesposteoModal({
+                        desposteoId,
+                        modo: selectedTarea.tipo === 'Filtro Desposteo' ? 'filtro' : 'facturacion',
+                      });
+                    }
+                  }
+                : undefined
+            }
           />
         </>
       )}
@@ -4356,6 +4439,14 @@ export function NotificacionesPage() {
           onDone={() => {
             queryClient.invalidateQueries({ queryKey: ['notificaciones'] });
             queryClient.invalidateQueries({ queryKey: ['notificaciones-stats'] });
+            // Refrescar la tarea abierta en el drawer: el back la cierra al
+            // aprobar/rechazar, así que sin esto el panel lateral seguiría
+            // mostrándola como Pendiente. Mismo patrón que el ApprovalModal.
+            if (selectedTarea) {
+              notificacionesService.getById(selectedTarea.id)
+                .then(updated => setSelectedTarea(updated))
+                .catch(console.error);
+            }
           }}
         />
       )}

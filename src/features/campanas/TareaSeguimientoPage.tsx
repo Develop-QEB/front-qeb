@@ -29,6 +29,8 @@ import {
   Check,
   Image,
   Eye,
+  EyeOff,
+  Maximize2,
   Camera,
   ClipboardList,
   Info,
@@ -1556,6 +1558,54 @@ function UploadArtModal({
   // Tab del modal: Artes o Fichas Técnicas
   const [modalTab, setModalTab] = useState<'artes' | 'fichas'>('artes');
 
+  // Biblioteca de artes: manejo por-arte de "oculto" y filtro de visualizacion.
+  // Feedback usuario 2026-09-21: poder ocultar artes en la biblioteca para no
+  // saturar la vista, con filtro para alternar Todos / Visibles / Ocultos.
+  // Se persiste por campania en localStorage para que el usuario no tenga que
+  // re-ocultar cada vez que abre el modal.
+  const HIDDEN_ARTES_KEY = `qeb.upload-art.hidden.${campanaId}`;
+  const [hiddenArteIds, setHiddenArteIds] = useState<Set<string>>(() => {
+    try {
+      const raw = localStorage.getItem(HIDDEN_ARTES_KEY);
+      if (raw) return new Set(JSON.parse(raw) as string[]);
+    } catch { /* ignore */ }
+    return new Set();
+  });
+  useEffect(() => {
+    try {
+      localStorage.setItem(HIDDEN_ARTES_KEY, JSON.stringify(Array.from(hiddenArteIds)));
+    } catch { /* ignore */ }
+  }, [hiddenArteIds, HIDDEN_ARTES_KEY]);
+  const [visibilityFilter, setVisibilityFilter] = useState<'todos' | 'visibles' | 'ocultos'>('visibles');
+  // Vista previa maximizada de un arte (imagen o video) — se abre con el boton
+  // de la esquina superior, sin marcar el arte como seleccionado.
+  const [previewArte, setPreviewArte] = useState<{ url: string; nombre: string; nombre_arte?: string | null; nota?: string | null; isVideo: boolean } | null>(null);
+  const toggleHiddenArte = (id: string) => {
+    setHiddenArteIds(prev => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id); else next.add(id);
+      return next;
+    });
+  };
+  // ESC cierra la vista previa maximizada.
+  useEffect(() => {
+    if (!previewArte) return;
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') setPreviewArte(null); };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [previewArte]);
+
+  // Biblioteca visible aplicando el filtro (todos / visibles / ocultos).
+  // Los artes ocultos NO desaparecen del sistema — solo se filtran en la UI
+  // segun el toggle. La seleccion de un arte ya seleccionado sigue activa
+  // aunque el usuario lo oculte despues.
+  const visibleArtes = useMemo(() => {
+    if (visibilityFilter === 'todos') return localArtes;
+    if (visibilityFilter === 'ocultos') return localArtes.filter(a => hiddenArteIds.has(a.id));
+    return localArtes.filter(a => !hiddenArteIds.has(a.id));
+  }, [localArtes, visibilityFilter, hiddenArteIds]);
+  const hiddenCount = useMemo(() => localArtes.filter(a => hiddenArteIds.has(a.id)).length, [localArtes, hiddenArteIds]);
+
   // Estado para archivos digitales (múltiples)
   const [digitalFiles, setDigitalFiles] = useState<DigitalFile[]>([]);
   const [draggedFile, setDraggedFile] = useState<string | null>(null);
@@ -2258,7 +2308,7 @@ function UploadArtModal({
         className="absolute inset-0 bg-black/50 backdrop-blur-sm"
         onClick={() => { if (!isProcessingFinal) handleClose(); }}
       />
-      <div className="relative bg-card border border-border rounded-xl w-full max-w-6xl mx-4 max-h-[90vh] flex flex-col">
+      <div className="relative bg-card border border-border rounded-xl w-full max-w-[96vw] xl:max-w-[1600px] mx-4 max-h-[95vh] flex flex-col">
         {/* Header */}
         <div className="flex items-center justify-between p-4 border-b border-border flex-shrink-0">
           <h3 className="text-lg font-semibold flex items-center gap-2">
@@ -2451,64 +2501,107 @@ function UploadArtModal({
                     <>
                       {/* Galería de artes digitales existentes */}
                       <div className="flex-1 min-h-0 overflow-hidden flex flex-col">
-                        <label className={`block text-xs font-medium mb-1.5 ${isDark ? 'text-zinc-400' : 'text-gray-600'}`}>
-                          Biblioteca de contenido digital ({localArtes.length})
-                          {isUploadingDigitalFile && <Loader2 className="inline h-3 w-3 animate-spin text-cyan-400 ml-1.5" />}
-                        </label>
-                        <div className={`flex-1 min-h-[120px] max-h-[260px] border border-border rounded-lg overflow-auto p-2 ${isDark ? 'bg-zinc-900/50' : 'bg-gray-50'}`}>
+                        <div className="flex items-center justify-between mb-1.5 gap-2">
+                          <label className={`text-xs font-medium ${isDark ? 'text-zinc-400' : 'text-gray-600'}`}>
+                            Biblioteca de contenido digital ({visibleArtes.length}{hiddenCount > 0 ? ` · ${hiddenCount} oculto${hiddenCount === 1 ? '' : 's'}` : ''})
+                            {isUploadingDigitalFile && <Loader2 className="inline h-3 w-3 animate-spin text-cyan-400 ml-1.5" />}
+                          </label>
+                          <select
+                            value={visibilityFilter}
+                            onChange={(e) => setVisibilityFilter(e.target.value as 'todos' | 'visibles' | 'ocultos')}
+                            className="text-[10px] bg-background border border-border rounded px-1.5 py-0.5 focus:outline-none focus:ring-1 focus:ring-cyan-500"
+                            title="Filtro de visualizacion"
+                          >
+                            <option value="visibles">Solo visibles</option>
+                            <option value="todos">Todos</option>
+                            <option value="ocultos">Solo ocultos</option>
+                          </select>
+                        </div>
+                        <div className={`flex-1 min-h-[280px] border border-border rounded-lg overflow-auto p-3 ${isDark ? 'bg-zinc-900/50' : 'bg-gray-50'}`}>
                           {isLoadingArtes ? (
                             <div className="h-full flex items-center justify-center">
                               <Loader2 className="h-5 w-5 animate-spin text-cyan-400" />
                             </div>
-                          ) : localArtes.length === 0 ? (
+                          ) : visibleArtes.length === 0 ? (
                             <div className="h-full flex items-center justify-center text-center text-zinc-500">
                               <div>
                                 <Film className="h-8 w-8 mx-auto mb-1 opacity-30" />
-                                <p className="text-[10px]">No hay archivos. Sube imágenes o videos abajo.</p>
+                                <p className="text-[10px]">
+                                  {localArtes.length === 0
+                                    ? 'No hay archivos. Sube imágenes o videos abajo.'
+                                    : visibilityFilter === 'ocultos'
+                                      ? 'No hay archivos ocultos.'
+                                      : 'Todos los archivos estan ocultos. Cambia el filtro para verlos.'}
+                                </p>
                               </div>
                             </div>
                           ) : (
-                            <div className="grid grid-cols-6 gap-1.5">
-                              {localArtes.map((art) => {
+                            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 xl:grid-cols-5 gap-3">
+                              {visibleArtes.map((art) => {
                                 const isVideo = /\.(mp4|mov|webm|avi)$/i.test(art.url || '');
                                 const isSelected = selectedDigitalImages.has(art.id);
+                                const isHidden = hiddenArteIds.has(art.id);
                                 return (
-                                  <button
+                                  <div
                                     key={art.id}
-                                    onClick={() => toggleDigitalGalleryImage(art.id, art.url, isVideo)}
                                     className={`relative aspect-square rounded-lg overflow-hidden border-2 transition-all group ${
                                       isSelected
                                         ? 'border-cyan-400 ring-2 ring-cyan-400/30'
-                                        : 'border-transparent hover:border-cyan-400/50'
+                                        : isHidden ? 'border-zinc-600/60 opacity-70' : 'border-transparent hover:border-cyan-400/50'
                                     }`}
-                                    title={[
-                                      art.nombre_arte ? `Nombre: ${art.nombre_arte}` : null,
-                                      `Archivo: ${art.nombre}`,
-                                      art.nota ? `Nota: ${art.nota}` : null,
-                                      art.estatus ? `Estatus: ${art.estatus}` : null,
-                                    ].filter(Boolean).join('\n')}
                                   >
-                                    {isVideo ? (
-                                      <div className="w-full h-full flex items-center justify-center bg-zinc-700">
-                                        <Play className="h-5 w-5 text-cyan-400" />
-                                      </div>
-                                    ) : (
-                                      <ArteImg
-                                        src={art.url}
-                                        alt={art.nombre_arte || art.nombre}
-                                        className="w-full h-full object-cover"
-                                      />
-                                    )}
-                                    {isSelected && (
-                                      <div className="absolute inset-0 bg-cyan-600/30 flex items-center justify-center">
-                                        <Check className="h-4 w-4 text-white" />
-                                      </div>
-                                    )}
+                                    <button
+                                      type="button"
+                                      onClick={() => toggleDigitalGalleryImage(art.id, art.url, isVideo)}
+                                      className="w-full h-full block"
+                                      title={[
+                                        art.nombre_arte ? `Nombre: ${art.nombre_arte}` : null,
+                                        `Archivo: ${art.nombre}`,
+                                        art.nota ? `Nota: ${art.nota}` : null,
+                                        art.estatus ? `Estatus: ${art.estatus}` : null,
+                                      ].filter(Boolean).join('\n')}
+                                    >
+                                      {isVideo ? (
+                                        <div className="w-full h-full flex items-center justify-center bg-zinc-700">
+                                          <Play className="h-8 w-8 text-cyan-400" />
+                                        </div>
+                                      ) : (
+                                        <ArteImg
+                                          src={art.url}
+                                          alt={art.nombre_arte || art.nombre}
+                                          className="w-full h-full object-cover"
+                                        />
+                                      )}
+                                      {isSelected && (
+                                        <div className="absolute inset-0 bg-cyan-600/30 flex items-center justify-center pointer-events-none">
+                                          <Check className="h-6 w-6 text-white" />
+                                        </div>
+                                      )}
+                                    </button>
+                                    {/* Botones de accion en la esquina superior izquierda: vista previa y ocultar/mostrar. */}
+                                    <div className="absolute top-1 left-1 flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                                      <button
+                                        type="button"
+                                        onClick={(e) => { e.stopPropagation(); setPreviewArte({ url: art.url, nombre: art.nombre, nombre_arte: art.nombre_arte, nota: art.nota, isVideo }); }}
+                                        className="p-1 bg-black/70 hover:bg-black text-white rounded"
+                                        title="Vista previa"
+                                      >
+                                        <Maximize2 className="h-3 w-3" />
+                                      </button>
+                                      <button
+                                        type="button"
+                                        onClick={(e) => { e.stopPropagation(); toggleHiddenArte(art.id); }}
+                                        className="p-1 bg-black/70 hover:bg-black text-white rounded"
+                                        title={isHidden ? 'Mostrar arte' : 'Ocultar arte'}
+                                      >
+                                        {isHidden ? <Eye className="h-3 w-3" /> : <EyeOff className="h-3 w-3" />}
+                                      </button>
+                                    </div>
                                     {/* Badge de estatus arriba a la derecha. Si el arte
                                         esta marcado como Instalado en otra reserva,
                                         priorizamos ese badge (purpura) sobre arte_aprobado. */}
                                     {(art.tiene_instalado || art.estatus) && (
-                                      <span className={`absolute top-0.5 right-0.5 px-1 py-0 rounded text-[8px] font-semibold ${
+                                      <span className={`absolute top-1 right-1 px-1.5 py-0.5 rounded text-[10px] font-semibold pointer-events-none ${
                                         art.tiene_instalado ? 'bg-purple-500/80 text-white'
                                         : art.estatus?.toLowerCase() === 'aprobado' ? 'bg-green-500/80 text-white'
                                         : art.estatus?.toLowerCase() === 'rechazado' ? 'bg-red-500/80 text-white'
@@ -2516,17 +2609,17 @@ function UploadArtModal({
                                         : 'bg-zinc-700/80 text-zinc-200'
                                       }`}>{art.tiene_instalado ? 'Instalado' : art.estatus}</span>
                                     )}
-                                    <div className="absolute bottom-0 left-0 right-0 bg-black/70 px-1 py-px">
-                                      <p className="text-[7px] text-zinc-300 truncate" title={art.nombre_arte || art.nombre}>
+                                    <div className="absolute bottom-0 left-0 right-0 bg-black/70 px-1.5 py-1 pointer-events-none">
+                                      <p className="text-[10px] text-zinc-200 truncate" title={art.nombre_arte || art.nombre}>
                                         {art.nombre_arte || art.nombre}
                                       </p>
                                       {art.nota && (
-                                        <p className="text-[7px] text-zinc-400 truncate italic" title={art.nota}>
+                                        <p className="text-[10px] text-zinc-400 truncate italic" title={art.nota}>
                                           {art.nota}
                                         </p>
                                       )}
                                     </div>
-                                  </button>
+                                  </div>
                                 );
                               })}
                             </div>
@@ -2760,54 +2853,97 @@ function UploadArtModal({
                     <>
                       {/* Galería de artes existentes */}
                       <div className="flex-1 min-h-0 overflow-hidden flex flex-col">
-                        <label className={`block text-xs font-medium mb-1.5 ${isDark ? 'text-zinc-400' : 'text-gray-600'}`}>
-                          Biblioteca de artes ({localArtes.length})
-                          {isUploadingFile && <Loader2 className="inline h-3 w-3 animate-spin text-purple-400 ml-1.5" />}
-                        </label>
-                        <div className={`flex-1 min-h-[120px] max-h-[260px] border border-border rounded-lg overflow-auto p-2 ${isDark ? 'bg-zinc-900/50' : 'bg-gray-50'}`}>
+                        <div className="flex items-center justify-between mb-1.5 gap-2">
+                          <label className={`text-xs font-medium ${isDark ? 'text-zinc-400' : 'text-gray-600'}`}>
+                            Biblioteca de artes ({visibleArtes.length}{hiddenCount > 0 ? ` · ${hiddenCount} oculto${hiddenCount === 1 ? '' : 's'}` : ''})
+                            {isUploadingFile && <Loader2 className="inline h-3 w-3 animate-spin text-purple-400 ml-1.5" />}
+                          </label>
+                          <select
+                            value={visibilityFilter}
+                            onChange={(e) => setVisibilityFilter(e.target.value as 'todos' | 'visibles' | 'ocultos')}
+                            className="text-[10px] bg-background border border-border rounded px-1.5 py-0.5 focus:outline-none focus:ring-1 focus:ring-purple-500"
+                            title="Filtro de visualizacion"
+                          >
+                            <option value="visibles">Solo visibles</option>
+                            <option value="todos">Todos</option>
+                            <option value="ocultos">Solo ocultos</option>
+                          </select>
+                        </div>
+                        <div className={`flex-1 min-h-[280px] border border-border rounded-lg overflow-auto p-3 ${isDark ? 'bg-zinc-900/50' : 'bg-gray-50'}`}>
                           {isLoadingArtes ? (
                             <div className="h-full flex items-center justify-center">
                               <Loader2 className="h-5 w-5 animate-spin text-purple-400" />
                             </div>
-                          ) : localArtes.length === 0 ? (
+                          ) : visibleArtes.length === 0 ? (
                             <div className="h-full flex items-center justify-center text-center text-zinc-500">
                               <div>
                                 <Image className="h-8 w-8 mx-auto mb-1 opacity-30" />
-                                <p className="text-[10px]">No hay imágenes. Sube archivos o agrega URLs abajo.</p>
+                                <p className="text-[10px]">
+                                  {localArtes.length === 0
+                                    ? 'No hay imágenes. Sube archivos o agrega URLs abajo.'
+                                    : visibilityFilter === 'ocultos'
+                                      ? 'No hay imagenes ocultas.'
+                                      : 'Todas las imagenes estan ocultas. Cambia el filtro para verlas.'}
+                                </p>
                               </div>
                             </div>
                           ) : (
-                            <div className="grid grid-cols-6 gap-1.5">
-                              {localArtes.map((art) => {
+                            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 xl:grid-cols-5 gap-3">
+                              {visibleArtes.map((art) => {
                                 const isSelected = selectedGalleryImages.has(art.id);
+                                const isHidden = hiddenArteIds.has(art.id);
                                 return (
-                                  <button
+                                  <div
                                     key={art.id}
-                                    onClick={() => toggleGalleryImage(art.id, art.url)}
                                     className={`relative aspect-square rounded-lg overflow-hidden border-2 transition-all group ${
                                       isSelected
                                         ? 'border-purple-400 ring-2 ring-purple-400/30'
-                                        : 'border-transparent hover:border-purple-400/50'
+                                        : isHidden ? 'border-zinc-600/60 opacity-70' : 'border-transparent hover:border-purple-400/50'
                                     }`}
-                                    title={[
-                                      art.nombre_arte ? `Nombre: ${art.nombre_arte}` : null,
-                                      `Archivo: ${art.nombre}`,
-                                      art.nota ? `Nota: ${art.nota}` : null,
-                                      art.tiene_instalado ? 'Estatus: Instalado (al asignarlo, el inventario destino quedara como instalado)' : (art.estatus ? `Estatus: ${art.estatus}` : null),
-                                    ].filter(Boolean).join('\n')}
                                   >
-                                    <ArteImg
-                                      src={art.url}
-                                      alt={art.nombre_arte || art.nombre}
-                                      className="w-full h-full object-cover"
-                                    />
-                                    {isSelected && (
-                                      <div className="absolute inset-0 bg-purple-600/30 flex items-center justify-center">
-                                        <Check className="h-4 w-4 text-white" />
-                                      </div>
-                                    )}
+                                    <button
+                                      type="button"
+                                      onClick={() => toggleGalleryImage(art.id, art.url)}
+                                      className="w-full h-full block"
+                                      title={[
+                                        art.nombre_arte ? `Nombre: ${art.nombre_arte}` : null,
+                                        `Archivo: ${art.nombre}`,
+                                        art.nota ? `Nota: ${art.nota}` : null,
+                                        art.tiene_instalado ? 'Estatus: Instalado (al asignarlo, el inventario destino quedara como instalado)' : (art.estatus ? `Estatus: ${art.estatus}` : null),
+                                      ].filter(Boolean).join('\n')}
+                                    >
+                                      <ArteImg
+                                        src={art.url}
+                                        alt={art.nombre_arte || art.nombre}
+                                        className="w-full h-full object-cover"
+                                      />
+                                      {isSelected && (
+                                        <div className="absolute inset-0 bg-purple-600/30 flex items-center justify-center pointer-events-none">
+                                          <Check className="h-6 w-6 text-white" />
+                                        </div>
+                                      )}
+                                    </button>
+                                    {/* Botones de accion: vista previa y ocultar/mostrar. */}
+                                    <div className="absolute top-1 left-1 flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                                      <button
+                                        type="button"
+                                        onClick={(e) => { e.stopPropagation(); setPreviewArte({ url: art.url, nombre: art.nombre, nombre_arte: art.nombre_arte, nota: art.nota, isVideo: false }); }}
+                                        className="p-1 bg-black/70 hover:bg-black text-white rounded"
+                                        title="Vista previa"
+                                      >
+                                        <Maximize2 className="h-3 w-3" />
+                                      </button>
+                                      <button
+                                        type="button"
+                                        onClick={(e) => { e.stopPropagation(); toggleHiddenArte(art.id); }}
+                                        className="p-1 bg-black/70 hover:bg-black text-white rounded"
+                                        title={isHidden ? 'Mostrar arte' : 'Ocultar arte'}
+                                      >
+                                        {isHidden ? <Eye className="h-3 w-3" /> : <EyeOff className="h-3 w-3" />}
+                                      </button>
+                                    </div>
                                     {(art.tiene_instalado || art.estatus) && (
-                                      <span className={`absolute top-0.5 right-0.5 px-1 py-0 rounded text-[8px] font-semibold ${
+                                      <span className={`absolute top-1 right-1 px-1.5 py-0.5 rounded text-[10px] font-semibold pointer-events-none ${
                                         art.tiene_instalado ? 'bg-purple-500/80 text-white'
                                         : art.estatus?.toLowerCase() === 'aprobado' ? 'bg-green-500/80 text-white'
                                         : art.estatus?.toLowerCase() === 'rechazado' ? 'bg-red-500/80 text-white'
@@ -2815,17 +2951,17 @@ function UploadArtModal({
                                         : 'bg-zinc-700/80 text-zinc-200'
                                       }`}>{art.tiene_instalado ? 'Instalado' : art.estatus}</span>
                                     )}
-                                    <div className="absolute bottom-0 left-0 right-0 bg-black/70 px-1 py-px">
-                                      <p className="text-[7px] text-zinc-300 truncate" title={art.nombre_arte || art.nombre}>
+                                    <div className="absolute bottom-0 left-0 right-0 bg-black/70 px-1.5 py-1 pointer-events-none">
+                                      <p className="text-[10px] text-zinc-200 truncate" title={art.nombre_arte || art.nombre}>
                                         {art.nombre_arte || art.nombre}
                                       </p>
                                       {art.nota && (
-                                        <p className="text-[7px] text-zinc-400 truncate italic" title={art.nota}>
+                                        <p className="text-[10px] text-zinc-400 truncate italic" title={art.nota}>
                                           {art.nota}
                                         </p>
                                       )}
                                     </div>
-                                  </button>
+                                  </div>
                                 );
                               })}
                             </div>
@@ -3274,6 +3410,55 @@ function UploadArtModal({
           isDark={isDark}
         />
       )}
+
+      {/* Vista previa maximizada de un arte. Se abre desde el boton de la
+          esquina superior de cada thumbnail; no selecciona el arte, solo lo
+          muestra en grande para revisarlo. Cierra con ESC, click fuera o X. */}
+      {previewArte && (
+        <div
+          className="fixed inset-0 z-[70] flex items-center justify-center bg-black/85 backdrop-blur-sm"
+          onClick={() => setPreviewArte(null)}
+          onKeyDown={(e) => { if (e.key === 'Escape') setPreviewArte(null); }}
+          tabIndex={-1}
+        >
+          <div className="relative w-full max-w-[95vw] max-h-[95vh] flex flex-col items-center gap-3" onClick={(e) => e.stopPropagation()}>
+            <button
+              type="button"
+              onClick={() => setPreviewArte(null)}
+              className="absolute -top-2 -right-2 z-10 p-2 bg-zinc-900 hover:bg-zinc-800 border border-zinc-700 rounded-full text-white shadow-lg"
+              title="Cerrar (ESC)"
+            >
+              <X className="h-4 w-4" />
+            </button>
+            <div className="bg-zinc-900 rounded-xl overflow-hidden flex items-center justify-center max-h-[85vh] max-w-full">
+              {previewArte.isVideo ? (
+                <video
+                  src={getImageUrl(previewArte.url) || previewArte.url}
+                  controls
+                  autoPlay
+                  className="max-h-[85vh] max-w-[95vw]"
+                />
+              ) : (
+                <ArteImg
+                  src={previewArte.url}
+                  alt={previewArte.nombre_arte || previewArte.nombre}
+                  className="max-h-[85vh] max-w-[95vw] object-contain"
+                />
+              )}
+            </div>
+            <div className="bg-zinc-900/90 border border-border rounded-lg px-4 py-2 max-w-2xl w-full text-center">
+              <p className="text-sm text-white font-medium truncate" title={previewArte.nombre_arte || previewArte.nombre}>
+                {previewArte.nombre_arte || previewArte.nombre}
+              </p>
+              {previewArte.nota && (
+                <p className="text-xs text-zinc-400 italic mt-0.5 truncate" title={previewArte.nota}>
+                  {previewArte.nota}
+                </p>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -3537,7 +3722,7 @@ function FilterToolbar({
         </button>
         {showFilters && (
           <div
-            className={`${useFixedDropdowns ? 'fixed' : 'absolute right-0 top-full mt-1'} z-[100] w-[520px] ${isDark ? 'bg-[#1a1025]' : 'bg-white'} border border-purple-900/50 rounded-lg shadow-xl p-4`}
+            className={`${useFixedDropdowns ? 'fixed' : 'absolute right-0 top-full mt-1'} z-[100] w-[520px] max-w-[calc(100vw-1rem)] ${isDark ? 'bg-[#1a1025]' : 'bg-white'} border border-purple-900/50 rounded-lg shadow-xl p-4`}
             style={useFixedDropdowns ? getDropdownPosition(filterBtnRef, 520) : undefined}
           >
             <div className="flex items-center justify-between mb-3">
@@ -3546,19 +3731,21 @@ function FilterToolbar({
             </div>
             <div className="space-y-3 max-h-[300px] overflow-visible pr-1">
               {filters.map((filter, index) => (
-                <div key={filter.id} className="flex items-center gap-2">
-                  {index > 0 && <span className="text-[10px] text-purple-400 font-medium w-8">AND</span>}
-                  {index === 0 && <span className="w-8"></span>}
-                  <select value={filter.field} onChange={(e) => updateFilter(filter.id, { field: e.target.value })} className="w-[130px] text-xs bg-background border border-border rounded px-2 py-1.5">
+                // Movil: campo/operador/valor apilados en columna para que no
+                // se corten (feedback usuario 2026-09-21). Desktop mantiene fila.
+                <div key={filter.id} className="flex flex-col sm:flex-row sm:items-center gap-2">
+                  {index > 0 && <span className="text-[10px] text-purple-400 font-medium w-full sm:w-8">AND</span>}
+                  {index === 0 && <span className="hidden sm:inline sm:w-8"></span>}
+                  <select value={filter.field} onChange={(e) => updateFilter(filter.id, { field: e.target.value })} className="w-full sm:w-[130px] text-xs bg-background border border-border rounded px-2 py-1.5">
                     {filterFields.map((f) => <option key={f.field} value={f.field}>{f.label}</option>)}
                   </select>
-                  <select value={filter.operator} onChange={(e) => updateFilter(filter.id, { operator: e.target.value as FilterOperator })} className="w-[90px] text-xs bg-background border border-border rounded px-2 py-1.5">
+                  <select value={filter.operator} onChange={(e) => updateFilter(filter.id, { operator: e.target.value as FilterOperator })} className="w-full sm:w-[90px] text-xs bg-background border border-border rounded px-2 py-1.5">
                     {FILTER_OPERATORS.filter(op => { const fc = filterFields.find(f => f.field === filter.field); return fc && op.forTypes.includes(fc.type); }).map((op) => <option key={op.value} value={op.value}>{op.label}</option>)}
                   </select>
                   {/* Combobox: input libre + dropdown de opciones que matchean.
                       Permite escribir texto cualquiera (no esta restringido al listado).
                       Pattern identico al de filtros avanzados de Campañas/Solicitudes. */}
-                  <div className="flex-1 relative">
+                  <div className="flex-1 min-w-0 relative">
                     <input
                       type="text"
                       value={filter.value}

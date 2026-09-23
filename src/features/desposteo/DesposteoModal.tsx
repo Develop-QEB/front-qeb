@@ -7,6 +7,9 @@ import {
   desposteoService,
   DesposteoNota,
   DesposteoSolicitud,
+  DesgloseAps,
+  DesgloseCatorcena,
+  DesglosePlazaFormato,
   SnapshotAPS,
   TIPO_NOTA_LABEL,
   ESTATUS_LABEL,
@@ -77,6 +80,21 @@ export function DesposteoModal({ isOpen, onClose, modo, campaniaId, aps, solicit
     try { return JSON.parse(solicitud.snapshot_aps) as SnapshotAPS; } catch { return null; }
   }, [solicitud]);
 
+  // Campania/APS efectivos — vienen como props (modo solicitar) o del
+  // snapshot/solicitud (modos filtro/facturacion/ver).
+  const campaniaEfectiva = campaniaId ?? solicitud?.campania_id ?? snapshot?.campania_id ?? null;
+  const apsEfectivo = aps ?? solicitud?.aps ?? snapshot?.aps ?? null;
+
+  // Desglose enriquecido en vivo (catorcenas -> plaza/formato -> articulos).
+  // Complementa el snapshot histórico con montos reales (tarifa * caras) y
+  // agrupacion que Jos pidio ver estilo listado con APS.
+  const desgloseQuery = useQuery({
+    queryKey: ['desposteo-aps-detalle', campaniaEfectiva, apsEfectivo],
+    queryFn: () => desposteoService.apsDetalle(campaniaEfectiva!, apsEfectivo!),
+    enabled: isOpen && !!campaniaEfectiva && !!apsEfectivo,
+  });
+  const desglose = desgloseQuery.data || null;
+
   const invalidarTodo = () => {
     qc.invalidateQueries({ queryKey: ['desposteo-detalle', solicitudId] });
     qc.invalidateQueries({ queryKey: ['desposteo-historial', campaniaId, aps] });
@@ -84,6 +102,11 @@ export function DesposteoModal({ isOpen, onClose, modo, campaniaId, aps, solicit
     // Refrescar tareas/notificaciones que muestran esta solicitud
     qc.invalidateQueries({ queryKey: ['notificaciones'] });
     qc.invalidateQueries({ queryKey: ['tareas'] });
+    // Badges de estado por APS en el detalle de campaña. Sin esto el badge
+    // ("DESPOSTEO SOLICITADO" / "LISTO PARA DESPOSTEAR") se quedaba hasta 30s
+    // con el estado viejo tras aprobar o rechazar, porque esa query tiene
+    // staleTime de 30s y vive en otra pantalla.
+    qc.invalidateQueries({ queryKey: ['desposteo-estados-aps'] });
   };
 
   const solicitarMut = useMutation({
@@ -192,8 +215,8 @@ export function DesposteoModal({ isOpen, onClose, modo, campaniaId, aps, solicit
             </div>
           )}
 
-          {/* Snapshot */}
-          {snapshot && (
+          {/* Datos del posteo a cancelar — snapshot resumido + desglose vivo */}
+          {(snapshot || desglose) && (
             <div className={`rounded-lg border ${isDark ? 'border-zinc-800 bg-zinc-800/40' : 'border-gray-200 bg-gray-50'}`}>
               <button
                 type="button"
@@ -205,7 +228,20 @@ export function DesposteoModal({ isOpen, onClose, modo, campaniaId, aps, solicit
                 </span>
                 {detallesVisible ? <ChevronUp className="h-3.5 w-3.5" /> : <ChevronDown className="h-3.5 w-3.5" />}
               </button>
-              {detallesVisible && <SnapshotView snapshot={snapshot} isDark={isDark} />}
+              {detallesVisible && (
+                <div className="px-3 pb-3 space-y-3">
+                  {desglose ? (
+                    <DesgloseView desglose={desglose} isDark={isDark} />
+                  ) : snapshot ? (
+                    <SnapshotView snapshot={snapshot} isDark={isDark} />
+                  ) : null}
+                  {desgloseQuery.isLoading && (
+                    <div className={`text-[11px] flex items-center gap-2 ${isDark ? 'text-zinc-500' : 'text-gray-400'}`}>
+                      <Loader2 className="h-3 w-3 animate-spin" /> Cargando desglose...
+                    </div>
+                  )}
+                </div>
+              )}
             </div>
           )}
 
@@ -357,6 +393,10 @@ function EstatusBadge({ estatus, isDark }: { estatus: EstatusDesposteo; isDark: 
   );
 }
 
+function fmtMoney(n: number): string {
+  return n.toLocaleString('es-MX', { style: 'currency', currency: 'MXN', minimumFractionDigits: 2 });
+}
+
 function SnapshotView({ snapshot, isDark }: { snapshot: SnapshotAPS; isDark: boolean }) {
   const kv = (k: string, v: React.ReactNode) => (
     <div className="flex items-baseline gap-2 text-xs">
@@ -365,28 +405,118 @@ function SnapshotView({ snapshot, isDark }: { snapshot: SnapshotAPS; isDark: boo
     </div>
   );
   return (
-    <div className="px-3 pb-3 space-y-1">
+    <div className="space-y-1">
       {kv('Campana', <>#{snapshot.campania_id} — {snapshot.campania_nombre}</>)}
       {kv('APS', <>{snapshot.aps}</>)}
       {snapshot.razon_social && kv('Razon social', snapshot.razon_social)}
       {snapshot.cliente_nombre && kv('Cliente', snapshot.cliente_nombre)}
-      {kv('Monto estimado', <span className="font-semibold">${snapshot.monto_estimado.toFixed(2)}</span>)}
+      {kv('Monto estimado', <span className="font-semibold">{fmtMoney(snapshot.monto_estimado || 0)}</span>)}
       {snapshot.doc_entry && kv('Doc SAP', <>{snapshot.doc_entry}{snapshot.doc_num ? ` / ${snapshot.doc_num}` : ''}</>)}
       {snapshot.posted_at && kv('Posteado', new Date(snapshot.posted_at).toLocaleString('es-MX'))}
-      {snapshot.circuitos.length > 0 && (
-        <div className="pt-2">
-          <div className={`text-[11px] mb-1 ${isDark ? 'text-zinc-500' : 'text-gray-500'}`}>Circuitos ({snapshot.circuitos.length})</div>
-          <div className="space-y-1 max-h-40 overflow-y-auto pr-1">
-            {snapshot.circuitos.map(c => (
-              <div key={c.id} className={`text-[11px] flex items-center gap-2 ${isDark ? 'text-zinc-300' : 'text-gray-700'}`}>
-                <span className={`font-medium ${isDark ? 'text-fuchsia-300' : 'text-fuchsia-700'}`}>#{c.id}</span>
-                <span className="truncate">{c.articulo || '—'} · {c.formato || '—'} · {c.ciudad || '—'}</span>
-                <span className={`ml-auto shrink-0 ${isDark ? 'text-zinc-500' : 'text-gray-500'}`}>${c.costo.toFixed(2)}</span>
-              </div>
-            ))}
-          </div>
+    </div>
+  );
+}
+
+// Desglose enriquecido — jerarquia catorcena -> plaza/formato -> articulos.
+// Imita el listado con APS del detalle de campana.
+function DesgloseView({ desglose, isDark }: { desglose: DesgloseAps; isDark: boolean }) {
+  const label = isDark ? 'text-zinc-500' : 'text-gray-500';
+  const value = isDark ? 'text-zinc-200' : 'text-gray-800';
+  const kv = (k: string, v: React.ReactNode) => (
+    <div className="flex items-baseline gap-2 text-xs">
+      <span className={`w-32 shrink-0 ${label}`}>{k}</span>
+      <span className={value}>{v}</span>
+    </div>
+  );
+  return (
+    <div className="space-y-3">
+      <div className="space-y-1">
+        {kv('Campana', <>#{desglose.campania_id} — {desglose.campania_nombre}</>)}
+        {kv('APS', <>{desglose.aps}</>)}
+        {desglose.razon_social && kv('Razon social', desglose.razon_social)}
+        {desglose.cliente_nombre && kv('Cliente', desglose.cliente_nombre)}
+        {desglose.cuic != null && kv('CUIC', String(desglose.cuic))}
+        {desglose.marca && kv('Marca', desglose.marca)}
+        {desglose.doc_entry && kv('Doc SAP', <>{desglose.doc_entry}{desglose.doc_num ? ` / ${desglose.doc_num}` : ''}</>)}
+        {desglose.posted_at && kv('Posteado', new Date(desglose.posted_at).toLocaleString('es-MX'))}
+        {kv('Total caras', <span className="font-semibold">{desglose.caras_total}</span>)}
+        {kv('Inversion total', <span className={`font-semibold ${isDark ? 'text-emerald-300' : 'text-emerald-700'}`}>{fmtMoney(desglose.inversion_total)}</span>)}
+      </div>
+      {desglose.catorcenas.length > 0 && (
+        <div className="space-y-2 max-h-72 overflow-y-auto pr-1">
+          {desglose.catorcenas.map((c, i) => (
+            <CatorcenaCard key={`${c.anio}-${c.numero}-${i}`} catorcena={c} apsPrincipal={desglose.aps} isDark={isDark} />
+          ))}
         </div>
       )}
+    </div>
+  );
+}
+
+function CatorcenaCard({ catorcena, apsPrincipal, isDark }: {
+  catorcena: DesgloseCatorcena;
+  apsPrincipal: number;
+  isDark: boolean;
+}) {
+  return (
+    <div className={`rounded-md border ${isDark ? 'border-zinc-700 bg-zinc-800/50' : 'border-gray-200 bg-white'}`}>
+      <div className={`flex items-center gap-3 px-3 py-2 border-b ${isDark ? 'border-zinc-700' : 'border-gray-200'}`}>
+        <span className={`text-xs font-semibold ${isDark ? 'text-fuchsia-300' : 'text-fuchsia-700'}`}>
+          Cat {catorcena.numero ?? '—'} / {catorcena.anio ?? '—'}
+        </span>
+        <span className={`text-[11px] ${isDark ? 'text-zinc-500' : 'text-gray-500'}`}>
+          Caras: <span className={isDark ? 'text-zinc-200' : 'text-gray-800'}>{catorcena.caras_total}</span>
+        </span>
+        <span className={`text-[11px] ml-auto ${isDark ? 'text-zinc-500' : 'text-gray-500'}`}>
+          Inv: <span className={`font-medium ${isDark ? 'text-emerald-300' : 'text-emerald-700'}`}>{fmtMoney(catorcena.inversion_total)}</span>
+        </span>
+      </div>
+      <div className="p-2 space-y-2">
+        {catorcena.plazas.map((p, i) => (
+          <PlazaFormatoCard key={`${p.plaza}-${p.formato}-${i}`} bloque={p} apsPrincipal={apsPrincipal} isDark={isDark} />
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function PlazaFormatoCard({ bloque, apsPrincipal, isDark }: {
+  bloque: DesglosePlazaFormato;
+  apsPrincipal: number;
+  isDark: boolean;
+}) {
+  return (
+    <div className={`rounded border ${isDark ? 'border-zinc-700' : 'border-gray-200'}`}>
+      <div className={`flex items-center gap-2 px-2 py-1.5 border-b text-[11px] ${
+        isDark ? 'border-zinc-700 bg-zinc-800/70' : 'border-gray-200 bg-gray-50'
+      }`}>
+        <span className={isDark ? 'text-zinc-500' : 'text-gray-500'}>Plaza:</span>
+        <span className={`px-1.5 py-0.5 rounded text-[10px] font-medium ${isDark ? 'bg-zinc-700 text-zinc-100' : 'bg-gray-200 text-gray-800'}`}>{bloque.plaza}</span>
+        <span className={isDark ? 'text-zinc-500' : 'text-gray-500'}>Formato:</span>
+        <span className={`px-1.5 py-0.5 rounded text-[10px] font-medium ${isDark ? 'bg-fuchsia-500/20 text-fuchsia-200' : 'bg-fuchsia-100 text-fuchsia-800'}`}>{bloque.formato}</span>
+        <span className={`ml-auto ${isDark ? 'text-zinc-500' : 'text-gray-500'}`}>APS:</span>
+        <span className={`font-medium ${isDark ? 'text-zinc-100' : 'text-gray-800'}`}>{apsPrincipal}</span>
+        <span className={`px-1 py-0.5 rounded text-[9px] font-semibold ${isDark ? 'bg-emerald-500/20 text-emerald-200' : 'bg-emerald-100 text-emerald-800'}`}>POST</span>
+      </div>
+      <div className="px-2 py-1 space-y-1">
+        {bloque.articulos.map(a => (
+          <div key={a.id} className={`flex items-center gap-2 text-[11px] px-1 py-1 rounded ${
+            isDark ? 'hover:bg-zinc-800/60' : 'hover:bg-gray-50'
+          }`}>
+            <span className={`shrink-0 ${isDark ? 'text-zinc-500' : 'text-gray-500'}`}>Articulo:</span>
+            <span className={`shrink-0 font-medium ${isDark ? 'text-cyan-300' : 'text-cyan-700'}`}>{a.articulo || '—'}</span>
+            {a.grupo_masivo_id != null && (
+              <span className={`shrink-0 ${isDark ? 'text-zinc-500' : 'text-gray-500'}`}>| Grupo {a.grupo_masivo_id}</span>
+            )}
+            {a.tipo && (
+              <span className={`shrink-0 ${isDark ? 'text-zinc-500' : 'text-gray-500'}`}>| {a.tipo}</span>
+            )}
+            <span className={`ml-auto shrink-0 ${isDark ? 'text-zinc-500' : 'text-gray-500'}`}>Caras: <span className={isDark ? 'text-zinc-200' : 'text-gray-800'}>{a.caras}</span></span>
+            <span className={`shrink-0 ${isDark ? 'text-zinc-500' : 'text-gray-500'}`}>Tarifa: <span className={isDark ? 'text-zinc-200' : 'text-gray-800'}>{fmtMoney(a.tarifa_publica)}</span></span>
+            <span className={`shrink-0 ${isDark ? 'text-zinc-500' : 'text-gray-500'}`}>Inv: <span className={`font-medium ${isDark ? 'text-emerald-300' : 'text-emerald-700'}`}>{fmtMoney(a.inversion)}</span></span>
+          </div>
+        ))}
+      </div>
     </div>
   );
 }

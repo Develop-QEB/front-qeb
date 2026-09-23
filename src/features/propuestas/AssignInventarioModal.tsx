@@ -21,7 +21,7 @@ import { circuitosService } from '../../services/circuitos.service';
 import { clientesService } from '../../services/clientes.service';
 import { useEnvironmentStore, getEndpoints } from '../../store/environmentStore';
 import { useAuthStore } from '../../store/authStore';
-import { getPermissions, esAsesorComercial } from '../../lib/permissions';
+import { getPermissions, esAsesorComercial, esTrafico } from '../../lib/permissions';
 import { filterAllowedArticulos } from '../../config/allowedDigitalArticles';
 import { useSocketPropuesta, useSocketEquipos, useSocketInventarioRealtime, useEstatusEnVivo, type InventarioRealtimePayload } from '../../hooks/useSocket';
 import { useThemeStore } from '../../store/themeStore';
@@ -32,6 +32,7 @@ import { BULK_DELETE_ENABLED } from '../../config/featureFlags';
 import { NotasDireccionBitacora } from '../notificaciones/NotasDireccionBitacora';
 import { NuevaNotaDireccionModal } from '../notificaciones/NuevaNotaDireccionModal';
 import { notasDireccionService } from '../../services/notasDireccion.service';
+import { BitacoraEstatusInline, type BitacoraEstatusInlineHandle, type StatusValidation } from '../../components/BitacoraEstatusInline';
 
 // GOOGLE_MAPS_API_KEY / LIBRARIES centralizados en src/config/googleMaps.ts.
 
@@ -804,12 +805,16 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
   // Bloqueo Edición Asesores — Estatus Ajuste CTO: los asesores comerciales no pueden
   // editar circuitos existentes mientras la propuesta esté en "Ajuste Cto-Cliente".
   const bloqueoCircuitoAjusteCto = esAsesorComercial(user?.rol) && (statusActual === 'Ajuste Cto-Cliente' || statusActual === 'Ajuste Inventario');
-  // Bloqueo Edición No-Asesores — Estatus Ajuste Comercial: cuando la propuesta
-  // esta en Ajuste Comercial el balón está del lado del asesor; trafico y
-  // demás roles no deben tocar circuitos hasta que el asesor lo resuelva.
+  // Bloqueo Edición Tráfico — Estatus Ajuste Comercial: cuando la propuesta
+  // esta en Ajuste Comercial el balón está del lado del asesor; tráfico no
+  // debe tocar circuitos hasta que el asesor lo resuelva.
   // Feedback 2026-09-10 (Jos): simetrico al bloqueo Ajuste CTO (que bloquea a
   // asesores), pero al reves.
-  const bloqueoCircuitoAjusteComercial = !esAsesorComercial(user?.rol) && statusActual === 'Ajuste Comercial';
+  // Ajuste 2026-09-23 (Jos): la condición original era `!esAsesorComercial`
+  // que arrastraba a admins, gerentes y directores (Jos, Dul y demás) — les
+  // salía el aviso y no podían mover nada. La regla correcta es "sólo
+  // tráfico"; admins/gerentes/directores editan igual que siempre.
+  const bloqueoCircuitoAjusteComercial = esTrafico(user?.rol) && statusActual === 'Ajuste Comercial';
   const puedeEditarCircuito = permissions.canEditCircuitoExistente && !bloqueoCircuitoAjusteCto && !bloqueoCircuitoAjusteComercial;
   const effectiveCanEdit = !readOnly && permissions.canAsignarInventario && !isDescartada && !bloqueoCircuitoAjusteComercial;
   const canEditResumen = !readOnly && permissions.canEditResumenPropuesta && !isDescartada && !bloqueoCircuitoAjusteComercial;
@@ -2080,6 +2085,37 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
     );
   }, [caras]);
 
+  // Bitacora inline (estatus + comentarios) — se guarda junto con el resto de
+  // los cambios del modal. Handle imperativo para que el flujo de Guardar
+  // Cambios pueda invocarlo despues del save principal. La tabla general sigue
+  // usando su propio StatusModal, ambos flujos coexisten.
+  const bitacoraRef = useRef<BitacoraEstatusInlineHandle>(null);
+  const [bitacoraPending, setBitacoraPending] = useState(false);
+  const [bitacoraPendingCount, setBitacoraPendingCount] = useState(0);
+  const authBloqueoStatus = useMemo(() => {
+    const pend = caras.filter(c => c.autorizacion_dg === 'pendiente' || c.autorizacion_dcm === 'pendiente').length;
+    const corr = caras.filter(c => c.autorizacion_dg === 'correccion' || c.autorizacion_dcm === 'correccion').length;
+    const rech = caras.filter(c => c.autorizacion_dg === 'rechazado' || c.autorizacion_dcm === 'rechazado').length;
+    return pend > 0 || corr > 0 || rech > 0;
+  }, [caras]);
+  // Opciones de estatus para el select — usa el whitelist de rol si existe,
+  // fallback al catalogo base sin los estatus solo-sistema.
+  const propuestaStatusOptions = useMemo<string[]>(() => {
+    const catalogoBase = ['Atendido', 'Abierto', 'Ajuste Cto-Cliente', 'Ajuste Comercial', 'Pase a ventas', 'Rechazada'];
+    if (permissions.allowedPropuestaStatuses && permissions.allowedPropuestaStatuses.length > 0) {
+      return permissions.allowedPropuestaStatuses;
+    }
+    return catalogoBase;
+  }, [permissions.allowedPropuestaStatuses]);
+  const getPropuestaStatusValidation = useCallback((status: string): StatusValidation => {
+    const bloqueaAvanceStatus = status === 'Aprobada' || status === 'Pase a ventas';
+    const bloqueaSalidaStatus = status === 'Rechazada' || status === 'Cancelada';
+    if (authBloqueoStatus && (bloqueaAvanceStatus || bloqueaSalidaStatus)) {
+      return { disabled: true, reason: 'Autorización abierta' };
+    }
+    return { disabled: false };
+  }, [authBloqueoStatus]);
+
   // Saved-pending lock: existe alguna cara YA GUARDADA en BD (id != null) con
   // autorización original pendiente y que NO ha sido modificada localmente.
   // Las caras agregadas localmente (sin id) o las modificadas en la sesion no
@@ -3240,22 +3276,27 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
   const handleBulkSaveChanges = async (skipNotaGate = false) => {
     const hasPropuestaChanges = hasChanges;
     const hasCaraChanges = modifiedCaras.size > 0;
+    const hasBitacoraChanges = bitacoraRef.current?.hasPending() === true;
 
-    if (!hasPropuestaChanges && !hasCaraChanges) {
+    if (!hasPropuestaChanges && !hasCaraChanges && !hasBitacoraChanges) {
       showToast('No hay cambios pendientes', 'info');
       return;
     }
 
-    if (invalidCaras.length > 0) {
+    if (invalidCaras.length > 0 && (hasPropuestaChanges || hasCaraChanges)) {
       showToast(`No se puede guardar: ${invalidCaras.length} cara(s) tienen catorcenas fuera del rango configurado`, 'error');
       return;
     }
 
-    // No permitir guardar si quedan circuitos rechazados sin resolver.
-    const rechazadasSinResolver = caras.filter(c => c.autorizacion_dg === 'rechazado' || c.autorizacion_dcm === 'rechazado');
-    if (rechazadasSinResolver.length > 0) {
-      showToast(`Tienes ${rechazadasSinResolver.length} circuito(s) rechazado(s) sin resolver. Edítalos o usa "Reenviar a autorización" antes de guardar.`, 'error');
-      return;
+    // No permitir guardar si quedan circuitos rechazados sin resolver — solo
+    // cuando estamos guardando cambios de propuesta/caras (los cambios de
+    // bitacora/estatus se dejan pasar; el back tiene sus propios guardias).
+    if (hasPropuestaChanges || hasCaraChanges) {
+      const rechazadasSinResolver = caras.filter(c => c.autorizacion_dg === 'rechazado' || c.autorizacion_dcm === 'rechazado');
+      if (rechazadasSinResolver.length > 0) {
+        showToast(`Tienes ${rechazadasSinResolver.length} circuito(s) rechazado(s) sin resolver. Edítalos o usa "Reenviar a autorización" antes de guardar.`, 'error');
+        return;
+      }
     }
 
     // Gate obligatorio: si HAY autorización pendiente (current o guardada),
@@ -3266,7 +3307,10 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
     // falso positivo cuando el usuario resolvia la correccion editando el
     // circuito (bajaba tarifa/caras). El estado final ya venia en
     // `autorizacion_dg` como 'aprobado' pero se seguia pidiendo la nota.
-    if (!skipNotaGate) {
+    // Ajuste 2026-09-21: solo aplica cuando hay cambios de propuesta/caras. Si
+    // el usuario solo toco bitacora (estatus/comentarios), no re-enviamos
+    // autorizacion y por lo tanto no se pide Nota Direccion.
+    if (!skipNotaGate && (hasPropuestaChanges || hasCaraChanges)) {
       const dgPending = caras.some(c =>
         c.autorizacion_dg === 'pendiente' ||
         c.autorizacion_dg === 'correccion' ||
@@ -3289,6 +3333,21 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
     setIsSaving(true);
     try {
       const messages: string[] = [];
+
+      // 0. Bitacora inline (estatus + comentarios). Se aplica ANTES del bulk
+      // de caras: si el cambio de estatus revienta por el back (autorizacion
+      // abierta, etc.), abortamos antes de tocar caras y mostramos el error.
+      if (hasBitacoraChanges && bitacoraRef.current) {
+        try {
+          await bitacoraRef.current.commit();
+          messages.push('Estatus/bitácora actualizados');
+        } catch (bitErr) {
+          const bmsg = bitErr instanceof Error ? bitErr.message : (bitErr as any)?.response?.data?.error || 'Error al actualizar estatus/bitácora';
+          showToast(`Estatus/bitácora: ${bmsg}`, 'error');
+          setIsSaving(false);
+          return;
+        }
+      }
 
       // 1. Save propuesta summary changes if any
       if (hasPropuestaChanges) {
@@ -7804,13 +7863,14 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
 
   const handleClose = () => {
     const hayCarasNuevas = sessionNewCaraIdsRef.current.size > 0;
-    if (hasChanges || modifiedCaras.size > 0 || hayCarasNuevas) {
+    if (hasChanges || modifiedCaras.size > 0 || hayCarasNuevas || bitacoraPending) {
       setConfirmModal({
         isOpen: true,
         title: 'Cambios sin guardar',
         message: `Tienes ${[
           hasChanges ? 'cambios en la propuesta' : '',
           modifiedCaras.size > 0 ? `${modifiedCaras.size} circuito(s) sin guardar` : '',
+          bitacoraPending ? `${bitacoraPendingCount} cambio(s) en la bitácora` : '',
         ].filter(Boolean).join(' y ') || 'cambios'} sin guardar.${hayCarasNuevas ? ' Los circuitos agregados se descartarán.' : ''} ¿Seguro que quieres cerrar?`,
         confirmText: 'Cerrar sin guardar',
         cancelText: 'Volver',
@@ -7856,6 +7916,26 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
             </div>
           ) : (
             <>
+              {/* Section 0: Bitacora inline (estatus + comentarios).
+                  Feedback usuario 2026-09-21: poder editar estatus y agregar
+                  comentarios como parte del proceso de edicion, sin salir del
+                  modal. Los cambios se aplican al Guardar Cambios de abajo.
+                  El modal StatusModal en PropuestasPage sigue funcionando desde
+                  la tabla, ambos flujos coexisten. */}
+              <BitacoraEstatusInline
+                ref={bitacoraRef}
+                kind="propuesta"
+                entityId={propuesta.id}
+                currentStatus={statusActual}
+                statusOptions={propuestaStatusOptions}
+                getStatusValidation={getPropuestaStatusValidation}
+                canEditStatus={effectiveCanEdit && permissions.canEditPropuestaStatus}
+                canComment={!readOnly}
+                onPendingChange={(pending, count) => { setBitacoraPending(pending); setBitacoraPendingCount(count); }}
+                saving={isSaving}
+                contextLabel={`Propuesta #${propuesta.id}`}
+              />
+
               {/* Section 1: Propuesta Summary */}
               <div className={`${isDark ? 'bg-zinc-800/30' : 'bg-gray-50/30'} rounded-2xl border ${isDark ? 'border-zinc-700/50' : 'border-gray-200/50'} overflow-hidden`}>
                 <div className={`px-5 py-3 border-b ${isDark ? 'border-zinc-700/50' : 'border-gray-200/50'} ${isDark ? 'bg-zinc-800/50' : 'bg-gray-50/50'}`}>
@@ -10198,7 +10278,7 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
         </div>
 
         {/* Footer with Guardar Cambios button */}
-        {(caras.length > 0 || hasChanges) && (
+        {(caras.length > 0 || hasChanges || bitacoraPending) && (
           <div className={`px-6 py-4 border-t ${isDark ? 'border-zinc-800' : 'border-gray-200'} ${isDark ? 'bg-zinc-900' : 'bg-white'}/80 flex items-center justify-between`}>
             <div className="flex items-center gap-4">
               {/* Status summary */}
@@ -10221,12 +10301,13 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
                     Autorizaciones pendientes
                   </div>
                 )}
-                {(modifiedCaras.size > 0 || hasChanges) && (
+                {(modifiedCaras.size > 0 || hasChanges || bitacoraPending) && (
                   <div className="flex items-center gap-2 text-purple-400">
                     <span className="w-2 h-2 rounded-full bg-purple-500 animate-pulse" />
                     {[
                       hasChanges ? 'Propuesta' : '',
                       modifiedCaras.size > 0 ? `${modifiedCaras.size} circuito(s)` : '',
+                      bitacoraPending ? `Bitácora (${bitacoraPendingCount})` : '',
                     ].filter(Boolean).join(' + ')} pendiente(s)
                   </div>
                 )}
@@ -10241,11 +10322,29 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
               </button>
               {effectiveCanEdit && (
                 <button
-                  disabled={(!hasChanges && modifiedCaras.size === 0) || isSaving || invalidCaras.length > 0}
-                  title={invalidCaras.length > 0
+                  disabled={(!hasChanges && modifiedCaras.size === 0 && !bitacoraPending) || isSaving || ((hasChanges || modifiedCaras.size > 0) && invalidCaras.length > 0)}
+                  title={((hasChanges || modifiedCaras.size > 0) && invalidCaras.length > 0)
                     ? `${invalidCaras.length} cara(s) tienen catorcenas fuera del rango actual. Ajusta el rango o elimínalas para poder guardar.`
                     : undefined}
-                  onClick={() => {
+                  onClick={async () => {
+                    // Bitacora-only: si el usuario solo cambio estatus/comentarios
+                    // saltamos el gate de Nota Direccion y el modal de confirmar
+                    // cambios — no hay re-envio de caras y no hay que resumir
+                    // cambios de propuesta. Sencillo y directo.
+                    const onlyBitacora = !hasChanges && modifiedCaras.size === 0 && bitacoraPending;
+                    if (onlyBitacora) {
+                      setIsSaving(true);
+                      try {
+                        await bitacoraRef.current?.commit();
+                        showToast('Estatus/bitácora actualizados', 'success');
+                      } catch (err) {
+                        const msg = err instanceof Error ? err.message : (err as any)?.response?.data?.error || 'Error al guardar bitácora';
+                        showToast(msg, 'error');
+                      } finally {
+                        setIsSaving(false);
+                      }
+                      return;
+                    }
                     // Flujo nuevo (feedback Jos 2026-07-15): si hay autorización
                     // pendiente, mostrar PRIMERO la ventana de Nueva Nota Dirección
                     // y DESPUÉS el confirmar cambios. Antes iba confirmar → nota,
@@ -10269,7 +10368,7 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
                     setShowSaveConfirm(true);
                   }}
                   className={`px-6 py-2 rounded-lg text-sm font-medium transition-all ${
-                    (hasChanges || modifiedCaras.size > 0) && !isSaving && invalidCaras.length === 0
+                    (hasChanges || modifiedCaras.size > 0 || bitacoraPending) && !isSaving && !((hasChanges || modifiedCaras.size > 0) && invalidCaras.length > 0)
                       ? 'bg-purple-500 text-white hover:bg-purple-600 shadow-lg shadow-purple-500/25'
                       : `${isDark ? 'bg-zinc-700' : 'bg-gray-200'} ${isDark ? 'text-zinc-500' : 'text-gray-400'} cursor-not-allowed`
                   }`}
@@ -10279,7 +10378,7 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
                   ) : (
                     <Save className="h-4 w-4 inline-block mr-2" />
                   )}
-                  {isSaving ? 'Guardando...' : `Guardar Cambios${(hasChanges || modifiedCaras.size > 0) ? ` (${(hasChanges ? 1 : 0) + modifiedCaras.size})` : ''}`}
+                  {isSaving ? 'Guardando...' : `Guardar Cambios${(hasChanges || modifiedCaras.size > 0 || bitacoraPending) ? ` (${(hasChanges ? 1 : 0) + modifiedCaras.size + (bitacoraPending ? 1 : 0)})` : ''}`}
                 </button>
               )}
             </div>

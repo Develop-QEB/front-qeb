@@ -84,6 +84,56 @@ export interface VerificarResult {
   motivo?: string;
 }
 
+// Desglose enriquecido del APS (catorcena -> plaza/formato -> articulos)
+export interface DesgloseArticulo {
+  id: number;
+  articulo: string | null;
+  grupo_masivo_id: number | null;
+  tipo: string | null;
+  caras: number;
+  tarifa_publica: number;
+  inversion: number;
+  costo: number;
+}
+export interface DesglosePlazaFormato {
+  plaza: string;
+  formato: string;
+  caras_total: number;
+  inversion_total: number;
+  articulos: DesgloseArticulo[];
+}
+export interface DesgloseCatorcena {
+  numero: number | null;
+  anio: number | null;
+  inicio_periodo: string | null;
+  caras_total: number;
+  inversion_total: number;
+  plazas: DesglosePlazaFormato[];
+}
+export interface DesgloseAps {
+  campania_id: number;
+  campania_nombre: string;
+  aps: number;
+  razon_social: string | null;
+  cliente_nombre: string | null;
+  cuic: number | null;
+  marca: string | null;
+  post_log_id: number | null;
+  posted_at: string | null;
+  doc_entry: number | null;
+  doc_num: number | null;
+  caras_total: number;
+  inversion_total: number;
+  catorcenas: DesgloseCatorcena[];
+}
+
+// Estado de desposteo por APS (para badges en el listado)
+export type EstadoAps = {
+  estatus: 'solicitado' | 'filtro_aprobado' | 'aprobado' | 'ejecutado' | 'rechazado';
+  solicitud_id: number;
+};
+export type EstadosApsMap = Record<number, EstadoAps>;
+
 function extractApiError(err: unknown, fallback: string): Error {
   if (err instanceof AxiosError) {
     const serverError = err.response?.data as { error?: string; detalles?: unknown } | undefined;
@@ -135,6 +185,26 @@ export const desposteoService = {
       return data.data as DesposteoNota[];
     } catch (err) {
       throw extractApiError(err, 'Error al obtener historial de notas');
+    }
+  },
+
+  async apsDetalle(campania_id: number, aps: number): Promise<DesgloseAps> {
+    try {
+      const { data } = await api.get(`/desposteo/aps-detalle?campania_id=${campania_id}&aps=${aps}`);
+      if (!data.success) throw new Error(data.error || 'Error al obtener desglose');
+      return data.data as DesgloseAps;
+    } catch (err) {
+      throw extractApiError(err, 'Error al obtener desglose de APS');
+    }
+  },
+
+  async estadosAps(campania_id: number): Promise<EstadosApsMap> {
+    try {
+      const { data } = await api.get(`/desposteo/estados-aps?campania_id=${campania_id}`);
+      if (!data.success) throw new Error(data.error || 'Error al obtener estados');
+      return data.data as EstadosApsMap;
+    } catch (err) {
+      throw extractApiError(err, 'Error al obtener estados de APS');
     }
   },
 
@@ -208,14 +278,21 @@ export const TIPO_NOTA_LABEL: Record<TipoNota, string> = {
   ejecucion: 'Ejecutado en SAP',
 };
 
+// Feature flag: si false, oculta el boton de solicitar desposteo.
+//
+// PRENDIDO el 2026-09-17 junto con el del back (deben ir iguales): ya estan
+// el drawer con finalizar tarea, el modal enriquecido, los badges por APS y
+// la matriz de roles. Falta solo el escalado por tabulador, que mientras Jos
+// no defina los rangos corre con el comportamiento actual (siempre pasa por
+// el filtro del gerente comercial).
+export const FEATURE_SOLICITAR_DESPOSTEO_ACTIVE = true;
+
 // Roles con permisos (deben coincidir con back).
-const ROLES_SOLICITA = new Set([
-  'Asesor Comercial',
-  'Asesor Comercial Aeropuerto',
-  'Administrador',
-  'DEV',
-]);
-const ROLES_FILTRO_GC = new Set([
+// Feedback Jos: Asesores + Analistas pueden iniciar; Admin/TI no.
+const ROLES_ASESOR = ['Asesor Comercial', 'Asesor Comercial Aeropuerto'];
+const ROLES_ANALISTA = ['Asesor Analista', 'Analista de Servicio al Cliente', 'Analista de Aeropuerto'];
+const ROLES_SOLICITA = [...ROLES_ASESOR, ...ROLES_ANALISTA];
+const ROLES_FILTRO_GC = [
   'Gerente Comercial Vía Pública',
   'Gerente Comercial Via Publica',
   'Gerente Comercial Plazas',
@@ -223,28 +300,59 @@ const ROLES_FILTRO_GC = new Set([
   'Gerente Comercial',
   'Administrador',
   'DEV',
-]);
-const ROLES_FACTURACION = new Set([
+];
+// Fix 2026-09-17: faltaban 'Analista de Facturación y Cobranza' y
+// 'Especialista de Facturación'. Con solo los coordinadores, un analista de
+// facturación abría el modal en solo lectura y no podía aprobar. Los 4 roles
+// son los que el resto del sistema ya trata como facturación.
+const ROLES_FACTURACION = [
   'Coordinador de Facturación y Cobranza',
   'Coordinador de Facturación',
+  'Analista de Facturación y Cobranza',
+  'Especialista de Facturación',
   'Administrador',
   'DEV',
-]);
-const ROLES_BYPASS = new Set(['Administrador', 'DEV']);
+];
+const ROLES_BYPASS = ['Administrador', 'DEV'];
+const ROLES_TI = ['Gerente de TI', 'Especialista de TI', 'Analista de TI'];
 
-// Flujo desposteo temporalmente oculto en UI mientras se cierran ajustes
-// pendientes (drawer + finalizar tarea, enriquecer modal, indicadores, rol
-// Analista, permisos finales, tabulador). Al terminar esos ajustes, regresar
-// a la implementacion basada en ROLES_SOLICITA.
-export function puedeSolicitarDesposteo(_rol?: string | null): boolean {
-  return false;
+/**
+ * Compara roles sin depender de acentos ni mayúsculas.
+ *
+ * Los `user_role` de la BD no están normalizados y las dos bases difieren:
+ * en PROD el coordinador de facturación está guardado SIN acento
+ * ('Coordinador de Facturacion y Cobranza') y en PRUEBAS CON acento. Con una
+ * comparación exacta, en producción no pasaba ningún guard de facturación.
+ * Espejo de `rolEnLista()` del back (`utils/permissions.ts`).
+ */
+function normalizarRol(rol?: string | null): string {
+  return (rol || '')
+    .normalize('NFD')
+    .replace(/[̀-ͯ]/g, '')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .toLowerCase();
+}
+
+function rolEnLista(rol: string | null | undefined, lista: readonly string[]): boolean {
+  const objetivo = normalizarRol(rol);
+  if (!objetivo) return false;
+  return lista.some(r => normalizarRol(r) === objetivo);
+}
+
+export function puedeSolicitarDesposteo(rol?: string | null): boolean {
+  if (!FEATURE_SOLICITAR_DESPOSTEO_ACTIVE) return false;
+  return rolEnLista(rol, ROLES_SOLICITA);
 }
 export function puedeFiltrarDesposteo(rol?: string | null): boolean {
-  return !!rol && ROLES_FILTRO_GC.has(rol);
+  return rolEnLista(rol, ROLES_FILTRO_GC);
 }
 export function puedeAprobarDesposteoFacturacion(rol?: string | null): boolean {
-  return !!rol && ROLES_FACTURACION.has(rol);
+  return rolEnLista(rol, ROLES_FACTURACION);
 }
 export function puedeBypassearDesposteo(rol?: string | null): boolean {
-  return !!rol && ROLES_BYPASS.has(rol);
+  return rolEnLista(rol, ROLES_BYPASS);
+}
+export function esRolTIDesposteo(rol?: string | null): boolean {
+  return rolEnLista(rol, ROLES_TI);
 }
