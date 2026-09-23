@@ -20,7 +20,7 @@ import { parseCircuitoDigital } from '../../lib/circuitos';
 import { circuitosService } from '../../services/circuitos.service';
 import { useEnvironmentStore, getEndpoints } from '../../store/environmentStore';
 import { useAuthStore } from '../../store/authStore';
-import { usePermissions, esAsesorComercial } from '../../lib/permissions';
+import { usePermissions, esAsesorComercial, esTrafico } from '../../lib/permissions';
 import { filterAllowedArticulos } from '../../config/allowedDigitalArticles';
 import { useSocketEquipos, useSocketCampana, useSocketInventarioRealtime, useEstatusEnVivo, type InventarioRealtimePayload } from '../../hooks/useSocket';
 import { useThemeStore } from '../../store/themeStore';
@@ -805,10 +805,13 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
   // Bloqueo Edición Asesores — Estatus Ajuste CTO: los asesores comerciales no pueden
   // editar circuitos existentes mientras la campaña esté en "Ajuste CTO Cliente".
   const bloqueoCircuitoAjusteCto = esAsesorComercial(user?.rol) && statusActual === 'Ajuste CTO Cliente';
-  // Bloqueo No-Asesores en Ajuste Comercial: trafico y demas no deben tocar
-  // circuitos mientras el asesor esta resolviendo. Feedback 2026-09-10 (Jos):
-  // simetrico a Ajuste CTO (que bloquea a asesores), pero al reves.
-  const bloqueoCircuitoAjusteComercial = !esAsesorComercial(user?.rol) && statusActual === 'Ajuste Comercial';
+  // Bloqueo Tráfico en Ajuste Comercial: sólo tráfico se detiene mientras
+  // el asesor está resolviendo. Feedback 2026-09-10 (Jos): simetrico a
+  // Ajuste CTO (que bloquea a asesores), pero al reves.
+  // Ajuste 2026-09-23 (Jos): la condición era `!esAsesorComercial` que
+  // arrastraba a admins, gerentes y directores (Jos, Dul y demás) — les salía
+  // el aviso y no podían editar. La regla correcta es "solo tráfico".
+  const bloqueoCircuitoAjusteComercial = esTrafico(user?.rol) && statusActual === 'Ajuste Comercial';
   const effectiveCanEdit = permissions.canAsignarInventario && !bloqueoCircuitoAjusteComercial;
   const canEditResumen = permissions.canEditResumenPropuesta && !bloqueoCircuitoAjusteComercial;
   const canEditTarifaCaras = canEditResumen && permissions.canEditTarifaCaras;

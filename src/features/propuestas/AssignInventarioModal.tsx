@@ -20,7 +20,7 @@ import { circuitosService } from '../../services/circuitos.service';
 import { clientesService } from '../../services/clientes.service';
 import { useEnvironmentStore, getEndpoints } from '../../store/environmentStore';
 import { useAuthStore } from '../../store/authStore';
-import { getPermissions, esAsesorComercial } from '../../lib/permissions';
+import { getPermissions, esAsesorComercial, esTrafico } from '../../lib/permissions';
 import { filterAllowedArticulos } from '../../config/allowedDigitalArticles';
 import { useSocketPropuesta, useSocketEquipos, useSocketInventarioRealtime, useEstatusEnVivo, type InventarioRealtimePayload } from '../../hooks/useSocket';
 import { useThemeStore } from '../../store/themeStore';
@@ -804,12 +804,16 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
   // Bloqueo Edición Asesores — Estatus Ajuste CTO: los asesores comerciales no pueden
   // editar circuitos existentes mientras la propuesta esté en "Ajuste Cto-Cliente".
   const bloqueoCircuitoAjusteCto = esAsesorComercial(user?.rol) && (statusActual === 'Ajuste Cto-Cliente' || statusActual === 'Ajuste Inventario');
-  // Bloqueo Edición No-Asesores — Estatus Ajuste Comercial: cuando la propuesta
-  // esta en Ajuste Comercial el balón está del lado del asesor; trafico y
-  // demás roles no deben tocar circuitos hasta que el asesor lo resuelva.
+  // Bloqueo Edición Tráfico — Estatus Ajuste Comercial: cuando la propuesta
+  // esta en Ajuste Comercial el balón está del lado del asesor; tráfico no
+  // debe tocar circuitos hasta que el asesor lo resuelva.
   // Feedback 2026-09-10 (Jos): simetrico al bloqueo Ajuste CTO (que bloquea a
   // asesores), pero al reves.
-  const bloqueoCircuitoAjusteComercial = !esAsesorComercial(user?.rol) && statusActual === 'Ajuste Comercial';
+  // Ajuste 2026-09-23 (Jos): la condición original era `!esAsesorComercial`
+  // que arrastraba a admins, gerentes y directores (Jos, Dul y demás) — les
+  // salía el aviso y no podían mover nada. La regla correcta es "sólo
+  // tráfico"; admins/gerentes/directores editan igual que siempre.
+  const bloqueoCircuitoAjusteComercial = esTrafico(user?.rol) && statusActual === 'Ajuste Comercial';
   const puedeEditarCircuito = permissions.canEditCircuitoExistente && !bloqueoCircuitoAjusteCto && !bloqueoCircuitoAjusteComercial;
   const effectiveCanEdit = !readOnly && permissions.canAsignarInventario && !isDescartada && !bloqueoCircuitoAjusteComercial;
   const canEditResumen = !readOnly && permissions.canEditResumenPropuesta && !isDescartada && !bloqueoCircuitoAjusteComercial;
