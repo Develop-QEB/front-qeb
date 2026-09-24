@@ -1,11 +1,11 @@
 import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useState, useMemo, useRef, useCallback, memo } from 'react';
 import {
   ArrowLeft, Share2, Download, FileText, Map as MapIcon, Copy, Check, Loader2,
   ChevronDown, ChevronRight, Filter, ArrowUpDown, Layers, FileSpreadsheet, ExternalLink, X, Maximize2, Eye, EyeOff
 } from 'lucide-react';
-import { GoogleMap, useLoadScript, Marker, Circle, Autocomplete, InfoWindow } from '@react-google-maps/api';
+import { GoogleMap, useLoadScript, Marker, InfoWindow } from '@react-google-maps/api';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell } from 'recharts';
 import { propuestasService, InventarioReservado, PropuestaFullDetails } from '../../services/propuestas.service';
 import { formatCurrency, formatDate } from '../../lib/utils';
@@ -28,6 +28,16 @@ import {
 // Config UNICA de Google Maps (mismo id/key/libraries en toda la app) para
 // que el script se inyecte una sola vez. Ver src/config/googleMaps.ts.
 import { GOOGLE_MAPS_LOADER_OPTIONS } from '../../config/googleMaps';
+// Capas de POI / poligonos con las que Trafico armo cada circuito (Buscador de
+// Formatos -> capasMapa.ts). Vista interna: llegan TODAS, incluidas las que
+// Trafico oculto al cliente; aqui se pueden mostrar/ocultar y borrar.
+import { capasMapaService } from '../../services/capasMapa.service';
+import { CapaMapa, boundsDeCapas } from './capasMapa';
+import { CapasMapaPanel } from './CapasMapaPanel';
+import { CapasMapaOverlay } from './CapasMapaOverlay';
+// Buscador de POI libre (misma busqueda por area que el Buscador de Formatos).
+import { PoiBuscadorMapa, PoiMapaOverlay } from './PoiBuscadorMapa';
+import type { POIEncontrado } from './poiBusqueda';
 
 // Purple Brand Colors for Compartir
 const PURPLE_PRIMARY = '#8B5CF6';
@@ -44,13 +54,6 @@ const DARK_MAP_STYLES = [
   { featureType: 'road', elementType: 'geometry', stylers: [{ color: '#2d2d44' }] },
   { featureType: 'water', elementType: 'geometry', stylers: [{ color: '#0f0f1a' }] },
 ];
-
-interface POIMarker {
-  id: string;
-  position: { lat: number; lng: number };
-  name: string;
-  range: number;
-}
 
 // Helper functions
 const MESES_LABEL = ['Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio', 'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre'];
@@ -295,7 +298,6 @@ export function CompartirPropuestaPage() {
   const isDark = useThemeStore((s) => s.theme) === 'dark';
   const propuestaId = id ? parseInt(id, 10) : 0;
   const mapRef = useRef<google.maps.Map | null>(null);
-  const autocompleteRef = useRef<google.maps.places.Autocomplete | null>(null);
 
   // States
   const [copied, setCopied] = useState(false);
@@ -315,15 +317,18 @@ export function CompartirPropuestaPage() {
   const [showFilters, setShowFilters] = useState(false);
 
   // POI states
-  const [poiMarkers, setPoiMarkers] = useState<POIMarker[]>([]);
+  const [poiMarkers, setPoiMarkers] = useState<POIEncontrado[]>([]);
   const [searchRange, setSearchRange] = useState(300);
-  const [poiSearch, setPoiSearch] = useState('');
   const [selectedMarker, setSelectedMarker] = useState<InventarioReservado | null>(null);
   // El mapa embebido pinta un marker por inventario (miles en propuestas grandes) y es
   // lo más pesado de la página. Colapsado por default: así los checkboxes van fluidos y
   // el mapa solo se monta cuando el usuario lo pide. ("Ver Mapa"/"Expandir Mapa" siguen
   // abriendo el visor completo aparte.)
   const [showMap, setShowMap] = useState(false);
+  // Capas de Trafico prendidas en el mapa (nacen apagadas: son "activables").
+  const [capasActivas, setCapasActivas] = useState<Set<number>>(new Set());
+  const [capaOcupadaId, setCapaOcupadaId] = useState<number | null>(null);
+  const queryClient = useQueryClient();
 
   // Google Maps
   const { isLoaded } = useLoadScript(GOOGLE_MAPS_LOADER_OPTIONS);
@@ -338,6 +343,14 @@ export function CompartirPropuestaPage() {
   const { data: inventario, isLoading: loadingInventario } = useQuery({
     queryKey: ['propuesta-inventario', propuestaId],
     queryFn: () => propuestasService.getInventarioReservado(propuestaId),
+    enabled: propuestaId > 0,
+  });
+
+  // Capas por circuito (solicitud_caras_id). Como todo se resuelve por la
+  // propuesta (idquote), sirven igual para la campaña (?ctx=campana).
+  const { data: capas = [] } = useQuery({
+    queryKey: ['capas-mapa', propuestaId],
+    queryFn: () => capasMapaService.listarPorPropuesta(propuestaId),
     enabled: propuestaId > 0,
   });
 
@@ -414,6 +427,60 @@ export function CompartirPropuestaPage() {
   // "Expandir Mapa" (visor aparte), que sí muestra todo sin selección.
   const MAX_PINES_INLINE = 2000;
   const demasiadosPines = selectedItems.size === 0 && visibleMarkers.length > MAX_PINES_INLINE;
+
+  // ---- Capas de Trafico ----
+  // Circuitos con inventario en el alcance actual (chips de catorcena): las
+  // capas de circuitos fuera se atenúan en el panel. Nombre legible por circuito.
+  const circuitosVisibles = useMemo(() => {
+    const s = new Set<number>();
+    catorcenaFilteredInventario.forEach(i => { if (i.solicitud_caras_id) s.add(i.solicitud_caras_id); });
+    return s;
+  }, [catorcenaFilteredInventario]);
+  const nombreCircuito = useCallback((scId: number): string | null => {
+    const item = (inventario || []).find(i => i.solicitud_caras_id === scId);
+    if (!item) return null;
+    return [item.articulo, item.formato || item.mueble].filter(Boolean).join(' · ') || null;
+  }, [inventario]);
+  // Al prender una capa se encuadra el mapa para que se vea (si esta montado).
+  const handleToggleCapa = (id: number) => {
+    const capa = capas.find(c => c.id === id);
+    if (capa && !capasActivas.has(id) && mapRef.current) {
+      const b = boundsDeCapas([capa]);
+      if (b) mapRef.current.fitBounds(b, 60);
+    }
+    setCapasActivas(prev => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id); else next.add(id);
+      return next;
+    });
+  };
+  const toggleTodasCapas = (activar: boolean) => {
+    setCapasActivas(activar ? new Set(capas.map(c => c.id)) : new Set());
+  };
+  const handleCambiarVisibleCapa = async (capa: CapaMapa, visible: boolean) => {
+    setCapaOcupadaId(capa.id);
+    try {
+      await capasMapaService.actualizar(capa.id, { visibleCliente: visible });
+      await queryClient.invalidateQueries({ queryKey: ['capas-mapa', propuestaId] });
+    } catch (err) {
+      window.alert(err instanceof Error ? err.message : 'No se pudo actualizar la capa');
+    } finally {
+      setCapaOcupadaId(null);
+    }
+  };
+  const handleEliminarCapa = async (capa: CapaMapa) => {
+    if (!window.confirm(`¿Eliminar la capa "${capa.nombre}"?\n\nDejará de verse aquí y en el link del cliente. El circuito no cambia.`)) return;
+    setCapaOcupadaId(capa.id);
+    try {
+      await capasMapaService.eliminar(capa.id);
+      setCapasActivas(prev => { const next = new Set(prev); next.delete(capa.id); return next; });
+      await queryClient.invalidateQueries({ queryKey: ['capas-mapa', propuestaId] });
+    } catch (err) {
+      window.alert(err instanceof Error ? err.message : 'No se pudo eliminar la capa');
+    } finally {
+      setCapaOcupadaId(null);
+    }
+  };
 
   // Map center (responds to catorcena filter)
   const mapCenter = useMemo(() => {
@@ -1282,22 +1349,6 @@ export function CompartirPropuestaPage() {
     doc.save(`Propuesta_Interna_${propuestaId}.pdf`);
   };
 
-  const handlePOIPlaceChanged = () => {
-    const place = autocompleteRef.current?.getPlace();
-    if (place?.geometry?.location) {
-      const newMarker: POIMarker = {
-        id: `poi-${Date.now()}`,
-        position: { lat: place.geometry.location.lat(), lng: place.geometry.location.lng() },
-        name: place.name || 'POI',
-        range: searchRange,
-      };
-      setPoiMarkers(prev => [...prev, newMarker]);
-      mapRef.current?.setCenter(newMarker.position);
-      mapRef.current?.setZoom(15);
-      setPoiSearch('');
-    }
-  };
-
   const toggleResumen = (key: string) => {
     const next = new Set(expandedResumen);
     if (next.has(key)) next.delete(key);
@@ -1921,44 +1972,19 @@ export function CompartirPropuestaPage() {
             <h3 className={`text-lg font-semibold ${isDark ? 'text-white' : 'text-gray-900'}`}>Mapa de Reservas</h3>
 
             <div className="flex items-center gap-2 ml-auto">
-              {showMap && (<>
-              <select
-                value={searchRange}
-                onChange={(e) => setSearchRange(parseInt(e.target.value))}
-                className={`px-2 py-1.5 rounded-lg text-xs ${isDark ? 'bg-zinc-800 border border-zinc-700 text-white' : 'bg-white border border-gray-200 text-gray-900'}`}
-              >
-                <option value={100}>100m</option>
-                <option value={200}>200m</option>
-                <option value={300}>300m</option>
-                <option value={500}>500m</option>
-                <option value={1000}>1km</option>
-              </select>
-
-              {isLoaded && (
-                <Autocomplete
-                  onLoad={(ac) => { autocompleteRef.current = ac; }}
-                  onPlaceChanged={handlePOIPlaceChanged}
-                  options={{ componentRestrictions: { country: 'mx' } }}
-                >
-                  <input
-                    type="text"
-                    value={poiSearch}
-                    onChange={(e) => setPoiSearch(e.target.value)}
-                    placeholder="Buscar POI..."
-                    className={`px-3 py-1.5 rounded-lg text-sm focus:outline-none focus:ring-1 focus:ring-purple-500 w-48 ${isDark ? 'bg-zinc-800 border border-zinc-700 text-white placeholder:text-zinc-500' : 'bg-white border border-gray-200 text-gray-900 placeholder:text-gray-400'}`}
-                  />
-                </Autocomplete>
+              {/* POI libre: busca en el area visible, como el Buscador de Formatos */}
+              {showMap && (
+                <PoiBuscadorMapa
+                  getMap={() => mapRef.current}
+                  isLoaded={isLoaded}
+                  pois={poiMarkers}
+                  onChange={setPoiMarkers}
+                  range={searchRange}
+                  onRangeChange={setSearchRange}
+                  isDark={isDark}
+                  acento="purple"
+                />
               )}
-
-              {poiMarkers.length > 0 && (
-                <button
-                  onClick={() => setPoiMarkers([])}
-                  className="px-3 py-1.5 bg-red-600/20 text-red-400 hover:bg-red-600/30 rounded-lg text-xs"
-                >
-                  Limpiar POIs
-                </button>
-              )}
-              </>)}
               {/* Toggle: el mapa está oculto por default (pinta miles de markers y traba
                   los checkboxes en propuestas grandes). Mismo patrón que "Mostrar Pines"
                   del Dashboard. */}
@@ -1981,7 +2007,9 @@ export function CompartirPropuestaPage() {
               className={`w-full h-32 flex flex-col items-center justify-center gap-2 transition-colors ${isDark ? 'text-zinc-500 hover:bg-zinc-800/40' : 'text-gray-400 hover:bg-gray-50'}`}
             >
               <MapIcon className="h-8 w-8 opacity-60" />
-              <span className="text-sm font-medium">Mostrar mapa ({visibleMarkers.length} pines)</span>
+              <span className="text-sm font-medium">
+                Mostrar mapa ({visibleMarkers.length} pines{capas.length > 0 ? ` · ${capas.length} ${capas.length === 1 ? 'capa' : 'capas'}` : ''})
+              </span>
               <span className="text-xs opacity-70">Oculto para mantener la lista fluida</span>
             </button>
           )}
@@ -1993,6 +2021,22 @@ export function CompartirPropuestaPage() {
                 {visibleMarkers.length.toLocaleString()} pines: Seleccionar Catorcenas para mostrarlos aquí.
                 O usa <strong>Expandir Mapa</strong> para ver todos.
               </div>
+            )}
+            {capas.length > 0 && (
+              <CapasMapaPanel
+                className="absolute top-3 left-3 z-10 w-72 max-w-[calc(100%-1.5rem)] max-h-[calc(100%-1.5rem)]"
+                capas={capas}
+                activas={capasActivas}
+                onToggle={handleToggleCapa}
+                onToggleTodas={toggleTodasCapas}
+                nombreCircuito={nombreCircuito}
+                circuitosVisibles={selectedCatorcenas.size > 0 ? circuitosVisibles : null}
+                interno
+                onCambiarVisible={handleCambiarVisibleCapa}
+                onEliminar={handleEliminarCapa}
+                ocupadaId={capaOcupadaId}
+                isDark={isDark}
+              />
             )}
             {isLoaded ? (
               <GoogleMap
@@ -2016,6 +2060,7 @@ export function CompartirPropuestaPage() {
                   }
                 }}
               >
+                <CapasMapaOverlay capas={capas} activas={capasActivas} />
                 {!demasiadosPines && visibleMarkers.map((item) => (
                   <MapMarker
                     key={itemKey(item)}
@@ -2054,20 +2099,7 @@ export function CompartirPropuestaPage() {
                     </div>
                   </InfoWindow>
                 )}
-                {poiMarkers.map(marker => (
-                  <Circle
-                    key={marker.id}
-                    center={marker.position}
-                    radius={marker.range}
-                    options={{
-                      strokeColor: '#a855f7',
-                      strokeOpacity: 0.7,
-                      strokeWeight: 2,
-                      fillColor: '#a855f7',
-                      fillOpacity: 0.15,
-                    }}
-                  />
-                ))}
+                <PoiMapaOverlay pois={poiMarkers} onChange={setPoiMarkers} color="#a855f7" />
               </GoogleMap>
             ) : (
               <div className="flex items-center justify-center h-full">

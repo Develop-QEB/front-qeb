@@ -2,10 +2,13 @@ import React, { useState, useRef, useMemo } from 'react';
 import { GoogleMap, Marker, Circle, InfoWindow, Autocomplete, Polygon } from '@react-google-maps/api';
 import {
   Search, X, MapPin, Navigation, FileUp, Trash2, Plus,
-  Check, Ban, LocateFixed, ChevronDown, ChevronRight
+  Check, Ban, LocateFixed, ChevronDown, ChevronRight, Layers
 } from 'lucide-react';
 import { InventarioDisponible } from '../../services/inventarios.service';
 import { useThemeStore } from '../../store/themeStore';
+// Capas persistentes (Vista Compartir): parser KML compartido + payload.
+import { parseKML, nombreSugeridoCapa, origenDeGeometria, type NuevaCapa, type ModoCapa } from './capasMapa';
+import { buscarPOIsEnArea } from './poiBusqueda';
 
 // Dark map styles
 const DARK_MAP_STYLES = [
@@ -45,8 +48,18 @@ interface Props {
   selectedInventory: Set<number>;
   onToggleSelection: (id: number) => void;
   mapCenter: { lat: number; lng: number };
-  onFilterByPOI?: (idsInRange: number[], idsOutOfRange: number[]) => void;
+  /** Tercer argumento: 'incluir' (Conservar con POIs) | 'excluir' (Conservar sin POIs). */
+  onFilterByPOI?: (idsInRange: number[], idsOutOfRange: number[], modo: ModoCapa) => void;
   hasPOIFilter?: boolean;
+  /**
+   * Capas persistentes para la Vista Compartir (ver capasMapa.ts). Con
+   * `solicitudCarasId` + `onGuardarCapa`, "Conservar con/sin POIs" guarda
+   * ademas la capa del circuito. Sin ellos el componente se comporta igual
+   * que siempre (solo filtra).
+   */
+  solicitudCarasId?: number | null;
+  onGuardarCapa?: (capa: Omit<NuevaCapa, 'solicitudCarasId'>) => Promise<void>;
+  canGuardarCapa?: boolean;
 }
 
 export function AdvancedMapComponent({
@@ -55,6 +68,9 @@ export function AdvancedMapComponent({
   onToggleSelection,
   mapCenter,
   onFilterByPOI,
+  solicitudCarasId = null,
+  onGuardarCapa,
+  canGuardarCapa = true,
 }: Props) {
   const isDark = useThemeStore((s) => s.theme) === 'dark';
   const mapRef = useRef<google.maps.Map | null>(null);
@@ -66,6 +82,17 @@ export function AdvancedMapComponent({
   // POI markers
   const [poiMarkers, setPoiMarkers] = useState<POIMarker[]>([]);
   const [kmlPolygons, setKmlPolygons] = useState<KMLPolygon[]>([]);
+
+  // Guardado de capa (Vista Compartir). Checkbox ON por default: el click en
+  // "Conservar" ya es la decision; no hace falta otro boton.
+  const puedeGuardarCapa = !!onGuardarCapa && canGuardarCapa && !!solicitudCarasId;
+  const [guardarComoCapa, setGuardarComoCapa] = useState(true);
+  const [nombreCapa, setNombreCapa] = useState('');
+  const [capaVisibleCliente, setCapaVisibleCliente] = useState(true);
+  const [capaEstado, setCapaEstado] = useState<'idle' | 'guardando' | 'ok' | 'error'>('idle');
+  const [capaError, setCapaError] = useState('');
+  // Ultimo KML subido (texto original): se manda como respaldo al guardar la capa.
+  const kmlOriginalRef = useRef<{ nombre: string; texto: string } | null>(null);
 
   // Search states
   const [poiSearch, setPoiSearch] = useState('');
@@ -177,94 +204,17 @@ export function AdvancedMapComponent({
     placesServiceRef.current = new google.maps.places.PlacesService(map);
   };
 
-  // Search POI with sub-zone splitting for more results
-  const handleSearchPOI = () => {
-    if (!poiSearch.trim() || !placesServiceRef.current || !mapRef.current) return;
-
+  // Search POI en el area visible (grid 3x3 + paginacion). La busqueda vive en
+  // poiBusqueda.ts para que los mapas de compartir usen exactamente la misma.
+  const handleSearchPOI = async () => {
+    if (!poiSearch.trim() || !mapRef.current || isSearching) return;
     setIsSearching(true);
-    const bounds = mapRef.current.getBounds();
-    if (!bounds) { setIsSearching(false); return; }
-
-    const ne = bounds.getNorthEast();
-    const sw = bounds.getSouthWest();
-    const latRange = ne.lat() - sw.lat();
-    const lngRange = ne.lng() - sw.lng();
-
-    // Split visible area into sub-zones (3x3 grid = 9 zones for large areas, 1 for small)
-    const gridSize = (latRange > 0.05 || lngRange > 0.05) ? 3 : 1;
-    const latStep = latRange / gridSize;
-    const lngStep = lngRange / gridSize;
-
-    const subBounds: google.maps.LatLngBounds[] = [];
-    for (let r = 0; r < gridSize; r++) {
-      for (let c = 0; c < gridSize; c++) {
-        subBounds.push(new google.maps.LatLngBounds(
-          { lat: sw.lat() + r * latStep, lng: sw.lng() + c * lngStep },
-          { lat: sw.lat() + (r + 1) * latStep, lng: sw.lng() + (c + 1) * lngStep }
-        ));
-      }
-    }
-
-    const allResults: google.maps.places.PlaceResult[] = [];
-    const seenPlaceIds = new Set<string>();
-    let completedZones = 0;
-    const totalZones = subBounds.length;
-
-    const finalize = () => {
+    try {
+      const encontrados = await buscarPOIsEnArea(mapRef.current, poiSearch, searchRange);
+      setPoiMarkers(prev => [...prev, ...encontrados]);
+    } finally {
       setIsSearching(false);
-      const timestamp = Date.now();
-      const newMarkers: POIMarker[] = allResults.map((place, idx) => ({
-        id: `poi-${timestamp}-${idx}`,
-        position: {
-          lat: place.geometry?.location?.lat() || 0,
-          lng: place.geometry?.location?.lng() || 0,
-        },
-        name: place.name || 'POI',
-        type: 'poi',
-        range: searchRange,
-      }));
-      setPoiMarkers(prev => [...prev, ...newMarkers]);
-    };
-
-    const searchZone = (zoneBounds: google.maps.LatLngBounds) => {
-      const request: google.maps.places.TextSearchRequest = {
-        query: poiSearch,
-        bounds: zoneBounds,
-      };
-
-      const processResults = (
-        results: google.maps.places.PlaceResult[] | null,
-        status: google.maps.places.PlacesServiceStatus,
-        pagination: google.maps.places.PlaceSearchPagination | null
-      ) => {
-        if (status === google.maps.places.PlacesServiceStatus.OK && results) {
-          results.forEach(place => {
-            const placeId = place.place_id || `${place.geometry?.location?.lat()}-${place.geometry?.location?.lng()}`;
-            if (!seenPlaceIds.has(placeId)) {
-              seenPlaceIds.add(placeId);
-              allResults.push(place);
-            }
-          });
-
-          if (pagination?.hasNextPage) {
-            setTimeout(() => pagination.nextPage(), 300);
-            return;
-          }
-        }
-
-        completedZones++;
-        if (completedZones >= totalZones) {
-          finalize();
-        }
-      };
-
-      placesServiceRef.current!.textSearch(request, processResults);
-    };
-
-    // Stagger requests to avoid rate limiting
-    subBounds.forEach((zb, i) => {
-      setTimeout(() => searchZone(zb), i * 400);
-    });
+    }
   };
 
   // Add custom pin
@@ -311,7 +261,8 @@ export function AdvancedMapComponent({
     setAddressSearch('');
   };
 
-  // Handle KML file
+  // Handle KML file (parser compartido en capasMapa.ts). Se conserva el texto
+  // original para subirlo como respaldo si la capa se persiste.
   const handleKMLUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
     if (!file) return;
@@ -320,65 +271,27 @@ export function AdvancedMapComponent({
     reader.onload = (e) => {
       try {
         const content = e.target?.result as string;
-        const parser = new DOMParser();
-        const kmlDoc = parser.parseFromString(content, 'text/xml');
-        const placemarks = kmlDoc.getElementsByTagName('Placemark');
+        const { pines, poligonos } = parseKML(content);
+        const timestamp = Date.now();
+        kmlOriginalRef.current = { nombre: file.name, texto: content };
 
-        const newMarkers: POIMarker[] = [];
-        const newPolygons: KMLPolygon[] = [];
-
-        for (let i = 0; i < placemarks.length; i++) {
-          const placemark = placemarks[i];
-          const nameEl = placemark.getElementsByTagName('name')[0];
-          const name = nameEl?.textContent || `KML ${i + 1}`;
-
-          // Check for Polygon geometry
-          const polygonEl = placemark.getElementsByTagName('Polygon')[0];
-          if (polygonEl) {
-            const outerCoords = polygonEl.getElementsByTagName('coordinates')[0];
-            if (outerCoords) {
-              const rawText = outerCoords.textContent?.trim() || '';
-              const paths = rawText.split(/\s+/).map(pair => {
-                const parts = pair.split(',');
-                const lng = parseFloat(parts[0]);
-                const lat = parseFloat(parts[1]);
-                return isNaN(lat) || isNaN(lng) ? null : { lat, lng };
-              }).filter((p): p is { lat: number; lng: number } => p !== null);
-
-              if (paths.length >= 3) {
-                newPolygons.push({ id: `kml-poly-${Date.now()}-${i}`, name, paths });
-              }
-            }
-            continue;
-          }
-
-          // Fallback: Point geometry
-          const pointEl = placemark.getElementsByTagName('Point')[0];
-          const coordsEl = (pointEl || placemark).getElementsByTagName('coordinates')[0];
-          if (coordsEl) {
-            const coords = coordsEl.textContent?.trim().split(',');
-            if (coords && coords.length >= 2) {
-              const lng = parseFloat(coords[0]);
-              const lat = parseFloat(coords[1]);
-              if (!isNaN(lat) && !isNaN(lng)) {
-                newMarkers.push({
-                  id: `kml-${Date.now()}-${i}`,
-                  position: { lat, lng },
-                  name,
-                  type: 'kml',
-                  range: searchRange,
-                });
-              }
-            }
-          }
-        }
+        const newPolygons: KMLPolygon[] = poligonos.map((p, i) => ({
+          id: `kml-poly-${timestamp}-${i}`, name: p.name, paths: p.paths,
+        }));
+        const newMarkers: POIMarker[] = pines.map((p, i) => ({
+          id: `kml-${timestamp}-${i}`,
+          position: { lat: p.lat, lng: p.lng },
+          name: p.name,
+          type: 'kml',
+          range: searchRange,
+        }));
 
         if (newPolygons.length > 0) {
           setKmlPolygons(prev => [...prev, ...newPolygons]);
           // Center map on centroid of first polygon
           const first = newPolygons[0].paths;
-          const avgLat = first.reduce((s, p) => s + p.lat, 0) / first.length;
-          const avgLng = first.reduce((s, p) => s + p.lng, 0) / first.length;
+          const avgLat = first.reduce((sum, p) => sum + p.lat, 0) / first.length;
+          const avgLng = first.reduce((sum, p) => sum + p.lng, 0) / first.length;
           mapRef.current?.setCenter({ lat: avgLat, lng: avgLng });
           mapRef.current?.setZoom(12);
         }
@@ -408,18 +321,51 @@ export function AdvancedMapComponent({
     setPoiMarkers([]);
     setKmlPolygons([]);
     setSelectedMarker(null);
+    kmlOriginalRef.current = null;
   };
 
-  // Filter handlers
+  // Filter handlers. Ademas de filtrar la lista, persisten la capa del
+  // circuito (si el modal lo habilito) para que la Vista Compartir la pinte.
+  // Es el momento honesto para guardarla: aqui la capa decide el inventario.
+  const guardarCapaActual = async (modo: ModoCapa) => {
+    if (!puedeGuardarCapa || !onGuardarCapa || !guardarComoCapa) return;
+    const geometria = {
+      pines: poiMarkers.map(m => ({ lat: m.position.lat, lng: m.position.lng, name: m.name, range: m.range })),
+      poligonos: kmlPolygons.map(p => ({ name: p.name, paths: p.paths })),
+    };
+    if (geometria.pines.length === 0 && geometria.poligonos.length === 0) return;
+    setCapaEstado('guardando');
+    setCapaError('');
+    try {
+      await onGuardarCapa({
+        nombre: nombreCapa.trim() || nombreSugeridoCapa(modo, geometria),
+        modo,
+        origen: origenDeGeometria(poiMarkers.map(m => m.type), kmlPolygons.length > 0),
+        geometria,
+        visibleCliente: capaVisibleCliente,
+        kmlTexto: kmlOriginalRef.current?.texto ?? null,
+        kmlNombre: kmlOriginalRef.current?.nombre ?? null,
+      });
+      setCapaEstado('ok');
+      setNombreCapa('');
+      setTimeout(() => setCapaEstado(prev => (prev === 'ok' ? 'idle' : prev)), 3000);
+    } catch (err) {
+      setCapaEstado('error');
+      setCapaError(err instanceof Error ? err.message : 'No se pudo guardar la capa');
+    }
+  };
+
   const handleConservarConPOIs = () => {
     if (onFilterByPOI && inRangeSet.size > 0) {
-      onFilterByPOI(Array.from(inRangeSet), Array.from(outOfRangeSet));
+      onFilterByPOI(Array.from(inRangeSet), Array.from(outOfRangeSet), 'incluir');
+      void guardarCapaActual('incluir');
     }
   };
 
   const handleConservarSinPOIs = () => {
     if (onFilterByPOI && outOfRangeSet.size > 0) {
-      onFilterByPOI(Array.from(outOfRangeSet), Array.from(inRangeSet));
+      onFilterByPOI(Array.from(outOfRangeSet), Array.from(inRangeSet), 'excluir');
+      void guardarCapaActual('excluir');
     }
   };
 
@@ -751,6 +697,51 @@ export function AdvancedMapComponent({
             {/* Action Buttons */}
             {(poiMarkers.length > 0 || kmlPolygons.length > 0) && onFilterByPOI && (
               <div className={`p-3 border-t ${isDark ? 'border-zinc-800' : 'border-gray-200'} space-y-2`}>
+                {/* Guardar como capa: se dispara junto con "Conservar" (ver guardarCapaActual). */}
+                {puedeGuardarCapa && (
+                  <div className={`rounded-lg border p-2 space-y-1.5 ${isDark ? 'border-sky-500/30 bg-sky-500/5' : 'border-sky-200 bg-sky-50'}`}>
+                    <label className={`flex items-center gap-2 text-xs cursor-pointer ${isDark ? 'text-zinc-300' : 'text-gray-700'}`}>
+                      <input
+                        type="checkbox"
+                        checked={guardarComoCapa}
+                        onChange={(e) => setGuardarComoCapa(e.target.checked)}
+                        className="h-3.5 w-3.5 accent-sky-500"
+                      />
+                      <Layers className="h-3.5 w-3.5 text-sky-500" />
+                      Guardar como capa en Vista Compartir
+                    </label>
+                    {guardarComoCapa && (
+                      <>
+                        <input
+                          type="text"
+                          value={nombreCapa}
+                          onChange={(e) => setNombreCapa(e.target.value)}
+                          placeholder="Nombre de la capa (opcional)"
+                          maxLength={255}
+                          className={`w-full px-2 py-1.5 ${isDark ? 'bg-zinc-800 border-zinc-700 text-white placeholder:text-zinc-500' : 'bg-white border-gray-200 text-gray-900 placeholder:text-gray-400'} border rounded-lg text-xs focus:outline-none focus:ring-1 focus:ring-sky-500`}
+                        />
+                        <label className={`flex items-center gap-2 text-[11px] cursor-pointer ${isDark ? 'text-zinc-400' : 'text-gray-500'}`}>
+                          <input
+                            type="checkbox"
+                            checked={capaVisibleCliente}
+                            onChange={(e) => setCapaVisibleCliente(e.target.checked)}
+                            className="h-3 w-3 accent-sky-500"
+                          />
+                          Visible para el cliente en el link público
+                        </label>
+                      </>
+                    )}
+                    {capaEstado === 'guardando' && (
+                      <p className={`text-[11px] ${isDark ? 'text-zinc-400' : 'text-gray-500'}`}>Guardando capa...</p>
+                    )}
+                    {capaEstado === 'ok' && (
+                      <p className="text-[11px] text-green-500 font-medium">Capa guardada</p>
+                    )}
+                    {capaEstado === 'error' && (
+                      <p className="text-[11px] text-red-400">{capaError}</p>
+                    )}
+                  </div>
+                )}
                 <button
                   onClick={handleConservarConPOIs}
                   disabled={inRangeSet.size === 0}
