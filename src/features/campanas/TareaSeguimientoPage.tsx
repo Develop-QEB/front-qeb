@@ -3721,8 +3721,11 @@ function FilterToolbar({
           {filters.length > 0 && <span className="px-1 py-0.5 rounded bg-purple-800 text-[10px]">{filters.length}</span>}
         </button>
         {showFilters && (
+          // Movil (<sm) sin useFixedDropdowns: cambiar a fixed anclado al
+          // viewport para que no se corte por la izquierda cuando el
+          // contenedor .relative es angosto. Feedback usuario 2026-09-23.
           <div
-            className={`${useFixedDropdowns ? 'fixed' : 'absolute right-0 top-full mt-1'} z-[100] w-[520px] max-w-[calc(100vw-1rem)] ${isDark ? 'bg-[#1a1025]' : 'bg-white'} border border-purple-900/50 rounded-lg shadow-xl p-4`}
+            className={`${useFixedDropdowns ? 'fixed' : 'fixed inset-x-2 top-16 sm:absolute sm:inset-auto sm:right-0 sm:top-full sm:mt-1'} z-[100] w-auto sm:w-[520px] max-w-none sm:max-w-[calc(100vw-1rem)] max-h-[calc(100vh-5rem)] sm:max-h-none overflow-auto sm:overflow-visible ${isDark ? 'bg-[#1a1025]' : 'bg-white'} border border-purple-900/50 rounded-lg shadow-xl p-4`}
             style={useFixedDropdowns ? getDropdownPosition(filterBtnRef, 520) : undefined}
           >
             <div className="flex items-center justify-between mb-3">
@@ -3809,7 +3812,7 @@ function FilterToolbar({
           </button>
           {showGrouping && (
             <div
-              className={`${useFixedDropdowns ? 'fixed' : 'absolute right-0 top-full mt-1'} z-[100] ${isDark ? 'bg-[#1a1025]' : 'bg-white'} border border-purple-900/50 rounded-lg shadow-xl p-2 min-w-[200px]`}
+              className={`${useFixedDropdowns ? 'fixed' : 'fixed inset-x-2 top-16 sm:absolute sm:inset-auto sm:right-0 sm:top-full sm:mt-1'} z-[100] w-auto sm:w-auto sm:min-w-[200px] max-h-[calc(100vh-5rem)] sm:max-h-none overflow-auto sm:overflow-visible ${isDark ? 'bg-[#1a1025]' : 'bg-white'} border border-purple-900/50 rounded-lg shadow-xl p-2`}
               style={useFixedDropdowns ? getDropdownPosition(groupBtnRef, 200) : undefined}
             >
               <div className="flex items-center justify-between mb-2 px-2">
@@ -3852,7 +3855,7 @@ function FilterToolbar({
           </button>
           {showSort && (
             <div
-              className={`${useFixedDropdowns ? 'fixed' : 'absolute right-0 top-full mt-1'} z-[100] w-[240px] bg-[#1a1025] border border-purple-900/50 rounded-lg shadow-xl p-3`}
+              className={`${useFixedDropdowns ? 'fixed' : 'fixed inset-x-2 top-16 sm:absolute sm:inset-auto sm:right-0 sm:top-full sm:mt-1'} z-[100] w-auto sm:w-[240px] max-h-[calc(100vh-5rem)] sm:max-h-none overflow-auto sm:overflow-visible bg-[#1a1025] border border-purple-900/50 rounded-lg shadow-xl p-3`}
               style={useFixedDropdowns ? getDropdownPosition(sortBtnRef, 240) : undefined}
             >
               <div className="flex items-center justify-between mb-3">
