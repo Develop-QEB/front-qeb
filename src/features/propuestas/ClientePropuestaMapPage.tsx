@@ -5,7 +5,7 @@ import {
   Map as MapIcon, Loader2, Copy, Check, Download, ChevronDown, ChevronRight,
   Search, FileSpreadsheet, SlidersHorizontal, X, Layers,
 } from 'lucide-react';
-import { GoogleMap, useLoadScript, Marker, Circle, Autocomplete, InfoWindow } from '@react-google-maps/api';
+import { GoogleMap, useLoadScript, Marker, InfoWindow } from '@react-google-maps/api';
 import { formatCurrency } from '../../lib/utils';
 import { toNum } from '../../utils/excelFormat';
 import { descargarExcelCompartir, FMT_ENTERO, FMT_COORD } from '../../utils/excelCompartir';
@@ -24,6 +24,14 @@ import {
 // Config UNICA de Google Maps (mismo id/key/libraries en toda la app) para
 // que el script se inyecte una sola vez. Ver src/config/googleMaps.ts.
 import { GOOGLE_MAPS_LOADER_OPTIONS } from '../../config/googleMaps';
+// Capas de POI / poligonos con las que Trafico armo cada circuito. Al cliente
+// solo le llegan las marcadas visibles (vienen dentro del payload publico).
+import { CapaMapa, boundsDeCapas } from './capasMapa';
+import { CapasMapaPanel } from './CapasMapaPanel';
+import { CapasMapaOverlay } from './CapasMapaOverlay';
+// Buscador de POI libre (misma busqueda por area que el Buscador de Formatos).
+import { PoiBuscadorMapa, PoiMapaOverlay } from './PoiBuscadorMapa';
+import type { POIEncontrado } from './poiBusqueda';
 
 const IMU_BLUE = '#0054A6';
 const IMU_GREEN = '#7AB800';
@@ -59,6 +67,7 @@ const IMU_MAP_STYLES = [
 interface InventarioReservado extends ConVersion, ConOrigen {
   id: number;
   codigo_unico: string;
+  solicitud_caras_id?: number | null;
   mueble: string | null;
   estado: string | null;
   municipio: string | null;
@@ -101,13 +110,7 @@ interface PublicPropuestaData {
   campania: { id: number; nombre: string; status: string } | null;
   caras: { caras: number; bonificacion: number; tarifa_publica: number }[];
   inventario: InventarioReservado[];
-}
-
-interface POIMarker {
-  id: string;
-  position: { lat: number; lng: number };
-  name: string;
-  range: number;
+  capas?: CapaMapa[];
 }
 
 const MESES_LABEL = ['Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio', 'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre'];
@@ -209,15 +212,15 @@ export function ClientePropuestaMapPage() {
     [idsParam]
   );
   const mapRef = useRef<google.maps.Map | null>(null);
-  const autocompleteRef = useRef<google.maps.places.Autocomplete | null>(null);
 
   const [selectedMarker, setSelectedMarker] = useState<Row | null>(null);
-  const [poiMarkers, setPoiMarkers] = useState<POIMarker[]>([]);
+  const [poiMarkers, setPoiMarkers] = useState<POIEncontrado[]>([]);
   const [searchRange, setSearchRange] = useState(300);
-  const [poiSearch, setPoiSearch] = useState('');
   const [copied, setCopied] = useState(false);
   const [showList, setShowList] = useState(true);
   const [showFilters, setShowFilters] = useState(false);
+  // Capas de Trafico prendidas (nacen apagadas).
+  const [capasActivas, setCapasActivas] = useState<Set<number>>(new Set());
 
   // Filtros
   const [search, setSearch] = useState('');
@@ -311,6 +314,34 @@ export function ClientePropuestaMapPage() {
 
   // Solo filas con coordenadas para el mapa.
   const mapRows = useMemo(() => effectiveRows.filter(r => r.latitud && r.longitud), [effectiveRows]);
+
+  // ---- Capas de Trafico ----
+  const capas = useMemo(() => data?.capas ?? [], [data]);
+  // Circuitos presentes en lo que se pinta: las capas de otros se atenúan.
+  const circuitosVisibles = useMemo(() => {
+    const s = new Set<number>();
+    mapRows.forEach(r => { if (r.solicitud_caras_id) s.add(r.solicitud_caras_id); });
+    return s;
+  }, [mapRows]);
+  const nombreCircuito = (scId: number): string | null => {
+    const r = baseRows.find(x => x.solicitud_caras_id === scId);
+    return r ? ([r.articulo, r.mueble].filter(Boolean).join(' · ') || null) : null;
+  };
+  const handleToggleCapa = (id: number) => {
+    const capa = capas.find(c => c.id === id);
+    if (capa && !capasActivas.has(id) && mapRef.current) {
+      const b = boundsDeCapas([capa]);
+      if (b) mapRef.current.fitBounds(b, 60);
+    }
+    setCapasActivas(prev => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id); else next.add(id);
+      return next;
+    });
+  };
+  const toggleTodasCapas = (activar: boolean) => {
+    setCapasActivas(activar ? new Set(capas.map(c => c.id)) : new Set());
+  };
 
   // Lista agrupada: catorcena -> circuito (articulo) -> filas. Ordenada como inventario.
   const grouped = useMemo(() => {
@@ -479,22 +510,6 @@ export function ClientePropuestaMapPage() {
     if (mapRef.current) {
       mapRef.current.panTo({ lat: item.latitud, lng: item.longitud });
       mapRef.current.setZoom(16);
-    }
-  };
-
-  const handlePOIPlaceChanged = () => {
-    const place = autocompleteRef.current?.getPlace();
-    if (place?.geometry?.location) {
-      const newMarker: POIMarker = {
-        id: `poi-${Date.now()}`,
-        position: { lat: place.geometry.location.lat(), lng: place.geometry.location.lng() },
-        name: place.name || 'POI',
-        range: searchRange,
-      };
-      setPoiMarkers(prev => [...prev, newMarker]);
-      mapRef.current?.setCenter(newMarker.position);
-      mapRef.current?.setZoom(15);
-      setPoiSearch('');
     }
   };
 
@@ -812,24 +827,31 @@ export function ClientePropuestaMapPage() {
           )}
         </div>
 
-        {/* POI search */}
-        <div className="absolute top-3 right-3 z-10 flex items-center gap-2 bg-white/95 backdrop-blur rounded-xl shadow-lg border border-gray-200 px-2.5 py-2 max-w-[calc(100%-1.5rem)]">
-          <select value={searchRange} onChange={(e) => setSearchRange(parseInt(e.target.value))} className="px-2 py-1.5 bg-white border border-gray-300 rounded-lg text-xs text-gray-700">
-            <option value={100}>100m</option>
-            <option value={200}>200m</option>
-            <option value={300}>300m</option>
-            <option value={500}>500m</option>
-            <option value={1000}>1km</option>
-          </select>
-          {isLoaded && (
-            <Autocomplete onLoad={(ac) => { autocompleteRef.current = ac; }} onPlaceChanged={handlePOIPlaceChanged} options={{ componentRestrictions: { country: 'mx' } }}>
-              <input type="text" value={poiSearch} onChange={(e) => setPoiSearch(e.target.value)} placeholder="Buscar POI..." className="px-3 py-1.5 bg-white border border-gray-300 rounded-lg text-sm w-28 sm:w-48 focus:outline-none focus:ring-2 focus:ring-[#0054A6] text-gray-700" />
-            </Autocomplete>
-          )}
-          {poiMarkers.length > 0 && (
-            <button onClick={() => setPoiMarkers([])} className="px-2.5 py-1.5 bg-red-50 text-red-600 border border-red-200 rounded-lg text-xs hover:bg-red-100 transition-colors">Limpiar</button>
-          )}
+        {/* POI search (libre): busca en el area visible, como el Buscador de Formatos */}
+        <div className="absolute top-3 right-3 z-10 bg-white/95 backdrop-blur rounded-xl shadow-lg border border-gray-200 px-2.5 py-2 max-w-[calc(100%-1.5rem)]">
+          <PoiBuscadorMapa
+            getMap={() => mapRef.current}
+            isLoaded={isLoaded}
+            pois={poiMarkers}
+            onChange={setPoiMarkers}
+            range={searchRange}
+            onRangeChange={setSearchRange}
+            acento="imu"
+          />
         </div>
+
+        {/* Capas de Trafico (debajo del buscador de POI, que es libre y efimero) */}
+        {capas.length > 0 && (
+          <CapasMapaPanel
+            className="absolute top-16 right-3 z-10 w-72 max-w-[calc(100%-1.5rem)] max-h-[calc(100%-5rem)]"
+            capas={capas}
+            activas={capasActivas}
+            onToggle={handleToggleCapa}
+            onToggleTodas={toggleTodasCapas}
+            nombreCircuito={nombreCircuito}
+            circuitosVisibles={circuitosVisibles}
+          />
+        )}
 
         {isLoaded ? (
           <GoogleMap
@@ -846,6 +868,7 @@ export function ClientePropuestaMapPage() {
               }
             }}
           >
+            <CapasMapaOverlay capas={capas} activas={capasActivas} />
             {mapRows.map((item) => {
               const isActive = selectedMarker?._rk === item._rk;
               return (
@@ -895,9 +918,7 @@ export function ClientePropuestaMapPage() {
                 </div>
               </InfoWindow>
             )}
-            {poiMarkers.map(marker => (
-              <Circle key={marker.id} center={marker.position} radius={marker.range} options={{ strokeColor: IMU_GREEN, strokeOpacity: 0.8, strokeWeight: 2, fillColor: IMU_GREEN, fillOpacity: 0.15 }} />
-            ))}
+            <PoiMapaOverlay pois={poiMarkers} onChange={setPoiMarkers} color={IMU_GREEN} />
           </GoogleMap>
         ) : (
           <div className="flex items-center justify-center h-full bg-gray-50">

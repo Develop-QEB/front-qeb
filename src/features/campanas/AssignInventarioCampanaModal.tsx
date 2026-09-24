@@ -9,6 +9,8 @@ import {
 import { GoogleMap, useLoadScript, Marker } from '@react-google-maps/api';
 import { GOOGLE_MAPS_LOADER_OPTIONS } from '../../config/googleMaps';
 import { AdvancedMapComponent } from '../propuestas/AdvancedMapComponent';
+import { capasMapaService } from '../../services/capasMapa.service';
+import type { NuevaCapa } from '../propuestas/capasMapa';
 import { HistorialInventarioPanel } from '../propuestas/HistorialInventarioPanel';
 import { Campana, CampanaWithComments } from '../../types';
 import { solicitudesService, UserOption } from '../../services/solicitudes.service';
@@ -4157,6 +4159,21 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
     setPoiFilterIds(null);
   }, []);
 
+  // Capa de POIs/KML del circuito: se persiste al "Conservar con/sin POIs"
+  // para que la Vista Compartir (propuesta y campaña) la muestre como capa
+  // activable. Solo hay circuito cuando la cara ya existe en BD (id).
+  const capaCircuitoId = selectedCaraForSearch?.id ?? null;
+  const handleGuardarCapa = async (capa: Omit<NuevaCapa, 'solicitudCarasId'>) => {
+    if (!capaCircuitoId) return;
+    try {
+      const creada = await capasMapaService.crear({ ...capa, solicitudCarasId: capaCircuitoId });
+      showToast(`Capa "${creada.nombre}" guardada para la Vista Compartir`, 'success');
+    } catch (err) {
+      showToast(err instanceof Error ? err.message : 'No se pudo guardar la capa', 'error');
+      throw err;
+    }
+  };
+
   // Check if there are digital items in inventory
   const hasDigitalInventory = useMemo(() => {
     return inventarioDisponible.some(inv =>
@@ -6858,6 +6875,9 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
                       mapCenter={mapCenter}
                       onFilterByPOI={handlePOIFilter}
                       hasPOIFilter={poiFilterIds !== null}
+                      solicitudCarasId={capaCircuitoId}
+                      onGuardarCapa={handleGuardarCapa}
+                      canGuardarCapa={effectiveCanEdit}
                     />
                   ) : (
                     <div className={`flex items-center justify-center h-full ${isDark ? 'bg-zinc-800' : 'bg-gray-100'}`}>
