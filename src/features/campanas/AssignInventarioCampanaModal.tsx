@@ -2760,6 +2760,18 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
       !isEspecialArticle(newCara.articulo || '');
     const wantsPair = !!articuloBf && (newCara.bonificacion || 0) > 0 && articuloSupportsBf;
 
+    // GUARD (caso 81357): en una RT con bonificación SIEMPRE debe crearse la línea
+    // BF aparte (forma A). Si el asesor puso bonificación pero no eligió artículo BF,
+    // bloquear — así el número nunca queda "embebido" en la RT sin su línea (que es
+    // lo que rompe el conteo de bonificadas y el posteo). Espeja el candado que el
+    // modal de propuestas ya tiene. Aplica tanto en alta como en edición: si el par
+    // BF existía pero su artículo no se pudo resolver del catálogo, esto obliga a
+    // volver a elegirlo en vez de colapsar la pareja a embebido.
+    if ((newCara.bonificacion || 0) > 0 && articuloSupportsBf && !articuloBf) {
+      alert('Debes seleccionar el artículo de bonificación (BF) antes de guardar, o poner las caras de bonificación en 0. La bonificación en una renta siempre se crea como línea BF aparte.');
+      return;
+    }
+
     // No permitir bonificación sin renta (la bonif es ADICIONAL a la renta).
     // Excepción: artículos puros BF/CF/CT/IM y especiales que no requieren renta.
     if ((newCara.bonificacion || 0) > 0 && (newCara.caras || 0) <= 0 && articuloSupportsBf) {
