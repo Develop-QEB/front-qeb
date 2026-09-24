@@ -1134,7 +1134,9 @@ const CampanaRow = React.memo(function CampanaRow({
                 ? (isDark ? 'bg-blue-500/20 text-blue-300' : 'bg-blue-50 text-blue-700') + ' border-blue-500/30'
                 : item.sap_database === 'TEST'
                   ? (isDark ? 'bg-amber-500/20 text-amber-300' : 'bg-amber-50 text-amber-700') + ' border-amber-500/30'
-                  : (isDark ? 'bg-emerald-500/20 text-emerald-300' : 'bg-emerald-50 text-emerald-700') + ' border-emerald-500/30'
+                  : item.sap_database === 'UDC'
+                    ? (isDark ? 'bg-cyan-500/20 text-cyan-300' : 'bg-cyan-50 text-cyan-700') + ' border-cyan-500/30'
+                    : (isDark ? 'bg-emerald-500/20 text-emerald-300' : 'bg-emerald-50 text-emerald-700') + ' border-emerald-500/30'
             }`}>{item.sap_database}</span>
           )}
         </div>
@@ -1521,8 +1523,16 @@ export function CampanasPage() {
   // filters y sort. La búsqueda (search) ya la aplicó el backend sobre todos
   // los campos relevantes (incluye codigo_unico de inventarios via subquery),
   // así que NO se re-filtra cliente-side.
+  // Filtro por BD SAP — aplica a AMBAS vistas (tabla y versionario/catorcena).
+  const [sapDbFilter, setSapDbFilter] = useState<'todas' | 'CIMU' | 'TRADE' | 'TEST' | 'UDC'>('todas');
+
   const filteredData = useMemo(() => {
     let items = data?.data || [];
+
+    // Filter by BD SAP (CIMU/TRADE/UDC/TEST) — versionario y tabla lo respetan.
+    if (sapDbFilter !== 'todas') {
+      items = items.filter(c => (c.sap_database || '').toUpperCase() === sapDbFilter);
+    }
 
     // Filter by catorcena inicio
     if (selectedCatorcenaInicio && items.length > 0) {
@@ -1657,7 +1667,7 @@ export function CampanasPage() {
     }
 
     return items;
-  }, [data?.data, selectedCatorcenaInicio, status, advancedFilters, sortField, sortDirection, campanaInventarios]);
+  }, [data?.data, selectedCatorcenaInicio, status, sapDbFilter, advancedFilters, sortField, sortDirection, campanaInventarios]);
 
   // Recalculate stats from filteredData when client-side filters are active.
   // El search ya viaja al backend y stats lo recibe via queryKey, así que NO
@@ -2463,7 +2473,7 @@ export function CampanasPage() {
   };
 
   const hasPeriodFilter = yearInicio !== undefined && yearFin !== undefined;
-  const hasActiveFilters = !!(status || hasPeriodFilter || activeGroupings.length > 0 || searchTags.length > 0 || selectedCatorcenaInicio || advancedFilters.length > 0 || sortField !== null || apsFilter !== 'todas' || postFilter !== 'todas');
+  const hasActiveFilters = !!(status || hasPeriodFilter || activeGroupings.length > 0 || searchTags.length > 0 || selectedCatorcenaInicio || advancedFilters.length > 0 || sortField !== null || apsFilter !== 'todas' || postFilter !== 'todas' || sapDbFilter !== 'todas');
 
   // Get unique values for each field (for advanced filter dropdowns).
   // Solo se calcula cuando el panel de filtros avanzados está abierto: evita
@@ -3815,6 +3825,23 @@ export function CampanasPage() {
             <LayoutGrid className="h-4 w-4" />
             Versionario
           </button>
+
+          {/* Filtro por BD SAP — aplica a Vista Tabla y Versionario. UDC solo para roles de Aeropuerto. */}
+          <select
+            value={sapDbFilter}
+            onChange={(e) => setSapDbFilter(e.target.value as typeof sapDbFilter)}
+            title="Filtrar por Base SAP"
+            className={`px-3 py-2.5 rounded-xl text-sm font-medium transition-all border cursor-pointer ${
+              sapDbFilter !== 'todas'
+                ? isDark ? 'bg-purple-500/20 text-purple-300 border-purple-500/40' : 'bg-purple-100 text-purple-700 border-purple-200'
+                : isDark ? 'bg-zinc-800/60 text-zinc-400 border-zinc-700/50 hover:bg-zinc-800 hover:text-zinc-200' : 'bg-gray-100 text-gray-500 border-gray-200 hover:bg-gray-200 hover:text-gray-700'
+            }`}
+          >
+            <option value="todas">Todas las BD</option>
+            <option value="CIMU">CIMU</option>
+            <option value="TRADE">TRADE</option>
+            {permissions.canVerUDC && <option value="UDC">UDC</option>}
+          </select>
         </div>
 
         {/* Info Badge */}
