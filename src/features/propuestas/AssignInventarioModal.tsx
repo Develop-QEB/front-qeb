@@ -9,13 +9,10 @@ import {
 import { GoogleMap, useLoadScript, Marker } from '@react-google-maps/api';
 import { GOOGLE_MAPS_LOADER_OPTIONS } from '../../config/googleMaps';
 import { AdvancedMapComponent } from './AdvancedMapComponent';
-<<<<<<< HEAD
 import { capasMapaService } from '../../services/capasMapa.service';
 import type { NuevaCapa } from './capasMapa';
-=======
 import { UdcFichaTecnicaPanel } from './UdcFichaTecnicaPanel';
 import { UdcReservadosPanel } from './UdcReservadosPanel';
->>>>>>> df1e13ef1da9c4e21fa1798c7479237c3ef9067a
 import { HistorialInventarioPanel } from './HistorialInventarioPanel';
 import { Propuesta } from '../../types';
 import { solicitudesService, UserOption } from '../../services/solicitudes.service';

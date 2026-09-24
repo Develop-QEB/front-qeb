@@ -1422,12 +1422,17 @@ export function CampanasPage() {
   const hasSearch = allSearchTerms.length > 0;
   const needsAllData = activeGroupings.length > 0 || advancedFilters.length > 0;
   // En vista catorcena necesitamos todas las campañas del rango para que la agrupación
-  // por catorcena sea correcta (no podemos paginar y agrupar). 200 se queda corto cuando
-  // hay muchas campañas activas en catorcenas cercanas — usar tope alto.
-  const effectiveLimit = activeView === 'catorcena' ? 50000 : (needsAllData ? 200 : limit);
+  // por catorcena sea correcta (no podemos paginar y agrupar). Lo mismo aplica en
+  // Vista Tabla cuando hay filtros avanzados o agrupación: se evalúan en cliente,
+  // así que el backend debe devolver TODO el universo. Antes se pedían 200 y el
+  // filtro (p.ej. Asesor = X) solo veía las 200 campañas más recientes, dando
+  // conteos distintos entre Tabla y Versionario.
+  const effectiveLimit = (activeView === 'catorcena' || needsAllData) ? 50000 : limit;
   // Tags unidos por '|' — el backend separa por ese delimitador (no espacios)
-  // y aplica AND entre tags. Soporta búsqueda por nombre de campaña,
-  // razon_social, CUIC, marca, código de inventario, etc.
+  // y aplica OR entre tags (cada tag suma resultados). Busca en nombre de
+  // campaña, artículo, marca, cliente, razón social, CUIC, asesor, asignado,
+  // creador, plaza (ciudad del circuito / plaza del inventario) y código de
+  // inventario. Ver buildCampanaSearchCondition en el back.
   const serverSearch = allSearchTerms.length > 0 ? allSearchTerms.join('|') : undefined;
 
   // El listado oculta 'Rechazada' y 'Cancelada' por default. PERO si el usuario
@@ -3360,7 +3365,7 @@ export function CampanasPage() {
                 ))}
                 <input
                   type="text"
-                  placeholder={searchTags.length === 0 ? 'Buscar campaña, articulo, cliente, código inventario... (Enter para agregar)' : 'Agregar filtro...'}
+                  placeholder={searchTags.length === 0 ? 'Buscar campaña, cliente, asesor, artículo, marca, plaza, código inventario... (Enter para agregar)' : 'Agregar filtro...'}
                   className={`flex-1 min-w-[120px] bg-transparent border-none outline-none text-sm ${isDark ? 'text-white placeholder:text-zinc-500' : 'text-gray-900 placeholder:text-gray-400'}`}
                   value={searchInput}
                   onChange={(e) => setSearchInput(e.target.value)}
