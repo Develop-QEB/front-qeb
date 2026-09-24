@@ -974,7 +974,7 @@ export function ProveedoresPage() {
                   )}
                 </button>
                 {showFilterPopup && (
-                  <div className={`absolute right-0 top-full mt-1 z-[60] w-[520px] max-w-[calc(100vw-2rem)] ${isDark ? 'bg-[#1a1025]' : 'bg-white'} border ${isDark ? 'border-purple-900/50' : 'border-gray-200'} rounded-lg shadow-xl p-4`}>
+                  <div className={`fixed inset-x-2 top-16 mt-0 w-auto max-w-none max-h-[calc(100vh-5rem)] overflow-auto sm:absolute sm:inset-auto sm:top-full sm:right-0 sm:mt-1 sm:w-[520px] sm:max-w-[calc(100vw-2rem)] sm:max-h-none sm:overflow-visible z-[60] ${isDark ? 'bg-[#1a1025]' : 'bg-white'} border ${isDark ? 'border-purple-900/50' : 'border-gray-200'} rounded-lg shadow-xl p-4`}>
                     <div className="flex items-center justify-between mb-3">
                       <span className={`text-sm font-medium ${isDark ? 'text-purple-300' : 'text-purple-700'}`}>Filtros de busqueda</span>
                       <button onClick={() => setShowFilterPopup(false)} className={`${isDark ? 'text-zinc-400 hover:text-white' : 'text-gray-400 hover:text-gray-900'}`}>
