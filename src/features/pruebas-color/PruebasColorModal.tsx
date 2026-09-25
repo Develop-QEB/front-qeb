@@ -150,11 +150,17 @@ export function PruebasColorModal({ isOpen, onClose, propuestaId, contextoNombre
 
   return (
     <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm">
-      <div className={`w-full max-w-3xl rounded-2xl shadow-2xl border max-h-[92vh] overflow-y-auto ${
+      {/* Feedback usuario 2026-09-25: el dropdown de "Selecciona un circuito"
+          se cortaba por debajo del modal porque el contenedor tenia
+          overflow-y-auto — el popup absolute quedaba clippeado. Fix: layout
+          flex-col con el overflow-y-auto SOLO en el body interno, y min-h
+          [640px] al modal para que siempre haya espacio abajo del selector
+          incluso cuando el contenido es corto. */}
+      <div className={`w-full max-w-3xl rounded-2xl shadow-2xl border max-h-[92vh] min-h-[min(640px,92vh)] flex flex-col ${
         isDark ? 'bg-zinc-900 border-zinc-800' : 'bg-white border-gray-200'
       }`}>
         {/* Header */}
-        <div className={`flex items-start justify-between px-5 py-4 border-b sticky top-0 z-10 ${
+        <div className={`flex items-start justify-between px-5 py-4 border-b flex-shrink-0 ${
           isDark ? 'bg-zinc-900 border-zinc-800' : 'bg-white border-gray-200'
         }`}>
           <div className="flex items-start gap-3">
@@ -180,8 +186,9 @@ export function PruebasColorModal({ isOpen, onClose, propuestaId, contextoNombre
           </button>
         </div>
 
-        {/* Body */}
-        <div className="px-5 py-4 space-y-4">
+        {/* Body — flex-1 con overflow interno para que el dropdown absolute
+            no se corte pero el modal aun respete max-h-[92vh]. */}
+        <div className="flex-1 overflow-y-auto px-5 py-4 space-y-4">
           {/* Selector circuito */}
           <div>
             <label className={labelCls}>Circuito</label>
