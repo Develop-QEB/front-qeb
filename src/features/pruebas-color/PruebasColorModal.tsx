@@ -131,11 +131,12 @@ export function PruebasColorModal({ isOpen, onClose, propuestaId, contextoNombre
     setError(null);
     if (!scId) { setError('Selecciona un circuito'); return; }
     if (!archivoUrl) { setError('Sube el arte de la prueba'); return; }
+    if (!nombreArte.trim()) { setError('El nombre del arte es requerido'); return; }
     createMutation.mutate({
       propuesta_id: propuestaId,
       sc_id: scId,
       archivo: archivoUrl,
-      nombre_arte: nombreArte.trim() || undefined,
+      nombre_arte: nombreArte.trim(),
       notas: notas.trim() || undefined,
     });
   };
@@ -157,7 +158,7 @@ export function PruebasColorModal({ isOpen, onClose, propuestaId, contextoNombre
           abajo), asi NUNCA se corta sin importar el tamaño del modal. Aqui
           solo se ajusta el layout a flex-col con el scroll en el body para
           que sea consistente. */}
-      <div className={`w-full max-w-3xl rounded-2xl shadow-2xl border max-h-[92vh] flex flex-col ${
+      <div className={`w-full max-w-4xl rounded-2xl shadow-2xl border max-h-[95vh] flex flex-col ${
         isDark ? 'bg-zinc-900 border-zinc-800' : 'bg-white border-gray-200'
       }`}>
         {/* Header */}
@@ -208,7 +209,10 @@ export function PruebasColorModal({ isOpen, onClose, propuestaId, contextoNombre
             )}
           </div>
 
-          {/* Lista de pruebas del circuito */}
+          {/* Lista de pruebas del circuito. Feedback Jos 2026-09-25: con
+              varias pruebas + formulario nuevo el body queda con scroll
+              interno chico. Limitamos la lista a max-h-72 y el formulario
+              queda siempre visible sin comprimirse. */}
           {scId && (
             <div className="space-y-2">
               <div className={`text-xs font-medium ${isDark ? 'text-zinc-400' : 'text-gray-500'}`}>
@@ -224,19 +228,23 @@ export function PruebasColorModal({ isOpen, onClose, propuestaId, contextoNombre
                   Sin pruebas de color para este circuito todavía.
                 </div>
               )}
-              {pruebas.map(p => (
-                <PruebaCard
-                  key={p.id}
-                  prueba={p}
-                  isDark={isDark}
-                  puedeGestionar={puedeGestionar}
-                  isUpdating={updateEstatusMutation.isPending || deleteMutation.isPending}
-                  onChangeEstatus={(nuevo) => updateEstatusMutation.mutate({ id: p.id, estatus: nuevo })}
-                  onDelete={() => {
-                    if (confirm(`¿Eliminar la prueba v${p.version}?`)) deleteMutation.mutate(p.id);
-                  }}
-                />
-              ))}
+              {pruebas.length > 0 && (
+                <div className={`space-y-2 ${pruebas.length > 2 ? 'max-h-72 overflow-y-auto pr-1' : ''}`}>
+                  {pruebas.map(p => (
+                    <PruebaCard
+                      key={p.id}
+                      prueba={p}
+                      isDark={isDark}
+                      puedeGestionar={puedeGestionar}
+                      isUpdating={updateEstatusMutation.isPending || deleteMutation.isPending}
+                      onChangeEstatus={(nuevo) => updateEstatusMutation.mutate({ id: p.id, estatus: nuevo })}
+                      onDelete={() => {
+                        if (confirm(`¿Eliminar la prueba v${p.version}?`)) deleteMutation.mutate(p.id);
+                      }}
+                    />
+                  ))}
+                </div>
+              )}
             </div>
           )}
 
@@ -278,7 +286,7 @@ export function PruebasColorModal({ isOpen, onClose, propuestaId, contextoNombre
                   </div>
                 </div>
                 <div>
-                  <label className={labelCls}>Nombre del arte (opcional)</label>
+                  <label className={labelCls}>Nombre del arte *</label>
                   <input className={inputCls} value={nombreArte} onChange={e => setNombreArte(e.target.value)} placeholder="Ej. Arte v1 - versión CMYK" />
                 </div>
                 <div>
@@ -297,7 +305,7 @@ export function PruebasColorModal({ isOpen, onClose, propuestaId, contextoNombre
                 <div className="flex justify-end gap-2">
                   <button
                     onClick={handleSubmit}
-                    disabled={createMutation.isPending || !archivoUrl}
+                    disabled={createMutation.isPending || !archivoUrl || !nombreArte.trim()}
                     className="flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium text-white bg-fuchsia-600 hover:bg-fuchsia-700 disabled:opacity-50 disabled:cursor-not-allowed"
                   >
                     {createMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
@@ -520,7 +528,22 @@ function CircuitoCombobox({
         <span className={`truncate ${!selected ? (isDark ? 'text-zinc-500' : 'text-gray-400') : ''}`}>
           {selected ? labelFor(selected) : (isLoading ? 'Cargando circuitos...' : 'Selecciona un circuito...')}
         </span>
-        <ChevronDown className={`h-4 w-4 shrink-0 transition-transform ${open ? 'rotate-180' : ''} ${isDark ? 'text-zinc-500' : 'text-gray-400'}`} />
+        <div className="flex items-center gap-1 shrink-0">
+          {selected && (
+            <span
+              role="button"
+              tabIndex={0}
+              onClick={(e) => { e.stopPropagation(); onChange(null); setOpen(false); setQuery(''); }}
+              onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); e.stopPropagation(); onChange(null); setOpen(false); setQuery(''); } }}
+              className={`p-0.5 rounded cursor-pointer ${isDark ? 'hover:bg-zinc-700 text-zinc-400 hover:text-zinc-200' : 'hover:bg-gray-200 text-gray-500 hover:text-gray-700'}`}
+              title="Quitar circuito"
+              aria-label="Quitar circuito seleccionado"
+            >
+              <X className="h-3.5 w-3.5" />
+            </span>
+          )}
+          <ChevronDown className={`h-4 w-4 transition-transform ${open ? 'rotate-180' : ''} ${isDark ? 'text-zinc-500' : 'text-gray-400'}`} />
+        </div>
       </button>
 
       {open && (
