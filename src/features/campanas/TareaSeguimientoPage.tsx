@@ -2303,12 +2303,16 @@ function UploadArtModal({
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center">
+    <div className="fixed inset-0 z-50 flex items-stretch justify-stretch">
       <div
         className="absolute inset-0 bg-black/50 backdrop-blur-sm"
         onClick={() => { if (!isProcessingFinal) handleClose(); }}
       />
-      <div className="relative bg-card border border-border rounded-xl w-full max-w-[96vw] xl:max-w-[1600px] mx-4 max-h-[95vh] flex flex-col">
+      {/* Feedback usuario 2026-09-24: la ventana debe ocupar TODA la pantalla,
+          no dejar bordes de ~2vw ni margen. Cambio de max-w-[96vw] centrado a
+          w-screen h-screen sin border/rounded. Asi la biblioteca respira y las
+          miniaturas tienen espacio real para verse grandes. */}
+      <div className="relative bg-card w-screen h-screen flex flex-col">
         {/* Header */}
         <div className="flex items-center justify-between p-4 border-b border-border flex-shrink-0">
           <h3 className="text-lg font-semibold flex items-center gap-2">
@@ -2517,7 +2521,7 @@ function UploadArtModal({
                             <option value="ocultos">Solo ocultos</option>
                           </select>
                         </div>
-                        <div className={`flex-1 min-h-[280px] border border-border rounded-lg overflow-auto p-3 ${isDark ? 'bg-zinc-900/50' : 'bg-gray-50'}`}>
+                        <div className={`flex-1 min-h-[400px] border border-border rounded-lg overflow-auto p-4 ${isDark ? 'bg-zinc-900/50' : 'bg-gray-50'}`}>
                           {isLoadingArtes ? (
                             <div className="h-full flex items-center justify-center">
                               <Loader2 className="h-5 w-5 animate-spin text-cyan-400" />
@@ -2536,7 +2540,7 @@ function UploadArtModal({
                               </div>
                             </div>
                           ) : (
-                            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 xl:grid-cols-5 gap-3">
+                            <div className="grid grid-cols-[repeat(auto-fill,minmax(220px,1fr))] gap-4">
                               {visibleArtes.map((art) => {
                                 const isVideo = /\.(mp4|mov|webm|avi)$/i.test(art.url || '');
                                 const isSelected = selectedDigitalImages.has(art.id);
@@ -2869,7 +2873,7 @@ function UploadArtModal({
                             <option value="ocultos">Solo ocultos</option>
                           </select>
                         </div>
-                        <div className={`flex-1 min-h-[280px] border border-border rounded-lg overflow-auto p-3 ${isDark ? 'bg-zinc-900/50' : 'bg-gray-50'}`}>
+                        <div className={`flex-1 min-h-[400px] border border-border rounded-lg overflow-auto p-4 ${isDark ? 'bg-zinc-900/50' : 'bg-gray-50'}`}>
                           {isLoadingArtes ? (
                             <div className="h-full flex items-center justify-center">
                               <Loader2 className="h-5 w-5 animate-spin text-purple-400" />
@@ -2888,7 +2892,7 @@ function UploadArtModal({
                               </div>
                             </div>
                           ) : (
-                            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 xl:grid-cols-5 gap-3">
+                            <div className="grid grid-cols-[repeat(auto-fill,minmax(220px,1fr))] gap-4">
                               {visibleArtes.map((art) => {
                                 const isSelected = selectedGalleryImages.has(art.id);
                                 const isHidden = hiddenArteIds.has(art.id);
