@@ -12,11 +12,19 @@ function extractApiError(err: unknown, fallback: string): Error {
   return new Error(fallback);
 }
 
-// Estatus posibles de una prueba de color.
-// Transiciones: solicitada -> enviada_proveedor -> aprobada | rechazada.
-// aprobada y rechazada son terminales — para una nueva iteracion se crea
-// otra prueba con version incrementada (el back lo maneja automatico).
-export type EstatusPruebaColor = 'solicitada' | 'enviada_proveedor' | 'aprobada' | 'rechazada';
+// Estatus posibles de una prueba de color. Feedback Jos 2026-09-25:
+// nuevo flujo con revisión de arte previa + tarea de seguimiento.
+//   revision_artes → arte_aprobado → enviada_proveedor → aprobada
+//                                                      ↘ rechazada
+//   revision_artes → rechazada
+// 'solicitada' se mantiene como valor de compat para pruebas viejas.
+export type EstatusPruebaColor =
+  | 'solicitada'
+  | 'revision_artes'
+  | 'arte_aprobado'
+  | 'enviada_proveedor'
+  | 'aprobada'
+  | 'rechazada';
 
 export interface PruebaColor {
   id: number;
@@ -99,15 +107,22 @@ export const pruebasColorService = {
 
 // Etiquetas legibles para el UI.
 export const ESTATUS_LABEL: Record<EstatusPruebaColor, string> = {
-  solicitada: 'Solicitada',
+  solicitada: 'Revisión de artes',
+  revision_artes: 'Revisión de artes',
+  arte_aprobado: 'Arte aprobado',
   enviada_proveedor: 'Enviada al proveedor',
   aprobada: 'Aprobada',
   rechazada: 'Rechazada',
 };
 
 // Transiciones validas por estatus actual (mismo criterio que el back).
+// solicitada se conserva como sinonimo de revision_artes (datos viejos).
+// La transicion a 'aprobada' desde arte_aprobado/enviada_proveedor la
+// hace normalmente el analista al finalizar la tarea Seguimiento.
 export const TRANSICIONES: Record<EstatusPruebaColor, EstatusPruebaColor[]> = {
-  solicitada: ['enviada_proveedor', 'aprobada', 'rechazada'],
+  solicitada: ['arte_aprobado', 'enviada_proveedor', 'aprobada', 'rechazada'],
+  revision_artes: ['arte_aprobado', 'rechazada'],
+  arte_aprobado: ['enviada_proveedor', 'aprobada', 'rechazada'],
   enviada_proveedor: ['aprobada', 'rechazada'],
   aprobada: [],
   rechazada: [],
