@@ -705,7 +705,7 @@ export function CompartirPropuestaPage() {
     if (source.length === 0) return;
     // codigo_unico (completo) va ANTES de Clave (que es solo el prefijo).
     // "Estado" marca las piezas no vigentes (ademas la fila va en gris).
-    const headers = ['codigo_unico', 'Clave', 'Plaza', 'Ubicación', 'Tipo de Cara', 'Formato', 'Tipo Inventario', 'Periodo', 'Lat', 'Long', 'Estado', ...(mostrarOrigen ? ['Origen'] : []), 'NOTAS'];
+    const headers = ['codigo_unico', 'Clave', 'Plaza', 'Ubicación', 'Formato', 'Tipo Inventario', 'Periodo', 'Lat', 'Long', 'Estado', ...(mostrarOrigen ? ['Origen'] : []), 'NOTAS'];
     const byPlaza: Record<string, InventarioReservado[]> = {};
     for (const i of source) {
       const plaza = i.plaza || 'Sin Plaza';
@@ -729,7 +729,6 @@ export function CompartirPropuestaPage() {
           (i.codigo_unico || '').split('_')[0],
           i.plaza || '',
           i.ubicacion || '',
-          i.tipo_de_cara || '',
           i.mueble || '',
           i.tradicional_digital || '',
           formatInicioPeriodo(i, tipoPeriodo),
@@ -741,7 +740,9 @@ export function CompartirPropuestaPage() {
         ],
       })),
       // Lat (col 8) y Long (col 9) como celdas tipo número
-      formatos: { 8: FMT_COORD, 9: FMT_COORD },
+      // Lat (7) y Long (8) como celdas tipo número. Corridos una posición al
+      // quitar "Tipo de Cara".
+      formatos: { 7: FMT_COORD, 8: FMT_COORD },
     }));
     const sufijo = selectedItems.size > 0 ? '_seleccion' : '';
     const notaPie = mostrarOrigen ? `${NO_VIGENTE_LEYENDA}  ·  ${ORIGEN_LEYENDA}` : NO_VIGENTE_LEYENDA;
@@ -1294,7 +1295,23 @@ export function CompartirPropuestaPage() {
           doc.setFont('helvetica', 'bold');
           doc.setTextColor(...WHITE);
           const groupTarifaUnit = items.length > 0 ? tarifaBruta(items[0]) : 0;
-          doc.text(`${articulo}`, marginX + 10, y + 4);
+          // La barra verde identifica al grupo por PLAZA y FORMATO, no por
+          // artículo: el artículo es nomenclatura interna y no le dice nada al
+          // cliente. Un grupo puede abarcar varias plazas o formatos, así que se
+          // listan los distintos y se recorta para no chocar con los totales de
+          // la derecha. Si por algún motivo no hay ninguno, cae al artículo.
+          const etiquetaDe = (vals: (string | null)[]) => [...new Set(vals.filter(Boolean) as string[])].join(', ');
+          const plazasGrupo = etiquetaDe(items.map(i => i.plaza));
+          const formatosGrupo = etiquetaDe(items.map(i => i.mueble));
+          let etiquetaGrupo = [plazasGrupo, formatosGrupo].filter(Boolean).join('  ·  ') || articulo;
+          const anchoMaxEtiqueta = pageWidth - marginX * 2 - 120;
+          if (doc.getTextWidth(etiquetaGrupo) > anchoMaxEtiqueta) {
+            while (etiquetaGrupo.length > 8 && doc.getTextWidth(`${etiquetaGrupo}…`) > anchoMaxEtiqueta) {
+              etiquetaGrupo = etiquetaGrupo.slice(0, -1);
+            }
+            etiquetaGrupo = `${etiquetaGrupo}…`;
+          }
+          doc.text(etiquetaGrupo, marginX + 10, y + 4);
           doc.setFont('helvetica', 'normal');
           doc.text(`Renta: ${groupCaras}${groupBonif > 0 ? `  |  Bonif: ${groupBonif}` : ''}  |  Tarifa: ${formatCurrency(groupTarifaUnit)}  |  Inversion: ${formatCurrency(groupTarifa)}`, pageWidth - marginX - 10, y + 4, { align: 'right' });
           y += 8;
@@ -1354,12 +1371,19 @@ export function CompartirPropuestaPage() {
             if (col === 1) rowTop += rowMaxH + gap; // cerrar fila incompleta
             y = rowTop + 2;
           } else {
-          // === TABLE FOR THIS ARTICULO ===
+          // === TABLA DE ESTE GRUPO ===
+          // Mismas columnas y mismos datos que el Excel de esta pantalla, para
+          // que los dos documentos se lean igual. Quedan fuera solo las dos
+          // columnas que existen por el formato de la hoja: "Clave" (el prefijo
+          // de codigo_unico, ya visible ahí) y "NOTAS" (columna en blanco para
+          // escribir a mano).
           const tableData = items.map(i => [
-            String(i.id),
+            i.codigo_unico || '',
+            i.plaza || '',
             (i.ubicacion || '').substring(0, 50),
             i.mueble || '',
-            i.municipio || '',
+            i.tradicional_digital || '',
+            formatInicioPeriodo(i, tipoPeriodo),
             i.latitud?.toFixed(6) || '-',
             i.longitud?.toFixed(6) || '-',
             estadoTexto(i),
@@ -1367,7 +1391,7 @@ export function CompartirPropuestaPage() {
           ]);
 
           autoTable(doc, {
-            head: [['ID', 'Ubicación', 'Mueble', 'Municipio', 'Latitud', 'Longitud', 'Estado', ...(mostrarOrigen ? ['Origen'] : [])]],
+            head: [['codigo_unico', 'Plaza', 'Ubicación', 'Formato', 'Tipo Inventario', 'Periodo', 'Lat', 'Long', 'Estado', ...(mostrarOrigen ? ['Origen'] : [])]],
             body: tableData,
             startY: y,
             margin: { left: marginX + 5, right: marginX + 5 },
@@ -1375,14 +1399,16 @@ export function CompartirPropuestaPage() {
             headStyles: { fillColor: [230, 240, 250], textColor: IMU_BLUE, fontStyle: 'bold', fontSize: 7 },
             alternateRowStyles: { fillColor: [250, 252, 255] },
             columnStyles: {
-              0: { cellWidth: 18 },
-              1: { cellWidth: 70 },
-              2: { cellWidth: 35 },
-              3: { cellWidth: 35 },
-              4: { cellWidth: 28 },
+              0: { cellWidth: 52 },
+              1: { cellWidth: 30 },
+              2: { cellWidth: 66 },
+              3: { cellWidth: 32 },
+              4: { cellWidth: 26 },
               5: { cellWidth: 28 },
-              6: { cellWidth: 45 },
-              7: { cellWidth: 40 },
+              6: { cellWidth: 26 },
+              7: { cellWidth: 26 },
+              8: { cellWidth: 42 },
+              9: { cellWidth: 38 },
             },
             // Gris = no vigente (desplazada/quitada tras completar el circuito).
             // Azul/verde = origen en la campaña (propuesta vs agregado despues).
