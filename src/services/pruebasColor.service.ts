@@ -130,11 +130,9 @@ const ROLES_PRUEBA_COLOR = new Set<string>([
   'DEV',
 ]);
 
-// Feature flag: mientras Jos no de luz verde para el rollout, todos los
-// botones de "Prueba de color" quedan ocultos. Se cambia a false para
-// re-habilitar sin tocar los puntos de entrada (PropuestasPage, CampanasPage,
-// TareaSeguimientoPage) — los 3 dependen de este helper.
-const PRUEBA_COLOR_OCULTA = true;
+// Feature flag: Jos dio luz verde 2026-09-25 para activar en stage/dev
+// (presentacion en junta). Cambiar a true si hay que ocultar de nuevo.
+const PRUEBA_COLOR_OCULTA = false;
 
 export function puedeGestionarPruebaColor(rol: string | null | undefined): boolean {
   if (PRUEBA_COLOR_OCULTA) return false;
