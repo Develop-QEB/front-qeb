@@ -151,12 +151,13 @@ export function PruebasColorModal({ isOpen, onClose, propuestaId, contextoNombre
   return (
     <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm">
       {/* Feedback usuario 2026-09-25: el dropdown de "Selecciona un circuito"
-          se cortaba por debajo del modal porque el contenedor tenia
-          overflow-y-auto — el popup absolute quedaba clippeado. Fix: layout
-          flex-col con el overflow-y-auto SOLO en el body interno, y min-h
-          [640px] al modal para que siempre haya espacio abajo del selector
-          incluso cuando el contenido es corto. */}
-      <div className={`w-full max-w-3xl rounded-2xl shadow-2xl border max-h-[92vh] min-h-[min(640px,92vh)] flex flex-col ${
+          se cortaba porque el modal contenedor tenia overflow-y-auto y el
+          panel absolute quedaba clippeado. Fix definitivo: el CircuitoCombobox
+          usa position:fixed calculado por getBoundingClientRect (ver mas
+          abajo), asi NUNCA se corta sin importar el tamaño del modal. Aqui
+          solo se ajusta el layout a flex-col con el scroll en el body para
+          que sea consistente. */}
+      <div className={`w-full max-w-3xl rounded-2xl shadow-2xl border max-h-[92vh] flex flex-col ${
         isDark ? 'bg-zinc-900 border-zinc-800' : 'bg-white border-gray-200'
       }`}>
         {/* Header */}
@@ -426,22 +427,56 @@ function CircuitoCombobox({
 }) {
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState('');
+  const [panelStyle, setPanelStyle] = useState<React.CSSProperties>({});
   const containerRef = useRef<HTMLDivElement>(null);
+  const btnRef = useRef<HTMLButtonElement>(null);
+  const panelRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
+
+  // Reposicionar el panel via getBoundingClientRect + position:fixed cada vez
+  // que abre — asi nunca se corta por overflow del modal contenedor.
+  // Feedback usuario 2026-09-25.
+  const positionPanel = () => {
+    if (!btnRef.current) return;
+    const rect = btnRef.current.getBoundingClientRect();
+    const vh = window.innerHeight;
+    const spaceBelow = vh - rect.bottom - 8;
+    const spaceAbove = rect.top - 8;
+    // Preferir abrir hacia abajo. Si abajo hay < 280px y arriba hay mas espacio,
+    // abrir hacia arriba.
+    const openUp = spaceBelow < 280 && spaceAbove > spaceBelow;
+    setPanelStyle({
+      position: 'fixed',
+      left: rect.left,
+      width: rect.width,
+      top: openUp ? undefined : rect.bottom + 4,
+      bottom: openUp ? vh - rect.top + 4 : undefined,
+      maxHeight: openUp ? Math.max(200, spaceAbove) : Math.max(200, spaceBelow),
+    });
+  };
 
   useEffect(() => {
     if (!open) return;
+    positionPanel();
     const onDown = (e: MouseEvent) => {
-      if (containerRef.current && !containerRef.current.contains(e.target as Node)) setOpen(false);
+      const target = e.target as Node;
+      const insideContainer = containerRef.current?.contains(target);
+      const insidePanel = panelRef.current?.contains(target);
+      if (!insideContainer && !insidePanel) setOpen(false);
     };
     const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') setOpen(false); };
+    const onResize = () => positionPanel();
     document.addEventListener('mousedown', onDown);
     document.addEventListener('keydown', onKey);
+    window.addEventListener('resize', onResize);
+    window.addEventListener('scroll', onResize, true);
     // Auto-focus del input de búsqueda al abrir.
     setTimeout(() => inputRef.current?.focus(), 0);
     return () => {
       document.removeEventListener('mousedown', onDown);
       document.removeEventListener('keydown', onKey);
+      window.removeEventListener('resize', onResize);
+      window.removeEventListener('scroll', onResize, true);
     };
   }, [open]);
 
@@ -469,7 +504,10 @@ function CircuitoCombobox({
     isDark ? 'bg-zinc-800 border-zinc-700 text-white hover:bg-zinc-800/80'
            : 'bg-white border-gray-300 text-gray-900 hover:bg-gray-50'
   }`;
-  const panelCls = `absolute z-20 mt-1 w-full rounded-lg border shadow-xl overflow-hidden ${
+  // Panel del dropdown: position:fixed calculado en positionPanel() para que
+  // NUNCA se corte por overflow del modal contenedor. z-[200] para ganarle
+  // a cualquier modal/overlay padre.
+  const panelCls = `z-[200] rounded-lg border shadow-xl flex flex-col overflow-hidden ${
     isDark ? 'bg-zinc-900 border-zinc-700' : 'bg-white border-gray-200'
   }`;
   const searchCls = `w-full bg-transparent outline-none text-sm ${
@@ -478,7 +516,7 @@ function CircuitoCombobox({
 
   return (
     <div ref={containerRef} className="relative">
-      <button type="button" onClick={() => setOpen(o => !o)} className={btnCls}>
+      <button ref={btnRef} type="button" onClick={() => setOpen(o => !o)} className={btnCls}>
         <span className={`truncate ${!selected ? (isDark ? 'text-zinc-500' : 'text-gray-400') : ''}`}>
           {selected ? labelFor(selected) : (isLoading ? 'Cargando circuitos...' : 'Selecciona un circuito...')}
         </span>
@@ -486,8 +524,8 @@ function CircuitoCombobox({
       </button>
 
       {open && (
-        <div className={panelCls}>
-          <div className={`flex items-center gap-2 px-3 py-2 border-b ${isDark ? 'border-zinc-800' : 'border-gray-200'}`}>
+        <div ref={panelRef} className={panelCls} style={panelStyle}>
+          <div className={`flex items-center gap-2 px-3 py-2 border-b flex-shrink-0 ${isDark ? 'border-zinc-800' : 'border-gray-200'}`}>
             <Search className={`h-4 w-4 shrink-0 ${isDark ? 'text-zinc-500' : 'text-gray-400'}`} />
             <input
               ref={inputRef}
@@ -503,7 +541,7 @@ function CircuitoCombobox({
             )}
           </div>
 
-          <div className="max-h-72 overflow-y-auto py-1">
+          <div className="flex-1 min-h-0 overflow-y-auto py-1">
             {isLoading && (
               <div className={`px-3 py-4 text-xs text-center flex items-center justify-center gap-2 ${isDark ? 'text-zinc-500' : 'text-gray-400'}`}>
                 <Loader2 className="h-3 w-3 animate-spin" /> Cargando circuitos...
