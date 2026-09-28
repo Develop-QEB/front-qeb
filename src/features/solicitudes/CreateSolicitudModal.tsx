@@ -1389,10 +1389,11 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
       showToast('Hay circuito(s) con autorización pendiente de DG/DCM. No puedes agregar nuevos circuitos hasta que dirección los apruebe o rechace.', 'error');
       return;
     }
-    // Circuitos: NSE no es requerido (los inventarios del circuito ya están fijos)
+    // Circuitos: NSE no es requerido (los inventarios del circuito ya están fijos).
+    // UDC (aeropuerto AICM): su inventario NO tiene NSE, así que tampoco se exige.
     const esCircuitoNew = newCara.articulo ? !!parseCircuitoDigital(newCara.articulo.ItemCode) : false;
     if (!newCara.articulo || !newCara.estado || !newCara.formato || !newCara.tipo) return;
-    if (!esCircuitoNew && newCara.nse.length === 0) return;
+    if (!esCircuitoNew && !esUDC && newCara.nse.length === 0) return;
 
     // Validar tarifa pública: si es 0, solo CT, BF/CF, IM, IN (intercambio) y
     // ESP/ES- pueden avanzar.
@@ -3781,8 +3782,9 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
                     disabled={(() => {
                       const esCirc = newCara.articulo ? !!parseCircuitoDigital(newCara.articulo.ItemCode) : false;
                       const baseInvalid = !newCara.articulo || !newCara.estado || !newCara.formato || !newCara.tipo || !newCara.periodo || (tipoPeriodo === 'mensual' && (!newCara.periodoInicioCustom || !newCara.periodoFinCustom));
-                      // NSE solo requerido si NO es circuito
-                      const nseInvalid = !esCirc && newCara.nse.length === 0;
+                      // NSE solo requerido si NO es circuito y NO es UDC
+                      // (el inventario UDC del aeropuerto no tiene NSE).
+                      const nseInvalid = !esCirc && !esUDC && newCara.nse.length === 0;
                       // Bloqueo: con autorización de dirección pendiente no se
                       // pueden AGREGAR circuitos nuevos (editar uno existente sí).
                       return baseInvalid || nseInvalid || (authBlocked && !editingCaraId);
