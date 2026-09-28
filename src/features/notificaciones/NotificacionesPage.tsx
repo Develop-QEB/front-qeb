@@ -3753,12 +3753,17 @@ export function NotificacionesPage() {
                   )}
                 </button>
                 {showFilterPopup && (
-                  // Movil (<sm): fixed anclado al viewport con margen — la
-                  // version absolute con right-0 y w-[520px] se salia por la
-                  // izquierda porque el contenedor .relative es angosto.
-                  // Desktop (sm+): comportamiento original de dropdown.
-                  // Feedback usuario 2026-09-23.
-                  <div className={`fixed inset-x-2 top-16 mt-0 w-auto max-w-none max-h-[calc(100vh-5rem)] overflow-auto sm:absolute sm:inset-auto sm:top-full sm:right-0 sm:mt-1 sm:w-[520px] sm:max-w-[calc(100vw-2rem)] sm:max-h-none sm:overflow-visible z-[60] ${isDark ? 'bg-[#1a1025] border-purple-900/50' : 'bg-white border-gray-200'} border rounded-lg shadow-xl p-4`}>
+                  // Mobile + tablet (<lg): fixed anclado al viewport con
+                  // margen. Antes se usaba `sm:` como corte pero celulares
+                  // en landscape (~640-900px CSS) activaban `sm:absolute
+                  // sm:right-0 sm:w-[520px]` y el popup se salia por la
+                  // izquierda porque el contenedor .relative del boton es
+                  // angosto. Ahora el corte a dropdown es en lg: (1024px)
+                  // para que solo desktop verdadero lo use.
+                  // Ademas usa dvh en lugar de vh para que la URL bar
+                  // dinamica no le robe altura al max-height del scroll.
+                  // Feedback Jos 2026-09-28.
+                  <div className={`fixed inset-x-2 top-2 bottom-2 mt-0 w-auto max-w-none max-h-[calc(100dvh-1rem)] overflow-y-auto overscroll-contain lg:absolute lg:inset-auto lg:top-full lg:right-0 lg:bottom-auto lg:mt-1 lg:w-[520px] lg:max-w-[calc(100vw-2rem)] lg:max-h-none lg:overflow-visible z-[60] ${isDark ? 'bg-[#1a1025] border-purple-900/50' : 'bg-white border-gray-200'} border rounded-lg shadow-xl p-4`}>
                     {/* Filtros rápidos */}
                     <div className="mb-3">
                       <span className="text-[11px] font-medium text-purple-400 uppercase tracking-wide">
@@ -3899,7 +3904,7 @@ export function NotificacionesPage() {
                     )}
                   </button>
                   {showGroupPopup && (
-                    <div className={`fixed inset-x-2 top-16 mt-0 w-auto max-h-[calc(100vh-5rem)] overflow-auto sm:absolute sm:inset-auto sm:top-full sm:right-0 sm:mt-1 sm:w-auto sm:max-h-none sm:overflow-visible sm:min-w-[180px] z-[60] ${isDark ? 'bg-[#1a1025] border-purple-900/50' : 'bg-white border-gray-200'} border rounded-lg shadow-xl p-2`}>
+                    <div className={`fixed inset-x-2 top-2 bottom-2 mt-0 w-auto max-h-[calc(100dvh-1rem)] overflow-y-auto overscroll-contain lg:absolute lg:inset-auto lg:top-full lg:right-0 lg:bottom-auto lg:mt-1 lg:w-auto lg:max-h-none lg:overflow-visible lg:min-w-[180px] z-[60] ${isDark ? 'bg-[#1a1025] border-purple-900/50' : 'bg-white border-gray-200'} border rounded-lg shadow-xl p-2`}>
                       <p className={`text-[10px] ${isDark ? 'text-zinc-500' : 'text-gray-400'} uppercase tracking-wide px-2 py-1`}>Agrupar por (max 2)</p>
                       {AVAILABLE_GROUPINGS.map(({ field, label }) => (
                         <button
@@ -3943,7 +3948,7 @@ export function NotificacionesPage() {
                   <ArrowUpDown className="h-4 w-4" />
                 </button>
                 {showSortPopup && (
-                  <div className={`fixed inset-x-2 top-16 mt-0 w-auto max-w-none max-h-[calc(100vh-5rem)] overflow-auto sm:absolute sm:inset-auto sm:top-full sm:right-0 sm:mt-1 sm:w-[300px] sm:max-h-none sm:overflow-visible z-[60] ${isDark ? 'bg-[#1a1025] border-purple-900/50' : 'bg-white border-gray-200'} border rounded-lg shadow-xl p-3`}>
+                  <div className={`fixed inset-x-2 top-2 bottom-2 mt-0 w-auto max-w-none max-h-[calc(100dvh-1rem)] overflow-y-auto overscroll-contain lg:absolute lg:inset-auto lg:top-full lg:right-0 lg:bottom-auto lg:mt-1 lg:w-[300px] lg:max-h-none lg:overflow-visible z-[60] ${isDark ? 'bg-[#1a1025] border-purple-900/50' : 'bg-white border-gray-200'} border rounded-lg shadow-xl p-3`}>
                     <div className="flex items-center justify-between mb-3">
                       <span className="text-sm font-medium text-purple-300">Ordenar por</span>
                       <button onClick={() => setShowSortPopup(false)} className={isDark ? 'text-zinc-400 hover:text-white' : 'text-gray-400 hover:text-gray-900'}>
