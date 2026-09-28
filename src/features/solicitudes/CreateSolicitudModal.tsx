@@ -11,7 +11,7 @@ import { formatCurrency } from '../../lib/utils';
 import { getSapCache, setSapCache, SAP_CACHE_KEYS, clearSapCache } from '../../lib/sapCache';
 import { SAP_BASE_URL, getEndpoints } from '../../store/environmentStore';
 import { filterAllowedArticulos } from '../../config/allowedDigitalArticles';
-import { parseArticuloUDC, esArticuloUDCBasura } from '../../lib/udc';
+import { parseArticuloUDC, esArticuloUDCBasura, esArticuloUDC } from '../../lib/udc';
 import type { SapDatabase } from '../../store/environmentStore';
 import { useSocketEquipos } from '../../hooks/useSocket';
 import { useAuthStore } from '../../store/authStore';
@@ -1390,10 +1390,12 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
       return;
     }
     // Circuitos: NSE no es requerido (los inventarios del circuito ya están fijos).
-    // UDC (aeropuerto AICM): su inventario NO tiene NSE, así que tampoco se exige.
+    // UDC (aeropuerto AICM): su inventario NO tiene NSE — se detecta por cliente/tab
+    // (esUDC) O por el propio artículo (CT-BLOQA-AICM-CDMX, etc.), así tampoco se exige.
     const esCircuitoNew = newCara.articulo ? !!parseCircuitoDigital(newCara.articulo.ItemCode) : false;
+    const esArtUDCNew = newCara.articulo ? esArticuloUDC(newCara.articulo.ItemCode, newCara.articulo.ItemName) : false;
     if (!newCara.articulo || !newCara.estado || !newCara.formato || !newCara.tipo) return;
-    if (!esCircuitoNew && !esUDC && newCara.nse.length === 0) return;
+    if (!esCircuitoNew && !esUDC && !esArtUDCNew && newCara.nse.length === 0) return;
 
     // Validar tarifa pública: si es 0, solo CT, BF/CF, IM, IN (intercambio) y
     // ESP/ES- pueden avanzar.
@@ -3781,10 +3783,11 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
                     onClick={handleAddCara}
                     disabled={(() => {
                       const esCirc = newCara.articulo ? !!parseCircuitoDigital(newCara.articulo.ItemCode) : false;
+                      const esArtUDCBtn = newCara.articulo ? esArticuloUDC(newCara.articulo.ItemCode, newCara.articulo.ItemName) : false;
                       const baseInvalid = !newCara.articulo || !newCara.estado || !newCara.formato || !newCara.tipo || !newCara.periodo || (tipoPeriodo === 'mensual' && (!newCara.periodoInicioCustom || !newCara.periodoFinCustom));
-                      // NSE solo requerido si NO es circuito y NO es UDC
-                      // (el inventario UDC del aeropuerto no tiene NSE).
-                      const nseInvalid = !esCirc && !esUDC && newCara.nse.length === 0;
+                      // NSE solo requerido si NO es circuito y NO es UDC (por cliente/tab
+                      // o por el propio artículo). El inventario UDC del aeropuerto no tiene NSE.
+                      const nseInvalid = !esCirc && !esUDC && !esArtUDCBtn && newCara.nse.length === 0;
                       // Bloqueo: con autorización de dirección pendiente no se
                       // pueden AGREGAR circuitos nuevos (editar uno existente sí).
                       return baseInvalid || nseInvalid || (authBlocked && !editingCaraId);
