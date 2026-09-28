@@ -111,7 +111,7 @@ export function NuevaActividadComercialModal({ isOpen, onClose, editing }: Props
           // Marcamos un placeholder para conservar el ref_id aunque el user
           // no vuelva a buscar. El objeto se refresca cuando la query traiga
           // la lista y encontremos el id real.
-          setSelected({ id: c.ref_id, label: `#${c.ref_id}`, cliente: c.cliente || null, marca: c.marca || null });
+          setSelected({ id: c.ref_id, label: `#${c.ref_id}`, cliente: c.cliente || null, marca: c.marca || null, status: '' });
         }
         if (c.cliente) setCliente(c.cliente);
         if (c.marca) setMarca(c.marca);
@@ -189,7 +189,7 @@ export function NuevaActividadComercialModal({ isOpen, onClose, editing }: Props
       ? Math.max(0, Math.min(365, parseInt(diasAntes || '0', 10) || 0))
       : undefined;
     const isLead = subtipo === 'Lead';
-    const payload = {
+    const payload: import('../../services/notificaciones.service').CrearActividadComercialInput = {
       subtipo: isLead ? 'Lead' : (selected ? subtipo : undefined),
       ref_id: isLead ? undefined : selected?.id,
       cliente: cliente.trim() || undefined,

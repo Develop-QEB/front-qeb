@@ -3211,7 +3211,6 @@ export function NotificacionesPage() {
   const isDark = useThemeStore((s) => s.theme) === 'dark';
   const currentUserId = useAuthStore((s) => s.user?.id);
   const currentUserRol = useAuthStore((s) => s.user?.rol);
-  const currentUserId = useAuthStore((s) => s.user?.id);
   const puedeCrearActividadComercial = !!currentUserRol && ROLES_ACTIVIDAD_COMERCIAL.has(currentUserRol);
   const [showActividadModal, setShowActividadModal] = useState(false);
   // Tarea en edición para el modal Actividad Comercial. null = modo creación.
