@@ -1716,6 +1716,9 @@ function UploadArtModal({
   const [modalSortBy, setModalSortBy] = useState<'codigo' | 'aps' | 'catorcena'>('codigo');
   const [modalPage, setModalPage] = useState(1);
   const MODAL_PAGE_SIZE = 5;
+  // Panel "Espacios a asignar" colapsable — feedback Jos 2026-09-25: al
+  // colapsar, la biblioteca de artes crece a todo el ancho del modal.
+  const [spacesPanelCollapsed, setSpacesPanelCollapsed] = useState(false);
 
   // Preview URL basado en la opción seleccionada
   const previewUrl = useMemo(() => {
@@ -2477,7 +2480,7 @@ function UploadArtModal({
               )}
             </div>
           ) : (
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 h-full min-h-0">
+          <div className={`grid grid-cols-1 gap-6 h-full min-h-0 relative ${spacesPanelCollapsed ? '' : 'lg:grid-cols-2'}`}>
             {/* Left Column - Upload Options & Preview */}
             <div className="flex flex-col space-y-4 h-full min-h-0">
               {isDigitalInventory ? (
@@ -3169,16 +3172,28 @@ function UploadArtModal({
               )}
             </div>
 
-            {/* Right Column - Selected Items Table */}
-            <div className="flex flex-col h-full">
+            {/* Right Column - Selected Items Table. Feedback Jos 2026-09-25:
+                colapsable. Si se contrae, la biblioteca de artes ocupa todo
+                el ancho y aparece un botón lateral para volver a mostrarlo. */}
+            <div className={`flex flex-col h-full ${spacesPanelCollapsed ? 'hidden' : ''}`}>
               {/* Header with count and toolbar */}
-              <div className="flex items-center justify-between mb-2">
-                <span className={`text-sm font-medium ${isDark ? 'text-white' : 'text-gray-900'}`}>
-                  Espacios a asignar
-                </span>
-                <Badge className={isDark ? "bg-purple-600/30 text-purple-300 border-purple-500/30" : "bg-purple-100 text-purple-700 border-purple-300"}>
-                  {selectedInventory.length} elemento{selectedInventory.length !== 1 ? 's' : ''}
-                </Badge>
+              <div className="flex items-center justify-between mb-2 gap-2">
+                <div className="flex items-center gap-2 min-w-0">
+                  <span className={`text-sm font-medium truncate ${isDark ? 'text-white' : 'text-gray-900'}`}>
+                    Espacios a asignar
+                  </span>
+                  <Badge className={isDark ? "bg-purple-600/30 text-purple-300 border-purple-500/30" : "bg-purple-100 text-purple-700 border-purple-300"}>
+                    {selectedInventory.length} elemento{selectedInventory.length !== 1 ? 's' : ''}
+                  </Badge>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setSpacesPanelCollapsed(true)}
+                  title="Ocultar panel — expandir biblioteca de artes"
+                  className={`p-1 rounded shrink-0 ${isDark ? 'text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800' : 'text-gray-500 hover:text-gray-800 hover:bg-gray-100'}`}
+                >
+                  <ChevronRight className="h-4 w-4" />
+                </button>
               </div>
 
               {/* Toolbar */}
@@ -3325,6 +3340,22 @@ function UploadArtModal({
                 </div>
               </div>
             </div>
+            {/* Botón flotante para reabrir el panel Espacios a asignar cuando
+                está colapsado. Vive dentro del grid contenedor para pegarse
+                al borde derecho del modal. Feedback Jos 2026-09-25. */}
+            {spacesPanelCollapsed && (
+              <button
+                type="button"
+                onClick={() => setSpacesPanelCollapsed(false)}
+                title={`Mostrar Espacios a asignar (${selectedInventory.length})`}
+                className={`absolute right-0 top-1/2 -translate-y-1/2 flex flex-col items-center gap-2 py-3 px-2 rounded-l-lg shadow-lg border border-r-0 z-10 transition-colors ${isDark ? 'bg-purple-900/40 border-purple-500/40 text-purple-200 hover:bg-purple-800/60' : 'bg-purple-100 border-purple-300 text-purple-800 hover:bg-purple-200'}`}
+              >
+                <ChevronLeft className="h-4 w-4" />
+                <span className="text-[10px] font-medium [writing-mode:vertical-rl] rotate-180 whitespace-nowrap">
+                  Espacios a asignar · {selectedInventory.length}
+                </span>
+              </button>
+            )}
           </div>
           )}
         </div>
