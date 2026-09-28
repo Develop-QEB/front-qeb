@@ -9,9 +9,21 @@ import {
   ActividadSubtipo,
 } from '../../services/notificaciones.service';
 
+// Tarea a editar. Estos son los campos que precargamos. Todos opcionales
+// para tolerar filas viejas con contenido incompleto o parseo fallido.
+export interface ActividadEditable {
+  id: number;
+  descripcion?: string | null;
+  fecha_fin?: string | Date | null;
+  contenido?: string | null; // JSON con cliente/marca/subtipo/ref_id/etc
+}
+
 interface Props {
   isOpen: boolean;
   onClose: () => void;
+  // Si se pasa una tarea, el modal entra en modo edición y precarga
+  // los campos. Al guardar llama al PATCH en lugar del POST.
+  editing?: ActividadEditable | null;
 }
 
 function useDebounced<T>(value: T, ms = 300): T {
@@ -26,7 +38,8 @@ function useDebounced<T>(value: T, ms = 300): T {
 // Modal "Nueva Actividad Comercial". Reemplaza la accion manual que vivia en
 // Historial de Acciones para asesores comerciales — ahora es una tarea real en
 // el modulo de Notificaciones y Tareas con categoria='Actividad Comercial'.
-export function NuevaActividadComercialModal({ isOpen, onClose }: Props) {
+export function NuevaActividadComercialModal({ isOpen, onClose, editing }: Props) {
+  const isEditMode = !!editing;
   const isDark = useThemeStore(s => s.theme) === 'dark';
   const user = useAuthStore(s => s.user);
   const queryClient = useQueryClient();
@@ -53,26 +66,72 @@ export function NuevaActividadComercialModal({ isOpen, onClose }: Props) {
 
   const debouncedSearch = useDebounced(search, 300);
 
-  // Reset al abrir/cerrar
+  // Reset al abrir/cerrar. En modo edición precarga desde `editing`.
   useEffect(() => {
-    if (isOpen) {
-      setSubtipo('Campaña');
-      setSearch('');
-      setSelected(null);
-      setCliente('');
-      setMarca('');
-      setDescripcion('');
-      setFechaEntrega('');
-      setActivarRecordatorio(false);
-      setDiasAntes('1');
-      setError(null);
-      setCreatedId(null);
-      setAnio('');
-      setCatorcena('');
-      setEstatusActividad('');
-      setBase('');
+    if (!isOpen) return;
+    // Defaults
+    setSubtipo('Campaña');
+    setSearch('');
+    setSelected(null);
+    setCliente('');
+    setMarca('');
+    setDescripcion('');
+    setFechaEntrega('');
+    setActivarRecordatorio(false);
+    setDiasAntes('1');
+    setError(null);
+    setCreatedId(null);
+    setAnio('');
+    setCatorcena('');
+    setEstatusActividad('');
+    setBase('');
+
+    if (!editing) return;
+    // Precarga desde `editing` (modo edición).
+    setDescripcion(editing.descripcion || '');
+    if (editing.fecha_fin) {
+      const d = new Date(editing.fecha_fin);
+      if (!isNaN(d.getTime())) {
+        setFechaEntrega(d.toISOString().slice(0, 10));
+      }
     }
-  }, [isOpen]);
+    if (editing.contenido) {
+      try {
+        const c = JSON.parse(editing.contenido) as {
+          subtipo?: string; ref_id?: number;
+          cliente?: string; marca?: string;
+          activar_recordatorio?: boolean; recordar_dias_antes?: number;
+          anio?: number; catorcena?: number;
+          estatus_actividad?: string; base?: string;
+        };
+        if (c.subtipo === 'Campaña' || c.subtipo === 'Propuesta' || c.subtipo === 'Lead') {
+          setSubtipo(c.subtipo);
+        }
+        if (c.ref_id && (c.subtipo === 'Campaña' || c.subtipo === 'Propuesta')) {
+          // Marcamos un placeholder para conservar el ref_id aunque el user
+          // no vuelva a buscar. El objeto se refresca cuando la query traiga
+          // la lista y encontremos el id real.
+          setSelected({ id: c.ref_id, label: `#${c.ref_id}`, cliente: c.cliente || null, marca: c.marca || null });
+        }
+        if (c.cliente) setCliente(c.cliente);
+        if (c.marca) setMarca(c.marca);
+        if (c.activar_recordatorio) {
+          setActivarRecordatorio(true);
+          if (c.recordar_dias_antes != null) setDiasAntes(String(c.recordar_dias_antes));
+        }
+        if (c.anio) setAnio(String(c.anio));
+        if (c.catorcena) setCatorcena(String(c.catorcena));
+        if (c.estatus_actividad === 'Abierto' || c.estatus_actividad === 'Cerrado') {
+          setEstatusActividad(c.estatus_actividad);
+        }
+        if (c.base === 'CIMU' || c.base === 'TRADE' || c.base === 'UDC') {
+          setBase(c.base);
+        }
+      } catch (e) {
+        console.warn('[ActividadComercial] no se pudo parsear contenido para editar:', e);
+      }
+    }
+  }, [isOpen, editing]);
 
   // Rango de años: actual - 1 hasta actual + 1. Cubre actividades atrasadas
   // y las que se planifican con anticipacion sin desbordar el select.
@@ -101,6 +160,17 @@ export function NuevaActividadComercialModal({ isOpen, onClose }: Props) {
     onError: (err: Error) => setError(err.message),
   });
 
+  const editMutation = useMutation({
+    mutationFn: (payload: Parameters<typeof notificacionesService.editarActividadComercial>[1]) =>
+      notificacionesService.editarActividadComercial(editing!.id, payload),
+    onSuccess: (data) => {
+      setCreatedId(data.id);
+      queryClient.invalidateQueries({ queryKey: ['notificaciones'] });
+      queryClient.invalidateQueries({ queryKey: ['tareas'] });
+    },
+    onError: (err: Error) => setError(err.message),
+  });
+
   const asesorNombre = user?.nombre || 'Usuario';
   const nowLabel = useMemo(() => {
     return new Date().toLocaleString('es-MX', {
@@ -118,12 +188,8 @@ export function NuevaActividadComercialModal({ isOpen, onClose }: Props) {
     const dias = activarRecordatorio && fechaEntrega
       ? Math.max(0, Math.min(365, parseInt(diasAntes || '0', 10) || 0))
       : undefined;
-    // Payload:
-    //   - Lead: manda subtipo='Lead' sin ref_id (siempre, aunque no haya selected).
-    //   - Campaña/Propuesta con seleccion: manda subtipo + ref_id.
-    //   - Campaña/Propuesta sin seleccion: omite ambos (actividad libre).
     const isLead = subtipo === 'Lead';
-    createMutation.mutate({
+    const payload = {
       subtipo: isLead ? 'Lead' : (selected ? subtipo : undefined),
       ref_id: isLead ? undefined : selected?.id,
       cliente: cliente.trim() || undefined,
@@ -136,8 +202,15 @@ export function NuevaActividadComercialModal({ isOpen, onClose }: Props) {
       catorcena: catorcena ? Number(catorcena) : undefined,
       estatus_actividad: estatusActividad || undefined,
       base: base || undefined,
-    });
+    };
+    if (isEditMode) {
+      editMutation.mutate(payload);
+    } else {
+      createMutation.mutate(payload);
+    }
   };
+
+  const isSubmitting = createMutation.isPending || editMutation.isPending;
 
   if (!isOpen) return null;
 
@@ -168,10 +241,12 @@ export function NuevaActividadComercialModal({ isOpen, onClose }: Props) {
             </div>
             <div>
               <h3 className={`text-base font-semibold ${isDark ? 'text-zinc-100' : 'text-gray-900'}`}>
-                Nueva Actividad Comercial
+                {isEditMode ? 'Editar Actividad Comercial' : 'Nueva Actividad Comercial'}
               </h3>
               <p className={`mt-0.5 text-xs ${isDark ? 'text-zinc-400' : 'text-gray-500'}`}>
-                Registra una tarea manual sobre una campaña o propuesta.
+                {isEditMode
+                  ? `Editando actividad #${editing?.id}. Los cambios quedan en el historial.`
+                  : 'Registra una tarea manual sobre una campaña o propuesta.'}
               </p>
             </div>
           </div>
@@ -190,7 +265,7 @@ export function NuevaActividadComercialModal({ isOpen, onClose }: Props) {
               <Send className={`h-6 w-6 ${isDark ? 'text-emerald-300' : 'text-emerald-600'}`} />
             </div>
             <div className={`text-sm ${isDark ? 'text-zinc-200' : 'text-gray-800'}`}>
-              Actividad comercial creada.
+              {isEditMode ? 'Actividad comercial actualizada.' : 'Actividad comercial creada.'}
             </div>
             <div className={`text-xs ${isDark ? 'text-zinc-400' : 'text-gray-500'}`}>
               ID_accion: <span className="font-mono">{createdId}</span>
@@ -482,11 +557,11 @@ export function NuevaActividadComercialModal({ isOpen, onClose }: Props) {
               <button
                 type="button"
                 onClick={handleSubmit}
-                disabled={createMutation.isPending}
+                disabled={isSubmitting}
                 className="flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium text-white bg-amber-600 hover:bg-amber-700 disabled:opacity-50 disabled:cursor-not-allowed"
               >
-                {createMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
-                {createMutation.isPending ? 'Guardando...' : 'Crear actividad'}
+                {isSubmitting ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
+                {isSubmitting ? 'Guardando...' : (isEditMode ? 'Guardar cambios' : 'Crear actividad')}
               </button>
             </div>
           </div>
