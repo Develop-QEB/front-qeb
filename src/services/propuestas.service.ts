@@ -538,6 +538,6 @@ export interface ReservaHistorialItem {
   inicio_periodo: string | null;
   fin_periodo: string | null;
   disponible: boolean;         // ¿se puede volver a reservar hoy?
-  motivo_salida: 'Bloqueado' | 'Desplazado' | 'Quitado' | string;
+  motivo_salida: 'Bloqueado' | 'Inhabilitado' | 'Desplazado' | 'Quitado' | string;
   motivo_no_disponible: string | null;
 }

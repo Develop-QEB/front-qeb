@@ -19,6 +19,12 @@ import {
   MatrizOcupacion,
   cellKeyOf,
 } from '../../services/analisisOcupacion.service';
+import {
+  TIPO_BLOQUEO_DEFAULT,
+  TIPO_BLOQUEO_TEXTOS,
+  TipoBloqueoInventario,
+} from '../../lib/bloqueoInventario';
+import { TipoBloqueoSelector } from './TipoBloqueoSelector';
 
 type Step = 'select' | 'periodos' | 'matriz';
 
@@ -132,6 +138,8 @@ export function BloqueoMasivoModal({ open, onClose, initialInventarios }: Bloque
 
   const [confirmBloqueoOpen, setConfirmBloqueoOpen] = useState(false);
   const [motivo, setMotivo] = useState('');
+  const [tipo, setTipo] = useState<TipoBloqueoInventario>(TIPO_BLOQUEO_DEFAULT);
+  const textos = TIPO_BLOQUEO_TEXTOS[tipo];
   const [bloqueando, setBloqueando] = useState(false);
   const [bloqueoResultado, setBloqueoResultado] = useState<BloqueoResultado | null>(null);
   const [resultadoOpen, setResultadoOpen] = useState(false);
@@ -156,6 +164,7 @@ export function BloqueoMasivoModal({ open, onClose, initialInventarios }: Bloque
     setBloqueadosLocal(new Set());
     setCsvFeedback(null);
     setMotivo('');
+    setTipo(TIPO_BLOQUEO_DEFAULT);
     setConfirmBloqueoOpen(false);
     setBloqueoResultado(null);
     setResultadoOpen(false);
@@ -364,7 +373,7 @@ export function BloqueoMasivoModal({ open, onClose, initialInventarios }: Bloque
     //    Loop secuencial para no saturar al backend (no hay endpoint bulk).
     for (const invId of inventariosObjetivo) {
       try {
-        await inventariosService.toggleBlock(invId);
+        await inventariosService.toggleBlock(invId, tipo);
         bloqueadosOk.add(invId);
         resultado.inventariosBloqueados += 1;
       } catch (err) {
@@ -404,9 +413,10 @@ export function BloqueoMasivoModal({ open, onClose, initialInventarios }: Bloque
         '',
         `Editar campaña: ${window.location.origin}/campanas/detail/${card.campana_id}`,
         '',
-        `Fecha de bloqueo: ${fechaBloqueo}`,
+        `Tipo: ${textos.opcion}`,
+        `Fecha de ${textos.sustantivo}: ${fechaBloqueo}`,
         motivoTexto ? `Motivo: ${motivoTexto}` : null,
-        user ? `Bloqueado por: ${user.nombre}` : null,
+        user ? `${textos.participio} por: ${user.nombre}` : null,
       ].filter(Boolean).join('\n');
 
       tareasJobs.push(
@@ -834,7 +844,7 @@ export function BloqueoMasivoModal({ open, onClose, initialInventarios }: Bloque
                 </div>
                 <div className="flex-1 min-w-0">
                   <h3 className={`text-base font-semibold ${isDark ? 'text-white' : 'text-gray-900'}`}>
-                    Bloquear {inventariosObjetivo.size} {inventariosObjetivo.size === 1 ? 'inventario' : 'inventarios'}
+                    {textos.infinitivo} {inventariosObjetivo.size} {inventariosObjetivo.size === 1 ? 'inventario' : 'inventarios'}
                   </h3>
                   <p className={`text-xs mt-1 ${isDark ? 'text-zinc-400' : 'text-gray-600'}`}>
                     Se eliminarán automáticamente las reservas activas sobre estos inventarios (con o sin APS).
@@ -844,9 +854,10 @@ export function BloqueoMasivoModal({ open, onClose, initialInventarios }: Bloque
               </div>
             </div>
             <div className="p-5 space-y-3 text-xs">
+              <TipoBloqueoSelector value={tipo} onChange={setTipo} isDark={isDark} disabled={bloqueando} />
               <div className={`rounded-lg border p-3 space-y-1.5 ${isDark ? 'border-zinc-700 bg-zinc-800/50' : 'border-gray-200 bg-gray-50'}`}>
                 <div className="flex justify-between">
-                  <span className={isDark ? 'text-zinc-400' : 'text-gray-500'}>Inventarios a bloquear</span>
+                  <span className={isDark ? 'text-zinc-400' : 'text-gray-500'}>Inventarios a {textos.infinitivo.toLowerCase()}</span>
                   <span className={`font-semibold ${isDark ? 'text-white' : 'text-gray-900'}`}>{inventariosObjetivo.size}</span>
                 </div>
                 <div className="flex justify-between">
@@ -874,7 +885,7 @@ export function BloqueoMasivoModal({ open, onClose, initialInventarios }: Bloque
               </div>
               <div>
                 <label className={`block text-xs font-medium mb-1 ${isDark ? 'text-zinc-300' : 'text-gray-700'}`}>
-                  Motivo del bloqueo <span className={isDark ? 'text-zinc-500' : 'text-gray-400'}>(se incluye en cada tarea)</span>
+                  Motivo <span className={isDark ? 'text-zinc-500' : 'text-gray-400'}>(se incluye en cada tarea)</span>
                 </label>
                 <textarea
                   value={motivo}
@@ -905,7 +916,7 @@ export function BloqueoMasivoModal({ open, onClose, initialInventarios }: Bloque
                 className={`flex items-center gap-2 px-4 py-1.5 rounded-lg text-sm font-medium ${isDark ? 'bg-rose-500 text-white hover:bg-rose-600' : 'bg-rose-600 text-white hover:bg-rose-700'} disabled:opacity-50`}
               >
                 {bloqueando ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Ban className="h-3.5 w-3.5" />}
-                {bloqueando ? 'Bloqueando...' : 'Confirmar bloqueo'}
+                {bloqueando ? `${textos.gerundio}...` : `Confirmar ${textos.sustantivo}`}
               </button>
             </div>
           </div>

@@ -21,6 +21,7 @@ import { NotasDireccionBitacora } from '../notificaciones/NotasDireccionBitacora
 import { DesposteoModal } from '../desposteo/DesposteoModal';
 import { puedeSolicitarDesposteo, puedeBypassearDesposteo, esRolTIDesposteo, desposteoService, EstadoAps } from '../../services/desposteo.service';
 import { udcFichaDe } from '../../lib/udc';
+import { esInventarioBloqueado } from '../../lib/bloqueoInventario';
 
 // Mini-preview (cuadrito cyan con el aspect-ratio real de la pantalla) para las
 // listas UDC del aeropuerto. Solo se pinta si el código corresponde a una
@@ -667,8 +668,8 @@ function renderReservadoCell(item: InventarioReservado, col: TableColumn, p = 'p
       <div className="flex items-center gap-1.5">
         <UdcPreview codigo={item.codigo_unico} />
         {item.codigo_unico || '-'}
-        {item.estatus_inventario === 'Bloqueado' && (
-          <span className="px-1.5 py-0.5 rounded text-[9px] font-semibold bg-red-500/20 text-red-400 border border-red-500/30">Bloqueado</span>
+        {esInventarioBloqueado(item.estatus_inventario) && (
+          <span className="px-1.5 py-0.5 rounded text-[9px] font-semibold bg-red-500/20 text-red-400 border border-red-500/30">{item.estatus_inventario}</span>
         )}
         {!hideGroupBadge && groupInfo && !groupInfo.completo && (
           <span className="px-1.5 py-0.5 rounded text-[9px] font-semibold bg-yellow-500/20 text-yellow-400 border border-yellow-500/30" title={`Grupo incompleto: ${groupInfo.reservadas}/${groupInfo.esperadas} caras`}>

@@ -4,6 +4,13 @@ import { Ban, AlertTriangle, X, Loader2, Search, User, ExternalLink, ChevronRigh
 import { solicitudesService, UserOption } from '../../services/solicitudes.service';
 import { inventariosService } from '../../services/inventarios.service';
 import { campanasService } from '../../services/campanas.service';
+import {
+  TIPO_BLOQUEO_DEFAULT,
+  TIPO_BLOQUEO_TEXTOS,
+  TipoBloqueoInventario,
+  esInventarioBloqueado,
+} from '../../lib/bloqueoInventario';
+import { TipoBloqueoSelector } from './TipoBloqueoSelector';
 
 interface InventarioBasico {
   id: number;
@@ -27,6 +34,8 @@ export interface CampanaBloqueoEntry {
 }
 
 export interface BloqueoData {
+  // Clasificación a aplicar: 'Bloqueado' | 'Inhabilitado' (mismo comportamiento).
+  tipo: TipoBloqueoInventario;
   motivo: string;
   analistas: UserOption[];
   trafico: UserOption[];
@@ -111,6 +120,7 @@ function UserSelector({
 
 export function BloqueoModal({ isOpen, onClose, item, onConfirm, isSubmitting }: Props) {
   const [motivo, setMotivo] = useState('');
+  const [tipo, setTipo] = useState<TipoBloqueoInventario>(TIPO_BLOQUEO_DEFAULT);
   // Wizard: step 0 = motivo + overview, step 1..N = per-campaign assignment
   const [step, setStep] = useState(0);
   // Per-campaign selections stored by index
@@ -260,7 +270,8 @@ export function BloqueoModal({ isOpen, onClose, item, onConfirm, isSubmitting }:
   if (!isOpen || !item) return null;
 
   const estatusReal = item.estatus_real || item.estatus || '';
-  const yaEstaBloquedo = item.estatus === 'Bloqueado';
+  const yaEstaBloquedo = esInventarioBloqueado(item.estatus);
+  const textos = TIPO_BLOQUEO_TEXTOS[tipo];
   const enUso = ['Reservado', 'Ocupado', 'Vendido'].includes(estatusReal);
   const esDisponible = !yaEstaBloquedo && !enUso && campanasActivas.length === 0;
 
@@ -287,17 +298,18 @@ export function BloqueoModal({ isOpen, onClose, item, onConfirm, isSubmitting }:
     // For backwards compat, also flatten all analistas/trafico
     const allAnalistas = perCampana.flatMap(e => e.analistas);
     const allTrafico = perCampana.flatMap(e => e.trafico);
-    await onConfirm({ motivo, analistas: allAnalistas, trafico: allTrafico, campanas: campanasActivas, perCampana });
+    await onConfirm({ tipo, motivo, analistas: allAnalistas, trafico: allTrafico, campanas: campanasActivas, perCampana });
     reset();
   };
 
   const handleConfirmSimple = async () => {
-    await onConfirm({ motivo, analistas: [], trafico: [], campanas: [] });
+    await onConfirm({ tipo, motivo, analistas: [], trafico: [], campanas: [] });
     reset();
   };
 
   const reset = () => {
     setMotivo('');
+    setTipo(TIPO_BLOQUEO_DEFAULT);
     setStep(0);
     setPerCampanaSelections({});
     setSearchAnalista('');
@@ -342,7 +354,7 @@ export function BloqueoModal({ isOpen, onClose, item, onConfirm, isSubmitting }:
           <div className="flex items-center gap-2">
             <Ban className="h-5 w-5 text-red-400" />
             <h2 className="text-sm font-semibold text-white">
-              {yaEstaBloquedo ? 'Crear tarea de revisión de bloqueo' : esDisponible ? 'Bloquear inventario' : 'Bloquear inventario en uso'}
+              {yaEstaBloquedo ? 'Crear tarea de revisión de bloqueo' : esDisponible ? `${textos.infinitivo} inventario` : `${textos.infinitivo} inventario en uso`}
             </h2>
           </div>
           <button onClick={handleClose} className="text-zinc-500 hover:text-zinc-300"><X className="h-4 w-4" /></button>
@@ -375,13 +387,18 @@ export function BloqueoModal({ isOpen, onClose, item, onConfirm, isSubmitting }:
             {item.plaza && <p className="text-xs text-zinc-500">{item.plaza}</p>}
           </div>
 
+          {/* Clasificación — solo al bloquear (no aplica si ya está bloqueado) */}
+          {!yaEstaBloquedo && step === 0 && (
+            <TipoBloqueoSelector value={tipo} onChange={setTipo} disabled={isSubmitting} />
+          )}
+
           {esDisponible ? (
             <>
               <div className="flex items-start gap-2.5 px-3 py-2.5 bg-red-500/10 border border-red-500/30 rounded-lg">
                 <Ban className="h-4 w-4 text-red-400 flex-shrink-0 mt-0.5" />
                 <div className="space-y-1">
                   <p className="text-xs text-red-300">
-                    Se bloqueará este inventario. Indica el motivo para que se pueda desbloquear después.
+                    Este inventario quedará como {textos.participio.toLowerCase()} y no se podrá ocupar. Indica el motivo para que se pueda revertir después.
                   </p>
                   <p className="text-[11px] text-red-300/80">
                     Cualquier reserva activa sobre este inventario se eliminará automáticamente, con o sin APS.
@@ -395,7 +412,7 @@ export function BloqueoModal({ isOpen, onClose, item, onConfirm, isSubmitting }:
                   value={motivo}
                   onChange={e => setMotivo(e.target.value)}
                   rows={3}
-                  placeholder="¿Por qué se bloquea este inventario?"
+                  placeholder={`¿Por qué se ${tipo === 'Inhabilitado' ? 'inhabilita' : 'bloquea'} este inventario?`}
                   className="w-full bg-zinc-800 border border-zinc-700 text-white text-sm rounded-lg px-3 py-2 resize-none focus:outline-none focus:border-red-500/50 placeholder:text-zinc-600"
                 />
               </div>
@@ -407,12 +424,12 @@ export function BloqueoModal({ isOpen, onClose, item, onConfirm, isSubmitting }:
                 <AlertTriangle className="h-4 w-4 text-amber-400 flex-shrink-0 mt-0.5" />
                 <div>
                   <p className="text-xs font-semibold text-amber-300">
-                    {yaEstaBloquedo ? 'Inventario bloqueado' : `En uso — ${estatusReal}`}
+                    {yaEstaBloquedo ? `Inventario ${(item.estatus || 'bloqueado').toLowerCase()}` : `En uso — ${estatusReal}`}
                   </p>
                   <p className="text-xs text-amber-400/80 mt-0.5">
                     {yaEstaBloquedo
                       ? 'Se creará una tarea para que un usuario pueda revisar y desbloquear manualmente.'
-                      : 'Se bloqueará el inventario y se creará una tarea por cada campaña afectada.'}
+                      : `El inventario quedará como ${textos.participio.toLowerCase()} y se creará una tarea por cada campaña afectada.`}
                   </p>
                   {!yaEstaBloquedo && (
                     <p className="text-[11px] text-red-300 mt-1">
@@ -526,7 +543,7 @@ export function BloqueoModal({ isOpen, onClose, item, onConfirm, isSubmitting }:
               className="flex-1 flex items-center justify-center gap-2 px-3 py-2 text-sm font-medium bg-red-600 hover:bg-red-500 disabled:bg-zinc-700 disabled:text-zinc-500 text-white rounded-lg transition-colors"
             >
               {isSubmitting ? <Loader2 className="h-4 w-4 animate-spin" /> : <Ban className="h-4 w-4" />}
-              {isSubmitting ? 'Bloqueando...' : 'Bloquear inventario'}
+              {isSubmitting ? `${textos.gerundio}...` : `${textos.infinitivo} inventario`}
             </button>
           ) : !isLastStep ? (
             <button

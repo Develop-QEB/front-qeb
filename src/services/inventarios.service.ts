@@ -1,5 +1,6 @@
 import api from '../lib/api';
 import { Inventario, InventarioMapItem, InventarioStats, PaginatedResponse, ApiResponse } from '../types';
+import type { TipoBloqueoInventario } from '../lib/bloqueoInventario';
 
 /**
  * Un evento de la timeline de un inventario. La arma el back combinando varias
@@ -552,8 +553,13 @@ export const inventariosService = {
   },
 
   // Toggle block/unblock
-  async toggleBlock(id: number): Promise<Inventario> {
-    const response = await api.patch<ApiResponse<Inventario>>(`/inventarios/${id}/toggle-block`);
+  // `tipo` = clasificación a aplicar al bloquear ('Bloqueado' | 'Inhabilitado').
+  // Al desbloquear se ignora. Sin `tipo` el back usa 'Bloqueado'.
+  async toggleBlock(id: number, tipo?: TipoBloqueoInventario): Promise<Inventario> {
+    const response = await api.patch<ApiResponse<Inventario>>(
+      `/inventarios/${id}/toggle-block`,
+      tipo ? { tipo } : undefined,
+    );
     if (!response.data.success || !response.data.data) {
       throw new Error(response.data.error || 'Error al bloquear/desbloquear inventario');
     }

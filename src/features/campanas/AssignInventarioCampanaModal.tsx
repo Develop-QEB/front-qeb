@@ -23,6 +23,7 @@ import { clientesService } from '../../services/clientes.service';
 import { formatCurrency } from '../../lib/utils';
 import { monthLabelLong, monthLabelShort, dayMonthShort, getRequiredPeriodoForArticulo } from '../../lib/periodos';
 import { parseCircuitoDigital } from '../../lib/circuitos';
+import { esInventarioBloqueado } from '../../lib/bloqueoInventario';
 import { circuitosService } from '../../services/circuitos.service';
 import { useEnvironmentStore, getEndpoints } from '../../store/environmentStore';
 import { useAuthStore } from '../../store/authStore';
@@ -10105,8 +10106,8 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
                                           <input type="checkbox" checked={selectedMapReservas.has(reserva.id)} onChange={() => toggleSingleMapReserva(reserva.id)} className="checkbox-purple" />
                                           <UdcPreview codigo={reserva.codigo_unico} />
                                           <span className="text-zinc-400 font-mono text-[11px]">{reserva.codigo_unico}</span>
-                                          {reserva.estatus_inventario === 'Bloqueado' && (
-                                            <span className="px-1 py-0.5 rounded text-[9px] font-semibold bg-red-500/20 text-red-400 border border-red-500/30">Bloqueado</span>
+                                          {esInventarioBloqueado(reserva.estatus_inventario) && (
+                                            <span className="px-1 py-0.5 rounded text-[9px] font-semibold bg-red-500/20 text-red-400 border border-red-500/30">{reserva.estatus_inventario}</span>
                                           )}
                                           <span className="text-zinc-500 text-[11px] truncate max-w-[80px]">{reserva.plaza}</span>
                                           <span className="text-zinc-500 text-[11px]">{reserva.formato}</span>
@@ -10160,8 +10161,8 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
                                                       <input type="checkbox" checked={selectedMapReservas.has(reserva.id)} onChange={() => toggleSingleMapReserva(reserva.id)} className="checkbox-purple" />
                                           <UdcPreview codigo={reserva.codigo_unico} />
                                                       <span className="text-zinc-400 font-mono">{reserva.codigo_unico}</span>
-                                                      {reserva.estatus_inventario === 'Bloqueado' && (
-                                                        <span className="px-1 py-0.5 rounded text-[9px] font-semibold bg-red-500/20 text-red-400 border border-red-500/30">Bloqueado</span>
+                                                      {esInventarioBloqueado(reserva.estatus_inventario) && (
+                                                        <span className="px-1 py-0.5 rounded text-[9px] font-semibold bg-red-500/20 text-red-400 border border-red-500/30">{reserva.estatus_inventario}</span>
                                                       )}
                                                       <span className={`ml-auto px-1.5 py-0.5 rounded text-[10px] ${
                                                         reserva.codigo_unico?.includes('_Completo') ? 'bg-purple-500/20 text-purple-300' :
@@ -10197,8 +10198,8 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
                                                             <input type="checkbox" checked={selectedMapReservas.has(reserva.id)} onChange={() => toggleSingleMapReserva(reserva.id)} className="checkbox-purple" />
                                           <UdcPreview codigo={reserva.codigo_unico} />
                                                             <span className="text-zinc-400 font-mono">{reserva.codigo_unico}</span>
-                                                            {reserva.estatus_inventario === 'Bloqueado' && (
-                                                              <span className="px-1 py-0.5 rounded text-[9px] font-semibold bg-red-500/20 text-red-400 border border-red-500/30">Bloqueado</span>
+                                                            {esInventarioBloqueado(reserva.estatus_inventario) && (
+                                                              <span className="px-1 py-0.5 rounded text-[9px] font-semibold bg-red-500/20 text-red-400 border border-red-500/30">{reserva.estatus_inventario}</span>
                                                             )}
                                                           </label>
                                                         ))}
