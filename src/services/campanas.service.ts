@@ -2,7 +2,7 @@ import api from '../lib/api';
 import { Campana, CampanaStats, PaginatedResponse, ApiResponse, ComentarioTarea, CampanaWithComments } from '../types';
 import type { ReservaHistorialItem } from './propuestas.service';
 
-import { useEnvironmentStore, getEndpoints, getDeliveryNotesEndpoint, getSeriesForSapDatabase, usaSapPruebas } from '../store/environmentStore';
+import { useEnvironmentStore, getEndpoints, getDeliveryNotesEndpoint, getSeriesForSapDatabase, getSapCompanyDb } from '../store/environmentStore';
 import type { SapDatabase } from '../store/environmentStore';
 export type { CampanaWithComments };
 
@@ -641,10 +641,10 @@ export function buildDeliveryNote(
       NumAtCard: campana.id?.toString() || '',
       Comments: campana.comentario_cambio_status || '',
       DocDueDate: (campana.fecha_fin || new Date().toISOString()).split('T')[0],
-      // TRADE: SAP espera siempre -1 ("directo / sin asesor"), sin importar
-      // el salesperson_code del cliente (regla de negocio IMU). CIMU/TEST sí
+      // TRADE: SAP espera siempre -1 ("directo / sin asesor"), sin importar el
+      // salesperson_code del cliente (regla de negocio IMU). CIMU/TEST/UDC sí
       // usan el real, fallback a -1 si null.
-      SalesPersonCode: sapDatabase === 'TRADE' ? -1 : ((campana as any).salesperson_code || -1),
+      SalesPersonCode: (sapDatabase === 'TRADE') ? -1 : ((campana as any).salesperson_code || -1),
       U_CIC: String(campana.cuic || ''),
       U_CRM_Asesor: campana.T0_U_Asesor || '',
       U_CRM_Producto: campana.T2_U_Producto || '',
@@ -686,12 +686,8 @@ export async function resolveBaseEntry(
   docNum: string,
   sapDatabase: string
 ): Promise<SAPDeliveryNoteMigrated> {
-  const dbMap: Record<string, string> = {
-    'TRADE': 'SBOIMUTRADE',
-    'CIMU': 'SBOCIMU',
-    'TEST': 'PB_SBOCIMU',
-  };
-  const db = usaSapPruebas(sapDatabase as SapDatabase) ? 'PB_SBOCIMU' : (dbMap[sapDatabase] || 'PB_SBOCIMU');
+  // Compañía SAP real (respeta desvío a pruebas: PB_SBOCIMU / PB_SBOUDC).
+  const db = getSapCompanyDb(sapDatabase as SapDatabase);
 
   const response = await fetch(`${SAP_BASE_URL}/order-by-docnum/${db}/${docNum}`);
   if (!response.ok) {
@@ -722,6 +718,9 @@ export async function resolveBaseEntry(
 // Cuando se devuelve `success: false` el caller puede usar `errorType`,
 // `endpoint`, `status`, `rawResponse` para mostrar info útil al usuario.
 export async function postDeliveryNoteToSAP(deliveryNote: SAPDeliveryNote | SAPDeliveryNoteMigrated, sapDatabase?: string | null): Promise<SAPPostResponse> {
+  // UDC ya tiene serie real (91) → sin guard. El POST va al endpoint del proxy
+  // /delivery-notes-udc (compañía según cómo esté configurado el proxy: SBOUDC
+  // o PB_SBOUDC de pruebas).
   const endpoint = sapDatabase
     ? getDeliveryNotesEndpoint(sapDatabase as SapDatabase)
     : `${SAP_BASE_URL}/delivery-notes-test`;
@@ -819,13 +818,6 @@ export async function postDeliveryNoteToSAP(deliveryNote: SAPDeliveryNote | SAPD
   return { success: true, data, endpoint, status: response.status };
 }
 
-// Mapa BD QEB → DB SAP (mismo que en resolveBaseEntry).
-const SAP_DB_NAME_MAP: Record<string, string> = {
-  TRADE: 'SBOIMUTRADE',
-  CIMU: 'SBOCIMU',
-  TEST: 'PB_SBOCIMU',
-};
-
 export interface ExistingDeliveryNote {
   exists: true;
   DocEntry: number;
@@ -838,7 +830,7 @@ export interface ExistingDeliveryNote {
 // con su DocEntry para que el caller decida POST (crear) o PATCH (actualizar).
 // 404 ⇒ null. Cualquier otro error vuela como excepción.
 export async function findExistingDeliveryNote(numAtCard: string | number, sapDatabase?: string | null): Promise<ExistingDeliveryNote | null> {
-  const db = usaSapPruebas((sapDatabase || 'TEST') as SapDatabase) ? 'PB_SBOCIMU' : (SAP_DB_NAME_MAP[sapDatabase || 'TEST'] || 'PB_SBOCIMU');
+  const db = getSapCompanyDb((sapDatabase || 'TEST') as SapDatabase);
   const url = `${SAP_BASE_URL}/delivery-note-by-numatcard/${db}/${numAtCard}`;
   const response = await fetch(url);
   if (response.status === 404) return null;
@@ -850,7 +842,8 @@ export async function findExistingDeliveryNote(numAtCard: string | number, sapDa
 
 // PATCH a un DN existente en SAP. Mismo manejo defensivo de errores que POST.
 export async function patchDeliveryNoteToSAP(docEntry: number, deliveryNote: SAPDeliveryNote | SAPDeliveryNoteMigrated, sapDatabase?: string | null): Promise<SAPPostResponse> {
-  const db = usaSapPruebas((sapDatabase || 'TEST') as SapDatabase) ? 'PB_SBOCIMU' : (SAP_DB_NAME_MAP[sapDatabase || 'TEST'] || 'PB_SBOCIMU');
+  // UDC ya tiene serie real (91) → sin guard (ver postDeliveryNoteToSAP).
+  const db = getSapCompanyDb((sapDatabase || 'TEST') as SapDatabase);
   const endpoint = `${SAP_BASE_URL}/delivery-notes/${db}/${docEntry}`;
 
   let response: Response;

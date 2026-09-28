@@ -1134,7 +1134,9 @@ const CampanaRow = React.memo(function CampanaRow({
                 ? (isDark ? 'bg-blue-500/20 text-blue-300' : 'bg-blue-50 text-blue-700') + ' border-blue-500/30'
                 : item.sap_database === 'TEST'
                   ? (isDark ? 'bg-amber-500/20 text-amber-300' : 'bg-amber-50 text-amber-700') + ' border-amber-500/30'
-                  : (isDark ? 'bg-emerald-500/20 text-emerald-300' : 'bg-emerald-50 text-emerald-700') + ' border-emerald-500/30'
+                  : item.sap_database === 'UDC'
+                    ? (isDark ? 'bg-cyan-500/20 text-cyan-300' : 'bg-cyan-50 text-cyan-700') + ' border-cyan-500/30'
+                    : (isDark ? 'bg-emerald-500/20 text-emerald-300' : 'bg-emerald-50 text-emerald-700') + ' border-emerald-500/30'
             }`}>{item.sap_database}</span>
           )}
         </div>
@@ -1420,12 +1422,17 @@ export function CampanasPage() {
   const hasSearch = allSearchTerms.length > 0;
   const needsAllData = activeGroupings.length > 0 || advancedFilters.length > 0;
   // En vista catorcena necesitamos todas las campañas del rango para que la agrupación
-  // por catorcena sea correcta (no podemos paginar y agrupar). 200 se queda corto cuando
-  // hay muchas campañas activas en catorcenas cercanas — usar tope alto.
-  const effectiveLimit = activeView === 'catorcena' ? 50000 : (needsAllData ? 200 : limit);
+  // por catorcena sea correcta (no podemos paginar y agrupar). Lo mismo aplica en
+  // Vista Tabla cuando hay filtros avanzados o agrupación: se evalúan en cliente,
+  // así que el backend debe devolver TODO el universo. Antes se pedían 200 y el
+  // filtro (p.ej. Asesor = X) solo veía las 200 campañas más recientes, dando
+  // conteos distintos entre Tabla y Versionario.
+  const effectiveLimit = (activeView === 'catorcena' || needsAllData) ? 50000 : limit;
   // Tags unidos por '|' — el backend separa por ese delimitador (no espacios)
-  // y aplica AND entre tags. Soporta búsqueda por nombre de campaña,
-  // razon_social, CUIC, marca, código de inventario, etc.
+  // y aplica OR entre tags (cada tag suma resultados). Busca en nombre de
+  // campaña, artículo, marca, cliente, razón social, CUIC, asesor, asignado,
+  // creador, plaza (ciudad del circuito / plaza del inventario) y código de
+  // inventario. Ver buildCampanaSearchCondition en el back.
   const serverSearch = allSearchTerms.length > 0 ? allSearchTerms.join('|') : undefined;
 
   // El listado oculta 'Rechazada' y 'Cancelada' por default. PERO si el usuario
@@ -1521,8 +1528,16 @@ export function CampanasPage() {
   // filters y sort. La búsqueda (search) ya la aplicó el backend sobre todos
   // los campos relevantes (incluye codigo_unico de inventarios via subquery),
   // así que NO se re-filtra cliente-side.
+  // Filtro por BD SAP — aplica a AMBAS vistas (tabla y versionario/catorcena).
+  const [sapDbFilter, setSapDbFilter] = useState<'todas' | 'CIMU' | 'TRADE' | 'TEST' | 'UDC'>('todas');
+
   const filteredData = useMemo(() => {
     let items = data?.data || [];
+
+    // Filter by BD SAP (CIMU/TRADE/UDC/TEST) — versionario y tabla lo respetan.
+    if (sapDbFilter !== 'todas') {
+      items = items.filter(c => (c.sap_database || '').toUpperCase() === sapDbFilter);
+    }
 
     // Filter by catorcena inicio
     if (selectedCatorcenaInicio && items.length > 0) {
@@ -1657,7 +1672,7 @@ export function CampanasPage() {
     }
 
     return items;
-  }, [data?.data, selectedCatorcenaInicio, status, advancedFilters, sortField, sortDirection, campanaInventarios]);
+  }, [data?.data, selectedCatorcenaInicio, status, sapDbFilter, advancedFilters, sortField, sortDirection, campanaInventarios]);
 
   // Recalculate stats from filteredData when client-side filters are active.
   // El search ya viaja al backend y stats lo recibe via queryKey, así que NO
@@ -2463,7 +2478,7 @@ export function CampanasPage() {
   };
 
   const hasPeriodFilter = yearInicio !== undefined && yearFin !== undefined;
-  const hasActiveFilters = !!(status || hasPeriodFilter || activeGroupings.length > 0 || searchTags.length > 0 || selectedCatorcenaInicio || advancedFilters.length > 0 || sortField !== null || apsFilter !== 'todas' || postFilter !== 'todas');
+  const hasActiveFilters = !!(status || hasPeriodFilter || activeGroupings.length > 0 || searchTags.length > 0 || selectedCatorcenaInicio || advancedFilters.length > 0 || sortField !== null || apsFilter !== 'todas' || postFilter !== 'todas' || sapDbFilter !== 'todas');
 
   // Get unique values for each field (for advanced filter dropdowns).
   // Solo se calcula cuando el panel de filtros avanzados está abierto: evita
@@ -3350,7 +3365,7 @@ export function CampanasPage() {
                 ))}
                 <input
                   type="text"
-                  placeholder={searchTags.length === 0 ? 'Buscar campaña, articulo, cliente, código inventario... (Enter para agregar)' : 'Agregar filtro...'}
+                  placeholder={searchTags.length === 0 ? 'Buscar campaña, cliente, asesor, artículo, marca, plaza, código inventario... (Enter para agregar)' : 'Agregar filtro...'}
                   className={`flex-1 min-w-[120px] bg-transparent border-none outline-none text-sm ${isDark ? 'text-white placeholder:text-zinc-500' : 'text-gray-900 placeholder:text-gray-400'}`}
                   value={searchInput}
                   onChange={(e) => setSearchInput(e.target.value)}
@@ -3815,6 +3830,23 @@ export function CampanasPage() {
             <LayoutGrid className="h-4 w-4" />
             Versionario
           </button>
+
+          {/* Filtro por BD SAP — aplica a Vista Tabla y Versionario. UDC solo para roles de Aeropuerto. */}
+          <select
+            value={sapDbFilter}
+            onChange={(e) => setSapDbFilter(e.target.value as typeof sapDbFilter)}
+            title="Filtrar por Base SAP"
+            className={`px-3 py-2.5 rounded-xl text-sm font-medium transition-all border cursor-pointer ${
+              sapDbFilter !== 'todas'
+                ? isDark ? 'bg-purple-500/20 text-purple-300 border-purple-500/40' : 'bg-purple-100 text-purple-700 border-purple-200'
+                : isDark ? 'bg-zinc-800/60 text-zinc-400 border-zinc-700/50 hover:bg-zinc-800 hover:text-zinc-200' : 'bg-gray-100 text-gray-500 border-gray-200 hover:bg-gray-200 hover:text-gray-700'
+            }`}
+          >
+            <option value="todas">Todas las BD</option>
+            <option value="CIMU">CIMU</option>
+            <option value="TRADE">TRADE</option>
+            {permissions.canVerUDC && <option value="UDC">UDC</option>}
+          </select>
         </div>
 
         {/* Info Badge */}

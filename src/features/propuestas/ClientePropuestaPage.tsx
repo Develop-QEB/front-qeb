@@ -23,6 +23,8 @@ import {
   ConOrigen, origenColor, origenTexto, origenDe, tieneOrigen, contarPorOrigen,
   excelFondoOrigen, pdfEstiloCompartir, ORIGEN_COLOR, ORIGEN_LABEL, ORIGEN_LEYENDA, PDF_ORIGEN_FONDO,
 } from './origenReserva';
+import { UdcReservadosTable } from './UdcReservadosTable';
+import type { InventarioReservado as SvcInventarioReservado } from '../../services/propuestas.service';
 
 // Config UNICA de Google Maps (mismo id/key/libraries en toda la app) para
 // que el script se inyecte una sola vez. Ver src/config/googleMaps.ts.
@@ -284,6 +286,10 @@ export function ClientePropuestaPage() {
 
   const inventario = data?.inventario || [];
   const tipoPeriodo = (data?.cotizacion as any)?.tipo_periodo || 'catorcena';
+  // UDC (aeropuerto AICM): el payload público no trae sap_database, así que lo
+  // detectamos por el inventario (plaza AICM). En UDC se muestra la ficha técnica
+  // (UdcReservadosTable) y se oculta el mapa de ubicaciones (sin geo).
+  const esUDC = inventario.length > 0 && inventario.some(i => (i.plaza || '').toUpperCase() === 'AICM');
 
   // Leyenda de contexto: la decide el punto de entrada — el enlace compartido
   // desde Campañas trae ?ctx=campana ("Circuitos Confirmados"); sin él, es una
@@ -965,9 +971,12 @@ export function ClientePropuestaPage() {
             </div>
           </div>
           <div className="flex items-center gap-2">
+            {/* UDC (aeropuerto): sin KML */}
+            {!esUDC && (
             <button onClick={handleDownloadKML} className={`flex items-center gap-2 px-4 py-2 border rounded-lg text-sm font-medium shadow-sm transition-colors ${isDark ? 'bg-zinc-800 hover:bg-zinc-700 text-zinc-300 border-zinc-700' : 'bg-white hover:bg-gray-50 text-gray-700 border-gray-300'}`}>
               <MapIcon className="h-4 w-4" /> KML
             </button>
+            )}
             <button onClick={handleGeneratePDF} className="flex items-center gap-2 px-4 py-2 bg-[#0054A6] hover:bg-[#003B71] text-white rounded-lg text-sm font-medium shadow-sm transition-colors">
               <FileText className="h-4 w-4" /> PDF
             </button>
@@ -1112,8 +1121,17 @@ export function ClientePropuestaPage() {
           ))}
         </div>
 
-        {/* Resumen de Caras - Tabla principal */}
-        <div className={`rounded-2xl shadow-sm border overflow-hidden ${isDark ? 'bg-zinc-800 border-zinc-700' : 'bg-white border-gray-200'}`}>
+        {/* UDC: ficha técnica de reservados (misma tabla que la vista interna) */}
+        {esUDC && (
+          <UdcReservadosTable
+            items={filteredInventario as unknown as SvcInventarioReservado[]}
+            isDark={false}
+            tipoPeriodo={tipoPeriodo}
+          />
+        )}
+
+        {/* Resumen de Caras - Tabla principal (oculto en UDC) */}
+        <div className={`rounded-2xl shadow-sm border overflow-hidden ${esUDC ? 'hidden' : ''} ${isDark ? 'bg-zinc-800 border-zinc-700' : 'bg-white border-gray-200'}`}>
           {/* Toolbar */}
           <div className={`px-5 py-4 border-b ${isDark ? 'border-zinc-700 bg-zinc-800/50' : 'border-gray-200 bg-gradient-to-r from-[#0054A6]/5 to-[#7AB800]/5'}`}>
             <div className="flex items-center justify-between mb-3">
@@ -1484,8 +1502,8 @@ export function ClientePropuestaPage() {
           </div>
         </div>
 
-        {/* Map */}
-        <div className="bg-white rounded-2xl shadow-sm border border-gray-200 overflow-hidden">
+        {/* Map (oculto en UDC: aeropuerto sin geolocalización) */}
+        <div className={`bg-white rounded-2xl shadow-sm border border-gray-200 overflow-hidden ${esUDC ? 'hidden' : ''}`}>
           <div className="p-4 border-b border-gray-200 flex items-center gap-4 bg-gray-50">
             <MapIcon className="h-5 w-5 text-[#0054A6]" />
             <h3 className="text-lg font-semibold text-[#0054A6]">Mapa de Ubicaciones</h3>

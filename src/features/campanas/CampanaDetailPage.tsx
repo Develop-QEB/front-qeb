@@ -19,7 +19,25 @@ import { getPermissions } from '../../lib/permissions';
 import { useSocketCampana } from '../../hooks/useSocket';
 import { NotasDireccionBitacora } from '../notificaciones/NotasDireccionBitacora';
 import { DesposteoModal } from '../desposteo/DesposteoModal';
-import { puedeSolicitarDesposteo, puedeBypassearDesposteo } from '../../services/desposteo.service';
+import { puedeSolicitarDesposteo, puedeBypassearDesposteo, esRolTIDesposteo, desposteoService, EstadoAps } from '../../services/desposteo.service';
+import { udcFichaDe } from '../../lib/udc';
+
+// Mini-preview (cuadrito cyan con el aspect-ratio real de la pantalla) para las
+// listas UDC del aeropuerto. Solo se pinta si el código corresponde a una
+// pantalla UDC (udcFichaDe la encuentra); si no, no renderiza nada.
+function UdcPreview({ codigo }: { codigo?: string | null }) {
+  const f = udcFichaDe(codigo);
+  if (!f || !f.ancho || !f.alto) return null;
+  const BW = 40, BH = 24;
+  const ratio = f.ancho / f.alto;
+  let w = BW, h = BW / ratio;
+  if (h > BH) { h = BH; w = BH * ratio; }
+  return (
+    <span className="inline-flex items-center justify-center shrink-0" style={{ width: BW, height: BH }} title={`${f.ancho} × ${f.alto}px · ${f.duracion} seg`}>
+      <span className="rounded-[2px] bg-gradient-to-br from-cyan-400 to-cyan-600 ring-1 ring-cyan-300/40 shadow-sm" style={{ width: Math.max(6, w), height: Math.max(5, h) }} />
+    </span>
+  );
+}
 
 const statusVariants: Record<string, 'secondary' | 'success' | 'warning' | 'info'> = {
   Aprobada: 'success',
@@ -549,6 +567,46 @@ function fmtMoney(n: number): string {
   return `$${n.toLocaleString('es-MX', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 }
 
+// Badge para el estado de solicitud desposteo por APS. Se muestra a todos los
+// roles en el listado con APS — la accion (Cancelar POST) sigue reservada a TI.
+function DesposteoBadge({ estado }: { estado: EstadoAps | undefined }) {
+  if (!estado) return null;
+  // aprobado = listo para TI = mas prominente
+  const cfg: Record<EstadoAps['estatus'], { label: string; cls: string; title: string }> = {
+    solicitado: {
+      label: 'DESPOSTEO SOLICITADO',
+      cls: 'bg-amber-500/20 text-amber-300 border-amber-500/30',
+      title: 'Solicitud de desposteo enviada al gerente comercial',
+    },
+    filtro_aprobado: {
+      label: 'DESPOSTEO EN FACTURACION',
+      cls: 'bg-blue-500/20 text-blue-300 border-blue-500/30',
+      title: 'Gerente comercial dio check, esperando aprobacion de Facturacion',
+    },
+    aprobado: {
+      label: 'LISTO PARA DESPOSTEAR',
+      cls: 'bg-emerald-500/25 text-emerald-200 border-emerald-500/40 animate-pulse',
+      title: 'Facturacion aprobo. TI puede cancelar el POST.',
+    },
+    ejecutado: {
+      label: 'DESPOSTEADO',
+      cls: 'bg-zinc-500/20 text-zinc-300 border-zinc-500/30',
+      title: 'El POST ya se cancelo tras autorizacion.',
+    },
+    rechazado: {
+      label: 'DESPOSTEO RECHAZADO',
+      cls: 'bg-red-500/20 text-red-300 border-red-500/30',
+      title: 'La solicitud fue rechazada.',
+    },
+  };
+  const c = cfg[estado.estatus];
+  return (
+    <span title={c.title} className={`text-[9px] font-semibold px-1 py-0.5 rounded border shrink-0 cursor-help ${c.cls}`}>
+      {c.label}
+    </span>
+  );
+}
+
 function GroupSummaryInline({ items, groupField, isDark: isDarkProp }: { items: InventarioReservado[]; groupField: string; isDark?: boolean }) {
   const isDark = isDarkProp ?? (useThemeStore((s) => s.theme) === 'dark');
   if (groupField === 'aps') return null;
@@ -607,6 +665,7 @@ function renderReservadoCell(item: InventarioReservado, col: TableColumn, p = 'p
   if (col.field === 'codigo_unico') return (
     <td key={col.field} className={`${p} ${isDark ? 'text-white' : 'text-gray-900'} font-medium`}>
       <div className="flex items-center gap-1.5">
+        <UdcPreview codigo={item.codigo_unico} />
         {item.codigo_unico || '-'}
         {item.estatus_inventario === 'Bloqueado' && (
           <span className="px-1.5 py-0.5 rounded text-[9px] font-semibold bg-red-500/20 text-red-400 border border-red-500/30">Bloqueado</span>
@@ -638,7 +697,11 @@ function renderReservadoCell(item: InventarioReservado, col: TableColumn, p = 'p
   }
   if (col.field === 'latitud') return <td key={col.field} className={`${p} ${isDark ? 'text-zinc-500' : 'text-gray-400'} font-mono text-[10px]`}>{item.latitud != null ? item.latitud.toFixed(5) : '-'}</td>;
   if (col.field === 'longitud') return <td key={col.field} className={`${p} ${isDark ? 'text-zinc-500' : 'text-gray-400'} font-mono text-[10px]`}>{item.longitud != null ? item.longitud.toFixed(5) : '-'}</td>;
-  if (col.field === 'medidas') return <td key={col.field} className={`${p} ${isDark ? 'text-zinc-400' : 'text-gray-500'} text-[10px]`}>{item.ancho && item.alto ? `${item.ancho}×${item.alto}` : '-'}</td>;
+  if (col.field === 'medidas') {
+    const f = udcFichaDe(item.codigo_unico);
+    const anchoM = item.ancho || f?.ancho; const altoM = item.alto || f?.alto;
+    return <td key={col.field} className={`${p} ${isDark ? 'text-zinc-400' : 'text-gray-500'} text-[10px]`}>{anchoM && altoM ? `${anchoM}×${altoM}` : '-'}</td>;
+  }
   const value = item[col.field as keyof InventarioReservado];
   return <td key={col.field} className={`${p} ${isDark ? 'text-zinc-300' : 'text-gray-700'}`}>{value !== null && value !== undefined ? String(value) : '-'}</td>;
 }
@@ -1076,6 +1139,10 @@ export function CampanaDetailPage() {
     placeholderData: (prev) => prev, // evita parpadeo al refrescar
   });
 
+  // UDC (aeropuerto): sin geolocalización → en los paneles Sin APS / Con APS se
+  // oculta el mapa y la lista ocupa todo el ancho (con la ficha de la pantalla).
+  const esUDC = (campana?.sap_database || '').toUpperCase() === 'UDC';
+
   // Inicializar alreadyPosted, postedAPSGroups y prefacturaAPSGroups desde la DB
   useEffect(() => {
     if (campana?.posted_to_sap) setAlreadyPosted(true);
@@ -1109,6 +1176,15 @@ export function CampanaDetailPage() {
     }
     return map;
   }, [postLog]);
+
+  // Estados de desposteo por APS — para pintar badges "en curso" / "listo TI"
+  // en el listado con APS. Se muestra a todos los roles; solo TI puede accionar.
+  const { data: estadosDesposteoAps = {} } = useQuery({
+    queryKey: ['desposteo-estados-aps', campanaId],
+    queryFn: () => desposteoService.estadosAps(campanaId),
+    staleTime: 1000 * 30,
+    placeholderData: (prev) => prev,
+  });
 
   const { data: inventarioConAPS = [], isLoading: isLoadingAPS, error: errorAPS, refetch: refetchAPS } = useQuery({
     queryKey: ['campana-inventario-aps', campanaId],
@@ -2548,6 +2624,7 @@ export function CampanaDetailPage() {
                     campana.sap_database === 'CIMU' ? (isDark ? 'bg-blue-500/20 text-blue-300 border-blue-500/30' : 'bg-blue-50 text-blue-700 border-blue-200') :
                     campana.sap_database === 'TEST' ? (isDark ? 'bg-amber-500/20 text-amber-300 border-amber-500/30' : 'bg-amber-50 text-amber-700 border-amber-200') :
                     campana.sap_database === 'TRADE' ? (isDark ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500/30' : 'bg-emerald-50 text-emerald-700 border-emerald-200') :
+                    campana.sap_database === 'UDC' ? (isDark ? 'bg-cyan-500/20 text-cyan-300 border-cyan-500/30' : 'bg-cyan-50 text-cyan-700 border-cyan-200') :
                     (isDark ? 'bg-zinc-500/20 text-zinc-300 border-zinc-500/30' : 'bg-gray-100 text-gray-700 border-gray-200')
                   }`}>{campana.sap_database}</span>
                 </div>
@@ -2768,9 +2845,9 @@ export function CampanaDetailPage() {
               )}
             </div>
           </div>
-          <div className="grid grid-cols-1 lg:grid-cols-[1fr_2fr] gap-3 md:gap-4 p-3 md:p-4">
-            {/* Columna izquierda: Mapa */}
-            <div className={`h-[280px] sm:h-[320px] md:h-[360px] lg:h-[400px] rounded-lg overflow-hidden border border-border relative ${isDark ? 'map-dark-controls' : ''}`}>
+          <div className={`grid ${esUDC ? 'grid-cols-1' : 'grid-cols-1 lg:grid-cols-[1fr_2fr]'} gap-3 md:gap-4 p-3 md:p-4`}>
+            {/* Columna izquierda: Mapa (oculto en UDC: aeropuerto sin geo) */}
+            <div className={`h-[280px] sm:h-[320px] md:h-[360px] lg:h-[400px] rounded-lg overflow-hidden border border-border relative ${esUDC ? 'hidden' : ''} ${isDark ? 'map-dark-controls' : ''}`}>
               {!isLoaded || isLoadingInventario ? (
                 <MapSkeleton />
               ) : errorInventario ? (
@@ -4159,21 +4236,41 @@ export function CampanaDetailPage() {
                   <span className={`text-[10px] sm:text-xs font-medium ${isDark ? 'text-rose-300' : 'text-rose-700'}`}>Solicitar desposteo</span>
                 </button>
               )}
-              {(permissions.canCancelPostSAP || user?.area === 'TI') && inventarioConAPS.length > 0 && (
-                <button
-                  onClick={() => { setCancelPostSAPResult(null); setShowCancelPostSAPModal(true); }}
-                  className={`flex items-center justify-center px-2 sm:px-3 py-1 sm:py-1.5 rounded-lg border transition-colors ${isDark ? 'bg-red-900/30 border-red-500/20 hover:bg-red-500/20 hover:border-red-500/40' : 'bg-red-50 border-red-200 hover:bg-red-100'}`}
-                  title={puedeBypassearDesposteo(user?.rol) ? 'Cancelar POST a SAP (DEV/Admin: bypass sin solicitud aprobada)' : 'Cancelar POST a SAP - requiere solicitud de desposteo aprobada'}
-                >
-                  <XCircle className={`h-3 sm:h-3.5 w-3 sm:w-3.5 mr-1 ${isDark ? 'text-red-400' : 'text-red-600'}`} />
-                  <span className={`text-[10px] sm:text-xs font-medium ${isDark ? 'text-red-300' : 'text-red-700'}`}>Cancelar POST</span>
-                </button>
-              )}
+              {/* Cancelar POST — visible solo para Admin/DEV (bypass emergencia)
+                  y roles TI. Para TI, deshabilitado si no hay ningun APS con
+                  desposteo aprobado por Facturacion. Feedback Jos: cualquier
+                  otro rol no debe ver el boton (aunque el back siempre valida). */}
+              {(puedeBypassearDesposteo(user?.rol) || esRolTIDesposteo(user?.rol)) && inventarioConAPS.length > 0 && (() => {
+                const isTI = esRolTIDesposteo(user?.rol) && !puedeBypassearDesposteo(user?.rol);
+                const hayApsAprobado = Object.values(estadosDesposteoAps).some(e => e.estatus === 'aprobado');
+                const tiBloqueado = isTI && !hayApsAprobado;
+                return (
+                  <button
+                    onClick={() => { if (tiBloqueado) return; setCancelPostSAPResult(null); setShowCancelPostSAPModal(true); }}
+                    disabled={tiBloqueado}
+                    className={`flex items-center justify-center px-2 sm:px-3 py-1 sm:py-1.5 rounded-lg border transition-colors ${
+                      tiBloqueado
+                        ? (isDark ? 'bg-red-900/10 border-red-500/10 opacity-50 cursor-not-allowed' : 'bg-red-50/50 border-red-100 opacity-50 cursor-not-allowed')
+                        : (isDark ? 'bg-red-900/30 border-red-500/20 hover:bg-red-500/20 hover:border-red-500/40' : 'bg-red-50 border-red-200 hover:bg-red-100')
+                    }`}
+                    title={
+                      puedeBypassearDesposteo(user?.rol)
+                        ? 'Cancelar POST a SAP (Admin/DEV: bypass sin solicitud aprobada, queda auditado)'
+                        : tiBloqueado
+                          ? 'No hay ningun APS con desposteo aprobado por Facturacion. Espera la autorizacion para poder cancelar.'
+                          : 'Cancelar POST a SAP — requiere solicitud de desposteo aprobada'
+                    }
+                  >
+                    <XCircle className={`h-3 sm:h-3.5 w-3 sm:w-3.5 mr-1 ${isDark ? 'text-red-400' : 'text-red-600'}`} />
+                    <span className={`text-[10px] sm:text-xs font-medium ${isDark ? 'text-red-300' : 'text-red-700'}`}>Cancelar POST</span>
+                  </button>
+                );
+              })()}
             </div>
           </div>
-          <div className="grid grid-cols-1 lg:grid-cols-[1fr_2fr] gap-3 md:gap-4 p-3 md:p-4">
-            {/* Columna izquierda: Mapa */}
-            <div className={`h-[280px] sm:h-[320px] md:h-[360px] lg:h-[400px] rounded-lg overflow-hidden border border-border relative ${isDark ? 'map-dark-controls' : ''}`}>
+          <div className={`grid ${esUDC ? 'grid-cols-1' : 'grid-cols-1 lg:grid-cols-[1fr_2fr]'} gap-3 md:gap-4 p-3 md:p-4`}>
+            {/* Columna izquierda: Mapa (oculto en UDC: aeropuerto sin geo) */}
+            <div className={`h-[280px] sm:h-[320px] md:h-[360px] lg:h-[400px] rounded-lg overflow-hidden border border-border relative ${esUDC ? 'hidden' : ''} ${isDark ? 'map-dark-controls' : ''}`}>
               {!isLoaded || isLoadingAPS ? (
                 <MapSkeleton />
               ) : errorAPS ? (
@@ -4796,6 +4893,7 @@ export function CampanaDetailPage() {
                               const sapCls = log.sap_database === 'CIMU' ? 'bg-blue-500/20 text-blue-300 border-blue-500/30'
                                 : log.sap_database === 'TEST' ? 'bg-amber-500/20 text-amber-300 border-amber-500/30'
                                 : log.sap_database === 'TRADE' ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500/30'
+                                : log.sap_database === 'UDC' ? 'bg-cyan-500/20 text-cyan-300 border-cyan-500/30'
                                 : 'bg-zinc-500/20 text-zinc-300 border-zinc-500/30';
                               return (
                                 <>
@@ -4828,6 +4926,9 @@ export function CampanaDetailPage() {
                             })()}
                             {activeGroupingsAPS[0] === 'aps' && allGroupItemsAPS[0] && prefacturaAPSGroups.has(allGroupItemsAPS[0].aps) && (
                               <span className="text-[9px] font-semibold px-1 py-0.5 rounded bg-amber-500/20 text-amber-400 border border-amber-500/30 shrink-0">PRE FACTURA</span>
+                            )}
+                            {activeGroupingsAPS[0] === 'aps' && allGroupItemsAPS[0] && (
+                              <DesposteoBadge estado={estadosDesposteoAps[allGroupItemsAPS[0].aps]} />
                             )}
                             <GroupSummaryInline items={allGroupItemsAPS} groupField={activeGroupingsAPS[0]} />
                             <span className="ml-auto text-[10px] text-muted-foreground shrink-0">
@@ -4982,6 +5083,9 @@ export function CampanaDetailPage() {
                                           {activeGroupingsAPS[1] === 'aps' && allSubItemsAPS[0] && prefacturaAPSGroups.has(allSubItemsAPS[0].aps) && (
                                             <span className="text-[9px] font-semibold px-1 py-0.5 rounded bg-amber-500/20 text-amber-400 border border-amber-500/30 shrink-0">PRE FACTURA</span>
                                           )}
+                                          {activeGroupingsAPS[1] === 'aps' && allSubItemsAPS[0] && (
+                                            <DesposteoBadge estado={estadosDesposteoAps[allSubItemsAPS[0].aps]} />
+                                          )}
                                           <GroupSummaryInline items={allSubItemsAPS} groupField={activeGroupingsAPS[1]} />
                                           <span className="ml-auto text-[10px] text-muted-foreground shrink-0">
                                             {subTotalItems}
@@ -5129,6 +5233,9 @@ export function CampanaDetailPage() {
                                                         )}
                                                         {activeGroupingsAPS[2] === 'aps' && thirdItems[0] && prefacturaAPSGroups.has(thirdItems[0].aps) && (
                                                           <span className="text-[9px] font-semibold px-1 py-0.5 rounded bg-amber-500/20 text-amber-400 border border-amber-500/30 shrink-0">PRE FACTURA</span>
+                                                        )}
+                                                        {activeGroupingsAPS[2] === 'aps' && thirdItems[0] && (
+                                                          <DesposteoBadge estado={estadosDesposteoAps[thirdItems[0].aps]} />
                                                         )}
                                                         <GroupSummaryInline items={thirdItems} groupField={activeGroupingsAPS[2]} />
                                                         <span className="ml-auto text-[10px] text-muted-foreground shrink-0">
@@ -5700,6 +5807,7 @@ export function CampanaDetailPage() {
         const sapCls = p.sap_database === 'CIMU' ? 'bg-blue-500/20 text-blue-300 border-blue-500/30'
           : p.sap_database === 'TEST' ? 'bg-amber-500/20 text-amber-300 border-amber-500/30'
           : p.sap_database === 'TRADE' ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500/30'
+          : p.sap_database === 'UDC' ? 'bg-cyan-500/20 text-cyan-300 border-cyan-500/30'
           : 'bg-zinc-500/20 text-zinc-300 border-zinc-500/30';
         const row = (label: string, value: React.ReactNode) => (
           <div className="flex justify-between gap-4 py-1.5 border-t border-border first:border-t-0">

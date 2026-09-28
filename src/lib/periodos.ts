@@ -3,6 +3,8 @@
 //   - 'catorcena': shows "Cat 8 / 2026"
 //   - 'mensual': shows "Abril 2026" (long) / "Abr 2026" (short)
 
+import { esArticuloUDC } from './udc';
+
 export const MESES_LARGO = ['Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio', 'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre'];
 export const MESES_CORTO = ['Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun', 'Jul', 'Ago', 'Sep', 'Oct', 'Nov', 'Dic'];
 
@@ -98,7 +100,9 @@ export function groupPeriodoLabel(
 // Unipolares, Bajo Puentes) es MENSUAL; PB/Columna y todo lo demás es catorcenal.
 // Se usa para filtrar el dropdown de artículos por el periodo de la solicitud/
 // propuesta/campaña (mensual → solo Gran Formato; catorcena → excluye Gran Formato).
-export function getRequiredPeriodoForArticulo(itemName: string): 'catorcena' | 'mensual' {
+export function getRequiredPeriodoForArticulo(itemName: string, itemCode?: string): 'catorcena' | 'mensual' {
+  // UDC (aeropuerto AICM): todo es MENSUAL. Se detecta por código o nombre.
+  if (esArticuloUDC(itemCode, itemName)) return 'mensual';
   if (!itemName) return 'catorcena';
   const name = itemName.toUpperCase();
   if (name.includes('KIOSCO') || name.includes('KIOSKO')) return 'mensual';

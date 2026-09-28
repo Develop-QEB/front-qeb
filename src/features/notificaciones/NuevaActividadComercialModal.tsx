@@ -49,7 +49,7 @@ export function NuevaActividadComercialModal({ isOpen, onClose }: Props) {
   const [anio, setAnio] = useState<string>('');
   const [catorcena, setCatorcena] = useState<string>('');
   const [estatusActividad, setEstatusActividad] = useState<'' | 'Abierto' | 'Cerrado'>('');
-  const [base, setBase] = useState<'' | 'CIMU' | 'TRADE'>('');
+  const [base, setBase] = useState<'' | 'CIMU' | 'TRADE' | 'UDC'>('');
 
   const debouncedSearch = useDebounced(search, 300);
 
@@ -393,11 +393,12 @@ export function NuevaActividadComercialModal({ isOpen, onClose }: Props) {
                 <select
                   className={inputCls}
                   value={base}
-                  onChange={(e) => setBase(e.target.value as '' | 'CIMU' | 'TRADE')}
+                  onChange={(e) => setBase(e.target.value as '' | 'CIMU' | 'TRADE' | 'UDC')}
                 >
                   <option value="">—</option>
                   <option value="CIMU">CIMU</option>
                   <option value="TRADE">TRADE</option>
+                  <option value="UDC">UDC</option>
                 </select>
               </div>
             </div>

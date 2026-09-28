@@ -246,6 +246,7 @@ export interface Propuesta {
   cuic?: number | null;
   campania_id?: number | null;
   campania_status?: string | null;
+  sap_database?: string | null;
 }
 
 export interface PropuestaStats {

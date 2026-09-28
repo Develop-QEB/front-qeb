@@ -1,13 +1,16 @@
 import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useState, useMemo, useRef, useCallback, memo } from 'react';
 import {
   ArrowLeft, Share2, Download, FileText, Map as MapIcon, Copy, Check, Loader2,
   ChevronDown, ChevronRight, Filter, ArrowUpDown, Layers, FileSpreadsheet, ExternalLink, X, Maximize2, Eye, EyeOff
 } from 'lucide-react';
-import { GoogleMap, useLoadScript, Marker, Circle, Autocomplete, InfoWindow } from '@react-google-maps/api';
+import { GoogleMap, useLoadScript, Marker, InfoWindow } from '@react-google-maps/api';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell } from 'recharts';
 import { propuestasService, InventarioReservado, PropuestaFullDetails } from '../../services/propuestas.service';
+import { UdcReservadosTable } from './UdcReservadosTable';
+import { UdcMapaAeropuerto } from './UdcMapaAeropuerto';
+import { udcFichaImg, udcFichaDe, udcMapaCoord } from '../../lib/udc';
 import { formatCurrency, formatDate } from '../../lib/utils';
 import { toNum } from '../../utils/excelFormat';
 import { descargarExcelCompartir, FMT_COORD } from '../../utils/excelCompartir';
@@ -28,6 +31,16 @@ import {
 // Config UNICA de Google Maps (mismo id/key/libraries en toda la app) para
 // que el script se inyecte una sola vez. Ver src/config/googleMaps.ts.
 import { GOOGLE_MAPS_LOADER_OPTIONS } from '../../config/googleMaps';
+// Capas de POI / poligonos con las que Trafico armo cada circuito (Buscador de
+// Formatos -> capasMapa.ts). Vista interna: llegan TODAS, incluidas las que
+// Trafico oculto al cliente; aqui se pueden mostrar/ocultar y borrar.
+import { capasMapaService } from '../../services/capasMapa.service';
+import { CapaMapa, boundsDeCapas } from './capasMapa';
+import { CapasMapaPanel } from './CapasMapaPanel';
+import { CapasMapaOverlay } from './CapasMapaOverlay';
+// Buscador de POI libre (misma busqueda por area que el Buscador de Formatos).
+import { PoiBuscadorMapa, PoiMapaOverlay } from './PoiBuscadorMapa';
+import type { POIEncontrado } from './poiBusqueda';
 
 // Purple Brand Colors for Compartir
 const PURPLE_PRIMARY = '#8B5CF6';
@@ -44,13 +57,6 @@ const DARK_MAP_STYLES = [
   { featureType: 'road', elementType: 'geometry', stylers: [{ color: '#2d2d44' }] },
   { featureType: 'water', elementType: 'geometry', stylers: [{ color: '#0f0f1a' }] },
 ];
-
-interface POIMarker {
-  id: string;
-  position: { lat: number; lng: number };
-  name: string;
-  range: number;
-}
 
 // Helper functions
 const MESES_LABEL = ['Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio', 'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre'];
@@ -295,7 +301,6 @@ export function CompartirPropuestaPage() {
   const isDark = useThemeStore((s) => s.theme) === 'dark';
   const propuestaId = id ? parseInt(id, 10) : 0;
   const mapRef = useRef<google.maps.Map | null>(null);
-  const autocompleteRef = useRef<google.maps.places.Autocomplete | null>(null);
 
   // States
   const [copied, setCopied] = useState(false);
@@ -315,15 +320,18 @@ export function CompartirPropuestaPage() {
   const [showFilters, setShowFilters] = useState(false);
 
   // POI states
-  const [poiMarkers, setPoiMarkers] = useState<POIMarker[]>([]);
+  const [poiMarkers, setPoiMarkers] = useState<POIEncontrado[]>([]);
   const [searchRange, setSearchRange] = useState(300);
-  const [poiSearch, setPoiSearch] = useState('');
   const [selectedMarker, setSelectedMarker] = useState<InventarioReservado | null>(null);
   // El mapa embebido pinta un marker por inventario (miles en propuestas grandes) y es
   // lo más pesado de la página. Colapsado por default: así los checkboxes van fluidos y
   // el mapa solo se monta cuando el usuario lo pide. ("Ver Mapa"/"Expandir Mapa" siguen
   // abriendo el visor completo aparte.)
   const [showMap, setShowMap] = useState(false);
+  // Capas de Trafico prendidas en el mapa (nacen apagadas: son "activables").
+  const [capasActivas, setCapasActivas] = useState<Set<number>>(new Set());
+  const [capaOcupadaId, setCapaOcupadaId] = useState<number | null>(null);
+  const queryClient = useQueryClient();
 
   // Google Maps
   const { isLoaded } = useLoadScript(GOOGLE_MAPS_LOADER_OPTIONS);
@@ -341,7 +349,18 @@ export function CompartirPropuestaPage() {
     enabled: propuestaId > 0,
   });
 
+  // Capas por circuito (solicitud_caras_id). Como todo se resuelve por la
+  // propuesta (idquote), sirven igual para la campaña (?ctx=campana).
+  const { data: capas = [] } = useQuery({
+    queryKey: ['capas-mapa', propuestaId],
+    queryFn: () => capasMapaService.listarPorPropuesta(propuestaId),
+    enabled: propuestaId > 0,
+  });
+
   const tipoPeriodo = (details?.cotizacion as any)?.tipo_periodo || 'catorcena';
+  // UDC (aeropuerto AICM): sin geolocalización → en compartir se oculta el
+  // "Resumen de Circuitos" + mapa y se muestra la ficha técnica de reservados.
+  const esUDC = ((details?.propuesta as any)?.sap_database || (details?.solicitud as any)?.sap_database || '').toString().toUpperCase() === 'UDC';
 
   // Leyenda de contexto: la misma vista sirve para compartir desde PROPUESTAS
   // ("Circuitos Muestra") y desde CAMPAÑAS ("Circuitos Confirmados"). La decide
@@ -414,6 +433,60 @@ export function CompartirPropuestaPage() {
   // "Expandir Mapa" (visor aparte), que sí muestra todo sin selección.
   const MAX_PINES_INLINE = 2000;
   const demasiadosPines = selectedItems.size === 0 && visibleMarkers.length > MAX_PINES_INLINE;
+
+  // ---- Capas de Trafico ----
+  // Circuitos con inventario en el alcance actual (chips de catorcena): las
+  // capas de circuitos fuera se atenúan en el panel. Nombre legible por circuito.
+  const circuitosVisibles = useMemo(() => {
+    const s = new Set<number>();
+    catorcenaFilteredInventario.forEach(i => { if (i.solicitud_caras_id) s.add(i.solicitud_caras_id); });
+    return s;
+  }, [catorcenaFilteredInventario]);
+  const nombreCircuito = useCallback((scId: number): string | null => {
+    const item = (inventario || []).find(i => i.solicitud_caras_id === scId);
+    if (!item) return null;
+    return [item.articulo, item.formato || item.mueble].filter(Boolean).join(' · ') || null;
+  }, [inventario]);
+  // Al prender una capa se encuadra el mapa para que se vea (si esta montado).
+  const handleToggleCapa = (id: number) => {
+    const capa = capas.find(c => c.id === id);
+    if (capa && !capasActivas.has(id) && mapRef.current) {
+      const b = boundsDeCapas([capa]);
+      if (b) mapRef.current.fitBounds(b, 60);
+    }
+    setCapasActivas(prev => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id); else next.add(id);
+      return next;
+    });
+  };
+  const toggleTodasCapas = (activar: boolean) => {
+    setCapasActivas(activar ? new Set(capas.map(c => c.id)) : new Set());
+  };
+  const handleCambiarVisibleCapa = async (capa: CapaMapa, visible: boolean) => {
+    setCapaOcupadaId(capa.id);
+    try {
+      await capasMapaService.actualizar(capa.id, { visibleCliente: visible });
+      await queryClient.invalidateQueries({ queryKey: ['capas-mapa', propuestaId] });
+    } catch (err) {
+      window.alert(err instanceof Error ? err.message : 'No se pudo actualizar la capa');
+    } finally {
+      setCapaOcupadaId(null);
+    }
+  };
+  const handleEliminarCapa = async (capa: CapaMapa) => {
+    if (!window.confirm(`¿Eliminar la capa "${capa.nombre}"?\n\nDejará de verse aquí y en el link del cliente. El circuito no cambia.`)) return;
+    setCapaOcupadaId(capa.id);
+    try {
+      await capasMapaService.eliminar(capa.id);
+      setCapasActivas(prev => { const next = new Set(prev); next.delete(capa.id); return next; });
+      await queryClient.invalidateQueries({ queryKey: ['capas-mapa', propuestaId] });
+    } catch (err) {
+      window.alert(err instanceof Error ? err.message : 'No se pudo eliminar la capa');
+    } finally {
+      setCapaOcupadaId(null);
+    }
+  };
 
   // Map center (responds to catorcena filter)
   const mapCenter = useMemo(() => {
@@ -632,7 +705,7 @@ export function CompartirPropuestaPage() {
     if (source.length === 0) return;
     // codigo_unico (completo) va ANTES de Clave (que es solo el prefijo).
     // "Estado" marca las piezas no vigentes (ademas la fila va en gris).
-    const headers = ['codigo_unico', 'Clave', 'Plaza', 'Ubicación', 'Tipo de Cara', 'Formato', 'Tipo Inventario', 'Periodo', 'Lat', 'Long', 'Estado', ...(mostrarOrigen ? ['Origen'] : []), 'NOTAS'];
+    const headers = ['codigo_unico', 'Clave', 'Plaza', 'Ubicación', 'Formato', 'Tipo Inventario', 'Periodo', 'Lat', 'Long', 'Estado', ...(mostrarOrigen ? ['Origen'] : []), 'NOTAS'];
     const byPlaza: Record<string, InventarioReservado[]> = {};
     for (const i of source) {
       const plaza = i.plaza || 'Sin Plaza';
@@ -656,7 +729,6 @@ export function CompartirPropuestaPage() {
           (i.codigo_unico || '').split('_')[0],
           i.plaza || '',
           i.ubicacion || '',
-          i.tipo_de_cara || '',
           i.mueble || '',
           i.tradicional_digital || '',
           formatInicioPeriodo(i, tipoPeriodo),
@@ -668,7 +740,9 @@ export function CompartirPropuestaPage() {
         ],
       })),
       // Lat (col 8) y Long (col 9) como celdas tipo número
-      formatos: { 8: FMT_COORD, 9: FMT_COORD },
+      // Lat (7) y Long (8) como celdas tipo número. Corridos una posición al
+      // quitar "Tipo de Cara".
+      formatos: { 7: FMT_COORD, 8: FMT_COORD },
     }));
     const sufijo = selectedItems.size > 0 ? '_seleccion' : '';
     const notaPie = mostrarOrigen ? `${NO_VIGENTE_LEYENDA}  ·  ${ORIGEN_LEYENDA}` : NO_VIGENTE_LEYENDA;
@@ -1164,6 +1238,20 @@ export function CompartirPropuestaPage() {
       }
     }
 
+    // UDC: precargar las fichas técnicas (imágenes) para incrustarlas en el PDF,
+    // y un índice de la ficha por nombre de pantalla (para los datos básicos).
+    const fichaImgCache = new Map<string, HTMLImageElement>();
+    if (esUDC && inventario && inventario.length > 0) {
+      const urls = new Set<string>();
+      inventario.forEach(it => { const u = udcFichaImg(it.codigo_unico); if (u) urls.add(u); });
+      await Promise.all(Array.from(urls).map(u => new Promise<void>(resolve => {
+        const img = new Image();
+        img.onload = () => { fichaImgCache.set(u, img); resolve(); };
+        img.onerror = () => resolve();
+        img.src = u;
+      })));
+    }
+
     // Table grouped by Catorcena > Artículo (separate rows)
     if (inventario && inventario.length > 0) {
       // Group by catorcena first, then by articulo
@@ -1207,17 +1295,95 @@ export function CompartirPropuestaPage() {
           doc.setFont('helvetica', 'bold');
           doc.setTextColor(...WHITE);
           const groupTarifaUnit = items.length > 0 ? tarifaBruta(items[0]) : 0;
-          doc.text(`${articulo}`, marginX + 10, y + 4);
+          // La barra verde identifica al grupo por PLAZA y FORMATO, no por
+          // artículo: el artículo es nomenclatura interna y no le dice nada al
+          // cliente. Un grupo puede abarcar varias plazas o formatos, así que se
+          // listan los distintos y se recorta para no chocar con los totales de
+          // la derecha. Si por algún motivo no hay ninguno, cae al artículo.
+          const etiquetaDe = (vals: (string | null)[]) => [...new Set(vals.filter(Boolean) as string[])].join(', ');
+          const plazasGrupo = etiquetaDe(items.map(i => i.plaza));
+          const formatosGrupo = etiquetaDe(items.map(i => i.mueble));
+          let etiquetaGrupo = [plazasGrupo, formatosGrupo].filter(Boolean).join('  ·  ') || articulo;
+          const anchoMaxEtiqueta = pageWidth - marginX * 2 - 120;
+          if (doc.getTextWidth(etiquetaGrupo) > anchoMaxEtiqueta) {
+            while (etiquetaGrupo.length > 8 && doc.getTextWidth(`${etiquetaGrupo}…`) > anchoMaxEtiqueta) {
+              etiquetaGrupo = etiquetaGrupo.slice(0, -1);
+            }
+            etiquetaGrupo = `${etiquetaGrupo}…`;
+          }
+          doc.text(etiquetaGrupo, marginX + 10, y + 4);
           doc.setFont('helvetica', 'normal');
           doc.text(`Renta: ${groupCaras}${groupBonif > 0 ? `  |  Bonif: ${groupBonif}` : ''}  |  Tarifa: ${formatCurrency(groupTarifaUnit)}  |  Inversion: ${formatCurrency(groupTarifa)}`, pageWidth - marginX - 10, y + 4, { align: 'right' });
           y += 8;
 
-          // === TABLE FOR THIS ARTICULO ===
+          if (esUDC) {
+            // === UDC: FICHAS TÉCNICAS (imágenes) + datos básicos, 2 por fila ===
+            const gap = 6;
+            const colW = (pageWidth - marginX * 2 - 10 - gap) / 2;
+            let col = 0;
+            let rowTop = y;
+            let rowMaxH = 0;
+            for (const it of items) {
+              const f = udcFichaDe(it.codigo_unico);
+              const url = udcFichaImg(it.codigo_unico);
+              const img = url ? fichaImgCache.get(url) : undefined;
+              const ratio = img && img.naturalWidth > 0 ? img.naturalWidth / img.naturalHeight : 1.647;
+              const imgH = colW / ratio;
+              const cellH = imgH + 11;
+              // Salto de página si la ficha no cabe
+              if (rowTop + cellH > pageHeight - 16) {
+                doc.addPage();
+                rowTop = 20;
+                col = 0;
+                rowMaxH = 0;
+              }
+              const x = marginX + 5 + col * (colW + gap);
+              if (img) {
+                doc.addImage(img, 'JPEG', x, rowTop, colW, imgH);
+                doc.setDrawColor(210);
+                doc.rect(x, rowTop, colW, imgH);
+              } else {
+                doc.setFillColor(245, 245, 245);
+                doc.rect(x, rowTop, colW, imgH, 'F');
+                doc.setFontSize(8);
+                doc.setTextColor(150, 150, 150);
+                doc.text('Ficha técnica no disponible', x + colW / 2, rowTop + imgH / 2, { align: 'center' });
+              }
+              // Datos básicos debajo de la ficha
+              const nombre = it.codigo_unico || 'Pantalla';
+              const zona = f?.zona || it.ubicacion || '';
+              const medida = (it.ancho && it.alto) ? `${it.ancho}x${it.alto}px` : (f ? f.medida : '');
+              const dur = f ? `${f.duracion} seg` : '';
+              const tarifaStr = `Tarifa: ${formatCurrency(tarifaBruta(it))}`;
+              const tipo = (Number(it.caras_bonificadas) || 0) > 0 && (Number(it.caras_renta) || 0) === 0 ? 'Bonificación' : 'Renta';
+              doc.setFontSize(9);
+              doc.setFont('helvetica', 'bold');
+              doc.setTextColor(...IMU_DARK);
+              doc.text(`${nombre}${zona ? `   ·   ${zona}` : ''}`, x + 1, rowTop + imgH + 5);
+              doc.setFontSize(7.5);
+              doc.setFont('helvetica', 'normal');
+              doc.setTextColor(90, 90, 90);
+              doc.text([medida, dur, tipo, tarifaStr].filter(Boolean).join('   ·   '), x + 1, rowTop + imgH + 9);
+              rowMaxH = Math.max(rowMaxH, cellH);
+              col++;
+              if (col === 2) { col = 0; rowTop += rowMaxH + gap; rowMaxH = 0; }
+            }
+            if (col === 1) rowTop += rowMaxH + gap; // cerrar fila incompleta
+            y = rowTop + 2;
+          } else {
+          // === TABLA DE ESTE GRUPO ===
+          // Mismas columnas y mismos datos que el Excel de esta pantalla, para
+          // que los dos documentos se lean igual. Quedan fuera solo las dos
+          // columnas que existen por el formato de la hoja: "Clave" (el prefijo
+          // de codigo_unico, ya visible ahí) y "NOTAS" (columna en blanco para
+          // escribir a mano).
           const tableData = items.map(i => [
-            String(i.id),
+            i.codigo_unico || '',
+            i.plaza || '',
             (i.ubicacion || '').substring(0, 50),
             i.mueble || '',
-            i.municipio || '',
+            i.tradicional_digital || '',
+            formatInicioPeriodo(i, tipoPeriodo),
             i.latitud?.toFixed(6) || '-',
             i.longitud?.toFixed(6) || '-',
             estadoTexto(i),
@@ -1225,7 +1391,7 @@ export function CompartirPropuestaPage() {
           ]);
 
           autoTable(doc, {
-            head: [['ID', 'Ubicación', 'Mueble', 'Municipio', 'Latitud', 'Longitud', 'Estado', ...(mostrarOrigen ? ['Origen'] : [])]],
+            head: [['codigo_unico', 'Plaza', 'Ubicación', 'Formato', 'Tipo Inventario', 'Periodo', 'Lat', 'Long', 'Estado', ...(mostrarOrigen ? ['Origen'] : [])]],
             body: tableData,
             startY: y,
             margin: { left: marginX + 5, right: marginX + 5 },
@@ -1233,14 +1399,16 @@ export function CompartirPropuestaPage() {
             headStyles: { fillColor: [230, 240, 250], textColor: IMU_BLUE, fontStyle: 'bold', fontSize: 7 },
             alternateRowStyles: { fillColor: [250, 252, 255] },
             columnStyles: {
-              0: { cellWidth: 18 },
-              1: { cellWidth: 70 },
-              2: { cellWidth: 35 },
-              3: { cellWidth: 35 },
-              4: { cellWidth: 28 },
+              0: { cellWidth: 52 },
+              1: { cellWidth: 30 },
+              2: { cellWidth: 66 },
+              3: { cellWidth: 32 },
+              4: { cellWidth: 26 },
               5: { cellWidth: 28 },
-              6: { cellWidth: 45 },
-              7: { cellWidth: 40 },
+              6: { cellWidth: 26 },
+              7: { cellWidth: 26 },
+              8: { cellWidth: 42 },
+              9: { cellWidth: 38 },
             },
             // Gris = no vigente (desplazada/quitada tras completar el circuito).
             // Azul/verde = origen en la campaña (propuesta vs agregado despues).
@@ -1253,6 +1421,7 @@ export function CompartirPropuestaPage() {
           if (y > pageHeight - 40) {
             doc.addPage();
             y = 20;
+          }
           }
         });
 
@@ -1280,22 +1449,6 @@ export function CompartirPropuestaPage() {
     }
 
     doc.save(`Propuesta_Interna_${propuestaId}.pdf`);
-  };
-
-  const handlePOIPlaceChanged = () => {
-    const place = autocompleteRef.current?.getPlace();
-    if (place?.geometry?.location) {
-      const newMarker: POIMarker = {
-        id: `poi-${Date.now()}`,
-        position: { lat: place.geometry.location.lat(), lng: place.geometry.location.lng() },
-        name: place.name || 'POI',
-        range: searchRange,
-      };
-      setPoiMarkers(prev => [...prev, newMarker]);
-      mapRef.current?.setCenter(newMarker.position);
-      mapRef.current?.setZoom(15);
-      setPoiSearch('');
-    }
   };
 
   const toggleResumen = (key: string) => {
@@ -1347,6 +1500,8 @@ export function CompartirPropuestaPage() {
               <ExternalLink className="h-4 w-4" />
               Ver en navegador
             </a>
+            {/* UDC (aeropuerto): sin mapa geográfico ni KML */}
+            {!esUDC && (
             <a
               href={`/cliente/propuesta/${propuestaId}/mapa${esCampana ? '?ctx=campana' : ''}`}
               target="_blank"
@@ -1356,6 +1511,7 @@ export function CompartirPropuestaPage() {
               <MapIcon className="h-4 w-4" />
               Ver Mapa
             </a>
+            )}
             <button
               onClick={handleCopyLink}
               className="flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-purple-600 to-purple-700 hover:from-purple-500 hover:to-purple-600 text-white rounded-lg text-sm font-medium transition-all shadow-lg shadow-purple-500/20"
@@ -1363,6 +1519,7 @@ export function CompartirPropuestaPage() {
               {copied ? <Check className="h-4 w-4" /> : <Copy className="h-4 w-4" />}
               {copied ? 'Copiado!' : 'Copiar Enlace'}
             </button>
+            {!esUDC && (
             <button
               onClick={handleDownloadKMLAll}
               className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-colors border ${isDark ? 'bg-zinc-800/80 hover:bg-purple-500/20 text-white border-purple-500/30' : 'bg-gray-100 hover:bg-gray-200 text-gray-900 border-gray-200'}`}
@@ -1371,6 +1528,7 @@ export function CompartirPropuestaPage() {
               <MapIcon className="h-4 w-4" />
               KML Todo
             </button>
+            )}
             <button
               onClick={handleGeneratePDF}
               className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-colors border ${isDark ? 'bg-zinc-800/80 hover:bg-purple-500/20 text-white border-purple-500/30' : 'bg-gray-100 hover:bg-gray-200 text-gray-900 border-gray-200'}`}
@@ -1586,7 +1744,30 @@ export function CompartirPropuestaPage() {
           ))}
         </div>
 
-        {/* Resumen de Caras - Tabla principal */}
+        {/* Resumen de Caras - Tabla principal (UDC = ficha técnica de reservados + mapa AICM) */}
+        {esUDC ? (
+          <div className="space-y-6">
+            <UdcReservadosTable items={filteredInventario} isDark={isDark} tipoPeriodo={tipoPeriodo} />
+            {/* Mapa del aeropuerto — solo se muestra si alguna pantalla reservada
+                cae en este plano (T1 Planta Alta). Si ninguna está, no aporta
+                (saldría todo gris), así que se oculta. */}
+            {filteredInventario.some(i => udcMapaCoord(i.codigo_unico)) && (
+            <div className={`rounded-2xl border overflow-hidden ${isDark ? 'bg-zinc-900 border-cyan-500/20' : 'bg-white border-cyan-200'}`}>
+              <div className={`px-5 py-4 border-b flex items-center gap-2 ${isDark ? 'border-cyan-500/20 bg-gradient-to-r from-cyan-600/10 to-sky-600/10' : 'border-cyan-100 bg-cyan-50/60'}`}>
+                <MapIcon className={`h-4 w-4 ${isDark ? 'text-cyan-300' : 'text-cyan-600'}`} />
+                <h3 className={`text-sm font-semibold ${isDark ? 'text-cyan-300' : 'text-cyan-700'}`}>Ubicación en el aeropuerto</h3>
+                <span className={`text-xs ${isDark ? 'text-zinc-500' : 'text-gray-400'}`}>AICM · Terminal 1</span>
+              </div>
+              <div className="p-3 sm:p-4 overflow-x-auto">
+                <UdcMapaAeropuerto
+                  reservados={new Set(filteredInventario.map(i => i.codigo_unico || ''))}
+                  isDark={isDark}
+                />
+              </div>
+            </div>
+            )}
+          </div>
+        ) : (
         <div className={`rounded-2xl border overflow-hidden ${isDark ? 'bg-gradient-to-br from-zinc-900 to-purple-900/10 border-purple-500/20' : 'bg-white border-gray-200'}`}>
           {/* Toolbar */}
           <div className={`px-5 py-4 border-b ${isDark ? 'border-purple-500/20 bg-gradient-to-r from-purple-600/10 to-violet-600/10' : 'border-gray-200 bg-gray-50'}`}>
@@ -1913,52 +2094,28 @@ export function CompartirPropuestaPage() {
             })}
           </div>
         </div>
+        )}
 
-        {/* Map */}
-        <div className={`rounded-2xl border overflow-hidden ${isDark ? 'bg-zinc-900 border-zinc-800' : 'bg-white border-gray-200'}`}>
+        {/* Mapa de Reservas — oculto para UDC (aeropuerto sin geolocalización) */}
+        <div className={esUDC ? 'hidden' : `rounded-2xl border overflow-hidden ${isDark ? 'bg-zinc-900 border-zinc-800' : 'bg-white border-gray-200'}`}>
           <div className={`p-4 border-b flex items-center gap-4 ${isDark ? 'border-zinc-800' : 'border-gray-200'}`}>
             <MapIcon className="h-5 w-5 text-blue-500" />
             <h3 className={`text-lg font-semibold ${isDark ? 'text-white' : 'text-gray-900'}`}>Mapa de Reservas</h3>
 
             <div className="flex items-center gap-2 ml-auto">
-              {showMap && (<>
-              <select
-                value={searchRange}
-                onChange={(e) => setSearchRange(parseInt(e.target.value))}
-                className={`px-2 py-1.5 rounded-lg text-xs ${isDark ? 'bg-zinc-800 border border-zinc-700 text-white' : 'bg-white border border-gray-200 text-gray-900'}`}
-              >
-                <option value={100}>100m</option>
-                <option value={200}>200m</option>
-                <option value={300}>300m</option>
-                <option value={500}>500m</option>
-                <option value={1000}>1km</option>
-              </select>
-
-              {isLoaded && (
-                <Autocomplete
-                  onLoad={(ac) => { autocompleteRef.current = ac; }}
-                  onPlaceChanged={handlePOIPlaceChanged}
-                  options={{ componentRestrictions: { country: 'mx' } }}
-                >
-                  <input
-                    type="text"
-                    value={poiSearch}
-                    onChange={(e) => setPoiSearch(e.target.value)}
-                    placeholder="Buscar POI..."
-                    className={`px-3 py-1.5 rounded-lg text-sm focus:outline-none focus:ring-1 focus:ring-purple-500 w-48 ${isDark ? 'bg-zinc-800 border border-zinc-700 text-white placeholder:text-zinc-500' : 'bg-white border border-gray-200 text-gray-900 placeholder:text-gray-400'}`}
-                  />
-                </Autocomplete>
+              {/* POI libre: busca en el area visible, como el Buscador de Formatos */}
+              {showMap && (
+                <PoiBuscadorMapa
+                  getMap={() => mapRef.current}
+                  isLoaded={isLoaded}
+                  pois={poiMarkers}
+                  onChange={setPoiMarkers}
+                  range={searchRange}
+                  onRangeChange={setSearchRange}
+                  isDark={isDark}
+                  acento="purple"
+                />
               )}
-
-              {poiMarkers.length > 0 && (
-                <button
-                  onClick={() => setPoiMarkers([])}
-                  className="px-3 py-1.5 bg-red-600/20 text-red-400 hover:bg-red-600/30 rounded-lg text-xs"
-                >
-                  Limpiar POIs
-                </button>
-              )}
-              </>)}
               {/* Toggle: el mapa está oculto por default (pinta miles de markers y traba
                   los checkboxes en propuestas grandes). Mismo patrón que "Mostrar Pines"
                   del Dashboard. */}
@@ -1981,7 +2138,9 @@ export function CompartirPropuestaPage() {
               className={`w-full h-32 flex flex-col items-center justify-center gap-2 transition-colors ${isDark ? 'text-zinc-500 hover:bg-zinc-800/40' : 'text-gray-400 hover:bg-gray-50'}`}
             >
               <MapIcon className="h-8 w-8 opacity-60" />
-              <span className="text-sm font-medium">Mostrar mapa ({visibleMarkers.length} pines)</span>
+              <span className="text-sm font-medium">
+                Mostrar mapa ({visibleMarkers.length} pines{capas.length > 0 ? ` · ${capas.length} ${capas.length === 1 ? 'capa' : 'capas'}` : ''})
+              </span>
               <span className="text-xs opacity-70">Oculto para mantener la lista fluida</span>
             </button>
           )}
@@ -1993,6 +2152,22 @@ export function CompartirPropuestaPage() {
                 {visibleMarkers.length.toLocaleString()} pines: Seleccionar Catorcenas para mostrarlos aquí.
                 O usa <strong>Expandir Mapa</strong> para ver todos.
               </div>
+            )}
+            {capas.length > 0 && (
+              <CapasMapaPanel
+                className="absolute top-3 left-3 z-10 w-72 max-w-[calc(100%-1.5rem)] max-h-[calc(100%-1.5rem)]"
+                capas={capas}
+                activas={capasActivas}
+                onToggle={handleToggleCapa}
+                onToggleTodas={toggleTodasCapas}
+                nombreCircuito={nombreCircuito}
+                circuitosVisibles={selectedCatorcenas.size > 0 ? circuitosVisibles : null}
+                interno
+                onCambiarVisible={handleCambiarVisibleCapa}
+                onEliminar={handleEliminarCapa}
+                ocupadaId={capaOcupadaId}
+                isDark={isDark}
+              />
             )}
             {isLoaded ? (
               <GoogleMap
@@ -2016,6 +2191,7 @@ export function CompartirPropuestaPage() {
                   }
                 }}
               >
+                <CapasMapaOverlay capas={capas} activas={capasActivas} />
                 {!demasiadosPines && visibleMarkers.map((item) => (
                   <MapMarker
                     key={itemKey(item)}
@@ -2054,20 +2230,7 @@ export function CompartirPropuestaPage() {
                     </div>
                   </InfoWindow>
                 )}
-                {poiMarkers.map(marker => (
-                  <Circle
-                    key={marker.id}
-                    center={marker.position}
-                    radius={marker.range}
-                    options={{
-                      strokeColor: '#a855f7',
-                      strokeOpacity: 0.7,
-                      strokeWeight: 2,
-                      fillColor: '#a855f7',
-                      fillOpacity: 0.15,
-                    }}
-                  />
-                ))}
+                <PoiMapaOverlay pois={poiMarkers} onChange={setPoiMarkers} color="#a855f7" />
               </GoogleMap>
             ) : (
               <div className="flex items-center justify-center h-full">

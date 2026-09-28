@@ -13,6 +13,7 @@ import { ALLOWED_DIGITAL_ITEM_CODES } from '../../config/allowedDigitalArticles'
 import { solicitudesService } from '../../services/solicitudes.service';
 import { Catorcena } from '../../types';
 import { useThemeStore } from '../../store/themeStore';
+import { udcZonaDeArticulo, esArticuloUDC } from '../../lib/udc';
 import * as XLSX from 'xlsx';
 
 // URL base para archivos estáticos
@@ -224,7 +225,7 @@ interface OrdenesMontajeModalProps {
   canExport?: boolean;
 }
 
-type TabType = 'cat' | 'ocupacion-digital' | 'digital' | 'invian' | 'invian-digital' | 'invian-unmas';
+type TabType = 'cat' | 'ocupacion-digital' | 'udc' | 'digital' | 'invian' | 'invian-digital' | 'invian-unmas';
 
 // Limpia el nombre de un arte quitando el prefijo de Digital Ocean Spaces
 // (formato: "<timestamp>-<hash>-<nombreReal>.<ext>") y la extensión.
@@ -291,6 +292,15 @@ const extractCiudadFromCodigoUnico = (codigoUnico?: string | null): string => {
   }
   return last.trim();
 };
+
+// ¿La fila del orden de montaje es UDC (aeropuerto AICM)? Señales, en orden de
+// confianza: BD SAP = UDC, plaza AICM, o el ItemCode con patrón UDC (AICM/UDC/
+// familias VWL/PAQ/BLOQ/CIRC). Se usa para separar UDC en su propia pestaña y
+// sacarlo de "Ocupación Digital".
+const esUDCRow = (item: OrdenMontajeCAT): boolean =>
+  (item.sap_database || '').toUpperCase() === 'UDC' ||
+  (item.plaza || '').toUpperCase() === 'AICM' ||
+  esArticuloUDC(item.numero_articulo);
 
 // Status options for filter
 const STATUS_OPTIONS = ['Aprobada', 'inactiva', 'finalizada', 'por iniciar', 'en curso'];
@@ -455,6 +465,7 @@ const getSapDbCls = (db: string | null | undefined, isDark: boolean): string => 
     case 'CIMU': return isDark ? 'bg-blue-500/20 text-blue-300 border-blue-500/30' : 'bg-blue-50 text-blue-700 border-blue-200';
     case 'TEST': return isDark ? 'bg-amber-500/20 text-amber-300 border-amber-500/30' : 'bg-amber-50 text-amber-700 border-amber-200';
     case 'TRADE': return isDark ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500/30' : 'bg-emerald-50 text-emerald-700 border-emerald-200';
+    case 'UDC': return isDark ? 'bg-cyan-500/20 text-cyan-300 border-cyan-500/30' : 'bg-cyan-50 text-cyan-700 border-cyan-200';
     default: return isDark ? 'bg-zinc-500/20 text-zinc-300 border-zinc-500/30' : 'bg-gray-100 text-gray-600 border-gray-200';
   }
 };
@@ -495,9 +506,13 @@ export function OrdenesMontajeModal({ isOpen, onClose, canExport = true }: Orden
   const [showCatorcenaPopup, setShowCatorcenaPopup] = useState(false);
 
   // Filtros globales (aplican en todas las pestañas)
-  const [sapDbFilter, setSapDbFilter] = useState<'todas' | 'TRADE' | 'CIMU'>('todas');
+  const [sapDbFilter, setSapDbFilter] = useState<'todas' | 'TRADE' | 'CIMU' | 'UDC'>('todas');
   const [apsEspecificoFilter, setApsEspecificoFilter] = useState<'todas' | 'con' | 'sin'>('todas');
   const [postFilter, setPostFilter] = useState<'todas' | 'con' | 'sin'>('todas');
+  // Filtro Formato (multiselect) — aplica en TODAS las pestañas. Vacío = todos.
+  const [formatoFilter, setFormatoFilter] = useState<string[]>([]);
+  const [showFormatoPopup, setShowFormatoPopup] = useState(false);
+  const [formatoSearch, setFormatoSearch] = useState('');
   // Ocupación: 'vendido' (default = lo que ya está en campañas), 'disponible'
   // (inventario libre/reservado) o 'todo' (ambos). Los filtros de APS/POST/BD SAP
   // solo tienen sentido con 'vendido' (viven en las reservas ya vendidas).
@@ -698,7 +713,7 @@ export function OrdenesMontajeModal({ isOpen, onClose, canExport = true }: Orden
       ...apiCatorcenaRange,
       ocupacion: ocupacionFilter,
     }),
-    enabled: isOpen && (activeTab === 'cat' || activeTab === 'digital' || activeTab === 'ocupacion-digital'),
+    enabled: isOpen && (activeTab === 'cat' || activeTab === 'digital' || activeTab === 'ocupacion-digital' || activeTab === 'udc'),
   });
 
   // Refresca la columna Diferencia en tiempo real cuando alguien crea/borra reservas
@@ -714,6 +729,18 @@ export function OrdenesMontajeModal({ isOpen, onClose, canExport = true }: Orden
     }),
     enabled: isOpen && (activeTab === 'invian' || activeTab === 'invian-digital' || activeTab === 'invian-unmas'),
   });
+
+  // Opciones del filtro Formato: formatos distintos presentes en los datos (CAT + INVIAN).
+  const formatoOptions = useMemo(() => {
+    const set = new Set<string>();
+    const push = (arr: unknown) => { if (Array.isArray(arr)) arr.forEach((it) => {
+      const f = String((it as { formato?: string | null }).formato || '').trim();
+      if (f) set.add(f);
+    }); };
+    push(catData); push(invianData);
+    return Array.from(set).sort((a, b) => a.localeCompare(b, 'es'));
+  }, [catData, invianData]);
+  const toggleFormato = (f: string) => setFormatoFilter(prev => prev.includes(f) ? prev.filter(x => x !== f) : [...prev, f]);
 
   // Haystack precalculado por item — antes `buildHaystack` se ejecutaba en
   // CADA filtrado × CADA item, y los 3-5 useMemo de filtros lo recorrían cada
@@ -823,6 +850,9 @@ export function OrdenesMontajeModal({ isOpen, onClose, canExport = true }: Orden
     } else if (postFilter === 'sin') {
       items = items.filter(item => item.posted !== true);
     }
+    if (formatoFilter.length > 0) {
+      items = items.filter(item => formatoFilter.includes(String((item as { formato?: string | null }).formato || '').trim()));
+    }
 
     // Filter by date range if set
     if (fechaInicio || fechaFin) {
@@ -867,17 +897,18 @@ export function OrdenesMontajeModal({ isOpen, onClose, canExport = true }: Orden
     }
 
     return items;
-  }, [catData, selectedCatorcenas, fechaInicio, fechaFin, catFilters, catSortField, catSortDirection, sapDbFilter, apsEspecificoFilter, postFilter, allSearchTerms, matchesSearchCAT]);
+  }, [catData, selectedCatorcenas, fechaInicio, fechaFin, catFilters, catSortField, catSortDirection, sapDbFilter, apsEspecificoFilter, postFilter, formatoFilter, allSearchTerms, matchesSearchCAT]);
 
   // Filtered Ocupacion Digital data (CAT only digital items)
   const filteredOcupacionDigitalData = useMemo(() => {
     if (!catData) return [];
     let items = [...catData];
 
-    // Only digital items (tradicional_digital = 'Digital')
+    // Only digital items (tradicional_digital = 'Digital'), EXCLUYENDO UDC
+    // (aeropuerto AICM) que vive en su propia pestaña.
     items = items.filter(item => {
       const td = (item.tradicional_digital || '').toUpperCase();
-      return td === 'DIGITAL';
+      return td === 'DIGITAL' && !esUDCRow(item);
     });
 
     // Búsqueda de texto
@@ -901,6 +932,9 @@ export function OrdenesMontajeModal({ isOpen, onClose, canExport = true }: Orden
       items = items.filter(item => item.posted === true);
     } else if (postFilter === 'sin') {
       items = items.filter(item => item.posted !== true);
+    }
+    if (formatoFilter.length > 0) {
+      items = items.filter(item => formatoFilter.includes(String((item as { formato?: string | null }).formato || '').trim()));
     }
 
     // Filter by date range if set
@@ -948,7 +982,82 @@ export function OrdenesMontajeModal({ isOpen, onClose, canExport = true }: Orden
     }
 
     return items;
-  }, [catData, selectedCatorcenas, fechaInicio, fechaFin, catFilters, catSortField, catSortDirection, sapDbFilter, apsEspecificoFilter, postFilter, allSearchTerms, matchesSearchCAT]);
+  }, [catData, selectedCatorcenas, fechaInicio, fechaFin, catFilters, catSortField, catSortDirection, sapDbFilter, apsEspecificoFilter, postFilter, formatoFilter, allSearchTerms, matchesSearchCAT]);
+
+  // Filtered UDC data (aeropuerto AICM). Mismo pipeline que Ocupación Digital
+  // pero SOLO filas UDC. La zona se deriva del ItemCode al render/export.
+  const filteredUdcData = useMemo(() => {
+    if (!catData) return [];
+    let items = catData.filter(esUDCRow);
+
+    // Búsqueda de texto
+    if (allSearchTerms.length > 0) {
+      items = items.filter(matchesSearchCAT);
+    }
+
+    // Filtros globales
+    if (sapDbFilter !== 'todas') {
+      items = items.filter(item => ((item.bd_sap_post || item.sap_database) || '').toUpperCase() === sapDbFilter);
+    }
+    if (apsEspecificoFilter === 'con') {
+      items = items.filter(item => item.aps_especifico !== null && item.aps_especifico !== '');
+    } else if (apsEspecificoFilter === 'sin') {
+      items = items.filter(item => item.aps_especifico === null || item.aps_especifico === '');
+    }
+    if (postFilter === 'con') {
+      items = items.filter(item => item.posted === true);
+    } else if (postFilter === 'sin') {
+      items = items.filter(item => item.posted !== true);
+    }
+    if (formatoFilter.length > 0) {
+      items = items.filter(item => formatoFilter.includes(String((item as { formato?: string | null }).formato || '').trim()));
+    }
+
+    // Rango de fechas
+    if (fechaInicio || fechaFin) {
+      const startDate = fechaInicio ? new Date(fechaInicio) : null;
+      const endDate = fechaFin ? new Date(fechaFin) : null;
+      if (endDate) endDate.setHours(23, 59, 59, 999);
+      items = items.filter(item => {
+        if (!item.fecha_inicio_periodo) return false;
+        const itemDate = new Date(item.fecha_inicio_periodo);
+        if (startDate && itemDate < startDate) return false;
+        if (endDate && itemDate > endDate) return false;
+        return true;
+      });
+    }
+
+    // Catorcenas seleccionadas
+    if (selectedCatorcenas.length > 0) {
+      items = items.filter(item => {
+        if (!item.catorcena_numero || !item.catorcena_year) return false;
+        return selectedCatorcenas.includes(`${item.catorcena_numero}-${item.catorcena_year}`);
+      });
+    }
+
+    // Filtros avanzados
+    if (catFilters.length > 0) {
+      items = applyAdvancedFilters(items as unknown as Record<string, unknown>[], catFilters) as unknown as OrdenMontajeCAT[];
+    }
+
+    // Orden
+    if (catSortField) {
+      items.sort((a, b) => {
+        const aVal = a[catSortField as keyof OrdenMontajeCAT];
+        const bVal = b[catSortField as keyof OrdenMontajeCAT];
+        if (aVal === null || aVal === undefined) return 1;
+        if (bVal === null || bVal === undefined) return -1;
+        if (typeof aVal === 'number' && typeof bVal === 'number') {
+          return catSortDirection === 'asc' ? aVal - bVal : bVal - aVal;
+        }
+        const strA = String(aVal).toLowerCase();
+        const strB = String(bVal).toLowerCase();
+        return catSortDirection === 'asc' ? strA.localeCompare(strB) : strB.localeCompare(strA);
+      });
+    }
+
+    return items;
+  }, [catData, selectedCatorcenas, fechaInicio, fechaFin, catFilters, catSortField, catSortDirection, sapDbFilter, apsEspecificoFilter, postFilter, formatoFilter, allSearchTerms, matchesSearchCAT]);
 
   // Filter Ocupacion UN+ data: solo gran formato (mi macro, kioscos, boleros,
   // bajo puentes, puentes peatonales) Y solo periodos mensuales.
@@ -976,6 +1085,9 @@ export function OrdenesMontajeModal({ isOpen, onClose, canExport = true }: Orden
       items = items.filter(item => item.posted === true);
     } else if (postFilter === 'sin') {
       items = items.filter(item => item.posted !== true);
+    }
+    if (formatoFilter.length > 0) {
+      items = items.filter(item => formatoFilter.includes(String((item as { formato?: string | null }).formato || '').trim()));
     }
 
     // Excluir digital (tradicional_digital === 'Digital')
@@ -1035,7 +1147,7 @@ export function OrdenesMontajeModal({ isOpen, onClose, canExport = true }: Orden
     }
 
     return items;
-  }, [catData, selectedCatorcenas, fechaInicio, fechaFin, catFilters, catSortField, catSortDirection, sapDbFilter, apsEspecificoFilter, postFilter, allSearchTerms, matchesSearchCAT]);
+  }, [catData, selectedCatorcenas, fechaInicio, fechaFin, catFilters, catSortField, catSortDirection, sapDbFilter, apsEspecificoFilter, postFilter, formatoFilter, allSearchTerms, matchesSearchCAT]);
 
   // Group CAT data
   const getCATGroupValue = (item: OrdenMontajeCAT, field: CATGroupByField): string => {
@@ -1069,6 +1181,18 @@ export function OrdenesMontajeModal({ isOpen, onClose, canExport = true }: Orden
 
     return Object.entries(groups).sort((a, b) => b[1].length - a[1].length);
   }, [filteredOcupacionDigitalData, catGroupings]);
+
+  // Group UDC data
+  const groupedUdcData = useMemo(() => {
+    if (catGroupings.length === 0 || !filteredUdcData.length) return null;
+    const groups: Record<string, OrdenMontajeCAT[]> = {};
+    filteredUdcData.forEach(item => {
+      const key = getCATGroupValue(item, catGroupings[0]);
+      if (!groups[key]) groups[key] = [];
+      groups[key].push(item);
+    });
+    return Object.entries(groups).sort((a, b) => b[1].length - a[1].length);
+  }, [filteredUdcData, catGroupings]);
 
   // Filtered and sorted INVIAN data
   const filteredINVIANData = useMemo(() => {
@@ -1104,6 +1228,9 @@ export function OrdenesMontajeModal({ isOpen, onClose, canExport = true }: Orden
       items = items.filter(item => item.posted === true);
     } else if (postFilter === 'sin') {
       items = items.filter(item => item.posted !== true);
+    }
+    if (formatoFilter.length > 0) {
+      items = items.filter(item => formatoFilter.includes(String((item as { formato?: string | null }).formato || '').trim()));
     }
     // Filtro APS: en INVIAN la APS vive en CodigoContrato (back: rsv.APS AS rsv_aps).
     // "sin APS" = null o 0 (mismo criterio que el back: APS IS NULL OR APS = 0).
@@ -1156,7 +1283,7 @@ export function OrdenesMontajeModal({ isOpen, onClose, canExport = true }: Orden
     }
 
     return items;
-  }, [invianData, selectedCatorcenas, fechaInicio, fechaFin, invianFilters, invianSortField, invianSortDirection, sapDbFilter, apsEspecificoFilter, postFilter, allSearchTerms, matchesSearchINVIAN]);
+  }, [invianData, selectedCatorcenas, fechaInicio, fechaFin, invianFilters, invianSortField, invianSortDirection, sapDbFilter, apsEspecificoFilter, postFilter, formatoFilter, allSearchTerms, matchesSearchINVIAN]);
 
   // Group INVIAN data
   const getINVIANGroupValue = (item: OrdenMontajeINVIAN, field: INVIANGroupByField): string => {
@@ -1207,6 +1334,9 @@ export function OrdenesMontajeModal({ isOpen, onClose, canExport = true }: Orden
     } else if (postFilter === 'sin') {
       items = items.filter(item => item.posted !== true);
     }
+    if (formatoFilter.length > 0) {
+      items = items.filter(item => formatoFilter.includes(String((item as { formato?: string | null }).formato || '').trim()));
+    }
     // Filtro APS: en INVIAN la APS vive en CodigoContrato (back: rsv.APS AS rsv_aps).
     // "sin APS" = null o 0 (mismo criterio que el back: APS IS NULL OR APS = 0).
     if (apsEspecificoFilter === 'con') {
@@ -1254,7 +1384,7 @@ export function OrdenesMontajeModal({ isOpen, onClose, canExport = true }: Orden
     }
 
     return items;
-  }, [invianData, selectedCatorcenas, fechaInicio, fechaFin, invianFilters, invianSortField, invianSortDirection, sapDbFilter, apsEspecificoFilter, postFilter, allSearchTerms, matchesSearchINVIAN]);
+  }, [invianData, selectedCatorcenas, fechaInicio, fechaFin, invianFilters, invianSortField, invianSortDirection, sapDbFilter, apsEspecificoFilter, postFilter, formatoFilter, allSearchTerms, matchesSearchINVIAN]);
 
   // Group INVIAN Digital data
   const groupedINVIANDigitalData = useMemo(() => {
@@ -1307,6 +1437,15 @@ export function OrdenesMontajeModal({ isOpen, onClose, canExport = true }: Orden
       monto: filteredOcupacionDigitalData.reduce((sum, i) => sum + (Number(i.monto_total) || 0), 0),
     };
   }, [filteredOcupacionDigitalData]);
+
+  const udcTotals = useMemo(() => {
+    if (!filteredUdcData || filteredUdcData.length === 0) return { caras: 0, tarifa: 0, monto: 0 };
+    return {
+      caras: filteredUdcData.reduce((sum, i) => sum + (Number(i.caras) || 0), 0),
+      tarifa: filteredUdcData.reduce((sum, i) => sum + (Number(i.tarifa) || 0), 0),
+      monto: filteredUdcData.reduce((sum, i) => sum + (Number(i.monto_total) || 0), 0),
+    };
+  }, [filteredUdcData]);
 
   // Export to XLSX
   const handleExportXLSX = () => {
@@ -1379,6 +1518,32 @@ export function OrdenesMontajeModal({ isOpen, onClose, canExport = true }: Orden
       const wb = XLSX.utils.book_new();
       XLSX.utils.book_append_sheet(wb, ws, 'Ocupacion Digital');
       XLSX.writeFile(wb, `orden_montaje_ocupacion_digital_${new Date().toISOString().split('T')[0]}.xlsx`);
+    } else if (activeTab === 'udc' && filteredUdcData.length > 0) {
+      // Orden de Montaje UDC (aeropuerto AICM). Mismo layout que el ejemplo de
+      // IMU: columna ZONA (derivada del ItemCode) entre Caras y Tarifa.
+      const wsData = filteredUdcData.map(item => ({
+        'Plaza': item.plaza || '',
+        'Tipo': item.tipo || '',
+        'Asesor': item.asesor || '',
+        'APS Global': item.campania_id || item.aps_global || '',
+        'APS Específico': item.aps_especifico || '',
+        'Fecha Inicio': item.fecha_inicio_periodo ? formatDate(item.fecha_inicio_periodo) : '',
+        'Fecha Fin': item.fecha_fin_periodo ? formatDate(item.fecha_fin_periodo) : '',
+        'Cliente': item.cliente || '',
+        'Marca': item.marca || '',
+        'Campaña': item.campania || '',
+        'Artículo': item.numero_articulo || '',
+        'Negociación': item.negociacion || '',
+        'Caras': Number(item.caras) || 0,
+        'ZONA': udcZonaDeArticulo(item.numero_articulo),
+        'Tarifa': Number(item.tarifa) || 0,
+        'Monto Total': Number(item.monto_total) || 0,
+        'Diferencia': (() => { const d = Number(item.delta_caras) || 0; if (d === 0) return '✓'; return d > 0 ? `+${d}` : `${d}`; })(),
+      }));
+      const ws = XLSX.utils.json_to_sheet(wsData);
+      const wb = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(wb, ws, 'Ocupacion Digital');
+      XLSX.writeFile(wb, `orden_montaje_udc_${new Date().toISOString().split('T')[0]}.xlsx`);
     } else if (activeTab === 'digital' && filteredDigitalData.length > 0) {
       const carasKeyDig = filteredDigitalData.every(i => (i.tipo || '').toUpperCase().includes('PUENTE PEATONAL')) ? 'Puentes' : 'Caras';
       const wsData = filteredDigitalData.map(item => ({
@@ -1530,14 +1695,14 @@ export function OrdenesMontajeModal({ isOpen, onClose, canExport = true }: Orden
 
   // Filter management callbacks
   const addFilter = useCallback(() => {
-    const fields = activeTab === 'cat' || activeTab === 'digital' || activeTab === 'ocupacion-digital' ? CAT_FILTER_FIELDS : INVIAN_FILTER_FIELDS;
+    const fields = activeTab === 'cat' || activeTab === 'digital' || activeTab === 'ocupacion-digital' || activeTab === 'udc' ? CAT_FILTER_FIELDS : INVIAN_FILTER_FIELDS;
     const newFilter: AdvancedFilterCondition = {
       id: `filter-${Date.now()}`,
       field: fields[0].field,
       operator: '=',
       value: '',
     };
-    if (activeTab === 'cat' || activeTab === 'digital' || activeTab === 'ocupacion-digital') {
+    if (activeTab === 'cat' || activeTab === 'digital' || activeTab === 'ocupacion-digital' || activeTab === 'udc') {
       setCatFilters(prev => [...prev, newFilter]);
     } else {
       setInvianFilters(prev => [...prev, newFilter]);
@@ -1545,7 +1710,7 @@ export function OrdenesMontajeModal({ isOpen, onClose, canExport = true }: Orden
   }, [activeTab]);
 
   const updateFilter = useCallback((id: string, updates: Partial<AdvancedFilterCondition>) => {
-    if (activeTab === 'cat' || activeTab === 'digital' || activeTab === 'ocupacion-digital') {
+    if (activeTab === 'cat' || activeTab === 'digital' || activeTab === 'ocupacion-digital' || activeTab === 'udc') {
       setCatFilters(prev => prev.map(f => (f.id === id ? { ...f, ...updates } : f)));
     } else {
       setInvianFilters(prev => prev.map(f => (f.id === id ? { ...f, ...updates } : f)));
@@ -1553,7 +1718,7 @@ export function OrdenesMontajeModal({ isOpen, onClose, canExport = true }: Orden
   }, [activeTab]);
 
   const removeFilter = useCallback((id: string) => {
-    if (activeTab === 'cat' || activeTab === 'digital' || activeTab === 'ocupacion-digital') {
+    if (activeTab === 'cat' || activeTab === 'digital' || activeTab === 'ocupacion-digital' || activeTab === 'udc') {
       setCatFilters(prev => prev.filter(f => f.id !== id));
     } else {
       setInvianFilters(prev => prev.filter(f => f.id !== id));
@@ -1561,7 +1726,7 @@ export function OrdenesMontajeModal({ isOpen, onClose, canExport = true }: Orden
   }, [activeTab]);
 
   const clearCurrentFilters = useCallback(() => {
-    if (activeTab === 'cat' || activeTab === 'digital' || activeTab === 'ocupacion-digital') {
+    if (activeTab === 'cat' || activeTab === 'digital' || activeTab === 'ocupacion-digital' || activeTab === 'udc') {
       setCatFilters([]);
     } else {
       setInvianFilters([]);
@@ -1570,7 +1735,7 @@ export function OrdenesMontajeModal({ isOpen, onClose, canExport = true }: Orden
 
   // Grouping toggle
   const toggleGrouping = useCallback((field: string) => {
-    if (activeTab === 'cat' || activeTab === 'digital' || activeTab === 'ocupacion-digital') {
+    if (activeTab === 'cat' || activeTab === 'digital' || activeTab === 'ocupacion-digital' || activeTab === 'udc') {
       setCatGroupings(prev => {
         if (prev.includes(field as CATGroupByField)) {
           return prev.filter(f => f !== field);
@@ -1589,7 +1754,7 @@ export function OrdenesMontajeModal({ isOpen, onClose, canExport = true }: Orden
 
   // Toggle expanded groups
   const toggleGroup = useCallback((groupName: string) => {
-    if (activeTab === 'cat' || activeTab === 'digital' || activeTab === 'ocupacion-digital') {
+    if (activeTab === 'cat' || activeTab === 'digital' || activeTab === 'ocupacion-digital' || activeTab === 'udc') {
       setCatExpandedGroups(prev => {
         const next = new Set(prev);
         if (next.has(groupName)) next.delete(groupName);
@@ -1622,30 +1787,32 @@ export function OrdenesMontajeModal({ isOpen, onClose, canExport = true }: Orden
     setInvianFilters([]);
     setInvianGroupings([]);
     setInvianSortField(null);
+    setFormatoFilter([]);
     setCurrentPage(1);
   }, []);
 
   // Current tab data
-  const currentFilters = activeTab === 'cat' || activeTab === 'digital' || activeTab === 'ocupacion-digital' ? catFilters : invianFilters;
-  const currentGroupings = activeTab === 'cat' || activeTab === 'digital' || activeTab === 'ocupacion-digital' ? catGroupings : invianGroupings;
-  const currentSortField = activeTab === 'cat' || activeTab === 'digital' || activeTab === 'ocupacion-digital' ? catSortField : invianSortField;
-  const currentSortDirection = activeTab === 'cat' || activeTab === 'digital' || activeTab === 'ocupacion-digital' ? catSortDirection : invianSortDirection;
-  const currentFilterFields = activeTab === 'cat' || activeTab === 'digital' || activeTab === 'ocupacion-digital' ? CAT_FILTER_FIELDS : INVIAN_FILTER_FIELDS;
-  const currentGroupOptions = activeTab === 'cat' || activeTab === 'digital' || activeTab === 'ocupacion-digital' ? CAT_GROUPINGS : INVIAN_GROUPINGS;
-  const currentSortOptions = activeTab === 'cat' || activeTab === 'digital' || activeTab === 'ocupacion-digital' ? CAT_SORT_FIELDS : INVIAN_SORT_FIELDS;
-  const currentUniqueValues = activeTab === 'cat' || activeTab === 'digital' || activeTab === 'ocupacion-digital' ? getCATUniqueValues : activeTab === 'invian-digital' ? getINVIANDigitalUniqueValues : getINVIANUniqueValues;
+  const currentFilters = activeTab === 'cat' || activeTab === 'digital' || activeTab === 'ocupacion-digital' || activeTab === 'udc' ? catFilters : invianFilters;
+  const currentGroupings = activeTab === 'cat' || activeTab === 'digital' || activeTab === 'ocupacion-digital' || activeTab === 'udc' ? catGroupings : invianGroupings;
+  const currentSortField = activeTab === 'cat' || activeTab === 'digital' || activeTab === 'ocupacion-digital' || activeTab === 'udc' ? catSortField : invianSortField;
+  const currentSortDirection = activeTab === 'cat' || activeTab === 'digital' || activeTab === 'ocupacion-digital' || activeTab === 'udc' ? catSortDirection : invianSortDirection;
+  const currentFilterFields = activeTab === 'cat' || activeTab === 'digital' || activeTab === 'ocupacion-digital' || activeTab === 'udc' ? CAT_FILTER_FIELDS : INVIAN_FILTER_FIELDS;
+  const currentGroupOptions = activeTab === 'cat' || activeTab === 'digital' || activeTab === 'ocupacion-digital' || activeTab === 'udc' ? CAT_GROUPINGS : INVIAN_GROUPINGS;
+  const currentSortOptions = activeTab === 'cat' || activeTab === 'digital' || activeTab === 'ocupacion-digital' || activeTab === 'udc' ? CAT_SORT_FIELDS : INVIAN_SORT_FIELDS;
+  const currentUniqueValues = activeTab === 'cat' || activeTab === 'digital' || activeTab === 'ocupacion-digital' || activeTab === 'udc' ? getCATUniqueValues : activeTab === 'invian-digital' ? getINVIANDigitalUniqueValues : getINVIANUniqueValues;
 
-  const hasActiveFilters = currentFilters.length > 0 || currentGroupings.length > 0 || currentSortField !== null || selectedCatorcenas.length > 0 || fechaInicio || fechaFin || sapDbFilter !== 'todas' || apsEspecificoFilter !== 'todas' || postFilter !== 'todas' || ocupacionFilter !== 'vendido';
+  const hasActiveFilters = currentFilters.length > 0 || currentGroupings.length > 0 || currentSortField !== null || selectedCatorcenas.length > 0 || fechaInicio || fechaFin || sapDbFilter !== 'todas' || apsEspecificoFilter !== 'todas' || postFilter !== 'todas' || ocupacionFilter !== 'vendido' || formatoFilter.length > 0;
 
   if (!isOpen) return null;
 
-  const isLoading = activeTab === 'cat' || activeTab === 'digital' || activeTab === 'ocupacion-digital' ? isLoadingCAT : isLoadingINVIAN;
-  const dataCount = activeTab === 'cat' ? filteredCATData.length : activeTab === 'ocupacion-digital' ? filteredOcupacionDigitalData.length : activeTab === 'digital' ? filteredDigitalData.length : activeTab === 'invian-digital' ? filteredINVIANDigitalData.length : activeTab === 'invian-unmas' ? filteredINVIANUnmasData.length : filteredINVIANData.length;
+  const isLoading = activeTab === 'cat' || activeTab === 'digital' || activeTab === 'ocupacion-digital' || activeTab === 'udc' ? isLoadingCAT : isLoadingINVIAN;
+  const dataCount = activeTab === 'cat' ? filteredCATData.length : activeTab === 'ocupacion-digital' ? filteredOcupacionDigitalData.length : activeTab === 'udc' ? filteredUdcData.length : activeTab === 'digital' ? filteredDigitalData.length : activeTab === 'invian-digital' ? filteredINVIANDigitalData.length : activeTab === 'invian-unmas' ? filteredINVIANUnmasData.length : filteredINVIANData.length;
   // Ocupación VP: total = registros NO digitales del endpoint CAT (los digitales
   // viven en la pestaña Ocupación Digital y confundía verlos restados del total).
   const totalCount = activeTab === 'cat'
     ? (catData?.filter(i => (i.tradicional_digital || '').toUpperCase() !== 'DIGITAL').length || 0)
     : activeTab === 'ocupacion-digital' ? filteredOcupacionDigitalData.length
+    : activeTab === 'udc' ? filteredUdcData.length
     : activeTab === 'digital' ? filteredDigitalData.length
     : activeTab === 'invian-digital' ? filteredINVIANDigitalData.length
     : activeTab === 'invian-unmas' ? filteredINVIANUnmasData.length
@@ -1657,6 +1824,7 @@ export function OrdenesMontajeModal({ isOpen, onClose, canExport = true }: Orden
   // Paginated slices (only used when no grouping active)
   const paginatedCATData = filteredCATData.slice((safeCurrentPage - 1) * PAGE_SIZE, safeCurrentPage * PAGE_SIZE);
   const paginatedOcupacionDigitalData = filteredOcupacionDigitalData.slice((safeCurrentPage - 1) * PAGE_SIZE, safeCurrentPage * PAGE_SIZE);
+  const paginatedUdcData = filteredUdcData.slice((safeCurrentPage - 1) * PAGE_SIZE, safeCurrentPage * PAGE_SIZE);
   const paginatedDigitalData = filteredDigitalData.slice((safeCurrentPage - 1) * PAGE_SIZE, safeCurrentPage * PAGE_SIZE);
   const paginatedINVIANData = filteredINVIANData.slice((safeCurrentPage - 1) * PAGE_SIZE, safeCurrentPage * PAGE_SIZE);
   const paginatedINVIANDigitalData = filteredINVIANDigitalData.slice((safeCurrentPage - 1) * PAGE_SIZE, safeCurrentPage * PAGE_SIZE);
@@ -1694,7 +1862,7 @@ export function OrdenesMontajeModal({ isOpen, onClose, canExport = true }: Orden
         {/* Controles (arriba) + Tabs (abajo), en 2 filas para no amontonar */}
         <div className={`flex flex-col gap-3 px-6 py-3 border-b ${isDark ? 'border-zinc-800/50 bg-zinc-900/80' : 'border-gray-200 bg-gray-50/80'}`}>
           {/* Tabs ARRIBA: tira pareja de 6 columnas iguales (no cambian de tamaño al seleccionar) */}
-          <div className={`order-1 grid grid-cols-3 sm:grid-cols-6 gap-1 p-1 ${isDark ? 'bg-zinc-800/80 border-zinc-700/50' : 'bg-gray-100 border-gray-200'} rounded-xl border`}>
+          <div className={`order-1 grid grid-cols-3 sm:grid-cols-4 lg:grid-cols-7 gap-1 p-1 ${isDark ? 'bg-zinc-800/80 border-zinc-700/50' : 'bg-gray-100 border-gray-200'} rounded-xl border`}>
             <button
               onClick={() => { setActiveTab('cat'); setCurrentPage(1); }}
               className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all ${
@@ -1716,6 +1884,17 @@ export function OrdenesMontajeModal({ isOpen, onClose, canExport = true }: Orden
             >
               <Monitor className="h-4 w-4" />
               Ocupacion Digital
+            </button>
+            <button
+              onClick={() => { setActiveTab('udc'); setCurrentPage(1); }}
+              className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all ${
+                activeTab === 'udc'
+                  ? 'bg-gradient-to-r from-cyan-500 to-teal-500 text-white shadow-lg shadow-cyan-500/25'
+                  : isDark ? 'text-zinc-400 hover:text-zinc-200' : 'text-gray-500 hover:text-gray-900'
+              }`}
+            >
+              <Monitor className="h-4 w-4" />
+              UDC Aeropuerto
             </button>
             <button
               onClick={() => { setActiveTab('digital'); setCurrentPage(1); }}
@@ -1779,7 +1958,7 @@ export function OrdenesMontajeModal({ isOpen, onClose, canExport = true }: Orden
                 Filtros
                 {hasActiveFilters && (
                   <span className="ml-1 px-1.5 py-0.5 rounded-full bg-white/20 text-[10px]">
-                    {(selectedCatorcenas.length > 0 ? 1 : 0) + (fechaInicio ? 1 : 0) + (ocupacionFilter !== 'vendido' ? 1 : 0) + (sapDbFilter !== 'todas' ? 1 : 0) + (apsEspecificoFilter !== 'todas' ? 1 : 0) + (postFilter !== 'todas' ? 1 : 0) + currentFilters.length + currentGroupings.length + (currentSortField ? 1 : 0)}
+                    {(selectedCatorcenas.length > 0 ? 1 : 0) + (fechaInicio ? 1 : 0) + (ocupacionFilter !== 'vendido' ? 1 : 0) + (sapDbFilter !== 'todas' ? 1 : 0) + (apsEspecificoFilter !== 'todas' ? 1 : 0) + (postFilter !== 'todas' ? 1 : 0) + (formatoFilter.length > 0 ? 1 : 0) + currentFilters.length + currentGroupings.length + (currentSortField ? 1 : 0)}
                   </span>
                 )}
               </button>
@@ -1823,13 +2002,57 @@ export function OrdenesMontajeModal({ isOpen, onClose, canExport = true }: Orden
                       </p>
                     </div>
 
+                    {/* Formato (multiselect) — aplica en TODAS las pestañas */}
+                    <div>
+                      <label className="text-xs font-medium text-zinc-400 mb-2 block">
+                        Formatos {formatoFilter.length > 0 && <span className="text-purple-400">({formatoFilter.length})</span>}
+                      </label>
+                      <div className="relative">
+                        <button
+                          type="button"
+                          onClick={() => setShowFormatoPopup(v => !v)}
+                          className="w-full flex items-center justify-between gap-2 px-3 py-2 rounded-lg text-xs bg-zinc-800 text-zinc-200 border border-zinc-700 hover:bg-zinc-700 transition-colors"
+                        >
+                          <span className="truncate">
+                            {formatoFilter.length === 0 ? 'Todos los formatos' : formatoFilter.length === 1 ? formatoFilter[0] : `${formatoFilter.length} formatos`}
+                          </span>
+                          <ChevronDown className="h-4 w-4 shrink-0 text-zinc-400" />
+                        </button>
+                        {showFormatoPopup && (
+                          <div className="absolute z-30 mt-1 w-full rounded-lg border border-zinc-700 bg-zinc-900 shadow-xl max-h-64 overflow-hidden flex flex-col">
+                            <div className="p-2 border-b border-zinc-800">
+                              <input
+                                autoFocus
+                                value={formatoSearch}
+                                onChange={e => setFormatoSearch(e.target.value)}
+                                placeholder="Buscar formato…"
+                                className="w-full px-2 py-1.5 text-xs rounded bg-zinc-800 border border-zinc-700 text-zinc-100 placeholder:text-zinc-500 focus:outline-none focus:ring-1 focus:ring-purple-500/50"
+                              />
+                              {formatoFilter.length > 0 && (
+                                <button type="button" onClick={() => setFormatoFilter([])} className="mt-1.5 text-[11px] text-red-400 hover:text-red-300">Limpiar selección</button>
+                              )}
+                            </div>
+                            <div className="overflow-y-auto">
+                              {formatoOptions.filter(f => f.toLowerCase().includes(formatoSearch.trim().toLowerCase())).map(f => (
+                                <label key={f} className="flex items-center gap-2 px-3 py-1.5 text-xs text-zinc-200 hover:bg-zinc-800 cursor-pointer">
+                                  <input type="checkbox" checked={formatoFilter.includes(f)} onChange={() => toggleFormato(f)} className="accent-purple-500" />
+                                  <span className="truncate">{f}</span>
+                                </label>
+                              ))}
+                              {formatoOptions.length === 0 && <div className="px-3 py-2 text-[11px] text-zinc-500">Sin formatos en los datos</div>}
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+
                     {/* BDD SAP */}
                     <div className={ocupacionSoloVendido ? '' : 'opacity-40 pointer-events-none'}>
                       <label className="text-xs font-medium text-zinc-400 mb-2 block">
                         BDD SAP {!ocupacionSoloVendido && <span className="text-[10px] text-zinc-500">(solo en Vendido)</span>}
                       </label>
                       <div className="flex gap-2">
-                        {(['todas', 'TRADE', 'CIMU'] as const).map(opt => (
+                        {(['todas', 'TRADE', 'CIMU', 'UDC'] as const).map(opt => (
                           <button
                             key={opt}
                             disabled={!ocupacionSoloVendido}
@@ -2034,7 +2257,7 @@ export function OrdenesMontajeModal({ isOpen, onClose, canExport = true }: Orden
                           value={currentSortField || ''}
                           onChange={(e) => {
                             const val = e.target.value || null;
-                            if (activeTab === 'cat' || activeTab === 'digital' || activeTab === 'ocupacion-digital') {
+                            if (activeTab === 'cat' || activeTab === 'digital' || activeTab === 'ocupacion-digital' || activeTab === 'udc') {
                               setCatSortField(val);
                             } else {
                               setInvianSortField(val);
@@ -2049,7 +2272,7 @@ export function OrdenesMontajeModal({ isOpen, onClose, canExport = true }: Orden
                         </select>
                         <button
                           onClick={() => {
-                            if (activeTab === 'cat' || activeTab === 'digital' || activeTab === 'ocupacion-digital') {
+                            if (activeTab === 'cat' || activeTab === 'digital' || activeTab === 'ocupacion-digital' || activeTab === 'udc') {
                               setCatSortDirection(prev => prev === 'asc' ? 'desc' : 'asc');
                             } else {
                               setInvianSortDirection(prev => prev === 'asc' ? 'desc' : 'asc');
@@ -2069,7 +2292,7 @@ export function OrdenesMontajeModal({ isOpen, onClose, canExport = true }: Orden
                         value={currentGroupings[0] || ''}
                         onChange={(e) => {
                           const val = e.target.value;
-                          if (activeTab === 'cat' || activeTab === 'digital' || activeTab === 'ocupacion-digital') {
+                          if (activeTab === 'cat' || activeTab === 'digital' || activeTab === 'ocupacion-digital' || activeTab === 'udc') {
                             setCatGroupings(val ? [val as CATGroupByField] : []);
                           } else {
                             setInvianGroupings(val ? [val as INVIANGroupByField] : []);
@@ -2364,6 +2587,101 @@ export function OrdenesMontajeModal({ isOpen, onClose, canExport = true }: Orden
                 )}
               </table>
             </div>
+          ) : activeTab === 'udc' ? (
+            <div className="overflow-x-auto">
+              <table className="w-full min-w-[1700px]">
+                <thead className="sticky top-0 z-10">
+                  <tr className="border-b border-cyan-500/20 bg-gradient-to-r from-cyan-900/40 via-teal-900/30 to-cyan-900/40 backdrop-blur-sm">
+                    <th className="px-3 py-3 text-left text-[10px] font-semibold text-cyan-300 uppercase tracking-wider">Plaza</th>
+                    <th className="px-3 py-3 text-left text-[10px] font-semibold text-cyan-300 uppercase tracking-wider">Tipo</th>
+                    <th className="px-3 py-3 text-left text-[10px] font-semibold text-cyan-300 uppercase tracking-wider">Asesor</th>
+                    <th className="px-3 py-3 text-left text-[10px] font-semibold text-cyan-300 uppercase tracking-wider">APS Global</th>
+                    <th className="px-3 py-3 text-left text-[10px] font-semibold text-cyan-300 uppercase tracking-wider">APS Específico</th>
+                    <th className="px-3 py-3 text-left text-[10px] font-semibold text-cyan-300 uppercase tracking-wider">CUIC</th>
+                    <th className="px-3 py-3 text-left text-[10px] font-semibold text-cyan-300 uppercase tracking-wider">BD SAP</th>
+                    <th className="px-3 py-3 text-left text-[10px] font-semibold text-cyan-300 uppercase tracking-wider">F. Inicio</th>
+                    <th className="px-3 py-3 text-left text-[10px] font-semibold text-cyan-300 uppercase tracking-wider">F. Fin</th>
+                    <th className="px-3 py-3 text-left text-[10px] font-semibold text-cyan-300 uppercase tracking-wider">Cliente</th>
+                    <th className="px-3 py-3 text-left text-[10px] font-semibold text-cyan-300 uppercase tracking-wider">Marca</th>
+                    <th className="px-3 py-3 text-left text-[10px] font-semibold text-cyan-300 uppercase tracking-wider">Campaña</th>
+                    <th className="px-3 py-3 text-left text-[10px] font-semibold text-cyan-300 uppercase tracking-wider">Artículo</th>
+                    <th className="px-3 py-3 text-left text-[10px] font-semibold text-cyan-300 uppercase tracking-wider">Negociación</th>
+                    <th className="px-3 py-3 text-right text-[10px] font-semibold text-cyan-300 uppercase tracking-wider">Caras</th>
+                    <th className="px-3 py-3 text-left text-[10px] font-semibold text-cyan-300 uppercase tracking-wider">Zona</th>
+                    <th className="px-3 py-3 text-right text-[10px] font-semibold text-cyan-300 uppercase tracking-wider">Tarifa</th>
+                    <th className="px-3 py-3 text-right text-[10px] font-semibold text-cyan-300 uppercase tracking-wider">Monto Total</th>
+                    <th className="px-3 py-3 text-center text-[10px] font-semibold text-cyan-300 uppercase tracking-wider">Diferencia</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {groupedUdcData ? (
+                    groupedUdcData.map(([groupName, items]) => (
+                      <React.Fragment key={groupName}>
+                        <tr
+                          onClick={() => toggleGroup(groupName)}
+                          className="bg-cyan-500/10 border-b border-cyan-500/20 cursor-pointer hover:bg-cyan-500/15 transition-colors"
+                        >
+                          <td colSpan={19} className="px-4 py-2">
+                            <div className="flex items-center gap-2">
+                              {catExpandedGroups.has(groupName) ? (
+                                <ChevronDown className="h-4 w-4 text-cyan-400" />
+                              ) : (
+                                <ChevronRight className="h-4 w-4 text-cyan-400" />
+                              )}
+                              <span className="font-semibold text-white text-sm">{groupName}</span>
+                              <span className="px-2 py-0.5 rounded-full text-xs bg-cyan-500/20 text-cyan-300">
+                                {items.length} registros
+                              </span>
+                              <span className="text-xs text-zinc-400">
+                                Caras: {items.reduce((sum, i) => sum + (Number(i.caras) || 0), 0).toLocaleString()}
+                              </span>
+                              <span className="text-xs text-emerald-400">
+                                Total: ${items.reduce((sum, i) => sum + (Number(i.monto_total) || 0), 0).toLocaleString()}
+                              </span>
+                            </div>
+                          </td>
+                        </tr>
+                        {catExpandedGroups.has(groupName) && items.map((item, idx) => (
+                          <CATRow key={`${groupName}-${idx}`} item={item} isDark={isDark} showApsEspecifico showZona />
+                        ))}
+                      </React.Fragment>
+                    ))
+                  ) : (
+                    paginatedUdcData.map((item, idx) => (
+                      <CATRow key={idx} item={item} isDark={isDark} showApsEspecifico showZona />
+                    ))
+                  )}
+                  {filteredUdcData.length === 0 && (
+                    <tr>
+                      <td colSpan={19} className="px-4 py-12 text-center">
+                        <div className="inline-flex items-center justify-center w-16 h-16 rounded-full bg-cyan-500/10 mb-4">
+                          <Monitor className="w-8 h-8 text-cyan-400" />
+                        </div>
+                        <p className="text-zinc-500">No se encontraron registros UDC (aeropuerto)</p>
+                      </td>
+                    </tr>
+                  )}
+                </tbody>
+                {filteredUdcData.length > 0 && (
+                  <tfoot className="sticky bottom-0 bg-zinc-900/95 backdrop-blur-sm">
+                    <tr className="border-t-2 border-cyan-500/40">
+                      <td colSpan={14} className="px-3 py-3 text-right text-sm font-semibold text-cyan-300">
+                        Totales:
+                      </td>
+                      <td className="px-3 py-3 text-right text-sm font-bold text-white">
+                        {udcTotals.caras.toLocaleString()}
+                      </td>
+                      <td></td>
+                      <td></td>
+                      <td className="px-3 py-3 text-right text-sm font-bold text-emerald-400">
+                        ${udcTotals.monto.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                      </td>
+                      <td></td>
+                    </tr>
+                  </tfoot>
+                )}
+              </table>
+            </div>
           ) : activeTab === 'digital' ? (
             <div className="overflow-x-auto">
               <table className="w-full min-w-[1700px]">
@@ -2587,7 +2905,7 @@ function mesFromDate(dateStr: string | null): string {
 // Memoizado: solo se re-renderiza si cambia item, isDark o las flags de
 // visualización. Antes se redibujaban TODAS las filas en cada render del
 // padre. `isDark` ahora llega como prop para no suscribir el store por fila.
-const CATRow = React.memo(function CATRow({ item, isDark, showApsEspecifico = false, showMes = false }: { item: OrdenMontajeCAT; isDark: boolean; showApsEspecifico?: boolean; showMes?: boolean }) {
+const CATRow = React.memo(function CATRow({ item, isDark, showApsEspecifico = false, showMes = false, showZona = false }: { item: OrdenMontajeCAT; isDark: boolean; showApsEspecifico?: boolean; showMes?: boolean; showZona?: boolean }) {
   const negociacionColor = getNegociacionColorCls(item.negociacion, isDark);
   const negociacionLabel = (() => {
     switch (item.negociacion) {
@@ -2640,6 +2958,16 @@ const CATRow = React.memo(function CATRow({ item, isDark, showApsEspecifico = fa
         </span>
       </td>
       <td className={`px-3 py-2 text-xs text-right ${isDark ? 'text-white' : 'text-gray-900'} font-medium`}>{Number(item.caras) || 0}</td>
+      {showZona && (() => {
+        const zona = udcZonaDeArticulo(item.numero_articulo);
+        return zona ? (
+          <td className="px-3 py-2">
+            <span className={`px-2 py-0.5 rounded-full text-[10px] border ${isDark ? 'bg-cyan-500/20 text-cyan-300 border-cyan-500/30' : 'bg-cyan-50 text-cyan-700 border-cyan-200'}`}>{zona}</span>
+          </td>
+        ) : (
+          <td className={`px-3 py-2 text-xs ${isDark ? 'text-zinc-600' : 'text-gray-400'}`}>-</td>
+        );
+      })()}
       <td className={`px-3 py-2 text-xs text-right ${isDark ? 'text-zinc-300' : 'text-gray-700'}`}>${(Number(item.tarifa) || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
       <td className="px-3 py-2 text-xs text-right text-emerald-400 font-medium">${(Number(item.monto_total) || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
       <td className="px-3 py-2 text-xs text-center font-medium">
