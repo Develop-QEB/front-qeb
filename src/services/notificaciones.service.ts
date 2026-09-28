@@ -333,6 +333,17 @@ export const notificacionesService = {
     }
     return response.data.data;
   },
+
+  async editarActividadComercial(id: number, payload: CrearActividadComercialInput): Promise<ActividadComercialCreated> {
+    const response = await api.patch<ApiResponse<ActividadComercialCreated>>(
+      `/notificaciones/actividad-comercial/${id}`,
+      payload
+    );
+    if (!response.data.success || !response.data.data) {
+      throw new Error(response.data.error || 'Error al editar actividad comercial');
+    }
+    return response.data.data;
+  },
 };
 
 // ==================== TIPOS ACTIVIDAD COMERCIAL ====================

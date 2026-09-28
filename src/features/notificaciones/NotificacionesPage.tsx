@@ -37,6 +37,7 @@ import { NuevaActividadComercialModal } from './NuevaActividadComercialModal';
 const ROLES_ACTIVIDAD_COMERCIAL = new Set([
   'Asesor Comercial',
   'Asesor Comercial Aeropuerto',
+  'Asesor Analista',
   'Gerente Comercial',
   'Director Comercial',
   'Administrador',
@@ -430,12 +431,17 @@ function TareaRow({
   showBorder = true,
   selected,
   onToggleSelection,
+  currentUserId,
+  onEditActividad,
 }: {
   tarea: Notificacion;
   onSelect: () => void;
   showBorder?: boolean;
   selected?: boolean;
   onToggleSelection?: (id: number) => void;
+  // Si el user actual es creador de la Actividad Comercial, mostramos plumita.
+  currentUserId?: number;
+  onEditActividad?: (tarea: Notificacion) => void;
 }) {
   const isDark = useThemeStore((s) => s.theme) === 'dark';
   const statusConfig = getStatusConfig(tarea.estatus);
@@ -573,6 +579,19 @@ function TareaRow({
             #{tarea.referencia_id}
           </span>
         )}
+
+        {/* Editar Actividad Comercial — solo el creador ve la plumita.
+            Feedback Jos 2026-09-25: reabre el mismo modal precargado. */}
+        {tarea.tipo === 'Actividad Comercial' && onEditActividad && currentUserId != null && tarea.id_responsable === currentUserId && (
+          <button
+            type="button"
+            onClick={(e) => { e.stopPropagation(); onEditActividad(tarea); }}
+            title="Editar actividad comercial"
+            className={`p-1.5 rounded-lg transition-colors ${isDark ? 'text-amber-300 hover:bg-amber-500/15' : 'text-amber-600 hover:bg-amber-50'}`}
+          >
+            <Pencil className="h-3.5 w-3.5" />
+          </button>
+        )}
       </div>
     </div>
   );
@@ -676,6 +695,8 @@ function NestedSection({
   onSelectTarea,
   selectedIds,
   onToggleSelection,
+  currentUserId,
+  onEditActividad,
 }: {
   group: NestedGroup;
   level?: number;
@@ -683,6 +704,8 @@ function NestedSection({
   onSelectTarea: (tarea: Notificacion) => void;
   selectedIds?: Set<number>;
   onToggleSelection?: (id: number) => void;
+  currentUserId?: number;
+  onEditActividad?: (tarea: Notificacion) => void;
 }) {
   const isDark = useThemeStore((s) => s.theme) === 'dark';
   const [open, setOpen] = useState(true);
@@ -712,6 +735,8 @@ function NestedSection({
                 showBorder={idx !== group.tareas.length - 1}
                 selected={selectedIds?.has(tarea.id)}
                 onToggleSelection={onToggleSelection}
+                currentUserId={currentUserId}
+                onEditActividad={onEditActividad}
               />
             ))}
       </div>
@@ -762,6 +787,8 @@ function NestedSection({
                   onSelectTarea={onSelectTarea}
                   selectedIds={selectedIds}
                   onToggleSelection={onToggleSelection}
+                  currentUserId={currentUserId}
+                  onEditActividad={onEditActividad}
                 />
               ))}
             </div>
@@ -775,6 +802,8 @@ function NestedSection({
                 showBorder={idx !== group.tareas.length - 1}
                 selected={selectedIds?.has(tarea.id)}
                 onToggleSelection={onToggleSelection}
+                currentUserId={currentUserId}
+                onEditActividad={onEditActividad}
               />
             ))
           )}
@@ -3182,8 +3211,17 @@ export function NotificacionesPage() {
   const isDark = useThemeStore((s) => s.theme) === 'dark';
   const currentUserId = useAuthStore((s) => s.user?.id);
   const currentUserRol = useAuthStore((s) => s.user?.rol);
+  const currentUserId = useAuthStore((s) => s.user?.id);
   const puedeCrearActividadComercial = !!currentUserRol && ROLES_ACTIVIDAD_COMERCIAL.has(currentUserRol);
   const [showActividadModal, setShowActividadModal] = useState(false);
+  // Tarea en edición para el modal Actividad Comercial. null = modo creación.
+  // Feedback Jos 2026-09-25: plumita reabre el mismo modal precargado.
+  const [editingActividad, setEditingActividad] = useState<{
+    id: number;
+    descripcion?: string | null;
+    fecha_fin?: string | Date | null;
+    contenido?: string | null;
+  } | null>(null);
 
   // Suscribirse a WebSocket para actualizaciones en tiempo real.
   // popups: false — los popups los dispara solo la instancia del Header.
@@ -4116,6 +4154,8 @@ export function NotificacionesPage() {
                     onSelectTarea={handleSelectTarea}
                     selectedIds={contentType === 'notificaciones' ? selectedTareaIds : undefined}
                     onToggleSelection={contentType === 'notificaciones' ? toggleTareaSelection : undefined}
+                    currentUserId={currentUserId}
+                    onEditActividad={puedeCrearActividadComercial ? (t) => setEditingActividad({ id: t.id, descripcion: t.mensaje || t.titulo, fecha_fin: t.fecha_fin, contenido: t.contenido }) : undefined}
                   />
                 ))}
               </div>
@@ -4265,6 +4305,21 @@ export function NotificacionesPage() {
 
                         {/* Acciones */}
                         <div className="flex items-center gap-1 flex-shrink-0 mt-1">
+                          {/* Plumita para editar Actividad Comercial — solo el creador la ve.
+                              Feedback Jos 2026-09-25: reabre el mismo modal precargado. */}
+                          {tarea.tipo === 'Actividad Comercial' && puedeCrearActividadComercial && currentUserId != null && tarea.id_responsable === currentUserId && (
+                            <button
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setEditingActividad({ id: tarea.id, descripcion: tarea.mensaje || tarea.titulo, fecha_fin: tarea.fecha_fin, contenido: tarea.contenido });
+                              }}
+                              title="Editar actividad comercial"
+                              className={`p-1.5 rounded-lg transition-colors ${isDark ? 'text-amber-300 hover:bg-amber-500/15' : 'text-amber-600 hover:bg-amber-50'}`}
+                            >
+                              <Pencil className="h-3.5 w-3.5" />
+                            </button>
+                          )}
                           {/* Botón Ir a ver - solo si tiene referencia o id_solicitud para tareas de autorización/rechazo */}
                           {hasNavigationRoute(tarea) && (
                             <button
@@ -4502,11 +4557,13 @@ export function NotificacionesPage() {
         />
       )}
 
-      {/* Nueva Actividad Comercial (tarea manual asesor) */}
+      {/* Nueva Actividad Comercial (tarea manual asesor). Si editingActividad
+          está seteado, entra en modo edición con datos precargados. */}
       {puedeCrearActividadComercial && (
         <NuevaActividadComercialModal
-          isOpen={showActividadModal}
-          onClose={() => setShowActividadModal(false)}
+          isOpen={showActividadModal || !!editingActividad}
+          onClose={() => { setShowActividadModal(false); setEditingActividad(null); }}
+          editing={editingActividad}
         />
       )}
 
