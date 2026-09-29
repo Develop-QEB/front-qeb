@@ -537,7 +537,7 @@ export function ClientesPage() {
   const isDark = useThemeStore((s) => s.theme === 'dark');
   const queryClient = useQueryClient();
   const user = useAuthStore((state) => state.user);
-  const permissions = getPermissions(user?.rol);
+  const permissions = getPermissions(user?.rol, user?.nombre);
 
   // WebSocket para actualizaciones en tiempo real
   useSocketClientes();

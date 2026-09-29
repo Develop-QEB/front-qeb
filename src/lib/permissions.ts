@@ -2802,7 +2802,7 @@ const rolePermissions: Partial<Record<UserRole, Partial<RolePermissions>>> = {
   },
 };
 
-export function getPermissions(role: string | undefined | null): RolePermissions {
+export function getPermissions(role: string | undefined | null, nombreUsuario?: string | null): RolePermissions {
   if (!role) {
     // Sin rol, permisos mínimos
     return {
@@ -2842,12 +2842,12 @@ export function getPermissions(role: string | undefined | null): RolePermissions
   // Tráfico (cualquier rol de tráfico) NO puede editar tarifa ni cantidad de caras
   // de circuitos, ni en propuestas ni en campañas.
   const esTrafico = /trafico/i.test(role);
-  return { ...merged, canEditTarifaCaras: merged.canEditTarifaCaras && !esTrafico, canVerUDC: esRolUDC(role) };
+  return { ...merged, canEditTarifaCaras: merged.canEditTarifaCaras && !esTrafico, canVerUDC: esRolUDC(role) || esUsuarioUDCExtra(nombreUsuario) };
 }
 
 // Hook para usar en componentes
-export function usePermissions(role: string | undefined | null): RolePermissions {
-  return getPermissions(role);
+export function usePermissions(role: string | undefined | null, nombreUsuario?: string | null): RolePermissions {
+  return getPermissions(role, nombreUsuario);
 }
 
 /**
@@ -2895,4 +2895,17 @@ export function esRolUDC(rol?: string | null): boolean {
  */
 export function esTrafico(rol?: string | null): boolean {
   return !!rol && /trafico/i.test(rol);
+}
+
+// Usuarios con acceso UDC por EXCEPCIÓN (además de los ROLES_UDC), por nombre.
+// Para dar UDC a alguien puntual sin cambiarle el rol. Comparación tolerante a
+// acentos / mayúsculas / espacios dobles.
+export const USUARIOS_UDC_EXTRA: string[] = [
+  'Mayra Angelica Duran Perez',
+];
+const normNombreUDC = (s?: string | null): string =>
+  (s || '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().trim().replace(/\s+/g, ' ');
+export function esUsuarioUDCExtra(nombre?: string | null): boolean {
+  const n = normNombreUDC(nombre);
+  return !!n && USUARIOS_UDC_EXTRA.some(u => normNombreUDC(u) === n);
 }

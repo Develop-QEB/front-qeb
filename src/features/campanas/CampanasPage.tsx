@@ -1286,7 +1286,7 @@ export function CampanasPage() {
   const [searchParams, setSearchParams] = useSearchParams();
   const user = useAuthStore((state) => state.user);
   const isDark = useThemeStore((s) => s.theme) === 'dark';
-  const permissions = getPermissions(user?.rol);
+  const permissions = getPermissions(user?.rol, user?.nombre);
 
   // WebSocket para actualizaciones en tiempo real
   useSocketCampanas();
