@@ -729,7 +729,7 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
 
   // Current user for default asignado
   const currentUser = useAuthStore((state) => state.user);
-  const permissions = getPermissions(currentUser?.rol);
+  const permissions = getPermissions(currentUser?.rol, currentUser?.nombre);
   const canEditCliente = permissions.canEditClienteEnFormularios;
 
   // Toast notification state
@@ -2618,8 +2618,10 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
       } else {
         if (!mesInicio || !mesFin) return false;
       }
-      if (!descripcion.trim()) return false;
-      if (!notas.trim()) return false;
+      // UDC (aeropuerto AICM): Descripción Tráfico y Notas Dirección NO son
+      // obligatorias (no aplica el flujo de tráfico/dirección para el aeropuerto).
+      if (!esUDC && !descripcion.trim()) return false;
+      if (!esUDC && !notas.trim()) return false;
       return true;
     }
     if (s === 3) {
