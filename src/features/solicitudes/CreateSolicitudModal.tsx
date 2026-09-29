@@ -923,7 +923,13 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
   // UDC = periodos SIEMPRE mensuales (inventario aeropuerto AICM, todo digital,
   // dispo ilimitada como parabús digital). Al elegir BD/cliente UDC forzamos
   // 'mensual' y ocultamos la opción Catorcena del toggle.
-  const esUDC = sapDbFilter === 'UDC' || ((selectedCuic?.sap_database || '') as string).toUpperCase() === 'UDC';
+  // Detección robusta de cliente UDC: por sap_database='UDC' O por CardCode UDC*
+  // (los códigos SAP de UDC empiezan con "UDC"). Blindaje por si el sap_database
+  // del cliente no quedó bien seteado en la BD.
+  const clienteEsUDC =
+    ((selectedCuic?.sap_database || '') as string).toUpperCase() === 'UDC' ||
+    String((selectedCuic as { card_code?: string | null } | null | undefined)?.card_code || '').trim().toUpperCase().startsWith('UDC');
+  const esUDC = sapDbFilter === 'UDC' || clienteEsUDC;
   // BD SAP del catálogo de artículos: UDC cuando el contexto es UDC. DEBE ser
   // CONSISTENTE con esUDC (tab UDC O cliente UDC). Antes miraba solo
   // selectedCuic.sap_database, así que en el tab UDC con un cliente cuyo
