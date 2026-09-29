@@ -920,12 +920,16 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
     return cuicDataRaw.filter(c => c.sap_database === sapDbFilter);
   }, [cuicDataRaw, sapDbFilter]);
 
-  // BD SAP del catálogo: UDC (aeropuerto) si el cliente seleccionado es UDC.
-  const sapDbArticulos = ((selectedCuic?.sap_database || '') as string).toUpperCase() === 'UDC' ? ('UDC' as const) : null;
   // UDC = periodos SIEMPRE mensuales (inventario aeropuerto AICM, todo digital,
   // dispo ilimitada como parabús digital). Al elegir BD/cliente UDC forzamos
   // 'mensual' y ocultamos la opción Catorcena del toggle.
   const esUDC = sapDbFilter === 'UDC' || ((selectedCuic?.sap_database || '') as string).toUpperCase() === 'UDC';
+  // BD SAP del catálogo de artículos: UDC cuando el contexto es UDC. DEBE ser
+  // CONSISTENTE con esUDC (tab UDC O cliente UDC). Antes miraba solo
+  // selectedCuic.sap_database, así que en el tab UDC con un cliente cuyo
+  // sap_database no quedó en 'UDC' el catálogo caía al regular (/articulos) y se
+  // colaban los Gran Formato mensuales de CIMU/TRADE. Ese era el bug.
+  const sapDbArticulos = esUDC ? ('UDC' as const) : null;
   useEffect(() => {
     if (esUDC && tipoPeriodo !== 'mensual') {
       setTipoPeriodo('mensual');
