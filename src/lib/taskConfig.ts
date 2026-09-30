@@ -207,6 +207,14 @@ export const TIPO_CONFIG = {
     border: 'border-red-500/30',
     icon: ShieldX
   },
+  // Aviso al asesor de que su circuito YA fue eliminado (tras autorizar).
+  // Informativo (no acción): ámbar + campana para distinguirlo de las auth rojas.
+  'Aviso Eliminación': {
+    color: 'text-amber-400',
+    bg: 'bg-amber-500/20',
+    border: 'border-amber-500/30',
+    icon: Bell
+  },
 } as const;
 
 // Default para tipos no definidos
