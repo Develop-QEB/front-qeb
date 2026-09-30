@@ -919,6 +919,12 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
   // Track locally modified caras (caraDbId -> CaraUpdateData) for bulk save
   const [modifiedCaras, setModifiedCaras] = useState<Map<number, Record<string, unknown>>>(new Map());
   const initialValuesSetRef = useRef(false);
+  // Ids de caras que YA estaban guardadas al abrir el modal (estado original).
+  // Sirve para no pedir autorización de eliminación al borrar un circuito que se
+  // agregó EN ESTA sesión (aunque ya tenga id por haber reservado) y aún no se
+  // "guarda" formalmente — la auth de eliminación solo aplica a lo ya guardado.
+  const originalCaraIdsRef = useRef<Set<number>>(new Set());
+  const originalIdsCapturedRef = useRef(false);
 
   // New cara form
   const [newCara, setNewCara] = useState<Omit<CaraItem, 'localId'>>(EMPTY_CARA);
@@ -1608,6 +1614,15 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
       });
       setCaras(carasWithIds);
       setSelectedCaraIds(new Set());
+      // Captura UNA sola vez (al abrir) los ids ya guardados. En recargas
+      // posteriores (p.ej. tras reservar) NO se re-captura, así las caras
+      // agregadas en la sesión quedan fuera del set "original".
+      if (!originalIdsCapturedRef.current) {
+        originalCaraIdsRef.current = new Set(
+          carasWithIds.filter(c => typeof c.id === 'number').map(c => c.id as number)
+        );
+        originalIdsCapturedRef.current = true;
+      }
     }
   }, [carasData, isOpen, catorcenasData, tipoPeriodo]);
 
@@ -1624,6 +1639,8 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
       setArticuloBf(null);
       setModifiedCaras(new Map());
       initialValuesSetRef.current = false;
+      originalIdsCapturedRef.current = false;
+      originalCaraIdsRef.current = new Set();
     }
   }, [isOpen]);
 
@@ -2569,6 +2586,10 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
         const toDelete = [caraToDelete, ...pairedCaras].filter(Boolean) as CaraItem[];
         const conId = toDelete.filter(c => c.id) as (CaraItem & { id: number })[];
         const sinId = toDelete.filter(c => !c.id);
+        // Con id pero AGREGADAS en esta sesión (no estaban guardadas al abrir):
+        // se borran directo SIN autorización. Solo lo YA guardado pide auth.
+        const conIdNuevo = conId.filter(c => !originalCaraIdsRef.current.has(c.id));
+        const conIdOriginal = conId.filter(c => originalCaraIdsRef.current.has(c.id));
 
         // Caras locales aún no guardadas (sin id): se quitan directo, no están en BD.
         if (sinId.length > 0) {
@@ -2579,12 +2600,25 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
 
         setDeleteCircuitoModal(prev => ({ ...prev, isOpen: false, isDeleting: false }));
 
-        if (conId.length > 0) {
-          // Eliminar en campaña requiere autorización (Gerente → DG) con MOTIVO de
-          // eliminación obligatorio. Se abre el modal de motivo y, al confirmarlo, se
-          // manda 1 sola solicitud (con la pareja RT/BF incluida). El motivo viaja en
-          // la tarea (lo ve el Gerente y DG).
-          setDeleteNota({ open: true, caraIds: conId.map(c => c.id) });
+        // Agregadas en la sesión (ya tienen id por haber reservado): borrado directo
+        // sin autorización — no estaban guardadas, es "deshacer" lo que acabas de hacer.
+        if (conIdNuevo.length > 0) {
+          const [primero, ...resto] = conIdNuevo.map(c => c.id);
+          try {
+            await campanasService.deleteCara(campana!.id, primero, false, resto, true);
+            const nuevoLocalIds = new Set(conIdNuevo.map(c => c.localId));
+            setCaras(prev => prev.filter(c => !nuevoLocalIds.has(c.localId)));
+            setReservas(prev => prev.filter(r => !conIdNuevo.some(c => r.id.startsWith(c.localId) || r.solicitudCaraId === c.id)));
+          } catch (e) {
+            console.error('Error eliminando circuito nuevo (sin auth):', e);
+          }
+        }
+
+        if (conIdOriginal.length > 0) {
+          // Ya guardadas: eliminar en campaña requiere autorización (Gerente) con
+          // MOTIVO. Se abre el modal de motivo y, al confirmarlo, se manda 1 sola
+          // solicitud (con la pareja RT/BF incluida). El motivo viaja en la tarea.
+          setDeleteNota({ open: true, caraIds: conIdOriginal.map(c => c.id) });
         }
       }
     });
