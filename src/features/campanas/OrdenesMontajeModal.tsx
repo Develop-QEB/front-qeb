@@ -277,6 +277,16 @@ const esGranFormato = (formato: string | null | undefined): boolean => {
 const esMensual = (tipoPeriodo: string | null | undefined): boolean =>
   (tipoPeriodo || '').toLowerCase() === 'mensual';
 
+// El FORMATO vive en distinto campo según la vista: en las filas CAT (Ocupación)
+// está en `tipo` (ver OrdenMontajeCAT: `tipo` = sc.formato); en las filas INVIAN
+// (Inventario) está en `formato` (sc.formato). Este accesor unifica ambos para
+// que el filtro de Formato funcione en TODOS los tabs. Antes se leía solo
+// `.formato`, que en las filas CAT viene vacío → "Sin formatos en los datos".
+const formatoDeFila = (it: unknown): string => {
+  const o = it as { formato?: string | null; tipo?: string | null };
+  return String(o?.formato || o?.tipo || '').trim();
+};
+
 // Extrae la ciudad del codigo_unico de inventarios.
 // Formato esperado: 'CODIGO_SENTIDO_CIUDAD' (ej. 'AC3033_Contraflujo2_Acapulco de Juárez').
 // Casos especiales en la data: separador con coma en lugar de _ (ej. '21061_Flujo,Monterrey'
@@ -734,7 +744,7 @@ export function OrdenesMontajeModal({ isOpen, onClose, canExport = true }: Orden
   const formatoOptions = useMemo(() => {
     const set = new Set<string>();
     const push = (arr: unknown) => { if (Array.isArray(arr)) arr.forEach((it) => {
-      const f = String((it as { formato?: string | null }).formato || '').trim();
+      const f = formatoDeFila(it);
       if (f) set.add(f);
     }); };
     push(catData); push(invianData);
@@ -851,7 +861,7 @@ export function OrdenesMontajeModal({ isOpen, onClose, canExport = true }: Orden
       items = items.filter(item => item.posted !== true);
     }
     if (formatoFilter.length > 0) {
-      items = items.filter(item => formatoFilter.includes(String((item as { formato?: string | null }).formato || '').trim()));
+      items = items.filter(item => formatoFilter.includes(formatoDeFila(item)));
     }
 
     // Filter by date range if set
@@ -934,7 +944,7 @@ export function OrdenesMontajeModal({ isOpen, onClose, canExport = true }: Orden
       items = items.filter(item => item.posted !== true);
     }
     if (formatoFilter.length > 0) {
-      items = items.filter(item => formatoFilter.includes(String((item as { formato?: string | null }).formato || '').trim()));
+      items = items.filter(item => formatoFilter.includes(formatoDeFila(item)));
     }
 
     // Filter by date range if set
@@ -1010,7 +1020,7 @@ export function OrdenesMontajeModal({ isOpen, onClose, canExport = true }: Orden
       items = items.filter(item => item.posted !== true);
     }
     if (formatoFilter.length > 0) {
-      items = items.filter(item => formatoFilter.includes(String((item as { formato?: string | null }).formato || '').trim()));
+      items = items.filter(item => formatoFilter.includes(formatoDeFila(item)));
     }
 
     // Rango de fechas
@@ -1087,7 +1097,7 @@ export function OrdenesMontajeModal({ isOpen, onClose, canExport = true }: Orden
       items = items.filter(item => item.posted !== true);
     }
     if (formatoFilter.length > 0) {
-      items = items.filter(item => formatoFilter.includes(String((item as { formato?: string | null }).formato || '').trim()));
+      items = items.filter(item => formatoFilter.includes(formatoDeFila(item)));
     }
 
     // Excluir digital (tradicional_digital === 'Digital')
@@ -1230,7 +1240,7 @@ export function OrdenesMontajeModal({ isOpen, onClose, canExport = true }: Orden
       items = items.filter(item => item.posted !== true);
     }
     if (formatoFilter.length > 0) {
-      items = items.filter(item => formatoFilter.includes(String((item as { formato?: string | null }).formato || '').trim()));
+      items = items.filter(item => formatoFilter.includes(formatoDeFila(item)));
     }
     // Filtro APS: en INVIAN la APS vive en CodigoContrato (back: rsv.APS AS rsv_aps).
     // "sin APS" = null o 0 (mismo criterio que el back: APS IS NULL OR APS = 0).
@@ -1335,7 +1345,7 @@ export function OrdenesMontajeModal({ isOpen, onClose, canExport = true }: Orden
       items = items.filter(item => item.posted !== true);
     }
     if (formatoFilter.length > 0) {
-      items = items.filter(item => formatoFilter.includes(String((item as { formato?: string | null }).formato || '').trim()));
+      items = items.filter(item => formatoFilter.includes(formatoDeFila(item)));
     }
     // Filtro APS: en INVIAN la APS vive en CodigoContrato (back: rsv.APS AS rsv_aps).
     // "sin APS" = null o 0 (mismo criterio que el back: APS IS NULL OR APS = 0).
