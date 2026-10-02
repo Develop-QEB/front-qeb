@@ -4,6 +4,13 @@ import { Ban, AlertTriangle, X, Loader2, Search, User, ExternalLink, ChevronRigh
 import { solicitudesService, UserOption } from '../../services/solicitudes.service';
 import { inventariosService } from '../../services/inventarios.service';
 import { campanasService } from '../../services/campanas.service';
+import {
+  TIPO_BLOQUEO_DEFAULT,
+  TIPO_BLOQUEO_TEXTOS,
+  TipoBloqueoInventario,
+  esInventarioBloqueado,
+} from '../../lib/bloqueoInventario';
+import { TipoBloqueoSelector } from './TipoBloqueoSelector';
 
 export interface InventarioBasico {
   id: number;
@@ -28,6 +35,8 @@ export interface PairAssignment {
 }
 
 export interface BloqueoBulkData {
+  // Clasificación a aplicar a todos: 'Bloqueado' | 'Inhabilitado'.
+  tipo: TipoBloqueoInventario;
   motivo: string;
   // Por cada inventario, lo que se necesita aplicar al confirmar:
   // - campañas afectadas y sus asignaciones (para crear tareas)
@@ -121,6 +130,8 @@ function UserSelector({
 
 export function BloqueoBulkModal({ isOpen, onClose, items, onConfirm, isSubmitting }: Props) {
   const [motivo, setMotivo] = useState('');
+  const [tipo, setTipo] = useState<TipoBloqueoInventario>(TIPO_BLOQUEO_DEFAULT);
+  const textos = TIPO_BLOQUEO_TEXTOS[tipo];
   const [step, setStep] = useState(0);
   // Asignaciones por pareja (inv, campaña). Key = `${invId}::${campanaId}`.
   const [pairSelections, setPairSelections] = useState<Record<string, { analistas: UserOption[]; trafico: UserOption[] }>>({});
@@ -313,6 +324,7 @@ export function BloqueoBulkModal({ isOpen, onClose, items, onConfirm, isSubmitti
   // === Reset al abrir/cerrar ===
   const reset = () => {
     setMotivo('');
+    setTipo(TIPO_BLOQUEO_DEFAULT);
     setStep(0);
     setPairSelections({});
     setSearchAnalista('');
@@ -340,7 +352,7 @@ export function BloqueoBulkModal({ isOpen, onClose, items, onConfirm, isSubmitti
       const camps = campanasPorInv.get(it.id) || [];
       return {
         item: it,
-        yaEstaBloquedo: it.estatus === 'Bloqueado',
+        yaEstaBloquedo: esInventarioBloqueado(it.estatus),
         pairs: camps.map(c => ({
           campana: c,
           analistas: pairSelections[`${it.id}::${c.campana_id}`]?.analistas ?? [],
@@ -348,7 +360,7 @@ export function BloqueoBulkModal({ isOpen, onClose, items, onConfirm, isSubmitti
         })),
       };
     });
-    await onConfirm({ motivo, perItem });
+    await onConfirm({ tipo, motivo, perItem });
     reset();
   };
 
@@ -363,7 +375,7 @@ export function BloqueoBulkModal({ isOpen, onClose, items, onConfirm, isSubmitti
           <div className="flex items-center gap-2">
             <Ban className="h-5 w-5 text-red-400" />
             <h2 className="text-sm font-semibold text-white">
-              Bloquear {items.length} inventarios
+              {textos.infinitivo} {items.length} inventarios
             </h2>
           </div>
           <button onClick={handleClose} className="text-zinc-500 hover:text-zinc-300"><X className="h-4 w-4" /></button>
@@ -394,12 +406,14 @@ export function BloqueoBulkModal({ isOpen, onClose, items, onConfirm, isSubmitti
           {step === 0 ? (
             /* ===== STEP 0: motivo + overview ===== */
             <>
+              <TipoBloqueoSelector value={tipo} onChange={setTipo} disabled={isSubmitting} />
+
               <div className="flex items-start gap-2.5 px-3 py-2.5 bg-amber-500/10 border border-amber-500/30 rounded-lg">
                 <AlertTriangle className="h-4 w-4 text-amber-400 flex-shrink-0 mt-0.5" />
                 <div>
                   <p className="text-xs font-semibold text-amber-300">Acción masiva</p>
                   <p className="text-xs text-amber-400/80 mt-0.5">
-                    Se bloquearán {items.length} inventarios. Las reservas activas en cada uno
+                    {items.length} inventarios quedarán como {textos.participio.toLowerCase()} y no se podrán ocupar. Las reservas activas en cada uno
                     quedarán soft-deleted (las campañas pierden esas caras y los asesores recibirán
                     tareas para reasignarlas).
                   </p>
@@ -417,7 +431,7 @@ export function BloqueoBulkModal({ isOpen, onClose, items, onConfirm, isSubmitti
                   <div className="space-y-1 max-h-64 overflow-y-auto">
                     {items.map(it => {
                       const camps = campanasPorInv.get(it.id) || [];
-                      const yaBloqueado = it.estatus === 'Bloqueado';
+                      const yaBloqueado = esInventarioBloqueado(it.estatus);
                       return (
                         <div
                           key={it.id}
@@ -430,7 +444,7 @@ export function BloqueoBulkModal({ isOpen, onClose, items, onConfirm, isSubmitti
                             </p>
                             <p className="text-[10px] text-zinc-500 truncate">
                               {it.plaza || '—'}
-                              {yaBloqueado && <span className="ml-1.5 text-red-400">(ya bloqueado)</span>}
+                              {yaBloqueado && <span className="ml-1.5 text-red-400">(ya {(it.estatus || 'bloqueado').toLowerCase()})</span>}
                             </p>
                           </div>
                           <span className={`text-[10px] font-medium px-2 py-0.5 rounded-full flex-shrink-0 ${camps.length === 0 ? 'bg-emerald-500/15 text-emerald-300' : 'bg-orange-500/15 text-orange-300'}`}>
@@ -455,7 +469,7 @@ export function BloqueoBulkModal({ isOpen, onClose, items, onConfirm, isSubmitti
                   value={motivo}
                   onChange={e => setMotivo(e.target.value)}
                   rows={3}
-                  placeholder="¿Por qué se bloquean estos inventarios? (mismo motivo para todos)"
+                  placeholder={`¿Por qué se ${tipo === 'Inhabilitado' ? 'inhabilitan' : 'bloquean'} estos inventarios? (mismo motivo para todos)`}
                   className="w-full bg-zinc-800 border border-zinc-700 text-white text-sm rounded-lg px-3 py-2 resize-none focus:outline-none focus:border-red-500/50 placeholder:text-zinc-600"
                 />
               </div>
@@ -541,7 +555,7 @@ export function BloqueoBulkModal({ isOpen, onClose, items, onConfirm, isSubmitti
               className="flex-1 flex items-center justify-center gap-2 px-3 py-2 text-sm font-medium bg-red-600 hover:bg-red-500 disabled:bg-zinc-700 disabled:text-zinc-500 text-white rounded-lg transition-colors"
             >
               {isSubmitting ? <Loader2 className="h-4 w-4 animate-spin" /> : <Ban className="h-4 w-4" />}
-              {isSubmitting ? 'Bloqueando...' : `Bloquear ${items.length} inventarios`}
+              {isSubmitting ? `${textos.gerundio}...` : `${textos.infinitivo} ${items.length} inventarios`}
             </button>
           ) : !isLastStep ? (
             <button
@@ -559,7 +573,7 @@ export function BloqueoBulkModal({ isOpen, onClose, items, onConfirm, isSubmitti
               className="flex-1 flex items-center justify-center gap-2 px-3 py-2 text-sm font-medium bg-red-600 hover:bg-red-500 disabled:bg-zinc-700 disabled:text-zinc-500 text-white rounded-lg transition-colors"
             >
               {isSubmitting ? <Loader2 className="h-4 w-4 animate-spin" /> : <Check className="h-4 w-4" />}
-              {isSubmitting ? 'Procesando...' : 'Confirmar y bloquear'}
+              {isSubmitting ? 'Procesando...' : `Confirmar y ${textos.infinitivo.toLowerCase()}`}
             </button>
           )}
         </div>

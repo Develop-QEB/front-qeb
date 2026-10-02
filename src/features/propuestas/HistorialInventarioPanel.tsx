@@ -21,9 +21,10 @@ const fmtPeriodo = (ini: string | null, fin: string | null): string => {
   return a || b || '—';
 };
 
-type Motivo = 'Bloqueado' | 'Desplazado' | 'Quitado';
+type Motivo = 'Bloqueado' | 'Inhabilitado' | 'Desplazado' | 'Quitado';
 const MOTIVO_META: Record<string, { icon: typeof Ban; cls: string }> = {
   Bloqueado: { icon: Lock, cls: 'bg-red-500/15 text-red-300 border-red-500/30' },
+  Inhabilitado: { icon: Lock, cls: 'bg-red-500/15 text-red-300 border-red-500/30' },
   Desplazado: { icon: ArrowRightLeft, cls: 'bg-amber-500/15 text-amber-300 border-amber-500/30' },
   Quitado: { icon: Trash2, cls: 'bg-zinc-500/15 text-zinc-300 border-zinc-500/30' },
 };
@@ -61,7 +62,7 @@ export function HistorialInventarioPanel({ items, isDark, canEdit, reReservandoI
   const motivosPresentes = useMemo(() => {
     const s = new Set<string>();
     items.forEach(it => s.add(it.motivo_salida));
-    return (['Quitado', 'Desplazado', 'Bloqueado'] as Motivo[]).filter(m => s.has(m));
+    return (['Quitado', 'Desplazado', 'Bloqueado', 'Inhabilitado'] as Motivo[]).filter(m => s.has(m));
   }, [items]);
 
   const filtered = useMemo(() => {
