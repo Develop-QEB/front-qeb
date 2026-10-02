@@ -6524,7 +6524,10 @@ function TaskDetailModal({
     }
   };
 
-  // Handler para crear tarea de recepción
+  // Handler para crear tarea de recepción. Feedback Jos 2026-10-02: cuando el
+  // PDF era grande (10-25MB) o el upload fallaba, el error solo iba a console
+  // y el usuario veía el boton sin pasar nada. Ahora cualquier fallo se
+  // muestra como alert para que el usuario sepa que hacer.
   const handleCrearRecepcion = async () => {
     if (!task || !task.id) return;
 
@@ -6532,8 +6535,15 @@ function TaskDetailModal({
     try {
       let guiaPdfUrlCreada: string | undefined;
       if (impresionPdfFile) {
-        const pdfResult = await campanasService.uploadTestigoFile(impresionPdfFile);
-        guiaPdfUrlCreada = pdfResult.url;
+        try {
+          const pdfResult = await campanasService.uploadTestigoFile(impresionPdfFile);
+          guiaPdfUrlCreada = pdfResult.url;
+        } catch (uploadErr) {
+          console.error('Error al subir PDF de guia:', uploadErr);
+          const msg = uploadErr instanceof Error ? uploadErr.message : 'No se pudo subir el PDF de guía';
+          alert(`No se pudo crear la tarea de recepción: ${msg}`);
+          return;
+        }
       }
       await onCreateRecepcion(
         task.id,
@@ -6548,6 +6558,8 @@ function TaskDetailModal({
       onClose();
     } catch (error) {
       console.error('Error al crear tarea de recepción:', error);
+      const msg = error instanceof Error ? error.message : 'Error desconocido al crear la tarea';
+      alert(`No se pudo crear la tarea de recepción: ${msg}`);
     } finally {
       setIsCreatingRecepcion(false);
     }
