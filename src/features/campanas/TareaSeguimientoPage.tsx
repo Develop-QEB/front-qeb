@@ -5037,8 +5037,17 @@ function TaskDetailModal({
   const [isFinalizando, setIsFinalizando] = useState(false);
   const [envioRevisionError, setEnvioRevisionError] = useState<string | null>(null);
 
-  // Estado para crear tarea de recepción (Impresión)
+  // Estado para crear tarea de recepción (Impresión).
+  // Feedback Jos 2026-10-02: el asignado debe permitir multiples usuarios de
+  // Operaciones. Antes era un input search que solo guardaba 1 usuario.
+  // Ahora usamos el mismo patrón de multi-select con checkboxes que ya existe
+  // en InstaladoChoiceDialog (operacionesAsignados: { ids, nombres }).
   const [isCreatingRecepcion, setIsCreatingRecepcion] = useState(false);
+  const [recepcionAsignadosMap, setRecepcionAsignadosMap] = useState<Map<number, string>>(new Map());
+  const [showRecepcionOpsList, setShowRecepcionOpsList] = useState(false);
+  // Compat para el search antiguo — algunos callers lo referencian para búsqueda.
+  // Mantener los dos legacy sin usar activamente evita tener que tocar refs
+  // residuales del modal; se seguirá leyendo del Map al guardar.
   const [recepcionAsignadoNombre, setRecepcionAsignadoNombre] = useState('');
   const [recepcionAsignadoId, setRecepcionAsignadoId] = useState('');
   const [recepcionAsignadoSearch, setRecepcionAsignadoSearch] = useState('');
@@ -6749,10 +6758,12 @@ function TaskDetailModal({
     }
   };
 
-  // Handler para crear tarea de recepción. Feedback Jos 2026-10-02: cuando el
-  // PDF era grande (10-25MB) o el upload fallaba, el error solo iba a console
-  // y el usuario veía el boton sin pasar nada. Ahora cualquier fallo se
-  // muestra como alert para que el usuario sepa que hacer.
+  // Handler para crear tarea de recepción. Feedback Jos 2026-10-02:
+  // (1) cuando el PDF era grande (10-25MB) o el upload fallaba, el error
+  //     solo iba a console y el usuario veía el boton sin pasar nada. Ahora
+  //     cualquier fallo se muestra como alert.
+  // (2) el asignado ahora admite multiples usuarios: tomamos ids y nombres
+  //     del Map y los mandamos como strings comma-separated al back.
   const handleCrearRecepcion = async () => {
     if (!task || !task.id) return;
 
@@ -6770,12 +6781,15 @@ function TaskDetailModal({
           return;
         }
       }
+      const idsStr = Array.from(recepcionAsignadosMap.keys()).join(',');
+      const nombresStr = Array.from(recepcionAsignadosMap.values()).join(', ');
       await onCreateRecepcion(
         task.id,
-        recepcionAsignadoNombre || undefined,
-        recepcionAsignadoId || undefined,
+        nombresStr || undefined,
+        idsStr || undefined,
         guiaPdfUrlCreada
       );
+      setRecepcionAsignadosMap(new Map());
       setRecepcionAsignadoNombre('');
       setRecepcionAsignadoId('');
       setRecepcionAsignadoSearch('');
@@ -7481,61 +7495,65 @@ function TaskDetailModal({
               {task.estatus === 'Activo' && canResolveProduccionTasks && (
                 <div className="bg-zinc-900/50 rounded-lg p-4 border border-border">
                   <h4 className="text-sm font-medium text-purple-300 mb-3">Crear tarea de recepción</h4>
-                  <div className="relative">
+                  {/* Multi-select de usuarios de Operaciones. Feedback Jos
+                      2026-10-02: el asesor/operaciones puede necesitar
+                      asignarla a varios responsables. Mismo patron que
+                      InstaladoChoiceDialog (checkboxes + buildOps). */}
+                  <div className="mb-3">
                     <label className="block text-xs font-medium text-muted-foreground mb-1">Asignar a *</label>
-                    <input
-                      ref={recepcionInputRef}
-                      type="text"
-                      value={recepcionAsignadoSearch}
-                      onChange={(e) => {
-                        setRecepcionAsignadoSearch(e.target.value);
-                        setShowRecepcionAsignadoDropdown(true);
-                        if (!e.target.value) {
-                          setRecepcionAsignadoNombre('');
-                          setRecepcionAsignadoId('');
-                        }
-                      }}
-                      onFocus={() => {
-                        if (recepcionInputRef.current) {
-                          const rect = recepcionInputRef.current.getBoundingClientRect();
-                          setDropdownPosition({
-                            top: rect.bottom + 4,
-                            left: rect.left,
-                            width: rect.width,
-                          });
-                        }
-                        setShowRecepcionAsignadoDropdown(true);
-                      }}
-                      onBlur={() => setTimeout(() => setShowRecepcionAsignadoDropdown(false), 200)}
-                      placeholder="Buscar usuario..."
-                      className="w-full px-3 py-2 text-sm bg-background border border-border rounded-lg focus:outline-none focus:ring-1 focus:ring-purple-500"
-                    />
-                    {showRecepcionAsignadoDropdown && filteredUsuariosRecepcion.length > 0 && (
-                      <div
-                        className="fixed z-[9999] bg-card border border-border rounded-lg shadow-lg max-h-48 overflow-y-auto"
-                        style={{
-                          top: dropdownPosition.top,
-                          left: dropdownPosition.left,
-                          width: dropdownPosition.width,
-                        }}
-                      >
-                        {filteredUsuariosRecepcion.map((u) => (
-                          <button
-                            key={u.id}
-                            type="button"
-                            onClick={() => {
-                              setRecepcionAsignadoNombre(u.nombre);
-                              setRecepcionAsignadoId(String(u.id));
-                              setRecepcionAsignadoSearch(`${u.id}, ${u.nombre}`);
-                              setShowRecepcionAsignadoDropdown(false);
-                            }}
-                            className="w-full px-3 py-2 text-sm text-left hover:bg-purple-900/30 transition-colors"
-                          >
-                            {u.id}, {u.nombre}
-                          </button>
-                        ))}
+                    <button
+                      type="button"
+                      onClick={() => setShowRecepcionOpsList(s => !s)}
+                      className={`w-full text-left text-xs font-medium px-3 py-2 rounded-lg border transition-colors flex items-center justify-between ${
+                        recepcionAsignadosMap.size === 0
+                          ? 'border-red-500/40 bg-red-500/10 hover:bg-red-500/20 text-red-200'
+                          : 'border-zinc-700 bg-zinc-800/50 hover:bg-zinc-800 text-zinc-200'
+                      }`}
+                    >
+                      <span className="truncate">
+                        {recepcionAsignadosMap.size === 0
+                          ? 'Selecciona usuarios de Operaciones'
+                          : Array.from(recepcionAsignadosMap.values()).join(', ')}
+                        {recepcionAsignadosMap.size > 0 && (
+                          <span className="ml-2 px-1.5 py-0.5 rounded text-[10px] bg-purple-500/30 text-purple-200">
+                            {recepcionAsignadosMap.size}
+                          </span>
+                        )}
+                      </span>
+                      <ChevronDown className={`h-3.5 w-3.5 shrink-0 transition-transform ${showRecepcionOpsList ? 'rotate-180' : ''}`} />
+                    </button>
+                    {showRecepcionOpsList && (
+                      <div className="mt-2 max-h-48 overflow-y-auto rounded-lg border border-zinc-700 bg-zinc-900/50 p-2 space-y-1">
+                        {usuarios.length === 0 ? (
+                          <p className="text-[10px] text-center py-2 text-zinc-500">No hay usuarios de Operaciones.</p>
+                        ) : (
+                          usuarios.map(u => (
+                            <label key={u.id} className="flex items-center gap-2 text-xs p-1.5 rounded cursor-pointer hover:bg-zinc-800 text-zinc-200">
+                              <input
+                                type="checkbox"
+                                checked={recepcionAsignadosMap.has(u.id)}
+                                onChange={() => {
+                                  setRecepcionAsignadosMap(prev => {
+                                    const n = new Map(prev);
+                                    if (n.has(u.id)) n.delete(u.id);
+                                    else n.set(u.id, u.nombre);
+                                    return n;
+                                  });
+                                }}
+                                className="rounded"
+                              />
+                              <span className="flex-1 truncate">{u.nombre}</span>
+                              <span className="text-[9px] text-zinc-500">{u.puesto}</span>
+                            </label>
+                          ))
+                        )}
                       </div>
                     )}
+                    <p className={`text-[10px] mt-1 ${recepcionAsignadosMap.size === 0 ? 'text-red-300' : 'text-zinc-500'}`}>
+                      {recepcionAsignadosMap.size === 0
+                        ? 'Selecciona al menos un usuario de Operaciones.'
+                        : 'La tarea de recepción les llegará a estas personas.'}
+                    </p>
                   </div>
                   <div className="mt-4">
                     <label className="block text-xs font-medium text-muted-foreground mb-1">Guía del proveedor en PDF (opcional)</label>
@@ -7745,7 +7763,7 @@ function TaskDetailModal({
                 {task.estatus === 'Activo' && canResolveProduccionTasks && (
                   <button
                     onClick={handleCrearRecepcion}
-                    disabled={isCreatingRecepcion || !recepcionAsignadoNombre}
+                    disabled={isCreatingRecepcion || recepcionAsignadosMap.size === 0}
                     className="flex items-center gap-2 px-4 py-2 text-sm font-medium bg-purple-600 hover:bg-purple-700 text-white rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                   >
                     {isCreatingRecepcion ? (
