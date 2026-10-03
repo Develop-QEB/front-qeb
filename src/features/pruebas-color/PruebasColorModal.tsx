@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { AlertCircle, Check, CheckCircle2, ChevronDown, Loader2, Paintbrush, Search, Send, Trash2, X, Upload, FileImage } from 'lucide-react';
+import { AlertCircle, Check, CheckCircle2, ChevronDown, Loader2, Paintbrush, Search, Send, Trash2, X, Upload, FileImage, ClipboardList, XCircle, Flag } from 'lucide-react';
 import { useThemeStore } from '../../store/themeStore';
 import { useAuthStore } from '../../store/authStore';
 import {
@@ -10,6 +10,8 @@ import {
   ESTATUS_LABEL,
   TRANSICIONES,
   puedeGestionarPruebaColor,
+  TareaAsociadaPruebaColor,
+  AccionResolverTarea,
 } from '../../services/pruebasColor.service';
 import { propuestasService, SolicitudCara } from '../../services/propuestas.service';
 import { uploadsService } from '../../services/uploads.service';
@@ -414,6 +416,144 @@ function PruebaCard({
             ))}
           </div>
         )}
+      </div>
+
+      {/* Tareas asociadas: Revisión de artes + Seguimiento Prueba de color.
+          Feedback Jos 2026-10-02: se consumen desde este modal para que el
+          analista no tenga que ir al módulo de Tareas mientras la prueba
+          vive en una propuesta. Al avanzar a campaña, estas mismas tareas
+          se sincronizan al gestor de artes vía campania_id. */}
+      <TareasAsociadasSection
+        pruebaId={prueba.id}
+        isDark={isDark}
+        puedeGestionar={puedeGestionar}
+      />
+    </div>
+  );
+}
+
+// ─── Tareas asociadas a una prueba (Revisión + Seguimiento) ─────────────
+// Feedback Jos 2026-10-02: la ventana de prueba de color las consume
+// (listar + resolver) para que el analista no vaya al módulo Tareas.
+function TareasAsociadasSection({
+  pruebaId,
+  isDark,
+  puedeGestionar,
+}: {
+  pruebaId: number;
+  isDark: boolean;
+  puedeGestionar: boolean;
+}) {
+  const queryClient = useQueryClient();
+  const tareasQuery = useQuery({
+    queryKey: ['pruebas-color', 'tareas', pruebaId],
+    queryFn: () => pruebasColorService.listarTareas(pruebaId),
+    staleTime: 10_000,
+  });
+
+  const resolver = useMutation({
+    mutationFn: ({ tareaId, accion, comentario }: { tareaId: number; accion: AccionResolverTarea; comentario?: string }) =>
+      pruebasColorService.resolverTarea(pruebaId, tareaId, accion, comentario),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['pruebas-color', 'tareas', pruebaId] });
+      // La resolución puede haber cambiado el estatus de la prueba o creado otra tarea.
+      queryClient.invalidateQueries({ queryKey: ['pruebas-color'] });
+    },
+    onError: (e: Error) => alert(e.message),
+  });
+
+  const tareas = tareasQuery.data || [];
+
+  if (tareasQuery.isLoading) {
+    return (
+      <div className={`mt-3 pt-3 border-t text-[11px] flex items-center gap-2 ${isDark ? 'border-zinc-800 text-zinc-500' : 'border-gray-200 text-gray-500'}`}>
+        <Loader2 className="h-3 w-3 animate-spin" /> Cargando tareas...
+      </div>
+    );
+  }
+
+  if (tareas.length === 0) return null;
+
+  const estadoColor = (estatus: string | null) => {
+    if (!estatus) return isDark ? 'bg-zinc-700/40 text-zinc-400' : 'bg-gray-100 text-gray-600';
+    const e = estatus.toLowerCase();
+    if (e.includes('finaliz') || e.includes('atendid') || e.includes('aprob')) return isDark ? 'bg-emerald-500/15 text-emerald-300' : 'bg-emerald-50 text-emerald-700';
+    if (e.includes('rechaz')) return isDark ? 'bg-red-500/15 text-red-300' : 'bg-red-50 text-red-700';
+    return isDark ? 'bg-amber-500/15 text-amber-300' : 'bg-amber-50 text-amber-700';
+  };
+
+  return (
+    <div className={`mt-3 pt-3 border-t ${isDark ? 'border-zinc-800' : 'border-gray-200'}`}>
+      <div className={`text-[11px] font-medium flex items-center gap-1.5 mb-2 ${isDark ? 'text-zinc-400' : 'text-gray-500'}`}>
+        <ClipboardList className="h-3 w-3" /> Tareas asociadas ({tareas.length})
+      </div>
+      <div className="space-y-1.5">
+        {tareas.map(t => {
+          const esRevision = t.tipo === 'Revisión de artes';
+          const esSeguimiento = t.tipo === 'Seguimiento Prueba de color';
+          const puedeAprobar = esRevision && t.estatus === 'Pendiente' && puedeGestionar;
+          const puedeFinalizar = esSeguimiento && t.estatus === 'Pendiente' && puedeGestionar;
+
+          return (
+            <div
+              key={t.id}
+              className={`rounded border px-2.5 py-1.5 text-[11px] ${isDark ? 'bg-zinc-900/40 border-zinc-800' : 'bg-white border-gray-200'}`}
+            >
+              <div className="flex items-start justify-between gap-2">
+                <div className="flex items-center gap-1.5 min-w-0 flex-1">
+                  <span className={`shrink-0 px-1.5 py-0.5 rounded text-[10px] font-medium ${estadoColor(t.estatus)}`}>
+                    {t.estatus || 'Sin estado'}
+                  </span>
+                  <span className={`truncate ${isDark ? 'text-zinc-300' : 'text-gray-700'}`} title={t.tipo || ''}>
+                    {esRevision ? 'Revisión de artes' : esSeguimiento ? 'Seguimiento' : t.tipo}
+                  </span>
+                </div>
+                {(puedeAprobar || puedeFinalizar) && (
+                  <div className="flex items-center gap-1 shrink-0">
+                    {puedeAprobar && (
+                      <>
+                        <button
+                          onClick={() => resolver.mutate({ tareaId: t.id, accion: 'aprobar' })}
+                          disabled={resolver.isPending}
+                          className={`px-1.5 py-0.5 rounded border transition-colors ${isDark ? 'border-emerald-500/40 text-emerald-300 hover:bg-emerald-500/10' : 'border-emerald-300 text-emerald-700 hover:bg-emerald-50'} disabled:opacity-50`}
+                          title="Aprobar revisión"
+                        >
+                          <CheckCircle2 className="h-3 w-3 inline mr-0.5" /> Aprobar
+                        </button>
+                        <button
+                          onClick={() => {
+                            const comentario = prompt('Motivo del rechazo (opcional):') || undefined;
+                            resolver.mutate({ tareaId: t.id, accion: 'rechazar', comentario });
+                          }}
+                          disabled={resolver.isPending}
+                          className={`px-1.5 py-0.5 rounded border transition-colors ${isDark ? 'border-red-500/40 text-red-300 hover:bg-red-500/10' : 'border-red-300 text-red-700 hover:bg-red-50'} disabled:opacity-50`}
+                          title="Rechazar revisión"
+                        >
+                          <XCircle className="h-3 w-3 inline mr-0.5" /> Rechazar
+                        </button>
+                      </>
+                    )}
+                    {puedeFinalizar && (
+                      <button
+                        onClick={() => resolver.mutate({ tareaId: t.id, accion: 'finalizar' })}
+                        disabled={resolver.isPending}
+                        className={`px-1.5 py-0.5 rounded border transition-colors ${isDark ? 'border-emerald-500/40 text-emerald-300 hover:bg-emerald-500/10' : 'border-emerald-300 text-emerald-700 hover:bg-emerald-50'} disabled:opacity-50`}
+                        title="Finalizar seguimiento"
+                      >
+                        <Flag className="h-3 w-3 inline mr-0.5" /> Finalizar
+                      </button>
+                    )}
+                  </div>
+                )}
+              </div>
+              {t.asignado && (
+                <div className={`mt-1 text-[10px] ${isDark ? 'text-zinc-500' : 'text-gray-500'}`}>
+                  → {t.asignado}
+                </div>
+              )}
+            </div>
+          );
+        })}
       </div>
     </div>
   );

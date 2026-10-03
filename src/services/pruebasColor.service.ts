@@ -60,6 +60,23 @@ export interface ListarPruebaColorParams {
   sc_id?: number;
 }
 
+// Tarea asociada a una prueba de color (Revisión de artes / Seguimiento).
+export interface TareaAsociadaPruebaColor {
+  id: number;
+  tipo: string | null;
+  titulo: string | null;
+  descripcion: string | null;
+  estatus: string | null;
+  asignado: string | null;
+  responsable: string | null;
+  archivo: string | null;
+  contenido: string | null;
+  fecha_inicio: string | null;
+  fecha_fin: string | null;
+}
+
+export type AccionResolverTarea = 'aprobar' | 'rechazar' | 'finalizar';
+
 export const pruebasColorService = {
   async listar(params: ListarPruebaColorParams): Promise<PruebaColor[]> {
     try {
@@ -103,6 +120,28 @@ export const pruebasColorService = {
       throw extractApiError(err, 'Error al eliminar prueba de color');
     }
   },
+
+  // Lista las tareas asociadas a una prueba (Revisión / Seguimiento).
+  // Feedback Jos 2026-10-02: se consumen desde la ventana del modal.
+  async listarTareas(pruebaId: number): Promise<TareaAsociadaPruebaColor[]> {
+    try {
+      const { data } = await api.get(`/pruebas-color/${pruebaId}/tareas`);
+      if (!data.success) throw new Error(data.error || 'Error al listar tareas asociadas');
+      return data.data as TareaAsociadaPruebaColor[];
+    } catch (err) {
+      throw extractApiError(err, 'Error al listar tareas asociadas');
+    }
+  },
+
+  // Resuelve una tarea asociada (aprobar / rechazar / finalizar) desde el modal.
+  async resolverTarea(pruebaId: number, tareaId: number, accion: AccionResolverTarea, comentario?: string): Promise<void> {
+    try {
+      const { data } = await api.patch(`/pruebas-color/${pruebaId}/tareas/${tareaId}`, { accion, comentario });
+      if (!data.success) throw new Error(data.error || 'Error al resolver tarea');
+    } catch (err) {
+      throw extractApiError(err, 'Error al resolver tarea');
+    }
+  },
 };
 
 // Etiquetas legibles para el UI.
@@ -141,6 +180,7 @@ const ROLES_PRUEBA_COLOR = new Set<string>([
   'Producción',
   'Asesor Comercial',
   'Asesor Comercial Aeropuerto',
+  'Analista de Servicio al Cliente',
   'Administrador',
   'DEV',
 ]);
