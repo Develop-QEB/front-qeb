@@ -70,20 +70,21 @@ export function PruebasColorModal({ isOpen, onClose, propuestaId, contextoNombre
     enabled: isOpen && !!propuestaId,
   });
 
-  // Pruebas de los circuitos seleccionados. Si hay varios circuitos, listamos
-  // por propuesta y filtramos localmente — evita N fetches.
+  // Pruebas de la propuesta. Fetch siempre que el modal este abierto para
+  // que el usuario vea las pruebas existentes al reabrir sin tener que
+  // reseleccionar circuito (feedback Jos 2026-10-06).
   const pruebasQuery = useQuery({
     queryKey: ['pruebas-color', 'propuesta', propuestaId],
     queryFn: () => pruebasColorService.listar({ propuesta_id: propuestaId }),
-    enabled: isOpen && !!propuestaId && scIds.length > 0,
+    enabled: isOpen && !!propuestaId,
   });
 
+  const pruebasAll = pruebasQuery.data || [];
   const pruebas = useMemo(() => {
-    const all = pruebasQuery.data || [];
-    if (scIds.length === 0) return [];
+    if (scIds.length === 0) return pruebasAll; // sin filtro muestra todas
     const setScs = new Set(scIds);
-    return all.filter(p => setScs.has(p.sc_id));
-  }, [pruebasQuery.data, scIds]);
+    return pruebasAll.filter(p => setScs.has(p.sc_id));
+  }, [pruebasAll, scIds]);
 
   // Crear multiples pruebas (una por circuito seleccionado) en paralelo.
   const createMutation = useMutation({
@@ -253,11 +254,14 @@ export function PruebasColorModal({ isOpen, onClose, propuestaId, contextoNombre
             )}
           </div>
 
-          {/* Lista de pruebas de los circuitos seleccionados. */}
-          {scIds.length > 0 && (
+          {/* Lista de pruebas (si no hay filtro muestra TODAS las de la
+              propuesta; si hay circuitos seleccionados filtra a esos). */}
+          {(pruebasAll.length > 0 || scIds.length > 0) && (
             <div className="space-y-2">
               <div className={`text-xs font-medium ${isDark ? 'text-zinc-400' : 'text-gray-500'}`}>
-                Pruebas previas de {scIds.length === 1 ? 'este circuito' : `los ${scIds.length} circuitos seleccionados`} ({pruebas.length})
+                {scIds.length === 0
+                  ? `Pruebas existentes en esta propuesta (${pruebas.length})`
+                  : `Pruebas de ${scIds.length === 1 ? 'este circuito' : `los ${scIds.length} circuitos seleccionados`} (${pruebas.length})`}
               </div>
               {pruebasQuery.isLoading && (
                 <div className={`px-3 py-3 text-xs flex items-center gap-2 ${isDark ? 'text-zinc-500' : 'text-gray-400'}`}>
@@ -271,19 +275,24 @@ export function PruebasColorModal({ isOpen, onClose, propuestaId, contextoNombre
               )}
               {pruebas.length > 0 && (
                 <div className={`space-y-2 ${pruebas.length > 2 ? 'max-h-72 overflow-y-auto pr-1' : ''}`}>
-                  {pruebas.map(p => (
-                    <PruebaCard
-                      key={p.id}
-                      prueba={p}
-                      isDark={isDark}
-                      puedeGestionar={puedeGestionar}
-                      isUpdating={updateEstatusMutation.isPending || deleteMutation.isPending}
-                      onChangeEstatus={(nuevo) => updateEstatusMutation.mutate({ id: p.id, estatus: nuevo })}
-                      onDelete={() => {
-                        if (confirm(`¿Eliminar la prueba v${p.version}?`)) deleteMutation.mutate(p.id);
-                      }}
-                    />
-                  ))}
+                  {pruebas.map(p => {
+                    const cara = (carasQuery.data || []).find(c => c.id === p.sc_id);
+                    const scLabel = cara ? `#${cara.id} · ${cara.articulo || 'Sin articulo'}` : `Circuito #${p.sc_id}`;
+                    return (
+                      <PruebaCard
+                        key={p.id}
+                        prueba={p}
+                        isDark={isDark}
+                        puedeGestionar={puedeGestionar}
+                        isUpdating={updateEstatusMutation.isPending || deleteMutation.isPending}
+                        onChangeEstatus={(nuevo) => updateEstatusMutation.mutate({ id: p.id, estatus: nuevo })}
+                        onDelete={() => {
+                          if (confirm(`¿Eliminar la prueba v${p.version}?`)) deleteMutation.mutate(p.id);
+                        }}
+                        scLabel={scIds.length === 0 ? scLabel : undefined}
+                      />
+                    );
+                  })}
                 </div>
               )}
             </div>
@@ -376,6 +385,7 @@ function PruebaCard({
   isUpdating,
   onChangeEstatus,
   onDelete,
+  scLabel,
 }: {
   prueba: PruebaColor;
   isDark: boolean;
@@ -383,6 +393,9 @@ function PruebaCard({
   isUpdating: boolean;
   onChangeEstatus: (e: EstatusPruebaColor) => void;
   onDelete: () => void;
+  // Etiqueta corta del circuito al que pertenece la prueba. Util cuando se
+  // listan pruebas de distintos circuitos en la vista "sin filtro".
+  scLabel?: string;
 }) {
   const estatusStyle: Record<EstatusPruebaColor, string> = {
     solicitada: isDark ? 'bg-amber-500/15 text-amber-300 border-amber-500/30' : 'bg-amber-50 text-amber-700 border-amber-200',
@@ -407,6 +420,11 @@ function PruebaCard({
           <span className={`text-xs font-medium truncate ${isDark ? 'text-zinc-200' : 'text-gray-800'}`}>
             {prueba.nombre_arte || `Prueba #${prueba.id}`}
           </span>
+          {scLabel && (
+            <span className={`text-[10px] px-1.5 py-0.5 rounded ${isDark ? 'bg-zinc-700/60 text-zinc-400' : 'bg-gray-100 text-gray-500'}`} title="Circuito">
+              {scLabel}
+            </span>
+          )}
         </div>
         {puedeGestionar && transiciones.length > 0 && (
           <button
