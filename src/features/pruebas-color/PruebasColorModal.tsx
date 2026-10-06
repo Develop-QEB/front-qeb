@@ -38,7 +38,11 @@ export function PruebasColorModal({ isOpen, onClose, propuestaId, contextoNombre
   const queryClient = useQueryClient();
   const puedeGestionar = puedeGestionarPruebaColor(user?.rol);
 
-  const [scId, setScId] = useState<number | null>(initialScId ?? null);
+  // Multi-select de circuitos. Feedback Jos 2026-10-06: hay casos donde una
+  // sola prueba de color aplica a varios circuitos (ej. mismo arte en Renta
+  // + Bonificacion del mismo mueble). Al solicitar, se crea una prueba por
+  // cada circuito seleccionado.
+  const [scIds, setScIds] = useState<number[]>(initialScId ? [initialScId] : []);
   const [archivoFile, setArchivoFile] = useState<File | null>(null);
   const [archivoUrl, setArchivoUrl] = useState<string | null>(null);
   const [nombreArte, setNombreArte] = useState('');
@@ -49,7 +53,7 @@ export function PruebasColorModal({ isOpen, onClose, propuestaId, contextoNombre
   // Reset al abrir/cerrar
   useEffect(() => {
     if (isOpen) {
-      setScId(initialScId ?? null);
+      setScIds(initialScId ? [initialScId] : []);
       setArchivoFile(null);
       setArchivoUrl(null);
       setNombreArte('');
@@ -66,23 +70,31 @@ export function PruebasColorModal({ isOpen, onClose, propuestaId, contextoNombre
     enabled: isOpen && !!propuestaId,
   });
 
-  // Pruebas del circuito seleccionado.
+  // Pruebas de los circuitos seleccionados. Si hay varios circuitos, listamos
+  // por propuesta y filtramos localmente — evita N fetches.
   const pruebasQuery = useQuery({
-    queryKey: ['pruebas-color', 'sc', scId],
-    queryFn: () => pruebasColorService.listar({ sc_id: scId! }),
-    enabled: isOpen && !!scId,
+    queryKey: ['pruebas-color', 'propuesta', propuestaId],
+    queryFn: () => pruebasColorService.listar({ propuesta_id: propuestaId }),
+    enabled: isOpen && !!propuestaId && scIds.length > 0,
   });
 
-  const pruebas = pruebasQuery.data || [];
+  const pruebas = useMemo(() => {
+    const all = pruebasQuery.data || [];
+    if (scIds.length === 0) return [];
+    const setScs = new Set(scIds);
+    return all.filter(p => setScs.has(p.sc_id));
+  }, [pruebasQuery.data, scIds]);
 
+  // Crear multiples pruebas (una por circuito seleccionado) en paralelo.
   const createMutation = useMutation({
-    mutationFn: pruebasColorService.crear,
+    mutationFn: async (inputs: Array<Parameters<typeof pruebasColorService.crear>[0]>) => {
+      await Promise.all(inputs.map(i => pruebasColorService.crear(i)));
+    },
     onSuccess: () => {
       setArchivoFile(null);
       setArchivoUrl(null);
       setNombreArte('');
       setNotas('');
-      queryClient.invalidateQueries({ queryKey: ['pruebas-color', 'sc', scId] });
       queryClient.invalidateQueries({ queryKey: ['pruebas-color', 'propuesta', propuestaId] });
     },
     onError: (e: Error) => setError(e.message),
@@ -92,7 +104,6 @@ export function PruebasColorModal({ isOpen, onClose, propuestaId, contextoNombre
     mutationFn: ({ id, estatus }: { id: number; estatus: EstatusPruebaColor }) =>
       pruebasColorService.actualizarEstatus(id, estatus),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['pruebas-color', 'sc', scId] });
       queryClient.invalidateQueries({ queryKey: ['pruebas-color', 'propuesta', propuestaId] });
     },
     onError: (e: Error) => alert(e.message),
@@ -101,17 +112,22 @@ export function PruebasColorModal({ isOpen, onClose, propuestaId, contextoNombre
   const deleteMutation = useMutation({
     mutationFn: pruebasColorService.eliminar,
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['pruebas-color', 'sc', scId] });
       queryClient.invalidateQueries({ queryKey: ['pruebas-color', 'propuesta', propuestaId] });
     },
     onError: (e: Error) => alert(e.message),
   });
 
+  const circuitosSeleccionados = useMemo(() => {
+    const caras = carasQuery.data || [];
+    return scIds.map(id => caras.find(c => c.id === id)).filter(Boolean) as SolicitudCara[];
+  }, [carasQuery.data, scIds]);
+
   const circuitoLabel = useMemo(() => {
-    const c = (carasQuery.data || []).find(x => x.id === scId);
+    // Se usa cuando initialScId esta set — un solo circuito.
+    const c = (carasQuery.data || []).find(x => x.id === initialScId);
     if (!c) return '';
     return `${c.articulo || 'Sin articulo'} · ${c.formato || 'Sin formato'} · ${c.ciudad || c.estados || 'Sin ciudad'}`;
-  }, [carasQuery.data, scId]);
+  }, [carasQuery.data, initialScId]);
 
   const handleUploadFile = async (file: File) => {
     setError(null);
@@ -131,16 +147,18 @@ export function PruebasColorModal({ isOpen, onClose, propuestaId, contextoNombre
 
   const handleSubmit = () => {
     setError(null);
-    if (!scId) { setError('Selecciona un circuito'); return; }
+    if (scIds.length === 0) { setError('Selecciona al menos un circuito'); return; }
     if (!archivoUrl) { setError('Sube el arte de la prueba'); return; }
     if (!nombreArte.trim()) { setError('El nombre del arte es requerido'); return; }
-    createMutation.mutate({
+    // Una prueba por circuito seleccionado.
+    const inputs = scIds.map(sc_id => ({
       propuesta_id: propuestaId,
-      sc_id: scId,
-      archivo: archivoUrl,
+      sc_id,
+      archivo: archivoUrl!,
       nombre_arte: nombreArte.trim(),
       notas: notas.trim() || undefined,
-    });
+    }));
+    createMutation.mutate(inputs);
   };
 
   if (!isOpen) return null;
@@ -193,32 +211,53 @@ export function PruebasColorModal({ isOpen, onClose, propuestaId, contextoNombre
         {/* Body — flex-1 con overflow interno para que el dropdown absolute
             no se corte pero el modal aun respete max-h-[92vh]. */}
         <div className="flex-1 overflow-y-auto px-5 py-4 space-y-4">
-          {/* Selector circuito */}
+          {/* Selector circuito(s) - multi-select */}
           <div>
-            <label className={labelCls}>Circuito</label>
+            <label className={labelCls}>Circuito(s)</label>
             {initialScId ? (
               <div className={`px-3 py-2 rounded-lg border text-sm ${isDark ? 'bg-zinc-800/60 border-zinc-700 text-zinc-300' : 'bg-gray-50 border-gray-200 text-gray-700'}`}>
                 {circuitoLabel || `Circuito #${initialScId}`}
               </div>
             ) : (
-              <CircuitoCombobox
-                caras={carasQuery.data || []}
-                isLoading={carasQuery.isLoading}
-                selectedId={scId}
-                onChange={setScId}
-                isDark={isDark}
-              />
+              <>
+                <CircuitoCombobox
+                  caras={carasQuery.data || []}
+                  isLoading={carasQuery.isLoading}
+                  selectedIds={scIds}
+                  onToggle={(id) => setScIds(prev => prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id])}
+                  onClear={() => setScIds([])}
+                  isDark={isDark}
+                />
+                {circuitosSeleccionados.length > 0 && (
+                  <div className="mt-2 flex flex-wrap gap-1.5">
+                    {circuitosSeleccionados.map(c => (
+                      <span
+                        key={c.id}
+                        className={`inline-flex items-center gap-1.5 px-2 py-1 rounded-md text-[11px] border ${isDark ? 'bg-fuchsia-500/15 text-fuchsia-200 border-fuchsia-500/30' : 'bg-fuchsia-50 text-fuchsia-700 border-fuchsia-200'}`}
+                      >
+                        <span className="font-medium">#{c.id}</span>
+                        <span className="truncate max-w-[200px]">{c.articulo || 'Sin articulo'} · {c.formato || 'Sin formato'}</span>
+                        <button
+                          type="button"
+                          onClick={() => setScIds(prev => prev.filter(x => x !== c.id))}
+                          className={isDark ? 'hover:text-fuchsia-50' : 'hover:text-fuchsia-900'}
+                          title="Quitar"
+                        >
+                          <X className="h-3 w-3" />
+                        </button>
+                      </span>
+                    ))}
+                  </div>
+                )}
+              </>
             )}
           </div>
 
-          {/* Lista de pruebas del circuito. Feedback Jos 2026-09-25: con
-              varias pruebas + formulario nuevo el body queda con scroll
-              interno chico. Limitamos la lista a max-h-72 y el formulario
-              queda siempre visible sin comprimirse. */}
-          {scId && (
+          {/* Lista de pruebas de los circuitos seleccionados. */}
+          {scIds.length > 0 && (
             <div className="space-y-2">
               <div className={`text-xs font-medium ${isDark ? 'text-zinc-400' : 'text-gray-500'}`}>
-                Pruebas previas ({pruebas.length})
+                Pruebas previas de {scIds.length === 1 ? 'este circuito' : `los ${scIds.length} circuitos seleccionados`} ({pruebas.length})
               </div>
               {pruebasQuery.isLoading && (
                 <div className={`px-3 py-3 text-xs flex items-center gap-2 ${isDark ? 'text-zinc-500' : 'text-gray-400'}`}>
@@ -251,7 +290,7 @@ export function PruebasColorModal({ isOpen, onClose, propuestaId, contextoNombre
           )}
 
           {/* Nueva prueba */}
-          {scId && puedeGestionar && (
+          {scIds.length > 0 && puedeGestionar && (
             <div className={`pt-3 border-t ${isDark ? 'border-zinc-800' : 'border-gray-200'}`}>
               <div className={`text-sm font-medium mb-2 ${isDark ? 'text-fuchsia-300' : 'text-fuchsia-700'}`}>
                 Nueva prueba
@@ -318,7 +357,7 @@ export function PruebasColorModal({ isOpen, onClose, propuestaId, contextoNombre
             </div>
           )}
 
-          {scId && !puedeGestionar && (
+          {scIds.length > 0 && !puedeGestionar && (
             <div className={`px-3 py-2 rounded-lg text-xs ${isDark ? 'bg-zinc-800/60 border border-zinc-700 text-zinc-400' : 'bg-gray-50 border border-gray-200 text-gray-500'}`}>
               Tu rol no puede solicitar pruebas de color. Puedes ver las existentes arriba.
             </div>
@@ -565,14 +604,16 @@ function TareasAsociadasSection({
 function CircuitoCombobox({
   caras,
   isLoading,
-  selectedId,
-  onChange,
+  selectedIds,
+  onToggle,
+  onClear,
   isDark,
 }: {
   caras: SolicitudCara[];
   isLoading: boolean;
-  selectedId: number | null;
-  onChange: (id: number | null) => void;
+  selectedIds: number[];
+  onToggle: (id: number) => void;
+  onClear: () => void;
   isDark: boolean;
 }) {
   const [open, setOpen] = useState(false);
@@ -646,7 +687,8 @@ function CircuitoCombobox({
     });
   }, [caras, query]);
 
-  const selected = useMemo(() => caras.find(c => c.id === selectedId), [caras, selectedId]);
+  const selectedCount = selectedIds.length;
+  const selectedSet = useMemo(() => new Set(selectedIds), [selectedIds]);
   const labelFor = (c: SolicitudCara) =>
     `#${c.id} — ${c.articulo || 'Sin articulo'} · ${c.formato || 'Sin formato'} · ${c.ciudad || c.estados || 'Sin ciudad'}`;
 
@@ -664,22 +706,28 @@ function CircuitoCombobox({
     isDark ? 'text-white placeholder:text-zinc-500' : 'text-gray-900 placeholder:text-gray-400'
   }`;
 
+  const btnLabel = selectedCount === 0
+    ? (isLoading ? 'Cargando circuitos...' : 'Selecciona uno o varios circuitos...')
+    : (selectedCount === 1
+        ? labelFor(caras.find(c => c.id === selectedIds[0]) || caras[0])
+        : `${selectedCount} circuitos seleccionados`);
+
   return (
     <div ref={containerRef} className="relative">
       <button ref={btnRef} type="button" onClick={() => setOpen(o => !o)} className={btnCls}>
-        <span className={`truncate ${!selected ? (isDark ? 'text-zinc-500' : 'text-gray-400') : ''}`}>
-          {selected ? labelFor(selected) : (isLoading ? 'Cargando circuitos...' : 'Selecciona un circuito...')}
+        <span className={`truncate ${selectedCount === 0 ? (isDark ? 'text-zinc-500' : 'text-gray-400') : ''}`}>
+          {btnLabel}
         </span>
         <div className="flex items-center gap-1 shrink-0">
-          {selected && (
+          {selectedCount > 0 && (
             <span
               role="button"
               tabIndex={0}
-              onClick={(e) => { e.stopPropagation(); onChange(null); setOpen(false); setQuery(''); }}
-              onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); e.stopPropagation(); onChange(null); setOpen(false); setQuery(''); } }}
+              onClick={(e) => { e.stopPropagation(); onClear(); setOpen(false); setQuery(''); }}
+              onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); e.stopPropagation(); onClear(); setOpen(false); setQuery(''); } }}
               className={`p-0.5 rounded cursor-pointer ${isDark ? 'hover:bg-zinc-700 text-zinc-400 hover:text-zinc-200' : 'hover:bg-gray-200 text-gray-500 hover:text-gray-700'}`}
-              title="Quitar circuito"
-              aria-label="Quitar circuito seleccionado"
+              title="Quitar todos los circuitos"
+              aria-label="Quitar todos los circuitos seleccionados"
             >
               <X className="h-3.5 w-3.5" />
             </span>
@@ -718,19 +766,25 @@ function CircuitoCombobox({
               </div>
             )}
             {filtered.map(c => {
-              const isSel = c.id === selectedId;
+              const isSel = selectedSet.has(c.id);
               return (
                 <button
                   type="button"
                   key={c.id}
-                  onClick={() => { onChange(c.id); setOpen(false); setQuery(''); }}
+                  onClick={() => { onToggle(c.id); /* no cerramos para permitir multi */ }}
                   className={`w-full text-left px-3 py-2 text-xs flex items-start gap-2 transition-colors ${
                     isSel
                       ? (isDark ? 'bg-fuchsia-500/15 text-fuchsia-200' : 'bg-fuchsia-50 text-fuchsia-900')
                       : (isDark ? 'text-zinc-200 hover:bg-zinc-800' : 'text-gray-800 hover:bg-gray-50')
                   }`}
                 >
-                  <span className="w-4 shrink-0 mt-0.5">{isSel && <Check className="h-3.5 w-3.5" />}</span>
+                  <span className={`w-4 h-4 shrink-0 mt-0.5 rounded border flex items-center justify-center ${
+                    isSel
+                      ? (isDark ? 'bg-fuchsia-600 border-fuchsia-600' : 'bg-fuchsia-600 border-fuchsia-600')
+                      : (isDark ? 'border-zinc-600' : 'border-gray-300')
+                  }`}>
+                    {isSel && <Check className="h-3 w-3 text-white" />}
+                  </span>
                   <span className="truncate">
                     <span className={`font-medium ${isDark ? 'text-fuchsia-300' : 'text-fuchsia-700'}`}>#{c.id}</span>
                     {' — '}
