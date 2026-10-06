@@ -1550,14 +1550,22 @@ export function PropuestasPage() {
   useEffect(() => {
     const viewIdParam = searchParams.get('viewId');
     const searchParam = searchParams.get('search');
+    // Deep-link desde notificacion de tarea Revisión / Seguimiento Prueba de Color:
+    // abrir el modal de prueba de color de la propuesta directamente, en vez
+    // de mandar al Gestor de Artes. Feedback Jos 2026-10-06.
+    const pruebaColorTareaId = searchParams.get('pruebaColorTareaId');
 
     if (viewIdParam) {
       const id = parseInt(viewIdParam, 10);
       if (!isNaN(id)) {
-        // Fetch propuesta and open modal
+        // Fetch propuesta y abrir el modal correspondiente.
         propuestasService.getById(id).then((propuesta) => {
-          setSelectedPropuestaForAssign(propuesta);
-          setShowAssignModal(true);
+          if (pruebaColorTareaId) {
+            setPruebaColorPropuesta(propuesta);
+          } else {
+            setSelectedPropuestaForAssign(propuesta);
+            setShowAssignModal(true);
+          }
         }).catch(console.error);
       }
       setSearchParams({}, { replace: true });
