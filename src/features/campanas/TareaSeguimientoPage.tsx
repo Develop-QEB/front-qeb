@@ -16199,6 +16199,9 @@ export function TareaSeguimientoPage() {
 
     // Mapa de compositeId/inventoryId -> rsv_ids para puente impresion↔recepcion
     const compositeToRsvIds = new Map<string, string[]>();
+    // Mapa inverso rsv_id -> compositeId para que normalizeIds pueda
+    // propagar la forma composite cuando parte de un rsv_id puro.
+    const rsvIdToComposite = new Map<string, string>();
     inventarioArteAPI.forEach(item => {
       const invId = String(item.id);
       const compositeId = item.grupo ? `${item.id}_${item.grupo}` : invId;
@@ -16209,6 +16212,9 @@ export function TareaSeguimientoPage() {
         if (!compositeToRsvIds.has(invId)) {
           compositeToRsvIds.set(invId, rsvIds);
         }
+        rsvIds.forEach(r => {
+          if (!rsvIdToComposite.has(r)) rsvIdToComposite.set(r, compositeId);
+        });
       }
     });
 
@@ -16226,6 +16232,17 @@ export function TareaSeguimientoPage() {
         const inventoryId = rsvIdToInventoryId.get(id);
         if (inventoryId) {
           normalizedIds.add(inventoryId);
+        }
+        // Si es un rsv_id, agregar también el compositeId correspondiente.
+        // Sin esto, la Recepción Faltantes huerfana solo escribe rsv_id puro
+        // + invId en reservaToTareaMap, pero el loop normal de la Recepción
+        // Atendida ya escribió el composite ("15768_19257") como 'recibido'.
+        // Como el matching del inventario prioriza compositeId > invId > rsvId,
+        // los items faltantes nunca pasaban a 'pendiente_recepcion' aunque el
+        // badge sí los contara via num_impresiones. Bug reportado Jos 2026-10-05.
+        const composite = rsvIdToComposite.get(id);
+        if (composite) {
+          normalizedIds.add(composite);
         }
         // Si es un composite/inventory ID, agregar sus rsv_ids correspondientes
         const rsvIds = compositeToRsvIds.get(id);
