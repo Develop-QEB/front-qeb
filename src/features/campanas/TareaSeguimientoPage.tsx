@@ -20302,6 +20302,48 @@ export function TareaSeguimientoPage() {
                             return acc;
                           }, {} as Record<string, { items: typeof grupo.items; archivo: string | undefined }>);
 
+                          // Para tareas Recepción Faltantes con rotación de artes sobre
+                          // los MISMOS espacios físicos (ej. 50 inv × 2 artes = 100 impresiones):
+                          // el inventario físico solo guarda UN archivo_arte, pero la tarea
+                          // tiene varios artes en evidencia.faltantesPorArte. Si agrupamos solo
+                          // por item.archivo_arte perderíamos los demás artes. Preferimos
+                          // faltantesPorArte cuando contiene más artes que el inventario.
+                          // Feedback Jos 2026-10-06 (campania 81475): 2 artes × 25 faltantes
+                          // mostraba solo un card en Pend. Recepcion.
+                          const primerItem = grupo.items[0];
+                          let faltantesPorArteEv: { arte: string; cantidad: number }[] | null = null;
+                          if (tarea?.evidencia) {
+                            try {
+                              const ev = JSON.parse(tarea.evidencia);
+                              if (ev?.tipo === 'recepcion_faltantes' && Array.isArray(ev.faltantesPorArte) && ev.faltantesPorArte.length > 0) {
+                                faltantesPorArteEv = ev.faltantesPorArte;
+                              }
+                            } catch {}
+                          }
+                          if (faltantesPorArteEv && faltantesPorArteEv.length > Object.keys(artesAgrupados).length) {
+                            return faltantesPorArteEv.map((f, idx) => (
+                              <div key={`fpa-${idx}-${f.arte || 'sin_arte'}`} className="flex items-center gap-3 p-2 border-b border-border/30 last:border-0">
+                                <div className="w-12 h-10 bg-zinc-800 rounded overflow-hidden flex-shrink-0">
+                                  {f.arte ? (
+                                    <ArteImg src={f.arte} alt="Arte" className="w-full h-full object-cover" />
+                                  ) : (
+                                    <div className="w-full h-full flex items-center justify-center">
+                                      <Image className="h-4 w-4 text-zinc-600" />
+                                    </div>
+                                  )}
+                                </div>
+                                <div className="flex-1 min-w-0">
+                                  <p className="text-xs text-white">{f.cantidad} impresiones</p>
+                                  {primerItem && (
+                                    <p className="text-[10px] text-zinc-500 truncate">
+                                      {primerItem.mueble} - {primerItem.ciudad}
+                                    </p>
+                                  )}
+                                </div>
+                              </div>
+                            ));
+                          }
+
                           return Object.entries(artesAgrupados).map(([arteKey, arteGrupo]) => {
                             // Buscar impresiones para este arte
                             const impresionesArte = arteGrupo.archivo ? (impresionesMap[arteGrupo.archivo] || 0) : 0;
