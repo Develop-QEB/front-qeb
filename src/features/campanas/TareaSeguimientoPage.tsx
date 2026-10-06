@@ -8425,7 +8425,7 @@ function TaskDetailModal({
           {task.tipo === 'Gestión de Recepción Parcial' && (
             <div className="space-y-4">
               {(() => {
-                let evParcial: { tipo?: string; recepcionFaltantesTitulo?: string; totalFaltantes?: number; faltantesPorArte?: { arte: string; cantidad: number }[]; campania_nombre?: string } = {};
+                let evParcial: { tipo?: string; recepcionFaltantesTitulo?: string; totalFaltantes?: number; faltantesPorArte?: { arte: string; cantidad: number; nombre_arte?: string | null }[]; campania_nombre?: string } = {};
                 if (task.evidencia) {
                   try { evParcial = JSON.parse(task.evidencia); } catch {}
                 }
@@ -8468,7 +8468,11 @@ function TaskDetailModal({
                         </div>
                         <div className="p-4 space-y-2 max-h-[300px] overflow-y-auto">
                           {detalle.map((f, idx) => {
-                            const nombreArchivo = f.arte ? (f.arte.split('/').pop() || 'Arte') : 'Sin arte';
+                            // Preferimos el nombre_arte legible (lo guarda el back desde
+                            // biblioteca_artes al crear la Faltantes). Fallback al nombre
+                            // del archivo si la tarea es vieja o el arte no esta en biblioteca.
+                            // Feedback Jos 2026-10-06.
+                            const nombreDisplay = f.nombre_arte || (f.arte ? (f.arte.split('/').pop() || 'Arte') : 'Sin arte');
                             return (
                               <div key={idx} className="flex items-center gap-3 p-3 bg-zinc-800/30 rounded-lg border border-border/50">
                                 <div className="w-16 h-12 bg-zinc-800 rounded overflow-hidden flex-shrink-0 border border-zinc-700">
@@ -8481,7 +8485,7 @@ function TaskDetailModal({
                                   )}
                                 </div>
                                 <div className="flex-1 min-w-0">
-                                  <p className="text-xs text-zinc-400 truncate">{nombreArchivo}</p>
+                                  <p className="text-xs text-zinc-400 truncate" title={nombreDisplay}>{nombreDisplay}</p>
                                 </div>
                                 <div className="text-right">
                                   <p className="text-lg font-bold text-red-400">{f.cantidad}</p>
