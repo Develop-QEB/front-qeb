@@ -19892,6 +19892,37 @@ export function TareaSeguimientoPage() {
                               return acc;
                             }, {} as Record<string, { items: typeof grupo.items; archivo: string | undefined }>);
 
+                            // Mismo fallback que en Pend. Recepcion: cuando el inventario fisico
+                            // comparte un solo archivo_arte entre varios artes (rotacion), usamos
+                            // impresionesMapRecibido (derivado de evidencia.impresiones -
+                            // faltantes) para rendear una card por cada arte en vez de solo una.
+                            // Feedback Jos 2026-10-06 campania 81475.
+                            const primerItemR = grupo.items[0];
+                            const mapKeys = Object.keys(impresionesMapRecibido);
+                            if (mapKeys.length > Object.keys(artesAgrupados).length) {
+                              return mapKeys.map((arteUrl, idx) => (
+                                <div key={`imr-${idx}-${arteUrl || 'sin_arte'}`} className="flex items-center gap-3 p-2 border-b border-border/30 last:border-0">
+                                  <div className="w-12 h-10 bg-zinc-800 rounded overflow-hidden flex-shrink-0">
+                                    {arteUrl ? (
+                                      <ArteImg src={arteUrl} alt="Arte" className="w-full h-full object-cover" />
+                                    ) : (
+                                      <div className="w-full h-full flex items-center justify-center">
+                                        <Image className="h-4 w-4 text-zinc-600" />
+                                      </div>
+                                    )}
+                                  </div>
+                                  <div className="flex-1 min-w-0">
+                                    <p className="text-xs text-white">{impresionesMapRecibido[arteUrl] || 0} impresiones</p>
+                                    {primerItemR && (
+                                      <p className="text-[10px] text-zinc-500 truncate">
+                                        {primerItemR.mueble} - {primerItemR.ciudad}
+                                      </p>
+                                    )}
+                                  </div>
+                                </div>
+                              ));
+                            }
+
                             return Object.entries(artesAgrupados).map(([arteKey, arteGrupo]) => {
                               const arteSelected = arteGrupo.items.every(item => selectedInventoryIds.has(item.id));
                               const impresionesArteR = arteGrupo.archivo ? (impresionesMapRecibido[arteGrupo.archivo] || 0) : 0;
