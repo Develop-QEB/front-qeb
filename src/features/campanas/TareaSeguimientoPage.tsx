@@ -8324,6 +8324,76 @@ function TaskDetailModal({
                     <p className="text-green-300 font-medium">Recepción completada</p>
                     <p className="text-sm text-zinc-400 mt-1">Esta tarea de recepción ya ha sido finalizada.</p>
                   </div>
+                  {/* Desglose por arte con miniaturas: cuanto se recibio de cada arte vs
+                     lo que quedo faltante. Feedback Jos 2026-10-06: antes solo decia
+                     "Recepción completada 100" sin desglose, los ASC no sabian que
+                     recibieron especificamente. */}
+                  {(() => {
+                    let evOrig: any = null;
+                    try { evOrig = task.evidencia ? JSON.parse(task.evidencia) : null; } catch {}
+                    const impresionesMapOrig: Record<string, number> = (evOrig && typeof evOrig.impresiones === 'object' && evOrig.impresiones !== null)
+                      ? evOrig.impresiones
+                      : {};
+                    const artesSolicitados = Object.entries(impresionesMapOrig);
+                    if (artesSolicitados.length === 0) return null;
+
+                    // Buscar Faltantes hija por titulo "Recepción Faltantes - {identifier}"
+                    // para mapear cuanto quedo faltante por arte.
+                    const identifierMatch = task.titulo?.match(/TASK-\d+/) || task.identificador?.match(/TASK-\d+/);
+                    const identifier = identifierMatch ? identifierMatch[0] : `TASK-${task.id}`;
+                    const faltantesPorArte: Record<string, number> = {};
+                    const nombrePorArte: Record<string, string> = {};
+                    for (const t of tareasCampana) {
+                      if (t.tipo !== 'Recepción') continue;
+                      if (t.id === parseInt(task.id)) continue;
+                      const tituloMatch = (t.titulo || '').includes(identifier);
+                      let ev: any = null;
+                      try { ev = t.evidencia ? JSON.parse(t.evidencia) : null; } catch {}
+                      if (tituloMatch && ev?.tipo === 'recepcion_faltantes' && Array.isArray(ev.faltantesPorArte)) {
+                        ev.faltantesPorArte.forEach((f: any) => {
+                          if (!f?.arte) return;
+                          faltantesPorArte[f.arte] = (faltantesPorArte[f.arte] || 0) + (Number(f.cantidad) || 0);
+                          if (f?.nombre_arte && !nombrePorArte[f.arte]) nombrePorArte[f.arte] = f.nombre_arte;
+                        });
+                      }
+                    }
+
+                    return (
+                      <div className="mt-3 pt-3 border-t border-green-500/20">
+                        <p className="text-xs font-medium text-zinc-400 mb-2">Detalle por arte:</p>
+                        <div className="space-y-2">
+                          {artesSolicitados.map(([arteUrl, solicitadas], idx) => {
+                            const faltantes = faltantesPorArte[arteUrl] || 0;
+                            const recibidas = Math.max(0, (Number(solicitadas) || 0) - faltantes);
+                            const nombre = nombrePorArte[arteUrl] || arteUrl.split('/').pop() || 'Sin arte';
+                            return (
+                              <div key={`det-${idx}-${arteUrl}`} className="flex items-center gap-3 p-2 bg-zinc-900/40 rounded-lg border border-border/50">
+                                <div className="w-14 h-11 bg-zinc-800 rounded overflow-hidden flex-shrink-0 border border-zinc-700">
+                                  {arteUrl ? (
+                                    <ArteImg src={arteUrl} alt="Arte" className="w-full h-full object-cover" />
+                                  ) : (
+                                    <div className="w-full h-full flex items-center justify-center">
+                                      <Image className="h-4 w-4 text-zinc-600" />
+                                    </div>
+                                  )}
+                                </div>
+                                <div className="flex-1 min-w-0">
+                                  <p className="text-xs text-zinc-300 truncate" title={nombre}>{nombre}</p>
+                                  <p className="text-[10px] text-zinc-500">Solicitadas: {solicitadas}</p>
+                                </div>
+                                <div className="text-right">
+                                  <p className="text-sm font-bold text-emerald-400">{recibidas} recibidas</p>
+                                  {faltantes > 0 && (
+                                    <p className="text-[10px] text-red-400">{faltantes} faltante{faltantes !== 1 ? 's' : ''}</p>
+                                  )}
+                                </div>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    );
+                  })()}
                   {task.contenido && (
                     <div className="mt-3 pt-3 border-t border-green-500/20">
                       <p className="text-xs font-medium text-zinc-400 mb-1">Observaciones:</p>
