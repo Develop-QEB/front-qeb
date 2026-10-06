@@ -1436,6 +1436,26 @@ function isGestionArtesTarea(tipo?: string | null): boolean {
   return !!tipo && GESTION_ARTES_TIPOS.includes(tipo);
 }
 
+// Las tareas "Revisión de artes" generadas desde el modulo de prueba de color
+// NO pertenecen al flujo de gestion de artes de campaña — se consumen desde el
+// modal de prueba de color (de propuesta o campaña). Las identificamos por el
+// prefijo del titulo que les asigna crearTareaRevisionArte en el back.
+// Feedback Jos 2026-10-06: abrir estas tareas enviaba al gestor de artes modo
+// campaña aunque la prueba se originó en propuesta, lo cual confundia porque
+// el arte no se mostraba y la "campaña" aún no estaba lista para ese flujo.
+function isPruebaColorRevisionTarea(tipo?: string | null, titulo?: string | null): boolean {
+  if (tipo !== 'Revisión de artes') return false;
+  if (!titulo) return false;
+  const t = titulo.toLowerCase();
+  return t.includes('prueba de color');
+}
+
+// Tarea de Seguimiento de prueba de color — misma logica: se consume desde
+// el modal, no desde gestor de artes.
+function isPruebaColorSeguimientoTarea(tipo?: string | null): boolean {
+  return tipo === 'Seguimiento Prueba de color';
+}
+
 // Tarea informativa "Gestión de Recepción Parcial" (ASC): navega al gestor
 // de artes → tab Impresiones → sub-tab Pend. Recepción para ver el detalle.
 function isRecepcionParcialTarea(tipo?: string | null): boolean {
@@ -1478,6 +1498,13 @@ function hasNavigationRoute(tarea: Notificacion): boolean {
   if (tarea.referencia_tipo && tarea.referencia_id && tarea.referencia_tipo !== 'sistema') {
     return true;
   }
+  // Prueba de color: tiene navegacion si hay propuesta o campaña asociada
+  // (abre modal, no gestor). Chequear antes del gate generico de Gestion de Artes
+  // porque isGestionArtesTarea('Revisión de artes') es true y bloquearia el
+  // caso propuesta-sin-campania.
+  if ((isPruebaColorRevisionTarea(tarea.tipo, tarea.titulo) || isPruebaColorSeguimientoTarea(tarea.tipo)) && (tarea.id_propuesta || tarea.campania_id)) {
+    return true;
+  }
   // Tareas de Gestión de Artes con campania_id
   if (isGestionArtesTarea(tarea.tipo) && tarea.campania_id) {
     return true;
@@ -1502,6 +1529,10 @@ function getNavigationLabel(tipo: string, tipoTarea?: string, campaniaId?: numbe
   // (tienen tipo='Notificación' pero pertenecen al flujo de Gestión de Artes)
   if (isArtesNotification(titulo)) {
     return 'Ver Gestión de Artes';
+  }
+  // Prueba de color (Revisión o Seguimiento) → abrir modal, no gestor.
+  if (isPruebaColorRevisionTarea(tipoTarea, titulo) || isPruebaColorSeguimientoTarea(tipoTarea)) {
+    return 'Ver Prueba de Color';
   }
   // Tareas de Gestión de Artes → Ver Gestión de Artes
   if (isGestionArtesTarea(tipoTarea)) {
@@ -1600,6 +1631,19 @@ function getRejectionSolicitudId(tarea: Notificacion): number | null {
 function getDirectNavigationPath(tipo: string, id: number, titulo: string, tipoTarea?: string, campaniaId?: number | null, propuestaId?: number | null, tareaId?: number): string {
   const isComment = isCommentNotification(titulo);
   const isRejection = isRejectionTask(titulo);
+
+  // Prueba de color (Revisión o Seguimiento) → abrir modal de prueba.
+  // Si la prueba todavia vive en propuesta (propuestaId > 0), ir a /propuestas
+  // y abrir modal con pruebaId. Si ya avanzo a campaña, ir a /campanas/:id con
+  // query param que detona el modal. Feedback Jos 2026-10-06.
+  if (isPruebaColorRevisionTarea(tipoTarea, titulo) || isPruebaColorSeguimientoTarea(tipoTarea)) {
+    if (propuestaId) {
+      return `/propuestas?viewId=${propuestaId}&pruebaColorTareaId=${tareaId || id}`;
+    }
+    if (campaniaId) {
+      return `/campanas/${campaniaId}?pruebaColorTareaId=${tareaId || id}`;
+    }
+  }
 
   // Tareas de Gestión de Artes → Gestión de Artes con auto-open del modal (prioridad sobre propuesta)
   if (isGestionArtesTarea(tipoTarea) && campaniaId) {
