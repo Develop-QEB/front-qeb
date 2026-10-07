@@ -174,22 +174,6 @@ export function PruebasColorModal({ isOpen, onClose, propuestaId, contextoNombre
     }
   };
 
-  const handleSubmit = () => {
-    setError(null);
-    if (scIds.length === 0) { setError('Selecciona al menos un circuito'); return; }
-    if (!archivoUrl) { setError('Sube el arte de la prueba'); return; }
-    if (!nombreArte.trim()) { setError('El nombre del arte es requerido'); return; }
-    // Una prueba por circuito seleccionado.
-    const inputs = scIds.map(sc_id => ({
-      propuesta_id: propuestaId,
-      sc_id,
-      archivo: archivoUrl!,
-      nombre_arte: nombreArte.trim(),
-      notas: notas.trim() || undefined,
-    }));
-    createMutation.mutate(inputs);
-  };
-
   if (!isOpen) return null;
 
   const inputCls = `w-full rounded-lg border px-3 py-2 text-sm ${
@@ -488,11 +472,23 @@ export function PruebasColorModal({ isOpen, onClose, propuestaId, contextoNombre
                     Cancelar
                   </button>
                   <button
-                    onClick={() => {
-                      handleSubmit();
-                      // si todo pasa, el useEffect de onSuccess ya limpia; cambiamos al tab de pruebas
-                      if (archivoUrl && nombreArte.trim() && scIds.length > 0) {
-                        setTimeout(() => { if (!createMutation.isError) setActiveTab('pruebas'); }, 400);
+                    onClick={async () => {
+                      setError(null);
+                      if (scIds.length === 0) { setError('Selecciona al menos un circuito'); return; }
+                      if (!archivoUrl) { setError('Sube el arte de la prueba'); return; }
+                      if (!nombreArte.trim()) { setError('El nombre del arte es requerido'); return; }
+                      try {
+                        const inputs = scIds.map(sc_id => ({
+                          propuesta_id: propuestaId,
+                          sc_id,
+                          archivo: archivoUrl!,
+                          nombre_arte: nombreArte.trim(),
+                          notas: notas.trim() || undefined,
+                        }));
+                        await createMutation.mutateAsync(inputs);
+                        setActiveTab('pruebas');
+                      } catch {
+                        // onError ya setea el error en el estado
                       }
                     }}
                     disabled={createMutation.isPending || !archivoUrl || !nombreArte.trim() || scIds.length === 0}
