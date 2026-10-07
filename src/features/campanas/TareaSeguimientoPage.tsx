@@ -13209,6 +13209,14 @@ function CreateTaskModal({
   // Campos específicos para Impresión - impresiones por cada arte (agrupado por archivo)
   const [impresiones, setImpresiones] = useState<Record<string, number>>({});
 
+  // #243 Guía PDF del proveedor para "Cliente imprime". El cliente ya mandó
+  // imprimir con su propio proveedor y nos entrega la guía/remisión; la
+  // adjuntamos al crear la tarea para que Operaciones tenga el documento al
+  // recibir fisicamente los artes.
+  const [guiaPdfFile, setGuiaPdfFile] = useState<File | null>(null);
+  const [guiaPdfUrl, setGuiaPdfUrl] = useState<string | null>(null);
+  const [guiaPdfUploading, setGuiaPdfUploading] = useState(false);
+
   // Campos específicos para Programación - indicaciones por cada archivo digital
   const [programacionIndicaciones, setProgramacionIndicaciones] = useState<Record<string, string>>({});
   const [archivosDigitalesProgramacion, setArchivosDigitalesProgramacion] = useState<{
@@ -13661,10 +13669,14 @@ function CreateTaskModal({
       // Total y desglose por arte (la tabla del modal de Recepción se arma desde evidencia.impresiones)
       const totalImpresiones = Object.values(impresiones).reduce((sum, val) => sum + (val || 0), 0);
       (payload as any).num_impresiones = totalImpresiones;
-      (payload as any).evidencia = JSON.stringify({
+      // #243 Guia PDF del proveedor va en evidencia.guia_pdf; el modal de
+      // Recepción ya la lee desde ahí (ver guiaPdfUrl memo arriba).
+      const evidenciaCI: Record<string, unknown> = {
         tipo: 'recepcion_normal',
         impresiones,
-      });
+      };
+      if (guiaPdfUrl) evidenciaCI.guia_pdf = guiaPdfUrl;
+      (payload as any).evidencia = JSON.stringify(evidenciaCI);
       // Asignados (área Operaciones)
       if (selectedAsignadosImpresion.length > 0) {
         (payload as any).id_asignado = selectedAsignadosImpresion.map(u => u.id).join(',');
@@ -13791,6 +13803,10 @@ function CreateTaskModal({
     setFechaCreacion(new Date().toISOString().slice(0, 16));
     // Reset campos de Impresión
     setImpresiones({});
+    // #243 Reset guía PDF de Cliente imprime
+    setGuiaPdfFile(null);
+    setGuiaPdfUrl(null);
+    setGuiaPdfUploading(false);
     // Reset campos de Impresión (múltiples asignados)
     setSelectedAsignadosImpresion([]);
     setAsignadoSearchImpresion('');
@@ -14584,6 +14600,64 @@ function CreateTaskModal({
                         ))}
                       </select>
                     )}
+                  </div>
+                )}
+
+                {/* #243 Guía PDF del proveedor (solo Cliente imprime). El
+                    cliente ya mando imprimir y nos pasa la guia/remision; se
+                    sube ahora y queda en evidencia.guia_pdf para que
+                    Operaciones la vea al recibir fisicamente. */}
+                {tipo === 'Cliente imprime' && (
+                  <div>
+                    <label className="block text-xs font-medium text-muted-foreground mb-1">Guía del proveedor (PDF, opcional)</label>
+                    <div className="flex items-center gap-2">
+                      <label className={`inline-flex items-center gap-2 px-3 py-2 text-sm font-medium rounded-lg border cursor-pointer ${isDark ? 'bg-zinc-800 border-border text-zinc-200 hover:bg-zinc-700' : 'bg-white border-border text-gray-700 hover:bg-gray-50'} ${guiaPdfUploading || isSubmitting ? 'opacity-60 cursor-not-allowed' : ''}`}>
+                        {guiaPdfUploading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Upload className="h-4 w-4" />}
+                        {guiaPdfUploading ? 'Subiendo...' : guiaPdfUrl ? 'Cambiar PDF' : 'Subir PDF'}
+                        <input
+                          type="file"
+                          accept="application/pdf,.pdf"
+                          className="hidden"
+                          disabled={guiaPdfUploading || isSubmitting}
+                          onChange={async (e) => {
+                            const f = e.target.files?.[0];
+                            e.target.value = '';
+                            if (!f) return;
+                            setGuiaPdfUploading(true);
+                            try {
+                              const r = await campanasService.uploadTestigoFile(f);
+                              setGuiaPdfFile(f);
+                              setGuiaPdfUrl(r.url);
+                            } catch (err) {
+                              console.error('Error al subir guia PDF:', err);
+                              alert(err instanceof Error ? err.message : 'No se pudo subir el PDF');
+                              setGuiaPdfFile(null);
+                              setGuiaPdfUrl(null);
+                            } finally {
+                              setGuiaPdfUploading(false);
+                            }
+                          }}
+                        />
+                      </label>
+                      {guiaPdfUrl && (
+                        <>
+                          <a href={guiaPdfUrl} target="_blank" rel="noopener noreferrer" className="text-xs underline truncate max-w-[220px] text-purple-400 hover:text-purple-300" title={guiaPdfFile?.name || guiaPdfUrl}>
+                            {guiaPdfFile?.name || 'guía subida'}
+                          </a>
+                          <button
+                            type="button"
+                            onClick={() => { setGuiaPdfFile(null); setGuiaPdfUrl(null); }}
+                            className="p-1 text-zinc-500 hover:text-red-400 rounded"
+                            title="Quitar PDF"
+                          >
+                            <X className="h-3.5 w-3.5" />
+                          </button>
+                        </>
+                      )}
+                    </div>
+                    <p className="mt-1 text-[11px] text-muted-foreground">
+                      Operaciones verá esta guía en la tarea de Recepción al recibir físicamente los artes.
+                    </p>
                   </div>
                 )}
 
