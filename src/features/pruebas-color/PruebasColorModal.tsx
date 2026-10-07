@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { AlertCircle, Check, CheckCircle2, ChevronDown, Loader2, Paintbrush, Search, Send, Trash2, X, Upload, FileImage, ClipboardList, XCircle, Flag } from 'lucide-react';
+import { AlertCircle, Check, CheckCircle2, ChevronDown, Loader2, Paintbrush, Search, Send, Trash2, X, Upload, FileImage, ClipboardList, XCircle, Flag, Plus, Users } from 'lucide-react';
 import { useThemeStore } from '../../store/themeStore';
 import { useAuthStore } from '../../store/authStore';
 import {
@@ -10,7 +10,6 @@ import {
   ESTATUS_LABEL,
   TRANSICIONES,
   puedeGestionarPruebaColor,
-  TareaAsociadaPruebaColor,
   AccionResolverTarea,
 } from '../../services/pruebasColor.service';
 import { propuestasService, SolicitudCara } from '../../services/propuestas.service';
@@ -50,6 +49,13 @@ export function PruebasColorModal({ isOpen, onClose, propuestaId, contextoNombre
   const [error, setError] = useState<string | null>(null);
   const [uploading, setUploading] = useState(false);
 
+  // Tab activo del modal rediseñado (#252). Pestañas: 'pruebas' (listado de
+  // pruebas existentes agrupadas por circuito) y 'nueva' (formulario de
+  // solicitud limpio). Feedback Jos 2026-10-06: separar consulta de
+  // creacion para que el usuario no vea el formulario mezclado con la
+  // lista de pruebas ya solicitadas.
+  const [activeTab, setActiveTab] = useState<'pruebas' | 'nueva'>('pruebas');
+
   // Reset al abrir/cerrar
   useEffect(() => {
     if (isOpen) {
@@ -60,6 +66,7 @@ export function PruebasColorModal({ isOpen, onClose, propuestaId, contextoNombre
       setNotas('');
       setError(null);
       setUploading(false);
+      setActiveTab('pruebas');
     }
   }, [isOpen, initialScId]);
 
@@ -79,7 +86,7 @@ export function PruebasColorModal({ isOpen, onClose, propuestaId, contextoNombre
     enabled: isOpen && !!propuestaId,
   });
 
-  const pruebasAll = pruebasQuery.data || [];
+  const pruebasAll = useMemo(() => pruebasQuery.data || [], [pruebasQuery.data]);
   const pruebas = useMemo(() => {
     if (scIds.length === 0) return pruebasAll; // sin filtro muestra todas
     const setScs = new Set(scIds);
@@ -122,6 +129,27 @@ export function PruebasColorModal({ isOpen, onClose, propuestaId, contextoNombre
     const caras = carasQuery.data || [];
     return scIds.map(id => caras.find(c => c.id === id)).filter(Boolean) as SolicitudCara[];
   }, [carasQuery.data, scIds]);
+
+  // Agrupacion de pruebas por circuito para el tab "Pruebas". Mantiene el
+  // orden de circuitos de la propuesta y pone al final cualquier prueba
+  // con sc_id no encontrado en caras.
+  const pruebasPorCircuito = useMemo(() => {
+    const caras = carasQuery.data || [];
+    const porId = new Map<number, { cara: SolicitudCara | null; pruebas: PruebaColor[] }>();
+    for (const p of pruebas) {
+      const prev = porId.get(p.sc_id) || { cara: caras.find(c => c.id === p.sc_id) || null, pruebas: [] };
+      prev.pruebas.push(p);
+      porId.set(p.sc_id, prev);
+    }
+    // orden: primero circuitos en orden de 'caras', luego los demas
+    const grupos: Array<{ scId: number; cara: SolicitudCara | null; pruebas: PruebaColor[] }> = [];
+    for (const c of caras) {
+      const g = porId.get(c.id);
+      if (g) { grupos.push({ scId: c.id, cara: g.cara, pruebas: g.pruebas }); porId.delete(c.id); }
+    }
+    for (const [scId, g] of porId.entries()) grupos.push({ scId, cara: g.cara, pruebas: g.pruebas });
+    return grupos;
+  }, [pruebas, carasQuery.data]);
 
   const circuitoLabel = useMemo(() => {
     // Se usa cuando initialScId esta set — un solo circuito.
@@ -209,107 +237,207 @@ export function PruebasColorModal({ isOpen, onClose, propuestaId, contextoNombre
           </button>
         </div>
 
+        {/* Barra de tabs (#252) — separar consulta de creacion para que el
+            formulario no se mezcle con la lista de pruebas existentes. */}
+        <div className={`flex items-stretch gap-1 px-5 pt-3 border-b flex-shrink-0 ${isDark ? 'border-zinc-800 bg-zinc-900' : 'border-gray-200 bg-white'}`}>
+          <TabButton
+            active={activeTab === 'pruebas'}
+            onClick={() => setActiveTab('pruebas')}
+            isDark={isDark}
+            icon={<ClipboardList className="h-4 w-4" />}
+            label="Pruebas"
+            badge={pruebasAll.length}
+          />
+          {puedeGestionar && (
+            <TabButton
+              active={activeTab === 'nueva'}
+              onClick={() => setActiveTab('nueva')}
+              isDark={isDark}
+              icon={<Plus className="h-4 w-4" />}
+              label="Nueva solicitud"
+            />
+          )}
+        </div>
+
         {/* Body — flex-1 con overflow interno para que el dropdown absolute
             no se corte pero el modal aun respete max-h-[92vh]. */}
-        <div className="flex-1 overflow-y-auto px-5 py-4 space-y-4">
-          {/* Selector circuito(s) - multi-select */}
-          <div>
-            <label className={labelCls}>Circuito(s)</label>
-            {initialScId ? (
-              <div className={`px-3 py-2 rounded-lg border text-sm ${isDark ? 'bg-zinc-800/60 border-zinc-700 text-zinc-300' : 'bg-gray-50 border-gray-200 text-gray-700'}`}>
-                {circuitoLabel || `Circuito #${initialScId}`}
-              </div>
-            ) : (
-              <>
-                <CircuitoCombobox
-                  caras={carasQuery.data || []}
-                  isLoading={carasQuery.isLoading}
-                  selectedIds={scIds}
-                  onToggle={(id) => setScIds(prev => prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id])}
-                  onClear={() => setScIds([])}
-                  isDark={isDark}
-                />
-                {circuitosSeleccionados.length > 0 && (
-                  <div className="mt-2 flex flex-wrap gap-1.5">
-                    {circuitosSeleccionados.map(c => (
-                      <span
-                        key={c.id}
-                        className={`inline-flex items-center gap-1.5 px-2 py-1 rounded-md text-[11px] border ${isDark ? 'bg-fuchsia-500/15 text-fuchsia-200 border-fuchsia-500/30' : 'bg-fuchsia-50 text-fuchsia-700 border-fuchsia-200'}`}
+        <div className="flex-1 overflow-y-auto px-5 py-4">
+          {activeTab === 'pruebas' && (
+            <div className="space-y-4">
+              {/* Filtro de circuitos (colapsable visualmente). Siempre
+                  visible pero compacto arriba del listado. */}
+              {!initialScId && (carasQuery.data || []).length > 1 && (
+                <div className={`rounded-lg border p-3 ${isDark ? 'bg-zinc-800/40 border-zinc-800' : 'bg-gray-50 border-gray-200'}`}>
+                  <div className={`text-[11px] font-medium mb-1.5 flex items-center justify-between ${isDark ? 'text-zinc-400' : 'text-gray-500'}`}>
+                    <span>Filtrar por circuito</span>
+                    {scIds.length > 0 && (
+                      <button
+                        type="button"
+                        onClick={() => setScIds([])}
+                        className={`text-[10px] px-1.5 py-0.5 rounded ${isDark ? 'text-zinc-500 hover:text-zinc-300 hover:bg-zinc-700/50' : 'text-gray-500 hover:text-gray-700 hover:bg-gray-200'}`}
                       >
-                        <span className="font-medium">#{c.id}</span>
-                        <span className="truncate max-w-[200px]">{c.articulo || 'Sin articulo'} · {c.formato || 'Sin formato'}</span>
-                        <button
-                          type="button"
-                          onClick={() => setScIds(prev => prev.filter(x => x !== c.id))}
-                          className={isDark ? 'hover:text-fuchsia-50' : 'hover:text-fuchsia-900'}
-                          title="Quitar"
-                        >
-                          <X className="h-3 w-3" />
-                        </button>
-                      </span>
-                    ))}
+                        Limpiar filtro
+                      </button>
+                    )}
                   </div>
-                )}
-              </>
-            )}
-          </div>
+                  <CircuitoCombobox
+                    caras={carasQuery.data || []}
+                    isLoading={carasQuery.isLoading}
+                    selectedIds={scIds}
+                    onToggle={(id) => setScIds(prev => prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id])}
+                    onClear={() => setScIds([])}
+                    isDark={isDark}
+                  />
+                  {circuitosSeleccionados.length > 0 && (
+                    <div className="mt-2 flex flex-wrap gap-1.5">
+                      {circuitosSeleccionados.map(c => (
+                        <span
+                          key={c.id}
+                          className={`inline-flex items-center gap-1.5 px-2 py-1 rounded-md text-[11px] border ${isDark ? 'bg-fuchsia-500/15 text-fuchsia-200 border-fuchsia-500/40' : 'bg-fuchsia-50 text-fuchsia-700 border-fuchsia-200'}`}
+                        >
+                          <span className="font-medium">#{c.id}</span>
+                          <span className="truncate max-w-[180px]">{c.articulo || 'Sin articulo'}</span>
+                          <button
+                            type="button"
+                            onClick={() => setScIds(prev => prev.filter(x => x !== c.id))}
+                            className={isDark ? 'hover:text-fuchsia-50' : 'hover:text-fuchsia-900'}
+                            title="Quitar"
+                          >
+                            <X className="h-3 w-3" />
+                          </button>
+                        </span>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )}
 
-          {/* Lista de pruebas (si no hay filtro muestra TODAS las de la
-              propuesta; si hay circuitos seleccionados filtra a esos). */}
-          {(pruebasAll.length > 0 || scIds.length > 0) && (
-            <div className="space-y-2">
-              <div className={`text-xs font-medium ${isDark ? 'text-zinc-400' : 'text-gray-500'}`}>
-                {scIds.length === 0
-                  ? `Pruebas existentes en esta propuesta (${pruebas.length})`
-                  : `Pruebas de ${scIds.length === 1 ? 'este circuito' : `los ${scIds.length} circuitos seleccionados`} (${pruebas.length})`}
-              </div>
+              {initialScId && (
+                <div className={`px-3 py-2 rounded-lg border text-sm flex items-center gap-2 ${isDark ? 'bg-fuchsia-500/10 border-fuchsia-500/30 text-fuchsia-200' : 'bg-fuchsia-50 border-fuchsia-200 text-fuchsia-800'}`}>
+                  <span className={`text-[10px] px-1.5 py-0.5 rounded font-medium ${isDark ? 'bg-fuchsia-500/20' : 'bg-fuchsia-100'}`}>Circuito</span>
+                  <span className="truncate">{circuitoLabel || `#${initialScId}`}</span>
+                </div>
+              )}
+
+              {/* Loader / vacío */}
               {pruebasQuery.isLoading && (
-                <div className={`px-3 py-3 text-xs flex items-center gap-2 ${isDark ? 'text-zinc-500' : 'text-gray-400'}`}>
-                  <Loader2 className="h-3 w-3 animate-spin" /> Cargando...
+                <div className={`py-10 text-center text-sm flex items-center justify-center gap-2 ${isDark ? 'text-zinc-400' : 'text-gray-500'}`}>
+                  <Loader2 className="h-4 w-4 animate-spin" /> Cargando pruebas...
                 </div>
               )}
               {!pruebasQuery.isLoading && pruebas.length === 0 && (
-                <div className={`px-3 py-3 text-xs text-center rounded-lg border ${isDark ? 'text-zinc-500 border-zinc-800' : 'text-gray-400 border-gray-200'}`}>
-                  Sin pruebas de color para este circuito todavía.
+                <div className={`py-10 px-6 text-center rounded-lg border-2 border-dashed ${isDark ? 'border-zinc-800 text-zinc-500' : 'border-gray-200 text-gray-400'}`}>
+                  <Paintbrush className="h-8 w-8 mx-auto mb-2 opacity-50" />
+                  <div className="text-sm font-medium mb-1">
+                    {scIds.length > 0 ? 'Sin pruebas en los circuitos filtrados' : 'Aún no hay pruebas de color'}
+                  </div>
+                  {puedeGestionar && (
+                    <button
+                      type="button"
+                      onClick={() => setActiveTab('nueva')}
+                      className={`mt-3 inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium ${isDark ? 'bg-fuchsia-500/15 text-fuchsia-300 hover:bg-fuchsia-500/25' : 'bg-fuchsia-50 text-fuchsia-700 hover:bg-fuchsia-100'}`}
+                    >
+                      <Plus className="h-3 w-3" /> Solicitar primera prueba
+                    </button>
+                  )}
                 </div>
               )}
+
+              {/* Listado agrupado por circuito */}
               {pruebas.length > 0 && (
-                <div className={`space-y-2 ${pruebas.length > 2 ? 'max-h-72 overflow-y-auto pr-1' : ''}`}>
-                  {pruebas.map(p => {
-                    const cara = (carasQuery.data || []).find(c => c.id === p.sc_id);
-                    const scLabel = cara ? `#${cara.id} · ${cara.articulo || 'Sin articulo'}` : `Circuito #${p.sc_id}`;
-                    return (
-                      <PruebaCard
-                        key={p.id}
-                        prueba={p}
-                        isDark={isDark}
-                        puedeGestionar={puedeGestionar}
-                        isUpdating={updateEstatusMutation.isPending || deleteMutation.isPending}
-                        onChangeEstatus={(nuevo) => updateEstatusMutation.mutate({ id: p.id, estatus: nuevo })}
-                        onDelete={() => {
-                          if (confirm(`¿Eliminar la prueba v${p.version}?`)) deleteMutation.mutate(p.id);
-                        }}
-                        scLabel={scIds.length === 0 ? scLabel : undefined}
-                      />
-                    );
-                  })}
+                <div className="space-y-5">
+                  {pruebasPorCircuito.map(grupo => (
+                    <div key={grupo.scId} className="space-y-2">
+                      <div className={`flex items-center gap-2 pb-1.5 border-b ${isDark ? 'border-zinc-800' : 'border-gray-200'}`}>
+                        <span className={`text-[10px] px-1.5 py-0.5 rounded font-medium ${isDark ? 'bg-fuchsia-500/15 text-fuchsia-300' : 'bg-fuchsia-50 text-fuchsia-700'}`}>#{grupo.scId}</span>
+                        <span className={`text-xs font-semibold ${isDark ? 'text-zinc-200' : 'text-gray-800'}`}>
+                          {grupo.cara?.articulo || 'Circuito'}
+                        </span>
+                        {grupo.cara && (
+                          <span className={`text-[11px] ${isDark ? 'text-zinc-500' : 'text-gray-500'}`}>
+                            · {grupo.cara.formato || 'Sin formato'} · {grupo.cara.ciudad || grupo.cara.estados || 'Sin ciudad'}
+                          </span>
+                        )}
+                        <span className={`ml-auto text-[10px] px-1.5 py-0.5 rounded ${isDark ? 'bg-zinc-800 text-zinc-400' : 'bg-gray-100 text-gray-600'}`}>
+                          {grupo.pruebas.length} {grupo.pruebas.length === 1 ? 'prueba' : 'pruebas'}
+                        </span>
+                      </div>
+                      <div className="space-y-2">
+                        {grupo.pruebas.map(p => (
+                          <PruebaCard
+                            key={p.id}
+                            prueba={p}
+                            isDark={isDark}
+                            puedeGestionar={puedeGestionar}
+                            isUpdating={updateEstatusMutation.isPending || deleteMutation.isPending}
+                            onChangeEstatus={(nuevo) => updateEstatusMutation.mutate({ id: p.id, estatus: nuevo })}
+                            onDelete={() => {
+                              if (confirm(`¿Eliminar la prueba v${p.version}?`)) deleteMutation.mutate(p.id);
+                            }}
+                          />
+                        ))}
+                      </div>
+                    </div>
+                  ))}
                 </div>
               )}
             </div>
           )}
 
-          {/* Nueva prueba */}
-          {scIds.length > 0 && puedeGestionar && (
-            <div className={`pt-3 border-t ${isDark ? 'border-zinc-800' : 'border-gray-200'}`}>
-              <div className={`text-sm font-medium mb-2 ${isDark ? 'text-fuchsia-300' : 'text-fuchsia-700'}`}>
-                Nueva prueba
+          {activeTab === 'nueva' && puedeGestionar && (
+            <div className="space-y-4">
+              <div className={`rounded-lg border p-3 ${isDark ? 'bg-zinc-800/40 border-zinc-800' : 'bg-gray-50 border-gray-200'}`}>
+                <label className={labelCls}>Circuito(s) a solicitar *</label>
+                {initialScId ? (
+                  <div className={`px-3 py-2 rounded-lg border text-sm ${isDark ? 'bg-zinc-900 border-zinc-700 text-zinc-200' : 'bg-white border-gray-300 text-gray-800'}`}>
+                    {circuitoLabel || `Circuito #${initialScId}`}
+                  </div>
+                ) : (
+                  <>
+                    <CircuitoCombobox
+                      caras={carasQuery.data || []}
+                      isLoading={carasQuery.isLoading}
+                      selectedIds={scIds}
+                      onToggle={(id) => setScIds(prev => prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id])}
+                      onClear={() => setScIds([])}
+                      isDark={isDark}
+                    />
+                    {circuitosSeleccionados.length > 0 && (
+                      <div className="mt-2 flex flex-wrap gap-1.5">
+                        {circuitosSeleccionados.map(c => (
+                          <span
+                            key={c.id}
+                            className={`inline-flex items-center gap-1.5 px-2 py-1 rounded-md text-[11px] border ${isDark ? 'bg-fuchsia-500/15 text-fuchsia-200 border-fuchsia-500/40' : 'bg-fuchsia-50 text-fuchsia-700 border-fuchsia-200'}`}
+                          >
+                            <span className="font-medium">#{c.id}</span>
+                            <span className="truncate max-w-[180px]">{c.articulo || 'Sin articulo'}</span>
+                            <button
+                              type="button"
+                              onClick={() => setScIds(prev => prev.filter(x => x !== c.id))}
+                              className={isDark ? 'hover:text-fuchsia-50' : 'hover:text-fuchsia-900'}
+                              title="Quitar"
+                            >
+                              <X className="h-3 w-3" />
+                            </button>
+                          </span>
+                        ))}
+                      </div>
+                    )}
+                    {scIds.length > 1 && (
+                      <p className={`mt-2 text-[11px] ${isDark ? 'text-amber-300/80' : 'text-amber-700'}`}>
+                        Se creará una prueba por cada circuito seleccionado ({scIds.length} en total).
+                      </p>
+                    )}
+                  </>
+                )}
               </div>
+
               <div className="space-y-3">
                 <div>
                   <label className={labelCls}>Arte *</label>
                   <div className="flex items-center gap-2">
                     <label
-                      className={`flex items-center gap-2 px-3 py-2 rounded-lg text-sm font-medium cursor-pointer border ${
+                      className={`flex items-center gap-2 px-3 py-2 rounded-lg text-sm font-medium cursor-pointer border transition-colors ${
                         isDark ? 'bg-zinc-800 border-zinc-700 text-zinc-200 hover:bg-zinc-700'
                                : 'bg-white border-gray-300 text-gray-700 hover:bg-gray-50'
                       } ${uploading ? 'opacity-60 cursor-not-allowed' : ''}`}
@@ -328,8 +456,8 @@ export function PruebasColorModal({ isOpen, onClose, propuestaId, contextoNombre
                       />
                     </label>
                     {archivoUrl && (
-                      <a href={archivoUrl} target="_blank" rel="noreferrer" className={`text-xs underline truncate max-w-[220px] ${isDark ? 'text-fuchsia-300' : 'text-fuchsia-700'}`} title={archivoFile?.name || archivoUrl}>
-                        <FileImage className="h-3 w-3 inline mr-1" />
+                      <a href={archivoUrl} target="_blank" rel="noreferrer" className={`text-xs underline truncate max-w-[260px] inline-flex items-center gap-1 ${isDark ? 'text-fuchsia-300' : 'text-fuchsia-700'}`} title={archivoFile?.name || archivoUrl}>
+                        <FileImage className="h-3 w-3" />
                         {archivoFile?.name || 'archivo subido'}
                       </a>
                     )}
@@ -346,29 +474,41 @@ export function PruebasColorModal({ isOpen, onClose, propuestaId, contextoNombre
 
                 {error && (
                   <div className={`text-xs flex items-center gap-2 px-3 py-2 rounded ${
-                    isDark ? 'bg-red-500/10 border border-red-500/30 text-red-300' : 'bg-red-50 border border-red-200 text-red-600'
+                    isDark ? 'bg-red-500/10 border border-red-500/30 text-red-300' : 'bg-red-50 border border-red-200 text-red-700'
                   }`}>
                     <AlertCircle className="h-3 w-3 shrink-0" /> {error}
                   </div>
                 )}
 
-                <div className="flex justify-end gap-2">
+                <div className="flex justify-end gap-2 pt-1">
                   <button
-                    onClick={handleSubmit}
-                    disabled={createMutation.isPending || !archivoUrl || !nombreArte.trim()}
+                    onClick={() => setActiveTab('pruebas')}
+                    className={`px-4 py-2 rounded-lg text-sm font-medium border ${isDark ? 'bg-zinc-800 border-zinc-700 text-zinc-300 hover:bg-zinc-700' : 'bg-white border-gray-300 text-gray-700 hover:bg-gray-50'}`}
+                  >
+                    Cancelar
+                  </button>
+                  <button
+                    onClick={() => {
+                      handleSubmit();
+                      // si todo pasa, el useEffect de onSuccess ya limpia; cambiamos al tab de pruebas
+                      if (archivoUrl && nombreArte.trim() && scIds.length > 0) {
+                        setTimeout(() => { if (!createMutation.isError) setActiveTab('pruebas'); }, 400);
+                      }
+                    }}
+                    disabled={createMutation.isPending || !archivoUrl || !nombreArte.trim() || scIds.length === 0}
                     className="flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium text-white bg-fuchsia-600 hover:bg-fuchsia-700 disabled:opacity-50 disabled:cursor-not-allowed"
                   >
                     {createMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
-                    {createMutation.isPending ? 'Guardando...' : 'Solicitar prueba de color'}
+                    {createMutation.isPending ? 'Guardando...' : 'Solicitar prueba'}
                   </button>
                 </div>
               </div>
             </div>
           )}
 
-          {scIds.length > 0 && !puedeGestionar && (
-            <div className={`px-3 py-2 rounded-lg text-xs ${isDark ? 'bg-zinc-800/60 border border-zinc-700 text-zinc-400' : 'bg-gray-50 border border-gray-200 text-gray-500'}`}>
-              Tu rol no puede solicitar pruebas de color. Puedes ver las existentes arriba.
+          {activeTab === 'nueva' && !puedeGestionar && (
+            <div className={`px-3 py-6 rounded-lg text-sm text-center ${isDark ? 'bg-zinc-800/60 border border-zinc-700 text-zinc-400' : 'bg-gray-50 border border-gray-200 text-gray-500'}`}>
+              Tu rol no puede solicitar pruebas de color.
             </div>
           )}
         </div>
@@ -377,7 +517,43 @@ export function PruebasColorModal({ isOpen, onClose, propuestaId, contextoNombre
   );
 }
 
+// ─── Boton de tab reutilizable (#252) ───────────────────────────────────
+function TabButton({ active, onClick, isDark, icon, label, badge }: {
+  active: boolean;
+  onClick: () => void;
+  isDark: boolean;
+  icon: React.ReactNode;
+  label: string;
+  badge?: number;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className={`relative flex items-center gap-1.5 px-3 py-2 text-sm font-medium transition-colors border-b-2 -mb-px ${
+        active
+          ? (isDark ? 'border-fuchsia-400 text-fuchsia-200' : 'border-fuchsia-600 text-fuchsia-700')
+          : (isDark ? 'border-transparent text-zinc-400 hover:text-zinc-200' : 'border-transparent text-gray-500 hover:text-gray-800')
+      }`}
+    >
+      {icon}
+      {label}
+      {typeof badge === 'number' && badge > 0 && (
+        <span className={`ml-0.5 text-[10px] px-1.5 py-0.5 rounded-full font-semibold ${
+          active
+            ? (isDark ? 'bg-fuchsia-500/20 text-fuchsia-200' : 'bg-fuchsia-100 text-fuchsia-700')
+            : (isDark ? 'bg-zinc-800 text-zinc-400' : 'bg-gray-100 text-gray-600')
+        }`}>
+          {badge}
+        </span>
+      )}
+    </button>
+  );
+}
+
 // ─── Card individual de una prueba de color ─────────────────────────────
+// Rediseño #252: jerarquia clara entre "la prueba" (arte) y "la tarea
+// asociada" (revision asignada). Mejor contraste en metadata y notas.
 function PruebaCard({
   prueba,
   isDark,
@@ -385,7 +561,6 @@ function PruebaCard({
   isUpdating,
   onChangeEstatus,
   onDelete,
-  scLabel,
 }: {
   prueba: PruebaColor;
   isDark: boolean;
@@ -393,44 +568,37 @@ function PruebaCard({
   isUpdating: boolean;
   onChangeEstatus: (e: EstatusPruebaColor) => void;
   onDelete: () => void;
-  // Etiqueta corta del circuito al que pertenece la prueba. Util cuando se
-  // listan pruebas de distintos circuitos en la vista "sin filtro".
-  scLabel?: string;
 }) {
   const estatusStyle: Record<EstatusPruebaColor, string> = {
-    solicitada: isDark ? 'bg-amber-500/15 text-amber-300 border-amber-500/30' : 'bg-amber-50 text-amber-700 border-amber-200',
-    revision_artes: isDark ? 'bg-amber-500/15 text-amber-300 border-amber-500/30' : 'bg-amber-50 text-amber-700 border-amber-200',
-    arte_aprobado: isDark ? 'bg-cyan-500/15 text-cyan-300 border-cyan-500/30' : 'bg-cyan-50 text-cyan-700 border-cyan-200',
-    enviada_proveedor: isDark ? 'bg-blue-500/15 text-blue-300 border-blue-500/30' : 'bg-blue-50 text-blue-700 border-blue-200',
-    aprobada: isDark ? 'bg-emerald-500/15 text-emerald-300 border-emerald-500/30' : 'bg-emerald-50 text-emerald-700 border-emerald-200',
-    rechazada: isDark ? 'bg-red-500/15 text-red-300 border-red-500/30' : 'bg-red-50 text-red-700 border-red-200',
+    solicitada: isDark ? 'bg-amber-500/15 text-amber-200 border-amber-500/40' : 'bg-amber-50 text-amber-800 border-amber-300',
+    revision_artes: isDark ? 'bg-amber-500/15 text-amber-200 border-amber-500/40' : 'bg-amber-50 text-amber-800 border-amber-300',
+    arte_aprobado: isDark ? 'bg-cyan-500/15 text-cyan-200 border-cyan-500/40' : 'bg-cyan-50 text-cyan-800 border-cyan-300',
+    enviada_proveedor: isDark ? 'bg-blue-500/15 text-blue-200 border-blue-500/40' : 'bg-blue-50 text-blue-800 border-blue-300',
+    aprobada: isDark ? 'bg-emerald-500/15 text-emerald-200 border-emerald-500/40' : 'bg-emerald-50 text-emerald-800 border-emerald-300',
+    rechazada: isDark ? 'bg-red-500/15 text-red-200 border-red-500/40' : 'bg-red-50 text-red-800 border-red-300',
   };
   const transiciones = TRANSICIONES[prueba.estatus] || [];
 
   return (
-    <div className={`rounded-lg border p-3 ${isDark ? 'bg-zinc-800/40 border-zinc-800' : 'bg-gray-50 border-gray-200'}`}>
-      <div className="flex items-start justify-between gap-3">
-        <div className="flex items-center gap-2 min-w-0">
-          <span className={`text-[10px] px-1.5 py-0.5 rounded font-medium ${isDark ? 'bg-fuchsia-500/15 text-fuchsia-300' : 'bg-fuchsia-50 text-fuchsia-700'}`}>
+    <div className={`rounded-lg border overflow-hidden ${isDark ? 'bg-zinc-800/50 border-zinc-700' : 'bg-white border-gray-200'}`}>
+      {/* Header: version + estatus + nombre + eliminar */}
+      <div className={`px-3 py-2.5 flex items-start justify-between gap-3 border-b ${isDark ? 'border-zinc-800 bg-zinc-900/40' : 'border-gray-100 bg-gray-50/60'}`}>
+        <div className="flex items-center gap-2 min-w-0 flex-1">
+          <span className={`text-[11px] px-1.5 py-0.5 rounded font-bold ${isDark ? 'bg-fuchsia-500/20 text-fuchsia-200' : 'bg-fuchsia-100 text-fuchsia-700'}`}>
             v{prueba.version}
           </span>
-          <span className={`text-[10px] px-1.5 py-0.5 rounded border font-medium ${estatusStyle[prueba.estatus]}`}>
+          <span className={`text-[10px] px-2 py-0.5 rounded-full border font-semibold ${estatusStyle[prueba.estatus]}`}>
             {ESTATUS_LABEL[prueba.estatus]}
           </span>
-          <span className={`text-xs font-medium truncate ${isDark ? 'text-zinc-200' : 'text-gray-800'}`}>
+          <span className={`text-sm font-semibold truncate ${isDark ? 'text-zinc-100' : 'text-gray-900'}`}>
             {prueba.nombre_arte || `Prueba #${prueba.id}`}
           </span>
-          {scLabel && (
-            <span className={`text-[10px] px-1.5 py-0.5 rounded ${isDark ? 'bg-zinc-700/60 text-zinc-400' : 'bg-gray-100 text-gray-500'}`} title="Circuito">
-              {scLabel}
-            </span>
-          )}
         </div>
         {puedeGestionar && transiciones.length > 0 && (
           <button
             onClick={onDelete}
             disabled={isUpdating}
-            className={`p-1 rounded hover:bg-red-500/10 ${isDark ? 'text-zinc-500 hover:text-red-300' : 'text-gray-400 hover:text-red-600'} disabled:opacity-50`}
+            className={`shrink-0 p-1 rounded transition-colors ${isDark ? 'text-zinc-500 hover:text-red-300 hover:bg-red-500/10' : 'text-gray-400 hover:text-red-600 hover:bg-red-50'} disabled:opacity-50`}
             title="Eliminar"
           >
             <Trash2 className="h-3.5 w-3.5" />
@@ -438,41 +606,47 @@ function PruebaCard({
         )}
       </div>
 
-      <div className={`mt-1 text-[11px] ${isDark ? 'text-zinc-500' : 'text-gray-500'}`}>
-        {prueba.created_by_nombre} · {formatDate(prueba.created_at)}
-      </div>
+      {/* Cuerpo: metadata + notas + acciones del arte */}
+      <div className="px-3 py-2.5 space-y-2">
+        <div className={`text-[11px] ${isDark ? 'text-zinc-400' : 'text-gray-600'}`}>
+          Solicitada por <span className={isDark ? 'text-zinc-200' : 'text-gray-800'}>{prueba.created_by_nombre}</span> · {formatDate(prueba.created_at)}
+        </div>
 
-      {prueba.notas && (
-        <p className={`mt-2 text-xs whitespace-pre-wrap ${isDark ? 'text-zinc-300' : 'text-gray-700'}`}>{prueba.notas}</p>
-      )}
-
-      <div className="mt-2 flex items-center gap-2 flex-wrap">
-        <a href={prueba.archivo} target="_blank" rel="noreferrer" className={`inline-flex items-center gap-1 text-xs underline ${isDark ? 'text-fuchsia-300' : 'text-fuchsia-700'}`}>
-          <FileImage className="h-3 w-3" /> Ver arte
-        </a>
-
-        {puedeGestionar && transiciones.length > 0 && (
-          <div className="flex items-center gap-1 ml-auto">
-            {transiciones.map(t => (
-              <button
-                key={t}
-                onClick={() => onChangeEstatus(t)}
-                disabled={isUpdating}
-                className={`text-[11px] px-2 py-0.5 rounded border transition-colors ${
-                  t === 'aprobada'
-                    ? (isDark ? 'border-emerald-500/40 text-emerald-300 hover:bg-emerald-500/10' : 'border-emerald-300 text-emerald-700 hover:bg-emerald-50')
-                    : t === 'rechazada'
-                      ? (isDark ? 'border-red-500/40 text-red-300 hover:bg-red-500/10' : 'border-red-300 text-red-700 hover:bg-red-50')
-                      : (isDark ? 'border-blue-500/40 text-blue-300 hover:bg-blue-500/10' : 'border-blue-300 text-blue-700 hover:bg-blue-50')
-                } disabled:opacity-50`}
-                title={`Marcar como ${ESTATUS_LABEL[t]}`}
-              >
-                {t === 'aprobada' && <CheckCircle2 className="h-3 w-3 inline mr-1" />}
-                {ESTATUS_LABEL[t]}
-              </button>
-            ))}
+        {prueba.notas && (
+          <div className={`text-xs rounded-md px-2.5 py-1.5 whitespace-pre-wrap ${isDark ? 'bg-zinc-900/60 text-zinc-200 border border-zinc-800' : 'bg-gray-50 text-gray-700 border border-gray-200'}`}>
+            {prueba.notas}
           </div>
         )}
+
+        <div className="flex items-center gap-2 flex-wrap pt-0.5">
+          <a href={prueba.archivo} target="_blank" rel="noreferrer" className={`inline-flex items-center gap-1 text-xs font-medium px-2 py-1 rounded border transition-colors ${isDark ? 'text-fuchsia-300 border-fuchsia-500/40 hover:bg-fuchsia-500/10' : 'text-fuchsia-700 border-fuchsia-300 hover:bg-fuchsia-50'}`}>
+            <FileImage className="h-3 w-3" /> Ver arte
+          </a>
+
+          {puedeGestionar && transiciones.length > 0 && (
+            <div className="flex items-center gap-1 ml-auto">
+              {transiciones.map(t => (
+                <button
+                  key={t}
+                  onClick={() => onChangeEstatus(t)}
+                  disabled={isUpdating}
+                  className={`text-[11px] font-medium px-2 py-1 rounded border transition-colors ${
+                    t === 'aprobada'
+                      ? (isDark ? 'border-emerald-500/50 text-emerald-200 bg-emerald-500/10 hover:bg-emerald-500/20' : 'border-emerald-400 text-emerald-800 bg-emerald-50 hover:bg-emerald-100')
+                      : t === 'rechazada'
+                        ? (isDark ? 'border-red-500/50 text-red-200 bg-red-500/10 hover:bg-red-500/20' : 'border-red-400 text-red-800 bg-red-50 hover:bg-red-100')
+                        : (isDark ? 'border-blue-500/50 text-blue-200 bg-blue-500/10 hover:bg-blue-500/20' : 'border-blue-400 text-blue-800 bg-blue-50 hover:bg-blue-100')
+                  } disabled:opacity-50`}
+                  title={`Marcar como ${ESTATUS_LABEL[t]}`}
+                >
+                  {t === 'aprobada' && <CheckCircle2 className="h-3 w-3 inline mr-0.5" />}
+                  {t === 'rechazada' && <XCircle className="h-3 w-3 inline mr-0.5" />}
+                  {ESTATUS_LABEL[t]}
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
       </div>
 
       {/* Tareas asociadas: Revisión de artes + Seguimiento Prueba de color.
@@ -523,7 +697,7 @@ function TareasAsociadasSection({
 
   if (tareasQuery.isLoading) {
     return (
-      <div className={`mt-3 pt-3 border-t text-[11px] flex items-center gap-2 ${isDark ? 'border-zinc-800 text-zinc-500' : 'border-gray-200 text-gray-500'}`}>
+      <div className={`px-3 py-2 border-t text-[11px] flex items-center gap-2 ${isDark ? 'border-zinc-800 text-zinc-400' : 'border-gray-200 text-gray-500'}`}>
         <Loader2 className="h-3 w-3 animate-spin" /> Cargando tareas...
       </div>
     );
@@ -532,36 +706,39 @@ function TareasAsociadasSection({
   if (tareas.length === 0) return null;
 
   const estadoColor = (estatus: string | null) => {
-    if (!estatus) return isDark ? 'bg-zinc-700/40 text-zinc-400' : 'bg-gray-100 text-gray-600';
+    if (!estatus) return isDark ? 'bg-zinc-700/60 text-zinc-200' : 'bg-gray-100 text-gray-700';
     const e = estatus.toLowerCase();
-    if (e.includes('finaliz') || e.includes('atendid') || e.includes('aprob')) return isDark ? 'bg-emerald-500/15 text-emerald-300' : 'bg-emerald-50 text-emerald-700';
-    if (e.includes('rechaz')) return isDark ? 'bg-red-500/15 text-red-300' : 'bg-red-50 text-red-700';
-    return isDark ? 'bg-amber-500/15 text-amber-300' : 'bg-amber-50 text-amber-700';
+    if (e.includes('finaliz') || e.includes('atendid') || e.includes('aprob')) return isDark ? 'bg-emerald-500/20 text-emerald-200' : 'bg-emerald-100 text-emerald-800';
+    if (e.includes('rechaz')) return isDark ? 'bg-red-500/20 text-red-200' : 'bg-red-100 text-red-800';
+    return isDark ? 'bg-amber-500/20 text-amber-200' : 'bg-amber-100 text-amber-800';
   };
 
   return (
-    <div className={`mt-3 pt-3 border-t ${isDark ? 'border-zinc-800' : 'border-gray-200'}`}>
-      <div className={`text-[11px] font-medium flex items-center gap-1.5 mb-2 ${isDark ? 'text-zinc-400' : 'text-gray-500'}`}>
-        <ClipboardList className="h-3 w-3" /> Tareas asociadas ({tareas.length})
+    <div className={`border-t ${isDark ? 'border-zinc-800 bg-zinc-900/30' : 'border-gray-200 bg-gray-50/50'}`}>
+      <div className={`px-3 py-1.5 text-[10px] font-semibold uppercase tracking-wide flex items-center gap-1.5 ${isDark ? 'text-zinc-400' : 'text-gray-500'}`}>
+        <ClipboardList className="h-3 w-3" /> Tareas de la prueba ({tareas.length})
       </div>
-      <div className="space-y-1.5">
+      <div className={`px-3 pb-3 space-y-1.5`}>
         {tareas.map(t => {
           const esRevision = t.tipo === 'Revisión de artes';
           const esSeguimiento = t.tipo === 'Seguimiento Prueba de color';
           const puedeAprobar = esRevision && t.estatus === 'Pendiente' && puedeGestionar;
           const puedeFinalizar = esSeguimiento && t.estatus === 'Pendiente' && puedeGestionar;
+          const asignados = t.asignado ? t.asignado.split(',').map(s => s.trim()).filter(Boolean) : [];
+          const asignadosMostrar = asignados.slice(0, 2);
+          const extra = asignados.length - asignadosMostrar.length;
 
           return (
             <div
               key={t.id}
-              className={`rounded border px-2.5 py-1.5 text-[11px] ${isDark ? 'bg-zinc-900/40 border-zinc-800' : 'bg-white border-gray-200'}`}
+              className={`rounded-lg border ${isDark ? 'bg-zinc-800/60 border-zinc-700' : 'bg-white border-gray-200'}`}
             >
-              <div className="flex items-start justify-between gap-2">
+              <div className="px-2.5 py-2 flex items-start justify-between gap-2">
                 <div className="flex items-center gap-1.5 min-w-0 flex-1">
-                  <span className={`shrink-0 px-1.5 py-0.5 rounded text-[10px] font-medium ${estadoColor(t.estatus)}`}>
+                  <span className={`shrink-0 px-1.5 py-0.5 rounded-full text-[10px] font-semibold ${estadoColor(t.estatus)}`}>
                     {t.estatus || 'Sin estado'}
                   </span>
-                  <span className={`truncate ${isDark ? 'text-zinc-300' : 'text-gray-700'}`} title={t.tipo || ''}>
+                  <span className={`text-xs font-medium truncate ${isDark ? 'text-zinc-100' : 'text-gray-800'}`} title={t.tipo || ''}>
                     {esRevision ? 'Revisión de artes' : esSeguimiento ? 'Seguimiento' : t.tipo}
                   </span>
                 </div>
@@ -572,7 +749,7 @@ function TareasAsociadasSection({
                         <button
                           onClick={() => resolver.mutate({ tareaId: t.id, accion: 'aprobar' })}
                           disabled={resolver.isPending}
-                          className={`px-1.5 py-0.5 rounded border transition-colors ${isDark ? 'border-emerald-500/40 text-emerald-300 hover:bg-emerald-500/10' : 'border-emerald-300 text-emerald-700 hover:bg-emerald-50'} disabled:opacity-50`}
+                          className={`text-[11px] font-medium px-2 py-0.5 rounded border transition-colors ${isDark ? 'border-emerald-500/50 text-emerald-200 bg-emerald-500/10 hover:bg-emerald-500/20' : 'border-emerald-400 text-emerald-800 bg-emerald-50 hover:bg-emerald-100'} disabled:opacity-50`}
                           title="Aprobar revisión"
                         >
                           <CheckCircle2 className="h-3 w-3 inline mr-0.5" /> Aprobar
@@ -583,7 +760,7 @@ function TareasAsociadasSection({
                             resolver.mutate({ tareaId: t.id, accion: 'rechazar', comentario });
                           }}
                           disabled={resolver.isPending}
-                          className={`px-1.5 py-0.5 rounded border transition-colors ${isDark ? 'border-red-500/40 text-red-300 hover:bg-red-500/10' : 'border-red-300 text-red-700 hover:bg-red-50'} disabled:opacity-50`}
+                          className={`text-[11px] font-medium px-2 py-0.5 rounded border transition-colors ${isDark ? 'border-red-500/50 text-red-200 bg-red-500/10 hover:bg-red-500/20' : 'border-red-400 text-red-800 bg-red-50 hover:bg-red-100'} disabled:opacity-50`}
                           title="Rechazar revisión"
                         >
                           <XCircle className="h-3 w-3 inline mr-0.5" /> Rechazar
@@ -594,7 +771,7 @@ function TareasAsociadasSection({
                       <button
                         onClick={() => resolver.mutate({ tareaId: t.id, accion: 'finalizar' })}
                         disabled={resolver.isPending}
-                        className={`px-1.5 py-0.5 rounded border transition-colors ${isDark ? 'border-emerald-500/40 text-emerald-300 hover:bg-emerald-500/10' : 'border-emerald-300 text-emerald-700 hover:bg-emerald-50'} disabled:opacity-50`}
+                        className={`text-[11px] font-medium px-2 py-0.5 rounded border transition-colors ${isDark ? 'border-emerald-500/50 text-emerald-200 bg-emerald-500/10 hover:bg-emerald-500/20' : 'border-emerald-400 text-emerald-800 bg-emerald-50 hover:bg-emerald-100'} disabled:opacity-50`}
                         title="Finalizar seguimiento"
                       >
                         <Flag className="h-3 w-3 inline mr-0.5" /> Finalizar
@@ -603,9 +780,15 @@ function TareasAsociadasSection({
                   </div>
                 )}
               </div>
-              {t.asignado && (
-                <div className={`mt-1 text-[10px] ${isDark ? 'text-zinc-500' : 'text-gray-500'}`}>
-                  → {t.asignado}
+              {asignados.length > 0 && (
+                <div className={`px-2.5 pb-2 flex items-center gap-1.5 text-[11px] ${isDark ? 'text-zinc-300' : 'text-gray-600'}`}>
+                  <Users className={`h-3 w-3 shrink-0 ${isDark ? 'text-zinc-500' : 'text-gray-400'}`} />
+                  <span className="truncate" title={asignados.join(', ')}>
+                    {asignadosMostrar.join(', ')}
+                    {extra > 0 && (
+                      <span className={`ml-1 font-medium ${isDark ? 'text-fuchsia-300' : 'text-fuchsia-700'}`}>+{extra} más</span>
+                    )}
+                  </span>
                 </div>
               )}
             </div>
