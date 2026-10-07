@@ -12530,11 +12530,19 @@ function TaskDetailModal({
                                             const rsvIds = item.rsv_id?.split(',').map(id => parseInt(id.trim())).filter(id => !isNaN(id)) || [];
                                             if (rsvIds.length > 0) openTradicionalGallery(rsvIds, item.codigo_unico);
                                           }}
-                                          className="w-20 h-16 rounded bg-orange-500/20 border border-orange-500/50 flex flex-col items-center justify-center hover:bg-orange-500/30 transition-colors"
+                                          className="relative w-20 h-16 rounded overflow-hidden bg-zinc-800 border border-orange-500/50 hover:border-orange-400 transition-colors group"
                                           title={`Ver ${tradSummary.total} artes tradicionales`}
                                         >
-                                          <Printer className="h-5 w-5 text-orange-400 mb-1" />
-                                          <span className="text-orange-400 font-bold text-sm">{tradSummary.total}</span>
+                                          {item.archivo_arte ? (
+                                            <ArteImg src={item.archivo_arte} alt="Arte" className="w-full h-full object-cover opacity-80 group-hover:opacity-100" />
+                                          ) : (
+                                            <div className="w-full h-full flex items-center justify-center">
+                                              <Printer className="h-5 w-5 text-orange-400" />
+                                            </div>
+                                          )}
+                                          <span className="absolute top-0.5 right-0.5 bg-orange-500 text-white font-bold text-[10px] px-1.5 py-0.5 rounded shadow-sm">
+                                            +{tradSummary.total}
+                                          </span>
                                         </button>
                                       ) : item.archivo_arte ? (
                                         <button
@@ -12566,7 +12574,11 @@ function TaskDetailModal({
                                       <p className="text-sm font-medium text-white truncate">{item.codigo_unico}</p>
                                       <p className="text-xs text-zinc-400 truncate">{item.mueble}</p>
                                       <p className="text-xs text-zinc-500 truncate">
-                                        {isDigital && digitalSummary ? getDigitalSummaryText(digitalSummary) : tradSummary ? `${tradSummary.total} artes` : item.ubicacion}
+                                        {isDigital && digitalSummary
+                                          ? getDigitalSummaryText(digitalSummary)
+                                          : tradSummary
+                                            ? `${tradSummary.total} ${tradSummary.total === 1 ? 'arte' : 'artes'}`
+                                            : item.ubicacion}
                                       </p>
                                       <div className="mt-1 flex items-center gap-2">
                                         <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-medium ${
@@ -12626,12 +12638,22 @@ function TaskDetailModal({
                                         const rsvIds = representativeItem.rsv_id?.split(',').map(id => parseInt(id.trim())).filter(id => !isNaN(id)) || [];
                                         if (rsvIds.length > 0) openTradicionalGallery(rsvIds, representativeItem.codigo_unico);
                                       }}
-                                      className="w-32 h-24 rounded-lg bg-orange-500/20 border border-orange-500/50 flex flex-col items-center justify-center hover:bg-orange-500/30 transition-colors"
+                                      className="relative w-32 h-24 rounded-lg overflow-hidden bg-zinc-800 border border-orange-500/50 hover:border-orange-400 transition-colors group"
                                       title={`Ver ${tradSummary.total} artes tradicionales`}
                                     >
-                                      <Printer className="h-8 w-8 text-orange-400 mb-1" />
-                                      <span className="text-orange-400 font-bold text-lg">{tradSummary.total}</span>
-                                      <span className="text-orange-300 text-[10px]">{tradSummary.total} artes</span>
+                                      {representativeItem.archivo_arte ? (
+                                        <ArteImg src={representativeItem.archivo_arte} alt="Arte" className="w-full h-full object-cover opacity-85 group-hover:opacity-100" />
+                                      ) : (
+                                        <div className="w-full h-full flex items-center justify-center">
+                                          <Printer className="h-8 w-8 text-orange-400" />
+                                        </div>
+                                      )}
+                                      <span className="absolute top-1 right-1 bg-orange-500 text-white font-bold text-xs px-1.5 py-0.5 rounded shadow-sm">
+                                        +{tradSummary.total}
+                                      </span>
+                                      <span className="absolute bottom-0 inset-x-0 bg-black/70 text-orange-200 text-[10px] py-0.5 text-center">
+                                        {tradSummary.total} artes
+                                      </span>
                                     </button>
                                   ) : representativeItem?.archivo_arte ? (
                                     <button
