@@ -110,8 +110,12 @@ export function NuevaActividadComercialModal({ isOpen, onClose, editing }: Props
         if (c.ref_id && (c.subtipo === 'Campaña' || c.subtipo === 'Propuesta')) {
           // Marcamos un placeholder para conservar el ref_id aunque el user
           // no vuelva a buscar. El objeto se refresca cuando la query traiga
-          // la lista y encontremos el id real.
+          // la lista y encontremos el id real (ver useEffect refresh abajo).
           setSelected({ id: c.ref_id, label: `#${c.ref_id}`, cliente: c.cliente || null, marca: c.marca || null, status: '' });
+          // Disparamos la busqueda por el ID para que el backend devuelva el
+          // registro aunque no esté en el top-N por defecto. El combobox de
+          // resultados no se muestra porque `selected` ya tiene valor.
+          setSearch(String(c.ref_id));
         }
         if (c.cliente) setCliente(c.cliente);
         if (c.marca) setMarca(c.marca);
@@ -150,6 +154,17 @@ export function NuevaActividadComercialModal({ isOpen, onClose, editing }: Props
     enabled: isOpen && subtipo !== 'Lead',
   });
 
+  // Reemplaza el placeholder `#id` del chip en modo edición con el label real
+  // en cuanto la query devuelve datos (fix al bug donde el chip quedaba como
+  // "#12345" en lugar de "#12345 — Campaña Alfa"). Lo derivamos sin tocar el
+  // state `selected` para no entrar en loops ni perder el id original.
+  const displayedSelected = useMemo(() => {
+    if (!selected) return null;
+    if (!/^#\d+$/.test(selected.label)) return selected;
+    const found = listQuery.data?.find(x => x.id === selected.id);
+    return found || selected;
+  }, [selected, listQuery.data]);
+
   const createMutation = useMutation({
     mutationFn: notificacionesService.crearActividadComercial,
     onSuccess: (data) => {
@@ -179,7 +194,10 @@ export function NuevaActividadComercialModal({ isOpen, onClose, editing }: Props
     });
   }, [isOpen]);
 
-  const minDate = new Date().toISOString().slice(0, 10);
+  // Sin min date en modo edición: si la actividad original tenía fecha
+  // pasada, el usuario debe poder dejarla o moverla sin que el input se
+  // queje. En modo crear sí bloqueamos fechas pasadas.
+  const minDate = isEditMode ? undefined : new Date().toISOString().slice(0, 10);
 
   const handleSubmit = () => {
     setError(null);
@@ -270,12 +288,39 @@ export function NuevaActividadComercialModal({ isOpen, onClose, editing }: Props
             <div className={`text-xs ${isDark ? 'text-zinc-400' : 'text-gray-500'}`}>
               ID_accion: <span className="font-mono">{createdId}</span>
             </div>
-            <button
-              onClick={onClose}
-              className="mt-2 px-4 py-2 rounded-lg text-sm font-medium text-white bg-amber-600 hover:bg-amber-700"
-            >
-              Cerrar
-            </button>
+            <div className="flex items-center justify-center gap-2 mt-2">
+              {!isEditMode && (
+                <button
+                  onClick={() => {
+                    // Reset form state para crear otra sin cerrar y reabrir.
+                    setCreatedId(null);
+                    setSubtipo('Campaña');
+                    setSearch('');
+                    setSelected(null);
+                    setCliente('');
+                    setMarca('');
+                    setDescripcion('');
+                    setFechaEntrega('');
+                    setActivarRecordatorio(false);
+                    setDiasAntes('1');
+                    setError(null);
+                    setAnio('');
+                    setCatorcena('');
+                    setEstatusActividad('');
+                    setBase('');
+                  }}
+                  className={`px-4 py-2 rounded-lg text-sm font-medium border ${isDark ? 'border-amber-500/40 text-amber-200 hover:bg-amber-500/10' : 'border-amber-400 text-amber-700 hover:bg-amber-50'}`}
+                >
+                  Crear otra
+                </button>
+              )}
+              <button
+                onClick={onClose}
+                className="px-4 py-2 rounded-lg text-sm font-medium text-white bg-amber-600 hover:bg-amber-700"
+              >
+                Cerrar
+              </button>
+            </div>
           </div>
         ) : (
           <div className="px-5 py-4 space-y-4">
@@ -383,14 +428,14 @@ export function NuevaActividadComercialModal({ isOpen, onClose, editing }: Props
             )}
 
             {/* Chip de la campaña/propuesta seleccionada (no bloquea nada) */}
-            {selected && (
+            {displayedSelected && (
               <div className={`flex items-center justify-between gap-2 rounded-lg border px-3 py-2 ${isDark ? 'border-amber-500/30 bg-amber-500/5' : 'border-amber-200 bg-amber-50/50'}`}>
                 <div className="min-w-0">
                   <span className={`text-[10px] font-medium uppercase tracking-wide mr-2 ${isDark ? 'text-amber-300' : 'text-amber-700'}`}>
                     {subtipo}
                   </span>
                   <span className={`text-xs font-semibold ${isDark ? 'text-zinc-100' : 'text-gray-900'}`}>
-                    {selected.label}
+                    {displayedSelected.label}
                   </span>
                 </div>
                 <button
@@ -497,7 +542,7 @@ export function NuevaActividadComercialModal({ isOpen, onClose, editing }: Props
                 type="date"
                 className={inputCls}
                 value={fechaEntrega}
-                min={minDate}
+                {...(minDate ? { min: minDate } : {})}
                 onChange={(e) => setFechaEntrega(e.target.value)}
               />
               <p className={`text-[10px] mt-1 ${isDark ? 'text-zinc-500' : 'text-gray-400'}`}>
