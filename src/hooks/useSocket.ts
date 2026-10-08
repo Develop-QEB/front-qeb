@@ -273,6 +273,16 @@ export function useSocketCampana(campanaId: number | null) {
       });
     };
 
+    // R6 (Jos): al crear/eliminar una reserva en el sistema, refrescar en vivo el
+    // tab Historial y los Reservados del buscador de formatos de la campaña. El
+    // evento viaja con propuestaId (no campanaId), así que invalidamos por tipo
+    // de query (en la práctica hay un solo buscador abierto).
+    const handleReservaCambioCampana = (data: { propuestaId?: number }) => {
+      console.log('[Socket] Reserva creada/eliminada (campaña):', data);
+      queryClient.invalidateQueries({ queryKey: ['campana-reservas-historial'] });
+      queryClient.invalidateQueries({ queryKey: ['campana-reservas-modal'] });
+    };
+
     // Suscribirse a eventos
     socket.on(SOCKET_EVENTS.TAREA_CREADA, handleTareaCreada);
     socket.on(SOCKET_EVENTS.TAREA_ACTUALIZADA, handleTareaActualizada);
@@ -286,6 +296,8 @@ export function useSocketCampana(campanaId: number | null) {
     socket.on(SOCKET_EVENTS.AUTORIZACION_APROBADA, handleAutorizacionAprobadaCampana);
     socket.on(SOCKET_EVENTS.AUTORIZACION_RECHAZADA, handleAutorizacionRechazadaCampana);
     socket.on(SOCKET_EVENTS.CAMPANA_APS_POSTED, handleAPSPosted);
+    socket.on(SOCKET_EVENTS.RESERVA_CREADA, handleReservaCambioCampana);
+    socket.on(SOCKET_EVENTS.RESERVA_ELIMINADA, handleReservaCambioCampana);
 
     return () => {
       // Limpiar listeners al desmontar
@@ -301,6 +313,8 @@ export function useSocketCampana(campanaId: number | null) {
       socket.off(SOCKET_EVENTS.AUTORIZACION_APROBADA, handleAutorizacionAprobadaCampana);
       socket.off(SOCKET_EVENTS.AUTORIZACION_RECHAZADA, handleAutorizacionRechazadaCampana);
       socket.off(SOCKET_EVENTS.CAMPANA_APS_POSTED, handleAPSPosted);
+      socket.off(SOCKET_EVENTS.RESERVA_CREADA, handleReservaCambioCampana);
+      socket.off(SOCKET_EVENTS.RESERVA_ELIMINADA, handleReservaCambioCampana);
     };
   }, [campanaId, queryClient]);
 
@@ -503,6 +517,9 @@ export function useSocketPropuesta(propuestaId: number | null) {
       queryClient.invalidateQueries({ queryKey: ['propuesta-inventario', data.propuestaId] });
       queryClient.invalidateQueries({ queryKey: ['propuesta-full', data.propuestaId] });
       queryClient.invalidateQueries({ queryKey: ['propuesta', data.propuestaId] });
+      // Tab Historial del buscador (R6 Jos): al reservar/regresar cambia lo que
+      // sale del historial del circuito → refrescar en vivo.
+      queryClient.invalidateQueries({ queryKey: ['propuesta-reservas-historial', data.propuestaId] });
       queryClient.invalidateQueries({ queryKey: ['inventario'] });
     };
 
@@ -516,6 +533,9 @@ export function useSocketPropuesta(propuestaId: number | null) {
       // Refrescar el historial: cuando desplazan reservas de esta propuesta (venta en
       // otra campaña), queda un registro nuevo que debe aparecer al momento.
       queryClient.invalidateQueries({ queryKey: ['propuesta-historial', data.propuestaId] });
+      // Tab Historial del buscador (R6 Jos): al quitar/desplazar un reservado
+      // aparece en el historial del circuito → refrescar en vivo.
+      queryClient.invalidateQueries({ queryKey: ['propuesta-reservas-historial', data.propuestaId] });
       queryClient.invalidateQueries({ queryKey: ['inventario'] });
     };
 

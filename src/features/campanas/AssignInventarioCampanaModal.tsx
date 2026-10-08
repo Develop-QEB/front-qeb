@@ -1267,7 +1267,7 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
   });
 
   // Historial del circuito (reservas que salieron: quitadas/desplazadas/bloqueo)
-  const { data: historialInventario } = useQuery({
+  const { data: historialInventario, refetch: refetchHistorial, isFetching: historialFetching } = useQuery({
     queryKey: ['campana-reservas-historial', campana!.id],
     queryFn: () => campanasService.getReservasHistorial(campana!.id),
     enabled: isOpen && !!campana!.id,
@@ -7106,6 +7106,8 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
               canEdit={effectiveCanEdit}
               reReservandoId={reReservandoHistId}
               onReReservar={handleReReservarHistorial}
+              onRefresh={() => refetchHistorial()}
+              refreshing={historialFetching}
             />
           ) : (
             /* RESERVADOS TAB CONTENT */
