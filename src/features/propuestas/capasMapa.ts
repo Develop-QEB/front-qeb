@@ -79,7 +79,7 @@ export const ORIGEN_CAPA_LABEL: Record<OrigenCapa, string> = {
 };
 
 export const CAPAS_LEYENDA =
-  'Capas: pines y polígonos con los que Tráfico armó cada circuito. Azul: se conservó lo cercano. Rojo: se conservó lo lejano.';
+  'Capas: pines y polígonos con los que Tráfico armó cada circuito. Azul: se conservó lo cercano. Rojo: se conservó lo lejano. Prender una capa filtra el inventario del mapa con ese criterio.';
 
 export function colorCapa(capa: Pick<CapaMapa, 'modo'>): string {
   return MODO_COLOR[capa.modo] ?? MODO_COLOR.incluir;
@@ -180,6 +180,36 @@ export function agruparCapasPorCircuito(capas: CapaMapa[]): Map<number, CapaMapa
     if (arr) arr.push(c); else m.set(c.solicitud_caras_id, [c]);
   }
   return m;
+}
+
+/**
+ * Filtro espacial de inventario por capas ACTIVAS: prender una capa no solo
+ * la pinta, deja en el mapa únicamente el inventario que cumple su criterio
+ * (mismo significado que el "Conservar" del Buscador de Formatos):
+ *   - 'incluir' (cerca de): el punto debe caer dentro de ALGUNA capa incluir activa.
+ *   - 'excluir' (lejos de): el punto debe quedar fuera de TODAS las capas excluir activas.
+ * Devuelve null si no hay capas activas o google.maps no está cargado (sin filtro).
+ * Pre-construye polígonos/LatLngs una vez: memoizar por [capas, activas].
+ */
+export function crearFiltroCapas(capasActivas: CapaMapa[]): ((lat: number, lng: number) => boolean) | null {
+  if (capasActivas.length === 0 || typeof google === 'undefined' || !google.maps?.geometry) return null;
+
+  const prep = (capa: CapaMapa) => ({
+    pines: capa.geometria.pines.map(p => ({ centro: new google.maps.LatLng(p.lat, p.lng), range: p.range })),
+    poligonos: capa.geometria.poligonos.map(po => new google.maps.Polygon({ paths: po.paths })),
+  });
+  const incluir = capasActivas.filter(c => c.modo === 'incluir').map(prep);
+  const excluir = capasActivas.filter(c => c.modo === 'excluir').map(prep);
+
+  const dentroDe = (capa: ReturnType<typeof prep>, punto: google.maps.LatLng) =>
+    capa.pines.some(p => google.maps.geometry.spherical.computeDistanceBetween(punto, p.centro) <= p.range) ||
+    capa.poligonos.some(po => google.maps.geometry.poly.containsLocation(punto, po));
+
+  return (lat: number, lng: number) => {
+    const punto = new google.maps.LatLng(lat, lng);
+    if (incluir.length > 0 && !incluir.some(c => dentroDe(c, punto))) return false;
+    return excluir.every(c => !dentroDe(c, punto));
+  };
 }
 
 /**

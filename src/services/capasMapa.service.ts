@@ -14,6 +14,15 @@ export const capasMapaService = {
     return response.data.data ?? [];
   },
 
+  /** Buscador de Formatos: capas ya guardadas del circuito abierto. */
+  async listarPorCircuito(solicitudCarasId: number): Promise<CapaMapa[]> {
+    const response = await api.get<ApiResponse<CapaMapa[]>>(`/capas-mapa/circuito/${solicitudCarasId}`);
+    if (!response.data.success) {
+      throw new Error(response.data.error || 'Error al obtener capas');
+    }
+    return response.data.data ?? [];
+  },
+
   async crear(input: NuevaCapa): Promise<CapaMapa> {
     const response = await api.post<ApiResponse<CapaMapa>>('/capas-mapa', input);
     if (!response.data.success || !response.data.data) {

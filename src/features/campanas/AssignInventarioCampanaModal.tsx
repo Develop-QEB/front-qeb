@@ -11,6 +11,7 @@ import { GOOGLE_MAPS_LOADER_OPTIONS } from '../../config/googleMaps';
 import { AdvancedMapComponent } from '../propuestas/AdvancedMapComponent';
 import { capasMapaService } from '../../services/capasMapa.service';
 import type { NuevaCapa } from '../propuestas/capasMapa';
+import { CapasCircuitoPanel } from '../propuestas/CapasCircuitoPanel';
 import { Campana, CampanaWithComments } from '../../types';
 import { solicitudesService, UserOption } from '../../services/solicitudes.service';
 import { inventariosService, InventarioDisponible } from '../../services/inventarios.service';
@@ -1044,8 +1045,8 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
   // Expanded groups state for collapsible groups
   const [expandedGroups, setExpandedGroups] = useState<Set<string>>(new Set(['Grupo 1']));
 
-  // Tab state for search view (buscar / reservados)
-  const [searchViewTab, setSearchViewTab] = useState<'buscar' | 'reservados'>('buscar');
+  // Tab state for search view (buscar / reservados / capas)
+  const [searchViewTab, setSearchViewTab] = useState<'buscar' | 'reservados' | 'capas'>('buscar');
 
   // Disponibles data
   const [inventarioDisponible, setInventarioDisponible] = useState<InventarioDisponible[]>([]);
@@ -4249,6 +4250,13 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
       throw err;
     }
   };
+  // Conteo para el badge de la pestaña "Capas" (misma clave de cache que el
+  // panel y que la lista del mapa: una sola petición entre los tres).
+  const { data: capasCircuito = [] } = useQuery({
+    queryKey: ['capas-mapa-circuito', capaCircuitoId],
+    queryFn: () => capasMapaService.listarPorCircuito(capaCircuitoId!),
+    enabled: !!capaCircuitoId,
+  });
 
   // Check if there are digital items in inventory
   const hasDigitalInventory = useMemo(() => {
@@ -5939,6 +5947,21 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
                   </span>
                 )}
               </button>
+              <button
+                onClick={() => setSearchViewTab('capas')}
+                className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all ${searchViewTab === 'capas'
+                  ? 'bg-sky-500/20 text-sky-300 border border-sky-500/40'
+                  : 'text-zinc-400 hover:text-white hover:bg-zinc-800'
+                  }`}
+              >
+                <Layers className="h-4 w-4" />
+                Capas
+                {capasCircuito.length > 0 && (
+                  <span className={`px-1.5 py-0.5 ${isDark ? 'bg-sky-500/30 text-sky-300' : 'bg-sky-100 text-sky-700'} rounded-full text-xs`}>
+                    {capasCircuito.length}
+                  </span>
+                )}
+              </button>
             </div>
           </div>
 
@@ -6907,6 +6930,13 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
                 </div>
               </div>
             </>
+          ) : searchViewTab === 'capas' ? (
+            /* CAPAS TAB CONTENT: gestion de capas de POI/KML del circuito */
+            <CapasCircuitoPanel
+              solicitudCarasId={capaCircuitoId}
+              canEdit={effectiveCanEdit}
+              isDark={isDark}
+            />
           ) : (
             /* RESERVADOS TAB CONTENT */
             <div className="flex-1 flex overflow-hidden">
