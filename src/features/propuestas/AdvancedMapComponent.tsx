@@ -1,13 +1,18 @@
 import React, { useState, useRef, useMemo } from 'react';
 import { GoogleMap, Marker, Circle, InfoWindow, Autocomplete, Polygon } from '@react-google-maps/api';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   Search, X, MapPin, Navigation, FileUp, Trash2, Plus,
-  Check, Ban, LocateFixed, ChevronDown, ChevronRight, Layers
+  Check, Ban, LocateFixed, ChevronDown, ChevronRight, Layers, Loader2
 } from 'lucide-react';
 import { InventarioDisponible } from '../../services/inventarios.service';
 import { useThemeStore } from '../../store/themeStore';
 // Capas persistentes (Vista Compartir): parser KML compartido + payload.
-import { parseKML, nombreSugeridoCapa, origenDeGeometria, type NuevaCapa, type ModoCapa } from './capasMapa';
+import {
+  parseKML, nombreSugeridoCapa, origenDeGeometria, resumenCapa, colorCapa, MODO_LABEL,
+  type NuevaCapa, type ModoCapa, type CapaMapa,
+} from './capasMapa';
+import { capasMapaService } from '../../services/capasMapa.service';
 import { buscarPOIsEnArea } from './poiBusqueda';
 
 // Dark map styles
@@ -93,6 +98,35 @@ export function AdvancedMapComponent({
   const [capaError, setCapaError] = useState('');
   // Ultimo KML subido (texto original): se manda como respaldo al guardar la capa.
   const kmlOriginalRef = useRef<{ nombre: string; texto: string } | null>(null);
+
+  // Capas YA guardadas del circuito: se listan en el panel para poder
+  // borrarlas sin salir del Buscador de Formatos. Borrar una capa solo quita
+  // la visualizacion en Vista Compartir; el inventario del circuito no cambia.
+  const capasHabilitadas = !!onGuardarCapa && !!solicitudCarasId;
+  const queryClient = useQueryClient();
+  const { data: capasGuardadas = [] } = useQuery({
+    queryKey: ['capas-mapa-circuito', solicitudCarasId],
+    queryFn: () => capasMapaService.listarPorCircuito(solicitudCarasId!),
+    enabled: capasHabilitadas,
+  });
+  const [capaBorrandoId, setCapaBorrandoId] = useState<number | null>(null);
+  const invalidarCapas = () => {
+    void queryClient.invalidateQueries({ queryKey: ['capas-mapa-circuito', solicitudCarasId] });
+    // La Vista Compartir interna cachea por propuesta con otra clave.
+    void queryClient.invalidateQueries({ queryKey: ['capas-mapa'] });
+  };
+  const handleEliminarCapaGuardada = async (capa: CapaMapa) => {
+    if (!window.confirm(`¿Eliminar la capa "${capa.nombre}"?\n\nDejará de verse en la Vista Compartir y en el link del cliente. El inventario del circuito no cambia.`)) return;
+    setCapaBorrandoId(capa.id);
+    try {
+      await capasMapaService.eliminar(capa.id);
+      invalidarCapas();
+    } catch (err) {
+      window.alert(err instanceof Error ? err.message : 'No se pudo eliminar la capa');
+    } finally {
+      setCapaBorrandoId(null);
+    }
+  };
 
   // Search states
   const [poiSearch, setPoiSearch] = useState('');
@@ -329,9 +363,31 @@ export function AdvancedMapComponent({
   // Es el momento honesto para guardarla: aqui la capa decide el inventario.
   const guardarCapaActual = async (modo: ModoCapa) => {
     if (!puedeGuardarCapa || !onGuardarCapa || !guardarComoCapa) return;
+
+    // En 'incluir' solo se guardan los pines/poligonos que TOCAN inventario:
+    // son los que decidieron que se conservo. Un pin que no alcanza nada no
+    // aporto al circuito y solo ensucia la Vista Compartir. En 'excluir' se
+    // guardan todos: ahi el valor es ver de que se alejo el circuito, aunque
+    // algun pin no haya tenido inventario cerca.
+    const conCoords = inventarios.filter(inv => inv.latitud && inv.longitud);
+    const pinToca = (m: POIMarker) => conCoords.some(inv =>
+      google.maps.geometry.spherical.computeDistanceBetween(
+        new google.maps.LatLng(inv.latitud, inv.longitud),
+        new google.maps.LatLng(m.position.lat, m.position.lng)
+      ) <= m.range
+    );
+    const poligonoToca = (p: KMLPolygon) => {
+      const poly = new google.maps.Polygon({ paths: p.paths });
+      return conCoords.some(inv =>
+        google.maps.geometry.poly.containsLocation(new google.maps.LatLng(inv.latitud, inv.longitud), poly)
+      );
+    };
+    const pinesUsados = modo === 'incluir' ? poiMarkers.filter(pinToca) : poiMarkers;
+    const poligonosUsados = modo === 'incluir' ? kmlPolygons.filter(poligonoToca) : kmlPolygons;
+
     const geometria = {
-      pines: poiMarkers.map(m => ({ lat: m.position.lat, lng: m.position.lng, name: m.name, range: m.range })),
-      poligonos: kmlPolygons.map(p => ({ name: p.name, paths: p.paths })),
+      pines: pinesUsados.map(m => ({ lat: m.position.lat, lng: m.position.lng, name: m.name, range: m.range })),
+      poligonos: poligonosUsados.map(p => ({ name: p.name, paths: p.paths })),
     };
     if (geometria.pines.length === 0 && geometria.poligonos.length === 0) return;
     setCapaEstado('guardando');
@@ -340,7 +396,7 @@ export function AdvancedMapComponent({
       await onGuardarCapa({
         nombre: nombreCapa.trim() || nombreSugeridoCapa(modo, geometria),
         modo,
-        origen: origenDeGeometria(poiMarkers.map(m => m.type), kmlPolygons.length > 0),
+        origen: origenDeGeometria(pinesUsados.map(m => m.type), poligonosUsados.length > 0),
         geometria,
         visibleCliente: capaVisibleCliente,
         kmlTexto: kmlOriginalRef.current?.texto ?? null,
@@ -348,6 +404,7 @@ export function AdvancedMapComponent({
       });
       setCapaEstado('ok');
       setNombreCapa('');
+      invalidarCapas();
       setTimeout(() => setCapaEstado(prev => (prev === 'ok' ? 'idle' : prev)), 3000);
     } catch (err) {
       setCapaEstado('error');
@@ -688,6 +745,45 @@ export function AdvancedMapComponent({
                       >
                         <X className="h-3 w-3" />
                       </button>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* Capas ya guardadas del circuito (Vista Compartir). Se listan
+                siempre que existan, haya o no pines nuevos en el mapa. */}
+            {capasHabilitadas && capasGuardadas.length > 0 && (
+              <div className={`border-t ${isDark ? 'border-zinc-800' : 'border-gray-200'} shrink-0`}>
+                <div className="px-3 pt-2 pb-1 flex items-center gap-1.5">
+                  <Layers className="h-3.5 w-3.5 text-sky-500" />
+                  <span className={`text-xs font-medium ${isDark ? 'text-zinc-300' : 'text-gray-600'}`}>
+                    Capas guardadas ({capasGuardadas.length})
+                  </span>
+                </div>
+                <div className={`max-h-36 overflow-y-auto divide-y ${isDark ? 'divide-zinc-800/50' : 'divide-gray-200'}`}>
+                  {capasGuardadas.map(capa => (
+                    <div key={capa.id} className={`flex items-center gap-2 px-3 py-1.5 ${isDark ? 'hover:bg-zinc-800/30' : 'hover:bg-gray-100'}`}>
+                      <div className="w-3 h-3 rounded-full flex-shrink-0" style={{ backgroundColor: colorCapa(capa) }} />
+                      <div className="flex-1 min-w-0">
+                        <p className={`text-xs ${isDark ? 'text-white' : 'text-gray-900'} truncate`}>{capa.nombre}</p>
+                        <p className={`text-[10px] ${isDark ? 'text-zinc-500' : 'text-gray-400'}`}>
+                          {MODO_LABEL[capa.modo]} · {resumenCapa(capa)}
+                        </p>
+                      </div>
+                      {canGuardarCapa && (
+                        capaBorrandoId === capa.id ? (
+                          <Loader2 className={`h-3.5 w-3.5 animate-spin ${isDark ? 'text-zinc-500' : 'text-gray-400'}`} />
+                        ) : (
+                          <button
+                            onClick={() => void handleEliminarCapaGuardada(capa)}
+                            className={`p-1 ${isDark ? 'text-zinc-500' : 'text-gray-400'} hover:text-red-400`}
+                            title="Eliminar capa de la Vista Compartir"
+                          >
+                            <Trash2 className="h-3 w-3" />
+                          </button>
+                        )
+                      )}
                     </div>
                   ))}
                 </div>

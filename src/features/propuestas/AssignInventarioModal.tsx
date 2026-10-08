@@ -14,6 +14,7 @@ import type { NuevaCapa } from './capasMapa';
 import { UdcFichaTecnicaPanel } from './UdcFichaTecnicaPanel';
 import { UdcReservadosPanel } from './UdcReservadosPanel';
 import { HistorialInventarioPanel } from './HistorialInventarioPanel';
+import { CapasCircuitoPanel } from './CapasCircuitoPanel';
 import { Propuesta } from '../../types';
 import { solicitudesService, UserOption } from '../../services/solicitudes.service';
 import { inventariosService, InventarioDisponible } from '../../services/inventarios.service';
@@ -1109,8 +1110,8 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
   // Expanded groups state for collapsible groups
   const [expandedGroups, setExpandedGroups] = useState<Set<string>>(new Set(['Grupo 1']));
 
-  // Tab state for search view (buscar / reservados)
-  const [searchViewTab, setSearchViewTab] = useState<'buscar' | 'reservados' | 'historial'>('buscar');
+  // Tab state for search view (buscar / reservados / historial / capas)
+  const [searchViewTab, setSearchViewTab] = useState<'buscar' | 'reservados' | 'historial' | 'capas'>('buscar');
 
   // Disponibles data
   const [inventarioDisponible, setInventarioDisponible] = useState<InventarioDisponible[]>([]);
@@ -4283,6 +4284,13 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
       throw err;
     }
   };
+  // Conteo para el badge de la pestaña "Capas" (misma clave de cache que el
+  // panel y que la lista del mapa: una sola petición entre los tres).
+  const { data: capasCircuito = [] } = useQuery({
+    queryKey: ['capas-mapa-circuito', capaCircuitoId],
+    queryFn: () => capasMapaService.listarPorCircuito(capaCircuitoId!),
+    enabled: !!capaCircuitoId,
+  });
 
   // Check if there are digital items in inventory
   const hasDigitalInventory = useMemo(() => {
@@ -6021,6 +6029,21 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
                   </span>
                 )}
               </button>
+              <button
+                onClick={() => setSearchViewTab('capas')}
+                className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all ${searchViewTab === 'capas'
+                  ? 'bg-sky-500/20 text-sky-300 border border-sky-500/40'
+                  : `${isDark ? 'text-zinc-400' : 'text-gray-500'} ${isDark ? 'hover:text-white' : 'hover:text-gray-900'} ${isDark ? 'hover:bg-zinc-800' : 'hover:bg-gray-100'}`
+                  }`}
+              >
+                <Layers className="h-4 w-4" />
+                Capas
+                {capasCircuito.length > 0 && (
+                  <span className="px-1.5 py-0.5 bg-sky-500/30 text-sky-300 rounded-full text-xs">
+                    {capasCircuito.length}
+                  </span>
+                )}
+              </button>
             </div>
           </div>
 
@@ -7121,6 +7144,13 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
               canEdit={effectiveCanEdit}
               reReservandoId={reReservandoHistId}
               onReReservar={handleReReservarHistorial}
+            />
+          ) : searchViewTab === 'capas' ? (
+            /* CAPAS TAB CONTENT: gestion de capas de POI/KML del circuito */
+            <CapasCircuitoPanel
+              solicitudCarasId={capaCircuitoId}
+              canEdit={effectiveCanEdit}
+              isDark={isDark}
             />
           ) : (
             /* RESERVADOS TAB CONTENT */

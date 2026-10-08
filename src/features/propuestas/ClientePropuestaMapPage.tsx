@@ -26,7 +26,7 @@ import {
 import { GOOGLE_MAPS_LOADER_OPTIONS } from '../../config/googleMaps';
 // Capas de POI / poligonos con las que Trafico armo cada circuito. Al cliente
 // solo le llegan las marcadas visibles (vienen dentro del payload publico).
-import { CapaMapa, boundsDeCapas } from './capasMapa';
+import { CapaMapa, boundsDeCapas, crearFiltroCapas } from './capasMapa';
 import { CapasMapaPanel } from './CapasMapaPanel';
 import { CapasMapaOverlay } from './CapasMapaOverlay';
 // Buscador de POI libre (misma busqueda por area que el Buscador de Formatos).
@@ -196,6 +196,7 @@ export function ClientePropuestaMapPage() {
   //   ?periodos=YYYY-NN,...  -> solo ciertas catorcenas (todo su inventario).
   //   ?ids=1,2,3             -> legado (por id de inventario, sin distinguir catorcena).
   //   sin params             -> todo el inventario.
+  // Aparte del alcance, ?capas=id,id prende esas Capas de Trafico al abrir.
   const selParam = searchParams.get('sel') || '';
   const periodosParam = searchParams.get('periodos') || '';
   const idsParam = searchParams.get('ids') || '';
@@ -219,8 +220,13 @@ export function ClientePropuestaMapPage() {
   const [copied, setCopied] = useState(false);
   const [showList, setShowList] = useState(true);
   const [showFilters, setShowFilters] = useState(false);
-  // Capas de Trafico prendidas (nacen apagadas).
-  const [capasActivas, setCapasActivas] = useState<Set<number>>(new Set());
+  // Capas de Trafico prendidas. Nacen apagadas, salvo que el enlace traiga
+  // ?capas=id,id (seleccion hecha en la Vista Compartir o al copiar el enlace
+  // de este mismo visor): esas llegan prendidas. Ids que no existan o que ya
+  // no sean visibles al cliente simplemente no pintan nada.
+  const [capasActivas, setCapasActivas] = useState<Set<number>>(() => new Set(
+    (searchParams.get('capas') || '').split(',').map(s => parseInt(s.trim(), 10)).filter(n => Number.isFinite(n) && n > 0)
+  ));
 
   // Filtros
   const [search, setSearch] = useState('');
@@ -289,6 +295,16 @@ export function ClientePropuestaMapPage() {
   const formatoOptions = useMemo(() => [...new Set(baseRows.map(r => r.mueble).filter(Boolean) as string[])].sort(), [baseRows]);
   const tipoOptions = useMemo(() => [...new Set(baseRows.map(r => r.tipo_de_cara).filter(Boolean) as string[])].sort(), [baseRows]);
 
+  // ---- Capas de Trafico ----
+  const capas = useMemo(() => data?.capas ?? [], [data]);
+  // Capas prendidas = filtro espacial ademas de visualizacion: queda solo el
+  // inventario que cumple el criterio (dentro de "cerca de" / fuera de "lejos
+  // de"). Aplica a lista, mapa y descargas, como los demas filtros.
+  const filtroCapas = useMemo(
+    () => (isLoaded ? crearFiltroCapas(capas.filter(c => capasActivas.has(c.id))) : null),
+    [capas, capasActivas, isLoaded]
+  );
+
   // Filas visibles tras aplicar filtros (es lo que pinta el mapa y la lista).
   const visibleRows = useMemo(() => {
     const q = search.trim().toLowerCase();
@@ -297,13 +313,14 @@ export function ClientePropuestaMapPage() {
       if (plazaFilter && r.plaza !== plazaFilter) return false;
       if (formatoFilter && r.mueble !== formatoFilter) return false;
       if (tipoFilter && r.tipo_de_cara !== tipoFilter) return false;
+      if (filtroCapas && !(r.latitud && r.longitud && filtroCapas(r.latitud, r.longitud))) return false;
       if (q) {
         const hay = `${r.codigo_unico || ''} ${r.plaza || ''} ${r.ubicacion || ''} ${r.mueble || ''} ${r.articulo || ''}`.toLowerCase();
         if (!hay.includes(q)) return false;
       }
       return true;
     });
-  }, [baseRows, search, catFilter, plazaFilter, formatoFilter, tipoFilter]);
+  }, [baseRows, search, catFilter, plazaFilter, formatoFilter, tipoFilter, filtroCapas]);
 
   // Conjunto efectivo: si hay seleccion solo se muestra lo seleccionado; si no, lo visible.
   // Unifica lo que pinta el mapa con lo que exportan las descargas.
@@ -315,8 +332,6 @@ export function ClientePropuestaMapPage() {
   // Solo filas con coordenadas para el mapa.
   const mapRows = useMemo(() => effectiveRows.filter(r => r.latitud && r.longitud), [effectiveRows]);
 
-  // ---- Capas de Trafico ----
-  const capas = useMemo(() => data?.capas ?? [], [data]);
   // Circuitos presentes en lo que se pinta: las capas de otros se atenúan.
   const circuitosVisibles = useMemo(() => {
     const s = new Set<number>();
@@ -531,6 +546,10 @@ export function ClientePropuestaMapPage() {
         if (v) params.set(k, v);
       }
     }
+    // Capas prendidas AHORA en este visor (prenderlas/apagarlas aqui ajusta el
+    // enlace, aunque el mapa se haya abierto con otro ?capas=).
+    const capasSel = capas.filter(c => capasActivas.has(c.id)).map(c => c.id);
+    if (capasSel.length > 0) params.set('capas', capasSel.join(','));
     const qs = params.toString();
     const publicUrl = `${window.location.origin}/cliente/propuesta/${propuestaId}/mapa${qs ? `?${qs}` : ''}`;
     navigator.clipboard.writeText(publicUrl);

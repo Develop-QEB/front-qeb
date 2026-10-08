@@ -80,6 +80,9 @@ export function CapasMapaPanel({
               <span className="inline-block h-2 w-2 rounded-full ml-2 mr-1 align-middle" style={{ backgroundColor: '#E4002B' }} />lejos
             </span>
           </div>
+          <p className={`px-3 py-1 text-[10px] border-b ${borde} ${sub}`}>
+            Prender una capa deja en el mapa solo el inventario que cumple su criterio.
+          </p>
 
           <div className="flex-1 min-h-0 overflow-y-auto px-1.5 py-1.5 space-y-1.5">
             {grupos.map(([scId, lista]) => {
