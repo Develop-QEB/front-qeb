@@ -925,6 +925,10 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
   // "guarda" formalmente — la auth de eliminación solo aplica a lo ya guardado.
   const originalCaraIdsRef = useRef<Set<number>>(new Set());
   const originalIdsCapturedRef = useRef(false);
+  // Campaña para la que se capturó el set original. Si cambia la campaña con el
+  // modal abierto, se re-captura (evita arrastrar ids de otra campaña, que hacía
+  // que todo saliera "nuevo" y se borrara SIN autorización).
+  const capturedForCampanaRef = useRef<number | null>(null);
 
   // New cara form
   const [newCara, setNewCara] = useState<Omit<CaraItem, 'localId'>>(EMPTY_CARA);
@@ -1614,14 +1618,18 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
       });
       setCaras(carasWithIds);
       setSelectedCaraIds(new Set());
-      // Captura UNA sola vez (al abrir) los ids ya guardados. En recargas
-      // posteriores (p.ej. tras reservar) NO se re-captura, así las caras
-      // agregadas en la sesión quedan fuera del set "original".
-      if (!originalIdsCapturedRef.current) {
+      // Captura (al abrir, una vez por campaña) los ids ya guardados en BD. En
+      // recargas posteriores (p.ej. tras reservar) NO se re-captura, así las
+      // caras agregadas en la sesión quedan fuera del set "original". Se re-captura
+      // solo si cambió la campaña con el modal abierto. carasData viene de getCaras
+      // (BD): si está undefined este efecto ni entra, así que nunca capturamos un
+      // set vacío "prematuro".
+      if (capturedForCampanaRef.current !== (campana?.id ?? null)) {
         originalCaraIdsRef.current = new Set(
           carasWithIds.filter(c => typeof c.id === 'number').map(c => c.id as number)
         );
         originalIdsCapturedRef.current = true;
+        capturedForCampanaRef.current = campana?.id ?? null;
       }
     }
   }, [carasData, isOpen, catorcenasData, tipoPeriodo]);
@@ -1641,6 +1649,7 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
       initialValuesSetRef.current = false;
       originalIdsCapturedRef.current = false;
       originalCaraIdsRef.current = new Set();
+      capturedForCampanaRef.current = null;
     }
   }, [isOpen]);
 
@@ -2588,8 +2597,18 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
         const sinId = toDelete.filter(c => !c.id);
         // Con id pero AGREGADAS en esta sesión (no estaban guardadas al abrir):
         // se borran directo SIN autorización. Solo lo YA guardado pide auth.
-        const conIdNuevo = conId.filter(c => !originalCaraIdsRef.current.has(c.id));
-        const conIdOriginal = conId.filter(c => originalCaraIdsRef.current.has(c.id));
+        //
+        // SEGURIDAD (regresión Jos, oct 2026 "todo se descompuso / borra sin auth"):
+        // solo tratamos una cara como "nueva" (borrado directo) si el set original
+        // se capturó bien para ESTA campaña. Si la captura no es confiable (no se
+        // corrió, cambió la campaña, o quedó vacío pese a que getCaras SÍ trajo
+        // caras → carrera de carga), NO arriesgamos: TODO pide autorización. Nunca
+        // borrar sin auth por un fallo de captura.
+        const capturadoParaEsta = capturedForCampanaRef.current === (campana?.id ?? null);
+        const refConfiable = capturadoParaEsta &&
+          (originalCaraIdsRef.current.size > 0 || (carasData?.length ?? 0) === 0);
+        const conIdNuevo = refConfiable ? conId.filter(c => !originalCaraIdsRef.current.has(c.id)) : [];
+        const conIdOriginal = refConfiable ? conId.filter(c => originalCaraIdsRef.current.has(c.id)) : conId;
 
         // Caras locales aún no guardadas (sin id): se quitan directo, no están en BD.
         if (sinId.length > 0) {
