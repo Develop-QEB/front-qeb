@@ -1236,7 +1236,7 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
   });
 
   // Historial del circuito (reservas que salieron: quitadas/desplazadas/bloqueo)
-  const { data: historialInventario } = useQuery({
+  const { data: historialInventario, refetch: refetchHistorial, isFetching: historialFetching } = useQuery({
     queryKey: ['propuesta-reservas-historial', propuesta.id],
     queryFn: () => propuestasService.getReservasHistorial(propuesta.id),
     enabled: isOpen && !!propuesta.id,
@@ -7121,6 +7121,8 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
               canEdit={effectiveCanEdit}
               reReservandoId={reReservandoHistId}
               onReReservar={handleReReservarHistorial}
+              onRefresh={() => refetchHistorial()}
+              refreshing={historialFetching}
             />
           ) : (
             /* RESERVADOS TAB CONTENT */

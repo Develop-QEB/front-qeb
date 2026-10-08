@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react';
-import { History, Search, Download, RotateCcw, Ban, ArrowRightLeft, Trash2, Lock } from 'lucide-react';
+import { History, Search, Download, RotateCcw, RefreshCw, Ban, ArrowRightLeft, Trash2, Lock } from 'lucide-react';
 import type { ReservaHistorialItem } from '../../services/propuestas.service';
 
 // Tab "Historial" del buscador de formatos (propuestas y campañas): muestra el
@@ -52,9 +52,11 @@ interface Props {
   canEdit?: boolean;
   reReservandoId?: number | null; // reserva_id en curso (spinner)
   onReReservar?: (item: ReservaHistorialItem) => void;
+  onRefresh?: () => void;   // refetch manual del historial (botón)
+  refreshing?: boolean;     // spinner mientras refetchea
 }
 
-export function HistorialInventarioPanel({ items, isDark, canEdit, reReservandoId, onReReservar }: Props) {
+export function HistorialInventarioPanel({ items, isDark, canEdit, reReservandoId, onReReservar, onRefresh, refreshing }: Props) {
   const [q, setQ] = useState('');
   const [motivoFilter, setMotivoFilter] = useState<'all' | Motivo>('all');
   const [soloDisponibles, setSoloDisponibles] = useState(false);
@@ -124,6 +126,17 @@ export function HistorialInventarioPanel({ items, isDark, canEdit, reReservandoI
                 className={`pl-8 pr-3 py-1.5 text-xs rounded-lg border w-52 focus:outline-none focus:ring-1 focus:ring-purple-500/50 ${isDark ? 'bg-zinc-800/70 border-zinc-700 text-white placeholder:text-zinc-500' : 'bg-white border-gray-200 text-gray-900 placeholder:text-gray-400'}`}
               />
             </div>
+            {onRefresh && (
+              <button
+                type="button"
+                onClick={onRefresh}
+                disabled={refreshing}
+                title="Refrescar historial"
+                className={`p-1.5 rounded-lg border transition-colors disabled:opacity-40 ${isDark ? 'bg-zinc-800/60 border-zinc-700/50 text-zinc-400 hover:text-purple-400 hover:bg-purple-500/10' : 'bg-gray-50 border-gray-200 text-gray-500 hover:text-purple-600 hover:bg-purple-50'}`}
+              >
+                <RefreshCw className={`h-4 w-4 ${refreshing ? 'animate-spin' : ''}`} />
+              </button>
+            )}
             <button
               type="button"
               onClick={downloadCsv}
