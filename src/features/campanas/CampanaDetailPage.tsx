@@ -1895,7 +1895,11 @@ export function CampanaDetailPage() {
     });
 
     return grouped;
-  }, [filteredInventarioReservado, activeGroupings]);
+    // tipoPeriodo va en deps: las claves de grupo por periodo (mensual vs Cat)
+    // dependen de él. Sin esta dep, si la campaña aún no cargaba cuando corrió el
+    // memo (tipoPeriodo=undefined → formatInicioPeriodo cae a "Cat N" por
+    // numero_catorcena), la etiqueta quedaba stale al llegar 'mensual'.
+  }, [filteredInventarioReservado, activeGroupings, tipoPeriodo]);
 
   // Detectar si un item de inventario es cortesía (solicitudCaras.cortesia = 1)
   const isCortesiaItem = (item: { cortesia?: number | null }) => item.cortesia === 1;
@@ -2130,7 +2134,9 @@ export function CampanaDetailPage() {
     });
 
     return grouped;
-  }, [filteredInventarioAPS, activeGroupingsAPS]);
+    // tipoPeriodo en deps: mismo motivo que groupedInventario — evita etiquetas
+    // de periodo stale ("Cat N") cuando la campaña carga después de este memo.
+  }, [filteredInventarioAPS, activeGroupingsAPS, tipoPeriodo]);
 
   // Bloquear scroll del body cuando el modal de comentarios está abierto
   useEffect(() => {
