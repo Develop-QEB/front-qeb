@@ -2281,11 +2281,8 @@ function TaskDrawer({
   onAutorizacionAction,
   contentType,
   onOpenApprovalModal,
-<<<<<<< Updated upstream
   onOpenDesposteoModal,
-=======
   onEditActividad,
->>>>>>> Stashed changes
 }: {
   tarea: Notificacion & { comentarios?: ComentarioTarea[] };
   onClose: () => void;
@@ -2296,13 +2293,10 @@ function TaskDrawer({
   onAutorizacionAction?: () => void;
   contentType: ContentType;
   onOpenApprovalModal?: () => void;
-<<<<<<< Updated upstream
   onOpenDesposteoModal?: () => void;
-=======
   // [#266] Callback para abrir el modal de edicion de Actividad Comercial
   // desde el boton "Editar" del drawer.
   onEditActividad?: (tarea: Notificacion) => void;
->>>>>>> Stashed changes
 }) {
   const isDark = useThemeStore((s) => s.theme) === 'dark';
   const [comment, setComment] = useState('');
