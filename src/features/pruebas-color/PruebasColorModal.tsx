@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { AlertCircle, Check, CheckCircle2, ChevronDown, Loader2, Paintbrush, Search, Send, Trash2, X, Upload, FileImage, ClipboardList, XCircle, Flag, Plus, Users } from 'lucide-react';
+import { AlertCircle, Check, ChevronDown, Loader2, Paintbrush, Search, Send, Trash2, X, Upload, FileImage, ClipboardList, Plus, Users } from 'lucide-react';
 import { useThemeStore } from '../../store/themeStore';
 import { useAuthStore } from '../../store/authStore';
 import {
@@ -8,9 +8,7 @@ import {
   PruebaColor,
   EstatusPruebaColor,
   ESTATUS_LABEL,
-  TRANSICIONES,
   puedeGestionarPruebaColor,
-  AccionResolverTarea,
 } from '../../services/pruebasColor.service';
 import { propuestasService, SolicitudCara } from '../../services/propuestas.service';
 import { uploadsService } from '../../services/uploads.service';
@@ -354,7 +352,6 @@ export function PruebasColorModal({ isOpen, onClose, propuestaId, contextoNombre
                             isDark={isDark}
                             puedeGestionar={puedeGestionar}
                             isUpdating={updateEstatusMutation.isPending || deleteMutation.isPending}
-                            onChangeEstatus={(nuevo) => updateEstatusMutation.mutate({ id: p.id, estatus: nuevo })}
                             onDelete={() => {
                               if (confirm(`¿Eliminar la prueba v${p.version}?`)) deleteMutation.mutate(p.id);
                             }}
@@ -555,14 +552,12 @@ function PruebaCard({
   isDark,
   puedeGestionar,
   isUpdating,
-  onChangeEstatus,
   onDelete,
 }: {
   prueba: PruebaColor;
   isDark: boolean;
   puedeGestionar: boolean;
   isUpdating: boolean;
-  onChangeEstatus: (e: EstatusPruebaColor) => void;
   onDelete: () => void;
 }) {
   const estatusStyle: Record<EstatusPruebaColor, string> = {
@@ -573,7 +568,8 @@ function PruebaCard({
     aprobada: isDark ? 'bg-emerald-500/15 text-emerald-200 border-emerald-500/40' : 'bg-emerald-50 text-emerald-800 border-emerald-300',
     rechazada: isDark ? 'bg-red-500/15 text-red-200 border-red-500/40' : 'bg-red-50 text-red-800 border-red-300',
   };
-  const transiciones = TRANSICIONES[prueba.estatus] || [];
+  // [Fix #258] Las transiciones de estatus (Aprobar/Rechazar directo) se
+  // quitan del modal; viven en la tarea abierta.
 
   return (
     <div className={`rounded-lg border overflow-hidden ${isDark ? 'bg-zinc-800/50 border-zinc-700' : 'bg-white border-gray-200'}`}>
@@ -590,7 +586,7 @@ function PruebaCard({
             {prueba.nombre_arte || `Prueba #${prueba.id}`}
           </span>
         </div>
-        {puedeGestionar && transiciones.length > 0 && (
+        {puedeGestionar && (
           <button
             onClick={onDelete}
             disabled={isUpdating}
@@ -614,34 +610,14 @@ function PruebaCard({
           </div>
         )}
 
+        {/* [Fix #258] Jos: las acciones aprobar/rechazar NO deben estar como
+            botones directos aqui. Deben ser herramientas de la tarea abierta.
+            En el modal solo mostramos "Ver arte" + estatus visual (ya pintado
+            en el header de la card). */}
         <div className="flex items-center gap-2 flex-wrap pt-0.5">
           <a href={prueba.archivo} target="_blank" rel="noreferrer" className={`inline-flex items-center gap-1 text-xs font-medium px-2 py-1 rounded border transition-colors ${isDark ? 'text-fuchsia-300 border-fuchsia-500/40 hover:bg-fuchsia-500/10' : 'text-fuchsia-700 border-fuchsia-300 hover:bg-fuchsia-50'}`}>
             <FileImage className="h-3 w-3" /> Ver arte
           </a>
-
-          {puedeGestionar && transiciones.length > 0 && (
-            <div className="flex items-center gap-1 ml-auto">
-              {transiciones.map(t => (
-                <button
-                  key={t}
-                  onClick={() => onChangeEstatus(t)}
-                  disabled={isUpdating}
-                  className={`text-[11px] font-medium px-2 py-1 rounded border transition-colors ${
-                    t === 'aprobada'
-                      ? (isDark ? 'border-emerald-500/50 text-emerald-200 bg-emerald-500/10 hover:bg-emerald-500/20' : 'border-emerald-400 text-emerald-800 bg-emerald-50 hover:bg-emerald-100')
-                      : t === 'rechazada'
-                        ? (isDark ? 'border-red-500/50 text-red-200 bg-red-500/10 hover:bg-red-500/20' : 'border-red-400 text-red-800 bg-red-50 hover:bg-red-100')
-                        : (isDark ? 'border-blue-500/50 text-blue-200 bg-blue-500/10 hover:bg-blue-500/20' : 'border-blue-400 text-blue-800 bg-blue-50 hover:bg-blue-100')
-                  } disabled:opacity-50`}
-                  title={`Marcar como ${ESTATUS_LABEL[t]}`}
-                >
-                  {t === 'aprobada' && <CheckCircle2 className="h-3 w-3 inline mr-0.5" />}
-                  {t === 'rechazada' && <XCircle className="h-3 w-3 inline mr-0.5" />}
-                  {ESTATUS_LABEL[t]}
-                </button>
-              ))}
-            </div>
-          )}
         </div>
       </div>
 
@@ -653,40 +629,25 @@ function PruebaCard({
       <TareasAsociadasSection
         pruebaId={prueba.id}
         isDark={isDark}
-        puedeGestionar={puedeGestionar}
       />
     </div>
   );
 }
 
 // ─── Tareas asociadas a una prueba (Revisión + Seguimiento) ─────────────
-// Feedback Jos 2026-10-02: la ventana de prueba de color las consume
-// (listar + resolver) para que el analista no vaya al módulo Tareas.
+// [Fix #258] Jos: las acciones (aprobar/rechazar/finalizar) ya no viven aqui;
+// vienen de la tarea abierta. Esta seccion solo lista estatus visual.
 function TareasAsociadasSection({
   pruebaId,
   isDark,
-  puedeGestionar,
 }: {
   pruebaId: number;
   isDark: boolean;
-  puedeGestionar: boolean;
 }) {
-  const queryClient = useQueryClient();
   const tareasQuery = useQuery({
     queryKey: ['pruebas-color', 'tareas', pruebaId],
     queryFn: () => pruebasColorService.listarTareas(pruebaId),
     staleTime: 10_000,
-  });
-
-  const resolver = useMutation({
-    mutationFn: ({ tareaId, accion, comentario }: { tareaId: number; accion: AccionResolverTarea; comentario?: string }) =>
-      pruebasColorService.resolverTarea(pruebaId, tareaId, accion, comentario),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['pruebas-color', 'tareas', pruebaId] });
-      // La resolución puede haber cambiado el estatus de la prueba o creado otra tarea.
-      queryClient.invalidateQueries({ queryKey: ['pruebas-color'] });
-    },
-    onError: (e: Error) => alert(e.message),
   });
 
   const tareas = tareasQuery.data || [];
@@ -718,12 +679,13 @@ function TareasAsociadasSection({
         {tareas.map(t => {
           const esRevision = t.tipo === 'Revisión de artes';
           const esSeguimiento = t.tipo === 'Seguimiento Prueba de color';
-          const puedeAprobar = esRevision && t.estatus === 'Pendiente' && puedeGestionar;
-          const puedeFinalizar = esSeguimiento && t.estatus === 'Pendiente' && puedeGestionar;
           const asignados = t.asignado ? t.asignado.split(',').map(s => s.trim()).filter(Boolean) : [];
           const asignadosMostrar = asignados.slice(0, 2);
           const extra = asignados.length - asignadosMostrar.length;
 
+          // [Fix #258] Jos: las acciones aprobar/rechazar/finalizar NO deben
+          // vivir aqui. Son herramientas de la tarea abierta. El modal solo
+          // muestra el estatus visual de las tareas conforme se van atendiendo.
           return (
             <div
               key={t.id}
@@ -738,43 +700,6 @@ function TareasAsociadasSection({
                     {esRevision ? 'Revisión de artes' : esSeguimiento ? 'Seguimiento' : t.tipo}
                   </span>
                 </div>
-                {(puedeAprobar || puedeFinalizar) && (
-                  <div className="flex items-center gap-1 shrink-0">
-                    {puedeAprobar && (
-                      <>
-                        <button
-                          onClick={() => resolver.mutate({ tareaId: t.id, accion: 'aprobar' })}
-                          disabled={resolver.isPending}
-                          className={`text-[11px] font-medium px-2 py-0.5 rounded border transition-colors ${isDark ? 'border-emerald-500/50 text-emerald-200 bg-emerald-500/10 hover:bg-emerald-500/20' : 'border-emerald-400 text-emerald-800 bg-emerald-50 hover:bg-emerald-100'} disabled:opacity-50`}
-                          title="Aprobar revisión"
-                        >
-                          <CheckCircle2 className="h-3 w-3 inline mr-0.5" /> Aprobar
-                        </button>
-                        <button
-                          onClick={() => {
-                            const comentario = prompt('Motivo del rechazo (opcional):') || undefined;
-                            resolver.mutate({ tareaId: t.id, accion: 'rechazar', comentario });
-                          }}
-                          disabled={resolver.isPending}
-                          className={`text-[11px] font-medium px-2 py-0.5 rounded border transition-colors ${isDark ? 'border-red-500/50 text-red-200 bg-red-500/10 hover:bg-red-500/20' : 'border-red-400 text-red-800 bg-red-50 hover:bg-red-100'} disabled:opacity-50`}
-                          title="Rechazar revisión"
-                        >
-                          <XCircle className="h-3 w-3 inline mr-0.5" /> Rechazar
-                        </button>
-                      </>
-                    )}
-                    {puedeFinalizar && (
-                      <button
-                        onClick={() => resolver.mutate({ tareaId: t.id, accion: 'finalizar' })}
-                        disabled={resolver.isPending}
-                        className={`text-[11px] font-medium px-2 py-0.5 rounded border transition-colors ${isDark ? 'border-emerald-500/50 text-emerald-200 bg-emerald-500/10 hover:bg-emerald-500/20' : 'border-emerald-400 text-emerald-800 bg-emerald-50 hover:bg-emerald-100'} disabled:opacity-50`}
-                        title="Finalizar seguimiento"
-                      >
-                        <Flag className="h-3 w-3 inline mr-0.5" /> Finalizar
-                      </button>
-                    )}
-                  </div>
-                )}
               </div>
               {asignados.length > 0 && (
                 <div className={`px-2.5 pb-2 flex items-center gap-1.5 text-[11px] ${isDark ? 'text-zinc-300' : 'text-gray-600'}`}>
