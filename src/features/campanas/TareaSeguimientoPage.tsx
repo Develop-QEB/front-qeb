@@ -19766,11 +19766,21 @@ export function TareaSeguimientoPage() {
                     .reduce((sum, t) => sum + getNumImpresiones(t), 0);
                   const recibidoTotal = recibido + huerfanasRecibidas;
 
+                  // [Fix #263] El badge "Recibido" sumaba num_impresiones de
+                  // tareas, que duplica cuando hay artes múltiples por
+                  // ubicación (Jos: 25 impresiones × 2 artes = 50 reales, el
+                  // badge mostraba 100). Fuente de verdad real: items del tab
+                  // ya desduplicados por (reserva × arte) en
+                  // inventoryImpresionesData.
+                  const recibidoItemsCount = inventoryImpresionesData.filter(i => i.estado_impresion === 'recibido').length;
+                  // Si inventory no tiene items (fallback edge) usamos el
+                  // cálculo viejo para no mostrar 0 incorrectamente.
+                  const recibidoBadge = recibidoItemsCount > 0 ? recibidoItemsCount : recibidoTotal;
                   return [
                     { key: 'orden_impresion' as const, label: 'Orden Impresión', count: inventoryOrdenImpresionData.length },
                     { key: 'en_impresion' as const, label: 'En Impresion', count: activeImpresiones },
                     { key: 'pendiente_recepcion' as const, label: 'Pend. Recepcion', count: pendingRecepcion },
-                    { key: 'recibido' as const, label: 'Recibido', count: recibidoTotal },
+                    { key: 'recibido' as const, label: 'Recibido', count: recibidoBadge },
                   ];
                 })().map(tab => (
                   <button
