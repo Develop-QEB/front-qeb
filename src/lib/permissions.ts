@@ -67,6 +67,11 @@ export type UserRole =
   | 'Jefe de Operaciones León'
   | 'Jefe de Operaciones Tijuana'
   | 'Jefe de Operaciones Mérida'
+  // Nuevos roles (Matriz Roles QEB 2026-10-09) — mismos permisos que
+  // Asesor Comercial / Analista de Servicio al Cliente: visibilidad del
+  // módulo de Campañas con descarga de ODM/versionario e Instalación.
+  | 'Supervisor de Call Center'
+  | 'Tecnico en Programacion Digital y WIFI'
   | 'Administrador'
   | 'DEV';
 
@@ -403,6 +408,82 @@ const rolePermissions: Partial<Record<UserRole, Partial<RolePermissions>>> = {
     canApproveArteSinRevisar: true,
 
     // Inventarios: Oculto (ya se oculta con canSeeInventarios: false)
+    canCreateInventarios: false,
+    canEditInventarios: false,
+    canDeleteInventarios: false,
+  },
+  // [#265] Supervisor de Call Center — mismo perfil que Analista de Servicio
+  // al Cliente / Asesor Comercial segun Matriz 2026-10-09. Visibilidad del
+  // modulo Campañas, descarga de ODM/versionario, instalación de artes.
+  'Supervisor de Call Center': {
+    canSeeDashboard: false,
+    canSeeInventarios: false,
+    canSeeAdminUsuarios: false,
+    canCreateClientes: false,
+    canEditClientes: false,
+    canDeleteClientes: false,
+    canCreateProveedores: false,
+    canEditProveedores: false,
+    canDeleteProveedores: false,
+    canCreateSolicitudes: false,
+    canEditSolicitudes: false,
+    canDeleteSolicitudes: false,
+    canAtenderSolicitudes: false,
+    canChangeEstadoSolicitud: false,
+    canEditPropuestaStatus: false,
+    allowedPropuestaStatuses: [],
+    canAprobarPropuesta: false,
+    canAsignarInventario: true,
+    canCompartirPropuesta: true,
+    canBuscarInventarioEnModal: false,
+    canEditCircuitoExistente: false,
+    canEditCampanas: false,
+    canEditDetalleCampana: true,
+    canDeleteDetalleCampana: false,
+    canPostToSAP: true,
+    canResolveProduccionTasks: false,
+    canResolveCorreccionTasks: true,
+    canOnlyOpenCorreccionTasks: true,
+    canOpenTasks: true,
+    canCreateTareasGestionArtes: true,
+    canApproveArteSinRevisar: true,
+    canCreateInventarios: false,
+    canEditInventarios: false,
+    canDeleteInventarios: false,
+  },
+  // [#265] Técnico en Programación Digital y WIFI — mismo perfil que arriba.
+  'Tecnico en Programacion Digital y WIFI': {
+    canSeeDashboard: false,
+    canSeeInventarios: false,
+    canSeeAdminUsuarios: false,
+    canCreateClientes: false,
+    canEditClientes: false,
+    canDeleteClientes: false,
+    canCreateProveedores: false,
+    canEditProveedores: false,
+    canDeleteProveedores: false,
+    canCreateSolicitudes: false,
+    canEditSolicitudes: false,
+    canDeleteSolicitudes: false,
+    canAtenderSolicitudes: false,
+    canChangeEstadoSolicitud: false,
+    canEditPropuestaStatus: false,
+    allowedPropuestaStatuses: [],
+    canAprobarPropuesta: false,
+    canAsignarInventario: true,
+    canCompartirPropuesta: true,
+    canBuscarInventarioEnModal: false,
+    canEditCircuitoExistente: false,
+    canEditCampanas: false,
+    canEditDetalleCampana: true,
+    canDeleteDetalleCampana: false,
+    canPostToSAP: true,
+    canResolveProduccionTasks: false,
+    canResolveCorreccionTasks: true,
+    canOnlyOpenCorreccionTasks: true,
+    canOpenTasks: true,
+    canCreateTareasGestionArtes: true,
+    canApproveArteSinRevisar: true,
     canCreateInventarios: false,
     canEditInventarios: false,
     canDeleteInventarios: false,
