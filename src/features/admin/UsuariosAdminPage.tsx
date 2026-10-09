@@ -103,6 +103,11 @@ const PUESTOS_POR_AREA: Record<string, string[]> = {
     'Jefe de Operaciones León',
     'Jefe de Operaciones Tijuana',
     'Jefe de Operaciones Mérida',
+    // [#265] Matriz 2026-10-09: 2 nuevos roles con perfil equivalente a
+    // Analista de Servicio al Cliente (visibilidad campañas + descarga ODM
+    // + instalación de artes).
+    'Supervisor de Call Center',
+    'Tecnico en Programacion Digital y WIFI',
   ],
   'Facturacion': [
     'Coordinador de Facturacion y Cobranza',
