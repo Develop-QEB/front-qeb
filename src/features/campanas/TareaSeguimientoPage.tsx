@@ -6819,7 +6819,20 @@ function TaskDetailModal({
       onClose();
     } catch (error) {
       console.error('Error al crear tarea de recepción:', error);
-      const msg = error instanceof Error ? error.message : 'Error desconocido al crear la tarea';
+      // [Fix #262] Extraer el mensaje real del back (axios lo guarda en
+      // error.response.data.error) antes de caer al generico 'Request failed
+      // with status code 400'. Jos reportaba solo ver el 400 sin pista de
+      // la causa real.
+      let msg = 'Error desconocido al crear la tarea';
+      if (error && typeof error === 'object') {
+        const anyErr = error as { response?: { data?: { error?: string; message?: string } }; message?: string };
+        msg = anyErr.response?.data?.error
+          || anyErr.response?.data?.message
+          || anyErr.message
+          || msg;
+      } else if (error instanceof Error) {
+        msg = error.message;
+      }
       alert(`No se pudo crear la tarea de recepción: ${msg}`);
     } finally {
       setIsCreatingRecepcion(false);
