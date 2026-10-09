@@ -49,6 +49,7 @@ import {
   ChartData,
   PlazaMapData,
   InventoryCoord,
+  InventoryDetailItem,
   PosteoStats,
 } from '../../services/dashboard.service';
 import {
@@ -401,7 +402,8 @@ function GoogleMapsChart({
   onTogglePins,
   selectedPlaza,
   onSelectPlaza,
-  selectedInventoryIds
+  selectedInventoryIds,
+  filters,
 }: {
   plazaData: PlazaMapData[];
   allCoords: InventoryCoord[];
@@ -410,6 +412,8 @@ function GoogleMapsChart({
   selectedPlaza: string | null;
   onSelectPlaza: (p: string | null) => void;
   selectedInventoryIds: Set<number>;
+  /** Filtros activos del dashboard: la tarjeta del pin pide el detalle con el mismo periodo. */
+  filters: DashboardFilters;
 }) {
   const { isLoaded } = useLoadScript(GOOGLE_MAPS_LOADER_OPTIONS);
   const theme = useThemeStore((s) => s.theme);
@@ -419,6 +423,26 @@ function GoogleMapsChart({
   const clustererRef = useRef<MarkerClusterer | null>(null);
   const markersRef = useRef<google.maps.Marker[]>([]);
   const [mapReady, setMapReady] = useState(false);
+
+  // Tarjeta de info al clickear un pin: se pide el detalle de ESA pieza al
+  // back (mismos campos que la tabla de Inventario Detallado) con los filtros
+  // de periodo activos, para que el estatus coincida con lo que muestra la tabla.
+  const [pinSel, setPinSel] = useState<{ id: number; lat: number; lng: number } | null>(null);
+  const [pinItem, setPinItem] = useState<InventoryDetailItem | null>(null);
+  const [pinLoading, setPinLoading] = useState(false);
+  const abrirPin = useCallback((coord: InventoryCoord) => {
+    setPinSel({ id: coord.id, lat: coord.lat, lng: coord.lng });
+    setPinItem(null);
+    setPinLoading(true);
+    dashboardService.getInventoryDetail({ ...filters, inventario_id: coord.id, page: 1, limit: 1, includeCoords: false })
+      .then(d => setPinItem(d.items[0] || null))
+      .catch(() => setPinItem(null))
+      .finally(() => setPinLoading(false));
+  }, [filters]);
+  // Los listeners de los markers se crean una vez por lote; el ref evita que
+  // capturen un abrirPin viejo cuando cambian los filtros.
+  const abrirPinRef = useRef(abrirPin);
+  useEffect(() => { abrirPinRef.current = abrirPin; }, [abrirPin]);
 
   // Tope de marcadores creados. El costo real no es agrupar (SuperCluster indexa
   // los puntos una sola vez) sino instanciar google.maps.Marker; por encima de
@@ -606,6 +630,7 @@ function GoogleMapsChart({
           },
           title: `${coord.plaza} - ${coord.estatus}`,
         });
+        marker.addListener('click', () => abrirPinRef.current(coord));
         return marker;
       });
 
@@ -672,6 +697,17 @@ function GoogleMapsChart({
     setMapReady(true);
   }, []);
 
+  // Click en una plaza de la leyenda: zoom a esa plaza para ver sus pines
+  // (antes abría una tarjetita con el conteo). Si los pines están apagados se
+  // prenden, porque la intención del click es verlos.
+  const handlePlazaZoom = (plaza: PlazaMapData) => {
+    onSelectPlaza(plaza.plaza);
+    if (!plaza.lat || !plaza.lng || !mapRef.current) return;
+    if (!showPins) onTogglePins();
+    mapRef.current.panTo({ lat: plaza.lat, lng: plaza.lng });
+    mapRef.current.setZoom(12);
+  };
+
   if (!isLoaded) {
     return (
       <GlassCard className="h-full">
@@ -734,15 +770,56 @@ function GoogleMapsChart({
         >
           {/* Circulos de densidad removidos - solo se muestran los pines/clusters */}
 
-          {/* InfoWindow para plaza seleccionada */}
-          {selectedPlaza && validPlazas.find(d => d.plaza === selectedPlaza) && (
+          {/* Tarjeta de info del pin clickeado: mismos datos que la tabla de
+              Inventario Detallado. (La tarjetita de plaza se quitó: click en
+              una plaza ahora hace zoom a sus pines.) */}
+          {pinSel && (
             <InfoWindow
-              position={{ lat: validPlazas.find(d => d.plaza === selectedPlaza)!.lat!, lng: validPlazas.find(d => d.plaza === selectedPlaza)!.lng! }}
-              onCloseClick={() => onSelectPlaza(null)}
+              position={{ lat: pinSel.lat, lng: pinSel.lng }}
+              onCloseClick={() => { setPinSel(null); setPinItem(null); }}
             >
-              <div className="p-2 min-w-[140px]">
-                <p className="font-bold text-gray-800 text-base">{selectedPlaza}</p>
-                <p className="text-sm text-gray-600">{validPlazas.find(d => d.plaza === selectedPlaza)?.count.toLocaleString()} inventarios</p>
+              <div className="p-1 min-w-[230px] max-w-[290px]">
+                {pinLoading ? (
+                  <div className="flex items-center gap-2 p-2 text-gray-500 text-sm">
+                    <Loader2 className="h-4 w-4 animate-spin" /> Cargando detalle...
+                  </div>
+                ) : pinItem ? (
+                  <div className="space-y-1.5">
+                    <div className="flex items-center justify-between gap-2">
+                      <span className="font-mono text-xs font-bold text-purple-700">{pinItem.codigo_unico || pinItem.id}</span>
+                      <span className={`px-2 py-0.5 rounded-full text-[10px] font-medium border ${
+                        pinItem.estatus === 'Reservado' ? 'bg-yellow-50 text-yellow-700 border-yellow-200' :
+                        pinItem.estatus === 'Bloqueado' ? 'bg-rose-50 text-rose-700 border-rose-200' :
+                        pinItem.estatus === 'Disponible' ? 'bg-green-50 text-green-700 border-green-200' :
+                        'bg-cyan-50 text-cyan-700 border-cyan-200'
+                      }`}>
+                        {pinItem.estatus || 'Disponible'}
+                      </span>
+                    </div>
+                    <p className="text-sm font-semibold text-gray-800">
+                      {pinItem.plaza || '-'}
+                      {pinItem.municipio && <span className="font-normal text-gray-500"> · {pinItem.municipio}</span>}
+                    </p>
+                    <p className="text-xs text-gray-600">
+                      {pinItem.mueble || '-'}
+                      {pinItem.tipo_de_mueble && pinItem.tipo_de_mueble?.toUpperCase() !== pinItem.mueble?.toUpperCase() && ` (${pinItem.tipo_de_mueble})`}
+                      {' · '}{pinItem.tradicional_digital || 'Tradicional'}
+                    </p>
+                    <div className="border-t border-gray-200 pt-1.5 space-y-0.5 text-xs text-gray-600">
+                      <p><span className="text-gray-400">Cliente:</span> {pinItem.cliente_nombre || '-'}</p>
+                      <p><span className="text-gray-400">Agencia:</span> {pinItem.agencia || '-'}</p>
+                      {pinItem.nombre_campania && <p><span className="text-gray-400">Campaña:</span> {pinItem.nombre_campania}</p>}
+                      {(pinItem.propuesta_id || pinItem.campana_id) && (
+                        <p>
+                          {pinItem.propuesta_id && <span className="mr-3"><span className="text-gray-400">Propuesta:</span> #{pinItem.propuesta_id}</span>}
+                          {pinItem.campana_id && <span><span className="text-gray-400">Campaña:</span> #{pinItem.campana_id}</span>}
+                        </p>
+                      )}
+                    </div>
+                  </div>
+                ) : (
+                  <p className="p-2 text-sm text-gray-500">No se encontró el detalle de esta pieza.</p>
+                )}
               </div>
             </InfoWindow>
           )}
@@ -755,8 +832,9 @@ function GoogleMapsChart({
             {validPlazas.slice(0, 5).map((plaza, i) => (
               <div
                 key={plaza.plaza}
+                title={`Hacer zoom a ${plaza.plaza}`}
                 className={`flex items-center gap-2 p-2 rounded-lg cursor-pointer transition-all ${selectedPlaza === plaza.plaza ? `${isDark ? 'bg-purple-500/10 border-purple-500/30' : 'bg-purple-50 border-purple-300'} border` : `${isDark ? 'hover:bg-purple-500/10' : 'hover:bg-purple-50'}`}`}
-                onClick={() => onSelectPlaza(plaza.plaza)}
+                onClick={() => handlePlazaZoom(plaza)}
               >
                 <div
                   className="w-3 h-3 rounded-full"
@@ -2464,17 +2542,6 @@ export function DashboardPage() {
           <SimpleBarChart data={graficas?.porNSE || []} title="Por Nivel Socioeconomico" />
         </div>
 
-        {/* Map */}
-        <GoogleMapsChart
-          plazaData={inventoryData?.byPlaza || []}
-          allCoords={inventoryData?.allCoords || []}
-          showPins={showPins}
-          onTogglePins={() => setShowPins(!showPins)}
-          selectedPlaza={selectedPlaza}
-          onSelectPlaza={setSelectedPlaza}
-          selectedInventoryIds={selectedInventoryIds}
-        />
-
         {/* Inventory Table */}
         <InventoryTable
           data={inventoryData?.items || []}
@@ -2487,6 +2554,18 @@ export function DashboardPage() {
           onSelectionChange={setSelectedInventoryIds}
           filters={filters}
           activeEstatus={activeEstatus}
+        />
+
+        {/* Map (debajo de la tabla: seleccionas filas arriba y las ves aquí) */}
+        <GoogleMapsChart
+          plazaData={inventoryData?.byPlaza || []}
+          allCoords={inventoryData?.allCoords || []}
+          showPins={showPins}
+          onTogglePins={() => setShowPins(!showPins)}
+          selectedPlaza={selectedPlaza}
+          onSelectPlaza={setSelectedPlaza}
+          selectedInventoryIds={selectedInventoryIds}
+          filters={filters}
         />
       </div>
     </div>

@@ -219,7 +219,7 @@ class DashboardService {
     return response.data.data;
   }
 
-  async getInventoryDetail(filters?: DashboardFilters & { estatus?: string; page?: number; limit?: number; includeCoords?: boolean }): Promise<InventoryDetailResponse> {
+  async getInventoryDetail(filters?: DashboardFilters & { estatus?: string; page?: number; limit?: number; includeCoords?: boolean; inventario_id?: number }): Promise<InventoryDetailResponse> {
     const params = new URLSearchParams();
 
     appendMulti(params, 'estado', filters?.estado);
@@ -232,6 +232,7 @@ class DashboardService {
     if (filters?.fecha_inicio) params.append('fecha_inicio', filters.fecha_inicio);
     if (filters?.fecha_fin) params.append('fecha_fin', filters.fecha_fin);
     if (filters?.estatus) params.append('estatus', filters.estatus);
+    if (filters?.inventario_id) params.append('inventario_id', filters.inventario_id.toString());
     if (filters?.page) params.append('page', filters.page.toString());
     if (filters?.limit) params.append('limit', filters.limit.toString());
     if (filters?.includeCoords) params.append('includeCoords', 'true');
