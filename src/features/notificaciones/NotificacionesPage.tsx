@@ -8,7 +8,7 @@ import {
   MessageSquare, Send, Plus, Pencil, Trash2, StickyNote,
   Users, Tag, Building2, Download, Table2, ExternalLink, Bell, ClipboardList,
   Filter, Layers, ArrowUpDown, ArrowUp, ArrowDown, Check, Loader2, UserCheck, UserPlus,
-  ShieldCheck, DollarSign, Ban
+  ShieldCheck, DollarSign, Ban, Briefcase
 } from 'lucide-react';
 import { Header } from '../../components/layout/Header';
 import { notificacionesService, CaraAutorizacion, ResumenAutorizacion, HistorialAutorizacion } from '../../services/notificaciones.service';
@@ -2333,7 +2333,11 @@ function TaskDrawer({
   onAutorizacionAction,
   contentType,
   onOpenApprovalModal,
+<<<<<<< Updated upstream
   onOpenDesposteoModal,
+=======
+  onEditActividad,
+>>>>>>> Stashed changes
 }: {
   tarea: Notificacion & { comentarios?: ComentarioTarea[] };
   onClose: () => void;
@@ -2344,7 +2348,13 @@ function TaskDrawer({
   onAutorizacionAction?: () => void;
   contentType: ContentType;
   onOpenApprovalModal?: () => void;
+<<<<<<< Updated upstream
   onOpenDesposteoModal?: () => void;
+=======
+  // [#266] Callback para abrir el modal de edicion de Actividad Comercial
+  // desde el boton "Editar" del drawer.
+  onEditActividad?: (tarea: Notificacion) => void;
+>>>>>>> Stashed changes
 }) {
   const isDark = useThemeStore((s) => s.theme) === 'dark';
   const [comment, setComment] = useState('');
@@ -2890,6 +2900,68 @@ function TaskDrawer({
             </div>
           </div>
         )}
+
+        {/* [#266] Bloque específico para Actividad Comercial — muestra los
+            mismos campos que el modal de creacion/edicion: Tipo (subtipo),
+            Cliente, Marca, Año, Catorcena, Estatus Actividad, Base. Jos
+            pidio que estos campos sean visibles aqui ademas del titulo. */}
+        {tarea.tipo === 'Actividad Comercial' && tarea.contenido && (() => {
+          try {
+            const c = JSON.parse(tarea.contenido) as {
+              cliente?: string | null;
+              marca?: string | null;
+              subtipo?: string | null;
+              ref_id?: number | null;
+              anio?: number | null;
+              catorcena?: number | null;
+              estatus_actividad?: string | null;
+              base?: string | null;
+            };
+            const campos: Array<{ label: string; value: string }> = [];
+            if (c.subtipo) {
+              campos.push({
+                label: 'Tipo',
+                value: c.ref_id ? `${c.subtipo} #${c.ref_id}` : c.subtipo,
+              });
+            }
+            if (c.cliente) campos.push({ label: 'Cliente', value: c.cliente });
+            if (c.marca) campos.push({ label: 'Marca', value: c.marca });
+            if (c.anio) campos.push({ label: 'Año', value: String(c.anio) });
+            if (c.catorcena) campos.push({ label: 'Catorcena', value: `Cat ${c.catorcena}` });
+            if (c.estatus_actividad) campos.push({ label: 'Estatus', value: c.estatus_actividad });
+            if (c.base) campos.push({ label: 'Base', value: c.base });
+
+            if (campos.length === 0) return null;
+
+            return (
+              <div className={`p-5 border-b ${isDark ? 'border-zinc-800/50' : 'border-gray-200'}`}>
+                <div className="flex items-center justify-between mb-3">
+                  <h3 className="text-xs font-medium text-amber-400 uppercase tracking-wider flex items-center gap-2">
+                    <Briefcase className="h-3.5 w-3.5" />
+                    Información de la Actividad
+                  </h3>
+                  {onEditActividad && (
+                    <button
+                      onClick={() => onEditActividad(tarea)}
+                      className={`flex items-center gap-1 px-2.5 py-1 rounded-lg text-[11px] font-medium border transition-colors ${isDark ? 'border-amber-500/40 text-amber-200 hover:bg-amber-500/10' : 'border-amber-400 text-amber-700 hover:bg-amber-50'}`}
+                      title="Editar actividad"
+                    >
+                      <Pencil className="h-3 w-3" /> Editar
+                    </button>
+                  )}
+                </div>
+                <div className={`space-y-1.5 rounded-xl p-3 border ${isDark ? 'bg-amber-500/5 border-amber-500/20' : 'bg-amber-50/50 border-amber-200'}`}>
+                  {campos.map((f, i) => (
+                    <div key={i} className="flex items-center justify-between">
+                      <span className={`text-xs font-medium ${isDark ? 'text-zinc-400' : 'text-gray-500'}`}>{f.label}</span>
+                      <span className={`text-sm ${isDark ? 'text-white' : 'text-gray-900'} font-medium text-right`}>{f.value}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            );
+          } catch { return null; }
+        })()}
 
         {/* Campañas afectadas — Ajuste Inventario Bloqueado */}
         {tarea.tipo === 'Ajuste Inventario Bloqueado' && tarea.contenido && (() => {
