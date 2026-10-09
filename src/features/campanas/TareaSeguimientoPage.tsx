@@ -5653,37 +5653,59 @@ function TaskDetailModal({
   // Cuando se agrupa por ciudad/grupo, también se sub-agrupa por archivo para separar artes diferentes
   const groupedInventory = useMemo(() => {
     const groups: Record<string, InventoryRow[]> = {};
-    taskInventory.forEach(item => {
-      let key = '';
-      switch (groupBy) {
-        case 'ciudad':
-          // Agrupar por ciudad + archivo (para separar artes diferentes)
-          const ciudadKey = item.ciudad || 'Sin ciudad';
-          const archivoKeyCiudad = item.archivo_arte || 'sin_arte';
-          key = `${ciudadKey}|||${archivoKeyCiudad}`;
-          break;
-        case 'grupo':
-          // Agrupar por grupo + archivo (para separar artes diferentes)
-          const grupoKey = item.grupo_id || item.id;
-          const archivoKeyGrupo = item.archivo_arte || 'sin_arte';
-          key = `${grupoKey}|||${archivoKeyGrupo}`;
-          break;
-        case 'tipo_cara': {
-          // Agrupar por Tipo de Cara (Flujo / Contraflujo / Bonificacion / etc) + archivo.
-          // Normalizamos: si comienza con "Flujo" agrupa todos en "Flujo", igual con "Contraflujo".
-          const tcRaw = (item.tipo_de_cara || 'Sin tipo').toString();
-          const tcKey = tcRaw.toLowerCase().startsWith('contraflujo') ? 'Contraflujo'
-                      : tcRaw.toLowerCase().startsWith('flujo') ? 'Flujo'
-                      : tcRaw;
-          const archivoKeyTC = item.archivo_arte || 'sin_arte';
-          key = `${tcKey}|||${archivoKeyTC}`;
-          break;
-        }
-        default:
-          key = item.id;
+    // [Fix #261] Cuando un item tiene artes_multiples con varias URLs
+    // (separadas por "||"), debemos crear un grupo por cada arte distinto
+    // para que el revisor pueda aprobar/rechazar cada uno individualmente.
+    // Antes se agrupaban todos los artes del mismo inventario en una sola
+    // card. Regresión reportada por Jos: "sigue manteniendo agrupados los
+    // dos artes, deben de quedar separados para que se puedan atender de
+    // manera individual".
+    const getArtesForItem = (item: InventoryRow): string[] => {
+      if (item.artes_multiples && item.artes_multiples.includes('||')) {
+        const artes = item.artes_multiples.split('||').map(a => a.trim()).filter(Boolean);
+        if (artes.length > 1) return artes;
       }
-      if (!groups[key]) groups[key] = [];
-      groups[key].push(item);
+      return [item.archivo_arte || 'sin_arte'];
+    };
+    taskInventory.forEach(item => {
+      const artes = getArtesForItem(item);
+      artes.forEach(archivoKey => {
+        let key = '';
+        switch (groupBy) {
+          case 'ciudad': {
+            const ciudadKey = item.ciudad || 'Sin ciudad';
+            key = `${ciudadKey}|||${archivoKey}`;
+            break;
+          }
+          case 'grupo': {
+            const grupoKey = item.grupo_id || item.id;
+            key = `${grupoKey}|||${archivoKey}`;
+            break;
+          }
+          case 'tipo_cara': {
+            // Agrupar por Tipo de Cara (Flujo / Contraflujo / Bonificacion / etc) + archivo.
+            // Normalizamos: si comienza con "Flujo" agrupa todos en "Flujo", igual con "Contraflujo".
+            const tcRaw = (item.tipo_de_cara || 'Sin tipo').toString();
+            const tcKey = tcRaw.toLowerCase().startsWith('contraflujo') ? 'Contraflujo'
+                        : tcRaw.toLowerCase().startsWith('flujo') ? 'Flujo'
+                        : tcRaw;
+            key = `${tcKey}|||${archivoKey}`;
+            break;
+          }
+          default:
+            // 'inventario': separar también por arte para que artes múltiples
+            // en una misma ubicación generen cards independientes.
+            key = artes.length > 1 ? `${item.id}|||${archivoKey}` : item.id;
+        }
+        if (!groups[key]) groups[key] = [];
+        // Clonar el item para que `archivo_arte` apunte al arte específico de
+        // este grupo (los componentes aguas abajo leen item.archivo_arte para
+        // la miniatura y el link "Ver arte").
+        const itemForGroup = artes.length > 1
+          ? { ...item, archivo_arte: archivoKey }
+          : item;
+        groups[key].push(itemForGroup);
+      });
     });
     return groups;
   }, [taskInventory, groupBy]);
