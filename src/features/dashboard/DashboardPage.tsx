@@ -587,14 +587,18 @@ function GoogleMapsChart({
     if (showPins && markerCoords.length > 0) {
       // Se crean una unica vez por cambio de datos; el clusterer se encarga de
       // mostrar/ocultar segun zoom y viewport.
+      // Toda la familia de vendido pinta cian; Bonificado es tentativa (amarillo,
+      // como Reservado). Antes 'Con Arte'/'Vendido bonificado'/'Bonificado' caian
+      // al verde de Disponible.
+      const VENDIDO_PIN = new Set(['Vendido', 'Vendido bonificado', 'Con Arte', 'Sin Arte']);
       const markers = markerCoords.map(coord => {
         const marker = new google.maps.Marker({
           position: { lat: coord.lat, lng: coord.lng },
           icon: {
             path: google.maps.SymbolPath.CIRCLE,
             scale: 4,
-            fillColor: coord.estatus === 'Reservado' ? '#facc15' :
-                       coord.estatus === 'Vendido' ? '#06b6d4' :
+            fillColor: (coord.estatus === 'Reservado' || coord.estatus === 'Bonificado') ? '#facc15' :
+                       VENDIDO_PIN.has(coord.estatus) ? '#06b6d4' :
                        coord.estatus === 'Bloqueado' ? '#f43f5e' : '#22c55e',
             fillOpacity: 0.9,
             strokeColor: '#fff',
@@ -1343,6 +1347,23 @@ function InventoryTable({ data, isLoading, page, totalPages, total, onPageChange
   const allCurrentPageSelected = filteredData.length > 0 && filteredData.every(item => selectedIds.has(item.id));
   const someCurrentPageSelected = filteredData.some(item => selectedIds.has(item.id));
 
+  // Color del badge de estatus. Los vendidos llegan desglosados por tipo de
+  // venta (Renta/Bonificado/Cortesía/Intercambio) — familia cian. 'Bonificado'
+  // es ambiguo: bajo el KPI Reservado es una reserva tentativa (amarillo);
+  // en los demás contextos es una venta bonificada (cian).
+  const VENDIDO_BADGE = new Set(['Vendido', 'Vendido bonificado', 'Con Arte', 'Sin Arte', 'Renta', 'Cortesía', 'Intercambio']);
+  const estatusBadgeClass = (estatus: string): string => {
+    const cyan = `${isDark ? 'bg-cyan-500/20 text-cyan-300 border-cyan-500/30' : 'bg-cyan-50 text-cyan-700 border-cyan-200'} border`;
+    const yellow = `${isDark ? 'bg-yellow-500/20 text-yellow-300 border-yellow-500/30' : 'bg-yellow-50 text-yellow-700 border-yellow-200'} border`;
+    const rose = `${isDark ? 'bg-rose-500/20 text-rose-300 border-rose-500/30' : 'bg-rose-50 text-rose-700 border-rose-200'} border`;
+    const green = `${isDark ? 'bg-green-500/20 text-green-300 border-green-500/30' : 'bg-green-50 text-green-700 border-green-200'} border`;
+    if (VENDIDO_BADGE.has(estatus)) return cyan;
+    if (estatus === 'Bonificado') return activeEstatus === 'Reservado' ? yellow : cyan;
+    if (estatus === 'Reservado') return yellow;
+    if (estatus === 'Bloqueado') return rose;
+    return green;
+  };
+
   // Row renderer
   const renderRow = (item: any, idx: number) => {
     const isSelected = selectedIds.has(item.id);
@@ -1373,12 +1394,7 @@ function InventoryTable({ data, isLoading, page, totalPages, total, onPageChange
           </span>
         </td>
         <td className="px-4 py-3">
-          <span className={`px-2 py-0.5 rounded-full text-[10px] font-medium ${
-            item.estatus === 'Vendido' ? `${isDark ? 'bg-cyan-500/20 text-cyan-300 border-cyan-500/30' : 'bg-cyan-50 text-cyan-700 border-cyan-200'} border` :
-            item.estatus === 'Reservado' ? `${isDark ? 'bg-yellow-500/20 text-yellow-300 border-yellow-500/30' : 'bg-yellow-50 text-yellow-700 border-yellow-200'} border` :
-            item.estatus === 'Bloqueado' ? `${isDark ? 'bg-rose-500/20 text-rose-300 border-rose-500/30' : 'bg-rose-50 text-rose-700 border-rose-200'} border` :
-            `${isDark ? 'bg-green-500/20 text-green-300 border-green-500/30' : 'bg-green-50 text-green-700 border-green-200'} border`
-          }`}>
+          <span className={`px-2 py-0.5 rounded-full text-[10px] font-medium ${estatusBadgeClass(item.estatus || 'Disponible')}`}>
             {item.estatus || 'Disponible'}
           </span>
         </td>
