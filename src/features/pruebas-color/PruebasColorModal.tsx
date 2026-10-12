@@ -55,6 +55,18 @@ export function PruebasColorModal({ isOpen, onClose, propuestaId, contextoNombre
   // lista de pruebas ya solicitadas.
   const [activeTab, setActiveTab] = useState<'pruebas' | 'nueva'>('pruebas');
 
+  // Acordeon de grupos por circuito. Jos 2026-10-12: para propuestas con
+  // muchos circuitos poder colapsar los grupos y navegar mas facil. Por
+  // defecto todos abiertos; el usuario colapsa los que no le interesan.
+  const [collapsedGroups, setCollapsedGroups] = useState<Set<number>>(new Set());
+  const toggleGroup = (scId: number) => {
+    setCollapsedGroups(prev => {
+      const next = new Set(prev);
+      if (next.has(scId)) next.delete(scId); else next.add(scId);
+      return next;
+    });
+  };
+
   // Reset al abrir/cerrar
   useEffect(() => {
     if (isOpen) {
@@ -345,41 +357,66 @@ export function PruebasColorModal({ isOpen, onClose, propuestaId, contextoNombre
                 </div>
               )}
 
-              {/* Listado agrupado por circuito */}
+              {/* Listado agrupado por circuito — acordeon colapsable */}
               {pruebas.length > 0 && (
-                <div className="space-y-5">
-                  {pruebasPorCircuito.map(grupo => (
-                    <div key={grupo.scId} className="space-y-2">
-                      <div className={`flex items-center gap-2 pb-1.5 border-b ${isDark ? 'border-zinc-800' : 'border-gray-200'}`}>
-                        <span className={`text-[10px] px-1.5 py-0.5 rounded font-medium ${isDark ? 'bg-fuchsia-500/15 text-fuchsia-300' : 'bg-fuchsia-50 text-fuchsia-700'}`}>#{grupo.scId}</span>
-                        <span className={`text-xs font-semibold ${isDark ? 'text-zinc-200' : 'text-gray-800'}`}>
-                          {grupo.cara?.articulo || 'Circuito'}
-                        </span>
-                        {grupo.cara && (
-                          <span className={`text-[11px] ${isDark ? 'text-zinc-500' : 'text-gray-500'}`}>
-                            · {grupo.cara.formato || 'Sin formato'} · {grupo.cara.ciudad || grupo.cara.estados || 'Sin ciudad'}
+                <div className="space-y-3">
+                  {pruebasPorCircuito.map(grupo => {
+                    const colapsado = collapsedGroups.has(grupo.scId);
+                    const resumenEstatus = (() => {
+                      const counts: Record<string, number> = {};
+                      for (const p of grupo.pruebas) counts[p.estatus] = (counts[p.estatus] || 0) + 1;
+                      return counts;
+                    })();
+                    return (
+                      <div key={grupo.scId} className={`rounded-lg border overflow-hidden ${isDark ? 'border-zinc-800' : 'border-gray-200'}`}>
+                        <button
+                          type="button"
+                          onClick={() => toggleGroup(grupo.scId)}
+                          className={`w-full flex items-center gap-2 px-3 py-2 text-left transition-colors ${isDark ? 'bg-zinc-900/60 hover:bg-zinc-800/80' : 'bg-gray-50 hover:bg-gray-100'}`}
+                          title={colapsado ? 'Expandir grupo' : 'Colapsar grupo'}
+                        >
+                          <ChevronDown className={`h-3.5 w-3.5 shrink-0 transition-transform ${isDark ? 'text-fuchsia-300' : 'text-fuchsia-600'} ${colapsado ? '-rotate-90' : ''}`} />
+                          <span className={`text-[10px] px-1.5 py-0.5 rounded font-medium ${isDark ? 'bg-fuchsia-500/15 text-fuchsia-300' : 'bg-fuchsia-50 text-fuchsia-700'}`}>#{grupo.scId}</span>
+                          <span className={`text-xs font-semibold ${isDark ? 'text-zinc-200' : 'text-gray-800'}`}>
+                            {grupo.cara?.articulo || 'Circuito'}
                           </span>
+                          {grupo.cara && (
+                            <span className={`text-[11px] truncate ${isDark ? 'text-zinc-500' : 'text-gray-500'}`}>
+                              · {grupo.cara.formato || 'Sin formato'} · {grupo.cara.ciudad || grupo.cara.estados || 'Sin ciudad'}
+                            </span>
+                          )}
+                          <span className={`ml-auto shrink-0 text-[10px] px-1.5 py-0.5 rounded ${isDark ? 'bg-zinc-800 text-zinc-400' : 'bg-gray-100 text-gray-600'}`}>
+                            {grupo.pruebas.length} {grupo.pruebas.length === 1 ? 'prueba' : 'pruebas'}
+                          </span>
+                          {colapsado && (
+                            <span className={`shrink-0 flex items-center gap-1 text-[10px] ${isDark ? 'text-zinc-400' : 'text-gray-500'}`}>
+                              {Object.entries(resumenEstatus).slice(0, 3).map(([est, n]) => (
+                                <span key={est} className={`px-1.5 py-0.5 rounded border ${isDark ? 'border-zinc-700' : 'border-gray-200'}`}>
+                                  {ESTATUS_LABEL[est as EstatusPruebaColor] || est}: {n}
+                                </span>
+                              ))}
+                            </span>
+                          )}
+                        </button>
+                        {!colapsado && (
+                          <div className={`px-3 py-2 space-y-2 ${isDark ? 'bg-zinc-950/40' : 'bg-white'}`}>
+                            {grupo.pruebas.map(p => (
+                              <PruebaCard
+                                key={p.id}
+                                prueba={p}
+                                isDark={isDark}
+                                puedeGestionar={puedeGestionar}
+                                isUpdating={updateEstatusMutation.isPending || deleteMutation.isPending}
+                                onDelete={() => {
+                                  if (confirm(`¿Eliminar la prueba v${p.version}?`)) deleteMutation.mutate(p.id);
+                                }}
+                              />
+                            ))}
+                          </div>
                         )}
-                        <span className={`ml-auto text-[10px] px-1.5 py-0.5 rounded ${isDark ? 'bg-zinc-800 text-zinc-400' : 'bg-gray-100 text-gray-600'}`}>
-                          {grupo.pruebas.length} {grupo.pruebas.length === 1 ? 'prueba' : 'pruebas'}
-                        </span>
                       </div>
-                      <div className="space-y-2">
-                        {grupo.pruebas.map(p => (
-                          <PruebaCard
-                            key={p.id}
-                            prueba={p}
-                            isDark={isDark}
-                            puedeGestionar={puedeGestionar}
-                            isUpdating={updateEstatusMutation.isPending || deleteMutation.isPending}
-                            onDelete={() => {
-                              if (confirm(`¿Eliminar la prueba v${p.version}?`)) deleteMutation.mutate(p.id);
-                            }}
-                          />
-                        ))}
-                      </div>
-                    </div>
-                  ))}
+                    );
+                  })}
                 </div>
               )}
             </div>
