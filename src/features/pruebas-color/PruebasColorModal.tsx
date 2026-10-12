@@ -148,20 +148,24 @@ export function PruebasColorModal({ isOpen, onClose, propuestaId, contextoNombre
       prev.pruebas.push(p);
       porId.set(p.sc_id, prev);
     }
+    const tsPrueba = (p: PruebaColor) => (p.created_at ? new Date(p.created_at).getTime() : 0) || p.id;
     const ordenarPorRecencia = (arr: PruebaColor[]) =>
       [...arr].sort((a, b) => {
-        const ta = a.created_at ? new Date(a.created_at).getTime() : 0;
-        const tb = b.created_at ? new Date(b.created_at).getTime() : 0;
-        if (tb !== ta) return tb - ta;
-        return b.id - a.id;
+        const diff = tsPrueba(b) - tsPrueba(a);
+        return diff !== 0 ? diff : b.id - a.id;
       });
-    // orden: primero circuitos en orden de 'caras', luego los demas
+    // Jos 2026-10-12: ordenar grupos por su prueba mas reciente (desc),
+    // asi el circuito donde se acaba de crear la nueva prueba sale arriba
+    // aunque este mas abajo en el orden original de los circuitos.
     const grupos: Array<{ scId: number; cara: SolicitudCara | null; pruebas: PruebaColor[] }> = [];
-    for (const c of caras) {
-      const g = porId.get(c.id);
-      if (g) { grupos.push({ scId: c.id, cara: g.cara, pruebas: ordenarPorRecencia(g.pruebas) }); porId.delete(c.id); }
+    for (const [scId, g] of porId.entries()) {
+      grupos.push({ scId, cara: g.cara, pruebas: ordenarPorRecencia(g.pruebas) });
     }
-    for (const [scId, g] of porId.entries()) grupos.push({ scId, cara: g.cara, pruebas: ordenarPorRecencia(g.pruebas) });
+    grupos.sort((a, b) => {
+      const maxA = Math.max(...a.pruebas.map(tsPrueba));
+      const maxB = Math.max(...b.pruebas.map(tsPrueba));
+      return maxB - maxA;
+    });
     return grupos;
   }, [pruebas, carasQuery.data]);
 
