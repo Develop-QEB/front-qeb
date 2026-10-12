@@ -931,6 +931,10 @@ function AtenderTareaModal({
   const yaResuelta = tarea.estatus !== 'Pendiente';
   const esRechazada = (tarea.estatus || '').toLowerCase().includes('rechaz');
   const esAtendidaOk = ['atendido', 'finalizada'].includes((tarea.estatus || '').toLowerCase());
+  // Jos 2026-10-12: solo permitir editar/reenviar si la prueba sigue
+  // 'rechazada'. Si ya se reenvio (prueba -> revision_artes) la tarea
+  // vieja rechazada queda como registro historico y no es editable.
+  const puedeReenviar = esRechazada && esRevision && prueba.estatus === 'rechazada';
 
   return (
     <div
@@ -1022,7 +1026,7 @@ function AtenderTareaModal({
 
           {/* Formulario inline para reenviar la prueba rechazada — Jos 2026-10-12.
               Sobreescribe la MISMA prueba, no crea una v2 nueva. */}
-          {showReenviarForm && esRechazada && esRevision && (
+          {showReenviarForm && puedeReenviar && (
             <div className={`rounded-lg border p-3 space-y-3 ${isDark ? 'bg-fuchsia-500/5 border-fuchsia-500/30' : 'bg-fuchsia-50/50 border-fuchsia-300'}`}>
               <div className={`text-[10px] uppercase tracking-wide font-semibold flex items-center gap-1.5 ${isDark ? 'text-fuchsia-300' : 'text-fuchsia-700'}`}>
                 <Upload className="h-3 w-3" /> Reenviar a revisión
@@ -1161,7 +1165,7 @@ function AtenderTareaModal({
                   >
                     Cerrar
                   </button>
-                  {esRechazada && esRevision && (
+                  {puedeReenviar && (
                     <button
                       onClick={() => setShowReenviarForm(true)}
                       className={`text-xs font-semibold px-4 py-2 rounded border transition-colors inline-flex items-center gap-1 ${isDark ? 'border-fuchsia-500/60 text-fuchsia-100 bg-fuchsia-500/20 hover:bg-fuchsia-500/30' : 'border-fuchsia-400 text-fuchsia-800 bg-fuchsia-50 hover:bg-fuchsia-100'}`}
