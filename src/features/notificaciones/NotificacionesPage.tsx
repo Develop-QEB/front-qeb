@@ -32,6 +32,11 @@ import { DesposteoModal, ModoDesposteo } from '../desposteo/DesposteoModal';
 import { puedeFiltrarDesposteo, puedeAprobarDesposteoFacturacion } from '../../services/desposteo.service';
 import { NuevaActividadComercialModal } from './NuevaActividadComercialModal';
 
+// [TEMPORAL] Ocultar "Actividad Comercial" en producción (pedido de Dirección,
+// oct 2026): la feature de Akary entró a main con el merge de release del 29-sep
+// pero aún no debía estar visible. Para reactivarla: poner en false.
+const OCULTAR_ACTIVIDAD_COMERCIAL = true;
+
 // Roles que pueden crear tarea manual "Actividad Comercial".
 // Se muestra el boton solo a estos. El back re-valida.
 const ROLES_ACTIVIDAD_COMERCIAL = new Set([
@@ -3427,7 +3432,7 @@ export function NotificacionesPage() {
   const isDark = useThemeStore((s) => s.theme) === 'dark';
   const currentUserId = useAuthStore((s) => s.user?.id);
   const currentUserRol = useAuthStore((s) => s.user?.rol);
-  const puedeCrearActividadComercial = !!currentUserRol && ROLES_ACTIVIDAD_COMERCIAL.has(currentUserRol);
+  const puedeCrearActividadComercial = !OCULTAR_ACTIVIDAD_COMERCIAL && !!currentUserRol && ROLES_ACTIVIDAD_COMERCIAL.has(currentUserRol);
   const [showActividadModal, setShowActividadModal] = useState(false);
   // Tarea en edición para el modal Actividad Comercial. null = modo creación.
   // Feedback Jos 2026-09-25: plumita reabre el mismo modal precargado.
