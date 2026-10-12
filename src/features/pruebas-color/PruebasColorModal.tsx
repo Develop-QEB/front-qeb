@@ -411,6 +411,7 @@ export function PruebasColorModal({ isOpen, onClose, propuestaId, contextoNombre
                               <PruebaCard
                                 key={p.id}
                                 prueba={p}
+                                cara={grupo.cara}
                                 isDark={isDark}
                                 puedeGestionar={puedeGestionar}
                                 isUpdating={updateEstatusMutation.isPending || deleteMutation.isPending}
@@ -613,12 +614,14 @@ function TabButton({ active, onClick, isDark, icon, label, badge }: {
 // asociada" (revision asignada). Mejor contraste en metadata y notas.
 function PruebaCard({
   prueba,
+  cara,
   isDark,
   puedeGestionar,
   isUpdating,
   onDelete,
 }: {
   prueba: PruebaColor;
+  cara: SolicitudCara | null;
   isDark: boolean;
   puedeGestionar: boolean;
   isUpdating: boolean;
@@ -692,6 +695,7 @@ function PruebaCard({
           se sincronizan al gestor de artes vía campania_id. */}
       <TareasAsociadasSection
         prueba={prueba}
+        cara={cara}
         isDark={isDark}
         puedeGestionar={puedeGestionar}
       />
@@ -707,10 +711,12 @@ function PruebaCard({
 // estatus visual + lista de asignados.
 function TareasAsociadasSection({
   prueba,
+  cara,
   isDark,
   puedeGestionar,
 }: {
   prueba: PruebaColor;
+  cara: SolicitudCara | null;
   isDark: boolean;
   puedeGestionar: boolean;
 }) {
@@ -831,6 +837,7 @@ function TareasAsociadasSection({
         <AtenderTareaModal
           tarea={tareaAbierta}
           prueba={prueba}
+          cara={cara}
           isDark={isDark}
           esUltimaRevision={tareaAbierta.id === idUltimaRevision}
           onClose={() => setOpenTareaId(null)}
@@ -850,6 +857,7 @@ function TareasAsociadasSection({
 function AtenderTareaModal({
   tarea,
   prueba,
+  cara,
   isDark,
   esUltimaRevision,
   onClose,
@@ -860,6 +868,7 @@ function AtenderTareaModal({
 }: {
   tarea: TareaAsociadaPruebaColor;
   prueba: PruebaColor;
+  cara: SolicitudCara | null;
   isDark: boolean;
   // true si esta es la tarea de Revision mas reciente de la prueba.
   // Rechazos viejos (de iteraciones anteriores) tienen esto en false.
@@ -980,6 +989,23 @@ function AtenderTareaModal({
 
         {/* Body (scrolleable para que crezca sin desbordar) */}
         <div className="flex-1 overflow-y-auto px-5 py-4 space-y-4">
+          {/* Plaza / circuito — Jos 2026-10-12: mismo detalle que se ve en el
+              header del acordeon del modal padre, para que el revisor sepa de
+              un vistazo donde va la prueba. */}
+          <div className={`rounded-lg border px-3 py-2 flex items-center gap-2 flex-wrap ${isDark ? 'bg-fuchsia-500/5 border-fuchsia-500/30' : 'bg-fuchsia-50/60 border-fuchsia-200'}`}>
+            <span className={`text-[10px] px-1.5 py-0.5 rounded font-medium ${isDark ? 'bg-fuchsia-500/20 text-fuchsia-200' : 'bg-fuchsia-100 text-fuchsia-700'}`}>
+              #{prueba.sc_id}
+            </span>
+            <span className={`text-xs font-semibold ${isDark ? 'text-zinc-100' : 'text-gray-900'}`}>
+              {cara?.articulo || 'Circuito'}
+            </span>
+            {cara && (
+              <span className={`text-[11px] ${isDark ? 'text-zinc-400' : 'text-gray-600'}`}>
+                · {cara.formato || 'Sin formato'} · {cara.ciudad || cara.estados || 'Sin ciudad'}
+              </span>
+            )}
+          </div>
+
           {/* Preview del arte asociado a la prueba. Click abre lightbox.
               Jos 2026-10-12: usamos tarea.archivo (el arte en el momento de
               esa tarea) y NO prueba.archivo, para que al abrir una tarea
