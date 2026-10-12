@@ -70,14 +70,6 @@ export function PruebasColorModal({ isOpen, onClose, propuestaId, contextoNombre
     });
   };
 
-  // Callback 'Subir nueva version' — invocado desde la card rechazada o
-  // desde el AtenderTareaModal cuando la tarea fue rechazada. Lleva al tab
-  // 'nueva' con el circuito preseleccionado para subir v2.
-  const handleSubirNuevaVersion = (scId: number) => {
-    setScIds([scId]);
-    setActiveTab('nueva');
-    setExpandedGroups(new Set([scId]));
-  };
 
   // Reset al abrir/cerrar
   useEffect(() => {
@@ -425,7 +417,6 @@ export function PruebasColorModal({ isOpen, onClose, propuestaId, contextoNombre
                                 onDelete={() => {
                                   if (confirm(`¿Eliminar la prueba v${p.version}?`)) deleteMutation.mutate(p.id);
                                 }}
-                                onSubirNuevaVersion={handleSubirNuevaVersion}
                               />
                             ))}
                           </div>
@@ -626,14 +617,12 @@ function PruebaCard({
   puedeGestionar,
   isUpdating,
   onDelete,
-  onSubirNuevaVersion,
 }: {
   prueba: PruebaColor;
   isDark: boolean;
   puedeGestionar: boolean;
   isUpdating: boolean;
   onDelete: () => void;
-  onSubirNuevaVersion: (scId: number) => void;
 }) {
   const estatusStyle: Record<EstatusPruebaColor, string> = {
     solicitada: isDark ? 'bg-amber-500/15 text-amber-200 border-amber-500/40' : 'bg-amber-50 text-amber-800 border-amber-300',
@@ -705,7 +694,6 @@ function PruebaCard({
         prueba={prueba}
         isDark={isDark}
         puedeGestionar={puedeGestionar}
-        onSubirNuevaVersion={onSubirNuevaVersion}
       />
     </div>
   );
@@ -721,12 +709,10 @@ function TareasAsociadasSection({
   prueba,
   isDark,
   puedeGestionar,
-  onSubirNuevaVersion,
 }: {
   prueba: PruebaColor;
   isDark: boolean;
   puedeGestionar: boolean;
-  onSubirNuevaVersion: (scId: number) => void;
 }) {
   const pruebaId = prueba.id;
   const queryClient = useQueryClient();
@@ -843,7 +829,6 @@ function TareasAsociadasSection({
           onAprobar={() => resolver.mutate({ tareaId: tareaAbierta.id, accion: 'aprobar' })}
           onRechazar={(comentario) => resolver.mutate({ tareaId: tareaAbierta.id, accion: 'rechazar', comentario })}
           onFinalizar={() => resolver.mutate({ tareaId: tareaAbierta.id, accion: 'finalizar' })}
-          onSubirNuevaVersion={() => { setOpenTareaId(null); onSubirNuevaVersion(prueba.sc_id); }}
           isSaving={resolver.isPending}
         />
       )}
@@ -862,7 +847,6 @@ function AtenderTareaModal({
   onAprobar,
   onRechazar,
   onFinalizar,
-  onSubirNuevaVersion,
   isSaving,
 }: {
   tarea: TareaAsociadaPruebaColor;
@@ -872,7 +856,6 @@ function AtenderTareaModal({
   onAprobar: () => void;
   onRechazar: (comentario?: string) => void;
   onFinalizar: () => void;
-  onSubirNuevaVersion: () => void;
   isSaving: boolean;
 }) {
   const esRevision = tarea.tipo === 'Revisión de artes';
@@ -883,6 +866,49 @@ function AtenderTareaModal({
   // Lightbox del arte de la prueba — Jos pidió preview + click para abrir
   // el visor grande (reutiliza el patrón del modal de galeria de artes).
   const [lightboxOpen, setLightboxOpen] = useState(false);
+
+  // Reenvio inline — Jos 2026-10-12: cuando la tarea es Revisión Rechazada,
+  // el creador puede re-subir arte sobre la misma prueba (NO crea v2).
+  // Se expone un formulario dentro del mismo modalsito.
+  const [showReenviarForm, setShowReenviarForm] = useState(false);
+  const [reenviarFile, setReenviarFile] = useState<File | null>(null);
+  const [reenviarUrl, setReenviarUrl] = useState<string | null>(null);
+  const [reenviarNombre, setReenviarNombre] = useState(prueba.nombre_arte || '');
+  const [reenviarNotas, setReenviarNotas] = useState(prueba.notas || '');
+  const [reenviarError, setReenviarError] = useState<string | null>(null);
+  const [reenviarUploading, setReenviarUploading] = useState(false);
+  const queryClientLocal = useQueryClient();
+  const reenviarMutation = useMutation({
+    mutationFn: () => {
+      if (!reenviarUrl) throw new Error('Sube el archivo del arte primero');
+      return pruebasColorService.reenviar(prueba.id, {
+        archivo: reenviarUrl,
+        nombre_arte: reenviarNombre.trim() || undefined,
+        notas: reenviarNotas.trim() || undefined,
+      });
+    },
+    onSuccess: () => {
+      queryClientLocal.invalidateQueries({ queryKey: ['pruebas-color', 'tareas', prueba.id] });
+      queryClientLocal.invalidateQueries({ queryKey: ['pruebas-color'] });
+      onClose();
+    },
+    onError: (e: Error) => setReenviarError(e.message),
+  });
+  const handleUploadReenviar = async (file: File) => {
+    setReenviarError(null);
+    setReenviarUploading(true);
+    try {
+      const res = await uploadsService.uploadFile(file, 'pruebas-color');
+      setReenviarFile(file);
+      setReenviarUrl(res.url);
+    } catch (e) {
+      setReenviarError(e instanceof Error ? e.message : 'Error al subir archivo');
+      setReenviarFile(null);
+      setReenviarUrl(null);
+    } finally {
+      setReenviarUploading(false);
+    }
+  };
 
   // Resolucion persistida en tarea.evidencia (back guarda motivoRechazo o
   // comentarioResolucion + resueltaPor + resueltaAt al atender la tarea).
@@ -994,6 +1020,77 @@ function AtenderTareaModal({
             </div>
           )}
 
+          {/* Formulario inline para reenviar la prueba rechazada — Jos 2026-10-12.
+              Sobreescribe la MISMA prueba, no crea una v2 nueva. */}
+          {showReenviarForm && esRechazada && esRevision && (
+            <div className={`rounded-lg border p-3 space-y-3 ${isDark ? 'bg-fuchsia-500/5 border-fuchsia-500/30' : 'bg-fuchsia-50/50 border-fuchsia-300'}`}>
+              <div className={`text-[10px] uppercase tracking-wide font-semibold flex items-center gap-1.5 ${isDark ? 'text-fuchsia-300' : 'text-fuchsia-700'}`}>
+                <Upload className="h-3 w-3" /> Reenviar a revisión
+              </div>
+              <div className={`text-[11px] ${isDark ? 'text-zinc-300' : 'text-gray-600'}`}>
+                Sube el arte corregido. Se enviará la MISMA prueba a los mismos revisores (sin crear versión nueva).
+              </div>
+
+              <div>
+                <label className={`text-[11px] font-semibold ${isDark ? 'text-zinc-200' : 'text-gray-800'}`}>Arte *</label>
+                {reenviarUrl ? (
+                  <div className={`mt-1 flex items-center gap-2 text-xs rounded border px-2 py-1.5 ${isDark ? 'bg-zinc-800 border-zinc-700 text-zinc-200' : 'bg-white border-gray-300 text-gray-700'}`}>
+                    <FileImage className="h-3.5 w-3.5" />
+                    <span className="truncate flex-1">{reenviarFile?.name || 'arte.jpg'}</span>
+                    <button
+                      type="button"
+                      onClick={() => { setReenviarFile(null); setReenviarUrl(null); }}
+                      className={`text-[10px] font-medium ${isDark ? 'text-fuchsia-300 hover:text-fuchsia-200' : 'text-fuchsia-700 hover:text-fuchsia-900'}`}
+                    >
+                      Cambiar
+                    </button>
+                  </div>
+                ) : (
+                  <input
+                    type="file"
+                    accept="image/*,application/pdf"
+                    onChange={(e) => { const f = e.target.files?.[0]; if (f) handleUploadReenviar(f); }}
+                    disabled={reenviarUploading}
+                    className={`mt-1 w-full text-[11px] file:mr-2 file:py-1 file:px-2 file:rounded file:border file:text-[11px] file:font-medium ${isDark ? 'text-zinc-300 file:bg-zinc-800 file:border-zinc-700 file:text-zinc-200' : 'text-gray-700 file:bg-white file:border-gray-300 file:text-gray-700'}`}
+                  />
+                )}
+                {reenviarUploading && (
+                  <div className={`mt-1 flex items-center gap-1.5 text-[10px] ${isDark ? 'text-zinc-400' : 'text-gray-500'}`}>
+                    <Loader2 className="h-3 w-3 animate-spin" /> Subiendo arte...
+                  </div>
+                )}
+              </div>
+
+              <div>
+                <label className={`text-[11px] font-semibold ${isDark ? 'text-zinc-200' : 'text-gray-800'}`}>Nombre del arte</label>
+                <input
+                  type="text"
+                  value={reenviarNombre}
+                  onChange={(e) => setReenviarNombre(e.target.value)}
+                  placeholder="Ej. prueba 5 corregida"
+                  className={`mt-1 w-full text-xs rounded-md border px-2.5 py-1.5 outline-none ${isDark ? 'bg-zinc-800 border-zinc-700 text-zinc-100 focus:border-fuchsia-500/60' : 'bg-white border-gray-300 text-gray-900 focus:border-fuchsia-400'}`}
+                />
+              </div>
+
+              <div>
+                <label className={`text-[11px] font-semibold ${isDark ? 'text-zinc-200' : 'text-gray-800'}`}>Notas (opcional)</label>
+                <textarea
+                  value={reenviarNotas}
+                  onChange={(e) => setReenviarNotas(e.target.value)}
+                  rows={2}
+                  placeholder="Cambios aplicados..."
+                  className={`mt-1 w-full text-xs rounded-md border px-2.5 py-1.5 outline-none ${isDark ? 'bg-zinc-800 border-zinc-700 text-zinc-100 focus:border-fuchsia-500/60' : 'bg-white border-gray-300 text-gray-900 focus:border-fuchsia-400'}`}
+                />
+              </div>
+
+              {reenviarError && (
+                <div className={`text-[11px] px-2 py-1 rounded ${isDark ? 'bg-red-500/15 text-red-200 border border-red-500/30' : 'bg-red-50 text-red-700 border border-red-200'}`}>
+                  {reenviarError}
+                </div>
+              )}
+            </div>
+          )}
+
           {asignados.length > 0 && (
             <div>
               <div className={`flex items-center gap-1.5 text-[10px] uppercase tracking-wide font-semibold mb-1 ${isDark ? 'text-zinc-400' : 'text-gray-500'}`}>
@@ -1034,23 +1131,45 @@ function AtenderTareaModal({
         {/* Footer con acciones */}
         <div className={`shrink-0 px-5 py-3 flex items-center justify-end gap-2 border-t ${isDark ? 'border-zinc-800 bg-zinc-900/60' : 'border-gray-200 bg-gray-50/60'}`}>
           {yaResuelta ? (
-            // Tarea ya atendida: Cerrar + "Subir nueva version" si fue rechazada.
-            // Jos 2026-10-12: desde el modal de Detalle de la tarea rechazada el
-            // creador puede ir directo al formulario para subir v2.
+            // Tarea ya atendida: Cerrar + "Subir arte / Reenviar" si fue rechazada.
+            // Jos 2026-10-12: el creador puede editar la MISMA prueba inline en
+            // este mismo modal (no se crea v2).
             <>
-              <button
-                onClick={onClose}
-                className={`text-xs font-semibold px-4 py-2 rounded border transition-colors ${isDark ? 'border-zinc-700 text-zinc-200 bg-zinc-800 hover:bg-zinc-700' : 'border-gray-300 text-gray-800 bg-white hover:bg-gray-50'}`}
-              >
-                Cerrar
-              </button>
-              {esRechazada && esRevision && (
-                <button
-                  onClick={onSubirNuevaVersion}
-                  className={`text-xs font-semibold px-4 py-2 rounded border transition-colors inline-flex items-center gap-1 ${isDark ? 'border-fuchsia-500/60 text-fuchsia-100 bg-fuchsia-500/20 hover:bg-fuchsia-500/30' : 'border-fuchsia-400 text-fuchsia-800 bg-fuchsia-50 hover:bg-fuchsia-100'}`}
-                >
-                  <Upload className="h-3.5 w-3.5" /> Subir nueva versión
-                </button>
+              {showReenviarForm ? (
+                <>
+                  <button
+                    onClick={() => { setShowReenviarForm(false); setReenviarError(null); }}
+                    disabled={reenviarMutation.isPending}
+                    className={`text-xs font-medium px-3 py-1.5 rounded border transition-colors ${isDark ? 'border-zinc-700 text-zinc-300 hover:bg-zinc-800' : 'border-gray-300 text-gray-700 hover:bg-gray-100'} disabled:opacity-50`}
+                  >
+                    Cancelar
+                  </button>
+                  <button
+                    onClick={() => reenviarMutation.mutate()}
+                    disabled={reenviarMutation.isPending || !reenviarUrl || reenviarUploading}
+                    className={`text-xs font-semibold px-4 py-2 rounded border transition-colors inline-flex items-center gap-1 ${isDark ? 'border-fuchsia-500/60 text-fuchsia-100 bg-fuchsia-500/20 hover:bg-fuchsia-500/30' : 'border-fuchsia-400 text-fuchsia-800 bg-fuchsia-50 hover:bg-fuchsia-100'} disabled:opacity-50`}
+                  >
+                    {reenviarMutation.isPending ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Send className="h-3.5 w-3.5" />}
+                    Reenviar a revisión
+                  </button>
+                </>
+              ) : (
+                <>
+                  <button
+                    onClick={onClose}
+                    className={`text-xs font-semibold px-4 py-2 rounded border transition-colors ${isDark ? 'border-zinc-700 text-zinc-200 bg-zinc-800 hover:bg-zinc-700' : 'border-gray-300 text-gray-800 bg-white hover:bg-gray-50'}`}
+                  >
+                    Cerrar
+                  </button>
+                  {esRechazada && esRevision && (
+                    <button
+                      onClick={() => setShowReenviarForm(true)}
+                      className={`text-xs font-semibold px-4 py-2 rounded border transition-colors inline-flex items-center gap-1 ${isDark ? 'border-fuchsia-500/60 text-fuchsia-100 bg-fuchsia-500/20 hover:bg-fuchsia-500/30' : 'border-fuchsia-400 text-fuchsia-800 bg-fuchsia-50 hover:bg-fuchsia-100'}`}
+                    >
+                      <Upload className="h-3.5 w-3.5" /> Subir arte corregido
+                    </button>
+                  )}
+                </>
               )}
             </>
           ) : showRechazoInput ? (
