@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { AlertCircle, Check, ChevronDown, Loader2, Paintbrush, Search, Send, Trash2, X, Upload, FileImage, ClipboardList, Plus, Users } from 'lucide-react';
+import { AlertCircle, Check, CheckCircle2, ChevronDown, Loader2, Paintbrush, Search, Send, Trash2, X, Upload, FileImage, ClipboardList, Plus, Users, XCircle, Flag, ChevronRight } from 'lucide-react';
 import { useThemeStore } from '../../store/themeStore';
 import { useAuthStore } from '../../store/authStore';
 import {
@@ -9,6 +9,7 @@ import {
   EstatusPruebaColor,
   ESTATUS_LABEL,
   puedeGestionarPruebaColor,
+  AccionResolverTarea,
 } from '../../services/pruebasColor.service';
 import { propuestasService, SolicitudCara } from '../../services/propuestas.service';
 import { uploadsService } from '../../services/uploads.service';
@@ -629,28 +630,54 @@ function PruebaCard({
       <TareasAsociadasSection
         pruebaId={prueba.id}
         isDark={isDark}
+        puedeGestionar={puedeGestionar}
       />
     </div>
   );
 }
 
 // ─── Tareas asociadas a una prueba (Revisión + Seguimiento) ─────────────
-// [Fix #258] Jos: las acciones (aprobar/rechazar/finalizar) ya no viven aqui;
-// vienen de la tarea abierta. Esta seccion solo lista estatus visual.
+// [Fix #258 — expand inline] Jos: las acciones aprobar/rechazar/finalizar
+// NO deben ser botones directos del modal; deben vivir dentro de la "tarea
+// abierta". Implementacion: cada tarea es clickeable y al expandirla aparece
+// el panel con las acciones (resolver). El estado colapsado solo muestra el
+// estatus visual + lista de asignados.
 function TareasAsociadasSection({
   pruebaId,
   isDark,
+  puedeGestionar,
 }: {
   pruebaId: number;
   isDark: boolean;
+  puedeGestionar: boolean;
 }) {
+  const queryClient = useQueryClient();
+  // [Fix #258 — modal dentro de modal] Jos: al clickear una tarea pendiente,
+  // debe abrirse OTRO modal (overlay por encima del principal) con las
+  // acciones de aprobar/rechazar/finalizar. El modal principal de prueba de
+  // color NO tiene esas acciones directamente — solo las presenta cuando el
+  // usuario explícitamente "abre" la tarea.
+  const [openTareaId, setOpenTareaId] = useState<number | null>(null);
+
   const tareasQuery = useQuery({
     queryKey: ['pruebas-color', 'tareas', pruebaId],
     queryFn: () => pruebasColorService.listarTareas(pruebaId),
     staleTime: 10_000,
   });
 
+  const resolver = useMutation({
+    mutationFn: ({ tareaId, accion, comentario }: { tareaId: number; accion: AccionResolverTarea; comentario?: string }) =>
+      pruebasColorService.resolverTarea(pruebaId, tareaId, accion, comentario),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['pruebas-color', 'tareas', pruebaId] });
+      queryClient.invalidateQueries({ queryKey: ['pruebas-color'] });
+      setOpenTareaId(null);
+    },
+    onError: (e: Error) => alert(e.message),
+  });
+
   const tareas = tareasQuery.data || [];
+  const tareaAbierta = tareas.find(t => t.id === openTareaId) || null;
 
   if (tareasQuery.isLoading) {
     return (
@@ -682,16 +709,20 @@ function TareasAsociadasSection({
           const asignados = t.asignado ? t.asignado.split(',').map(s => s.trim()).filter(Boolean) : [];
           const asignadosMostrar = asignados.slice(0, 2);
           const extra = asignados.length - asignadosMostrar.length;
+          const puedeAprobar = esRevision && t.estatus === 'Pendiente' && puedeGestionar;
+          const puedeFinalizar = esSeguimiento && t.estatus === 'Pendiente' && puedeGestionar;
+          const tieneAcciones = puedeAprobar || puedeFinalizar;
 
-          // [Fix #258] Jos: las acciones aprobar/rechazar/finalizar NO deben
-          // vivir aqui. Son herramientas de la tarea abierta. El modal solo
-          // muestra el estatus visual de las tareas conforme se van atendiendo.
           return (
-            <div
+            <button
               key={t.id}
-              className={`rounded-lg border ${isDark ? 'bg-zinc-800/60 border-zinc-700' : 'bg-white border-gray-200'}`}
+              type="button"
+              disabled={!tieneAcciones}
+              onClick={() => setOpenTareaId(t.id)}
+              className={`w-full rounded-lg border text-left transition-colors ${isDark ? 'bg-zinc-800/60 border-zinc-700' : 'bg-white border-gray-200'} ${tieneAcciones ? (isDark ? 'hover:bg-zinc-800 hover:border-fuchsia-500/40 cursor-pointer' : 'hover:bg-gray-50 hover:border-fuchsia-300 cursor-pointer') : 'cursor-default'}`}
+              title={tieneAcciones ? 'Abrir tarea para atender' : undefined}
             >
-              <div className="px-2.5 py-2 flex items-start justify-between gap-2">
+              <div className="px-2.5 py-2 flex items-center justify-between gap-2">
                 <div className="flex items-center gap-1.5 min-w-0 flex-1">
                   <span className={`shrink-0 px-1.5 py-0.5 rounded-full text-[10px] font-semibold ${estadoColor(t.estatus)}`}>
                     {t.estatus || 'Sin estado'}
@@ -700,6 +731,9 @@ function TareasAsociadasSection({
                     {esRevision ? 'Revisión de artes' : esSeguimiento ? 'Seguimiento' : t.tipo}
                   </span>
                 </div>
+                {tieneAcciones && (
+                  <ChevronRight className={`h-3.5 w-3.5 shrink-0 ${isDark ? 'text-fuchsia-300' : 'text-fuchsia-600'}`} />
+                )}
               </div>
               {asignados.length > 0 && (
                 <div className={`px-2.5 pb-2 flex items-center gap-1.5 text-[11px] ${isDark ? 'text-zinc-300' : 'text-gray-600'}`}>
@@ -712,9 +746,185 @@ function TareasAsociadasSection({
                   </span>
                 </div>
               )}
-            </div>
+            </button>
           );
         })}
+      </div>
+
+      {/* Modal secundario de atención de tarea.
+          [Fix #258] Jos: debe abrirse "otro modal" encima del principal con la
+          info de la tarea + acciones aprobar/rechazar/finalizar. Overlay con
+          z-index mayor al principal (z-[80]) y stop-propagation al clickear el
+          contenido para que no cierre el modal padre. */}
+      {tareaAbierta && (
+        <AtenderTareaModal
+          tarea={tareaAbierta}
+          isDark={isDark}
+          onClose={() => setOpenTareaId(null)}
+          onAprobar={() => resolver.mutate({ tareaId: tareaAbierta.id, accion: 'aprobar' })}
+          onRechazar={(comentario) => resolver.mutate({ tareaId: tareaAbierta.id, accion: 'rechazar', comentario })}
+          onFinalizar={() => resolver.mutate({ tareaId: tareaAbierta.id, accion: 'finalizar' })}
+          isSaving={resolver.isPending}
+        />
+      )}
+    </div>
+  );
+}
+
+// ─── Modal secundario: atender tarea de prueba de color ─────────────────
+// [Fix #258] Overlay por encima del modal principal con info + acciones.
+// Reutilizable: también puede invocarse desde el drawer de notificaciones.
+function AtenderTareaModal({
+  tarea,
+  isDark,
+  onClose,
+  onAprobar,
+  onRechazar,
+  onFinalizar,
+  isSaving,
+}: {
+  tarea: { id: number; tipo: string | null; estatus: string | null; asignado: string | null };
+  isDark: boolean;
+  onClose: () => void;
+  onAprobar: () => void;
+  onRechazar: (comentario?: string) => void;
+  onFinalizar: () => void;
+  isSaving: boolean;
+}) {
+  const esRevision = tarea.tipo === 'Revisión de artes';
+  const esSeguimiento = tarea.tipo === 'Seguimiento Prueba de color';
+  const asignados = tarea.asignado ? tarea.asignado.split(',').map(s => s.trim()).filter(Boolean) : [];
+  const [showRechazoInput, setShowRechazoInput] = useState(false);
+  const [comentarioRechazo, setComentarioRechazo] = useState('');
+
+  return (
+    <div
+      className="fixed inset-0 z-[80] flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm"
+      onClick={onClose}
+    >
+      <div
+        onClick={(e) => e.stopPropagation()}
+        className={`w-full max-w-md rounded-xl border shadow-2xl ${isDark ? 'bg-zinc-900 border-zinc-700 text-zinc-100' : 'bg-white border-gray-200 text-gray-900'}`}
+      >
+        {/* Header */}
+        <div className={`px-4 py-3 flex items-start justify-between gap-3 border-b ${isDark ? 'border-zinc-800' : 'border-gray-200'}`}>
+          <div className="flex-1 min-w-0">
+            <div className={`text-[10px] uppercase tracking-wide font-semibold ${isDark ? 'text-fuchsia-300' : 'text-fuchsia-700'}`}>
+              Atender tarea
+            </div>
+            <div className="text-sm font-semibold mt-0.5">
+              {esRevision ? 'Revisión de artes' : esSeguimiento ? 'Seguimiento Prueba de color' : tarea.tipo}
+            </div>
+            <div className={`text-[11px] mt-0.5 ${isDark ? 'text-zinc-400' : 'text-gray-500'}`}>
+              Tarea #{tarea.id} · {tarea.estatus || 'Sin estado'}
+            </div>
+          </div>
+          <button
+            onClick={onClose}
+            className={`shrink-0 p-1 rounded transition-colors ${isDark ? 'text-zinc-400 hover:text-zinc-100 hover:bg-zinc-800' : 'text-gray-500 hover:text-gray-900 hover:bg-gray-100'}`}
+          >
+            <X className="h-4 w-4" />
+          </button>
+        </div>
+
+        {/* Body */}
+        <div className="px-4 py-3 space-y-3">
+          {asignados.length > 0 && (
+            <div>
+              <div className={`flex items-center gap-1.5 text-[10px] uppercase tracking-wide font-semibold mb-1 ${isDark ? 'text-zinc-400' : 'text-gray-500'}`}>
+                <Users className="h-3 w-3" /> Asignados ({asignados.length})
+              </div>
+              <div className={`text-xs ${isDark ? 'text-zinc-200' : 'text-gray-700'}`}>{asignados.join(', ')}</div>
+            </div>
+          )}
+
+          <div className={`text-xs rounded-md px-3 py-2 ${isDark ? 'bg-zinc-800/60 text-zinc-300 border border-zinc-700' : 'bg-gray-50 text-gray-600 border border-gray-200'}`}>
+            {esRevision
+              ? 'Aprobar permite al arte avanzar a producción. Rechazar devuelve la prueba al diseñador con un comentario.'
+              : esSeguimiento
+                ? 'Marca la tarea de seguimiento como finalizada una vez atendida la aprobación del cliente.'
+                : 'Elige una acción para resolver esta tarea.'}
+          </div>
+
+          {/* Formulario de rechazo (solo cuando el usuario pulsa Rechazar) */}
+          {showRechazoInput && (
+            <div className="space-y-1.5">
+              <label className={`text-[11px] font-semibold ${isDark ? 'text-zinc-300' : 'text-gray-700'}`}>
+                Motivo del rechazo (opcional)
+              </label>
+              <textarea
+                value={comentarioRechazo}
+                onChange={(e) => setComentarioRechazo(e.target.value)}
+                rows={3}
+                autoFocus
+                placeholder="Describe por qué se rechaza la prueba..."
+                className={`w-full text-xs rounded-md border px-2.5 py-1.5 outline-none transition-colors ${isDark ? 'bg-zinc-800 border-zinc-700 text-zinc-100 placeholder-zinc-500 focus:border-fuchsia-500/60' : 'bg-white border-gray-300 text-gray-900 placeholder-gray-400 focus:border-fuchsia-400'}`}
+              />
+            </div>
+          )}
+        </div>
+
+        {/* Footer con acciones */}
+        <div className={`px-4 py-3 flex items-center justify-end gap-2 border-t ${isDark ? 'border-zinc-800 bg-zinc-900/60' : 'border-gray-200 bg-gray-50/60'}`}>
+          {showRechazoInput ? (
+            <>
+              <button
+                onClick={() => { setShowRechazoInput(false); setComentarioRechazo(''); }}
+                disabled={isSaving}
+                className={`text-xs font-medium px-3 py-1.5 rounded border transition-colors ${isDark ? 'border-zinc-700 text-zinc-300 hover:bg-zinc-800' : 'border-gray-300 text-gray-700 hover:bg-gray-100'} disabled:opacity-50`}
+              >
+                Cancelar
+              </button>
+              <button
+                onClick={() => onRechazar(comentarioRechazo.trim() || undefined)}
+                disabled={isSaving}
+                className={`text-xs font-semibold px-3 py-1.5 rounded border transition-colors inline-flex items-center gap-1 ${isDark ? 'border-red-500/60 text-red-100 bg-red-500/20 hover:bg-red-500/30' : 'border-red-400 text-red-800 bg-red-50 hover:bg-red-100'} disabled:opacity-50`}
+              >
+                {isSaving ? <Loader2 className="h-3 w-3 animate-spin" /> : <XCircle className="h-3 w-3" />}
+                Confirmar rechazo
+              </button>
+            </>
+          ) : (
+            <>
+              <button
+                onClick={onClose}
+                disabled={isSaving}
+                className={`text-xs font-medium px-3 py-1.5 rounded border transition-colors ${isDark ? 'border-zinc-700 text-zinc-300 hover:bg-zinc-800' : 'border-gray-300 text-gray-700 hover:bg-gray-100'} disabled:opacity-50`}
+              >
+                Cerrar
+              </button>
+              {esRevision && (
+                <>
+                  <button
+                    onClick={() => setShowRechazoInput(true)}
+                    disabled={isSaving}
+                    className={`text-xs font-semibold px-3 py-1.5 rounded border transition-colors inline-flex items-center gap-1 ${isDark ? 'border-red-500/50 text-red-200 bg-red-500/10 hover:bg-red-500/20' : 'border-red-400 text-red-800 bg-red-50 hover:bg-red-100'} disabled:opacity-50`}
+                  >
+                    <XCircle className="h-3 w-3" /> Rechazar
+                  </button>
+                  <button
+                    onClick={onAprobar}
+                    disabled={isSaving}
+                    className={`text-xs font-semibold px-3 py-1.5 rounded border transition-colors inline-flex items-center gap-1 ${isDark ? 'border-emerald-500/60 text-emerald-100 bg-emerald-500/20 hover:bg-emerald-500/30' : 'border-emerald-400 text-emerald-800 bg-emerald-50 hover:bg-emerald-100'} disabled:opacity-50`}
+                  >
+                    {isSaving ? <Loader2 className="h-3 w-3 animate-spin" /> : <CheckCircle2 className="h-3 w-3" />}
+                    Aprobar
+                  </button>
+                </>
+              )}
+              {esSeguimiento && (
+                <button
+                  onClick={onFinalizar}
+                  disabled={isSaving}
+                  className={`text-xs font-semibold px-3 py-1.5 rounded border transition-colors inline-flex items-center gap-1 ${isDark ? 'border-emerald-500/60 text-emerald-100 bg-emerald-500/20 hover:bg-emerald-500/30' : 'border-emerald-400 text-emerald-800 bg-emerald-50 hover:bg-emerald-100'} disabled:opacity-50`}
+                >
+                  {isSaving ? <Loader2 className="h-3 w-3 animate-spin" /> : <Flag className="h-3 w-3" />}
+                  Finalizar
+                </button>
+              )}
+            </>
+          )}
+        </div>
       </div>
     </div>
   );
