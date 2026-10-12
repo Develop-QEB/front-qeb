@@ -22,7 +22,7 @@ import { campanasService, ReservaModalItem } from '../../services/campanas.servi
 import type { ReservaHistorialItem } from '../../services/propuestas.service';
 import { clientesService } from '../../services/clientes.service';
 import { formatCurrency } from '../../lib/utils';
-import { monthLabelLong, monthLabelShort, dayMonthShort, getRequiredPeriodoForArticulo } from '../../lib/periodos';
+import { monthLabelLong, monthLabelShort, dayMonthShort, articuloValidoEnPeriodo } from '../../lib/periodos';
 import { parseCircuitoDigital } from '../../lib/circuitos';
 import { esInventarioBloqueado } from '../../lib/bloqueoInventario';
 import { circuitosService } from '../../services/circuitos.service';
@@ -8775,8 +8775,9 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
                             // BF/CF solo aparecen en el dropdown de bonificación, no en el principal
                             if (code.startsWith('BF') || code.startsWith('CF')) return false;
                             // Gran Formato ↔ periodo: mensual solo muestra Gran Formato;
-                            // catorcena los excluye (mismo criterio que en solicitudes).
-                            return getRequiredPeriodoForArticulo(a.ItemName, a.ItemCode) === tipoPeriodo;
+                            // catorcena los excluye. Excepción: digital PB/CL también
+                            // en mensual (ver articuloValidoEnPeriodo).
+                            return articuloValidoEnPeriodo(a.ItemName, a.ItemCode, tipoPeriodo);
                           })}
                           value={selectedArticulo}
                           onChange={async (item: SAPArticulo) => {
