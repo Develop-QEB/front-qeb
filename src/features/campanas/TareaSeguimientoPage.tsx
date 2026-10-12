@@ -2630,6 +2630,18 @@ function UploadArtModal({
                                         <span className="px-1.5 py-0.5 bg-emerald-500/90 text-white border-l border-fuchsia-500/60">Aprobada</span>
                                       </span>
                                     )}
+                                    {/* Jos 2026-10-12: badge adicional para 'Estatus Operaciones'
+                                        (texto manual que captura el usuario al asignar el arte).
+                                        Vive en la esquina inferior izquierda, encima del area
+                                        oscura con nombre_arte/nota. */}
+                                    {art.estatus_operaciones && (
+                                      <span
+                                        className="absolute bottom-7 left-1 max-w-[75%] truncate px-1.5 py-0.5 rounded text-[10px] font-semibold pointer-events-none bg-amber-500/90 text-white shadow-sm"
+                                        title={`Estatus Operaciones: ${art.estatus_operaciones}`}
+                                      >
+                                        {art.estatus_operaciones}
+                                      </span>
+                                    )}
                                     <div className="absolute bottom-0 left-0 right-0 bg-black/70 px-1.5 py-1 pointer-events-none">
                                       <p className="text-[10px] text-zinc-200 truncate" title={art.nombre_arte || art.nombre}>
                                         {art.nombre_arte || art.nombre}
@@ -2984,6 +2996,18 @@ function UploadArtModal({
                                       >
                                         <span className="px-1.5 py-0.5 bg-fuchsia-500/90 text-white">PC v{art.prueba_color_version ?? '?'}</span>
                                         <span className="px-1.5 py-0.5 bg-emerald-500/90 text-white border-l border-fuchsia-500/60">Aprobada</span>
+                                      </span>
+                                    )}
+                                    {/* Jos 2026-10-12: badge adicional para 'Estatus Operaciones'
+                                        (texto manual que captura el usuario al asignar el arte).
+                                        Vive en la esquina inferior izquierda, encima del area
+                                        oscura con nombre_arte/nota. */}
+                                    {art.estatus_operaciones && (
+                                      <span
+                                        className="absolute bottom-7 left-1 max-w-[75%] truncate px-1.5 py-0.5 rounded text-[10px] font-semibold pointer-events-none bg-amber-500/90 text-white shadow-sm"
+                                        title={`Estatus Operaciones: ${art.estatus_operaciones}`}
+                                      >
+                                        {art.estatus_operaciones}
                                       </span>
                                     )}
                                     <div className="absolute bottom-0 left-0 right-0 bg-black/70 px-1.5 py-1 pointer-events-none">
