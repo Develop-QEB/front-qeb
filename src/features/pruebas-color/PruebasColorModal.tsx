@@ -943,6 +943,14 @@ function AtenderTareaModal({
   const asignados = tarea.asignado ? tarea.asignado.split(',').map(s => s.trim()).filter(Boolean) : [];
   const [showRechazoInput, setShowRechazoInput] = useState(false);
   const [comentarioRechazo, setComentarioRechazo] = useState('');
+  // Jos 2026-10-12: scroll automatico al abrir el form de rechazo para
+  // que los campos de adjuntos sean visibles sin scroll manual.
+  const rechazoFormRef = useRef<HTMLDivElement | null>(null);
+  useEffect(() => {
+    if (showRechazoInput && rechazoFormRef.current) {
+      rechazoFormRef.current.scrollIntoView({ behavior: 'smooth', block: 'end' });
+    }
+  }, [showRechazoInput]);
   // Jos 2026-10-12: adjuntos opcionales del rechazo. Van al back y
   // aparecen en la notificacion al creador.
   const [rechazoFile, setRechazoFile] = useState<File | null>(null);
@@ -1317,7 +1325,7 @@ function AtenderTareaModal({
 
           {/* Formulario de rechazo (solo cuando el usuario pulsa Rechazar) */}
           {showRechazoInput && (
-            <div className="space-y-1.5">
+            <div ref={rechazoFormRef} className="space-y-1.5">
               <label className={`text-[11px] font-semibold ${isDark ? 'text-zinc-300' : 'text-gray-700'}`}>
                 Motivo del rechazo (opcional)
               </label>
