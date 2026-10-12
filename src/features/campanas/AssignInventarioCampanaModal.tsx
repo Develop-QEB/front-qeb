@@ -8747,7 +8747,7 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
                             // Gran Formato ↔ periodo: mensual solo muestra Gran Formato;
                             // catorcena los excluye. Excepción: digital PB/CL también
                             // en mensual (ver articuloValidoEnPeriodo).
-                            return articuloValidoEnPeriodo(a.ItemName, a.ItemCode, tipoPeriodo);
+                            return articuloValidoEnPeriodo(a.ItemName, a.ItemCode, tipoPeriodo as 'catorcena' | 'mensual');
                           })}
                           value={selectedArticulo}
                           onChange={async (item: SAPArticulo) => {
