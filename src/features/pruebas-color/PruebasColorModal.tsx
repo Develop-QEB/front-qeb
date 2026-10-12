@@ -9,6 +9,8 @@ import {
   EstatusPruebaColor,
   ESTATUS_LABEL,
   puedeGestionarPruebaColor,
+  puedeCrearPruebaColor,
+  puedeRevisarPruebaColor,
   AccionResolverTarea,
   TareaAsociadaPruebaColor,
 } from '../../services/pruebasColor.service';
@@ -51,6 +53,9 @@ export function PruebasColorModal({ isOpen, onClose, propuestaId, contextoNombre
   const user = useAuthStore(s => s.user);
   const queryClient = useQueryClient();
   const puedeGestionar = puedeGestionarPruebaColor(user?.rol);
+  // Jos 2026-10-12: permisos separados para controlar la UI.
+  const puedeCrear = puedeCrearPruebaColor(user?.rol);
+  const puedeRevisar = puedeRevisarPruebaColor(user?.rol);
 
   // Multi-select de circuitos. Feedback Jos 2026-10-06: hay casos donde una
   // sola prueba de color aplica a varios circuitos (ej. mismo arte en Renta
@@ -286,7 +291,7 @@ export function PruebasColorModal({ isOpen, onClose, propuestaId, contextoNombre
             label="Pruebas"
             badge={pruebasAll.length}
           />
-          {puedeGestionar && (
+          {puedeCrear && (
             <TabButton
               active={activeTab === 'nueva'}
               onClick={() => setActiveTab('nueva')}
@@ -431,6 +436,8 @@ export function PruebasColorModal({ isOpen, onClose, propuestaId, contextoNombre
                                 cara={grupo.cara}
                                 isDark={isDark}
                                 puedeGestionar={puedeGestionar}
+                                puedeCrear={puedeCrear}
+                                puedeRevisar={puedeRevisar}
                                 isUpdating={updateEstatusMutation.isPending || deleteMutation.isPending}
                                 onDelete={() => {
                                   if (confirm(`¿Eliminar la prueba v${p.version}?`)) deleteMutation.mutate(p.id);
@@ -447,7 +454,7 @@ export function PruebasColorModal({ isOpen, onClose, propuestaId, contextoNombre
             </div>
           )}
 
-          {activeTab === 'nueva' && puedeGestionar && (
+          {activeTab === 'nueva' && puedeCrear && (
             <div className="space-y-4">
               <div className={`rounded-lg border p-3 ${isDark ? 'bg-zinc-800/40 border-zinc-800' : 'bg-gray-50 border-gray-200'}`}>
                 <label className={labelCls}>Circuito(s) a solicitar *</label>
@@ -611,7 +618,7 @@ export function PruebasColorModal({ isOpen, onClose, propuestaId, contextoNombre
             </div>
           )}
 
-          {activeTab === 'nueva' && !puedeGestionar && (
+          {activeTab === 'nueva' && !puedeCrear && (
             <div className={`px-3 py-6 rounded-lg text-sm text-center ${isDark ? 'bg-zinc-800/60 border border-zinc-700 text-zinc-400' : 'bg-gray-50 border border-gray-200 text-gray-500'}`}>
               Tu rol no puede solicitar pruebas de color.
             </div>
@@ -664,6 +671,8 @@ function PruebaCard({
   cara,
   isDark,
   puedeGestionar,
+  puedeCrear,
+  puedeRevisar,
   isUpdating,
   onDelete,
 }: {
@@ -671,6 +680,8 @@ function PruebaCard({
   cara: SolicitudCara | null;
   isDark: boolean;
   puedeGestionar: boolean;
+  puedeCrear: boolean;
+  puedeRevisar: boolean;
   isUpdating: boolean;
   onDelete: () => void;
 }) {
@@ -752,6 +763,8 @@ function PruebaCard({
         cara={cara}
         isDark={isDark}
         puedeGestionar={puedeGestionar}
+        puedeCrear={puedeCrear}
+        puedeRevisar={puedeRevisar}
       />
     </div>
   );
@@ -768,11 +781,15 @@ function TareasAsociadasSection({
   cara,
   isDark,
   puedeGestionar,
+  puedeCrear,
+  puedeRevisar,
 }: {
   prueba: PruebaColor;
   cara: SolicitudCara | null;
   isDark: boolean;
   puedeGestionar: boolean;
+  puedeCrear: boolean;
+  puedeRevisar: boolean;
 }) {
   const pruebaId = prueba.id;
   const queryClient = useQueryClient();
@@ -845,8 +862,9 @@ function TareasAsociadasSection({
           const asignados = t.asignado ? t.asignado.split(',').map(s => s.trim()).filter(Boolean) : [];
           const asignadosMostrar = asignados.slice(0, 2);
           const extra = asignados.length - asignadosMostrar.length;
-          const puedeAprobar = esRevision && t.estatus === 'Pendiente' && puedeGestionar;
-          const puedeFinalizar = esSeguimiento && t.estatus === 'Pendiente' && puedeGestionar;
+          // Jos 2026-10-12: Aprobar/Rechazar solo Diseño; Finalizar solo Analista.
+          const puedeAprobar = esRevision && t.estatus === 'Pendiente' && puedeRevisar;
+          const puedeFinalizar = esSeguimiento && t.estatus === 'Pendiente' && puedeCrear;
           const tieneAcciones = puedeAprobar || puedeFinalizar;
 
           // Jos 2026-10-12: una tarea ya resuelta (Rechazado/Atendido/
@@ -898,6 +916,8 @@ function TareasAsociadasSection({
           prueba={prueba}
           cara={cara}
           isDark={isDark}
+          puedeCrear={puedeCrear}
+          puedeRevisar={puedeRevisar}
           esUltimaRevision={tareaAbierta.id === idUltimaRevision}
           onClose={() => setOpenTareaId(null)}
           onAprobar={() => resolver.mutate({ tareaId: tareaAbierta.id, accion: 'aprobar' })}
@@ -918,6 +938,8 @@ function AtenderTareaModal({
   prueba,
   cara,
   isDark,
+  puedeCrear,
+  puedeRevisar,
   esUltimaRevision,
   onClose,
   onAprobar,
@@ -929,6 +951,8 @@ function AtenderTareaModal({
   prueba: PruebaColor;
   cara: SolicitudCara | null;
   isDark: boolean;
+  puedeCrear: boolean;
+  puedeRevisar: boolean;
   // true si esta es la tarea de Revision mas reciente de la prueba.
   // Rechazos viejos (de iteraciones anteriores) tienen esto en false.
   esUltimaRevision: boolean;
@@ -1051,7 +1075,7 @@ function AtenderTareaModal({
   // Jos 2026-10-12: solo permitir editar/reenviar si la prueba sigue
   // 'rechazada'. Si ya se reenvio (prueba -> revision_artes) la tarea
   // vieja rechazada queda como registro historico y no es editable.
-  const puedeReenviar = esRechazada && esRevision && prueba.estatus === 'rechazada' && esUltimaRevision;
+  const puedeReenviar = esRechazada && esRevision && prueba.estatus === 'rechazada' && esUltimaRevision && puedeCrear;
 
   return (
     <div
@@ -1327,7 +1351,7 @@ function AtenderTareaModal({
           {showRechazoInput && (
             <div ref={rechazoFormRef} className="space-y-1.5">
               <label className={`text-[11px] font-semibold ${isDark ? 'text-zinc-300' : 'text-gray-700'}`}>
-                Motivo del rechazo (opcional)
+                Motivo del rechazo *
               </label>
               <textarea
                 value={comentarioRechazo}
@@ -1443,17 +1467,22 @@ function AtenderTareaModal({
               </button>
               <button
                 onClick={() => {
+                  const motivoLimpio = comentarioRechazo.trim();
+                  if (!motivoLimpio) {
+                    alert('El motivo del rechazo es obligatorio');
+                    return;
+                  }
                   const enlaceLimpio = rechazoEnlace.trim();
                   if (enlaceLimpio && !esUrlValido(enlaceLimpio)) {
                     alert('El link no es válido. Debe comenzar con http:// o https://');
                     return;
                   }
-                  onRechazar(comentarioRechazo.trim() || undefined, {
+                  onRechazar(motivoLimpio, {
                     archivo_adjunto: rechazoFileUrl || null,
                     enlace_adjunto: enlaceLimpio || null,
                   });
                 }}
-                disabled={isSaving || rechazoFileUploading}
+                disabled={isSaving || rechazoFileUploading || !comentarioRechazo.trim()}
                 className={`text-xs font-semibold px-3 py-1.5 rounded border transition-colors inline-flex items-center gap-1 ${isDark ? 'border-red-500/60 text-red-100 bg-red-500/20 hover:bg-red-500/30' : 'border-red-400 text-red-800 bg-red-50 hover:bg-red-100'} disabled:opacity-50`}
               >
                 {isSaving ? <Loader2 className="h-3 w-3 animate-spin" /> : <XCircle className="h-3 w-3" />}
@@ -1469,7 +1498,7 @@ function AtenderTareaModal({
               >
                 Cerrar
               </button>
-              {esRevision && (
+              {esRevision && puedeRevisar && (
                 <>
                   <button
                     onClick={() => setShowRechazoInput(true)}
@@ -1488,7 +1517,7 @@ function AtenderTareaModal({
                   </button>
                 </>
               )}
-              {esSeguimiento && (
+              {esSeguimiento && puedeCrear && (
                 <button
                   onClick={onFinalizar}
                   disabled={isSaving}
