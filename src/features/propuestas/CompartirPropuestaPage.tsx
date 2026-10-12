@@ -35,7 +35,7 @@ import { GOOGLE_MAPS_LOADER_OPTIONS } from '../../config/googleMaps';
 // Formatos -> capasMapa.ts). Vista interna: llegan TODAS, incluidas las que
 // Trafico oculto al cliente; aqui se pueden mostrar/ocultar y borrar.
 import { capasMapaService } from '../../services/capasMapa.service';
-import { CapaMapa, boundsDeCapas } from './capasMapa';
+import { CapaMapa, boundsDeCapas, crearFiltroCapas } from './capasMapa';
 import { CapasMapaPanel } from './CapasMapaPanel';
 import { CapasMapaOverlay } from './CapasMapaOverlay';
 // Buscador de POI libre (misma busqueda por area que el Buscador de Formatos).
@@ -420,13 +420,22 @@ export function CompartirPropuestaPage() {
     return Object.entries(counts).map(([name, value]) => ({ name, value })).sort((a, b) => b.value - a.value);
   }, [catorcenaFilteredInventario]);
 
-  // Markers visibles en el mapa (con coords y respetando la selección). Memoizado para
-  // no reconstruir el arreglo salvo que cambie el inventario filtrado o la selección.
+  // Capas prendidas = filtro espacial ademas de visualizacion: el mapa deja solo
+  // el inventario que cumple el criterio (dentro de "cerca de" / fuera de "lejos
+  // de"), igual que el "Conservar" del Buscador de Formatos.
+  const filtroCapas = useMemo(
+    () => crearFiltroCapas(capas.filter(c => capasActivas.has(c.id))),
+    [capas, capasActivas]
+  );
+
+  // Markers visibles en el mapa (con coords, respetando la selección y las capas
+  // prendidas). Memoizado para no reconstruir el arreglo salvo que algo cambie.
   const visibleMarkers = useMemo(() => {
     return catorcenaFilteredInventario.filter(i =>
       i.latitud && i.longitud && (selectedItems.size === 0 || selectedItems.has(i.rsv_ids))
+      && (!filtroCapas || filtroCapas(i.latitud, i.longitud))
     );
-  }, [catorcenaFilteredInventario, selectedItems]);
+  }, [catorcenaFilteredInventario, selectedItems, filtroCapas]);
 
   // En el mapa EMBEBIDO: si hay demasiados pines (>2000) y no hay selección, no pintarlos
   // todos (traba el navegador). Se piden que seleccione circuitos primero. NO aplica a
@@ -837,6 +846,7 @@ export function CompartirPropuestaPage() {
   //     entre catorcenas) — el bug que hacía que el mapa no respondiera a la seleccion.
   //   - Solo chips de catorcena: ?periodos=YYYY-NN,... (compacto, no enumera cada pin).
   //   - Sin nada seleccionado: sin params -> mapa completo.
+  //   - Capas de Trafico prendidas en el mapa embebido: ?capas=id,id (llegan prendidas).
   const handleExpandMap = () => {
     const base = catorcenaFilteredInventario; // respeta los chips de catorcena
     const params = new URLSearchParams();
@@ -851,6 +861,11 @@ export function CompartirPropuestaPage() {
     } else if (selectedCatorcenas.size > 0) {
       params.set('periodos', Array.from(selectedCatorcenas).join(','));
     }
+
+    // Capas de Trafico prendidas aqui -> llegan prendidas al visor (?capas=ids).
+    // Solo las visibles al cliente: las ocultas ni viajan en el endpoint publico.
+    const capasSel = capas.filter(c => capasActivas.has(c.id) && c.visible_cliente).map(c => c.id);
+    if (capasSel.length > 0) params.set('capas', capasSel.join(','));
 
     const qs = params.toString();
     window.open(`/cliente/propuesta/${propuestaId}/mapa${qs ? `?${qs}` : ''}`, '_blank', 'noopener,noreferrer');
