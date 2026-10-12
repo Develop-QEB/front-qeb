@@ -27,7 +27,7 @@ import { BULK_DELETE_ENABLED } from '../../config/featureFlags';
 import { NotasDireccionBitacora } from '../notificaciones/NotasDireccionBitacora';
 import { NuevaNotaDireccionModal } from '../notificaciones/NuevaNotaDireccionModal';
 import { notasDireccionService } from '../../services/notasDireccion.service';
-import { getRequiredPeriodoForArticulo } from '../../lib/periodos';
+import { articuloValidoEnPeriodo } from '../../lib/periodos';
 
 // Tarifas now come from SAP (U_IMU_PublicPrice = tarifa publica, PriceList 11 = tarifa piso)
 
@@ -1003,7 +1003,8 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
     return articulosData.filter(a => {
       const code = a.ItemCode.toUpperCase();
       if (code.startsWith('BF') || code.startsWith('CF')) return false;
-      return getRequiredPeriodoForArticulo(a.ItemName, a.ItemCode) === tipoPeriodo;
+      // Digital PB/CL también salen en mensual (ver articuloValidoEnPeriodo).
+      return articuloValidoEnPeriodo(a.ItemName, a.ItemCode, tipoPeriodo);
     });
   }, [articulosData, tipoPeriodo]);
 
@@ -2958,7 +2959,7 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
                         setMesFin(undefined);
                         setCaras([]);
                         // Clear articulo/formato if incompatible with new period type
-                        if (newCara.articulo && getRequiredPeriodoForArticulo(newCara.articulo.ItemName, newCara.articulo.ItemCode) !== 'catorcena') {
+                        if (newCara.articulo && !articuloValidoEnPeriodo(newCara.articulo.ItemName, newCara.articulo.ItemCode, 'catorcena')) {
                           setNewCara(prev => ({ ...prev, articulo: null, formato: '', tipo: '', plaza: '', estado: '', ciudades: [], tarifaPublica: 0 }));
                         } else if (newCara.formato && getRequiredPeriodoForFormato(newCara.formato) !== 'catorcena') {
                           setNewCara(prev => ({ ...prev, formato: '' }));
@@ -2977,7 +2978,7 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
                         setCatorcenaFin(undefined);
                         setCaras([]);
                         // Clear articulo/formato if incompatible with new period type
-                        if (newCara.articulo && getRequiredPeriodoForArticulo(newCara.articulo.ItemName, newCara.articulo.ItemCode) !== 'mensual') {
+                        if (newCara.articulo && !articuloValidoEnPeriodo(newCara.articulo.ItemName, newCara.articulo.ItemCode, 'mensual')) {
                           setNewCara(prev => ({ ...prev, articulo: null, formato: '', tipo: '', plaza: '', estado: '', ciudades: [], tarifaPublica: 0 }));
                         } else if (newCara.formato && getRequiredPeriodoForFormato(newCara.formato) !== 'mensual') {
                           setNewCara(prev => ({ ...prev, formato: '' }));
