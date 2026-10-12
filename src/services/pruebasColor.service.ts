@@ -146,6 +146,19 @@ export const pruebasColorService = {
       throw extractApiError(err, 'Error al resolver tarea');
     }
   },
+
+  // Reenviar una prueba rechazada — edita en sitio sobre la misma prueba
+  // (archivo, nombre_arte, notas) y la vuelve a 'revision_artes'. Jos
+  // 2026-10-12. El back crea nueva tarea de Revisión para los reviewers.
+  async reenviar(pruebaId: number, payload: { archivo: string; archivo_data?: string | null; nombre_arte?: string; notas?: string }): Promise<PruebaColor> {
+    try {
+      const { data } = await api.post(`/pruebas-color/${pruebaId}/reenviar`, payload);
+      if (!data.success) throw new Error(data.error || 'Error al reenviar prueba');
+      return data.data as PruebaColor;
+    } catch (err) {
+      throw extractApiError(err, 'Error al reenviar prueba');
+    }
+  },
 };
 
 // Etiquetas legibles para el UI.
