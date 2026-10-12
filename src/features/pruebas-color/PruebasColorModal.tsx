@@ -70,6 +70,15 @@ export function PruebasColorModal({ isOpen, onClose, propuestaId, contextoNombre
     });
   };
 
+  // Callback 'Subir nueva version' — invocado desde la card rechazada o
+  // desde el AtenderTareaModal cuando la tarea fue rechazada. Lleva al tab
+  // 'nueva' con el circuito preseleccionado para subir v2.
+  const handleSubirNuevaVersion = (scId: number) => {
+    setScIds([scId]);
+    setActiveTab('nueva');
+    setExpandedGroups(new Set([scId]));
+  };
+
   // Reset al abrir/cerrar
   useEffect(() => {
     if (isOpen) {
@@ -416,6 +425,7 @@ export function PruebasColorModal({ isOpen, onClose, propuestaId, contextoNombre
                                 onDelete={() => {
                                   if (confirm(`¿Eliminar la prueba v${p.version}?`)) deleteMutation.mutate(p.id);
                                 }}
+                                onSubirNuevaVersion={handleSubirNuevaVersion}
                               />
                             ))}
                           </div>
@@ -616,12 +626,14 @@ function PruebaCard({
   puedeGestionar,
   isUpdating,
   onDelete,
+  onSubirNuevaVersion,
 }: {
   prueba: PruebaColor;
   isDark: boolean;
   puedeGestionar: boolean;
   isUpdating: boolean;
   onDelete: () => void;
+  onSubirNuevaVersion: (scId: number) => void;
 }) {
   const estatusStyle: Record<EstatusPruebaColor, string> = {
     solicitada: isDark ? 'bg-amber-500/15 text-amber-200 border-amber-500/40' : 'bg-amber-50 text-amber-800 border-amber-300',
@@ -693,6 +705,7 @@ function PruebaCard({
         prueba={prueba}
         isDark={isDark}
         puedeGestionar={puedeGestionar}
+        onSubirNuevaVersion={onSubirNuevaVersion}
       />
     </div>
   );
@@ -708,10 +721,12 @@ function TareasAsociadasSection({
   prueba,
   isDark,
   puedeGestionar,
+  onSubirNuevaVersion,
 }: {
   prueba: PruebaColor;
   isDark: boolean;
   puedeGestionar: boolean;
+  onSubirNuevaVersion: (scId: number) => void;
 }) {
   const pruebaId = prueba.id;
   const queryClient = useQueryClient();
@@ -828,6 +843,7 @@ function TareasAsociadasSection({
           onAprobar={() => resolver.mutate({ tareaId: tareaAbierta.id, accion: 'aprobar' })}
           onRechazar={(comentario) => resolver.mutate({ tareaId: tareaAbierta.id, accion: 'rechazar', comentario })}
           onFinalizar={() => resolver.mutate({ tareaId: tareaAbierta.id, accion: 'finalizar' })}
+          onSubirNuevaVersion={() => { setOpenTareaId(null); onSubirNuevaVersion(prueba.sc_id); }}
           isSaving={resolver.isPending}
         />
       )}
@@ -846,6 +862,7 @@ function AtenderTareaModal({
   onAprobar,
   onRechazar,
   onFinalizar,
+  onSubirNuevaVersion,
   isSaving,
 }: {
   tarea: TareaAsociadaPruebaColor;
@@ -855,6 +872,7 @@ function AtenderTareaModal({
   onAprobar: () => void;
   onRechazar: (comentario?: string) => void;
   onFinalizar: () => void;
+  onSubirNuevaVersion: () => void;
   isSaving: boolean;
 }) {
   const esRevision = tarea.tipo === 'Revisión de artes';
@@ -1016,13 +1034,25 @@ function AtenderTareaModal({
         {/* Footer con acciones */}
         <div className={`shrink-0 px-5 py-3 flex items-center justify-end gap-2 border-t ${isDark ? 'border-zinc-800 bg-zinc-900/60' : 'border-gray-200 bg-gray-50/60'}`}>
           {yaResuelta ? (
-            // Tarea ya atendida: solo lectura — un boton Cerrar.
-            <button
-              onClick={onClose}
-              className={`text-xs font-semibold px-4 py-2 rounded border transition-colors ${isDark ? 'border-zinc-700 text-zinc-200 bg-zinc-800 hover:bg-zinc-700' : 'border-gray-300 text-gray-800 bg-white hover:bg-gray-50'}`}
-            >
-              Cerrar
-            </button>
+            // Tarea ya atendida: Cerrar + "Subir nueva version" si fue rechazada.
+            // Jos 2026-10-12: desde el modal de Detalle de la tarea rechazada el
+            // creador puede ir directo al formulario para subir v2.
+            <>
+              <button
+                onClick={onClose}
+                className={`text-xs font-semibold px-4 py-2 rounded border transition-colors ${isDark ? 'border-zinc-700 text-zinc-200 bg-zinc-800 hover:bg-zinc-700' : 'border-gray-300 text-gray-800 bg-white hover:bg-gray-50'}`}
+              >
+                Cerrar
+              </button>
+              {esRechazada && esRevision && (
+                <button
+                  onClick={onSubirNuevaVersion}
+                  className={`text-xs font-semibold px-4 py-2 rounded border transition-colors inline-flex items-center gap-1 ${isDark ? 'border-fuchsia-500/60 text-fuchsia-100 bg-fuchsia-500/20 hover:bg-fuchsia-500/30' : 'border-fuchsia-400 text-fuchsia-800 bg-fuchsia-50 hover:bg-fuchsia-100'}`}
+                >
+                  <Upload className="h-3.5 w-3.5" /> Subir nueva versión
+                </button>
+              )}
+            </>
           ) : showRechazoInput ? (
             <>
               <button
