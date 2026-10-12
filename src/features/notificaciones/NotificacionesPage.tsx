@@ -8,7 +8,7 @@ import {
   MessageSquare, Send, Plus, Pencil, Trash2, StickyNote,
   Users, Tag, Building2, Download, Table2, ExternalLink, Bell, ClipboardList,
   Filter, Layers, ArrowUpDown, ArrowUp, ArrowDown, Check, Loader2, UserCheck, UserPlus,
-  ShieldCheck, DollarSign, Ban, Briefcase
+  ShieldCheck, DollarSign, Ban, Briefcase, Upload
 } from 'lucide-react';
 import { Header } from '../../components/layout/Header';
 import { notificacionesService, CaraAutorizacion, ResumenAutorizacion, HistorialAutorizacion } from '../../services/notificaciones.service';
@@ -1456,6 +1456,25 @@ function isPruebaColorSeguimientoTarea(tipo?: string | null): boolean {
   return tipo === 'Seguimiento Prueba de color';
 }
 
+// Tarea de notificacion al creador cuando cambia el estatus de la prueba
+// (incluye el flujo de rechazo con requiereNuevaVersion). Jos 2026-10-12:
+// desde el boton 'Ver' se abre el modal con el acordeon del circuito
+// expandido para que el analista vea la prueba rechazada y re-suba v2.
+function isPruebaColorNotificacionTarea(tipo?: string | null): boolean {
+  return tipo === 'Prueba de Color';
+}
+// Parsea el contenido JSON de una tarea tipo 'Prueba de Color' para
+// extraer scId / propuestaId / requiereNuevaVersion.
+function parsePruebaColorNotifContent(contenido?: string | null): {
+  scId?: number; propuestaId?: number; requiereNuevaVersion?: boolean;
+} {
+  if (!contenido) return {};
+  try {
+    const c = JSON.parse(contenido);
+    return { scId: c.scId, propuestaId: c.propuestaId, requiereNuevaVersion: !!c.requiereNuevaVersion };
+  } catch { return {}; }
+}
+
 // Tarea informativa "Gestión de Recepción Parcial" (ASC): navega al gestor
 // de artes → tab Impresiones → sub-tab Pend. Recepción para ver el detalle.
 function isRecepcionParcialTarea(tipo?: string | null): boolean {
@@ -1505,6 +1524,10 @@ function hasNavigationRoute(tarea: Notificacion): boolean {
   if ((isPruebaColorRevisionTarea(tarea.tipo, tarea.titulo) || isPruebaColorSeguimientoTarea(tarea.tipo)) && (tarea.id_propuesta || tarea.campania_id)) {
     return true;
   }
+  // Notificacion de cambio de estatus de prueba de color (incluye rechazo).
+  if (isPruebaColorNotificacionTarea(tarea.tipo) && (tarea.id_propuesta || tarea.campania_id)) {
+    return true;
+  }
   // Tareas de Gestión de Artes con campania_id
   if (isGestionArtesTarea(tarea.tipo) && tarea.campania_id) {
     return true;
@@ -1530,8 +1553,8 @@ function getNavigationLabel(tipo: string, tipoTarea?: string, campaniaId?: numbe
   if (isArtesNotification(titulo)) {
     return 'Ver Gestión de Artes';
   }
-  // Prueba de color (Revisión o Seguimiento) → abrir modal, no gestor.
-  if (isPruebaColorRevisionTarea(tipoTarea, titulo) || isPruebaColorSeguimientoTarea(tipoTarea)) {
+  // Prueba de color (Revisión o Seguimiento o Notificacion de estatus) → abrir modal.
+  if (isPruebaColorRevisionTarea(tipoTarea, titulo) || isPruebaColorSeguimientoTarea(tipoTarea) || isPruebaColorNotificacionTarea(tipoTarea)) {
     return 'Ver Prueba de Color';
   }
   // Tareas de Gestión de Artes → Ver Gestión de Artes
@@ -1628,7 +1651,7 @@ function getRejectionSolicitudId(tarea: Notificacion): number | null {
 }
 
 // Función para obtener la ruta de navegación directa al detalle
-function getDirectNavigationPath(tipo: string, id: number, titulo: string, tipoTarea?: string, campaniaId?: number | null, propuestaId?: number | null, tareaId?: number): string {
+function getDirectNavigationPath(tipo: string, id: number, titulo: string, tipoTarea?: string, campaniaId?: number | null, propuestaId?: number | null, tareaId?: number, contenido?: string | null): string {
   const isComment = isCommentNotification(titulo);
   const isRejection = isRejectionTask(titulo);
 
@@ -1637,6 +1660,23 @@ function getDirectNavigationPath(tipo: string, id: number, titulo: string, tipoT
   // y abrir modal con pruebaId. Si ya avanzo a campaña, ir a /campanas/:id con
   // query param que detona el modal. Feedback Jos 2026-10-06.
   if (isPruebaColorRevisionTarea(tipoTarea, titulo) || isPruebaColorSeguimientoTarea(tipoTarea)) {
+    if (propuestaId) {
+      return `/propuestas?viewId=${propuestaId}&pruebaColorTareaId=${tareaId || id}`;
+    }
+    if (campaniaId) {
+      return `/campanas/${campaniaId}?pruebaColorTareaId=${tareaId || id}`;
+    }
+  }
+
+  // Notificacion de prueba de color (rechazo / cambios de estatus): abre
+  // modal en tab 'nueva' si requiere nueva version, si no en 'pruebas'
+  // con el circuito expandido (via pruebaColorNuevaScId que setea el
+  // acordeon expandido en PruebasColorModal).
+  if (isPruebaColorNotificacionTarea(tipoTarea)) {
+    const parsed = parsePruebaColorNotifContent(contenido);
+    if (propuestaId && parsed.scId && parsed.requiereNuevaVersion) {
+      return `/propuestas?viewId=${propuestaId}&pruebaColorNuevaScId=${parsed.scId}`;
+    }
     if (propuestaId) {
       return `/propuestas?viewId=${propuestaId}&pruebaColorTareaId=${tareaId || id}`;
     }
@@ -2578,7 +2618,7 @@ function TaskDrawer({
     // Si tiene referencia_tipo y referencia_id, usar esos
     if (tarea.referencia_tipo && tarea.referencia_id) {
       const propId = tarea.id_propuesta ? parseInt(tarea.id_propuesta) : null;
-      const path = getDirectNavigationPath(tarea.referencia_tipo, tarea.referencia_id, tarea.titulo || '', tarea.tipo || undefined, tarea.campania_id, propId, tarea.id);
+      const path = getDirectNavigationPath(tarea.referencia_tipo, tarea.referencia_id, tarea.titulo || '', tarea.tipo || undefined, tarea.campania_id, propId, tarea.id, tarea.contenido);
       onNavigate(path);
       return;
     }
@@ -2951,6 +2991,52 @@ function TaskDrawer({
                       <span className={`text-sm ${isDark ? 'text-white' : 'text-gray-900'} font-medium text-right`}>{f.value}</span>
                     </div>
                   ))}
+                </div>
+              </div>
+            );
+          } catch { return null; }
+        })()}
+
+        {/* Prueba de color rechazada: mostrar motivo + boton para subir v2.
+            Jos 2026-10-12: tarea tipo 'Prueba de Color' con contenido JSON
+            que incluye requiereNuevaVersion=true. */}
+        {tarea.tipo === 'Prueba de Color' && tarea.contenido && (() => {
+          try {
+            const c = JSON.parse(tarea.contenido) as {
+              pruebaColorId?: number;
+              scId?: number;
+              propuestaId?: number;
+              version?: number;
+              estatus?: string;
+              origen?: string;
+              requiereNuevaVersion?: boolean;
+              motivoRechazo?: string;
+            };
+            if (!c.requiereNuevaVersion) return null;
+            return (
+              <div className={`p-5 border-b ${isDark ? 'border-zinc-800/50' : 'border-gray-200'}`}>
+                <h3 className="text-xs font-medium text-red-400 uppercase tracking-wider mb-3 flex items-center gap-2">
+                  <AlertCircle className="h-3.5 w-3.5" />
+                  Prueba de color rechazada
+                </h3>
+                <div className={`rounded-xl p-3 border space-y-2 ${isDark ? 'bg-red-500/5 border-red-500/20' : 'bg-red-50/70 border-red-200'}`}>
+                  {c.motivoRechazo && (
+                    <div>
+                      <div className={`text-[10px] uppercase tracking-wide font-semibold mb-1 ${isDark ? 'text-red-300' : 'text-red-700'}`}>Motivo del rechazo</div>
+                      <div className={`text-sm whitespace-pre-wrap ${isDark ? 'text-zinc-100' : 'text-gray-800'}`}>{c.motivoRechazo}</div>
+                    </div>
+                  )}
+                  <div className={`text-[11px] ${isDark ? 'text-zinc-400' : 'text-gray-600'}`}>
+                    {c.version ? `v${c.version} ` : ''}{c.scId ? `· Circuito #${c.scId} ` : ''}{c.propuestaId ? `· Propuesta #${c.propuestaId}` : ''}
+                  </div>
+                  {c.propuestaId && c.scId && onNavigate && (
+                    <button
+                      onClick={() => onNavigate(`/propuestas?viewId=${c.propuestaId}&pruebaColorNuevaScId=${c.scId}`)}
+                      className={`mt-1 inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold border transition-colors ${isDark ? 'border-fuchsia-500/60 text-fuchsia-100 bg-fuchsia-500/20 hover:bg-fuchsia-500/30' : 'border-fuchsia-400 text-fuchsia-800 bg-fuchsia-50 hover:bg-fuchsia-100'}`}
+                    >
+                      <Upload className="h-3.5 w-3.5" /> Subir nueva versión
+                    </button>
+                  )}
                 </div>
               </div>
             );
@@ -4472,7 +4558,7 @@ export function NotificacionesPage() {
                                 // Si tiene referencia_tipo y referencia_id, usar esos
                                 if (tarea.referencia_tipo && tarea.referencia_id) {
                                   const propId = tarea.id_propuesta ? parseInt(tarea.id_propuesta) : null;
-                                  const path = getDirectNavigationPath(tarea.referencia_tipo, tarea.referencia_id, tarea.titulo || '', tarea.tipo || undefined, tarea.campania_id, propId, tarea.id);
+                                  const path = getDirectNavigationPath(tarea.referencia_tipo, tarea.referencia_id, tarea.titulo || '', tarea.tipo || undefined, tarea.campania_id, propId, tarea.id, tarea.contenido);
                                   navigate(path);
                                   return;
                                 }
