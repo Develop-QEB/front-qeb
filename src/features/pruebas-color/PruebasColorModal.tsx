@@ -16,6 +16,18 @@ import { propuestasService, SolicitudCara } from '../../services/propuestas.serv
 import { uploadsService } from '../../services/uploads.service';
 import { formatDate } from '../../lib/utils';
 
+// Valida que un string sea un URL http(s) real. Rechaza basura como
+// 'asdasd', 'mailto:...', 'javascript:...' o paths relativos. Jos
+// 2026-10-12: evitar que pegues cualquier cosa en el campo de link.
+function esUrlValido(str: string): boolean {
+  const s = str.trim();
+  if (!s) return false;
+  try {
+    const u = new URL(s);
+    return u.protocol === 'http:' || u.protocol === 'https:';
+  } catch { return false; }
+}
+
 interface Props {
   isOpen: boolean;
   onClose: () => void;
@@ -527,6 +539,11 @@ export function PruebasColorModal({ isOpen, onClose, propuestaId, contextoNombre
                       placeholder="https://drive.google.com/..."
                       disabled={uploading}
                     />
+                    {!archivoFile && archivoUrl && !esUrlValido(archivoUrl) && (
+                      <div className={`text-[11px] mt-1 flex items-center gap-1 ${isDark ? 'text-red-300' : 'text-red-600'}`}>
+                        <AlertCircle className="h-3 w-3" /> Debe comenzar con http:// o https://
+                      </div>
+                    )}
                   </div>
                 </div>
                 <div>
@@ -557,7 +574,14 @@ export function PruebasColorModal({ isOpen, onClose, propuestaId, contextoNombre
                     onClick={async () => {
                       setError(null);
                       if (scIds.length === 0) { setError('Selecciona al menos un circuito'); return; }
-                      if (!archivoUrl) { setError('Sube el arte de la prueba'); return; }
+                      // Jos 2026-10-12: validacion - debe haber archivo subido o link valido.
+                      if (!archivoUrl) { setError('Sube el arte de la prueba o pega un link'); return; }
+                      // Si NO es un archivo subido (archivoFile null), entonces archivoUrl
+                      // viene del campo "pega un link" y debe ser URL http(s) real.
+                      if (!archivoFile && !esUrlValido(archivoUrl)) {
+                        setError('El link del arte no es válido. Debe comenzar con http:// o https://');
+                        return;
+                      }
                       if (!nombreArte.trim()) { setError('El nombre del arte es requerido'); return; }
                       try {
                         const inputs = scIds.map(sc_id => ({
@@ -921,7 +945,12 @@ function AtenderTareaModal({
   const queryClientLocal = useQueryClient();
   const reenviarMutation = useMutation({
     mutationFn: () => {
-      if (!reenviarUrl) throw new Error('Sube el archivo del arte primero');
+      if (!reenviarUrl) throw new Error('Sube un archivo o pega un link');
+      // Jos 2026-10-12: si NO es archivo subido (reenviarFile null), entonces
+      // reenviarUrl viene del campo 'pega un link' y debe ser URL http(s) real.
+      if (!reenviarFile && !esUrlValido(reenviarUrl)) {
+        throw new Error('El link del arte no es válido. Debe comenzar con http:// o https://');
+      }
       return pruebasColorService.reenviar(prueba.id, {
         archivo: reenviarUrl,
         nombre_arte: reenviarNombre.trim() || undefined,
@@ -1163,6 +1192,11 @@ function AtenderTareaModal({
                   disabled={reenviarUploading}
                   className={`w-full text-xs rounded-md border px-2.5 py-1.5 outline-none ${isDark ? 'bg-zinc-800 border-zinc-700 text-zinc-100 focus:border-fuchsia-500/60' : 'bg-white border-gray-300 text-gray-900 focus:border-fuchsia-400'}`}
                 />
+                {!reenviarFile && reenviarUrl && !esUrlValido(reenviarUrl) && (
+                  <div className={`text-[11px] mt-1 flex items-center gap-1 ${isDark ? 'text-red-300' : 'text-red-600'}`}>
+                    <AlertCircle className="h-3 w-3" /> Debe comenzar con http:// o https://
+                  </div>
+                )}
               </div>
 
               <div>
