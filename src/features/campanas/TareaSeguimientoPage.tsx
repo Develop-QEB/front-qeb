@@ -2616,11 +2616,18 @@ function UploadArtModal({
                                         : 'bg-zinc-700/80 text-zinc-200'
                                       }`}>{art.tiene_instalado ? 'Instalado' : art.estatus}</span>
                                     )}
-                                    {/* Jos 2026-10-12: badge ADICIONAL para artes que vienen de una
-                                        prueba de color aprobada. */}
+                                    {/* Jos 2026-10-12: badge ADICIONAL de prueba de color.
+                                        Juntamos los dos marcadores (version + aprobada) en una
+                                        sola esquina para no mezclarlos con los badges de flujo
+                                        normal (estatus_operaciones, arte_aprobado) que viven en
+                                        las esquinas opuestas. */}
                                     {art.origen_prueba_color && (
-                                      <span className="absolute top-1 left-1 px-1.5 py-0.5 rounded text-[10px] font-semibold pointer-events-none bg-fuchsia-500/90 text-white" title="Arte proveniente de una prueba de color aprobada">
-                                        PC v{art.prueba_color_version ?? '?'}
+                                      <span
+                                        className="absolute top-1 left-1 inline-flex items-center overflow-hidden rounded border border-fuchsia-500/60 text-[10px] font-semibold pointer-events-none shadow-sm"
+                                        title="Arte proveniente de una prueba de color aprobada"
+                                      >
+                                        <span className="px-1.5 py-0.5 bg-fuchsia-500/90 text-white">PC v{art.prueba_color_version ?? '?'}</span>
+                                        <span className="px-1.5 py-0.5 bg-emerald-500/90 text-white border-l border-fuchsia-500/60">Aprobada</span>
                                       </span>
                                     )}
                                     <div className="absolute bottom-0 left-0 right-0 bg-black/70 px-1.5 py-1 pointer-events-none">
@@ -2965,11 +2972,18 @@ function UploadArtModal({
                                         : 'bg-zinc-700/80 text-zinc-200'
                                       }`}>{art.tiene_instalado ? 'Instalado' : art.estatus}</span>
                                     )}
-                                    {/* Jos 2026-10-12: badge ADICIONAL para artes que vienen de una
-                                        prueba de color aprobada. */}
+                                    {/* Jos 2026-10-12: badge ADICIONAL de prueba de color.
+                                        Juntamos los dos marcadores (version + aprobada) en una
+                                        sola esquina para no mezclarlos con los badges de flujo
+                                        normal (estatus_operaciones, arte_aprobado) que viven en
+                                        las esquinas opuestas. */}
                                     {art.origen_prueba_color && (
-                                      <span className="absolute top-1 left-1 px-1.5 py-0.5 rounded text-[10px] font-semibold pointer-events-none bg-fuchsia-500/90 text-white" title="Arte proveniente de una prueba de color aprobada">
-                                        PC v{art.prueba_color_version ?? '?'}
+                                      <span
+                                        className="absolute top-1 left-1 inline-flex items-center overflow-hidden rounded border border-fuchsia-500/60 text-[10px] font-semibold pointer-events-none shadow-sm"
+                                        title="Arte proveniente de una prueba de color aprobada"
+                                      >
+                                        <span className="px-1.5 py-0.5 bg-fuchsia-500/90 text-white">PC v{art.prueba_color_version ?? '?'}</span>
+                                        <span className="px-1.5 py-0.5 bg-emerald-500/90 text-white border-l border-fuchsia-500/60">Aprobada</span>
                                       </span>
                                     )}
                                     <div className="absolute bottom-0 left-0 right-0 bg-black/70 px-1.5 py-1 pointer-events-none">
