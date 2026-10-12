@@ -968,11 +968,15 @@ function AtenderTareaModal({
 
         {/* Body (scrolleable para que crezca sin desbordar) */}
         <div className="flex-1 overflow-y-auto px-5 py-4 space-y-4">
-          {/* Preview del arte asociado a la prueba. Click abre lightbox. */}
-          {prueba.archivo && (
+          {/* Preview del arte asociado a la prueba. Click abre lightbox.
+              Jos 2026-10-12: usamos tarea.archivo (el arte en el momento de
+              esa tarea) y NO prueba.archivo, para que al abrir una tarea
+              rechazada vieja se vea el arte original rechazado, no el que
+              se subio despues en el reenvio. */}
+          {(tarea.archivo || prueba.archivo) && (
             <div>
               <div className={`flex items-center gap-1.5 text-[10px] uppercase tracking-wide font-semibold mb-1.5 ${isDark ? 'text-zinc-400' : 'text-gray-500'}`}>
-                <FileImage className="h-3 w-3" /> Arte de la prueba
+                <FileImage className="h-3 w-3" /> Arte revisado en esta tarea
               </div>
               <button
                 type="button"
@@ -981,7 +985,7 @@ function AtenderTareaModal({
                 title="Click para ver en grande"
               >
                 <img
-                  src={prueba.archivo}
+                  src={tarea.archivo || prueba.archivo}
                   alt={prueba.nombre_arte || `Prueba #${prueba.id}`}
                   className="w-full h-full object-contain"
                 />
@@ -1021,6 +1025,17 @@ function AtenderTareaModal({
           {yaResuelta && !resolucion && (
             <div className={`rounded-lg border px-3 py-2.5 text-xs ${isDark ? 'bg-zinc-800/60 border-zinc-700 text-zinc-400' : 'bg-gray-50 border-gray-200 text-gray-500'}`}>
               Esta tarea ya fue atendida.
+            </div>
+          )}
+
+          {/* Aviso: la tarea rechazada ya se reenvio y no se puede volver a editar.
+              Jos 2026-10-12. */}
+          {esRechazada && esRevision && prueba.estatus !== 'rechazada' && (
+            <div className={`rounded-lg border px-3 py-2.5 text-xs flex items-start gap-2 ${isDark ? 'bg-amber-500/10 border-amber-500/40 text-amber-100' : 'bg-amber-50 border-amber-300 text-amber-800'}`}>
+              <AlertCircle className="h-4 w-4 shrink-0 mt-0.5" />
+              <div>
+                Esta prueba ya fue reenviada después del rechazo (actualmente está en <b>{ESTATUS_LABEL[prueba.estatus]}</b>). No se puede volver a editar este rechazo — se conserva como registro histórico.
+              </div>
             </div>
           )}
 
@@ -1238,7 +1253,7 @@ function AtenderTareaModal({
       </div>
 
       {/* Lightbox del arte — overlay por encima de todo (z-[90]) */}
-      {lightboxOpen && prueba.archivo && (
+      {lightboxOpen && (tarea.archivo || prueba.archivo) && (
         <div
           className="fixed inset-0 z-[90] flex items-center justify-center p-4 bg-black/90"
           onClick={(e) => { e.stopPropagation(); setLightboxOpen(false); }}
@@ -1251,7 +1266,7 @@ function AtenderTareaModal({
             <X className="h-5 w-5" />
           </button>
           <a
-            href={prueba.archivo}
+            href={tarea.archivo || prueba.archivo}
             target="_blank"
             rel="noreferrer"
             onClick={(e) => e.stopPropagation()}
@@ -1261,7 +1276,7 @@ function AtenderTareaModal({
             <FileImage className="h-3.5 w-3.5" /> Abrir original
           </a>
           <img
-            src={prueba.archivo}
+            src={tarea.archivo || prueba.archivo}
             alt={prueba.nombre_arte || `Prueba #${prueba.id}`}
             onClick={(e) => e.stopPropagation()}
             className="max-w-full max-h-full object-contain rounded shadow-2xl"
