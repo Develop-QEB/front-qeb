@@ -628,7 +628,7 @@ function PruebaCard({
           vive en una propuesta. Al avanzar a campaña, estas mismas tareas
           se sincronizan al gestor de artes vía campania_id. */}
       <TareasAsociadasSection
-        pruebaId={prueba.id}
+        prueba={prueba}
         isDark={isDark}
         puedeGestionar={puedeGestionar}
       />
@@ -643,14 +643,15 @@ function PruebaCard({
 // el panel con las acciones (resolver). El estado colapsado solo muestra el
 // estatus visual + lista de asignados.
 function TareasAsociadasSection({
-  pruebaId,
+  prueba,
   isDark,
   puedeGestionar,
 }: {
-  pruebaId: number;
+  prueba: PruebaColor;
   isDark: boolean;
   puedeGestionar: boolean;
 }) {
+  const pruebaId = prueba.id;
   const queryClient = useQueryClient();
   // [Fix #258 — modal dentro de modal] Jos: al clickear una tarea pendiente,
   // debe abrirse OTRO modal (overlay por encima del principal) con las
@@ -759,6 +760,7 @@ function TareasAsociadasSection({
       {tareaAbierta && (
         <AtenderTareaModal
           tarea={tareaAbierta}
+          prueba={prueba}
           isDark={isDark}
           onClose={() => setOpenTareaId(null)}
           onAprobar={() => resolver.mutate({ tareaId: tareaAbierta.id, accion: 'aprobar' })}
@@ -776,6 +778,7 @@ function TareasAsociadasSection({
 // Reutilizable: también puede invocarse desde el drawer de notificaciones.
 function AtenderTareaModal({
   tarea,
+  prueba,
   isDark,
   onClose,
   onAprobar,
@@ -784,6 +787,7 @@ function AtenderTareaModal({
   isSaving,
 }: {
   tarea: { id: number; tipo: string | null; estatus: string | null; asignado: string | null };
+  prueba: PruebaColor;
   isDark: boolean;
   onClose: () => void;
   onAprobar: () => void;
@@ -796,6 +800,9 @@ function AtenderTareaModal({
   const asignados = tarea.asignado ? tarea.asignado.split(',').map(s => s.trim()).filter(Boolean) : [];
   const [showRechazoInput, setShowRechazoInput] = useState(false);
   const [comentarioRechazo, setComentarioRechazo] = useState('');
+  // Lightbox del arte de la prueba — Jos pidió preview + click para abrir
+  // el visor grande (reutiliza el patrón del modal de galeria de artes).
+  const [lightboxOpen, setLightboxOpen] = useState(false);
 
   return (
     <div
@@ -829,6 +836,37 @@ function AtenderTareaModal({
 
         {/* Body */}
         <div className="px-4 py-3 space-y-3">
+          {/* Preview del arte asociado a la prueba. Click abre lightbox. */}
+          {prueba.archivo && (
+            <div>
+              <div className={`flex items-center gap-1.5 text-[10px] uppercase tracking-wide font-semibold mb-1 ${isDark ? 'text-zinc-400' : 'text-gray-500'}`}>
+                <FileImage className="h-3 w-3" /> Arte de la prueba
+              </div>
+              <button
+                type="button"
+                onClick={() => setLightboxOpen(true)}
+                className={`relative w-full h-40 rounded-lg overflow-hidden border transition-all group ${isDark ? 'border-zinc-700 bg-zinc-800 hover:border-fuchsia-500/60' : 'border-gray-300 bg-gray-50 hover:border-fuchsia-400'}`}
+                title="Click para ver en grande"
+              >
+                <img
+                  src={prueba.archivo}
+                  alt={prueba.nombre_arte || `Prueba #${prueba.id}`}
+                  className="w-full h-full object-contain"
+                />
+                <div className={`absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity ${isDark ? 'bg-black/40' : 'bg-black/30'}`}>
+                  <span className="text-xs font-semibold text-white px-2.5 py-1 rounded bg-black/60 inline-flex items-center gap-1">
+                    <Search className="h-3 w-3" /> Ver en grande
+                  </span>
+                </div>
+              </button>
+              {prueba.nombre_arte && (
+                <div className={`text-[11px] mt-1 truncate ${isDark ? 'text-zinc-400' : 'text-gray-500'}`} title={prueba.nombre_arte}>
+                  v{prueba.version} · {prueba.nombre_arte}
+                </div>
+              )}
+            </div>
+          )}
+
           {asignados.length > 0 && (
             <div>
               <div className={`flex items-center gap-1.5 text-[10px] uppercase tracking-wide font-semibold mb-1 ${isDark ? 'text-zinc-400' : 'text-gray-500'}`}>
@@ -926,6 +964,46 @@ function AtenderTareaModal({
           )}
         </div>
       </div>
+
+      {/* Lightbox del arte — overlay por encima de todo (z-[90]) */}
+      {lightboxOpen && prueba.archivo && (
+        <div
+          className="fixed inset-0 z-[90] flex items-center justify-center p-4 bg-black/90"
+          onClick={(e) => { e.stopPropagation(); setLightboxOpen(false); }}
+        >
+          <button
+            onClick={(e) => { e.stopPropagation(); setLightboxOpen(false); }}
+            className="absolute top-4 right-4 p-2 rounded-full bg-black/60 text-white hover:bg-black/80 transition-colors z-10"
+            title="Cerrar"
+          >
+            <X className="h-5 w-5" />
+          </button>
+          <a
+            href={prueba.archivo}
+            target="_blank"
+            rel="noreferrer"
+            onClick={(e) => e.stopPropagation()}
+            className="absolute top-4 left-4 inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-black/60 text-white text-xs font-medium hover:bg-black/80 transition-colors z-10"
+            title="Abrir original en pestaña nueva"
+          >
+            <FileImage className="h-3.5 w-3.5" /> Abrir original
+          </a>
+          <img
+            src={prueba.archivo}
+            alt={prueba.nombre_arte || `Prueba #${prueba.id}`}
+            onClick={(e) => e.stopPropagation()}
+            className="max-w-full max-h-full object-contain rounded shadow-2xl"
+          />
+          {prueba.nombre_arte && (
+            <div
+              onClick={(e) => e.stopPropagation()}
+              className="absolute bottom-4 left-1/2 -translate-x-1/2 px-3 py-1.5 rounded-full bg-black/60 text-white text-xs font-medium"
+            >
+              v{prueba.version} · {prueba.nombre_arte}
+            </div>
+          )}
+        </div>
+      )}
     </div>
   );
 }
