@@ -34,6 +34,8 @@ export interface PruebaColor {
   reserva_id: number | null;
   archivo: string;
   archivo_data: string | null;
+  // Jos 2026-10-12: link externo opcional. Puede coexistir con archivo.
+  enlace_externo: string | null;
   nombre_arte: string | null;
   notas: string | null;
   estatus: EstatusPruebaColor;
@@ -50,6 +52,7 @@ export interface CrearPruebaColorInput {
   sc_id: number;
   archivo: string;
   archivo_data?: string | null;
+  enlace_externo?: string | null;
   nombre_arte?: string | null;
   notas?: string | null;
 }
@@ -150,7 +153,7 @@ export const pruebasColorService = {
   // Reenviar una prueba rechazada — edita en sitio sobre la misma prueba
   // (archivo, nombre_arte, notas) y la vuelve a 'revision_artes'. Jos
   // 2026-10-12. El back crea nueva tarea de Revisión para los reviewers.
-  async reenviar(pruebaId: number, payload: { archivo: string; archivo_data?: string | null; nombre_arte?: string; notas?: string }): Promise<PruebaColor> {
+  async reenviar(pruebaId: number, payload: { archivo: string; archivo_data?: string | null; enlace_externo?: string | null; nombre_arte?: string; notas?: string }): Promise<PruebaColor> {
     try {
       const { data } = await api.post(`/pruebas-color/${pruebaId}/reenviar`, payload);
       if (!data.success) throw new Error(data.error || 'Error al reenviar prueba');

@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { AlertCircle, Check, CheckCircle2, ChevronDown, Loader2, Paintbrush, Search, Send, Trash2, X, Upload, FileImage, ClipboardList, Plus, Users, XCircle, Flag, ChevronRight } from 'lucide-react';
+import { AlertCircle, Check, CheckCircle2, ChevronDown, Loader2, Paintbrush, Search, Send, Trash2, X, Upload, FileImage, ClipboardList, Plus, Users, XCircle, Flag, ChevronRight, ExternalLink } from 'lucide-react';
 import { useThemeStore } from '../../store/themeStore';
 import { useAuthStore } from '../../store/authStore';
 import {
@@ -59,6 +59,9 @@ export function PruebasColorModal({ isOpen, onClose, propuestaId, contextoNombre
   const [scIds, setScIds] = useState<number[]>(initialScId ? [initialScId] : []);
   const [archivoFile, setArchivoFile] = useState<File | null>(null);
   const [archivoUrl, setArchivoUrl] = useState<string | null>(null);
+  // Jos 2026-10-12: enlace_externo es un campo separado para permitir que
+  // archivo subido y link coexistan.
+  const [enlaceExterno, setEnlaceExterno] = useState('');
   const [nombreArte, setNombreArte] = useState('');
   const [notas, setNotas] = useState('');
   const [error, setError] = useState<string | null>(null);
@@ -89,6 +92,7 @@ export function PruebasColorModal({ isOpen, onClose, propuestaId, contextoNombre
       setScIds(initialScId ? [initialScId] : []);
       setArchivoFile(null);
       setArchivoUrl(null);
+      setEnlaceExterno('');
       setNombreArte('');
       setNotas('');
       setError(null);
@@ -131,6 +135,7 @@ export function PruebasColorModal({ isOpen, onClose, propuestaId, contextoNombre
     onSuccess: () => {
       setArchivoFile(null);
       setArchivoUrl(null);
+      setEnlaceExterno('');
       setNombreArte('');
       setNotas('');
       // Jos 2026-10-12: resetear scIds para que el tab Pruebas muestre
@@ -520,26 +525,20 @@ export function PruebasColorModal({ isOpen, onClose, propuestaId, contextoNombre
                       </a>
                     )}
                   </div>
-                  {/* Jos 2026-10-12: alternativa de pegar un link externo (Drive, Dropbox,
-                      WeTransfer, etc.) en vez de subir archivo. Si hay URL pegada y no se
-                      subio archivo, se usa esa URL como arte. */}
+                  {/* Jos 2026-10-12: puede coexistir con el archivo subido (y/o).
+                      El back guarda ambos y los muestra ambos en la card. */}
                   <div className="mt-2">
                     <div className={`text-[10px] uppercase tracking-wide font-semibold mb-1 ${isDark ? 'text-zinc-500' : 'text-gray-500'}`}>
-                      O pega un link (Drive, Dropbox, etc.)
+                      Y / o pega un link (Drive, Dropbox, etc.)
                     </div>
                     <input
                       type="url"
                       className={inputCls}
-                      value={archivoFile ? '' : (archivoUrl || '')}
-                      onChange={e => {
-                        const url = e.target.value.trim();
-                        setArchivoFile(null);
-                        setArchivoUrl(url || null);
-                      }}
+                      value={enlaceExterno}
+                      onChange={e => setEnlaceExterno(e.target.value)}
                       placeholder="https://drive.google.com/..."
-                      disabled={uploading}
                     />
-                    {!archivoFile && archivoUrl && !esUrlValido(archivoUrl) && (
+                    {enlaceExterno.trim() && !esUrlValido(enlaceExterno) && (
                       <div className={`text-[11px] mt-1 flex items-center gap-1 ${isDark ? 'text-red-300' : 'text-red-600'}`}>
                         <AlertCircle className="h-3 w-3" /> Debe comenzar con http:// o https://
                       </div>
@@ -574,11 +573,14 @@ export function PruebasColorModal({ isOpen, onClose, propuestaId, contextoNombre
                     onClick={async () => {
                       setError(null);
                       if (scIds.length === 0) { setError('Selecciona al menos un circuito'); return; }
-                      // Jos 2026-10-12: validacion - debe haber archivo subido o link valido.
-                      if (!archivoUrl) { setError('Sube el arte de la prueba o pega un link'); return; }
-                      // Si NO es un archivo subido (archivoFile null), entonces archivoUrl
-                      // viene del campo "pega un link" y debe ser URL http(s) real.
-                      if (!archivoFile && !esUrlValido(archivoUrl)) {
+                      const enlaceLimpio = enlaceExterno.trim();
+                      // Al menos uno (archivo subido o link) es requerido.
+                      if (!archivoUrl && !enlaceLimpio) {
+                        setError('Sube un archivo o pega un link del arte');
+                        return;
+                      }
+                      // Si pegaste link, debe ser URL http(s) real.
+                      if (enlaceLimpio && !esUrlValido(enlaceLimpio)) {
                         setError('El link del arte no es válido. Debe comenzar con http:// o https://');
                         return;
                       }
@@ -587,7 +589,8 @@ export function PruebasColorModal({ isOpen, onClose, propuestaId, contextoNombre
                         const inputs = scIds.map(sc_id => ({
                           propuesta_id: propuestaId,
                           sc_id,
-                          archivo: archivoUrl!,
+                          archivo: archivoUrl || '',
+                          enlace_externo: enlaceLimpio || null,
                           nombre_arte: nombreArte.trim(),
                           notas: notas.trim() || undefined,
                         }));
@@ -597,7 +600,7 @@ export function PruebasColorModal({ isOpen, onClose, propuestaId, contextoNombre
                         // onError ya setea el error en el estado
                       }
                     }}
-                    disabled={createMutation.isPending || !archivoUrl || !nombreArte.trim() || scIds.length === 0}
+                    disabled={createMutation.isPending || (!archivoUrl && !enlaceExterno.trim()) || !nombreArte.trim() || scIds.length === 0}
                     className="flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium text-white bg-fuchsia-600 hover:bg-fuchsia-700 disabled:opacity-50 disabled:cursor-not-allowed"
                   >
                     {createMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
@@ -726,9 +729,16 @@ function PruebaCard({
             En el modal solo mostramos "Ver arte" + estatus visual (ya pintado
             en el header de la card). */}
         <div className="flex items-center gap-2 flex-wrap pt-0.5">
-          <a href={prueba.archivo} target="_blank" rel="noreferrer" className={`inline-flex items-center gap-1 text-xs font-medium px-2 py-1 rounded border transition-colors ${isDark ? 'text-fuchsia-300 border-fuchsia-500/40 hover:bg-fuchsia-500/10' : 'text-fuchsia-700 border-fuchsia-300 hover:bg-fuchsia-50'}`}>
-            <FileImage className="h-3 w-3" /> Ver arte
-          </a>
+          {prueba.archivo && (
+            <a href={prueba.archivo} target="_blank" rel="noreferrer" className={`inline-flex items-center gap-1 text-xs font-medium px-2 py-1 rounded border transition-colors ${isDark ? 'text-fuchsia-300 border-fuchsia-500/40 hover:bg-fuchsia-500/10' : 'text-fuchsia-700 border-fuchsia-300 hover:bg-fuchsia-50'}`}>
+              <FileImage className="h-3 w-3" /> Ver arte
+            </a>
+          )}
+          {prueba.enlace_externo && (
+            <a href={prueba.enlace_externo} target="_blank" rel="noreferrer" className={`inline-flex items-center gap-1 text-xs font-medium px-2 py-1 rounded border transition-colors ${isDark ? 'text-cyan-300 border-cyan-500/40 hover:bg-cyan-500/10' : 'text-cyan-700 border-cyan-300 hover:bg-cyan-50'}`}>
+              <ExternalLink className="h-3 w-3" /> Abrir link
+            </a>
+          )}
         </div>
       </div>
 
@@ -938,6 +948,8 @@ function AtenderTareaModal({
   const [showReenviarForm, setShowReenviarForm] = useState(false);
   const [reenviarFile, setReenviarFile] = useState<File | null>(null);
   const [reenviarUrl, setReenviarUrl] = useState<string | null>(null);
+  // Jos 2026-10-12: enlace independiente para que coexista con archivo subido.
+  const [reenviarEnlace, setReenviarEnlace] = useState('');
   const [reenviarNombre, setReenviarNombre] = useState(prueba.nombre_arte || '');
   const [reenviarNotas, setReenviarNotas] = useState(prueba.notas || '');
   const [reenviarError, setReenviarError] = useState<string | null>(null);
@@ -945,14 +957,14 @@ function AtenderTareaModal({
   const queryClientLocal = useQueryClient();
   const reenviarMutation = useMutation({
     mutationFn: () => {
-      if (!reenviarUrl) throw new Error('Sube un archivo o pega un link');
-      // Jos 2026-10-12: si NO es archivo subido (reenviarFile null), entonces
-      // reenviarUrl viene del campo 'pega un link' y debe ser URL http(s) real.
-      if (!reenviarFile && !esUrlValido(reenviarUrl)) {
+      const enlaceLimpio = reenviarEnlace.trim();
+      if (!reenviarUrl && !enlaceLimpio) throw new Error('Sube un archivo o pega un link');
+      if (enlaceLimpio && !esUrlValido(enlaceLimpio)) {
         throw new Error('El link del arte no es válido. Debe comenzar con http:// o https://');
       }
       return pruebasColorService.reenviar(prueba.id, {
-        archivo: reenviarUrl,
+        archivo: reenviarUrl || '',
+        enlace_externo: enlaceLimpio || null,
         nombre_arte: reenviarNombre.trim() || undefined,
         notas: reenviarNotas.trim() || undefined,
       });
@@ -1090,6 +1102,25 @@ function AtenderTareaModal({
             </div>
           )}
 
+          {/* Enlace externo adjunto a la prueba (Drive, Dropbox, etc.) —
+              Jos 2026-10-12: puede venir junto con archivo o en lugar de el. */}
+          {prueba.enlace_externo && (
+            <div>
+              <div className={`flex items-center gap-1.5 text-[10px] uppercase tracking-wide font-semibold mb-1 ${isDark ? 'text-zinc-400' : 'text-gray-500'}`}>
+                <ExternalLink className="h-3 w-3" /> Link externo del arte
+              </div>
+              <a
+                href={prueba.enlace_externo}
+                target="_blank"
+                rel="noreferrer"
+                className={`inline-flex items-center gap-1.5 text-xs font-medium px-3 py-1.5 rounded border transition-colors break-all ${isDark ? 'text-cyan-200 border-cyan-500/40 bg-cyan-500/10 hover:bg-cyan-500/20' : 'text-cyan-800 border-cyan-300 bg-cyan-50 hover:bg-cyan-100'}`}
+              >
+                <ExternalLink className="h-3.5 w-3.5 shrink-0" />
+                <span className="truncate max-w-[380px]" title={prueba.enlace_externo}>{prueba.enlace_externo}</span>
+              </a>
+            </div>
+          )}
+
           {/* Resolucion previa — solo si la tarea ya fue atendida.
               Muestra motivo capturado, quien y cuando. */}
           {yaResuelta && resolucion && (
@@ -1176,23 +1207,18 @@ function AtenderTareaModal({
                     <Loader2 className="h-3 w-3 animate-spin" /> Subiendo arte...
                   </div>
                 )}
-                {/* Jos 2026-10-12: alternativa de pegar link (Drive, Dropbox, etc.) */}
+                {/* Jos 2026-10-12: enlace independiente al archivo, pueden coexistir */}
                 <div className={`text-[10px] uppercase tracking-wide font-semibold mt-2 mb-1 ${isDark ? 'text-zinc-500' : 'text-gray-500'}`}>
-                  O pega un link (Drive, Dropbox, etc.)
+                  Y / o pega un link (Drive, Dropbox, etc.)
                 </div>
                 <input
                   type="url"
-                  value={reenviarFile ? '' : (reenviarUrl || '')}
-                  onChange={(e) => {
-                    const url = e.target.value.trim();
-                    setReenviarFile(null);
-                    setReenviarUrl(url || null);
-                  }}
+                  value={reenviarEnlace}
+                  onChange={(e) => setReenviarEnlace(e.target.value)}
                   placeholder="https://drive.google.com/..."
-                  disabled={reenviarUploading}
                   className={`w-full text-xs rounded-md border px-2.5 py-1.5 outline-none ${isDark ? 'bg-zinc-800 border-zinc-700 text-zinc-100 focus:border-fuchsia-500/60' : 'bg-white border-gray-300 text-gray-900 focus:border-fuchsia-400'}`}
                 />
-                {!reenviarFile && reenviarUrl && !esUrlValido(reenviarUrl) && (
+                {reenviarEnlace.trim() && !esUrlValido(reenviarEnlace) && (
                   <div className={`text-[11px] mt-1 flex items-center gap-1 ${isDark ? 'text-red-300' : 'text-red-600'}`}>
                     <AlertCircle className="h-3 w-3" /> Debe comenzar con http:// o https://
                   </div>
@@ -1284,7 +1310,7 @@ function AtenderTareaModal({
                   </button>
                   <button
                     onClick={() => reenviarMutation.mutate()}
-                    disabled={reenviarMutation.isPending || !reenviarUrl || reenviarUploading}
+                    disabled={reenviarMutation.isPending || reenviarUploading || (!reenviarUrl && !reenviarEnlace.trim())}
                     className={`text-xs font-semibold px-4 py-2 rounded border transition-colors inline-flex items-center gap-1 ${isDark ? 'border-fuchsia-500/60 text-fuchsia-100 bg-fuchsia-500/20 hover:bg-fuchsia-500/30' : 'border-fuchsia-400 text-fuchsia-800 bg-fuchsia-50 hover:bg-fuchsia-100'} disabled:opacity-50`}
                   >
                     {reenviarMutation.isPending ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Send className="h-3.5 w-3.5" />}
