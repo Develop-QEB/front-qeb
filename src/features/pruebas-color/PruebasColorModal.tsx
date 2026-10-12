@@ -742,6 +742,13 @@ function TareasAsociadasSection({
 
   const tareas = tareasQuery.data || [];
   const tareaAbierta = tareas.find(t => t.id === openTareaId) || null;
+  // Jos 2026-10-12: la ultima tarea de Revision de artes (por id desc) es
+  // la "activa"; si hay varias rechazadas, solo la mas reciente permite
+  // reeditar. Las viejas son registro historico de rechazos anteriores.
+  const idUltimaRevision = tareas
+    .filter(t => t.tipo === 'Revisión de artes')
+    .map(t => t.id)
+    .sort((a, b) => b - a)[0];
 
   if (tareasQuery.isLoading) {
     return (
@@ -825,6 +832,7 @@ function TareasAsociadasSection({
           tarea={tareaAbierta}
           prueba={prueba}
           isDark={isDark}
+          esUltimaRevision={tareaAbierta.id === idUltimaRevision}
           onClose={() => setOpenTareaId(null)}
           onAprobar={() => resolver.mutate({ tareaId: tareaAbierta.id, accion: 'aprobar' })}
           onRechazar={(comentario) => resolver.mutate({ tareaId: tareaAbierta.id, accion: 'rechazar', comentario })}
@@ -843,6 +851,7 @@ function AtenderTareaModal({
   tarea,
   prueba,
   isDark,
+  esUltimaRevision,
   onClose,
   onAprobar,
   onRechazar,
@@ -852,6 +861,9 @@ function AtenderTareaModal({
   tarea: TareaAsociadaPruebaColor;
   prueba: PruebaColor;
   isDark: boolean;
+  // true si esta es la tarea de Revision mas reciente de la prueba.
+  // Rechazos viejos (de iteraciones anteriores) tienen esto en false.
+  esUltimaRevision: boolean;
   onClose: () => void;
   onAprobar: () => void;
   onRechazar: (comentario?: string) => void;
@@ -934,7 +946,7 @@ function AtenderTareaModal({
   // Jos 2026-10-12: solo permitir editar/reenviar si la prueba sigue
   // 'rechazada'. Si ya se reenvio (prueba -> revision_artes) la tarea
   // vieja rechazada queda como registro historico y no es editable.
-  const puedeReenviar = esRechazada && esRevision && prueba.estatus === 'rechazada';
+  const puedeReenviar = esRechazada && esRevision && prueba.estatus === 'rechazada' && esUltimaRevision;
 
   return (
     <div
@@ -1029,12 +1041,23 @@ function AtenderTareaModal({
           )}
 
           {/* Aviso: la tarea rechazada ya se reenvio y no se puede volver a editar.
-              Jos 2026-10-12. */}
-          {esRechazada && esRevision && prueba.estatus !== 'rechazada' && (
+              Jos 2026-10-12.
+              Caso A: la prueba paso a otro estatus (ej. 'revision_artes') tras reenvio.
+              Caso B: la prueba volvio a 'rechazada' pero esta tarea es un rechazo
+              viejo, no el actual (existe una tarea de Revision mas reciente). */}
+          {esRechazada && esRevision && !esUltimaRevision && (
             <div className={`rounded-lg border px-3 py-2.5 text-xs flex items-start gap-2 ${isDark ? 'bg-amber-500/10 border-amber-500/40 text-amber-100' : 'bg-amber-50 border-amber-300 text-amber-800'}`}>
               <AlertCircle className="h-4 w-4 shrink-0 mt-0.5" />
               <div>
-                Esta prueba ya fue reenviada después del rechazo (actualmente está en <b>{ESTATUS_LABEL[prueba.estatus]}</b>). No se puede volver a editar este rechazo — se conserva como registro histórico.
+                Este rechazo ya fue atendido en un reenvío posterior. No se puede volver a editar — se conserva como registro histórico.
+              </div>
+            </div>
+          )}
+          {esRechazada && esRevision && esUltimaRevision && prueba.estatus !== 'rechazada' && (
+            <div className={`rounded-lg border px-3 py-2.5 text-xs flex items-start gap-2 ${isDark ? 'bg-amber-500/10 border-amber-500/40 text-amber-100' : 'bg-amber-50 border-amber-300 text-amber-800'}`}>
+              <AlertCircle className="h-4 w-4 shrink-0 mt-0.5" />
+              <div>
+                Esta prueba ya fue reenviada después del rechazo (actualmente está en <b>{ESTATUS_LABEL[prueba.estatus]}</b>). No se puede volver a editar este rechazo.
               </div>
             </div>
           )}
