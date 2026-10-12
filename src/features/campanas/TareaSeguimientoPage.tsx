@@ -2616,6 +2616,13 @@ function UploadArtModal({
                                         : 'bg-zinc-700/80 text-zinc-200'
                                       }`}>{art.tiene_instalado ? 'Instalado' : art.estatus}</span>
                                     )}
+                                    {/* Jos 2026-10-12: badge ADICIONAL para artes que vienen de una
+                                        prueba de color aprobada. */}
+                                    {art.origen_prueba_color && (
+                                      <span className="absolute top-1 left-1 px-1.5 py-0.5 rounded text-[10px] font-semibold pointer-events-none bg-fuchsia-500/90 text-white" title="Arte proveniente de una prueba de color aprobada">
+                                        PC v{art.prueba_color_version ?? '?'}
+                                      </span>
+                                    )}
                                     <div className="absolute bottom-0 left-0 right-0 bg-black/70 px-1.5 py-1 pointer-events-none">
                                       <p className="text-[10px] text-zinc-200 truncate" title={art.nombre_arte || art.nombre}>
                                         {art.nombre_arte || art.nombre}
@@ -2957,6 +2964,13 @@ function UploadArtModal({
                                         : art.estatus?.toLowerCase() === 'pendiente' ? 'bg-orange-500/80 text-white'
                                         : 'bg-zinc-700/80 text-zinc-200'
                                       }`}>{art.tiene_instalado ? 'Instalado' : art.estatus}</span>
+                                    )}
+                                    {/* Jos 2026-10-12: badge ADICIONAL para artes que vienen de una
+                                        prueba de color aprobada. */}
+                                    {art.origen_prueba_color && (
+                                      <span className="absolute top-1 left-1 px-1.5 py-0.5 rounded text-[10px] font-semibold pointer-events-none bg-fuchsia-500/90 text-white" title="Arte proveniente de una prueba de color aprobada">
+                                        PC v{art.prueba_color_version ?? '?'}
+                                      </span>
                                     )}
                                     <div className="absolute bottom-0 left-0 right-0 bg-black/70 px-1.5 py-1 pointer-events-none">
                                       <p className="text-[10px] text-zinc-200 truncate" title={art.nombre_arte || art.nombre}>
