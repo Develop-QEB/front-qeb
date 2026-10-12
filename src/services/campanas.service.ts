@@ -400,6 +400,12 @@ export interface ArteExistente {
   nombre_generico?: string | null;     // valor único compartido por el batch (modo Genérico)
   estatus?: string | null;     // estatus del arte (Aprobado / Rechazado / Pendiente / etc.)
   tiene_instalado?: boolean;   // true si alguna reserva que usa este arte ya esta instalada
+  // Jos 2026-10-12: marca ADICIONAL. Si true, el arte proviene de una prueba
+  // de color aprobada; se muestra un badge extra en la biblioteca sin
+  // reemplazar las etiquetas del flujo (Instalado, Pendiente, etc.).
+  origen_prueba_color?: boolean;
+  prueba_color_version?: number | null;
+  prueba_color_enlace_externo?: string | null;
 }
 
 // Órdenes de Montaje
