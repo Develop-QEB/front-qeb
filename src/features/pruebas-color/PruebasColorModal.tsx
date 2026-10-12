@@ -481,7 +481,7 @@ export function PruebasColorModal({ isOpen, onClose, propuestaId, contextoNombre
               <div className="space-y-3">
                 <div>
                   <label className={labelCls}>Arte *</label>
-                  <div className="flex items-center gap-2">
+                  <div className="flex items-center gap-2 flex-wrap">
                     <label
                       className={`flex items-center gap-2 px-3 py-2 rounded-lg text-sm font-medium cursor-pointer border transition-colors ${
                         isDark ? 'bg-zinc-800 border-zinc-700 text-zinc-200 hover:bg-zinc-700'
@@ -507,6 +507,26 @@ export function PruebasColorModal({ isOpen, onClose, propuestaId, contextoNombre
                         {archivoFile?.name || 'archivo subido'}
                       </a>
                     )}
+                  </div>
+                  {/* Jos 2026-10-12: alternativa de pegar un link externo (Drive, Dropbox,
+                      WeTransfer, etc.) en vez de subir archivo. Si hay URL pegada y no se
+                      subio archivo, se usa esa URL como arte. */}
+                  <div className="mt-2">
+                    <div className={`text-[10px] uppercase tracking-wide font-semibold mb-1 ${isDark ? 'text-zinc-500' : 'text-gray-500'}`}>
+                      O pega un link (Drive, Dropbox, etc.)
+                    </div>
+                    <input
+                      type="url"
+                      className={inputCls}
+                      value={archivoFile ? '' : (archivoUrl || '')}
+                      onChange={e => {
+                        const url = e.target.value.trim();
+                        setArchivoFile(null);
+                        setArchivoUrl(url || null);
+                      }}
+                      placeholder="https://drive.google.com/..."
+                      disabled={uploading}
+                    />
                   </div>
                 </div>
                 <div>
@@ -1101,10 +1121,10 @@ function AtenderTareaModal({
 
               <div>
                 <label className={`text-[11px] font-semibold ${isDark ? 'text-zinc-200' : 'text-gray-800'}`}>Arte *</label>
-                {reenviarUrl ? (
+                {reenviarFile && reenviarUrl ? (
                   <div className={`mt-1 flex items-center gap-2 text-xs rounded border px-2 py-1.5 ${isDark ? 'bg-zinc-800 border-zinc-700 text-zinc-200' : 'bg-white border-gray-300 text-gray-700'}`}>
                     <FileImage className="h-3.5 w-3.5" />
-                    <span className="truncate flex-1">{reenviarFile?.name || 'arte.jpg'}</span>
+                    <span className="truncate flex-1">{reenviarFile.name}</span>
                     <button
                       type="button"
                       onClick={() => { setReenviarFile(null); setReenviarUrl(null); }}
@@ -1127,6 +1147,22 @@ function AtenderTareaModal({
                     <Loader2 className="h-3 w-3 animate-spin" /> Subiendo arte...
                   </div>
                 )}
+                {/* Jos 2026-10-12: alternativa de pegar link (Drive, Dropbox, etc.) */}
+                <div className={`text-[10px] uppercase tracking-wide font-semibold mt-2 mb-1 ${isDark ? 'text-zinc-500' : 'text-gray-500'}`}>
+                  O pega un link (Drive, Dropbox, etc.)
+                </div>
+                <input
+                  type="url"
+                  value={reenviarFile ? '' : (reenviarUrl || '')}
+                  onChange={(e) => {
+                    const url = e.target.value.trim();
+                    setReenviarFile(null);
+                    setReenviarUrl(url || null);
+                  }}
+                  placeholder="https://drive.google.com/..."
+                  disabled={reenviarUploading}
+                  className={`w-full text-xs rounded-md border px-2.5 py-1.5 outline-none ${isDark ? 'bg-zinc-800 border-zinc-700 text-zinc-100 focus:border-fuchsia-500/60' : 'bg-white border-gray-300 text-gray-900 focus:border-fuchsia-400'}`}
+                />
               </div>
 
               <div>
