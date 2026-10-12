@@ -141,9 +141,20 @@ export const pruebasColorService = {
   },
 
   // Resuelve una tarea asociada (aprobar / rechazar / finalizar) desde el modal.
-  async resolverTarea(pruebaId: number, tareaId: number, accion: AccionResolverTarea, comentario?: string): Promise<void> {
+  async resolverTarea(
+    pruebaId: number,
+    tareaId: number,
+    accion: AccionResolverTarea,
+    comentario?: string,
+    adjuntos?: { archivo_adjunto?: string | null; enlace_adjunto?: string | null },
+  ): Promise<void> {
     try {
-      const { data } = await api.patch(`/pruebas-color/${pruebaId}/tareas/${tareaId}`, { accion, comentario });
+      const { data } = await api.patch(`/pruebas-color/${pruebaId}/tareas/${tareaId}`, {
+        accion,
+        comentario,
+        archivo_adjunto: adjuntos?.archivo_adjunto || null,
+        enlace_adjunto: adjuntos?.enlace_adjunto || null,
+      });
       if (!data.success) throw new Error(data.error || 'Error al resolver tarea');
     } catch (err) {
       throw extractApiError(err, 'Error al resolver tarea');

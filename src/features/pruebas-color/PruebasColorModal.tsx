@@ -790,8 +790,13 @@ function TareasAsociadasSection({
   });
 
   const resolver = useMutation({
-    mutationFn: ({ tareaId, accion, comentario }: { tareaId: number; accion: AccionResolverTarea; comentario?: string }) =>
-      pruebasColorService.resolverTarea(pruebaId, tareaId, accion, comentario),
+    mutationFn: ({ tareaId, accion, comentario, archivo_adjunto, enlace_adjunto }: {
+      tareaId: number;
+      accion: AccionResolverTarea;
+      comentario?: string;
+      archivo_adjunto?: string | null;
+      enlace_adjunto?: string | null;
+    }) => pruebasColorService.resolverTarea(pruebaId, tareaId, accion, comentario, { archivo_adjunto, enlace_adjunto }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['pruebas-color', 'tareas', pruebaId] });
       queryClient.invalidateQueries({ queryKey: ['pruebas-color'] });
@@ -896,7 +901,7 @@ function TareasAsociadasSection({
           esUltimaRevision={tareaAbierta.id === idUltimaRevision}
           onClose={() => setOpenTareaId(null)}
           onAprobar={() => resolver.mutate({ tareaId: tareaAbierta.id, accion: 'aprobar' })}
-          onRechazar={(comentario) => resolver.mutate({ tareaId: tareaAbierta.id, accion: 'rechazar', comentario })}
+          onRechazar={(comentario, adjuntos) => resolver.mutate({ tareaId: tareaAbierta.id, accion: 'rechazar', comentario, archivo_adjunto: adjuntos?.archivo_adjunto, enlace_adjunto: adjuntos?.enlace_adjunto })}
           onFinalizar={() => resolver.mutate({ tareaId: tareaAbierta.id, accion: 'finalizar' })}
           isSaving={resolver.isPending}
         />
@@ -929,7 +934,7 @@ function AtenderTareaModal({
   esUltimaRevision: boolean;
   onClose: () => void;
   onAprobar: () => void;
-  onRechazar: (comentario?: string) => void;
+  onRechazar: (comentario?: string, adjuntos?: { archivo_adjunto?: string | null; enlace_adjunto?: string | null }) => void;
   onFinalizar: () => void;
   isSaving: boolean;
 }) {
@@ -938,6 +943,26 @@ function AtenderTareaModal({
   const asignados = tarea.asignado ? tarea.asignado.split(',').map(s => s.trim()).filter(Boolean) : [];
   const [showRechazoInput, setShowRechazoInput] = useState(false);
   const [comentarioRechazo, setComentarioRechazo] = useState('');
+  // Jos 2026-10-12: adjuntos opcionales del rechazo. Van al back y
+  // aparecen en la notificacion al creador.
+  const [rechazoFile, setRechazoFile] = useState<File | null>(null);
+  const [rechazoFileUrl, setRechazoFileUrl] = useState<string | null>(null);
+  const [rechazoFileUploading, setRechazoFileUploading] = useState(false);
+  const [rechazoEnlace, setRechazoEnlace] = useState('');
+  const handleUploadRechazo = async (file: File) => {
+    setRechazoFileUploading(true);
+    try {
+      const res = await uploadsService.uploadFile(file, 'pruebas-color/rechazos');
+      setRechazoFile(file);
+      setRechazoFileUrl(res.url);
+    } catch (e) {
+      alert(e instanceof Error ? e.message : 'Error al subir archivo');
+      setRechazoFile(null);
+      setRechazoFileUrl(null);
+    } finally {
+      setRechazoFileUploading(false);
+    }
+  };
   // Lightbox del arte de la prueba — Jos pidió preview + click para abrir
   // el visor grande (reutiliza el patrón del modal de galeria de artes).
   const [lightboxOpen, setLightboxOpen] = useState(false);
@@ -1288,6 +1313,53 @@ function AtenderTareaModal({
                 placeholder="Describe por qué se rechaza la prueba..."
                 className={`w-full text-xs rounded-md border px-2.5 py-1.5 outline-none transition-colors ${isDark ? 'bg-zinc-800 border-zinc-700 text-zinc-100 placeholder-zinc-500 focus:border-fuchsia-500/60' : 'bg-white border-gray-300 text-gray-900 placeholder-gray-400 focus:border-fuchsia-400'}`}
               />
+
+              {/* Jos 2026-10-12: adjuntos opcionales del rechazo. Pueden ir
+                  archivo, link, ambos o ninguno. Se mandan al back y llegan
+                  a la notificacion del creador. */}
+              <div className="pt-2 space-y-2">
+                <div className={`text-[11px] font-semibold ${isDark ? 'text-zinc-300' : 'text-gray-700'}`}>
+                  Adjuntar (opcional)
+                </div>
+                {rechazoFile && rechazoFileUrl ? (
+                  <div className={`flex items-center gap-2 text-xs rounded border px-2 py-1.5 ${isDark ? 'bg-zinc-800 border-zinc-700 text-zinc-200' : 'bg-white border-gray-300 text-gray-700'}`}>
+                    <FileImage className="h-3.5 w-3.5" />
+                    <span className="truncate flex-1">{rechazoFile.name}</span>
+                    <button
+                      type="button"
+                      onClick={() => { setRechazoFile(null); setRechazoFileUrl(null); }}
+                      className={`text-[10px] font-medium ${isDark ? 'text-fuchsia-300 hover:text-fuchsia-200' : 'text-fuchsia-700 hover:text-fuchsia-900'}`}
+                    >
+                      Quitar
+                    </button>
+                  </div>
+                ) : (
+                  <input
+                    type="file"
+                    accept="image/*,application/pdf"
+                    onChange={(e) => { const f = e.target.files?.[0]; if (f) handleUploadRechazo(f); }}
+                    disabled={rechazoFileUploading}
+                    className={`w-full text-[11px] file:mr-2 file:py-1 file:px-2 file:rounded file:border file:text-[11px] file:font-medium ${isDark ? 'text-zinc-300 file:bg-zinc-800 file:border-zinc-700 file:text-zinc-200' : 'text-gray-700 file:bg-white file:border-gray-300 file:text-gray-700'}`}
+                  />
+                )}
+                {rechazoFileUploading && (
+                  <div className={`flex items-center gap-1.5 text-[10px] ${isDark ? 'text-zinc-400' : 'text-gray-500'}`}>
+                    <Loader2 className="h-3 w-3 animate-spin" /> Subiendo archivo...
+                  </div>
+                )}
+                <input
+                  type="url"
+                  value={rechazoEnlace}
+                  onChange={(e) => setRechazoEnlace(e.target.value)}
+                  placeholder="O pega un link (Drive, Dropbox, etc.)"
+                  className={`w-full text-xs rounded-md border px-2.5 py-1.5 outline-none ${isDark ? 'bg-zinc-800 border-zinc-700 text-zinc-100 focus:border-fuchsia-500/60' : 'bg-white border-gray-300 text-gray-900 focus:border-fuchsia-400'}`}
+                />
+                {rechazoEnlace.trim() && !esUrlValido(rechazoEnlace) && (
+                  <div className={`text-[11px] flex items-center gap-1 ${isDark ? 'text-red-300' : 'text-red-600'}`}>
+                    <AlertCircle className="h-3 w-3" /> Debe comenzar con http:// o https://
+                  </div>
+                )}
+              </div>
             </div>
           )}
         </div>
@@ -1346,8 +1418,18 @@ function AtenderTareaModal({
                 Cancelar
               </button>
               <button
-                onClick={() => onRechazar(comentarioRechazo.trim() || undefined)}
-                disabled={isSaving}
+                onClick={() => {
+                  const enlaceLimpio = rechazoEnlace.trim();
+                  if (enlaceLimpio && !esUrlValido(enlaceLimpio)) {
+                    alert('El link no es válido. Debe comenzar con http:// o https://');
+                    return;
+                  }
+                  onRechazar(comentarioRechazo.trim() || undefined, {
+                    archivo_adjunto: rechazoFileUrl || null,
+                    enlace_adjunto: enlaceLimpio || null,
+                  });
+                }}
+                disabled={isSaving || rechazoFileUploading}
                 className={`text-xs font-semibold px-3 py-1.5 rounded border transition-colors inline-flex items-center gap-1 ${isDark ? 'border-red-500/60 text-red-100 bg-red-500/20 hover:bg-red-500/30' : 'border-red-400 text-red-800 bg-red-50 hover:bg-red-100'} disabled:opacity-50`}
               >
                 {isSaving ? <Loader2 className="h-3 w-3 animate-spin" /> : <XCircle className="h-3 w-3" />}
