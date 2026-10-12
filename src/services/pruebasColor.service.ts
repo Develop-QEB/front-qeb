@@ -71,6 +71,10 @@ export interface TareaAsociadaPruebaColor {
   responsable: string | null;
   archivo: string | null;
   contenido: string | null;
+  // JSON string con la resolucion: motivoRechazo | comentarioResolucion,
+  // resueltaPor, resueltaPorId, resueltaAt. Se lee en el modal para
+  // mostrar quien y por que atendio la tarea cuando ya no esta Pendiente.
+  evidencia: string | null;
   fecha_inicio: string | null;
   fecha_fin: string | null;
 }

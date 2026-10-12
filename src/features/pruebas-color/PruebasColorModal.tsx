@@ -714,14 +714,16 @@ function TareasAsociadasSection({
           const puedeFinalizar = esSeguimiento && t.estatus === 'Pendiente' && puedeGestionar;
           const tieneAcciones = puedeAprobar || puedeFinalizar;
 
+          // Jos 2026-10-12: una tarea ya resuelta (Rechazado/Atendido/
+          // Finalizada) tambien debe poder abrirse — en modo solo lectura —
+          // para consultar el motivo que quedo guardado en la evidencia.
           return (
             <button
               key={t.id}
               type="button"
-              disabled={!tieneAcciones}
               onClick={() => setOpenTareaId(t.id)}
-              className={`w-full rounded-lg border text-left transition-colors ${isDark ? 'bg-zinc-800/60 border-zinc-700' : 'bg-white border-gray-200'} ${tieneAcciones ? (isDark ? 'hover:bg-zinc-800 hover:border-fuchsia-500/40 cursor-pointer' : 'hover:bg-gray-50 hover:border-fuchsia-300 cursor-pointer') : 'cursor-default'}`}
-              title={tieneAcciones ? 'Abrir tarea para atender' : undefined}
+              className={`w-full rounded-lg border text-left transition-colors cursor-pointer ${isDark ? 'bg-zinc-800/60 border-zinc-700 hover:bg-zinc-800 hover:border-fuchsia-500/40' : 'bg-white border-gray-200 hover:bg-gray-50 hover:border-fuchsia-300'}`}
+              title={tieneAcciones ? 'Abrir tarea para atender' : 'Ver detalle de la tarea'}
             >
               <div className="px-2.5 py-2 flex items-center justify-between gap-2">
                 <div className="flex items-center gap-1.5 min-w-0 flex-1">
@@ -732,9 +734,7 @@ function TareasAsociadasSection({
                     {esRevision ? 'Revisión de artes' : esSeguimiento ? 'Seguimiento' : t.tipo}
                   </span>
                 </div>
-                {tieneAcciones && (
-                  <ChevronRight className={`h-3.5 w-3.5 shrink-0 ${isDark ? 'text-fuchsia-300' : 'text-fuchsia-600'}`} />
-                )}
+                <ChevronRight className={`h-3.5 w-3.5 shrink-0 ${isDark ? 'text-fuchsia-300' : 'text-fuchsia-600'}`} />
               </div>
               {asignados.length > 0 && (
                 <div className={`px-2.5 pb-2 flex items-center gap-1.5 text-[11px] ${isDark ? 'text-zinc-300' : 'text-gray-600'}`}>
@@ -804,6 +804,28 @@ function AtenderTareaModal({
   // el visor grande (reutiliza el patrón del modal de galeria de artes).
   const [lightboxOpen, setLightboxOpen] = useState(false);
 
+  // Resolucion persistida en tarea.evidencia (back guarda motivoRechazo o
+  // comentarioResolucion + resueltaPor + resueltaAt al atender la tarea).
+  // Jos 2026-10-12: al reabrir una tarea ya resuelta se debe mostrar quien
+  // la atendio, cuando y el motivo capturado.
+  const resolucion = useMemo(() => {
+    if (!tarea.evidencia) return null;
+    try {
+      const data = JSON.parse(tarea.evidencia);
+      const motivo = data.motivoRechazo || data.comentarioResolucion || null;
+      if (!motivo && !data.resueltaPor) return null;
+      return {
+        motivo: typeof motivo === 'string' ? motivo : null,
+        resueltaPor: data.resueltaPor || null,
+        resueltaAt: data.resueltaAt || null,
+      };
+    } catch { return null; }
+  }, [tarea.evidencia]);
+
+  const yaResuelta = tarea.estatus !== 'Pendiente';
+  const esRechazada = (tarea.estatus || '').toLowerCase().includes('rechaz');
+  const esAtendidaOk = ['atendido', 'finalizada'].includes((tarea.estatus || '').toLowerCase());
+
   return (
     <div
       className="fixed inset-0 z-[80] flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm"
@@ -811,15 +833,15 @@ function AtenderTareaModal({
     >
       <div
         onClick={(e) => e.stopPropagation()}
-        className={`w-full max-w-md rounded-xl border shadow-2xl ${isDark ? 'bg-zinc-900 border-zinc-700 text-zinc-100' : 'bg-white border-gray-200 text-gray-900'}`}
+        className={`w-full max-w-2xl rounded-xl border shadow-2xl flex flex-col max-h-[92vh] ${isDark ? 'bg-zinc-900 border-zinc-700 text-zinc-100' : 'bg-white border-gray-200 text-gray-900'}`}
       >
         {/* Header */}
-        <div className={`px-4 py-3 flex items-start justify-between gap-3 border-b ${isDark ? 'border-zinc-800' : 'border-gray-200'}`}>
+        <div className={`shrink-0 px-5 py-3 flex items-start justify-between gap-3 border-b ${isDark ? 'border-zinc-800' : 'border-gray-200'}`}>
           <div className="flex-1 min-w-0">
             <div className={`text-[10px] uppercase tracking-wide font-semibold ${isDark ? 'text-fuchsia-300' : 'text-fuchsia-700'}`}>
-              Atender tarea
+              {yaResuelta ? 'Detalle de la tarea' : 'Atender tarea'}
             </div>
-            <div className="text-sm font-semibold mt-0.5">
+            <div className="text-base font-semibold mt-0.5">
               {esRevision ? 'Revisión de artes' : esSeguimiento ? 'Seguimiento Prueba de color' : tarea.tipo}
             </div>
             <div className={`text-[11px] mt-0.5 ${isDark ? 'text-zinc-400' : 'text-gray-500'}`}>
@@ -834,18 +856,18 @@ function AtenderTareaModal({
           </button>
         </div>
 
-        {/* Body */}
-        <div className="px-4 py-3 space-y-3">
+        {/* Body (scrolleable para que crezca sin desbordar) */}
+        <div className="flex-1 overflow-y-auto px-5 py-4 space-y-4">
           {/* Preview del arte asociado a la prueba. Click abre lightbox. */}
           {prueba.archivo && (
             <div>
-              <div className={`flex items-center gap-1.5 text-[10px] uppercase tracking-wide font-semibold mb-1 ${isDark ? 'text-zinc-400' : 'text-gray-500'}`}>
+              <div className={`flex items-center gap-1.5 text-[10px] uppercase tracking-wide font-semibold mb-1.5 ${isDark ? 'text-zinc-400' : 'text-gray-500'}`}>
                 <FileImage className="h-3 w-3" /> Arte de la prueba
               </div>
               <button
                 type="button"
                 onClick={() => setLightboxOpen(true)}
-                className={`relative w-full h-40 rounded-lg overflow-hidden border transition-all group ${isDark ? 'border-zinc-700 bg-zinc-800 hover:border-fuchsia-500/60' : 'border-gray-300 bg-gray-50 hover:border-fuchsia-400'}`}
+                className={`relative w-full h-64 rounded-lg overflow-hidden border transition-all group ${isDark ? 'border-zinc-700 bg-zinc-800 hover:border-fuchsia-500/60' : 'border-gray-300 bg-gray-50 hover:border-fuchsia-400'}`}
                 title="Click para ver en grande"
               >
                 <img
@@ -867,6 +889,31 @@ function AtenderTareaModal({
             </div>
           )}
 
+          {/* Resolucion previa — solo si la tarea ya fue atendida.
+              Muestra motivo capturado, quien y cuando. */}
+          {yaResuelta && resolucion && (
+            <div className={`rounded-lg border px-3 py-2.5 ${esRechazada ? (isDark ? 'bg-red-500/10 border-red-500/40' : 'bg-red-50 border-red-200') : esAtendidaOk ? (isDark ? 'bg-emerald-500/10 border-emerald-500/40' : 'bg-emerald-50 border-emerald-200') : (isDark ? 'bg-zinc-800/60 border-zinc-700' : 'bg-gray-50 border-gray-200')}`}>
+              <div className={`flex items-center gap-1.5 text-[10px] uppercase tracking-wide font-semibold mb-1.5 ${esRechazada ? (isDark ? 'text-red-200' : 'text-red-800') : esAtendidaOk ? (isDark ? 'text-emerald-200' : 'text-emerald-800') : (isDark ? 'text-zinc-300' : 'text-gray-600')}`}>
+                {esRechazada ? <XCircle className="h-3 w-3" /> : esAtendidaOk ? <CheckCircle2 className="h-3 w-3" /> : <Flag className="h-3 w-3" />}
+                {esRechazada ? 'Motivo del rechazo' : esAtendidaOk ? 'Resolución' : 'Detalle'}
+              </div>
+              {resolucion.motivo && (
+                <div className={`text-sm whitespace-pre-wrap ${isDark ? 'text-zinc-100' : 'text-gray-800'}`}>
+                  {resolucion.motivo}
+                </div>
+              )}
+              <div className={`text-[11px] mt-1.5 ${isDark ? 'text-zinc-400' : 'text-gray-500'}`}>
+                {resolucion.resueltaPor && <>Atendida por <span className={isDark ? 'text-zinc-200' : 'text-gray-700'}>{resolucion.resueltaPor}</span></>}
+                {resolucion.resueltaAt && <> · {new Date(resolucion.resueltaAt).toLocaleString('es-MX')}</>}
+              </div>
+            </div>
+          )}
+          {yaResuelta && !resolucion && (
+            <div className={`rounded-lg border px-3 py-2.5 text-xs ${isDark ? 'bg-zinc-800/60 border-zinc-700 text-zinc-400' : 'bg-gray-50 border-gray-200 text-gray-500'}`}>
+              Esta tarea ya fue atendida.
+            </div>
+          )}
+
           {asignados.length > 0 && (
             <div>
               <div className={`flex items-center gap-1.5 text-[10px] uppercase tracking-wide font-semibold mb-1 ${isDark ? 'text-zinc-400' : 'text-gray-500'}`}>
@@ -876,13 +923,15 @@ function AtenderTareaModal({
             </div>
           )}
 
-          <div className={`text-xs rounded-md px-3 py-2 ${isDark ? 'bg-zinc-800/60 text-zinc-300 border border-zinc-700' : 'bg-gray-50 text-gray-600 border border-gray-200'}`}>
-            {esRevision
-              ? 'Aprobar permite al arte avanzar a producción. Rechazar devuelve la prueba al diseñador con un comentario.'
-              : esSeguimiento
-                ? 'Marca la tarea de seguimiento como finalizada una vez atendida la aprobación del cliente.'
-                : 'Elige una acción para resolver esta tarea.'}
-          </div>
+          {!yaResuelta && (
+            <div className={`text-xs rounded-md px-3 py-2 ${isDark ? 'bg-zinc-800/60 text-zinc-300 border border-zinc-700' : 'bg-gray-50 text-gray-600 border border-gray-200'}`}>
+              {esRevision
+                ? 'Aprobar permite al arte avanzar a producción. Rechazar devuelve la prueba al diseñador con un comentario.'
+                : esSeguimiento
+                  ? 'Marca la tarea de seguimiento como finalizada una vez atendida la aprobación del cliente.'
+                  : 'Elige una acción para resolver esta tarea.'}
+            </div>
+          )}
 
           {/* Formulario de rechazo (solo cuando el usuario pulsa Rechazar) */}
           {showRechazoInput && (
@@ -903,8 +952,16 @@ function AtenderTareaModal({
         </div>
 
         {/* Footer con acciones */}
-        <div className={`px-4 py-3 flex items-center justify-end gap-2 border-t ${isDark ? 'border-zinc-800 bg-zinc-900/60' : 'border-gray-200 bg-gray-50/60'}`}>
-          {showRechazoInput ? (
+        <div className={`shrink-0 px-5 py-3 flex items-center justify-end gap-2 border-t ${isDark ? 'border-zinc-800 bg-zinc-900/60' : 'border-gray-200 bg-gray-50/60'}`}>
+          {yaResuelta ? (
+            // Tarea ya atendida: solo lectura — un boton Cerrar.
+            <button
+              onClick={onClose}
+              className={`text-xs font-semibold px-4 py-2 rounded border transition-colors ${isDark ? 'border-zinc-700 text-zinc-200 bg-zinc-800 hover:bg-zinc-700' : 'border-gray-300 text-gray-800 bg-white hover:bg-gray-50'}`}
+            >
+              Cerrar
+            </button>
+          ) : showRechazoInput ? (
             <>
               <button
                 onClick={() => { setShowRechazoInput(false); setComentarioRechazo(''); }}
