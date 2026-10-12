@@ -224,3 +224,28 @@ export function puedeGestionarPruebaColor(rol: string | null | undefined): boole
   if (PRUEBA_COLOR_OCULTA) return false;
   return !!rol && ROLES_PRUEBA_COLOR.has(rol);
 }
+
+// Jos 2026-10-12: permisos separados.
+// CREAR / SOLICITAR / REENVIAR / FINALIZAR seguimiento: solo analistas y admins.
+const ROLES_CREAR_PRUEBA_COLOR = new Set<string>([
+  'Analista de Servicio al Cliente',
+  'Administrador',
+  'DEV',
+]);
+// APROBAR / RECHAZAR tarea de Revisión: solo area de Diseño.
+const ROLES_REVISAR_PRUEBA_COLOR = new Set<string>([
+  'Coordinador de Diseño',
+  'Coordinador de Diseno',
+  'Diseñador',
+  'Diseñadores',
+  'Administrador',
+  'DEV',
+]);
+export function puedeCrearPruebaColor(rol: string | null | undefined): boolean {
+  if (PRUEBA_COLOR_OCULTA) return false;
+  return !!rol && ROLES_CREAR_PRUEBA_COLOR.has(rol);
+}
+export function puedeRevisarPruebaColor(rol: string | null | undefined): boolean {
+  if (PRUEBA_COLOR_OCULTA) return false;
+  return !!rol && ROLES_REVISAR_PRUEBA_COLOR.has(rol);
+}
