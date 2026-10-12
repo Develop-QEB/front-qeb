@@ -102,6 +102,10 @@ export function PruebasColorModal({ isOpen, onClose, propuestaId, contextoNombre
       setArchivoUrl(null);
       setNombreArte('');
       setNotas('');
+      // Jos 2026-10-12: resetear scIds para que el tab Pruebas muestre
+      // TODAS las pruebas (incluidas aprobadas/rechazadas de otros
+      // circuitos) y no solo las del circuito que se acaba de elegir.
+      setScIds(initialScId ? [initialScId] : []);
       queryClient.invalidateQueries({ queryKey: ['pruebas-color', 'propuesta', propuestaId] });
     },
     onError: (e: Error) => setError(e.message),
@@ -132,6 +136,10 @@ export function PruebasColorModal({ isOpen, onClose, propuestaId, contextoNombre
   // Agrupacion de pruebas por circuito para el tab "Pruebas". Mantiene el
   // orden de circuitos de la propuesta y pone al final cualquier prueba
   // con sc_id no encontrado en caras.
+  //
+  // Jos 2026-10-12: dentro de cada grupo las pruebas van ordenadas de
+  // MAS RECIENTE a MAS VIEJA. Pendientes/revisión suelen ser las ultimas
+  // creadas, por eso quedaban abajo en el orden natural del back.
   const pruebasPorCircuito = useMemo(() => {
     const caras = carasQuery.data || [];
     const porId = new Map<number, { cara: SolicitudCara | null; pruebas: PruebaColor[] }>();
@@ -140,13 +148,20 @@ export function PruebasColorModal({ isOpen, onClose, propuestaId, contextoNombre
       prev.pruebas.push(p);
       porId.set(p.sc_id, prev);
     }
+    const ordenarPorRecencia = (arr: PruebaColor[]) =>
+      [...arr].sort((a, b) => {
+        const ta = a.created_at ? new Date(a.created_at).getTime() : 0;
+        const tb = b.created_at ? new Date(b.created_at).getTime() : 0;
+        if (tb !== ta) return tb - ta;
+        return b.id - a.id;
+      });
     // orden: primero circuitos en orden de 'caras', luego los demas
     const grupos: Array<{ scId: number; cara: SolicitudCara | null; pruebas: PruebaColor[] }> = [];
     for (const c of caras) {
       const g = porId.get(c.id);
-      if (g) { grupos.push({ scId: c.id, cara: g.cara, pruebas: g.pruebas }); porId.delete(c.id); }
+      if (g) { grupos.push({ scId: c.id, cara: g.cara, pruebas: ordenarPorRecencia(g.pruebas) }); porId.delete(c.id); }
     }
-    for (const [scId, g] of porId.entries()) grupos.push({ scId, cara: g.cara, pruebas: g.pruebas });
+    for (const [scId, g] of porId.entries()) grupos.push({ scId, cara: g.cara, pruebas: ordenarPorRecencia(g.pruebas) });
     return grupos;
   }, [pruebas, carasQuery.data]);
 
