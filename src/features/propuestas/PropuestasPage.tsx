@@ -1543,6 +1543,11 @@ export function PropuestasPage() {
   const [approvePropuesta, setApprovePropuesta] = useState<Propuesta | null>(null);
   const [showAssignModal, setShowAssignModal] = useState(false);
   const [pruebaColorPropuesta, setPruebaColorPropuesta] = useState<Propuesta | null>(null);
+  // Jos 2026-10-12: cuando la propuesta se abre desde la tarea de rechazo
+  // de prueba de color, abrimos el modal directo en el formulario de nueva
+  // solicitud con el circuito original preseleccionado para subir v2.
+  const [pruebaColorInitialScId, setPruebaColorInitialScId] = useState<number | undefined>(undefined);
+  const [pruebaColorInitialTab, setPruebaColorInitialTab] = useState<'pruebas' | 'nueva' | undefined>(undefined);
   const puedePruebaColor = puedeGestionarPruebaColor(user?.rol);
   const [selectedPropuestaForAssign, setSelectedPropuestaForAssign] = useState<Propuesta | null>(null);
 
@@ -1554,13 +1559,23 @@ export function PropuestasPage() {
     // abrir el modal de prueba de color de la propuesta directamente, en vez
     // de mandar al Gestor de Artes. Feedback Jos 2026-10-06.
     const pruebaColorTareaId = searchParams.get('pruebaColorTareaId');
+    // Jos 2026-10-12: deep-link para abrir modal en 'nueva' con circuito
+    // preseleccionado (caso: tarea de rechazo → subir v2).
+    const pruebaColorNuevaScIdParam = searchParams.get('pruebaColorNuevaScId');
 
     if (viewIdParam) {
       const id = parseInt(viewIdParam, 10);
       if (!isNaN(id)) {
         // Fetch propuesta y abrir el modal correspondiente.
         propuestasService.getById(id).then((propuesta) => {
-          if (pruebaColorTareaId) {
+          if (pruebaColorNuevaScIdParam) {
+            const scId = parseInt(pruebaColorNuevaScIdParam, 10);
+            setPruebaColorInitialScId(Number.isFinite(scId) ? scId : undefined);
+            setPruebaColorInitialTab('nueva');
+            setPruebaColorPropuesta(propuesta);
+          } else if (pruebaColorTareaId) {
+            setPruebaColorInitialScId(undefined);
+            setPruebaColorInitialTab(undefined);
             setPruebaColorPropuesta(propuesta);
           } else {
             setSelectedPropuestaForAssign(propuesta);
@@ -2878,9 +2893,15 @@ export function PropuestasPage() {
       {pruebaColorPropuesta && (
         <PruebasColorModal
           isOpen={!!pruebaColorPropuesta}
-          onClose={() => setPruebaColorPropuesta(null)}
+          onClose={() => {
+            setPruebaColorPropuesta(null);
+            setPruebaColorInitialScId(undefined);
+            setPruebaColorInitialTab(undefined);
+          }}
           propuestaId={pruebaColorPropuesta.id}
           contextoNombre={pruebaColorPropuesta.nombre_campania || undefined}
+          initialScId={pruebaColorInitialScId}
+          initialTab={pruebaColorInitialTab}
         />
       )}
     </div>

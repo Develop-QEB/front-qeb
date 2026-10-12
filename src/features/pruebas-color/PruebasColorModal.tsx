@@ -25,13 +25,16 @@ interface Props {
   // Si viene preseleccionado, el dropdown de circuito se deshabilita y la
   // vista arranca en ese circuito (caso: abrir desde gestión de artes).
   initialScId?: number;
+  // Jos 2026-10-12: abrir en el tab 'nueva' con el formulario listo para
+  // subir una v2 (caso: analista entra desde la tarea de rechazo).
+  initialTab?: 'pruebas' | 'nueva';
 }
 
 // Modal reusable de Prueba de Color. Se usa desde 3 lugares:
 // (1) listado de propuestas — sin initialScId (el usuario elige circuito).
 // (2) listado de campañas — igual, sin initialScId.
 // (3) gestión de artes (campaña con APS) — con initialScId preseleccionado.
-export function PruebasColorModal({ isOpen, onClose, propuestaId, contextoNombre, initialScId }: Props) {
+export function PruebasColorModal({ isOpen, onClose, propuestaId, contextoNombre, initialScId, initialTab }: Props) {
   const isDark = useThemeStore(s => s.theme) === 'dark';
   const user = useAuthStore(s => s.user);
   const queryClient = useQueryClient();
@@ -77,9 +80,12 @@ export function PruebasColorModal({ isOpen, onClose, propuestaId, contextoNombre
       setNotas('');
       setError(null);
       setUploading(false);
-      setActiveTab('pruebas');
+      setActiveTab(initialTab || 'pruebas');
+      // Si abrimos directo en 'nueva' con circuito preseleccionado,
+      // tambien expandimos ese grupo del acordeon.
+      setExpandedGroups(initialScId ? new Set([initialScId]) : new Set());
     }
-  }, [isOpen, initialScId]);
+  }, [isOpen, initialScId, initialTab]);
 
   // Circuitos de la propuesta (para el dropdown de selección).
   const carasQuery = useQuery({
