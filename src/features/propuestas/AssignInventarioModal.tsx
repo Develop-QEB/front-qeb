@@ -18,7 +18,7 @@ import { inventariosService, InventarioDisponible } from '../../services/inventa
 import { propuestasService, ReservaModalItem, CaraUpdateData } from '../../services/propuestas.service';
 import { formatCurrency } from '../../lib/utils';
 import { parseCircuitoDigital } from '../../lib/circuitos';
-import { getRequiredPeriodoForArticulo } from '../../lib/periodos';
+import { articuloValidoEnPeriodo } from '../../lib/periodos';
 import { circuitosService } from '../../services/circuitos.service';
 import { clientesService } from '../../services/clientes.service';
 import { useEnvironmentStore, getEndpoints } from '../../store/environmentStore';
@@ -8493,8 +8493,9 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
                             // BF/CF solo aparecen en el dropdown de bonificación, no en el principal
                             if (code.startsWith('BF') || code.startsWith('CF')) return false;
                             // Gran Formato ↔ periodo: mensual solo muestra Gran Formato;
-                            // catorcena los excluye (mismo criterio que en solicitudes).
-                            return getRequiredPeriodoForArticulo(a.ItemName) === tipoPeriodo;
+                            // catorcena los excluye. Excepción: digital PB/CL también
+                            // en mensual (ver articuloValidoEnPeriodo).
+                            return articuloValidoEnPeriodo(a.ItemName, a.ItemCode, tipoPeriodo);
                           })}
                           value={selectedArticulo}
                           onChange={async (item: SAPArticulo) => {

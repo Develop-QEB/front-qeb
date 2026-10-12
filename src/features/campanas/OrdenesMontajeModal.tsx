@@ -276,6 +276,22 @@ const esGranFormato = (formato: string | null | undefined): boolean => {
 const esMensual = (tipoPeriodo: string | null | undefined): boolean =>
   (tipoPeriodo || '').toLowerCase() === 'mensual';
 
+// UN+ extendido (oct 2026, pedido Dirección): además del gran formato, el tab
+// UN+ incluye los DIGITALES de Parabús/Columna cuando son mensuales (prueba de
+// usar digital con rangos de días). Se identifican por tradicional_digital =
+// 'Digital' + formato PARABUS/COLUMNA.
+const esDigitalPbCl = (formato: string | null | undefined, tradicionalDigital: string | null | undefined): boolean => {
+  if ((tradicionalDigital || '').toLowerCase() !== 'digital') return false;
+  const f = (formato || '').toLowerCase();
+  return f.includes('parabus') || f.includes('columna');
+};
+// ¿La fila va al tab UN+ (mensual)? Gran formato O digital PB/CL.
+const esFilaUnmas = (
+  formato: string | null | undefined,
+  tipoPeriodo: string | null | undefined,
+  tradicionalDigital: string | null | undefined,
+): boolean => esMensual(tipoPeriodo) && (esGranFormato(formato) || esDigitalPbCl(formato, tradicionalDigital));
+
 // El FORMATO vive en distinto campo según la vista: en las filas CAT (Ocupación)
 // está en `tipo` (ver OrdenMontajeCAT: `tipo` = sc.formato); en las filas INVIAN
 // (Inventario) está en `formato` (sc.formato). Este accesor unifica ambos para
@@ -989,8 +1005,8 @@ export function OrdenesMontajeModal({ isOpen, onClose, canExport = true }: Orden
     if (!catData) return [];
     let items = [...catData];
 
-    // Solo periodos mensuales + gran formato (incluye vidrios; ver helper).
-    items = items.filter(item => esMensual(item.tipo_periodo) && esGranFormato(item.tipo));
+    // Solo periodos mensuales + gran formato (incluye vidrios) O digital PB/CL.
+    items = items.filter(item => esFilaUnmas(item.tipo, item.tipo_periodo, (item as { tradicional_digital?: string | null }).tradicional_digital));
 
     // Filtros globales
     if (sapDbFilter !== 'todas') {
@@ -1315,7 +1331,7 @@ export function OrdenesMontajeModal({ isOpen, onClose, canExport = true }: Orden
   // Se deriva de filteredINVIANData (que ya aplicó búsqueda/filtros/orden), solo
   // se acota a mensual + gran formato (incluye vidrios; ver esGranFormato).
   const filteredINVIANUnmasData = useMemo(
-    () => filteredINVIANData.filter(item => esMensual(item.tipo_periodo) && esGranFormato(item.formato)),
+    () => filteredINVIANData.filter(item => esFilaUnmas(item.formato, item.tipo_periodo, item.tradicional_digital)),
     [filteredINVIANData]
   );
 
