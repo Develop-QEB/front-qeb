@@ -10,6 +10,7 @@ import {
   ESTATUS_LABEL,
   puedeGestionarPruebaColor,
   AccionResolverTarea,
+  TareaAsociadaPruebaColor,
 } from '../../services/pruebasColor.service';
 import { propuestasService, SolicitudCara } from '../../services/propuestas.service';
 import { uploadsService } from '../../services/uploads.service';
@@ -55,12 +56,11 @@ export function PruebasColorModal({ isOpen, onClose, propuestaId, contextoNombre
   // lista de pruebas ya solicitadas.
   const [activeTab, setActiveTab] = useState<'pruebas' | 'nueva'>('pruebas');
 
-  // Acordeon de grupos por circuito. Jos 2026-10-12: para propuestas con
-  // muchos circuitos poder colapsar los grupos y navegar mas facil. Por
-  // defecto todos abiertos; el usuario colapsa los que no le interesan.
-  const [collapsedGroups, setCollapsedGroups] = useState<Set<number>>(new Set());
+  // Acordeon de grupos por circuito. Jos 2026-10-12: por defecto TODOS
+  // minimizados; el usuario expande solo el circuito que le interesa.
+  const [expandedGroups, setExpandedGroups] = useState<Set<number>>(new Set());
   const toggleGroup = (scId: number) => {
-    setCollapsedGroups(prev => {
+    setExpandedGroups(prev => {
       const next = new Set(prev);
       if (next.has(scId)) next.delete(scId); else next.add(scId);
       return next;
@@ -361,7 +361,7 @@ export function PruebasColorModal({ isOpen, onClose, propuestaId, contextoNombre
               {pruebas.length > 0 && (
                 <div className="space-y-3">
                   {pruebasPorCircuito.map(grupo => {
-                    const colapsado = collapsedGroups.has(grupo.scId);
+                    const colapsado = !expandedGroups.has(grupo.scId);
                     const resumenEstatus = (() => {
                       const counts: Record<string, number> = {};
                       for (const p of grupo.pruebas) counts[p.estatus] = (counts[p.estatus] || 0) + 1;
@@ -842,7 +842,7 @@ function AtenderTareaModal({
   onFinalizar,
   isSaving,
 }: {
-  tarea: { id: number; tipo: string | null; estatus: string | null; asignado: string | null };
+  tarea: TareaAsociadaPruebaColor;
   prueba: PruebaColor;
   isDark: boolean;
   onClose: () => void;
