@@ -1569,9 +1569,12 @@ export function PropuestasPage() {
         // Fetch propuesta y abrir el modal correspondiente.
         propuestasService.getById(id).then((propuesta) => {
           if (pruebaColorNuevaScIdParam) {
+            // Jos 2026-10-12: abrir en tab 'pruebas' con el acordeon del
+            // circuito expandido para que vea la prueba rechazada primero;
+            // desde la card rechazada hay boton 'Subir nueva version'.
             const scId = parseInt(pruebaColorNuevaScIdParam, 10);
             setPruebaColorInitialScId(Number.isFinite(scId) ? scId : undefined);
-            setPruebaColorInitialTab('nueva');
+            setPruebaColorInitialTab('pruebas');
             setPruebaColorPropuesta(propuesta);
           } else if (pruebaColorTareaId) {
             setPruebaColorInitialScId(undefined);
