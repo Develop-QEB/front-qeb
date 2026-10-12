@@ -1026,11 +1026,13 @@ function AtenderTareaModal({
     try {
       const data = JSON.parse(tarea.evidencia);
       const motivo = data.motivoRechazo || data.comentarioResolucion || null;
-      if (!motivo && !data.resueltaPor) return null;
+      if (!motivo && !data.resueltaPor && !data.archivoAdjunto && !data.enlaceAdjunto) return null;
       return {
         motivo: typeof motivo === 'string' ? motivo : null,
         resueltaPor: data.resueltaPor || null,
         resueltaAt: data.resueltaAt || null,
+        archivoAdjunto: typeof data.archivoAdjunto === 'string' ? data.archivoAdjunto : null,
+        enlaceAdjunto: typeof data.enlaceAdjunto === 'string' ? data.enlaceAdjunto : null,
       };
     } catch { return null; }
   }, [tarea.evidencia]);
@@ -1157,6 +1159,20 @@ function AtenderTareaModal({
               {resolucion.motivo && (
                 <div className={`text-sm whitespace-pre-wrap ${isDark ? 'text-zinc-100' : 'text-gray-800'}`}>
                   {resolucion.motivo}
+                </div>
+              )}
+              {(resolucion.archivoAdjunto || resolucion.enlaceAdjunto) && (
+                <div className="flex items-center gap-2 flex-wrap pt-1.5">
+                  {resolucion.archivoAdjunto && (
+                    <a href={resolucion.archivoAdjunto} target="_blank" rel="noreferrer" className={`inline-flex items-center gap-1.5 text-xs font-medium px-2.5 py-1 rounded border ${isDark ? 'text-fuchsia-200 border-fuchsia-500/40 bg-fuchsia-500/10 hover:bg-fuchsia-500/20' : 'text-fuchsia-800 border-fuchsia-300 bg-fuchsia-50 hover:bg-fuchsia-100'}`}>
+                      <FileImage className="h-3 w-3" /> Ver archivo adjunto
+                    </a>
+                  )}
+                  {resolucion.enlaceAdjunto && (
+                    <a href={resolucion.enlaceAdjunto} target="_blank" rel="noreferrer" className={`inline-flex items-center gap-1.5 text-xs font-medium px-2.5 py-1 rounded border ${isDark ? 'text-cyan-200 border-cyan-500/40 bg-cyan-500/10 hover:bg-cyan-500/20' : 'text-cyan-800 border-cyan-300 bg-cyan-50 hover:bg-cyan-100'}`}>
+                      <ExternalLink className="h-3 w-3" /> Abrir link adjunto
+                    </a>
+                  )}
                 </div>
               )}
               <div className={`text-[11px] mt-1.5 ${isDark ? 'text-zinc-400' : 'text-gray-500'}`}>
