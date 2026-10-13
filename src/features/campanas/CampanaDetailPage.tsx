@@ -1257,7 +1257,13 @@ export function CampanaDetailPage() {
   const gruposSinInventario = useMemo(() => {
     return solicitudCaras.filter((sc: SolicitudCara) => {
       const info = groupCompletenessMap.get(sc.id);
-      return info && info.reservadas === 0 && info.esperadas > 0;
+      // IM / ES / ESP no requieren inventario físico: groupCompletenessMap ya los
+      // marca `completo` (esArticuloSinInventario). Sin este `!info.completo`, las
+      // líneas de impresión (0 reservas físicas, caras > 0) se colaban aquí y el
+      // detalle las mostraba como "Incompleto / sin inventario" (ticket #599,
+      // campaña 81060 ZAGAZINE tras desposteo). Las cortesías (completo=false) y
+      // los circuitos realmente incompletos siguen entrando.
+      return info && !info.completo && info.reservadas === 0 && info.esperadas > 0;
     });
   }, [solicitudCaras, groupCompletenessMap]);
 
