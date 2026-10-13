@@ -2998,6 +2998,13 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
       };
     };
 
+    // Rollback de BF huerfana: si creamos una cara BF via POST y luego el flujo del
+    // RT truena (fallo de create/update, error de red, excepcion en el bulk local),
+    // la BF ya quedo en DB con un grupo_rt_bf sin pareja. Caso #80925: 3 BF visibles
+    // de las cuales 2 eran huerfanas de intentos previos fallidos. Al final del try
+    // ponemos esto en null; si llegamos al catch con un id aqui, borramos.
+    let createdBfIdForRollback: number | null = null;
+
     try {
       if (editingCaraId) {
         // ---- LOCAL-ONLY UPDATE for RT cara; CREATE/UPDATE/DELETE BF pair as needed ----
@@ -3157,6 +3164,7 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
             // Create a new BF row in DB (needs a DB id to tie reservas later)
             const bfData = buildBfCaraData(articuloBf.ItemCode, bfCount, grupoRtBf);
             const createdBf = await campanasService.createCara(campana!.id, { ...bfData, deferAuth: true } as any);
+            createdBfIdForRollback = createdBf.id;
             createdBfItem = {
               localId: `cara-${createdBf.id}`,
               id: createdBf.id,
@@ -3386,6 +3394,7 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
           const bfCount = newCara.bonificacion || 0;
           const bfData = buildBfCaraData(articuloBf.ItemCode, bfCount, grupoRtBf);
           const createdBf = await campanasService.createCara(campana!.id, { ...bfData, deferAuth: true } as any);
+          createdBfIdForRollback = createdBf.id;
           newBfItem = {
             localId: `cara-${createdBf.id}`,
             id: createdBf.id,
@@ -3455,8 +3464,18 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
       setSelectedArticulo(null);
       setArticuloBf(null);
       setShowAddCaraForm(false);
+      // Flujo completo exitoso: ya quedo la pareja RT+BF o solo el RT. Limpiamos el
+      // flag para que el catch no borre una BF legitima si algo revienta despues.
+      createdBfIdForRollback = null;
     } catch (error) {
       console.error('Error saving cara:', error);
+      if (createdBfIdForRollback != null) {
+        try {
+          await campanasService.deleteCara(campana!.id, createdBfIdForRollback, false, undefined, true);
+        } catch (rollbackErr) {
+          console.error('Rollback de BF huerfana fallo (grupo quedara en DB):', rollbackErr);
+        }
+      }
       alert('Error al guardar la cara');
     }
   };
