@@ -2798,6 +2798,11 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
         }
       : null;
 
+    // Rollback de BF huerfana: ver justificacion en AssignInventarioCampanaModal.tsx
+    // (caso #80925). Si el POST de la BF salio pero el flujo del RT truena despues,
+    // borramos la BF para no dejar grupos sin pareja en DB.
+    let createdBfIdForRollback: number | null = null;
+
     try {
       if (editingCaraId) {
         // ---- LOCAL-ONLY UPDATE (no API call for the RT cara itself) ----
@@ -2933,6 +2938,7 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
               bfIdToRemove = existingBfPair.id ?? null;
               bfLocalIdToRemove = existingBfPair.localId;
               const createdBf = await propuestasService.createCara(propuesta.id, bfCaraData);
+              createdBfIdForRollback = createdBf.id;
               sessionNewCaraIdsRef.current.add(createdBf.id);
               newBfCaraItem = {
                 localId: `cara-${createdBf.id}`,
@@ -2986,6 +2992,7 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
           } else if (!existingBfPair && usePairMode && bfCaraData) {
             // Create new BF pair in DB
             const createdBf = await propuestasService.createCara(propuesta.id, bfCaraData);
+            createdBfIdForRollback = createdBf.id;
             sessionNewCaraIdsRef.current.add(createdBf.id);
             newBfCaraItem = {
               localId: `cara-${createdBf.id}`,
@@ -3200,6 +3207,7 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
         let createdBfItem: CaraItem | null = null;
         if (bfCaraData) {
           const createdBf = await propuestasService.createCara(propuesta.id, bfCaraData);
+          createdBfIdForRollback = createdBf.id;
           createdBfItem = {
             localId: `cara-${createdBf.id}`,
             id: createdBf.id,
@@ -3281,8 +3289,17 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
       setNewCara(EMPTY_CARA);
       setSelectedArticulo(null);
       setShowAddCaraForm(false);
+      // Flujo completo exitoso — no borrar BF al limpiar si algo falla despues.
+      createdBfIdForRollback = null;
     } catch (error) {
       console.error('Error saving cara:', error);
+      if (createdBfIdForRollback != null) {
+        try {
+          await propuestasService.deleteCara(propuesta.id, createdBfIdForRollback);
+        } catch (rollbackErr) {
+          console.error('Rollback de BF huerfana fallo (grupo quedara en DB):', rollbackErr);
+        }
+      }
       alert('Error al guardar la cara');
     }
   };
