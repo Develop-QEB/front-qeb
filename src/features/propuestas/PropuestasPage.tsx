@@ -643,7 +643,8 @@ function StatusModal({ isOpen, onClose, propuesta, onStatusChange, allowedStatus
       // - sufijo "-QR" (Gestión QTO, Querétaro/Celaya sin inventario disponible):
       //   reservar es OPCIONAL — pase a ventas funciona con o sin reservas.
       const articulo = ((cara as any).articulo || '').toUpperCase();
-      if (articulo.startsWith('IM') || articulo.startsWith('ESP') || articulo.startsWith('ES-') || articulo.endsWith('-QR')) return false;
+      // CF-#### (CF + dígitos) = servicio tipo Mantenimiento Ext: sin inventario, como IM.
+      if (articulo.startsWith('IM') || articulo.startsWith('ESP') || articulo.startsWith('ES-') || articulo.endsWith('-QR') || /^CF-?\d/.test(articulo)) return false;
 
       const caraReservas = (reservas as any[]).filter(r => r.solicitud_cara_id === cara.id);
       // Bonificacion is determined by estatus='Bonificado', not by tipo_de_cara

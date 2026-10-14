@@ -137,9 +137,21 @@ const isEspecialArticle = (itemCode: string, itemName?: string): boolean => {
   return false;
 };
 
-// Detectar si un artículo no requiere inventario (impresión o ejecución especial)
+// CF-#### (CF + dígitos, ej. CF-0017 "Mantenimiento Extraordinario"): artículo de
+// SERVICIO cobrado — NO bonificación contraflujo. Se maneja como IM: sin inventario.
+const isServicioCFArticle = (itemCode?: string | null): boolean => {
+  return /^CF-?\d/i.test((itemCode || '').trim());
+};
+
+// BF/CF de bonificación "real" (excluye los CF-#### de servicio)
+const isBfCfArticle = (itemCode?: string | null): boolean => {
+  const code = (itemCode || '').toUpperCase();
+  return (code.startsWith('BF') || code.startsWith('CF')) && !isServicioCFArticle(code);
+};
+
+// Detectar si un artículo no requiere inventario (impresión, ejec. especial o servicio CF-####)
 const isNoInventoryArticle = (itemCode: string, itemName?: string): boolean => {
-  return isImpresionArticle(itemCode, itemName) || isEspecialArticle(itemCode, itemName);
+  return isImpresionArticle(itemCode, itemName) || isEspecialArticle(itemCode, itemName) || isServicioCFArticle(itemCode);
 };
 
 // Regla "Direcciones Aprobadas" (espejo del backend conservarAprobacionSiIncrementa).
@@ -181,6 +193,7 @@ const isQuretaroArticle = (itemCode: string): boolean => {
 // SAP) se cuenta como Renta con tarifa flexible, no como bonificación.
 const isBonifSplitArticle = (articulo?: string | null): boolean => {
   const a = (articulo || '').toUpperCase();
+  if (isServicioCFArticle(a)) return false; // CF-#### = servicio, no bonif
   return a.startsWith('BF') || a.startsWith('CF') || a.startsWith('CT');
 };
 
@@ -2846,10 +2859,11 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
 
     const artCode = (newCara.articulo || '').toUpperCase();
     const esCortesia = artCode.startsWith('CT');
-    const esBonificacion = artCode.startsWith('BF') || artCode.startsWith('CF');
+    const esBonificacion = isBfCfArticle(artCode);
     const esImpresion = artCode.startsWith('IM');
     const esIntercambio = artCode.startsWith('IN');
-    if (newCara.tarifa_publica <= 0 && !esCortesia && !esBonificacion && !esImpresion && !esIntercambio) {
+    const esServicio = isServicioCFArticle(artCode);
+    if (newCara.tarifa_publica <= 0 && !esCortesia && !esBonificacion && !esImpresion && !esIntercambio && !esServicio) {
       alert('La tarifa pública no puede ser 0. Por favor ingresa una tarifa válida.');
       return;
     }
@@ -2872,6 +2886,7 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
     const articuloSupportsBf =
       !esCortesia &&
       !esBonificacion &&
+      !esServicio &&
       !artCode.startsWith('IM') &&
       !artCode.startsWith('IN') &&
       !isEspecialArticle(newCara.articulo || '');
@@ -8440,8 +8455,9 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
                           label="Seleccionar artículo"
                           options={(articulosData || []).filter(a => {
                             const code = a.ItemCode.toUpperCase();
-                            // BF/CF solo aparecen en el dropdown de bonificación, no en el principal
-                            if (code.startsWith('BF') || code.startsWith('CF')) return false;
+                            // BF/CF solo aparecen en el dropdown de bonificación, no en el
+                            // principal. Los CF-#### (servicio/mantenimiento) SÍ van aquí.
+                            if (isBfCfArticle(code)) return false;
                             // Gran Formato ↔ periodo: mensual solo muestra Gran Formato;
                             // catorcena los excluye. Excepción: digital PB/CL también
                             // en mensual (ver articuloValidoEnPeriodo).
@@ -8521,6 +8537,7 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
                             const isIntercambio = item.ItemCode.toUpperCase().startsWith('IN');
                             const isImpresion = item.ItemCode.toUpperCase().startsWith('IM');
                             const isEspecial = isEspecialArticle(item.ItemCode);
+                            const isSrvCF = isServicioCFArticle(item.ItemCode);
                             const isTarifaCero = isCortesia;
                             setNewCara({
                               ...newCara,
@@ -8530,7 +8547,7 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
                               caras: isCortesia ? 0 : newCara.caras,
                               caras_flujo: isCortesia ? 0 : newCara.caras_flujo,
                               caras_contraflujo: isCortesia ? 0 : newCara.caras_contraflujo,
-                              bonificacion: (isImpresion || isIntercambio || isEspecial) ? 0 : newCara.bonificacion,
+                              bonificacion: (isImpresion || isIntercambio || isEspecial || isSrvCF) ? 0 : newCara.bonificacion,
                               estados: plazaPorNombre?.plaza || ciudadEstado?.estado || newCara.estados,
                               // Si ciudadEstado existe, usar su ciudad (incluso si es vacía para CDMX)
                               ciudad: ciudadEstado ? ciudadEstado.ciudad : newCara.ciudad,
@@ -8911,7 +8928,7 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
                     <div className="grid grid-cols-4 gap-4 mb-4">
                       <div className="space-y-1">
                         <label className={`text-xs ${isDark ? 'text-zinc-500' : 'text-gray-500'}`}>
-                          {newCara.articulo?.toUpperCase().startsWith('IM') ? 'Impresiones' : newCara.articulo?.toUpperCase().startsWith('IN') ? 'Intercambio' : isEspecialArticle(newCara.articulo || '') ? 'Ejec. Especiales' : (newCara.formato || '').toUpperCase().includes('PUENTE PEATONAL') ? 'Puentes en Renta' : 'Caras en Renta'}
+                          {newCara.articulo?.toUpperCase().startsWith('IM') ? 'Impresiones' : isServicioCFArticle(newCara.articulo) ? 'Servicios' : newCara.articulo?.toUpperCase().startsWith('IN') ? 'Intercambio' : isEspecialArticle(newCara.articulo || '') ? 'Ejec. Especiales' : (newCara.formato || '').toUpperCase().includes('PUENTE PEATONAL') ? 'Puentes en Renta' : 'Caras en Renta'}
                           {newCara.articulo?.toUpperCase().startsWith('CT') && (
                             <span className="ml-1 text-cyan-400 text-[10px]">(Cortesía)</span>
                           )}
@@ -9002,7 +9019,7 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
                           {canEditResumen && !editingCaraHasReservas ? (
                             <SearchableSelect
                               label=""
-                              options={(articulosData || []).filter((a: SAPArticulo) => a.ItemCode.toUpperCase().startsWith('BF') || a.ItemCode.toUpperCase().startsWith('CF'))}
+                              options={(articulosData || []).filter((a: SAPArticulo) => isBfCfArticle(a.ItemCode))}
                               value={articuloBf}
                               onChange={(item: SAPArticulo) => setArticuloBf(item)}
                               onClear={() => setArticuloBf(null)}

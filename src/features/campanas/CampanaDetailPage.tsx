@@ -496,11 +496,12 @@ const isIMArticle = (item: InventarioReservado | InventarioConAPS): boolean => {
   return String(item.rsv_ids).startsWith('sc_');
 };
 
-// Artículos que NO requieren inventario físico: impresión (IM) y ejecución especial
-// (ES/ESP). Se consideran siempre completos, igual que IM (no piden inventario).
+// Artículos que NO requieren inventario físico: impresión (IM), ejecución especial
+// (ES/ESP) y servicios CF-#### (CF + dígitos, ej. CF-0017 Mantenimiento Ext — NO
+// confundir con bonif CF). Se consideran siempre completos (no piden inventario).
 const esArticuloSinInventario = (articulo?: string | null): boolean => {
   const a = String(articulo || '').toUpperCase();
-  return a.startsWith('IM') || a.startsWith('ESP') || a.startsWith('ES-');
+  return a.startsWith('IM') || a.startsWith('ESP') || a.startsWith('ES-') || /^CF-?\d/.test(a);
 };
 
 const TABLE_COLUMNS_IM_APS: TableColumn[] = [
