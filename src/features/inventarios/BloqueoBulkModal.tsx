@@ -35,7 +35,7 @@ export interface PairAssignment {
 }
 
 export interface BloqueoBulkData {
-  // Clasificación a aplicar a todos: 'Bloqueado' | 'Inhabilitado'.
+  // Clasificación a aplicar a todos: 'No Disponible' | 'Inhabilitado'.
   tipo: TipoBloqueoInventario;
   motivo: string;
   // Por cada inventario, lo que se necesita aplicar al confirmar:
@@ -375,7 +375,7 @@ export function BloqueoBulkModal({ isOpen, onClose, items, onConfirm, isSubmitti
           <div className="flex items-center gap-2">
             <Ban className="h-5 w-5 text-red-400" />
             <h2 className="text-sm font-semibold text-white">
-              {textos.infinitivo} {items.length} inventarios
+              {textos.infinitivo} — {items.length} inventarios
             </h2>
           </div>
           <button onClick={handleClose} className="text-zinc-500 hover:text-zinc-300"><X className="h-4 w-4" /></button>
@@ -555,7 +555,7 @@ export function BloqueoBulkModal({ isOpen, onClose, items, onConfirm, isSubmitti
               className="flex-1 flex items-center justify-center gap-2 px-3 py-2 text-sm font-medium bg-red-600 hover:bg-red-500 disabled:bg-zinc-700 disabled:text-zinc-500 text-white rounded-lg transition-colors"
             >
               {isSubmitting ? <Loader2 className="h-4 w-4 animate-spin" /> : <Ban className="h-4 w-4" />}
-              {isSubmitting ? `${textos.gerundio}...` : `${textos.infinitivo} ${items.length} inventarios`}
+              {isSubmitting ? `${textos.gerundio}...` : `${textos.infinitivo} (${items.length} inventarios)`}
             </button>
           ) : !isLastStep ? (
             <button

@@ -220,7 +220,7 @@ Tiene 5 pestañas:
   'Inventarios': `El usuario está en el módulo de Inventarios, el catálogo de espacios publicitarios.
 Elementos visibles:
 - Barra de búsqueda: busca por código de inventario, dirección, municipio.
-- Filtros: Tipo (espectacular, mural, valla, etc.), Plaza (ciudad), Estatus (Disponible, Reservado, Bloqueado, Vendido).
+- Filtros: Tipo (espectacular, mural, valla, etc.), Plaza (ciudad), Estatus (Disponible, Reservado, No Disponible, Vendido).
 - Tabla principal con columnas: Código, Nombre/Ubicación, Plaza, Municipio, Tipo, Formato, Estatus, Precio, Acciones.
 - Botón "Crear" (solo admins): crea un nuevo espacio en el inventario.
 - Botón "Cargar CSV": carga masiva de inventario desde archivo CSV.
@@ -231,7 +231,7 @@ Elementos visibles:
 Estatus explicados:
 - Disponible: el espacio puede asignarse a propuestas nuevas.
 - Reservado: está comprometido en una propuesta o campaña activa.
-- Bloqueado: bloqueado manualmente por el administrador (no disponible).
+- No Disponible: bloqueado manualmente por el administrador, no se puede ocupar (antes se llamaba "Bloqueado"; también existe "Inhabilitado", que se comporta igual).
 - Vendido: cerrado como venta definitiva.`,
 
   // ─────────────────────────── CLIENTES ───────────────────────────
