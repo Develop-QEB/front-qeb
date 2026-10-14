@@ -312,6 +312,8 @@ export const solicitudesService = {
     costo: number;
     tarifa_publica?: number;
     articulo?: string | null;
+    // Compañía SAP del origen: 'UDC' evalúa contra el tabulador de Dirección UDC.
+    sap_database?: string | null;
   }): Promise<{
     estado: 'aprobado' | 'pendiente_dcm' | 'pendiente_dg';
     autorizacion_dg: 'aprobado' | 'pendiente' | 'rechazado';

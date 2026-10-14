@@ -1523,6 +1523,7 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
           costo: precioTotal,
           tarifa_publica: newCara.tarifaPublica,
           articulo: newCara.articulo?.ItemCode || null,
+          sap_database: esUDC ? 'UDC' : ((selectedCuic as any)?.sap_database ?? undefined),
         });
         autorizacion_dg = resultado.autorizacion_dg;
         autorizacion_dcm = resultado.autorizacion_dcm;
@@ -1883,6 +1884,7 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
         costo: cara.precioTotal,
         tarifa_publica: cara.tarifaPublica,
         articulo: cara.articulo?.ItemCode || null,
+        sap_database: esUDC ? 'UDC' : ((selectedCuic as any)?.sap_database ?? undefined),
       });
       const nuevoDg = eraCorreccion ? 'pendiente' : resultado.autorizacion_dg;
       // Solo se actualiza autorizacion_* (badge/local). _original* se mantiene

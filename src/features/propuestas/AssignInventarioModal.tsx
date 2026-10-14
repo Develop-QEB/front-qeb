@@ -2885,6 +2885,7 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
                 costo: costoCalculado,
                 tarifa_publica: newCara.tarifa_publica,
                 articulo: newCara.articulo || null,
+                sap_database: esUDC ? 'UDC' : undefined,
               });
               autorizacion_dg = resultado.autorizacion_dg || 'aprobado';
               autorizacion_dcm = resultado.autorizacion_dcm || 'aprobado';
@@ -3317,6 +3318,7 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
         costo: target.costo,
         tarifa_publica: target.tarifa_publica,
         articulo: target.articulo || null,
+        sap_database: esUDC ? 'UDC' : undefined,
       });
       const nuevoDg = eraCorreccion ? 'pendiente' : resultado.autorizacion_dg;
       // Espejear el nuevo estado de autorización al BF del par. El backend ya
