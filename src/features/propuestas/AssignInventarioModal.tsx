@@ -156,9 +156,21 @@ const isEspecialArticle = (itemCode: string, itemName?: string): boolean => {
   return false;
 };
 
+// CF-#### (CF + dígitos, ej. CF-0017 "Mantenimiento Extraordinario"): artículo de
+// SERVICIO cobrado — NO bonificación contraflujo. Se maneja como IM: sin inventario.
+const isServicioCFArticle = (itemCode?: string | null): boolean => {
+  return /^CF-?\d/i.test((itemCode || '').trim());
+};
+
+// BF/CF de bonificación "real" (excluye los CF-#### de servicio)
+const isBfCfArticle = (itemCode?: string | null): boolean => {
+  const code = (itemCode || '').toUpperCase();
+  return (code.startsWith('BF') || code.startsWith('CF')) && !isServicioCFArticle(code);
+};
+
 // Detectar si un artículo no requiere inventario
 const isNoInventoryArticle = (itemCode: string, itemName?: string): boolean => {
-  return isImpresionArticle(itemCode, itemName) || isEspecialArticle(itemCode, itemName);
+  return isImpresionArticle(itemCode, itemName) || isEspecialArticle(itemCode, itemName) || isServicioCFArticle(itemCode);
 };
 
 // Regla "Direcciones Aprobadas" (espejo del backend conservarAprobacionSiIncrementa).
@@ -200,6 +212,7 @@ const isQuretaroArticle = (itemCode: string): boolean => {
 // SAP) se cuenta como Renta con tarifa flexible, no como bonificación.
 const isBonifSplitArticle = (articulo?: string | null): boolean => {
   const a = (articulo || '').toUpperCase();
+  if (isServicioCFArticle(a)) return false; // CF-#### = servicio, no bonif
   return a.startsWith('BF') || a.startsWith('CF') || a.startsWith('CT');
 };
 
@@ -2667,28 +2680,29 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
       return;
     }
 
-    // Validar tarifa pública: si es 0, solo CT, BF/CF, IM e IN (intercambio)
-    // pueden avanzar.
+    // Validar tarifa pública: si es 0, solo CT, BF/CF, IM, IN (intercambio) y
+    // CF-#### (servicio, como IM) pueden avanzar.
     const artCode = (newCara.articulo || '').toUpperCase();
     const esCortesia = artCode.startsWith('CT');
-    const esBonificacion = artCode.startsWith('BF') || artCode.startsWith('CF');
+    const esBonificacion = isBfCfArticle(artCode);
     const esImpresion = artCode.startsWith('IM');
     const esIntercambio = artCode.startsWith('IN');
-    if (newCara.tarifa_publica <= 0 && !esCortesia && !esBonificacion && !esImpresion && !esIntercambio) {
+    const esServicio = isServicioCFArticle(artCode);
+    if (newCara.tarifa_publica <= 0 && !esCortesia && !esBonificacion && !esImpresion && !esIntercambio && !esServicio) {
       alert('La tarifa pública no puede ser 0. Por favor ingresa una tarifa válida.');
       return;
     }
 
     // BF validation: bonificacion > 0 on RT article requires articuloBf
-    const needsBfArticle = (newCara.bonificacion || 0) > 0 && !esCortesia && !esBonificacion && !esImpresion && !isEspecialArticle(artCode);
+    const needsBfArticle = (newCara.bonificacion || 0) > 0 && !esCortesia && !esBonificacion && !esImpresion && !esServicio && !isEspecialArticle(artCode);
     if (needsBfArticle && !newCara.articuloBf) {
       alert('Debes seleccionar el artículo de bonificación (BF) antes de guardar, o quita las caras de bonificación a 0.');
       return;
     }
 
     // No permitir bonificación sin renta (la bonif es ADICIONAL a la renta).
-    // Excepción: artículos BF/CF/CT/IM y especiales que no requieren renta.
-    if ((newCara.bonificacion || 0) > 0 && (newCara.caras || 0) <= 0 && !esCortesia && !esBonificacion && !esImpresion && !isEspecialArticle(artCode)) {
+    // Excepción: artículos BF/CF/CT/IM, servicios CF-#### y especiales que no requieren renta.
+    if ((newCara.bonificacion || 0) > 0 && (newCara.caras || 0) <= 0 && !esCortesia && !esBonificacion && !esImpresion && !esServicio && !isEspecialArticle(artCode)) {
       alert('No puedes agregar bonificación sin tener al menos 1 cara de renta. Sube las caras o quita la bonificación.');
       return;
     }
@@ -2712,15 +2726,17 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
     // Determine if this save is an RT/BF pair (bonificacion > 0 AND articuloBf selected AND article is neither CT/BF/CF/IM/especial)
     const primaryCodeUpper = (newCara.articulo || '').toUpperCase();
     const isPrimaryCortesia = primaryCodeUpper.startsWith('CT');
-    const isPrimaryBonificacion = primaryCodeUpper.startsWith('BF') || primaryCodeUpper.startsWith('CF');
+    const isPrimaryBonificacion = isBfCfArticle(primaryCodeUpper);
     const isPrimaryImpresion = primaryCodeUpper.startsWith('IM');
     const isPrimaryEspecial = isEspecialArticle(primaryCodeUpper);
+    const isPrimaryServicio = isServicioCFArticle(primaryCodeUpper);
     const usePairMode = !!newCara.articuloBf
       && (newCara.bonificacion || 0) > 0
       && !isPrimaryCortesia
       && !isPrimaryBonificacion
       && !isPrimaryImpresion
-      && !isPrimaryEspecial;
+      && !isPrimaryEspecial
+      && !isPrimaryServicio;
 
     // Reuse existing grupo_rt_bf (for edits) or create a new one (for new pairs)
     const grupoRtBfVal: number | null = usePairMode
@@ -8719,8 +8735,9 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
                           label="Seleccionar artículo"
                           options={(articulosData || []).filter(a => {
                             const code = a.ItemCode.toUpperCase();
-                            // BF/CF solo aparecen en el dropdown de bonificación, no en el principal
-                            if (code.startsWith('BF') || code.startsWith('CF')) return false;
+                            // BF/CF solo aparecen en el dropdown de bonificación, no en el
+                            // principal. Los CF-#### (servicio/mantenimiento) SÍ van aquí.
+                            if (isBfCfArticle(code)) return false;
                             // Gran Formato ↔ periodo: mensual solo muestra Gran Formato;
                             // catorcena los excluye. Excepción: digital PB/CL también
                             // en mensual (ver articuloValidoEnPeriodo).
@@ -8786,6 +8803,7 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
                               const esIN = item.ItemCode.toUpperCase().startsWith('IN');
                               const esIM = item.ItemCode.toUpperCase().startsWith('IM');
                               const esESP = isEspecialArticle(item.ItemCode.toUpperCase());
+                              const esSrvCF = isServicioCFArticle(item.ItemCode);
                               setNewCara({
                                 ...newCara,
                                 articulo: item.ItemCode,
@@ -8794,7 +8812,7 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
                                 caras: esCT ? 0 : newCara.caras,
                                 caras_flujo: esCT ? 0 : newCara.caras_flujo,
                                 caras_contraflujo: esCT ? 0 : newCara.caras_contraflujo,
-                                bonificacion: (esIM || esIN || esESP) ? 0 : newCara.bonificacion,
+                                bonificacion: (esIM || esIN || esESP || esSrvCF) ? 0 : newCara.bonificacion,
                                 estados: udc?.plazaLabel || 'Ciudad de México / AM',
                                 ciudad: udc?.ciudad || 'AICM',
                                 formato: udc?.familiaLabel || newCara.formato,
@@ -8826,6 +8844,7 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
                             const isIntercambio = item.ItemCode.toUpperCase().startsWith('IN');
                             const isImpresion = item.ItemCode.toUpperCase().startsWith('IM');
                             const isEspecial = isEspecialArticle(item.ItemCode.toUpperCase());
+                            const isSrvCF = isServicioCFArticle(item.ItemCode);
                             const isTarifaCero = isCortesia;
                             setNewCara({
                               ...newCara,
@@ -8835,7 +8854,7 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
                               caras: isCortesia ? 0 : newCara.caras,
                               caras_flujo: isCortesia ? 0 : newCara.caras_flujo,
                               caras_contraflujo: isCortesia ? 0 : newCara.caras_contraflujo,
-                              bonificacion: (isImpresion || isIntercambio || isEspecial) ? 0 : newCara.bonificacion,
+                              bonificacion: (isImpresion || isIntercambio || isEspecial || isSrvCF) ? 0 : newCara.bonificacion,
                               estados: plazaPorNombre?.plaza || ciudadEstado?.estado || newCara.estados,
                               // Si ciudadEstado existe, usar su ciudad (incluso si es vacía para CDMX)
                               ciudad: ciudadEstado ? ciudadEstado.ciudad : newCara.ciudad,
@@ -9294,7 +9313,7 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
                     <div className="grid grid-cols-4 gap-4 mb-4">
                       <div className="space-y-1">
                         <label className={`text-xs ${isDark ? 'text-zinc-500' : 'text-gray-400'}`}>
-                          {isEspecialArticle((newCara.articulo || '').toUpperCase()) ? 'Ejec. Especiales' : newCara.articulo?.toUpperCase().startsWith('IM') ? 'Impresiones' : newCara.articulo?.toUpperCase().startsWith('IN') ? 'Intercambio' : (newCara.formato || '').toUpperCase().includes('PUENTE PEATONAL') ? 'Puentes en Renta' : 'Caras en Renta'}
+                          {isEspecialArticle((newCara.articulo || '').toUpperCase()) ? 'Ejec. Especiales' : newCara.articulo?.toUpperCase().startsWith('IM') ? 'Impresiones' : isServicioCFArticle(newCara.articulo) ? 'Servicios' : newCara.articulo?.toUpperCase().startsWith('IN') ? 'Intercambio' : (newCara.formato || '').toUpperCase().includes('PUENTE PEATONAL') ? 'Puentes en Renta' : 'Caras en Renta'}
                           {newCara.articulo?.toUpperCase().startsWith('CT') && (
                             <span className="ml-1 text-cyan-400 text-[10px]">(Cortesía)</span>
                           )}
@@ -9380,7 +9399,7 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
                         <label className={`text-xs font-medium ${isDark ? 'text-emerald-400' : 'text-emerald-600'} mb-1 block`}>Artículo de Bonificación (BF)</label>
                         <SearchableSelect
                           label=""
-                          options={(articulosData || []).filter(a => a.ItemCode.toUpperCase().startsWith('BF') || a.ItemCode.toUpperCase().startsWith('CF'))}
+                          options={(articulosData || []).filter(a => isBfCfArticle(a.ItemCode))}
                           value={newCara.articuloBf || null}
                           onChange={(item: SAPArticulo) => setNewCara({ ...newCara, articuloBf: item })}
                           onClear={() => setNewCara({ ...newCara, articuloBf: null })}
