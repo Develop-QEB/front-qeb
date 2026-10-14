@@ -13,7 +13,7 @@ interface Props {
 }
 
 const ICONOS: Record<TipoBloqueoInventario, typeof Ban> = {
-  Bloqueado: Ban,
+  'No Disponible': Ban,
   Inhabilitado: PowerOff,
 };
 

@@ -33,6 +33,8 @@ const getEstatusStyles = (isDark: boolean): Record<string, { bg: string; text: s
   Reservado: { bg: isDark ? 'bg-amber-500/20' : 'bg-amber-50', text: isDark ? 'text-amber-300' : 'text-amber-700', border: 'border-amber-500/30' },
   Ocupado: { bg: isDark ? 'bg-cyan-500/20' : 'bg-cyan-50', text: isDark ? 'text-cyan-300' : 'text-cyan-700', border: 'border-cyan-500/30' },
   Mantenimiento: { bg: isDark ? 'bg-zinc-500/20' : 'bg-zinc-50', text: isDark ? 'text-zinc-300' : 'text-zinc-700', border: 'border-zinc-500/30' },
+  // 'No Disponible' = nombre nuevo de 'Bloqueado'; el legacy se conserva para filas pre-migración.
+  'No Disponible': { bg: isDark ? 'bg-red-500/20' : 'bg-red-50', text: isDark ? 'text-red-300' : 'text-red-700', border: 'border-red-500/30' },
   Bloqueado: { bg: isDark ? 'bg-red-500/20' : 'bg-red-50', text: isDark ? 'text-red-300' : 'text-red-700', border: 'border-red-500/30' },
   Inhabilitado: { bg: isDark ? 'bg-red-500/20' : 'bg-red-50', text: isDark ? 'text-red-300' : 'text-red-700', border: 'border-red-500/30' },
 });
@@ -1007,7 +1009,9 @@ export function InventariosPage() {
     { key: 'total_espacios', label: 'Total Espacios', type: 'number' },
     { key: 'tarifa_publica', label: 'Tarifa Pública', type: 'number' },
     { key: 'tarifa_piso', label: 'Tarifa Piso', type: 'number' },
-    { key: 'estatus', label: 'Estatus', options: ['Disponible', 'Reservado', 'Ocupado', 'Mantenimiento', 'Bloqueado', 'Inhabilitado'] },
+    // 'No Disponible' reemplaza a 'Bloqueado' como opción visible; el back expande
+    // el filtro a ambos valores (filas legacy incluidas).
+    { key: 'estatus', label: 'Estatus', options: ['Disponible', 'Reservado', 'Ocupado', 'Mantenimiento', 'No Disponible', 'Inhabilitado'] },
   ];
 
   const renderFormModal = (isEdit: boolean) => (
@@ -1110,11 +1114,11 @@ export function InventariosPage() {
             </div>
           </div>
 
-          {/* Bloqueados */}
+          {/* No Disponibles (bloqueados) */}
           <div className={`rounded-2xl border ${isDark ? 'border-zinc-800/80 bg-zinc-900/50' : 'border-gray-200 bg-white'} backdrop-blur-sm p-5 flex flex-col justify-between relative overflow-hidden group`}>
             <div className="absolute bottom-0 right-0 w-24 h-24 bg-red-500/10 rounded-full blur-2xl -mr-5 -mb-5 pointer-events-none group-hover:bg-red-500/20 transition-all duration-500" />
             <div>
-              <p className={`${isDark ? 'text-zinc-400' : 'text-gray-500'} text-sm font-medium mb-1`}>Bloqueados</p>
+              <p className={`${isDark ? 'text-zinc-400' : 'text-gray-500'} text-sm font-medium mb-1`}>No Disponibles</p>
               <div className="flex items-baseline gap-2">
                 <h3 className="text-3xl font-bold text-red-400">
                   {isLoadingStats ? '...' : (statsData?.bloqueados ?? 0)}
@@ -1618,7 +1622,7 @@ export function InventariosPage() {
                                     ? isDark ? 'hover:bg-amber-500/10 text-red-400 hover:text-amber-300' : 'hover:bg-amber-50 text-red-600 hover:text-amber-700'
                                     : `${isDark ? 'hover:bg-red-500/10 hover:text-red-400' : 'hover:bg-red-50 hover:text-red-600'} ${isDark ? 'text-zinc-500' : 'text-gray-400'}`
                                   } disabled:opacity-50`}
-                                  title={isBlocked ? (item.estatus === 'Inhabilitado' ? 'Habilitar' : 'Desbloquear') : 'Bloquear / Inhabilitar'}
+                                  title={isBlocked ? (item.estatus === 'Inhabilitado' ? 'Habilitar' : 'Marcar Disponible') : 'Marcar No Disponible / Inhabilitar'}
                                 >
                                   {toggleBlockMutation.isPending && toggleBlockMutation.variables?.id === item.id
                                     ? <Loader2 className="h-3.5 w-3.5 animate-spin" />
@@ -1863,7 +1867,7 @@ export function InventariosPage() {
                               a.startsWith('vendida') || a.startsWith('pasó a ventas') ? paleta.rojo
                               : a.startsWith('reservada') ? paleta.ambar
                               : a.startsWith('liberada') ? paleta.gris
-                              : a.startsWith('bloqueado') || a.startsWith('inhabilitado') ? paleta.rojo
+                              : a.startsWith('bloqueado') || a.startsWith('inhabilitado') || a.startsWith('no disponible') ? paleta.rojo
                               : a.startsWith('desbloqueado') || a.startsWith('habilitado') ? paleta.verde
                               : a.startsWith('actualizado') ? paleta.cyan
                               : a.startsWith('creado') ? paleta.azul
@@ -2521,7 +2525,7 @@ export function InventariosPage() {
             <div className={`flex items-center justify-between px-5 py-4 border-b ${isDark ? 'border-zinc-800' : 'border-gray-200'}`}>
               <div className="flex items-center gap-2">
                 <CheckCircle className="h-5 w-5 text-emerald-400" />
-                <h2 className={`text-sm font-semibold ${isDark ? 'text-white' : 'text-gray-900'}`}>{desbloqueoItem.estatus === 'Inhabilitado' ? 'Habilitar' : 'Desbloquear'} inventario</h2>
+                <h2 className={`text-sm font-semibold ${isDark ? 'text-white' : 'text-gray-900'}`}>{desbloqueoItem.estatus === 'Inhabilitado' ? 'Habilitar' : 'Marcar Disponible'} inventario</h2>
               </div>
               <button onClick={() => setDesbloqueoItem(null)} className={`${isDark ? 'text-zinc-500 hover:text-zinc-300' : 'text-gray-400 hover:text-gray-600'}`}>
                 <X className="h-4 w-4" />
@@ -2540,7 +2544,7 @@ export function InventariosPage() {
               </div>
 
               <p className={`text-sm ${isDark ? 'text-zinc-300' : 'text-gray-700'}`}>
-                ¿Estás seguro de que deseas {desbloqueoItem.estatus === 'Inhabilitado' ? 'habilitar' : 'desbloquear'} este inventario?
+                ¿Estás seguro de que deseas {desbloqueoItem.estatus === 'Inhabilitado' ? 'habilitar' : 'marcar como Disponible'} este inventario?
               </p>
             </div>
 
@@ -2559,7 +2563,7 @@ export function InventariosPage() {
                 className="flex-1 flex items-center justify-center gap-2 px-3 py-2 text-sm font-medium bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg transition-colors"
               >
                 <CheckCircle className="h-4 w-4" />
-                {desbloqueoItem.estatus === 'Inhabilitado' ? 'Habilitar' : 'Desbloquear'}
+                {desbloqueoItem.estatus === 'Inhabilitado' ? 'Habilitar' : 'Marcar Disponible'}
               </button>
             </div>
           </div>
