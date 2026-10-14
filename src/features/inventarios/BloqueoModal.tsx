@@ -27,6 +27,8 @@ export interface CampanaBloqueoEntry {
 }
 
 export interface BloqueoData {
+  // Clasificación a aplicar: 'No Disponible' | 'Inhabilitado' (mismo comportamiento).
+  tipo: TipoBloqueoInventario;
   motivo: string;
   analistas: UserOption[];
   trafico: UserOption[];
@@ -342,7 +344,7 @@ export function BloqueoModal({ isOpen, onClose, item, onConfirm, isSubmitting }:
           <div className="flex items-center gap-2">
             <Ban className="h-5 w-5 text-red-400" />
             <h2 className="text-sm font-semibold text-white">
-              {yaEstaBloquedo ? 'Crear tarea de revisión de bloqueo' : esDisponible ? 'Bloquear inventario' : 'Bloquear inventario en uso'}
+              {yaEstaBloquedo ? 'Crear tarea de revisión de bloqueo' : esDisponible ? textos.infinitivo : `${textos.infinitivo} — inventario en uso`}
             </h2>
           </div>
           <button onClick={handleClose} className="text-zinc-500 hover:text-zinc-300"><X className="h-4 w-4" /></button>
@@ -526,7 +528,7 @@ export function BloqueoModal({ isOpen, onClose, item, onConfirm, isSubmitting }:
               className="flex-1 flex items-center justify-center gap-2 px-3 py-2 text-sm font-medium bg-red-600 hover:bg-red-500 disabled:bg-zinc-700 disabled:text-zinc-500 text-white rounded-lg transition-colors"
             >
               {isSubmitting ? <Loader2 className="h-4 w-4 animate-spin" /> : <Ban className="h-4 w-4" />}
-              {isSubmitting ? 'Bloqueando...' : 'Bloquear inventario'}
+              {isSubmitting ? `${textos.gerundio}...` : textos.infinitivo}
             </button>
           ) : !isLastStep ? (
             <button

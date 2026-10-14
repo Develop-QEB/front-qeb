@@ -552,8 +552,13 @@ export const inventariosService = {
   },
 
   // Toggle block/unblock
-  async toggleBlock(id: number): Promise<Inventario> {
-    const response = await api.patch<ApiResponse<Inventario>>(`/inventarios/${id}/toggle-block`);
+  // `tipo` = clasificación a aplicar al bloquear ('No Disponible' | 'Inhabilitado').
+  // Al desbloquear se ignora. Sin `tipo` el back usa 'No Disponible'.
+  async toggleBlock(id: number, tipo?: TipoBloqueoInventario): Promise<Inventario> {
+    const response = await api.patch<ApiResponse<Inventario>>(
+      `/inventarios/${id}/toggle-block`,
+      tipo ? { tipo } : undefined,
+    );
     if (!response.data.success || !response.data.data) {
       throw new Error(response.data.error || 'Error al bloquear/desbloquear inventario');
     }

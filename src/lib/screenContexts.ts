@@ -238,30 +238,22 @@ Son 6 TABS (no 5), en este orden:
 REGLA (recordar): El arte Rechazado requiere motivo específico Y adjunto (archivo o link). Un arte aprobado NO se puede 'desaprobar' sin crear una nueva tarea de Corrección. Pruebas de Color sigue un flujo paralelo distinto (ver pantalla 'Pruebas de Color').`,
 
   // ─────────────────────────── INVENTARIOS ───────────────────────────
-  'Inventarios': `El usuario está en el módulo de Inventarios (/inventarios).
-Columnas: ID, Código (formato MUPI-GDL-001_F con F=Flujo, CF=Contraflujo), Mueble (badge 'DIG' si digital), Formato, Ubicación, Plaza, Cara, Dimensiones, Actividad (Ocupado/Disponible), Estatus (Activo/No Disponible), Acciones.
-
-ESTATUS REALES de inventario (usa 'No Disponible', NUNCA 'Bloqueado'):
-- Activo/Disponible (verde): libre para asignar.
-- Reservado (ámbar): comprometido en una propuesta/campaña.
-- Ocupado (cyan): en uso activo con APS.
-- Mantenimiento (gris): en reparación.
-- No Disponible (rojo): bloqueado administrativamente, no se puede ocupar. Antes se llamaba 'Bloqueado' (renombrado 2026-10-14).
-- Inhabilitado: variante dura, no se puede reactivar automáticamente.
-HARD-LOCK (2026-10-14): no se puede reservar ni reactivar un inventario con estatus 'No Disponible' ni 'Inhabilitado'. Si el usuario reporta 'no puedo reservar este espacio', es por este candado.
-
-Vistas: toggle Tabla / Mapa (Google Maps con pins coloreados).
-Filtros: búsqueda (código/ubicación/municipio), Tipo, Estatus, Plaza. Combinables.
-Acciones por fila: Editar, Historial (modal con todas las reservas pasadas), Eliminar (solo sin reservas activas).
-
-MODALES ESPECIALIZADOS (visibles para Trafico/Admin):
-- BloqueoMasivoModal: bloquea múltiples espacios a la vez con motivo y asignación de Analistas/Trafico.
-- AuditoriaConflictosModal: audita conflictos de reservas duplicadas o inventario inconsistente.
-- ReorganizarOcupacionModal: reorganiza qué espacios atienden qué campañas cuando hay conflicto.
-- AnalisisOcupacionModal: análisis masivo de ocupación por período/plaza; se puede generar un link público /inventarios/analisis/:analisisId que comparte el análisis sin requerir permiso al módulo.
-- Modal de Bloqueo individual (espacio en uso): obliga a motivo + lista de Analistas/Trafico. Al enviar genera tareas 'Ajuste Inventario Bloqueado' en cada campaña afectada.
-
-Carga masiva CSV: subir, verificar, resultado (3 pasos). Campos requeridos: codigo_unico, tipo_de_mueble, tipo_de_cara (Flujo/Contraflujo), tradicional_digital, plaza, estado, municipio. Descarga de plantilla disponible.`,
+  'Inventarios': `El usuario está en el módulo de Inventarios, el catálogo de espacios publicitarios.
+Elementos visibles:
+- Barra de búsqueda: busca por código de inventario, dirección, municipio.
+- Filtros: Tipo (espectacular, mural, valla, etc.), Plaza (ciudad), Estatus (Disponible, Reservado, No Disponible, Vendido).
+- Tabla principal con columnas: Código, Nombre/Ubicación, Plaza, Municipio, Tipo, Formato, Estatus, Precio, Acciones.
+- Botón "Crear" (solo admins): crea un nuevo espacio en el inventario.
+- Botón "Cargar CSV": carga masiva de inventario desde archivo CSV.
+- Acciones por fila:
+  - "Editar": modifica los datos del espacio.
+  - "Historial": muestra en qué campañas y propuestas ha estado este espacio.
+  - "Eliminar": elimina el espacio (solo si no tiene reservas activas).
+Estatus explicados:
+- Disponible: el espacio puede asignarse a propuestas nuevas.
+- Reservado: está comprometido en una propuesta o campaña activa.
+- No Disponible: bloqueado manualmente por el administrador, no se puede ocupar (antes se llamaba "Bloqueado"; también existe "Inhabilitado", que se comporta igual).
+- Vendido: cerrado como venta definitiva.`,
 
   // ─────────────────────────── CLIENTES ───────────────────────────
   'Clientes': `El usuario está en el módulo Clientes.
