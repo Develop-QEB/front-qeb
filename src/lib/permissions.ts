@@ -44,6 +44,8 @@ export type UserRole =
   | 'Gerente Comercial Vía Pública'
   | 'Gerente Comercial Plazas'
   | 'Jefe de BI'
+  // Nuevo rol (2026-10-14): mismos permisos que Director General Adjunto
+  | 'Director Comercial General'
   // Perfil B — TI y Mejora Continua (admin completo)
   | 'Gerente de TI'
   | 'Especialista de TI'
@@ -2442,6 +2444,24 @@ const rolePermissions: Partial<Record<UserRole, Partial<RolePermissions>>> = {
     canCreateInventarios: false, canEditInventarios: false, canDeleteInventarios: false,
     canExportOrdenesMontaje: true,
     // Historial de Acciones — feedback 2026-08-13: Dirección ve todo.
+    canSeeHistorialAcciones: true, canSeeAllHistorial: true,
+  },
+  'Director Comercial General': {
+    canSeeAdminUsuarios: false,
+    canCreateClientes: false, canEditClientes: false, canDeleteClientes: false,
+    canCreateProveedores: false, canEditProveedores: false, canDeleteProveedores: false,
+    canCreateSolicitudes: false, canEditSolicitudes: false, canDeleteSolicitudes: false,
+    canAtenderSolicitudes: false, canChangeEstadoSolicitud: false,
+    canEditPropuestaStatus: false, allowedPropuestaStatuses: [],
+    canAprobarPropuesta: false, canAsignarInventario: false, canEditResumenPropuesta: false,
+    canCompartirPropuesta: true, canBuscarInventarioEnModal: false,
+    canEditCampanas: false, canEditCampanaStatus: false,
+    canEditDetalleCampana: false, canDeleteDetalleCampana: false,
+    canSeeGestionArtes: true, canEditGestionArtes: false,
+    canResolveProduccionTasks: false, canSeeOrdenesMontajeButton: true,
+    canCreateTareasGestionArtes: false, canResolveRevisionArtesTasks: false,
+    canCreateInventarios: false, canEditInventarios: false, canDeleteInventarios: false,
+    canExportOrdenesMontaje: true,
     canSeeHistorialAcciones: true, canSeeAllHistorial: true,
   },
   'Director Desarrollo de Nuevos Negocios': {
