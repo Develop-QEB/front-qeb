@@ -196,6 +196,15 @@ export const propuestasService = {
     return response.data.data;
   },
 
+  /** Desglose de completitud por catorcena (popover del badge "Incompleta"). */
+  async getCompletitud(id: number): Promise<{ catorcena: number; anio: number; caras_esperadas: number; reservas_count: number; completa: boolean }[]> {
+    const response = await api.get<ApiResponse<{ catorcena: number; anio: number; caras_esperadas: number; reservas_count: number; completa: boolean }[]>>(`/propuestas/${id}/completitud`);
+    if (!response.data.success) {
+      throw new Error(response.data.error || 'Error al obtener completitud');
+    }
+    return response.data.data ?? [];
+  },
+
   async updateStatus(id: number, status: string, comentario_cambio_status?: string): Promise<Propuesta> {
     const response = await api.patch<ApiResponse<Propuesta>>(`/propuestas/${id}/status`, {
       status,

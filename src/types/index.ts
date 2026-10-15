@@ -240,6 +240,10 @@ export interface Propuesta {
   catorcena_fin?: number | null;
   anio_fin?: number | null;
   tipo_periodo?: string | null;
+  // Totales de completitud del listado (mismo criterio y exclusiones que el
+  // badge "Incompleta" de campañas) — para el badge de la tabla de propuestas.
+  caras_esperadas_total?: number | null;
+  reservas_validas_total?: number | null;
   fecha_inicio?: string | null;
   fecha_fin?: string | null;
   formatos?: string | null;
