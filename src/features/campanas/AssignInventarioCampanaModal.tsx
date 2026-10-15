@@ -2649,12 +2649,35 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
       setArticuloBf(null);
     }
 
-    // Calculate caras en renta (flujo + contraflujo)
+    // Calculate caras en renta.
     // BF/CF/CT: el split flujo/contra es el split de la bonificación (KPI),
     // NO caras adicionales. Para esos artículos `caras` siempre debe ser 0.
-    const carasEnRenta = isBonifSplitArticle(cara.articulo)
-      ? 0
-      : (cara.caras_flujo || 0) + (cara.caras_contraflujo || 0);
+    //
+    // RT (FIX 81891): el total `caras` se prellena del VALOR GUARDADO (cara.caras),
+    // NO de flujo+contra. Existían filas chuecas (caras=150 vs flujo+contra=25+25=50)
+    // y derivar de flujo+contra pisaba el total: al guardar un cambio de NSE el form
+    // reenviaba caras=50 y costo=50×tarifa, disparando una re-autorización indebida.
+    const esSplitBonifEdit = isBonifSplitArticle(cara.articulo);
+    const carasEnRenta = esSplitBonifEdit ? 0 : (cara.caras || 0);
+
+    // Si el split guardado no cuadra con el total, re-derivarlo DESDE caras para que
+    // el form quede consistente con el TOTAL (conserva el ratio si ambos>0, si no 50/50).
+    let carasFlujoPrefill = cara.caras_flujo;
+    let carasContraflujoPrefill = cara.caras_contraflujo;
+    if (!esSplitBonifEdit) {
+      const cfG = cara.caras_flujo || 0;
+      const ccG = cara.caras_contraflujo || 0;
+      const totalG = cara.caras || 0;
+      if (cfG + ccG !== totalG) {
+        if (cfG > 0 && ccG > 0) {
+          carasFlujoPrefill = Math.round(totalG * (cfG / (cfG + ccG)));
+          carasContraflujoPrefill = totalG - carasFlujoPrefill;
+        } else {
+          carasFlujoPrefill = Math.ceil(totalG / 2);
+          carasContraflujoPrefill = Math.floor(totalG / 2);
+        }
+      }
+    }
 
     const bonificacionForForm = bfPair ? (bfPair.bonificacion || 0) : cara.bonificacion;
 
@@ -2694,8 +2717,8 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
       // Truncar a YYYY-MM-DD para que <input type="date"> lo reconozca
       inicio_periodo: String(cara.inicio_periodo || '').slice(0, 10),
       fin_periodo: String(cara.fin_periodo || '').slice(0, 10),
-      caras_flujo: cara.caras_flujo,
-      caras_contraflujo: cara.caras_contraflujo,
+      caras_flujo: carasFlujoPrefill,
+      caras_contraflujo: carasContraflujoPrefill,
       articulo: cara.articulo,
       descuento: cara.descuento,
       catorcena_inicio: catorcenaInicioVal,
@@ -2962,6 +2985,16 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
 
         const rtCaraData = buildRtCaraData(grupoRtBf);
 
+        // FIX 1c (81891): al EDITAR solo se mandan `caras` y `costo` si el usuario
+        // realmente cambió el total de caras (o la tarifa, que recalcula el costo).
+        // Editar NSE/ciudad/formato NO debe transmitir caras ni costo — así el
+        // backend conserva los actuales y no recalcula ni re-autoriza.
+        const carasCambioEdit = (Number(newCara.caras) || 0) !== (Number(caraToEdit.caras) || 0);
+        const tarifaCambioEdit = (Number(newCara.tarifa_publica) || 0) !== (Number(caraToEdit.tarifa_publica) || 0);
+        const rtCaraDataBulk: Record<string, unknown> = { ...rtCaraData };
+        if (!carasCambioEdit) delete rtCaraDataBulk.caras;
+        if (!carasCambioEdit && !tarifaCambioEdit) delete rtCaraDataBulk.costo;
+
         // Handle BF side: create / update / delete
         let createdBfItem: CaraItem | null = null;
         let bfCaraDataForPersist: Record<string, unknown> | null = null;
@@ -3088,7 +3121,7 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
         // Track RT as modified for bulk save
         setModifiedCaras(prev => {
           const next = new Map(prev);
-          next.set(caraToEdit.id!, rtCaraData);
+          next.set(caraToEdit.id!, rtCaraDataBulk);
           // Track existing BF update for bulk save
           if (bfCaraDataForPersist && bfCaraDbIdForPersist) {
             next.set(bfCaraDbIdForPersist, bfCaraDataForPersist);
@@ -3113,8 +3146,9 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
               for (const otra of otrasCarasGrupo) {
                 if (!otra.id) continue;
                 // Conservar el grupo_rt_bf y periodo propios de la otra cara
+                // (rtCaraDataBulk omite caras/costo si no cambiaron → el grupo tampoco los mueve).
                 next.set(otra.id, {
-                  ...rtCaraData,
+                  ...rtCaraDataBulk,
                   inicio_periodo: otra.inicio_periodo,
                   fin_periodo: otra.fin_periodo,
                   grupo_rt_bf: otra.grupo_rt_bf ?? null,

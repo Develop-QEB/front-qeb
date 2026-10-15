@@ -2496,13 +2496,35 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
       }
     }
 
-    // Calculate caras en renta (flujo + contraflujo).
+    // Calculate caras en renta.
     // BF/CF/CT: el split flujo/contra es el split de la bonificación (KPI),
-    // NO caras adicionales. Para esos artículos `caras` siempre debe ser 0,
-    // sino el form pre-llena con la suma y la guarda como total (data corrupta).
-    const carasEnRenta = isBonifSplitArticle(cara.articulo)
-      ? 0
-      : (cara.caras_flujo || 0) + (cara.caras_contraflujo || 0);
+    // NO caras adicionales. Para esos artículos `caras` siempre debe ser 0.
+    //
+    // RT (FIX 81891): el total `caras` se prellena del VALOR GUARDADO (cara.caras),
+    // NO de flujo+contra. Existían filas chuecas (caras=150 vs flujo+contra=25+25=50)
+    // y derivar de flujo+contra pisaba el total: al guardar un cambio de NSE el form
+    // reenviaba caras=50 y costo=50×tarifa, disparando una re-autorización indebida.
+    const esSplitBonifEdit = isBonifSplitArticle(cara.articulo);
+    const carasEnRenta = esSplitBonifEdit ? 0 : (cara.caras || 0);
+
+    // Si el split guardado no cuadra con el total, re-derivarlo DESDE caras para que
+    // el form quede consistente con el TOTAL (conserva el ratio si ambos>0, si no 50/50).
+    let carasFlujoPrefill = cara.caras_flujo;
+    let carasContraflujoPrefill = cara.caras_contraflujo;
+    if (!esSplitBonifEdit) {
+      const cfG = cara.caras_flujo || 0;
+      const ccG = cara.caras_contraflujo || 0;
+      const totalG = cara.caras || 0;
+      if (cfG + ccG !== totalG) {
+        if (cfG > 0 && ccG > 0) {
+          carasFlujoPrefill = Math.round(totalG * (cfG / (cfG + ccG)));
+          carasContraflujoPrefill = totalG - carasFlujoPrefill;
+        } else {
+          carasFlujoPrefill = Math.ceil(totalG / 2);
+          carasContraflujoPrefill = Math.floor(totalG / 2);
+        }
+      }
+    }
 
     // Try to find the matching catorcena from inicio_periodo
     let catorcenaInicioVal = cara.catorcena_inicio;
@@ -2542,8 +2564,8 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
       // Truncar a YYYY-MM-DD para que <input type="date"> lo reconozca
       inicio_periodo: String(cara.inicio_periodo || '').slice(0, 10),
       fin_periodo: String(cara.fin_periodo || '').slice(0, 10),
-      caras_flujo: cara.caras_flujo,
-      caras_contraflujo: cara.caras_contraflujo,
+      caras_flujo: carasFlujoPrefill,
+      caras_contraflujo: carasContraflujoPrefill,
       articulo: cara.articulo,
       descuento: cara.descuento,
       catorcena_inicio: catorcenaInicioVal,
@@ -2688,6 +2710,16 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
         // ---- LOCAL-ONLY UPDATE (no API call for the RT cara itself) ----
         const caraToEdit = caras.find(c => c.localId === editingCaraId);
         if (caraToEdit?.id) {
+          // FIX 1c (81891): al EDITAR solo se mandan `caras` y `costo` si el usuario
+          // realmente cambió el total de caras (o la tarifa, que recalcula el costo).
+          // Editar NSE/ciudad/formato NO debe transmitir caras ni costo — así el
+          // backend conserva los actuales y no recalcula ni re-autoriza.
+          const carasCambioEdit = (Number(newCara.caras) || 0) !== (Number(caraToEdit.caras) || 0);
+          const tarifaCambioEdit = (Number(newCara.tarifa_publica) || 0) !== (Number(caraToEdit.tarifa_publica) || 0);
+          const caraDataBulk: typeof caraData = { ...caraData };
+          if (!carasCambioEdit) delete caraDataBulk.caras;
+          if (!carasCambioEdit && !tarifaCambioEdit) delete caraDataBulk.costo;
+
           // Cambio de periodo o de ARTÍCULO con reservas: avisar que se liberará el
           // inventario. Al guardar, el backend libera las reservas del circuito
           // (cara + pareja RT/BF) y lo deja en el nuevo periodo/artículo con 0.
@@ -2957,7 +2989,7 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
           }
           setModifiedCaras(prev => {
             const next = new Map(prev);
-            next.set(caraToEdit.id!, caraData);
+            next.set(caraToEdit.id!, caraDataBulk);
             // Si BF pair existe y NO cambió su artículo, también marcarlo como modificado
             // para que el bulk save persista la nueva cantidad de bonificación
             if (existingBfPair && existingBfPair.id && usePairMode && bfCaraData &&
@@ -2982,8 +3014,9 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
                 for (const otra of otrasCarasGrupo) {
                   if (!otra.id) continue;
                   // Replicamos campos NO-temporales; mantenemos periodo y grupo_rt_bf propios de cada otra cara
+                  // (caraDataBulk omite caras/costo si no cambiaron → el grupo tampoco los mueve).
                   next.set(otra.id, {
-                    ...caraData,
+                    ...caraDataBulk,
                     inicio_periodo: otra.inicio_periodo,
                     fin_periodo: otra.fin_periodo,
                     grupo_rt_bf: otra.grupo_rt_bf ?? null,
