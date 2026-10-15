@@ -1,4 +1,5 @@
 import React, { useState, useMemo, useEffect, useRef } from 'react';
+import { createPortal } from 'react-dom';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import {
@@ -86,6 +87,140 @@ const getStatusColor = (status: string, isDark: boolean): StatusColor => {
 };
 
 const STATUS_OPTIONS = ['Atendido', 'Abierto', 'Ajuste Cto-Cliente', 'Ajuste Inventario', 'Ajuste Comercial', 'Pase a ventas', 'Liberada', 'Rechazada'];
+
+// Pseudo-estatus de completitud para el chip de Status: no son estatus reales
+// de la propuesta, se evalúan en cliente contra los totales de reservas.
+const COMPLETITUD_STATUS = ['Incompleta', 'Completa'];
+
+// Propuesta con reservas por debajo de las caras esperadas (totales del
+// listado, mismo criterio/exclusiones que el badge "Incompleta" de campañas).
+function esPropuestaIncompleta(p: Propuesta): boolean {
+  return p.caras_esperadas_total != null
+    && Number(p.caras_esperadas_total) > 0
+    && Number(p.reservas_validas_total ?? 0) < Number(p.caras_esperadas_total);
+}
+
+// Badge "Incompleta (X/Y)" para la tabla de propuestas. Al dar clic abre el
+// desglose por catorcena (GET /propuestas/:id/completitud), igual que el badge
+// de campañas. Popover con position:fixed + portal para que no lo recorte el
+// overflow de la tabla.
+function IncompletaBadge({ propuesta, isDark }: { propuesta: Propuesta; isDark: boolean }) {
+  const [open, setOpen] = useState(false);
+  const [pos, setPos] = useState<{ top: number; left: number } | null>(null);
+  const btnRef = useRef<HTMLButtonElement>(null);
+  const popRef = useRef<HTMLDivElement>(null);
+
+  const { data: detail, isLoading } = useQuery({
+    queryKey: ['propuesta-completitud', propuesta.id],
+    queryFn: () => propuestasService.getCompletitud(propuesta.id),
+    enabled: open,
+    staleTime: 60000,
+  });
+
+  const esperadas = Number(propuesta.caras_esperadas_total) || 0;
+  const reservadas = Number(propuesta.reservas_validas_total) || 0;
+
+  const POPOVER_W = 260;
+  const toggle = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (!open && btnRef.current) {
+      const r = btnRef.current.getBoundingClientRect();
+      setPos({
+        top: r.bottom + 8,
+        left: Math.max(8, Math.min(r.left, window.innerWidth - POPOVER_W - 8)),
+      });
+    }
+    setOpen(v => !v);
+  };
+
+  // position:fixed queda "volando" si se scrollea la página: cerrar en scroll
+  // o resize, excepto el scroll interno de la lista del propio popover.
+  useEffect(() => {
+    if (!open) return;
+    const closeOnScroll = (e: Event) => {
+      if (popRef.current && e.target instanceof Node && popRef.current.contains(e.target)) return;
+      setOpen(false);
+    };
+    const closeOnResize = () => setOpen(false);
+    window.addEventListener('scroll', closeOnScroll, true);
+    window.addEventListener('resize', closeOnResize);
+    return () => {
+      window.removeEventListener('scroll', closeOnScroll, true);
+      window.removeEventListener('resize', closeOnResize);
+    };
+  }, [open]);
+
+  return (
+    <>
+      <button
+        ref={btnRef}
+        onClick={toggle}
+        className={`px-1.5 py-0.5 rounded-full text-[9px] flex items-center gap-1 cursor-pointer hover:opacity-80 transition-opacity ${isDark ? 'bg-yellow-500/20 text-yellow-300' : 'bg-yellow-50 text-yellow-700'} border border-yellow-500/30`}
+        title="Ver desglose por catorcena"
+      >
+        <AlertTriangle className="h-3 w-3" />
+        Incompleta ({reservadas}/{esperadas})
+      </button>
+      {open && pos && createPortal(
+        <>
+          <div className="fixed inset-0 z-40" onClick={(e) => { e.stopPropagation(); setOpen(false); }} />
+          <div
+            ref={popRef}
+            className={`fixed z-50 rounded-xl border shadow-2xl overflow-hidden ${isDark ? 'bg-zinc-900 border-yellow-500/40 shadow-black/60' : 'bg-white border-yellow-400 shadow-gray-400/40'}`}
+            style={{ top: pos.top, left: pos.left, width: POPOVER_W }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className={`absolute -top-[7px] left-6 w-3 h-3 rotate-45 border-l border-t ${isDark ? 'bg-zinc-900 border-yellow-500/40' : 'bg-yellow-50 border-yellow-400'}`} />
+            <div className={`flex items-center justify-between gap-2 px-3 py-2 border-b ${isDark ? 'bg-yellow-500/10 border-yellow-500/20' : 'bg-yellow-50 border-yellow-200'}`}>
+              <div className="flex items-center gap-1.5 min-w-0">
+                <AlertTriangle className={`h-3.5 w-3.5 shrink-0 ${isDark ? 'text-yellow-400' : 'text-yellow-600'}`} />
+                <span className={`text-xs font-semibold truncate ${isDark ? 'text-yellow-300' : 'text-yellow-700'}`}>
+                  Incompleta — {reservadas}/{esperadas} caras
+                </span>
+              </div>
+              <button
+                onClick={(e) => { e.stopPropagation(); setOpen(false); }}
+                className={`p-0.5 rounded transition-colors shrink-0 ${isDark ? 'text-zinc-400 hover:text-white hover:bg-zinc-700' : 'text-gray-400 hover:text-gray-700 hover:bg-gray-100'}`}
+                title="Cerrar"
+              >
+                <X className="h-3.5 w-3.5" />
+              </button>
+            </div>
+            <div className="p-3">
+              <p className={`text-[10px] uppercase tracking-wide font-semibold mb-2 ${isDark ? 'text-zinc-500' : 'text-gray-400'}`}>Desglose por catorcena</p>
+              {isLoading ? (
+                <div className="flex items-center gap-2 py-1">
+                  <Loader2 className="h-3.5 w-3.5 animate-spin text-yellow-400" />
+                  <span className={`text-xs ${isDark ? 'text-zinc-400' : 'text-gray-500'}`}>Cargando...</span>
+                </div>
+              ) : detail && detail.length > 0 ? (
+                <div className="space-y-1.5 max-h-56 overflow-y-auto pr-1">
+                  {detail.map(d => (
+                    <div key={`${d.anio}-${d.catorcena}`} className="flex items-center justify-between gap-4">
+                      <span className={`text-xs ${isDark ? 'text-zinc-400' : 'text-gray-500'}`}>
+                        Cat {String(d.catorcena).padStart(2, '0')} / {d.anio}
+                      </span>
+                      <span className={`text-xs font-bold px-2 py-0.5 rounded-full ${
+                        d.completa
+                          ? (isDark ? 'text-green-300 bg-green-500/20 border border-green-500/30' : 'text-green-700 bg-green-50 border border-green-200')
+                          : (isDark ? 'text-yellow-300 bg-yellow-500/20 border border-yellow-500/30' : 'text-yellow-700 bg-yellow-50 border border-yellow-200')
+                      }`}>
+                        {d.reservas_count}/{d.caras_esperadas} {d.completa ? '✓' : `— faltan ${d.caras_esperadas - d.reservas_count}`}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <p className={`text-xs ${isDark ? 'text-zinc-400' : 'text-gray-500'}`}>Sin desglose disponible</p>
+              )}
+            </div>
+          </div>
+        </>,
+        document.body
+      )}
+    </>
+  );
+}
 
 // Estatus que SOLO puede asignar el sistema, nunca un usuario. 'Liberada' es el
 // registro de que el job de liberación automática (criterio 30 días) quitó las
@@ -1404,18 +1539,23 @@ const PropuestaRow = React.memo(function PropuestaRow({
         )}
       </td>
       <td className="px-4 py-3">
-        {canEditStatusPerm && !isLocked ? (
-          <button
-            onClick={() => onStatus(item)}
-            className={`px-2 py-1 rounded-full text-[10px] whitespace-nowrap ${statusColor.bg} ${statusColor.text} border ${statusColor.border} hover:opacity-80 transition-opacity cursor-pointer`}
-          >
-            {item.status}
-          </button>
-        ) : (
-          <span className={`px-2 py-1 rounded-full text-[10px] whitespace-nowrap ${statusColor.bg} ${statusColor.text} border ${statusColor.border}`}>
-            {item.status}
-          </span>
-        )}
+        <div className="flex items-center gap-1 flex-wrap">
+          {canEditStatusPerm && !isLocked ? (
+            <button
+              onClick={() => onStatus(item)}
+              className={`px-2 py-1 rounded-full text-[10px] whitespace-nowrap ${statusColor.bg} ${statusColor.text} border ${statusColor.border} hover:opacity-80 transition-opacity cursor-pointer`}
+            >
+              {item.status}
+            </button>
+          ) : (
+            <span className={`px-2 py-1 rounded-full text-[10px] whitespace-nowrap ${statusColor.bg} ${statusColor.text} border ${statusColor.border}`}>
+              {item.status}
+            </span>
+          )}
+          {esPropuestaIncompleta(item) && (
+            <IncompletaBadge propuesta={item} isDark={isDark} />
+          )}
+        </div>
       </td>
       <td className="px-4 py-3">
         <div className="flex items-center gap-1">
@@ -1611,8 +1751,14 @@ export function PropuestasPage() {
   // por lo que cada tag viaja como UNA frase. Esto evita que palabras cortas
   // ("y", "de") generen un OR que matchee la mayoría de los registros.
   const serverSearch = allSearchTerms.length > 0 ? allSearchTerms.join('|') : undefined;
-  const needsAllData = !!groupBy || advancedFilters.length > 0;
-  const effectiveLimit = needsAllData ? 200 : limit;
+  // 'Incompleta'/'Completa' son pseudo-estatus: se evalúan en cliente contra
+  // los totales de completitud, así que el server no recibe status y se pide
+  // todo el universo (igual que con agrupación/filtros avanzados).
+  const statusCompletitud = COMPLETITUD_STATUS.includes(status);
+  const needsAllData = !!groupBy || advancedFilters.length > 0 || statusCompletitud;
+  // 5000 (antes 200): con agrupación/filtros avanzados/completitud el filtro
+  // cliente debe ver TODAS las propuestas (~1.7k), no solo las 200 más nuevas.
+  const effectiveLimit = needsAllData ? 5000 : limit;
 
   // El listado oculta 'Rechazada' por default. PERO si el usuario agrega un
   // filtro avanzado sobre el campo 'status' (p.ej. status = Rechazada), dejamos
@@ -1640,7 +1786,7 @@ export function PropuestasPage() {
   const { data: stats } = useQuery({
     queryKey: ['propuestas-stats', status, yearInicio, yearFin, catorcenaInicio, catorcenaFin, tipoPeriodo, serverSearch, historialFilter, effectiveExcludeRechazadas],
     queryFn: () => propuestasService.getStats({
-      status: status || undefined,
+      status: statusCompletitud ? undefined : (status || undefined),
       yearInicio,
       yearFin,
       catorcenaInicio,
@@ -1659,7 +1805,7 @@ export function PropuestasPage() {
       propuestasService.getAll({
         page: needsAllData ? 1 : page,
         limit: effectiveLimit,
-        status: status || undefined,
+        status: statusCompletitud ? undefined : (status || undefined),
         search: serverSearch,
         yearInicio,
         yearFin,
@@ -1676,8 +1822,9 @@ export function PropuestasPage() {
 
   // 'Rechazada' se oculta del chip simple de Status (las propuestas rechazadas
   // están ocultas por default). Sigue disponible en el filtro avanzado para
-  // quien quiera verlas explícitamente.
-  const allStatuses = STATUS_OPTIONS.filter(s => s !== 'Rechazada');
+  // quien quiera verlas explícitamente. 'Incompleta'/'Completa' son pseudo-
+  // estatus de completitud de reservas (se filtran en cliente).
+  const allStatuses = [...STATUS_OPTIONS.filter(s => s !== 'Rechazada'), ...COMPLETITUD_STATUS];
 
   const hasPeriodFilter = yearInicio !== undefined && yearFin !== undefined;
   const hasActiveFilters = !!(status || tipoPeriodo || hasPeriodFilter || groupBy || sortBy !== 'fecha' || advancedFilters.length > 0 || searchTags.length > 0);
@@ -1716,13 +1863,17 @@ export function PropuestasPage() {
   // paginación al filtrar únicamente la página visible.
   const filteredData = useMemo(() => {
     if (!data?.data) return [];
-    return applyAdvancedFilters(data.data, advancedFilters);
-  }, [data?.data, advancedFilters]);
+    let result = applyAdvancedFilters(data.data, advancedFilters);
+    // Pseudo-estatus de completitud (cliente-side, mismo criterio que el badge).
+    if (status === 'Incompleta') result = result.filter(esPropuestaIncompleta);
+    else if (status === 'Completa') result = result.filter(p => !esPropuestaIncompleta(p));
+    return result;
+  }, [data?.data, advancedFilters, status]);
 
   // Sólo cuando hay filtros avanzados activos necesitamos recalcular stats en
   // cliente (el backend no soporta esos operadores Y/O custom). El search va
   // como queryKey en `propuestas-stats`, así que `stats` ya viene filtrado.
-  const needsClientFilter = advancedFilters.length > 0;
+  const needsClientFilter = advancedFilters.length > 0 || statusCompletitud;
   const effectiveStats = useMemo(() => {
     if (needsClientFilter && data?.data) {
       const byStatus: Record<string, number> = {};
@@ -2085,7 +2236,7 @@ export function PropuestasPage() {
   // El search ya viaja al backend, así que la paginación del servidor sigue
   // siendo correcta. Sólo cuando hay filtros avanzados activos (cliente-side)
   // forzamos página única con el conteo local.
-  const hasLocalFilters = advancedFilters.length > 0;
+  const hasLocalFilters = advancedFilters.length > 0 || statusCompletitud;
   const totalPages = hasLocalFilters ? 1 : (data?.pagination?.totalPages || 1);
   const total = hasLocalFilters ? filteredData.length : (data?.pagination?.total ?? 0);
 
