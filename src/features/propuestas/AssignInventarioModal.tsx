@@ -1222,8 +1222,11 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
         T0_U_Cliente: c.T0_U_Cliente || '',
         T1_U_UnidadNegocio: c.T1_U_UnidadNegocio || '',
         T0_U_Agencia: c.T0_U_Agencia || '',
-        ASESOR_U_IDAsesor: c.ASESOR_U_IDAsesor || '',
-        ASESOR_U_Asesor: c.ASESOR_U_Asesor || '',
+        // La tabla `cliente` guarda el asesor en T0_U_Asesor/T0_U_IDAsesor; algunos
+        // orígenes SAP lo traen como ASESOR_U_*. Fallback igual que CreateSolicitudModal
+        // (si no, cambiar el CUIC dejaba el asesor SIEMPRE vacío — reporte Jos 15-oct).
+        ASESOR_U_IDAsesor: c.ASESOR_U_IDAsesor || c.T0_U_IDAsesor || '',
+        ASESOR_U_Asesor: c.ASESOR_U_Asesor || c.T0_U_Asesor || '',
         T1_U_IDMarca: c.T1_U_IDMarca || 0,
         T2_U_Marca: c.T2_U_Marca || '',
         T2_U_IDProducto: c.T2_U_IDProducto || 0,
