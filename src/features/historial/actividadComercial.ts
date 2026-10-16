@@ -1,0 +1,91 @@
+// Helpers del tablero CRM de "Actividad Comercial" (tab en Historial de
+// Acciones). Espejo del back (actividad-comercial.service.ts): las 3 columnas
+// se derivan de `tareas.estatus` y al soltar una tarjeta se escribe el valor
+// canonico de la columna (Finalizado -> 'Atendido', que es lo que todo
+// Notificaciones ya trata como resuelto).
+import type { ActividadComercialTarea } from '../../services/historial.service';
+
+/** Query key del tablero. useSocketHistorialAcciones la invalida con `historial:nueva`. */
+export const QK_ACTIVIDAD_COMERCIAL = ['historial-actividad-comercial'] as const;
+
+export const COLUMNAS_AC = ['Abierto', 'Activo', 'Finalizado'] as const;
+export type ColumnaAC = (typeof COLUMNAS_AC)[number];
+
+export const COLUMNA_LABEL: Record<ColumnaAC, string> = {
+  Abierto: 'Abierto',
+  Activo: 'Activo',
+  Finalizado: 'Finalizado',
+};
+
+export const COLUMNA_DESCRIPCION: Record<ColumnaAC, string> = {
+  Abierto: 'Registradas, aún sin trabajar',
+  Activo: 'En seguimiento',
+  Finalizado: 'Atendidas o canceladas',
+};
+
+// Mismos colores que las columnas del kanban de Notificaciones (azul / ámbar / esmeralda).
+export const COLUMNA_COLOR: Record<ColumnaAC, { bg: string; border: string; text: string; dot: string; drop: string }> = {
+  Abierto: { bg: 'bg-blue-500/10', border: 'border-blue-500/30', text: 'text-blue-400', dot: 'bg-blue-500', drop: 'ring-blue-500/60' },
+  Activo: { bg: 'bg-amber-500/10', border: 'border-amber-500/30', text: 'text-amber-400', dot: 'bg-amber-500', drop: 'ring-amber-500/60' },
+  Finalizado: { bg: 'bg-emerald-500/10', border: 'border-emerald-500/30', text: 'text-emerald-400', dot: 'bg-emerald-500', drop: 'ring-emerald-500/60' },
+};
+
+const ESTATUS_FINALIZADOS = new Set(['Atendido', 'Finalizada', 'Finalizado', 'Completado', 'Cerrado', 'Cancelado']);
+
+export function columnaDeEstatus(estatus: string | null | undefined): ColumnaAC {
+  if (estatus === 'Abierto') return 'Abierto';
+  if (estatus && ESTATUS_FINALIZADOS.has(estatus)) return 'Finalizado';
+  return 'Activo';
+}
+
+export function esCancelada(t: Pick<ActividadComercialTarea, 'estatus'>): boolean {
+  return t.estatus === 'Cancelado';
+}
+
+/** Campos del formulario del asesor, serializados en `contenido`. */
+export interface ContenidoAC {
+  cliente?: string | null;
+  marca?: string | null;
+  subtipo?: string | null;
+  ref_id?: number | string | null;
+  anio?: number | null;
+  catorcena?: number | null;
+  estatus_actividad?: string | null;
+  base?: string | null;
+}
+
+export function parseContenidoAC(raw: string | null | undefined): ContenidoAC {
+  if (!raw) return {};
+  try {
+    const o = JSON.parse(raw);
+    return o && typeof o === 'object' ? (o as ContenidoAC) : {};
+  } catch {
+    return {};
+  }
+}
+
+/** "Actividad Comercial · Propuesta #81612" -> "Propuesta #81612" (el chip ya dice el tipo). */
+export function tituloCorto(titulo: string | null | undefined): string {
+  const t = (titulo || '').trim();
+  return t.replace(/^Actividad Comercial\s*·\s*/i, '') || 'Actividad Comercial';
+}
+
+/** Vencida = fecha_fin pasó y sigue sin finalizar. */
+export function estaVencida(t: Pick<ActividadComercialTarea, 'estatus' | 'fecha_fin'>): boolean {
+  if (columnaDeEstatus(t.estatus) === 'Finalizado') return false;
+  const fin = new Date(t.fecha_fin);
+  if (Number.isNaN(fin.getTime())) return false;
+  const hoy = new Date();
+  hoy.setHours(0, 0, 0, 0);
+  return fin < hoy;
+}
+
+/** Texto plano para el buscador del tablero. */
+export function textoBusqueda(t: ActividadComercialTarea): string {
+  const c = parseContenidoAC(t.contenido);
+  return [
+    t.titulo, t.descripcion, t.responsable, t.asignado,
+    c.cliente, c.marca, c.subtipo, c.ref_id != null ? `#${c.ref_id}` : null, c.base,
+    t.campania_id ? `#${t.campania_id}` : null, t.id_propuesta ? `#${t.id_propuesta}` : null,
+  ].filter(Boolean).join(' ').toLowerCase();
+}

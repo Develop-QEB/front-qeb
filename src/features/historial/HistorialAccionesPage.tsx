@@ -2,7 +2,7 @@ import { useState, useCallback, useRef, useEffect } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import {
   Search, X, RefreshCw, Clock, Filter, ChevronLeft, ChevronRight, ChevronDown,
-  StickyNote, Send, History, Layers, Download, User, Eye,
+  StickyNote, Send, History, Layers, Download, User, Eye, Briefcase,
 } from 'lucide-react';
 import { Header } from '../../components/layout/Header';
 import { historialService, type HistorialEntry, type HistorialFilters, type HistorialUsuario } from '../../services/historial.service';
@@ -11,6 +11,7 @@ import { useAuthStore } from '../../store/authStore';
 import { getPermissions } from '../../lib/permissions';
 import { useSocketHistorialAcciones } from '../../hooks/useSocket';
 import { formatHistorialDetalles } from '../../lib/historial';
+import { ActividadComercialBoard } from './ActividadComercialBoard';
 
 function formatFechaHora(fecha: string): string {
   const d = new Date(fecha);
@@ -297,7 +298,7 @@ export function HistorialAccionesPage() {
   const permissions = getPermissions(user?.rol);
   const queryClient = useQueryClient();
 
-  const [activeTab, setActiveTab] = useState<'general' | 'admin'>('general');
+  const [activeTab, setActiveTab] = useState<'general' | 'actividad' | 'admin'>('general');
   const [filters, setFilters] = useState<HistorialFilters>({ page: 1, limit: 50 });
   const [searchInput, setSearchInput] = useState('');
   const [showNotaModal, setShowNotaModal] = useState(false);
@@ -518,9 +519,9 @@ export function HistorialAccionesPage() {
     <div className="min-h-screen">
       <Header title="Historial de Acciones" />
 
-      {/* Tabs — la pestaña "Acciones Admin" solo es visible para rol DEV */}
-      {canSeeAdminTab && (
-        <div className={`px-6 pt-4 border-b ${isDark ? 'border-zinc-800' : 'border-gray-200'}`}>
+      {/* Tabs — "Actividad Comercial" (tablero CRM) para todos los que ven la
+          pagina; "Acciones Admin" solo para rol DEV */}
+      <div className={`px-6 pt-4 border-b ${isDark ? 'border-zinc-800' : 'border-gray-200'}`}>
           <div className="flex items-center gap-1">
             <button
               onClick={() => setActiveTab('general')}
@@ -533,6 +534,19 @@ export function HistorialAccionesPage() {
               General
             </button>
             <button
+              onClick={() => setActiveTab('actividad')}
+              className={`px-4 py-2 text-sm font-medium border-b-2 transition-colors flex items-center gap-1.5 ${
+                activeTab === 'actividad'
+                  ? isDark ? 'border-amber-500 text-white' : 'border-amber-500 text-gray-900'
+                  : isDark ? 'border-transparent text-zinc-400 hover:text-zinc-200' : 'border-transparent text-gray-500 hover:text-gray-700'
+              }`}
+              title="Tablero de actividades comerciales por estatus"
+            >
+              <Briefcase className="h-3.5 w-3.5 text-amber-500" />
+              Actividad Comercial
+            </button>
+            {canSeeAdminTab && (
+            <button
               onClick={() => setActiveTab('admin')}
               className={`px-4 py-2 text-sm font-medium border-b-2 transition-colors flex items-center gap-1.5 ${
                 activeTab === 'admin'
@@ -544,10 +558,15 @@ export function HistorialAccionesPage() {
               Acciones Admin
               <span className={`text-[10px] px-1.5 py-0.5 rounded ${isDark ? 'bg-amber-500/20 text-amber-300' : 'bg-amber-100 text-amber-700'}`}>DEV</span>
             </button>
+            )}
           </div>
-        </div>
-      )}
+      </div>
 
+      {activeTab === 'actividad' ? (
+        <div className="p-6">
+          <ActividadComercialBoard isDark={isDark} />
+        </div>
+      ) : (
       <div className="space-y-4 p-6">
       {/* Barra de filtros */}
       <div className={`rounded-xl border ${cardBg}`}>
@@ -919,6 +938,7 @@ export function HistorialAccionesPage() {
         </div>
       )}
       </div>
+      )}
     </div>
   );
 }
