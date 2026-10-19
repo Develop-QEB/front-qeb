@@ -35,7 +35,7 @@ import { NuevaActividadComercialModal } from './NuevaActividadComercialModal';
 // [TEMPORAL] Ocultar "Actividad Comercial" en producción (pedido de Dirección,
 // oct 2026): la feature de Akary entró a main con el merge de release del 29-sep
 // pero aún no debía estar visible. Para reactivarla: poner en false.
-const OCULTAR_ACTIVIDAD_COMERCIAL = true;
+const OCULTAR_ACTIVIDAD_COMERCIAL = false;
 
 // Roles que pueden crear tarea manual "Actividad Comercial".
 // Se muestra el boton solo a estos. El back re-valida.
@@ -4670,6 +4670,10 @@ export function NotificacionesPage() {
             onClose={handleCloseDrawer}
             onAddComment={(contenido) => addCommentMutation.mutate({ id: selectedTarea.id, contenido })}
             onUpdateFechaFin={(fecha_fin) => updateTareaMutation.mutate({ id: selectedTarea.id, fecha_fin })}
+            onEditActividad={puedeCrearActividadComercial ? (t) => {
+              handleCloseDrawer();
+              setTimeout(() => setEditingActividad({ id: t.id, descripcion: t.mensaje || t.titulo, fecha_fin: t.fecha_fin, contenido: t.contenido }), 250);
+            } : undefined}
             onNavigate={(path) => {
               if (selectedTarea.tipo?.includes('Rechazo')) {
                 handleCloseDrawer();
