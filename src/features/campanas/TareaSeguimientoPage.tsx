@@ -8109,7 +8109,7 @@ function TaskDetailModal({
 
                         // Verificar si es una tarea de recepción faltantes (tiene evidencia especial)
                         let esFaltantes = false;
-                        let faltantesData: { arte: string; cantidad: number }[] = [];
+                        let faltantesData: { arte: string; cantidad: number; nombre_arte?: string | null }[] = [];
 
                         if (task.evidencia) {
                           try {
@@ -8155,8 +8155,10 @@ function TaskDetailModal({
                                   <p className="text-sm font-medium text-white">
                                     {faltante.cantidad} faltante{faltante.cantidad !== 1 ? 's' : ''}
                                   </p>
-                                  <p className="text-xs text-zinc-500 truncate">
-                                    {!faltante.arte ? 'Sin arte asignado' : faltante.arte.startsWith('data:') ? 'Arte' : faltante.arte.split('/').pop()}
+                                  <p className="text-xs text-zinc-500 truncate" title={faltante.arte ? faltante.arte.split('/').pop() : ''}>
+                                    {/* Priorizar nombre_arte legible (lo enriquece el back desde biblioteca_artes).
+                                        Caer al filename solo si no hay nombre guardado. */}
+                                    {!faltante.arte ? 'Sin arte asignado' : (faltante.nombre_arte || (faltante.arte.startsWith('data:') ? 'Arte' : faltante.arte.split('/').pop()))}
                                   </p>
                                 </div>
 
