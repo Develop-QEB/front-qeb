@@ -20291,7 +20291,6 @@ export function TareaSeguimientoPage() {
                           return s + (ev.totalFaltantes || 0);
                         } catch { return s; }
                       }, 0);
-                    console.log('[RECIBIDO DEBUG] tareaId:', grupo.tarea_id, 'totalImpOrig:', totalImpresionesRecibido, 'faltantesTasks:', faltantesTasks.length, 'totalFaltantesPending:', totalFaltantesPending, 'faltantesDetail:', JSON.stringify(faltantesTasks.map(t => ({ id: t.id, est: t.estatus, num: t.num_impresiones, ev: (() => { try { const e = JSON.parse(t.evidencia || '{}'); return { tipo: e.tipo, totalF: e.totalFaltantes }; } catch { return 'err'; } })() }))));
                     if (totalFaltantesPending > 0 && totalImpresionesRecibido > totalFaltantesPending) {
                       totalImpresionesRecibido = totalImpresionesRecibido - totalFaltantesPending;
                     }
@@ -20344,8 +20343,13 @@ export function TareaSeguimientoPage() {
                             <Badge className="bg-emerald-500/20 text-emerald-300 border-emerald-500/30 text-xs">
                               Recibido
                             </Badge>
+                            {/* Badge consistente con el conteo del tab Recibido:
+                                mostrar siempre items (reserva x arte) del grupo. Antes mostraba
+                                num_impresiones del back (fijo al crear), que en parciales
+                                quedaba desalineado con las ubicaciones reales (Jos 2026-10-19). */}
                             <Badge className={isDark ? "bg-purple-500/20 text-purple-300 border-purple-500/30 text-xs" : "bg-purple-100 text-purple-700 border-purple-300 text-xs"}>
-                              {totalImpresionesRecibido > 0 ? `${totalImpresionesRecibido} impresiones` : `${grupo.items.length} items`}
+                              {`${grupo.items.length} ${grupo.items.length === 1 ? 'item' : 'items'}`}
+                              {totalImpresionesRecibido > 0 && grupo.items.length !== totalImpresionesRecibido ? ` · ${totalImpresionesRecibido} impr.` : ''}
                             </Badge>
                             {permissions.canOpenTasks && (
                               <button
