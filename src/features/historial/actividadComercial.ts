@@ -84,8 +84,39 @@ export function estaVencida(t: Pick<ActividadComercialTarea, 'estatus' | 'fecha_
 export function textoBusqueda(t: ActividadComercialTarea): string {
   const c = parseContenidoAC(t.contenido);
   return [
-    t.titulo, t.descripcion, t.responsable, t.asignado,
+    t.titulo, t.descripcion, t.responsable, t.asignado, t.asesor, t.cuic, t.cliente_nombre,
     c.cliente, c.marca, c.subtipo, c.ref_id != null ? `#${c.ref_id}` : null, c.base,
     t.campania_id ? `#${t.campania_id}` : null, t.id_propuesta ? `#${t.id_propuesta}` : null,
   ].filter(Boolean).join(' ').toLowerCase();
 }
+
+/** Cliente para filtrar: lo que capturó el asesor, o el de la cuenta vinculada. */
+export function clienteDe(t: ActividadComercialTarea): string | null {
+  const c = parseContenidoAC(t.contenido);
+  return (c.cliente || t.cliente_nombre || '').trim() || null;
+}
+
+/** ¿Alguno de los IDs de la actividad (tarea, campaña, propuesta, ref) es exactamente `id`? */
+export function coincideId(t: ActividadComercialTarea, id: string): boolean {
+  const q = id.trim();
+  if (!q) return true;
+  const c = parseContenidoAC(t.contenido);
+  return [t.id, t.campania_id, t.id_propuesta, c.ref_id]
+    .filter(v => v !== null && v !== undefined && v !== '')
+    .some(v => String(v) === q);
+}
+
+// Filtros rapidos del tablero. Deciden que columnas se muestran.
+export type FiltroRapidoAC = 'todas' | 'sin_finalizar' | 'finalizadas';
+
+export const FILTRO_RAPIDO_LABEL: Record<FiltroRapidoAC, string> = {
+  todas: 'Todas',
+  sin_finalizar: 'Sin finalizar',
+  finalizadas: 'Finalizadas',
+};
+
+export const COLUMNAS_POR_FILTRO: Record<FiltroRapidoAC, readonly ColumnaAC[]> = {
+  todas: COLUMNAS_AC,
+  sin_finalizar: ['Abierto', 'Activo'],
+  finalizadas: ['Finalizado'],
+};

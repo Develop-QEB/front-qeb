@@ -1,25 +1,30 @@
-import { useMemo, useState, type DragEvent } from 'react';
+import { useMemo, useRef, useState, type DragEvent } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import {
   Briefcase, Calendar, Search, X, RefreshCw, Circle, Pencil, ArrowRight, ArrowLeft,
-  AlertTriangle, Building2, Tag, Layers,
+  AlertTriangle, Building2, Tag, Layers, Filter, User, Users, Hash,
 } from 'lucide-react';
 import { historialService, type ActividadComercialTarea } from '../../services/historial.service';
 import { useAuthStore } from '../../store/authStore';
 import { UserAvatar } from '../../components/ui/user-avatar';
 import { formatDate } from '../../lib/utils';
 import { NuevaActividadComercialModal } from '../notificaciones/NuevaActividadComercialModal';
+import { FiltroMultiple } from './FiltroMultiple';
+import { DetalleActividadModal } from './DetalleActividadModal';
 import {
   COLUMNAS_AC, COLUMNA_LABEL, COLUMNA_DESCRIPCION, COLUMNA_COLOR, QK_ACTIVIDAD_COMERCIAL, type ColumnaAC,
-  columnaDeEstatus, esCancelada, parseContenidoAC, tituloCorto, estaVencida, textoBusqueda,
+  columnaDeEstatus, esCancelada, parseContenidoAC, tituloCorto, estaVencida, textoBusqueda, clienteDe, coincideId,
+  type FiltroRapidoAC, FILTRO_RAPIDO_LABEL, COLUMNAS_POR_FILTRO,
 } from './actividadComercial';
 
-// Tablero CRM de Actividad Comercial: 3 columnas por estatus de la tarea,
+// Tablero CRM de Actividad Comercial: columnas por estatus de la tarea,
 // drag & drop entre columnas (HTML5 nativo, sin dependencias) y botones
-// "mover" como alternativa. Muestra TODAS las actividades (de todos los
-// usuarios): el tab vive en Historial de Acciones, que ya es solo para
-// roles directivos/admin.
+// "mover" como alternativa. Click en la tarjeta abre el detalle (ver, mover,
+// editar). Muestra TODAS las actividades (de todos los usuarios): el tab vive
+// en Historial de Acciones, que ya es solo para roles directivos/admin.
 const DND_MIME = 'application/x-qeb-actividad-id';
+
+const FILTROS_RAPIDOS: FiltroRapidoAC[] = ['todas', 'sin_finalizar', 'finalizadas'];
 
 interface Props {
   isDark: boolean;
@@ -29,12 +34,26 @@ export function ActividadComercialBoard({ isDark }: Props) {
   const queryClient = useQueryClient();
   const user = useAuthStore((s) => s.user);
   const currentUserId = user?.id ?? null;
+  // Mismo criterio que el back (editarActividadComercial): creador o Admin/DEV.
+  const esAdmin = user?.rol === 'Administrador' || user?.rol === 'DEV';
+  const puedeEditar = (t: ActividadComercialTarea) => esAdmin || (currentUserId != null && t.id_responsable === currentUserId);
 
+  // Filtros
   const [search, setSearch] = useState('');
-  const [responsable, setResponsable] = useState('');
+  const [filtroRapido, setFiltroRapido] = useState<FiltroRapidoAC>('todas');
+  const [responsables, setResponsables] = useState<string[]>([]);
+  const [clientes, setClientes] = useState<string[]>([]);
+  const [asesores, setAsesores] = useState<string[]>([]);
+  const [cuic, setCuic] = useState('');
+  const [idFiltro, setIdFiltro] = useState('');
   const [ocultarCanceladas, setOcultarCanceladas] = useState(false);
+  const [showMoreFilters, setShowMoreFilters] = useState(false);
+
+  // DnD / modales
   const [dragOverCol, setDragOverCol] = useState<ColumnaAC | null>(null);
   const [draggingId, setDraggingId] = useState<number | null>(null);
+  const arrastrando = useRef(false);
+  const [detalleId, setDetalleId] = useState<number | null>(null);
   const [editing, setEditing] = useState<ActividadComercialTarea | null>(null);
 
   const { data = [], isLoading, isFetching } = useQuery({
@@ -66,21 +85,35 @@ export function ActividadComercialBoard({ isDark }: Props) {
     },
   });
 
-  const responsables = useMemo(() => {
-    const set = new Set<string>();
-    data.forEach(t => { if (t.responsable) set.add(t.responsable); });
-    return Array.from(set).sort((a, b) => a.localeCompare(b, 'es'));
+  // Opciones de los multiselects, derivadas de los datos.
+  const opciones = useMemo(() => {
+    const r = new Set<string>(); const c = new Set<string>(); const a = new Set<string>();
+    data.forEach(t => {
+      if (t.responsable) r.add(t.responsable);
+      const cl = clienteDe(t); if (cl) c.add(cl);
+      if (t.asesor) a.add(t.asesor);
+    });
+    const ord = (s: Set<string>) => Array.from(s).sort((x, y) => x.localeCompare(y, 'es'));
+    return { responsables: ord(r), clientes: ord(c), asesores: ord(a) };
   }, [data]);
 
   const filtradas = useMemo(() => {
     const q = search.trim().toLowerCase();
+    const cuicQ = cuic.trim();
+    const setR = new Set(responsables); const setC = new Set(clientes); const setA = new Set(asesores);
     return data.filter(t => {
-      if (responsable && t.responsable !== responsable) return false;
+      if (setR.size && !(t.responsable && setR.has(t.responsable))) return false;
+      if (setC.size) { const cl = clienteDe(t); if (!cl || !setC.has(cl)) return false; }
+      if (setA.size && !(t.asesor && setA.has(t.asesor))) return false;
+      if (cuicQ && !(t.cuic || '').includes(cuicQ)) return false;
+      if (!coincideId(t, idFiltro)) return false;
       if (ocultarCanceladas && esCancelada(t)) return false;
       if (q && !textoBusqueda(t).includes(q)) return false;
       return true;
     });
-  }, [data, search, responsable, ocultarCanceladas]);
+  }, [data, search, responsables, clientes, asesores, cuic, idFiltro, ocultarCanceladas]);
+
+  const columnasVisibles = COLUMNAS_POR_FILTRO[filtroRapido];
 
   const porColumna = useMemo(() => {
     const g: Record<ColumnaAC, ActividadComercialTarea[]> = { Abierto: [], Activo: [], Finalizado: [] };
@@ -90,19 +123,40 @@ export function ActividadComercialBoard({ isDark }: Props) {
     return g;
   }, [filtradas]);
 
+  const totalVisible = columnasVisibles.reduce((n, col) => n + porColumna[col].length, 0);
+  const conteoRapido: Record<FiltroRapidoAC, number> = {
+    todas: filtradas.length,
+    sin_finalizar: porColumna.Abierto.length + porColumna.Activo.length,
+    finalizadas: porColumna.Finalizado.length,
+  };
+
+  const hayFiltros = !!(responsables.length || clientes.length || asesores.length || cuic.trim() || idFiltro.trim() || ocultarCanceladas);
+  const limpiarFiltros = () => {
+    setSearch(''); setResponsables([]); setClientes([]); setAsesores([]);
+    setCuic(''); setIdFiltro(''); setOcultarCanceladas(false);
+  };
+
   const mover = (id: number, columna: ColumnaAC) => {
     const t = data.find(x => x.id === id);
     if (!t || columnaDeEstatus(t.estatus) === columna) return;
     moverMutation.mutate({ id, columna });
   };
 
+  // El detalle se lee de `data` para que refleje el movimiento sin cerrar el modal.
+  const detalle = detalleId != null ? data.find(t => t.id === detalleId) ?? null : null;
+
   // ---- Drag & drop (HTML5) ----
   const onDragStart = (e: DragEvent, id: number) => {
     e.dataTransfer.setData(DND_MIME, String(id));
     e.dataTransfer.effectAllowed = 'move';
+    arrastrando.current = true;
     setDraggingId(id);
   };
-  const onDragEnd = () => { setDraggingId(null); setDragOverCol(null); };
+  const onDragEnd = () => {
+    setDraggingId(null); setDragOverCol(null);
+    // El click de soltar llega despues del dragend: se ignora en el siguiente tick.
+    setTimeout(() => { arrastrando.current = false; }, 0);
+  };
   const onDragOver = (e: DragEvent, col: ColumnaAC) => {
     if (!e.dataTransfer.types.includes(DND_MIME)) return;
     e.preventDefault();
@@ -118,6 +172,7 @@ export function ActividadComercialBoard({ isDark }: Props) {
   };
 
   const subText = isDark ? 'text-zinc-400' : 'text-gray-500';
+  const cardBg = isDark ? 'bg-zinc-900/50 border-zinc-800' : 'bg-white border-gray-200';
   const inputCls = isDark
     ? 'bg-zinc-800 border-zinc-700 text-white placeholder:text-zinc-600'
     : 'bg-white border-gray-300 text-gray-900 placeholder:text-gray-400';
@@ -127,54 +182,140 @@ export function ActividadComercialBoard({ isDark }: Props) {
 
   return (
     <div className="space-y-4">
-      {/* Filtros */}
-      <div className={`rounded-xl border p-4 flex flex-wrap items-center gap-2.5 ${isDark ? 'bg-zinc-900/50 border-zinc-800' : 'bg-white border-gray-200'}`}>
-        <div className="relative flex-1 min-w-[220px]">
-          <Search className={`absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 ${subText}`} />
-          <input
-            type="text"
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            placeholder="Buscar por cliente, marca, descripción, responsable, #ref..."
-            className={`w-full rounded-lg border pl-9 pr-8 py-2 text-sm ${inputCls}`}
+      {/* Barra de filtros */}
+      <div className={`rounded-xl border ${cardBg}`}>
+        <div className="p-4 flex flex-wrap items-center gap-2.5">
+          {/* Filtros rapidos */}
+          <div className={`flex items-center rounded-lg border p-0.5 ${isDark ? 'border-zinc-700 bg-zinc-800/60' : 'border-gray-200 bg-gray-50'}`}>
+            {FILTROS_RAPIDOS.map(f => {
+              const on = filtroRapido === f;
+              return (
+                <button
+                  key={f}
+                  onClick={() => setFiltroRapido(f)}
+                  className={`px-3 py-1.5 rounded-md text-xs font-medium transition-colors flex items-center gap-1.5 ${
+                    on
+                      ? 'bg-purple-600 text-white shadow-sm'
+                      : isDark ? 'text-zinc-400 hover:text-white' : 'text-gray-500 hover:text-gray-900'
+                  }`}
+                >
+                  {FILTRO_RAPIDO_LABEL[f]}
+                  <span className={`px-1.5 py-px rounded-full text-[10px] ${on ? 'bg-white/20' : isDark ? 'bg-zinc-700 text-zinc-300' : 'bg-gray-200 text-gray-600'}`}>
+                    {conteoRapido[f]}
+                  </span>
+                </button>
+              );
+            })}
+          </div>
+
+          {/* Busqueda */}
+          <div className="relative flex-1 min-w-[220px]">
+            <Search className={`absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 ${subText}`} />
+            <input
+              type="text"
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              placeholder="Buscar por cliente, marca, descripción, responsable, CUIC, #ref..."
+              className={`w-full rounded-lg border pl-9 pr-8 py-2 text-sm ${inputCls}`}
+            />
+            {search && (
+              <button onClick={() => setSearch('')} className={`absolute right-3 top-1/2 -translate-y-1/2 ${subText}`}>
+                <X className="h-4 w-4" />
+              </button>
+            )}
+          </div>
+
+          <FiltroMultiple
+            label="Responsables"
+            icon={User}
+            options={opciones.responsables}
+            selected={responsables}
+            onChange={setResponsables}
+            isDark={isDark}
+            placeholder="Buscar responsable..."
           />
-          {search && (
-            <button onClick={() => setSearch('')} className={`absolute right-3 top-1/2 -translate-y-1/2 ${subText}`}>
-              <X className="h-4 w-4" />
-            </button>
-          )}
+
+          <span className={`text-xs ${subText}`}>{totalVisible} de {data.length}</span>
+
+          <button
+            onClick={() => queryClient.invalidateQueries({ queryKey: QK_ACTIVIDAD_COMERCIAL })}
+            className={`p-2 rounded-lg border transition-colors ${btnSecondary}`}
+            title="Refrescar"
+          >
+            <RefreshCw className={`h-4 w-4 ${isFetching ? 'animate-spin' : ''}`} />
+          </button>
+
+          <button
+            onClick={() => setShowMoreFilters(v => !v)}
+            className={`flex items-center gap-1.5 px-3 py-2 rounded-lg text-sm border transition-colors ${
+              showMoreFilters || hayFiltros ? 'border-purple-500 text-purple-500' : btnSecondary
+            }`}
+            title="Más filtros"
+          >
+            <Filter className="h-4 w-4" />
+            {hayFiltros && (
+              <span className="inline-flex items-center justify-center w-4 h-4 rounded-full bg-purple-500 text-white text-[10px] font-bold">
+                {[responsables.length, clientes.length, asesores.length, cuic.trim(), idFiltro.trim(), ocultarCanceladas].filter(Boolean).length}
+              </span>
+            )}
+          </button>
         </div>
 
-        <select
-          value={responsable}
-          onChange={(e) => setResponsable(e.target.value)}
-          className={`rounded-lg border px-3 py-2 text-sm min-w-[180px] ${inputCls}`}
-        >
-          <option value="">Todos los responsables</option>
-          {responsables.map(r => <option key={r} value={r}>{r}</option>)}
-        </select>
-
-        <label className={`flex items-center gap-2 text-xs cursor-pointer ${subText}`}>
-          <input
-            type="checkbox"
-            checked={ocultarCanceladas}
-            onChange={(e) => setOcultarCanceladas(e.target.checked)}
-            className="h-3.5 w-3.5 accent-purple-600"
-          />
-          Ocultar canceladas
-        </label>
-
-        <span className={`text-xs ml-auto ${subText}`}>
-          {filtradas.length} de {data.length}
-        </span>
-
-        <button
-          onClick={() => queryClient.invalidateQueries({ queryKey: QK_ACTIVIDAD_COMERCIAL })}
-          className={`p-2 rounded-lg border transition-colors ${btnSecondary}`}
-          title="Refrescar"
-        >
-          <RefreshCw className={`h-4 w-4 ${isFetching ? 'animate-spin' : ''}`} />
-        </button>
+        {showMoreFilters && (
+          <div className="px-4 pb-4 pt-0">
+            <div className={`flex flex-wrap items-end gap-3 pt-3 border-t ${isDark ? 'border-zinc-800' : 'border-gray-100'}`}>
+              <div>
+                <label className={`text-xs font-medium mb-1 block ${subText}`}>Cliente</label>
+                <FiltroMultiple label="Clientes" icon={Building2} options={opciones.clientes} selected={clientes} onChange={setClientes} isDark={isDark} placeholder="Buscar cliente..." />
+              </div>
+              <div>
+                <label className={`text-xs font-medium mb-1 block ${subText}`}>Asesor de la cuenta</label>
+                <FiltroMultiple label="Asesores" icon={Users} options={opciones.asesores} selected={asesores} onChange={setAsesores} isDark={isDark} placeholder="Buscar asesor..." />
+              </div>
+              <div>
+                <label className={`text-xs font-medium mb-1 block ${subText}`}>CUIC</label>
+                <div className="relative">
+                  <Hash className={`absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 ${subText}`} />
+                  <input
+                    type="text"
+                    value={cuic}
+                    onChange={(e) => setCuic(e.target.value)}
+                    placeholder="Contiene..."
+                    className={`rounded-lg border pl-8 pr-3 py-1.5 text-sm w-36 ${inputCls}`}
+                  />
+                </div>
+              </div>
+              <div>
+                <label className={`text-xs font-medium mb-1 block ${subText}`}>ID</label>
+                <input
+                  type="text"
+                  value={idFiltro}
+                  onChange={(e) => setIdFiltro(e.target.value)}
+                  placeholder="Tarea, campaña o propuesta"
+                  title="Coincidencia exacta con el # de tarea, campaña, propuesta o referencia"
+                  className={`rounded-lg border px-3 py-1.5 text-sm w-44 ${inputCls}`}
+                />
+              </div>
+              <label className={`flex items-center gap-2 text-xs cursor-pointer pb-2 ${subText}`}>
+                <input
+                  type="checkbox"
+                  checked={ocultarCanceladas}
+                  onChange={(e) => setOcultarCanceladas(e.target.checked)}
+                  className="h-3.5 w-3.5 accent-purple-600"
+                />
+                Ocultar canceladas
+              </label>
+              {(hayFiltros || search) && (
+                <button
+                  onClick={limpiarFiltros}
+                  className="px-3 py-1.5 rounded-lg text-xs font-medium text-purple-500 hover:text-purple-400 border border-purple-500/30 hover:border-purple-500/50 transition-colors"
+                >
+                  Limpiar todo
+                </button>
+              )}
+            </div>
+          </div>
+        )}
       </div>
 
       {/* Tablero */}
@@ -183,11 +324,13 @@ export function ActividadComercialBoard({ isDark }: Props) {
           <RefreshCw className="h-6 w-6 animate-spin text-purple-500" />
         </div>
       ) : (
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 items-start">
-          {COLUMNAS_AC.map(col => {
+        <div className={`grid grid-cols-1 gap-4 items-start ${columnasVisibles.length === 3 ? 'md:grid-cols-3' : columnasVisibles.length === 2 ? 'md:grid-cols-2' : 'md:grid-cols-1'}`}>
+          {columnasVisibles.map(col => {
             const c = COLUMNA_COLOR[col];
             const items = porColumna[col];
             const activa = dragOverCol === col;
+            // Con una sola columna (Finalizadas) las tarjetas van en rejilla para no hacer una tira infinita.
+            const unaColumna = columnasVisibles.length === 1;
             return (
               <div
                 key={col}
@@ -208,7 +351,7 @@ export function ActividadComercialBoard({ isDark }: Props) {
                     {items.length}
                   </span>
                 </div>
-                <div className={`p-2 rounded-b-xl min-h-[240px] max-h-[calc(100vh-320px)] overflow-y-auto space-y-2 ${isDark ? 'bg-zinc-900/30' : 'bg-gray-50/60'}`}>
+                <div className={`p-2 rounded-b-xl min-h-[240px] max-h-[calc(100vh-320px)] overflow-y-auto ${isDark ? 'bg-zinc-900/30' : 'bg-gray-50/60'} ${unaColumna ? 'grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-2 content-start' : 'space-y-2'}`}>
                   {items.map(t => (
                     <TarjetaActividad
                       key={t.id}
@@ -216,16 +359,17 @@ export function ActividadComercialBoard({ isDark }: Props) {
                       columna={col}
                       isDark={isDark}
                       dragging={draggingId === t.id}
-                      puedeEditar={currentUserId != null && t.id_responsable === currentUserId}
+                      puedeEditar={puedeEditar(t)}
                       moviendo={moverMutation.isPending && moverMutation.variables?.id === t.id}
                       onDragStart={(e) => onDragStart(e, t.id)}
                       onDragEnd={onDragEnd}
                       onMover={(destino) => mover(t.id, destino)}
                       onEditar={() => setEditing(t)}
+                      onAbrir={() => { if (!arrastrando.current) setDetalleId(t.id); }}
                     />
                   ))}
                   {items.length === 0 && (
-                    <div className={`flex flex-col items-center justify-center py-10 ${isDark ? 'text-zinc-600' : 'text-gray-300'}`}>
+                    <div className={`flex flex-col items-center justify-center py-10 ${unaColumna ? 'col-span-full' : ''} ${isDark ? 'text-zinc-600' : 'text-gray-300'}`}>
                       <Circle className="h-8 w-8 mb-2 opacity-50" />
                       <span className="text-xs">{activa ? 'Suelta aquí' : 'Sin actividades'}</span>
                     </div>
@@ -237,7 +381,20 @@ export function ActividadComercialBoard({ isDark }: Props) {
         </div>
       )}
 
-      {/* Edicion: reusa el modal de Notificaciones (solo el creador; el back re-valida rol). */}
+      {/* Detalle (click en tarjeta) */}
+      {detalle && (
+        <DetalleActividadModal
+          tarea={detalle}
+          isDark={isDark}
+          puedeEditar={puedeEditar(detalle)}
+          moviendo={moverMutation.isPending && moverMutation.variables?.id === detalle.id}
+          onClose={() => setDetalleId(null)}
+          onMover={(col) => mover(detalle.id, col)}
+          onEditar={() => setEditing(detalle)}
+        />
+      )}
+
+      {/* Edicion: reusa el modal de Notificaciones (creador o Admin/DEV; el back re-valida). */}
       <NuevaActividadComercialModal
         isOpen={!!editing}
         onClose={() => {
@@ -253,7 +410,7 @@ export function ActividadComercialBoard({ isDark }: Props) {
 // ---------- Tarjeta ----------
 
 function TarjetaActividad({
-  tarea, columna, isDark, dragging, puedeEditar, moviendo, onDragStart, onDragEnd, onMover, onEditar,
+  tarea, columna, isDark, dragging, puedeEditar, moviendo, onDragStart, onDragEnd, onMover, onEditar, onAbrir,
 }: {
   tarea: ActividadComercialTarea;
   columna: ColumnaAC;
@@ -265,6 +422,7 @@ function TarjetaActividad({
   onDragEnd: () => void;
   onMover: (destino: ColumnaAC) => void;
   onEditar: () => void;
+  onAbrir: () => void;
 }) {
   const c = parseContenidoAC(tarea.contenido);
   const cancelada = esCancelada(tarea);
@@ -272,13 +430,15 @@ function TarjetaActividad({
   const idx = COLUMNAS_AC.indexOf(columna);
   const anterior = idx > 0 ? COLUMNAS_AC[idx - 1] : null;
   const siguiente = idx < COLUMNAS_AC.length - 1 ? COLUMNAS_AC[idx + 1] : null;
+  const cliente = clienteDe(tarea);
 
   const chips: { icon: typeof Tag; text: string }[] = [];
-  if (c.cliente) chips.push({ icon: Building2, text: c.marca ? `${c.cliente} · ${c.marca}` : c.cliente });
+  if (cliente) chips.push({ icon: Building2, text: c.marca ? `${cliente} · ${c.marca}` : cliente });
   else if (c.marca) chips.push({ icon: Building2, text: c.marca });
   if (c.subtipo) chips.push({ icon: Tag, text: c.ref_id != null ? `${c.subtipo} #${c.ref_id}` : c.subtipo });
   if (c.catorcena || c.anio) chips.push({ icon: Layers, text: [c.catorcena ? `Cat ${c.catorcena}` : null, c.anio].filter(Boolean).join(' / ') });
   if (c.base) chips.push({ icon: Tag, text: c.base });
+  if (tarea.cuic) chips.push({ icon: Hash, text: `CUIC ${tarea.cuic}` });
 
   const sub = isDark ? 'text-zinc-500' : 'text-gray-400';
   const txt = isDark ? 'text-white' : 'text-gray-900';
@@ -289,6 +449,8 @@ function TarjetaActividad({
       draggable={!moviendo}
       onDragStart={onDragStart}
       onDragEnd={onDragEnd}
+      onClick={onAbrir}
+      title="Click para ver el detalle · arrastra para cambiar de columna"
       className={`group rounded-xl border p-3 transition-all ${
         isDark ? 'bg-zinc-800/60 border-zinc-700/60 hover:border-zinc-600' : 'bg-white border-gray-200 hover:border-gray-300 shadow-sm'
       } ${dragging ? 'opacity-40' : ''} ${cancelada ? 'opacity-60' : ''} ${moviendo ? 'cursor-wait' : 'cursor-grab active:cursor-grabbing'}`}
@@ -340,12 +502,12 @@ function TarjetaActividad({
         </div>
       </div>
 
-      {/* Acciones (alternativa al arrastre; visibles al pasar el mouse) */}
+      {/* Acciones (alternativa al arrastre; visibles al pasar el mouse). stopPropagation: no abrir el detalle. */}
       <div className="flex items-center justify-between gap-1 mt-2 opacity-0 group-hover:opacity-100 focus-within:opacity-100 transition-opacity">
         <div className="flex items-center gap-1">
           {anterior && (
             <button
-              onClick={() => onMover(anterior)}
+              onClick={(e) => { e.stopPropagation(); onMover(anterior); }}
               disabled={moviendo}
               className={`inline-flex items-center gap-1 px-2 py-1 rounded-md text-[10px] border transition-colors disabled:opacity-50 ${isDark ? 'border-zinc-700 text-zinc-400 hover:text-white hover:bg-zinc-700' : 'border-gray-200 text-gray-500 hover:text-gray-800 hover:bg-gray-100'}`}
               title={`Mover a ${COLUMNA_LABEL[anterior]}`}
@@ -355,9 +517,9 @@ function TarjetaActividad({
           )}
           {siguiente && (
             <button
-              onClick={() => onMover(siguiente)}
+              onClick={(e) => { e.stopPropagation(); onMover(siguiente); }}
               disabled={moviendo}
-              className={`inline-flex items-center gap-1 px-2 py-1 rounded-md text-[10px] border transition-colors disabled:opacity-50 ${COLUMNA_COLOR[siguiente].border} ${COLUMNA_COLOR[siguiente].text} hover:${COLUMNA_COLOR[siguiente].bg}`}
+              className={`inline-flex items-center gap-1 px-2 py-1 rounded-md text-[10px] border transition-colors disabled:opacity-50 ${COLUMNA_COLOR[siguiente].border} ${COLUMNA_COLOR[siguiente].text}`}
               title={`Mover a ${COLUMNA_LABEL[siguiente]}`}
             >
               {COLUMNA_LABEL[siguiente]} <ArrowRight className="h-3 w-3" />
@@ -365,7 +527,7 @@ function TarjetaActividad({
           )}
         </div>
         {puedeEditar && (
-          <button onClick={onEditar} className={`p-1 rounded-md transition-colors ${iconBtn}`} title="Editar actividad">
+          <button onClick={(e) => { e.stopPropagation(); onEditar(); }} className={`p-1 rounded-md transition-colors ${iconBtn}`} title="Editar actividad">
             <Pencil className="h-3.5 w-3.5" />
           </button>
         )}

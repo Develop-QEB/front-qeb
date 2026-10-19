@@ -55,6 +55,11 @@ export interface ActividadComercialTarea {
   /** JSON del formulario: cliente, marca, subtipo, ref_id, anio, catorcena, estatus_actividad, base. */
   contenido: string | null;
   created_at: string | null;
+  // Cuenta vinculada (campaña o propuesta), derivada en el back para filtrar.
+  // null en actividades sobre leads sin campaña/propuesta.
+  cuic?: string | null;
+  asesor?: string | null;
+  cliente_nombre?: string | null;
 }
 
 export type ColumnaActividadComercial = 'Abierto' | 'Activo' | 'Finalizado';
