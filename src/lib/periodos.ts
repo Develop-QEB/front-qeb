@@ -132,7 +132,7 @@ export function articuloValidoEnPeriodo(
   itemCode: string | undefined,
   tipoPeriodo: 'catorcena' | 'mensual',
 ): boolean {
-  if (getRequiredPeriodoForArticulo(itemName, itemCode) === tipoPeriodo) return true;
+  if (getRequiredPeriodoForArticulo(itemName) === tipoPeriodo) return true;
   // Digital PB/CL: permitido también en mensual.
   if (tipoPeriodo === 'mensual' && esDigitalParabusColumna(itemName, itemCode)) return true;
   return false;
