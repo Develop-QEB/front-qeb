@@ -4460,6 +4460,10 @@ export function NotificacionesPage() {
             onClose={handleCloseDrawer}
             onAddComment={(contenido) => addCommentMutation.mutate({ id: selectedTarea.id, contenido })}
             onUpdateFechaFin={(fecha_fin) => updateTareaMutation.mutate({ id: selectedTarea.id, fecha_fin })}
+            onEditActividad={puedeCrearActividadComercial ? (t) => {
+              handleCloseDrawer();
+              setTimeout(() => setEditingActividad({ id: t.id, descripcion: t.mensaje || t.titulo, fecha_fin: t.fecha_fin, contenido: t.contenido }), 250);
+            } : undefined}
             onNavigate={(path) => {
               if (selectedTarea.tipo?.includes('Rechazo')) {
                 handleCloseDrawer();
