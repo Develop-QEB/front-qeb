@@ -496,11 +496,12 @@ const isIMArticle = (item: InventarioReservado | InventarioConAPS): boolean => {
   return String(item.rsv_ids).startsWith('sc_');
 };
 
-// Artículos que NO requieren inventario físico: impresión (IM) y ejecución especial
-// (ES/ESP). Se consideran siempre completos, igual que IM (no piden inventario).
+// Artículos que NO requieren inventario físico: impresión (IM), ejecución especial
+// (ES/ESP) y servicios CF-#### (CF + dígitos, ej. CF-0017 Mantenimiento Ext — NO
+// confundir con bonif CF). Se consideran siempre completos (no piden inventario).
 const esArticuloSinInventario = (articulo?: string | null): boolean => {
   const a = String(articulo || '').toUpperCase();
-  return a.startsWith('IM') || a.startsWith('ESP') || a.startsWith('ES-');
+  return a.startsWith('IM') || a.startsWith('ESP') || a.startsWith('ES-') || /^CF-?\d/.test(a);
 };
 
 const TABLE_COLUMNS_IM_APS: TableColumn[] = [
@@ -2850,7 +2851,7 @@ export function CampanaDetailPage() {
                       )}
                     </button>
                     {showFiltersReservado && (
-                      <div className={`absolute right-0 top-full mt-1 z-50 w-[520px] ${isDark ? 'bg-[#1a1025] border-purple-900/50' : 'bg-white border-purple-200'} border rounded-lg shadow-xl p-4`}>
+                      <div className={`fixed inset-x-2 top-16 mt-0 w-auto max-w-none max-h-[calc(100vh-5rem)] overflow-auto sm:absolute sm:inset-auto sm:top-full sm:right-0 sm:mt-1 sm:w-[520px] sm:max-h-none sm:overflow-visible z-50 ${isDark ? 'bg-[#1a1025] border-purple-900/50' : 'bg-white border-purple-200'} border rounded-lg shadow-xl p-4`}>
                         <div className="flex items-center justify-between mb-3">
                           <span className={`text-sm font-medium ${isDark ? 'text-purple-300' : 'text-purple-700'}`}>Filtros de búsqueda</span>
                           <button
@@ -4235,7 +4236,7 @@ export function CampanaDetailPage() {
                       )}
                     </button>
                     {showFiltersAPS && (
-                      <div className={`absolute right-0 top-full mt-1 z-50 w-[520px] ${isDark ? 'bg-[#1a1025] border-purple-900/50' : 'bg-white border-purple-200'} border rounded-lg shadow-xl p-4`}>
+                      <div className={`fixed inset-x-2 top-16 mt-0 w-auto max-w-none max-h-[calc(100vh-5rem)] overflow-auto sm:absolute sm:inset-auto sm:top-full sm:right-0 sm:mt-1 sm:w-[520px] sm:max-h-none sm:overflow-visible z-50 ${isDark ? 'bg-[#1a1025] border-purple-900/50' : 'bg-white border-purple-200'} border rounded-lg shadow-xl p-4`}>
                         <div className="flex items-center justify-between mb-3">
                           <span className={`text-sm font-medium ${isDark ? 'text-purple-300' : 'text-purple-700'}`}>Filtros de búsqueda</span>
                           <button

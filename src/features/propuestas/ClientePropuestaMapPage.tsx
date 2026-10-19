@@ -5,10 +5,10 @@ import {
   Map as MapIcon, Loader2, Copy, Check, Download, ChevronDown, ChevronRight,
   Search, FileSpreadsheet, SlidersHorizontal, X, Layers,
 } from 'lucide-react';
-import { GoogleMap, useLoadScript, Marker, Circle, Autocomplete, InfoWindow } from '@react-google-maps/api';
+import { GoogleMap, useLoadScript, Marker, InfoWindow } from '@react-google-maps/api';
 import { formatCurrency } from '../../lib/utils';
 import { toNum } from '../../utils/excelFormat';
-import { descargarExcelCompartir, FMT_ENTERO, FMT_MONEDA, FMT_COORD } from '../../utils/excelCompartir';
+import { descargarExcelCompartir, FMT_ENTERO, FMT_COORD } from '../../utils/excelCompartir';
 // Versionado de circuitos completados: pines/filas 'no_vigente' en gris.
 // Vista del CLIENTE: las piezas en reasignación solo se atenúan en gris, sin
 // etiqueta ni leyenda ni columna de estado. La explicación vive únicamente en
@@ -24,6 +24,14 @@ import {
 // Config UNICA de Google Maps (mismo id/key/libraries en toda la app) para
 // que el script se inyecte una sola vez. Ver src/config/googleMaps.ts.
 import { GOOGLE_MAPS_LOADER_OPTIONS } from '../../config/googleMaps';
+// Capas de POI / poligonos con las que Trafico armo cada circuito. Al cliente
+// solo le llegan las marcadas visibles (vienen dentro del payload publico).
+import { CapaMapa, boundsDeCapas, crearFiltroCapas } from './capasMapa';
+import { CapasMapaPanel } from './CapasMapaPanel';
+import { CapasMapaOverlay } from './CapasMapaOverlay';
+// Buscador de POI libre (misma busqueda por area que el Buscador de Formatos).
+import { PoiBuscadorMapa, PoiMapaOverlay } from './PoiBuscadorMapa';
+import type { POIEncontrado } from './poiBusqueda';
 
 const IMU_BLUE = '#0054A6';
 const IMU_GREEN = '#7AB800';
@@ -59,6 +67,7 @@ const IMU_MAP_STYLES = [
 interface InventarioReservado extends ConVersion, ConOrigen {
   id: number;
   codigo_unico: string;
+  solicitud_caras_id?: number | null;
   mueble: string | null;
   estado: string | null;
   municipio: string | null;
@@ -101,13 +110,7 @@ interface PublicPropuestaData {
   campania: { id: number; nombre: string; status: string } | null;
   caras: { caras: number; bonificacion: number; tarifa_publica: number }[];
   inventario: InventarioReservado[];
-}
-
-interface POIMarker {
-  id: string;
-  position: { lat: number; lng: number };
-  name: string;
-  range: number;
+  capas?: CapaMapa[];
 }
 
 const MESES_LABEL = ['Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio', 'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre'];
@@ -193,6 +196,7 @@ export function ClientePropuestaMapPage() {
   //   ?periodos=YYYY-NN,...  -> solo ciertas catorcenas (todo su inventario).
   //   ?ids=1,2,3             -> legado (por id de inventario, sin distinguir catorcena).
   //   sin params             -> todo el inventario.
+  // Aparte del alcance, ?capas=id,id prende esas Capas de Trafico al abrir.
   const selParam = searchParams.get('sel') || '';
   const periodosParam = searchParams.get('periodos') || '';
   const idsParam = searchParams.get('ids') || '';
@@ -209,15 +213,20 @@ export function ClientePropuestaMapPage() {
     [idsParam]
   );
   const mapRef = useRef<google.maps.Map | null>(null);
-  const autocompleteRef = useRef<google.maps.places.Autocomplete | null>(null);
 
   const [selectedMarker, setSelectedMarker] = useState<Row | null>(null);
-  const [poiMarkers, setPoiMarkers] = useState<POIMarker[]>([]);
+  const [poiMarkers, setPoiMarkers] = useState<POIEncontrado[]>([]);
   const [searchRange, setSearchRange] = useState(300);
-  const [poiSearch, setPoiSearch] = useState('');
   const [copied, setCopied] = useState(false);
   const [showList, setShowList] = useState(true);
   const [showFilters, setShowFilters] = useState(false);
+  // Capas de Trafico prendidas. Nacen apagadas, salvo que el enlace traiga
+  // ?capas=id,id (seleccion hecha en la Vista Compartir o al copiar el enlace
+  // de este mismo visor): esas llegan prendidas. Ids que no existan o que ya
+  // no sean visibles al cliente simplemente no pintan nada.
+  const [capasActivas, setCapasActivas] = useState<Set<number>>(() => new Set(
+    (searchParams.get('capas') || '').split(',').map(s => parseInt(s.trim(), 10)).filter(n => Number.isFinite(n) && n > 0)
+  ));
 
   // Filtros
   const [search, setSearch] = useState('');
@@ -286,6 +295,16 @@ export function ClientePropuestaMapPage() {
   const formatoOptions = useMemo(() => [...new Set(baseRows.map(r => r.mueble).filter(Boolean) as string[])].sort(), [baseRows]);
   const tipoOptions = useMemo(() => [...new Set(baseRows.map(r => r.tipo_de_cara).filter(Boolean) as string[])].sort(), [baseRows]);
 
+  // ---- Capas de Trafico ----
+  const capas = useMemo(() => data?.capas ?? [], [data]);
+  // Capas prendidas = filtro espacial ademas de visualizacion: queda solo el
+  // inventario que cumple el criterio (dentro de "cerca de" / fuera de "lejos
+  // de"). Aplica a lista, mapa y descargas, como los demas filtros.
+  const filtroCapas = useMemo(
+    () => (isLoaded ? crearFiltroCapas(capas.filter(c => capasActivas.has(c.id))) : null),
+    [capas, capasActivas, isLoaded]
+  );
+
   // Filas visibles tras aplicar filtros (es lo que pinta el mapa y la lista).
   const visibleRows = useMemo(() => {
     const q = search.trim().toLowerCase();
@@ -294,13 +313,14 @@ export function ClientePropuestaMapPage() {
       if (plazaFilter && r.plaza !== plazaFilter) return false;
       if (formatoFilter && r.mueble !== formatoFilter) return false;
       if (tipoFilter && r.tipo_de_cara !== tipoFilter) return false;
+      if (filtroCapas && !(r.latitud && r.longitud && filtroCapas(r.latitud, r.longitud))) return false;
       if (q) {
         const hay = `${r.codigo_unico || ''} ${r.plaza || ''} ${r.ubicacion || ''} ${r.mueble || ''} ${r.articulo || ''}`.toLowerCase();
         if (!hay.includes(q)) return false;
       }
       return true;
     });
-  }, [baseRows, search, catFilter, plazaFilter, formatoFilter, tipoFilter]);
+  }, [baseRows, search, catFilter, plazaFilter, formatoFilter, tipoFilter, filtroCapas]);
 
   // Conjunto efectivo: si hay seleccion solo se muestra lo seleccionado; si no, lo visible.
   // Unifica lo que pinta el mapa con lo que exportan las descargas.
@@ -311,6 +331,32 @@ export function ClientePropuestaMapPage() {
 
   // Solo filas con coordenadas para el mapa.
   const mapRows = useMemo(() => effectiveRows.filter(r => r.latitud && r.longitud), [effectiveRows]);
+
+  // Circuitos presentes en lo que se pinta: las capas de otros se atenúan.
+  const circuitosVisibles = useMemo(() => {
+    const s = new Set<number>();
+    mapRows.forEach(r => { if (r.solicitud_caras_id) s.add(r.solicitud_caras_id); });
+    return s;
+  }, [mapRows]);
+  const nombreCircuito = (scId: number): string | null => {
+    const r = baseRows.find(x => x.solicitud_caras_id === scId);
+    return r ? ([r.articulo, r.mueble].filter(Boolean).join(' · ') || null) : null;
+  };
+  const handleToggleCapa = (id: number) => {
+    const capa = capas.find(c => c.id === id);
+    if (capa && !capasActivas.has(id) && mapRef.current) {
+      const b = boundsDeCapas([capa]);
+      if (b) mapRef.current.fitBounds(b, 60);
+    }
+    setCapasActivas(prev => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id); else next.add(id);
+      return next;
+    });
+  };
+  const toggleTodasCapas = (activar: boolean) => {
+    setCapasActivas(activar ? new Set(capas.map(c => c.id)) : new Set());
+  };
 
   // Lista agrupada: catorcena -> circuito (articulo) -> filas. Ordenada como inventario.
   const grouped = useMemo(() => {
@@ -392,14 +438,17 @@ export function ClientePropuestaMapPage() {
   const handleDownloadXLSX = () => {
     // Sin columna "Estado" para el cliente: la pieza en reasignación solo va con
     // la fila atenuada en gris.
-    const headers = ['Catorcena', 'Circuito', 'Codigo', 'Plaza', 'Ubicacion', 'Tipo Cara', 'Formato', 'Tipo Inventario', 'Articulo', 'Caras', 'Tarifa', 'Latitud', 'Longitud', ...(mostrarOrigen ? ['Origen'] : [])];
+    // Columnas acordadas con el cliente: fuera Circuito, Tipo Cara, Articulo y
+    // Tarifa (nomenclatura interna y dato comercial); "Codigo" se llama
+    // "Clave única", que es como le dice el cliente.
+    const headers = ['Catorcena', 'Clave única', 'Plaza', 'Ubicacion', 'Formato', 'Tipo Inventario', 'Caras', 'Latitud', 'Longitud', ...(mostrarOrigen ? ['Origen'] : [])];
     const filas = downloadRows.map(i => ({
       noVigente: esNoVigente(i),
       // Tinte azul/verde por origen (solo campañas); el gris de no vigente gana.
       fondoArgb: excelFondoOrigen(i, mostrarOrigen),
       valores: [
-        i._catLabel, i.articulo || '', i.codigo_unico, i.plaza, i.ubicacion, i.tipo_de_cara, i.mueble,
-        i.tradicional_digital || '', i.articulo, toNum(i.caras_totales), tarifaBruta(i), toNum(i.latitud), toNum(i.longitud),
+        i._catLabel, i.codigo_unico, i.plaza, i.ubicacion, i.mueble,
+        i.tradicional_digital || '', toNum(i.caras_totales), toNum(i.latitud), toNum(i.longitud),
         ...(mostrarOrigen ? [origenTexto(i, true)] : []),
       ],
     }));
@@ -409,8 +458,8 @@ export function ClientePropuestaMapPage() {
       subLeyenda: leyendaVersion(baseRows) || undefined,
       headers,
       filas,
-      // Caras (9), Tarifa (10), Latitud (11), Longitud (12) como celdas tipo número
-      formatos: { 9: FMT_ENTERO, 10: FMT_MONEDA, 11: FMT_COORD, 12: FMT_COORD },
+      // Caras (6), Latitud (7), Longitud (8) como celdas tipo número
+      formatos: { 6: FMT_ENTERO, 7: FMT_COORD, 8: FMT_COORD },
     }], mostrarOrigen ? ORIGEN_LEYENDA : undefined)
       .catch(err => console.error('Error generando Excel:', err));
   };
@@ -479,22 +528,6 @@ export function ClientePropuestaMapPage() {
     }
   };
 
-  const handlePOIPlaceChanged = () => {
-    const place = autocompleteRef.current?.getPlace();
-    if (place?.geometry?.location) {
-      const newMarker: POIMarker = {
-        id: `poi-${Date.now()}`,
-        position: { lat: place.geometry.location.lat(), lng: place.geometry.location.lng() },
-        name: place.name || 'POI',
-        range: searchRange,
-      };
-      setPoiMarkers(prev => [...prev, newMarker]);
-      mapRef.current?.setCenter(newMarker.position);
-      mapRef.current?.setZoom(15);
-      setPoiSearch('');
-    }
-  };
-
   // Copiar enlace "a la medida": si el usuario seleccionó filas en este mapa, el enlace
   // codifica EXACTAMENTE esa seleccion (?sel=id@catorcena). Si no hay seleccion, preserva
   // el alcance con el que se abrió el mapa (sel / periodos / ids).
@@ -513,6 +546,10 @@ export function ClientePropuestaMapPage() {
         if (v) params.set(k, v);
       }
     }
+    // Capas prendidas AHORA en este visor (prenderlas/apagarlas aqui ajusta el
+    // enlace, aunque el mapa se haya abierto con otro ?capas=).
+    const capasSel = capas.filter(c => capasActivas.has(c.id)).map(c => c.id);
+    if (capasSel.length > 0) params.set('capas', capasSel.join(','));
     const qs = params.toString();
     const publicUrl = `${window.location.origin}/cliente/propuesta/${propuestaId}/mapa${qs ? `?${qs}` : ''}`;
     navigator.clipboard.writeText(publicUrl);
@@ -809,24 +846,31 @@ export function ClientePropuestaMapPage() {
           )}
         </div>
 
-        {/* POI search */}
-        <div className="absolute top-3 right-3 z-10 flex items-center gap-2 bg-white/95 backdrop-blur rounded-xl shadow-lg border border-gray-200 px-2.5 py-2 max-w-[calc(100%-1.5rem)]">
-          <select value={searchRange} onChange={(e) => setSearchRange(parseInt(e.target.value))} className="px-2 py-1.5 bg-white border border-gray-300 rounded-lg text-xs text-gray-700">
-            <option value={100}>100m</option>
-            <option value={200}>200m</option>
-            <option value={300}>300m</option>
-            <option value={500}>500m</option>
-            <option value={1000}>1km</option>
-          </select>
-          {isLoaded && (
-            <Autocomplete onLoad={(ac) => { autocompleteRef.current = ac; }} onPlaceChanged={handlePOIPlaceChanged} options={{ componentRestrictions: { country: 'mx' } }}>
-              <input type="text" value={poiSearch} onChange={(e) => setPoiSearch(e.target.value)} placeholder="Buscar POI..." className="px-3 py-1.5 bg-white border border-gray-300 rounded-lg text-sm w-28 sm:w-48 focus:outline-none focus:ring-2 focus:ring-[#0054A6] text-gray-700" />
-            </Autocomplete>
-          )}
-          {poiMarkers.length > 0 && (
-            <button onClick={() => setPoiMarkers([])} className="px-2.5 py-1.5 bg-red-50 text-red-600 border border-red-200 rounded-lg text-xs hover:bg-red-100 transition-colors">Limpiar</button>
-          )}
+        {/* POI search (libre): busca en el area visible, como el Buscador de Formatos */}
+        <div className="absolute top-3 right-3 z-10 bg-white/95 backdrop-blur rounded-xl shadow-lg border border-gray-200 px-2.5 py-2 max-w-[calc(100%-1.5rem)]">
+          <PoiBuscadorMapa
+            getMap={() => mapRef.current}
+            isLoaded={isLoaded}
+            pois={poiMarkers}
+            onChange={setPoiMarkers}
+            range={searchRange}
+            onRangeChange={setSearchRange}
+            acento="imu"
+          />
         </div>
+
+        {/* Capas de Trafico (debajo del buscador de POI, que es libre y efimero) */}
+        {capas.length > 0 && (
+          <CapasMapaPanel
+            className="absolute top-16 right-3 z-10 w-72 max-w-[calc(100%-1.5rem)] max-h-[calc(100%-5rem)]"
+            capas={capas}
+            activas={capasActivas}
+            onToggle={handleToggleCapa}
+            onToggleTodas={toggleTodasCapas}
+            nombreCircuito={nombreCircuito}
+            circuitosVisibles={circuitosVisibles}
+          />
+        )}
 
         {isLoaded ? (
           <GoogleMap
@@ -843,6 +887,7 @@ export function ClientePropuestaMapPage() {
               }
             }}
           >
+            <CapasMapaOverlay capas={capas} activas={capasActivas} />
             {mapRows.map((item) => {
               const isActive = selectedMarker?._rk === item._rk;
               return (
@@ -874,15 +919,15 @@ export function ClientePropuestaMapPage() {
                     <span className="h-2.5 w-2.5 rounded-full" style={{ backgroundColor: colorFor(selectedMarker._catKey) }} />
                     <h4 className="font-bold text-sm" style={{ color: IMU_DARK }}>{selectedMarker.codigo_unico}</h4>
                   </div>
+                  {/* Tarjeta de pin para el CLIENTE: se omiten a propósito
+                      Circuito (nomenclatura interna), Tipo de cara y Tarifa
+                      (dato comercial). El resto sí le sirve para ubicar la pieza. */}
                   <div className="text-xs space-y-1">
                     <p><strong>Catorcena:</strong> {selectedMarker._catLabel}</p>
-                    <p><strong>Circuito:</strong> {selectedMarker.articulo || 'N/A'}</p>
                     <p><strong>Plaza:</strong> {selectedMarker.plaza || 'N/A'}</p>
-                    <p><strong>Tipo:</strong> {selectedMarker.tipo_de_cara || 'N/A'}</p>
                     <p><strong>Formato:</strong> {selectedMarker.mueble || 'N/A'}</p>
                     <p><strong>Ubicacion:</strong> {selectedMarker.ubicacion || 'N/A'}</p>
                     <p><strong>{(selectedMarker.mueble || '').toUpperCase().includes('PUENTE PEATONAL') ? 'Puentes' : 'Caras'}:</strong> {selectedMarker.caras_totales}</p>
-                    <p><strong>Tarifa:</strong> {formatCurrency(tarifaBruta(selectedMarker))}</p>
                     {mostrarOrigen && origenDe(selectedMarker) && (
                       <p><strong>Origen:</strong>{' '}
                         <span style={{ color: ORIGEN_COLOR[origenDe(selectedMarker)!] }}>{ORIGEN_LABEL[origenDe(selectedMarker)!]}</span>
@@ -892,9 +937,7 @@ export function ClientePropuestaMapPage() {
                 </div>
               </InfoWindow>
             )}
-            {poiMarkers.map(marker => (
-              <Circle key={marker.id} center={marker.position} radius={marker.range} options={{ strokeColor: IMU_GREEN, strokeOpacity: 0.8, strokeWeight: 2, fillColor: IMU_GREEN, fillOpacity: 0.15 }} />
-            ))}
+            <PoiMapaOverlay pois={poiMarkers} onChange={setPoiMarkers} color={IMU_GREEN} />
           </GoogleMap>
         ) : (
           <div className="flex items-center justify-center h-full bg-gray-50">

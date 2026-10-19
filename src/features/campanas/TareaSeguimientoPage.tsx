@@ -3536,8 +3536,11 @@ function FilterToolbar({
           {filters.length > 0 && <span className="px-1 py-0.5 rounded bg-purple-800 text-[10px]">{filters.length}</span>}
         </button>
         {showFilters && (
+          // Movil (<sm) sin useFixedDropdowns: cambiar a fixed anclado al
+          // viewport para que no se corte por la izquierda cuando el
+          // contenedor .relative es angosto. Feedback usuario 2026-09-23.
           <div
-            className={`${useFixedDropdowns ? 'fixed' : 'absolute right-0 top-full mt-1'} z-[100] w-[520px] ${isDark ? 'bg-[#1a1025]' : 'bg-white'} border border-purple-900/50 rounded-lg shadow-xl p-4`}
+            className={`${useFixedDropdowns ? 'fixed' : 'fixed inset-x-2 top-16 sm:absolute sm:inset-auto sm:right-0 sm:top-full sm:mt-1'} z-[100] w-auto sm:w-[520px] max-w-none sm:max-w-[calc(100vw-1rem)] max-h-[calc(100vh-5rem)] sm:max-h-none overflow-auto sm:overflow-visible ${isDark ? 'bg-[#1a1025]' : 'bg-white'} border border-purple-900/50 rounded-lg shadow-xl p-4`}
             style={useFixedDropdowns ? getDropdownPosition(filterBtnRef, 520) : undefined}
           >
             <div className="flex items-center justify-between mb-3">
@@ -3546,19 +3549,21 @@ function FilterToolbar({
             </div>
             <div className="space-y-3 max-h-[300px] overflow-visible pr-1">
               {filters.map((filter, index) => (
-                <div key={filter.id} className="flex items-center gap-2">
-                  {index > 0 && <span className="text-[10px] text-purple-400 font-medium w-8">AND</span>}
-                  {index === 0 && <span className="w-8"></span>}
-                  <select value={filter.field} onChange={(e) => updateFilter(filter.id, { field: e.target.value })} className="w-[130px] text-xs bg-background border border-border rounded px-2 py-1.5">
+                // Movil: campo/operador/valor apilados en columna para que no
+                // se corten (feedback usuario 2026-09-21). Desktop mantiene fila.
+                <div key={filter.id} className="flex flex-col sm:flex-row sm:items-center gap-2">
+                  {index > 0 && <span className="text-[10px] text-purple-400 font-medium w-full sm:w-8">AND</span>}
+                  {index === 0 && <span className="hidden sm:inline sm:w-8"></span>}
+                  <select value={filter.field} onChange={(e) => updateFilter(filter.id, { field: e.target.value })} className="w-full sm:w-[130px] text-xs bg-background border border-border rounded px-2 py-1.5">
                     {filterFields.map((f) => <option key={f.field} value={f.field}>{f.label}</option>)}
                   </select>
-                  <select value={filter.operator} onChange={(e) => updateFilter(filter.id, { operator: e.target.value as FilterOperator })} className="w-[90px] text-xs bg-background border border-border rounded px-2 py-1.5">
+                  <select value={filter.operator} onChange={(e) => updateFilter(filter.id, { operator: e.target.value as FilterOperator })} className="w-full sm:w-[90px] text-xs bg-background border border-border rounded px-2 py-1.5">
                     {FILTER_OPERATORS.filter(op => { const fc = filterFields.find(f => f.field === filter.field); return fc && op.forTypes.includes(fc.type); }).map((op) => <option key={op.value} value={op.value}>{op.label}</option>)}
                   </select>
                   {/* Combobox: input libre + dropdown de opciones que matchean.
                       Permite escribir texto cualquiera (no esta restringido al listado).
                       Pattern identico al de filtros avanzados de Campañas/Solicitudes. */}
-                  <div className="flex-1 relative">
+                  <div className="flex-1 min-w-0 relative">
                     <input
                       type="text"
                       value={filter.value}
@@ -3622,7 +3627,7 @@ function FilterToolbar({
           </button>
           {showGrouping && (
             <div
-              className={`${useFixedDropdowns ? 'fixed' : 'absolute right-0 top-full mt-1'} z-[100] ${isDark ? 'bg-[#1a1025]' : 'bg-white'} border border-purple-900/50 rounded-lg shadow-xl p-2 min-w-[200px]`}
+              className={`${useFixedDropdowns ? 'fixed' : 'fixed inset-x-2 top-16 sm:absolute sm:inset-auto sm:right-0 sm:top-full sm:mt-1'} z-[100] w-auto sm:w-auto sm:min-w-[200px] max-h-[calc(100vh-5rem)] sm:max-h-none overflow-auto sm:overflow-visible ${isDark ? 'bg-[#1a1025]' : 'bg-white'} border border-purple-900/50 rounded-lg shadow-xl p-2`}
               style={useFixedDropdowns ? getDropdownPosition(groupBtnRef, 200) : undefined}
             >
               <div className="flex items-center justify-between mb-2 px-2">
@@ -3665,7 +3670,7 @@ function FilterToolbar({
           </button>
           {showSort && (
             <div
-              className={`${useFixedDropdowns ? 'fixed' : 'absolute right-0 top-full mt-1'} z-[100] w-[240px] bg-[#1a1025] border border-purple-900/50 rounded-lg shadow-xl p-3`}
+              className={`${useFixedDropdowns ? 'fixed' : 'fixed inset-x-2 top-16 sm:absolute sm:inset-auto sm:right-0 sm:top-full sm:mt-1'} z-[100] w-auto sm:w-[240px] max-h-[calc(100vh-5rem)] sm:max-h-none overflow-auto sm:overflow-visible bg-[#1a1025] border border-purple-900/50 rounded-lg shadow-xl p-3`}
               style={useFixedDropdowns ? getDropdownPosition(sortBtnRef, 240) : undefined}
             >
               <div className="flex items-center justify-between mb-3">

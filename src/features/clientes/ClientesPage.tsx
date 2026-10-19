@@ -224,6 +224,10 @@ function ViewClienteModal({ isOpen, onClose, cliente }: ViewClienteModalProps) {
                     <span className={`${isDark ? 'text-zinc-500' : 'text-gray-500'} text-sm`}>Razón Social</span>
                     <span className={`${isDark ? 'text-white' : 'text-gray-900'} text-sm truncate ml-4 max-w-[200px]`}>{cliente.T0_U_RazonSocial || '-'}</span>
                   </div>
+                  <div className="flex justify-between">
+                    <span className={`${isDark ? 'text-zinc-500' : 'text-gray-500'} text-sm`}>CardCode SAP</span>
+                    <span className={`${isDark ? 'text-cyan-300' : 'text-cyan-700'} text-sm font-mono font-medium`}>{cliente.card_code || cliente.ACA_U_SAPCode || '-'}</span>
+                  </div>
                 </div>
               </div>
 
@@ -243,7 +247,7 @@ function ViewClienteModal({ isOpen, onClose, cliente }: ViewClienteModalProps) {
                     <span className={`${isDark ? 'text-white' : 'text-gray-900'} text-sm font-mono`}>{cliente.ASESOR_U_IDAsesor || cliente.T0_U_IDAsesor || '-'}</span>
                   </div>
                   <div className="flex justify-between">
-                    <span className={`${isDark ? 'text-zinc-500' : 'text-gray-500'} text-sm`}>Código SAP</span>
+                    <span className={`${isDark ? 'text-zinc-500' : 'text-gray-500'} text-sm`}>Código SAP Asesor</span>
                     <span className={`${isDark ? 'text-white' : 'text-gray-900'} text-sm font-mono`}>{cliente.ASESOR_U_SAPCode || '-'}</span>
                   </div>
                   <div className="flex justify-between">
@@ -1105,7 +1109,7 @@ export function ClientesPage() {
                     )}
                   </button>
                   {showFilterPopup && (
-                    <div className={`absolute right-0 top-full mt-1 z-[60] w-[520px] max-w-[calc(100vw-2rem)] ${isDark ? 'bg-[#1a1025] border-purple-900/50' : 'bg-white border-purple-200'} border rounded-lg shadow-xl p-4`}>
+                    <div className={`fixed inset-x-2 top-16 mt-0 w-auto max-w-none max-h-[calc(100vh-5rem)] overflow-auto sm:absolute sm:inset-auto sm:top-full sm:right-0 sm:mt-1 sm:w-[520px] sm:max-w-[calc(100vw-2rem)] sm:max-h-none sm:overflow-visible z-[60] ${isDark ? 'bg-[#1a1025] border-purple-900/50' : 'bg-white border-purple-200'} border rounded-lg shadow-xl p-4`}>
                       <div className="flex items-center justify-between mb-3">
                         <span className={`text-sm font-medium ${isDark ? 'text-purple-300' : 'text-purple-700'}`}>Filtros de búsqueda</span>
                         <button onClick={() => setShowFilterPopup(false)} className={`${isDark ? 'text-zinc-400 hover:text-white' : 'text-gray-400 hover:text-gray-700'}`}>

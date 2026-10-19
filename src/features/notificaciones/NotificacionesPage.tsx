@@ -1844,11 +1844,16 @@ function ApprovalModal({
   }, [allCaras]);
 
   return (
-    <div className="fixed inset-0 z-[60] flex items-center justify-center">
+    <div className="fixed inset-0 z-[60] flex items-stretch sm:items-center justify-center">
       <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={onClose} />
-      <div className={`relative w-full max-w-4xl max-h-[95vh] sm:max-h-[90vh] mx-2 sm:mx-4 rounded-2xl ${isDark ? 'bg-zinc-900 border-zinc-700' : 'bg-white border-gray-200'} border shadow-2xl flex flex-col overflow-hidden`}>
+      {/* Mobile: modal a pantalla completa (h + w) para que se vea todo el contenido
+          al rotar entre portrait/landscape sin cortar. Feedback usuario 2026-09-21.
+          Desktop: se conserva max-w-4xl y max-h-[90vh] centrado. dvh (dynamic
+          viewport) mide bien el alto real cuando el teclado o la barra del
+          navegador aparecen. */}
+      <div className={`relative w-full h-[100dvh] sm:h-auto max-w-4xl sm:max-h-[90vh] mx-0 sm:mx-4 rounded-none sm:rounded-2xl ${isDark ? 'bg-zinc-900 border-zinc-700' : 'bg-white border-gray-200'} border-0 sm:border shadow-2xl flex flex-col overflow-hidden`}>
         {/* Header */}
-        <div className={`p-4 sm:p-6 border-b ${isDark ? 'border-zinc-800' : 'border-gray-200'}`}>
+        <div className={`p-4 sm:p-6 border-b flex-shrink-0 ${isDark ? 'border-zinc-800' : 'border-gray-200'}`}>
           <div className="flex items-center justify-between mb-4 gap-3">
             <div className="flex items-center gap-3 min-w-0">
               <div className="p-2 rounded-xl bg-orange-500/20 border border-orange-500/30 flex-shrink-0">
@@ -1948,8 +1953,11 @@ function ApprovalModal({
           </div>
         )}
 
-        {/* Tabla de caras organizada por catorcenas */}
-        <div className="flex-1 overflow-y-auto px-3 sm:px-6 py-3 sm:py-4">
+        {/* Tabla de caras organizada por catorcenas.
+            min-h-0 obligatorio para que el flex-1 respete la altura del padre
+            flex-col: sin esto, en landscape movil el header + footer empujan y
+            el body scroll se sale del contenedor (sintoma: "no navega bien"). */}
+        <div className="flex-1 min-h-0 overflow-y-auto px-3 sm:px-6 py-3 sm:py-4">
           {Array.from(catorcenaGroups.entries()).map(([catorcena, caras]) => {
             const periodoInfo = caras[0]?.inicio_periodo && caras[0]?.fin_periodo
               ? `${formatDate(caras[0].inicio_periodo)} → ${formatDate(caras[0].fin_periodo)}`
@@ -1979,7 +1987,16 @@ function ApprovalModal({
                 </button>
 
                 {!isCollapsed && (
-                <div className={`mt-2 rounded-xl border ${isDark ? 'border-zinc-700/50' : 'border-gray-200'} overflow-x-auto scrollbar-purple`}>
+                <div className={`mt-2 rounded-xl border ${isDark ? 'border-zinc-700/50' : 'border-gray-200'} overflow-hidden`}>
+                  {/* Hint de scroll horizontal — solo en movil (< sm) porque la
+                      tabla tiene min-w-[820px] y en pantallas chicas el
+                      overflow-x no era obvio; el usuario se quejo de que "se
+                      corta info". Feedback usuario 2026-09-21. */}
+                  <div className={`sm:hidden flex items-center justify-center gap-1.5 px-3 py-1 text-[10px] border-b ${isDark ? 'border-zinc-700/50 bg-zinc-800/50 text-zinc-500' : 'border-gray-200 bg-gray-50 text-gray-500'}`}>
+                    <span>Desliza la tabla</span>
+                    <ChevronRight className="h-3 w-3 animate-pulse" />
+                  </div>
+                  <div className="overflow-x-auto scrollbar-purple">
                   {/* min-w para forzar scroll horizontal en móvil (10 columnas
                       no caben en <640px). Feedback Jos 2026-07-15. */}
                   <table className="w-full min-w-[820px]">
@@ -2045,6 +2062,7 @@ function ApprovalModal({
                       ))}
                     </tbody>
                   </table>
+                  </div>
                 </div>
                 )}
               </div>
@@ -2130,7 +2148,7 @@ function ApprovalModal({
 
         {/* Footer con acciones */}
         {isAutorizacionTask && tarea.estatus !== 'Atendido' && tarea.estatus !== 'Cancelado' && (
-          <div className={`p-4 sm:p-6 border-t ${isDark ? 'border-zinc-800' : 'border-gray-200'}`}>
+          <div className={`p-4 sm:p-6 border-t flex-shrink-0 ${isDark ? 'border-zinc-800' : 'border-gray-200'}`}>
             {!showRechazoInput ? (
               <>
                 {/* Feedback 2026-08-15: comentario opcional para filtros DG/DCM.
@@ -3675,7 +3693,17 @@ export function NotificacionesPage() {
                   )}
                 </button>
                 {showFilterPopup && (
-                  <div className={`absolute right-0 top-full mt-1 z-[60] w-[520px] max-w-[calc(100vw-2rem)] ${isDark ? 'bg-[#1a1025] border-purple-900/50' : 'bg-white border-gray-200'} border rounded-lg shadow-xl p-4`}>
+                  // Mobile + tablet (<lg): fixed anclado al viewport con
+                  // margen. Antes se usaba `sm:` como corte pero celulares
+                  // en landscape (~640-900px CSS) activaban `sm:absolute
+                  // sm:right-0 sm:w-[520px]` y el popup se salia por la
+                  // izquierda porque el contenedor .relative del boton es
+                  // angosto. Ahora el corte a dropdown es en lg: (1024px)
+                  // para que solo desktop verdadero lo use.
+                  // Ademas usa dvh en lugar de vh para que la URL bar
+                  // dinamica no le robe altura al max-height del scroll.
+                  // Feedback Jos 2026-09-28.
+                  <div className={`fixed inset-x-2 top-2 bottom-2 mt-0 w-auto max-w-none max-h-[calc(100dvh-1rem)] overflow-y-auto overscroll-contain lg:absolute lg:inset-auto lg:top-full lg:right-0 lg:bottom-auto lg:mt-1 lg:w-[520px] lg:max-w-[calc(100vw-2rem)] lg:max-h-none lg:overflow-visible z-[60] ${isDark ? 'bg-[#1a1025] border-purple-900/50' : 'bg-white border-gray-200'} border rounded-lg shadow-xl p-4`}>
                     {/* Filtros rápidos */}
                     <div className="mb-3">
                       <span className="text-[11px] font-medium text-purple-400 uppercase tracking-wide">
@@ -3712,13 +3740,15 @@ export function NotificacionesPage() {
                     </div>
                     <div className="space-y-3 max-h-[300px] overflow-y-auto pr-1">
                       {filters.map((filter, index) => (
-                        <div key={filter.id} className="flex items-center gap-2">
-                          {index > 0 && <span className="text-[10px] text-purple-400 font-medium w-8">AND</span>}
-                          {index === 0 && <span className="w-8"></span>}
+                        // Movil: campo/operador/valor apilados en columna para que no
+                        // se corten (feedback usuario 2026-09-21). Desktop mantiene fila.
+                        <div key={filter.id} className="flex flex-col sm:flex-row sm:items-center gap-2">
+                          {index > 0 && <span className="text-[10px] text-purple-400 font-medium w-full sm:w-8">AND</span>}
+                          {index === 0 && <span className="hidden sm:inline sm:w-8"></span>}
                           <select
                             value={filter.field}
                             onChange={(e) => updateFilter(filter.id, { field: e.target.value })}
-                            className={`w-[130px] text-xs ${isDark ? 'bg-zinc-900 border-zinc-700 text-white' : 'bg-gray-50 border-gray-200 text-gray-900'} border rounded px-2 py-1.5`}
+                            className={`w-full sm:w-[130px] text-xs ${isDark ? 'bg-zinc-900 border-zinc-700 text-white' : 'bg-gray-50 border-gray-200 text-gray-900'} border rounded px-2 py-1.5`}
                           >
                             {FILTER_FIELDS.map((f) => (
                               <option key={f.field} value={f.field}>{f.label}</option>
@@ -3727,7 +3757,7 @@ export function NotificacionesPage() {
                           <select
                             value={filter.operator}
                             onChange={(e) => updateFilter(filter.id, { operator: e.target.value as FilterOperator })}
-                            className={`w-[110px] text-xs ${isDark ? 'bg-zinc-900 border-zinc-700 text-white' : 'bg-gray-50 border-gray-200 text-gray-900'} border rounded px-2 py-1.5`}
+                            className={`w-full sm:w-[110px] text-xs ${isDark ? 'bg-zinc-900 border-zinc-700 text-white' : 'bg-gray-50 border-gray-200 text-gray-900'} border rounded px-2 py-1.5`}
                           >
                             {DATE_FIELDS.includes(filter.field) ? (
                               <>
@@ -3744,7 +3774,7 @@ export function NotificacionesPage() {
                           <select
                             value={filter.value}
                             onChange={(e) => updateFilter(filter.id, { value: e.target.value })}
-                            className={`flex-1 text-xs ${isDark ? 'bg-zinc-900 border-zinc-700 text-white' : 'bg-gray-50 border-gray-200 text-gray-900'} border rounded px-2 py-1.5 focus:outline-none focus:border-purple-500`}
+                            className={`w-full sm:flex-1 min-w-0 text-xs ${isDark ? 'bg-zinc-900 border-zinc-700 text-white' : 'bg-gray-50 border-gray-200 text-gray-900'} border rounded px-2 py-1.5 focus:outline-none focus:border-purple-500`}
                           >
                             <option value="">Selecciona...</option>
                             {DATE_PRESET_OPTIONS.map((opt) => (
@@ -3759,7 +3789,7 @@ export function NotificacionesPage() {
                               value={filter.value}
                               onChange={(e) => updateFilter(filter.id, { value: e.target.value })}
                               placeholder="Escribe o selecciona..."
-                              className={`flex-1 text-xs ${isDark ? 'bg-zinc-900 border-zinc-700 text-white placeholder:text-zinc-500' : 'bg-gray-50 border-gray-200 text-gray-900 placeholder:text-gray-400'} border rounded px-2 py-1.5 focus:outline-none focus:border-purple-500`}
+                              className={`w-full sm:flex-1 min-w-0 text-xs ${isDark ? 'bg-zinc-900 border-zinc-700 text-white placeholder:text-zinc-500' : 'bg-gray-50 border-gray-200 text-gray-900 placeholder:text-gray-400'} border rounded px-2 py-1.5 focus:outline-none focus:border-purple-500`}
                             />
                             <datalist id={`datalist-${filter.id}`}>
                               {getUniqueValues[filter.field]?.map((val) => (
@@ -3768,7 +3798,7 @@ export function NotificacionesPage() {
                             </datalist>
                           </>
                         )}
-                          <button onClick={() => removeFilter(filter.id)} className="text-red-400 hover:text-red-300 p-0.5">
+                          <button onClick={() => removeFilter(filter.id)} className="text-red-400 hover:text-red-300 p-0.5 self-end sm:self-auto">
                             <Trash2 className="h-3 w-3" />
                           </button>
                         </div>
@@ -3814,7 +3844,7 @@ export function NotificacionesPage() {
                     )}
                   </button>
                   {showGroupPopup && (
-                    <div className={`absolute right-0 top-full mt-1 z-[60] ${isDark ? 'bg-[#1a1025] border-purple-900/50' : 'bg-white border-gray-200'} border rounded-lg shadow-xl p-2 min-w-[180px]`}>
+                    <div className={`fixed inset-x-2 top-2 bottom-2 mt-0 w-auto max-h-[calc(100dvh-1rem)] overflow-y-auto overscroll-contain lg:absolute lg:inset-auto lg:top-full lg:right-0 lg:bottom-auto lg:mt-1 lg:w-auto lg:max-h-none lg:overflow-visible lg:min-w-[180px] z-[60] ${isDark ? 'bg-[#1a1025] border-purple-900/50' : 'bg-white border-gray-200'} border rounded-lg shadow-xl p-2`}>
                       <p className={`text-[10px] ${isDark ? 'text-zinc-500' : 'text-gray-400'} uppercase tracking-wide px-2 py-1`}>Agrupar por (max 2)</p>
                       {AVAILABLE_GROUPINGS.map(({ field, label }) => (
                         <button
@@ -3858,7 +3888,7 @@ export function NotificacionesPage() {
                   <ArrowUpDown className="h-4 w-4" />
                 </button>
                 {showSortPopup && (
-                  <div className={`absolute right-0 top-full mt-1 z-[60] w-[300px] ${isDark ? 'bg-[#1a1025] border-purple-900/50' : 'bg-white border-gray-200'} border rounded-lg shadow-xl p-3`}>
+                  <div className={`fixed inset-x-2 top-2 bottom-2 mt-0 w-auto max-w-none max-h-[calc(100dvh-1rem)] overflow-y-auto overscroll-contain lg:absolute lg:inset-auto lg:top-full lg:right-0 lg:bottom-auto lg:mt-1 lg:w-[300px] lg:max-h-none lg:overflow-visible z-[60] ${isDark ? 'bg-[#1a1025] border-purple-900/50' : 'bg-white border-gray-200'} border rounded-lg shadow-xl p-3`}>
                     <div className="flex items-center justify-between mb-3">
                       <span className="text-sm font-medium text-purple-300">Ordenar por</span>
                       <button onClick={() => setShowSortPopup(false)} className={isDark ? 'text-zinc-400 hover:text-white' : 'text-gray-400 hover:text-gray-900'}>

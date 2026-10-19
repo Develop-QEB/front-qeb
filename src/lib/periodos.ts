@@ -111,6 +111,33 @@ export function getRequiredPeriodoForArticulo(itemName: string): 'catorcena' | '
   return 'catorcena';
 }
 
+// ¿Un artículo se puede SELECCIONAR bajo este tipo de periodo?
+// Base: cada formato tiene su periodo natural (getRequiredPeriodoForArticulo).
+// EXCEPCIÓN (oct 2026, pedido Dirección): los artículos DIGITALES de Parabús y
+// Columna también se permiten en MENSUAL (además de su catorcena natural), para
+// probar digital con rangos libres de días / un solo día. Se reflejan como
+// periodos mensuales y entran al tab UN+ de órdenes de montaje.
+// Detección por NOMBRE (PARABUS/COLUMNA) + código digital (contiene DIG). NO por
+// el sufijo del código: ahí el token final es la PLAZA (ej. -PB = Puebla, no
+// parabús; -CL no es plaza → seguro).
+export function esDigitalParabusColumna(itemName: string, itemCode?: string): boolean {
+  const esDigital = (itemCode || '').toUpperCase().includes('DIG');
+  if (!esDigital) return false;
+  const name = (itemName || '').toUpperCase();
+  return name.includes('PARABUS') || name.includes('COLUMNA');
+}
+
+export function articuloValidoEnPeriodo(
+  itemName: string,
+  itemCode: string | undefined,
+  tipoPeriodo: 'catorcena' | 'mensual',
+): boolean {
+  if (getRequiredPeriodoForArticulo(itemName) === tipoPeriodo) return true;
+  // Digital PB/CL: permitido también en mensual.
+  if (tipoPeriodo === 'mensual' && esDigitalParabusColumna(itemName, itemCode)) return true;
+  return false;
+}
+
 // Format a date range as "1 Abr – 30 Abr" (same month) or "1 Abr – 15 May" (cross month)
 export function dateRangeShort(from: unknown, to: unknown): string {
   const a = dayMonthShort(from);
