@@ -22,6 +22,63 @@ api.interceptors.request.use(
   (error) => Promise.reject(error)
 );
 
+// ---- Errores entendibles (Fase 1) ----
+// Normaliza el error ANTES de que llegue a las pantallas. Casi todos los
+// call-sites muestran `err.response?.data?.error || err.message`, así que aquí
+// se sobreescriben AMBOS con un mensaje humano y con sugerencia de qué hacer:
+// se acabó el "Request failed with status code 504". Los 400/409 del back ya
+// vienen redactados para el usuario y se respetan tal cual; solo se tapan los
+// mensajes técnicos (Prisma, stacks, errores de red del server).
+
+const MENSAJE_POR_STATUS: Record<number, string> = {
+  408: 'La operación tardó demasiado y se canceló. Intenta de nuevo.',
+  429: 'Se enviaron demasiadas solicitudes en poco tiempo. Espera un momento e intenta de nuevo.',
+  502: 'El servidor se está reiniciando o está saturado. Es probable que tus cambios NO se guardaran — espera unos segundos y vuelve a intentar.',
+  503: 'El servidor no está disponible en este momento. Espera unos segundos y vuelve a intentar.',
+  504: 'El servidor está saturado y tardó demasiado en responder. Es probable que tus cambios NO se guardaran — espera unos segundos y vuelve a intentar.',
+};
+
+// Mensajes que delatan un error interno y no le dicen nada al usuario.
+const PATRON_TECNICO = /prisma|invocation|ECONN|ETIMEDOUT|EPIPE|getaddrinfo|socket hang up|cannot read|undefined|unexpected token|internal server error|request failed|jwt|token/i;
+
+function normalizarErrorApi(error: AxiosError): AxiosError {
+  const status = error.response?.status;
+  const data = error.response?.data as { error?: unknown; message?: unknown } | undefined;
+  const esBlob = typeof Blob !== 'undefined' && error.response?.data instanceof Blob;
+  const dataError = !esBlob && typeof data?.error === 'string' && data.error.trim()
+    ? data.error
+    : (!esBlob && typeof data?.message === 'string' && data.message.trim() ? data.message : '');
+  const dataErrorUsable = dataError && !PATRON_TECNICO.test(dataError) ? dataError : '';
+
+  let mensaje = '';
+  if (!error.response) {
+    mensaje = typeof navigator !== 'undefined' && navigator.onLine === false
+      ? 'Sin conexión a internet. Revisa tu red e intenta de nuevo.'
+      : 'No se pudo contactar al servidor. Revisa tu conexión e intenta de nuevo en unos segundos.';
+  } else if (status && MENSAJE_POR_STATUS[status]) {
+    mensaje = MENSAJE_POR_STATUS[status];
+  } else if (status === 403) {
+    mensaje = dataErrorUsable || 'No tienes permiso para realizar esta acción. Si crees que deberías poder hacerlo, pide a sistemas que revisen tu rol.';
+  } else if (status === 404) {
+    mensaje = dataErrorUsable || 'No se encontró la información solicitada. Puede que haya sido eliminada — recarga la página e intenta de nuevo.';
+  } else if (status && status >= 500) {
+    mensaje = dataErrorUsable || 'Ocurrió un error inesperado en el servidor al procesar la operación. Intenta de nuevo; si persiste, repórtalo a sistemas.';
+  } else if (status && status >= 400) {
+    // 400/409/422: mensajes de validación del back (ya humanos). Solo se cubre
+    // el caso en que vengan vacíos o técnicos.
+    mensaje = dataErrorUsable || 'La operación no pudo procesarse con los datos enviados. Revisa la información e intenta de nuevo.';
+  }
+
+  if (mensaje) {
+    error.message = mensaje;
+    if (!esBlob && data && typeof data === 'object') {
+      (data as Record<string, unknown>).error = mensaje;
+      if ('message' in data) (data as Record<string, unknown>).message = mensaje;
+    }
+  }
+  return error;
+}
+
 // Refresh lock - prevents multiple simultaneous refresh calls
 let isRefreshing = false;
 let failedQueue: { resolve: (token: string) => void; reject: (error: unknown) => void }[] = [];
@@ -62,7 +119,7 @@ api.interceptors.response.use(
 
     // Only handle 401 and don't retry the refresh call itself
     if (error.response?.status !== 401 || originalRequest._retry) {
-      return Promise.reject(error);
+      return Promise.reject(normalizarErrorApi(error));
     }
 
     // If already refreshing, queue this request
