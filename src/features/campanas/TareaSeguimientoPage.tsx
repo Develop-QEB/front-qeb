@@ -14306,7 +14306,17 @@ function CreateTaskModal({
                               setGuiaPdfUrl(r.url);
                             } catch (err) {
                               console.error('Error al subir guia PDF:', err);
-                              alert(err instanceof Error ? err.message : 'No se pudo subir el PDF');
+                              let msg = 'No se pudo subir el PDF';
+                              if (err && typeof err === 'object') {
+                                const anyErr = err as { response?: { data?: { error?: string; message?: string } }; message?: string };
+                                msg = anyErr.response?.data?.error
+                                  || anyErr.response?.data?.message
+                                  || anyErr.message
+                                  || msg;
+                              } else if (err instanceof Error) {
+                                msg = err.message;
+                              }
+                              alert(msg);
                               setGuiaPdfFile(null);
                               setGuiaPdfUrl(null);
                             } finally {
@@ -17789,7 +17799,17 @@ export function TareaSeguimientoPage() {
       }
     } catch (error) {
       console.error('Error al crear tarea:', error);
-      setCreateTaskError(error instanceof Error ? error.message : 'Error al crear tarea');
+      let msg = 'Error al crear tarea';
+      if (error && typeof error === 'object') {
+        const anyErr = error as { response?: { data?: { error?: string; message?: string } }; message?: string };
+        msg = anyErr.response?.data?.error
+          || anyErr.response?.data?.message
+          || anyErr.message
+          || msg;
+      } else if (error instanceof Error) {
+        msg = error.message;
+      }
+      setCreateTaskError(msg);
     }
   }, [selectedInventoryItems, createTareaMutation, updateInstaladoMutation, campanaId, queryClient, getSelectedImpresionFlowConflicts, setActiveMainTab]);
 
