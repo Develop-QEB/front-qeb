@@ -106,6 +106,54 @@ export function coincideId(t: ActividadComercialTarea, id: string): boolean {
     .some(v => String(v) === q);
 }
 
+// ---------- KPIs del tablero ----------
+// Se calculan sobre el ESTADO ACTUAL de las actividades (no sobre el historial
+// de transiciones): una actividad en Finalizado se asume que paso por Activo.
+// Las canceladas no cuentan como avance ni como finalizadas; se reportan aparte.
+export interface KpisAC {
+  total: number;
+  abiertas: number;
+  activas: number;
+  /** En columna Finalizado SIN canceladas. */
+  finalizadas: number;
+  canceladas: number;
+  vencidas: number;
+  /** total - canceladas: denominador de los porcentajes. */
+  base: number;
+  /** finalizadas / base. null si base = 0. */
+  pctFinalizacion: number | null;
+  /** (activas + finalizadas) / base: cuantas ya salieron de Abierto. */
+  convAbiertoActivo: number | null;
+  /** finalizadas / (activas + finalizadas): cuantas de las que llegaron a Activo terminaron. */
+  convActivoFinalizado: number | null;
+}
+
+export function calcularKpisAC(tareas: ActividadComercialTarea[]): KpisAC {
+  let abiertas = 0, activas = 0, finalizadas = 0, canceladas = 0, vencidas = 0;
+  for (const t of tareas) {
+    if (esCancelada(t)) { canceladas++; continue; }
+    const col = columnaDeEstatus(t.estatus);
+    if (col === 'Abierto') abiertas++;
+    else if (col === 'Activo') activas++;
+    else finalizadas++;
+    if (estaVencida(t)) vencidas++;
+  }
+  const total = tareas.length;
+  const base = total - canceladas;
+  const llegaronActivo = activas + finalizadas;
+  const ratio = (num: number, den: number) => (den > 0 ? num / den : null);
+  return {
+    total, abiertas, activas, finalizadas, canceladas, vencidas, base,
+    pctFinalizacion: ratio(finalizadas, base),
+    convAbiertoActivo: ratio(llegaronActivo, base),
+    convActivoFinalizado: ratio(finalizadas, llegaronActivo),
+  };
+}
+
+export function formatPct(v: number | null): string {
+  return v === null ? '—' : `${Math.round(v * 100)}%`;
+}
+
 // Filtros rapidos del tablero. Deciden que columnas se muestran.
 export type FiltroRapidoAC = 'todas' | 'sin_finalizar' | 'finalizadas';
 
