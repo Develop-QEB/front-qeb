@@ -1,17 +1,19 @@
-import { useState, useCallback, useRef, useEffect } from 'react';
+import { useState, useCallback } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import {
   Search, X, RefreshCw, Clock, Filter, ChevronLeft, ChevronRight, ChevronDown,
-  StickyNote, Send, History, Layers, Download, User, Eye, Briefcase,
+  StickyNote, Send, History, Layers, Download, User, Eye, Briefcase, Activity, Code,
+  GitBranch, Info,
 } from 'lucide-react';
 import { Header } from '../../components/layout/Header';
-import { historialService, type HistorialEntry, type HistorialFilters, type HistorialUsuario } from '../../services/historial.service';
+import { historialService, type HistorialEntry, type HistorialFilters } from '../../services/historial.service';
 import { useThemeStore } from '../../store/themeStore';
 import { useAuthStore } from '../../store/authStore';
 import { getPermissions } from '../../lib/permissions';
 import { useSocketHistorialAcciones } from '../../hooks/useSocket';
-import { formatHistorialDetalles } from '../../lib/historial';
+import { formatHistorialDetalles, formatValue, isPlainObject } from '../../lib/historial';
 import { ActividadComercialBoard } from './ActividadComercialBoard';
+import { FiltroMultiple } from './FiltroMultiple';
 
 function formatFechaHora(fecha: string): string {
   const d = new Date(fecha);
@@ -21,29 +23,6 @@ function formatFechaHora(fecha: string): string {
   });
 }
 
-function normalizeTipo(raw: string): string {
-  if (raw.startsWith('autorizacion_')) return 'Autorización';
-  if (raw === 'Arte' || raw.startsWith('Arte ')) return 'Arte';
-  const map: Record<string, string> = {
-    'Campaña': 'Campaña', 'Propuesta': 'Propuesta', 'Solicitud': 'Solicitud',
-    'Inventario': 'Inventario', 'Nota': 'Nota', 'Tarea': 'Tarea',
-    'Desposteo': 'Desposteo',
-  };
-  return map[raw] || raw;
-}
-
-function formatSubtipo(raw: string): string | null {
-  if (!raw.startsWith('autorizacion_')) return null;
-  const sub = raw.replace('autorizacion_', '');
-  const map: Record<string, string> = {
-    'solicitud_solicitud': 'Solicitud', 'cambio_campana': 'Cambio Campaña',
-    'nueva_cara_campana': 'Nueva Cara', 'cambio_solicitud': 'Cambio Solicitud',
-    'nueva_cara_solicitud': 'Nueva Cara Sol.', 'solicitud_campana': 'Campaña',
-    'aprobacion': 'Aprobación', 'rechazo': 'Rechazo',
-  };
-  return map[sub] || sub.charAt(0).toUpperCase() + sub.slice(1).replace(/_/g, ' ');
-}
-
 // Wrapper local: la pagina global espera '-' cuando no hay detalles; el
 // modulo compartido devuelve ''. Mantenemos la semantica original.
 function formatDetalles(detalles: string | null): string {
@@ -51,122 +30,38 @@ function formatDetalles(detalles: string | null): string {
   return out || '-';
 }
 
-const tipoColors: Record<string, { bg: string; text: string; darkBg: string; darkText: string }> = {
-  'Campaña': { bg: 'bg-purple-100', text: 'text-purple-700', darkBg: 'bg-purple-900/30', darkText: 'text-purple-300' },
-  'Propuesta': { bg: 'bg-blue-100', text: 'text-blue-700', darkBg: 'bg-blue-900/30', darkText: 'text-blue-300' },
-  'Solicitud': { bg: 'bg-green-100', text: 'text-green-700', darkBg: 'bg-green-900/30', darkText: 'text-green-300' },
-  'Inventario': { bg: 'bg-orange-100', text: 'text-orange-700', darkBg: 'bg-orange-900/30', darkText: 'text-orange-300' },
-  'Autorización': { bg: 'bg-red-100', text: 'text-red-700', darkBg: 'bg-red-900/30', darkText: 'text-red-300' },
-  'Nota': { bg: 'bg-yellow-100', text: 'text-yellow-700', darkBg: 'bg-yellow-900/30', darkText: 'text-yellow-300' },
-  'Arte': { bg: 'bg-pink-100', text: 'text-pink-700', darkBg: 'bg-pink-900/30', darkText: 'text-pink-300' },
-  'Tarea': { bg: 'bg-cyan-100', text: 'text-cyan-700', darkBg: 'bg-cyan-900/30', darkText: 'text-cyan-300' },
-  'Desposteo': { bg: 'bg-amber-100', text: 'text-amber-700', darkBg: 'bg-amber-900/30', darkText: 'text-amber-300' },
+// Color por GRUPO de modulo (no por modulo suelto): son ~20 modulos en 8
+// grupos, y pintar cada uno distinto seria ruido. El grupo viene del back
+// junto con la opcion (ver utils/historialTaxonomia.ts).
+const grupoColors: Record<string, { bg: string; text: string; darkBg: string; darkText: string }> = {
+  'Flujo comercial': { bg: 'bg-purple-100', text: 'text-purple-700', darkBg: 'bg-purple-900/30', darkText: 'text-purple-300' },
+  'Inventario y espacios': { bg: 'bg-orange-100', text: 'text-orange-700', darkBg: 'bg-orange-900/30', darkText: 'text-orange-300' },
+  'Artes y producción': { bg: 'bg-pink-100', text: 'text-pink-700', darkBg: 'bg-pink-900/30', darkText: 'text-pink-300' },
+  'Operaciones SAP': { bg: 'bg-amber-100', text: 'text-amber-700', darkBg: 'bg-amber-900/30', darkText: 'text-amber-300' },
+  'Mapa': { bg: 'bg-teal-100', text: 'text-teal-700', darkBg: 'bg-teal-900/30', darkText: 'text-teal-300' },
+  'CRM y soporte': { bg: 'bg-green-100', text: 'text-green-700', darkBg: 'bg-green-900/30', darkText: 'text-green-300' },
+  'Administración': { bg: 'bg-blue-100', text: 'text-blue-700', darkBg: 'bg-blue-900/30', darkText: 'text-blue-300' },
 };
+const grupoNeutro = { bg: 'bg-gray-100', text: 'text-gray-700', darkBg: 'bg-zinc-700/30', darkText: 'text-zinc-300' };
 
-function TipoBadge({ tipo, isDark }: { tipo: string; isDark: boolean }) {
-  const display = normalizeTipo(tipo);
-  const subtipo = formatSubtipo(tipo);
-  const colors = tipoColors[display] || {
-    bg: 'bg-gray-100', text: 'text-gray-700', darkBg: 'bg-zinc-700/30', darkText: 'text-zinc-300',
-  };
+/** Mapa value -> {label, grupo} para resolver los badges de cada fila. */
+type Taxonomia = Map<string, { label: string; grupo: string }>;
+
+function ClasificacionBadge({
+  modulo, categoria, modulos, categorias, isDark,
+}: {
+  modulo: string; categoria: string; modulos: Taxonomia; categorias: Taxonomia; isDark: boolean;
+}) {
+  const m = modulos.get(modulo);
+  const colors = grupoColors[m?.grupo ?? ''] ?? grupoNeutro;
+  const catLabel = categorias.get(categoria)?.label;
   return (
     <div className="flex flex-col gap-0.5">
       <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${
         isDark ? `${colors.darkBg} ${colors.darkText}` : `${colors.bg} ${colors.text}`
-      }`}>{display}</span>
-      {subtipo && (
-        <span className={`text-[10px] px-2 ${isDark ? 'text-zinc-500' : 'text-gray-400'}`}>{subtipo}</span>
-      )}
-    </div>
-  );
-}
-
-function UserSelect({
-  users, value, onChange, isDark,
-}: {
-  users: HistorialUsuario[]; value: string; onChange: (v: string) => void; isDark: boolean;
-}) {
-  const [open, setOpen] = useState(false);
-  const [search, setSearch] = useState('');
-  const ref = useRef<HTMLDivElement>(null);
-
-  useEffect(() => {
-    const handler = (e: MouseEvent) => {
-      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
-    };
-    document.addEventListener('mousedown', handler);
-    return () => document.removeEventListener('mousedown', handler);
-  }, []);
-
-  const filtered = search
-    ? users.filter(u => u.nombre.toLowerCase().includes(search.toLowerCase()))
-    : users;
-
-  const inputCls = isDark
-    ? 'bg-zinc-800 border-zinc-700 text-white placeholder:text-zinc-600'
-    : 'bg-white border-gray-300 text-gray-900 placeholder:text-gray-400';
-
-  return (
-    <div ref={ref} className="relative">
-      <button
-        onClick={() => { setOpen(!open); setSearch(''); }}
-        className={`flex items-center gap-2 rounded-lg border px-3 py-2 text-sm min-w-[180px] ${inputCls} ${
-          value ? '' : isDark ? 'text-zinc-500' : 'text-gray-400'
-        }`}
-      >
-        <User className="h-3.5 w-3.5 shrink-0" />
-        <span className="truncate flex-1 text-left">{value || 'Todos los usuarios'}</span>
-        {value ? (
-          <X className="h-3.5 w-3.5 shrink-0 hover:text-red-400" onClick={(e) => { e.stopPropagation(); onChange(''); }} />
-        ) : (
-          <ChevronDown className="h-3.5 w-3.5 shrink-0" />
-        )}
-      </button>
-      {open && (
-        <div className={`absolute top-full left-0 mt-1 w-72 rounded-lg border shadow-xl z-50 overflow-hidden ${
-          isDark ? 'bg-zinc-900 border-zinc-700' : 'bg-white border-gray-200'
-        }`}>
-          <div className="p-2">
-            <input
-              type="text"
-              value={search}
-              onChange={e => setSearch(e.target.value)}
-              placeholder="Buscar usuario..."
-              className={`w-full rounded-md border px-2.5 py-1.5 text-sm ${inputCls}`}
-              autoFocus
-            />
-          </div>
-          <div className="max-h-52 overflow-y-auto">
-            <button
-              onClick={() => { onChange(''); setOpen(false); }}
-              className={`w-full text-left px-3 py-2 text-sm transition-colors ${
-                !value
-                  ? 'bg-purple-500/10 text-purple-500 font-medium'
-                  : isDark ? 'text-zinc-300 hover:bg-zinc-800' : 'text-gray-700 hover:bg-gray-50'
-              }`}
-            >
-              Todos los usuarios
-            </button>
-            {filtered.map(u => (
-              <button
-                key={u.id}
-                onClick={() => { onChange(u.nombre); setOpen(false); }}
-                className={`w-full text-left px-3 py-2 text-sm transition-colors ${
-                  value === u.nombre
-                    ? 'bg-purple-500/10 text-purple-500 font-medium'
-                    : isDark ? 'text-zinc-300 hover:bg-zinc-800' : 'text-gray-700 hover:bg-gray-50'
-                }`}
-              >
-                {u.nombre}
-              </button>
-            ))}
-            {filtered.length === 0 && (
-              <div className={`px-3 py-3 text-sm text-center ${isDark ? 'text-zinc-500' : 'text-gray-400'}`}>
-                Sin resultados
-              </div>
-            )}
-          </div>
-        </div>
+      }`}>{m?.label ?? modulo}</span>
+      {catLabel && catLabel !== 'Otro' && (
+        <span className={`text-[10px] px-2 ${isDark ? 'text-zinc-500' : 'text-gray-400'}`}>{catLabel}</span>
       )}
     </div>
   );
@@ -286,6 +181,119 @@ function NotaModal({
   );
 }
 
+// Claves de `detalles` que el modal pinta en secciones dedicadas. Todo lo que
+// NO este aqui cae en el bloque "Más datos" — el back escribe ~75 claves
+// distintas y antes solo se mostraban estas, el resto se perdia en silencio.
+const CLAVES_CON_SECCION = new Set([
+  'usuario', 'usuarioId', 'usuarioRol', 'origen', 'accion',
+  'aprobadoPor', 'rechazadoPor', 'tipo', 'carasAprobadas', 'motivo',
+  'cambios', 'cara', 'caras', 'campaña', 'articulo',
+  'reservas_eliminadas', 'circuitos_eliminados', 'circuitos',
+  'pendientesDg', 'pendientesDcm',
+]);
+
+/** Par etiqueta/valor del modal de detalle. Vive fuera del render para que
+ *  React no lo trate como un componente nuevo (y remonte) en cada render. */
+function CampoDetalle({ label, isDark, children }: { label: string; isDark: boolean; children: React.ReactNode }) {
+  return (
+    <div>
+      <span className={`text-xs font-medium ${isDark ? 'text-zinc-400' : 'text-gray-500'}`}>{label}</span>
+      <div className={`text-sm mt-1 ${isDark ? 'text-white' : 'text-gray-900'}`}>{children}</div>
+    </div>
+  );
+}
+
+/** 'reservas_liberadas' -> 'Reservas liberadas'; 'nombreArte' -> 'Nombre Arte'. */
+function humanizarClave(k: string): string {
+  const t = k.replace(/_/g, ' ').replace(/([a-z0-9])([A-ZÁÉÍÓÚÑ])/g, '$1 $2').trim();
+  return t.charAt(0).toUpperCase() + t.slice(1);
+}
+
+/**
+ * Pinta cualquier valor del JSON de `detalles` sin conocer su forma:
+ * arrays de objetos como tabla, objetos como pares anidados, el resto como
+ * texto. Se corta a los 2 niveles para que un JSON hondo no reviente el modal.
+ */
+function ValorGenerico({ valor, isDark, nivel = 0 }: { valor: unknown; isDark: boolean; nivel?: number }) {
+  const sub = isDark ? 'text-zinc-500' : 'text-gray-400';
+  const txt = isDark ? 'text-zinc-200' : 'text-gray-800';
+  const borde = isDark ? 'border-zinc-700' : 'border-gray-200';
+
+  if (valor === null || valor === undefined || valor === '') return <span className={sub}>—</span>;
+  if (typeof valor === 'boolean') return <span className={txt}>{valor ? 'Sí' : 'No'}</span>;
+
+  if (Array.isArray(valor)) {
+    if (valor.length === 0) return <span className={sub}>—</span>;
+    const objetos = valor.filter(isPlainObject);
+    // Array homogeneo de objetos -> tabla (ej. caras_eliminadas, reservas).
+    if (objetos.length === valor.length && nivel < 2) {
+      const cols = Array.from(new Set(objetos.flatMap(o => Object.keys(o)))).slice(0, 8);
+      return (
+        <div className={`overflow-x-auto rounded-lg border ${borde} mt-1`}>
+          <table className="w-full text-xs">
+            <thead>
+              <tr className={isDark ? 'bg-zinc-800' : 'bg-gray-50'}>
+                {cols.map(c => (
+                  <th key={c} className={`px-2 py-1.5 text-left font-medium ${sub}`}>{humanizarClave(c)}</th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {objetos.slice(0, 50).map((o, i) => (
+                <tr key={i} className={`border-t ${borde}`}>
+                  {cols.map(c => (
+                    <td key={c} className={`px-2 py-1.5 ${txt}`}>{formatValue(o[c])}</td>
+                  ))}
+                </tr>
+              ))}
+            </tbody>
+          </table>
+          {objetos.length > 50 && (
+            <div className={`px-2 py-1 text-[10px] ${sub}`}>+{objetos.length - 50} más</div>
+          )}
+        </div>
+      );
+    }
+    return <span className={txt}>{valor.map(formatValue).join(', ')}</span>;
+  }
+
+  if (isPlainObject(valor)) {
+    if (nivel >= 2) return <span className={txt}>{JSON.stringify(valor)}</span>;
+    return (
+      <div className={`space-y-0.5 pl-3 border-l ${borde}`}>
+        {Object.entries(valor).map(([k, v]) => (
+          <div key={k} className="flex flex-wrap gap-x-2 text-sm">
+            <span className={`${sub} shrink-0`}>{humanizarClave(k)}:</span>
+            <ValorGenerico valor={v} isDark={isDark} nivel={nivel + 1} />
+          </div>
+        ))}
+      </div>
+    );
+  }
+
+  return <span className={txt}>{formatValue(valor)}</span>;
+}
+
+// Expedientes validos para una nota manual. Son valores de `historial.tipo`,
+// NO modulos de la taxonomia: el modulo se deriva despues de tipo+accion.
+const TIPOS_NOTA: { label: string; value: string }[] = [
+  { label: 'Nota', value: 'Nota' },
+  { label: 'Campaña', value: 'Campaña' },
+  { label: 'Propuesta', value: 'Propuesta' },
+  { label: 'Solicitud', value: 'Solicitud' },
+  { label: 'Tarea', value: 'Tarea' },
+  { label: 'Inventario', value: 'Inventario' },
+];
+
+/** Niveles por los que se puede agrupar la tabla, uno por eje de la taxonomia. */
+type NivelAgrupacion = 'etapa' | 'modulo' | 'referencia';
+
+const NIVEL_LABEL: Record<NivelAgrupacion, string> = {
+  etapa: 'Etapa',
+  modulo: 'Módulo',
+  referencia: 'Referencia',
+};
+
 interface GroupNode {
   key: string;
   entries: HistorialEntry[];
@@ -303,10 +311,11 @@ export function HistorialAccionesPage() {
   const [searchInput, setSearchInput] = useState('');
   const [showNotaModal, setShowNotaModal] = useState(false);
   const [showMoreFilters, setShowMoreFilters] = useState(false);
-  const [groupLevels, setGroupLevels] = useState<('etapa' | 'referencia')[]>([]);
+  const [groupLevels, setGroupLevels] = useState<NivelAgrupacion[]>([]);
   const [collapsedGroups, setCollapsedGroups] = useState<Set<string>>(new Set());
   const [isExporting, setIsExporting] = useState(false);
   const [detalleModal, setDetalleModal] = useState<HistorialEntry | null>(null);
+  const [verJson, setVerJson] = useState(false); // toggle del JSON crudo (solo DEV)
 
   // Tab "Acciones Admin" solo visible para usuarios con rol DEV
   const canSeeAdminTab = user?.rol === 'DEV';
@@ -322,41 +331,38 @@ export function HistorialAccionesPage() {
     queryFn: () => historialService.getAll(effectiveFilters),
   });
 
-  const { data: tiposRaw = [] } = useQuery({
-    queryKey: ['historial-tipos'],
-    queryFn: () => historialService.getTipos(),
+  // Listas de clasificacion: el back las sirve desde codigo, no cambian
+  // durante la sesion, asi que no vale la pena revalidarlas.
+  const { data: etapasRaw = [] } = useQuery({
+    queryKey: ['historial-etapas'],
+    queryFn: () => historialService.getEtapas(),
+    staleTime: Infinity,
   });
 
-  const { data: accionesRaw = [] } = useQuery({
-    queryKey: ['historial-acciones-list'],
-    queryFn: () => historialService.getAcciones(),
+  const { data: modulosRaw = [] } = useQuery({
+    queryKey: ['historial-modulos'],
+    queryFn: () => historialService.getModulos(),
+    staleTime: Infinity,
   });
+
+  const { data: categoriasRaw = [] } = useQuery({
+    queryKey: ['historial-categorias'],
+    queryFn: () => historialService.getCategorias(),
+    staleTime: Infinity,
+  });
+
+  const etapasMap: Taxonomia = new Map(etapasRaw.map(o => [o.value, { label: o.label, grupo: o.grupo }]));
+  const modulosMap: Taxonomia = new Map(modulosRaw.map(o => [o.value, { label: o.label, grupo: o.grupo }]));
+  const categoriasMap: Taxonomia = new Map(categoriasRaw.map(o => [o.value, { label: o.label, grupo: o.grupo }]));
 
   const { data: usuariosRaw = [] } = useQuery({
     queryKey: ['historial-usuarios'],
     queryFn: () => historialService.getUsuarios(),
   });
 
-  const tiposAgrupados = (() => {
-    const seen = new Set<string>();
-    const result: { label: string; value: string }[] = [];
-    for (const t of tiposRaw) {
-      const norm = normalizeTipo(t);
-      if (!seen.has(norm)) {
-        seen.add(norm);
-        let value = t;
-        if (t.startsWith('autorizacion_')) value = 'autorizacion_';
-        else if (t === 'Arte' || t.startsWith('Arte ')) value = 'Arte*';
-        result.push({ label: norm, value });
-      }
-    }
-    // Garantizar que "Tarea" siempre este en el dropdown de "Agregar accion"
-    // aunque no haya entradas previas con tipo='Tarea' en historial.
-    if (!seen.has('Tarea')) {
-      result.push({ label: 'Tarea', value: 'Tarea' });
-    }
-    return result;
-  })();
+  // El filtro de usuario del back es por nombre (LIKE sobre detalles/accion),
+  // no por id; dedupe por si hay nombres repetidos.
+  const opcionesUsuarios = Array.from(new Set(usuariosRaw.map(u => u.nombre).filter(Boolean)));
 
   const addNotaMutation = useMutation({
     mutationFn: historialService.addNota,
@@ -388,13 +394,16 @@ export function HistorialAccionesPage() {
         })
         .map(e => ({
         'Fecha/Hora': formatFechaHora(e.fecha_hora),
-        'Tipo': normalizeTipo(e.tipo),
+        'Etapa': etapasMap.get(e.etapa)?.label ?? '',
+        'Módulo': modulosMap.get(e.modulo)?.label ?? e.modulo,
+        'Tipo de acción': categoriasMap.get(e.categoria)?.label ?? e.categoria,
+        'Expediente': e.tipo,
         'Ref ID': e.ref_id || '',
         'Acción': e.accion,
         'Detalles': formatDetalles(e.detalles),
       }));
       const ws = XLSX.utils.json_to_sheet(rows);
-      ws['!cols'] = [{ wch: 22 }, { wch: 14 }, { wch: 10 }, { wch: 24 }, { wch: 60 }];
+      ws['!cols'] = [{ wch: 22 }, { wch: 14 }, { wch: 18 }, { wch: 18 }, { wch: 22 }, { wch: 10 }, { wch: 40 }, { wch: 60 }];
       const wb = XLSX.utils.book_new();
       XLSX.utils.book_append_sheet(wb, ws, 'Historial');
       XLSX.writeFile(wb, `historial_${new Date().toISOString().split('T')[0]}.xlsx`);
@@ -419,17 +428,23 @@ export function HistorialAccionesPage() {
     return !accion.includes('Suplantó identidad') && !accion.includes('Suplanto identidad');
   });
   const pagination = data?.pagination;
+  // El back decide quien ve todo (utils/permissions.ts). Si recorto la vista,
+  // se le dice al usuario en vez de dejarlo creer que el historial esta vacio.
+  const vistaRecortada = data?.visibilidad?.verTodo === false;
 
   const groupNodes = groupLevels.length > 0 ? (() => {
-    function build(entries: HistorialEntry[], levels: ('etapa' | 'referencia')[]): GroupNode[] {
+    function build(entries: HistorialEntry[], levels: NivelAgrupacion[]): GroupNode[] {
       if (levels.length === 0) return [];
       const [level, ...rest] = levels;
       const map: Record<string, HistorialEntry[]> = {};
       const order: string[] = [];
       for (const entry of entries) {
-        const key = level === 'referencia'
-          ? `${normalizeTipo(entry.tipo)} #${entry.ref_id}`
-          : normalizeTipo(entry.tipo);
+        const modulo = modulosMap.get(entry.modulo)?.label ?? entry.modulo;
+        const key = level === 'etapa'
+          ? (etapasMap.get(entry.etapa)?.label ?? 'Fuera del flujo')
+          : level === 'referencia'
+            ? `${modulo} #${entry.ref_id}`
+            : modulo;
         if (!map[key]) { map[key] = []; order.push(key); }
         map[key].push(entry);
       }
@@ -474,7 +489,17 @@ export function HistorialAccionesPage() {
       ];
     });
 
-  const hasActiveFilters = !!(filters.tipo || filters.accion || filters.usuario || filters.fechaDesde || filters.fechaHasta || groupLevels.length > 0);
+  // Filtros que viven en la fila secundaria (detras del boton de embudo):
+  // acción, rango de fechas y agrupamiento. Usuario y etapa estan a la vista
+  // y ya traen su propio contador en el chip.
+  const filtrosSecundarios = (filters.categoria?.length ?? 0)
+    + [filters.fechaDesde, filters.fechaHasta].filter(Boolean).length
+    + groupLevels.length;
+
+  const hasActiveFilters = !!(
+    filters.etapa?.length || filters.modulo?.length || filters.usuario?.length
+    || filtrosSecundarios > 0
+  );
 
   const clearAllFilters = () => {
     setSearchInput('');
@@ -502,12 +527,17 @@ export function HistorialAccionesPage() {
           {formatFechaHora(entry.fecha_hora)}
         </div>
       </td>
-      <td className="px-5 py-3"><TipoBadge tipo={entry.tipo} isDark={isDark} /></td>
+      <td className="px-5 py-3">
+        <ClasificacionBadge
+          modulo={entry.modulo} categoria={entry.categoria}
+          modulos={modulosMap} categorias={categoriasMap} isDark={isDark}
+        />
+      </td>
       <td className={`px-5 py-3 text-sm font-mono ${headerText}`}>{entry.ref_id || '-'}</td>
       <td className={`px-5 py-3 text-sm ${headerText}`}>{entry.accion}</td>
       <td className="px-5 py-3 text-center">
         {entry.detalles ? (
-          <button onClick={() => setDetalleModal(entry)} className={`p-1.5 rounded-lg transition-colors ${isDark ? 'hover:bg-zinc-700 text-zinc-400 hover:text-white' : 'hover:bg-gray-200 text-gray-400 hover:text-gray-700'}`} title="Ver detalle">
+          <button onClick={() => { setVerJson(false); setDetalleModal(entry); }} className={`p-1.5 rounded-lg transition-colors ${isDark ? 'hover:bg-zinc-700 text-zinc-400 hover:text-white' : 'hover:bg-gray-200 text-gray-400 hover:text-gray-700'}`} title="Ver detalle">
             <Eye className="h-4 w-4" />
           </button>
         ) : <span className={subText}>-</span>}
@@ -596,24 +626,45 @@ export function HistorialAccionesPage() {
           </button>
 
           {/* Usuario */}
-          <UserSelect
-            users={usuariosRaw}
-            value={filters.usuario || ''}
-            onChange={(v) => setFilters(prev => ({ ...prev, page: 1, usuario: v || undefined }))}
+          <FiltroMultiple
+            label="Todos los usuarios"
+            icon={User}
+            options={opcionesUsuarios}
+            selected={filters.usuario ?? []}
+            onChange={(v) => setFilters(prev => ({ ...prev, page: 1, usuario: v.length ? v : undefined }))}
             isDark={isDark}
+            placeholder="Buscar usuario..."
+            commitOnClose
+            className="min-w-[180px]"
           />
 
-          {/* Etapa */}
-          <select
-            value={filters.tipo || ''}
-            onChange={(e) => setFilters(prev => ({ ...prev, page: 1, tipo: e.target.value || undefined }))}
-            className={`rounded-lg border px-3 py-2 text-sm min-w-[150px] ${inputCls}`}
-          >
-            <option value="">Todas las etapas</option>
-            {tiposAgrupados.map(t => (
-              <option key={t.value} value={t.value}>{t.label}</option>
-            ))}
-          </select>
+          {/* Etapa — DONDE en el flujo comercial. Solo son tres:
+              Solicitud -> Propuesta -> Campaña. */}
+          <FiltroMultiple
+            label="Todas las etapas"
+            icon={GitBranch}
+            options={etapasRaw}
+            selected={filters.etapa ?? []}
+            onChange={(v) => setFilters(prev => ({ ...prev, page: 1, etapa: v.length ? v : undefined }))}
+            isDark={isDark}
+            placeholder="Buscar etapa..."
+            commitOnClose
+            className="min-w-[160px]"
+          />
+
+          {/* Modulo — sobre QUE se actuo. Lo que antes se llamaba "Etapa" y
+              mezclaba las etapas del flujo con entidades de otros modulos. */}
+          <FiltroMultiple
+            label="Todos los módulos"
+            icon={Layers}
+            options={modulosRaw}
+            selected={filters.modulo ?? []}
+            onChange={(v) => setFilters(prev => ({ ...prev, page: 1, modulo: v.length ? v : undefined }))}
+            isDark={isDark}
+            placeholder="Buscar módulo..."
+            commitOnClose
+            className="min-w-[170px]"
+          />
 
           <div className={`w-px h-8 ${isDark ? 'bg-zinc-700' : 'bg-gray-200'}`} />
 
@@ -641,8 +692,10 @@ export function HistorialAccionesPage() {
             }`}
           >
             <Filter className="h-4 w-4" />
-            {hasActiveFilters && <span className="inline-flex items-center justify-center w-4 h-4 rounded-full bg-purple-500 text-white text-[10px] font-bold">
-              {[filters.accion, filters.fechaDesde, filters.fechaHasta].filter(Boolean).length + groupLevels.length}
+            {/* Cuenta solo lo que vive en esta fila secundaria (usuario y etapa
+                ya muestran su propio contador). Sin badge si es 0. */}
+            {filtrosSecundarios > 0 && <span className="inline-flex items-center justify-center w-4 h-4 rounded-full bg-purple-500 text-white text-[10px] font-bold">
+              {filtrosSecundarios}
             </span>}
           </button>
         </div>
@@ -666,19 +719,24 @@ export function HistorialAccionesPage() {
               </div>
 
               <div>
-                <label className={`text-xs font-medium mb-1 block ${subText}`}>Acción</label>
-                <select value={filters.accion || ''}
-                  onChange={(e) => setFilters(prev => ({ ...prev, page: 1, accion: e.target.value || undefined }))}
-                  className={`rounded-lg border px-3 py-1.5 text-sm min-w-[140px] ${inputCls}`}>
-                  <option value="">Todas</option>
-                  {accionesRaw.map(a => <option key={a.value} value={a.value}>{a.label}</option>)}
-                </select>
+                <label className={`text-xs font-medium mb-1 block ${subText}`}>Tipo de acción</label>
+                <FiltroMultiple
+                  label="Todas"
+                  icon={Activity}
+                  options={categoriasRaw}
+                  selected={filters.categoria ?? []}
+                  onChange={(v) => setFilters(prev => ({ ...prev, page: 1, categoria: v.length ? v : undefined }))}
+                  isDark={isDark}
+                  placeholder="Buscar tipo de acción..."
+                  commitOnClose
+                  className="min-w-[200px]"
+                />
               </div>
 
               <div>
                 <label className={`text-xs font-medium mb-1 block ${subText}`}>Agrupar por</label>
                 <div className="flex gap-1.5">
-                  {(['etapa', 'referencia'] as const).map(level => {
+                  {(['etapa', 'modulo', 'referencia'] as const).map(level => {
                     const idx = groupLevels.indexOf(level);
                     const active = idx !== -1;
                     return (
@@ -699,7 +757,7 @@ export function HistorialAccionesPage() {
                             {idx + 1}
                           </span>
                         )}
-                        {level === 'etapa' ? 'Etapa' : 'Referencia'}
+                        {NIVEL_LABEL[level]}
                       </button>
                     );
                   })}
@@ -716,6 +774,18 @@ export function HistorialAccionesPage() {
           </div>
         )}
       </div>
+
+      {vistaRecortada && (
+        <div className={`flex items-start gap-2 rounded-xl border px-4 py-2.5 text-sm ${
+          isDark ? 'border-zinc-800 bg-zinc-900/50 text-zinc-400' : 'border-gray-200 bg-gray-50 text-gray-500'
+        }`}>
+          <Info className="h-4 w-4 mt-0.5 shrink-0 text-purple-500" />
+          <span>
+            Estás viendo solo los registros que hiciste y los de las solicitudes,
+            propuestas y campañas en las que participas.
+          </span>
+        </div>
+      )}
 
       {/* Tabla */}
       <div className={`rounded-xl border overflow-hidden ${cardBg}`}>
@@ -735,7 +805,7 @@ export function HistorialAccionesPage() {
                 <thead>
                   <tr className={isDark ? 'bg-zinc-800/70' : 'bg-gray-50'}>
                     <th className={`text-left px-5 py-3 text-xs font-semibold uppercase tracking-wider ${subText}`}>Fecha/Hora</th>
-                    <th className={`text-left px-5 py-3 text-xs font-semibold uppercase tracking-wider ${subText}`}>Tipo</th>
+                    <th className={`text-left px-5 py-3 text-xs font-semibold uppercase tracking-wider ${subText}`}>Módulo</th>
                     <th className={`text-left px-5 py-3 text-xs font-semibold uppercase tracking-wider ${subText}`}>Ref ID</th>
                     <th className={`text-left px-5 py-3 text-xs font-semibold uppercase tracking-wider ${subText}`}>Acción</th>
                     <th className={`text-left px-5 py-3 text-xs font-semibold uppercase tracking-wider ${subText}`}>Detalles</th>
@@ -780,163 +850,185 @@ export function HistorialAccionesPage() {
         isOpen={showNotaModal}
         onClose={() => setShowNotaModal(false)}
         onSubmit={addNotaMutation.mutate}
-        tipos={tiposAgrupados}
+        tipos={TIPOS_NOTA}
         isDark={isDark}
         isLoading={addNotaMutation.isPending}
       />
 
-      {detalleModal && (
+      {detalleModal && (() => {
+        const raw = detalleModal.detalles;
+        const esJson = !!raw && (raw.trimStart().startsWith('{') || raw.trimStart().startsWith('['));
+        let obj: Record<string, unknown> | null = null;
+        if (esJson) {
+          try {
+            const parsed = JSON.parse(raw as string);
+            obj = isPlainObject(parsed) ? parsed : null;
+          } catch { obj = null; }
+        }
+        // Todo lo que no tiene seccion propia. Se calcula por RESTA, asi que
+        // cualquier clave que el back agregue en el futuro aparece sola en
+        // vez de perderse en silencio.
+        const extras = obj
+          ? Object.entries(obj).filter(([k, v]) =>
+              !CLAVES_CON_SECCION.has(k) && v !== null && v !== undefined && v !== '')
+          : [];
+        const Campo = ({ label, children }: { label: string; children: React.ReactNode }) => (
+          <CampoDetalle label={label} isDark={isDark}>{children}</CampoDetalle>
+        );
+
+        return (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4" onClick={() => setDetalleModal(null)}>
           <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" />
-          <div className={`relative w-full max-w-2xl max-h-[80vh] overflow-auto rounded-2xl border ${isDark ? 'bg-zinc-900 border-zinc-700' : 'bg-white border-gray-200'} shadow-2xl`} onClick={e => e.stopPropagation()}>
-            <div className={`sticky top-0 flex items-center justify-between px-6 py-4 border-b ${isDark ? 'border-zinc-700 bg-zinc-900' : 'border-gray-200 bg-white'}`}>
-              <div>
+          <div className={`relative w-full max-w-3xl max-h-[85vh] overflow-auto rounded-2xl border ${isDark ? 'bg-zinc-900 border-zinc-700' : 'bg-white border-gray-200'} shadow-2xl`} onClick={e => e.stopPropagation()}>
+            <div className={`sticky top-0 z-10 flex items-start justify-between px-6 py-4 border-b ${isDark ? 'border-zinc-700 bg-zinc-900' : 'border-gray-200 bg-white'}`}>
+              <div className="min-w-0">
                 <h3 className={`text-lg font-semibold ${headerText}`}>Detalle de Acción</h3>
-                <p className={`text-xs mt-0.5 ${subText}`}>{formatFechaHora(detalleModal.fecha_hora)} · {normalizeTipo(detalleModal.tipo)} · #{detalleModal.ref_id || '-'}</p>
+                <div className="flex flex-wrap items-center gap-x-3 gap-y-1 mt-1.5">
+                  <span className={`text-xs ${subText}`}>{formatFechaHora(detalleModal.fecha_hora)}</span>
+                  <ClasificacionBadge
+                    modulo={detalleModal.modulo} categoria={detalleModal.categoria}
+                    modulos={modulosMap} categorias={categoriasMap} isDark={isDark}
+                  />
+                  <span className={`text-xs ${subText}`}>
+                    {detalleModal.tipo}{detalleModal.ref_id ? ` #${detalleModal.ref_id}` : ''}
+                  </span>
+                </div>
               </div>
-              <button onClick={() => setDetalleModal(null)} className={`p-1.5 rounded-lg ${isDark ? 'hover:bg-zinc-700 text-zinc-400' : 'hover:bg-gray-100 text-gray-400'}`}><X className="h-5 w-5" /></button>
+              <div className="flex items-center gap-1 shrink-0">
+                {canSeeAdminTab && raw && (
+                  <button
+                    onClick={() => setVerJson(v => !v)}
+                    className={`flex items-center gap-1 px-2 py-1 rounded-lg text-[11px] border transition-colors ${
+                      verJson ? 'border-purple-500 text-purple-500' : btnSecondary
+                    }`}
+                    title="Ver el JSON crudo del registro"
+                  >
+                    <Code className="h-3.5 w-3.5" />JSON
+                  </button>
+                )}
+                <button onClick={() => setDetalleModal(null)} className={`p-1.5 rounded-lg ${isDark ? 'hover:bg-zinc-700 text-zinc-400' : 'hover:bg-gray-100 text-gray-400'}`}><X className="h-5 w-5" /></button>
+              </div>
             </div>
+
             <div className="px-6 py-4 space-y-4">
-              <div>
-                <span className={`text-xs font-medium ${subText}`}>Acción</span>
-                <p className={`text-sm mt-1 ${headerText}`}>{detalleModal.accion}</p>
-              </div>
-              {(() => {
-                const raw = detalleModal.detalles;
-                if (!raw) return <p className={`text-sm ${subText}`}>Sin detalles</p>;
-                if (!raw.startsWith('{') && !raw.startsWith('[')) return <p className={`text-sm ${headerText}`}>{raw}</p>;
-                try {
-                  const obj = JSON.parse(raw);
-                  return (
-                    <>
-                      {obj.usuario && (
-                        <div>
-                          <span className={`text-xs font-medium ${subText}`}>Usuario</span>
-                          <p className={`text-sm mt-1 ${headerText}`}>{obj.usuario}</p>
-                        </div>
-                      )}
-                      {obj.origen && (
-                        <div>
-                          <span className={`text-xs font-medium ${subText}`}>Origen</span>
-                          <p className={`text-sm mt-1 ${headerText}`}>{obj.origen}</p>
-                        </div>
-                      )}
-                      {obj.aprobadoPor && (
-                        <div>
-                          <span className={`text-xs font-medium ${subText}`}>Aprobado por</span>
-                          <p className={`text-sm mt-1 ${headerText}`}>{obj.aprobadoPor}{obj.tipo ? ` · Tipo: ${obj.tipo}` : ''}{obj.carasAprobadas ? ` · ${obj.carasAprobadas} circuito(s)` : ''}</p>
-                        </div>
-                      )}
-                      {obj.rechazadoPor && (
-                        <div>
-                          <span className={`text-xs font-medium ${subText}`}>Rechazado por</span>
-                          <p className={`text-sm mt-1 ${headerText}`}>{obj.rechazadoPor}{obj.motivo ? ` · Motivo: ${obj.motivo}` : ''}</p>
-                        </div>
-                      )}
-                      {obj.cambios?.length > 0 && (
-                        <div>
-                          <span className={`text-xs font-medium ${subText}`}>Cambios ({obj.cambios.length})</span>
-                          <table className={`w-full mt-2 text-sm border ${isDark ? 'border-zinc-700' : 'border-gray-200'} rounded-lg overflow-hidden`}>
-                            <thead>
-                              <tr className={isDark ? 'bg-zinc-800' : 'bg-gray-50'}>
-                                <th className={`px-3 py-2 text-left text-xs font-medium ${subText}`}>Campo</th>
-                                <th className={`px-3 py-2 text-left text-xs font-medium ${subText}`}>Antes</th>
-                                <th className={`px-3 py-2 text-left text-xs font-medium ${subText}`}>Después</th>
-                              </tr>
-                            </thead>
-                            <tbody>
-                              {obj.cambios.map((c: any, i: number) => (
-                                <tr key={i} className={`border-t ${isDark ? 'border-zinc-700' : 'border-gray-200'}`}>
-                                  <td className={`px-3 py-2 font-medium ${headerText}`}>{c.label || c.campo}</td>
-                                  <td className="px-3 py-2 text-red-400">{c.antes ?? '-'}</td>
-                                  <td className="px-3 py-2 text-emerald-400">{c.despues ?? '-'}</td>
-                                </tr>
-                              ))}
-                            </tbody>
-                          </table>
-                        </div>
-                      )}
-                      {obj.cara && (() => {
-                        const isPP = (obj.cara.formato || '').toUpperCase().includes('PUENTE PEATONAL');
-                        const cap = isPP ? 'Puente' : 'Cara';
-                        const noun = isPP ? 'puentes' : 'caras';
-                        return (
-                          <div>
-                            <span className={`text-xs font-medium ${subText}`}>{cap}</span>
-                            <p className={`text-sm mt-1 ${headerText}`}>Artículo: {obj.cara.articulo} · {obj.cara.caras} {noun}</p>
+              <Campo label="Acción">{detalleModal.accion}</Campo>
+
+              {verJson && (
+                <pre className={`text-[11px] p-3 rounded-lg overflow-x-auto whitespace-pre-wrap break-all ${isDark ? 'bg-zinc-950 text-zinc-300' : 'bg-gray-50 text-gray-700'}`}>
+                  {(() => { try { return JSON.stringify(JSON.parse(raw as string), null, 2); } catch { return raw; } })()}
+                </pre>
+              )}
+
+              {/* Detalles en texto plano: addNota y registros anteriores al JSON. */}
+              {!obj && raw && <Campo label="Detalles">{raw}</Campo>}
+              {!raw && <p className={`text-sm ${subText}`}>Sin detalles</p>}
+
+              {obj && (
+                <>
+                  {(!!obj.usuario || !!obj.usuarioRol || !!obj.origen) && (
+                    <div className={`flex flex-wrap gap-6 p-3 rounded-lg ${isDark ? 'bg-zinc-800/50' : 'bg-gray-50'}`}>
+                      {!!obj.usuario && <Campo label="Usuario">{formatValue(obj.usuario)}</Campo>}
+                      {!!obj.usuarioRol && <Campo label="Rol">{formatValue(obj.usuarioRol)}</Campo>}
+                      {!!obj.origen && <Campo label="Origen">{formatValue(obj.origen)}</Campo>}
+                    </div>
+                  )}
+
+                  {!!obj.aprobadoPor && (
+                    <Campo label="Aprobado por">
+                      {formatValue(obj.aprobadoPor)}
+                      {obj.tipo ? ` · Tipo: ${formatValue(obj.tipo)}` : ''}
+                      {obj.carasAprobadas ? ` · ${formatValue(obj.carasAprobadas)} circuito(s)` : ''}
+                    </Campo>
+                  )}
+                  {!!obj.rechazadoPor && (
+                    <Campo label="Rechazado por">
+                      {formatValue(obj.rechazadoPor)}{obj.motivo ? ` · Motivo: ${formatValue(obj.motivo)}` : ''}
+                    </Campo>
+                  )}
+
+                  {Array.isArray(obj.cambios) && obj.cambios.length > 0 && (
+                    <div>
+                      <span className={`text-xs font-medium ${subText}`}>Cambios ({obj.cambios.length})</span>
+                      <table className={`w-full mt-2 text-sm border ${isDark ? 'border-zinc-700' : 'border-gray-200'} rounded-lg overflow-hidden`}>
+                        <thead>
+                          <tr className={isDark ? 'bg-zinc-800' : 'bg-gray-50'}>
+                            <th className={`px-3 py-2 text-left text-xs font-medium ${subText}`}>Campo</th>
+                            <th className={`px-3 py-2 text-left text-xs font-medium ${subText}`}>Antes</th>
+                            <th className={`px-3 py-2 text-left text-xs font-medium ${subText}`}>Después</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {(obj.cambios as Record<string, unknown>[]).map((c, i) => (
+                            <tr key={i} className={`border-t ${isDark ? 'border-zinc-700' : 'border-gray-200'}`}>
+                              <td className={`px-3 py-2 font-medium ${headerText}`}>{formatValue(c.label ?? c.campo)}</td>
+                              <td className="px-3 py-2 text-red-400">{formatValue(c.antes) || '-'}</td>
+                              <td className="px-3 py-2 text-emerald-400">{formatValue(c.despues) || '-'}</td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  )}
+
+                  {isPlainObject(obj.cara) && (() => {
+                    const cara = obj.cara as Record<string, unknown>;
+                    const isPP = String(cara.formato ?? '').toUpperCase().includes('PUENTE PEATONAL');
+                    return (
+                      <Campo label={isPP ? 'Puente' : 'Cara'}>
+                        Artículo: {formatValue(cara.articulo)} · {formatValue(cara.caras)} {isPP ? 'puentes' : 'caras'}
+                      </Campo>
+                    );
+                  })()}
+                  {Array.isArray(obj.caras) && obj.caras.length > 0 && (() => {
+                    const caras = obj.caras as Record<string, unknown>[];
+                    const allPP = caras.every(c => String(c.formato ?? '').toUpperCase().includes('PUENTE PEATONAL'));
+                    return (
+                      <div>
+                        <span className={`text-xs font-medium ${subText}`}>{allPP ? 'Puentes' : 'Caras'} ({caras.length})</span>
+                        <ValorGenerico valor={caras} isDark={isDark} />
+                      </div>
+                    );
+                  })()}
+                  {Array.isArray(obj.circuitos) && obj.circuitos.length > 0 && (
+                    <div>
+                      <span className={`text-xs font-medium ${subText}`}>Circuitos afectados ({obj.circuitos.length})</span>
+                      <ValorGenerico valor={obj.circuitos} isDark={isDark} />
+                    </div>
+                  )}
+
+                  {!!obj['campaña'] && <Campo label="Campaña">{formatValue(obj['campaña'])}</Campo>}
+                  {!!obj.articulo && <Campo label="Artículo">{formatValue(obj.articulo)}</Campo>}
+                  {!obj.rechazadoPor && !!obj.motivo && <Campo label="Motivo">{formatValue(obj.motivo)}</Campo>}
+                  {obj.reservas_eliminadas != null && (
+                    <Campo label="Reservas eliminadas"><span className="text-red-400 font-medium">{formatValue(obj.reservas_eliminadas)}</span></Campo>
+                  )}
+                  {obj.circuitos_eliminados != null && (
+                    <Campo label="Circuitos eliminados"><span className="text-red-400 font-medium">{formatValue(obj.circuitos_eliminados)}</span></Campo>
+                  )}
+                  {!!obj.pendientesDg && <p className={`text-sm ${subText}`}>Pendientes DG: {formatValue(obj.pendientesDg)}</p>}
+                  {!!obj.pendientesDcm && <p className={`text-sm ${subText}`}>Pendientes DCM: {formatValue(obj.pendientesDcm)}</p>}
+
+                  {/* Todo lo demas que trae el registro. */}
+                  {extras.length > 0 && (
+                    <div className={`pt-3 border-t ${isDark ? 'border-zinc-800' : 'border-gray-100'}`}>
+                      <span className={`text-xs font-medium ${subText}`}>Más datos ({extras.length})</span>
+                      <div className="mt-2 space-y-2">
+                        {extras.map(([k, v]) => (
+                          <div key={k}>
+                            <span className={`text-xs font-medium ${subText}`}>{humanizarClave(k)}</span>
+                            <div className="mt-0.5"><ValorGenerico valor={v} isDark={isDark} /></div>
                           </div>
-                        );
-                      })()}
-                      {obj.caras?.length > 0 && (() => {
-                        const allPP = obj.caras.every((c: any) => (c.formato || '').toUpperCase().includes('PUENTE PEATONAL'));
-                        const groupLabel = allPP ? 'Puentes' : 'Caras';
-                        return (
-                          <div>
-                            <span className={`text-xs font-medium ${subText}`}>{groupLabel} ({obj.caras.length})</span>
-                            <div className="mt-1 space-y-1">
-                              {obj.caras.map((c: any, i: number) => {
-                                const isPP = (c.formato || '').toUpperCase().includes('PUENTE PEATONAL');
-                                const noun = isPP ? 'puentes' : 'caras';
-                                return (
-                                  <p key={i} className={`text-sm ${headerText}`}>{c.articulo} — {c.formato} — {c.caras} {noun}</p>
-                                );
-                              })}
-                            </div>
-                          </div>
-                        );
-                      })()}
-                      {obj.campaña && (
-                        <div>
-                          <span className={`text-xs font-medium ${subText}`}>Campaña</span>
-                          <p className={`text-sm mt-1 ${headerText}`}>{obj.campaña}</p>
-                        </div>
-                      )}
-                      {obj.motivo && (
-                        <div>
-                          <span className={`text-xs font-medium ${subText}`}>Motivo</span>
-                          <p className={`text-sm mt-1 ${headerText}`}>{obj.motivo}</p>
-                        </div>
-                      )}
-                      {obj.articulo && (
-                        <div>
-                          <span className={`text-xs font-medium ${subText}`}>Artículo</span>
-                          <p className={`text-sm mt-1 ${headerText}`}>{obj.articulo}</p>
-                        </div>
-                      )}
-                      {obj.reservas_eliminadas != null && (
-                        <div>
-                          <span className={`text-xs font-medium ${subText}`}>Reservas eliminadas</span>
-                          <p className={`text-sm mt-1 text-red-400 font-medium`}>{obj.reservas_eliminadas}</p>
-                        </div>
-                      )}
-                      {obj.circuitos_eliminados != null && (
-                        <div>
-                          <span className={`text-xs font-medium ${subText}`}>Circuitos eliminados</span>
-                          <p className={`text-sm mt-1 text-red-400 font-medium`}>{obj.circuitos_eliminados}</p>
-                        </div>
-                      )}
-                      {obj.circuitos?.length > 0 && !obj.cambios && (
-                        <div>
-                          <span className={`text-xs font-medium ${subText}`}>Circuitos afectados ({obj.circuitos.length})</span>
-                          <div className="mt-1 space-y-1">
-                            {obj.circuitos.map((c: any, i: number) => (
-                              <p key={i} className={`text-sm ${headerText}`}>{c.articulo || '-'} — {c.formato || '-'}</p>
-                            ))}
-                          </div>
-                        </div>
-                      )}
-                      {obj.pendientesDg && <p className={`text-sm ${subText}`}>Pendientes DG: {obj.pendientesDg}</p>}
-                      {obj.pendientesDcm && <p className={`text-sm ${subText}`}>Pendientes DCM: {obj.pendientesDcm}</p>}
-                    </>
-                  );
-                } catch {
-                  return <p className={`text-sm ${headerText}`}>{raw}</p>;
-                }
-              })()}
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </>
+              )}
             </div>
           </div>
         </div>
-      )}
+        );
+      })()}
       </div>
       )}
     </div>

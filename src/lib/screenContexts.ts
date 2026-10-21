@@ -432,7 +432,10 @@ Si el usuario te pregunta 'cómo elimino este circuito': NUNCA sugieras eliminac
 
   // ─────────────────────────── HISTORIAL DE ACCIONES ───────────────────────────
   'Historial de Acciones': `El usuario está en /historial-acciones, la pantalla de auditoría exhaustiva del sistema.
-Solo visible para roles de Dirección, Administrador y DEV.
+Entran todos los roles: direcciones, gerentes comerciales, Administrador y TI ven todo; el resto solo ve lo que hizo
+o aquello (solicitud/propuesta/campaña) en lo que participa, y la pantalla se lo avisa con una nota arriba de la tabla.
+Filtros: Usuarios, Etapa (Solicitud/Propuesta/Campaña), Módulo (sobre qué: Circuito, Reserva, Arte, APS, Usuario, Ticket...)
+y Tipo de acción (qué se hizo: Creación, Edición, Eliminación, Autorización, Rechazo, Cambio de estado...). Se cruzan con AND.
 
 9 TIPOS DE ACCIÓN AUDITADOS:
 1. Campaña: creación, cambio de estatus, edición, eliminación.
@@ -545,7 +548,7 @@ Sub-módulos (rutas directas):
 - /admin/tickets-ranking: RankingTicketsPage (DEV y Admin). Rankings de tickets por asesor/agente/tiempo.
 - /dev/tickets: DevTicketsPage (equipo DEV). Board interno del equipo DEV con prioridades, asignaciones y tiempos de respuesta.
 - /reportes-especiales: ReportesEspecialesPage (DEV/Admin). Reportes personalizados.
-- /historial-acciones: HistorialAccionesPage (Dirección, Admin, DEV). Auditoría exhaustiva (ver pantalla 'Historial de Acciones').`,
+- /historial-acciones: HistorialAccionesPage (todos los roles; visibilidad total solo direcciones, gerentes comerciales, Admin y TI). Auditoría exhaustiva (ver pantalla 'Historial de Acciones').`,
 
 };
 

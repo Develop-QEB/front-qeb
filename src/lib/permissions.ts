@@ -254,10 +254,17 @@ const defaultPermissions: RolePermissions = {
 
   canCancelPostSAP: false,
 
-  // Historial de Acciones — feedback 2026-08-13: solo roles de Dirección
-  // y Admin/DEV ven el módulo. El default queda en false y cada rol de
-  // dirección lo habilita explícitamente (junto con canSeeAllHistorial).
-  canSeeHistorialAcciones: false,
+  // Historial de Acciones — ajuste 2026-10-21: el módulo lo abre CUALQUIER
+  // rol, pero quien no está en la lista de visibilidad total solo ve lo que
+  // hizo o aquello en lo que participa (es creador o asignado). Ese recorte
+  // lo aplica el backend, que es la única autoridad: ver
+  // tieneHistorialCompleto() en qeb-Back/src/utils/permissions.ts.
+  //
+  // Antes (feedback 2026-08-13) el default era false y solo ~10 roles de
+  // dirección podían entrar.
+  canSeeHistorialAcciones: true,
+  // Solo informativo para la UI (p. ej. el aviso de "viendo solo lo tuyo").
+  // El filtro real NO depende de esta bandera.
   canSeeAllHistorial: false,
 };
 

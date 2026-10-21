@@ -7,11 +7,18 @@ export interface HistorialEntry {
   accion: string;
   fecha_hora: string;
   detalles: string | null;
+  // Clasificacion en los tres ejes de la taxonomia. La calcula el back
+  // (utils/historialTaxonomia.ts) para que el front solo pinte.
+  etapa: string;
+  modulo: string;
+  categoria: string;
 }
 
 export interface HistorialResponse {
   success: boolean;
   data: HistorialEntry[];
+  /** verTodo=false -> el back recorto la vista a lo del propio usuario. */
+  visibilidad?: { verTodo: boolean };
   pagination: {
     total: number;
     page: number;
@@ -23,9 +30,14 @@ export interface HistorialResponse {
 export interface HistorialFilters {
   page?: number;
   limit?: number;
-  tipo?: string;
-  accion?: string;
-  usuario?: string;
+  // Multiselect: viajan como parametro repetido (?tipo=a&tipo=b). El back
+  // los combina en OR entre si y en AND con el resto de los filtros.
+  tipo?: string[];
+  accion?: string[];
+  usuario?: string[];
+  etapa?: string[];
+  modulo?: string[];
+  categoria?: string[];
   search?: string;
   fechaDesde?: string;
   fechaHasta?: string;
@@ -35,6 +47,13 @@ export interface HistorialFilters {
 export interface HistorialUsuario {
   id: number;
   nombre: string;
+}
+
+/** Opcion de los dropdowns de Modulo / Tipo de accion. `grupo` es el encabezado de seccion. */
+export interface OpcionTaxonomia {
+  value: string;
+  label: string;
+  grupo: string;
 }
 
 // Fila de `tareas` con tipo='Actividad Comercial' (tablero CRM del tab
@@ -69,9 +88,12 @@ export const historialService = {
     const params = new URLSearchParams();
     if (filters.page) params.set('page', String(filters.page));
     if (filters.limit) params.set('limit', String(filters.limit));
-    if (filters.tipo) params.set('tipo', filters.tipo);
-    if (filters.accion) params.set('accion', filters.accion);
-    if (filters.usuario) params.set('usuario', filters.usuario);
+    for (const t of filters.tipo ?? []) params.append('tipo', t);
+    for (const a of filters.accion ?? []) params.append('accion', a);
+    for (const u of filters.usuario ?? []) params.append('usuario', u);
+    for (const e of filters.etapa ?? []) params.append('etapa', e);
+    for (const m of filters.modulo ?? []) params.append('modulo', m);
+    for (const c of filters.categoria ?? []) params.append('categoria', c);
     if (filters.search) params.set('search', filters.search);
     if (filters.fechaDesde) params.set('fechaDesde', filters.fechaDesde);
     if (filters.fechaHasta) params.set('fechaHasta', filters.fechaHasta);
@@ -81,13 +103,20 @@ export const historialService = {
     return data;
   },
 
-  async getTipos(): Promise<string[]> {
-    const { data } = await api.get('/historial/tipos');
+  // Listas de clasificacion. Son estaticas en el back (no consultan la BD),
+  // asi que se pueden cachear agresivamente.
+  async getEtapas(): Promise<OpcionTaxonomia[]> {
+    const { data } = await api.get('/historial/etapas');
     return data.data;
   },
 
-  async getAcciones(): Promise<{ label: string; value: string }[]> {
-    const { data } = await api.get('/historial/acciones');
+  async getModulos(): Promise<OpcionTaxonomia[]> {
+    const { data } = await api.get('/historial/modulos');
+    return data.data;
+  },
+
+  async getCategorias(): Promise<OpcionTaxonomia[]> {
+    const { data } = await api.get('/historial/categorias');
     return data.data;
   },
 
