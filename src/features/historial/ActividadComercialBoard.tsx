@@ -11,6 +11,7 @@ import { formatDate } from '../../lib/utils';
 import { NuevaActividadComercialModal } from '../notificaciones/NuevaActividadComercialModal';
 import { FiltroMultiple } from './FiltroMultiple';
 import { DetalleActividadModal } from './DetalleActividadModal';
+import { ActividadComercialKpis } from './ActividadComercialKpis';
 import {
   COLUMNAS_AC, COLUMNA_LABEL, COLUMNA_DESCRIPCION, COLUMNA_COLOR, QK_ACTIVIDAD_COMERCIAL, type ColumnaAC,
   columnaDeEstatus, esCancelada, parseContenidoAC, tituloCorto, estaVencida, textoBusqueda, clienteDe, coincideId,
@@ -317,6 +318,16 @@ export function ActividadComercialBoard({ isDark }: Props) {
           </div>
         )}
       </div>
+
+      {/* Indicadores (contraidos por default; responden a los filtros, no a la vista rapida) */}
+      {!isLoading && (
+        <ActividadComercialKpis
+          tareas={filtradas}
+          totalSinFiltro={data.length}
+          filtrosActivos={hayFiltros || !!search.trim()}
+          isDark={isDark}
+        />
+      )}
 
       {/* Tablero */}
       {isLoading ? (
