@@ -108,6 +108,11 @@ interface CaraItem {
   // Costo/caras de BD al cargar (regla "Direcciones Aprobadas" en la pre-evaluación).
   _originalCosto?: number;
   _originalCaras?: number;
+  // Total `caras` y tarifa TAL COMO ESTÁN EN BD (inmutables durante el borrador). El edit
+  // decide contra esto si manda `caras`/`costo`: el estado local ya trae ediciones sin
+  // guardar y no sirve de referencia (caso 81827 / 81894).
+  _savedCaras?: number;
+  _savedTarifa?: number;
   // RT/BF grouping: pair an RT (renta) cara with a BF (bonificación) cara
   grupo_rt_bf?: number | null;
   grupo_masivo_id?: number | null;
@@ -1534,6 +1539,9 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
         // Si es circuito, plaza se deriva del ItemCode (ej. RT-DIG-03-MX → "Ciudad de México / AM")
         const circuitoLoad = parseCircuitoDigital(cara.articulo || '');
         const plazaDerivada = circuitoLoad ? circuitoLoad.plazaLabel : '';
+        const tarifaBd = (Number(cara.caras) || 0) > 0
+          ? (Number(cara.costo) || 0) / (Number(cara.caras) || 1)
+          : Number(cara.tarifa_publica) || 0;
 
         return {
           localId: `cara-${cara.id || idx}-${Date.now()}`,
@@ -1548,9 +1556,7 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
           nivel_socioeconomico: cara.nivel_socioeconomico || '',
           formato: cara.formato || '',
           costo: Number(cara.costo) || 0,
-          tarifa_publica: (Number(cara.caras) || 0) > 0
-            ? (Number(cara.costo) || 0) / (Number(cara.caras) || 1)
-            : Number(cara.tarifa_publica) || 0,
+          tarifa_publica: tarifaBd,
           // Truncar a YYYY-MM-DD para que <input type="date"> autocomplete al editar
           inicio_periodo: String(cara.inicio_periodo || '').slice(0, 10),
           fin_periodo: String(cara.fin_periodo || '').slice(0, 10),
@@ -1574,6 +1580,9 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
           _originalCaras: esBf
             ? (Number(cara.bonificacion) || 0)
             : (Number(cara.caras_flujo) || 0) + (Number(cara.caras_contraflujo) || 0),
+          // Total y tarifa de BD (inmutables): base del edit para decidir si manda caras/costo.
+          _savedCaras: Number(cara.caras) || 0,
+          _savedTarifa: tarifaBd,
           grupo_rt_bf: grupoRtBf,
           grupo_masivo_id: (cara as any).grupo_masivo_id != null ? Number((cara as any).grupo_masivo_id) : null,
           esBf,
@@ -3105,8 +3114,12 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
         // realmente cambió el total de caras (o la tarifa, que recalcula el costo).
         // Editar NSE/ciudad/formato NO debe transmitir caras ni costo — así el
         // backend conserva los actuales y no recalcula ni re-autoriza.
-        const carasCambioEdit = (Number(newCara.caras) || 0) !== (Number(caraToEdit.caras) || 0);
-        const tarifaCambioEdit = (Number(newCara.tarifa_publica) || 0) !== (Number(caraToEdit.tarifa_publica) || 0);
+        // Se compara contra lo GUARDADO EN BD (_savedCaras/_savedTarifa), no contra el
+        // estado local: si el circuito ya se editó en este borrador (10→14) y se vuelve
+        // a editar antes de guardar, el local ya dice 14, `caras` se caía del payload y
+        // el back rechazaba el split 7+7 contra las 10 de BD (caso 81827 / 81894).
+        const carasCambioEdit = (Number(newCara.caras) || 0) !== (Number(caraToEdit._savedCaras ?? caraToEdit.caras) || 0);
+        const tarifaCambioEdit = (Number(newCara.tarifa_publica) || 0) !== (Number(caraToEdit._savedTarifa ?? caraToEdit.tarifa_publica) || 0);
         const rtCaraDataBulk: Record<string, unknown> = { ...rtCaraData };
         if (!carasCambioEdit) delete rtCaraDataBulk.caras;
         if (!carasCambioEdit && !tarifaCambioEdit) delete rtCaraDataBulk.costo;
@@ -3262,14 +3275,20 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
               const next = new Map(prev);
               for (const otra of otrasCarasGrupo) {
                 if (!otra.id) continue;
-                // Conservar el grupo_rt_bf y periodo propios de la otra cara
-                // (rtCaraDataBulk omite caras/costo si no cambiaron → el grupo tampoco los mueve).
-                next.set(otra.id, {
-                  ...rtCaraDataBulk,
+                // Conservar el grupo_rt_bf y periodo propios de la otra cara.
+                // caras/costo se deciden contra la BD de ESA cara (no la de la editada): solo viajan si
+                // el total/tarifa nuevos difieren de lo que ella tiene guardado.
+                const otraData: Record<string, unknown> = {
+                  ...rtCaraData,
                   inicio_periodo: otra.inicio_periodo,
                   fin_periodo: otra.fin_periodo,
                   grupo_rt_bf: otra.grupo_rt_bf ?? null,
-                });
+                };
+                const otraCarasCambio = (Number(newCara.caras) || 0) !== (Number(otra._savedCaras ?? otra.caras) || 0);
+                const otraTarifaCambio = (Number(newCara.tarifa_publica) || 0) !== (Number(otra._savedTarifa ?? otra.tarifa_publica) || 0);
+                if (!otraCarasCambio) delete otraData.caras;
+                if (!otraCarasCambio && !otraTarifaCambio) delete otraData.costo;
+                next.set(otra.id, otraData);
                 // También su par BF si existe
                 if (otra.grupo_rt_bf && bfCaraDataForPersist) {
                   const bfPair = caras.find(c =>
@@ -3403,6 +3422,9 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
           autorizacion_dcm: createdCara.autorizacion_dcm || 'aprobado',
           _originalDg: createdCara.autorizacion_dg || 'aprobado',
           _originalDcm: createdCara.autorizacion_dcm || 'aprobado',
+          // Recién persistida: su BD es lo que se acaba de crear.
+          _savedCaras: Number(createdCara.caras ?? newCara.caras) || 0,
+          _savedTarifa: Number(newCara.tarifa_publica) || 0,
           grupo_rt_bf: grupoRtBf,
           esBf: false,
         };
@@ -5774,18 +5796,37 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
                       if (totalRenta === 0) return;
                       const newFlujo = Math.ceil(totalRenta * v / 100);
                       const newContra = totalRenta - newFlujo;
-                      setSavingPct(true);
-                      try {
-                        await campanasService.updateCara(campana.id, selectedCaraForSearch.id, {
-                          caras_flujo: newFlujo,
-                          caras_contraflujo: newContra,
-                        } as any);
-                        const updatedCara = { ...selectedCaraForSearch, caras_flujo: newFlujo, caras_contraflujo: newContra };
-                        setSelectedCaraForSearch(updatedCara);
-                        setCaras(prev => prev.map(c => c.id === selectedCaraForSearch.id
+                      const caraId = selectedCaraForSearch.id;
+                      const aplicarSplitLocal = () => {
+                        setSelectedCaraForSearch({ ...selectedCaraForSearch, caras_flujo: newFlujo, caras_contraflujo: newContra });
+                        setCaras(prev => prev.map(c => c.id === caraId
                           ? { ...c, caras_flujo: newFlujo, caras_contraflujo: newContra }
                           : c
                         ));
+                        // Si el circuito tiene un cambio pendiente, el split nuevo viaja en él
+                        // (si no, "Guardar Cambios" lo regresaría al split anterior).
+                        setModifiedCaras(prev => {
+                          const pendiente = prev.get(caraId);
+                          if (!pendiente) return prev;
+                          const next = new Map(prev);
+                          next.set(caraId, { ...pendiente, caras_flujo: newFlujo, caras_contraflujo: newContra });
+                          return next;
+                        });
+                      };
+                      // El total cambió en el borrador y aún no se guarda: el back rechazaría este
+                      // split (debe sumar el total de BD). Se queda en el cambio pendiente y se
+                      // persiste con "Guardar Cambios" junto con el total (caso 81827).
+                      if (modifiedCaras.has(caraId) && totalRenta !== (selectedCaraForSearch._savedCaras ?? totalRenta)) {
+                        aplicarSplitLocal();
+                        return;
+                      }
+                      setSavingPct(true);
+                      try {
+                        await campanasService.updateCara(campana.id, caraId, {
+                          caras_flujo: newFlujo,
+                          caras_contraflujo: newContra,
+                        } as any);
+                        aplicarSplitLocal();
                       } catch (err) {
                         console.error('Error guardando distribución:', err);
                       } finally {
