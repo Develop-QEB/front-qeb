@@ -319,7 +319,12 @@ export interface Campana {
   id_asignado: string | null;
   inversion: number | null;
   comentario_cambio_status: string | null;
+  // Requiere la columna `campania.updated_at` (ver scripts/sql). Sin ella el
+  // listado la manda vacia: la tabla `campania` no la tenia.
   updated_at: string | null;
+  // Columna real de `campania`; llega por el cm.* del listado. Es la fecha con
+  // la que el backend ordena (COALESCE(fecha_aprobacion, fecha_inicio) DESC).
+  fecha_aprobacion?: string | null;
   // Campos adicionales del listado
   cliente_nombre: string | null;
   cliente_razon_social: string | null;

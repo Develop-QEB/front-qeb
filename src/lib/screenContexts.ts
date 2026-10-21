@@ -95,7 +95,10 @@ Solo roles con permiso canEditEstatusSolicitud (Asesor Comercial, Analista, Traf
 
   // ─────────────────────────── PROPUESTAS ───────────────────────────
   'Propuestas': `El usuario está en el módulo de Propuestas (lista de propuestas comerciales).
-VISTAS DISPONIBLES: toggle 'Tabla' / 'Versionario' en la esquina superior. Versionario agrupa dinámicamente por múltiples campos (asesor, cliente, catorcena, estatus, plaza) y recuerda la configuración en localStorage. Si el usuario no ve las columnas típicas probablemente está en Versionario.
+VISTAS DISPONIBLES: toggle 'Vista Tabla' / 'Desglose' (antes llamado Versionario) / 'Tablero' en la esquina superior. Desglose agrupa dinámicamente por múltiples campos (asesor, cliente, catorcena, estatus, plaza) y recuerda la configuración en localStorage. Si el usuario no ve las columnas típicas probablemente está en Desglose o en Tablero.
+TABLERO: una columna por estatus (Abierto, Atendido, Ajuste Comercial, Ajuste CTO Cliente, Ajuste Inventario, Pase a Ventas, Aprobada). Cada tarjeta trae ID, marca, campaña, catorcena, inversión, asesor/asignado, el badge de estatus y la FECHA DE ÚLTIMA EDICIÓN. NO hay drag & drop: para cambiar estatus se da clic en el badge de la tarjeta, que abre el mismo modal de la tabla. Las propuestas con un estatus sin columna (p.ej. Rechazada) no se pintan y el tablero avisa cuántas quedaron fuera.
+FILTROS RÁPIDOS DE ORDEN (aplican a Tabla y Tablero): 'Último cambio' (default del tablero, arriba lo que cambió de estatus o se editó más recientemente), 'Más nueva' y 'Más vieja' (por fecha de creación), más el chip 'Solo incompletos' (menos reservas que caras esperadas). Al elegir un orden distinto de 'Más nueva' la tabla deja de paginar y muestra todo el universo ordenado, porque ordenar solo la página visible daría un orden falso.
+VISTAS GUARDADAS (en el Tablero): el usuario elige qué columnas ver, le pone nombre y la guarda. Puede aplicarlas, renombrarlas, actualizarlas y borrarlas. Se guardan por usuario en localStorage del navegador, así que NO lo siguen si cambia de equipo o navegador.
 Columnas de la tabla: ID (morado), Fecha Creación, Marca (badge SAP CIMU/TEST/TRADE/UDC), Creador (avatar), Campaña, Asignados (primeros 2 + '+N'), Inversión (ámbar, moneda), Inicio (badge 'Cat X / YYYY' o 'Ene 2024'), Fin, Estatus (badge clickeable), Acciones.
 
 Estatus REALES del enum (NO uses 'Borrador', 'Enviada' ni 'Atendido' viejo):
@@ -150,6 +153,11 @@ Acciones por fila:
 Vistas disponibles:
 - Vista Tabla: lista paginada con filtros y agrupación hasta 2 niveles.
 - Versionario (vista Catorcena): tarjetas por catorcena con campañas expandibles mostrando inventario y APS agrupado.
+- Tablero: una columna por estatus (Por Iniciar, Ajuste Comercial, Ajuste CTO Cliente, Atendido, Aprobada, Finalizada). Cada tarjeta trae ID, nombre, cliente, catorcena, inversión, marca, APS, el badge de estatus y la fecha de última edición. NO hay drag & drop: el estatus se cambia con clic en el badge, que abre el mismo StatusCampanaModal. Las campañas con estatus sin columna ('en curso', 'inactiva', 'pausada') no se pintan y el tablero avisa cuántas quedaron fuera.
+  OJO: la fecha de última edición depende de la columna campania.updated_at. Si el ambiente todavía no tiene esa columna, las tarjetas muestran '—' y el orden 'Último cambio' no reordena. En Propuestas sí funciona (usa propuesta.updated_at).
+
+Filtros rápidos de orden (aplican a Tabla y Tablero): 'Último cambio' (default del tablero), 'Más nueva' y 'Más vieja' (por fecha de aprobación o de inicio), más el chip 'Solo incompletos'. El chip 'Campo' (Nombre, Cliente, Estatus, Fecha Inicio) sigue disponible y gana sobre el orden rápido cuando se elige.
+Vistas guardadas (en el Tablero): columnas elegidas + orden + filtro, con nombre. Se guardan por usuario en localStorage del navegador; no siguen al usuario a otro equipo.
 
 REGLA CRÍTICA (política QEB): las campañas NUNCA se eliminan. Para cancelar una campaña, cambiar el estatus a 'Rechazada' o 'Cancelada'. Al hacerlo se liberan automáticamente todas las reservas. Es IRREVERSIBLE.
 

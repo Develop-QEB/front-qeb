@@ -1,10 +1,9 @@
 import React, { useState, useMemo, useEffect, useRef } from 'react';
-import { createPortal } from 'react-dom';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import {
   Search, Download, Filter, ChevronDown, ChevronRight, X, SlidersHorizontal,
-  ArrowUpDown, Calendar, DollarSign, FileText, Building2, MessageSquare,
+  Columns3, Calendar, DollarSign, FileText, Building2, MessageSquare,
   CheckCircle, Users, Send, Loader2, User, Share2, MapPinned, Wrench, Clock, Paintbrush,
   Pencil, Trash2, Package, MapPin, Eye, Plus, AlertTriangle, List, LayoutGrid,
   Layers, Check, XCircle
@@ -34,193 +33,22 @@ import { useSocketEquipos, useSocketPropuestas } from '../../hooks/useSocket';
 import { HistorialFilterPopover, type HistorialFilterValues } from '../../components/HistorialFilterPopover';
 import { ConfirmModal } from '../../components/ui/confirm-modal';
 import { monthLabelShort } from '../../lib/periodos';
+import {
+  getStatusColor, STATUS_OPTIONS, COMPLETITUD_STATUS, esPropuestaIncompleta, IncompletaBadge,
+} from './propuestaEstatus';
+import PropuestasTableroView, {
+  PROPUESTAS_COLUMNAS, PROPUESTAS_COLUMNAS_KEYS,
+} from './PropuestasTableroView';
+import {
+  ordenarTablero, ORDEN_RAPIDO_DEFAULT, ORDEN_RAPIDO_TABLA_DEFAULT, type OrdenRapido,
+} from '../../lib/tableroVistas';
+import { TableroVistasControls } from '../../components/tablero/TableroVistasControls';
+import { OrdenRapidoChips } from '../../components/tablero/OrdenRapidoChips';
 
 function getMonthShort(dateStr: string): string {
   return monthLabelShort(dateStr) || '-';
 }
 
-// Status badge colors — dos mapas estáticos. El dark-mode toggle sigue
-// funcionando porque al cambiar `isDark` el componente re-renderiza y
-// `getStatusColor` selecciona el mapa correcto. Antes se construía un objeto
-// completo por cada fila renderizada.
-type StatusColor = { bg: string; text: string; border: string };
-
-const STATUS_COLORS_DARK: Record<string, StatusColor> = {
-  'Abierto': { bg: 'bg-blue-500/20', text: 'text-blue-300', border: 'border-blue-500/30' },
-  'Ajuste Cto-Cliente': { bg: 'bg-orange-500/20', text: 'text-orange-300', border: 'border-orange-500/30' },
-  'Ajuste Inventario': { bg: 'bg-rose-500/20', text: 'text-rose-300', border: 'border-rose-500/30' },
-  'Ajuste Comercial': { bg: 'bg-amber-500/20', text: 'text-amber-300', border: 'border-amber-500/30' },
-  'Pase a ventas': { bg: 'bg-emerald-500/20', text: 'text-emerald-300', border: 'border-emerald-500/30' },
-  'Atendido': { bg: 'bg-cyan-500/20', text: 'text-cyan-300', border: 'border-cyan-500/30' },
-  'Liberada': { bg: 'bg-teal-500/20', text: 'text-teal-300', border: 'border-teal-500/30' },
-  // Legacy (datos históricos)
-  'Pendiente': { bg: 'bg-amber-500/20', text: 'text-amber-300', border: 'border-amber-500/30' },
-  'Por aprobar': { bg: 'bg-amber-500/20', text: 'text-amber-300', border: 'border-amber-500/30' },
-  'Activa': { bg: 'bg-green-500/20', text: 'text-green-300', border: 'border-green-500/30' },
-  'Aprobada': { bg: 'bg-green-500/20', text: 'text-green-300', border: 'border-green-500/30' },
-  'Rechazada': { bg: 'bg-red-500/20', text: 'text-red-300', border: 'border-red-500/30' },
-  'Descartada': { bg: 'bg-zinc-500/20', text: 'text-zinc-400', border: 'border-zinc-500/30' },
-};
-
-const STATUS_COLORS_LIGHT: Record<string, StatusColor> = {
-  'Abierto': { bg: 'bg-blue-50', text: 'text-blue-700', border: 'border-blue-500/30' },
-  'Ajuste Cto-Cliente': { bg: 'bg-orange-50', text: 'text-orange-700', border: 'border-orange-500/30' },
-  'Ajuste Inventario': { bg: 'bg-rose-50', text: 'text-rose-700', border: 'border-rose-500/30' },
-  'Ajuste Comercial': { bg: 'bg-amber-50', text: 'text-amber-700', border: 'border-amber-500/30' },
-  'Pase a ventas': { bg: 'bg-emerald-50', text: 'text-emerald-700', border: 'border-emerald-500/30' },
-  'Atendido': { bg: 'bg-cyan-50', text: 'text-cyan-700', border: 'border-cyan-500/30' },
-  'Liberada': { bg: 'bg-teal-50', text: 'text-teal-700', border: 'border-teal-500/30' },
-  'Pendiente': { bg: 'bg-amber-50', text: 'text-amber-700', border: 'border-amber-500/30' },
-  'Por aprobar': { bg: 'bg-amber-50', text: 'text-amber-700', border: 'border-amber-500/30' },
-  'Activa': { bg: 'bg-green-50', text: 'text-green-700', border: 'border-green-500/30' },
-  'Aprobada': { bg: 'bg-green-50', text: 'text-green-700', border: 'border-green-500/30' },
-  'Rechazada': { bg: 'bg-red-50', text: 'text-red-700', border: 'border-red-500/30' },
-  'Descartada': { bg: 'bg-zinc-50', text: 'text-zinc-600', border: 'border-zinc-500/30' },
-};
-
-const DEFAULT_STATUS_COLOR_DARK: StatusColor = { bg: 'bg-violet-500/20', text: 'text-violet-300', border: 'border-violet-500/30' };
-const DEFAULT_STATUS_COLOR_LIGHT: StatusColor = { bg: 'bg-violet-50', text: 'text-violet-700', border: 'border-violet-500/30' };
-
-const getStatusColor = (status: string, isDark: boolean): StatusColor => {
-  const map = isDark ? STATUS_COLORS_DARK : STATUS_COLORS_LIGHT;
-  return map[status] || (isDark ? DEFAULT_STATUS_COLOR_DARK : DEFAULT_STATUS_COLOR_LIGHT);
-};
-
-const STATUS_OPTIONS = ['Atendido', 'Abierto', 'Ajuste Cto-Cliente', 'Ajuste Inventario', 'Ajuste Comercial', 'Pase a ventas', 'Liberada', 'Rechazada'];
-
-// Pseudo-estatus de completitud para el chip de Status: no son estatus reales
-// de la propuesta, se evalúan en cliente contra los totales de reservas.
-const COMPLETITUD_STATUS = ['Incompleta', 'Completa'];
-
-// Propuesta con reservas por debajo de las caras esperadas (totales del
-// listado, mismo criterio/exclusiones que el badge "Incompleta" de campañas).
-function esPropuestaIncompleta(p: Propuesta): boolean {
-  return p.caras_esperadas_total != null
-    && Number(p.caras_esperadas_total) > 0
-    && Number(p.reservas_validas_total ?? 0) < Number(p.caras_esperadas_total);
-}
-
-// Badge "Incompleta (X/Y)" para la tabla de propuestas. Al dar clic abre el
-// desglose por catorcena (GET /propuestas/:id/completitud), igual que el badge
-// de campañas. Popover con position:fixed + portal para que no lo recorte el
-// overflow de la tabla.
-function IncompletaBadge({ propuesta, isDark }: { propuesta: Propuesta; isDark: boolean }) {
-  const [open, setOpen] = useState(false);
-  const [pos, setPos] = useState<{ top: number; left: number } | null>(null);
-  const btnRef = useRef<HTMLButtonElement>(null);
-  const popRef = useRef<HTMLDivElement>(null);
-
-  const { data: detail, isLoading } = useQuery({
-    queryKey: ['propuesta-completitud', propuesta.id],
-    queryFn: () => propuestasService.getCompletitud(propuesta.id),
-    enabled: open,
-    staleTime: 60000,
-  });
-
-  const esperadas = Number(propuesta.caras_esperadas_total) || 0;
-  const reservadas = Number(propuesta.reservas_validas_total) || 0;
-
-  const POPOVER_W = 260;
-  const toggle = (e: React.MouseEvent) => {
-    e.stopPropagation();
-    if (!open && btnRef.current) {
-      const r = btnRef.current.getBoundingClientRect();
-      setPos({
-        top: r.bottom + 8,
-        left: Math.max(8, Math.min(r.left, window.innerWidth - POPOVER_W - 8)),
-      });
-    }
-    setOpen(v => !v);
-  };
-
-  // position:fixed queda "volando" si se scrollea la página: cerrar en scroll
-  // o resize, excepto el scroll interno de la lista del propio popover.
-  useEffect(() => {
-    if (!open) return;
-    const closeOnScroll = (e: Event) => {
-      if (popRef.current && e.target instanceof Node && popRef.current.contains(e.target)) return;
-      setOpen(false);
-    };
-    const closeOnResize = () => setOpen(false);
-    window.addEventListener('scroll', closeOnScroll, true);
-    window.addEventListener('resize', closeOnResize);
-    return () => {
-      window.removeEventListener('scroll', closeOnScroll, true);
-      window.removeEventListener('resize', closeOnResize);
-    };
-  }, [open]);
-
-  return (
-    <>
-      <button
-        ref={btnRef}
-        onClick={toggle}
-        className={`px-1.5 py-0.5 rounded-full text-[9px] flex items-center gap-1 cursor-pointer hover:opacity-80 transition-opacity ${isDark ? 'bg-yellow-500/20 text-yellow-300' : 'bg-yellow-50 text-yellow-700'} border border-yellow-500/30`}
-        title="Ver desglose por catorcena"
-      >
-        <AlertTriangle className="h-3 w-3" />
-        Incompleta ({reservadas}/{esperadas})
-      </button>
-      {open && pos && createPortal(
-        <>
-          <div className="fixed inset-0 z-40" onClick={(e) => { e.stopPropagation(); setOpen(false); }} />
-          <div
-            ref={popRef}
-            className={`fixed z-50 rounded-xl border shadow-2xl overflow-hidden ${isDark ? 'bg-zinc-900 border-yellow-500/40 shadow-black/60' : 'bg-white border-yellow-400 shadow-gray-400/40'}`}
-            style={{ top: pos.top, left: pos.left, width: POPOVER_W }}
-            onClick={(e) => e.stopPropagation()}
-          >
-            <div className={`absolute -top-[7px] left-6 w-3 h-3 rotate-45 border-l border-t ${isDark ? 'bg-zinc-900 border-yellow-500/40' : 'bg-yellow-50 border-yellow-400'}`} />
-            <div className={`flex items-center justify-between gap-2 px-3 py-2 border-b ${isDark ? 'bg-yellow-500/10 border-yellow-500/20' : 'bg-yellow-50 border-yellow-200'}`}>
-              <div className="flex items-center gap-1.5 min-w-0">
-                <AlertTriangle className={`h-3.5 w-3.5 shrink-0 ${isDark ? 'text-yellow-400' : 'text-yellow-600'}`} />
-                <span className={`text-xs font-semibold truncate ${isDark ? 'text-yellow-300' : 'text-yellow-700'}`}>
-                  Incompleta — {reservadas}/{esperadas} caras
-                </span>
-              </div>
-              <button
-                onClick={(e) => { e.stopPropagation(); setOpen(false); }}
-                className={`p-0.5 rounded transition-colors shrink-0 ${isDark ? 'text-zinc-400 hover:text-white hover:bg-zinc-700' : 'text-gray-400 hover:text-gray-700 hover:bg-gray-100'}`}
-                title="Cerrar"
-              >
-                <X className="h-3.5 w-3.5" />
-              </button>
-            </div>
-            <div className="p-3">
-              <p className={`text-[10px] uppercase tracking-wide font-semibold mb-2 ${isDark ? 'text-zinc-500' : 'text-gray-400'}`}>Desglose por catorcena</p>
-              {isLoading ? (
-                <div className="flex items-center gap-2 py-1">
-                  <Loader2 className="h-3.5 w-3.5 animate-spin text-yellow-400" />
-                  <span className={`text-xs ${isDark ? 'text-zinc-400' : 'text-gray-500'}`}>Cargando...</span>
-                </div>
-              ) : detail && detail.length > 0 ? (
-                <div className="space-y-1.5 max-h-56 overflow-y-auto pr-1">
-                  {detail.map(d => (
-                    <div key={`${d.anio}-${d.catorcena}`} className="flex items-center justify-between gap-4">
-                      <span className={`text-xs ${isDark ? 'text-zinc-400' : 'text-gray-500'}`}>
-                        Cat {String(d.catorcena).padStart(2, '0')} / {d.anio}
-                      </span>
-                      <span className={`text-xs font-bold px-2 py-0.5 rounded-full ${
-                        d.completa
-                          ? (isDark ? 'text-green-300 bg-green-500/20 border border-green-500/30' : 'text-green-700 bg-green-50 border border-green-200')
-                          : (isDark ? 'text-yellow-300 bg-yellow-500/20 border border-yellow-500/30' : 'text-yellow-700 bg-yellow-50 border border-yellow-200')
-                      }`}>
-                        {d.reservas_count}/{d.caras_esperadas} {d.completa ? '✓' : `— faltan ${d.caras_esperadas - d.reservas_count}`}
-                      </span>
-                    </div>
-                  ))}
-                </div>
-              ) : (
-                <p className={`text-xs ${isDark ? 'text-zinc-400' : 'text-gray-500'}`}>Sin desglose disponible</p>
-              )}
-            </div>
-          </div>
-        </>,
-        document.body
-      )}
-    </>
-  );
-}
 
 // Estatus que SOLO puede asignar el sistema, nunca un usuario. 'Liberada' es el
 // registro de que el job de liberación automática (criterio 30 días) quitó las
@@ -1648,8 +1476,6 @@ export function PropuestasPage() {
   const [catorcenaInicio, setCatorcenaInicio] = useState<number | undefined>(undefined);
   const [catorcenaFin, setCatorcenaFin] = useState<number | undefined>(undefined);
   const [historialFilter, setHistorialFilter] = useState<HistorialFilterValues>({});
-  const [sortBy, setSortBy] = useState('fecha');
-  const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('desc');
   const [groupBy, setGroupBy] = useState('');
   const [showFilters, setShowFilters] = useState(false);
   const [advancedFilters, setAdvancedFilters] = useState<AdvancedFilterCondition[]>([]);
@@ -1658,7 +1484,13 @@ export function PropuestasPage() {
   const [expandedGroups, setExpandedGroups] = useState<Set<string>>(new Set());
   const [page, setPage] = useState(1);
   const limit = 20;
-  const [activeView, setActiveView] = useState<'tabla' | 'versionario'>('tabla');
+  const [activeView, setActiveView] = useState<'tabla' | 'versionario' | 'tablero'>('tabla');
+  // Vista Tablero: columnas visibles, orden rápido y filtro de incompletos.
+  // Viven aquí (no en el tablero) porque el orden y el filtro también aplican a
+  // la Vista Tabla: una sola fuente de verdad para las dos.
+  const [tableroColumnas, setTableroColumnas] = useState<string[]>(PROPUESTAS_COLUMNAS_KEYS);
+  const [ordenRapido, setOrdenRapido] = useState<OrdenRapido>(ORDEN_RAPIDO_TABLA_DEFAULT);
+  const [soloIncompletos, setSoloIncompletos] = useState(false);
   const [exportingLayout, setExportingLayout] = useState(false);
   const [exportingOcupacion, setExportingOcupacion] = useState(false);
   // Versionario (Desglose) grouping config — controlled here so the filter chip lives in the filters bar
@@ -1783,7 +1615,26 @@ export function PropuestasPage() {
   // los totales de completitud, así que el server no recibe status y se pide
   // todo el universo (igual que con agrupación/filtros avanzados).
   const statusCompletitud = COMPLETITUD_STATUS.includes(status);
-  const needsAllData = !!groupBy || advancedFilters.length > 0 || statusCompletitud;
+  // El orden rápido y el filtro de incompletos se evalúan en cliente, así que
+  // necesitan el universo completo o estarían ordenando/filtrando sólo las 20
+  // filas de la página visible (que es el bug que tenía el chip "Ordenar").
+  //
+  // 'nueva_vieja' es la excepción: equivale al ORDER BY pr.id DESC del backend,
+  // así que con ese orden la Vista Tabla sigue paginando normal y la carga
+  // inicial no cambia de costo. El tablero siempre pide todo: sin todas las
+  // propuestas, las columnas mostrarían conteos falsos.
+  // Default de orden segun la vista: en el tablero el fijo es "ultimo cambio",
+  // en tabla/desglose es el orden que ya hace el backend. Se usa para no contar
+  // el default como "filtro activo" y para que "Limpiar todo" regrese al que
+  // corresponde a la vista en la que esta el usuario.
+  const ordenDefaultVista = activeView === 'tablero' ? ORDEN_RAPIDO_DEFAULT : ORDEN_RAPIDO_TABLA_DEFAULT;
+  const ordenNecesitaTodo = ordenRapido !== ORDEN_RAPIDO_TABLA_DEFAULT;
+  const needsAllData = !!groupBy
+    || advancedFilters.length > 0
+    || statusCompletitud
+    || activeView === 'tablero'
+    || soloIncompletos
+    || ordenNecesitaTodo;
   // 5000 (antes 200): con agrupación/filtros avanzados/completitud el filtro
   // cliente debe ver TODAS las propuestas (~1.7k), no solo las 200 más nuevas.
   const effectiveLimit = needsAllData ? 5000 : limit;
@@ -1828,7 +1679,7 @@ export function PropuestasPage() {
   });
 
   const { data, isLoading } = useQuery({
-    queryKey: ['propuestas', needsAllData ? 1 : page, status, serverSearch, yearInicio, yearFin, catorcenaInicio, catorcenaFin, sortBy, sortOrder, groupBy, tipoPeriodo, needsAllData, historialFilter, effectiveExcludeRechazadas],
+    queryKey: ['propuestas', needsAllData ? 1 : page, status, serverSearch, yearInicio, yearFin, catorcenaInicio, catorcenaFin, groupBy, tipoPeriodo, needsAllData, historialFilter, effectiveExcludeRechazadas],
     queryFn: () =>
       propuestasService.getAll({
         page: needsAllData ? 1 : page,
@@ -1855,7 +1706,7 @@ export function PropuestasPage() {
   const allStatuses = [...STATUS_OPTIONS.filter(s => s !== 'Rechazada'), ...COMPLETITUD_STATUS];
 
   const hasPeriodFilter = yearInicio !== undefined && yearFin !== undefined;
-  const hasActiveFilters = !!(status || tipoPeriodo || hasPeriodFilter || groupBy || sortBy !== 'fecha' || advancedFilters.length > 0 || searchTags.length > 0);
+  const hasActiveFilters = !!(status || tipoPeriodo || hasPeriodFilter || groupBy || ordenRapido !== ordenDefaultVista || soloIncompletos || advancedFilters.length > 0 || searchTags.length > 0);
 
   // Get unique values for each field (for advanced filter dropdowns).
   // Solo se calcula cuando el panel de filtros avanzados está abierto: evita
@@ -1895,8 +1746,18 @@ export function PropuestasPage() {
     // Pseudo-estatus de completitud (cliente-side, mismo criterio que el badge).
     if (status === 'Incompleta') result = result.filter(esPropuestaIncompleta);
     else if (status === 'Completa') result = result.filter(p => !esPropuestaIncompleta(p));
-    return result;
-  }, [data?.data, advancedFilters, status]);
+    // Filtro rápido de incompletos: mismo criterio que el badge y que el
+    // pseudo-estatus, solo que disponible como chip en las dos vistas.
+    if (soloIncompletos) result = result.filter(esPropuestaIncompleta);
+    // Orden rápido, SOLO cuando tenemos el universo completo. Si estamos
+    // paginando, ordenar aquí reacomodaría únicamente las 20 filas visibles y
+    // daría una lista que miente sobre el orden global; en ese caso vale el
+    // ORDER BY pr.id DESC del backend, que es justo 'nueva_vieja'.
+    // 'reciente' usa updated_at (el back lo escribe al cambiar estatus y al
+    // editar la propuesta); los otros dos usan `fecha`, la de creación.
+    if (!needsAllData) return result;
+    return ordenarTablero(result, ordenRapido, p => p.fecha, p => p.updated_at);
+  }, [data?.data, advancedFilters, status, soloIncompletos, ordenRapido, needsAllData]);
 
   // Sólo cuando hay filtros avanzados activos necesitamos recalcular stats en
   // cliente (el backend no soporta esos operadores Y/O custom). El search va
@@ -1947,8 +1808,8 @@ export function PropuestasPage() {
     setCatorcenaInicio(undefined);
     setCatorcenaFin(undefined);
     setHistorialFilter({});
-    setSortBy('fecha');
-    setSortOrder('desc');
+    setOrdenRapido(ordenDefaultVista);
+    setSoloIncompletos(false);
     setGroupBy('');
     setExpandedGroups(new Set());
     setAdvancedFilters([]);
@@ -2264,7 +2125,10 @@ export function PropuestasPage() {
   // El search ya viaja al backend, así que la paginación del servidor sigue
   // siendo correcta. Sólo cuando hay filtros avanzados activos (cliente-side)
   // forzamos página única con el conteo local.
-  const hasLocalFilters = advancedFilters.length > 0 || statusCompletitud;
+  // Cuando el filtrado/orden corre en cliente la paginación del servidor ya no
+  // aplica: se pidió el universo completo (needsAllData) y la tabla pinta todo
+  // filteredData, así que el contador y las páginas salen de aquí.
+  const hasLocalFilters = advancedFilters.length > 0 || statusCompletitud || soloIncompletos || ordenNecesitaTodo;
   const totalPages = hasLocalFilters ? 1 : (data?.pagination?.totalPages || 1);
   const total = hasLocalFilters ? filteredData.length : (data?.pagination?.total ?? 0);
 
@@ -2451,6 +2315,24 @@ export function PropuestasPage() {
               >
                 <LayoutGrid className="h-4 w-4" />
                 Desglose
+              </button>
+              <button
+                onClick={() => {
+                  setActiveView('tablero');
+                  setPage(1);
+                  // El tablero trae su propio orden fijo (último cambio arriba).
+                  // Solo se impone si el usuario no eligió otro: si ya venía
+                  // ordenando distinto en la tabla, se respeta.
+                  setOrdenRapido(prev => (prev === ORDEN_RAPIDO_TABLA_DEFAULT ? ORDEN_RAPIDO_DEFAULT : prev));
+                }}
+                className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-medium transition-all ${
+                  activeView === 'tablero'
+                    ? isDark ? 'bg-purple-500/20 text-purple-300 border border-purple-500/40' : 'bg-purple-100 text-purple-700 border border-purple-200'
+                    : isDark ? 'bg-zinc-800/60 text-zinc-400 border border-zinc-700/50 hover:bg-zinc-800 hover:text-zinc-200' : 'bg-gray-100 text-gray-500 border border-gray-200 hover:bg-gray-200 hover:text-gray-700'
+                }`}
+              >
+                <Columns3 className="h-4 w-4" />
+                Tablero
               </button>
 
               {/* Botones de export */}
@@ -2714,29 +2596,26 @@ export function PropuestasPage() {
                 {/* Divider */}
                 <div className={`h-4 w-px ${isDark ? 'bg-zinc-700/50' : 'bg-gray-200'} mx-1`} />
 
-                {/* Sort Options */}
-                <span className={`text-xs ${isDark ? 'text-zinc-500' : 'text-gray-400'} mr-1`}>
-                  <ArrowUpDown className="h-3 w-3 inline mr-1" />
-                  Ordenar:
-                </span>
-                <FilterChip
-                  label="Campo"
-                  options={['fecha', 'precio', 'inversion', 'status']}
-                  value={sortBy}
-                  onChange={(val) => { setSortBy(val); setPage(1); }}
-                  onClear={() => { setSortBy('fecha'); setPage(1); }}
+                {/* Filtros rápidos de orden + incompletos.
+                    Reemplazan al chip "Ordenar: Campo / Asc-Desc" anterior, que
+                    no ordenaba nada: sortBy/sortOrder viajaban en el queryKey
+                    pero nunca llegaban al backend (que ordena fijo por
+                    pr.id DESC) ni se aplicaban en cliente. */}
+                <OrdenRapidoChips
                   isDark={isDark}
+                  orden={ordenRapido}
+                  onOrdenChange={(o) => { setOrdenRapido(o); setPage(1); }}
+                  soloIncompletos={soloIncompletos}
+                  onSoloIncompletosChange={(v) => { setSoloIncompletos(v); setPage(1); }}
+                  entidadPlural="propuestas"
                 />
-                <button
-                  onClick={() => setSortOrder(sortOrder === 'asc' ? 'desc' : 'asc')}
-                  className={`flex items-center gap-1 px-2 py-1 rounded-full text-xs transition-all ${isDark ? 'bg-zinc-800/80 text-zinc-400 border border-zinc-700/50 hover:border-zinc-600' : 'bg-gray-100 text-gray-500 border border-gray-200 hover:border-gray-300'}`}
-                >
-                  {sortOrder === 'asc' ? '↑ Asc' : '↓ Desc'}
-                </button>
 
-                {/* Group By — Tabla: FilterChip single. Desglose: multi-select max 4. */}
-                <div className={`h-4 w-px ${isDark ? 'bg-zinc-700/50' : 'bg-gray-200'} mx-1`} />
-                {activeView === 'tabla' ? (
+                {/* Group By — Tabla: FilterChip single. Desglose: multi-select max 4.
+                    El Tablero no lo ofrece: ya agrupa por estatus por definición. */}
+                {activeView !== 'tablero' && (
+                  <div className={`h-4 w-px ${isDark ? 'bg-zinc-700/50' : 'bg-gray-200'} mx-1`} />
+                )}
+                {activeView === 'tablero' ? null : activeView === 'tabla' ? (
                   <FilterChip
                     label="Agrupar"
                     options={['status', 'asignado', 'asesor', 'creador_nombre']}
@@ -2825,6 +2704,44 @@ export function PropuestasPage() {
             )}
           </div>
         </div>
+
+        {/* Tablero View — columnas por estatus. Solo lectura: el estatus se
+            cambia con el mismo modal de la tabla (permisos + comentario). */}
+        {activeView === 'tablero' && (
+          <div className="space-y-3">
+            <div className="flex items-center justify-between gap-3 flex-wrap">
+              <span className={`text-xs ${isDark ? 'text-zinc-500' : 'text-gray-400'}`}>
+                {filteredData.length} {filteredData.length === 1 ? 'propuesta' : 'propuestas'} en el tablero
+              </span>
+              <TableroVistasControls
+                isDark={isDark}
+                scope="propuestas"
+                userId={user?.id}
+                todasColumnas={PROPUESTAS_COLUMNAS}
+                columnasVisibles={tableroColumnas}
+                onColumnasChange={setTableroColumnas}
+                orden={ordenRapido}
+                onOrdenChange={setOrdenRapido}
+                soloIncompletos={soloIncompletos}
+                onSoloIncompletosChange={setSoloIncompletos}
+              />
+            </div>
+            <PropuestasTableroView
+              items={filteredData}
+              columnasVisibles={tableroColumnas}
+              isDark={isDark}
+              isLoading={isLoading}
+              puedeEditarStatus={(p) => (
+                permissions.canEditPropuestaStatus
+                && p.status !== 'Activa'
+                && p.status !== 'Aprobada'
+                && !(ROLES_LOCKED_BY_ABIERTO.includes(user?.rol || '') && p.status === 'Abierto')
+              )}
+              onStatus={handleRowStatus}
+              onAssign={handleRowAssign}
+            />
+          </div>
+        )}
 
         {/* Versionario View */}
         {activeView === 'versionario' && (
