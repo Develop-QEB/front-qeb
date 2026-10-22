@@ -39,6 +39,7 @@ import api from '../../lib/api';
 import { Header } from '../../components/layout/Header';
 import { Skeleton } from '../../components/ui/skeleton';
 import { PosteoStatsCard } from '../../components/PosteoStatsCard';
+import { formatMoneyMXN } from '../../lib/utils';
 import { useThemeStore } from '../../store/themeStore';
 import { Button } from '../../components/ui/button';
 import {
@@ -139,6 +140,11 @@ const CustomTooltip = ({ active, payload, label }: any) => {
             <span className={`${isDark ? 'text-white' : 'text-gray-800'} text-lg font-bold`}>{value?.toLocaleString()}</span>
             {percentage !== undefined && (
               <span className={`text-xs ${isDark ? 'text-purple-400' : 'text-purple-500'}`}>{typeof percentage === 'number' ? percentage.toFixed(1) : percentage}%</span>
+            )}
+            {typeof data.monto === 'number' && (
+              <span className={`text-xs font-semibold ${isDark ? 'text-cyan-300' : 'text-cyan-600'}`} title={`$${data.monto.toLocaleString('es-MX', { minimumFractionDigits: 2 })} MXN`}>
+                {formatMoneyMXN(data.monto)} vendido
+              </span>
             )}
           </div>
         </div>
@@ -313,13 +319,17 @@ const PCT_BAR_COLOR: Record<'pink' | 'cyan' | 'yellow' | 'green' | 'purple', str
 };
 
 // KPI Card
-function KPICard({ title, value, icon: Icon, color, isActive, onClick, isLoading, total }: {
+function KPICard({ title, value, icon: Icon, color, isActive, onClick, isLoading, total, monto, montoLoading }: {
   title: string; value: number; icon: React.ElementType;
   color: 'pink' | 'cyan' | 'yellow' | 'green' | 'purple';
   isActive: boolean; onClick: () => void; isLoading: boolean;
   // Cuando se pasa `total`, la card muestra el % que este KPI representa sobre
   // el total de inventarios. El KPI "Total" no lo recibe (seria siempre 100%).
   total?: number;
+  // $ asociado al KPI en el periodo mostrado (hoy solo Vendido). Se pinta
+  // únicamente con el filtro del KPI activo.
+  monto?: number | null;
+  montoLoading?: boolean;
 }) {
   const isDark = useThemeStore((s) => s.theme) === 'dark';
   const colors = {
@@ -389,8 +399,18 @@ function KPICard({ title, value, icon: Icon, color, isActive, onClick, isLoading
           </div>
         </div>
         {isActive && (
-          <div className={`mt-3 text-xs ${c.text} flex items-center gap-1`}>
-            <CheckCircle2 className="h-3 w-3" /> Filtro activo
+          <div className={`mt-3 text-xs ${c.text} flex items-center justify-between gap-2`}>
+            <span className="flex items-center gap-1"><CheckCircle2 className="h-3 w-3" /> Filtro activo</span>
+            {montoLoading ? (
+              <Skeleton className={`h-4 w-16 ${isDark ? 'bg-purple-900/30' : 'bg-purple-100'}`} />
+            ) : (monto !== undefined && monto !== null) && (
+              <span
+                className={`text-sm font-semibold ${c.text}`}
+                title={`$${monto.toLocaleString('es-MX', { minimumFractionDigits: 2 })} MXN vendidos en el periodo`}
+              >
+                {formatMoneyMXN(monto)}
+              </span>
+            )}
           </div>
         )}
       </div>
@@ -875,10 +895,13 @@ function DistribucionPieChart({ data, title }: { data: ChartData[]; title: strin
   const isDark = useThemeStore((s) => s.theme) === 'dark';
   // % calculado sobre el total real (todas las plazas), no solo el top 8.
   const total = useMemo(() => data.reduce((sum, item) => sum + item.cantidad, 0), [data]);
+  // $ vendido (solo llega con el filtro Vendido activo). Total sobre TODAS las plazas.
+  const conMonto = data.some((d) => typeof d.monto === 'number');
+  const totalMonto = useMemo(() => data.reduce((sum, item) => sum + (item.monto || 0), 0), [data]);
   const chartData = useMemo(() => {
     const sorted = [...data].sort((a, b) => b.cantidad - a.cantidad).slice(0, 8);
     return sorted.map((item, index) => ({
-      label: item.nombre, name: item.nombre, value: item.cantidad,
+      label: item.nombre, name: item.nombre, value: item.cantidad, monto: item.monto,
       color: CHART_COLORS[index % CHART_COLORS.length], fill: CHART_COLORS[index % CHART_COLORS.length],
       percent: total > 0 ? ((item.cantidad / total) * 100).toFixed(1) : '0',
     }));
@@ -910,6 +933,11 @@ function DistribucionPieChart({ data, title }: { data: ChartData[]; title: strin
                 <div className="text-center">
                   <span className={`text-xl font-bold ${isDark ? 'text-white' : 'text-gray-800'}`}>{total.toLocaleString()}</span>
                   <span className={`block text-[9px] ${isDark ? 'text-purple-400' : 'text-purple-500'} uppercase`}>Total</span>
+                  {conMonto && (
+                    <span className={`block text-[11px] font-semibold ${isDark ? 'text-cyan-300' : 'text-cyan-600'}`} title={`$${totalMonto.toLocaleString('es-MX', { minimumFractionDigits: 2 })} MXN`}>
+                      {formatMoneyMXN(totalMonto)}
+                    </span>
+                  )}
                 </div>
               </div>
             </div>
@@ -923,6 +951,11 @@ function DistribucionPieChart({ data, title }: { data: ChartData[]; title: strin
                       <span className={`text-[10px] font-medium ${isDark ? 'text-purple-400' : 'text-purple-500'}`}>{item.percent}%</span>
                     </div>
                     <div className={`text-[9px] ${isDark ? 'text-zinc-400' : 'text-gray-500'} uppercase truncate`} title={item.label}>{item.label}</div>
+                    {typeof item.monto === 'number' && (
+                      <div className={`text-[11px] font-semibold ${isDark ? 'text-cyan-300' : 'text-cyan-600'}`} title={`$${item.monto.toLocaleString('es-MX', { minimumFractionDigits: 2 })} MXN`}>
+                        {formatMoneyMXN(item.monto)}
+                      </div>
+                    )}
                   </div>
                 </div>
               ))}
@@ -940,13 +973,16 @@ function TipoPieChart({ data, title }: { data: ChartData[]; title: string }) {
   const chartData = useMemo(() => {
     const total = data.reduce((sum, item) => sum + item.cantidad, 0);
     return data.map((item, index) => ({
-      label: item.nombre, name: item.nombre, value: item.cantidad,
+      label: item.nombre, name: item.nombre, value: item.cantidad, monto: item.monto,
       color: index === 0 ? '#06b6d4' : '#ec4899', fill: index === 0 ? '#06b6d4' : '#ec4899',
       percent: total > 0 ? ((item.cantidad / total) * 100).toFixed(1) : '0',
     }));
   }, [data]);
 
   const total = chartData.reduce((acc, curr) => acc + curr.value, 0);
+  // $ vendido (solo llega con el filtro Vendido activo).
+  const conMonto = chartData.some((d) => typeof d.monto === 'number');
+  const totalMonto = chartData.reduce((acc, curr) => acc + (curr.monto || 0), 0);
 
   return (
     <GlassCard className="h-full">
@@ -971,6 +1007,11 @@ function TipoPieChart({ data, title }: { data: ChartData[]; title: string }) {
                 <div className="text-center">
                   <span className={`text-2xl font-bold ${isDark ? 'text-white' : 'text-gray-800'}`}>{total.toLocaleString()}</span>
                   <span className={`block text-[9px] ${isDark ? 'text-purple-400' : 'text-purple-500'} uppercase`}>Total</span>
+                  {conMonto && (
+                    <span className={`block text-[11px] font-semibold ${isDark ? 'text-cyan-300' : 'text-cyan-600'}`} title={`$${totalMonto.toLocaleString('es-MX', { minimumFractionDigits: 2 })} MXN`}>
+                      {formatMoneyMXN(totalMonto)}
+                    </span>
+                  )}
                 </div>
               </div>
             </div>
@@ -979,7 +1020,14 @@ function TipoPieChart({ data, title }: { data: ChartData[]; title: string }) {
                 <div key={i} className={`flex items-center gap-3 p-3 rounded-xl ${isDark ? 'bg-zinc-800/50 border-purple-500/20' : 'bg-gray-50 border-purple-100'} border`}>
                   <div className="w-2 h-10 rounded-full" style={{ backgroundColor: item.color }} />
                   <div>
-                    <div className={`text-xl font-bold ${isDark ? 'text-white' : 'text-gray-800'}`}>{item.value.toLocaleString()}</div>
+                    <div className="flex items-baseline gap-2">
+                      <span className={`text-xl font-bold ${isDark ? 'text-white' : 'text-gray-800'}`}>{item.value.toLocaleString()}</span>
+                      {typeof item.monto === 'number' && (
+                        <span className={`text-sm font-semibold ${isDark ? 'text-cyan-300' : 'text-cyan-600'}`} title={`$${item.monto.toLocaleString('es-MX', { minimumFractionDigits: 2 })} MXN`}>
+                          {formatMoneyMXN(item.monto)}
+                        </span>
+                      )}
+                    </div>
                     <div className={`text-xs ${isDark ? 'text-zinc-400' : 'text-gray-500'}`}>{item.label} ({item.percent}%)</div>
                   </div>
                 </div>
@@ -995,9 +1043,21 @@ function TipoPieChart({ data, title }: { data: ChartData[]; title: string }) {
 // Bar Charts
 function HorizontalBarChart({ data, color, title }: { data: ChartData[]; color: string; title: string }) {
   const isDark = useThemeStore((s) => s.theme) === 'dark';
-  const sortedData = useMemo(() => [...data].sort((a, b) => b.cantidad - a.cantidad).slice(0, 8), [data]);
   // Total sobre TODOS los muebles (no solo el top 8) para que el % sea real.
   const totalCantidad = useMemo(() => data.reduce((sum, d) => sum + d.cantidad, 0), [data]);
+  // $ vendido (solo llega con el filtro Vendido activo): va en la etiqueta de la barra.
+  const conMonto = data.some((d) => typeof d.monto === 'number');
+  const totalMonto = useMemo(() => data.reduce((sum, d) => sum + (d.monto || 0), 0), [data]);
+  // Etiqueta al final de cada barra: cantidad + % sobre el total del grafico (+ $).
+  const sortedData = useMemo(() => [...data]
+    .sort((a, b) => b.cantidad - a.cantidad)
+    .slice(0, 8)
+    .map((d) => {
+      const base = totalCantidad > 0
+        ? `${d.cantidad.toLocaleString()} (${((d.cantidad / totalCantidad) * 100).toFixed(1)}%)`
+        : d.cantidad.toLocaleString();
+      return { ...d, label: typeof d.monto === 'number' ? `${base} · ${formatMoneyMXN(d.monto)}` : base };
+    }), [data, totalCantidad]);
   const colorHex = { pink: '#ec4899', cyan: '#06b6d4', yellow: '#facc15', green: '#22c55e', purple: '#a855f7' }[color] || '#a855f7';
 
   return (
@@ -1005,6 +1065,11 @@ function HorizontalBarChart({ data, color, title }: { data: ChartData[]; color: 
       <div className={`p-4 border-b ${isDark ? 'border-purple-900/30' : 'border-purple-200/50'}`}>
         <h3 className={`text-sm font-medium ${isDark ? 'text-white' : 'text-gray-800'} uppercase tracking-wider flex items-center gap-2`}>
           <TrendingUp className="h-4 w-4" style={{ color: colorHex }} /> {title}
+          {conMonto && (
+            <span className={`normal-case tracking-normal text-[11px] font-semibold px-2 py-0.5 rounded-full ${isDark ? 'bg-cyan-500/10 text-cyan-300' : 'bg-cyan-50 text-cyan-600'}`} title={`$${totalMonto.toLocaleString('es-MX', { minimumFractionDigits: 2 })} MXN vendidos`}>
+              {formatMoneyMXN(totalMonto)} vendido
+            </span>
+          )}
         </h3>
       </div>
       <div className="p-4 h-[300px]">
@@ -1012,26 +1077,19 @@ function HorizontalBarChart({ data, color, title }: { data: ChartData[]; color: 
           <div className={`h-full flex items-center justify-center ${isDark ? 'text-zinc-500' : 'text-gray-400'}`}>Sin datos</div>
         ) : (
           <ResponsiveContainer width="100%" height={268}>
-            <BarChart layout="vertical" data={sortedData} margin={{ top: 5, right: 70, left: 60, bottom: 5 }}>
+            <BarChart layout="vertical" data={sortedData} margin={{ top: 5, right: conMonto ? 120 : 70, left: 60, bottom: 5 }}>
               <XAxis type="number" hide />
               <YAxis type="category" dataKey="nombre" tick={{ fill: isDark ? '#a1a1aa' : '#6b7280', fontSize: 11 }} tickLine={false} axisLine={false} width={80} />
               <RechartsTooltip cursor={{ fill: 'rgba(139, 92, 246, 0.05)' }} content={<CustomTooltip />} />
               <Bar dataKey="cantidad" fill={colorHex} radius={[0, 6, 6, 0]} barSize={20}>
                 {sortedData.map((_, index) => (<Cell key={index} fillOpacity={0.7 + (index % 2) * 0.3} />))}
-                {/* Etiqueta al final de cada barra: cantidad + % sobre el total del grafico */}
                 <LabelList
-                  dataKey="cantidad"
+                  dataKey="label"
                   position="right"
                   offset={8}
                   fill={isDark ? '#e4e4e7' : '#374151'}
                   fontSize={11}
                   fontWeight={600}
-                  formatter={(v: unknown) => {
-                    const n = Number(v) || 0;
-                    return totalCantidad > 0
-                      ? `${n.toLocaleString()} (${((n / totalCantidad) * 100).toFixed(1)}%)`
-                      : n.toLocaleString();
-                  }}
                 />
               </Bar>
             </BarChart>
@@ -2427,7 +2485,14 @@ export function DashboardPage() {
           <KPICard title="Total" value={kpiTotal} icon={Package} color="purple" isActive={activeEstatus === 'total'} onClick={() => handleEstatusChange('total')} isLoading={loadingStats} />
           <KPICard title="Disponible" value={stats?.kpis.disponibles || 0} icon={CheckCircle2} color="green" isActive={activeEstatus === 'Disponible'} onClick={() => handleEstatusChange('Disponible')} isLoading={loadingStats} total={kpiTotal} />
           <KPICard title="Reservado" value={stats?.kpis.reservados || 0} icon={Clock} color="yellow" isActive={activeEstatus === 'Reservado'} onClick={() => handleEstatusChange('Reservado')} isLoading={loadingStats} total={kpiTotal} />
-          <KPICard title="Vendido" value={stats?.kpis.vendidos || 0} icon={ShoppingCart} color="cyan" isActive={activeEstatus === 'Vendido'} onClick={() => handleEstatusChange('Vendido')} isLoading={loadingStats} total={kpiTotal} />
+          <KPICard
+            title="Vendido" value={stats?.kpis.vendidos || 0} icon={ShoppingCart} color="cyan"
+            isActive={activeEstatus === 'Vendido'} onClick={() => handleEstatusChange('Vendido')}
+            isLoading={loadingStats} total={kpiTotal}
+            // $ vendido del periodo mostrado: solo con el filtro Vendido activo.
+            monto={activeEstatus === 'Vendido' ? (estatusStats?.montoVendido ?? null) : null}
+            montoLoading={activeEstatus === 'Vendido' && loadingEstatus}
+          />
           <KPICard title="No Disponible" value={stats?.kpis.bloqueados || 0} icon={Lock} color="pink" isActive={activeEstatus === 'Bloqueado'} onClick={() => handleEstatusChange('Bloqueado')} isLoading={loadingStats} total={kpiTotal} />
         </div>
 

@@ -11,6 +11,8 @@ export interface DashboardKPIs {
 export interface ChartData {
   nombre: string;
   cantidad: number;
+  /** Solo en stats por estatus 'Vendido': $ vendido del bucket en el periodo. */
+  monto?: number;
 }
 
 export interface DashboardGraficas {
@@ -163,6 +165,8 @@ class DashboardService {
   async getStatsByEstatus(estatus: string, filters?: DashboardFilters): Promise<{
     total: number;
     estatus: string;
+    /** Solo con estatus 'Vendido': $ de lo vendido en el periodo mostrado. */
+    montoVendido?: number;
     graficas: DashboardGraficas;
   }> {
     const params = new URLSearchParams();
