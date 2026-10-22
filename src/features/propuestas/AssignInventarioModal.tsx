@@ -6891,6 +6891,7 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
                     <div className="flex-1 overflow-hidden">
                       <UdcFichaTecnicaPanel
                         isDark={isDark}
+                        articulo={selectedCaraForSearch?.articulo}
                         selected={selectedInventory}
                         keyByNombre={udcKeyByNombre}
                         onToggle={toggleInventorySelection}

@@ -1,6 +1,6 @@
-import { useMemo, useState, type ReactNode } from 'react';
-import { Monitor, Clock, Users, Search, Plane, Maximize2, CheckSquare, Square, Download } from 'lucide-react';
-import { UDC_FICHA_TECNICA, UDC_ZONAS_ORDEN, udcPantallaNum, type UdcPantalla } from '../../lib/udc';
+import { useEffect, useMemo, useState, type ReactNode } from 'react';
+import { Monitor, Clock, Users, Search, Plane, Maximize2, CheckSquare, Square, Download, Filter } from 'lucide-react';
+import { UDC_FICHA_TECNICA, UDC_ZONAS_ORDEN, udcPantallaNum, articuloUDCPantallas, type UdcPantalla } from '../../lib/udc';
 
 // Panel de "lista de inventarios" UDC (aeropuerto AICM). Reemplaza al mapa en el
 // buscador cuando la propuesta/campaña es UDC: los inventarios del aeropuerto no
@@ -63,12 +63,23 @@ interface UdcFichaTecnicaPanelProps {
   onToggle?: (key: string) => void;
   // Marca/desmarca todas las pantallas visibles (según filtros actuales).
   onToggleVisible?: (keys: string[], allSelected: boolean) => void;
+  // Artículo (ItemCode SAP) de la cara/circuito activo. Si mapea a pantallas
+  // (ver articuloUDCPantallas), el buscador se PREFILTRA a esas pantallas; el
+  // usuario puede quitar el prefiltro con "Ver todo el inventario".
+  articulo?: string | null;
 }
 
-export function UdcFichaTecnicaPanel({ isDark, selected, keyByNombre, onToggle, onToggleVisible }: UdcFichaTecnicaPanelProps) {
+export function UdcFichaTecnicaPanel({ isDark, selected, keyByNombre, onToggle, onToggleVisible, articulo }: UdcFichaTecnicaPanelProps) {
   const [search, setSearch] = useState('');
   const [zonaFilter, setZonaFilter] = useState<string | 'all'>('all');
   const [durFilter, setDurFilter] = useState<number | 'all'>('all');
+  const [verTodo, setVerTodo] = useState(false);
+
+  // Pantallas que representa el artículo del circuito (null = sin mapeo → todo).
+  const mapeoArticulo = useMemo(() => articuloUDCPantallas(articulo), [articulo]);
+  // Al cambiar el artículo, reinicia el "ver todo" para volver a prefiltrar.
+  useEffect(() => { setVerTodo(false); }, [articulo]);
+  const soloNums = mapeoArticulo && !verTodo ? new Set(mapeoArticulo) : null;
 
   const selectable = !!(selected && keyByNombre && onToggle);
   const keyOf = (p: UdcPantalla): string | undefined => keyByNombre?.get(udcPantallaNum(p.nombre));
@@ -85,12 +96,14 @@ export function UdcFichaTecnicaPanel({ isDark, selected, keyByNombre, onToggle, 
   const filtradas = useMemo(() => {
     const q = search.trim().toLowerCase();
     return UDC_FICHA_TECNICA.filter(p => {
+      if (soloNums && !soloNums.has(udcPantallaNum(p.nombre))) return false;
       if (zonaFilter !== 'all' && p.zona !== zonaFilter) return false;
       if (durFilter !== 'all' && p.duracion !== durFilter) return false;
       if (q && !(`${p.nombre} ${p.medida} ${p.zona}`.toLowerCase().includes(q))) return false;
       return true;
     });
-  }, [search, zonaFilter, durFilter]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [search, zonaFilter, durFilter, mapeoArticulo, verTodo]);
 
   const porZona = useMemo(() => {
     const map = new Map<string, UdcPantalla[]>();
@@ -237,6 +250,26 @@ export function UdcFichaTecnicaPanel({ isDark, selected, keyByNombre, onToggle, 
             <Download className="h-4 w-4" />
           </button>
         </div>
+
+        {/* Prefiltro por artículo del circuito: muestra solo las pantallas que
+            ese artículo representa. Reversible con "Ver todo el inventario". */}
+        {mapeoArticulo && (
+          <div className={`flex items-center gap-2 mt-2 px-2.5 py-1.5 rounded-lg border text-[11px] ${isDark ? 'bg-cyan-500/10 border-cyan-500/30 text-cyan-200' : 'bg-cyan-50 border-cyan-200 text-cyan-800'}`}>
+            <Filter className="h-3.5 w-3.5 shrink-0" />
+            <span className="min-w-0">
+              {verTodo
+                ? <>Mostrando <b>todo</b> el inventario · el artículo representa {mapeoArticulo.length} pantalla{mapeoArticulo.length !== 1 ? 's' : ''}</>
+                : <>Prefiltrado por el artículo del circuito · <b>{mapeoArticulo.length} pantalla{mapeoArticulo.length !== 1 ? 's' : ''}</b></>}
+            </span>
+            <button
+              type="button"
+              onClick={() => setVerTodo(v => !v)}
+              className={`ml-auto shrink-0 px-2 py-0.5 rounded-md font-medium transition-colors ${isDark ? 'bg-cyan-500/20 hover:bg-cyan-500/30 text-cyan-100' : 'bg-white hover:bg-cyan-100 text-cyan-700 border border-cyan-200'}`}
+            >
+              {verTodo ? 'Volver al prefiltro' : 'Ver todo el inventario'}
+            </button>
+          </div>
+        )}
       </div>
 
       {/* Lista */}
