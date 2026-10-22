@@ -33,13 +33,12 @@ import {
   Trash2,
   Download,
   Loader2,
-  Send,
-  Clock3,
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import api from '../../lib/api';
 import { Header } from '../../components/layout/Header';
 import { Skeleton } from '../../components/ui/skeleton';
+import { PosteoStatsCard } from '../../components/PosteoStatsCard';
 import { useThemeStore } from '../../store/themeStore';
 import { Button } from '../../components/ui/button';
 import {
@@ -50,7 +49,6 @@ import {
   PlazaMapData,
   InventoryCoord,
   InventoryDetailItem,
-  PosteoStats,
 } from '../../services/dashboard.service';
 import {
   BarChart,
@@ -1974,100 +1972,6 @@ function CatorcenaIndicator({
         </span>
       )}
     </div>
-  );
-}
-
-// Formatea montos como moneda MXN compacta ($1.2M, $850.0K, $1,234)
-function formatMoneyMXN(n: number): string {
-  const abs = Math.abs(n);
-  if (abs >= 1_000_000) return `$${(n / 1_000_000).toFixed(1)}M`;
-  if (abs >= 1_000) return `$${(n / 1_000).toFixed(1)}K`;
-  return `$${n.toLocaleString('es-MX')}`;
-}
-
-// Bloque: estado de POST a SAP (pendientes por postear vs posteadas), con
-// conteo y monto. El monto total exacto se muestra en el tooltip.
-function PosteoStatsCard({ data, isLoading, periodoLabel }: { data?: PosteoStats; isLoading: boolean; periodoLabel?: string | null }) {
-  const isDark = useThemeStore((s) => s.theme) === 'dark';
-
-  const pendientes = data?.pendientes ?? { count: 0, monto: 0 };
-  const posteadas = data?.posteadas ?? { count: 0, monto: 0 };
-  const totalCount = (data?.total.count ?? 0) || 1; // evita /0 en la barra
-  const pctPosteadas = (posteadas.count / totalCount) * 100;
-
-  const cells: Array<{
-    key: string; label: string; icon: React.ElementType; bucket: { count: number; monto: number };
-    accent: string; bg: string; bar: string;
-  }> = [
-    {
-      key: 'pendientes', label: 'Pendientes por postear', icon: Clock3, bucket: pendientes,
-      accent: isDark ? 'text-amber-300' : 'text-amber-600',
-      bg: isDark ? 'bg-amber-500/10' : 'bg-amber-50',
-      bar: '#f59e0b',
-    },
-    {
-      key: 'posteadas', label: 'Posteadas a SAP', icon: Send, bucket: posteadas,
-      accent: isDark ? 'text-emerald-300' : 'text-emerald-600',
-      bg: isDark ? 'bg-emerald-500/10' : 'bg-emerald-50',
-      bar: '#10b981',
-    },
-  ];
-
-  return (
-    <GlassCard>
-      <div className={`p-4 border-b ${isDark ? 'border-purple-900/30' : 'border-purple-200/50'} flex flex-wrap items-center justify-between gap-2`}>
-        <h3 className={`text-sm font-medium ${isDark ? 'text-white' : 'text-gray-800'} uppercase tracking-wider flex items-center gap-2`}>
-          <Send className="h-4 w-4 text-emerald-500" /> Estado de POST a SAP
-          {periodoLabel && (
-            <span className={`normal-case tracking-normal text-[11px] font-medium px-2 py-0.5 rounded-full ${isDark ? 'bg-emerald-500/10 text-emerald-300' : 'bg-emerald-50 text-emerald-600'}`}>
-              {periodoLabel}
-            </span>
-          )}
-        </h3>
-        {data && (
-          <span className={`text-[10px] ${isDark ? 'text-zinc-500' : 'text-gray-400'}`}>
-            {data.total.count.toLocaleString()} circuitos · {formatMoneyMXN(data.total.monto)}
-          </span>
-        )}
-      </div>
-      <div className="p-4">
-        <div className="grid gap-3 sm:grid-cols-2">
-          {cells.map((cell) => (
-            <div key={cell.key} className={`rounded-xl p-4 ${cell.bg} border ${isDark ? 'border-white/5' : 'border-black/5'}`}>
-              <div className="flex items-center gap-2 mb-2">
-                <cell.icon className={`h-4 w-4 ${cell.accent}`} />
-                <span className={`text-[11px] font-medium uppercase tracking-wider ${cell.accent}`}>{cell.label}</span>
-              </div>
-              {isLoading ? (
-                <Skeleton className={`h-9 w-24 ${isDark ? 'bg-purple-900/30' : 'bg-purple-100'}`} />
-              ) : (
-                <>
-                  <div className="flex items-baseline gap-2">
-                    <span className={`text-3xl font-light ${isDark ? 'text-white' : 'text-gray-800'}`}>{cell.bucket.count.toLocaleString()}</span>
-                    <span className={`text-xs ${isDark ? 'text-zinc-400' : 'text-gray-500'}`}>circuitos</span>
-                  </div>
-                  <div className={`mt-1 text-sm font-semibold ${cell.accent}`} title={`$${cell.bucket.monto.toLocaleString('es-MX', { minimumFractionDigits: 2 })} MXN`}>
-                    {formatMoneyMXN(cell.bucket.monto)}
-                  </div>
-                </>
-              )}
-            </div>
-          ))}
-        </div>
-        {/* Barra de avance de posteo */}
-        {!isLoading && data && data.total.count > 0 && (
-          <div className="mt-4">
-            <div className="flex items-center justify-between mb-1">
-              <span className={`text-[10px] uppercase tracking-wider ${isDark ? 'text-zinc-500' : 'text-gray-400'}`}>Avance de posteo</span>
-              <span className={`text-xs font-semibold ${isDark ? 'text-emerald-300' : 'text-emerald-600'}`}>{pctPosteadas.toFixed(1)}%</span>
-            </div>
-            <div className={`h-2 w-full rounded-full overflow-hidden ${isDark ? 'bg-zinc-800' : 'bg-gray-100'}`}>
-              <div className="h-full rounded-full bg-emerald-500 transition-all duration-500" style={{ width: `${Math.min(pctPosteadas, 100)}%` }} />
-            </div>
-          </div>
-        )}
-      </div>
-    </GlassCard>
   );
 }
 

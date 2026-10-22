@@ -72,3 +72,12 @@ export function truncate(str: string, length: number): string {
   if (str.length <= length) return str;
   return str.slice(0, length) + '...';
 }
+
+// Formatea montos como moneda MXN compacta ($1.2M, $850.0K, $1,234).
+// Usado por los bloques de inversión/posteo (Dashboard y Campañas).
+export function formatMoneyMXN(n: number): string {
+  const abs = Math.abs(n);
+  if (abs >= 1_000_000) return `$${(n / 1_000_000).toFixed(1)}M`;
+  if (abs >= 1_000) return `$${(n / 1_000).toFixed(1)}K`;
+  return `$${n.toLocaleString('es-MX')}`;
+}

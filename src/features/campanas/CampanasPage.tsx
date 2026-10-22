@@ -11,6 +11,7 @@ import {
 } from 'lucide-react';
 import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip, Legend } from 'recharts';
 import { Header } from '../../components/layout/Header';
+import { PosteoStatsCard } from '../../components/PosteoStatsCard';
 import { campanasService, InventarioConAPS, InventarioReservado, SolicitudCara } from '../../services/campanas.service';
 import { Badge } from '../../components/ui/badge';
 import { solicitudesService } from '../../services/solicitudes.service';
@@ -1592,6 +1593,36 @@ export function CampanasPage() {
   // El search ya viaja al backend y stats lo recibe via queryKey, así que NO
   // forzamos recálculo cliente cuando solo hay búsqueda activa.
   const needsClientFilter = advancedFilters.length > 0 || selectedCatorcenaInicio || status === 'Incompleta' || soloIncompletos;
+
+  // Inversión total + estado de posteo con filtros en CLIENTE: los conteos se
+  // recalculan de filteredData, pero la inversión y el posteo no se pueden
+  // sumar en cliente (el posteo es por circuito). Se piden al back con el
+  // universo exacto de ids que lista la página, con los mismos filtros de
+  // servidor, para que cuadren con la columna Inversión.
+  const clientFilterIds = useMemo(
+    () => (needsClientFilter && data?.data ? filteredData.map(c => c.id) : null),
+    [needsClientFilter, data?.data, filteredData]
+  );
+  const { data: idsStatsData, isLoading: isLoadingIdsStats } = useQuery({
+    queryKey: ['campanas-stats', 'ids', clientFilterIds, status, yearInicio, yearFin, catorcenaInicio, catorcenaFin, tipoPeriodo, serverSearch, historialFilter, effectiveExcludeRechazadas],
+    queryFn: () =>
+      campanasService.getStats({
+        ids: clientFilterIds || [],
+        status: (status && status !== 'Incompleta') ? status : undefined,
+        search: serverSearch,
+        yearInicio,
+        yearFin,
+        catorcenaInicio,
+        catorcenaFin,
+        tipoPeriodo: tipoPeriodo || undefined,
+        excludeRechazadas: effectiveExcludeRechazadas,
+        ...historialFilter,
+      }),
+    enabled: clientFilterIds !== null,
+    staleTime: 1000 * 30,
+    placeholderData: (prev) => prev,
+  });
+
   const effectiveStats = useMemo(() => {
     if (needsClientFilter && data?.data) {
       const byStatus: Record<string, number> = {};
@@ -1608,10 +1639,25 @@ export function CampanasPage() {
         byStatus,
         conAps,
         sinAps,
+        montoTotal: idsStatsData?.montoTotal ?? 0,
+        posteo: idsStatsData?.posteo ?? { pendientes: { count: 0, monto: 0 }, posteadas: { count: 0, monto: 0 }, total: { count: 0, monto: 0 } },
       };
     }
     return statsData || null;
-  }, [needsClientFilter, filteredData, data?.data, statsData]);
+  }, [needsClientFilter, filteredData, data?.data, statsData, idsStatsData]);
+  const isLoadingInversionPosteo = needsClientFilter ? isLoadingIdsStats : isLoadingStats;
+
+  // Etiqueta del periodo que cubren inversión y posteo (misma lógica de filtro
+  // que el listado: catorcena(s) o año(s)). Sin filtro: todo el histórico.
+  const inversionPeriodoLabel = useMemo(() => {
+    if (yearInicio === undefined || yearFin === undefined) return null;
+    if (catorcenaInicio !== undefined && catorcenaFin !== undefined) {
+      const ini = `Cat. ${catorcenaInicio} / ${yearInicio}`;
+      const fin = `Cat. ${catorcenaFin} / ${yearFin}`;
+      return ini === fin ? ini : `${ini} – ${fin}`;
+    }
+    return yearInicio === yearFin ? `${yearInicio}` : `${yearInicio} – ${yearFin}`;
+  }, [yearInicio, yearFin, catorcenaInicio, catorcenaFin]);
 
   // Group data - supports up to 2 levels
   interface GroupedLevel1 {
@@ -3259,6 +3305,17 @@ export function CampanasPage() {
             </div>
           </div>
         </div>
+
+        {/* Segunda fila: inversión total del universo listado + estado de POST a
+            SAP de sus circuitos (mismo bloque que el Dashboard). La inversión es
+            la misma suma que la columna Inversión, con o sin filtro. */}
+        <PosteoStatsCard
+          data={effectiveStats?.posteo}
+          isLoading={isLoadingInversionPosteo}
+          periodoLabel={inversionPeriodoLabel}
+          inversionTotal={effectiveStats?.montoTotal ?? 0}
+          inversionSubLabel={`${(effectiveStats?.total ?? 0).toLocaleString()} campañas · ${hasActiveFilters ? 'Filtrado' : 'Todas'}`}
+        />
 
         {/* Control Bar */}
         <div className={`rounded-2xl border ${isDark ? 'border-purple-500/20 bg-gradient-to-br from-zinc-900/90 via-purple-950/20 to-zinc-900/90' : 'border-purple-200 bg-white'} backdrop-blur-xl p-4 relative z-30`}>

@@ -360,6 +360,18 @@ export interface Campana {
   formatos?: string | null;
 }
 
+export interface PosteoBucket {
+  count: number;
+  monto: number;
+}
+
+/** Estado de POST a SAP a nivel circuito (misma forma que /dashboard/posteo-stats). */
+export interface PosteoStats {
+  pendientes: PosteoBucket;
+  posteadas: PosteoBucket;
+  total: PosteoBucket;
+}
+
 export interface CampanaStats {
   total: number;
   activas: number;
@@ -367,6 +379,10 @@ export interface CampanaStats {
   byStatus: Record<string, number>;
   conAps: number;
   sinAps: number;
+  /** Suma de la inversión de las campañas del universo (misma fórmula que la columna Inversión). */
+  montoTotal: number;
+  /** Estado de POST a SAP de los circuitos de esas campañas. */
+  posteo: PosteoStats;
 }
 
 export interface CampanaWithComments extends Campana {

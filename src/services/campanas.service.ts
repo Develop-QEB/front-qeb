@@ -965,8 +965,13 @@ export const campanasService = {
     return response.data.data;
   },
 
-  async getStats(params?: Omit<CampanasParams, 'page' | 'limit'>): Promise<CampanaStats> {
-    const response = await api.get<ApiResponse<CampanaStats>>('/campanas/stats', { params });
+  // `ids`: universo explícito de campañas (cuando la página filtra en
+  // cliente). Va por POST en el body para no reventar el límite de URL.
+  async getStats(params?: Omit<CampanasParams, 'page' | 'limit'> & { ids?: number[] }): Promise<CampanaStats> {
+    const { ids, ...query } = params || {};
+    const response = ids
+      ? await api.post<ApiResponse<CampanaStats>>('/campanas/stats', { ids }, { params: query })
+      : await api.get<ApiResponse<CampanaStats>>('/campanas/stats', { params: query });
     if (!response.data.success || !response.data.data) {
       throw new Error(response.data.error || 'Error al obtener estadisticas');
     }
