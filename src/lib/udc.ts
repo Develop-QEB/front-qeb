@@ -194,6 +194,43 @@ export function udcFichaDe(codigo?: string | null): UdcPantalla | undefined {
   return n ? UDC_FICHA_BY_NUM.get(n) : undefined;
 }
 
+// ── Prefiltro del buscador por ARTÍCULO del circuito ─────────────────────────
+// Cada artículo comercial UDC (ItemCode SAP, p.ej. RT-CIR-8-PANT-INT) representa
+// una o varias pantallas FÍSICAS de la ficha técnica. Cuando el asesor elige el
+// artículo en la cara/circuito, el buscador de inventario UDC se prefiltra a esas
+// pantallas. El prefijo de operación (RT/CT/BF/IN/ES/IM/CF) NO cambia la pantalla,
+// así que se ignora y el mapeo va por la parte descriptiva del código.
+//
+// Devuelve los números canónicos de pantalla (ver udcPantallaNum), o `null`
+// cuando el artículo NO tiene un mapeo confirmado → el buscador muestra TODO el
+// inventario (comportamiento previo; nunca oculta pantallas por una suposición).
+//
+// ⚠️ Solo están cableados los mapeos CONFIRMADOS (circuitos por zona + pantallas
+// individuales cuyo número viene en el propio código). Faltan por confirmar con
+// IMU (artículo → pantalla/s): PANT-NAL-01 y PANT-P10-03 (SUEs Nacional, Zona A
+// = pantallas 2/3), PANT-MIGRA, PANT-DUPLA, PANT-PAS-VIP, PANT-FIL-INT,
+// PANT-SAL-NAC-T2, PANT-SAL-INT-T2, CIR-PAN-SUES-L-T2, CIR-PAN-TAXIS. Al
+// confirmarlas se agregan aquí y el buscador las prefiltra solo.
+const udcRangoNums = (desde: number, hasta: number): string[] => {
+  const out: string[] = [];
+  for (let n = desde; n <= hasta; n++) out.push(String(n));
+  return out;
+};
+
+export function articuloUDCPantallas(itemCode?: string | null): string[] | null {
+  const c = normCode(itemCode);
+  if (!c) return null;
+  // Circuitos → zona completa
+  if (/\b5-PANT/.test(c)) return udcRangoNums(34, 38);  // CIR 5 PANTALLAS SUE INT → Zona D (Módulo XI)
+  if (/\b8-PANT/.test(c)) return udcRangoNums(20, 27);  // CIR 8 PANTALLAS INT → Zona C (pasillo)
+  // Pantallas individuales (número/código embebido en el ItemCode)
+  if (/-1-A\b/.test(c)) return ['1A'];                  // GRAN PANTALLA
+  if (/-1-B\b/.test(c)) return ['1B'];                  // AMBULATORIO
+  if (/-41\b/.test(c)) return ['41'];                   // ASC SALAS VIP
+  if (/-43\b/.test(c)) return ['43'];                   // LLEGADAS INTER
+  return null;                                          // sin mapeo confirmado → mostrar todo
+}
+
 // ── Ficha técnica en imagen (JPG) por pantalla ───────────────────────────────
 // Cada pantalla del aeropuerto tiene una ficha técnica (imagen). Viven en
 // `front/public/udc-fichas/`. Hay imagen individual para 1A/1B/2/3/17/18/19/41/

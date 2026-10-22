@@ -7021,6 +7021,7 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
                     <div className="flex-1 overflow-hidden">
                       <UdcFichaTecnicaPanel
                         isDark={isDark}
+                        articulo={selectedCaraForSearch?.articulo}
                         selected={selectedInventory}
                         keyByNombre={udcKeyByNombre}
                         onToggle={toggleInventorySelection}
