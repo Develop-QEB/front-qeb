@@ -1,7 +1,7 @@
 import { useParams, useNavigate } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useState, useRef, useEffect, useMemo, useCallback, memo } from 'react';
-import { ArrowLeft, MessageSquare, Send, X, FileSpreadsheet, ListTodo, Layers, ChevronDown, ChevronRight, Check, Minus, Filter, Plus, Trash2, ArrowUpDown, ArrowUp, ArrowDown, Download, Upload, Loader2, CheckCircle, AlertCircle, AlertTriangle, Package, MapPinOff, RefreshCw, MessageSquareOff, ServerCrash, WifiOff, History, Edit2, XCircle } from 'lucide-react';
+import { ArrowLeft, MessageSquare, Send, X, FileSpreadsheet, ListTodo, Layers, ChevronDown, ChevronRight, Check, Minus, Filter, Plus, Trash2, ArrowUpDown, ArrowUp, ArrowDown, Download, Upload, Loader2, CheckCircle, AlertCircle, AlertTriangle, Package, MapPinOff, RefreshCw, MessageSquareOff, ServerCrash, WifiOff, History, Edit2, XCircle, ShieldAlert } from 'lucide-react';
 import { AssignInventarioCampanaModal } from './AssignInventarioCampanaModal';
 import { GoogleMap, useLoadScript, Marker } from '@react-google-maps/api';
 import { GOOGLE_MAPS_LOADER_OPTIONS } from '../../config/googleMaps';
@@ -663,7 +663,26 @@ function GroupMetaBadges({ items, skipFields, isDark: isDarkProp }: { items: Inv
   );
 }
 
-function renderReservadoCell(item: InventarioReservado, col: TableColumn, p = 'p-1.5', isDark = true, groupInfo?: { esperadas: number; reservadas: number; completo: boolean; exceso: boolean } | null, hideGroupBadge = false) {
+// Candado APS ↔ autorización de Direcciones (espejo de
+// describirBloqueoAutorizacionCara en campanas.controller.ts del back).
+// Devuelve null si la cara está aprobada por DG y DCM; si no, un texto corto
+// con la dimensión y el estado que la bloquea.
+const ESTADO_AUTORIZACION_LABEL: Record<string, string> = {
+  pendiente: 'pendiente',
+  rechazado: 'rechazada',
+  correccion: 'en corrección',
+};
+function describirBloqueoAutorizacionCara(cara?: Pick<SolicitudCara, 'autorizacion_dg' | 'autorizacion_dcm'> | null): string | null {
+  if (!cara) return null;
+  const dg = (cara.autorizacion_dg || 'aprobado').toLowerCase();
+  const dcm = (cara.autorizacion_dcm || 'aprobado').toLowerCase();
+  const motivos: string[] = [];
+  if (dg !== 'aprobado') motivos.push(`DG ${ESTADO_AUTORIZACION_LABEL[dg] || dg}`);
+  if (dcm !== 'aprobado') motivos.push(`DCM ${ESTADO_AUTORIZACION_LABEL[dcm] || dcm}`);
+  return motivos.length > 0 ? motivos.join(' · ') : null;
+}
+
+function renderReservadoCell(item: InventarioReservado, col: TableColumn, p = 'p-1.5', isDark = true, groupInfo?: { esperadas: number; reservadas: number; completo: boolean; exceso: boolean } | null, hideGroupBadge = false, autorizacionBloqueo?: string | null) {
   if (col.field === 'codigo_unico') return (
     <td key={col.field} className={`${p} ${isDark ? 'text-white' : 'text-gray-900'} font-medium`}>
       <div className="flex items-center gap-1.5">
@@ -671,6 +690,12 @@ function renderReservadoCell(item: InventarioReservado, col: TableColumn, p = 'p
         {item.codigo_unico || '-'}
         {esInventarioBloqueado(item.estatus_inventario) && (
           <span className="px-1.5 py-0.5 rounded text-[9px] font-semibold bg-red-500/20 text-red-400 border border-red-500/30">{item.estatus_inventario}</span>
+        )}
+        {autorizacionBloqueo && (
+          <span className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded text-[9px] font-semibold bg-red-500/20 text-red-400 border border-red-500/30" title={`Autorización de Dirección ${autorizacionBloqueo} — no se puede asignar APS`}>
+            <ShieldAlert className="h-2.5 w-2.5" />
+            {autorizacionBloqueo}
+          </span>
         )}
         {!hideGroupBadge && groupInfo && !groupInfo.completo && (
           <span className="px-1.5 py-0.5 rounded text-[9px] font-semibold bg-yellow-500/20 text-yellow-400 border border-yellow-500/30" title={`Grupo incompleto: ${groupInfo.reservadas}/${groupInfo.esperadas} caras`}>
@@ -1367,6 +1392,59 @@ export function CampanaDetailPage() {
     return !!info && info.exceso && !info.cortesia;
   };
 
+  // ── Candado APS ↔ autorización de Direcciones ──────────────────────────
+  // Solo se puede asignar APS a circuitos con autorizacion_dg Y
+  // autorizacion_dcm = 'aprobado'. Pendiente / rechazado / corrección bloquea
+  // la fila (no se puede seleccionar) y el botón APS. El back valida lo mismo
+  // en assignAPS, así que esto es UX; el error final siempre lo da el back.
+  const autorizacionBloqueoMap = useMemo(() => {
+    const map = new Map<number, string>();
+    for (const c of solicitudCaras as SolicitudCara[]) {
+      const motivo = describirBloqueoAutorizacionCara(c);
+      if (motivo) map.set(c.id, motivo);
+    }
+    return map;
+  }, [solicitudCaras]);
+
+  const getBloqueoAutorizacionItem = (item: InventarioReservado): string | null => {
+    if (!item.solicitud_caras_id) return null;
+    return autorizacionBloqueoMap.get(item.solicitud_caras_id) ?? null;
+  };
+
+  const describirCaraParaMensaje = (caraId: number | null): string => {
+    const cara = (solicitudCaras as SolicitudCara[]).find(c => c.id === caraId);
+    if (!cara) return `Circuito #${caraId ?? '?'}`;
+    return [cara.articulo, cara.formato, cara.ciudad].filter(Boolean).join(' · ') || `Circuito #${cara.id}`;
+  };
+
+  // Mensaje único y claro para el usuario cuando intenta asignar APS a un
+  // circuito sin autorización aprobada (clic en el candado de la fila o en
+  // el botón APS con selección bloqueada).
+  const explicarBloqueoAutorizacion = (items: InventarioReservado[]) => {
+    const porCara = new Map<number, string>();
+    for (const it of items) {
+      const motivo = getBloqueoAutorizacionItem(it);
+      if (motivo && it.solicitud_caras_id) porCara.set(it.solicitud_caras_id, motivo);
+    }
+    if (porCara.size === 0) return;
+    const detalle = Array.from(porCara.entries())
+      .map(([caraId, motivo]) => `• ${describirCaraParaMensaje(caraId)}: autorización ${motivo}`)
+      .join('\n');
+    alert(
+      `No se puede asignar APS a ${porCara.size} circuito(s): su autorización de Dirección no está aprobada.\n\n` +
+      `${detalle}\n\n` +
+      `Solo se puede asignar APS a circuitos con autorización DG y DCM aprobadas. ` +
+      `Espera a que Dirección los apruebe (o corrige y reenvía la solicitud si está rechazada / en corrección).`
+    );
+  };
+
+  // Items seleccionados que están bloqueados por autorización → deshabilita botón APS
+  const selectedBloqueadosAutorizacion = useMemo(() => {
+    if (selectedItems.size === 0) return [] as InventarioReservado[];
+    return inventarioReservado.filter(i => selectedItems.has(i.rsv_ids) && !!getBloqueoAutorizacionItem(i));
+  }, [selectedItems, inventarioReservado, autorizacionBloqueoMap]);
+  const selectedHasAutorizacionBloqueada = selectedBloqueadosAutorizacion.length > 0;
+
   // Hay algún item seleccionado en grupo incompleto o con exceso → deshabilita botón APS
   const selectedHasIncompleteOrExcess = useMemo(() => {
     if (selectedItems.size === 0) return false;
@@ -1962,17 +2040,24 @@ export function CampanaDetailPage() {
   // Click handler para markers del mapa de inventario reservado.
   // Toggle + scroll a la fila correspondiente en la tabla.
   const handleMarkerClickReservado = useCallback((rsvId: string) => {
-    toggleItemSelection(rsvId);
     const row = document.getElementById(`row-${rsvId}`);
     if (row) {
       row.scrollIntoView({ behavior: 'smooth', block: 'center' });
     }
-  }, [toggleItemSelection]);
+    // Candado autorización: el marker no puede seleccionar una fila bloqueada
+    // (misma regla que el checkbox de la tabla); explica el motivo.
+    const item = inventarioReservado.find(i => i.rsv_ids === rsvId);
+    if (item && getBloqueoAutorizacionItem(item)) {
+      explicarBloqueoAutorizacion([item]);
+      return;
+    }
+    toggleItemSelection(rsvId);
+  }, [toggleItemSelection, inventarioReservado, autorizacionBloqueoMap]);
 
   // Seleccionar/deseleccionar todos (excluye items de grupos incompletos o con exceso)
   const selectableItems = useMemo(() => {
-    return filteredInventarioReservado.filter(i => !isItemFromIncompleteGroup(i) && !isItemFromExcessGroup(i));
-  }, [filteredInventarioReservado, groupCompletenessMap]);
+    return filteredInventarioReservado.filter(i => !isItemFromIncompleteGroup(i) && !isItemFromExcessGroup(i) && !getBloqueoAutorizacionItem(i));
+  }, [filteredInventarioReservado, groupCompletenessMap, autorizacionBloqueoMap]);
 
   const toggleSelectAll = () => {
     if (selectedItems.size === selectableItems.length && selectableItems.length > 0) {
@@ -1984,7 +2069,12 @@ export function CampanaDetailPage() {
 
   // Seleccionar/deseleccionar un grupo completo (excluye items de grupos incompletos o con exceso)
   const toggleGroupSelection = (groupItems: InventarioReservado[]) => {
-    const selectable = groupItems.filter(i => !isItemFromIncompleteGroup(i) && !isItemFromExcessGroup(i));
+    const selectable = groupItems.filter(i => !isItemFromIncompleteGroup(i) && !isItemFromExcessGroup(i) && !getBloqueoAutorizacionItem(i));
+    // Si TODO el grupo está bloqueado por autorización, explicar por qué no se puede seleccionar.
+    if (selectable.length === 0 && groupItems.some(i => !!getBloqueoAutorizacionItem(i))) {
+      explicarBloqueoAutorizacion(groupItems);
+      return;
+    }
     setSelectedItems(prev => {
       const next = new Set(prev);
       const groupIds = selectable.map(i => i.rsv_ids);
@@ -2242,6 +2332,15 @@ export function CampanaDetailPage() {
   // Devuelve null si hay error (ya alertó al usuario).
   const buildAPSPayloadFromSelection = (): { inventarioIds: number[]; solicitudCarasIds: number[]; rsvIds: number[] } | null => {
     const selectedReservado = inventarioReservado.filter(item => selectedItems.has(item.rsv_ids));
+
+    // Candado autorización de Direcciones: ningún circuito seleccionado puede
+    // estar pendiente / rechazado / en corrección. El back repite esta
+    // validación en assignAPS; aquí damos el error antes de llamar.
+    const bloqueadosAuth = selectedReservado.filter(item => !!getBloqueoAutorizacionItem(item));
+    if (bloqueadosAuth.length > 0) {
+      explicarBloqueoAutorizacion(bloqueadosAuth);
+      return null;
+    }
 
     // La completitud se lee de groupCompletenessMap, que cuenta las caras de
     // AMBAS tablas (sin APS + con APS). Antes se recontaba aquí sobre
@@ -2803,11 +2902,13 @@ export function CampanaDetailPage() {
               )}
               {permissions.canEditDetalleCampana && (
                 <button
-                  onClick={handleAssignAPS}
+                  onClick={selectedHasAutorizacionBloqueada ? () => explicarBloqueoAutorizacion(selectedBloqueadosAutorizacion) : handleAssignAPS}
                   disabled={selectedItems.size === 0 || assignAPSMutation.isPending || selectedHasIncompleteOrExcess}
-                  title={selectedHasIncompleteOrExcess ? 'Hay grupos incompletos o con exceso de caras — ajusta el inventario antes de asignar APS' : selectedAreCortesias ? 'Las cortesías pueden tener APS opcional' : undefined}
+                  title={selectedHasAutorizacionBloqueada ? `${selectedBloqueadosAutorizacion.length} circuito(s) seleccionado(s) sin autorización de Dirección aprobada — no se puede asignar APS (clic para ver detalle)` : selectedHasIncompleteOrExcess ? 'Hay grupos incompletos o con exceso de caras — ajusta el inventario antes de asignar APS' : selectedAreCortesias ? 'Las cortesías pueden tener APS opcional' : undefined}
                   className={`flex items-center gap-1 sm:gap-1.5 px-2 sm:px-3 py-1 sm:py-1.5 text-[10px] sm:text-xs font-medium rounded-lg transition-colors ${
-                    selectedItems.size === 0 || selectedHasIncompleteOrExcess
+                    selectedHasAutorizacionBloqueada
+                      ? isDark ? 'bg-red-900/30 text-red-300 border border-red-500/40 cursor-not-allowed' : 'bg-red-50 text-red-600 border border-red-300 cursor-not-allowed'
+                      : selectedItems.size === 0 || selectedHasIncompleteOrExcess
                       ? isDark ? 'bg-purple-900/30 text-purple-400/50 cursor-not-allowed' : 'bg-purple-100 text-purple-300 cursor-not-allowed'
                       : 'bg-purple-600 hover:bg-purple-700 text-white'
                   }`}
@@ -2821,11 +2922,13 @@ export function CampanaDetailPage() {
                   pero lo etiqueta de modo que NO se puede mandar a SAP. */}
               {permissions.canEditDetalleCampana && (
                 <button
-                  onClick={handleAssignAPSPrefactura}
+                  onClick={selectedHasAutorizacionBloqueada ? () => explicarBloqueoAutorizacion(selectedBloqueadosAutorizacion) : handleAssignAPSPrefactura}
                   disabled={selectedItems.size === 0 || assignAPSPrefacturaMutation.isPending || selectedHasIncompleteOrExcess}
-                  title={selectedHasIncompleteOrExcess ? 'Hay grupos incompletos o con exceso de caras — ajusta el inventario antes de asignar Pre Factura' : 'Asigna APS y lo etiqueta como Pre Factura (no se puede mandar a SAP hasta cancelar la etiqueta)'}
+                  title={selectedHasAutorizacionBloqueada ? `${selectedBloqueadosAutorizacion.length} circuito(s) seleccionado(s) sin autorización de Dirección aprobada — no se puede asignar Pre Factura (clic para ver detalle)` : selectedHasIncompleteOrExcess ? 'Hay grupos incompletos o con exceso de caras — ajusta el inventario antes de asignar Pre Factura' : 'Asigna APS y lo etiqueta como Pre Factura (no se puede mandar a SAP hasta cancelar la etiqueta)'}
                   className={`flex items-center gap-1 sm:gap-1.5 px-2 sm:px-3 py-1 sm:py-1.5 text-[10px] sm:text-xs font-medium rounded-lg transition-colors ${
-                    selectedItems.size === 0 || selectedHasIncompleteOrExcess
+                    selectedHasAutorizacionBloqueada
+                      ? isDark ? 'bg-red-900/30 text-red-300 border border-red-500/40 cursor-not-allowed' : 'bg-red-50 text-red-600 border border-red-300 cursor-not-allowed'
+                      : selectedItems.size === 0 || selectedHasIncompleteOrExcess
                       ? isDark ? 'bg-amber-900/30 text-amber-400/50 cursor-not-allowed' : 'bg-amber-100 text-amber-300 cursor-not-allowed'
                       : 'bg-amber-500 hover:bg-amber-600 text-white'
                   }`}
@@ -3405,19 +3508,29 @@ export function CampanaDetailPage() {
                           {filteredInventarioReservado.filter(i => !isIMArticle(i)).map((item) => {
                             const incomplete = isItemFromIncompleteGroup(item);
                             const excess = isItemFromExcessGroup(item);
-                            const blocked = incomplete || excess;
+                            const authBlock = getBloqueoAutorizacionItem(item);
+                            const blocked = incomplete || excess || !!authBlock;
                             return (
                             <tr
                               key={item.rsv_ids}
                               id={`row-${item.rsv_ids}`}
                               className={`border-b border-border/50 transition-colors ${
-                                excess ? (isDark ? 'bg-orange-500/5' : 'bg-orange-50/50') : incomplete ? (isDark ? 'bg-yellow-500/5' : 'bg-yellow-50/50') : ''
+                                authBlock ? (isDark ? 'bg-red-500/5' : 'bg-red-50/50') : excess ? (isDark ? 'bg-orange-500/5' : 'bg-orange-50/50') : incomplete ? (isDark ? 'bg-yellow-500/5' : 'bg-yellow-50/50') : ''
                               } ${
                                 selectedItems.has(item.rsv_ids) ? 'bg-yellow-500/20' : 'hover:bg-purple-900/20'
                               }`}
                             >
                               <td className="p-2">
-                                {blocked ? (
+                                {authBlock ? (
+                                  <button
+                                    type="button"
+                                    onClick={(e) => { e.stopPropagation(); explicarBloqueoAutorizacion([item]); }}
+                                    className={`w-4 h-4 rounded border flex items-center justify-center border-red-500/50 bg-red-500/10 text-red-400 hover:bg-red-500/20 cursor-not-allowed`}
+                                    title={`Autorización de Dirección ${authBlock} — no se puede asignar APS. Clic para ver el detalle.`}
+                                  >
+                                    <ShieldAlert className="h-3 w-3" />
+                                  </button>
+                                ) : blocked ? (
                                   <div className={`w-4 h-4 rounded border flex items-center justify-center opacity-40 cursor-not-allowed ${excess ? 'border-orange-500/30' : 'border-yellow-500/30'}`} title={excess ? 'Grupo con exceso de caras — ajusta el inventario' : 'Grupo incompleto — ajusta las caras para poder seleccionar'} />
                                 ) : (
                                 <button
@@ -3434,7 +3547,7 @@ export function CampanaDetailPage() {
                                 </button>
                                 )}
                               </td>
-                              {visibleColumnsReservado.map(col => renderReservadoCell(item, col, 'p-2', isDark, item.solicitud_caras_id ? groupCompletenessMap.get(item.solicitud_caras_id) : null))}
+                              {visibleColumnsReservado.map(col => renderReservadoCell(item, col, 'p-2', isDark, item.solicitud_caras_id ? groupCompletenessMap.get(item.solicitud_caras_id) : null, false, authBlock))}
                             </tr>
                             );
                           })}
@@ -3533,7 +3646,7 @@ export function CampanaDetailPage() {
                               <th className="p-2 w-8">
                                 <button
                                   onClick={() => {
-                                    const imItems = filteredInventarioReservado.filter(i => isIMArticle(i));
+                                    const imItems = filteredInventarioReservado.filter(i => isIMArticle(i) && !getBloqueoAutorizacionItem(i));
                                     const allSelected = imItems.every(i => selectedItems.has(i.rsv_ids));
                                     const next = new Set(selectedItems);
                                     imItems.forEach(i => allSelected ? next.delete(i.rsv_ids) : next.add(i.rsv_ids));
@@ -3552,15 +3665,27 @@ export function CampanaDetailPage() {
                             </tr>
                           </thead>
                           <tbody>
-                            {filteredInventarioReservado.filter(i => isIMArticle(i)).map((item) => (
+                            {filteredInventarioReservado.filter(i => isIMArticle(i)).map((item) => {
+                              const authBlock = getBloqueoAutorizacionItem(item);
+                              return (
                               <tr
                                 key={item.rsv_ids}
                                 id={`row-${item.rsv_ids}`}
                                 className={`border-b border-border/50 hover:bg-blue-900/20 transition-colors ${
-                                  selectedItems.has(item.rsv_ids) ? 'bg-blue-500/20' : ''
+                                  authBlock ? (isDark ? 'bg-red-500/5' : 'bg-red-50/50') : selectedItems.has(item.rsv_ids) ? 'bg-blue-500/20' : ''
                                 }`}
                               >
                                 <td className="p-2">
+                                  {authBlock ? (
+                                    <button
+                                      type="button"
+                                      onClick={(e) => { e.stopPropagation(); explicarBloqueoAutorizacion([item]); }}
+                                      className="w-4 h-4 rounded border flex items-center justify-center border-red-500/50 bg-red-500/10 text-red-400 hover:bg-red-500/20 cursor-not-allowed"
+                                      title={`Autorización de Dirección ${authBlock} — no se puede asignar APS. Clic para ver el detalle.`}
+                                    >
+                                      <ShieldAlert className="h-3 w-3" />
+                                    </button>
+                                  ) : (
                                   <button
                                     onClick={() => toggleItemSelection(item.rsv_ids)}
                                     className={`w-4 h-4 rounded border flex items-center justify-center transition-colors ${
@@ -3573,10 +3698,12 @@ export function CampanaDetailPage() {
                                       <Check className="h-3 w-3 text-white" />
                                     )}
                                   </button>
+                                  )}
                                 </td>
                                 {TABLE_COLUMNS_IM.map(col => renderIMCell(item, col, 'p-2', isDark))}
                               </tr>
-                            ))}
+                              );
+                            })}
                           </tbody>
                         </table>
                       </>
@@ -3723,19 +3850,29 @@ export function CampanaDetailPage() {
                                                   {subItems.filter(i => !isIMArticle(i)).map((item) => {
                                                     const incomplete = isItemFromIncompleteGroup(item);
                                                     const excess = isItemFromExcessGroup(item);
-                                                    const blocked = incomplete || excess;
+                                                    const authBlock = getBloqueoAutorizacionItem(item);
+                                                    const blocked = incomplete || excess || !!authBlock;
                                                     return (
                                                     <tr
                                                       key={item.rsv_ids}
                                                       id={`row-${item.rsv_ids}`}
                                                       className={`border-t border-border/30 transition-colors ${
-                                                        excess ? (isDark ? 'bg-orange-500/5' : 'bg-orange-50/50') : incomplete ? (isDark ? 'bg-yellow-500/5' : 'bg-yellow-50/50') : ''
+                                                        authBlock ? (isDark ? 'bg-red-500/5' : 'bg-red-50/50') : excess ? (isDark ? 'bg-orange-500/5' : 'bg-orange-50/50') : incomplete ? (isDark ? 'bg-yellow-500/5' : 'bg-yellow-50/50') : ''
                                                       } ${
                                                         selectedItems.has(item.rsv_ids) ? 'bg-yellow-500/20' : 'hover:bg-purple-900/10'
                                                       }`}
                                                     >
                                                       <td className="p-1.5 w-8">
-                                                        {blocked ? (
+                                                        {authBlock ? (
+                                                          <button
+                                                            type="button"
+                                                            onClick={(e) => { e.stopPropagation(); explicarBloqueoAutorizacion([item]); }}
+                                                            className={`w-3.5 h-3.5 rounded border flex items-center justify-center border-red-500/50 bg-red-500/10 text-red-400 hover:bg-red-500/20 cursor-not-allowed`}
+                                                            title={`Autorización de Dirección ${authBlock} — no se puede asignar APS. Clic para ver el detalle.`}
+                                                          >
+                                                            <ShieldAlert className="h-2.5 w-2.5" />
+                                                          </button>
+                                                        ) : blocked ? (
                                                           <div className={`w-3.5 h-3.5 rounded border opacity-40 cursor-not-allowed ${excess ? 'border-orange-500/30' : 'border-yellow-500/30'}`} title={excess ? 'Grupo con exceso de caras — ajusta el inventario' : 'Grupo incompleto — ajusta las caras para poder seleccionar'} />
                                                         ) : (
                                                         <button
@@ -3752,7 +3889,7 @@ export function CampanaDetailPage() {
                                                         </button>
                                                         )}
                                                       </td>
-                                                      {visibleColumnsReservado.map(col => renderReservadoCell(item, col, 'p-1.5', isDark, item.solicitud_caras_id ? groupCompletenessMap.get(item.solicitud_caras_id) : null, true))}
+                                                      {visibleColumnsReservado.map(col => renderReservadoCell(item, col, 'p-1.5', isDark, item.solicitud_caras_id ? groupCompletenessMap.get(item.solicitud_caras_id) : null, true, authBlock))}
                                                     </tr>
                                                     );
                                                   })}
@@ -3776,15 +3913,27 @@ export function CampanaDetailPage() {
                                                     </tr>
                                                   </thead>
                                                   <tbody>
-                                                    {subItems.filter(i => isIMArticle(i)).map((item) => (
+                                                    {subItems.filter(i => isIMArticle(i)).map((item) => {
+                                                      const authBlock = getBloqueoAutorizacionItem(item);
+                                                      return (
                                                       <tr
                                                         key={item.rsv_ids}
                                                         id={`row-${item.rsv_ids}`}
                                                         className={`border-t border-border/30 hover:bg-blue-900/10 transition-colors ${
-                                                          selectedItems.has(item.rsv_ids) ? 'bg-blue-500/20' : ''
+                                                          authBlock ? (isDark ? 'bg-red-500/5' : 'bg-red-50/50') : selectedItems.has(item.rsv_ids) ? 'bg-blue-500/20' : ''
                                                         }`}
                                                       >
                                                         <td className="p-1.5 w-8">
+                                                          {authBlock ? (
+                                                            <button
+                                                              type="button"
+                                                              onClick={(e) => { e.stopPropagation(); explicarBloqueoAutorizacion([item]); }}
+                                                              className="w-3.5 h-3.5 rounded border flex items-center justify-center border-red-500/50 bg-red-500/10 text-red-400 hover:bg-red-500/20 cursor-not-allowed"
+                                                              title={`Autorización de Dirección ${authBlock} — no se puede asignar APS. Clic para ver el detalle.`}
+                                                            >
+                                                              <ShieldAlert className="h-2.5 w-2.5" />
+                                                            </button>
+                                                          ) : (
                                                           <button
                                                             onClick={() => toggleItemSelection(item.rsv_ids)}
                                                             className={`w-3.5 h-3.5 rounded border flex items-center justify-center transition-colors ${
@@ -3797,10 +3946,12 @@ export function CampanaDetailPage() {
                                                               <Check className="h-2.5 w-2.5 text-white" />
                                                             )}
                                                           </button>
+                                                          )}
                                                         </td>
                                                         {TABLE_COLUMNS_IM.map(col => renderIMCell(item, col, 'p-1.5', isDark))}
                                                       </tr>
-                                                    ))}
+                                                      );
+                                                    })}
                                                   </tbody>
                                                 </table>
                                               </>
@@ -3828,19 +3979,29 @@ export function CampanaDetailPage() {
                                         {items.filter(i => !isIMArticle(i)).map((item) => {
                                           const incomplete = isItemFromIncompleteGroup(item);
                                           const excess = isItemFromExcessGroup(item);
-                                          const blocked = incomplete || excess;
+                                          const authBlock = getBloqueoAutorizacionItem(item);
+                                          const blocked = incomplete || excess || !!authBlock;
                                           return (
                                           <tr
                                             key={item.rsv_ids}
                                             id={`row-${item.rsv_ids}`}
                                             className={`border-t border-border/30 transition-colors ${
-                                              excess ? (isDark ? 'bg-orange-500/5' : 'bg-orange-50/50') : incomplete ? (isDark ? 'bg-yellow-500/5' : 'bg-yellow-50/50') : ''
+                                              authBlock ? (isDark ? 'bg-red-500/5' : 'bg-red-50/50') : excess ? (isDark ? 'bg-orange-500/5' : 'bg-orange-50/50') : incomplete ? (isDark ? 'bg-yellow-500/5' : 'bg-yellow-50/50') : ''
                                             } ${
                                               selectedItems.has(item.rsv_ids) ? 'bg-yellow-500/20' : 'hover:bg-purple-900/10'
                                             }`}
                                           >
                                             <td className="p-1.5 w-8">
-                                              {blocked ? (
+                                              {authBlock ? (
+                                                <button
+                                                  type="button"
+                                                  onClick={(e) => { e.stopPropagation(); explicarBloqueoAutorizacion([item]); }}
+                                                  className={`w-3.5 h-3.5 rounded border flex items-center justify-center border-red-500/50 bg-red-500/10 text-red-400 hover:bg-red-500/20 cursor-not-allowed`}
+                                                  title={`Autorización de Dirección ${authBlock} — no se puede asignar APS. Clic para ver el detalle.`}
+                                                >
+                                                  <ShieldAlert className="h-2.5 w-2.5" />
+                                                </button>
+                                              ) : blocked ? (
                                                 <div className={`w-3.5 h-3.5 rounded border opacity-40 cursor-not-allowed ${excess ? 'border-orange-500/30' : 'border-yellow-500/30'}`} title={excess ? 'Grupo con exceso de caras — ajusta el inventario' : 'Grupo incompleto — ajusta las caras para poder seleccionar'} />
                                               ) : (
                                               <button
@@ -3857,7 +4018,7 @@ export function CampanaDetailPage() {
                                               </button>
                                               )}
                                             </td>
-                                            {visibleColumnsReservado.map(col => renderReservadoCell(item, col, 'p-1.5', isDark, item.solicitud_caras_id ? groupCompletenessMap.get(item.solicitud_caras_id) : null, true))}
+                                            {visibleColumnsReservado.map(col => renderReservadoCell(item, col, 'p-1.5', isDark, item.solicitud_caras_id ? groupCompletenessMap.get(item.solicitud_caras_id) : null, true, authBlock))}
                                           </tr>
                                           );
                                         })}
@@ -3881,15 +4042,27 @@ export function CampanaDetailPage() {
                                           </tr>
                                         </thead>
                                         <tbody>
-                                          {items.filter(i => isIMArticle(i)).map((item) => (
+                                          {items.filter(i => isIMArticle(i)).map((item) => {
+                                            const authBlock = getBloqueoAutorizacionItem(item);
+                                            return (
                                             <tr
                                               key={item.rsv_ids}
                                               id={`row-${item.rsv_ids}`}
                                               className={`border-t border-border/30 hover:bg-blue-900/10 transition-colors ${
-                                                selectedItems.has(item.rsv_ids) ? 'bg-blue-500/20' : ''
+                                                authBlock ? (isDark ? 'bg-red-500/5' : 'bg-red-50/50') : selectedItems.has(item.rsv_ids) ? 'bg-blue-500/20' : ''
                                               }`}
                                             >
                                               <td className="p-1.5 w-8">
+                                                {authBlock ? (
+                                                  <button
+                                                    type="button"
+                                                    onClick={(e) => { e.stopPropagation(); explicarBloqueoAutorizacion([item]); }}
+                                                    className="w-3.5 h-3.5 rounded border flex items-center justify-center border-red-500/50 bg-red-500/10 text-red-400 hover:bg-red-500/20 cursor-not-allowed"
+                                                    title={`Autorización de Dirección ${authBlock} — no se puede asignar APS. Clic para ver el detalle.`}
+                                                  >
+                                                    <ShieldAlert className="h-2.5 w-2.5" />
+                                                  </button>
+                                                ) : (
                                                 <button
                                                   onClick={() => toggleItemSelection(item.rsv_ids)}
                                                   className={`w-3.5 h-3.5 rounded border flex items-center justify-center transition-colors ${
@@ -3902,10 +4075,12 @@ export function CampanaDetailPage() {
                                                     <Check className="h-2.5 w-2.5 text-white" />
                                                   )}
                                                 </button>
+                                                )}
                                               </td>
                                               {TABLE_COLUMNS_IM.map(col => renderIMCell(item, col, 'p-1.5', isDark))}
                                             </tr>
-                                          ))}
+                                            );
+                                          })}
                                         </tbody>
                                       </table>
                                     </>
