@@ -46,6 +46,10 @@ export type UserRole =
   | 'Jefe de BI'
   // Nuevo rol (2026-10-14): mismos permisos que Director General Adjunto
   | 'Director Comercial General'
+  // Nuevo rol (2026-10-23, Matriz QEB): Director de Mercadotecnia.
+  // Perfil mixto — visibilidad total + actividades de trafico (asignacion
+  // de inventario, descargas ODM/versionario).
+  | 'Director de Mercadotecnia'
   // Perfil B — TI y Mejora Continua (admin completo)
   | 'Gerente de TI'
   | 'Especialista de TI'
@@ -2462,6 +2466,41 @@ const rolePermissions: Partial<Record<UserRole, Partial<RolePermissions>>> = {
     canCreateTareasGestionArtes: false, canResolveRevisionArtesTasks: false,
     canCreateInventarios: false, canEditInventarios: false, canDeleteInventarios: false,
     canExportOrdenesMontaje: true,
+    canSeeHistorialAcciones: true, canSeeAllHistorial: true,
+  },
+  // Director de Mercadotecnia (Matriz QEB 2026-10-23): perfil mixto.
+  // Visualizacion total como director + actividades de trafico (asignar
+  // inventario desde solicitudes/propuestas, buscar inventario en modal,
+  // descargas de ODM y versionario). No aprueba autorizaciones DG/DCM.
+  'Director de Mercadotecnia': {
+    canSeeDashboard: true,
+    canSeeClientes: true,
+    canSeeProveedores: true,
+    canSeeSolicitudes: true,
+    canSeePropuestas: true,
+    canSeeCampanas: true,
+    canSeeInventarios: true,
+    canSeeAdminUsuarios: false,
+    canCreateClientes: false, canEditClientes: false, canDeleteClientes: false,
+    canCreateProveedores: false, canEditProveedores: false, canDeleteProveedores: false,
+    canCreateSolicitudes: false, canEditSolicitudes: false, canDeleteSolicitudes: false,
+    canAtenderSolicitudes: false, canChangeEstadoSolicitud: false,
+    canEditPropuestaStatus: false, allowedPropuestaStatuses: [],
+    canAprobarPropuesta: false,
+    // Actividades tipo trafico — puede asignar/buscar inventario en el modal
+    canAsignarInventario: true,
+    canBuscarInventarioEnModal: true,
+    canEditResumenPropuesta: false,
+    canCompartirPropuesta: true,
+    canEditCampanas: false, canEditCampanaStatus: false,
+    canEditDetalleCampana: false, canDeleteDetalleCampana: false,
+    canSeeGestionArtes: true, canEditGestionArtes: false,
+    canResolveProduccionTasks: false,
+    // Descargas: ODM y versionario desde dashboard/propuestas/campanas
+    canSeeOrdenesMontajeButton: true,
+    canExportOrdenesMontaje: true,
+    canCreateTareasGestionArtes: false, canResolveRevisionArtesTasks: false,
+    canCreateInventarios: false, canEditInventarios: false, canDeleteInventarios: false,
     canSeeHistorialAcciones: true, canSeeAllHistorial: true,
   },
   'Director Desarrollo de Nuevos Negocios': {

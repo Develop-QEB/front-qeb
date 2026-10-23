@@ -73,6 +73,7 @@ const PUESTOS_POR_AREA: Record<string, string[]> = {
     'Bi Trafico',
   ],
   'Direccion de Mercadotecnia': [
+    'Director de Mercadotecnia',
     'Coordinador de Diseno',
     'Disenadores',
   ],
