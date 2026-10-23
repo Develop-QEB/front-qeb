@@ -46,6 +46,7 @@ import {
 } from '../../lib/tableroVistas';
 import { AUTORIZACION_LABELS, evalAutorizacionAvanzado, splitStatusSeleccion } from '../../lib/autorizacionFiltro';
 import { MultiSelectChip } from '../../components/MultiSelectChip';
+import { RefreshButton } from '../../components/RefreshButton';
 import { TableroVistasControls } from '../../components/tablero/TableroVistasControls';
 import { OrdenRapidoChips } from '../../components/tablero/OrdenRapidoChips';
 import { VistaSelector, type VistaOpcion } from '../../components/tablero/VistaSelector';
@@ -2297,6 +2298,9 @@ export function PropuestasPage() {
                   </button>
                 )}
               </div>
+
+              {/* Actualizar: refetch de listado, KPIs y desglose sin recargar la página */}
+              <RefreshButton isDark={isDark} />
 
               {/* Filter Toggle */}
               <button

@@ -59,6 +59,7 @@ import {
   Paintbrush,
 } from 'lucide-react';
 import { Header } from '../../components/layout/Header';
+import { RefreshButton } from '../../components/RefreshButton';
 import { campanasService, InventarioConArte, InventarioConAPS, TareaCampana, ArteExistente, DigitalFileSummary, TradicionalFileSummary, FichasTecnicasNode } from '../../services/campanas.service';
 import { proveedoresService } from '../../services/proveedores.service';
 import { Proveedor, Catorcena } from '../../types';
@@ -19020,16 +19021,21 @@ export function TareaSeguimientoPage() {
             <span className="text-sm font-medium">{campana.nombre}</span>
             <Badge variant="outline" className="text-[10px]">#{campana.id}</Badge>
           </div>
-          {puedePruebaColor && campana.propuesta_id && (
-            <button
-              onClick={() => setPruebaColorOpen(true)}
-              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium bg-fuchsia-500/10 text-fuchsia-300 hover:bg-fuchsia-500/20 border border-fuchsia-500/30 transition-colors"
-              title="Consultar o solicitar prueba de color para un circuito"
-            >
-              <Paintbrush className="h-3.5 w-3.5" />
-              Prueba de color
-            </button>
-          )}
+          <div className="flex items-center gap-2">
+            {/* Actualizar: refetch de tareas, inventario con arte, artes e
+                imágenes de la campaña sin recargar la página. */}
+            <RefreshButton isDark={isDark} variant="compact" />
+            {puedePruebaColor && campana.propuesta_id && (
+              <button
+                onClick={() => setPruebaColorOpen(true)}
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium bg-fuchsia-500/10 text-fuchsia-300 hover:bg-fuchsia-500/20 border border-fuchsia-500/30 transition-colors"
+                title="Consultar o solicitar prueba de color para un circuito"
+              >
+                <Paintbrush className="h-3.5 w-3.5" />
+                Prueba de color
+              </button>
+            )}
+          </div>
         </div>
 
         {/* Re-impresión success banner */}

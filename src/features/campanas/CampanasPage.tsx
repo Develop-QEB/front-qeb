@@ -53,6 +53,7 @@ import {
 } from '../../lib/tableroVistas';
 import { AUTORIZACION_LABELS, evalAutorizacionAvanzado, splitStatusSeleccion } from '../../lib/autorizacionFiltro';
 import { MultiSelectChip } from '../../components/MultiSelectChip';
+import { RefreshButton } from '../../components/RefreshButton';
 import { TableroVistasControls } from '../../components/tablero/TableroVistasControls';
 import { OrdenRapidoChips } from '../../components/tablero/OrdenRapidoChips';
 import { VistaSelector, type VistaOpcion } from '../../components/tablero/VistaSelector';
@@ -3411,6 +3412,24 @@ export function CampanasPage() {
                   </button>
                 )}
               </div>
+
+              {/* Actualizar sin recargar: refetch de listado/KPIs y limpieza de
+                  los cachés manuales (inventarios por campaña e inversión por
+                  catorcena) para que los efectos de auto-carga los vuelvan a pedir. */}
+              <RefreshButton
+                isDark={isDark}
+                onRefresh={() => {
+                  loadingRef.current.clear();
+                  isLoadingBatchRef.current = false;
+                  setLoadingInventarios(new Set());
+                  setCampanaInventarios({});
+                  setCampanaCaras({});
+                  loadedInvCatIdsRef.current.clear();
+                  loadingInvCatRef.current = false;
+                  setInversionPorCatorcena({});
+                  setBatchTick(t => t + 1);
+                }}
+              />
 
               {/* Filter Toggle */}
               <button

@@ -3,6 +3,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useState, useRef, useEffect, useMemo, useCallback, memo } from 'react';
 import { ArrowLeft, MessageSquare, Send, X, FileSpreadsheet, ListTodo, Layers, ChevronDown, ChevronRight, Check, Minus, Filter, Plus, Trash2, ArrowUpDown, ArrowUp, ArrowDown, Download, Upload, Loader2, CheckCircle, AlertCircle, AlertTriangle, Package, MapPinOff, RefreshCw, MessageSquareOff, ServerCrash, WifiOff, History, Edit2, XCircle, ShieldAlert } from 'lucide-react';
 import { AssignInventarioCampanaModal } from './AssignInventarioCampanaModal';
+import { RefreshButton } from '../../components/RefreshButton';
 import { GoogleMap, useLoadScript, Marker } from '@react-google-maps/api';
 import { GOOGLE_MAPS_LOADER_OPTIONS } from '../../config/googleMaps';
 import { Header } from '../../components/layout/Header';
@@ -2609,6 +2610,21 @@ export function CampanaDetailPage() {
             <span className="text-sm sm:text-base">Volver</span>
           </button>
           <div className="flex items-center gap-2 sm:gap-3">
+            {/* Actualizar: refetch de campaña, inventario, APS, caras, historial y
+                posteos sin recargar la página. */}
+            <RefreshButton
+              isDark={isDark}
+              variant="compact"
+              queryKeys={[
+                ['campana', campanaId],
+                ['campana-inventario', campanaId],
+                ['campana-inventario-aps', campanaId],
+                ['campana-caras', campanaId],
+                ['campana-historial', campanaId],
+                ['campana-post-log', campanaId],
+                ['desposteo-estados-aps', campanaId],
+              ]}
+            />
             {permissions.canEditCampanas && (() => {
               const statusLower = campana.status?.toLowerCase() || '';
               const disabledStatuses = ['finalizado', 'sin cotizacion activa', 'cancelada', 'rechazada'];

@@ -29,6 +29,7 @@ import {
 } from '../../lib/tableroVistas';
 import { AUTORIZACION_LABELS, evalAutorizacionAvanzado, splitStatusSeleccion } from '../../lib/autorizacionFiltro';
 import { MultiSelectChip } from '../../components/MultiSelectChip';
+import { RefreshButton } from '../../components/RefreshButton';
 import { TableroVistasControls } from '../../components/tablero/TableroVistasControls';
 import { OrdenRapidoChips } from '../../components/tablero/OrdenRapidoChips';
 import { VistaSelector, type VistaOpcion } from '../../components/tablero/VistaSelector';
@@ -1348,6 +1349,9 @@ export function SolicitudesPage() {
                   </button>
                 )}
               </div>
+
+              {/* Actualizar: refetch de listado y KPIs sin recargar la página */}
+              <RefreshButton isDark={isDark} queryKeys={[['solicitudes'], ['solicitudes-stats']]} />
 
               {/* Filter Toggle */}
               <button
