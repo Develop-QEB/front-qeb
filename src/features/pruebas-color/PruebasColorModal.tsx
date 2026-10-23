@@ -677,11 +677,12 @@ export function PruebasColorModal({ isOpen, onClose, propuestaId, contextoNombre
                       // Jos 2026-10-23: avisa total de pruebas que se crearan
                       // (producto cartesiano circuitos x artes con contenido).
                       const artesConContenido = artes.filter(a => a.url || a.enlaceExterno.trim()).length;
-                      const total = scIds.length * Math.max(artesConContenido, 1);
+                      const artesTotal = Math.max(artesConContenido, 1);
+                      const total = scIds.length * artesTotal;
                       if (total <= 1) return null;
                       return (
                         <p className={`mt-2 text-[11px] ${isDark ? 'text-amber-300/80' : 'text-amber-700'}`}>
-                          Se crearán {total} pruebas ({scIds.length} circuito{scIds.length === 1 ? '' : 's'} × {Math.max(artesConContenido, 1)} arte{artesConContenido === 1 ? '' : 's'}).
+                          Se crearán {total} pruebas ({scIds.length} circuito{scIds.length === 1 ? '' : 's'} × {artesTotal} arte{artesTotal === 1 ? '' : 's'}).
                         </p>
                       );
                     })()}
