@@ -9601,19 +9601,37 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
                                             <RefreshCw className="h-4 w-4" />
                                           </button>
                                         )}
-                                        {puedeEditarCircuito && (
+                                        {puedeEditarCircuito && (() => {
+                                          // Antes bloqueabamos TODOS los botones de editar si HAY alguna
+                                          // cara con autorizacion pendiente guardada (hasSavedPendingAuth).
+                                          // En migraciones SAP grandes (reporte Aylin/Aldonza 80617 TELCEL
+                                          // 2026-10-23) eso dejaba la propuesta inoperable: ya traia caras
+                                          // pendientes desde la migracion, entonces al abrir el modal todos
+                                          // los botones salian disabled sin que el asesor tocara nada.
+                                          // Ahora solo bloqueamos la cara que ESTA puntualmente pendiente
+                                          // (para no editarla mientras direccion la revisa). Las demas
+                                          // quedan libres para seguir ajustando. "Agregar circuito nuevo"
+                                          // sigue bloqueado globalmente arriba.
+                                          const caraTienePendienteGuardada =
+                                            cara.id != null &&
+                                            !modifiedCaras.has(cara.id) &&
+                                            ((cara as any)._originalDg === 'pendiente' || (cara as any)._originalDcm === 'pendiente');
+                                          const editBlocked = caraTienePendienteGuardada;
+                                          const blockReason = caraTienePendienteGuardada ? 'Este circuito esta pendiente de autorizacion - no se puede editar hasta que direccion resuelva' : 'Editar';
+                                          return (
                                           <button
-                                            onClick={(e) => { e.stopPropagation(); if (!hasSavedPendingAuth) handleEditCara(cara); }}
-                                            disabled={hasSavedPendingAuth}
-                                            className={`p-2 rounded-lg border transition-colors ${hasSavedPendingAuth
+                                            onClick={(e) => { e.stopPropagation(); if (!editBlocked) handleEditCara(cara); }}
+                                            disabled={editBlocked}
+                                            className={`p-2 rounded-lg border transition-colors ${editBlocked
                                               ? `bg-zinc-500/10 ${isDark ? 'text-zinc-500' : 'text-gray-400'} border-zinc-500/20 cursor-not-allowed`
                                               : 'bg-amber-500/10 text-amber-400 border-amber-500/20 hover:bg-amber-500/20'
                                             }`}
-                                            title={hasSavedPendingAuth ? 'Hay circuitos pendientes de autorizacion - no se pueden editar otros' : 'Editar'}
+                                            title={blockReason}
                                           >
                                             <Pencil className="h-4 w-4" />
                                           </button>
-                                        )}
+                                          );
+                                        })()}
                                         {canEditResumen && permissions.canEditCircuitoExistente && (() => {
                                             // Feedback 2026-08-13: el bote de basura siempre debe permitir eliminar
                                             // circuitos con reservas (libera inventario). Solo se bloquea si el rol
