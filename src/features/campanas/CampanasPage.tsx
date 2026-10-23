@@ -270,6 +270,7 @@ const STATUS_COLORS_DARK: Record<string, StatusColor> = {
   'inactiva':    { bg: 'bg-zinc-500/20',    text: 'text-zinc-300',    border: 'border-zinc-500/30' },
   'finalizada':  { bg: 'bg-blue-500/20',    text: 'text-blue-300',    border: 'border-blue-500/30' },
   'por iniciar': { bg: 'bg-amber-500/20',   text: 'text-amber-300',   border: 'border-amber-500/30' },
+  'inicializada':{ bg: 'bg-teal-500/20',    text: 'text-teal-300',    border: 'border-teal-500/30' },
   'en curso':    { bg: 'bg-cyan-500/20',    text: 'text-cyan-300',    border: 'border-cyan-500/30' },
   'pendiente':   { bg: 'bg-orange-500/20',  text: 'text-orange-300',  border: 'border-orange-500/30' },
   'cancelada':   { bg: 'bg-red-500/20',     text: 'text-red-300',     border: 'border-red-500/30' },
@@ -281,6 +282,7 @@ const STATUS_COLORS_LIGHT: Record<string, StatusColor> = {
   'inactiva':    { bg: 'bg-zinc-50',    text: 'text-zinc-700',    border: 'border-zinc-300' },
   'finalizada':  { bg: 'bg-blue-50',    text: 'text-blue-700',    border: 'border-blue-500/30' },
   'por iniciar': { bg: 'bg-amber-50',   text: 'text-amber-700',   border: 'border-amber-500/30' },
+  'inicializada':{ bg: 'bg-teal-50',    text: 'text-teal-700',    border: 'border-teal-500/30' },
   'en curso':    { bg: 'bg-cyan-50',    text: 'text-cyan-700',    border: 'border-cyan-500/30' },
   'pendiente':   { bg: 'bg-orange-50',  text: 'text-orange-700',  border: 'border-orange-500/30' },
   'cancelada':   { bg: 'bg-red-50',     text: 'text-red-700',     border: 'border-red-500/30' },
@@ -349,6 +351,7 @@ const CHART_COLORS = {
     'Aprobada': '#10b981',       // emerald
     'finalizada': '#3b82f6',    // blue
     'por iniciar': '#f59e0b',   // amber
+    'inicializada': '#14b8a6',  // teal
     'inactiva': '#6b7280',      // gray
     'en curso': '#06b6d4',      // cyan
     'cancelada': '#ef4444',     // red
