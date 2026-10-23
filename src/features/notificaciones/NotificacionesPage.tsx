@@ -549,6 +549,15 @@ function TareaRow({
             <TipoIcon className={`h-3 w-3 ${tipoConfig.color}`} />
             <span className={`text-[11px] font-medium ${tipoConfig.color}`}>{tarea.tipo}</span>
           </div>
+          {/* Badge de ESTATUS en el listado (feedback Jos 2026-10-20).
+              Para Actividad Comercial mostramos siempre el estatus; para otras
+              tareas lo mostramos salvo que sea 'Pendiente' por default
+              (ya se nota con el icono gris). */}
+          {!isNotificacion && tarea.estatus && (tarea.tipo === 'Actividad Comercial' || tarea.estatus !== 'Pendiente') && (
+            <div className={`flex-shrink-0 px-2 py-0.5 rounded-full ${statusConfig.bg} border ${statusConfig.border}`}>
+              <span className={`text-[10px] font-semibold ${statusConfig.color}`}>{tarea.estatus}</span>
+            </div>
+          )}
           {authBadge && !isRechazo && !isAprobacion && (
             <div className={`flex-shrink-0 px-2 py-0.5 rounded-full ${authBadge.bg} border ${authBadge.border}`}>
               <span className={`text-[10px] font-semibold ${authBadge.color}`}>{authBadge.label}</span>
