@@ -406,6 +406,9 @@ export interface ArteExistente {
   origen_prueba_color?: boolean;
   prueba_color_version?: number | null;
   prueba_color_enlace_externo?: string | null;
+  // Jos 2026-10-23: 'prueba_color' | 'revision_anticipada'. Define el prefijo
+  // del badge (PC vN vs RA vN) en la biblioteca de artes.
+  prueba_color_tipo?: 'prueba_color' | 'revision_anticipada' | null;
 }
 
 // Órdenes de Montaje
