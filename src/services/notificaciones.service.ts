@@ -390,8 +390,9 @@ export interface CrearActividadComercialInput {
   // Ajuste feedback 2026-08-15: campos manuales que clasifican la actividad.
   // Todos opcionales para no romper el submit sin ellos.
   anio?: number;                        // Año
-  catorcena?: number;                   // Periodo (1..26)
-  estatus_actividad?: 'Abierto' | 'Cerrado';
+  catorcena?: number;                   // Periodo singular (legacy, se mantiene como alias)
+  catorcenas?: number[];                // Periodo multi (feedback Jos 2026-10-19)
+  estatus_actividad?: 'Abierto' | 'Activo' | 'Finalizado' | 'Cerrado'; // 'Cerrado' = alias legacy
   base?: 'CIMU' | 'TRADE' | 'UDC';      // Base SAP
 }
 
