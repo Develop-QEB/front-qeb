@@ -21,6 +21,7 @@ interface CaraInfo {
   caras?: number;
   formato?: string;
   costo?: number;
+  catorcena?: string;
 }
 
 const isPlainObject = (v: unknown): v is Record<string, unknown> =>
@@ -114,6 +115,7 @@ export function formatHistorialDetalles(detalles: string | null | undefined): st
     const cara = obj.cara as CaraInfo;
     const noun = (cara.formato || '').toUpperCase().includes('PUENTE PEATONAL') ? 'puentes' : 'caras';
     const trozos: string[] = [];
+    if (cara.catorcena) trozos.push(String(cara.catorcena));
     if (cara.articulo) trozos.push(`Articulo: ${cara.articulo}`);
     if (cara.caras !== undefined) trozos.push(`${cara.caras} ${noun}`);
     if (cara.costo !== undefined) trozos.push(`$${Number(cara.costo).toLocaleString('es-MX')}`);

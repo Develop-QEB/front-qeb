@@ -2753,7 +2753,7 @@ export function CampanaDetailPage() {
                           )}
                           {isNuevaCara && parsedDetalles.cara && (
                             <p className={`text-[11px] ${isDark ? 'text-zinc-500' : 'text-gray-400'}`}>
-                              {parsedDetalles.cara.articulo} — {parsedDetalles.cara.caras} caras, ${Number(parsedDetalles.cara.costo).toLocaleString()}
+                              {parsedDetalles.cara.catorcena ? `${parsedDetalles.cara.catorcena} · ` : ''}{parsedDetalles.cara.articulo} — {parsedDetalles.cara.caras} caras, ${Number(parsedDetalles.cara.costo).toLocaleString()}
                             </p>
                           )}
                           {!isCambio && !isRechazo && !isNuevaCara && !isAprobacion && parsedDetalles.caras && (

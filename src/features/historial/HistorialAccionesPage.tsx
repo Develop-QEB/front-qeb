@@ -844,7 +844,7 @@ export function HistorialAccionesPage() {
                         return (
                           <div>
                             <span className={`text-xs font-medium ${subText}`}>{cap}</span>
-                            <p className={`text-sm mt-1 ${headerText}`}>Artículo: {obj.cara.articulo} · {obj.cara.caras} {noun}</p>
+                            <p className={`text-sm mt-1 ${headerText}`}>{obj.cara.catorcena ? `${obj.cara.catorcena} · ` : ''}Artículo: {obj.cara.articulo} · {obj.cara.caras} {noun}{obj.cara.costo != null ? ` · $${Number(obj.cara.costo).toLocaleString('es-MX')}` : ''}</p>
                           </div>
                         );
                       })()}
