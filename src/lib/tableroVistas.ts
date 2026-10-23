@@ -1,3 +1,5 @@
+import { AUTORIZACION_OPCIONES, AUTORIZACION_PREFIX } from './autorizacionFiltro';
+
 // Vistas de Tablero (Propuestas / Campañas): orden rápido, filtro de
 // incompletos y vistas guardadas por usuario.
 //
@@ -118,6 +120,76 @@ export function ordenarTablero<T>(
     if (tb === null) return -1;
     return asc ? ta - tb : tb - ta;
   });
+}
+
+// ---------- "Último cambio": qué cambios cuentan ----------
+//
+// El orden 'reciente' pone arriba lo que cambió más recientemente. Por default
+// cuenta CUALQUIER cambio (edición de datos, cambio de estatus y cambios de
+// autorización de los circuitos). El usuario puede acotar qué cambios cuentan
+// desde el popover del chip "Último cambio" (lista con buscador).
+//
+// Las fechas por estatus llegan del back en `item.cambios` (solo cuando el
+// listado pide `includeCambios`): claves `estatus:<Estatus>` y `auth:<key>`.
+// La edición de datos es `updated_at`.
+
+export type CambioGrupo = 'edicion' | 'estatus' | 'autorizacion';
+
+export interface CambioOpcion {
+  key: string;
+  label: string;
+  grupo: CambioGrupo;
+}
+
+export const CAMBIO_EDICION_KEY = 'edicion';
+export const CAMBIO_ESTATUS_PREFIX = 'estatus:';
+
+/** Opciones del popover: edición + estatus de la entidad + autorización de circuitos. */
+export function construirOpcionesCambio(estatus: readonly string[]): CambioOpcion[] {
+  const out: CambioOpcion[] = [{ key: CAMBIO_EDICION_KEY, label: 'Edición de datos', grupo: 'edicion' }];
+  const vistos = new Set<string>();
+  estatus.forEach(s => {
+    const n = normalizaEstatus(s);
+    if (!n || vistos.has(n)) return;
+    vistos.add(n);
+    out.push({ key: `${CAMBIO_ESTATUS_PREFIX}${s}`, label: s, grupo: 'estatus' });
+  });
+  AUTORIZACION_OPCIONES.forEach(o => {
+    out.push({ key: `${AUTORIZACION_PREFIX}${o.key}`, label: o.label, grupo: 'autorizacion' });
+  });
+  return out;
+}
+
+// Los estatus llegan del historial tal como se escribieron ('Pase a ventas',
+// 'por iniciar'...): se comparan normalizados, igual que las columnas del tablero.
+function normalizaClaveCambio(k: string): string {
+  if (k.startsWith(CAMBIO_ESTATUS_PREFIX)) return `${CAMBIO_ESTATUS_PREFIX}${normalizaEstatus(k.slice(CAMBIO_ESTATUS_PREFIX.length))}`;
+  return k;
+}
+
+/**
+ * Fecha del último cambio del registro considerando solo los cambios en
+ * `seleccion` (null = todos). Sin `cambios` del back, equivale a `updated_at`.
+ */
+export function fechaUltimoCambio(
+  item: { updated_at?: string | null; cambios?: Record<string, string> | null },
+  seleccion: readonly string[] | null,
+): string | null {
+  const todos = seleccion === null;
+  const sel = todos ? null : new Set(seleccion.map(normalizaClaveCambio));
+  let mejorMs: number | null = null;
+  let mejor: string | null = null;
+  const considerar = (v: string | null | undefined) => {
+    const t = parseFechaMs(v);
+    if (t !== null && (mejorMs === null || t > mejorMs)) { mejorMs = t; mejor = v ?? null; }
+  };
+  if (todos || sel!.has(CAMBIO_EDICION_KEY)) considerar(item.updated_at);
+  if (item.cambios) {
+    for (const [k, v] of Object.entries(item.cambios)) {
+      if (todos || sel!.has(normalizaClaveCambio(k))) considerar(v);
+    }
+  }
+  return mejor;
 }
 
 // ---------- Persistencia ----------

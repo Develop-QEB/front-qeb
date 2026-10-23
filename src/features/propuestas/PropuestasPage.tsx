@@ -42,7 +42,10 @@ import PropuestasTableroView, {
 } from './PropuestasTableroView';
 import {
   ordenarTablero, ORDEN_RAPIDO_DEFAULT, ORDEN_RAPIDO_TABLA_DEFAULT, type OrdenRapido,
+  construirOpcionesCambio, fechaUltimoCambio,
 } from '../../lib/tableroVistas';
+import { AUTORIZACION_LABELS, evalAutorizacionAvanzado, splitStatusSeleccion } from '../../lib/autorizacionFiltro';
+import { MultiSelectChip } from '../../components/MultiSelectChip';
 import { TableroVistasControls } from '../../components/tablero/TableroVistasControls';
 import { OrdenRapidoChips } from '../../components/tablero/OrdenRapidoChips';
 import { VistaSelector, type VistaOpcion } from '../../components/tablero/VistaSelector';
@@ -240,6 +243,12 @@ function evalCondition<T>(item: T, filter: AdvancedFilterCondition): boolean {
   const fieldValue = (item as Record<string, unknown>)[filter.field];
   const filterValue = filter.value;
   if (!filterValue) return true;
+  // Status = autorización de circuitos ('Aut. Pend. DG', ...): se evalúa
+  // contra el resumen por fila que manda el back (acotado al periodo filtrado).
+  if (filter.field === 'status') {
+    const aut = evalAutorizacionAvanzado((item as Propuesta).autorizacion_resumen, filter.operator, filterValue);
+    if (aut !== null) return aut;
+  }
   if (fieldValue === null || fieldValue === undefined) {
     return filter.operator === '!=' || filter.operator === 'not_contains';
   }
@@ -1431,7 +1440,8 @@ export function PropuestasPage() {
   const [searchInput, setSearchInput] = useState('');
   const [debouncedSearchTags, setDebouncedSearchTags] = useState<string[]>([]);
   const [debouncedSearchInput, setDebouncedSearchInput] = useState('');
-  const [status, setStatus] = useState('');
+  // Filtro Status (multiselect): estatus de propuesta + completitud + autorización de circuitos.
+  const [statusSel, setStatusSel] = useState<string[]>([]);
   const [tipoPeriodo, setTipoPeriodo] = useState('');
   const [yearInicio, setYearInicio] = useState<number | undefined>(undefined);
   const [yearFin, setYearFin] = useState<number | undefined>(undefined);
@@ -1461,6 +1471,8 @@ export function PropuestasPage() {
   const [ordenRapido, setOrdenRapido] = useState<OrdenRapido>(
     () => (activeView === 'tablero' ? ORDEN_RAPIDO_DEFAULT : ORDEN_RAPIDO_TABLA_DEFAULT),
   );
+  // Qué cambios cuentan para "Último cambio" (null = todos). Ver fechaUltimoCambio.
+  const [cambiosSeleccion, setCambiosSeleccion] = useState<string[] | null>(null);
   const [soloIncompletos, setSoloIncompletos] = useState(false);
   const [exportingLayout, setExportingLayout] = useState(false);
   const [exportingOcupacion, setExportingOcupacion] = useState(false);
@@ -1598,7 +1610,9 @@ export function PropuestasPage() {
   // 'Incompleta'/'Completa' son pseudo-estatus: se evalúan en cliente contra
   // los totales de completitud, así que el server no recibe status y se pide
   // todo el universo (igual que con agrupación/filtros avanzados).
-  const statusCompletitud = COMPLETITUD_STATUS.includes(status);
+  // Pseudo-estatus de completitud seleccionados (se filtran en cliente).
+  const completitudSel = useMemo(() => statusSel.filter(s => COMPLETITUD_STATUS.includes(s)), [statusSel]);
+  const statusCompletitud = completitudSel.length > 0;
   // El orden rápido y el filtro de incompletos se evalúan en cliente, así que
   // necesitan el universo completo o estarían ordenando/filtrando sólo las 20
   // filas de la página visible (que es el bug que tenía el chip "Ordenar").
@@ -1641,15 +1655,25 @@ export function PropuestasPage() {
     historialFilter.modo === 'cambio_estatus' && historialFilter.estatusValor === 'Rechazada'
   ) ? false : excludeRechazadas;
 
+  // El chip "Status" (multiselect) mezcla estatus de propuesta, pseudo-estatus
+  // de completitud (cliente) y estatus de autorización de circuitos ('Aut.
+  // Pend. DG', ...). Los de autorización viajan al back como `autorizacion` y
+  // el back aplica OR entre estatus y autorización. Ver lib/autorizacionFiltro.
+  const statusFiltro = splitStatusSeleccion(statusSel, COMPLETITUD_STATUS);
+  // Fechas de último cambio por estatus/autorización: solo hacen falta para
+  // el orden "Último cambio" (el back las calcula desde historial).
+  const includeCambios = ordenRapido === 'reciente';
+
   // Stats: WS invalida en cambios reales; staleTime corto evita refetches en
   // re-renders del padre. Pasamos `search` para que total/chart reflejen los
   // resultados filtrados aunque estemos en la página 1 de N, y `historialFilter`
   // + `effectiveExcludeRechazadas` para que los KPIs no queden en un universo
   // distinto al del listado.
   const { data: stats } = useQuery({
-    queryKey: ['propuestas-stats', status, yearInicio, yearFin, catorcenaInicio, catorcenaFin, tipoPeriodo, serverSearch, historialFilter, effectiveExcludeRechazadas],
+    queryKey: ['propuestas-stats', statusSel, yearInicio, yearFin, catorcenaInicio, catorcenaFin, tipoPeriodo, serverSearch, historialFilter, effectiveExcludeRechazadas],
     queryFn: () => propuestasService.getStats({
-      status: statusCompletitud ? undefined : (status || undefined),
+      status: statusFiltro.status,
+      autorizacion: statusFiltro.autorizacion,
       yearInicio,
       yearFin,
       catorcenaInicio,
@@ -1663,12 +1687,14 @@ export function PropuestasPage() {
   });
 
   const { data, isLoading } = useQuery({
-    queryKey: ['propuestas', needsAllData ? 1 : page, status, serverSearch, yearInicio, yearFin, catorcenaInicio, catorcenaFin, groupBy, tipoPeriodo, needsAllData, historialFilter, effectiveExcludeRechazadas],
+    queryKey: ['propuestas', needsAllData ? 1 : page, statusSel, serverSearch, yearInicio, yearFin, catorcenaInicio, catorcenaFin, groupBy, tipoPeriodo, needsAllData, historialFilter, effectiveExcludeRechazadas, includeCambios],
     queryFn: () =>
       propuestasService.getAll({
         page: needsAllData ? 1 : page,
         limit: effectiveLimit,
-        status: statusCompletitud ? undefined : (status || undefined),
+        status: statusFiltro.status,
+        autorizacion: statusFiltro.autorizacion,
+        includeCambios: includeCambios || undefined,
         search: serverSearch,
         yearInicio,
         yearFin,
@@ -1687,10 +1713,13 @@ export function PropuestasPage() {
   // están ocultas por default). Sigue disponible en el filtro avanzado para
   // quien quiera verlas explícitamente. 'Incompleta'/'Completa' son pseudo-
   // estatus de completitud de reservas (se filtran en cliente).
-  const allStatuses = [...STATUS_OPTIONS.filter(s => s !== 'Rechazada'), ...COMPLETITUD_STATUS];
+  // Al final, los estatus de autorización de circuitos (ver lib/autorizacionFiltro).
+  const allStatuses = [...STATUS_OPTIONS.filter(s => s !== 'Rechazada'), ...COMPLETITUD_STATUS, ...AUTORIZACION_LABELS];
+  // Cambios que puede considerar el orden "Último cambio" (popover del chip).
+  const cambiosOpciones = useMemo(() => construirOpcionesCambio(STATUS_OPTIONS), []);
 
   const hasPeriodFilter = yearInicio !== undefined && yearFin !== undefined;
-  const hasActiveFilters = !!(status || tipoPeriodo || hasPeriodFilter || groupBy || ordenRapido !== ordenDefaultVista || soloIncompletos || advancedFilters.length > 0 || searchTags.length > 0);
+  const hasActiveFilters = !!(statusSel.length > 0 || tipoPeriodo || hasPeriodFilter || groupBy || ordenRapido !== ordenDefaultVista || soloIncompletos || advancedFilters.length > 0 || searchTags.length > 0);
 
   // Get unique values for each field (for advanced filter dropdowns).
   // Solo se calcula cuando el panel de filtros avanzados está abierto: evita
@@ -1713,6 +1742,8 @@ export function PropuestasPage() {
       // puede seleccionarlos en el filtro avanzado para verlos.
       if (fieldConfig.field === 'status') {
         STATUS_OPTIONS.forEach(s => values.add(s));
+        // Autorización de circuitos (se evalúa contra autorizacion_resumen).
+        AUTORIZACION_LABELS.forEach(s => values.add(s));
       }
       valuesMap[fieldConfig.field] = Array.from(values).sort();
     });
@@ -1728,8 +1759,11 @@ export function PropuestasPage() {
     if (!data?.data) return [];
     let result = applyAdvancedFilters(data.data, advancedFilters);
     // Pseudo-estatus de completitud (cliente-side, mismo criterio que el badge).
-    if (status === 'Incompleta') result = result.filter(esPropuestaIncompleta);
-    else if (status === 'Completa') result = result.filter(p => !esPropuestaIncompleta(p));
+    // Con los dos marcados no acota nada (Incompleta o Completa = todas).
+    const soloIncompletas = completitudSel.includes('Incompleta') && !completitudSel.includes('Completa');
+    const soloCompletas = completitudSel.includes('Completa') && !completitudSel.includes('Incompleta');
+    if (soloIncompletas) result = result.filter(esPropuestaIncompleta);
+    else if (soloCompletas) result = result.filter(p => !esPropuestaIncompleta(p));
     // Filtro rápido de incompletos: mismo criterio que el badge y que el
     // pseudo-estatus, solo que disponible como chip en las dos vistas.
     if (soloIncompletos) result = result.filter(esPropuestaIncompleta);
@@ -1737,11 +1771,12 @@ export function PropuestasPage() {
     // paginando, ordenar aquí reacomodaría únicamente las 20 filas visibles y
     // daría una lista que miente sobre el orden global; en ese caso vale el
     // ORDER BY pr.id DESC del backend, que es justo 'nueva_vieja'.
-    // 'reciente' usa updated_at (el back lo escribe al cambiar estatus y al
-    // editar la propuesta); los otros dos usan `fecha`, la de creación.
+    // 'reciente' considera edición (updated_at), cambios de estatus y cambios
+    // de autorización de circuitos según `cambiosSeleccion`; los otros dos
+    // usan `fecha`, la de creación.
     if (!needsAllData) return result;
-    return ordenarTablero(result, ordenRapido, p => p.fecha, p => p.updated_at);
-  }, [data?.data, advancedFilters, status, soloIncompletos, ordenRapido, needsAllData]);
+    return ordenarTablero(result, ordenRapido, p => p.fecha, p => fechaUltimoCambio(p, cambiosSeleccion));
+  }, [data?.data, advancedFilters, completitudSel, soloIncompletos, ordenRapido, needsAllData, cambiosSeleccion]);
 
   // Sólo cuando hay filtros avanzados activos necesitamos recalcular stats en
   // cliente (el backend no soporta esos operadores Y/O custom). El search va
@@ -1785,7 +1820,7 @@ export function PropuestasPage() {
   };
 
   const clearAllFilters = () => {
-    setStatus('');
+    setStatusSel([]);
     setTipoPeriodo('');
     setYearInicio(undefined);
     setYearFin(undefined);
@@ -1793,6 +1828,7 @@ export function PropuestasPage() {
     setCatorcenaFin(undefined);
     setHistorialFilter({});
     setOrdenRapido(ordenDefaultVista);
+    setCambiosSeleccion(null);
     setSoloIncompletos(false);
     setGroupBy('');
     setExpandedGroups(new Set());
@@ -1867,7 +1903,8 @@ export function PropuestasPage() {
     setExportingLayout(true);
     try {
       const exportData = await propuestasService.getVersionarioData({
-        status: status || undefined,
+        status: statusFiltro.status,
+        autorizacion: statusFiltro.autorizacion,
         search: serverSearch,
         yearInicio,
         yearFin,
@@ -1970,7 +2007,8 @@ export function PropuestasPage() {
     setExportingOcupacion(true);
     try {
       const exportData = await propuestasService.getVersionarioData({
-        status: status || undefined,
+        status: statusFiltro.status,
+        autorizacion: statusFiltro.autorizacion,
         search: serverSearch,
         yearInicio,
         yearFin,
@@ -2135,7 +2173,7 @@ export function PropuestasPage() {
             </div>
             <div className="mt-4 flex items-center gap-2">
               <span className={`text-xs px-2 py-1 rounded-full ${isDark ? 'bg-zinc-800/80 text-zinc-300 border-zinc-700/50' : 'bg-gray-100 text-gray-700 border-gray-200'} border`}>
-                {(status || allSearchTerms.length > 0 || advancedFilters.length > 0 || hasPeriodFilter || tipoPeriodo) ? 'Filtrado' : 'Todas las catorcenas'}
+                {(statusSel.length > 0 || allSearchTerms.length > 0 || advancedFilters.length > 0 || hasPeriodFilter || tipoPeriodo) ? 'Filtrado' : 'Todas las catorcenas'}
               </span>
             </div>
           </div>
@@ -2479,12 +2517,13 @@ export function PropuestasPage() {
 
                 {/* Status Filter */}
                 <span className={`text-xs ${isDark ? 'text-zinc-500' : 'text-gray-400'} mr-1`}>Status:</span>
-                <FilterChip
+                <MultiSelectChip
                   label="Status"
                   options={allStatuses}
-                  value={status}
-                  onChange={(val) => { setStatus(val); setPage(1); }}
-                  onClear={() => { setStatus(''); setPage(1); }}
+                  separatorBefore={AUTORIZACION_LABELS[0]}
+                  values={statusSel}
+                  onChange={(vals) => { setStatusSel(vals); setPage(1); }}
+                  onClear={() => { setStatusSel([]); setPage(1); }}
                   isDark={isDark}
                 />
 
@@ -2562,6 +2601,9 @@ export function PropuestasPage() {
                   soloIncompletos={soloIncompletos}
                   onSoloIncompletosChange={(v) => { setSoloIncompletos(v); setPage(1); }}
                   entidadPlural="propuestas"
+                  cambiosOpciones={cambiosOpciones}
+                  cambiosSeleccion={cambiosSeleccion}
+                  onCambiosSeleccionChange={setCambiosSeleccion}
                 />
 
                 {/* Group By — Tabla: FilterChip single. Desglose: multi-select max 4.
@@ -2709,7 +2751,9 @@ export function PropuestasPage() {
           <PropuestasVersionarioView
             isDark={isDark}
             filters={{
-              status: status || undefined,
+              // Estatus de autorización de circuitos viaja aparte (`autorizacion`).
+              status: statusFiltro.status,
+              autorizacion: statusFiltro.autorizacion,
               // Mismo `serverSearch` que usa la tabla: si hay tags Y texto
               // escrito, viajan los dos (antes el texto se perdia).
               search: serverSearch,

@@ -28,6 +28,8 @@ interface PropuestasVersionarioViewProps {
     fechaDesde?: string;
     fechaHasta?: string;
     estatusValor?: string;
+    // Filtro por autorización de circuitos (ver lib/autorizacionFiltro).
+    autorizacion?: string;
   };
   advancedFilters?: AdvancedFilter[];
   activeGroupings: GroupByField[];

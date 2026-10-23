@@ -213,7 +213,29 @@ export interface Solicitud {
   // en el model de prisma: el listado usa findMany, que solo devuelve campos
   // del schema. Mientras tanto llega undefined.
   updated_at?: string | null;
+  // Autorización de circuitos (ver lib/autorizacionFiltro): conteo por
+  // estatus (acotado al periodo filtrado) y fechas de último cambio por
+  // estatus de entidad / autorización (solo con includeCambios).
+  autorizacion_resumen?: AutorizacionResumen | null;
+  cambios?: CambiosFechas | null;
 }
+
+/** Conteo de circuitos por estatus de autorización (llega por fila en los listados). */
+export interface AutorizacionResumen {
+  total: number;
+  aprobado: number;
+  pend_dg: number;
+  pend_dcm: number;
+  correccion: number;
+  rechazado: number;
+}
+
+/**
+ * Última fecha (ISO) en que el registro cambió a cada estatus. Claves
+ * `estatus:<Estatus>` (cambios de estatus de la entidad) y `auth:<key>`
+ * (cambios de autorización de sus circuitos). Lo usa el orden "Último cambio".
+ */
+export type CambiosFechas = Record<string, string>;
 
 export interface SolicitudStats {
   total: number;
@@ -238,6 +260,9 @@ export interface Propuesta {
   comentario_cambio_status: string;
   articulo: string;
   updated_at: string | null;
+  // Autorización de circuitos (ver lib/autorizacionFiltro).
+  autorizacion_resumen?: AutorizacionResumen | null;
+  cambios?: CambiosFechas | null;
   // Campos adicionales del JOIN
   cliente_nombre?: string;
   marca_nombre?: string;
@@ -334,6 +359,9 @@ export interface Campana {
   // Requiere la columna `campania.updated_at` (ver scripts/sql). Sin ella el
   // listado la manda vacia: la tabla `campania` no la tenia.
   updated_at: string | null;
+  // Autorización de circuitos (ver lib/autorizacionFiltro).
+  autorizacion_resumen?: AutorizacionResumen | null;
+  cambios?: CambiosFechas | null;
   // Columna real de `campania`; llega por el cm.* del listado. Es la fecha con
   // la que el backend ordena (COALESCE(fecha_aprobacion, fecha_inicio) DESC).
   fecha_aprobacion?: string | null;

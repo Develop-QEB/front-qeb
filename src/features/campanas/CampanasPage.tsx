@@ -49,7 +49,10 @@ import CampanasTableroView, {
 } from './CampanasTableroView';
 import {
   ordenarTablero, ORDEN_RAPIDO_DEFAULT, ORDEN_RAPIDO_TABLA_DEFAULT, type OrdenRapido,
+  construirOpcionesCambio, fechaUltimoCambio,
 } from '../../lib/tableroVistas';
+import { AUTORIZACION_LABELS, evalAutorizacionAvanzado, splitStatusSeleccion } from '../../lib/autorizacionFiltro';
+import { MultiSelectChip } from '../../components/MultiSelectChip';
 import { TableroVistasControls } from '../../components/tablero/TableroVistasControls';
 import { OrdenRapidoChips } from '../../components/tablero/OrdenRapidoChips';
 import { VistaSelector, type VistaOpcion } from '../../components/tablero/VistaSelector';
@@ -352,6 +355,12 @@ function evalCondition<T>(item: T, filter: AdvancedFilterCondition): boolean {
   const fieldValue = (item as Record<string, unknown>)[filter.field];
   const filterValue = filter.value;
   if (!filterValue) return true;
+  // Status = autorización de circuitos ('Aut. Pend. DG', ...): se evalúa
+  // contra el resumen por fila que manda el back (acotado al periodo filtrado).
+  if (filter.field === 'status') {
+    const aut = evalAutorizacionAvanzado((item as Campana).autorizacion_resumen, filter.operator, filterValue);
+    if (aut !== null) return aut;
+  }
   if (fieldValue === null || fieldValue === undefined) {
     return filter.operator === '!=' || filter.operator === 'not_contains';
   }
@@ -1139,7 +1148,9 @@ export function CampanasPage() {
     }
   }, [searchParams, setSearchParams]);
   const [page, setPage] = useState(1);
-  const [status, setStatus] = useState('');
+  // Filtro Status (multiselect): estatus de campaña + 'Incompleta' (cliente) + autorización de circuitos.
+  const [statusSel, setStatusSel] = useState<string[]>([]);
+  const statusIncompleta = statusSel.includes('Incompleta');
   const [tipoPeriodo, setTipoPeriodo] = useState('');
   const [yearInicio, setYearInicio] = useState<number | undefined>(undefined);
   const [yearFin, setYearFin] = useState<number | undefined>(undefined);
@@ -1199,6 +1210,8 @@ export function CampanasPage() {
   const [ordenRapido, setOrdenRapido] = useState<OrdenRapido>(
     () => (activeView === 'tablero' ? ORDEN_RAPIDO_DEFAULT : ORDEN_RAPIDO_TABLA_DEFAULT),
   );
+  // Qué cambios cuentan para "Último cambio" (null = todos). Ver fechaUltimoCambio.
+  const [cambiosSeleccion, setCambiosSeleccion] = useState<string[] | null>(null);
   const [soloIncompletos, setSoloIncompletos] = useState(false);
 
   // Estado para la vista de catorcena
@@ -1322,13 +1335,24 @@ export function CampanasPage() {
     historialFilter.modo === 'cambio_estatus' && historialFilter.estatusValor === 'Rechazada'
   ) ? false : excludeRechazadas;
 
+  // El chip "Status" (multiselect) mezcla estatus de campaña, el pseudo-estatus
+  // 'Incompleta' (cliente) y estatus de autorización de circuitos ('Aut. Pend.
+  // DG', ...). Los de autorización viajan al back como `autorizacion` y el back
+  // aplica OR entre estatus y autorización. Ver lib/autorizacionFiltro.
+  const statusFiltro = splitStatusSeleccion(statusSel, ['Incompleta']);
+  // Fechas de último cambio por estatus/autorización: solo hacen falta para
+  // el orden "Último cambio" (el back las calcula desde historial).
+  const includeCambios = ordenRapido === 'reciente';
+
   const { data, isLoading } = useQuery({
-    queryKey: ['campanas', needsAllData ? 1 : page, status, yearInicio, yearFin, catorcenaInicio, catorcenaFin, tipoPeriodo, needsAllData, serverSearch, effectiveLimit, historialFilter, effectiveExcludeRechazadas],
+    queryKey: ['campanas', needsAllData ? 1 : page, statusSel, yearInicio, yearFin, catorcenaInicio, catorcenaFin, tipoPeriodo, needsAllData, serverSearch, effectiveLimit, historialFilter, effectiveExcludeRechazadas, includeCambios],
     queryFn: () =>
       campanasService.getAll({
         page: needsAllData ? 1 : page,
         limit: effectiveLimit,
-        status: (status && status !== 'Incompleta') ? status : undefined,
+        status: statusFiltro.status,
+        autorizacion: statusFiltro.autorizacion,
+        includeCambios: includeCambios || undefined,
         search: serverSearch,
         yearInicio,
         yearFin,
@@ -1348,10 +1372,11 @@ export function CampanasPage() {
   // effectiveExcludeRechazadas para que los KPIs no queden en un universo
   // distinto al del listado.
   const { data: statsData, isLoading: isLoadingStats } = useQuery({
-    queryKey: ['campanas-stats', status, yearInicio, yearFin, catorcenaInicio, catorcenaFin, tipoPeriodo, serverSearch, historialFilter, effectiveExcludeRechazadas],
+    queryKey: ['campanas-stats', statusSel, yearInicio, yearFin, catorcenaInicio, catorcenaFin, tipoPeriodo, serverSearch, historialFilter, effectiveExcludeRechazadas],
     queryFn: () =>
       campanasService.getStats({
-        status: (status && status !== 'Incompleta') ? status : undefined,
+        status: statusFiltro.status,
+        autorizacion: statusFiltro.autorizacion,
         search: serverSearch,
         yearInicio,
         yearFin,
@@ -1422,7 +1447,7 @@ export function CampanasPage() {
     }
 
     // Filter by "Incompleta" status (frontend-only)
-    if (status === 'Incompleta') {
+    if (statusIncompleta) {
       items = items.filter(esCampanaIncompleta);
     }
 
@@ -1521,12 +1546,14 @@ export function CampanasPage() {
     // 'reciente' usa updated_at, que requiere la columna campania.updated_at
     // (ver scripts/sql): sin ella todas llegan nulas y ordenarTablero las deja
     // al final sin reordenar nada, en vez de fingir un orden.
+    // Ademas de updated_at, 'reciente' considera los cambios de estatus y de
+    // autorizacion de circuitos que el usuario eligio en `cambiosSeleccion`.
     if (needsAllData) {
       items = ordenarTablero(
         items,
         ordenRapido,
         c => c.fecha_aprobacion || c.fecha_inicio,
-        c => c.updated_at,
+        c => fechaUltimoCambio(c, cambiosSeleccion),
       );
     }
 
@@ -1566,12 +1593,12 @@ export function CampanasPage() {
     }
 
     return items;
-  }, [data?.data, selectedCatorcenaInicio, status, sapDbFilter, advancedFilters, sortField, sortDirection, campanaInventarios, soloIncompletos, ordenRapido, needsAllData]);
+  }, [data?.data, selectedCatorcenaInicio, statusIncompleta, sapDbFilter, advancedFilters, sortField, sortDirection, campanaInventarios, soloIncompletos, ordenRapido, needsAllData, cambiosSeleccion]);
 
   // Recalculate stats from filteredData when client-side filters are active.
   // El search ya viaja al backend y stats lo recibe via queryKey, así que NO
   // forzamos recálculo cliente cuando solo hay búsqueda activa.
-  const needsClientFilter = advancedFilters.length > 0 || selectedCatorcenaInicio || status === 'Incompleta' || soloIncompletos;
+  const needsClientFilter = advancedFilters.length > 0 || selectedCatorcenaInicio || statusIncompleta || soloIncompletos;
 
   // Inversión total + estado de posteo con filtros en CLIENTE: los conteos se
   // recalculan de filteredData, pero la inversión y el posteo no se pueden
@@ -1583,11 +1610,12 @@ export function CampanasPage() {
     [needsClientFilter, data?.data, filteredData]
   );
   const { data: idsStatsData, isLoading: isLoadingIdsStats } = useQuery({
-    queryKey: ['campanas-stats', 'ids', clientFilterIds, status, yearInicio, yearFin, catorcenaInicio, catorcenaFin, tipoPeriodo, serverSearch, historialFilter, effectiveExcludeRechazadas],
+    queryKey: ['campanas-stats', 'ids', clientFilterIds, statusSel, yearInicio, yearFin, catorcenaInicio, catorcenaFin, tipoPeriodo, serverSearch, historialFilter, effectiveExcludeRechazadas],
     queryFn: () =>
       campanasService.getStats({
         ids: clientFilterIds || [],
-        status: (status && status !== 'Incompleta') ? status : undefined,
+        status: statusFiltro.status,
+        autorizacion: statusFiltro.autorizacion,
         search: serverSearch,
         yearInicio,
         yearFin,
@@ -2420,7 +2448,7 @@ export function CampanasPage() {
   };
 
   const hasPeriodFilter = yearInicio !== undefined && yearFin !== undefined;
-  const hasActiveFilters = !!(status || hasPeriodFilter || activeGroupings.length > 0 || searchTags.length > 0 || selectedCatorcenaInicio || advancedFilters.length > 0 || sortField !== null || ordenRapido !== ordenDefaultVista || soloIncompletos || apsFilter !== 'todas' || postFilter !== 'todas' || sapDbFilter !== 'todas');
+  const hasActiveFilters = !!(statusSel.length > 0 || hasPeriodFilter || activeGroupings.length > 0 || searchTags.length > 0 || selectedCatorcenaInicio || advancedFilters.length > 0 || sortField !== null || ordenRapido !== ordenDefaultVista || soloIncompletos || apsFilter !== 'todas' || postFilter !== 'todas' || sapDbFilter !== 'todas');
 
   // Get unique values for each field (for advanced filter dropdowns).
   // Solo se calcula cuando el panel de filtros avanzados está abierto: evita
@@ -2454,6 +2482,8 @@ export function CampanasPage() {
       if (fieldConfig.field === 'status') {
         values.add('Rechazada');
         values.add('Cancelada');
+        // Autorización de circuitos (se evalúa contra autorizacion_resumen).
+        AUTORIZACION_LABELS.forEach(s => values.add(s));
       }
       valuesMap[fieldConfig.field] = Array.from(values).sort();
     });
@@ -2470,13 +2500,21 @@ export function CampanasPage() {
     // Add "Incompleta" if any campaign has incomplete inventory
     const hasIncompletas = data.data.some(esCampanaIncompleta);
     if (hasIncompletas) statusSet.add('Incompleta');
-    return Array.from(statusSet).sort();
+    // Al final, los estatus de autorización de circuitos (ver lib/autorizacionFiltro).
+    return [...Array.from(statusSet).sort(), ...AUTORIZACION_LABELS];
+  }, [data?.data]);
+  // Cambios que puede considerar el orden "Último cambio" (popover del chip):
+  // estatus conocidos + los que traiga el listado.
+  const cambiosOpciones = useMemo(() => {
+    const estatus = new Set<string>(STATUS_OPTIONS);
+    (data?.data ?? []).forEach(c => { if (c.status) estatus.add(c.status); });
+    return construirOpcionesCambio(Array.from(estatus));
   }, [data?.data]);
 
   const clearAllFilters = () => {
     setSearchTags([]);
     setSearchInput('');
-    setStatus('');
+    setStatusSel([]);
     setTipoPeriodo('');
     setYearInicio(undefined);
     setYearFin(undefined);
@@ -2487,6 +2525,7 @@ export function CampanasPage() {
     setSortField(null);
     setSortDirection('desc');
     setOrdenRapido(ordenDefaultVista);
+    setCambiosSeleccion(null);
     setSoloIncompletos(false);
     setActiveGroupings([]);
     setExpandedGroups(new Set());
@@ -2599,7 +2638,8 @@ export function CampanasPage() {
 
       // Un solo request al backend con los mismos filtros activos
       const exportData = await campanasService.getExportLayout({
-        status: (status && status !== 'Incompleta') ? status : undefined,
+        status: statusFiltro.status,
+        autorizacion: statusFiltro.autorizacion,
         yearInicio,
         yearFin,
         catorcenaInicio,
@@ -3199,7 +3239,7 @@ export function CampanasPage() {
   };
 
   // Calcular paginación basada en si hay filtros locales activos
-  const hasLocalFilters = !!(selectedCatorcenaInicio || advancedFilters.length > 0 || status === 'Incompleta');
+  const hasLocalFilters = !!(selectedCatorcenaInicio || advancedFilters.length > 0 || statusIncompleta);
   const totalPages = hasLocalFilters || needsAllData ? 1 : (data?.pagination?.totalPages || 1);
   const total = hasLocalFilters || needsAllData ? filteredData.length : (data?.pagination?.total ?? 0);
   const startItem = hasLocalFilters || needsAllData ? (filteredData.length > 0 ? 1 : 0) : ((page - 1) * limit + 1);
@@ -3655,12 +3695,13 @@ export function CampanasPage() {
 
                 {/* Status Filter */}
                 <span className={`text-xs ${isDark ? 'text-zinc-500' : 'text-gray-400'} mr-1`}>Status:</span>
-                <FilterChip
+                <MultiSelectChip
                   label="Status"
                   options={allStatuses}
-                  value={status}
-                  onChange={(val) => { setStatus(val); setPage(1); }}
-                  onClear={() => { setStatus(''); setPage(1); }}
+                  separatorBefore={AUTORIZACION_LABELS[0]}
+                  values={statusSel}
+                  onChange={(vals) => { setStatusSel(vals); setPage(1); }}
+                  onClear={() => { setStatusSel([]); setPage(1); }}
                   isDark={isDark}
                 />
 
@@ -3735,6 +3776,9 @@ export function CampanasPage() {
                   onOrdenChange={(o) => { setOrdenRapido(o); setPage(1); }}
                   soloIncompletos={soloIncompletos}
                   onSoloIncompletosChange={(v) => { setSoloIncompletos(v); setPage(1); }}
+                  cambiosOpciones={cambiosOpciones}
+                  cambiosSeleccion={cambiosSeleccion}
+                  onCambiosSeleccionChange={setCambiosSeleccion}
                   entidadPlural="campañas"
                 />
 
