@@ -2624,9 +2624,13 @@ function UploadArtModal({
                                     {art.origen_prueba_color && (
                                       <span
                                         className="absolute top-1 left-1 inline-flex items-center overflow-hidden rounded border border-fuchsia-500/60 text-[10px] font-semibold pointer-events-none shadow-sm"
-                                        title="Arte proveniente de una prueba de color aprobada"
+                                        title={art.prueba_color_tipo === 'revision_anticipada'
+                                          ? 'Arte proveniente de una revisión anticipada aprobada'
+                                          : 'Arte proveniente de una prueba de color aprobada'}
                                       >
-                                        <span className="px-1.5 py-0.5 bg-fuchsia-500/90 text-white">PC v{art.prueba_color_version ?? '?'}</span>
+                                        <span className="px-1.5 py-0.5 bg-fuchsia-500/90 text-white">
+                                          {art.prueba_color_tipo === 'revision_anticipada' ? 'RA' : 'PC'} v{art.prueba_color_version ?? '?'}
+                                        </span>
                                         <span className="px-1.5 py-0.5 bg-emerald-500/90 text-white border-l border-fuchsia-500/60">Aprobada</span>
                                       </span>
                                     )}
@@ -2992,9 +2996,13 @@ function UploadArtModal({
                                     {art.origen_prueba_color && (
                                       <span
                                         className="absolute top-1 left-1 inline-flex items-center overflow-hidden rounded border border-fuchsia-500/60 text-[10px] font-semibold pointer-events-none shadow-sm"
-                                        title="Arte proveniente de una prueba de color aprobada"
+                                        title={art.prueba_color_tipo === 'revision_anticipada'
+                                          ? 'Arte proveniente de una revisión anticipada aprobada'
+                                          : 'Arte proveniente de una prueba de color aprobada'}
                                       >
-                                        <span className="px-1.5 py-0.5 bg-fuchsia-500/90 text-white">PC v{art.prueba_color_version ?? '?'}</span>
+                                        <span className="px-1.5 py-0.5 bg-fuchsia-500/90 text-white">
+                                          {art.prueba_color_tipo === 'revision_anticipada' ? 'RA' : 'PC'} v{art.prueba_color_version ?? '?'}
+                                        </span>
                                         <span className="px-1.5 py-0.5 bg-emerald-500/90 text-white border-l border-fuchsia-500/60">Aprobada</span>
                                       </span>
                                     )}
