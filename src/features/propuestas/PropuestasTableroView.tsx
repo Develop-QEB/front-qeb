@@ -5,6 +5,10 @@ import { formatCurrency, formatDate, formatDateCompact } from '../../lib/utils';
 import { TableroBoard, TableroCard, type TableroColumna } from '../../components/tablero/TableroBoard';
 import { buildMapaColumnas, normalizaEstatus } from '../../lib/tableroVistas';
 import { getStatusColor, esPropuestaIncompleta, IncompletaBadge } from './propuestaEstatus';
+import { PropuestaAcciones, type PropuestaAccionesProps } from './PropuestaAcciones';
+
+/** Permisos y callbacks de la fila de acciones; los mismos que recibe la fila de la tabla. */
+export type PropuestaAccionesCtx = Omit<PropuestaAccionesProps, 'item' | 'isDark' | 'compact'>;
 
 // Vista Tablero de Propuestas: una columna por estatus del flujo comercial.
 //
@@ -79,8 +83,15 @@ interface PropuestasTableroViewProps {
   isLoading: boolean;
   /** Si el usuario puede abrir el modal de cambio de estatus para esta propuesta. */
   puedeEditarStatus: (p: Propuesta) => boolean;
+  /**
+   * Si el clic en la tarjeta abre la propuesta. Misma regla que el boton
+   * Asignar/Ver de la fila: Aprobada ya se fue a campanas y no se abre.
+   */
+  puedeAbrir: (p: Propuesta) => boolean;
   onStatus: (p: Propuesta) => void;
   onAssign: (p: Propuesta) => void;
+  /** Fila de iconos de accion al pie de la tarjeta (misma que la tabla). */
+  acciones: PropuestaAccionesCtx;
 }
 
 export default function PropuestasTableroView({
@@ -89,8 +100,10 @@ export default function PropuestasTableroView({
   isDark,
   isLoading,
   puedeEditarStatus,
+  puedeAbrir,
   onStatus,
   onAssign,
+  acciones,
 }: PropuestasTableroViewProps) {
   const columnas = useMemo(
     () => PROPUESTAS_COLUMNAS.filter(c => columnasVisibles.includes(c.key)),
@@ -106,9 +119,10 @@ export default function PropuestasTableroView({
       isDark={isDark}
       puedeEditarStatus={puedeEditarStatus(p)}
       onStatus={() => onStatus(p)}
-      onAbrir={() => onAssign(p)}
+      onAbrir={puedeAbrir(p) ? () => onAssign(p) : undefined}
+      acciones={acciones}
     />
-  ), [isDark, puedeEditarStatus, onStatus, onAssign]);
+  ), [isDark, puedeEditarStatus, puedeAbrir, onStatus, onAssign, acciones]);
 
   return (
     <TableroBoard
@@ -127,13 +141,15 @@ export default function PropuestasTableroView({
 // ---------- Tarjeta ----------
 
 function TarjetaPropuesta({
-  propuesta, isDark, puedeEditarStatus, onStatus, onAbrir,
+  propuesta, isDark, puedeEditarStatus, onStatus, onAbrir, acciones,
 }: {
   propuesta: Propuesta;
   isDark: boolean;
   puedeEditarStatus: boolean;
   onStatus: () => void;
-  onAbrir: () => void;
+  /** undefined = bloqueada por estatus/rol, la tarjeta no se abre. */
+  onAbrir?: () => void;
+  acciones: PropuestaAccionesCtx;
 }) {
   const statusColor = getStatusColor(propuesta.status, isDark);
   const sub = isDark ? 'text-zinc-500' : 'text-gray-400';
@@ -152,7 +168,11 @@ function TarjetaPropuesta({
     : null;
 
   return (
-    <TableroCard isDark={isDark} onClick={onAbrir} title="Abrir inventario de la propuesta">
+    <TableroCard
+      isDark={isDark}
+      onClick={onAbrir}
+      title={onAbrir ? 'Abrir inventario de la propuesta' : 'No disponible en este estatus'}
+    >
       <div className="flex items-center justify-between gap-2 mb-1.5">
         <span className={`font-mono text-[10px] px-1.5 py-0.5 rounded ${isDark ? 'bg-purple-500/10 text-purple-300' : 'bg-purple-50 text-purple-700'}`}>
           #{propuesta.campania_id || propuesta.id}
@@ -224,6 +244,17 @@ function TarjetaPropuesta({
             <IncompletaBadge propuesta={propuesta} isDark={isDark} />
           </span>
         )}
+      </div>
+
+      {/* Fila de acciones al pie, como en una tarjeta de CRM. Es el MISMO
+          componente que la celda Acciones de la tabla: mismos permisos y
+          candados. stopPropagation para que un clic en un boton no abra
+          ademas la tarjeta. */}
+      <div
+        className={`mt-2 pt-2 border-t ${isDark ? 'border-zinc-700/60' : 'border-gray-200'}`}
+        onClick={(e) => e.stopPropagation()}
+      >
+        <PropuestaAcciones item={propuesta} isDark={isDark} compact {...acciones} />
       </div>
     </TableroCard>
   );

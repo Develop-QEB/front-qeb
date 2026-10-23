@@ -151,22 +151,30 @@ export function TableroBoard<T>({
 
 interface TableroCardProps {
   isDark: boolean;
+  /** Sin onClick la tarjeta no se abre: mismo candado que la fila de la tabla. */
   onClick?: () => void;
   title?: string;
   children: React.ReactNode;
 }
 
-/** Chrome común de las tarjetas, para que los dos tableros se vean igual. */
+/**
+ * Chrome común de las tarjetas, para que los tableros se vean igual.
+ *
+ * Una tarjeta sin `onClick` se pinta atenuada y sin hover: es la forma en que
+ * el tablero respeta los bloqueos por estatus de cada módulo (p.ej. propuesta
+ * Aprobada, solicitud Atendida) en vez de abrir algo que la tabla no abriría.
+ */
 export function TableroCard({ isDark, onClick, title, children }: TableroCardProps) {
+  const abrible = !!onClick;
   return (
     <div
       onClick={onClick}
       title={title}
       className={`group rounded-xl border p-2.5 transition-all ${
         isDark
-          ? 'bg-zinc-800/60 border-zinc-700/60 hover:border-zinc-600'
-          : 'bg-white border-gray-200 hover:border-gray-300 shadow-sm'
-      } ${onClick ? 'cursor-pointer' : ''}`}
+          ? `bg-zinc-800/60 border-zinc-700/60 ${abrible ? 'hover:border-zinc-600' : ''}`
+          : `bg-white border-gray-200 shadow-sm ${abrible ? 'hover:border-gray-300' : ''}`
+      } ${abrible ? 'cursor-pointer' : 'cursor-default opacity-75'}`}
     >
       {children}
     </div>

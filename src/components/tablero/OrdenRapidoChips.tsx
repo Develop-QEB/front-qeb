@@ -14,6 +14,12 @@ interface OrdenRapidoChipsProps {
   onSoloIncompletosChange: (valor: boolean) => void;
   /** Texto del tooltip del filtro de incompletos ("propuestas" / "campanas"). */
   entidadPlural: string;
+  /**
+   * Que significa "incompleta" en este modulo. Propuestas y Campanas comparten
+   * el criterio de reservas vs caras esperadas; Solicitudes no tiene reservas
+   * todavia, asi que ahi es "sin circuitos cargados".
+   */
+  incompletosHint?: string;
 }
 
 export function OrdenRapidoChips({
@@ -23,6 +29,7 @@ export function OrdenRapidoChips({
   soloIncompletos,
   onSoloIncompletosChange,
   entidadPlural,
+  incompletosHint,
 }: OrdenRapidoChipsProps) {
   const chipBase = 'flex items-center gap-1 px-2 py-1 rounded-full text-xs transition-all border';
   const chipOff = isDark
@@ -56,7 +63,7 @@ export function OrdenRapidoChips({
 
       <button
         onClick={() => onSoloIncompletosChange(!soloIncompletos)}
-        title={`Solo ${entidadPlural} con menos reservas que caras esperadas`}
+        title={incompletosHint ?? `Solo ${entidadPlural} con menos reservas que caras esperadas`}
         className={`${chipBase} ${soloIncompletos
           ? (isDark ? 'bg-amber-500/20 text-amber-300 border-amber-500/40' : 'bg-amber-50 text-amber-700 border-amber-300')
           : chipOff}`}

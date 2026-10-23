@@ -7,7 +7,7 @@ import {
   Calendar, Clock, Eye, Megaphone, Edit2, Check, Minus, ArrowUpDown, User,
   List, LayoutGrid, Building2, MapPin, Loader2, Package, ClipboardList, Plus, Trash2,
   ArrowUp, ArrowDown, Lock, SlidersHorizontal, Upload, Printer, Monitor, Camera, Share2, Columns3,
-  Image, FileText, DollarSign, Hash, Gift, AlertTriangle, Film, Play, Zap, Paintbrush
+  Image, FileText, DollarSign, Hash, Gift, AlertTriangle, Film, Play, Zap
 } from 'lucide-react';
 import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip, Legend } from 'recharts';
 import { Header } from '../../components/layout/Header';
@@ -19,6 +19,14 @@ import { Campana, Catorcena } from '../../types';
 
 // Tipos para las vistas
 type ViewType = 'tabla' | 'catorcena' | 'tablero';
+// Vistas del modulo (selector compacto + vista fija por usuario). Se declara
+// debajo de los imports de lucide porque usa sus iconos.
+const VISTAS_CAMPANAS: readonly VistaOpcion<ViewType>[] = [
+  { key: 'tabla', label: 'Vista Tabla', icon: List },
+  { key: 'catorcena', label: 'Versionario', icon: LayoutGrid },
+  { key: 'tablero', label: 'Tablero', icon: Columns3 },
+];
+const VISTAS_CAMPANAS_KEYS = VISTAS_CAMPANAS.map(v => v.key);
 import { formatDate, formatCurrency } from '../../lib/utils';
 import { AssignInventarioCampanaModal } from './AssignInventarioCampanaModal';
 import { OrdenesMontajeModal } from './OrdenesMontajeModal';
@@ -44,6 +52,9 @@ import {
 } from '../../lib/tableroVistas';
 import { TableroVistasControls } from '../../components/tablero/TableroVistasControls';
 import { OrdenRapidoChips } from '../../components/tablero/OrdenRapidoChips';
+import { VistaSelector, type VistaOpcion } from '../../components/tablero/VistaSelector';
+import { loadVistaFijaModulo, saveVistaFijaModulo } from '../../lib/vistaFija';
+import { CampanaAcciones } from './CampanaAcciones';
 
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3000/api';
 const STATIC_URL = API_URL.replace(/\/api$/, '');
@@ -1086,63 +1097,19 @@ const CampanaRow = React.memo(function CampanaRow({
       </td>
       {/* Acciones */}
       <td className="px-4 py-3">
-        <div className="flex items-center gap-1">
-          <button
-            onClick={() => onOpen(item.id)}
-            className={`p-2 rounded-lg ${isDark ? 'bg-purple-500/10 text-purple-400 hover:bg-purple-500/20 hover:text-purple-300 border-purple-500/20 hover:border-purple-500/40' : 'bg-purple-50 text-purple-600 hover:bg-purple-100 hover:text-purple-700 border-purple-200 hover:border-purple-300'} border transition-all`}
-            title="Abrir campaña"
-          >
-            <Eye className="h-3.5 w-3.5" />
-          </button>
-          {item.propuesta_id && (
-            <button
-              onClick={() => onShare(item.propuesta_id!)}
-              className={`p-2 rounded-lg ${isDark ? 'bg-cyan-500/10 text-cyan-400 hover:bg-cyan-500/20 hover:text-cyan-300 border-cyan-500/20 hover:border-cyan-500/40' : 'bg-cyan-50 text-cyan-600 hover:bg-cyan-100 hover:text-cyan-700 border-cyan-200 hover:border-cyan-300'} border transition-all`}
-              title="Compartir campaña"
-            >
-              <Share2 className="h-3.5 w-3.5" />
-            </button>
-          )}
-          {canPruebaColor && item.propuesta_id && (
-            <button
-              onClick={() => onPruebaColor(item)}
-              className={`p-2 rounded-lg border transition-all ${isDark
-                ? 'bg-fuchsia-500/10 text-fuchsia-400 hover:bg-fuchsia-500/20 hover:text-fuchsia-300 border-fuchsia-500/20 hover:border-fuchsia-500/40'
-                : 'bg-fuchsia-50 text-fuchsia-600 hover:bg-fuchsia-100 hover:text-fuchsia-700 border-fuchsia-200 hover:border-fuchsia-300'
-              }`}
-              title="Solicitar prueba de color"
-            >
-              <Paintbrush className="h-3.5 w-3.5" />
-            </button>
-          )}
-          {canEditPerm && (
-            <button
-              onClick={() => onEdit(item)}
-              disabled={isEditDisabled}
-              className={`p-2 rounded-lg border transition-all ${
-                isEditDisabled
-                  ? isDark
-                    ? 'bg-zinc-800/30 text-zinc-600 border-zinc-700/30 cursor-not-allowed'
-                    : 'bg-gray-100 text-gray-400 border-gray-200 cursor-not-allowed'
-                  : isDark
-                    ? 'bg-zinc-500/10 text-zinc-400 hover:bg-zinc-500/20 hover:text-zinc-300 border-zinc-500/20 hover:border-zinc-500/40'
-                    : 'bg-gray-50 text-gray-500 hover:bg-gray-100 hover:text-gray-700 border-gray-200 hover:border-gray-300'
-              }`}
-              title={isEditDisabled ? 'No editable (tiene APS o status no permite edición)' : 'Editar campaña'}
-            >
-              <Edit2 className="h-3.5 w-3.5" />
-            </button>
-          )}
-          {canSeeGestionArtesPerm && (
-            <button
-              onClick={() => onIncidencia(item)}
-              className="p-2 rounded-lg border bg-orange-500/10 text-orange-400 hover:bg-orange-500/20 hover:text-orange-300 border-orange-500/20 hover:border-orange-500/40 transition-all"
-              title="Reportar incidencia"
-            >
-              <AlertTriangle className="h-3.5 w-3.5" />
-            </button>
-          )}
-        </div>
+        <CampanaAcciones
+          item={item}
+          isDark={isDark}
+          canEditPerm={canEditPerm}
+          canSeeGestionArtesPerm={canSeeGestionArtesPerm}
+          canPruebaColor={canPruebaColor}
+          isEditDisabled={isEditDisabled}
+          onOpen={onOpen}
+          onShare={onShare}
+          onEdit={onEdit}
+          onIncidencia={onIncidencia}
+          onPruebaColor={onPruebaColor}
+        />
       </td>
     </tr>
   );
@@ -1183,7 +1150,16 @@ export function CampanasPage() {
   const [sortField, setSortField] = useState<string | null>(null);
   const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('desc');
   const [advancedFilters, setAdvancedFilters] = useState<AdvancedFilterCondition[]>([]);
-  const [activeGroupings, setActiveGroupings] = useState<GroupByField[]>([]);
+  // Vista fija del modulo (por usuario, localStorage): con cual de las tres
+  // vistas abre Campanas. null = default ('tabla'). Va antes de
+  // activeGroupings porque el Versionario arranca agrupado por catorcena.
+  const [vistaFija, setVistaFija] = useState<ViewType | null>(
+    () => loadVistaFijaModulo('campanas', user?.id, VISTAS_CAMPANAS_KEYS),
+  );
+  const [activeView, setActiveView] = useState<ViewType>(() => vistaFija ?? 'tabla');
+  const [activeGroupings, setActiveGroupings] = useState<GroupByField[]>(
+    () => (activeView === 'catorcena' ? ['catorcena_inicio'] : []),
+  );
   const [expandedGroups, setExpandedGroups] = useState<Set<string>>(new Set());
 
   // Filtros rápidos del versionario (estilo Órdenes de Montaje): APS y POST a SAP.
@@ -1214,12 +1190,15 @@ export function CampanasPage() {
   const limit = 20;
 
   // Estado para la vista activa (tabs)
-  const [activeView, setActiveView] = useState<ViewType>('tabla');
   // Vista Tablero: columnas visibles, orden rápido y filtro de incompletos.
   // El orden y el filtro también aplican a la Vista Tabla, por eso viven aquí
   // y no dentro del tablero.
   const [tableroColumnas, setTableroColumnas] = useState<string[]>(CAMPANAS_COLUMNAS_KEYS);
-  const [ordenRapido, setOrdenRapido] = useState<OrdenRapido>(ORDEN_RAPIDO_TABLA_DEFAULT);
+  // Si el modulo abre directo en el tablero (vista fija), arranca con el orden
+  // fijo del tablero; si no, con el de la tabla.
+  const [ordenRapido, setOrdenRapido] = useState<OrdenRapido>(
+    () => (activeView === 'tablero' ? ORDEN_RAPIDO_DEFAULT : ORDEN_RAPIDO_TABLA_DEFAULT),
+  );
   const [soloIncompletos, setSoloIncompletos] = useState(false);
 
   // Estado para la vista de catorcena
@@ -3149,6 +3128,33 @@ export function CampanasPage() {
   // Callbacks estables para el `CampanaRow` memoizado. `useCallback` mantiene
   // la misma identidad entre renders del padre para que React.memo no aborte.
   const handleRowOpen = useCallback((id: number) => handleOpenCampana(id), [handleOpenCampana]);
+
+  const cambiarVista = (v: ViewType) => {
+    setActiveView(v);
+    setPage(1);
+    if (v === 'tabla') {
+      // Limpiar agrupaciones del versionario al volver a tabla
+      setActiveGroupings([]);
+      setExpandedGroups(new Set());
+    } else if (v === 'catorcena') {
+      // Vista catorcena: catorcena_inicio siempre es la primera agrupacion
+      setActiveGroupings(prev => (
+        prev.includes('catorcena_inicio')
+          ? prev
+          : (['catorcena_inicio', ...prev.filter(g => g !== 'catorcena_inicio')].slice(0, 2) as GroupByField[])
+      ));
+    } else {
+      // Las agrupaciones son del Versionario; el tablero agrupa por estatus.
+      setActiveGroupings([]);
+      setExpandedGroups(new Set());
+      // Orden fijo del tablero, salvo que el usuario ya eligiera otro.
+      setOrdenRapido(prev => (prev === ORDEN_RAPIDO_TABLA_DEFAULT ? ORDEN_RAPIDO_DEFAULT : prev));
+    }
+  };
+  const fijarVista = (v: ViewType | null) => {
+    setVistaFija(v);
+    saveVistaFijaModulo('campanas', user?.id, v);
+  };
   // ctx=campana: la vista compartir muestra "Circuitos Confirmados" (desde Propuestas, sin ctx, muestra "Circuitos Muestra")
   const handleRowShare = useCallback((propId: number) => navigate(`/propuestas/compartir/${propId}?ctx=campana`), [navigate]);
   const handleRowEdit = useCallback((c: Campana) => handleEditCampana(c), [handleEditCampana]);
@@ -3788,60 +3794,16 @@ export function CampanasPage() {
 
         {/* Tabs de vista */}
         <div className="flex items-center gap-2">
-          <button
-            onClick={() => {
-              setActiveView('tabla');
-              // Limpiar agrupaciones del versionario al volver a tabla
-              setActiveGroupings([]);
-              setExpandedGroups(new Set());
-            }}
-            className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-medium transition-all ${
-              activeView === 'tabla'
-                ? isDark ? 'bg-purple-500/20 text-purple-300 border border-purple-500/40' : 'bg-purple-100 text-purple-700 border border-purple-200'
-                : isDark ? 'bg-zinc-800/60 text-zinc-400 border border-zinc-700/50 hover:bg-zinc-800 hover:text-zinc-200' : 'bg-gray-100 text-gray-500 border border-gray-200 hover:bg-gray-200 hover:text-gray-700'
-            }`}
-          >
-            <List className="h-4 w-4" />
-            Vista Tabla
-          </button>
-          <button
-            onClick={() => {
-              setActiveView('catorcena');
-              // Al cambiar a vista catorcena, agregar catorcena_inicio como primera agrupación si no está
-              if (!activeGroupings.includes('catorcena_inicio')) {
-                setActiveGroupings(prev => ['catorcena_inicio', ...prev.filter(g => g !== 'catorcena_inicio')].slice(0, 2) as GroupByField[]);
-              }
-            }}
-            className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-medium transition-all ${
-              activeView === 'catorcena'
-                ? isDark ? 'bg-purple-500/20 text-purple-300 border border-purple-500/40' : 'bg-purple-100 text-purple-700 border border-purple-200'
-                : isDark ? 'bg-zinc-800/60 text-zinc-400 border border-zinc-700/50 hover:bg-zinc-800 hover:text-zinc-200' : 'bg-gray-100 text-gray-500 border border-gray-200 hover:bg-gray-200 hover:text-gray-700'
-            }`}
-          >
-            <LayoutGrid className="h-4 w-4" />
-            Versionario
-          </button>
-          <button
-            onClick={() => {
-              setActiveView('tablero');
-              setPage(1);
-              // Las agrupaciones son del Versionario; en el tablero el agrupado
-              // es por estatus y dejarlas activas solo recargaria de mas.
-              setActiveGroupings([]);
-              setExpandedGroups(new Set());
-              // El tablero trae su orden fijo (ultimo cambio arriba), pero solo
-              // se impone si el usuario no eligio otro en la tabla.
-              setOrdenRapido(prev => (prev === ORDEN_RAPIDO_TABLA_DEFAULT ? ORDEN_RAPIDO_DEFAULT : prev));
-            }}
-            className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-medium transition-all ${
-              activeView === 'tablero'
-                ? isDark ? 'bg-purple-500/20 text-purple-300 border border-purple-500/40' : 'bg-purple-100 text-purple-700 border border-purple-200'
-                : isDark ? 'bg-zinc-800/60 text-zinc-400 border border-zinc-700/50 hover:bg-zinc-800 hover:text-zinc-200' : 'bg-gray-100 text-gray-500 border border-gray-200 hover:bg-gray-200 hover:text-gray-700'
-            }`}
-          >
-            <Columns3 className="h-4 w-4" />
-            Tablero
-          </button>
+          {/* Selector de vista (Tabla / Versionario / Tablero) + estrella para
+              fijar con cual abre el modulo. */}
+          <VistaSelector
+            isDark={isDark}
+            opciones={VISTAS_CAMPANAS}
+            value={activeView}
+            onChange={cambiarVista}
+            fija={vistaFija}
+            onFijar={fijarVista}
+          />
 
           {/* Filtro por BD SAP — aplica a Vista Tabla y Versionario. UDC solo para roles de Aeropuerto. */}
           <select
@@ -3905,9 +3867,19 @@ export function CampanasPage() {
               columnasVisibles={tableroColumnas}
               isDark={isDark}
               isLoading={isLoading}
-              puedeEditarStatus={permissions.canEditCampanaStatus}
               onStatus={handleRowStatus}
               onAbrir={(c) => navigate(`/campanas/detail/${c.id}`)}
+              acciones={{
+                canEditPerm: permissions.canEditCampanas,
+                canSeeGestionArtesPerm: permissions.canSeeGestionArtes,
+                canPruebaColor: puedePruebaColor,
+                isEditDisabled,
+                onOpen: handleRowOpen,
+                onShare: handleRowShare,
+                onEdit: handleRowEdit,
+                onIncidencia: handleRowIncidencia,
+                onPruebaColor: handleRowPruebaColor,
+              }}
             />
           </div>
         )}

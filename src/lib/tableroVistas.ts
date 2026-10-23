@@ -7,7 +7,7 @@
 // justifica tabla ni endpoints. Contra conocido: no siguen al usuario si
 // cambia de navegador o de equipo.
 
-export type TableroScope = 'propuestas' | 'campanas';
+export type TableroScope = 'solicitudes' | 'propuestas' | 'campanas';
 
 // Orden de las tarjetas dentro de cada columna.
 //
@@ -39,6 +39,11 @@ export interface VistaTablero {
   columnas: string[];
   orden: OrdenRapido;
   soloIncompletos: boolean;
+  /**
+   * Vista fija: se aplica sola cada vez que el usuario entra al tablero.
+   * Como mucho una por modulo; marcar otra desmarca la anterior.
+   */
+  predeterminada?: boolean;
 }
 
 // ---------- Estatus ----------
@@ -159,6 +164,7 @@ export function loadVistas(
         columnas,
         orden: esOrdenValido(o.orden) ? o.orden : ORDEN_RAPIDO_DEFAULT,
         soloIncompletos: o.soloIncompletos === true,
+        predeterminada: o.predeterminada === true,
       }];
     });
   } catch {

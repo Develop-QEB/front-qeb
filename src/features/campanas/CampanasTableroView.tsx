@@ -5,6 +5,15 @@ import { formatCurrency, formatDate, formatDateCompact } from '../../lib/utils';
 import { TableroBoard, TableroCard, type TableroColumna } from '../../components/tablero/TableroBoard';
 import { buildMapaColumnas, normalizaEstatus } from '../../lib/tableroVistas';
 import { esCampanaIncompleta, IncompletaBadge } from './campanaCompletitud';
+import { CampanaAcciones, type CampanaAccionesProps } from './CampanaAcciones';
+
+/**
+ * Permisos y callbacks de la fila de acciones. `isEditDisabled` llega como
+ * funcion porque la pagina la calcula por campana (APS / estatus cerrado).
+ */
+export type CampanaAccionesCtx = Omit<CampanaAccionesProps, 'item' | 'isDark' | 'compact' | 'isEditDisabled'> & {
+  isEditDisabled: (c: Campana) => boolean;
+};
 
 // Vista Tablero de Campanas: una columna por estatus.
 //
@@ -80,9 +89,14 @@ interface CampanasTableroViewProps {
   columnasVisibles: string[];
   isDark: boolean;
   isLoading: boolean;
-  puedeEditarStatus: boolean;
+  /**
+   * Abre StatusCampanaModal. Siempre disponible, igual que el badge de la
+   * fila: el modal se pone en solo lectura cuando no hay permiso.
+   */
   onStatus: (c: Campana) => void;
   onAbrir: (c: Campana) => void;
+  /** Fila de iconos de accion al pie de la tarjeta (misma que la tabla). */
+  acciones: CampanaAccionesCtx;
 }
 
 export default function CampanasTableroView({
@@ -90,9 +104,9 @@ export default function CampanasTableroView({
   columnasVisibles,
   isDark,
   isLoading,
-  puedeEditarStatus,
   onStatus,
   onAbrir,
+  acciones,
 }: CampanasTableroViewProps) {
   const columnas = useMemo(
     () => CAMPANAS_COLUMNAS.filter(c => columnasVisibles.includes(c.key)),
@@ -106,11 +120,11 @@ export default function CampanasTableroView({
     <TarjetaCampana
       campana={c}
       isDark={isDark}
-      puedeEditarStatus={puedeEditarStatus}
       onStatus={() => onStatus(c)}
       onAbrir={() => onAbrir(c)}
+      acciones={acciones}
     />
-  ), [isDark, puedeEditarStatus, onStatus, onAbrir]);
+  ), [isDark, onStatus, onAbrir, acciones]);
 
   return (
     <TableroBoard
@@ -129,14 +143,15 @@ export default function CampanasTableroView({
 // ---------- Tarjeta ----------
 
 function TarjetaCampana({
-  campana, isDark, puedeEditarStatus, onStatus, onAbrir,
+  campana, isDark, onStatus, onAbrir, acciones,
 }: {
   campana: Campana;
   isDark: boolean;
-  puedeEditarStatus: boolean;
   onStatus: () => void;
   onAbrir: () => void;
+  acciones: CampanaAccionesCtx;
 }) {
+  const { isEditDisabled, ...accionesProps } = acciones;
   const sub = isDark ? 'text-zinc-500' : 'text-gray-400';
   const txt = isDark ? 'text-white' : 'text-gray-900';
   const soft = isDark ? 'text-zinc-400' : 'text-gray-500';
@@ -203,23 +218,15 @@ function TarjetaCampana({
       )}
 
       <div className="flex items-center gap-1 flex-wrap mt-2">
-        {puedeEditarStatus ? (
-          <button
-            onClick={(e) => { e.stopPropagation(); onStatus(); }}
-            className={`px-2 py-0.5 rounded-full text-[10px] whitespace-nowrap border transition-opacity hover:opacity-80 ${
-              isDark ? 'bg-zinc-700/60 text-zinc-200 border-zinc-600' : 'bg-gray-100 text-gray-700 border-gray-200'
-            }`}
-            title="Cambiar estatus"
-          >
-            {campana.status}
-          </button>
-        ) : (
-          <span className={`px-2 py-0.5 rounded-full text-[10px] whitespace-nowrap border ${
+        <button
+          onClick={(e) => { e.stopPropagation(); onStatus(); }}
+          className={`px-2 py-0.5 rounded-full text-[10px] whitespace-nowrap border transition-opacity hover:opacity-80 ${
             isDark ? 'bg-zinc-700/60 text-zinc-200 border-zinc-600' : 'bg-gray-100 text-gray-700 border-gray-200'
-          }`}>
-            {campana.status}
-          </span>
-        )}
+          }`}
+          title="Ver / cambiar estatus"
+        >
+          {campana.status}
+        </button>
         {campana.has_aps ? (
           <span className={`px-1.5 py-0.5 rounded-full text-[10px] ${isDark ? 'bg-emerald-500/20 text-emerald-300' : 'bg-emerald-50 text-emerald-700'} border border-emerald-500/30`}>
             APS
@@ -230,6 +237,23 @@ function TarjetaCampana({
             <IncompletaBadge campana={campana} isDark={isDark} />
           </span>
         )}
+      </div>
+
+      {/* Fila de acciones al pie, como en una tarjeta de CRM. Es el MISMO
+          componente que la celda Acciones de la tabla: mismos permisos y
+          candados. stopPropagation para que un clic en un boton no abra
+          ademas la tarjeta. */}
+      <div
+        className={`mt-2 pt-2 border-t ${isDark ? 'border-zinc-700/60' : 'border-gray-200'}`}
+        onClick={(e) => e.stopPropagation()}
+      >
+        <CampanaAcciones
+          item={campana}
+          isDark={isDark}
+          compact
+          isEditDisabled={isEditDisabled(campana)}
+          {...accionesProps}
+        />
       </div>
     </TableroCard>
   );

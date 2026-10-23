@@ -59,6 +59,32 @@ export const getStatusColor = (status: string, isDark: boolean): StatusColor => 
 
 export const STATUS_OPTIONS = ['Atendido', 'Abierto', 'Ajuste Cto-Cliente', 'Ajuste Inventario', 'Ajuste Comercial', 'Pase a ventas', 'Liberada', 'Rechazada'];
 
+// Roles para los que una propuesta en 'Abierto' esta bloqueada (todavia no la
+// trabaja inventarios, asi que comercial no tiene nada que hacerle).
+export const ROLES_LOCKED_BY_ABIERTO = ['Asesor Comercial', 'Director Comercial Aeropuerto', 'Asesor Comercial Aeropuerto'];
+
+/**
+ * Propuesta bloqueada para acciones de edicion: Activa o Aprobada (ya se fue a
+ * campanas) o Abierto para los roles comerciales. Es la misma regla que usa
+ * la fila de la tabla; la Vista Tablero la reusa para no abrir lo que la
+ * tabla no abriria.
+ */
+export function esPropuestaBloqueada(p: Pick<Propuesta, 'status'>, userRol: string): boolean {
+  return p.status === 'Activa'
+    || p.status === 'Aprobada'
+    || (ROLES_LOCKED_BY_ABIERTO.includes(userRol) && p.status === 'Abierto');
+}
+
+/**
+ * Si el usuario puede abrir la propuesta (boton Asignar/Ver de la fila).
+ * Con permiso de asignar inventario, Aprobada y las bloqueadas NO se abren
+ * (ya no hay nada que asignar). Sin ese permiso el boton es "Ver Propuesta"
+ * y siempre esta disponible. Misma regla que `disabled` del boton de la fila.
+ */
+export function puedeAbrirPropuesta(p: Pick<Propuesta, 'status'>, userRol: string, canAsignarInventario: boolean): boolean {
+  return !(canAsignarInventario && (p.status === 'Aprobada' || esPropuestaBloqueada(p, userRol)));
+}
+
 // Pseudo-estatus de completitud para el chip de Status: no son estatus reales
 // de la propuesta, se evalúan en cliente contra los totales de reservas.
 export const COMPLETITUD_STATUS = ['Incompleta', 'Completa'];

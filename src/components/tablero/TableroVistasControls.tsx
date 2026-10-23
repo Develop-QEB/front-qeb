@@ -1,6 +1,6 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import {
-  Check, ChevronDown, Columns3, Pencil, Save, Trash2, X,
+  Check, ChevronDown, Columns3, Pencil, Save, Star, Trash2, X,
 } from 'lucide-react';
 import type { TableroColumna } from './TableroBoard';
 import {
@@ -51,7 +51,12 @@ export function TableroVistasControls({
   const keysValidas = useMemo(() => todasColumnas.map(c => c.key), [todasColumnas]);
 
   const [vistas, setVistas] = useState<VistaTablero[]>(() => loadVistas(scope, userId, keysValidas));
-  const [vistaActivaId, setVistaActivaId] = useState<string | null>(null);
+  // Arranca en la vista fija (si hay): este componente solo vive mientras el
+  // tablero esta visible, asi que "cada vez que se entra al tablero" es
+  // exactamente "cada vez que se monta".
+  const [vistaActivaId, setVistaActivaId] = useState<string | null>(
+    () => vistas.find(v => v.predeterminada)?.id ?? null,
+  );
   const [showColumnas, setShowColumnas] = useState(false);
   const [showVistas, setShowVistas] = useState(false);
   const [nombreNueva, setNombreNueva] = useState('');
@@ -65,9 +70,25 @@ export function TableroVistasControls({
   const [claveCargada, setClaveCargada] = useState(claveDatos);
   if (claveCargada !== claveDatos) {
     setClaveCargada(claveDatos);
-    setVistas(loadVistas(scope, userId, keysValidas));
-    setVistaActivaId(null);
+    const recargadas = loadVistas(scope, userId, keysValidas);
+    setVistas(recargadas);
+    setVistaActivaId(recargadas.find(v => v.predeterminada)?.id ?? null);
   }
+
+  // Aplicar la vista fija a la pagina (columnas/orden/filtro) una sola vez por
+  // montaje (y otra vez si cambia el usuario). El ref recuerda para que clave
+  // ya se aplico, asi no se re-aplica cuando el usuario luego cambia algo a
+  // mano: la vista fija es el punto de partida, no una camisa de fuerza.
+  const fijaAplicadaParaRef = useRef<string | null>(null);
+  useEffect(() => {
+    if (fijaAplicadaParaRef.current === claveDatos) return;
+    fijaAplicadaParaRef.current = claveDatos;
+    const fija = vistas.find(v => v.predeterminada);
+    if (!fija) return;
+    onColumnasChange(fija.columnas);
+    onOrdenChange(fija.orden);
+    onSoloIncompletosChange(fija.soloIncompletos);
+  }, [claveDatos, vistas, onColumnasChange, onOrdenChange, onSoloIncompletosChange]);
 
   const persistir = (siguientes: VistaTablero[]) => {
     setVistas(siguientes);
@@ -123,6 +144,14 @@ export function TableroVistasControls({
         ? { ...v, columnas: [...columnasVisibles], orden, soloIncompletos }
         : v
     )));
+  };
+
+  // Solo una fija por modulo. Marcar la que ya es fija la desmarca.
+  const alternarPredeterminada = (id: string) => {
+    persistir(vistas.map(v => ({
+      ...v,
+      predeterminada: v.id === id ? !v.predeterminada : false,
+    })));
   };
 
   const eliminarVista = (id: string) => {
@@ -293,7 +322,17 @@ export function TableroVistasControls({
                           <span className={`block text-[10px] ${sub}`}>
                             {v.columnas.length} col · {ORDEN_RAPIDO_OPCIONES.find(o => o.value === v.orden)?.label}
                             {v.soloIncompletos && ' · incompletos'}
+                            {v.predeterminada && ' · fija'}
                           </span>
+                        </button>
+                        <button
+                          onClick={() => alternarPredeterminada(v.id)}
+                          className={`p-1 rounded ${v.predeterminada
+                            ? 'text-amber-400 hover:text-amber-300 hover:bg-amber-500/10'
+                            : isDark ? 'text-zinc-500 hover:text-amber-300 hover:bg-zinc-700' : 'text-gray-400 hover:text-amber-500 hover:bg-gray-200'}`}
+                          title={v.predeterminada ? 'Quitar como vista fija' : 'Usar como vista fija: se aplica sola al entrar al tablero'}
+                        >
+                          <Star className="h-3.5 w-3.5" fill={v.predeterminada ? 'currentColor' : 'none'} />
                         </button>
                         <button
                           onClick={() => { setRenombrandoId(v.id); setNombreEdit(v.nombre); }}

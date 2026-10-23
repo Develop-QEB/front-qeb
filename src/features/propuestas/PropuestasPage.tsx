@@ -4,8 +4,8 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import {
   Search, Download, Filter, ChevronDown, ChevronRight, X, SlidersHorizontal,
   Columns3, Calendar, DollarSign, FileText, Building2, MessageSquare,
-  CheckCircle, Users, Send, Loader2, User, Share2, MapPinned, Wrench, Clock, Paintbrush,
-  Pencil, Trash2, Package, MapPin, Eye, Plus, AlertTriangle, List, LayoutGrid,
+  CheckCircle, Users, Send, Loader2, User, Wrench, Clock,
+  Pencil, Trash2, Package, MapPin, Plus, AlertTriangle, List, LayoutGrid,
   Layers, Check, XCircle
 } from 'lucide-react';
 import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip as RechartsTooltip } from 'recharts';
@@ -35,6 +35,7 @@ import { ConfirmModal } from '../../components/ui/confirm-modal';
 import { monthLabelShort } from '../../lib/periodos';
 import {
   getStatusColor, STATUS_OPTIONS, COMPLETITUD_STATUS, esPropuestaIncompleta, IncompletaBadge,
+  esPropuestaBloqueada, puedeAbrirPropuesta,
 } from './propuestaEstatus';
 import PropuestasTableroView, {
   PROPUESTAS_COLUMNAS, PROPUESTAS_COLUMNAS_KEYS,
@@ -44,6 +45,17 @@ import {
 } from '../../lib/tableroVistas';
 import { TableroVistasControls } from '../../components/tablero/TableroVistasControls';
 import { OrdenRapidoChips } from '../../components/tablero/OrdenRapidoChips';
+import { VistaSelector, type VistaOpcion } from '../../components/tablero/VistaSelector';
+import { loadVistaFijaModulo, saveVistaFijaModulo } from '../../lib/vistaFija';
+import { PropuestaAcciones } from './PropuestaAcciones';
+
+type VistaPropuestas = 'tabla' | 'versionario' | 'tablero';
+const VISTAS_PROPUESTAS: readonly VistaOpcion<VistaPropuestas>[] = [
+  { key: 'tabla', label: 'Vista Tabla', icon: List },
+  { key: 'versionario', label: 'Desglose', icon: LayoutGrid },
+  { key: 'tablero', label: 'Tablero', icon: Columns3 },
+];
+const VISTAS_PROPUESTAS_KEYS = VISTAS_PROPUESTAS.map(v => v.key);
 
 function getMonthShort(dateStr: string): string {
   return monthLabelShort(dateStr) || '-';
@@ -1245,7 +1257,6 @@ function ApproveModal({ isOpen, onClose, propuesta, onSuccess }: ApproveModalPro
 // cuando solo cambia algo del padre (typing en search, abrir filtros, etc.).
 // Solo se vuelve a renderizar si cambia el `item`, `isDark`, o algún flag de
 // permisos/rol. Los callbacks llegan como refs estables vía useCallback.
-const ROLES_LOCKED_BY_ABIERTO = ['Asesor Comercial', 'Director Comercial Aeropuerto', 'Asesor Comercial Aeropuerto'];
 
 interface PropuestaRowProps {
   item: Propuesta & any;
@@ -1281,10 +1292,7 @@ const PropuestaRow = React.memo(function PropuestaRow({
   onPruebaColor,
 }: PropuestaRowProps) {
   const statusColor = getStatusColor(item.status, isDark);
-  const isActiva = item.status === 'Activa';
-  const isAprobada = item.status === 'Aprobada';
-  const isLockedByAbierto = ROLES_LOCKED_BY_ABIERTO.includes(userRol) && item.status === 'Abierto';
-  const isLocked = isActiva || isLockedByAbierto || isAprobada;
+  const isLocked = esPropuestaBloqueada(item, userRol);
 
   return (
     <tr key={`prop-${item.id}-${index}`} className={`border-b ${isDark ? 'border-zinc-800/50 hover:bg-zinc-800/30' : 'border-gray-200 hover:bg-gray-50'} transition-colors`}>
@@ -1388,65 +1396,19 @@ const PropuestaRow = React.memo(function PropuestaRow({
         </div>
       </td>
       <td className="px-4 py-3">
-        <div className="flex items-center gap-1">
-          {canAprobarPerm && (
-            <button
-              onClick={() => onApprove(item)}
-              disabled={item.status !== 'Pase a ventas' || isLocked}
-              className={`p-2 rounded-lg border transition-all ${item.status !== 'Pase a ventas' || isLocked
-                ? isDark ? 'bg-zinc-500/10 text-zinc-500 border-zinc-500/20 cursor-not-allowed opacity-50' : 'bg-gray-50 text-gray-400 border-gray-200 cursor-not-allowed opacity-50'
-                : isDark ? 'bg-emerald-500/10 text-emerald-400 hover:bg-emerald-500/20 hover:text-emerald-300 border-emerald-500/20 hover:border-emerald-500/40' : 'bg-emerald-50 text-emerald-600 hover:bg-emerald-100 hover:text-emerald-700 border-emerald-200 hover:border-emerald-300'
-                }`}
-              title={isLocked ? 'No disponible en este estatus' : (item.status !== 'Pase a ventas' ? 'Solo disponible con estatus Pase a ventas' : 'Aprobar propuesta')}
-            >
-              <CheckCircle className="h-3.5 w-3.5" />
-            </button>
-          )}
-          <button
-            onClick={() => onAssign(item)}
-            disabled={canAsignarInventarioPerm && (item.status === 'Aprobada' || isLocked)}
-            className={`p-2 rounded-lg border transition-all ${canAsignarInventarioPerm && (item.status === 'Aprobada' || isLocked)
-              ? isDark ? 'bg-zinc-500/10 text-zinc-500 border-zinc-500/20 cursor-not-allowed opacity-50' : 'bg-gray-50 text-gray-400 border-gray-200 cursor-not-allowed opacity-50'
-              : isDark ? 'bg-fuchsia-500/10 text-fuchsia-400 hover:bg-fuchsia-500/20 hover:text-fuchsia-300 border-fuchsia-500/20 hover:border-fuchsia-500/40' : 'bg-fuchsia-50 text-fuchsia-600 hover:bg-fuchsia-100 hover:text-fuchsia-700 border-fuchsia-200 hover:border-fuchsia-300'
-              }`}
-            title={canAsignarInventarioPerm ? (isLocked ? 'No disponible en este estatus' : (item.status === 'Aprobada' ? 'No disponible para propuestas aprobadas' : (item.status === 'Pase a ventas' ? 'Ver Inventario (solo lectura)' : 'Asignar a Inventario'))) : 'Ver Propuesta'}
-          >
-            {canAsignarInventarioPerm && item.status !== 'Pase a ventas' ? <MapPinned className="h-3.5 w-3.5" /> : <Eye className="h-3.5 w-3.5" />}
-          </button>
-          {canPruebaColor && (
-            <button
-              onClick={() => onPruebaColor(item)}
-              className={`p-2 rounded-lg border transition-all ${isDark
-                ? 'bg-fuchsia-500/10 text-fuchsia-400 hover:bg-fuchsia-500/20 hover:text-fuchsia-300 border-fuchsia-500/20 hover:border-fuchsia-500/40'
-                : 'bg-fuchsia-50 text-fuchsia-600 hover:bg-fuchsia-100 hover:text-fuchsia-700 border-fuchsia-200 hover:border-fuchsia-300'
-              }`}
-              title="Solicitar prueba de color"
-            >
-              <Paintbrush className="h-3.5 w-3.5" />
-            </button>
-          )}
-          {canCompartirPerm && (() => {
-            // Estatus desde los que tiene sentido compartir con el cliente. Los de
-            // ajuste entran porque el asesor manda la vista compartir mientras
-            // corrige inventario o costos con el cliente. Se aceptan las dos
-            // grafías de "Cto Cliente" que conviven en el sistema.
-            const ESTATUS_COMPARTIR = ['Aprobada', 'Atendido', 'Pase a ventas', 'Ajuste Inventario', 'Ajuste Cto-Cliente', 'Ajuste CTO Cliente'];
-            const puedeCompartir = ESTATUS_COMPARTIR.includes(item.status) && !isLocked;
-            return (
-            <button
-              disabled={!puedeCompartir}
-              onClick={() => puedeCompartir && onShare(item.id)}
-              className={`p-2 rounded-lg border transition-all ${puedeCompartir
-                ? isDark ? 'bg-cyan-500/10 text-cyan-400 hover:bg-cyan-500/20 hover:text-cyan-300 border-cyan-500/20 hover:border-cyan-500/40' : 'bg-cyan-50 text-cyan-600 hover:bg-cyan-100 hover:text-cyan-700 border-cyan-200 hover:border-cyan-300'
-                : isDark ? 'bg-zinc-500/10 text-zinc-500 border-zinc-500/20 cursor-not-allowed opacity-50' : 'bg-gray-50 text-gray-400 border-gray-200 cursor-not-allowed opacity-50'
-                }`}
-              title={isLocked ? 'No disponible en este estatus' : (puedeCompartir ? 'Compartir propuesta' : 'Disponible en Aprobada, Atendido, Pase a ventas, Ajuste Inventario y Ajuste Cto-Cliente')}
-            >
-              <Share2 className="h-3.5 w-3.5" />
-            </button>
-            );
-          })()}
-        </div>
+        <PropuestaAcciones
+          item={item}
+          isDark={isDark}
+          userRol={userRol}
+          canAprobarPerm={canAprobarPerm}
+          canAsignarInventarioPerm={canAsignarInventarioPerm}
+          canCompartirPerm={canCompartirPerm}
+          canPruebaColor={canPruebaColor}
+          onApprove={onApprove}
+          onAssign={onAssign}
+          onShare={onShare}
+          onPruebaColor={onPruebaColor}
+        />
       </td>
     </tr>
   );
@@ -1484,12 +1446,21 @@ export function PropuestasPage() {
   const [expandedGroups, setExpandedGroups] = useState<Set<string>>(new Set());
   const [page, setPage] = useState(1);
   const limit = 20;
-  const [activeView, setActiveView] = useState<'tabla' | 'versionario' | 'tablero'>('tabla');
+  // Vista fija del modulo (por usuario, localStorage): con cual de las tres
+  // vistas abre Propuestas. null = default ('tabla').
+  const [vistaFija, setVistaFija] = useState<VistaPropuestas | null>(
+    () => loadVistaFijaModulo('propuestas', user?.id, VISTAS_PROPUESTAS_KEYS),
+  );
+  const [activeView, setActiveView] = useState<VistaPropuestas>(() => vistaFija ?? 'tabla');
   // Vista Tablero: columnas visibles, orden rápido y filtro de incompletos.
   // Viven aquí (no en el tablero) porque el orden y el filtro también aplican a
   // la Vista Tabla: una sola fuente de verdad para las dos.
   const [tableroColumnas, setTableroColumnas] = useState<string[]>(PROPUESTAS_COLUMNAS_KEYS);
-  const [ordenRapido, setOrdenRapido] = useState<OrdenRapido>(ORDEN_RAPIDO_TABLA_DEFAULT);
+  // Si el modulo abre directo en el tablero (vista fija), arranca con el orden
+  // fijo del tablero; si no, con el de la tabla.
+  const [ordenRapido, setOrdenRapido] = useState<OrdenRapido>(
+    () => (activeView === 'tablero' ? ORDEN_RAPIDO_DEFAULT : ORDEN_RAPIDO_TABLA_DEFAULT),
+  );
   const [soloIncompletos, setSoloIncompletos] = useState(false);
   const [exportingLayout, setExportingLayout] = useState(false);
   const [exportingOcupacion, setExportingOcupacion] = useState(false);
@@ -1510,6 +1481,19 @@ export function PropuestasPage() {
     });
   };
   const resetVersionarioGroupings = () => setVersionarioGroupings(VERSIONARIO_DEFAULT_GROUPINGS);
+
+  const cambiarVista = (v: VistaPropuestas) => {
+    setActiveView(v);
+    setPage(1);
+    // El tablero trae su propio orden fijo (ultimo cambio arriba). Solo se
+    // impone si el usuario no eligio otro: si ya venia ordenando distinto en
+    // la tabla, se respeta.
+    if (v === 'tablero') setOrdenRapido(prev => (prev === ORDEN_RAPIDO_TABLA_DEFAULT ? ORDEN_RAPIDO_DEFAULT : prev));
+  };
+  const fijarVista = (v: VistaPropuestas | null) => {
+    setVistaFija(v);
+    saveVistaFijaModulo('propuestas', user?.id, v);
+  };
 
   // Modals
   const [statusPropuesta, setStatusPropuesta] = useState<Propuesta | null>(null);
@@ -2293,47 +2277,17 @@ export function PropuestasPage() {
                 )}
               </button>
 
-              {/* View Toggle - idéntico a campañas */}
-              <button
-                onClick={() => setActiveView('tabla')}
-                className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-medium transition-all ${
-                  activeView === 'tabla'
-                    ? isDark ? 'bg-purple-500/20 text-purple-300 border border-purple-500/40' : 'bg-purple-100 text-purple-700 border border-purple-200'
-                    : isDark ? 'bg-zinc-800/60 text-zinc-400 border border-zinc-700/50 hover:bg-zinc-800 hover:text-zinc-200' : 'bg-gray-100 text-gray-500 border border-gray-200 hover:bg-gray-200 hover:text-gray-700'
-                }`}
-              >
-                <List className="h-4 w-4" />
-                Vista Tabla
-              </button>
-              <button
-                onClick={() => setActiveView('versionario')}
-                className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-medium transition-all ${
-                  activeView === 'versionario'
-                    ? isDark ? 'bg-purple-500/20 text-purple-300 border border-purple-500/40' : 'bg-purple-100 text-purple-700 border border-purple-200'
-                    : isDark ? 'bg-zinc-800/60 text-zinc-400 border border-zinc-700/50 hover:bg-zinc-800 hover:text-zinc-200' : 'bg-gray-100 text-gray-500 border border-gray-200 hover:bg-gray-200 hover:text-gray-700'
-                }`}
-              >
-                <LayoutGrid className="h-4 w-4" />
-                Desglose
-              </button>
-              <button
-                onClick={() => {
-                  setActiveView('tablero');
-                  setPage(1);
-                  // El tablero trae su propio orden fijo (último cambio arriba).
-                  // Solo se impone si el usuario no eligió otro: si ya venía
-                  // ordenando distinto en la tabla, se respeta.
-                  setOrdenRapido(prev => (prev === ORDEN_RAPIDO_TABLA_DEFAULT ? ORDEN_RAPIDO_DEFAULT : prev));
-                }}
-                className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-medium transition-all ${
-                  activeView === 'tablero'
-                    ? isDark ? 'bg-purple-500/20 text-purple-300 border border-purple-500/40' : 'bg-purple-100 text-purple-700 border border-purple-200'
-                    : isDark ? 'bg-zinc-800/60 text-zinc-400 border border-zinc-700/50 hover:bg-zinc-800 hover:text-zinc-200' : 'bg-gray-100 text-gray-500 border border-gray-200 hover:bg-gray-200 hover:text-gray-700'
-                }`}
-              >
-                <Columns3 className="h-4 w-4" />
-                Tablero
-              </button>
+              {/* Selector de vista (Tabla / Desglose / Tablero) + estrella para
+                  fijar con cual abre el modulo. Un solo grupo compacto en vez
+                  de tres botones sueltos. */}
+              <VistaSelector
+                isDark={isDark}
+                opciones={VISTAS_PROPUESTAS}
+                value={activeView}
+                onChange={cambiarVista}
+                fija={vistaFija}
+                onFijar={fijarVista}
+              />
 
               {/* Botones de export */}
               {activeView === 'versionario' ? (
@@ -2731,14 +2685,21 @@ export function PropuestasPage() {
               columnasVisibles={tableroColumnas}
               isDark={isDark}
               isLoading={isLoading}
-              puedeEditarStatus={(p) => (
-                permissions.canEditPropuestaStatus
-                && p.status !== 'Activa'
-                && p.status !== 'Aprobada'
-                && !(ROLES_LOCKED_BY_ABIERTO.includes(user?.rol || '') && p.status === 'Abierto')
-              )}
+              puedeEditarStatus={(p) => permissions.canEditPropuestaStatus && !esPropuestaBloqueada(p, user?.rol || '')}
+              puedeAbrir={(p) => puedeAbrirPropuesta(p, user?.rol || '', permissions.canAsignarInventario)}
               onStatus={handleRowStatus}
               onAssign={handleRowAssign}
+              acciones={{
+                userRol: user?.rol || '',
+                canAprobarPerm: permissions.canAprobarPropuesta,
+                canAsignarInventarioPerm: permissions.canAsignarInventario,
+                canCompartirPerm: permissions.canCompartirPropuesta,
+                canPruebaColor: puedePruebaColor,
+                onApprove: handleRowApprove,
+                onAssign: handleRowAssign,
+                onShare: handleRowShare,
+                onPruebaColor: handleRowPruebaColor,
+              }}
             />
           </div>
         )}

@@ -201,6 +201,18 @@ export interface Solicitud {
   sap_database?: string | null;
   nombre_campania?: string | null;
   formatos?: string | null;
+  // Enriquecidos por el listado (solicitudes.controller.getAll) via cotizacion /
+  // campania ligadas. Pueden venir null si la solicitud aun no tiene cotizacion.
+  tipo_periodo?: string | null;
+  catorcena_inicio?: number | null;
+  anio_inicio?: number | null;
+  catorcena_fin?: number | null;
+  anio_fin?: number | null;
+  campania_id?: number | null;
+  // Requiere la columna `solicitud.updated_at` (ver scripts/sql) Y que este
+  // en el model de prisma: el listado usa findMany, que solo devuelve campos
+  // del schema. Mientras tanto llega undefined.
+  updated_at?: string | null;
 }
 
 export interface SolicitudStats {
