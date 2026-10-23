@@ -12,7 +12,7 @@ import { Catorcena } from '../../types';
 import { Badge } from '../../components/ui/badge';
 import { UserAvatar } from '../../components/ui/user-avatar';
 import { formatDate } from '../../lib/utils';
-import { formatHistorialDetalles } from '../../lib/historial';
+import { formatHistorialDetalles, limpiarMotivo } from '../../lib/historial';
 import { useAuthStore } from '../../store/authStore';
 import { useThemeStore } from '../../store/themeStore';
 import { getPermissions } from '../../lib/permissions';
@@ -2738,8 +2738,8 @@ export function CampanaDetailPage() {
                       </span>
                       {isAuthEntry && parsedDetalles ? (
                         <div className="mt-0.5">
-                          {isRechazo && parsedDetalles.motivo && (
-                            <p className={`text-xs ${isDark ? 'text-red-400/70' : 'text-red-600/70'}`}>Motivo: {parsedDetalles.motivo}</p>
+                          {isRechazo && (
+                            <p className={`text-xs ${isDark ? 'text-red-400/70' : 'text-red-600/70'}`}>Motivo: {limpiarMotivo(parsedDetalles.motivo) || 'no especificado'}</p>
                           )}
                           {isCambio && parsedDetalles.cambios && (
                             <div className="space-y-0.5">

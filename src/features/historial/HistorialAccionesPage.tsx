@@ -10,7 +10,7 @@ import { useThemeStore } from '../../store/themeStore';
 import { useAuthStore } from '../../store/authStore';
 import { getPermissions } from '../../lib/permissions';
 import { useSocketHistorialAcciones } from '../../hooks/useSocket';
-import { formatHistorialDetalles } from '../../lib/historial';
+import { formatHistorialDetalles, limpiarMotivo, formatCircuito } from '../../lib/historial';
 
 function formatFechaHora(fecha: string): string {
   const d = new Date(fecha);
@@ -811,7 +811,7 @@ export function HistorialAccionesPage() {
                       {obj.rechazadoPor && (
                         <div>
                           <span className={`text-xs font-medium ${subText}`}>Rechazado por</span>
-                          <p className={`text-sm mt-1 ${headerText}`}>{obj.rechazadoPor}{obj.motivo ? ` · Motivo: ${obj.motivo}` : ''}</p>
+                          <p className={`text-sm mt-1 ${headerText}`}>{obj.rechazadoPor}{obj.tipo ? ` · Tipo: ${obj.tipo}` : ''} · Motivo: {limpiarMotivo(obj.motivo) || 'no especificado'}</p>
                         </div>
                       )}
                       {obj.cambios?.length > 0 && (
@@ -872,10 +872,10 @@ export function HistorialAccionesPage() {
                           <p className={`text-sm mt-1 ${headerText}`}>{obj.campaña}</p>
                         </div>
                       )}
-                      {obj.motivo && (
+                      {!obj.rechazadoPor && limpiarMotivo(obj.motivo) && (
                         <div>
                           <span className={`text-xs font-medium ${subText}`}>Motivo</span>
-                          <p className={`text-sm mt-1 ${headerText}`}>{obj.motivo}</p>
+                          <p className={`text-sm mt-1 ${headerText}`}>{limpiarMotivo(obj.motivo)}</p>
                         </div>
                       )}
                       {obj.articulo && (
@@ -901,7 +901,7 @@ export function HistorialAccionesPage() {
                           <span className={`text-xs font-medium ${subText}`}>Circuitos afectados ({obj.circuitos.length})</span>
                           <div className="mt-1 space-y-1">
                             {obj.circuitos.map((c: any, i: number) => (
-                              <p key={i} className={`text-sm ${headerText}`}>{c.articulo || '-'} — {c.formato || '-'}</p>
+                              <p key={i} className={`text-sm ${headerText}`}>{formatCircuito(c) || `${c.articulo || '-'} — ${c.formato || '-'}`}</p>
                             ))}
                           </div>
                         </div>
