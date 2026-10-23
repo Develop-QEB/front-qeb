@@ -2953,6 +2953,7 @@ function TaskDrawer({
               ref_id?: number | null;
               anio?: number | null;
               catorcena?: number | null;
+              catorcenas?: number[] | null;
               estatus_actividad?: string | null;
               base?: string | null;
             };
@@ -2966,8 +2967,19 @@ function TaskDrawer({
             if (c.cliente) campos.push({ label: 'Cliente', value: c.cliente });
             if (c.marca) campos.push({ label: 'Marca', value: c.marca });
             if (c.anio) campos.push({ label: 'Año', value: String(c.anio) });
-            if (c.catorcena) campos.push({ label: 'Catorcena', value: `Cat ${c.catorcena}` });
-            if (c.estatus_actividad) campos.push({ label: 'Estatus', value: c.estatus_actividad });
+            // Catorcenas: array nuevo tiene prioridad; cae al singular legacy.
+            const catorcenasList = Array.isArray(c.catorcenas) && c.catorcenas.length > 0
+              ? c.catorcenas
+              : (c.catorcena ? [c.catorcena] : []);
+            if (catorcenasList.length > 0) {
+              const label = catorcenasList.length === 1 ? 'Catorcena' : 'Catorcenas';
+              campos.push({ label, value: catorcenasList.map(n => `Cat ${n}`).join(', ') });
+            }
+            // 'Cerrado' legacy se muestra como 'Finalizado' para alinear vocabulario.
+            if (c.estatus_actividad) {
+              const estDisplay = c.estatus_actividad === 'Cerrado' ? 'Finalizado' : c.estatus_actividad;
+              campos.push({ label: 'Estatus', value: estDisplay });
+            }
             if (c.base) campos.push({ label: 'Base', value: c.base });
 
             if (campos.length === 0) return null;

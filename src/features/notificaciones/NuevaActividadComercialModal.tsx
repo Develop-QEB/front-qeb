@@ -59,9 +59,13 @@ export function NuevaActividadComercialModal({ isOpen, onClose, editing }: Props
   const [error, setError] = useState<string | null>(null);
   const [createdId, setCreatedId] = useState<number | null>(null);
   // Ajuste feedback 2026-08-15: selectores manuales adicionales.
+  // Catorcena cambio a MULTI-select (feedback 2026-10-19): array de 1-26.
+  // Estatus: 3 opciones Abierto|Activo|Finalizado (feedback 2026-10-19);
+  // 'Cerrado' queda como alias legacy equivalente a 'Finalizado'.
   const [anio, setAnio] = useState<string>('');
-  const [catorcena, setCatorcena] = useState<string>('');
-  const [estatusActividad, setEstatusActividad] = useState<'' | 'Abierto' | 'Cerrado'>('');
+  const [catorcenas, setCatorcenas] = useState<number[]>([]);
+  const [catorcenaDropdownOpen, setCatorcenaDropdownOpen] = useState(false);
+  const [estatusActividad, setEstatusActividad] = useState<'' | 'Abierto' | 'Activo' | 'Finalizado'>('Abierto');
   const [base, setBase] = useState<'' | 'CIMU' | 'TRADE' | 'UDC'>('');
 
   const debouncedSearch = useDebounced(search, 300);
@@ -82,8 +86,10 @@ export function NuevaActividadComercialModal({ isOpen, onClose, editing }: Props
     setError(null);
     setCreatedId(null);
     setAnio('');
-    setCatorcena('');
-    setEstatusActividad('');
+    setCatorcenas([]);
+    // Default al crear nueva: 'Abierto' (feedback Jos 2026-10-19). En edicion,
+    // el useEffect de abajo precarga el valor guardado.
+    setEstatusActividad(editing ? '' : 'Abierto');
     setBase('');
 
     if (!editing) return;
@@ -101,7 +107,7 @@ export function NuevaActividadComercialModal({ isOpen, onClose, editing }: Props
           subtipo?: string; ref_id?: number;
           cliente?: string; marca?: string;
           activar_recordatorio?: boolean; recordar_dias_antes?: number;
-          anio?: number; catorcena?: number;
+          anio?: number; catorcena?: number; catorcenas?: number[];
           estatus_actividad?: string; base?: string;
         };
         if (c.subtipo === 'Campaña' || c.subtipo === 'Propuesta' || c.subtipo === 'Lead') {
@@ -124,9 +130,17 @@ export function NuevaActividadComercialModal({ isOpen, onClose, editing }: Props
           if (c.recordar_dias_antes != null) setDiasAntes(String(c.recordar_dias_antes));
         }
         if (c.anio) setAnio(String(c.anio));
-        if (c.catorcena) setCatorcena(String(c.catorcena));
-        if (c.estatus_actividad === 'Abierto' || c.estatus_actividad === 'Cerrado') {
+        // Catorcenas: aceptamos array nuevo o fallback al campo legacy singular.
+        if (Array.isArray(c.catorcenas) && c.catorcenas.length > 0) {
+          setCatorcenas(c.catorcenas.filter(n => Number.isFinite(n) && n >= 1 && n <= 26));
+        } else if (c.catorcena) {
+          setCatorcenas([c.catorcena]);
+        }
+        // 'Cerrado' legacy se normaliza a 'Finalizado' al editar.
+        if (c.estatus_actividad === 'Abierto' || c.estatus_actividad === 'Activo' || c.estatus_actividad === 'Finalizado') {
           setEstatusActividad(c.estatus_actividad);
+        } else if (c.estatus_actividad === 'Cerrado') {
+          setEstatusActividad('Finalizado');
         }
         if (c.base === 'CIMU' || c.base === 'TRADE' || c.base === 'UDC') {
           setBase(c.base);
@@ -143,7 +157,17 @@ export function NuevaActividadComercialModal({ isOpen, onClose, editing }: Props
     const y = new Date().getFullYear();
     return [y - 1, y, y + 1];
   }, []);
-  const catorcenas = useMemo(() => Array.from({ length: 26 }, (_, i) => i + 1), []);
+  const catorcenasOpciones = useMemo(() => Array.from({ length: 26 }, (_, i) => i + 1), []);
+  const toggleCatorcena = (n: number) => {
+    setCatorcenas(prev => prev.includes(n) ? prev.filter(x => x !== n) : [...prev, n].sort((a, b) => a - b));
+  };
+  const catorcenasLabel = catorcenas.length === 0
+    ? 'Selecciona catorcena(s)'
+    : catorcenas.length === 1
+      ? `Cat ${catorcenas[0]}`
+      : catorcenas.length <= 4
+        ? catorcenas.map(c => `Cat ${c}`).join(', ')
+        : `${catorcenas.length} catorcenas`;
 
   const listQuery = useQuery({
     queryKey: ['actividad-comercial-refs', subtipo, debouncedSearch],
@@ -217,7 +241,10 @@ export function NuevaActividadComercialModal({ isOpen, onClose, editing }: Props
       activar_recordatorio: activarRecordatorio,
       recordar_dias_antes: dias,
       anio: anio ? Number(anio) : undefined,
-      catorcena: catorcena ? Number(catorcena) : undefined,
+      // Catorcenas: enviamos SIEMPRE array; mantenemos la clave singular como
+      // alias (primera) para que listados legacy sigan mostrando algo.
+      catorcenas: catorcenas.length > 0 ? catorcenas : undefined,
+      catorcena: catorcenas[0] ?? undefined,
       estatus_actividad: estatusActividad || undefined,
       base: base || undefined,
     };
@@ -305,8 +332,8 @@ export function NuevaActividadComercialModal({ isOpen, onClose, editing }: Props
                     setDiasAntes('1');
                     setError(null);
                     setAnio('');
-                    setCatorcena('');
-                    setEstatusActividad('');
+                    setCatorcenas([]);
+                    setEstatusActividad('Abierto');
                     setBase('');
                   }}
                   className={`px-4 py-2 rounded-lg text-sm font-medium border ${isDark ? 'border-amber-500/40 text-amber-200 hover:bg-amber-500/10' : 'border-amber-400 text-amber-700 hover:bg-amber-50'}`}
@@ -485,27 +512,49 @@ export function NuevaActividadComercialModal({ isOpen, onClose, editing }: Props
                   {anios.map(y => <option key={y} value={y}>{y}</option>)}
                 </select>
               </div>
-              <div>
+              <div className="relative">
                 <label className={labelCls}>Periodo (catorcena)</label>
-                <select
-                  className={inputCls}
-                  value={catorcena}
-                  onChange={(e) => setCatorcena(e.target.value)}
+                {/* Multi-select con checkboxes (feedback Jos 2026-10-19). */}
+                <button
+                  type="button"
+                  onClick={() => setCatorcenaDropdownOpen(o => !o)}
+                  className={`${inputCls} text-left flex items-center justify-between gap-2`}
                 >
-                  <option value="">—</option>
-                  {catorcenas.map(c => <option key={c} value={c}>Cat {c}</option>)}
-                </select>
+                  <span className={catorcenas.length === 0 ? (isDark ? 'text-zinc-500' : 'text-gray-400') : ''}>
+                    {catorcenasLabel}
+                  </span>
+                  <span className={`text-[10px] shrink-0 ${isDark ? 'text-zinc-500' : 'text-gray-400'}`}>▾</span>
+                </button>
+                {catorcenaDropdownOpen && (
+                  <div className={`absolute z-20 mt-1 w-full max-h-56 overflow-y-auto rounded-lg border shadow-lg ${isDark ? 'bg-zinc-900 border-zinc-700' : 'bg-white border-gray-200'}`}>
+                    <div className={`sticky top-0 flex items-center justify-between px-2 py-1 border-b text-[10px] ${isDark ? 'bg-zinc-900 border-zinc-800 text-zinc-500' : 'bg-white border-gray-100 text-gray-500'}`}>
+                      <button type="button" onClick={() => setCatorcenas([])} className="hover:underline">Limpiar</button>
+                      <button type="button" onClick={() => setCatorcenaDropdownOpen(false)} className="hover:underline">Cerrar</button>
+                    </div>
+                    {catorcenasOpciones.map(c => (
+                      <label key={c} className={`flex items-center gap-2 px-2 py-1 text-xs cursor-pointer ${isDark ? 'hover:bg-zinc-800 text-zinc-200' : 'hover:bg-amber-50 text-gray-700'}`}>
+                        <input
+                          type="checkbox"
+                          className="h-3.5 w-3.5 accent-amber-600"
+                          checked={catorcenas.includes(c)}
+                          onChange={() => toggleCatorcena(c)}
+                        />
+                        Cat {c}
+                      </label>
+                    ))}
+                  </div>
+                )}
               </div>
               <div>
                 <label className={labelCls}>Estatus</label>
                 <select
                   className={inputCls}
                   value={estatusActividad}
-                  onChange={(e) => setEstatusActividad(e.target.value as '' | 'Abierto' | 'Cerrado')}
+                  onChange={(e) => setEstatusActividad(e.target.value as '' | 'Abierto' | 'Activo' | 'Finalizado')}
                 >
-                  <option value="">—</option>
                   <option value="Abierto">Abierto</option>
-                  <option value="Cerrado">Cerrado</option>
+                  <option value="Activo">Activo</option>
+                  <option value="Finalizado">Finalizado</option>
                 </select>
               </div>
               <div>
