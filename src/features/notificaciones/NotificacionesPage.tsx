@@ -3123,8 +3123,10 @@ function TaskDrawer({
         <div className="p-5 space-y-3">
           <h3 className={`text-xs font-medium ${isDark ? 'text-zinc-500' : 'text-gray-400'} uppercase tracking-wider mb-3`}>Detalles</h3>
 
-          {/* Cliente (si es tarea de autorización) */}
-          {(() => {
+          {/* Cliente (si es tarea de autorización). Para Actividad Comercial lo
+              omitimos aqui porque ya aparece en el bloque amarillo "Información
+              de la Actividad" (feedback Jos 2026-10-20 — campos duplicados). */}
+          {tarea.tipo !== 'Actividad Comercial' && (() => {
             const clienteName = (carasData && carasData.length > 0 ? carasData[0].cliente : null) || tarea.cliente;
             if (!clienteName) return null;
             return (
