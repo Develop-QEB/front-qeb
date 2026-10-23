@@ -34,6 +34,7 @@ import { IncidenciaModal } from './IncidenciaModal';
 import { PruebasColorModal } from '../pruebas-color/PruebasColorModal';
 import { puedeGestionarPruebaColor } from '../../services/pruebasColor.service';
 import { exportVersionarioArtesMulti } from '../../utils/exportVersionarioArtes';
+import { RefreshButton } from '../../components/RefreshButton';
 
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3000/api';
 const STATIC_URL = API_URL.replace(/\/api$/, '');
@@ -3389,6 +3390,24 @@ export function CampanasPage() {
                   </button>
                 )}
               </div>
+
+              {/* Actualizar sin recargar: refetch de listado/KPIs y limpieza de
+                  los cachés manuales (inventarios por campaña e inversión por
+                  catorcena) para que los efectos de auto-carga los vuelvan a pedir. */}
+              <RefreshButton
+                isDark={isDark}
+                onRefresh={() => {
+                  loadingRef.current.clear();
+                  isLoadingBatchRef.current = false;
+                  setLoadingInventarios(new Set());
+                  setCampanaInventarios({});
+                  setCampanaCaras({});
+                  loadedInvCatIdsRef.current.clear();
+                  loadingInvCatRef.current = false;
+                  setInversionPorCatorcena({});
+                  setBatchTick(t => t + 1);
+                }}
+              />
 
               {/* Filter Toggle */}
               <button

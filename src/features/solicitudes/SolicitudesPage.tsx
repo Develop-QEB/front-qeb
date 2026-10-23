@@ -20,6 +20,7 @@ import { useThemeStore } from '../../store/themeStore';
 import { getPermissions } from '../../lib/permissions';
 import { useSocketSolicitudes } from '../../hooks/useSocket';
 import { HistorialFilterPopover, type HistorialFilterValues } from '../../components/HistorialFilterPopover';
+import { RefreshButton } from '../../components/RefreshButton';
 
 // Filter Chip Component with Search - same as ClientesPage
 function FilterChip({
@@ -1308,6 +1309,9 @@ export function SolicitudesPage() {
                   </button>
                 )}
               </div>
+
+              {/* Actualizar: refetch de listado y KPIs sin recargar la página */}
+              <RefreshButton isDark={isDark} queryKeys={[['solicitudes'], ['solicitudes-stats']]} />
 
               {/* Filter Toggle */}
               <button

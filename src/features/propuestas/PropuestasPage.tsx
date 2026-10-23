@@ -34,6 +34,7 @@ import { useSocketEquipos, useSocketPropuestas } from '../../hooks/useSocket';
 import { HistorialFilterPopover, type HistorialFilterValues } from '../../components/HistorialFilterPopover';
 import { ConfirmModal } from '../../components/ui/confirm-modal';
 import { monthLabelShort } from '../../lib/periodos';
+import { RefreshButton } from '../../components/RefreshButton';
 
 function getMonthShort(dateStr: string): string {
   return monthLabelShort(dateStr) || '-';
@@ -2411,6 +2412,9 @@ export function PropuestasPage() {
                   </button>
                 )}
               </div>
+
+              {/* Actualizar: refetch de listado, KPIs y desglose sin recargar la página */}
+              <RefreshButton isDark={isDark} />
 
               {/* Filter Toggle */}
               <button
