@@ -1,5 +1,6 @@
 import api from '../lib/api';
 import { Inventario, InventarioMapItem, InventarioStats, PaginatedResponse, ApiResponse } from '../types';
+import type { TipoBloqueoInventario } from '../lib/bloqueoInventario';
 
 /**
  * Un evento de la timeline de un inventario. La arma el back combinando varias
