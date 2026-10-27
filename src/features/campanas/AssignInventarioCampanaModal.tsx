@@ -1491,8 +1491,10 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
       setClienteSearchTerm('');
       setShowClienteDropdown(false);
 
-      // Store initial values for change detection — only on first load
-      if (!initialValuesSetRef.current) {
+      // Store initial values for change detection — only on first load.
+      // Esperar a `users`: si la campaña llega antes, los asignados salen vacíos,
+      // luego se llenan y el modal marca "Campaña" como cambio fantasma (caso 80617).
+      if (!initialValuesSetRef.current && users) {
         const asignadosIdsStr = loadedAsignados.map(u => u.id).join(',');
         setInitialValues({
           nombreCampania: campaniaNombre,
@@ -2610,6 +2612,13 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
             const nuevoLocalIds = new Set(conIdNuevo.map(c => c.localId));
             setCaras(prev => prev.filter(c => !nuevoLocalIds.has(c.localId)));
             setReservas(prev => prev.filter(r => !conIdNuevo.some(c => r.id.startsWith(c.localId) || r.solicitudCaraId === c.id)));
+            // Sacarlas también de los pendientes: si no, "Guardar Cambios" manda un id
+            // borrado y el bulk truena con "Record to update not found" (caso 80617).
+            setModifiedCaras(prev => {
+              const next = new Map(prev);
+              for (const c of conIdNuevo) next.delete(c.id);
+              return next;
+            });
           } catch (e) {
             console.error('Error eliminando circuito nuevo (sin auth):', e);
           }
