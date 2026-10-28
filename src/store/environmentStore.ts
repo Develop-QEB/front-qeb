@@ -4,7 +4,11 @@ import { persist } from 'zustand/middleware';
 export type SapDatabase = 'CIMU' | 'TEST' | 'TRADE' | 'UDC';
 export type Environment = SapDatabase;
 
-export const SAP_BASE_URL = 'https://workflow-namely-changes-nothing.trycloudflare.com';
+// URL del proxy SAP. Se lee de la variable de entorno VITE_SAP_URL (la pone el
+// humano en Vercel por proyecto: dev/prod pueden tener URLs distintas sin tocar
+// código). Respaldo = el túnel cloudflared viejo, por si la variable no existe.
+// Nuevo proxy fijo y permanente: https://sap.qeb.mx
+export const SAP_BASE_URL = import.meta.env.VITE_SAP_URL || 'https://workflow-namely-changes-nothing.trycloudflare.com';
 
 // SERIES por BD SAP (CIMU=164, TRADE=95, UDC=91). UDC ya trae su serie real
 // confirmada por IMU (91, misma en PB_SBOUDC pruebas y SBOUDC producción), así
