@@ -11,9 +11,9 @@ import { propuestasService } from '../services/propuestas.service';
 import { dashboardService, resolveCatorcenaActual, FilterOptions } from '../services/dashboard.service';
 import { getSapCache, setSapCache, SAP_CACHE_KEYS } from '../lib/sapCache';
 import { filterAllowedArticulos } from '../config/allowedDigitalArticles';
+import { SAP_BASE_URL } from '../store/environmentStore';
 
-// SAP API URL
-const SAP_BASE_URL = 'https://workflow-namely-changes-nothing.trycloudflare.com';
+// SAP_BASE_URL viene de environmentStore (una sola fuente; lee VITE_SAP_URL).
 
 // Interfaces para SAP
 interface SAPCuicItem {

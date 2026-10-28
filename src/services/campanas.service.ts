@@ -2,12 +2,11 @@ import api from '../lib/api';
 import { Campana, CampanaStats, PaginatedResponse, ApiResponse, ComentarioTarea, CampanaWithComments } from '../types';
 import type { ReservaHistorialItem } from './propuestas.service';
 
-import { useEnvironmentStore, getEndpoints, getDeliveryNotesEndpoint, getSeriesForSapDatabase, usaSapPruebas } from '../store/environmentStore';
+import { useEnvironmentStore, getEndpoints, getDeliveryNotesEndpoint, getSeriesForSapDatabase, usaSapPruebas, SAP_BASE_URL } from '../store/environmentStore';
 import type { SapDatabase } from '../store/environmentStore';
 export type { CampanaWithComments };
 
-// SAP Configuration
-const SAP_BASE_URL = 'https://workflow-namely-changes-nothing.trycloudflare.com';
+// SAP_BASE_URL viene de environmentStore (una sola fuente; lee VITE_SAP_URL).
 
 // Interfaces para SAP Delivery Note
 /** Pieza que el backend NO pudo reservar, con su motivo. Permite decirle al
