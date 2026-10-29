@@ -365,6 +365,7 @@ export interface SolicitudCara {
   autorizacion_dg?: string;
   autorizacion_dcm?: string;
   grupo_rt_bf?: number | null;
+  en_filtro_dg?: boolean;
 }
 
 export interface Comentario {

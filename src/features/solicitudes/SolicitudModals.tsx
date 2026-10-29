@@ -1077,6 +1077,15 @@ export function ViewSolicitudModal({ isOpen, onClose, solicitudId, onEdit, onAte
                                                   });
                                                 }
                                                 if (authDg === 'pendiente') {
+                                                  // Etapa visual del filtro GC previo a DG. Si la solicitud tiene
+                                                  // tarea 'Filtro Autorización DG' abierta, aparece como chip extra
+                                                  // junto al "Pend. DG" para distinguir "esperando GC" de "esperando DG".
+                                                  if (cara.en_filtro_dg) {
+                                                    authBadges.push({
+                                                      label: 'Filtro GC',
+                                                      color: { bg: isDark ? 'bg-cyan-500/20' : 'bg-cyan-50', text: isDark ? 'text-cyan-300' : 'text-cyan-700', border: isDark ? 'border-cyan-500/30' : 'border-cyan-200' }
+                                                    });
+                                                  }
                                                   authBadges.push({
                                                     label: 'Pend. DG',
                                                     color: { bg: isDark ? 'bg-red-500/20' : 'bg-red-50', text: isDark ? 'text-red-300' : 'text-red-700', border: isDark ? 'border-red-500/30' : 'border-red-200' }
