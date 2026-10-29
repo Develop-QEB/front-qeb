@@ -300,6 +300,9 @@ export interface SolicitudCara {
   autorizacion_dcm?: string | null;
   // true si la cara tiene una tarea de eliminación abierta (Filtro GC o DG).
   pendiente_eliminacion?: boolean;
+  // true si hay una tarea 'Filtro Autorización DG' abierta (gerente comercial
+  // revisando antes de escalar a DG). Pinta embudo ambar junto al "Pend. DG".
+  en_filtro_dg?: boolean;
   grupo_rt_bf?: number | null;
   cortesia?: number | null;
 }

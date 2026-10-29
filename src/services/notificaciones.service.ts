@@ -454,4 +454,5 @@ export interface CaraAutorizacion {
   fin_periodo?: string;
   inicio_periodo?: string;
   asesor?: string;
+  en_filtro_dg?: boolean;
 }
