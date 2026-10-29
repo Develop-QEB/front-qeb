@@ -27,7 +27,7 @@ import { BULK_DELETE_ENABLED } from '../../config/featureFlags';
 import { NotasDireccionBitacora } from '../notificaciones/NotasDireccionBitacora';
 import { NuevaNotaDireccionModal } from '../notificaciones/NuevaNotaDireccionModal';
 import { notasDireccionService } from '../../services/notasDireccion.service';
-import { articuloValidoEnPeriodo } from '../../lib/periodos';
+import { articuloValidoEnPeriodo, esArticuloGranFormato } from '../../lib/periodos';
 
 // Tarifas now come from SAP (U_IMU_PublicPrice = tarifa publica, PriceList 11 = tarifa piso)
 
@@ -946,6 +946,10 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
   // sap_database no quedó en 'UDC' el catálogo caía al regular (/articulos) y se
   // colaban los Gran Formato mensuales de CIMU/TRADE. Ese era el bug.
   const sapDbArticulos = esUDC ? ('UDC' as const) : null;
+  // ¿El artículo elegido es GRAN FORMATO (puente/cartelera) dentro de un contexto
+  // UDC? Esos conservan su tipo/periodo reales (no se fuerzan a pantalla digital).
+  const newCaraEsGranFormato = esUDC && !!newCara.articulo
+    && esArticuloGranFormato(newCara.articulo.ItemName, newCara.articulo.ItemCode);
   useEffect(() => {
     if (esUDC && tipoPeriodo !== 'mensual') {
       setTipoPeriodo('mensual');
@@ -953,12 +957,13 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
       setCatorcenaFin(undefined);
     }
   }, [esUDC, tipoPeriodo]);
-  // UDC: el tipo SIEMPRE es Digital (inventario aeropuerto, sin variante Tradicional).
+  // UDC: el tipo SIEMPRE es Digital (inventario aeropuerto, sin variante
+  // Tradicional) — salvo gran formato dentro de UDC, que conserva su tipo real.
   useEffect(() => {
-    if (esUDC && newCara.tipo !== 'Digital') {
+    if (esUDC && !newCaraEsGranFormato && newCara.tipo !== 'Digital') {
       setNewCara(prev => ({ ...prev, tipo: 'Digital' }));
     }
-  }, [esUDC, newCara.tipo]);
+  }, [esUDC, newCaraEsGranFormato, newCara.tipo]);
   // Fetch ALL articulos from SAP with cache
   const { data: articulosData, isLoading: articulosLoading, refetch: refetchArticulos, isFetching: articulosFetching } = useQuery({
     queryKey: ['sap-articulos-all', forceRefreshSap, sapDbArticulos],
@@ -970,7 +975,20 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
         if (!response.ok) throw new Error('Error fetching articulos UDC');
         const data = await response.json();
         const raw = (data.value || data) as SAPArticulo[];
-        return filterAllowedArticulos(raw.filter(a => !esArticuloUDCBasura(a.ItemCode)));
+        const list = raw.filter(a => !esArticuloUDCBasura(a.ItemCode));
+        // UDC (aeropuerto) también vende GRAN FORMATO mensual (puentes, carteleras,
+        // unipolares…): se traen del catálogo CIMU y se anexan solo los de gran
+        // formato, para que el selector UDC muestre pantallas + gran formato.
+        try {
+          const rc = await fetch(getEndpoints('CIMU').articulos);
+          if (rc.ok) {
+            const dc = await rc.json();
+            const gf = ((dc.value || dc) as SAPArticulo[]).filter(a => esArticuloGranFormato(a.ItemName, a.ItemCode));
+            const seen = new Set(list.map(a => a.ItemCode));
+            for (const a of gf) if (!seen.has(a.ItemCode)) { list.push(a); seen.add(a.ItemCode); }
+          }
+        } catch { /* si CIMU falla, queda solo el catálogo UDC */ }
+        return filterAllowedArticulos(list);
       }
       // Try cache first (unless forcing refresh)
       if (forceRefreshSap === 0) {
@@ -3301,7 +3319,9 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
                       }
 
                       // UDC (aeropuerto AICM): todo Digital, mensual, plaza AICM.
-                      if (sapDbArticulos === 'UDC') {
+                      // Excepción: gran formato (puente/cartelera) dentro de UDC cae
+                      // a la rama normal de abajo (autollenado CIMU: tipo/plaza reales).
+                      if (sapDbArticulos === 'UDC' && !esArticuloGranFormato(item.ItemName, item.ItemCode)) {
                         const udc = parseArticuloUDC(item.ItemCode, item.ItemName);
                         const tarifaUdc = getTarifaFromArticulo(item);
                         const esCT = item.ItemCode.toUpperCase().startsWith('CT');
@@ -3501,12 +3521,12 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
                   <div>
                     <label className={`text-xs ${isDark ? 'text-zinc-500' : 'text-gray-500'}`}>Tipo</label>
                     <select
-                      value={esUDC ? 'Digital' : newCara.tipo}
-                      onChange={(e) => editingCaraId && !esUDC && setNewCara({ ...newCara, tipo: e.target.value as 'Tradicional' | 'Digital' | '' })}
-                      disabled={!editingCaraId || esUDC}
-                      className={`w-full px-3 py-2 ${isDark ? 'bg-zinc-800 border-zinc-700 text-white' : 'bg-gray-100 border-gray-200 text-gray-900'} border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-purple-500/50 ${(!editingCaraId || esUDC) ? 'opacity-60 cursor-not-allowed' : ''}`}
+                      value={esUDC && !newCaraEsGranFormato ? 'Digital' : newCara.tipo}
+                      onChange={(e) => editingCaraId && !(esUDC && !newCaraEsGranFormato) && setNewCara({ ...newCara, tipo: e.target.value as 'Tradicional' | 'Digital' | '' })}
+                      disabled={!editingCaraId || (esUDC && !newCaraEsGranFormato)}
+                      className={`w-full px-3 py-2 ${isDark ? 'bg-zinc-800 border-zinc-700 text-white' : 'bg-gray-100 border-gray-200 text-gray-900'} border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-purple-500/50 ${(!editingCaraId || (esUDC && !newCaraEsGranFormato)) ? 'opacity-60 cursor-not-allowed' : ''}`}
                     >
-                      {esUDC ? (
+                      {esUDC && !newCaraEsGranFormato ? (
                         <option value="Digital">Digital</option>
                       ) : (
                         <>
