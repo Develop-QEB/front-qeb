@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { AlertCircle, Check, CheckCircle2, ChevronDown, Loader2, Paintbrush, Search, Send, Trash2, X, Upload, FileImage, ClipboardList, Plus, Users, XCircle, Flag, ChevronRight, ExternalLink } from 'lucide-react';
+import { AlertCircle, Check, CheckCircle2, ChevronDown, Loader2, Paintbrush, Search, Send, Trash2, X, Upload, FileImage, ClipboardList, Plus, Users, XCircle, Flag, ChevronRight, ExternalLink, Printer } from 'lucide-react';
 import { useThemeStore } from '../../store/themeStore';
 import { useAuthStore } from '../../store/authStore';
 import {
@@ -17,6 +17,7 @@ import {
 } from '../../services/pruebasColor.service';
 import { propuestasService, SolicitudCara } from '../../services/propuestas.service';
 import { uploadsService } from '../../services/uploads.service';
+import { campanasService } from '../../services/campanas.service';
 import { formatDate } from '../../lib/utils';
 
 // Valida que un string sea un URL http(s) real. Rechaza basura como
@@ -444,7 +445,7 @@ export function PruebasColorModal({ isOpen, onClose, propuestaId, contextoNombre
             onClick={() => setActiveTab('pruebas')}
             isDark={isDark}
             icon={<ClipboardList className="h-4 w-4" />}
-            label="Pruebas"
+            label="Tareas"
             badge={pruebasDelFlujo.length}
           />
           {puedeCrear && (
@@ -1239,7 +1240,7 @@ function TareasAsociadasSection({
           puedeRevisar={puedeRevisar}
           esUltimaRevision={tareaAbierta.id === idUltimaRevision}
           onClose={() => setOpenTareaId(null)}
-          onAprobar={() => resolver.mutate({ tareaId: tareaAbierta.id, accion: 'aprobar' })}
+          onAprobar={(opts) => resolver.mutate({ tareaId: tareaAbierta.id, accion: 'aprobar', comentario: opts?.comentario, archivo_adjunto: opts?.archivo_adjunto, enlace_adjunto: opts?.enlace_adjunto })}
           onRechazar={(comentario, adjuntos) => resolver.mutate({ tareaId: tareaAbierta.id, accion: 'rechazar', comentario, archivo_adjunto: adjuntos?.archivo_adjunto, enlace_adjunto: adjuntos?.enlace_adjunto })}
           onFinalizar={() => resolver.mutate({ tareaId: tareaAbierta.id, accion: 'finalizar' })}
           isSaving={resolver.isPending}
@@ -1276,16 +1277,43 @@ function AtenderTareaModal({
   // Rechazos viejos (de iteraciones anteriores) tienen esto en false.
   esUltimaRevision: boolean;
   onClose: () => void;
-  onAprobar: () => void;
+  // Jos 2026-10-29: en Revision Anticipada la aprobacion abre modal con
+  // motivo + archivo + enlace (igual al rechazo pero en verde). Para PC
+  // sigue siendo click directo sin modal.
+  onAprobar: (opts?: { comentario?: string; archivo_adjunto?: string | null; enlace_adjunto?: string | null }) => void;
   onRechazar: (comentario?: string, adjuntos?: { archivo_adjunto?: string | null; enlace_adjunto?: string | null }) => void;
   onFinalizar: () => void;
   isSaving: boolean;
 }) {
   const esRevision = tarea.tipo === 'Revisión de artes';
   const esSeguimiento = tarea.tipo === 'Seguimiento Prueba de color';
+  const esRevisionAnticipada = prueba.tipo === 'revision_anticipada';
   const asignados = tarea.asignado ? tarea.asignado.split(',').map(s => s.trim()).filter(Boolean) : [];
   const [showRechazoInput, setShowRechazoInput] = useState(false);
   const [comentarioRechazo, setComentarioRechazo] = useState('');
+  // Jos 2026-10-29: estado del modal de aprobacion en RA (motivo + archivo + enlace).
+  const [showAprobacionInput, setShowAprobacionInput] = useState(false);
+  const [comentarioAprobacion, setComentarioAprobacion] = useState('');
+  const [aprobacionFile, setAprobacionFile] = useState<File | null>(null);
+  const [aprobacionFileUrl, setAprobacionFileUrl] = useState<string | null>(null);
+  const [aprobacionFileUploading, setAprobacionFileUploading] = useState(false);
+  const [aprobacionEnlace, setAprobacionEnlace] = useState('');
+  const handleUploadAprobacion = async (file: File) => {
+    setAprobacionFileUploading(true);
+    try {
+      const res = await uploadsService.uploadFile(file, 'pruebas-color/aprobaciones');
+      setAprobacionFile(file);
+      setAprobacionFileUrl(res.url);
+    } catch (e) {
+      alert(e instanceof Error ? e.message : 'Error al subir archivo');
+      setAprobacionFile(null);
+      setAprobacionFileUrl(null);
+    } finally {
+      setAprobacionFileUploading(false);
+    }
+  };
+  // Jos 2026-10-29: pedido de impresion desde la tarea Seguimiento.
+  const [showPedidoImpresion, setShowPedidoImpresion] = useState(false);
   // Jos 2026-10-12: scroll automatico al abrir el form de rechazo para
   // que los campos de adjuntos sean visibles sin scroll manual.
   const rechazoFormRef = useRef<HTMLDivElement | null>(null);
@@ -1729,6 +1757,68 @@ function AtenderTareaModal({
               </div>
             </div>
           )}
+
+          {/* Jos 2026-10-29: formulario de aprobacion para RA (mismo patron
+              que el rechazo pero en verde). En PC no se usa — ahi aprobar
+              sigue siendo click directo sin modal. */}
+          {showAprobacionInput && (
+            <div className="space-y-1.5">
+              <label className={`text-[11px] font-semibold ${isDark ? 'text-zinc-300' : 'text-gray-700'}`}>
+                Motivo de aprobación *
+              </label>
+              <textarea
+                value={comentarioAprobacion}
+                onChange={(e) => setComentarioAprobacion(e.target.value)}
+                rows={3}
+                autoFocus
+                placeholder="Describe la aprobación de la revisión anticipada..."
+                className={`w-full text-xs rounded-md border px-2.5 py-1.5 outline-none transition-colors ${isDark ? 'bg-zinc-800 border-zinc-700 text-zinc-100 placeholder-zinc-500 focus:border-emerald-500/60' : 'bg-white border-gray-300 text-gray-900 placeholder-gray-400 focus:border-emerald-400'}`}
+              />
+              <div className="pt-2 space-y-2">
+                <div className={`text-[11px] font-semibold ${isDark ? 'text-zinc-300' : 'text-gray-700'}`}>
+                  Adjuntar (opcional)
+                </div>
+                {aprobacionFile && aprobacionFileUrl ? (
+                  <div className={`flex items-center gap-2 text-xs rounded border px-2 py-1.5 ${isDark ? 'bg-zinc-800 border-zinc-700 text-zinc-200' : 'bg-white border-gray-300 text-gray-700'}`}>
+                    <FileImage className="h-3.5 w-3.5" />
+                    <span className="truncate flex-1">{aprobacionFile.name}</span>
+                    <button
+                      type="button"
+                      onClick={() => { setAprobacionFile(null); setAprobacionFileUrl(null); }}
+                      className={`text-[10px] font-medium ${isDark ? 'text-emerald-300 hover:text-emerald-200' : 'text-emerald-700 hover:text-emerald-900'}`}
+                    >
+                      Quitar
+                    </button>
+                  </div>
+                ) : (
+                  <input
+                    type="file"
+                    accept="image/*,application/pdf"
+                    onChange={(e) => { const f = e.target.files?.[0]; if (f) handleUploadAprobacion(f); }}
+                    disabled={aprobacionFileUploading}
+                    className={`w-full text-[11px] file:mr-2 file:py-1 file:px-2 file:rounded file:border file:text-[11px] file:font-medium ${isDark ? 'text-zinc-300 file:bg-zinc-800 file:border-zinc-700 file:text-zinc-200' : 'text-gray-700 file:bg-white file:border-gray-300 file:text-gray-700'}`}
+                  />
+                )}
+                {aprobacionFileUploading && (
+                  <div className={`flex items-center gap-1.5 text-[10px] ${isDark ? 'text-zinc-400' : 'text-gray-500'}`}>
+                    <Loader2 className="h-3 w-3 animate-spin" /> Subiendo archivo...
+                  </div>
+                )}
+                <input
+                  type="url"
+                  value={aprobacionEnlace}
+                  onChange={(e) => setAprobacionEnlace(e.target.value)}
+                  placeholder="O pega un link (Drive, Dropbox, etc.)"
+                  className={`w-full text-xs rounded-md border px-2.5 py-1.5 outline-none ${isDark ? 'bg-zinc-800 border-zinc-700 text-zinc-100 focus:border-emerald-500/60' : 'bg-white border-gray-300 text-gray-900 focus:border-emerald-400'}`}
+                />
+                {aprobacionEnlace.trim() && !esUrlValido(aprobacionEnlace) && (
+                  <div className={`text-[11px] flex items-center gap-1 ${isDark ? 'text-red-300' : 'text-red-600'}`}>
+                    <AlertCircle className="h-3 w-3" /> Debe comenzar con http:// o https://
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
         </div>
 
         {/* Footer con acciones */}
@@ -1808,6 +1898,40 @@ function AtenderTareaModal({
                 Confirmar rechazo
               </button>
             </>
+          ) : showAprobacionInput ? (
+            <>
+              <button
+                onClick={() => { setShowAprobacionInput(false); setComentarioAprobacion(''); }}
+                disabled={isSaving}
+                className={`text-xs font-medium px-3 py-1.5 rounded border transition-colors ${isDark ? 'border-zinc-700 text-zinc-300 hover:bg-zinc-800' : 'border-gray-300 text-gray-700 hover:bg-gray-100'} disabled:opacity-50`}
+              >
+                Cancelar
+              </button>
+              <button
+                onClick={() => {
+                  const motivoLimpio = comentarioAprobacion.trim();
+                  if (!motivoLimpio) {
+                    alert('El motivo de aprobación es obligatorio');
+                    return;
+                  }
+                  const enlaceLimpio = aprobacionEnlace.trim();
+                  if (enlaceLimpio && !esUrlValido(enlaceLimpio)) {
+                    alert('El link no es válido. Debe comenzar con http:// o https://');
+                    return;
+                  }
+                  onAprobar({
+                    comentario: motivoLimpio,
+                    archivo_adjunto: aprobacionFileUrl || null,
+                    enlace_adjunto: enlaceLimpio || null,
+                  });
+                }}
+                disabled={isSaving || aprobacionFileUploading || !comentarioAprobacion.trim()}
+                className={`text-xs font-semibold px-3 py-1.5 rounded border transition-colors inline-flex items-center gap-1 ${isDark ? 'border-emerald-500/60 text-emerald-100 bg-emerald-500/20 hover:bg-emerald-500/30' : 'border-emerald-400 text-emerald-800 bg-emerald-50 hover:bg-emerald-100'} disabled:opacity-50`}
+              >
+                {isSaving ? <Loader2 className="h-3 w-3 animate-spin" /> : <CheckCircle2 className="h-3 w-3" />}
+                Confirmar aprobación
+              </button>
+            </>
           ) : (
             <>
               <button
@@ -1827,7 +1951,7 @@ function AtenderTareaModal({
                     <XCircle className="h-3 w-3" /> Rechazar
                   </button>
                   <button
-                    onClick={onAprobar}
+                    onClick={() => esRevisionAnticipada ? setShowAprobacionInput(true) : onAprobar()}
                     disabled={isSaving}
                     className={`text-xs font-semibold px-3 py-1.5 rounded border transition-colors inline-flex items-center gap-1 ${isDark ? 'border-emerald-500/60 text-emerald-100 bg-emerald-500/20 hover:bg-emerald-500/30' : 'border-emerald-400 text-emerald-800 bg-emerald-50 hover:bg-emerald-100'} disabled:opacity-50`}
                   >
@@ -1837,14 +1961,28 @@ function AtenderTareaModal({
                 </>
               )}
               {esSeguimiento && puedeCrear && (
-                <button
-                  onClick={onFinalizar}
-                  disabled={isSaving}
-                  className={`text-xs font-semibold px-3 py-1.5 rounded border transition-colors inline-flex items-center gap-1 ${isDark ? 'border-emerald-500/60 text-emerald-100 bg-emerald-500/20 hover:bg-emerald-500/30' : 'border-emerald-400 text-emerald-800 bg-emerald-50 hover:bg-emerald-100'} disabled:opacity-50`}
-                >
-                  {isSaving ? <Loader2 className="h-3 w-3 animate-spin" /> : <Flag className="h-3 w-3" />}
-                  Finalizar
-                </button>
+                <>
+                  {/* Jos 2026-10-29: desde la tarea Seguimiento se puede crear
+                      directamente el pedido de impresion. Solo si la prueba
+                      ya esta vinculada a campania (POST /campanas/:id/tareas
+                      exige campania_id). */}
+                  <button
+                    onClick={() => setShowPedidoImpresion(true)}
+                    disabled={isSaving || !prueba.campania_id}
+                    title={prueba.campania_id ? 'Crear pedido de impresión al proveedor' : 'Disponible cuando la propuesta se apruebe como campaña'}
+                    className={`text-xs font-semibold px-3 py-1.5 rounded border transition-colors inline-flex items-center gap-1 ${isDark ? 'border-indigo-500/60 text-indigo-100 bg-indigo-500/20 hover:bg-indigo-500/30' : 'border-indigo-400 text-indigo-800 bg-indigo-50 hover:bg-indigo-100'} disabled:opacity-50 disabled:cursor-not-allowed`}
+                  >
+                    <Printer className="h-3 w-3" /> Pedido de impresión
+                  </button>
+                  <button
+                    onClick={onFinalizar}
+                    disabled={isSaving}
+                    className={`text-xs font-semibold px-3 py-1.5 rounded border transition-colors inline-flex items-center gap-1 ${isDark ? 'border-emerald-500/60 text-emerald-100 bg-emerald-500/20 hover:bg-emerald-500/30' : 'border-emerald-400 text-emerald-800 bg-emerald-50 hover:bg-emerald-100'} disabled:opacity-50`}
+                  >
+                    {isSaving ? <Loader2 className="h-3 w-3 animate-spin" /> : <Flag className="h-3 w-3" />}
+                    Finalizar
+                  </button>
+                </>
               )}
             </>
           )}
@@ -1890,6 +2028,126 @@ function AtenderTareaModal({
           )}
         </div>
       )}
+
+      {/* Jos 2026-10-29: sub-modal pedido de impresion desde la tarea
+          Seguimiento. Captura num_impresiones y crea tarea tipo 'Impresión'
+          en la campania asociada via POST /campanas/:id/tareas. */}
+      {showPedidoImpresion && prueba.campania_id && (
+        <PedidoImpresionSubmodal
+          prueba={prueba}
+          cara={cara}
+          isDark={isDark}
+          onClose={() => setShowPedidoImpresion(false)}
+          onCreated={() => { setShowPedidoImpresion(false); onClose(); }}
+        />
+      )}
+    </div>
+  );
+}
+
+// ─── Sub-modal: pedido de impresión desde Seguimiento ──────────────────
+// Crea una tarea tipo 'Impresión' en la campaña con los datos de la prueba
+// (arte, circuito, num_impresiones). Reusa POST /campanas/:id/tareas.
+function PedidoImpresionSubmodal({
+  prueba,
+  cara,
+  isDark,
+  onClose,
+  onCreated,
+}: {
+  prueba: PruebaColor;
+  cara: SolicitudCara | null;
+  isDark: boolean;
+  onClose: () => void;
+  onCreated: () => void;
+}) {
+  const [numImpresiones, setNumImpresiones] = useState<number>(1);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const handleCrear = async () => {
+    const campaniaId = prueba.campania_id;
+    if (!campaniaId) { setError('La prueba no está vinculada a una campaña'); return; }
+    if (!numImpresiones || numImpresiones < 1) { setError('Captura al menos 1 impresión'); return; }
+    setSaving(true);
+    setError(null);
+    try {
+      const circuitoId = cara?.id || prueba.sc_id;
+      const titulo = `Pedido de impresión - ${prueba.nombre_arte || `Prueba #${prueba.id}`}`;
+      const descripcion = `Pedido de impresión generado desde Seguimiento Prueba de color #${prueba.id}.${prueba.nombre_arte ? ` Arte: ${prueba.nombre_arte}.` : ''}${cara?.articulo ? ` Circuito: ${cara.articulo}.` : ''}`;
+      await campanasService.createTarea(campaniaId, {
+        titulo,
+        descripcion,
+        tipo: 'Impresión',
+        num_impresiones: numImpresiones,
+        ids_reservas: circuitoId ? String(circuitoId) : undefined,
+        evidencia: prueba.archivo || undefined,
+      });
+      onCreated();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Error al crear pedido de impresión');
+    } finally {
+      setSaving(false);
+    }
+  };
+  return (
+    <div
+      className="fixed inset-0 z-[95] flex items-center justify-center p-4 bg-black/70"
+      onClick={(e) => { e.stopPropagation(); onClose(); }}
+    >
+      <div
+        onClick={(e) => e.stopPropagation()}
+        className={`w-full max-w-sm rounded-xl shadow-2xl border overflow-hidden ${isDark ? 'bg-zinc-900 border-zinc-700' : 'bg-white border-gray-200'}`}
+      >
+        <div className={`px-4 py-3 border-b flex items-center justify-between ${isDark ? 'border-zinc-800' : 'border-gray-200'}`}>
+          <div className="flex items-center gap-2">
+            <Printer className={`h-4 w-4 ${isDark ? 'text-indigo-300' : 'text-indigo-600'}`} />
+            <div>
+              <div className={`text-sm font-semibold ${isDark ? 'text-zinc-100' : 'text-gray-900'}`}>Crear pedido de impresión</div>
+              <div className={`text-[10px] ${isDark ? 'text-zinc-400' : 'text-gray-500'}`}>Campaña #{prueba.campania_id}</div>
+            </div>
+          </div>
+          <button onClick={onClose} className={`p-1 rounded ${isDark ? 'hover:bg-zinc-800 text-zinc-400' : 'hover:bg-gray-100 text-gray-500'}`}>
+            <X className="h-4 w-4" />
+          </button>
+        </div>
+        <div className="px-4 py-3 space-y-3">
+          <div className={`text-[11px] rounded px-2 py-1.5 ${isDark ? 'bg-zinc-800/60 text-zinc-300 border border-zinc-700' : 'bg-gray-50 text-gray-600 border border-gray-200'}`}>
+            {prueba.nombre_arte || `Prueba #${prueba.id}`}{cara?.articulo ? ` · ${cara.articulo}` : ''}
+          </div>
+          <div>
+            <label className={`text-[11px] font-semibold ${isDark ? 'text-zinc-300' : 'text-gray-700'}`}># de impresiones *</label>
+            <input
+              type="number"
+              min={1}
+              value={numImpresiones}
+              onChange={(e) => setNumImpresiones(Math.max(1, parseInt(e.target.value) || 1))}
+              className={`mt-1 w-full text-sm rounded-md border px-2.5 py-1.5 outline-none ${isDark ? 'bg-zinc-800 border-zinc-700 text-zinc-100 focus:border-indigo-500/60' : 'bg-white border-gray-300 text-gray-900 focus:border-indigo-400'}`}
+            />
+          </div>
+          {error && (
+            <div className={`text-[11px] px-2 py-1 rounded ${isDark ? 'bg-red-500/15 text-red-200 border border-red-500/30' : 'bg-red-50 text-red-700 border border-red-200'}`}>
+              {error}
+            </div>
+          )}
+        </div>
+        <div className={`px-4 py-3 border-t flex items-center justify-end gap-2 ${isDark ? 'border-zinc-800 bg-zinc-900/60' : 'border-gray-200 bg-gray-50/60'}`}>
+          <button
+            onClick={onClose}
+            disabled={saving}
+            className={`text-xs font-medium px-3 py-1.5 rounded border transition-colors ${isDark ? 'border-zinc-700 text-zinc-300 hover:bg-zinc-800' : 'border-gray-300 text-gray-700 hover:bg-gray-100'} disabled:opacity-50`}
+          >
+            Cancelar
+          </button>
+          <button
+            onClick={handleCrear}
+            disabled={saving}
+            className={`text-xs font-semibold px-3 py-1.5 rounded border transition-colors inline-flex items-center gap-1 ${isDark ? 'border-indigo-500/60 text-indigo-100 bg-indigo-500/20 hover:bg-indigo-500/30' : 'border-indigo-400 text-indigo-800 bg-indigo-50 hover:bg-indigo-100'} disabled:opacity-50`}
+          >
+            {saving ? <Loader2 className="h-3 w-3 animate-spin" /> : <Printer className="h-3 w-3" />}
+            Crear pedido
+          </button>
+        </div>
+      </div>
     </div>
   );
 }
