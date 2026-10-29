@@ -2533,7 +2533,11 @@ export function CampanaDetailPage() {
             {permissions.canEditCampanas && (() => {
               const statusLower = campana.status?.toLowerCase() || '';
               const disabledStatuses = ['finalizado', 'sin cotizacion activa', 'cancelada', 'rechazada'];
-              const editDisabled = disabledStatuses.includes(statusLower) || campana.has_aps === true;
+              // UDC: si la campaña ya tiene APS, se bloquea editar y entrar a la
+              // lupa del buscador (este botón es el único acceso al editor/buscador).
+              // Se usa el inventario con APS real por si has_aps no viene seteado en UDC.
+              const udcConAps = esUDC && inventarioConAPS.length > 0;
+              const editDisabled = disabledStatuses.includes(statusLower) || campana.has_aps === true || udcConAps;
               return (
                 <button
                   onClick={() => withTransitionOverlay('Abriendo editor de campaña...', () => setEditModalOpen(true))}
@@ -2543,7 +2547,7 @@ export function CampanaDetailPage() {
                       ? isDark ? 'bg-zinc-800/30 text-zinc-600 border-zinc-700/30 cursor-not-allowed' : 'bg-gray-100 text-gray-400 border-gray-200 cursor-not-allowed'
                       : isDark ? 'bg-zinc-500/10 text-zinc-400 hover:bg-zinc-500/20 border-zinc-500/20' : 'bg-gray-50 text-gray-500 hover:bg-gray-100 border-gray-200'
                   }`}
-                  title={editDisabled ? 'No editable' : 'Editar campaña'}
+                  title={udcConAps ? 'Campaña UDC con APS: no se puede editar ni abrir el buscador' : editDisabled ? 'No editable' : 'Editar campaña'}
                 >
                   <Edit2 className="h-3.5 sm:h-4 w-3.5 sm:w-4" />
                   <span className="text-xs sm:text-sm">Editar campaña</span>
