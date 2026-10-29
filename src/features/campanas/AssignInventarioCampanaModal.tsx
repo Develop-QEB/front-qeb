@@ -1272,9 +1272,13 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
     enabled: isOpen,
   });
 
-  // BD SAP del catálogo de artículos: si la campaña es UDC (aeropuerto AICM),
-  // trae /articulos-udc; si no, respeta el ambiente global (CIMU/TRADE intactos).
-  const sapDbArticulos = (campana?.sap_database || '').toUpperCase() === 'UDC'
+  // BD SAP del catálogo de artículos: si el CLIENTE o la campaña son UDC
+  // (aeropuerto AICM), trae /articulos-udc; si no, respeta el ambiente global
+  // (CIMU/TRADE intactos). DEBE mirar cliente O campaña (igual que `esUDC` abajo
+  // y que el modal de propuestas): si solo mira campana.sap_database y ésta no
+  // quedó en 'UDC', la UI se ponía en modo UDC pero bajaba el catálogo CIMU y no
+  // salían los artículos de aeropuerto.
+  const sapDbArticulos = (((selectedClienteCuic as any)?.sap_database || campana?.sap_database || '') as string).toUpperCase() === 'UDC'
     ? ('UDC' as const)
     : useEnvironmentStore.getState().environment;
   // UDC (aeropuerto): el inventario no tiene geolocalización/plaza, así que en el
