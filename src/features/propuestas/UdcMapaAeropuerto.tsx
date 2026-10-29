@@ -20,6 +20,9 @@ const enAlgunMapa = (num: string) => MAPAS.some(m => m.coords[num]);
 
 export function UdcMapaAeropuerto({ reservados, isDark }: { reservados: Set<string>; isDark: boolean }) {
   const [ficha, setFicha] = useState<{ src: string; titulo: string } | null>(null);
+  // Cuando hay pantallas reservadas en más de un plano, se muestran con pestañas
+  // (un plano a la vez) en vez de apilados. En el PDF descargable sí van apilados.
+  const [tabId, setTabId] = useState<string | null>(null);
 
   const reservadosUp = useMemo(
     () => new Set(Array.from(reservados).map(udcPantallaNum)),
@@ -44,6 +47,10 @@ export function UdcMapaAeropuerto({ reservados, isDark }: { reservados: Set<stri
   );
   const totalRes = reservadosUp.size;
 
+  // Pestañas: si hay >1 plano con reservas, se muestra solo el activo.
+  const activeId = (tabId && planos.some(p => p.id === tabId)) ? tabId : (planos[0]?.id ?? null);
+  const planosToShow = planos.length > 1 ? planos.filter(p => p.id === activeId) : planos;
+
   const abrirFicha = (nombre: string) => {
     const src = udcFichaImg(nombre);
     if (src) setFicha({ src, titulo: nombre });
@@ -57,7 +64,30 @@ export function UdcMapaAeropuerto({ reservados, isDark }: { reservados: Set<stri
         </div>
       )}
 
-      {planos.map(plano => (
+      {/* Pestañas de planos (solo si hay más de uno con reservas) */}
+      {planos.length > 1 && (
+        <div className="flex flex-wrap items-center gap-2">
+          {planos.map(p => {
+            const activo = p.id === activeId;
+            return (
+              <button
+                key={p.id}
+                type="button"
+                onClick={() => setTabId(p.id)}
+                className={`px-3 py-1.5 rounded-lg text-xs font-medium border transition-all ${activo
+                  ? 'bg-cyan-500/20 text-cyan-300 border-cyan-500/40'
+                  : isDark
+                    ? 'bg-zinc-800/60 text-zinc-400 border-zinc-700/50 hover:text-zinc-200'
+                    : 'bg-gray-50 text-gray-500 border-gray-200 hover:text-gray-800'}`}
+              >
+                {p.titulo} <span className="opacity-70">({p.nRes})</span>
+              </button>
+            );
+          })}
+        </div>
+      )}
+
+      {planosToShow.map(plano => (
         <div key={plano.id}>
           <div className="flex items-center gap-2 mb-1.5">
             <MapPin className={`h-4 w-4 ${isDark ? 'text-cyan-400' : 'text-cyan-600'}`} />

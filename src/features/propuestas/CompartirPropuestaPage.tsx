@@ -10,7 +10,9 @@ import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContaine
 import { propuestasService, InventarioReservado, PropuestaFullDetails } from '../../services/propuestas.service';
 import { UdcReservadosTable } from './UdcReservadosTable';
 import { UdcMapaAeropuerto } from './UdcMapaAeropuerto';
-import { udcFichaImg, udcFichaDe, udcMapaCoord } from '../../lib/udc';
+import { udcFichaImg, udcFichaDe, udcMapaCoord, UDC_MAPA_COORDS, UDC_MAPA_COORDS_PB, udcPantallaNum } from '../../lib/udc';
+import udcMapaPA from './assets/udc-mapa-aicm-t1.jpg';
+import udcMapaPB from './assets/udc-mapa-aicm-t1-pb.jpg';
 import { formatCurrency, formatDate } from '../../lib/utils';
 import { toNum } from '../../utils/excelFormat';
 import { descargarExcelCompartir, FMT_COORD } from '../../utils/excelCompartir';
@@ -1463,6 +1465,92 @@ export function CompartirPropuestaPage() {
 
         y += 5; // Extra space after catorcena group
       });
+    }
+
+    // === UDC: MAPAS DEL AEROPUERTO (apilados) ===
+    // Un plano por cada mapa con >=1 pantalla reservada; pines verdes en las
+    // reservadas. En pantalla van con pestañas; aquí en el PDF, apilados.
+    if (esUDC && inventario && inventario.length > 0) {
+      const reservadosNums = new Set(inventario.map(i => udcPantallaNum(i.codigo_unico)).filter(Boolean));
+      const MAPAS_PDF: { titulo: string; url: string; coords: Record<string, { x: number; y: number }> }[] = [
+        { titulo: 'Terminal 1 · Planta Alta', url: udcMapaPA, coords: UDC_MAPA_COORDS },
+        { titulo: 'Terminal 1 · Planta Baja', url: udcMapaPB, coords: UDC_MAPA_COORDS_PB },
+      ];
+      const planos = MAPAS_PDF
+        .map(m => ({ ...m, nums: Object.keys(m.coords).filter(n => reservadosNums.has(n)) }))
+        .filter(m => m.nums.length > 0);
+      if (planos.length > 0) {
+        const mapaCache = new Map<string, HTMLImageElement>();
+        await Promise.all(planos.map(p => new Promise<void>(resolve => {
+          const img = new Image();
+          img.onload = () => { mapaCache.set(p.url, img); resolve(); };
+          img.onerror = () => resolve();
+          img.src = p.url;
+        })));
+
+        doc.addPage();
+        y = 20;
+        doc.setFillColor(...IMU_BLUE);
+        doc.rect(marginX, y, pageWidth - marginX * 2, 7, 'F');
+        doc.setFontSize(10);
+        doc.setFont('helvetica', 'bold');
+        doc.setTextColor(...WHITE);
+        doc.text('UBICACIÓN EN EL AEROPUERTO (AICM)', marginX + 5, y + 5);
+        y += 12;
+
+        const maxW = pageWidth - marginX * 2;
+        for (const plano of planos) {
+          const img = mapaCache.get(plano.url);
+          const ratio = img && img.naturalWidth > 0 ? img.naturalWidth / img.naturalHeight : 2;
+          let imgW = maxW;
+          let imgH = imgW / ratio;
+          const maxH = pageHeight - 46;
+          if (imgH > maxH) { imgH = maxH; imgW = imgH * ratio; }
+          if (y + 8 + imgH > pageHeight - 16) { doc.addPage(); y = 20; }
+          doc.setFillColor(...IMU_GREEN);
+          doc.roundedRect(marginX, y, maxW, 6, 1, 1, 'F');
+          doc.setFontSize(8);
+          doc.setFont('helvetica', 'bold');
+          doc.setTextColor(...WHITE);
+          doc.text(`${plano.titulo}  ·  ${plano.nums.length} reservada${plano.nums.length !== 1 ? 's' : ''}`, marginX + 4, y + 4);
+          y += 8;
+          const imgX = marginX + (maxW - imgW) / 2;
+          if (img) {
+            doc.addImage(img, 'JPEG', imgX, y, imgW, imgH);
+            doc.setDrawColor(210);
+            doc.rect(imgX, y, imgW, imgH);
+          } else {
+            doc.setFillColor(245, 245, 245);
+            doc.rect(imgX, y, imgW, imgH, 'F');
+          }
+          // Pines verdes en las pantallas reservadas de este plano
+          for (const num of plano.nums) {
+            const pos = plano.coords[num];
+            if (!pos) continue;
+            const px = imgX + (pos.x / 100) * imgW;
+            const py = y + (pos.y / 100) * imgH;
+            doc.setFillColor(16, 185, 129);
+            doc.setDrawColor(255, 255, 255);
+            doc.setLineWidth(0.4);
+            doc.circle(px, py, 1.6, 'FD');
+          }
+          doc.setLineWidth(0.2);
+          y += imgH + 6;
+        }
+
+        // Reservadas que no caen en ningún plano disponible aún.
+        const fuera = Array.from(reservadosNums).filter(n => n && !MAPAS_PDF.some(m => m.coords[n]));
+        if (fuera.length > 0) {
+          const nombres = fuera.map(n => udcFichaDe(n)?.nombre || `DIGITAL ${n}`).sort();
+          if (y > pageHeight - 24) { doc.addPage(); y = 20; }
+          doc.setFontSize(7.5);
+          doc.setFont('helvetica', 'italic');
+          doc.setTextColor(90, 90, 90);
+          const txt = doc.splitTextToSize(`Reservadas sin plano disponible aún: ${nombres.join(', ')}`, maxW);
+          doc.text(txt, marginX, y + 3);
+          y += txt.length * 4 + 4;
+        }
+      }
     }
 
     // Footer on all pages
