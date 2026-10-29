@@ -976,18 +976,9 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
         const data = await response.json();
         const raw = (data.value || data) as SAPArticulo[];
         const list = raw.filter(a => !esArticuloUDCBasura(a.ItemCode));
-        // UDC (aeropuerto) también vende GRAN FORMATO mensual (puentes, carteleras,
-        // unipolares…): se traen del catálogo CIMU y se anexan solo los de gran
-        // formato, para que el selector UDC muestre pantallas + gran formato.
-        try {
-          const rc = await fetch(getEndpoints('CIMU').articulos);
-          if (rc.ok) {
-            const dc = await rc.json();
-            const gf = ((dc.value || dc) as SAPArticulo[]).filter(a => esArticuloGranFormato(a.ItemName, a.ItemCode));
-            const seen = new Set(list.map(a => a.ItemCode));
-            for (const a of gf) if (!seen.has(a.ItemCode)) { list.push(a); seen.add(a.ItemCode); }
-          }
-        } catch { /* si CIMU falla, queda solo el catálogo UDC */ }
+        // (Gran formato dentro de UDC DESHABILITADO 2026-10-29: el selector UDC
+        // vuelve a mostrar SOLO pantallas del aeropuerto. El acceso a gran formato
+        // para usuarios UDC será vía CIMU/TRADE como tarea aparte.)
         return filterAllowedArticulos(list);
       }
       // Try cache first (unless forcing refresh)
