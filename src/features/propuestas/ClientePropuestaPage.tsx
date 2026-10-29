@@ -1455,7 +1455,8 @@ export function ClientePropuestaPage() {
             </div>
           </div>
 
-        {/* Charts */}
+        {/* Charts — ocultas en UDC: 1 ciudad (AICM) / 1 tipo (PANTALLA DIGITAL) no aportan nada */}
+        {!esUDC && (
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
           <div className="bg-white rounded-2xl p-6 shadow-sm border border-gray-200">
             <h3 className="text-lg font-semibold mb-4 text-[#0054A6]">Reservas por Ciudad</h3>
@@ -1501,6 +1502,7 @@ export function ClientePropuestaPage() {
             ) : <p className="text-gray-500 text-center py-10">No hay inventario reservado</p>}
           </div>
         </div>
+        )}
 
         {/* Map (oculto en UDC: aeropuerto sin geolocalización) */}
         <div className={`bg-white rounded-2xl shadow-sm border border-gray-200 overflow-hidden ${esUDC ? 'hidden' : ''}`}>
