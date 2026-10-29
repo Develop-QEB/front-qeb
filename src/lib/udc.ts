@@ -201,40 +201,53 @@ export function udcFichaDe(codigo?: string | null): UdcPantalla | undefined {
 }
 
 // ── Prefiltro del buscador por ARTÍCULO del circuito ─────────────────────────
-// Cada artículo comercial UDC (ItemCode SAP, p.ej. RT-CIR-8-PANT-INT) representa
-// una o varias pantallas FÍSICAS de la ficha técnica. Cuando el asesor elige el
-// artículo en la cara/circuito, el buscador de inventario UDC se prefiltra a esas
-// pantallas. El prefijo de operación (RT/CT/BF/IN/ES/IM/CF) NO cambia la pantalla,
-// así que se ignora y el mapeo va por la parte descriptiva del código.
+// Cada artículo comercial UDC (ItemCode SAP, p.ej. RT-PANT-1-A) representa una o
+// varias pantallas FÍSICAS de la ficha técnica. Cuando el asesor elige el
+// artículo en la cara/circuito, el buscador de inventario UDC se PREFILTRA a esas
+// pantallas (p.ej. RT-PANT-1-A → solo DIG- 1A). El prefijo de operación
+// (RT/CT/BF/IN/ES/IM/CF) NO cambia la pantalla, así que se ignora y el mapeo va
+// por la clave_base del código (ver UDC_ARTICULO_PANTALLAS abajo).
 //
 // Devuelve los números canónicos de pantalla (ver udcPantallaNum), o `null`
 // cuando el artículo NO tiene un mapeo confirmado → el buscador muestra TODO el
-// inventario (comportamiento previo; nunca oculta pantallas por una suposición).
-//
-// ⚠️ Solo están cableados los mapeos CONFIRMADOS (circuitos por zona + pantallas
-// individuales cuyo número viene en el propio código). Faltan por confirmar con
-// IMU (artículo → pantalla/s): PANT-NAL-01 y PANT-P10-03 (SUEs Nacional, Zona A
-// = pantallas 2/3), PANT-MIGRA, PANT-DUPLA, PANT-PAS-VIP, PANT-FIL-INT,
-// PANT-SAL-NAC-T2, PANT-SAL-INT-T2, CIR-PAN-SUES-L-T2, CIR-PAN-TAXIS. Al
-// confirmarlas se agregan aquí y el buscador las prefiltra solo.
+// inventario (nunca oculta pantallas por una suposición). El usuario además
+// puede quitar el prefiltro con "Ver todo el inventario".
 const udcRangoNums = (desde: number, hasta: number): string[] => {
   const out: string[] = [];
   for (let n = desde; n <= hasta; n++) out.push(String(n));
   return out;
 };
 
+// clave_base (ItemCode SIN el prefijo de operación) → números canónicos de
+// pantalla (ver udcPantallaNum). Fuente: Excel "aicm_articulos_filtros", hoja
+// "Artículos AICM", columna `pantallas` (mapeo CONFIRMADO contra el inventario
+// del cliente, 23 pantallas). Claves en MAYÚSCULAS (igual que normCode).
+const UDC_ARTICULO_PANTALLAS: Record<string, string[]> = {
+  'PANT-1-A': ['1A'],                          // GRAN PANTALLA        → DIG- 1A
+  'PANT-1-B': ['1B'],                          // AMBULATORIO          → DIG- 1B
+  'PANT-NAL-01': ['2'],                        // SUE NAC              → DIG- 02
+  'PANT-P10-03': ['3'],                        // PASUE NAC            → DIG- 03
+  'PANT-MIGRA': ['17'],                        // MIGRACIÓN            → DIG- 17
+  'PANT-DUPLA': ['18', '19'],                  // DUPLA                → DIG- 18 + 19
+  'CIR-8-PANT-INT': udcRangoNums(20, 27),      // CIR 8 PANT INT       → Zona C (DIG- 20–27)
+  'CIR-5-PANT-SUE-INT': udcRangoNums(34, 38),  // CIR 5 PANT SUE INT   → Zona D (DIG- 34–38)
+  'PANT-41-ASC-VP': ['41'],                    // ASC SALAS VIP        → DIG- 41
+  'PANT-LLEGD-INT-43': ['43'],                 // LLEGADAS INTER       → DIG- 43
+  'PANT-SAL-INT-T2': ['T2'],                   // SAL INT T2           → DIG- 01 T2
+  // Sin mapeo a propósito (el buscador muestra TODO): artículos "sin inventario"
+  // (PANT-PAS-VIP, PANT-FIL-INT, PANT-SAL-NAC-T2, CIR-PAN-SUES-L-T2,
+  // CIR-PAN-TAXIS), "no aplica" (UDC-ESP-T1-01, P1) y "por definir"
+  // (PDOOH-AERO-CDMX corre en todas las pantallas).
+};
+
 export function articuloUDCPantallas(itemCode?: string | null): string[] | null {
   const c = normCode(itemCode);
   if (!c) return null;
-  // Circuitos → zona completa
-  if (/\b5-PANT/.test(c)) return udcRangoNums(34, 38);  // CIR 5 PANTALLAS SUE INT → Zona D (Módulo XI)
-  if (/\b8-PANT/.test(c)) return udcRangoNums(20, 27);  // CIR 8 PANTALLAS INT → Zona C (pasillo)
-  // Pantallas individuales (número/código embebido en el ItemCode)
-  if (/-1-A\b/.test(c)) return ['1A'];                  // GRAN PANTALLA
-  if (/-1-B\b/.test(c)) return ['1B'];                  // AMBULATORIO
-  if (/-41\b/.test(c)) return ['41'];                   // ASC SALAS VIP
-  if (/-43\b/.test(c)) return ['43'];                   // LLEGADAS INTER
-  return null;                                          // sin mapeo confirmado → mostrar todo
+  // Quita el prefijo de operación (RT/BF/CF/CT/IN/IM/ES) para quedarnos con la
+  // clave_base; si no trae un prefijo conocido, usa el código completo.
+  const partes = c.split('-');
+  const claveBase = PREFIJOS_REALES.has(partes[0]) ? partes.slice(1).join('-') : c;
+  return UDC_ARTICULO_PANTALLAS[claveBase] ?? null;    // sin mapeo → mostrar todo
 }
 
 // ── Ficha técnica en imagen (JPG) por pantalla ───────────────────────────────
