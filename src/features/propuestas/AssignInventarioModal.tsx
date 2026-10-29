@@ -9827,7 +9827,7 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
                                           <span className="text-[10px] px-1.5 py-0.5 rounded bg-red-500/20 text-red-300">Pend. DG</span>
                                         )}
                                         {dcmDisplay === 'pendiente' && dgDisplay !== 'rechazado' && (
-                                          <span className="text-[10px] px-1.5 py-0.5 rounded bg-amber-500/20 text-amber-300">Pend. DCM</span>
+                                          <span className="text-[10px] px-1.5 py-0.5 rounded bg-amber-500/20 text-amber-300">Pend. {esUDC ? 'DCA' : 'DCM'}</span>
                                         )}
                                       </div>
                                         );
