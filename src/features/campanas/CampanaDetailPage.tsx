@@ -21,6 +21,7 @@ import { NotasDireccionBitacora } from '../notificaciones/NotasDireccionBitacora
 import { DesposteoModal } from '../desposteo/DesposteoModal';
 import { puedeSolicitarDesposteo, puedeBypassearDesposteo, esRolTIDesposteo, desposteoService, EstadoAps } from '../../services/desposteo.service';
 import { udcFichaDe } from '../../lib/udc';
+import { esArticuloGranFormato } from '../../lib/periodos';
 import { esInventarioBloqueado } from '../../lib/bloqueoInventario';
 
 // Mini-preview (cuadrito cyan con el aspect-ratio real de la pantalla) para las
@@ -1663,6 +1664,25 @@ export function CampanaDetailPage() {
         });
       } catch (err) {
         console.warn('Could not fetch articulos for CostingCode:', err);
+      }
+
+      // UDC: el delivery note puede incluir caras de GRAN FORMATO (artículos de
+      // CIMU) que /articulos-udc NO trae → su metadata (CostingCode/Sitio/dscSitio)
+      // saldría en default. Traemos también el catálogo CIMU y mezclamos SOLO los
+      // de gran formato (sin pisar los de UDC). El posteo sigue yendo a UDC.
+      if (sapDb === 'UDC') {
+        try {
+          const rc = await fetch(getEndpoints('CIMU').articulos);
+          const dc = await rc.json();
+          const cimu = (dc.value || dc || []) as { ItemCode: string; ItemName?: string; U_IMU_OcrCode?: string; U_IMU_cod_sitio?: number; U_IMU_dscSitio?: string }[];
+          cimu.forEach(a => {
+            if (a.ItemCode && !articulosMap[a.ItemCode] && esArticuloGranFormato(a.ItemName || '', a.ItemCode)) {
+              articulosMap[a.ItemCode] = { U_IMU_OcrCode: a.U_IMU_OcrCode, U_IMU_cod_sitio: a.U_IMU_cod_sitio, U_IMU_dscSitio: a.U_IMU_dscSitio };
+            }
+          });
+        } catch (err) {
+          console.warn('Could not fetch CIMU articulos for UDC gran formato CostingCode:', err);
+        }
       }
 
       // Resolver card_code desde SAP si la campaña no lo tiene
