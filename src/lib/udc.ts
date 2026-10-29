@@ -153,7 +153,7 @@ const rango = (base: string, desde: number, hasta: number, zona: string, ancho: 
 
 export const UDC_ZONA_A = 'Zona A';
 export const UDC_ZONA_C8 = 'Zona C · 8 pantallas';
-export const UDC_ZONA_C5 = 'Zona C · 5 pantallas';
+export const UDC_ZONA_D = 'Zona D · 5 pantallas';
 export const UDC_ZONA_IND = 'Digital';
 
 export const UDC_FICHA_TECNICA: UdcPantalla[] = [
@@ -162,8 +162,8 @@ export const UDC_FICHA_TECNICA: UdcPantalla[] = [
   mk('DIGITAL 3', UDC_ZONA_A, 2895, 790, 20),
   // Zona C (8 pantallas) — DIGITAL 20..27
   ...rango('DIGITAL', 20, 27, UDC_ZONA_C8, 1920, 1080, 10),
-  // Zona C (5 pantallas) — DIGITAL 34..38
-  ...rango('DIGITAL', 34, 38, UDC_ZONA_C5, 1920, 1080, 20),
+  // Zona D (Módulo XI, 5 pantallas) — DIGITAL 34..38
+  ...rango('DIGITAL', 34, 38, UDC_ZONA_D, 1920, 1080, 20),
   // Digital (individuales)
   mk('DIGITAL 1-A', UDC_ZONA_IND, 5376, 1152, 10),
   mk('DIGITAL 1-B', UDC_ZONA_IND, 2560, 1152, 10),
@@ -175,7 +175,7 @@ export const UDC_FICHA_TECNICA: UdcPantalla[] = [
   mk('DIGITAL T2', UDC_ZONA_IND, 3684, 1316, 10),
 ];
 
-export const UDC_ZONAS_ORDEN = [UDC_ZONA_A, UDC_ZONA_C8, UDC_ZONA_C5, UDC_ZONA_IND];
+export const UDC_ZONAS_ORDEN = [UDC_ZONA_A, UDC_ZONA_C8, UDC_ZONA_D, UDC_ZONA_IND];
 
 // Normaliza cualquier código de pantalla a un ID canónico por número, para
 // emparejar la ficha/imágenes/mapa aunque el string del inventario venga
