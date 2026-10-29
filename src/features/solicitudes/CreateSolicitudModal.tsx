@@ -1015,10 +1015,13 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
       // BF/CF de bonif van solo en el selector de bonificación; los CF-####
       // (servicio/mantenimiento) SÍ aparecen en el dropdown principal.
       if (isBfCfArticle(code)) return false;
+      // UDC (aeropuerto): todos digitales/mensual; la heurística de periodo solo
+      // reconoce ~18 de 91 y ocultaría el resto. Si es UDC, mostrarlos todos.
+      if (esUDC) return true;
       // Digital PB/CL también salen en mensual (ver articuloValidoEnPeriodo).
       return articuloValidoEnPeriodo(a.ItemName, a.ItemCode, tipoPeriodo);
     });
-  }, [articulosData, tipoPeriodo]);
+  }, [articulosData, tipoPeriodo, esUDC]);
 
   // Function to force refresh data
   const handleRefreshSap = () => {

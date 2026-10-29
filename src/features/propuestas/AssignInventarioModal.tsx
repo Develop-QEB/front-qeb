@@ -8785,6 +8785,10 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
                             // BF/CF solo aparecen en el dropdown de bonificación, no en el
                             // principal. Los CF-#### (servicio/mantenimiento) SÍ van aquí.
                             if (isBfCfArticle(code)) return false;
+                            // UDC (aeropuerto): todos sus artículos son digitales/mensual; la
+                            // heurística de periodo (pensada para CIMU) solo reconoce ~18 de 91
+                            // y ocultaría el resto. Si la propuesta es UDC, mostrarlos todos.
+                            if (esUDC) return true;
                             // Gran Formato ↔ periodo: mensual solo muestra Gran Formato;
                             // catorcena los excluye. Excepción: digital PB/CL también
                             // en mensual (ver articuloValidoEnPeriodo).
