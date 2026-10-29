@@ -11,7 +11,7 @@ import { formatCurrency } from '../../lib/utils';
 import { getSapCache, setSapCache, SAP_CACHE_KEYS, clearSapCache } from '../../lib/sapCache';
 import { SAP_BASE_URL, getEndpoints } from '../../store/environmentStore';
 import { filterAllowedArticulos } from '../../config/allowedDigitalArticles';
-import { parseArticuloUDC, esArticuloUDCBasura, esArticuloUDC } from '../../lib/udc';
+import { parseArticuloUDC, esArticuloUDCBasura, esArticuloUDC, UDC_FORMATO } from '../../lib/udc';
 import type { SapDatabase } from '../../store/environmentStore';
 import { useSocketEquipos } from '../../hooks/useSocket';
 import { useAuthStore } from '../../store/authStore';
@@ -1217,9 +1217,10 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
 
   // Cascade-filtered formatos/tipos/NSE from inventario-options API
   const filteredFormatos = useMemo(() => {
-    if (inventarioOptions?.formatos) return inventarioOptions.formatos;
-    return inventarioFilters?.formatos || [];
-  }, [inventarioOptions, inventarioFilters]);
+    const base = inventarioOptions?.formatos ? inventarioOptions.formatos : (inventarioFilters?.formatos || []);
+    // UDC: asegurar 'PANTALLA DIGITAL' (mueble real del inventario AICM) como opción.
+    return esUDC ? Array.from(new Set([UDC_FORMATO, ...base])) : base;
+  }, [inventarioOptions, inventarioFilters, esUDC]);
 
   const filteredTipos = useMemo(() => {
     if (inventarioOptions?.tipos) return inventarioOptions.tipos;
@@ -3317,7 +3318,7 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
                           plaza: udc?.plazaLabel || 'Ciudad de México / AM',
                           estado: udc?.plazaLabel || 'Ciudad de México / AM',
                           ciudades: udc?.ciudad ? [udc.ciudad] : newCara.ciudades,
-                          formato: udc?.familiaLabel || newCara.formato,
+                          formato: UDC_FORMATO,
                           tipo: 'Digital',
                         });
                         return;

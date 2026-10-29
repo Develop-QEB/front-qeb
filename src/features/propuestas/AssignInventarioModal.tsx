@@ -28,7 +28,7 @@ import { useEnvironmentStore, getEndpoints } from '../../store/environmentStore'
 import { useAuthStore } from '../../store/authStore';
 import { getPermissions, esAsesorComercial, esTrafico } from '../../lib/permissions';
 import { filterAllowedArticulos } from '../../config/allowedDigitalArticles';
-import { parseArticuloUDC, esArticuloUDCBasura, buildUdcInventarioDisponible, udcPantallaNum, udcFichaDe } from '../../lib/udc';
+import { parseArticuloUDC, esArticuloUDCBasura, buildUdcInventarioDisponible, udcPantallaNum, udcFichaDe, UDC_FORMATO } from '../../lib/udc';
 
 // Mini-preview (cuadrito cyan con el aspect-ratio real) para las filas UDC.
 // Solo se pinta si el código corresponde a una pantalla UDC (udcFichaDe la halla).
@@ -8866,7 +8866,9 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
                                 bonificacion: (esIM || esIN || esESP || esSrvCF) ? 0 : newCara.bonificacion,
                                 estados: udc?.plazaLabel || 'Ciudad de México / AM',
                                 ciudad: udc?.ciudad || 'AICM',
-                                formato: udc?.familiaLabel || newCara.formato,
+                                // UDC: todo el inventario es mueble 'PANTALLA DIGITAL'; parseArticuloUDC
+                                // da label vacío para el esquema PANT-* → autollenar con el mueble real.
+                                formato: UDC_FORMATO,
                                 tipo: 'Digital',
                               });
                               return;
@@ -9329,7 +9331,7 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
                         <label title={editingCaraHasReservas ? 'Bloqueado: el circuito tiene inventario reservado' : undefined} className={`text-xs ${(!editingCaraHasReservas && caraFiltersLocked) ? 'text-zinc-800' : `${isDark ? 'text-zinc-500' : 'text-gray-400'}`}`}>Formatos {editingCaraHasReservas ? <span className="text-amber-400 text-[10px]">(bloqueado)</span> : newCara.formato && !caraFiltersLocked && <span className="text-purple-400">({newCara.formato.split(',').filter(Boolean).length})</span>}</label>
                         {canEditResumen && !caraFiltersLocked ? (
                           <MultiSelectDropdown
-                            options={solicitudFilters?.formatos || []}
+                            options={esUDC ? Array.from(new Set([UDC_FORMATO, ...(solicitudFilters?.formatos || [])])) : (solicitudFilters?.formatos || [])}
                             selected={newCara.formato ? newCara.formato.split(',').map(s => s.trim()).filter(Boolean) : []}
                             onChange={(selected) => setNewCara({ ...newCara, formato: selected.join(', ') })}
                             placeholder="Seleccionar formatos..."

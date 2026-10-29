@@ -30,7 +30,7 @@ import { useEnvironmentStore, getEndpoints } from '../../store/environmentStore'
 import { useAuthStore } from '../../store/authStore';
 import { usePermissions, esAsesorComercial, esTrafico } from '../../lib/permissions';
 import { filterAllowedArticulos } from '../../config/allowedDigitalArticles';
-import { parseArticuloUDC, esArticuloUDCBasura, buildUdcInventarioDisponible, udcPantallaNum, udcFichaDe } from '../../lib/udc';
+import { parseArticuloUDC, esArticuloUDCBasura, buildUdcInventarioDisponible, udcPantallaNum, udcFichaDe, UDC_FORMATO } from '../../lib/udc';
 
 // Mini-preview (cuadrito cyan con el aspect-ratio real) para las filas UDC.
 function UdcPreview({ codigo }: { codigo?: string | null }) {
@@ -8973,7 +8973,7 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
                                 bonificacion: (esIM || esIN || esESP || esSrvCF) ? 0 : newCara.bonificacion,
                                 estados: udc?.plazaLabel || 'Ciudad de México / AM',
                                 ciudad: udc?.ciudad || 'AICM',
-                                formato: udc?.familiaLabel || newCara.formato,
+                                formato: UDC_FORMATO,
                                 tipo: 'Digital',
                               });
                               return;
@@ -9358,7 +9358,7 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
                         <label title={editingCaraGrupoConReservas ? 'Bloqueado: el circuito tiene inventario reservado' : undefined} className={`text-xs ${(!editingCaraGrupoConReservas && caraFiltersLocked) ? 'text-zinc-800' : 'text-zinc-500'}`}>Formatos {editingCaraGrupoConReservas ? <span className="text-amber-400 text-[10px]">(bloqueado)</span> : newCara.formato && !caraFiltersLocked && <span className="text-purple-400">({newCara.formato.split(',').filter(Boolean).length})</span>}</label>
                         {canEditResumen && !caraFiltersLocked ? (
                           <MultiSelectDropdown
-                            options={solicitudFilters?.formatos || []}
+                            options={esUDC ? Array.from(new Set([UDC_FORMATO, ...(solicitudFilters?.formatos || [])])) : (solicitudFilters?.formatos || [])}
                             selected={newCara.formato ? newCara.formato.split(',').map(s => s.trim()).filter(Boolean) : []}
                             onChange={(selected) => setNewCara({ ...newCara, formato: selected.join(', ') })}
                             placeholder="Seleccionar formatos..."
