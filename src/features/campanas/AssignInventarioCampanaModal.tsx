@@ -22,7 +22,7 @@ import { campanasService, ReservaModalItem } from '../../services/campanas.servi
 import type { ReservaHistorialItem } from '../../services/propuestas.service';
 import { clientesService } from '../../services/clientes.service';
 import { formatCurrency } from '../../lib/utils';
-import { monthLabelLong, monthLabelShort, dayMonthShort, articuloValidoEnPeriodo } from '../../lib/periodos';
+import { monthLabelLong, monthLabelShort, dayMonthShort, articuloValidoEnPeriodo, esArticuloGranFormato } from '../../lib/periodos';
 import { parseCircuitoDigital } from '../../lib/circuitos';
 import { esInventarioBloqueado } from '../../lib/bloqueoInventario';
 import { circuitosService } from '../../services/circuitos.service';
@@ -1292,7 +1292,21 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
         const data = await response.json();
         let list = (data.value || data) as SAPArticulo[];
         // UDC: quitar filas basura del catálogo (merch/reembolsos/activos).
-        if (sapDbArticulos === 'UDC') list = list.filter(a => !esArticuloUDCBasura(a.ItemCode));
+        if (sapDbArticulos === 'UDC') {
+          list = list.filter(a => !esArticuloUDCBasura(a.ItemCode));
+          // UDC (aeropuerto) también vende GRAN FORMATO mensual (puentes,
+          // carteleras, unipolares…): se traen del catálogo CIMU y se anexan solo
+          // los de gran formato, para que el selector UDC muestre pantallas + GF.
+          try {
+            const rc = await fetch(getEndpoints('CIMU').articulos);
+            if (rc.ok) {
+              const dc = await rc.json();
+              const gf = ((dc.value || dc) as SAPArticulo[]).filter(a => esArticuloGranFormato(a.ItemName, a.ItemCode));
+              const seen = new Set(list.map(a => a.ItemCode));
+              for (const a of gf) if (!seen.has(a.ItemCode)) { list.push(a); seen.add(a.ItemCode); }
+            }
+          } catch { /* si CIMU falla, queda solo el catálogo UDC */ }
+        }
         return filterAllowedArticulos(list);
       } catch {
         return [] as SAPArticulo[];
@@ -1301,6 +1315,17 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
     enabled: isOpen,
     staleTime: 5 * 60 * 1000,
   });
+
+  // ¿El buscador se comporta como UDC (ficha de pantallas) o normal (gran formato
+  // con inventario real)? Por CARA: una campaña UDC también puede traer caras de
+  // gran formato (puentes/carteleras) cuyo inventario vive en `inventarios`.
+  const esUDCBusqueda = useMemo(() => {
+    if (!esUDC) return false;
+    const art = selectedCaraForSearch?.articulo;
+    if (!art) return true;
+    const row = articulosData?.find(a => a.ItemCode === art);
+    return !(row && esArticuloGranFormato(row.ItemName, row.ItemCode));
+  }, [esUDC, selectedCaraForSearch?.articulo, articulosData]);
 
   // Fetch existing reservas for this propuesta - refetch always on mount for real-time data
   const { data: existingReservas, isLoading: reservasLoading } = useQuery({
@@ -4176,7 +4201,11 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
     // plaza='AICM' (sembradas aparte, con sus espacios). Las leemos por esa
     // plaza para tener ids REALES y poder reservar. Fallback sintético si el
     // entorno no está sembrado.
-    if (esUDC) {
+    // UDC con pantalla de aeropuerto → inventario AICM. Si la cara es GRAN
+    // FORMATO (puente/cartelera dentro de una campaña UDC), cae al buscador
+    // normal (inventario real por ciudad/formato).
+    const caraEsGranFormato = !!articulosData?.find(a => a.ItemCode === cara.articulo && esArticuloGranFormato(a.ItemName, a.ItemCode));
+    if (esUDC && !caraEsGranFormato) {
       setLoadingCaraAction(null);
       setIsSearching(true);
       try {
@@ -4280,7 +4309,8 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
     if (!selectedCaraForSearch) return;
 
     // UDC: releer inventario real por plaza='AICM' (ver handleSearchInventory).
-    if (esUDC) {
+    // Gran formato dentro de UDC usa el buscador normal (esUDCBusqueda=false).
+    if (esUDCBusqueda) {
       try {
         const resp = await inventariosService.getAll({ plaza: 'AICM', limit: 100 });
         const rows = resp.data || [];
@@ -5975,7 +6005,7 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
                 <h2 className={`text-lg font-semibold ${isDark ? 'text-white' : 'text-gray-900'}`}>Buscar Inventario</h2>
                 <p className={`text-sm ${isDark ? 'text-zinc-400' : 'text-gray-500'}`}>
                   {/* UDC: solo la plaza (aeropuerto), no la lista de ciudades */}
-                  {selectedCaraForSearch?.formato} - {esUDC ? (selectedCaraForSearch?.estados || 'AICM') : (selectedCaraForSearch?.ciudad || selectedCaraForSearch?.estados)}
+                  {selectedCaraForSearch?.formato} - {esUDCBusqueda ? (selectedCaraForSearch?.estados || 'AICM') : (selectedCaraForSearch?.ciudad || selectedCaraForSearch?.estados)}
                 </p>
               </div>
             </div>
@@ -6326,7 +6356,7 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
               {/* Filters — se ocultan en UDC: la ficha técnica trae su propia
                   barra (título + búsqueda + zona/duración + seleccionar todo),
                   así no duplicamos búsqueda ni filtros que no aplican al aeropuerto. */}
-              <div className={`px-6 py-2.5 border-b ${isDark ? 'border-zinc-800 bg-zinc-900/50' : 'border-gray-200 bg-gray-50/50'} ${esUDC ? 'hidden' : ''}`}>
+              <div className={`px-6 py-2.5 border-b ${isDark ? 'border-zinc-800 bg-zinc-900/50' : 'border-gray-200 bg-gray-50/50'} ${esUDCBusqueda ? 'hidden' : ''}`}>
                 <div className="flex items-center gap-2 flex-wrap">
                   {/* Flujo Toggle — para mensual solo Flujo (no Contraflujo) */}
                   {tipoPeriodo === 'mensual' ? (
@@ -6462,8 +6492,9 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
                     </button>
                   )}
 
-                  {/* Mundialista + Chico: no aplican a UDC (aeropuerto) → ocultos */}
-                  {!esUDC && (<>
+                  {/* Mundialista + Chico: no aplican a UDC (aeropuerto) → ocultos.
+                      En gran formato dentro de UDC (esUDCBusqueda=false) sí aplican. */}
+                  {!esUDCBusqueda && (<>
                   {/* Mundialista filter - 3-state toggle: off → SI → NO → off */}
                   <button
                     onClick={() => {
@@ -7025,8 +7056,8 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
                 {/* Columna principal: tabla estándar; en UDC = ficha técnica
                     (el inventario del aeropuerto) full-width. El footer de
                     acciones (Reservar/Bonificar) vive aquí → visible en UDC. */}
-                <div className={`${esUDC ? 'w-full' : 'w-1/2 border-r border-zinc-800'} flex flex-col`}>
-                  {esUDC ? (
+                <div className={`${esUDCBusqueda ? 'w-full' : 'w-1/2 border-r border-zinc-800'} flex flex-col`}>
+                  {esUDCBusqueda ? (
                     <div className="flex-1 overflow-hidden">
                       <UdcFichaTecnicaPanel
                         isDark={isDark}
@@ -7363,7 +7394,7 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
 
                 {/* Panel derecho = mapa. En UDC se oculta (la ficha técnica ya
                     ocupa la columna principal a todo lo ancho). */}
-                <div className={esUDC ? 'hidden' : 'w-1/2'}>
+                <div className={esUDCBusqueda ? 'hidden' : 'w-1/2'}>
                   {mapsLoaded ? (
                     <AdvancedMapComponent
                       inventarios={processedInventory}
@@ -7411,8 +7442,8 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
             <div className="flex-1 flex overflow-hidden">
               {/* Reservados Table — UDC ocupa todo el ancho (sin mapa) y usa el
                   panel de tarjetas (mismo look que "Buscar disponible"). */}
-              <div className={`${esUDC ? 'w-full' : 'w-1/2 border-r border-zinc-800'} flex flex-col`}>
-                {esUDC ? (
+              <div className={`${esUDCBusqueda ? 'w-full' : 'w-1/2 border-r border-zinc-800'} flex flex-col`}>
+                {esUDCBusqueda ? (
                   <UdcReservadosPanel
                     items={currentCaraReservasMerged}
                     isDark={isDark}
@@ -8184,8 +8215,9 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
                 )}
               </div>
 
-              {/* Map of Reservados — oculto para UDC (aeropuerto sin geolocalización) */}
-              <div className={esUDC ? 'hidden' : 'w-1/2 relative'}>
+              {/* Map of Reservados — oculto para UDC pantalla (aeropuerto sin
+                  geolocalización); en gran formato dentro de UDC sí se muestra. */}
+              <div className={esUDCBusqueda ? 'hidden' : 'w-1/2 relative'}>
                 {mapsLoaded ? (
                   <>
                     <GoogleMap
@@ -8962,7 +8994,9 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
                             // UDC (aeropuerto AICM): todo Digital, mensual, plaza AICM.
                             // La zona (terminal/familia) viene en el ItemCode/ItemName;
                             // usamos el parser UDC en vez del autorrelleno genérico.
-                            if ((campana?.sap_database || '').toUpperCase() === 'UDC') {
+                            // Excepción: gran formato (puente/cartelera) dentro de una
+                            // campaña UDC cae a la rama normal de abajo (autollenado CIMU).
+                            if ((campana?.sap_database || '').toUpperCase() === 'UDC' && !esArticuloGranFormato(item.ItemName, item.ItemCode)) {
                               const udc = parseArticuloUDC(item.ItemCode, item.ItemName);
                               const tarifaUdc = getTarifaPublicaFromArticulo(item);
                               const tarifaPisoUdc = getTarifaPisoFromArticulo(item);
