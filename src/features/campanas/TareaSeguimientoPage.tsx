@@ -357,6 +357,11 @@ interface InventoryRow {
   archivo_arte?: string;
   artes_multiples?: string; // Multiple arts separated by '||'
   arte_aprobado?: string; // Texto original de arte_aprobado
+  // JSON string del back con [{archivo, nota, spot, nombre_arte, estatus_operaciones, nombre_generico}].
+  // Solo poblado para items tradicionales en getInventarioConArte. Usado por el
+  // botón "Aprobar directo" para verificar que todos los artes tengan Estatus
+  // Operaciones = "En Uso" (Jos 2026-10-28).
+  artes_detalle?: string | null;
   imu?: number | string;
   // Para Testigo
   testigo_status?: 'pendiente' | 'validado' | 'rechazado';
@@ -989,6 +994,81 @@ interface ArteTradicionalView {
   nombre_arte?: string | null;
 }
 
+// Valores canónicos para Estatus Operaciones. Jos pidió (2026-10-28) migrar el
+// textarea libre a un select de 3 opciones + "Otro…" para preservar edición libre
+// (ej. valores legacy ya guardados). El schema sigue siendo VarChar(500) así que
+// convive con cualquier string previo.
+const ESTATUS_OPERACIONES_OPCIONES = ['En Uso', 'Espera', 'En Bodega'] as const;
+type EstatusOperacionesCanonico = typeof ESTATUS_OPERACIONES_OPCIONES[number];
+const esEstatusCanonico = (v: string): v is EstatusOperacionesCanonico =>
+  (ESTATUS_OPERACIONES_OPCIONES as readonly string[]).includes(v);
+
+// Select controlado para Estatus Operaciones. Muestra 3 opciones predeterminadas +
+// "Otro…" que revela un input de texto libre. Si el value entrante NO es canónico
+// (valor legacy en DB o custom del usuario), entra automáticamente en modo "Otro…".
+function EstatusOpSelect({
+  value,
+  onChange,
+  selectClassName,
+  inputClassName,
+  placeholder = 'Seleccionar estatus...',
+  customPlaceholder = 'Estatus personalizado',
+}: {
+  value: string;
+  onChange: (v: string) => void;
+  selectClassName?: string;
+  inputClassName?: string;
+  placeholder?: string;
+  customPlaceholder?: string;
+}) {
+  const trimmed = (value || '').trim();
+  const trimmedIsCanonico = esEstatusCanonico(trimmed);
+  const [customMode, setCustomMode] = useState<boolean>(trimmed !== '' && !trimmedIsCanonico);
+
+  useEffect(() => {
+    const t = (value || '').trim();
+    if (t !== '' && esEstatusCanonico(t)) setCustomMode(false);
+    else if (t !== '' && !esEstatusCanonico(t)) setCustomMode(true);
+    // t === '' preserva customMode (si el usuario eligió "Otro…" y luego borró, sigue en modo custom).
+  }, [value]);
+
+  const selectValue = customMode ? '__OTRO__' : (trimmedIsCanonico ? trimmed : '');
+
+  return (
+    <>
+      <select
+        value={selectValue}
+        onChange={(e) => {
+          const v = e.target.value;
+          if (v === '__OTRO__') {
+            setCustomMode(true);
+            if (trimmedIsCanonico) onChange('');
+          } else {
+            setCustomMode(false);
+            onChange(v);
+          }
+        }}
+        className={selectClassName}
+      >
+        <option value="">{placeholder}</option>
+        {ESTATUS_OPERACIONES_OPCIONES.map((op) => (
+          <option key={op} value={op}>{op}</option>
+        ))}
+        <option value="__OTRO__">Otro…</option>
+      </select>
+      {customMode && (
+        <input
+          type="text"
+          value={value}
+          onChange={(e) => onChange(e.target.value)}
+          placeholder={customPlaceholder}
+          className={inputClassName}
+        />
+      )}
+    </>
+  );
+}
+
 // Editor reutilizable del campo "Estatus Operaciones" para los modales de galería.
 // Persiste vía PATCH /campanas/:id/artes/estatus-operaciones; el cambio se aplica
 // a TODAS las reservas que comparten el mismo archivo dentro de la campaña.
@@ -1055,13 +1135,14 @@ function EstatusOperacionesEditor({
           </span>
         )}
       </div>
-      <textarea
-        value={val}
-        onChange={(e) => { setVal(e.target.value); setJustSaved(false); }}
-        rows={2}
-        placeholder="Escribe el estatus de operaciones..."
-        className="w-full text-sm p-2 rounded border bg-zinc-800 border-zinc-700 text-zinc-200 placeholder-zinc-500 focus:border-purple-500 focus:outline-none resize-y"
-      />
+      <div className="flex flex-col gap-1.5">
+        <EstatusOpSelect
+          value={val}
+          onChange={(v) => { setVal(v); setJustSaved(false); }}
+          selectClassName="w-full text-sm p-2 rounded border bg-zinc-800 border-zinc-700 text-zinc-200 focus:border-purple-500 focus:outline-none"
+          inputClassName="w-full text-sm p-2 rounded border bg-zinc-800 border-zinc-700 text-zinc-200 placeholder-zinc-500 focus:border-purple-500 focus:outline-none"
+        />
+      </div>
       {error && <p className="mt-1 text-[10px] text-red-400">{error}</p>}
       {isDirty && (
         <div className="mt-1.5 flex items-center justify-end">
@@ -2847,17 +2928,19 @@ function UploadArtModal({
                                 <label className="block text-[10px] font-medium text-zinc-400 mb-1 mt-1.5">
                                   Estatus Operaciones {idx + 1}
                                 </label>
-                                <textarea
-                                  value={digitalImageEstatusOps.get(id) || ''}
-                                  onChange={(e) => setDigitalImageEstatusOps(prev => {
-                                    const next = new Map(prev);
-                                    next.set(id, e.target.value);
-                                    return next;
-                                  })}
-                                  rows={2}
-                                  placeholder="Estatus de operaciones (opcional)"
-                                  className="w-full px-2 py-1.5 text-xs bg-background border border-border rounded-lg focus:outline-none focus:ring-1 focus:ring-cyan-500 resize-none"
-                                />
+                                <div className="flex flex-col gap-1">
+                                  <EstatusOpSelect
+                                    value={digitalImageEstatusOps.get(id) || ''}
+                                    onChange={(v) => setDigitalImageEstatusOps(prev => {
+                                      const next = new Map(prev);
+                                      next.set(id, v);
+                                      return next;
+                                    })}
+                                    selectClassName="w-full px-2 py-1.5 text-xs bg-background border border-border rounded-lg focus:outline-none focus:ring-1 focus:ring-cyan-500"
+                                    inputClassName="w-full px-2 py-1.5 text-xs bg-background border border-border rounded-lg focus:outline-none focus:ring-1 focus:ring-cyan-500"
+                                    placeholder="Estatus de operaciones (opcional)"
+                                  />
+                                </div>
                               </div>
                             );
                           })}
@@ -3211,17 +3294,19 @@ function UploadArtModal({
                                 <label className={`block text-[10px] font-medium mb-1 mt-1.5 ${isDark ? 'text-zinc-400' : 'text-gray-600'}`}>
                                   Estatus Operaciones {idx + 1}
                                 </label>
-                                <textarea
-                                  value={imageEstatusOps.get(id) || ''}
-                                  onChange={(e) => setImageEstatusOps(prev => {
-                                    const next = new Map(prev);
-                                    next.set(id, e.target.value);
-                                    return next;
-                                  })}
-                                  rows={2}
-                                  placeholder="Estatus de operaciones (opcional)"
-                                  className="w-full px-2 py-1.5 text-xs bg-background border border-border rounded-lg focus:outline-none focus:ring-1 focus:ring-purple-500 resize-none"
-                                />
+                                <div className="flex flex-col gap-1">
+                                  <EstatusOpSelect
+                                    value={imageEstatusOps.get(id) || ''}
+                                    onChange={(v) => setImageEstatusOps(prev => {
+                                      const next = new Map(prev);
+                                      next.set(id, v);
+                                      return next;
+                                    })}
+                                    selectClassName="w-full px-2 py-1.5 text-xs bg-background border border-border rounded-lg focus:outline-none focus:ring-1 focus:ring-purple-500"
+                                    inputClassName="w-full px-2 py-1.5 text-xs bg-background border border-border rounded-lg focus:outline-none focus:ring-1 focus:ring-purple-500"
+                                    placeholder="Estatus de operaciones (opcional)"
+                                  />
+                                </div>
                               </div>
                             </div>
                           </div>
@@ -16221,6 +16306,7 @@ export function TareaSeguimientoPage() {
       archivo_arte: item.archivo || undefined,
       artes_multiples: item.artes_multiples || undefined,
       arte_aprobado: item.arte_aprobado || '',
+      artes_detalle: item.artes_detalle || null,
       imu: item.IMU || '',
       articulo: item.articulo || '',
     };
@@ -18045,8 +18131,10 @@ export function TareaSeguimientoPage() {
         }
       }
     } else if (allPendiente) {
-      // Todos pendientes de revisión: solo mostrar Revisión de artes
-      availableTipos = ['Revisión de artes'];
+      // Todos pendientes de revisión: Revisión de artes (default) + Cliente imprime
+      // como atajo opcional cuando el cliente imprime y entrega el arte directamente
+      // (va directo a Recepción sin pasar por revisión interna). Jos 2026-10-28.
+      availableTipos = ['Revisión de artes', 'Cliente imprime'];
       initialTipo = 'Revisión de artes';
     } else {
       // Mezcla: mostrar tipos según IMU y tipo de inventario (pero excluir Impresión si ya fue recibido)
@@ -19538,40 +19626,64 @@ export function TareaSeguimientoPage() {
                       </>
                     )}
                   </button>
-                  {/* Boton Aprobar oculto en sub-tabs Sin Revisar, En Revisión
-                      y Aprobado: el flujo correcto pasa por una tarea de Revisión
-                      de artes; el atajo directo solo aplica al sub-tab Rechazado
-                      (re-aprobar algo previamente rechazado). */}
+                  {/* Boton "Aprobar" directo (sin crear tarea de Revisión).
+                      Habilitado en sub-tabs Sin Revisar, En Revisión y Rechazado
+                      (los estados pre-aprobación). Jos 2026-10-28: para evitar que
+                      se use como atajo indiscriminado, solo se activa cuando TODOS
+                      los artes seleccionados tienen Estatus Operaciones = "En Uso". */}
                   {permissions.canApproveArteSinRevisar
                     && activeEstadoArteTab !== 'aprobado'
-                    && activeEstadoArteTab !== 'sin_revisar'
-                    && activeEstadoArteTab !== 'en_revision'
                     && (() => {
-                    const itemsSinRevisar = selectedInventoryItems.filter(item => item.estado_arte === 'sin_revisar');
-                    const hasSinRevisar = itemsSinRevisar.length > 0;
+                    const itemsPreAprobacion = selectedInventoryItems.filter(item =>
+                      item.estado_arte === 'sin_revisar' || item.estado_arte === 'en_revision' || item.estado_arte === 'rechazado'
+                    );
+                    const hasItems = itemsPreAprobacion.length > 0;
+                    // Verifica que TODOS los artes del item tengan estatus_operaciones = "En Uso".
+                    // Parsea artes_detalle (JSON) poblado por getInventarioConArte para tradicionales.
+                    // Items digitales (sin artes_detalle) o items sin arte asignado no pueden
+                    // aprobarse directo por este botón, siguen el flujo normal de Revisión.
+                    const itemAllEnUso = (item: InventoryRow): boolean => {
+                      if (!item.artes_detalle) return false;
+                      try {
+                        const parsed = JSON.parse(item.artes_detalle);
+                        if (!Array.isArray(parsed) || parsed.length === 0) return false;
+                        return parsed.every((art: { estatus_operaciones?: string | null }) =>
+                          ((art?.estatus_operaciones || '') + '').trim() === 'En Uso'
+                        );
+                      } catch {
+                        return false;
+                      }
+                    };
+                    const allEnUso = hasItems && itemsPreAprobacion.every(itemAllEnUso);
+                    const canApprove = hasItems && allEnUso;
+                    const disabledReason = !hasItems
+                      ? 'Selecciona artes pendientes de aprobación'
+                      : !allEnUso
+                        ? 'Solo se puede aprobar directo si todos los artes seleccionados tienen Estatus Operaciones = "En Uso"'
+                        : '';
                     return (
                       <button
                         onClick={() => {
-                          const reservaIds = itemsSinRevisar.flatMap(item =>
+                          const reservaIds = itemsPreAprobacion.flatMap(item =>
                             item.rsv_id.split(',').map(id => parseInt(id.trim())).filter(id => !isNaN(id))
                           );
                           if (reservaIds.length > 0) {
                             updateArteStatusMutation.mutate({
                               reservaIds,
                               status: 'Aprobado',
-                              comentario: 'Aprobación directa desde Revisar y Aprobar',
+                              comentario: 'Aprobación directa (Estatus Operaciones: En Uso)',
                             });
                           }
                         }}
-                        disabled={!hasSinRevisar || updateArteStatusMutation.isPending}
+                        disabled={!canApprove || updateArteStatusMutation.isPending}
                         className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg transition-colors ${
-                          hasSinRevisar && !updateArteStatusMutation.isPending
+                          canApprove && !updateArteStatusMutation.isPending
                             ? 'bg-green-600 hover:bg-green-700 text-white'
                             : isDark ? 'bg-zinc-800 text-zinc-500 cursor-not-allowed' : 'bg-gray-200 text-gray-400 cursor-not-allowed'
                         }`}
-                        title={hasSinRevisar
-                          ? `Aprobar ${itemsSinRevisar.length} arte(s) en estado "Sin revisar"`
-                          : 'Selecciona artes en estado "Sin revisar" para aprobar'}
+                        title={canApprove
+                          ? `Aprobar ${itemsPreAprobacion.length} arte(s) directamente`
+                          : disabledReason}
                       >
                         {updateArteStatusMutation.isPending ? (
                           <>
