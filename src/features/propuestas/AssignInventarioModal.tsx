@@ -9616,7 +9616,17 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
                                           <span className="text-[10px] px-1.5 py-0.5 rounded bg-orange-500/20 text-orange-300">Corrección</span>
                                         )}
                                         {dgDisplay === 'pendiente' && dcmDisplay !== 'rechazado' && (
-                                          <span className="text-[10px] px-1.5 py-0.5 rounded bg-red-500/20 text-red-300">Pend. DG</span>
+                                          <>
+                                            {/* Etapa visual: la cara esta en el filtro del Gerente Comercial
+                                                (previo a DG). Al aprobar el GC la tarea pasa a 'Autorizacion DG'
+                                                y en_filtro_dg se apaga -> embudo desaparece y queda solo Pend. DG. */}
+                                            {cara.en_filtro_dg && (
+                                              <span className="inline-flex items-center gap-1 text-[10px] px-1.5 py-0.5 rounded bg-cyan-500/20 text-cyan-300" title="En filtro del Gerente Comercial (previo a DG)">
+                                                <Funnel className="w-3 h-3" /> Filtro GC
+                                              </span>
+                                            )}
+                                            <span className="text-[10px] px-1.5 py-0.5 rounded bg-red-500/20 text-red-300">Pend. DG</span>
+                                          </>
                                         )}
                                         {dcmDisplay === 'pendiente' && dgDisplay !== 'rechazado' && (
                                           <span className="text-[10px] px-1.5 py-0.5 rounded bg-amber-500/20 text-amber-300">Pend. DCM</span>

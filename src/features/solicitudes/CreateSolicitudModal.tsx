@@ -3,7 +3,7 @@ import { useModalTracker } from '../../hooks/useModalTracker';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import {
   X, Search, Plus, Trash2, Upload, ChevronDown, ChevronRight, Check, Users, Building2,
-  Package, Calendar, FileText, MapPin, Layers, Hash, RefreshCw, AlertTriangle, Pencil
+  Package, Calendar, FileText, MapPin, Layers, Hash, RefreshCw, AlertTriangle, Pencil, Funnel
 } from 'lucide-react';
 import { solicitudesService, UserOption } from '../../services/solicitudes.service';
 import { clientesService } from '../../services/clientes.service';
@@ -3933,9 +3933,17 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
                                                   </span>
                                                 )}
                                                 {dgEfectivo === 'pendiente' && dcmEfectivo !== 'rechazado' && (
-                                                  <span className="text-[10px] px-1.5 py-0.5 rounded bg-red-500/20 text-red-300" title="Requiere autorización DG">
-                                                    Pend. DG
-                                                  </span>
+                                                  <>
+                                                    {/* Etapa visual: en filtro del Gerente Comercial previo a DG. */}
+                                                    {cara.en_filtro_dg && (
+                                                      <span className="inline-flex items-center gap-1 text-[10px] px-1.5 py-0.5 rounded bg-cyan-500/20 text-cyan-300" title="En filtro del Gerente Comercial (previo a DG)">
+                                                        <Funnel className="w-3 h-3" /> Filtro GC
+                                                      </span>
+                                                    )}
+                                                    <span className="text-[10px] px-1.5 py-0.5 rounded bg-red-500/20 text-red-300" title="Requiere autorización DG">
+                                                      Pend. DG
+                                                    </span>
+                                                  </>
                                                 )}
                                                 {dcmEfectivo === 'pendiente' && dgEfectivo !== 'rechazado' && (
                                                   <span className="text-[10px] px-1.5 py-0.5 rounded bg-amber-500/20 text-amber-300" title="Requiere autorización DCM">
