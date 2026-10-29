@@ -1684,6 +1684,42 @@ function AtenderTareaModal({
             </div>
           )}
 
+          {/* Jos 2026-10-29: cuando es Seguimiento de RA, mostrar el motivo
+              de aprobacion y los adjuntos capturados por el diseñador en el
+              modal de aprobacion. Se leen del contenido JSON de la tarea
+              (motivoAprobacion / aprobacionArchivo / aprobacionEnlace). */}
+          {esSeguimiento && (() => {
+            if (!tarea.contenido) return null;
+            let data: any = null;
+            try { data = JSON.parse(tarea.contenido); } catch { return null; }
+            const motivo = data?.motivoAprobacion;
+            const archivo = data?.aprobacionArchivo;
+            const enlace = data?.aprobacionEnlace;
+            if (!motivo && !archivo && !enlace) return null;
+            return (
+              <div className={`text-xs rounded-md border px-3 py-2 space-y-2 ${isDark ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-100' : 'bg-emerald-50 border-emerald-200 text-emerald-800'}`}>
+                <div className="flex items-center gap-1.5 text-[10px] uppercase tracking-wide font-semibold">
+                  <CheckCircle2 className="h-3 w-3" /> Motivo de aprobación
+                </div>
+                {motivo && <div className="whitespace-pre-wrap">{motivo}</div>}
+                {(archivo || enlace) && (
+                  <div className="flex flex-wrap gap-2 pt-1">
+                    {archivo && (
+                      <a href={archivo} target="_blank" rel="noreferrer" className={`inline-flex items-center gap-1 text-[11px] px-2 py-1 rounded border ${isDark ? 'border-emerald-500/40 hover:bg-emerald-500/20' : 'border-emerald-300 hover:bg-emerald-100'}`}>
+                        <FileImage className="h-3 w-3" /> Archivo
+                      </a>
+                    )}
+                    {enlace && (
+                      <a href={enlace} target="_blank" rel="noreferrer" className={`inline-flex items-center gap-1 text-[11px] px-2 py-1 rounded border ${isDark ? 'border-emerald-500/40 hover:bg-emerald-500/20' : 'border-emerald-300 hover:bg-emerald-100'}`}>
+                        <ExternalLink className="h-3 w-3" /> Link
+                      </a>
+                    )}
+                  </div>
+                )}
+              </div>
+            );
+          })()}
+
           {!yaResuelta && (
             <div className={`text-xs rounded-md px-3 py-2 ${isDark ? 'bg-zinc-800/60 text-zinc-300 border border-zinc-700' : 'bg-gray-50 text-gray-600 border border-gray-200'}`}>
               {esRevision
