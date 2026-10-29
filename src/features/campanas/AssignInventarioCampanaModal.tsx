@@ -9868,7 +9868,7 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
                                           <span className={`text-[10px] px-1.5 py-0.5 rounded ${isDark ? 'bg-red-500/20 text-red-300' : 'bg-red-100 text-red-700'}`}>Pend. DG</span>
                                         )}
                                         {dcmDisplay === 'pendiente' && dgDisplay !== 'rechazado' && (
-                                          <span className={`text-[10px] px-1.5 py-0.5 rounded ${isDark ? 'bg-amber-500/20 text-amber-300' : 'bg-amber-100 text-amber-700'}`}>Pend. DCM</span>
+                                          <span className={`text-[10px] px-1.5 py-0.5 rounded ${isDark ? 'bg-amber-500/20 text-amber-300' : 'bg-amber-100 text-amber-700'}`}>Pend. {esUDC ? 'DCA' : 'DCM'}</span>
                                         )}
                                         {/* Eliminación pendiente de autorización de Gerencia — la cara sigue
                                             viva hasta que el Gerente apruebe el borrado. */}

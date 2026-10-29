@@ -4047,8 +4047,8 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
                                                   </span>
                                                 )}
                                                 {dcmEfectivo === 'pendiente' && dgEfectivo !== 'rechazado' && (
-                                                  <span className="text-[10px] px-1.5 py-0.5 rounded bg-amber-500/20 text-amber-300" title="Requiere autorización DCM">
-                                                    Pend. DCM
+                                                  <span className="text-[10px] px-1.5 py-0.5 rounded bg-amber-500/20 text-amber-300" title={`Requiere autorización ${esUDC ? 'DCA' : 'DCM'}`}>
+                                                    Pend. {esUDC ? 'DCA' : 'DCM'}
                                                   </span>
                                                 )}
                                                 {!dgEfectivo && !dcmEfectivo && (
