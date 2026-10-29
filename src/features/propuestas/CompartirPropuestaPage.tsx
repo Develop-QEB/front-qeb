@@ -1303,6 +1303,20 @@ export function CompartirPropuestaPage() {
           const groupBonif = items.reduce((sum, i) => sum + (Number(i.caras_bonificadas) || 0), 0);
           const groupTarifa = items.reduce((sum, i) => sum + inversionBruta(i), 0);
 
+          // UDC: mantener el encabezado del artículo PEGADO a su primera ficha.
+          // Si no cabe el sub-header + la primera ficha en lo que queda de hoja,
+          // abre hoja nueva para que cada artículo arranque limpio y no quede el
+          // título al pie con las fichas saltando a la página siguiente.
+          if (esUDC) {
+            const first = items[0];
+            const u0 = first ? udcFichaImg(first.codigo_unico) : null;
+            const img0 = u0 ? fichaImgCache.get(u0) : undefined;
+            const colW0 = (pageWidth - marginX * 2 - 10 - 6) / 2;
+            const ratio0 = img0 && img0.naturalWidth > 0 ? img0.naturalWidth / img0.naturalHeight : 1.647;
+            const need = 8 /*sub-header*/ + colW0 / ratio0 + 11 /*datos debajo*/;
+            if (y + need > pageHeight - 16) { doc.addPage(); y = 20; }
+          }
+
           // === ARTICULO SUB-HEADER ===
           doc.setFillColor(...IMU_GREEN);
           doc.roundedRect(marginX + 5, y, pageWidth - marginX * 2 - 10, 6, 1, 1, 'F');
@@ -1318,7 +1332,14 @@ export function CompartirPropuestaPage() {
           const etiquetaDe = (vals: (string | null)[]) => [...new Set(vals.filter(Boolean) as string[])].join(', ');
           const plazasGrupo = etiquetaDe(items.map(i => i.plaza));
           const formatosGrupo = etiquetaDe(items.map(i => i.mueble));
-          let etiquetaGrupo = [plazasGrupo, formatosGrupo].filter(Boolean).join('  ·  ') || articulo;
+          // UDC (aeropuerto): plaza y formato son IGUALES en todo el inventario
+          // ("CIUDAD DE MEXICO · PANTALLA DIGITAL"), así que esa etiqueta no
+          // distingue un circuito de otro y las fichas se ven "todas juntas".
+          // Para UDC la barra verde se rotula con el ARTÍCULO (el circuito), que
+          // es justo lo que separa un bloque de fichas del siguiente.
+          let etiquetaGrupo = esUDC
+            ? articulo
+            : ([plazasGrupo, formatosGrupo].filter(Boolean).join('  ·  ') || articulo);
           const anchoMaxEtiqueta = pageWidth - marginX * 2 - 120;
           if (doc.getTextWidth(etiquetaGrupo) > anchoMaxEtiqueta) {
             while (etiquetaGrupo.length > 8 && doc.getTextWidth(`${etiquetaGrupo}…`) > anchoMaxEtiqueta) {
