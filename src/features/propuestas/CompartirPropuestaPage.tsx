@@ -1709,7 +1709,8 @@ export function CompartirPropuestaPage() {
           ))}
         </div>
 
-        {/* Charts */}
+        {/* Charts — ocultas en UDC: 1 ciudad (AICM) / 1 tipo (PANTALLA DIGITAL) no aportan nada */}
+        {!esUDC && (
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
           <div className={`rounded-2xl p-6 border ${isDark ? 'bg-gradient-to-br from-zinc-900 to-purple-900/10 border-purple-500/20' : 'bg-gray-50 border-gray-200'}`}>
             <h3 className="text-lg font-semibold bg-gradient-to-r from-purple-500 to-pink-400 bg-clip-text text-transparent mb-4">Reservas por Ciudad</h3>
@@ -1763,6 +1764,7 @@ export function CompartirPropuestaPage() {
             )}
           </div>
         </div>
+        )}
 
         {/* KPIs */}
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
