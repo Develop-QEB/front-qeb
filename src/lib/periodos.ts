@@ -131,6 +131,19 @@ export function esDigitalParabusColumna(itemName: string, itemCode?: string): bo
   return name.includes('PARABUS') || name.includes('COLUMNA');
 }
 
+// ¿El artículo es GRAN FORMATO "mensual" (Kioscos, Boleros, Mi Macro, Puentes
+// Peatonales, Carteleras, Unipolares, Bajo Puentes) y NO una pantalla UDC del
+// aeropuerto? Se usa para INYECTAR estos artículos del catálogo CIMU dentro del
+// flujo UDC (una propuesta/campaña de aeropuerto también puede vender gran
+// formato) y para decidir, POR CARA, si el buscador usa el inventario real
+// (gran formato → buscador normal) o la ficha técnica de pantallas (UDC).
+// Nota: UDC pantalla (RT-PANT-1-A, "GRAN PANTALLA"…) NO cae aquí porque su
+// periodo natural por nombre es catorcena y esArticuloUDC lo excluiría.
+export function esArticuloGranFormato(itemName: string, itemCode?: string): boolean {
+  if (esArticuloUDC(itemCode, itemName)) return false;
+  return getRequiredPeriodoForArticulo(itemName, itemCode) === 'mensual';
+}
+
 export function articuloValidoEnPeriodo(
   itemName: string,
   itemCode: string | undefined,
