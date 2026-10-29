@@ -18,6 +18,9 @@ import { UserAvatar } from '../../components/ui/user-avatar';
 import { useThemeStore } from '../../store/themeStore';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
+import { articuloUDCPantallas, udcFichaDe, udcFichaImg, UDC_MAPA_COORDS, UDC_MAPA_COORDS_PB } from '../../lib/udc';
+import udcMapaPA from '../propuestas/assets/udc-mapa-aicm-t1.jpg';
+import udcMapaPB from '../propuestas/assets/udc-mapa-aicm-t1-pb.jpg';
 
 // Logo Grupo IMU
 const LOGO_IMU_URL = '/logo-grupo-imu.png';
@@ -655,6 +658,185 @@ export function ViewSolicitudModal({ isOpen, onClose, solicitudId, onEdit, onAte
     doc.setFont('helvetica', 'italic');
     doc.setTextColor(100, 100, 100);
     doc.text('*Precios más IVA', marginX, yPos);
+
+    // === UDC: FICHAS TÉCNICAS + UBICACIÓN EN EL AEROPUERTO ===
+    // El inventario UDC (aeropuerto AICM) es DIGITAL y de dispo ilimitada, así que
+    // la solicitud NO reserva pantallas: las pantallas de cada artículo se derivan
+    // del propio código (articuloUDCPantallas) y se presentan como ficha técnica +
+    // pin en el mapa. Solo UDC — CIMU/TRADE no se tocan.
+    const esUDCpdf = String((data.solicitud as any)?.sap_database || '').toUpperCase() === 'UDC'
+      || (data.caras || []).some(c => !!articuloUDCPantallas(c.articulo));
+    if (esUDCpdf && (data.caras?.length ?? 0) > 0) {
+      // Artículos UDC con mapeo de pantallas, en orden y sin repetir.
+      const artSeen = new Set<string>();
+      const artItems: { articulo: string; nums: string[] }[] = [];
+      for (const c of (data.caras || [])) {
+        const art = c.articulo || '';
+        if (!art || artSeen.has(art)) continue;
+        const nums = articuloUDCPantallas(art);
+        if (nums && nums.length > 0) { artSeen.add(art); artItems.push({ articulo: art, nums }); }
+      }
+      if (artItems.length > 0) {
+        // Precargar las fichas (JPG en /udc-fichas/) para incrustarlas en el PDF.
+        const fichaImgCache = new Map<string, HTMLImageElement>();
+        const fichaUrls = new Set<string>();
+        artItems.forEach(a => a.nums.forEach(n => { const u = udcFichaImg(n); if (u) fichaUrls.add(u); }));
+        await Promise.all(Array.from(fichaUrls).map(u => new Promise<void>(resolve => {
+          const img = new Image();
+          img.onload = () => { fichaImgCache.set(u, img); resolve(); };
+          img.onerror = () => resolve();
+          img.src = u;
+        })));
+
+        doc.addPage();
+        yPos = 20;
+        doc.setFillColor(...imuDarkBlue);
+        doc.rect(marginX, yPos, contentWidth, 8, 'F');
+        doc.setFontSize(10);
+        doc.setFont('helvetica', 'bold');
+        doc.setTextColor(...white);
+        doc.text('FICHAS TÉCNICAS DE LAS PANTALLAS', marginX + 5, yPos + 5.5);
+        yPos += 12;
+
+        for (const a of artItems) {
+          // Mantener el sub-header del artículo pegado a su primera ficha.
+          const u0 = a.nums[0] ? udcFichaImg(a.nums[0]) : null;
+          const img0 = u0 ? fichaImgCache.get(u0) : undefined;
+          const colW0 = (contentWidth - 6) / 2;
+          const ratio0 = img0 && img0.naturalWidth > 0 ? img0.naturalWidth / img0.naturalHeight : 1.647;
+          const need = 8 + colW0 / ratio0 + 11;
+          if (yPos + need > pageHeight - 16) { doc.addPage(); yPos = 20; }
+
+          doc.setFillColor(...imuGreen);
+          doc.roundedRect(marginX, yPos, contentWidth, 6, 1, 1, 'F');
+          doc.setFontSize(8);
+          doc.setFont('helvetica', 'bold');
+          doc.setTextColor(...white);
+          doc.text(a.articulo, marginX + 5, yPos + 4);
+          doc.setFont('helvetica', 'normal');
+          doc.text(`${a.nums.length} pantalla${a.nums.length !== 1 ? 's' : ''}`, pageWidth - marginX - 5, yPos + 4, { align: 'right' });
+          yPos += 8;
+
+          const gap = 6;
+          const colW = (contentWidth - gap) / 2;
+          let col = 0;
+          let rowTop = yPos;
+          let rowMaxH = 0;
+          for (const num of a.nums) {
+            const f = udcFichaDe(num);
+            const nombre = f?.nombre || `DIGITAL ${num}`;
+            const url = udcFichaImg(num);
+            const img = url ? fichaImgCache.get(url) : undefined;
+            const ratio = img && img.naturalWidth > 0 ? img.naturalWidth / img.naturalHeight : 1.647;
+            const imgH = colW / ratio;
+            const cellH = imgH + 11;
+            if (rowTop + cellH > pageHeight - 16) { doc.addPage(); rowTop = 20; col = 0; rowMaxH = 0; }
+            const x = marginX + col * (colW + gap);
+            if (img) {
+              doc.addImage(img, 'JPEG', x, rowTop, colW, imgH);
+              doc.setDrawColor(210);
+              doc.rect(x, rowTop, colW, imgH);
+            } else {
+              doc.setFillColor(245, 245, 245);
+              doc.rect(x, rowTop, colW, imgH, 'F');
+              doc.setFontSize(8);
+              doc.setTextColor(150, 150, 150);
+              doc.text('Ficha técnica no disponible', x + colW / 2, rowTop + imgH / 2, { align: 'center' });
+            }
+            doc.setFontSize(9);
+            doc.setFont('helvetica', 'bold');
+            doc.setTextColor(...textDark);
+            doc.text(`${nombre}${f?.zona ? `   ·   ${f.zona}` : ''}`, x + 1, rowTop + imgH + 5);
+            doc.setFontSize(7.5);
+            doc.setFont('helvetica', 'normal');
+            doc.setTextColor(90, 90, 90);
+            doc.text([f ? f.medida : '', f ? `${f.duracion} seg` : ''].filter(Boolean).join('   ·   '), x + 1, rowTop + imgH + 9);
+            rowMaxH = Math.max(rowMaxH, cellH);
+            col++;
+            if (col === 2) { col = 0; rowTop += rowMaxH + gap; rowMaxH = 0; }
+          }
+          if (col === 1) rowTop += rowMaxH + gap; // cerrar fila incompleta
+          yPos = rowTop + 2;
+        }
+
+        // Mapa del aeropuerto con pines en las pantallas de la solicitud.
+        const reservNums = new Set<string>();
+        artItems.forEach(a => a.nums.forEach(n => reservNums.add(n)));
+        const MAPAS_PDF: { titulo: string; url: string; coords: Record<string, { x: number; y: number }> }[] = [
+          { titulo: 'Terminal 1 · Planta Alta', url: udcMapaPA, coords: UDC_MAPA_COORDS },
+          { titulo: 'Terminal 1 · Planta Baja', url: udcMapaPB, coords: UDC_MAPA_COORDS_PB },
+        ];
+        const planos = MAPAS_PDF
+          .map(m => ({ ...m, nums: Object.keys(m.coords).filter(n => reservNums.has(n)) }))
+          .filter(m => m.nums.length > 0);
+        if (planos.length > 0) {
+          const mapaCache = new Map<string, HTMLImageElement>();
+          await Promise.all(planos.map(p => new Promise<void>(resolve => {
+            const img = new Image();
+            img.onload = () => { mapaCache.set(p.url, img); resolve(); };
+            img.onerror = () => resolve();
+            img.src = p.url;
+          })));
+          doc.addPage();
+          yPos = 20;
+          doc.setFillColor(...imuBlue);
+          doc.rect(marginX, yPos, contentWidth, 7, 'F');
+          doc.setFontSize(10);
+          doc.setFont('helvetica', 'bold');
+          doc.setTextColor(...white);
+          doc.text('UBICACIÓN EN EL AEROPUERTO (AICM)', marginX + 5, yPos + 5);
+          yPos += 12;
+          const maxW = contentWidth;
+          for (const plano of planos) {
+            const img = mapaCache.get(plano.url);
+            const ratio = img && img.naturalWidth > 0 ? img.naturalWidth / img.naturalHeight : 2;
+            let imgW = maxW;
+            let imgH = imgW / ratio;
+            const maxH = pageHeight - 46;
+            if (imgH > maxH) { imgH = maxH; imgW = imgH * ratio; }
+            if (yPos + 8 + imgH > pageHeight - 16) { doc.addPage(); yPos = 20; }
+            doc.setFillColor(...imuGreen);
+            doc.roundedRect(marginX, yPos, maxW, 6, 1, 1, 'F');
+            doc.setFontSize(8);
+            doc.setFont('helvetica', 'bold');
+            doc.setTextColor(...white);
+            doc.text(`${plano.titulo}  ·  ${plano.nums.length} pantalla${plano.nums.length !== 1 ? 's' : ''}`, marginX + 4, yPos + 4);
+            yPos += 8;
+            const imgX = marginX + (maxW - imgW) / 2;
+            if (img) {
+              doc.addImage(img, 'JPEG', imgX, yPos, imgW, imgH);
+              doc.setDrawColor(210);
+              doc.rect(imgX, yPos, imgW, imgH);
+            } else {
+              doc.setFillColor(245, 245, 245);
+              doc.rect(imgX, yPos, imgW, imgH, 'F');
+            }
+            for (const num of plano.nums) {
+              const pos = plano.coords[num];
+              if (!pos) continue;
+              const px = imgX + (pos.x / 100) * imgW;
+              const py = yPos + (pos.y / 100) * imgH;
+              doc.setFillColor(16, 185, 129);
+              doc.setDrawColor(255, 255, 255);
+              doc.setLineWidth(0.4);
+              doc.circle(px, py, 1.6, 'FD');
+            }
+            doc.setLineWidth(0.2);
+            yPos += imgH + 6;
+          }
+          const fuera = Array.from(reservNums).filter(n => n && !MAPAS_PDF.some(m => m.coords[n]));
+          if (fuera.length > 0) {
+            const nombres = fuera.map(n => udcFichaDe(n)?.nombre || `DIGITAL ${n}`).sort();
+            if (yPos > pageHeight - 24) { doc.addPage(); yPos = 20; }
+            doc.setFontSize(7.5);
+            doc.setFont('helvetica', 'italic');
+            doc.setTextColor(...textMuted);
+            doc.text(`Pantallas sin plano disponible aún: ${nombres.join(', ')}.`, marginX, yPos + 4);
+            yPos += 8;
+          }
+        }
+      }
+    }
 
     // === FOOTER ===
     const totalPages = doc.internal.pages.length - 1;
