@@ -11,7 +11,7 @@ import { formatCurrency } from '../../lib/utils';
 import { getSapCache, setSapCache, SAP_CACHE_KEYS, clearSapCache } from '../../lib/sapCache';
 import { SAP_BASE_URL, getEndpoints } from '../../store/environmentStore';
 import { filterAllowedArticulos } from '../../config/allowedDigitalArticles';
-import { parseArticuloUDC, esArticuloUDCBasura, esArticuloUDC, UDC_FORMATO } from '../../lib/udc';
+import { parseArticuloUDC, esArticuloUDCBasura, esArticuloUDC, UDC_FORMATO, articuloUDCPantallas, udcFichaDe, udcFichaImg } from '../../lib/udc';
 import type { SapDatabase } from '../../store/environmentStore';
 import { useSocketEquipos } from '../../hooks/useSocket';
 import { useAuthStore } from '../../store/authStore';
@@ -950,6 +950,19 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
   // UDC? Esos conservan su tipo/periodo reales (no se fuerzan a pantalla digital).
   const newCaraEsGranFormato = esUDC && !!newCara.articulo
     && esArticuloGranFormato(newCara.articulo.ItemName, newCara.articulo.ItemCode);
+  // UDC: pantallas físicas que mapea el artículo elegido (null = sin mapeo → el
+  // artículo corre en TODAS las pantallas). El inventario UDC es DIGITAL y de
+  // dispo ilimitada, así que NO hay reserva real: al elegir el artículo con mapeo
+  // se autollenan las "caras" con el # de pantallas y se listan abajo con su
+  // ficha (selección/visual — Mario 2026-10-29). El gran formato dentro de UDC no
+  // aplica aquí (conserva su flujo normal).
+  const udcPantallasNewCara = useMemo(
+    () => (esUDC && newCara.articulo && !newCaraEsGranFormato)
+      ? articuloUDCPantallas(newCara.articulo.ItemCode)
+      : null,
+    [esUDC, newCara.articulo, newCaraEsGranFormato]
+  );
+  const udcRentaLocked = !!(udcPantallasNewCara && udcPantallasNewCara.length > 0);
   useEffect(() => {
     if (esUDC && tipoPeriodo !== 'mensual') {
       setTipoPeriodo('mensual');
@@ -3320,11 +3333,15 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
                         const esIM = item.ItemCode.toUpperCase().startsWith('IM');
                         const esESP = isEspecialArticle(item.ItemCode);
                         const esSrvCF = isServicioCFArticle(item.ItemCode);
+                        // Pantallas físicas que mapea el artículo (digital: sin reserva
+                        // real, solo auto-selección/visual). Con mapeo, las "caras" se
+                        // autollenan al # de pantallas; sin mapeo se respeta lo capturado.
+                        const pantallasArt = articuloUDCPantallas(item.ItemCode);
                         setNewCara({
                           ...newCara,
                           articulo: item,
                           tarifaPublica: esCT ? 0 : tarifaUdc.tarifa_publica,
-                          renta: esCT ? 0 : newCara.renta,
+                          renta: esCT ? 0 : (pantallasArt && pantallasArt.length > 0 ? pantallasArt.length : newCara.renta),
                           bonificacion: (esIM || esIN || esESP || esSrvCF) ? 0 : newCara.bonificacion,
                           plaza: udc?.plazaLabel || 'Ciudad de México / AM',
                           estado: udc?.plazaLabel || 'Ciudad de México / AM',
@@ -3415,6 +3432,53 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
                     )}
                   />
                 </div>
+
+                {/* UDC: pantallas que mapea el artículo (auto-selección visual; es
+                    inventario digital, sin reserva real). Con mapeo se listan con su
+                    ficha; sin mapeo, el artículo corre en todas las pantallas. */}
+                {esUDC && newCara.articulo && !newCaraEsGranFormato && (
+                  <div className={`mb-4 rounded-lg border px-3 py-2.5 ${isDark ? 'border-cyan-500/25 bg-cyan-500/5' : 'border-cyan-200 bg-cyan-50/60'}`}>
+                    <div className="flex items-center gap-1.5 mb-2">
+                      <MapPin className={`h-3.5 w-3.5 ${isDark ? 'text-cyan-400' : 'text-cyan-600'}`} />
+                      <span className={`text-xs font-semibold ${isDark ? 'text-cyan-200' : 'text-cyan-800'}`}>
+                        {udcRentaLocked
+                          ? `Pantallas de este artículo (${udcPantallasNewCara!.length})`
+                          : 'Pantallas del aeropuerto'}
+                      </span>
+                    </div>
+                    {udcRentaLocked ? (
+                      <div className="flex flex-wrap gap-2">
+                        {udcPantallasNewCara!.map(num => {
+                          const f = udcFichaDe(num);
+                          const nombre = f?.nombre || `DIGITAL ${num}`;
+                          const img = udcFichaImg(num);
+                          return (
+                            <a
+                              key={num}
+                              href={img || undefined}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              title={img ? `${nombre} — ver ficha técnica` : nombre}
+                              className={`flex items-center gap-2 rounded-lg border px-2 py-1 transition-colors ${isDark ? 'border-zinc-700 bg-zinc-800/60 hover:border-cyan-500/40' : 'border-gray-200 bg-white hover:border-cyan-400'} ${img ? 'cursor-pointer' : 'cursor-default'}`}
+                            >
+                              {img && (
+                                <img src={img} alt={nombre} className="h-8 w-12 object-cover rounded shrink-0" draggable={false} />
+                              )}
+                              <div className="min-w-0">
+                                <div className={`text-[11px] font-medium ${isDark ? 'text-white' : 'text-gray-900'}`}>{nombre}</div>
+                                {f?.zona && <div className={`text-[9px] ${isDark ? 'text-zinc-500' : 'text-gray-400'}`}>{f.zona}</div>}
+                              </div>
+                            </a>
+                          );
+                        })}
+                      </div>
+                    ) : (
+                      <p className={`text-[11px] ${isDark ? 'text-zinc-400' : 'text-gray-500'}`}>
+                        Este artículo corre en todas las pantallas del aeropuerto; las “caras” se capturan a mano.
+                      </p>
+                    )}
+                  </div>
+                )}
 
                 {/* Row 2: Plaza, Ciudad (opcional), Formato, Tipo */}
                 <div className="grid grid-cols-4 gap-3 mb-4">
@@ -3645,7 +3709,8 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
                         setNewCara({ ...newCara, renta: v });
                       }}
                       placeholder='0'
-                      disabled={newCara.articulo?.ItemCode?.toUpperCase().startsWith('CT')}
+                      disabled={newCara.articulo?.ItemCode?.toUpperCase().startsWith('CT') || udcRentaLocked}
+                      title={udcRentaLocked ? 'Fijo: una cara por cada pantalla del artículo' : undefined}
                       className={`w-full px-3 py-2 ${isDark ? 'bg-zinc-800 border-zinc-700 text-white' : 'bg-gray-100 border-gray-200 text-gray-900'} border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-purple-500/50 disabled:opacity-40 disabled:cursor-not-allowed`}
                     />
                   </div>
