@@ -20,6 +20,12 @@ import type { InventarioDisponible } from '../services/inventarios.service';
 export const UDC_PLAZA_LABEL = 'Ciudad de México / AM';
 export const UDC_CIUDAD_BASE = 'AICM';
 
+// Formato (= inventarios.mueble) de TODO el inventario UDC/AICM: las pantallas
+// están sembradas con mueble 'PANTALLA DIGITAL'. Se usa como formato autollenado
+// al elegir un artículo UDC, para que empate con el inventario real (y como
+// opción en el dropdown de formatos cuando esUDC).
+export const UDC_FORMATO = 'PANTALLA DIGITAL';
+
 // Prefijos reales de artículo. Todo lo demás en el catálogo UDC es basura
 // (gorras, reembolsos, "otros activos": EDS*, INT-*, s1xx, S112-*).
 const PREFIJOS_REALES = new Set(['RT', 'BF', 'CF', 'CT', 'IN', 'IM', 'ES']);
