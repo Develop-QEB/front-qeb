@@ -4089,7 +4089,7 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
                                             const escalaPorContaminacion = algunaPendDg
                                               && authDgRaw !== 'pendiente'
                                               && authDgRaw !== 'rechazado'
-                                              && (authDcmRaw === 'pendiente' || authDgRaw === 'pendiente');
+                                              && authDcmRaw === 'pendiente';
                                             const dgEfectivo = escalaPorContaminacion ? 'pendiente' : authDgRaw;
                                             const dcmEfectivo = escalaPorContaminacion ? 'aprobado' : authDcmRaw;
                                             return (
