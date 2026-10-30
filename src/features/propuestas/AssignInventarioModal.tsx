@@ -116,6 +116,8 @@ interface CaraItem {
   anio_fin?: number;
   autorizacion_dg?: string;
   autorizacion_dcm?: string;
+  // true si hay una tarea 'Filtro Autorización DG' abierta — pinta embudo cyan junto al "Pend. DG".
+  en_filtro_dg?: boolean;
   _originalDg?: string;
   _originalDcm?: string;
   // Baseline INMUTABLE de BD (DG/DCM aprobados al cargar) para la regla de conservar
