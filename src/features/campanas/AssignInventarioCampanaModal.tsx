@@ -1555,8 +1555,10 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
       setClienteSearchTerm('');
       setShowClienteDropdown(false);
 
-      // Store initial values for change detection — only on first load
-      if (!initialValuesSetRef.current) {
+      // Store initial values for change detection — only on first load.
+      // Esperar a `users`: si la campaña llega antes, los asignados salen vacíos,
+      // luego se llenan y el modal marca "Campaña" como cambio fantasma (caso 80617).
+      if (!initialValuesSetRef.current && users) {
         const asignadosIdsStr = loadedAsignados.map(u => u.id).join(',');
         setInitialValues({
           nombreCampania: campaniaNombre,
@@ -2674,6 +2676,13 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
             const nuevoLocalIds = new Set(conIdNuevo.map(c => c.localId));
             setCaras(prev => prev.filter(c => !nuevoLocalIds.has(c.localId)));
             setReservas(prev => prev.filter(r => !conIdNuevo.some(c => r.id.startsWith(c.localId) || r.solicitudCaraId === c.id)));
+            // Sacarlas también de los pendientes: si no, "Guardar Cambios" manda un id
+            // borrado y el bulk truena con "Record to update not found" (caso 80617).
+            setModifiedCaras(prev => {
+              const next = new Map(prev);
+              for (const c of conIdNuevo) next.delete(c.id);
+              return next;
+            });
           } catch (e) {
             console.error('Error eliminando circuito nuevo (sin auth):', e);
           }
@@ -9856,7 +9865,17 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
                                           <span className={`text-[10px] px-1.5 py-0.5 rounded ${isDark ? 'bg-orange-500/20 text-orange-300' : 'bg-orange-100 text-orange-700'}`}>Corrección</span>
                                         )}
                                         {dgDisplay === 'pendiente' && dcmDisplay !== 'rechazado' && (
-                                          <span className={`text-[10px] px-1.5 py-0.5 rounded ${isDark ? 'bg-red-500/20 text-red-300' : 'bg-red-100 text-red-700'}`}>Pend. DG</span>
+                                          <>
+                                            {/* Etapa visual: la cara esta en el filtro del Gerente Comercial
+                                                (previo a DG). Al aprobar el GC la tarea pasa a 'Autorizacion DG'
+                                                y en_filtro_dg se apaga -> embudo desaparece y queda solo Pend. DG. */}
+                                            {cara.en_filtro_dg && (
+                                              <span className={`inline-flex items-center gap-1 text-[10px] px-1.5 py-0.5 rounded ${isDark ? 'bg-cyan-500/20 text-cyan-300' : 'bg-cyan-100 text-cyan-700'}`} title="En filtro del Gerente Comercial (previo a DG)">
+                                                <Funnel className="w-3 h-3" /> Filtro GC
+                                              </span>
+                                            )}
+                                            <span className={`text-[10px] px-1.5 py-0.5 rounded ${isDark ? 'bg-red-500/20 text-red-300' : 'bg-red-100 text-red-700'}`}>Pend. DG</span>
+                                          </>
                                         )}
                                         {dcmDisplay === 'pendiente' && dgDisplay !== 'rechazado' && (
                                           <span className={`text-[10px] px-1.5 py-0.5 rounded ${isDark ? 'bg-amber-500/20 text-amber-300' : 'bg-amber-100 text-amber-700'}`}>Pend. {esUDC ? 'DCA' : 'DCM'}</span>
@@ -9913,9 +9932,23 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
                                       );
                                     })()}
                                     {effectiveCanEdit && (() => {
-                                      const editBlocked = hasSavedPendingAuth || caraAPSBlocked;
+                                      // Antes bloqueabamos TODOS los botones de editar si HAY alguna cara
+                                      // con autorizacion pendiente guardada (hasSavedPendingAuth). En
+                                      // migraciones SAP grandes (reporte Aylin/Aldonza 80617 TELCEL
+                                      // 2026-10-23) eso dejaba la campana completa inoperable: ya traia
+                                      // caras pendientes desde la migracion, entonces al abrir el modal
+                                      // todos los botones salian disabled sin que el asesor tocara nada.
+                                      // Ahora solo bloqueamos la cara que ESTA puntualmente pendiente
+                                      // (para no editarla mientras direccion la revisa). Las demas quedan
+                                      // libres para seguir ajustando. "Agregar circuito nuevo" sigue
+                                      // bloqueado globalmente arriba.
+                                      const caraTienePendienteGuardada =
+                                        cara.id != null &&
+                                        !modifiedCaras.has(cara.id) &&
+                                        ((cara as any)._originalDg === 'pendiente' || (cara as any)._originalDcm === 'pendiente');
+                                      const editBlocked = caraTienePendienteGuardada || caraAPSBlocked;
                                       const isLoadingThis = loadingCaraAction?.caraId === cara.localId && loadingCaraAction?.action === 'edit';
-                                      const blockReason = caraAPSBlocked ? 'Grupo con APS asignado - no se puede editar' : hasSavedPendingAuth ? 'Hay circuitos pendientes de autorizacion - no se pueden editar otros' : isLoadingThis ? 'Cargando editor...' : 'Editar';
+                                      const blockReason = caraAPSBlocked ? 'Grupo con APS asignado - no se puede editar' : caraTienePendienteGuardada ? 'Este circuito esta pendiente de autorizacion - no se puede editar hasta que direccion resuelva' : isLoadingThis ? 'Cargando editor...' : 'Editar';
                                       return (
                                       <>
                                         {(cara.autorizacion_dg === 'rechazado' || cara.autorizacion_dcm === 'rechazado' || cara.autorizacion_dg === 'correccion') && (

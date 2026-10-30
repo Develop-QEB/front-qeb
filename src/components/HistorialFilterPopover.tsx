@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { History, X, ChevronDown } from 'lucide-react';
+import { AUTORIZACION_OPCIONES, estatusValorDeAutorizacion, labelDeEstatusValor } from '../lib/autorizacionFiltro';
 
 // Filtro por historial — rangos de fecha aplicados al historial guardado del
 // registro (tabla `historial`). Se usa en los listados de Solicitudes,
@@ -31,7 +32,8 @@ function formatChip(values: HistorialFilterValues): string {
   const desde = values.fechaDesde || '...';
   const hasta = values.fechaHasta || '...';
   if (values.modo === 'creacion') return `Creación: ${desde} → ${hasta}`;
-  const estatus = values.estatusValor || 'cualquier estatus';
+  // `auth:<key>` llega como estatus de autorización de circuitos.
+  const estatus = labelDeEstatusValor(values.estatusValor) || 'cualquier estatus';
   return `Cambió a ${estatus}: ${desde} → ${hasta}`;
 }
 
@@ -152,9 +154,19 @@ export function HistorialFilterPopover({
                     className={inputCls}
                   >
                     <option value="">Cualquier estatus</option>
-                    {estatusOptions.map(s => (
-                      <option key={s} value={s}>{s}</option>
-                    ))}
+                    <optgroup label="Estatus">
+                      {estatusOptions.map(s => (
+                        <option key={s} value={s}>{s}</option>
+                      ))}
+                    </optgroup>
+                    {/* Autorización de circuitos: filtra por la fecha en que
+                        los circuitos del registro pasaron a ese estatus
+                        (historial de autorización). Viaja como auth:<key>. */}
+                    <optgroup label="Autorización de circuitos">
+                      {AUTORIZACION_OPCIONES.map(o => (
+                        <option key={o.key} value={estatusValorDeAutorizacion(o.key)}>{o.label}</option>
+                      ))}
+                    </optgroup>
                   </select>
                 </div>
               )}

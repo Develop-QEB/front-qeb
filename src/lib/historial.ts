@@ -24,10 +24,10 @@ interface CaraInfo {
   catorcena?: string;
 }
 
-const isPlainObject = (v: unknown): v is Record<string, unknown> =>
+export const isPlainObject = (v: unknown): v is Record<string, unknown> =>
   typeof v === 'object' && v !== null && !Array.isArray(v);
 
-const formatValue = (v: unknown): string => {
+export const formatValue = (v: unknown): string => {
   if (v === null || v === undefined) return '';
   if (typeof v === 'string') return v;
   if (typeof v === 'number' || typeof v === 'boolean') return String(v);

@@ -2,6 +2,14 @@ import { Circle, Clock, CheckCircle, AlertCircle, FileText, Send, Bell, Briefcas
 
 // ============ CONFIGURACIÓN DE ESTATUS ============
 export const STATUS_CONFIG = {
+  // Actividad Comercial recien creada (tablero CRM en Historial de Acciones:
+  // Abierto -> Activo -> Finalizado). Ver features/historial/actividadComercial.ts.
+  'Abierto': {
+    color: 'text-blue-400',
+    bg: 'bg-blue-500/20',
+    border: 'border-blue-500/30',
+    icon: Circle
+  },
   'Activo': {
     color: 'text-amber-400',
     bg: 'bg-amber-500/20',

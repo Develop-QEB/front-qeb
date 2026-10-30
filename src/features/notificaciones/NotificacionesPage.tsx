@@ -35,7 +35,7 @@ import { NuevaActividadComercialModal } from './NuevaActividadComercialModal';
 // [TEMPORAL] Ocultar "Actividad Comercial" en producción (pedido de Dirección,
 // oct 2026): la feature de Akary entró a main con el merge de release del 29-sep
 // pero aún no debía estar visible. Para reactivarla: poner en false.
-const OCULTAR_ACTIVIDAD_COMERCIAL = true;
+const OCULTAR_ACTIVIDAD_COMERCIAL = false;
 
 // Roles que pueden crear tarea manual "Actividad Comercial".
 // Se muestra el boton solo a estos. El back re-valida.
@@ -165,6 +165,29 @@ type QuickFilterKey =
 // (notificaciones.controller.ts) o el conteo de la lista se descuadra del badge.
 const ESTATUS_RESUELTOS = ['Atendido', 'Rechazado', 'Cancelado'];
 const esResuelta = (estatus?: string | null) => !!estatus && ESTATUS_RESUELTOS.includes(estatus);
+
+// Roles de dirección: su listado de tareas se muestra SIEMPRE extendido (los
+// grupos nunca arrancan contraídos) y no cierran tareas a mano.
+const ROLES_DIRECCION = ['Director General', 'Director Comercial'];
+
+// Roles que NO pueden marcar tareas como finalizadas / sin finalizar a mano.
+// Mismo criterio que el botón del drawer de "Mis Tareas".
+const ROLES_SIN_CIERRE_MANUAL = ['Director General', 'Gerente Comercial Vía Pública', 'Gerente Comercial Plazas', 'Gerente Comercial'];
+
+// ¿Esta fila admite selección masiva para finalizar / reabrir?
+// - En Notificaciones: siempre (Atendido = leída).
+// - En Mis Tareas: solo tareas cuyo cierre es manual. Quedan fuera las de
+//   Autorización / Filtro (las cierra aprobar/rechazar), las del gestor de
+//   artes (las cierra su flujo) y las de Desposteo (su propio modal).
+function esSeleccionableMasivo(tarea: Notificacion, contentType: ContentType, rol?: string | null): boolean {
+  if (contentType === 'notificaciones') return true;
+  if (ROLES_SIN_CIERRE_MANUAL.includes(rol || '')) return false;
+  const tipo = tarea.tipo || '';
+  if (tipo.includes('Autorización') || tipo.includes('Autorizacion')) return false;
+  if (isTareaGestorArtes(tipo)) return false;
+  if (tipo === 'Filtro Desposteo') return false;
+  return true;
+}
 
 const QUICK_FILTERS_NOTIFICACIONES: { key: QuickFilter; label: string }[] = [
   { key: 'all', label: 'Todas' },
@@ -436,6 +459,7 @@ function TareaRow({
   showBorder = true,
   selected,
   onToggleSelection,
+  canSelect,
   currentUserId,
   onEditActividad,
 }: {
@@ -444,6 +468,9 @@ function TareaRow({
   showBorder?: boolean;
   selected?: boolean;
   onToggleSelection?: (id: number) => void;
+  // Si viene, decide por fila si se pinta el checkbox. Si la fila no es
+  // seleccionable se deja un espaciador para no desalinear el listado.
+  canSelect?: (tarea: Notificacion) => boolean;
   // Si el user actual es creador de la Actividad Comercial, mostramos plumita.
   currentUserId?: number;
   onEditActividad?: (tarea: Notificacion) => void;
@@ -482,13 +509,17 @@ function TareaRow({
     >
       {/* Checkbox de selección masiva */}
       {onToggleSelection && (
-        <input
-          type="checkbox"
-          checked={!!selected}
-          onClick={(e) => e.stopPropagation()}
-          onChange={(e) => { e.stopPropagation(); onToggleSelection(tarea.id); }}
-          className="w-4 h-4 accent-purple-500 cursor-pointer flex-shrink-0"
-        />
+        (!canSelect || canSelect(tarea)) ? (
+          <input
+            type="checkbox"
+            checked={!!selected}
+            onClick={(e) => e.stopPropagation()}
+            onChange={(e) => { e.stopPropagation(); onToggleSelection(tarea.id); }}
+            className="w-4 h-4 accent-purple-500 cursor-pointer flex-shrink-0"
+          />
+        ) : (
+          <span className="w-4 h-4 flex-shrink-0" aria-hidden="true" />
+        )
       )}
 
       {/* Indicador de estado visual */}
@@ -518,6 +549,15 @@ function TareaRow({
             <TipoIcon className={`h-3 w-3 ${tipoConfig.color}`} />
             <span className={`text-[11px] font-medium ${tipoConfig.color}`}>{tarea.tipo}</span>
           </div>
+          {/* Badge de ESTATUS en el listado (feedback Jos 2026-10-20).
+              Para Actividad Comercial mostramos siempre el estatus; para otras
+              tareas lo mostramos salvo que sea 'Pendiente' por default
+              (ya se nota con el icono gris). */}
+          {!isNotificacion && tarea.estatus && (tarea.tipo === 'Actividad Comercial' || tarea.estatus !== 'Pendiente') && (
+            <div className={`flex-shrink-0 px-2 py-0.5 rounded-full ${statusConfig.bg} border ${statusConfig.border}`}>
+              <span className={`text-[10px] font-semibold ${statusConfig.color}`}>{tarea.estatus}</span>
+            </div>
+          )}
           {authBadge && !isRechazo && !isAprobacion && (
             <div className={`flex-shrink-0 px-2 py-0.5 rounded-full ${authBadge.bg} border ${authBadge.border}`}>
               <span className={`text-[10px] font-semibold ${authBadge.color}`}>{authBadge.label}</span>
@@ -700,8 +740,10 @@ function NestedSection({
   onSelectTarea,
   selectedIds,
   onToggleSelection,
+  canSelect,
   currentUserId,
   onEditActividad,
+  defaultOpen = true,
 }: {
   group: NestedGroup;
   level?: number;
@@ -709,11 +751,15 @@ function NestedSection({
   onSelectTarea: (tarea: Notificacion) => void;
   selectedIds?: Set<number>;
   onToggleSelection?: (id: number) => void;
+  canSelect?: (tarea: Notificacion) => boolean;
   currentUserId?: number;
   onEditActividad?: (tarea: Notificacion) => void;
+  // Estado inicial del grupo. En "Mis Tareas" arranca contraído (salvo roles de
+  // dirección); en Notificaciones, extendido.
+  defaultOpen?: boolean;
 }) {
   const isDark = useThemeStore((s) => s.theme) === 'dark';
-  const [open, setOpen] = useState(true);
+  const [open, setOpen] = useState(defaultOpen);
   const statusConfig = getStatusConfig(group.key);
   const currentGroupType = groupByList[level];
   const groupOption = GROUP_BY_OPTIONS.find(o => o.value === currentGroupType);
@@ -740,6 +786,7 @@ function NestedSection({
                 showBorder={idx !== group.tareas.length - 1}
                 selected={selectedIds?.has(tarea.id)}
                 onToggleSelection={onToggleSelection}
+                canSelect={canSelect}
                 currentUserId={currentUserId}
                 onEditActividad={onEditActividad}
               />
@@ -792,8 +839,10 @@ function NestedSection({
                   onSelectTarea={onSelectTarea}
                   selectedIds={selectedIds}
                   onToggleSelection={onToggleSelection}
+                  canSelect={canSelect}
                   currentUserId={currentUserId}
                   onEditActividad={onEditActividad}
+                  defaultOpen={defaultOpen}
                 />
               ))}
             </div>
@@ -807,6 +856,7 @@ function NestedSection({
                 showBorder={idx !== group.tareas.length - 1}
                 selected={selectedIds?.has(tarea.id)}
                 onToggleSelection={onToggleSelection}
+                canSelect={canSelect}
                 currentUserId={currentUserId}
                 onEditActividad={onEditActividad}
               />
@@ -2953,6 +3003,7 @@ function TaskDrawer({
               ref_id?: number | null;
               anio?: number | null;
               catorcena?: number | null;
+              catorcenas?: number[] | null;
               estatus_actividad?: string | null;
               base?: string | null;
             };
@@ -2966,8 +3017,19 @@ function TaskDrawer({
             if (c.cliente) campos.push({ label: 'Cliente', value: c.cliente });
             if (c.marca) campos.push({ label: 'Marca', value: c.marca });
             if (c.anio) campos.push({ label: 'Año', value: String(c.anio) });
-            if (c.catorcena) campos.push({ label: 'Catorcena', value: `Cat ${c.catorcena}` });
-            if (c.estatus_actividad) campos.push({ label: 'Estatus', value: c.estatus_actividad });
+            // Catorcenas: array nuevo tiene prioridad; cae al singular legacy.
+            const catorcenasList = Array.isArray(c.catorcenas) && c.catorcenas.length > 0
+              ? c.catorcenas
+              : (c.catorcena ? [c.catorcena] : []);
+            if (catorcenasList.length > 0) {
+              const label = catorcenasList.length === 1 ? 'Catorcena' : 'Catorcenas';
+              campos.push({ label, value: catorcenasList.map(n => `Cat ${n}`).join(', ') });
+            }
+            // 'Cerrado' legacy se muestra como 'Finalizado' para alinear vocabulario.
+            if (c.estatus_actividad) {
+              const estDisplay = c.estatus_actividad === 'Cerrado' ? 'Finalizado' : c.estatus_actividad;
+              campos.push({ label: 'Estatus', value: estDisplay });
+            }
             if (c.base) campos.push({ label: 'Base', value: c.base });
 
             if (campos.length === 0) return null;
@@ -3111,8 +3173,10 @@ function TaskDrawer({
         <div className="p-5 space-y-3">
           <h3 className={`text-xs font-medium ${isDark ? 'text-zinc-500' : 'text-gray-400'} uppercase tracking-wider mb-3`}>Detalles</h3>
 
-          {/* Cliente (si es tarea de autorización) */}
-          {(() => {
+          {/* Cliente (si es tarea de autorización). Para Actividad Comercial lo
+              omitimos aqui porque ya aparece en el bloque amarillo "Información
+              de la Actividad" (feedback Jos 2026-10-20 — campos duplicados). */}
+          {tarea.tipo !== 'Actividad Comercial' && (() => {
             const clienteName = (carasData && carasData.length > 0 ? carasData[0].cliente : null) || tarea.cliente;
             if (!clienteName) return null;
             return (
@@ -3461,6 +3525,21 @@ export function NotificacionesPage() {
   const [quickFilter, setQuickFilter] = useState<QuickFilter>('pendientes');
   const [filtersOpen, setFiltersOpen] = useState(false);
 
+  // Chips por tipo de tarea (pestaña Mis Tareas). Acumulables: vacío = todos.
+  const [tiposSeleccionados, setTiposSeleccionados] = useState<Set<string>>(new Set());
+  useEffect(() => { setTiposSeleccionados(new Set()); }, [contentType]);
+  const toggleTipoSeleccionado = useCallback((tipo: string) => {
+    setTiposSeleccionados(prev => {
+      const next = new Set(prev);
+      if (next.has(tipo)) next.delete(tipo); else next.add(tipo);
+      return next;
+    });
+  }, []);
+  // El Tablero (columnas por tipo) solo aplica a Mis Tareas.
+  useEffect(() => {
+    if (contentType === 'notificaciones' && view === 'tablero') setView('lista');
+  }, [contentType, view]);
+
 
   // Estados para filtros avanzados (estilo Proveedores)
   const [filters, setFilters] = useState<FilterCondition[]>([]);
@@ -3598,6 +3677,8 @@ export function NotificacionesPage() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['notificaciones'] });
       queryClient.invalidateQueries({ queryKey: ['notificaciones-stats'] });
+      // En Mis Tareas el cambio de estatus también se refleja en las tareas de campaña.
+      queryClient.invalidateQueries({ queryKey: ['campana-tareas'], exact: false });
       setSelectedTareaIds(new Set());
     },
   });
@@ -3701,10 +3782,34 @@ export function NotificacionesPage() {
       });
     }, [baseTareas, quickFilter, user?.rol]);
 
-  const filteredTareas = tareasConQuickFilter;
+  // Tipos disponibles (con conteo) bajo el filtro rápido actual, para pintar
+  // los chips de tipo. Se calculan ANTES de aplicar el filtro de tipo para que
+  // un chip no desaparezca al seleccionar otro.
+  const tiposDisponibles = useMemo(() => {
+    const counts = new Map<string, number>();
+    for (const t of tareasConQuickFilter) {
+      const tipo = t.tipo || 'Sin tipo';
+      counts.set(tipo, (counts.get(tipo) || 0) + 1);
+    }
+    return Array.from(counts.entries())
+      .map(([tipo, count]) => ({ tipo, count }))
+      .sort((a, b) => b.count - a.count || a.tipo.localeCompare(b.tipo));
+  }, [tareasConQuickFilter]);
 
-  // Selección masiva: master checkbox que marca/desmarca todas las visibles.
-  const allFilteredIds = useMemo(() => filteredTareas.map(t => t.id), [filteredTareas]);
+  const filteredTareas = useMemo(() => {
+    if (contentType !== 'tareas' || tiposSeleccionados.size === 0) return tareasConQuickFilter;
+    return tareasConQuickFilter.filter(t => tiposSeleccionados.has(t.tipo || 'Sin tipo'));
+  }, [tareasConQuickFilter, tiposSeleccionados, contentType]);
+
+  // Selección masiva: solo las filas que admiten cierre manual (en Mis Tareas
+  // quedan fuera autorizaciones, gestor de artes y desposteo).
+  const puedeSeleccionar = useCallback(
+    (t: Notificacion) => esSeleccionableMasivo(t, contentType, user?.rol),
+    [contentType, user?.rol]
+  );
+  const haySeleccionables = useMemo(() => filteredTareas.some(puedeSeleccionar), [filteredTareas, puedeSeleccionar]);
+  // Master checkbox que marca/desmarca todas las visibles seleccionables.
+  const allFilteredIds = useMemo(() => filteredTareas.filter(puedeSeleccionar).map(t => t.id), [filteredTareas, puedeSeleccionar]);
   const allFilteredSelected = allFilteredIds.length > 0 && allFilteredIds.every(id => selectedTareaIds.has(id));
   const someFilteredSelected = !allFilteredSelected && allFilteredIds.some(id => selectedTareaIds.has(id));
   const toggleAllFilteredSelection = useCallback(() => {
@@ -3845,12 +3950,13 @@ export function NotificacionesPage() {
   }, [user?.rol]);
 
   // Vista de tabs
-  const viewTabs = [
+  // Tablero (columnas por tipo de tarea) solo en Mis Tareas.
+  const viewTabs: { key: ViewType; label: string; icon: typeof List }[] = [
     { key: 'lista', label: 'Lista', icon: List },
-    //{ key: 'tablero', label: 'Tablero', icon: LayoutGrid },
+    ...(contentType === 'tareas' ? [{ key: 'tablero' as ViewType, label: 'Tablero', icon: LayoutGrid }] : []),
     { key: 'calendario', label: 'Calendario', icon: CalendarDays },
     { key: 'notas', label: 'Notas', icon: StickyNote },
-  ] as const;
+  ];
 
   return (
     <div className="min-h-screen flex flex-col">
@@ -4302,6 +4408,49 @@ export function NotificacionesPage() {
             </div>
           </div>
         )}
+
+        {/* Chips por tipo de tarea — filtros rápidos acumulables (solo Mis Tareas,
+            en Lista y Tablero). Vacío = todos los tipos. */}
+        {contentType === 'tareas' && (view === 'lista' || view === 'tablero') && tiposDisponibles.length > 0 && (
+          <div className={`flex flex-wrap items-center gap-2 px-3 md:px-6 pb-3`}>
+            <button
+              onClick={() => setTiposSeleccionados(new Set())}
+              className={`px-3 py-1 rounded-full text-xs font-medium border transition-colors ${
+                tiposSeleccionados.size === 0
+                  ? 'bg-purple-600 text-white border-purple-500'
+                  : isDark ? 'bg-zinc-800/60 text-zinc-300 border-zinc-700 hover:bg-zinc-800' : 'bg-gray-50 text-gray-600 border-gray-200 hover:bg-gray-100'
+              }`}
+            >
+              Todas
+            </button>
+            {tiposDisponibles.map(({ tipo, count }) => {
+              const activo = tiposSeleccionados.has(tipo);
+              const cfg = getTipoConfig(tipo);
+              const TipoIcon = cfg.icon;
+              return (
+                <button
+                  key={tipo}
+                  onClick={() => toggleTipoSeleccionado(tipo)}
+                  aria-pressed={activo}
+                  className={`flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-medium border transition-colors ${
+                    activo
+                      ? `${cfg.bg} ${cfg.color} ${cfg.border} ring-1 ring-current/40`
+                      : isDark ? 'bg-zinc-800/60 text-zinc-300 border-zinc-700 hover:bg-zinc-800' : 'bg-gray-50 text-gray-600 border-gray-200 hover:bg-gray-100'
+                  }`}
+                >
+                  <TipoIcon className={`h-3 w-3 ${activo ? cfg.color : isDark ? 'text-zinc-500' : 'text-gray-400'}`} />
+                  {tipo}
+                  <span className={`px-1.5 rounded-full text-[10px] ${activo ? 'bg-black/20' : isDark ? 'bg-zinc-700 text-zinc-400' : 'bg-gray-200 text-gray-500'}`}>{count}</span>
+                </button>
+              );
+            })}
+            {tiposSeleccionados.size > 0 && (
+              <span className={`text-[11px] ${isDark ? 'text-zinc-500' : 'text-gray-400'}`}>
+                {tiposSeleccionados.size} tipo{tiposSeleccionados.size === 1 ? '' : 's'} · {filteredTareas.length} tarea{filteredTareas.length === 1 ? '' : 's'}
+              </span>
+            )}
+          </div>
+        )}
       </div>
 
       {/* Contenido principal */}
@@ -4316,7 +4465,7 @@ export function NotificacionesPage() {
           <div className="space-y-3">
             <div className="flex items-center justify-between gap-3">
               <div className="flex items-center gap-3">
-                {filteredTareas.length > 0 && contentType === 'notificaciones' && (
+                {filteredTareas.length > 0 && haySeleccionables && (
                   <label className="flex items-center gap-2 cursor-pointer select-none">
                     <input
                       type="checkbox"
@@ -4336,21 +4485,21 @@ export function NotificacionesPage() {
                   {activeGroupings.length > 0 && <span className={isDark ? 'text-zinc-600' : 'text-gray-400'}> · {activeGroupings.length} agrupación{activeGroupings.length > 1 ? 'es' : ''}</span>}
                 </span>
               </div>
-              {contentType === 'notificaciones' && selectedTareaIds.size > 0 && (
+              {selectedTareaIds.size > 0 && (
                 <div className="flex items-center gap-2">
                   <button
                     onClick={() => bulkUpdateEstatusMutation.mutate({ ids: Array.from(selectedTareaIds), estatus: 'Atendido' })}
                     disabled={bulkUpdateEstatusMutation.isPending}
                     className="px-3 py-1.5 text-xs font-medium bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg disabled:opacity-50 transition-colors"
                   >
-                    Marcar como leídas
+                    {contentType === 'notificaciones' ? 'Marcar como leídas' : 'Marcar como finalizadas'}
                   </button>
                   <button
                     onClick={() => bulkUpdateEstatusMutation.mutate({ ids: Array.from(selectedTareaIds), estatus: 'Pendiente' })}
                     disabled={bulkUpdateEstatusMutation.isPending}
                     className="px-3 py-1.5 text-xs font-medium bg-amber-600 hover:bg-amber-700 text-white rounded-lg disabled:opacity-50 transition-colors"
                   >
-                    Marcar como no leídas
+                    {contentType === 'notificaciones' ? 'Marcar como no leídas' : 'Marcar sin finalizar'}
                   </button>
                   <button
                     onClick={() => setSelectedTareaIds(new Set())}
@@ -4364,16 +4513,20 @@ export function NotificacionesPage() {
             </div>
 
             {activeGroupings.length > 0 ? (
-              /* Vista con agrupaciones */
-              <div className="space-y-3">
+              /* Vista con agrupaciones. key por pestaña: remonta los grupos al
+                 cambiar de tab para que aplique su estado inicial (contraído /
+                 extendido) y no herede el de la otra pestaña. */
+              <div className="space-y-3" key={contentType}>
                 {nestedGroups.map((group) => (
                   <NestedSection
                     key={group.key}
                     group={group}
                     groupByList={activeGroupings}
                     onSelectTarea={handleSelectTarea}
-                    selectedIds={contentType === 'notificaciones' ? selectedTareaIds : undefined}
-                    onToggleSelection={contentType === 'notificaciones' ? toggleTareaSelection : undefined}
+                    selectedIds={haySeleccionables ? selectedTareaIds : undefined}
+                    onToggleSelection={haySeleccionables ? toggleTareaSelection : undefined}
+                    canSelect={puedeSeleccionar}
+                    defaultOpen={contentType !== 'tareas' || isDirector}
                     currentUserId={currentUserId}
                     onEditActividad={puedeCrearActividadComercial ? (t) => setEditingActividad({ id: t.id, descripcion: t.mensaje || t.titulo, fecha_fin: t.fecha_fin, contenido: t.contenido }) : undefined}
                   />
@@ -4417,15 +4570,19 @@ export function NotificacionesPage() {
                         {/* Checkbox de selección masiva — solo en tab Notificaciones,
                             porque en Mis Tareas 'estatus=Atendido' significa tarea
                             completada, no solo "leída". */}
-                        {contentType === 'notificaciones' && (
+                        {haySeleccionables && (
                           <div className="pt-1.5">
-                            <input
-                              type="checkbox"
-                              checked={selectedTareaIds.has(tarea.id)}
-                              onClick={(e) => e.stopPropagation()}
-                              onChange={(e) => { e.stopPropagation(); toggleTareaSelection(tarea.id); }}
-                              className="w-4 h-4 accent-purple-500 cursor-pointer"
-                            />
+                            {puedeSeleccionar(tarea) ? (
+                              <input
+                                type="checkbox"
+                                checked={selectedTareaIds.has(tarea.id)}
+                                onClick={(e) => e.stopPropagation()}
+                                onChange={(e) => { e.stopPropagation(); toggleTareaSelection(tarea.id); }}
+                                className="w-4 h-4 accent-purple-500 cursor-pointer"
+                              />
+                            ) : (
+                              <span className="block w-4 h-4" aria-hidden="true" />
+                            )}
                           </div>
                         )}
                         {/* Indicador de estado + icono (oculto para auth) */}
@@ -4670,6 +4827,10 @@ export function NotificacionesPage() {
             onClose={handleCloseDrawer}
             onAddComment={(contenido) => addCommentMutation.mutate({ id: selectedTarea.id, contenido })}
             onUpdateFechaFin={(fecha_fin) => updateTareaMutation.mutate({ id: selectedTarea.id, fecha_fin })}
+            onEditActividad={puedeCrearActividadComercial ? (t) => {
+              handleCloseDrawer();
+              setTimeout(() => setEditingActividad({ id: t.id, descripcion: t.mensaje || t.titulo, fecha_fin: t.fecha_fin, contenido: t.contenido }), 250);
+            } : undefined}
             onNavigate={(path) => {
               if (selectedTarea.tipo?.includes('Rechazo')) {
                 handleCloseDrawer();

@@ -26,6 +26,12 @@ export type EstatusPruebaColor =
   | 'aprobada'
   | 'rechazada';
 
+// Jos 2026-10-23: expansion a dos flujos coexistentes en la misma tabla.
+//   'prueba_color'       -> flujo original (default).
+//   'revision_anticipada'-> arte revisado antes de pisada; al aprobar vincula
+//                           a biblioteca de artes con etiqueta "RA vN".
+export type TipoPrueba = 'prueba_color' | 'revision_anticipada';
+
 export interface PruebaColor {
   id: number;
   propuesta_id: number;
@@ -39,6 +45,9 @@ export interface PruebaColor {
   nombre_arte: string | null;
   notas: string | null;
   estatus: EstatusPruebaColor;
+  // Jos 2026-10-23: opcional porque los registros creados antes de la
+  // migracion no tienen el campo. Si falta, trata como 'prueba_color'.
+  tipo?: TipoPrueba | null;
   version: number;
   created_by: number;
   created_by_nombre: string;
@@ -55,12 +64,14 @@ export interface CrearPruebaColorInput {
   enlace_externo?: string | null;
   nombre_arte?: string | null;
   notas?: string | null;
+  tipo?: TipoPrueba;
 }
 
 export interface ListarPruebaColorParams {
   propuesta_id?: number;
   campania_id?: number;
   sc_id?: number;
+  tipo?: TipoPrueba;
 }
 
 // Tarea asociada a una prueba de color (Revisión de artes / Seguimiento).
@@ -91,6 +102,7 @@ export const pruebasColorService = {
       if (params.propuesta_id) query.set('propuesta_id', String(params.propuesta_id));
       if (params.campania_id) query.set('campania_id', String(params.campania_id));
       if (params.sc_id) query.set('sc_id', String(params.sc_id));
+      if (params.tipo) query.set('tipo', params.tipo);
       const { data } = await api.get(`/pruebas-color?${query.toString()}`);
       if (!data.success) throw new Error(data.error || 'Error al listar pruebas de color');
       return data.data as PruebaColor[];

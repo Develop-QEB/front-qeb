@@ -300,6 +300,9 @@ export interface SolicitudCara {
   autorizacion_dcm?: string | null;
   // true si la cara tiene una tarea de eliminación abierta (Filtro GC o DG).
   pendiente_eliminacion?: boolean;
+  // true si hay una tarea 'Filtro Autorización DG' abierta (gerente comercial
+  // revisando antes de escalar a DG). Pinta embudo ambar junto al "Pend. DG".
+  en_filtro_dg?: boolean;
   grupo_rt_bf?: number | null;
   cortesia?: number | null;
 }
@@ -405,6 +408,9 @@ export interface ArteExistente {
   origen_prueba_color?: boolean;
   prueba_color_version?: number | null;
   prueba_color_enlace_externo?: string | null;
+  // Jos 2026-10-23: 'prueba_color' | 'revision_anticipada'. Define el prefijo
+  // del badge (PC vN vs RA vN) en la biblioteca de artes.
+  prueba_color_tipo?: 'prueba_color' | 'revision_anticipada' | null;
 }
 
 // Órdenes de Montaje
@@ -921,6 +927,11 @@ export interface CampanasParams {
   fechaHasta?: string;
   estatusValor?: string;
   excludeRechazadas?: boolean;
+  // Filtro por autorización de circuitos (claves CSV: pend_dg,rechazado,...)
+  // y fechas de último cambio por fila para el orden "Último cambio".
+  // Ver lib/autorizacionFiltro.
+  autorizacion?: string;
+  includeCambios?: boolean;
 }
 
 export const campanasService = {
@@ -964,8 +975,13 @@ export const campanasService = {
     return response.data.data;
   },
 
-  async getStats(params?: Omit<CampanasParams, 'page' | 'limit'>): Promise<CampanaStats> {
-    const response = await api.get<ApiResponse<CampanaStats>>('/campanas/stats', { params });
+  // `ids`: universo explícito de campañas (cuando la página filtra en
+  // cliente). Va por POST en el body para no reventar el límite de URL.
+  async getStats(params?: Omit<CampanasParams, 'page' | 'limit'> & { ids?: number[] }): Promise<CampanaStats> {
+    const { ids, ...query } = params || {};
+    const response = ids
+      ? await api.post<ApiResponse<CampanaStats>>('/campanas/stats', { ids }, { params: query })
+      : await api.get<ApiResponse<CampanaStats>>('/campanas/stats', { params: query });
     if (!response.data.success || !response.data.data) {
       throw new Error(response.data.error || 'Error al obtener estadisticas');
     }

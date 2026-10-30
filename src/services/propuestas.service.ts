@@ -49,6 +49,11 @@ export interface PropuestasParams {
   fechaHasta?: string;
   estatusValor?: string;
   excludeRechazadas?: boolean;
+  // Filtro por autorización de circuitos (claves CSV: pend_dg,rechazado,...)
+  // y fechas de último cambio por fila para el orden "Último cambio".
+  // Ver lib/autorizacionFiltro.
+  autorizacion?: string;
+  includeCambios?: boolean;
 }
 
 export interface PropuestaStats {
@@ -194,6 +199,15 @@ export const propuestasService = {
       throw new Error(response.data.error || 'Error al obtener propuesta');
     }
     return response.data.data;
+  },
+
+  /** Desglose de completitud por catorcena (popover del badge "Incompleta"). */
+  async getCompletitud(id: number): Promise<{ catorcena: number; anio: number; caras_esperadas: number; reservas_count: number; completa: boolean }[]> {
+    const response = await api.get<ApiResponse<{ catorcena: number; anio: number; caras_esperadas: number; reservas_count: number; completa: boolean }[]>>(`/propuestas/${id}/completitud`);
+    if (!response.data.success) {
+      throw new Error(response.data.error || 'Error al obtener completitud');
+    }
+    return response.data.data ?? [];
   },
 
   async updateStatus(id: number, status: string, comentario_cambio_status?: string): Promise<Propuesta> {
@@ -490,6 +504,7 @@ export interface SolicitudCara {
   autorizacion_dg?: string;
   autorizacion_dcm?: string;
   grupo_rt_bf?: number | null;
+  en_filtro_dg?: boolean;
 }
 
 export interface ReservaModalItem {

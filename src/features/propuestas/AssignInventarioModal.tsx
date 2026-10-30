@@ -9815,7 +9815,17 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
                                           <span className="text-[10px] px-1.5 py-0.5 rounded bg-orange-500/20 text-orange-300">Corrección</span>
                                         )}
                                         {dgDisplay === 'pendiente' && dcmDisplay !== 'rechazado' && (
-                                          <span className="text-[10px] px-1.5 py-0.5 rounded bg-red-500/20 text-red-300">Pend. DG</span>
+                                          <>
+                                            {/* Etapa visual: la cara esta en el filtro del Gerente Comercial
+                                                (previo a DG). Al aprobar el GC la tarea pasa a 'Autorizacion DG'
+                                                y en_filtro_dg se apaga -> embudo desaparece y queda solo Pend. DG. */}
+                                            {cara.en_filtro_dg && (
+                                              <span className="inline-flex items-center gap-1 text-[10px] px-1.5 py-0.5 rounded bg-cyan-500/20 text-cyan-300" title="En filtro del Gerente Comercial (previo a DG)">
+                                                <Funnel className="w-3 h-3" /> Filtro GC
+                                              </span>
+                                            )}
+                                            <span className="text-[10px] px-1.5 py-0.5 rounded bg-red-500/20 text-red-300">Pend. DG</span>
+                                          </>
                                         )}
                                         {dcmDisplay === 'pendiente' && dgDisplay !== 'rechazado' && (
                                           <span className="text-[10px] px-1.5 py-0.5 rounded bg-amber-500/20 text-amber-300">Pend. {esUDC ? 'DCA' : 'DCM'}</span>
@@ -9879,19 +9889,37 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
                                             <RefreshCw className="h-4 w-4" />
                                           </button>
                                         )}
-                                        {puedeEditarCircuito && (
+                                        {puedeEditarCircuito && (() => {
+                                          // Antes bloqueabamos TODOS los botones de editar si HAY alguna
+                                          // cara con autorizacion pendiente guardada (hasSavedPendingAuth).
+                                          // En migraciones SAP grandes (reporte Aylin/Aldonza 80617 TELCEL
+                                          // 2026-10-23) eso dejaba la propuesta inoperable: ya traia caras
+                                          // pendientes desde la migracion, entonces al abrir el modal todos
+                                          // los botones salian disabled sin que el asesor tocara nada.
+                                          // Ahora solo bloqueamos la cara que ESTA puntualmente pendiente
+                                          // (para no editarla mientras direccion la revisa). Las demas
+                                          // quedan libres para seguir ajustando. "Agregar circuito nuevo"
+                                          // sigue bloqueado globalmente arriba.
+                                          const caraTienePendienteGuardada =
+                                            cara.id != null &&
+                                            !modifiedCaras.has(cara.id) &&
+                                            ((cara as any)._originalDg === 'pendiente' || (cara as any)._originalDcm === 'pendiente');
+                                          const editBlocked = caraTienePendienteGuardada;
+                                          const blockReason = caraTienePendienteGuardada ? 'Este circuito esta pendiente de autorizacion - no se puede editar hasta que direccion resuelva' : 'Editar';
+                                          return (
                                           <button
-                                            onClick={(e) => { e.stopPropagation(); if (!hasSavedPendingAuth) handleEditCara(cara); }}
-                                            disabled={hasSavedPendingAuth}
-                                            className={`p-2 rounded-lg border transition-colors ${hasSavedPendingAuth
+                                            onClick={(e) => { e.stopPropagation(); if (!editBlocked) handleEditCara(cara); }}
+                                            disabled={editBlocked}
+                                            className={`p-2 rounded-lg border transition-colors ${editBlocked
                                               ? `bg-zinc-500/10 ${isDark ? 'text-zinc-500' : 'text-gray-400'} border-zinc-500/20 cursor-not-allowed`
                                               : 'bg-amber-500/10 text-amber-400 border-amber-500/20 hover:bg-amber-500/20'
                                             }`}
-                                            title={hasSavedPendingAuth ? 'Hay circuitos pendientes de autorizacion - no se pueden editar otros' : 'Editar'}
+                                            title={blockReason}
                                           >
                                             <Pencil className="h-4 w-4" />
                                           </button>
-                                        )}
+                                          );
+                                        })()}
                                         {canEditResumen && permissions.canEditCircuitoExistente && (() => {
                                             // Feedback 2026-08-13: el bote de basura siempre debe permitir eliminar
                                             // circuitos con reservas (libera inventario). Solo se bloquea si el rol

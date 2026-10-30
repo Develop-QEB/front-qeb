@@ -1476,6 +1476,9 @@ export function useSocketHistorialAcciones() {
 
     const handleNueva = () => {
       queryClient.invalidateQueries({ queryKey: ['historial-acciones'], refetchType: 'active' });
+      // Tablero de Actividad Comercial (mismo room): mover una tarjeta en otra
+      // sesion emite este evento.
+      queryClient.invalidateQueries({ queryKey: ['historial-actividad-comercial'], refetchType: 'active' });
     };
 
     socket.on(SOCKET_EVENTS.HISTORIAL_NUEVA, handleNueva);

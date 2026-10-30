@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { AlertCircle, Check, CheckCircle2, ChevronDown, Loader2, Paintbrush, Search, Send, Trash2, X, Upload, FileImage, ClipboardList, Plus, Users, XCircle, Flag, ChevronRight, ExternalLink } from 'lucide-react';
+import { AlertCircle, Check, CheckCircle2, ChevronDown, Loader2, Paintbrush, Search, Send, Trash2, X, Upload, FileImage, ClipboardList, Plus, Users, XCircle, Flag, ChevronRight, ExternalLink, Printer } from 'lucide-react';
 import { useThemeStore } from '../../store/themeStore';
 import { useAuthStore } from '../../store/authStore';
 import {
@@ -13,9 +13,11 @@ import {
   puedeRevisarPruebaColor,
   AccionResolverTarea,
   TareaAsociadaPruebaColor,
+  TipoPrueba,
 } from '../../services/pruebasColor.service';
 import { propuestasService, SolicitudCara } from '../../services/propuestas.service';
 import { uploadsService } from '../../services/uploads.service';
+import { campanasService } from '../../services/campanas.service';
 import { formatDate } from '../../lib/utils';
 
 // Valida que un string sea un URL http(s) real. Rechaza basura como
@@ -28,6 +30,56 @@ function esUrlValido(str: string): boolean {
     const u = new URL(s);
     return u.protocol === 'http:' || u.protocol === 'https:';
   } catch { return false; }
+}
+
+// Jos 2026-10-23: slot individual del formulario "Nueva solicitud". Cada
+// solicitud puede tener N artes y M circuitos; se envian como N*M pruebas
+// (una por combinacion). Antes era 1 arte compartido por N circuitos.
+interface SlotArte {
+  // id local (no toca BD): keyed react render + remover slot especifico.
+  id: string;
+  file: File | null;
+  url: string;        // url del upload; '' si no se ha subido
+  enlaceExterno: string;
+  nombreArte: string;
+  uploading: boolean; // flag independiente por slot para subida en paralelo
+}
+
+let __slotArteSeq = 0;
+function crearSlotArte(): SlotArte {
+  __slotArteSeq += 1;
+  return { id: `slot-${__slotArteSeq}`, file: null, url: '', enlaceExterno: '', nombreArte: '', uploading: false };
+}
+
+// Nombre de arte autogenerado a partir del filename. Elimina la extension
+// y acorta a 120 chars (col nombre_arte en BD es VARCHAR 255 pero mantenemos
+// un UX corto). El usuario puede editarlo luego.
+function sanitizeNombreArte(filename: string): string {
+  const sinExt = filename.replace(/\.[^./\\]+$/, '');
+  return sinExt.slice(0, 120).trim() || 'Arte';
+}
+
+// Jos 2026-10-23: formato compacto de catorcena (periodo de pisada) para
+// pintar en los dropdowns/listados de circuito. Devuelve "15 oct - 28 oct"
+// o similar; cae a null si falta alguna fecha.
+function formatPeriodo(inicio?: string | null, fin?: string | null): string | null {
+  if (!inicio || !fin) return null;
+  const toLocal = (s: string): Date | null => {
+    // Soporta 'YYYY-MM-DD' y 'YYYY-MM-DDTHH:...' sin cambiarles la tz (parse local).
+    const m = s.match(/^(\d{4})-(\d{2})-(\d{2})/);
+    if (!m) return null;
+    return new Date(Number(m[1]), Number(m[2]) - 1, Number(m[3]));
+  };
+  const ini = toLocal(inicio);
+  const f = toLocal(fin);
+  if (!ini || !f) return null;
+  const mes = (d: Date) => d.toLocaleDateString('es-MX', { month: 'short' }).replace('.', '');
+  const dia = (d: Date) => d.getDate();
+  // Mismo mes → "15 - 28 oct". Distinto mes → "15 oct - 03 nov".
+  if (ini.getMonth() === f.getMonth() && ini.getFullYear() === f.getFullYear()) {
+    return `${dia(ini)} - ${dia(f)} ${mes(f)}`;
+  }
+  return `${dia(ini)} ${mes(ini)} - ${dia(f)} ${mes(f)}`;
 }
 
 interface Props {
@@ -62,15 +114,16 @@ export function PruebasColorModal({ isOpen, onClose, propuestaId, contextoNombre
   // + Bonificacion del mismo mueble). Al solicitar, se crea una prueba por
   // cada circuito seleccionado.
   const [scIds, setScIds] = useState<number[]>(initialScId ? [initialScId] : []);
-  const [archivoFile, setArchivoFile] = useState<File | null>(null);
-  const [archivoUrl, setArchivoUrl] = useState<string | null>(null);
-  // Jos 2026-10-12: enlace_externo es un campo separado para permitir que
-  // archivo subido y link coexistan.
-  const [enlaceExterno, setEnlaceExterno] = useState('');
-  const [nombreArte, setNombreArte] = useState('');
+  // Jos 2026-10-23: carga multiple. Antes era 1 arte compartido entre N
+  // circuitos (N pruebas iguales). Ahora cada slot es un arte distinto, y al
+  // enviar se crea el producto cartesiano (scIds x artes) -> N*M pruebas, cada
+  // una con 1 arte. Cada slot mantiene su propio archivo subido + link + nombre.
+  const [artes, setArtes] = useState<SlotArte[]>([crearSlotArte()]);
   const [notas, setNotas] = useState('');
   const [error, setError] = useState<string | null>(null);
-  const [uploading, setUploading] = useState(false);
+  // Flag global: true si CUALQUIER slot esta subiendo archivo. Evita que el
+  // usuario envie el formulario mientras hay un upload en vuelo.
+  const subiendoAlguno = artes.some(a => a.uploading);
 
   // Tab activo del modal rediseñado (#252). Pestañas: 'pruebas' (listado de
   // pruebas existentes agrupadas por circuito) y 'nueva' (formulario de
@@ -78,6 +131,11 @@ export function PruebasColorModal({ isOpen, onClose, propuestaId, contextoNombre
   // creacion para que el usuario no vea el formulario mezclado con la
   // lista de pruebas ya solicitadas.
   const [activeTab, setActiveTab] = useState<'pruebas' | 'nueva'>('pruebas');
+  // Jos 2026-10-23: pestana superior PC / RA. El modulo se renombra a
+  // "Revision de Artes Anticipada" y ahora alberga los 2 flujos. El tipo se
+  // persiste en pruebas_color.tipo y determina el comportamiento al aprobar
+  // (RA vincula a biblioteca, PC no).
+  const [activeFlujo, setActiveFlujo] = useState<TipoPrueba>('prueba_color');
 
   // Acordeon de grupos por circuito. Jos 2026-10-12: por defecto TODOS
   // minimizados; el usuario expande solo el circuito que le interesa.
@@ -95,14 +153,14 @@ export function PruebasColorModal({ isOpen, onClose, propuestaId, contextoNombre
   useEffect(() => {
     if (isOpen) {
       setScIds(initialScId ? [initialScId] : []);
-      setArchivoFile(null);
-      setArchivoUrl(null);
-      setEnlaceExterno('');
-      setNombreArte('');
+      setArtes([crearSlotArte()]);
       setNotas('');
       setError(null);
-      setUploading(false);
       setActiveTab(initialTab || 'pruebas');
+      // Jos 2026-10-23: al abrir, siempre arranca en el flujo original
+      // (Prueba de color). El usuario cambia a Revision Anticipada con la
+      // pestana superior si lo necesita.
+      setActiveFlujo('prueba_color');
       // Si abrimos directo en 'nueva' con circuito preseleccionado,
       // tambien expandimos ese grupo del acordeon.
       setExpandedGroups(initialScId ? new Set([initialScId]) : new Set());
@@ -126,11 +184,28 @@ export function PruebasColorModal({ isOpen, onClose, propuestaId, contextoNombre
   });
 
   const pruebasAll = useMemo(() => pruebasQuery.data || [], [pruebasQuery.data]);
+  // Jos 2026-10-23: contadores por flujo para los badges de la pestana
+  // superior. Los registros viejos sin `tipo` cuentan como 'prueba_color'
+  // (coincide con el default del back y del esquema).
+  const countsPorFlujo = useMemo(() => {
+    const c = { prueba_color: 0, revision_anticipada: 0 };
+    for (const p of pruebasAll) {
+      const t = (p.tipo || 'prueba_color') as TipoPrueba;
+      if (t === 'revision_anticipada') c.revision_anticipada++;
+      else c.prueba_color++;
+    }
+    return c;
+  }, [pruebasAll]);
+  // Jos 2026-10-23: cada pestana superior ve SOLO las pruebas de su tipo.
+  const pruebasDelFlujo = useMemo(
+    () => pruebasAll.filter(p => (p.tipo || 'prueba_color') === activeFlujo),
+    [pruebasAll, activeFlujo],
+  );
   const pruebas = useMemo(() => {
-    if (scIds.length === 0) return pruebasAll; // sin filtro muestra todas
+    if (scIds.length === 0) return pruebasDelFlujo; // sin filtro muestra todas
     const setScs = new Set(scIds);
-    return pruebasAll.filter(p => setScs.has(p.sc_id));
-  }, [pruebasAll, scIds]);
+    return pruebasDelFlujo.filter(p => setScs.has(p.sc_id));
+  }, [pruebasDelFlujo, scIds]);
 
   // Crear multiples pruebas (una por circuito seleccionado) en paralelo.
   const createMutation = useMutation({
@@ -138,10 +213,7 @@ export function PruebasColorModal({ isOpen, onClose, propuestaId, contextoNombre
       await Promise.all(inputs.map(i => pruebasColorService.crear(i)));
     },
     onSuccess: () => {
-      setArchivoFile(null);
-      setArchivoUrl(null);
-      setEnlaceExterno('');
-      setNombreArte('');
+      setArtes([crearSlotArte()]);
       setNotas('');
       // Jos 2026-10-12: resetear scIds para que el tab Pruebas muestre
       // TODAS las pruebas (incluidas aprobadas/rechazadas de otros
@@ -184,6 +256,7 @@ export function PruebasColorModal({ isOpen, onClose, propuestaId, contextoNombre
   const pruebasPorCircuito = useMemo(() => {
     const caras = carasQuery.data || [];
     const porId = new Map<number, { cara: SolicitudCara | null; pruebas: PruebaColor[] }>();
+    // Agrupa SOLO el flujo activo (ya filtrado en `pruebas`).
     for (const p of pruebas) {
       const prev = porId.get(p.sc_id) || { cara: caras.find(c => c.id === p.sc_id) || null, pruebas: [] };
       prev.pruebas.push(p);
@@ -214,26 +287,89 @@ export function PruebasColorModal({ isOpen, onClose, propuestaId, contextoNombre
     // Se usa cuando initialScId esta set — un solo circuito.
     const c = (carasQuery.data || []).find(x => x.id === initialScId);
     if (!c) return '';
-    return `${c.articulo || 'Sin articulo'} · ${c.formato || 'Sin formato'} · ${c.ciudad || c.estados || 'Sin ciudad'}`;
+    // Jos 2026-10-23: incluir catorcena para contexto rapido.
+    const periodo = formatPeriodo(c.inicio_periodo, c.fin_periodo);
+    const base = `${c.articulo || 'Sin articulo'} · ${c.formato || 'Sin formato'} · ${c.ciudad || c.estados || 'Sin ciudad'}`;
+    return periodo ? `${base} · ${periodo}` : base;
   }, [carasQuery.data, initialScId]);
 
-  const handleUploadFile = async (file: File) => {
+  // Jos 2026-10-23: subida multi-archivo. Reemplaza el archivo del slot
+  // indicado por el primer file, y los demas files se agregan como slots
+  // nuevos al final. Nombre_arte se autogenera del filename si el slot no
+  // tiene nombre todavia.
+  const handleUploadFiles = async (slotId: string, files: File[]) => {
+    if (!files.length) return;
     setError(null);
-    setUploading(true);
+    // Marca el slot destino como "uploading" para feedback inmediato.
+    setArtes(prev => prev.map(s => s.id === slotId ? { ...s, uploading: true } : s));
     try {
-      const res = await uploadsService.uploadFile(file, 'pruebas-color');
-      setArchivoFile(file);
-      setArchivoUrl(res.url);
+      // Sube todos en paralelo.
+      const uploads = await Promise.all(
+        files.map(f => uploadsService.uploadFile(f, 'pruebas-color').then(r => ({ file: f, url: r.url }))),
+      );
+      setArtes(prev => {
+        const idx = prev.findIndex(s => s.id === slotId);
+        if (idx === -1) return prev;
+        const next = [...prev];
+        // Primer upload reemplaza el slot destino.
+        const first = uploads[0];
+        next[idx] = {
+          ...next[idx],
+          file: first.file,
+          url: first.url,
+          // Autogenera nombre si estaba vacio: filename sin extension.
+          nombreArte: next[idx].nombreArte || sanitizeNombreArte(first.file.name),
+          uploading: false,
+        };
+        // Resto: slots nuevos al final.
+        for (let i = 1; i < uploads.length; i++) {
+          next.push({
+            ...crearSlotArte(),
+            file: uploads[i].file,
+            url: uploads[i].url,
+            nombreArte: sanitizeNombreArte(uploads[i].file.name),
+          });
+        }
+        return next;
+      });
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Error al subir archivo');
-      setArchivoFile(null);
-      setArchivoUrl(null);
-    } finally {
-      setUploading(false);
+      setArtes(prev => prev.map(s => s.id === slotId ? { ...s, uploading: false } : s));
     }
   };
 
+  const actualizarSlot = (slotId: string, patch: Partial<SlotArte>) => {
+    setArtes(prev => prev.map(s => s.id === slotId ? { ...s, ...patch } : s));
+  };
+  const quitarSlot = (slotId: string) => {
+    setArtes(prev => prev.length <= 1 ? prev : prev.filter(s => s.id !== slotId));
+  };
+  const agregarSlot = () => {
+    setArtes(prev => [...prev, crearSlotArte()]);
+  };
+
   if (!isOpen) return null;
+
+  // Jos 2026-10-23: textos dependientes del flujo activo.
+  const flujoLabels = activeFlujo === 'revision_anticipada'
+    ? {
+        singular: 'revisión anticipada',
+        plural: 'revisiones anticipadas',
+        solicitar: 'Solicitar revisión anticipada',
+        solicitarPrimera: 'Solicitar primera revisión',
+        emptyTitle: 'Aún no hay revisiones anticipadas',
+        emptyFiltered: 'Sin revisiones anticipadas en los circuitos filtrados',
+        sinPermiso: 'Tu rol no puede solicitar revisiones anticipadas.',
+      }
+    : {
+        singular: 'prueba de color',
+        plural: 'pruebas de color',
+        solicitar: 'Solicitar prueba',
+        solicitarPrimera: 'Solicitar primera prueba',
+        emptyTitle: 'Aún no hay pruebas de color',
+        emptyFiltered: 'Sin pruebas en los circuitos filtrados',
+        sinPermiso: 'Tu rol no puede solicitar pruebas de color.',
+      };
 
   const inputCls = `w-full rounded-lg border px-3 py-2 text-sm ${
     isDark ? 'bg-zinc-800 border-zinc-700 text-white placeholder:text-zinc-600'
@@ -265,7 +401,7 @@ export function PruebasColorModal({ isOpen, onClose, propuestaId, contextoNombre
             </div>
             <div>
               <h3 className={`text-base font-semibold ${isDark ? 'text-zinc-100' : 'text-gray-900'}`}>
-                Prueba de color
+                Revisión de Artes Anticipada
               </h3>
               <p className={`mt-0.5 text-xs ${isDark ? 'text-zinc-400' : 'text-gray-500'}`}>
                 Propuesta #{propuestaId}{contextoNombre ? ` · ${contextoNombre}` : ''}
@@ -280,6 +416,27 @@ export function PruebasColorModal({ isOpen, onClose, propuestaId, contextoNombre
           </button>
         </div>
 
+        {/* Barra de FLUJO (Jos 2026-10-23) — pestana superior PC / RA. Cada
+            flujo es independiente: contadores, listado y creacion. */}
+        <div className={`px-5 pt-3 flex-shrink-0 ${isDark ? 'bg-zinc-900' : 'bg-white'}`}>
+          <div className={`inline-flex rounded-lg border p-0.5 ${isDark ? 'bg-zinc-800/60 border-zinc-700' : 'bg-gray-50 border-gray-200'}`}>
+            <FlujoButton
+              active={activeFlujo === 'prueba_color'}
+              onClick={() => setActiveFlujo('prueba_color')}
+              isDark={isDark}
+              label="Prueba de color"
+              badge={countsPorFlujo.prueba_color}
+            />
+            <FlujoButton
+              active={activeFlujo === 'revision_anticipada'}
+              onClick={() => setActiveFlujo('revision_anticipada')}
+              isDark={isDark}
+              label="Revisión Anticipada"
+              badge={countsPorFlujo.revision_anticipada}
+            />
+          </div>
+        </div>
+
         {/* Barra de tabs (#252) — separar consulta de creacion para que el
             formulario no se mezcle con la lista de pruebas existentes. */}
         <div className={`flex items-stretch gap-1 px-5 pt-3 border-b flex-shrink-0 ${isDark ? 'border-zinc-800 bg-zinc-900' : 'border-gray-200 bg-white'}`}>
@@ -288,8 +445,8 @@ export function PruebasColorModal({ isOpen, onClose, propuestaId, contextoNombre
             onClick={() => setActiveTab('pruebas')}
             isDark={isDark}
             icon={<ClipboardList className="h-4 w-4" />}
-            label="Pruebas"
-            badge={pruebasAll.length}
+            label="Tareas"
+            badge={pruebasDelFlujo.length}
           />
           {puedeCrear && (
             <TabButton
@@ -333,23 +490,32 @@ export function PruebasColorModal({ isOpen, onClose, propuestaId, contextoNombre
                   />
                   {circuitosSeleccionados.length > 0 && (
                     <div className="mt-2 flex flex-wrap gap-1.5">
-                      {circuitosSeleccionados.map(c => (
-                        <span
-                          key={c.id}
-                          className={`inline-flex items-center gap-1.5 px-2 py-1 rounded-md text-[11px] border ${isDark ? 'bg-fuchsia-500/15 text-fuchsia-200 border-fuchsia-500/40' : 'bg-fuchsia-50 text-fuchsia-700 border-fuchsia-200'}`}
-                        >
-                          <span className="font-medium">#{c.id}</span>
-                          <span className="truncate max-w-[180px]">{c.articulo || 'Sin articulo'}</span>
-                          <button
-                            type="button"
-                            onClick={() => setScIds(prev => prev.filter(x => x !== c.id))}
-                            className={isDark ? 'hover:text-fuchsia-50' : 'hover:text-fuchsia-900'}
-                            title="Quitar"
+                      {circuitosSeleccionados.map(c => {
+                        const periodo = formatPeriodo(c.inicio_periodo, c.fin_periodo);
+                        return (
+                          <span
+                            key={c.id}
+                            className={`inline-flex items-center gap-1.5 px-2 py-1 rounded-md text-[11px] border ${isDark ? 'bg-fuchsia-500/15 text-fuchsia-200 border-fuchsia-500/40' : 'bg-fuchsia-50 text-fuchsia-700 border-fuchsia-200'}`}
+                            title={[c.articulo, c.formato, c.ciudad || c.estados, periodo].filter(Boolean).join(' · ')}
                           >
-                            <X className="h-3 w-3" />
-                          </button>
-                        </span>
-                      ))}
+                            <span className="font-medium">#{c.id}</span>
+                            <span className="truncate max-w-[180px]">{c.articulo || 'Sin articulo'}</span>
+                            {periodo && (
+                              <span className={`text-[10px] opacity-80 ${isDark ? 'text-fuchsia-100' : 'text-fuchsia-600'}`}>
+                                {periodo}
+                              </span>
+                            )}
+                            <button
+                              type="button"
+                              onClick={() => setScIds(prev => prev.filter(x => x !== c.id))}
+                              className={isDark ? 'hover:text-fuchsia-50' : 'hover:text-fuchsia-900'}
+                              title="Quitar"
+                            >
+                              <X className="h-3 w-3" />
+                            </button>
+                          </span>
+                        );
+                      })}
                     </div>
                   )}
                 </div>
@@ -372,7 +538,7 @@ export function PruebasColorModal({ isOpen, onClose, propuestaId, contextoNombre
                 <div className={`py-10 px-6 text-center rounded-lg border-2 border-dashed ${isDark ? 'border-zinc-800 text-zinc-500' : 'border-gray-200 text-gray-400'}`}>
                   <Paintbrush className="h-8 w-8 mx-auto mb-2 opacity-50" />
                   <div className="text-sm font-medium mb-1">
-                    {scIds.length > 0 ? 'Sin pruebas en los circuitos filtrados' : 'Aún no hay pruebas de color'}
+                    {scIds.length > 0 ? flujoLabels.emptyFiltered : flujoLabels.emptyTitle}
                   </div>
                   {puedeGestionar && (
                     <button
@@ -380,7 +546,7 @@ export function PruebasColorModal({ isOpen, onClose, propuestaId, contextoNombre
                       onClick={() => setActiveTab('nueva')}
                       className={`mt-3 inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium ${isDark ? 'bg-fuchsia-500/15 text-fuchsia-300 hover:bg-fuchsia-500/25' : 'bg-fuchsia-50 text-fuchsia-700 hover:bg-fuchsia-100'}`}
                     >
-                      <Plus className="h-3 w-3" /> Solicitar primera prueba
+                      <Plus className="h-3 w-3" /> {flujoLabels.solicitarPrimera}
                     </button>
                   )}
                 </div>
@@ -412,6 +578,11 @@ export function PruebasColorModal({ isOpen, onClose, propuestaId, contextoNombre
                           {grupo.cara && (
                             <span className={`text-[11px] truncate ${isDark ? 'text-zinc-500' : 'text-gray-500'}`}>
                               · {grupo.cara.formato || 'Sin formato'} · {grupo.cara.ciudad || grupo.cara.estados || 'Sin ciudad'}
+                              {(() => {
+                                // Jos 2026-10-23: catorcena en el header del grupo.
+                                const periodo = formatPeriodo(grupo.cara.inicio_periodo, grupo.cara.fin_periodo);
+                                return periodo ? ` · ${periodo}` : '';
+                              })()}
                             </span>
                           )}
                           <span className={`ml-auto shrink-0 text-[10px] px-1.5 py-0.5 rounded ${isDark ? 'bg-zinc-800 text-zinc-400' : 'bg-gray-100 text-gray-600'}`}>
@@ -439,6 +610,7 @@ export function PruebasColorModal({ isOpen, onClose, propuestaId, contextoNombre
                                 puedeCrear={puedeCrear}
                                 puedeRevisar={puedeRevisar}
                                 isUpdating={updateEstatusMutation.isPending || deleteMutation.isPending}
+                                totalVersiones={grupo.pruebas.length}
                                 onDelete={() => {
                                   if (confirm(`¿Eliminar la prueba v${p.version}?`)) deleteMutation.mutate(p.id);
                                 }}
@@ -474,87 +646,151 @@ export function PruebasColorModal({ isOpen, onClose, propuestaId, contextoNombre
                     />
                     {circuitosSeleccionados.length > 0 && (
                       <div className="mt-2 flex flex-wrap gap-1.5">
-                        {circuitosSeleccionados.map(c => (
-                          <span
-                            key={c.id}
-                            className={`inline-flex items-center gap-1.5 px-2 py-1 rounded-md text-[11px] border ${isDark ? 'bg-fuchsia-500/15 text-fuchsia-200 border-fuchsia-500/40' : 'bg-fuchsia-50 text-fuchsia-700 border-fuchsia-200'}`}
-                          >
-                            <span className="font-medium">#{c.id}</span>
-                            <span className="truncate max-w-[180px]">{c.articulo || 'Sin articulo'}</span>
-                            <button
-                              type="button"
-                              onClick={() => setScIds(prev => prev.filter(x => x !== c.id))}
-                              className={isDark ? 'hover:text-fuchsia-50' : 'hover:text-fuchsia-900'}
-                              title="Quitar"
+                        {circuitosSeleccionados.map(c => {
+                          const periodo = formatPeriodo(c.inicio_periodo, c.fin_periodo);
+                          return (
+                            <span
+                              key={c.id}
+                              className={`inline-flex items-center gap-1.5 px-2 py-1 rounded-md text-[11px] border ${isDark ? 'bg-fuchsia-500/15 text-fuchsia-200 border-fuchsia-500/40' : 'bg-fuchsia-50 text-fuchsia-700 border-fuchsia-200'}`}
+                              title={[c.articulo, c.formato, c.ciudad || c.estados, periodo].filter(Boolean).join(' · ')}
                             >
-                              <X className="h-3 w-3" />
-                            </button>
-                          </span>
-                        ))}
+                              <span className="font-medium">#{c.id}</span>
+                              <span className="truncate max-w-[180px]">{c.articulo || 'Sin articulo'}</span>
+                              {periodo && (
+                                <span className={`text-[10px] opacity-80 ${isDark ? 'text-fuchsia-100' : 'text-fuchsia-600'}`}>
+                                  {periodo}
+                                </span>
+                              )}
+                              <button
+                                type="button"
+                                onClick={() => setScIds(prev => prev.filter(x => x !== c.id))}
+                                className={isDark ? 'hover:text-fuchsia-50' : 'hover:text-fuchsia-900'}
+                                title="Quitar"
+                              >
+                                <X className="h-3 w-3" />
+                              </button>
+                            </span>
+                          );
+                        })}
                       </div>
                     )}
-                    {scIds.length > 1 && (
-                      <p className={`mt-2 text-[11px] ${isDark ? 'text-amber-300/80' : 'text-amber-700'}`}>
-                        Se creará una prueba por cada circuito seleccionado ({scIds.length} en total).
-                      </p>
-                    )}
+                    {(() => {
+                      // Jos 2026-10-23: avisa total de pruebas que se crearan
+                      // (producto cartesiano circuitos x artes con contenido).
+                      const artesConContenido = artes.filter(a => a.url || a.enlaceExterno.trim()).length;
+                      const artesTotal = Math.max(artesConContenido, 1);
+                      const total = scIds.length * artesTotal;
+                      if (total <= 1) return null;
+                      return (
+                        <p className={`mt-2 text-[11px] ${isDark ? 'text-amber-300/80' : 'text-amber-700'}`}>
+                          Se crearán {total} pruebas ({scIds.length} circuito{scIds.length === 1 ? '' : 's'} × {artesTotal} arte{artesTotal === 1 ? '' : 's'}).
+                        </p>
+                      );
+                    })()}
                   </>
                 )}
               </div>
 
               <div className="space-y-3">
-                <div>
-                  <label className={labelCls}>Arte *</label>
-                  <div className="flex items-center gap-2 flex-wrap">
-                    <label
-                      className={`flex items-center gap-2 px-3 py-2 rounded-lg text-sm font-medium cursor-pointer border transition-colors ${
-                        isDark ? 'bg-zinc-800 border-zinc-700 text-zinc-200 hover:bg-zinc-700'
-                               : 'bg-white border-gray-300 text-gray-700 hover:bg-gray-50'
-                      } ${uploading ? 'opacity-60 cursor-not-allowed' : ''}`}
-                    >
-                      {uploading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Upload className="h-4 w-4" />}
-                      {uploading ? 'Subiendo...' : archivoUrl ? 'Cambiar archivo' : 'Subir archivo'}
-                      <input
-                        type="file"
-                        className="hidden"
-                        disabled={uploading}
-                        onChange={e => {
-                          const f = e.target.files?.[0];
-                          if (f) handleUploadFile(f);
-                          e.target.value = '';
-                        }}
-                      />
-                    </label>
-                    {archivoUrl && (
-                      <a href={archivoUrl} target="_blank" rel="noreferrer" className={`text-xs underline truncate max-w-[260px] inline-flex items-center gap-1 ${isDark ? 'text-fuchsia-300' : 'text-fuchsia-700'}`} title={archivoFile?.name || archivoUrl}>
-                        <FileImage className="h-3 w-3" />
-                        {archivoFile?.name || 'archivo subido'}
-                      </a>
-                    )}
-                  </div>
-                  {/* Jos 2026-10-12: puede coexistir con el archivo subido (y/o).
-                      El back guarda ambos y los muestra ambos en la card. */}
-                  <div className="mt-2">
-                    <div className={`text-[10px] uppercase tracking-wide font-semibold mb-1 ${isDark ? 'text-zinc-500' : 'text-gray-500'}`}>
-                      Y / o pega un link (Drive, Dropbox, etc.)
-                    </div>
-                    <input
-                      type="url"
-                      className={inputCls}
-                      value={enlaceExterno}
-                      onChange={e => setEnlaceExterno(e.target.value)}
-                      placeholder="https://drive.google.com/..."
-                    />
-                    {enlaceExterno.trim() && !esUrlValido(enlaceExterno) && (
-                      <div className={`text-[11px] mt-1 flex items-center gap-1 ${isDark ? 'text-red-300' : 'text-red-600'}`}>
-                        <AlertCircle className="h-3 w-3" /> Debe comenzar con http:// o https://
-                      </div>
-                    )}
-                  </div>
+                {/* Jos 2026-10-23: carga multiple. Cada slot es un arte
+                    independiente (archivo subido Y/O link + nombre). Al enviar
+                    se crea el producto cartesiano (circuitos x artes). */}
+                <div className="flex items-center justify-between">
+                  <label className={labelCls}>Arte(s) *</label>
+                  {artes.length > 1 && (
+                    <span className={`text-[11px] ${isDark ? 'text-zinc-500' : 'text-gray-500'}`}>
+                      {artes.length} artes
+                    </span>
+                  )}
                 </div>
-                <div>
-                  <label className={labelCls}>Nombre del arte *</label>
-                  <input className={inputCls} value={nombreArte} onChange={e => setNombreArte(e.target.value)} placeholder="Ej. Arte v1 - versión CMYK" />
+                <div className="space-y-3">
+                  {artes.map((slot, idx) => {
+                    const linkInvalido = slot.enlaceExterno.trim() && !esUrlValido(slot.enlaceExterno);
+                    return (
+                      <div
+                        key={slot.id}
+                        className={`rounded-lg border p-3 space-y-2 ${isDark ? 'bg-zinc-800/40 border-zinc-800' : 'bg-gray-50 border-gray-200'}`}
+                      >
+                        <div className="flex items-center justify-between gap-2">
+                          <span className={`text-[11px] font-semibold ${isDark ? 'text-zinc-400' : 'text-gray-600'}`}>
+                            Arte {idx + 1}
+                          </span>
+                          {artes.length > 1 && (
+                            <button
+                              type="button"
+                              onClick={() => quitarSlot(slot.id)}
+                              className={`inline-flex items-center gap-1 text-[11px] px-1.5 py-0.5 rounded ${isDark ? 'text-zinc-400 hover:text-red-300 hover:bg-red-500/10' : 'text-gray-500 hover:text-red-700 hover:bg-red-50'}`}
+                              title="Quitar este arte"
+                            >
+                              <Trash2 className="h-3 w-3" /> Quitar
+                            </button>
+                          )}
+                        </div>
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <label
+                            className={`flex items-center gap-2 px-3 py-2 rounded-lg text-sm font-medium cursor-pointer border transition-colors ${
+                              isDark ? 'bg-zinc-900 border-zinc-700 text-zinc-200 hover:bg-zinc-800'
+                                     : 'bg-white border-gray-300 text-gray-700 hover:bg-gray-50'
+                            } ${slot.uploading ? 'opacity-60 cursor-not-allowed' : ''}`}
+                          >
+                            {slot.uploading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Upload className="h-4 w-4" />}
+                            {slot.uploading ? 'Subiendo...' : slot.url ? 'Cambiar archivo' : 'Subir archivo(s)'}
+                            <input
+                              type="file"
+                              multiple
+                              className="hidden"
+                              disabled={slot.uploading}
+                              onChange={e => {
+                                const files = Array.from(e.target.files || []);
+                                if (files.length) handleUploadFiles(slot.id, files);
+                                e.target.value = '';
+                              }}
+                            />
+                          </label>
+                          {slot.url && (
+                            <a href={slot.url} target="_blank" rel="noreferrer" className={`text-xs underline truncate max-w-[260px] inline-flex items-center gap-1 ${isDark ? 'text-fuchsia-300' : 'text-fuchsia-700'}`} title={slot.file?.name || slot.url}>
+                              <FileImage className="h-3 w-3" />
+                              {slot.file?.name || 'archivo subido'}
+                            </a>
+                          )}
+                        </div>
+                        {/* Jos 2026-10-12: puede coexistir con el archivo subido. */}
+                        <div>
+                          <div className={`text-[10px] uppercase tracking-wide font-semibold mb-1 ${isDark ? 'text-zinc-500' : 'text-gray-500'}`}>
+                            Y / o pega un link (Drive, Dropbox, etc.)
+                          </div>
+                          <input
+                            type="url"
+                            className={inputCls}
+                            value={slot.enlaceExterno}
+                            onChange={e => actualizarSlot(slot.id, { enlaceExterno: e.target.value })}
+                            placeholder="https://drive.google.com/..."
+                          />
+                          {linkInvalido && (
+                            <div className={`text-[11px] mt-1 flex items-center gap-1 ${isDark ? 'text-red-300' : 'text-red-600'}`}>
+                              <AlertCircle className="h-3 w-3" /> Debe comenzar con http:// o https://
+                            </div>
+                          )}
+                        </div>
+                        <div>
+                          <label className={labelCls}>Nombre del arte *</label>
+                          <input
+                            className={inputCls}
+                            value={slot.nombreArte}
+                            onChange={e => actualizarSlot(slot.id, { nombreArte: e.target.value })}
+                            placeholder="Ej. Arte v1 - versión CMYK"
+                          />
+                        </div>
+                      </div>
+                    );
+                  })}
+                  <button
+                    type="button"
+                    onClick={agregarSlot}
+                    className={`w-full flex items-center justify-center gap-1.5 px-3 py-2 rounded-lg text-xs font-medium border border-dashed transition-colors ${isDark ? 'border-zinc-700 text-zinc-400 hover:bg-zinc-800/60 hover:text-zinc-200' : 'border-gray-300 text-gray-500 hover:bg-gray-50 hover:text-gray-700'}`}
+                  >
+                    <Plus className="h-3 w-3" /> Agregar otro arte
+                  </button>
                 </div>
                 <div>
                   <label className={labelCls}>Notas (opcional)</label>
@@ -580,38 +816,62 @@ export function PruebasColorModal({ isOpen, onClose, propuestaId, contextoNombre
                     onClick={async () => {
                       setError(null);
                       if (scIds.length === 0) { setError('Selecciona al menos un circuito'); return; }
-                      const enlaceLimpio = enlaceExterno.trim();
-                      // Al menos uno (archivo subido o link) es requerido.
-                      if (!archivoUrl && !enlaceLimpio) {
-                        setError('Sube un archivo o pega un link del arte');
+                      if (subiendoAlguno) { setError('Espera a que terminen las subidas en curso'); return; }
+                      // Normalizar y validar cada slot. Solo se envian slots
+                      // con archivo o link (slot vacio se ignora para no
+                      // obligar al usuario a quitarlo manualmente).
+                      const slotsValidos: Array<{ archivo: string; enlace: string | null; nombre: string }> = [];
+                      for (let i = 0; i < artes.length; i++) {
+                        const s = artes[i];
+                        const enlaceLimpio = s.enlaceExterno.trim();
+                        const tieneArchivo = !!s.url;
+                        const tieneLink = !!enlaceLimpio;
+                        if (!tieneArchivo && !tieneLink) continue; // slot vacio: skip
+                        if (tieneLink && !esUrlValido(enlaceLimpio)) {
+                          setError(`Arte ${i + 1}: el link no es válido (debe comenzar con http:// o https://)`);
+                          return;
+                        }
+                        const nombreLimpio = s.nombreArte.trim();
+                        if (!nombreLimpio) {
+                          setError(`Arte ${i + 1}: el nombre del arte es requerido`);
+                          return;
+                        }
+                        slotsValidos.push({ archivo: s.url || '', enlace: enlaceLimpio || null, nombre: nombreLimpio });
+                      }
+                      if (slotsValidos.length === 0) {
+                        setError('Sube un archivo o pega un link en al menos un arte');
                         return;
                       }
-                      // Si pegaste link, debe ser URL http(s) real.
-                      if (enlaceLimpio && !esUrlValido(enlaceLimpio)) {
-                        setError('El link del arte no es válido. Debe comenzar con http:// o https://');
-                        return;
-                      }
-                      if (!nombreArte.trim()) { setError('El nombre del arte es requerido'); return; }
                       try {
-                        const inputs = scIds.map(sc_id => ({
-                          propuesta_id: propuestaId,
-                          sc_id,
-                          archivo: archivoUrl || '',
-                          enlace_externo: enlaceLimpio || null,
-                          nombre_arte: nombreArte.trim(),
-                          notas: notas.trim() || undefined,
-                        }));
+                        // Producto cartesiano: una prueba por combinacion
+                        // (circuito, arte). createMutation ya paraleliza.
+                        const inputs = scIds.flatMap(sc_id =>
+                          slotsValidos.map(a => ({
+                            propuesta_id: propuestaId,
+                            sc_id,
+                            archivo: a.archivo,
+                            enlace_externo: a.enlace,
+                            nombre_arte: a.nombre,
+                            notas: notas.trim() || undefined,
+                            tipo: activeFlujo,
+                          })),
+                        );
                         await createMutation.mutateAsync(inputs);
                         setActiveTab('pruebas');
                       } catch {
                         // onError ya setea el error en el estado
                       }
                     }}
-                    disabled={createMutation.isPending || (!archivoUrl && !enlaceExterno.trim()) || !nombreArte.trim() || scIds.length === 0}
+                    disabled={
+                      createMutation.isPending ||
+                      subiendoAlguno ||
+                      scIds.length === 0 ||
+                      !artes.some(a => (a.url || a.enlaceExterno.trim()) && a.nombreArte.trim())
+                    }
                     className="flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium text-white bg-fuchsia-600 hover:bg-fuchsia-700 disabled:opacity-50 disabled:cursor-not-allowed"
                   >
                     {createMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
-                    {createMutation.isPending ? 'Guardando...' : 'Solicitar prueba'}
+                    {createMutation.isPending ? 'Guardando...' : flujoLabels.solicitar}
                   </button>
                 </div>
               </div>
@@ -620,12 +880,46 @@ export function PruebasColorModal({ isOpen, onClose, propuestaId, contextoNombre
 
           {activeTab === 'nueva' && !puedeCrear && (
             <div className={`px-3 py-6 rounded-lg text-sm text-center ${isDark ? 'bg-zinc-800/60 border border-zinc-700 text-zinc-400' : 'bg-gray-50 border border-gray-200 text-gray-500'}`}>
-              Tu rol no puede solicitar pruebas de color.
+              {flujoLabels.sinPermiso}
             </div>
           )}
         </div>
       </div>
     </div>
+  );
+}
+
+// ─── Pestana superior PC / RA (Jos 2026-10-23) ───────────────────────────
+// Segmentada, no de linea inferior como TabButton. Sirve para dejar claro
+// que es un cambio de FLUJO, no de vista dentro del mismo flujo.
+function FlujoButton({ active, onClick, isDark, label, badge }: {
+  active: boolean;
+  onClick: () => void;
+  isDark: boolean;
+  label: string;
+  badge?: number;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-semibold transition-colors ${
+        active
+          ? (isDark ? 'bg-fuchsia-500/25 text-fuchsia-100 shadow-sm' : 'bg-white text-fuchsia-700 shadow-sm border border-fuchsia-200')
+          : (isDark ? 'text-zinc-400 hover:text-zinc-200' : 'text-gray-500 hover:text-gray-800')
+      }`}
+    >
+      {label}
+      {typeof badge === 'number' && badge > 0 && (
+        <span className={`text-[10px] px-1.5 py-0.5 rounded-full font-semibold ${
+          active
+            ? (isDark ? 'bg-fuchsia-500/30 text-fuchsia-100' : 'bg-fuchsia-100 text-fuchsia-700')
+            : (isDark ? 'bg-zinc-800 text-zinc-400' : 'bg-gray-100 text-gray-600')
+        }`}>
+          {badge}
+        </span>
+      )}
+    </button>
   );
 }
 
@@ -675,6 +969,7 @@ function PruebaCard({
   puedeRevisar,
   isUpdating,
   onDelete,
+  totalVersiones,
 }: {
   prueba: PruebaColor;
   cara: SolicitudCara | null;
@@ -684,6 +979,9 @@ function PruebaCard({
   puedeRevisar: boolean;
   isUpdating: boolean;
   onDelete: () => void;
+  // Jos 2026-10-23: total de versiones vivas de este arte en el circuito.
+  // Permite pintar "v2 de 3" para dar contexto al revisor.
+  totalVersiones?: number;
 }) {
   const estatusStyle: Record<EstatusPruebaColor, string> = {
     solicitada: isDark ? 'bg-amber-500/15 text-amber-200 border-amber-500/40' : 'bg-amber-50 text-amber-800 border-amber-300',
@@ -702,7 +1000,7 @@ function PruebaCard({
       <div className={`px-3 py-2.5 flex items-start justify-between gap-3 border-b ${isDark ? 'border-zinc-800 bg-zinc-900/40' : 'border-gray-100 bg-gray-50/60'}`}>
         <div className="flex items-center gap-2 min-w-0 flex-1">
           <span className={`text-[11px] px-1.5 py-0.5 rounded font-bold ${isDark ? 'bg-fuchsia-500/20 text-fuchsia-200' : 'bg-fuchsia-100 text-fuchsia-700'}`}>
-            v{prueba.version}
+            v{prueba.version}{totalVersiones && totalVersiones > 1 ? ` de ${totalVersiones}` : ''}
           </span>
           <span className={`text-[10px] px-2 py-0.5 rounded-full border font-semibold ${estatusStyle[prueba.estatus]}`}>
             {ESTATUS_LABEL[prueba.estatus]}
@@ -725,6 +1023,28 @@ function PruebaCard({
 
       {/* Cuerpo: metadata + notas + acciones del arte */}
       <div className="px-3 py-2.5 space-y-2">
+        {/* Jos 2026-10-23: info completa del circuito para que el revisor
+            no tenga que ir a propuestas a verificar que esta aprobando. */}
+        {cara && (() => {
+          const periodo = formatPeriodo(cara.inicio_periodo, cara.fin_periodo);
+          const items: Array<[string, string]> = [];
+          const plaza = cara.ciudad || cara.estados;
+          if (plaza) items.push(['Plaza', plaza]);
+          if (cara.formato) items.push(['Formato', cara.formato]);
+          if (periodo) items.push(['Catorcena', periodo]);
+          if (items.length === 0) return null;
+          return (
+            <div className={`text-[11px] flex flex-wrap gap-x-3 gap-y-1 rounded-md px-2 py-1.5 ${isDark ? 'bg-zinc-900/50 border border-zinc-800' : 'bg-gray-50 border border-gray-200'}`}>
+              {items.map(([k, v]) => (
+                <span key={k} className={isDark ? 'text-zinc-400' : 'text-gray-600'}>
+                  <span className={isDark ? 'text-zinc-500' : 'text-gray-500'}>{k}:</span>{' '}
+                  <span className={`font-medium ${isDark ? 'text-zinc-200' : 'text-gray-800'}`}>{v}</span>
+                </span>
+              ))}
+            </div>
+          );
+        })()}
+
         <div className={`text-[11px] ${isDark ? 'text-zinc-400' : 'text-gray-600'}`}>
           Solicitada por <span className={isDark ? 'text-zinc-200' : 'text-gray-800'}>{prueba.created_by_nombre}</span> · {formatDate(prueba.created_at)}
         </div>
@@ -920,7 +1240,7 @@ function TareasAsociadasSection({
           puedeRevisar={puedeRevisar}
           esUltimaRevision={tareaAbierta.id === idUltimaRevision}
           onClose={() => setOpenTareaId(null)}
-          onAprobar={() => resolver.mutate({ tareaId: tareaAbierta.id, accion: 'aprobar' })}
+          onAprobar={(opts) => resolver.mutate({ tareaId: tareaAbierta.id, accion: 'aprobar', comentario: opts?.comentario, archivo_adjunto: opts?.archivo_adjunto, enlace_adjunto: opts?.enlace_adjunto })}
           onRechazar={(comentario, adjuntos) => resolver.mutate({ tareaId: tareaAbierta.id, accion: 'rechazar', comentario, archivo_adjunto: adjuntos?.archivo_adjunto, enlace_adjunto: adjuntos?.enlace_adjunto })}
           onFinalizar={() => resolver.mutate({ tareaId: tareaAbierta.id, accion: 'finalizar' })}
           isSaving={resolver.isPending}
@@ -957,16 +1277,43 @@ function AtenderTareaModal({
   // Rechazos viejos (de iteraciones anteriores) tienen esto en false.
   esUltimaRevision: boolean;
   onClose: () => void;
-  onAprobar: () => void;
+  // Jos 2026-10-29: en Revision Anticipada la aprobacion abre modal con
+  // motivo + archivo + enlace (igual al rechazo pero en verde). Para PC
+  // sigue siendo click directo sin modal.
+  onAprobar: (opts?: { comentario?: string; archivo_adjunto?: string | null; enlace_adjunto?: string | null }) => void;
   onRechazar: (comentario?: string, adjuntos?: { archivo_adjunto?: string | null; enlace_adjunto?: string | null }) => void;
   onFinalizar: () => void;
   isSaving: boolean;
 }) {
   const esRevision = tarea.tipo === 'Revisión de artes';
   const esSeguimiento = tarea.tipo === 'Seguimiento Prueba de color';
+  const esRevisionAnticipada = prueba.tipo === 'revision_anticipada';
   const asignados = tarea.asignado ? tarea.asignado.split(',').map(s => s.trim()).filter(Boolean) : [];
   const [showRechazoInput, setShowRechazoInput] = useState(false);
   const [comentarioRechazo, setComentarioRechazo] = useState('');
+  // Jos 2026-10-29: estado del modal de aprobacion en RA (motivo + archivo + enlace).
+  const [showAprobacionInput, setShowAprobacionInput] = useState(false);
+  const [comentarioAprobacion, setComentarioAprobacion] = useState('');
+  const [aprobacionFile, setAprobacionFile] = useState<File | null>(null);
+  const [aprobacionFileUrl, setAprobacionFileUrl] = useState<string | null>(null);
+  const [aprobacionFileUploading, setAprobacionFileUploading] = useState(false);
+  const [aprobacionEnlace, setAprobacionEnlace] = useState('');
+  const handleUploadAprobacion = async (file: File) => {
+    setAprobacionFileUploading(true);
+    try {
+      const res = await uploadsService.uploadFile(file, 'pruebas-color/aprobaciones');
+      setAprobacionFile(file);
+      setAprobacionFileUrl(res.url);
+    } catch (e) {
+      alert(e instanceof Error ? e.message : 'Error al subir archivo');
+      setAprobacionFile(null);
+      setAprobacionFileUrl(null);
+    } finally {
+      setAprobacionFileUploading(false);
+    }
+  };
+  // Jos 2026-10-29: pedido de impresion desde la tarea Seguimiento.
+  const [showPedidoImpresion, setShowPedidoImpresion] = useState(false);
   // Jos 2026-10-12: scroll automatico al abrir el form de rechazo para
   // que los campos de adjuntos sean visibles sin scroll manual.
   const rechazoFormRef = useRef<HTMLDivElement | null>(null);
@@ -1337,6 +1684,42 @@ function AtenderTareaModal({
             </div>
           )}
 
+          {/* Jos 2026-10-29: cuando es Seguimiento de RA, mostrar el motivo
+              de aprobacion y los adjuntos capturados por el diseñador en el
+              modal de aprobacion. Se leen del contenido JSON de la tarea
+              (motivoAprobacion / aprobacionArchivo / aprobacionEnlace). */}
+          {esSeguimiento && (() => {
+            if (!tarea.contenido) return null;
+            let data: any = null;
+            try { data = JSON.parse(tarea.contenido); } catch { return null; }
+            const motivo = data?.motivoAprobacion;
+            const archivo = data?.aprobacionArchivo;
+            const enlace = data?.aprobacionEnlace;
+            if (!motivo && !archivo && !enlace) return null;
+            return (
+              <div className={`text-xs rounded-md border px-3 py-2 space-y-2 ${isDark ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-100' : 'bg-emerald-50 border-emerald-200 text-emerald-800'}`}>
+                <div className="flex items-center gap-1.5 text-[10px] uppercase tracking-wide font-semibold">
+                  <CheckCircle2 className="h-3 w-3" /> Motivo de aprobación
+                </div>
+                {motivo && <div className="whitespace-pre-wrap">{motivo}</div>}
+                {(archivo || enlace) && (
+                  <div className="flex flex-wrap gap-2 pt-1">
+                    {archivo && (
+                      <a href={archivo} target="_blank" rel="noreferrer" className={`inline-flex items-center gap-1 text-[11px] px-2 py-1 rounded border ${isDark ? 'border-emerald-500/40 hover:bg-emerald-500/20' : 'border-emerald-300 hover:bg-emerald-100'}`}>
+                        <FileImage className="h-3 w-3" /> Archivo
+                      </a>
+                    )}
+                    {enlace && (
+                      <a href={enlace} target="_blank" rel="noreferrer" className={`inline-flex items-center gap-1 text-[11px] px-2 py-1 rounded border ${isDark ? 'border-emerald-500/40 hover:bg-emerald-500/20' : 'border-emerald-300 hover:bg-emerald-100'}`}>
+                        <ExternalLink className="h-3 w-3" /> Link
+                      </a>
+                    )}
+                  </div>
+                )}
+              </div>
+            );
+          })()}
+
           {!yaResuelta && (
             <div className={`text-xs rounded-md px-3 py-2 ${isDark ? 'bg-zinc-800/60 text-zinc-300 border border-zinc-700' : 'bg-gray-50 text-gray-600 border border-gray-200'}`}>
               {esRevision
@@ -1403,6 +1786,68 @@ function AtenderTareaModal({
                   className={`w-full text-xs rounded-md border px-2.5 py-1.5 outline-none ${isDark ? 'bg-zinc-800 border-zinc-700 text-zinc-100 focus:border-fuchsia-500/60' : 'bg-white border-gray-300 text-gray-900 focus:border-fuchsia-400'}`}
                 />
                 {rechazoEnlace.trim() && !esUrlValido(rechazoEnlace) && (
+                  <div className={`text-[11px] flex items-center gap-1 ${isDark ? 'text-red-300' : 'text-red-600'}`}>
+                    <AlertCircle className="h-3 w-3" /> Debe comenzar con http:// o https://
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+
+          {/* Jos 2026-10-29: formulario de aprobacion para RA (mismo patron
+              que el rechazo pero en verde). En PC no se usa — ahi aprobar
+              sigue siendo click directo sin modal. */}
+          {showAprobacionInput && (
+            <div className="space-y-1.5">
+              <label className={`text-[11px] font-semibold ${isDark ? 'text-zinc-300' : 'text-gray-700'}`}>
+                Motivo de aprobación *
+              </label>
+              <textarea
+                value={comentarioAprobacion}
+                onChange={(e) => setComentarioAprobacion(e.target.value)}
+                rows={3}
+                autoFocus
+                placeholder="Describe la aprobación de la revisión anticipada..."
+                className={`w-full text-xs rounded-md border px-2.5 py-1.5 outline-none transition-colors ${isDark ? 'bg-zinc-800 border-zinc-700 text-zinc-100 placeholder-zinc-500 focus:border-emerald-500/60' : 'bg-white border-gray-300 text-gray-900 placeholder-gray-400 focus:border-emerald-400'}`}
+              />
+              <div className="pt-2 space-y-2">
+                <div className={`text-[11px] font-semibold ${isDark ? 'text-zinc-300' : 'text-gray-700'}`}>
+                  Adjuntar (opcional)
+                </div>
+                {aprobacionFile && aprobacionFileUrl ? (
+                  <div className={`flex items-center gap-2 text-xs rounded border px-2 py-1.5 ${isDark ? 'bg-zinc-800 border-zinc-700 text-zinc-200' : 'bg-white border-gray-300 text-gray-700'}`}>
+                    <FileImage className="h-3.5 w-3.5" />
+                    <span className="truncate flex-1">{aprobacionFile.name}</span>
+                    <button
+                      type="button"
+                      onClick={() => { setAprobacionFile(null); setAprobacionFileUrl(null); }}
+                      className={`text-[10px] font-medium ${isDark ? 'text-emerald-300 hover:text-emerald-200' : 'text-emerald-700 hover:text-emerald-900'}`}
+                    >
+                      Quitar
+                    </button>
+                  </div>
+                ) : (
+                  <input
+                    type="file"
+                    accept="image/*,application/pdf"
+                    onChange={(e) => { const f = e.target.files?.[0]; if (f) handleUploadAprobacion(f); }}
+                    disabled={aprobacionFileUploading}
+                    className={`w-full text-[11px] file:mr-2 file:py-1 file:px-2 file:rounded file:border file:text-[11px] file:font-medium ${isDark ? 'text-zinc-300 file:bg-zinc-800 file:border-zinc-700 file:text-zinc-200' : 'text-gray-700 file:bg-white file:border-gray-300 file:text-gray-700'}`}
+                  />
+                )}
+                {aprobacionFileUploading && (
+                  <div className={`flex items-center gap-1.5 text-[10px] ${isDark ? 'text-zinc-400' : 'text-gray-500'}`}>
+                    <Loader2 className="h-3 w-3 animate-spin" /> Subiendo archivo...
+                  </div>
+                )}
+                <input
+                  type="url"
+                  value={aprobacionEnlace}
+                  onChange={(e) => setAprobacionEnlace(e.target.value)}
+                  placeholder="O pega un link (Drive, Dropbox, etc.)"
+                  className={`w-full text-xs rounded-md border px-2.5 py-1.5 outline-none ${isDark ? 'bg-zinc-800 border-zinc-700 text-zinc-100 focus:border-emerald-500/60' : 'bg-white border-gray-300 text-gray-900 focus:border-emerald-400'}`}
+                />
+                {aprobacionEnlace.trim() && !esUrlValido(aprobacionEnlace) && (
                   <div className={`text-[11px] flex items-center gap-1 ${isDark ? 'text-red-300' : 'text-red-600'}`}>
                     <AlertCircle className="h-3 w-3" /> Debe comenzar con http:// o https://
                   </div>
@@ -1489,6 +1934,40 @@ function AtenderTareaModal({
                 Confirmar rechazo
               </button>
             </>
+          ) : showAprobacionInput ? (
+            <>
+              <button
+                onClick={() => { setShowAprobacionInput(false); setComentarioAprobacion(''); }}
+                disabled={isSaving}
+                className={`text-xs font-medium px-3 py-1.5 rounded border transition-colors ${isDark ? 'border-zinc-700 text-zinc-300 hover:bg-zinc-800' : 'border-gray-300 text-gray-700 hover:bg-gray-100'} disabled:opacity-50`}
+              >
+                Cancelar
+              </button>
+              <button
+                onClick={() => {
+                  const motivoLimpio = comentarioAprobacion.trim();
+                  if (!motivoLimpio) {
+                    alert('El motivo de aprobación es obligatorio');
+                    return;
+                  }
+                  const enlaceLimpio = aprobacionEnlace.trim();
+                  if (enlaceLimpio && !esUrlValido(enlaceLimpio)) {
+                    alert('El link no es válido. Debe comenzar con http:// o https://');
+                    return;
+                  }
+                  onAprobar({
+                    comentario: motivoLimpio,
+                    archivo_adjunto: aprobacionFileUrl || null,
+                    enlace_adjunto: enlaceLimpio || null,
+                  });
+                }}
+                disabled={isSaving || aprobacionFileUploading || !comentarioAprobacion.trim()}
+                className={`text-xs font-semibold px-3 py-1.5 rounded border transition-colors inline-flex items-center gap-1 ${isDark ? 'border-emerald-500/60 text-emerald-100 bg-emerald-500/20 hover:bg-emerald-500/30' : 'border-emerald-400 text-emerald-800 bg-emerald-50 hover:bg-emerald-100'} disabled:opacity-50`}
+              >
+                {isSaving ? <Loader2 className="h-3 w-3 animate-spin" /> : <CheckCircle2 className="h-3 w-3" />}
+                Confirmar aprobación
+              </button>
+            </>
           ) : (
             <>
               <button
@@ -1508,7 +1987,7 @@ function AtenderTareaModal({
                     <XCircle className="h-3 w-3" /> Rechazar
                   </button>
                   <button
-                    onClick={onAprobar}
+                    onClick={() => esRevisionAnticipada ? setShowAprobacionInput(true) : onAprobar()}
                     disabled={isSaving}
                     className={`text-xs font-semibold px-3 py-1.5 rounded border transition-colors inline-flex items-center gap-1 ${isDark ? 'border-emerald-500/60 text-emerald-100 bg-emerald-500/20 hover:bg-emerald-500/30' : 'border-emerald-400 text-emerald-800 bg-emerald-50 hover:bg-emerald-100'} disabled:opacity-50`}
                   >
@@ -1518,14 +1997,28 @@ function AtenderTareaModal({
                 </>
               )}
               {esSeguimiento && puedeCrear && (
-                <button
-                  onClick={onFinalizar}
-                  disabled={isSaving}
-                  className={`text-xs font-semibold px-3 py-1.5 rounded border transition-colors inline-flex items-center gap-1 ${isDark ? 'border-emerald-500/60 text-emerald-100 bg-emerald-500/20 hover:bg-emerald-500/30' : 'border-emerald-400 text-emerald-800 bg-emerald-50 hover:bg-emerald-100'} disabled:opacity-50`}
-                >
-                  {isSaving ? <Loader2 className="h-3 w-3 animate-spin" /> : <Flag className="h-3 w-3" />}
-                  Finalizar
-                </button>
+                <>
+                  {/* Jos 2026-10-29: desde la tarea Seguimiento se puede crear
+                      directamente el pedido de impresion. Solo si la prueba
+                      ya esta vinculada a campania (POST /campanas/:id/tareas
+                      exige campania_id). */}
+                  <button
+                    onClick={() => setShowPedidoImpresion(true)}
+                    disabled={isSaving || !prueba.campania_id}
+                    title={prueba.campania_id ? 'Crear pedido de impresión al proveedor' : 'Disponible cuando la propuesta se apruebe como campaña'}
+                    className={`text-xs font-semibold px-3 py-1.5 rounded border transition-colors inline-flex items-center gap-1 ${isDark ? 'border-indigo-500/60 text-indigo-100 bg-indigo-500/20 hover:bg-indigo-500/30' : 'border-indigo-400 text-indigo-800 bg-indigo-50 hover:bg-indigo-100'} disabled:opacity-50 disabled:cursor-not-allowed`}
+                  >
+                    <Printer className="h-3 w-3" /> Pedido de impresión
+                  </button>
+                  <button
+                    onClick={onFinalizar}
+                    disabled={isSaving}
+                    className={`text-xs font-semibold px-3 py-1.5 rounded border transition-colors inline-flex items-center gap-1 ${isDark ? 'border-emerald-500/60 text-emerald-100 bg-emerald-500/20 hover:bg-emerald-500/30' : 'border-emerald-400 text-emerald-800 bg-emerald-50 hover:bg-emerald-100'} disabled:opacity-50`}
+                  >
+                    {isSaving ? <Loader2 className="h-3 w-3 animate-spin" /> : <Flag className="h-3 w-3" />}
+                    Finalizar
+                  </button>
+                </>
               )}
             </>
           )}
@@ -1571,6 +2064,126 @@ function AtenderTareaModal({
           )}
         </div>
       )}
+
+      {/* Jos 2026-10-29: sub-modal pedido de impresion desde la tarea
+          Seguimiento. Captura num_impresiones y crea tarea tipo 'Impresión'
+          en la campania asociada via POST /campanas/:id/tareas. */}
+      {showPedidoImpresion && prueba.campania_id && (
+        <PedidoImpresionSubmodal
+          prueba={prueba}
+          cara={cara}
+          isDark={isDark}
+          onClose={() => setShowPedidoImpresion(false)}
+          onCreated={() => { setShowPedidoImpresion(false); onClose(); }}
+        />
+      )}
+    </div>
+  );
+}
+
+// ─── Sub-modal: pedido de impresión desde Seguimiento ──────────────────
+// Crea una tarea tipo 'Impresión' en la campaña con los datos de la prueba
+// (arte, circuito, num_impresiones). Reusa POST /campanas/:id/tareas.
+function PedidoImpresionSubmodal({
+  prueba,
+  cara,
+  isDark,
+  onClose,
+  onCreated,
+}: {
+  prueba: PruebaColor;
+  cara: SolicitudCara | null;
+  isDark: boolean;
+  onClose: () => void;
+  onCreated: () => void;
+}) {
+  const [numImpresiones, setNumImpresiones] = useState<number>(1);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const handleCrear = async () => {
+    const campaniaId = prueba.campania_id;
+    if (!campaniaId) { setError('La prueba no está vinculada a una campaña'); return; }
+    if (!numImpresiones || numImpresiones < 1) { setError('Captura al menos 1 impresión'); return; }
+    setSaving(true);
+    setError(null);
+    try {
+      const circuitoId = cara?.id || prueba.sc_id;
+      const titulo = `Pedido de impresión - ${prueba.nombre_arte || `Prueba #${prueba.id}`}`;
+      const descripcion = `Pedido de impresión generado desde Seguimiento Prueba de color #${prueba.id}.${prueba.nombre_arte ? ` Arte: ${prueba.nombre_arte}.` : ''}${cara?.articulo ? ` Circuito: ${cara.articulo}.` : ''}`;
+      await campanasService.createTarea(campaniaId, {
+        titulo,
+        descripcion,
+        tipo: 'Impresión',
+        num_impresiones: numImpresiones,
+        ids_reservas: circuitoId ? String(circuitoId) : undefined,
+        evidencia: prueba.archivo || undefined,
+      });
+      onCreated();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Error al crear pedido de impresión');
+    } finally {
+      setSaving(false);
+    }
+  };
+  return (
+    <div
+      className="fixed inset-0 z-[95] flex items-center justify-center p-4 bg-black/70"
+      onClick={(e) => { e.stopPropagation(); onClose(); }}
+    >
+      <div
+        onClick={(e) => e.stopPropagation()}
+        className={`w-full max-w-sm rounded-xl shadow-2xl border overflow-hidden ${isDark ? 'bg-zinc-900 border-zinc-700' : 'bg-white border-gray-200'}`}
+      >
+        <div className={`px-4 py-3 border-b flex items-center justify-between ${isDark ? 'border-zinc-800' : 'border-gray-200'}`}>
+          <div className="flex items-center gap-2">
+            <Printer className={`h-4 w-4 ${isDark ? 'text-indigo-300' : 'text-indigo-600'}`} />
+            <div>
+              <div className={`text-sm font-semibold ${isDark ? 'text-zinc-100' : 'text-gray-900'}`}>Crear pedido de impresión</div>
+              <div className={`text-[10px] ${isDark ? 'text-zinc-400' : 'text-gray-500'}`}>Campaña #{prueba.campania_id}</div>
+            </div>
+          </div>
+          <button onClick={onClose} className={`p-1 rounded ${isDark ? 'hover:bg-zinc-800 text-zinc-400' : 'hover:bg-gray-100 text-gray-500'}`}>
+            <X className="h-4 w-4" />
+          </button>
+        </div>
+        <div className="px-4 py-3 space-y-3">
+          <div className={`text-[11px] rounded px-2 py-1.5 ${isDark ? 'bg-zinc-800/60 text-zinc-300 border border-zinc-700' : 'bg-gray-50 text-gray-600 border border-gray-200'}`}>
+            {prueba.nombre_arte || `Prueba #${prueba.id}`}{cara?.articulo ? ` · ${cara.articulo}` : ''}
+          </div>
+          <div>
+            <label className={`text-[11px] font-semibold ${isDark ? 'text-zinc-300' : 'text-gray-700'}`}># de impresiones *</label>
+            <input
+              type="number"
+              min={1}
+              value={numImpresiones}
+              onChange={(e) => setNumImpresiones(Math.max(1, parseInt(e.target.value) || 1))}
+              className={`mt-1 w-full text-sm rounded-md border px-2.5 py-1.5 outline-none ${isDark ? 'bg-zinc-800 border-zinc-700 text-zinc-100 focus:border-indigo-500/60' : 'bg-white border-gray-300 text-gray-900 focus:border-indigo-400'}`}
+            />
+          </div>
+          {error && (
+            <div className={`text-[11px] px-2 py-1 rounded ${isDark ? 'bg-red-500/15 text-red-200 border border-red-500/30' : 'bg-red-50 text-red-700 border border-red-200'}`}>
+              {error}
+            </div>
+          )}
+        </div>
+        <div className={`px-4 py-3 border-t flex items-center justify-end gap-2 ${isDark ? 'border-zinc-800 bg-zinc-900/60' : 'border-gray-200 bg-gray-50/60'}`}>
+          <button
+            onClick={onClose}
+            disabled={saving}
+            className={`text-xs font-medium px-3 py-1.5 rounded border transition-colors ${isDark ? 'border-zinc-700 text-zinc-300 hover:bg-zinc-800' : 'border-gray-300 text-gray-700 hover:bg-gray-100'} disabled:opacity-50`}
+          >
+            Cancelar
+          </button>
+          <button
+            onClick={handleCrear}
+            disabled={saving}
+            className={`text-xs font-semibold px-3 py-1.5 rounded border transition-colors inline-flex items-center gap-1 ${isDark ? 'border-indigo-500/60 text-indigo-100 bg-indigo-500/20 hover:bg-indigo-500/30' : 'border-indigo-400 text-indigo-800 bg-indigo-50 hover:bg-indigo-100'} disabled:opacity-50`}
+          >
+            {saving ? <Loader2 className="h-3 w-3 animate-spin" /> : <Printer className="h-3 w-3" />}
+            Crear pedido
+          </button>
+        </div>
+      </div>
     </div>
   );
 }
@@ -1744,6 +2357,7 @@ function CircuitoCombobox({
             )}
             {filtered.map(c => {
               const isSel = selectedSet.has(c.id);
+              const periodo = formatPeriodo(c.inicio_periodo, c.fin_periodo);
               return (
                 <button
                   type="button"
@@ -1762,11 +2376,19 @@ function CircuitoCombobox({
                   }`}>
                     {isSel && <Check className="h-3 w-3 text-white" />}
                   </span>
-                  <span className="truncate">
-                    <span className={`font-medium ${isDark ? 'text-fuchsia-300' : 'text-fuchsia-700'}`}>#{c.id}</span>
-                    {' — '}
-                    <span>{c.articulo || 'Sin articulo'}</span>
-                    <span className={isDark ? 'text-zinc-500' : 'text-gray-500'}> · {c.formato || 'Sin formato'} · {c.ciudad || c.estados || 'Sin ciudad'}</span>
+                  <span className="min-w-0 flex-1">
+                    <span className="truncate block">
+                      <span className={`font-medium ${isDark ? 'text-fuchsia-300' : 'text-fuchsia-700'}`}>#{c.id}</span>
+                      {' — '}
+                      <span>{c.articulo || 'Sin articulo'}</span>
+                      <span className={isDark ? 'text-zinc-500' : 'text-gray-500'}> · {c.formato || 'Sin formato'} · {c.ciudad || c.estados || 'Sin ciudad'}</span>
+                    </span>
+                    {/* Jos 2026-10-23: catorcena visible por circuito. */}
+                    {periodo && (
+                      <span className={`block mt-0.5 text-[10px] ${isDark ? 'text-zinc-500' : 'text-gray-500'}`}>
+                        Catorcena: {periodo}
+                      </span>
+                    )}
                   </span>
                 </button>
               );
