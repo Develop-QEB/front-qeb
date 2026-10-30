@@ -1142,6 +1142,10 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
   // disparan autorización DG/DCM). Feedback Jos 2026-07-08.
   const [showNotaDireccionModal, setShowNotaDireccionModal] = useState(false);
   const [pendingAuthTipo, setPendingAuthTipo] = useState<'dg' | 'dcm' | 'ambas' | null>(null);
+  // DIFERIDO (igual que en campañas, fix jefe oct-2026): la Nota de Dirección se
+  // ENCOLA y se crea junto con el guardado (no al confirmar la nota), para que
+  // todo se guarde o se cancele junto.
+  const pendingNotaDireccionRef = useRef<string | null>(null);
 
   // Real-time: cuando OTRO usuario reserva un espacio cuyo período se solapa
   // con la cara que estoy buscando, quitarlo de mi listado de disponibles en
@@ -3426,8 +3430,9 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
     const hasPropuestaChanges = hasChanges;
     const hasCaraChanges = modifiedCaras.size > 0;
     const hasBitacoraChanges = bitacoraRef.current?.hasPending() === true;
+    const hasNotaDireccion = !!pendingNotaDireccionRef.current;
 
-    if (!hasPropuestaChanges && !hasCaraChanges && !hasBitacoraChanges) {
+    if (!hasPropuestaChanges && !hasCaraChanges && !hasBitacoraChanges && !hasNotaDireccion) {
       showToast('No hay cambios pendientes', 'info');
       return;
     }
@@ -3483,20 +3488,11 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
     try {
       const messages: string[] = [];
 
-      // 0. Bitacora inline (estatus + comentarios). Se aplica ANTES del bulk
-      // de caras: si el cambio de estatus revienta por el back (autorizacion
-      // abierta, etc.), abortamos antes de tocar caras y mostramos el error.
-      if (hasBitacoraChanges && bitacoraRef.current) {
-        try {
-          await bitacoraRef.current.commit();
-          messages.push('Estatus/bitácora actualizados');
-        } catch (bitErr) {
-          const bmsg = bitErr instanceof Error ? bitErr.message : (bitErr as any)?.response?.data?.error || 'Error al actualizar estatus/bitácora';
-          showToast(`Estatus/bitácora: ${bmsg}`, 'error');
-          setIsSaving(false);
-          return;
-        }
-      }
+      // ORDEN (fix jefe oct-2026 "guarda parte"): primero lo ESTRUCTURAL
+      // (encabezado, bulk de caras) y la nota/bitácora AL FINAL. Antes la
+      // bitácora se aplicaba PRIMERO: si el bulk tronaba, el comentario/estatus
+      // ya había quedado guardado y los circuitos no. Ahora, si algo estructural
+      // falla, ni la nota ni la bitácora se aplicaron.
 
       // 1. Save propuesta summary changes if any
       if (hasPropuestaChanges) {
@@ -3599,6 +3595,27 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
         messages.push(result.message || `${carasArray.length} circuito(s) actualizados`);
       }
 
+      // 2. Nota de Dirección ENCOLADA (autorización DG/DCM). Aditiva, después de
+      // lo estructural: si el bulk de arriba tronó, no llegamos aquí.
+      if (pendingNotaDireccionRef.current && propuesta.solicitud_id) {
+        await notasDireccionService.create(propuesta.solicitud_id, pendingNotaDireccionRef.current);
+        pendingNotaDireccionRef.current = null;
+        messages.push('Nota de Dirección registrada');
+      }
+
+      // 3. Bitácora inline (estatus + comentarios) — AL FINAL (aditiva). Si algo
+      // estructural falló arriba, no se aplicó. Si falla SOLO la bitácora, lo
+      // estructural ya quedó guardado, así que no abortamos: avisamos aparte.
+      let bitacoraError: string | null = null;
+      if (hasBitacoraChanges && bitacoraRef.current) {
+        try {
+          await bitacoraRef.current.commit();
+          messages.push('Estatus/bitácora actualizados');
+        } catch (bitErr) {
+          bitacoraError = bitErr instanceof Error ? bitErr.message : (bitErr as any)?.response?.data?.error || 'Error al actualizar estatus/bitácora';
+        }
+      }
+
       // Refresh data — incluye reservas modal para que circuitos se redibujen verdes/llenos tras redistribuir
       await Promise.all([
         queryClient.invalidateQueries({ queryKey: ['propuesta-full', propuesta.id] }),
@@ -3612,7 +3629,11 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
       // generó una sola vez en bulkUpdateCaras. Ya no son candidatas a rollback.
       sessionNewCaraIdsRef.current.clear();
 
-      showToast(messages.join(' | '), 'success');
+      if (bitacoraError) {
+        showToast(`Los cambios se guardaron, pero la bitácora/estatus falló: ${bitacoraError}`, 'error');
+      } else {
+        showToast(messages.join(' | '), 'success');
+      }
     } catch (error) {
       console.error('Error in bulk save:', error);
       const axiosError = error as { response?: { data?: { error?: string; message?: string } }; message?: string };
@@ -8205,10 +8226,12 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
         onConfirm: async () => {
           setConfirmModal(prev => ({ ...prev, isOpen: false }));
           await rollbackCarasNuevasSinGuardar();
+          pendingNotaDireccionRef.current = null; // descartar nota encolada
           onClose();
         },
       });
     } else {
+      pendingNotaDireccionRef.current = null;
       onClose();
     }
   };
@@ -10814,7 +10837,10 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
         }}
         onConfirm={async (texto) => {
           if (!propuesta.solicitud_id) return;
-          await notasDireccionService.create(propuesta.solicitud_id, texto);
+          // DIFERIDO: la Nota de Dirección se crea junto con el guardado (en
+          // handleBulkSaveChanges), no aquí, para que todo se guarde o se cancele
+          // junto. Si el usuario cancela el Confirmar Cambios, no se creó.
+          pendingNotaDireccionRef.current = texto;
           setShowNotaDireccionModal(false);
           setPendingAuthTipo(null);
           // Cadena al Confirmar Cambios (Save Confirm) — ya no ejecutamos save
