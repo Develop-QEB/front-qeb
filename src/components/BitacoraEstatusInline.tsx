@@ -90,6 +90,12 @@ export const BitacoraEstatusInline = forwardRef<BitacoraEstatusInlineHandle, Pro
 
   const [collapsed, setCollapsed] = useState(defaultCollapsed);
   const [pendingStatus, setPendingStatus] = useState<string>(currentStatus);
+  // Estatus que YA se guardó en este modal (commit ok). Sirve de baseline para
+  // que el "(1) pendiente" se limpie al instante tras guardar, sin depender de
+  // que `currentStatus` (que viene del estatus en vivo por socket) se actualice.
+  // En stage/casos sin socket, antes se quedaba pegado en "(1)" aunque el
+  // estatus sí se había guardado. Feedback jefe/Jos oct-2026.
+  const [committedStatus, setCommittedStatus] = useState<string | null>(null);
   const [pendingComments, setPendingComments] = useState<string[]>([]);
   const [draft, setDraft] = useState('');
   const listEndRef = useRef<HTMLDivElement>(null);
@@ -100,6 +106,7 @@ export const BitacoraEstatusInline = forwardRef<BitacoraEstatusInlineHandle, Pro
   // por socket.
   useEffect(() => {
     setPendingStatus(currentStatus);
+    setCommittedStatus(null);
     setPendingComments([]);
     setDraft('');
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -140,7 +147,10 @@ export const BitacoraEstatusInline = forwardRef<BitacoraEstatusInlineHandle, Pro
     }));
   }, [rawComments, kind]);
 
-  const statusChanged = pendingStatus !== currentStatus && !!pendingStatus;
+  // "Cambiado" solo si difiere del estatus actual (prop) Y del que ya guardamos
+  // en este modal. Así, tras un guardado exitoso, deja de contar como pendiente
+  // aunque `currentStatus` siga llegando viejo (socket caído / refetch lento).
+  const statusChanged = pendingStatus !== currentStatus && pendingStatus !== committedStatus && !!pendingStatus;
   const draftHasContent = draft.trim().length > 0;
   const hasPending = statusChanged || pendingComments.length > 0 || draftHasContent;
   const pendingCount = (statusChanged ? 1 : 0) + pendingComments.length + (draftHasContent ? 1 : 0);
@@ -187,6 +197,8 @@ export const BitacoraEstatusInline = forwardRef<BitacoraEstatusInlineHandle, Pro
           } else {
             await campanasService.updateStatus(entityId, pendingStatus);
           }
+          // Baseline: ya quedó guardado → statusChanged pasa a false al instante.
+          setCommittedStatus(pendingStatus);
         }
 
         // 3) Invalidar queries relacionadas.
@@ -207,13 +219,14 @@ export const BitacoraEstatusInline = forwardRef<BitacoraEstatusInlineHandle, Pro
       },
       reset() {
         setPendingStatus(currentStatus);
+        setCommittedStatus(null);
         setPendingComments([]);
         setDraft('');
       },
     }),
     // Dependencias: usar refs implicitas via closures. Reincluir todo lo que
     // toque commit para evitar closures stale entre renders.
-    [hasPending, pendingCount, pendingComments, draft, statusChanged, pendingStatus, currentStatus, kind, entityId, queryClient, pendingStatusBlocked, validationForPending?.reason],
+    [hasPending, pendingCount, pendingComments, draft, statusChanged, pendingStatus, committedStatus, currentStatus, kind, entityId, queryClient, pendingStatusBlocked, validationForPending?.reason],
   );
 
   const queueDraft = () => {
