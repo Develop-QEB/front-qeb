@@ -3914,8 +3914,19 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
                                             // no requerian autorizacion, pero pueden ser escaladas a DG y
                                             // rechazadas — el back si las valida (commit 79c59e5) y bloquea
                                             // Atender si hay rechazos. Caso reproducido en 80822.
-                                            const dgEfectivo = cara.autorizacion_dg;
-                                            const dcmEfectivo = cara.autorizacion_dcm;
+                                            // "Contaminacion DG": si al menos una cara de la solicitud esta
+                                            // Pend. DG, la regla del back es que todo escala a DG al guardar.
+                                            // Reflejamos esa regla en vivo para que la badge coincida con lo
+                                            // que se guardara (mismo patron que SolicitudModals.tsx).
+                                            const algunaPendDg = caras.some(c => (c.autorizacion_dg || 'aprobado') === 'pendiente');
+                                            const authDgRaw = cara.autorizacion_dg || 'aprobado';
+                                            const authDcmRaw = cara.autorizacion_dcm || 'aprobado';
+                                            const escalaPorContaminacion = algunaPendDg
+                                              && authDgRaw !== 'pendiente'
+                                              && authDgRaw !== 'rechazado'
+                                              && (authDcmRaw === 'pendiente' || authDgRaw === 'pendiente');
+                                            const dgEfectivo = escalaPorContaminacion ? 'pendiente' : authDgRaw;
+                                            const dcmEfectivo = escalaPorContaminacion ? 'aprobado' : authDcmRaw;
                                             return (
                                               <div className="flex flex-col gap-0.5">
                                                 {dgEfectivo === 'aprobado' && dcmEfectivo === 'aprobado' && (
