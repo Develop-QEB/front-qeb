@@ -100,6 +100,8 @@ interface CaraItem {
   autorizacion_dcm?: string;
   // Cara con una tarea de eliminación abierta (autorización de Gerencia) → badge "Pend. Ger. (elim.)".
   pendiente_eliminacion?: boolean;
+  // true si hay una tarea 'Filtro Autorización DG' abierta — pinta embudo cyan junto al "Pend. DG".
+  en_filtro_dg?: boolean;
   _originalDg?: string;
   _originalDcm?: string;
   // Baseline INMUTABLE de BD (DG/DCM aprobados al cargar) para conservar aprobación.

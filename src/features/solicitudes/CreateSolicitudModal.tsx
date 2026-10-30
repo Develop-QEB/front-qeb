@@ -355,6 +355,8 @@ interface CaraEntry {
   precioTotal: number;
   autorizacion_dg?: 'aprobado' | 'pendiente' | 'rechazado' | 'correccion';
   autorizacion_dcm?: 'aprobado' | 'pendiente' | 'rechazado' | 'correccion';
+  // true si hay una tarea 'Filtro Autorización DG' abierta — pinta embudo cyan junto al "Pend. DG".
+  en_filtro_dg?: boolean;
   // Valores originales del backend (antes de contaminación)
   _originalDg?: 'aprobado' | 'pendiente' | 'rechazado' | 'correccion';
   _originalDcm?: 'aprobado' | 'pendiente' | 'rechazado' | 'correccion';
