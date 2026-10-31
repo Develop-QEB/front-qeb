@@ -9616,23 +9616,28 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
                                       );
                                     })()}
                                     {effectiveCanEdit && (() => {
-                                      // Antes bloqueabamos TODOS los botones de editar si HAY alguna cara
-                                      // con autorizacion pendiente guardada (hasSavedPendingAuth). En
-                                      // migraciones SAP grandes (reporte Aylin/Aldonza 80617 TELCEL
-                                      // 2026-10-23) eso dejaba la campana completa inoperable: ya traia
-                                      // caras pendientes desde la migracion, entonces al abrir el modal
-                                      // todos los botones salian disabled sin que el asesor tocara nada.
-                                      // Ahora solo bloqueamos la cara que ESTA puntualmente pendiente
-                                      // (para no editarla mientras direccion la revisa). Las demas quedan
-                                      // libres para seguir ajustando. "Agregar circuito nuevo" sigue
-                                      // bloqueado globalmente arriba.
+                                      // Regla pedida por Jos (2026-10-30): si CUALQUIER cara de la
+                                      // campana tiene autorizacion pendiente (DG o DCM), nadie puede
+                                      // tocar circuitos. Toda la campana queda "congelada" visualmente
+                                      // hasta que direccion resuelva, porque editar un circuito
+                                      // mientras otros estan en revision mezcla cambios dentro de un
+                                      // flujo ya enviado. Vuelve al comportamiento previo al
+                                      // 2026-10-23 — el caso de migraciones SAP grandes (80617 TELCEL)
+                                      // se maneja esperando a que direccion revise, no abriendo la
+                                      // campana a edicion.
                                       const caraTienePendienteGuardada =
                                         cara.id != null &&
                                         !modifiedCaras.has(cara.id) &&
                                         ((cara as any)._originalDg === 'pendiente' || (cara as any)._originalDcm === 'pendiente');
-                                      const editBlocked = caraTienePendienteGuardada || caraAPSBlocked;
+                                      const editBlocked = caraTienePendienteGuardada || caraAPSBlocked || hasPendingAuthorization;
                                       const isLoadingThis = loadingCaraAction?.caraId === cara.localId && loadingCaraAction?.action === 'edit';
-                                      const blockReason = caraAPSBlocked ? 'Grupo con APS asignado - no se puede editar' : caraTienePendienteGuardada ? 'Este circuito esta pendiente de autorizacion - no se puede editar hasta que direccion resuelva' : isLoadingThis ? 'Cargando editor...' : 'Editar';
+                                      const blockReason = caraAPSBlocked
+                                        ? 'Grupo con APS asignado - no se puede editar'
+                                        : caraTienePendienteGuardada
+                                          ? 'Este circuito esta pendiente de autorizacion - no se puede editar hasta que direccion resuelva'
+                                          : hasPendingAuthorization
+                                            ? 'Hay otro circuito en esta campana pendiente de autorizacion. Aprobalo primero.'
+                                            : isLoadingThis ? 'Cargando editor...' : 'Editar';
                                       return (
                                       <>
                                         {(cara.autorizacion_dg === 'rechazado' || cara.autorizacion_dcm === 'rechazado' || cara.autorizacion_dg === 'correccion') && (
