@@ -333,6 +333,17 @@ export const notificacionesService = {
     }
     return response.data.data;
   },
+
+  async editarActividadComercial(id: number, payload: CrearActividadComercialInput): Promise<ActividadComercialCreated> {
+    const response = await api.patch<ApiResponse<ActividadComercialCreated>>(
+      `/notificaciones/actividad-comercial/${id}`,
+      payload
+    );
+    if (!response.data.success || !response.data.data) {
+      throw new Error(response.data.error || 'Error al editar actividad comercial');
+    }
+    return response.data.data;
+  },
 };
 
 // ==================== TIPOS ACTIVIDAD COMERCIAL ====================
@@ -379,9 +390,10 @@ export interface CrearActividadComercialInput {
   // Ajuste feedback 2026-08-15: campos manuales que clasifican la actividad.
   // Todos opcionales para no romper el submit sin ellos.
   anio?: number;                        // Año
-  catorcena?: number;                   // Periodo (1..26)
-  estatus_actividad?: 'Abierto' | 'Cerrado';
-  base?: 'CIMU' | 'TRADE';              // Base SAP
+  catorcena?: number;                   // Periodo singular (legacy, se mantiene como alias)
+  catorcenas?: number[];                // Periodo multi (feedback Jos 2026-10-19)
+  estatus_actividad?: 'Abierto' | 'Activo' | 'Finalizado' | 'Cerrado'; // 'Cerrado' = alias legacy
+  base?: 'CIMU' | 'TRADE' | 'UDC';      // Base SAP
 }
 
 export interface ActividadComercialCreated {
