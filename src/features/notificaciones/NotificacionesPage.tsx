@@ -33,7 +33,10 @@ import { NuevaActividadComercialModal } from './NuevaActividadComercialModal';
 // [TEMPORAL] Ocultar "Actividad Comercial" en producción (pedido de Dirección,
 // oct 2026): la feature de Akary entró a main con el merge de release del 29-sep
 // pero aún no debía estar visible. Para reactivarla: poner en false.
-const OCULTAR_ACTIVIDAD_COMERCIAL = true;
+// 2026-10-30: reactivado en RELEASE por decisión de Mario (QA del tablero
+// Actividad Comercial). OJO: si se mergea release→main volvería a prod — ahí
+// Dirección pidió esconderlo, así que al liberar/mergear revisar este flag.
+const OCULTAR_ACTIVIDAD_COMERCIAL = false;
 
 // Roles que pueden crear tarea manual "Actividad Comercial".
 // Se muestra el boton solo a estos. El back re-valida.
