@@ -941,6 +941,13 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
   // "no quede nada". Al guardar, se limpian (ya quedan confirmadas). No es estado
   // de render (useRef) para no re-renderizar en cada agregado.
   const sessionNewCaraIdsRef = useRef<Set<number>>(new Set());
+  // DIFERIDO (feedback jefe oct-2026 "cerré sin guardar y se vació"): ids de
+  // caras YA guardadas (originales) que el usuario eliminó pero que NO se mandan
+  // al back hasta "Guardar Cambios". Si cierra sin guardar, no se tocaron (al
+  // reabrir se reconstruyen de la data cacheada). Las caras agregadas EN la
+  // sesión se siguen borrando directo (deshacer el alta).
+  const [pendingCaraDeletions, setPendingCaraDeletions] = useState<number[]>([]);
+  const hasPendingDeletions = pendingCaraDeletions.length > 0;
 
   // New cara form
   const [newCara, setNewCara] = useState<Omit<CaraItem, 'localId'>>(EMPTY_CARA);
@@ -2423,38 +2430,33 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
       isDeleting: false,
       onConfirm: async () => {
         setDeleteCircuitoModal(prev => ({ ...prev, isDeleting: true }));
-        if (caraToDelete?.id) {
+        const dbIds = [caraToDelete?.id, pairCara?.id].filter((x): x is number => !!x);
+        // Nuevas de esta sesión (reservadas al agregar) → borrado directo: es
+        // deshacer el alta. Originales ya guardadas → DIFERIR al Guardar (si
+        // cierra sin guardar no se tocan; al reabrir reaparecen).
+        const nuevas = dbIds.filter(id => sessionNewCaraIdsRef.current.has(id));
+        const originales = dbIds.filter(id => !sessionNewCaraIdsRef.current.has(id));
+        for (const id of nuevas) {
           try {
-            await propuestasService.deleteCara(propuesta.id, caraToDelete.id);
+            await propuestasService.deleteCara(propuesta.id, id);
           } catch (error) {
-            console.error('Error deleting cara:', error);
+            console.error('Error deleting cara (nueva):', error);
             alert('Error al eliminar el formato de la base de datos');
             setDeleteCircuitoModal(prev => ({ ...prev, isOpen: false, isDeleting: false }));
             return;
           }
+          sessionNewCaraIdsRef.current.delete(id);
         }
-        if (pairCara?.id) {
-          try {
-            await propuestasService.deleteCara(propuesta.id, pairCara.id);
-          } catch (error) {
-            console.error('Error deleting RT/BF pair cara:', error);
-            alert('Error al eliminar la cara par (RT/BF) de la base de datos');
-            setDeleteCircuitoModal(prev => ({ ...prev, isOpen: false, isDeleting: false }));
-            return;
-          }
-        }
+        if (originales.length > 0) setPendingCaraDeletions(prev => [...prev, ...originales]);
+
         const idsToRemove = new Set<string>([localId]);
         if (pairCara) idsToRemove.add(pairCara.localId);
-        const dbIdsToRemove = new Set<number>();
-        if (caraToDelete?.id) dbIdsToRemove.add(caraToDelete.id);
-        if (pairCara?.id) dbIdsToRemove.add(pairCara.id);
+        const dbIdsToRemove = new Set<number>(dbIds);
         setModifiedCaras(prev => {
           const next = new Map(prev);
           for (const id of dbIdsToRemove) next.delete(id);
           return next;
         });
-        // Ya se borraron de BD: sacarlas del set de rollback para no re-borrarlas al cerrar.
-        for (const id of dbIdsToRemove) sessionNewCaraIdsRef.current.delete(id);
         setCaras(prev => prev.filter(c => !idsToRemove.has(c.localId)));
         setReservas(prev => prev.filter(r =>
           ![...idsToRemove].some(id => r.id.startsWith(id)) &&
@@ -2538,24 +2540,32 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
       onConfirm: async () => {
         setDeleteCircuitoModal(prev => ({ ...prev, isDeleting: true }));
 
-        // Eliminar primero las persistidas en BD; si una falla, detener y limpiar solo lo borrado
+        // Nuevas de esta sesión → borrado directo (deshacer alta); si una falla,
+        // detener. Originales ya guardadas → DIFERIR al Guardar (encolar).
         const removedLocalIds = new Set<string>();
         const removedDbIds = new Set<number>();
+        const originalesACola: number[] = [];
         let failed: CaraItem | null = null;
         for (const cara of carasToDelete) {
           if (cara.id) {
-            try {
-              await propuestasService.deleteCara(propuesta.id, cara.id);
-              removedDbIds.add(cara.id);
-            } catch (error) {
-              console.error('Error deleting cara (bulk):', error);
-              failed = cara;
-              break;
+            if (sessionNewCaraIdsRef.current.has(cara.id)) {
+              try {
+                await propuestasService.deleteCara(propuesta.id, cara.id);
+                sessionNewCaraIdsRef.current.delete(cara.id);
+              } catch (error) {
+                console.error('Error deleting cara (bulk, nueva):', error);
+                failed = cara;
+                break;
+              }
+            } else {
+              originalesACola.push(cara.id);
             }
+            removedDbIds.add(cara.id);
           }
           removedLocalIds.add(cara.localId);
         }
 
+        if (originalesACola.length > 0) setPendingCaraDeletions(prev => [...prev, ...originalesACola]);
         setModifiedCaras(prev => {
           const next = new Map(prev);
           for (const id of removedDbIds) next.delete(id);
@@ -3431,8 +3441,9 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
     const hasCaraChanges = modifiedCaras.size > 0;
     const hasBitacoraChanges = bitacoraRef.current?.hasPending() === true;
     const hasNotaDireccion = !!pendingNotaDireccionRef.current;
+    const hasDeletions = pendingCaraDeletions.length > 0;
 
-    if (!hasPropuestaChanges && !hasCaraChanges && !hasBitacoraChanges && !hasNotaDireccion) {
+    if (!hasPropuestaChanges && !hasCaraChanges && !hasBitacoraChanges && !hasNotaDireccion && !hasDeletions) {
       showToast('No hay cambios pendientes', 'info');
       return;
     }
@@ -3593,6 +3604,17 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
         // Clear modified caras tracking
         setModifiedCaras(new Map());
         messages.push(result.message || `${carasArray.length} circuito(s) actualizados`);
+      }
+
+      // 1b. Eliminaciones DIFERIDAS de circuitos ya guardados (propuesta =
+      // borrador, sin autorización). Van después del bulk: si algo estructural
+      // de arriba tronó, no llegamos aquí y los circuitos siguen intactos.
+      if (hasDeletions) {
+        for (const caraId of pendingCaraDeletions) {
+          await propuestasService.deleteCara(propuesta.id, caraId);
+        }
+        messages.push(`${pendingCaraDeletions.length} circuito(s) eliminados`);
+        setPendingCaraDeletions([]);
       }
 
       // 2. Nota de Dirección ENCOLADA (autorización DG/DCM). Aditiva, después de
@@ -8211,13 +8233,15 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
 
   const handleClose = () => {
     const hayCarasNuevas = sessionNewCaraIdsRef.current.size > 0;
-    if (hasChanges || modifiedCaras.size > 0 || hayCarasNuevas || bitacoraPending) {
+    const hayEliminaciones = pendingCaraDeletions.length > 0;
+    if (hasChanges || modifiedCaras.size > 0 || hayCarasNuevas || hayEliminaciones || bitacoraPending) {
       setConfirmModal({
         isOpen: true,
         title: 'Cambios sin guardar',
         message: `Tienes ${[
           hasChanges ? 'cambios en la propuesta' : '',
           modifiedCaras.size > 0 ? `${modifiedCaras.size} circuito(s) sin guardar` : '',
+          hayEliminaciones ? `${pendingCaraDeletions.length} circuito(s) por eliminar` : '',
           bitacoraPending ? `${bitacoraPendingCount} cambio(s) en la bitácora` : '',
         ].filter(Boolean).join(' y ') || 'cambios'} sin guardar.${hayCarasNuevas ? ' Los circuitos agregados se descartarán.' : ''} ¿Seguro que quieres cerrar?`,
         confirmText: 'Cerrar sin guardar',
@@ -8227,11 +8251,13 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
           setConfirmModal(prev => ({ ...prev, isOpen: false }));
           await rollbackCarasNuevasSinGuardar();
           pendingNotaDireccionRef.current = null; // descartar nota encolada
+          setPendingCaraDeletions([]); // descartar eliminaciones encoladas (no se tocaron en BD)
           onClose();
         },
       });
     } else {
       pendingNotaDireccionRef.current = null;
+      setPendingCaraDeletions([]);
       onClose();
     }
   };
@@ -10745,7 +10771,7 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
               </button>
               {effectiveCanEdit && (
                 <button
-                  disabled={(!hasChanges && modifiedCaras.size === 0 && !bitacoraPending) || isSaving || ((hasChanges || modifiedCaras.size > 0) && invalidCaras.length > 0)}
+                  disabled={(!hasChanges && modifiedCaras.size === 0 && !bitacoraPending && !hasPendingDeletions) || isSaving || ((hasChanges || modifiedCaras.size > 0) && invalidCaras.length > 0)}
                   title={((hasChanges || modifiedCaras.size > 0) && invalidCaras.length > 0)
                     ? `${invalidCaras.length} cara(s) tienen catorcenas fuera del rango actual. Ajusta el rango o elimínalas para poder guardar.`
                     : undefined}
@@ -10754,7 +10780,7 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
                     // saltamos el gate de Nota Direccion y el modal de confirmar
                     // cambios — no hay re-envio de caras y no hay que resumir
                     // cambios de propuesta. Sencillo y directo.
-                    const onlyBitacora = !hasChanges && modifiedCaras.size === 0 && bitacoraPending;
+                    const onlyBitacora = !hasChanges && modifiedCaras.size === 0 && !hasPendingDeletions && bitacoraPending;
                     if (onlyBitacora) {
                       setIsSaving(true);
                       try {
@@ -10791,7 +10817,7 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
                     setShowSaveConfirm(true);
                   }}
                   className={`px-6 py-2 rounded-lg text-sm font-medium transition-all ${
-                    (hasChanges || modifiedCaras.size > 0 || bitacoraPending) && !isSaving && !((hasChanges || modifiedCaras.size > 0) && invalidCaras.length > 0)
+                    (hasChanges || modifiedCaras.size > 0 || bitacoraPending || hasPendingDeletions) && !isSaving && !((hasChanges || modifiedCaras.size > 0) && invalidCaras.length > 0)
                       ? 'bg-purple-500 text-white hover:bg-purple-600 shadow-lg shadow-purple-500/25'
                       : `${isDark ? 'bg-zinc-700' : 'bg-gray-200'} ${isDark ? 'text-zinc-500' : 'text-gray-400'} cursor-not-allowed`
                   }`}
@@ -10801,7 +10827,7 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
                   ) : (
                     <Save className="h-4 w-4 inline-block mr-2" />
                   )}
-                  {isSaving ? 'Guardando...' : `Guardar Cambios${(hasChanges || modifiedCaras.size > 0 || bitacoraPending) ? ` (${(hasChanges ? 1 : 0) + modifiedCaras.size + (bitacoraPending ? 1 : 0)})` : ''}`}
+                  {isSaving ? 'Guardando...' : `Guardar Cambios${(hasChanges || modifiedCaras.size > 0 || bitacoraPending || hasPendingDeletions) ? ` (${(hasChanges ? 1 : 0) + modifiedCaras.size + (bitacoraPending ? 1 : 0) + pendingCaraDeletions.length})` : ''}`}
                 </button>
               )}
             </div>
