@@ -120,15 +120,28 @@ export const BitacoraEstatusInline = forwardRef<BitacoraEstatusInlineHandle, Pro
       if (kind === 'propuesta') {
         return await propuestasService.getComments(entityId);
       }
-      const c = await campanasService.getById(entityId);
-      return c?.comentarios || [];
+      // Campaña: la queryKey ['campana', id] la COMPARTEN el detalle,
+      // StatusCampanaModal, TareaSeguimientoPage y el socket, que guardan el
+      // OBJETO campaña completo (y leen .comentarios / .status de él). Si aquí
+      // devolviéramos solo el array de comentarios, chocarían los shapes bajo
+      // la misma key: cuando la cache tenía el objeto, este componente leía un
+      // no-array y mostraba "Sin comentarios" aunque sí hubiera (en ver-detalle
+      // sí salían). Devolvemos el MISMO objeto (getById, igual que el detalle) y
+      // extraemos .comentarios en el memo de abajo. Así no hay colisión y se
+      // conserva el refresco en vivo por socket.
+      return await campanasService.getById(entityId);
     },
     enabled: !!entityId,
     staleTime: 60_000,
   });
 
   const comments: NormalizedComment[] = useMemo(() => {
-    const list = Array.isArray(rawComments) ? rawComments : [];
+    // Propuesta: rawComments es un array (getComments). Campaña: rawComments es
+    // el OBJETO campaña y los comentarios viven en .comentarios. Tolera ambos
+    // por si otra query dejó el shape contrario en la cache compartida.
+    const list = Array.isArray(rawComments)
+      ? rawComments
+      : ((rawComments as { comentarios?: unknown[] } | null | undefined)?.comentarios ?? []);
     if (kind === 'propuesta') {
       return (list as Array<{ id: number; autor_nombre: string; autor_foto?: string | null; comentario: string; creado_en: string }>).map((c) => ({
         id: c.id,
