@@ -152,6 +152,12 @@ const CustomTooltip = ({ active, payload, label }: any) => {
 
 type EstatusType = 'total' | 'Disponible' | 'Reservado' | 'Vendido' | 'Bloqueado';
 
+// 'Bloqueado' es el valor WIRE que manda el back para el estatus efectivo (agrupa
+// No Disponible/Bloqueado legacy/Inhabilitado). Al usuario se le muestra el nombre
+// nuevo del estatus: "No Disponible".
+const displayEstatus = (e: string | null | undefined): string =>
+  e === 'Bloqueado' ? 'No Disponible' : (e || 'Disponible');
+
 // Glass Card Component
 function GlassCard({ children, className = '', ...props }: { children: React.ReactNode; className?: string; [key: string]: any }) {
   const isDark = useThemeStore((s) => s.theme) === 'dark';
@@ -628,7 +634,7 @@ function GoogleMapsChart({
             strokeColor: '#fff',
             strokeWeight: 1,
           },
-          title: `${coord.plaza} - ${coord.estatus}`,
+          title: `${coord.plaza} - ${displayEstatus(coord.estatus)}`,
         });
         marker.addListener('click', () => abrirPinRef.current(coord));
         return marker;
@@ -793,7 +799,7 @@ function GoogleMapsChart({
                         pinItem.estatus === 'Disponible' ? 'bg-green-50 text-green-700 border-green-200' :
                         'bg-cyan-50 text-cyan-700 border-cyan-200'
                       }`}>
-                        {pinItem.estatus || 'Disponible'}
+                        {displayEstatus(pinItem.estatus)}
                       </span>
                     </div>
                     <p className="text-sm font-semibold text-gray-800">
@@ -855,7 +861,7 @@ function GoogleMapsChart({
                   <div className="flex items-center gap-1"><div className="w-2 h-2 rounded-full bg-green-500"/><span className={isDark ? 'text-zinc-400' : 'text-gray-500'}>Disponible</span></div>
                   <div className="flex items-center gap-1"><div className="w-2 h-2 rounded-full bg-yellow-400"/><span className={isDark ? 'text-zinc-400' : 'text-gray-500'}>Reservado</span></div>
                   <div className="flex items-center gap-1"><div className="w-2 h-2 rounded-full bg-cyan-500"/><span className={isDark ? 'text-zinc-400' : 'text-gray-500'}>Vendido</span></div>
-                  <div className="flex items-center gap-1"><div className="w-2 h-2 rounded-full bg-rose-500"/><span className={isDark ? 'text-zinc-400' : 'text-gray-500'}>Bloqueado</span></div>
+                  <div className="flex items-center gap-1"><div className="w-2 h-2 rounded-full bg-rose-500"/><span className={isDark ? 'text-zinc-400' : 'text-gray-500'}>No Disponible</span></div>
                 </div>
               </div>
             </>
@@ -1473,7 +1479,7 @@ function InventoryTable({ data, isLoading, page, totalPages, total, onPageChange
         </td>
         <td className="px-4 py-3">
           <span className={`px-2 py-0.5 rounded-full text-[10px] font-medium ${estatusBadgeClass(item.estatus || 'Disponible')}`}>
-            {item.estatus || 'Disponible'}
+            {displayEstatus(item.estatus)}
           </span>
         </td>
         <td className={`px-4 py-3 text-sm ${isDark ? 'text-zinc-400' : 'text-gray-500'} truncate max-w-[150px]`}>{item.cliente_nombre || '-'}</td>
@@ -2518,7 +2524,7 @@ export function DashboardPage() {
           <KPICard title="Disponible" value={stats?.kpis.disponibles || 0} icon={CheckCircle2} color="green" isActive={activeEstatus === 'Disponible'} onClick={() => handleEstatusChange('Disponible')} isLoading={loadingStats} total={kpiTotal} />
           <KPICard title="Reservado" value={stats?.kpis.reservados || 0} icon={Clock} color="yellow" isActive={activeEstatus === 'Reservado'} onClick={() => handleEstatusChange('Reservado')} isLoading={loadingStats} total={kpiTotal} />
           <KPICard title="Vendido" value={stats?.kpis.vendidos || 0} icon={ShoppingCart} color="cyan" isActive={activeEstatus === 'Vendido'} onClick={() => handleEstatusChange('Vendido')} isLoading={loadingStats} total={kpiTotal} />
-          <KPICard title="Bloqueado" value={stats?.kpis.bloqueados || 0} icon={Lock} color="pink" isActive={activeEstatus === 'Bloqueado'} onClick={() => handleEstatusChange('Bloqueado')} isLoading={loadingStats} total={kpiTotal} />
+          <KPICard title="No Disponible" value={stats?.kpis.bloqueados || 0} icon={Lock} color="pink" isActive={activeEstatus === 'Bloqueado'} onClick={() => handleEstatusChange('Bloqueado')} isLoading={loadingStats} total={kpiTotal} />
         </div>
 
         {/* Estado de POST a SAP: pendientes por postear vs posteadas */}

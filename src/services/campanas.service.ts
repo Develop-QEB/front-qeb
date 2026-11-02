@@ -1,12 +1,12 @@
 import api from '../lib/api';
 import { Campana, CampanaStats, PaginatedResponse, ApiResponse, ComentarioTarea, CampanaWithComments } from '../types';
+import type { ReservaHistorialItem } from './propuestas.service';
 
-import { useEnvironmentStore, getEndpoints, getDeliveryNotesEndpoint, getSeriesForSapDatabase, usaSapPruebas } from '../store/environmentStore';
+import { useEnvironmentStore, getEndpoints, getDeliveryNotesEndpoint, getSeriesForSapDatabase, usaSapPruebas, SAP_BASE_URL } from '../store/environmentStore';
 import type { SapDatabase } from '../store/environmentStore';
 export type { CampanaWithComments };
 
-// SAP Configuration
-const SAP_BASE_URL = 'https://workflow-namely-changes-nothing.trycloudflare.com';
+// SAP_BASE_URL viene de environmentStore (una sola fuente; lee VITE_SAP_URL).
 
 // Interfaces para SAP Delivery Note
 /** Pieza que el backend NO pudo reservar, con su motivo. Permite decirle al
@@ -300,6 +300,9 @@ export interface SolicitudCara {
   autorizacion_dcm?: string | null;
   // true si la cara tiene una tarea de eliminación abierta (Filtro GC o DG).
   pendiente_eliminacion?: boolean;
+  // true si hay una tarea 'Filtro Autorización DG' abierta (gerente comercial
+  // revisando antes de escalar a DG). Pinta embudo ambar junto al "Pend. DG".
+  en_filtro_dg?: boolean;
   grupo_rt_bf?: number | null;
   cortesia?: number | null;
 }
@@ -1098,6 +1101,14 @@ export const campanasService = {
 
   async getHistorial(id: number): Promise<HistorialItem[]> {
     const response = await api.get<ApiResponse<HistorialItem[]>>(`/campanas/${id}/historial`);
+    if (!response.data.success || !response.data.data) {
+      throw new Error(response.data.error || 'Error al obtener historial');
+    }
+    return response.data.data;
+  },
+
+  async getReservasHistorial(campanaId: number): Promise<ReservaHistorialItem[]> {
+    const response = await api.get<ApiResponse<ReservaHistorialItem[]>>(`/campanas/${campanaId}/reservas-historial`);
     if (!response.data.success || !response.data.data) {
       throw new Error(response.data.error || 'Error al obtener historial');
     }

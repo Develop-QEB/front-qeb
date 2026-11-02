@@ -29,6 +29,8 @@ import {
   Check,
   Image,
   Eye,
+  EyeOff,
+  Maximize2,
   Camera,
   ClipboardList,
   Info,
@@ -1556,6 +1558,54 @@ function UploadArtModal({
   // Tab del modal: Artes o Fichas Técnicas
   const [modalTab, setModalTab] = useState<'artes' | 'fichas'>('artes');
 
+  // Biblioteca de artes: manejo por-arte de "oculto" y filtro de visualizacion.
+  // Feedback usuario 2026-09-21: poder ocultar artes en la biblioteca para no
+  // saturar la vista, con filtro para alternar Todos / Visibles / Ocultos.
+  // Se persiste por campania en localStorage para que el usuario no tenga que
+  // re-ocultar cada vez que abre el modal.
+  const HIDDEN_ARTES_KEY = `qeb.upload-art.hidden.${campanaId}`;
+  const [hiddenArteIds, setHiddenArteIds] = useState<Set<string>>(() => {
+    try {
+      const raw = localStorage.getItem(HIDDEN_ARTES_KEY);
+      if (raw) return new Set(JSON.parse(raw) as string[]);
+    } catch { /* ignore */ }
+    return new Set();
+  });
+  useEffect(() => {
+    try {
+      localStorage.setItem(HIDDEN_ARTES_KEY, JSON.stringify(Array.from(hiddenArteIds)));
+    } catch { /* ignore */ }
+  }, [hiddenArteIds, HIDDEN_ARTES_KEY]);
+  const [visibilityFilter, setVisibilityFilter] = useState<'todos' | 'visibles' | 'ocultos'>('visibles');
+  // Vista previa maximizada de un arte (imagen o video) — se abre con el boton
+  // de la esquina superior, sin marcar el arte como seleccionado.
+  const [previewArte, setPreviewArte] = useState<{ url: string; nombre: string; nombre_arte?: string | null; nota?: string | null; isVideo: boolean } | null>(null);
+  const toggleHiddenArte = (id: string) => {
+    setHiddenArteIds(prev => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id); else next.add(id);
+      return next;
+    });
+  };
+  // ESC cierra la vista previa maximizada.
+  useEffect(() => {
+    if (!previewArte) return;
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') setPreviewArte(null); };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [previewArte]);
+
+  // Biblioteca visible aplicando el filtro (todos / visibles / ocultos).
+  // Los artes ocultos NO desaparecen del sistema — solo se filtran en la UI
+  // segun el toggle. La seleccion de un arte ya seleccionado sigue activa
+  // aunque el usuario lo oculte despues.
+  const visibleArtes = useMemo(() => {
+    if (visibilityFilter === 'todos') return localArtes;
+    if (visibilityFilter === 'ocultos') return localArtes.filter(a => hiddenArteIds.has(a.id));
+    return localArtes.filter(a => !hiddenArteIds.has(a.id));
+  }, [localArtes, visibilityFilter, hiddenArteIds]);
+  const hiddenCount = useMemo(() => localArtes.filter(a => hiddenArteIds.has(a.id)).length, [localArtes, hiddenArteIds]);
+
   // Estado para archivos digitales (múltiples)
   const [digitalFiles, setDigitalFiles] = useState<DigitalFile[]>([]);
   const [draggedFile, setDraggedFile] = useState<string | null>(null);
@@ -1666,6 +1716,9 @@ function UploadArtModal({
   const [modalSortBy, setModalSortBy] = useState<'codigo' | 'aps' | 'catorcena'>('codigo');
   const [modalPage, setModalPage] = useState(1);
   const MODAL_PAGE_SIZE = 5;
+  // Panel "Espacios a asignar" colapsable — feedback Jos 2026-09-25: al
+  // colapsar, la biblioteca de artes crece a todo el ancho del modal.
+  const [spacesPanelCollapsed, setSpacesPanelCollapsed] = useState(false);
 
   // Preview URL basado en la opción seleccionada
   const previewUrl = useMemo(() => {
@@ -2253,12 +2306,16 @@ function UploadArtModal({
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center">
+    <div className="fixed inset-0 z-50 flex items-stretch justify-stretch">
       <div
         className="absolute inset-0 bg-black/50 backdrop-blur-sm"
         onClick={() => { if (!isProcessingFinal) handleClose(); }}
       />
-      <div className="relative bg-card border border-border rounded-xl w-full max-w-6xl mx-4 max-h-[90vh] flex flex-col">
+      {/* Feedback usuario 2026-09-24: la ventana debe ocupar TODA la pantalla,
+          no dejar bordes de ~2vw ni margen. Cambio de max-w-[96vw] centrado a
+          w-screen h-screen sin border/rounded. Asi la biblioteca respira y las
+          miniaturas tienen espacio real para verse grandes. */}
+      <div className="relative bg-card w-screen h-screen flex flex-col">
         {/* Header */}
         <div className="flex items-center justify-between p-4 border-b border-border flex-shrink-0">
           <h3 className="text-lg font-semibold flex items-center gap-2">
@@ -2423,7 +2480,7 @@ function UploadArtModal({
               )}
             </div>
           ) : (
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 h-full min-h-0">
+          <div className={`grid grid-cols-1 gap-6 h-full min-h-0 relative ${spacesPanelCollapsed ? '' : 'lg:grid-cols-2'}`}>
             {/* Left Column - Upload Options & Preview */}
             <div className="flex flex-col space-y-4 h-full min-h-0">
               {isDigitalInventory ? (
@@ -2451,64 +2508,107 @@ function UploadArtModal({
                     <>
                       {/* Galería de artes digitales existentes */}
                       <div className="flex-1 min-h-0 overflow-hidden flex flex-col">
-                        <label className={`block text-xs font-medium mb-1.5 ${isDark ? 'text-zinc-400' : 'text-gray-600'}`}>
-                          Biblioteca de contenido digital ({localArtes.length})
-                          {isUploadingDigitalFile && <Loader2 className="inline h-3 w-3 animate-spin text-cyan-400 ml-1.5" />}
-                        </label>
-                        <div className={`flex-1 min-h-[120px] max-h-[260px] border border-border rounded-lg overflow-auto p-2 ${isDark ? 'bg-zinc-900/50' : 'bg-gray-50'}`}>
+                        <div className="flex items-center justify-between mb-1.5 gap-2">
+                          <label className={`text-xs font-medium ${isDark ? 'text-zinc-400' : 'text-gray-600'}`}>
+                            Biblioteca de contenido digital ({visibleArtes.length}{hiddenCount > 0 ? ` · ${hiddenCount} oculto${hiddenCount === 1 ? '' : 's'}` : ''})
+                            {isUploadingDigitalFile && <Loader2 className="inline h-3 w-3 animate-spin text-cyan-400 ml-1.5" />}
+                          </label>
+                          <select
+                            value={visibilityFilter}
+                            onChange={(e) => setVisibilityFilter(e.target.value as 'todos' | 'visibles' | 'ocultos')}
+                            className="text-[10px] bg-background border border-border rounded px-1.5 py-0.5 focus:outline-none focus:ring-1 focus:ring-cyan-500"
+                            title="Filtro de visualizacion"
+                          >
+                            <option value="visibles">Solo visibles</option>
+                            <option value="todos">Todos</option>
+                            <option value="ocultos">Solo ocultos</option>
+                          </select>
+                        </div>
+                        <div className={`flex-1 min-h-[400px] border border-border rounded-lg overflow-auto p-4 ${isDark ? 'bg-zinc-900/50' : 'bg-gray-50'}`}>
                           {isLoadingArtes ? (
                             <div className="h-full flex items-center justify-center">
                               <Loader2 className="h-5 w-5 animate-spin text-cyan-400" />
                             </div>
-                          ) : localArtes.length === 0 ? (
+                          ) : visibleArtes.length === 0 ? (
                             <div className="h-full flex items-center justify-center text-center text-zinc-500">
                               <div>
                                 <Film className="h-8 w-8 mx-auto mb-1 opacity-30" />
-                                <p className="text-[10px]">No hay archivos. Sube imágenes o videos abajo.</p>
+                                <p className="text-[10px]">
+                                  {localArtes.length === 0
+                                    ? 'No hay archivos. Sube imágenes o videos abajo.'
+                                    : visibilityFilter === 'ocultos'
+                                      ? 'No hay archivos ocultos.'
+                                      : 'Todos los archivos estan ocultos. Cambia el filtro para verlos.'}
+                                </p>
                               </div>
                             </div>
                           ) : (
-                            <div className="grid grid-cols-6 gap-1.5">
-                              {localArtes.map((art) => {
+                            <div className="grid grid-cols-[repeat(auto-fill,minmax(220px,1fr))] gap-4">
+                              {visibleArtes.map((art) => {
                                 const isVideo = /\.(mp4|mov|webm|avi)$/i.test(art.url || '');
                                 const isSelected = selectedDigitalImages.has(art.id);
+                                const isHidden = hiddenArteIds.has(art.id);
                                 return (
-                                  <button
+                                  <div
                                     key={art.id}
-                                    onClick={() => toggleDigitalGalleryImage(art.id, art.url, isVideo)}
                                     className={`relative aspect-square rounded-lg overflow-hidden border-2 transition-all group ${
                                       isSelected
                                         ? 'border-cyan-400 ring-2 ring-cyan-400/30'
-                                        : 'border-transparent hover:border-cyan-400/50'
+                                        : isHidden ? 'border-zinc-600/60 opacity-70' : 'border-transparent hover:border-cyan-400/50'
                                     }`}
-                                    title={[
-                                      art.nombre_arte ? `Nombre: ${art.nombre_arte}` : null,
-                                      `Archivo: ${art.nombre}`,
-                                      art.nota ? `Nota: ${art.nota}` : null,
-                                      art.estatus ? `Estatus: ${art.estatus}` : null,
-                                    ].filter(Boolean).join('\n')}
                                   >
-                                    {isVideo ? (
-                                      <div className="w-full h-full flex items-center justify-center bg-zinc-700">
-                                        <Play className="h-5 w-5 text-cyan-400" />
-                                      </div>
-                                    ) : (
-                                      <ArteImg
-                                        src={art.url}
-                                        alt={art.nombre_arte || art.nombre}
-                                        className="w-full h-full object-cover"
-                                      />
-                                    )}
-                                    {isSelected && (
-                                      <div className="absolute inset-0 bg-cyan-600/30 flex items-center justify-center">
-                                        <Check className="h-4 w-4 text-white" />
-                                      </div>
-                                    )}
+                                    <button
+                                      type="button"
+                                      onClick={() => toggleDigitalGalleryImage(art.id, art.url, isVideo)}
+                                      className="w-full h-full block"
+                                      title={[
+                                        art.nombre_arte ? `Nombre: ${art.nombre_arte}` : null,
+                                        `Archivo: ${art.nombre}`,
+                                        art.nota ? `Nota: ${art.nota}` : null,
+                                        art.estatus ? `Estatus: ${art.estatus}` : null,
+                                      ].filter(Boolean).join('\n')}
+                                    >
+                                      {isVideo ? (
+                                        <div className="w-full h-full flex items-center justify-center bg-zinc-700">
+                                          <Play className="h-8 w-8 text-cyan-400" />
+                                        </div>
+                                      ) : (
+                                        <ArteImg
+                                          src={art.url}
+                                          alt={art.nombre_arte || art.nombre}
+                                          className="w-full h-full object-cover"
+                                        />
+                                      )}
+                                      {isSelected && (
+                                        <div className="absolute inset-0 bg-cyan-600/30 flex items-center justify-center pointer-events-none">
+                                          <Check className="h-6 w-6 text-white" />
+                                        </div>
+                                      )}
+                                    </button>
+                                    {/* Botones de accion en la esquina superior izquierda: vista previa y ocultar/mostrar. */}
+                                    <div className="absolute top-1 left-1 flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                                      <button
+                                        type="button"
+                                        onClick={(e) => { e.stopPropagation(); setPreviewArte({ url: art.url, nombre: art.nombre, nombre_arte: art.nombre_arte, nota: art.nota, isVideo }); }}
+                                        className="p-1 bg-black/70 hover:bg-black text-white rounded"
+                                        title="Vista previa"
+                                      >
+                                        <Maximize2 className="h-3 w-3" />
+                                      </button>
+                                      <button
+                                        type="button"
+                                        onClick={(e) => { e.stopPropagation(); toggleHiddenArte(art.id); }}
+                                        className="p-1 bg-black/70 hover:bg-black text-white rounded"
+                                        title={isHidden ? 'Mostrar arte' : 'Ocultar arte'}
+                                      >
+                                        {isHidden ? <Eye className="h-3 w-3" /> : <EyeOff className="h-3 w-3" />}
+                                      </button>
+                                    </div>
                                     {/* Badge de estatus arriba a la derecha. Si el arte
                                         esta marcado como Instalado en otra reserva,
                                         priorizamos ese badge (purpura) sobre arte_aprobado. */}
                                     {(art.tiene_instalado || art.estatus) && (
-                                      <span className={`absolute top-0.5 right-0.5 px-1 py-0 rounded text-[8px] font-semibold ${
+                                      <span className={`absolute top-1 right-1 px-1.5 py-0.5 rounded text-[10px] font-semibold pointer-events-none ${
                                         art.tiene_instalado ? 'bg-purple-500/80 text-white'
                                         : art.estatus?.toLowerCase() === 'aprobado' ? 'bg-green-500/80 text-white'
                                         : art.estatus?.toLowerCase() === 'rechazado' ? 'bg-red-500/80 text-white'
@@ -2516,17 +2616,17 @@ function UploadArtModal({
                                         : 'bg-zinc-700/80 text-zinc-200'
                                       }`}>{art.tiene_instalado ? 'Instalado' : art.estatus}</span>
                                     )}
-                                    <div className="absolute bottom-0 left-0 right-0 bg-black/70 px-1 py-px">
-                                      <p className="text-[7px] text-zinc-300 truncate" title={art.nombre_arte || art.nombre}>
+                                    <div className="absolute bottom-0 left-0 right-0 bg-black/70 px-1.5 py-1 pointer-events-none">
+                                      <p className="text-[10px] text-zinc-200 truncate" title={art.nombre_arte || art.nombre}>
                                         {art.nombre_arte || art.nombre}
                                       </p>
                                       {art.nota && (
-                                        <p className="text-[7px] text-zinc-400 truncate italic" title={art.nota}>
+                                        <p className="text-[10px] text-zinc-400 truncate italic" title={art.nota}>
                                           {art.nota}
                                         </p>
                                       )}
                                     </div>
-                                  </button>
+                                  </div>
                                 );
                               })}
                             </div>
@@ -2760,54 +2860,97 @@ function UploadArtModal({
                     <>
                       {/* Galería de artes existentes */}
                       <div className="flex-1 min-h-0 overflow-hidden flex flex-col">
-                        <label className={`block text-xs font-medium mb-1.5 ${isDark ? 'text-zinc-400' : 'text-gray-600'}`}>
-                          Biblioteca de artes ({localArtes.length})
-                          {isUploadingFile && <Loader2 className="inline h-3 w-3 animate-spin text-purple-400 ml-1.5" />}
-                        </label>
-                        <div className={`flex-1 min-h-[120px] max-h-[260px] border border-border rounded-lg overflow-auto p-2 ${isDark ? 'bg-zinc-900/50' : 'bg-gray-50'}`}>
+                        <div className="flex items-center justify-between mb-1.5 gap-2">
+                          <label className={`text-xs font-medium ${isDark ? 'text-zinc-400' : 'text-gray-600'}`}>
+                            Biblioteca de artes ({visibleArtes.length}{hiddenCount > 0 ? ` · ${hiddenCount} oculto${hiddenCount === 1 ? '' : 's'}` : ''})
+                            {isUploadingFile && <Loader2 className="inline h-3 w-3 animate-spin text-purple-400 ml-1.5" />}
+                          </label>
+                          <select
+                            value={visibilityFilter}
+                            onChange={(e) => setVisibilityFilter(e.target.value as 'todos' | 'visibles' | 'ocultos')}
+                            className="text-[10px] bg-background border border-border rounded px-1.5 py-0.5 focus:outline-none focus:ring-1 focus:ring-purple-500"
+                            title="Filtro de visualizacion"
+                          >
+                            <option value="visibles">Solo visibles</option>
+                            <option value="todos">Todos</option>
+                            <option value="ocultos">Solo ocultos</option>
+                          </select>
+                        </div>
+                        <div className={`flex-1 min-h-[400px] border border-border rounded-lg overflow-auto p-4 ${isDark ? 'bg-zinc-900/50' : 'bg-gray-50'}`}>
                           {isLoadingArtes ? (
                             <div className="h-full flex items-center justify-center">
                               <Loader2 className="h-5 w-5 animate-spin text-purple-400" />
                             </div>
-                          ) : localArtes.length === 0 ? (
+                          ) : visibleArtes.length === 0 ? (
                             <div className="h-full flex items-center justify-center text-center text-zinc-500">
                               <div>
                                 <Image className="h-8 w-8 mx-auto mb-1 opacity-30" />
-                                <p className="text-[10px]">No hay imágenes. Sube archivos o agrega URLs abajo.</p>
+                                <p className="text-[10px]">
+                                  {localArtes.length === 0
+                                    ? 'No hay imágenes. Sube archivos o agrega URLs abajo.'
+                                    : visibilityFilter === 'ocultos'
+                                      ? 'No hay imagenes ocultas.'
+                                      : 'Todas las imagenes estan ocultas. Cambia el filtro para verlas.'}
+                                </p>
                               </div>
                             </div>
                           ) : (
-                            <div className="grid grid-cols-6 gap-1.5">
-                              {localArtes.map((art) => {
+                            <div className="grid grid-cols-[repeat(auto-fill,minmax(220px,1fr))] gap-4">
+                              {visibleArtes.map((art) => {
                                 const isSelected = selectedGalleryImages.has(art.id);
+                                const isHidden = hiddenArteIds.has(art.id);
                                 return (
-                                  <button
+                                  <div
                                     key={art.id}
-                                    onClick={() => toggleGalleryImage(art.id, art.url)}
                                     className={`relative aspect-square rounded-lg overflow-hidden border-2 transition-all group ${
                                       isSelected
                                         ? 'border-purple-400 ring-2 ring-purple-400/30'
-                                        : 'border-transparent hover:border-purple-400/50'
+                                        : isHidden ? 'border-zinc-600/60 opacity-70' : 'border-transparent hover:border-purple-400/50'
                                     }`}
-                                    title={[
-                                      art.nombre_arte ? `Nombre: ${art.nombre_arte}` : null,
-                                      `Archivo: ${art.nombre}`,
-                                      art.nota ? `Nota: ${art.nota}` : null,
-                                      art.tiene_instalado ? 'Estatus: Instalado (al asignarlo, el inventario destino quedara como instalado)' : (art.estatus ? `Estatus: ${art.estatus}` : null),
-                                    ].filter(Boolean).join('\n')}
                                   >
-                                    <ArteImg
-                                      src={art.url}
-                                      alt={art.nombre_arte || art.nombre}
-                                      className="w-full h-full object-cover"
-                                    />
-                                    {isSelected && (
-                                      <div className="absolute inset-0 bg-purple-600/30 flex items-center justify-center">
-                                        <Check className="h-4 w-4 text-white" />
-                                      </div>
-                                    )}
+                                    <button
+                                      type="button"
+                                      onClick={() => toggleGalleryImage(art.id, art.url)}
+                                      className="w-full h-full block"
+                                      title={[
+                                        art.nombre_arte ? `Nombre: ${art.nombre_arte}` : null,
+                                        `Archivo: ${art.nombre}`,
+                                        art.nota ? `Nota: ${art.nota}` : null,
+                                        art.tiene_instalado ? 'Estatus: Instalado (al asignarlo, el inventario destino quedara como instalado)' : (art.estatus ? `Estatus: ${art.estatus}` : null),
+                                      ].filter(Boolean).join('\n')}
+                                    >
+                                      <ArteImg
+                                        src={art.url}
+                                        alt={art.nombre_arte || art.nombre}
+                                        className="w-full h-full object-cover"
+                                      />
+                                      {isSelected && (
+                                        <div className="absolute inset-0 bg-purple-600/30 flex items-center justify-center pointer-events-none">
+                                          <Check className="h-6 w-6 text-white" />
+                                        </div>
+                                      )}
+                                    </button>
+                                    {/* Botones de accion: vista previa y ocultar/mostrar. */}
+                                    <div className="absolute top-1 left-1 flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                                      <button
+                                        type="button"
+                                        onClick={(e) => { e.stopPropagation(); setPreviewArte({ url: art.url, nombre: art.nombre, nombre_arte: art.nombre_arte, nota: art.nota, isVideo: false }); }}
+                                        className="p-1 bg-black/70 hover:bg-black text-white rounded"
+                                        title="Vista previa"
+                                      >
+                                        <Maximize2 className="h-3 w-3" />
+                                      </button>
+                                      <button
+                                        type="button"
+                                        onClick={(e) => { e.stopPropagation(); toggleHiddenArte(art.id); }}
+                                        className="p-1 bg-black/70 hover:bg-black text-white rounded"
+                                        title={isHidden ? 'Mostrar arte' : 'Ocultar arte'}
+                                      >
+                                        {isHidden ? <Eye className="h-3 w-3" /> : <EyeOff className="h-3 w-3" />}
+                                      </button>
+                                    </div>
                                     {(art.tiene_instalado || art.estatus) && (
-                                      <span className={`absolute top-0.5 right-0.5 px-1 py-0 rounded text-[8px] font-semibold ${
+                                      <span className={`absolute top-1 right-1 px-1.5 py-0.5 rounded text-[10px] font-semibold pointer-events-none ${
                                         art.tiene_instalado ? 'bg-purple-500/80 text-white'
                                         : art.estatus?.toLowerCase() === 'aprobado' ? 'bg-green-500/80 text-white'
                                         : art.estatus?.toLowerCase() === 'rechazado' ? 'bg-red-500/80 text-white'
@@ -2815,17 +2958,17 @@ function UploadArtModal({
                                         : 'bg-zinc-700/80 text-zinc-200'
                                       }`}>{art.tiene_instalado ? 'Instalado' : art.estatus}</span>
                                     )}
-                                    <div className="absolute bottom-0 left-0 right-0 bg-black/70 px-1 py-px">
-                                      <p className="text-[7px] text-zinc-300 truncate" title={art.nombre_arte || art.nombre}>
+                                    <div className="absolute bottom-0 left-0 right-0 bg-black/70 px-1.5 py-1 pointer-events-none">
+                                      <p className="text-[10px] text-zinc-200 truncate" title={art.nombre_arte || art.nombre}>
                                         {art.nombre_arte || art.nombre}
                                       </p>
                                       {art.nota && (
-                                        <p className="text-[7px] text-zinc-400 truncate italic" title={art.nota}>
+                                        <p className="text-[10px] text-zinc-400 truncate italic" title={art.nota}>
                                           {art.nota}
                                         </p>
                                       )}
                                     </div>
-                                  </button>
+                                  </div>
                                 );
                               })}
                             </div>
@@ -3029,16 +3172,28 @@ function UploadArtModal({
               )}
             </div>
 
-            {/* Right Column - Selected Items Table */}
-            <div className="flex flex-col h-full">
+            {/* Right Column - Selected Items Table. Feedback Jos 2026-09-25:
+                colapsable. Si se contrae, la biblioteca de artes ocupa todo
+                el ancho y aparece un botón lateral para volver a mostrarlo. */}
+            <div className={`flex flex-col h-full ${spacesPanelCollapsed ? 'hidden' : ''}`}>
               {/* Header with count and toolbar */}
-              <div className="flex items-center justify-between mb-2">
-                <span className={`text-sm font-medium ${isDark ? 'text-white' : 'text-gray-900'}`}>
-                  Espacios a asignar
-                </span>
-                <Badge className={isDark ? "bg-purple-600/30 text-purple-300 border-purple-500/30" : "bg-purple-100 text-purple-700 border-purple-300"}>
-                  {selectedInventory.length} elemento{selectedInventory.length !== 1 ? 's' : ''}
-                </Badge>
+              <div className="flex items-center justify-between mb-2 gap-2">
+                <div className="flex items-center gap-2 min-w-0">
+                  <span className={`text-sm font-medium truncate ${isDark ? 'text-white' : 'text-gray-900'}`}>
+                    Espacios a asignar
+                  </span>
+                  <Badge className={isDark ? "bg-purple-600/30 text-purple-300 border-purple-500/30" : "bg-purple-100 text-purple-700 border-purple-300"}>
+                    {selectedInventory.length} elemento{selectedInventory.length !== 1 ? 's' : ''}
+                  </Badge>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setSpacesPanelCollapsed(true)}
+                  title="Ocultar panel — expandir biblioteca de artes"
+                  className={`p-1 rounded shrink-0 ${isDark ? 'text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800' : 'text-gray-500 hover:text-gray-800 hover:bg-gray-100'}`}
+                >
+                  <ChevronRight className="h-4 w-4" />
+                </button>
               </div>
 
               {/* Toolbar */}
@@ -3185,6 +3340,22 @@ function UploadArtModal({
                 </div>
               </div>
             </div>
+            {/* Botón flotante para reabrir el panel Espacios a asignar cuando
+                está colapsado. Vive dentro del grid contenedor para pegarse
+                al borde derecho del modal. Feedback Jos 2026-09-25. */}
+            {spacesPanelCollapsed && (
+              <button
+                type="button"
+                onClick={() => setSpacesPanelCollapsed(false)}
+                title={`Mostrar Espacios a asignar (${selectedInventory.length})`}
+                className={`absolute right-0 top-1/2 -translate-y-1/2 flex flex-col items-center gap-2 py-3 px-2 rounded-l-lg shadow-lg border border-r-0 z-10 transition-colors ${isDark ? 'bg-purple-900/40 border-purple-500/40 text-purple-200 hover:bg-purple-800/60' : 'bg-purple-100 border-purple-300 text-purple-800 hover:bg-purple-200'}`}
+              >
+                <ChevronLeft className="h-4 w-4" />
+                <span className="text-[10px] font-medium [writing-mode:vertical-rl] rotate-180 whitespace-nowrap">
+                  Espacios a asignar · {selectedInventory.length}
+                </span>
+              </button>
+            )}
           </div>
           )}
         </div>
@@ -3273,6 +3444,55 @@ function UploadArtModal({
           onResolve={instaladoDialog.resolve}
           isDark={isDark}
         />
+      )}
+
+      {/* Vista previa maximizada de un arte. Se abre desde el boton de la
+          esquina superior de cada thumbnail; no selecciona el arte, solo lo
+          muestra en grande para revisarlo. Cierra con ESC, click fuera o X. */}
+      {previewArte && (
+        <div
+          className="fixed inset-0 z-[70] flex items-center justify-center bg-black/85 backdrop-blur-sm"
+          onClick={() => setPreviewArte(null)}
+          onKeyDown={(e) => { if (e.key === 'Escape') setPreviewArte(null); }}
+          tabIndex={-1}
+        >
+          <div className="relative w-full max-w-[95vw] max-h-[95vh] flex flex-col items-center gap-3" onClick={(e) => e.stopPropagation()}>
+            <button
+              type="button"
+              onClick={() => setPreviewArte(null)}
+              className="absolute -top-2 -right-2 z-10 p-2 bg-zinc-900 hover:bg-zinc-800 border border-zinc-700 rounded-full text-white shadow-lg"
+              title="Cerrar (ESC)"
+            >
+              <X className="h-4 w-4" />
+            </button>
+            <div className="bg-zinc-900 rounded-xl overflow-hidden flex items-center justify-center max-h-[85vh] max-w-full">
+              {previewArte.isVideo ? (
+                <video
+                  src={getImageUrl(previewArte.url) || previewArte.url}
+                  controls
+                  autoPlay
+                  className="max-h-[85vh] max-w-[95vw]"
+                />
+              ) : (
+                <ArteImg
+                  src={previewArte.url}
+                  alt={previewArte.nombre_arte || previewArte.nombre}
+                  className="max-h-[85vh] max-w-[95vw] object-contain"
+                />
+              )}
+            </div>
+            <div className="bg-zinc-900/90 border border-border rounded-lg px-4 py-2 max-w-2xl w-full text-center">
+              <p className="text-sm text-white font-medium truncate" title={previewArte.nombre_arte || previewArte.nombre}>
+                {previewArte.nombre_arte || previewArte.nombre}
+              </p>
+              {previewArte.nota && (
+                <p className="text-xs text-zinc-400 italic mt-0.5 truncate" title={previewArte.nota}>
+                  {previewArte.nota}
+                </p>
+              )}
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );
@@ -4817,8 +5037,17 @@ function TaskDetailModal({
   const [isFinalizando, setIsFinalizando] = useState(false);
   const [envioRevisionError, setEnvioRevisionError] = useState<string | null>(null);
 
-  // Estado para crear tarea de recepción (Impresión)
+  // Estado para crear tarea de recepción (Impresión).
+  // Feedback Jos 2026-10-02: el asignado debe permitir multiples usuarios de
+  // Operaciones. Antes era un input search que solo guardaba 1 usuario.
+  // Ahora usamos el mismo patrón de multi-select con checkboxes que ya existe
+  // en InstaladoChoiceDialog (operacionesAsignados: { ids, nombres }).
   const [isCreatingRecepcion, setIsCreatingRecepcion] = useState(false);
+  const [recepcionAsignadosMap, setRecepcionAsignadosMap] = useState<Map<number, string>>(new Map());
+  const [showRecepcionOpsList, setShowRecepcionOpsList] = useState(false);
+  // Compat para el search antiguo — algunos callers lo referencian para búsqueda.
+  // Mantener los dos legacy sin usar activamente evita tener que tocar refs
+  // residuales del modal; se seguirá leyendo del Map al guardar.
   const [recepcionAsignadoNombre, setRecepcionAsignadoNombre] = useState('');
   const [recepcionAsignadoId, setRecepcionAsignadoId] = useState('');
   const [recepcionAsignadoSearch, setRecepcionAsignadoSearch] = useState('');
@@ -5424,37 +5653,59 @@ function TaskDetailModal({
   // Cuando se agrupa por ciudad/grupo, también se sub-agrupa por archivo para separar artes diferentes
   const groupedInventory = useMemo(() => {
     const groups: Record<string, InventoryRow[]> = {};
-    taskInventory.forEach(item => {
-      let key = '';
-      switch (groupBy) {
-        case 'ciudad':
-          // Agrupar por ciudad + archivo (para separar artes diferentes)
-          const ciudadKey = item.ciudad || 'Sin ciudad';
-          const archivoKeyCiudad = item.archivo_arte || 'sin_arte';
-          key = `${ciudadKey}|||${archivoKeyCiudad}`;
-          break;
-        case 'grupo':
-          // Agrupar por grupo + archivo (para separar artes diferentes)
-          const grupoKey = item.grupo_id || item.id;
-          const archivoKeyGrupo = item.archivo_arte || 'sin_arte';
-          key = `${grupoKey}|||${archivoKeyGrupo}`;
-          break;
-        case 'tipo_cara': {
-          // Agrupar por Tipo de Cara (Flujo / Contraflujo / Bonificacion / etc) + archivo.
-          // Normalizamos: si comienza con "Flujo" agrupa todos en "Flujo", igual con "Contraflujo".
-          const tcRaw = (item.tipo_de_cara || 'Sin tipo').toString();
-          const tcKey = tcRaw.toLowerCase().startsWith('contraflujo') ? 'Contraflujo'
-                      : tcRaw.toLowerCase().startsWith('flujo') ? 'Flujo'
-                      : tcRaw;
-          const archivoKeyTC = item.archivo_arte || 'sin_arte';
-          key = `${tcKey}|||${archivoKeyTC}`;
-          break;
-        }
-        default:
-          key = item.id;
+    // [Fix #261] Cuando un item tiene artes_multiples con varias URLs
+    // (separadas por "||"), debemos crear un grupo por cada arte distinto
+    // para que el revisor pueda aprobar/rechazar cada uno individualmente.
+    // Antes se agrupaban todos los artes del mismo inventario en una sola
+    // card. Regresión reportada por Jos: "sigue manteniendo agrupados los
+    // dos artes, deben de quedar separados para que se puedan atender de
+    // manera individual".
+    const getArtesForItem = (item: InventoryRow): string[] => {
+      if (item.artes_multiples && item.artes_multiples.includes('||')) {
+        const artes = item.artes_multiples.split('||').map(a => a.trim()).filter(Boolean);
+        if (artes.length > 1) return artes;
       }
-      if (!groups[key]) groups[key] = [];
-      groups[key].push(item);
+      return [item.archivo_arte || 'sin_arte'];
+    };
+    taskInventory.forEach(item => {
+      const artes = getArtesForItem(item);
+      artes.forEach(archivoKey => {
+        let key = '';
+        switch (groupBy) {
+          case 'ciudad': {
+            const ciudadKey = item.ciudad || 'Sin ciudad';
+            key = `${ciudadKey}|||${archivoKey}`;
+            break;
+          }
+          case 'grupo': {
+            const grupoKey = item.grupo_id || item.id;
+            key = `${grupoKey}|||${archivoKey}`;
+            break;
+          }
+          case 'tipo_cara': {
+            // Agrupar por Tipo de Cara (Flujo / Contraflujo / Bonificacion / etc) + archivo.
+            // Normalizamos: si comienza con "Flujo" agrupa todos en "Flujo", igual con "Contraflujo".
+            const tcRaw = (item.tipo_de_cara || 'Sin tipo').toString();
+            const tcKey = tcRaw.toLowerCase().startsWith('contraflujo') ? 'Contraflujo'
+                        : tcRaw.toLowerCase().startsWith('flujo') ? 'Flujo'
+                        : tcRaw;
+            key = `${tcKey}|||${archivoKey}`;
+            break;
+          }
+          default:
+            // 'inventario': separar también por arte para que artes múltiples
+            // en una misma ubicación generen cards independientes.
+            key = artes.length > 1 ? `${item.id}|||${archivoKey}` : item.id;
+        }
+        if (!groups[key]) groups[key] = [];
+        // Clonar el item para que `archivo_arte` apunte al arte específico de
+        // este grupo (los componentes aguas abajo leen item.archivo_arte para
+        // la miniatura y el link "Ver arte").
+        const itemForGroup = artes.length > 1
+          ? { ...item, archivo_arte: archivoKey }
+          : item;
+        groups[key].push(itemForGroup);
+      });
     });
     return groups;
   }, [taskInventory, groupBy]);
@@ -6529,7 +6780,12 @@ function TaskDetailModal({
     }
   };
 
-  // Handler para crear tarea de recepción
+  // Handler para crear tarea de recepción. Feedback Jos 2026-10-02:
+  // (1) cuando el PDF era grande (10-25MB) o el upload fallaba, el error
+  //     solo iba a console y el usuario veía el boton sin pasar nada. Ahora
+  //     cualquier fallo se muestra como alert.
+  // (2) el asignado ahora admite multiples usuarios: tomamos ids y nombres
+  //     del Map y los mandamos como strings comma-separated al back.
   const handleCrearRecepcion = async () => {
     if (!task || !task.id) return;
 
@@ -6537,15 +6793,25 @@ function TaskDetailModal({
     try {
       let guiaPdfUrlCreada: string | undefined;
       if (impresionPdfFile) {
-        const pdfResult = await campanasService.uploadTestigoFile(impresionPdfFile);
-        guiaPdfUrlCreada = pdfResult.url;
+        try {
+          const pdfResult = await campanasService.uploadTestigoFile(impresionPdfFile);
+          guiaPdfUrlCreada = pdfResult.url;
+        } catch (uploadErr) {
+          console.error('Error al subir PDF de guia:', uploadErr);
+          const msg = uploadErr instanceof Error ? uploadErr.message : 'No se pudo subir el PDF de guía';
+          alert(`No se pudo crear la tarea de recepción: ${msg}`);
+          return;
+        }
       }
+      const idsStr = Array.from(recepcionAsignadosMap.keys()).join(',');
+      const nombresStr = Array.from(recepcionAsignadosMap.values()).join(', ');
       await onCreateRecepcion(
         task.id,
-        recepcionAsignadoNombre || undefined,
-        recepcionAsignadoId || undefined,
+        nombresStr || undefined,
+        idsStr || undefined,
         guiaPdfUrlCreada
       );
+      setRecepcionAsignadosMap(new Map());
       setRecepcionAsignadoNombre('');
       setRecepcionAsignadoId('');
       setRecepcionAsignadoSearch('');
@@ -6553,6 +6819,21 @@ function TaskDetailModal({
       onClose();
     } catch (error) {
       console.error('Error al crear tarea de recepción:', error);
+      // [Fix #262] Extraer el mensaje real del back (axios lo guarda en
+      // error.response.data.error) antes de caer al generico 'Request failed
+      // with status code 400'. Jos reportaba solo ver el 400 sin pista de
+      // la causa real.
+      let msg = 'Error desconocido al crear la tarea';
+      if (error && typeof error === 'object') {
+        const anyErr = error as { response?: { data?: { error?: string; message?: string } }; message?: string };
+        msg = anyErr.response?.data?.error
+          || anyErr.response?.data?.message
+          || anyErr.message
+          || msg;
+      } else if (error instanceof Error) {
+        msg = error.message;
+      }
+      alert(`No se pudo crear la tarea de recepción: ${msg}`);
     } finally {
       setIsCreatingRecepcion(false);
     }
@@ -7249,61 +7530,65 @@ function TaskDetailModal({
               {task.estatus === 'Activo' && canResolveProduccionTasks && (
                 <div className="bg-zinc-900/50 rounded-lg p-4 border border-border">
                   <h4 className="text-sm font-medium text-purple-300 mb-3">Crear tarea de recepción</h4>
-                  <div className="relative">
+                  {/* Multi-select de usuarios de Operaciones. Feedback Jos
+                      2026-10-02: el asesor/operaciones puede necesitar
+                      asignarla a varios responsables. Mismo patron que
+                      InstaladoChoiceDialog (checkboxes + buildOps). */}
+                  <div className="mb-3">
                     <label className="block text-xs font-medium text-muted-foreground mb-1">Asignar a *</label>
-                    <input
-                      ref={recepcionInputRef}
-                      type="text"
-                      value={recepcionAsignadoSearch}
-                      onChange={(e) => {
-                        setRecepcionAsignadoSearch(e.target.value);
-                        setShowRecepcionAsignadoDropdown(true);
-                        if (!e.target.value) {
-                          setRecepcionAsignadoNombre('');
-                          setRecepcionAsignadoId('');
-                        }
-                      }}
-                      onFocus={() => {
-                        if (recepcionInputRef.current) {
-                          const rect = recepcionInputRef.current.getBoundingClientRect();
-                          setDropdownPosition({
-                            top: rect.bottom + 4,
-                            left: rect.left,
-                            width: rect.width,
-                          });
-                        }
-                        setShowRecepcionAsignadoDropdown(true);
-                      }}
-                      onBlur={() => setTimeout(() => setShowRecepcionAsignadoDropdown(false), 200)}
-                      placeholder="Buscar usuario..."
-                      className="w-full px-3 py-2 text-sm bg-background border border-border rounded-lg focus:outline-none focus:ring-1 focus:ring-purple-500"
-                    />
-                    {showRecepcionAsignadoDropdown && filteredUsuariosRecepcion.length > 0 && (
-                      <div
-                        className="fixed z-[9999] bg-card border border-border rounded-lg shadow-lg max-h-48 overflow-y-auto"
-                        style={{
-                          top: dropdownPosition.top,
-                          left: dropdownPosition.left,
-                          width: dropdownPosition.width,
-                        }}
-                      >
-                        {filteredUsuariosRecepcion.map((u) => (
-                          <button
-                            key={u.id}
-                            type="button"
-                            onClick={() => {
-                              setRecepcionAsignadoNombre(u.nombre);
-                              setRecepcionAsignadoId(String(u.id));
-                              setRecepcionAsignadoSearch(`${u.id}, ${u.nombre}`);
-                              setShowRecepcionAsignadoDropdown(false);
-                            }}
-                            className="w-full px-3 py-2 text-sm text-left hover:bg-purple-900/30 transition-colors"
-                          >
-                            {u.id}, {u.nombre}
-                          </button>
-                        ))}
+                    <button
+                      type="button"
+                      onClick={() => setShowRecepcionOpsList(s => !s)}
+                      className={`w-full text-left text-xs font-medium px-3 py-2 rounded-lg border transition-colors flex items-center justify-between ${
+                        recepcionAsignadosMap.size === 0
+                          ? 'border-red-500/40 bg-red-500/10 hover:bg-red-500/20 text-red-200'
+                          : 'border-zinc-700 bg-zinc-800/50 hover:bg-zinc-800 text-zinc-200'
+                      }`}
+                    >
+                      <span className="truncate">
+                        {recepcionAsignadosMap.size === 0
+                          ? 'Selecciona usuarios de Operaciones'
+                          : Array.from(recepcionAsignadosMap.values()).join(', ')}
+                        {recepcionAsignadosMap.size > 0 && (
+                          <span className="ml-2 px-1.5 py-0.5 rounded text-[10px] bg-purple-500/30 text-purple-200">
+                            {recepcionAsignadosMap.size}
+                          </span>
+                        )}
+                      </span>
+                      <ChevronDown className={`h-3.5 w-3.5 shrink-0 transition-transform ${showRecepcionOpsList ? 'rotate-180' : ''}`} />
+                    </button>
+                    {showRecepcionOpsList && (
+                      <div className="mt-2 max-h-48 overflow-y-auto rounded-lg border border-zinc-700 bg-zinc-900/50 p-2 space-y-1">
+                        {usuarios.length === 0 ? (
+                          <p className="text-[10px] text-center py-2 text-zinc-500">No hay usuarios de Operaciones.</p>
+                        ) : (
+                          usuarios.map(u => (
+                            <label key={u.id} className="flex items-center gap-2 text-xs p-1.5 rounded cursor-pointer hover:bg-zinc-800 text-zinc-200">
+                              <input
+                                type="checkbox"
+                                checked={recepcionAsignadosMap.has(u.id)}
+                                onChange={() => {
+                                  setRecepcionAsignadosMap(prev => {
+                                    const n = new Map(prev);
+                                    if (n.has(u.id)) n.delete(u.id);
+                                    else n.set(u.id, u.nombre);
+                                    return n;
+                                  });
+                                }}
+                                className="rounded"
+                              />
+                              <span className="flex-1 truncate">{u.nombre}</span>
+                              <span className="text-[9px] text-zinc-500">{u.puesto}</span>
+                            </label>
+                          ))
+                        )}
                       </div>
                     )}
+                    <p className={`text-[10px] mt-1 ${recepcionAsignadosMap.size === 0 ? 'text-red-300' : 'text-zinc-500'}`}>
+                      {recepcionAsignadosMap.size === 0
+                        ? 'Selecciona al menos un usuario de Operaciones.'
+                        : 'La tarea de recepción les llegará a estas personas.'}
+                    </p>
                   </div>
                   <div className="mt-4">
                     <label className="block text-xs font-medium text-muted-foreground mb-1">Guía del proveedor en PDF (opcional)</label>
@@ -7513,7 +7798,7 @@ function TaskDetailModal({
                 {task.estatus === 'Activo' && canResolveProduccionTasks && (
                   <button
                     onClick={handleCrearRecepcion}
-                    disabled={isCreatingRecepcion || !recepcionAsignadoNombre}
+                    disabled={isCreatingRecepcion || recepcionAsignadosMap.size === 0}
                     className="flex items-center gap-2 px-4 py-2 text-sm font-medium bg-purple-600 hover:bg-purple-700 text-white rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                   >
                     {isCreatingRecepcion ? (
@@ -7824,7 +8109,7 @@ function TaskDetailModal({
 
                         // Verificar si es una tarea de recepción faltantes (tiene evidencia especial)
                         let esFaltantes = false;
-                        let faltantesData: { arte: string; cantidad: number }[] = [];
+                        let faltantesData: { arte: string; cantidad: number; nombre_arte?: string | null }[] = [];
 
                         if (task.evidencia) {
                           try {
@@ -7870,8 +8155,10 @@ function TaskDetailModal({
                                   <p className="text-sm font-medium text-white">
                                     {faltante.cantidad} faltante{faltante.cantidad !== 1 ? 's' : ''}
                                   </p>
-                                  <p className="text-xs text-zinc-500 truncate">
-                                    {!faltante.arte ? 'Sin arte asignado' : faltante.arte.startsWith('data:') ? 'Arte' : faltante.arte.split('/').pop()}
+                                  <p className="text-xs text-zinc-500 truncate" title={faltante.arte ? faltante.arte.split('/').pop() : ''}>
+                                    {/* Priorizar nombre_arte legible (lo enriquece el back desde biblioteca_artes).
+                                        Caer al filename solo si no hay nombre guardado. */}
+                                    {!faltante.arte ? 'Sin arte asignado' : (faltante.nombre_arte || (faltante.arte.startsWith('data:') ? 'Arte' : faltante.arte.split('/').pop()))}
                                   </p>
                                 </div>
 
@@ -8299,6 +8586,76 @@ function TaskDetailModal({
                     <p className="text-green-300 font-medium">Recepción completada</p>
                     <p className="text-sm text-zinc-400 mt-1">Esta tarea de recepción ya ha sido finalizada.</p>
                   </div>
+                  {/* Desglose por arte con miniaturas: cuanto se recibio de cada arte vs
+                     lo que quedo faltante. Feedback Jos 2026-10-06: antes solo decia
+                     "Recepción completada 100" sin desglose, los ASC no sabian que
+                     recibieron especificamente. */}
+                  {(() => {
+                    let evOrig: any = null;
+                    try { evOrig = task.evidencia ? JSON.parse(task.evidencia) : null; } catch {}
+                    const impresionesMapOrig: Record<string, number> = (evOrig && typeof evOrig.impresiones === 'object' && evOrig.impresiones !== null)
+                      ? evOrig.impresiones
+                      : {};
+                    const artesSolicitados = Object.entries(impresionesMapOrig);
+                    if (artesSolicitados.length === 0) return null;
+
+                    // Buscar Faltantes hija por titulo "Recepción Faltantes - {identifier}"
+                    // para mapear cuanto quedo faltante por arte.
+                    const identifierMatch = task.titulo?.match(/TASK-\d+/) || task.identificador?.match(/TASK-\d+/);
+                    const identifier = identifierMatch ? identifierMatch[0] : `TASK-${task.id}`;
+                    const faltantesPorArte: Record<string, number> = {};
+                    const nombrePorArte: Record<string, string> = {};
+                    for (const t of tareasCampana) {
+                      if (t.tipo !== 'Recepción') continue;
+                      if (t.id === parseInt(task.id)) continue;
+                      const tituloMatch = (t.titulo || '').includes(identifier);
+                      let ev: any = null;
+                      try { ev = t.evidencia ? JSON.parse(t.evidencia) : null; } catch {}
+                      if (tituloMatch && ev?.tipo === 'recepcion_faltantes' && Array.isArray(ev.faltantesPorArte)) {
+                        ev.faltantesPorArte.forEach((f: any) => {
+                          if (!f?.arte) return;
+                          faltantesPorArte[f.arte] = (faltantesPorArte[f.arte] || 0) + (Number(f.cantidad) || 0);
+                          if (f?.nombre_arte && !nombrePorArte[f.arte]) nombrePorArte[f.arte] = f.nombre_arte;
+                        });
+                      }
+                    }
+
+                    return (
+                      <div className="mt-3 pt-3 border-t border-green-500/20">
+                        <p className="text-xs font-medium text-zinc-400 mb-2">Detalle por arte:</p>
+                        <div className="space-y-2">
+                          {artesSolicitados.map(([arteUrl, solicitadas], idx) => {
+                            const faltantes = faltantesPorArte[arteUrl] || 0;
+                            const recibidas = Math.max(0, (Number(solicitadas) || 0) - faltantes);
+                            const nombre = nombrePorArte[arteUrl] || arteUrl.split('/').pop() || 'Sin arte';
+                            return (
+                              <div key={`det-${idx}-${arteUrl}`} className="flex items-center gap-3 p-2 bg-zinc-900/40 rounded-lg border border-border/50">
+                                <div className="w-14 h-11 bg-zinc-800 rounded overflow-hidden flex-shrink-0 border border-zinc-700">
+                                  {arteUrl ? (
+                                    <ArteImg src={arteUrl} alt="Arte" className="w-full h-full object-cover" />
+                                  ) : (
+                                    <div className="w-full h-full flex items-center justify-center">
+                                      <Image className="h-4 w-4 text-zinc-600" />
+                                    </div>
+                                  )}
+                                </div>
+                                <div className="flex-1 min-w-0">
+                                  <p className="text-xs text-zinc-300 truncate" title={nombre}>{nombre}</p>
+                                  <p className="text-[10px] text-zinc-500">Solicitadas: {solicitadas}</p>
+                                </div>
+                                <div className="text-right">
+                                  <p className="text-sm font-bold text-emerald-400">{recibidas} recibidas</p>
+                                  {faltantes > 0 && (
+                                    <p className="text-[10px] text-red-400">{faltantes} faltante{faltantes !== 1 ? 's' : ''}</p>
+                                  )}
+                                </div>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    );
+                  })()}
                   {task.contenido && (
                     <div className="mt-3 pt-3 border-t border-green-500/20">
                       <p className="text-xs font-medium text-zinc-400 mb-1">Observaciones:</p>
@@ -8400,7 +8757,7 @@ function TaskDetailModal({
           {task.tipo === 'Gestión de Recepción Parcial' && (
             <div className="space-y-4">
               {(() => {
-                let evParcial: { tipo?: string; recepcionFaltantesTitulo?: string; totalFaltantes?: number; faltantesPorArte?: { arte: string; cantidad: number }[]; campania_nombre?: string } = {};
+                let evParcial: { tipo?: string; recepcionFaltantesTitulo?: string; totalFaltantes?: number; faltantesPorArte?: { arte: string; cantidad: number; nombre_arte?: string | null }[]; campania_nombre?: string } = {};
                 if (task.evidencia) {
                   try { evParcial = JSON.parse(task.evidencia); } catch {}
                 }
@@ -8443,7 +8800,11 @@ function TaskDetailModal({
                         </div>
                         <div className="p-4 space-y-2 max-h-[300px] overflow-y-auto">
                           {detalle.map((f, idx) => {
-                            const nombreArchivo = f.arte ? (f.arte.split('/').pop() || 'Arte') : 'Sin arte';
+                            // Preferimos el nombre_arte legible (lo guarda el back desde
+                            // biblioteca_artes al crear la Faltantes). Fallback al nombre
+                            // del archivo si la tarea es vieja o el arte no esta en biblioteca.
+                            // Feedback Jos 2026-10-06.
+                            const nombreDisplay = f.nombre_arte || (f.arte ? (f.arte.split('/').pop() || 'Arte') : 'Sin arte');
                             return (
                               <div key={idx} className="flex items-center gap-3 p-3 bg-zinc-800/30 rounded-lg border border-border/50">
                                 <div className="w-16 h-12 bg-zinc-800 rounded overflow-hidden flex-shrink-0 border border-zinc-700">
@@ -8456,7 +8817,7 @@ function TaskDetailModal({
                                   )}
                                 </div>
                                 <div className="flex-1 min-w-0">
-                                  <p className="text-xs text-zinc-400 truncate">{nombreArchivo}</p>
+                                  <p className="text-xs text-zinc-400 truncate" title={nombreDisplay}>{nombreDisplay}</p>
                                 </div>
                                 <div className="text-right">
                                   <p className="text-lg font-bold text-red-400">{f.cantidad}</p>
@@ -12206,11 +12567,19 @@ function TaskDetailModal({
                                             const rsvIds = item.rsv_id?.split(',').map(id => parseInt(id.trim())).filter(id => !isNaN(id)) || [];
                                             if (rsvIds.length > 0) openTradicionalGallery(rsvIds, item.codigo_unico);
                                           }}
-                                          className="w-20 h-16 rounded bg-orange-500/20 border border-orange-500/50 flex flex-col items-center justify-center hover:bg-orange-500/30 transition-colors"
+                                          className="relative w-20 h-16 rounded overflow-hidden bg-zinc-800 border border-orange-500/50 hover:border-orange-400 transition-colors group"
                                           title={`Ver ${tradSummary.total} artes tradicionales`}
                                         >
-                                          <Printer className="h-5 w-5 text-orange-400 mb-1" />
-                                          <span className="text-orange-400 font-bold text-sm">{tradSummary.total}</span>
+                                          {item.archivo_arte ? (
+                                            <ArteImg src={item.archivo_arte} alt="Arte" className="w-full h-full object-cover opacity-80 group-hover:opacity-100" />
+                                          ) : (
+                                            <div className="w-full h-full flex items-center justify-center">
+                                              <Printer className="h-5 w-5 text-orange-400" />
+                                            </div>
+                                          )}
+                                          <span className="absolute top-0.5 right-0.5 bg-orange-500 text-white font-bold text-[10px] px-1.5 py-0.5 rounded shadow-sm">
+                                            +{tradSummary.total}
+                                          </span>
                                         </button>
                                       ) : item.archivo_arte ? (
                                         <button
@@ -12242,7 +12611,11 @@ function TaskDetailModal({
                                       <p className="text-sm font-medium text-white truncate">{item.codigo_unico}</p>
                                       <p className="text-xs text-zinc-400 truncate">{item.mueble}</p>
                                       <p className="text-xs text-zinc-500 truncate">
-                                        {isDigital && digitalSummary ? getDigitalSummaryText(digitalSummary) : tradSummary ? `${tradSummary.total} artes` : item.ubicacion}
+                                        {isDigital && digitalSummary
+                                          ? getDigitalSummaryText(digitalSummary)
+                                          : tradSummary
+                                            ? `${tradSummary.total} ${tradSummary.total === 1 ? 'arte' : 'artes'}`
+                                            : item.ubicacion}
                                       </p>
                                       <div className="mt-1 flex items-center gap-2">
                                         <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-medium ${
@@ -12302,12 +12675,22 @@ function TaskDetailModal({
                                         const rsvIds = representativeItem.rsv_id?.split(',').map(id => parseInt(id.trim())).filter(id => !isNaN(id)) || [];
                                         if (rsvIds.length > 0) openTradicionalGallery(rsvIds, representativeItem.codigo_unico);
                                       }}
-                                      className="w-32 h-24 rounded-lg bg-orange-500/20 border border-orange-500/50 flex flex-col items-center justify-center hover:bg-orange-500/30 transition-colors"
+                                      className="relative w-32 h-24 rounded-lg overflow-hidden bg-zinc-800 border border-orange-500/50 hover:border-orange-400 transition-colors group"
                                       title={`Ver ${tradSummary.total} artes tradicionales`}
                                     >
-                                      <Printer className="h-8 w-8 text-orange-400 mb-1" />
-                                      <span className="text-orange-400 font-bold text-lg">{tradSummary.total}</span>
-                                      <span className="text-orange-300 text-[10px]">{tradSummary.total} artes</span>
+                                      {representativeItem.archivo_arte ? (
+                                        <ArteImg src={representativeItem.archivo_arte} alt="Arte" className="w-full h-full object-cover opacity-85 group-hover:opacity-100" />
+                                      ) : (
+                                        <div className="w-full h-full flex items-center justify-center">
+                                          <Printer className="h-8 w-8 text-orange-400" />
+                                        </div>
+                                      )}
+                                      <span className="absolute top-1 right-1 bg-orange-500 text-white font-bold text-xs px-1.5 py-0.5 rounded shadow-sm">
+                                        +{tradSummary.total}
+                                      </span>
+                                      <span className="absolute bottom-0 inset-x-0 bg-black/70 text-orange-200 text-[10px] py-0.5 text-center">
+                                        {tradSummary.total} artes
+                                      </span>
                                     </button>
                                   ) : representativeItem?.archivo_arte ? (
                                     <button
@@ -12885,6 +13268,14 @@ function CreateTaskModal({
   // Campos específicos para Impresión - impresiones por cada arte (agrupado por archivo)
   const [impresiones, setImpresiones] = useState<Record<string, number>>({});
 
+  // #243 Guía PDF del proveedor para "Cliente imprime". El cliente ya mandó
+  // imprimir con su propio proveedor y nos entrega la guía/remisión; la
+  // adjuntamos al crear la tarea para que Operaciones tenga el documento al
+  // recibir fisicamente los artes.
+  const [guiaPdfFile, setGuiaPdfFile] = useState<File | null>(null);
+  const [guiaPdfUrl, setGuiaPdfUrl] = useState<string | null>(null);
+  const [guiaPdfUploading, setGuiaPdfUploading] = useState(false);
+
   // Campos específicos para Programación - indicaciones por cada archivo digital
   const [programacionIndicaciones, setProgramacionIndicaciones] = useState<Record<string, string>>({});
   const [archivosDigitalesProgramacion, setArchivosDigitalesProgramacion] = useState<{
@@ -13337,10 +13728,14 @@ function CreateTaskModal({
       // Total y desglose por arte (la tabla del modal de Recepción se arma desde evidencia.impresiones)
       const totalImpresiones = Object.values(impresiones).reduce((sum, val) => sum + (val || 0), 0);
       (payload as any).num_impresiones = totalImpresiones;
-      (payload as any).evidencia = JSON.stringify({
+      // #243 Guia PDF del proveedor va en evidencia.guia_pdf; el modal de
+      // Recepción ya la lee desde ahí (ver guiaPdfUrl memo arriba).
+      const evidenciaCI: Record<string, unknown> = {
         tipo: 'recepcion_normal',
         impresiones,
-      });
+      };
+      if (guiaPdfUrl) evidenciaCI.guia_pdf = guiaPdfUrl;
+      (payload as any).evidencia = JSON.stringify(evidenciaCI);
       // Asignados (área Operaciones)
       if (selectedAsignadosImpresion.length > 0) {
         (payload as any).id_asignado = selectedAsignadosImpresion.map(u => u.id).join(',');
@@ -13467,6 +13862,10 @@ function CreateTaskModal({
     setFechaCreacion(new Date().toISOString().slice(0, 16));
     // Reset campos de Impresión
     setImpresiones({});
+    // #243 Reset guía PDF de Cliente imprime
+    setGuiaPdfFile(null);
+    setGuiaPdfUrl(null);
+    setGuiaPdfUploading(false);
     // Reset campos de Impresión (múltiples asignados)
     setSelectedAsignadosImpresion([]);
     setAsignadoSearchImpresion('');
@@ -14260,6 +14659,74 @@ function CreateTaskModal({
                         ))}
                       </select>
                     )}
+                  </div>
+                )}
+
+                {/* #243 Guía PDF del proveedor (solo Cliente imprime). El
+                    cliente ya mando imprimir y nos pasa la guia/remision; se
+                    sube ahora y queda en evidencia.guia_pdf para que
+                    Operaciones la vea al recibir fisicamente. */}
+                {tipo === 'Cliente imprime' && (
+                  <div>
+                    <label className="block text-xs font-medium text-muted-foreground mb-1">Guía del proveedor (PDF, opcional)</label>
+                    <div className="flex items-center gap-2">
+                      <label className={`inline-flex items-center gap-2 px-3 py-2 text-sm font-medium rounded-lg border cursor-pointer ${isDark ? 'bg-zinc-800 border-border text-zinc-200 hover:bg-zinc-700' : 'bg-white border-border text-gray-700 hover:bg-gray-50'} ${guiaPdfUploading || isSubmitting ? 'opacity-60 cursor-not-allowed' : ''}`}>
+                        {guiaPdfUploading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Upload className="h-4 w-4" />}
+                        {guiaPdfUploading ? 'Subiendo...' : guiaPdfUrl ? 'Cambiar PDF' : 'Subir PDF'}
+                        <input
+                          type="file"
+                          accept="application/pdf,.pdf"
+                          className="hidden"
+                          disabled={guiaPdfUploading || isSubmitting}
+                          onChange={async (e) => {
+                            const f = e.target.files?.[0];
+                            e.target.value = '';
+                            if (!f) return;
+                            setGuiaPdfUploading(true);
+                            try {
+                              const r = await campanasService.uploadTestigoFile(f);
+                              setGuiaPdfFile(f);
+                              setGuiaPdfUrl(r.url);
+                            } catch (err) {
+                              console.error('Error al subir guia PDF:', err);
+                              let msg = 'No se pudo subir el PDF';
+                              if (err && typeof err === 'object') {
+                                const anyErr = err as { response?: { data?: { error?: string; message?: string } }; message?: string };
+                                msg = anyErr.response?.data?.error
+                                  || anyErr.response?.data?.message
+                                  || anyErr.message
+                                  || msg;
+                              } else if (err instanceof Error) {
+                                msg = err.message;
+                              }
+                              alert(msg);
+                              setGuiaPdfFile(null);
+                              setGuiaPdfUrl(null);
+                            } finally {
+                              setGuiaPdfUploading(false);
+                            }
+                          }}
+                        />
+                      </label>
+                      {guiaPdfUrl && (
+                        <>
+                          <a href={guiaPdfUrl} target="_blank" rel="noopener noreferrer" className="text-xs underline truncate max-w-[220px] text-purple-400 hover:text-purple-300" title={guiaPdfFile?.name || guiaPdfUrl}>
+                            {guiaPdfFile?.name || 'guía subida'}
+                          </a>
+                          <button
+                            type="button"
+                            onClick={() => { setGuiaPdfFile(null); setGuiaPdfUrl(null); }}
+                            className="p-1 text-zinc-500 hover:text-red-400 rounded"
+                            title="Quitar PDF"
+                          >
+                            <X className="h-3.5 w-3.5" />
+                          </button>
+                        </>
+                      )}
+                    </div>
+                    <p className="mt-1 text-[11px] text-muted-foreground">
+                      Operaciones verá esta guía en la tarea de Recepción al recibir físicamente los artes.
+                    </p>
                   </div>
                 )}
 
@@ -15949,6 +16416,9 @@ export function TareaSeguimientoPage() {
 
     // Mapa de compositeId/inventoryId -> rsv_ids para puente impresion↔recepcion
     const compositeToRsvIds = new Map<string, string[]>();
+    // Mapa inverso rsv_id -> compositeId para que normalizeIds pueda
+    // propagar la forma composite cuando parte de un rsv_id puro.
+    const rsvIdToComposite = new Map<string, string>();
     inventarioArteAPI.forEach(item => {
       const invId = String(item.id);
       const compositeId = item.grupo ? `${item.id}_${item.grupo}` : invId;
@@ -15959,6 +16429,9 @@ export function TareaSeguimientoPage() {
         if (!compositeToRsvIds.has(invId)) {
           compositeToRsvIds.set(invId, rsvIds);
         }
+        rsvIds.forEach(r => {
+          if (!rsvIdToComposite.has(r)) rsvIdToComposite.set(r, compositeId);
+        });
       }
     });
 
@@ -15976,6 +16449,17 @@ export function TareaSeguimientoPage() {
         const inventoryId = rsvIdToInventoryId.get(id);
         if (inventoryId) {
           normalizedIds.add(inventoryId);
+        }
+        // Si es un rsv_id, agregar también el compositeId correspondiente.
+        // Sin esto, la Recepción Faltantes huerfana solo escribe rsv_id puro
+        // + invId en reservaToTareaMap, pero el loop normal de la Recepción
+        // Atendida ya escribió el composite ("15768_19257") como 'recibido'.
+        // Como el matching del inventario prioriza compositeId > invId > rsvId,
+        // los items faltantes nunca pasaban a 'pendiente_recepcion' aunque el
+        // badge sí los contara via num_impresiones. Bug reportado Jos 2026-10-05.
+        const composite = rsvIdToComposite.get(id);
+        if (composite) {
+          normalizedIds.add(composite);
         }
         // Si es un composite/inventory ID, agregar sus rsv_ids correspondientes
         const rsvIds = compositeToRsvIds.get(id);
@@ -17715,7 +18199,17 @@ export function TareaSeguimientoPage() {
       }
     } catch (error) {
       console.error('Error al crear tarea:', error);
-      setCreateTaskError(error instanceof Error ? error.message : 'Error al crear tarea');
+      let msg = 'Error al crear tarea';
+      if (error && typeof error === 'object') {
+        const anyErr = error as { response?: { data?: { error?: string; message?: string } }; message?: string };
+        msg = anyErr.response?.data?.error
+          || anyErr.response?.data?.message
+          || anyErr.message
+          || msg;
+      } else if (error instanceof Error) {
+        msg = error.message;
+      }
+      setCreateTaskError(msg);
     }
   }, [selectedInventoryItems, createTareaMutation, updateInstaladoMutation, campanaId, queryClient, getSelectedImpresionFlowConflicts, setActiveMainTab]);
 
@@ -19329,11 +19823,21 @@ export function TareaSeguimientoPage() {
                     .reduce((sum, t) => sum + getNumImpresiones(t), 0);
                   const recibidoTotal = recibido + huerfanasRecibidas;
 
+                  // [Fix #263] El badge "Recibido" sumaba num_impresiones de
+                  // tareas, que duplica cuando hay artes múltiples por
+                  // ubicación (Jos: 25 impresiones × 2 artes = 50 reales, el
+                  // badge mostraba 100). Fuente de verdad real: items del tab
+                  // ya desduplicados por (reserva × arte) en
+                  // inventoryImpresionesData.
+                  const recibidoItemsCount = inventoryImpresionesData.filter(i => i.estado_impresion === 'recibido').length;
+                  // Si inventory no tiene items (fallback edge) usamos el
+                  // cálculo viejo para no mostrar 0 incorrectamente.
+                  const recibidoBadge = recibidoItemsCount > 0 ? recibidoItemsCount : recibidoTotal;
                   return [
                     { key: 'orden_impresion' as const, label: 'Orden Impresión', count: inventoryOrdenImpresionData.length },
                     { key: 'en_impresion' as const, label: 'En Impresion', count: activeImpresiones },
                     { key: 'pendiente_recepcion' as const, label: 'Pend. Recepcion', count: pendingRecepcion },
-                    { key: 'recibido' as const, label: 'Recibido', count: recibidoTotal },
+                    { key: 'recibido' as const, label: 'Recibido', count: recibidoBadge },
                   ];
                 })().map(tab => (
                   <button
@@ -19737,7 +20241,6 @@ export function TareaSeguimientoPage() {
                           return s + (ev.totalFaltantes || 0);
                         } catch { return s; }
                       }, 0);
-                    console.log('[RECIBIDO DEBUG] tareaId:', grupo.tarea_id, 'totalImpOrig:', totalImpresionesRecibido, 'faltantesTasks:', faltantesTasks.length, 'totalFaltantesPending:', totalFaltantesPending, 'faltantesDetail:', JSON.stringify(faltantesTasks.map(t => ({ id: t.id, est: t.estatus, num: t.num_impresiones, ev: (() => { try { const e = JSON.parse(t.evidencia || '{}'); return { tipo: e.tipo, totalF: e.totalFaltantes }; } catch { return 'err'; } })() }))));
                     if (totalFaltantesPending > 0 && totalImpresionesRecibido > totalFaltantesPending) {
                       totalImpresionesRecibido = totalImpresionesRecibido - totalFaltantesPending;
                     }
@@ -19790,8 +20293,13 @@ export function TareaSeguimientoPage() {
                             <Badge className="bg-emerald-500/20 text-emerald-300 border-emerald-500/30 text-xs">
                               Recibido
                             </Badge>
+                            {/* Badge consistente con el conteo del tab Recibido:
+                                mostrar siempre items (reserva x arte) del grupo. Antes mostraba
+                                num_impresiones del back (fijo al crear), que en parciales
+                                quedaba desalineado con las ubicaciones reales (Jos 2026-10-19). */}
                             <Badge className={isDark ? "bg-purple-500/20 text-purple-300 border-purple-500/30 text-xs" : "bg-purple-100 text-purple-700 border-purple-300 text-xs"}>
-                              {totalImpresionesRecibido > 0 ? `${totalImpresionesRecibido} impresiones` : `${grupo.items.length} items`}
+                              {`${grupo.items.length} ${grupo.items.length === 1 ? 'item' : 'items'}`}
+                              {totalImpresionesRecibido > 0 && grupo.items.length !== totalImpresionesRecibido ? ` · ${totalImpresionesRecibido} impr.` : ''}
                             </Badge>
                             {permissions.canOpenTasks && (
                               <button
@@ -19849,6 +20357,37 @@ export function TareaSeguimientoPage() {
                               acc[key].items.push(item);
                               return acc;
                             }, {} as Record<string, { items: typeof grupo.items; archivo: string | undefined }>);
+
+                            // Mismo fallback que en Pend. Recepcion: cuando el inventario fisico
+                            // comparte un solo archivo_arte entre varios artes (rotacion), usamos
+                            // impresionesMapRecibido (derivado de evidencia.impresiones -
+                            // faltantes) para rendear una card por cada arte en vez de solo una.
+                            // Feedback Jos 2026-10-06 campania 81475.
+                            const primerItemR = grupo.items[0];
+                            const mapKeys = Object.keys(impresionesMapRecibido);
+                            if (mapKeys.length > Object.keys(artesAgrupados).length) {
+                              return mapKeys.map((arteUrl, idx) => (
+                                <div key={`imr-${idx}-${arteUrl || 'sin_arte'}`} className="flex items-center gap-3 p-2 border-b border-border/30 last:border-0">
+                                  <div className="w-12 h-10 bg-zinc-800 rounded overflow-hidden flex-shrink-0">
+                                    {arteUrl ? (
+                                      <ArteImg src={arteUrl} alt="Arte" className="w-full h-full object-cover" />
+                                    ) : (
+                                      <div className="w-full h-full flex items-center justify-center">
+                                        <Image className="h-4 w-4 text-zinc-600" />
+                                      </div>
+                                    )}
+                                  </div>
+                                  <div className="flex-1 min-w-0">
+                                    <p className="text-xs text-white">{impresionesMapRecibido[arteUrl] || 0} impresiones</p>
+                                    {primerItemR && (
+                                      <p className="text-[10px] text-zinc-500 truncate">
+                                        {primerItemR.mueble} - {primerItemR.ciudad}
+                                      </p>
+                                    )}
+                                  </div>
+                                </div>
+                              ));
+                            }
 
                             return Object.entries(artesAgrupados).map(([arteKey, arteGrupo]) => {
                               const arteSelected = arteGrupo.items.every(item => selectedInventoryIds.has(item.id));
@@ -20034,6 +20573,48 @@ export function TareaSeguimientoPage() {
                             acc[key].items.push(item);
                             return acc;
                           }, {} as Record<string, { items: typeof grupo.items; archivo: string | undefined }>);
+
+                          // Para tareas Recepción Faltantes con rotación de artes sobre
+                          // los MISMOS espacios físicos (ej. 50 inv × 2 artes = 100 impresiones):
+                          // el inventario físico solo guarda UN archivo_arte, pero la tarea
+                          // tiene varios artes en evidencia.faltantesPorArte. Si agrupamos solo
+                          // por item.archivo_arte perderíamos los demás artes. Preferimos
+                          // faltantesPorArte cuando contiene más artes que el inventario.
+                          // Feedback Jos 2026-10-06 (campania 81475): 2 artes × 25 faltantes
+                          // mostraba solo un card en Pend. Recepcion.
+                          const primerItem = grupo.items[0];
+                          let faltantesPorArteEv: { arte: string; cantidad: number }[] | null = null;
+                          if (tarea?.evidencia) {
+                            try {
+                              const ev = JSON.parse(tarea.evidencia);
+                              if (ev?.tipo === 'recepcion_faltantes' && Array.isArray(ev.faltantesPorArte) && ev.faltantesPorArte.length > 0) {
+                                faltantesPorArteEv = ev.faltantesPorArte;
+                              }
+                            } catch {}
+                          }
+                          if (faltantesPorArteEv && faltantesPorArteEv.length > Object.keys(artesAgrupados).length) {
+                            return faltantesPorArteEv.map((f, idx) => (
+                              <div key={`fpa-${idx}-${f.arte || 'sin_arte'}`} className="flex items-center gap-3 p-2 border-b border-border/30 last:border-0">
+                                <div className="w-12 h-10 bg-zinc-800 rounded overflow-hidden flex-shrink-0">
+                                  {f.arte ? (
+                                    <ArteImg src={f.arte} alt="Arte" className="w-full h-full object-cover" />
+                                  ) : (
+                                    <div className="w-full h-full flex items-center justify-center">
+                                      <Image className="h-4 w-4 text-zinc-600" />
+                                    </div>
+                                  )}
+                                </div>
+                                <div className="flex-1 min-w-0">
+                                  <p className="text-xs text-white">{f.cantidad} impresiones</p>
+                                  {primerItem && (
+                                    <p className="text-[10px] text-zinc-500 truncate">
+                                      {primerItem.mueble} - {primerItem.ciudad}
+                                    </p>
+                                  )}
+                                </div>
+                              </div>
+                            ));
+                          }
 
                           return Object.entries(artesAgrupados).map(([arteKey, arteGrupo]) => {
                             // Buscar impresiones para este arte

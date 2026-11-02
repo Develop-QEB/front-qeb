@@ -4,7 +4,7 @@ import { useQuery, useQueryClient, useMutation } from '@tanstack/react-query';
 import {
   X, Search, Plus, Trash2, ChevronDown, ChevronRight, ChevronUp, Users,
   FileText, MapPin, Layers, Pencil, Map as MapIcon, Package, Calendar,
-  Gift, Target, Save, ArrowLeft, Filter, Grid, LayoutGrid, Ruler, ArrowUpDown, ArrowUp, ArrowDown, Download, Eye, Funnel, Check, Upload, Monitor, AlertTriangle, Trophy, Loader2, Clock, RefreshCw
+  Gift, Target, Save, ArrowLeft, Filter, Grid, LayoutGrid, Ruler, ArrowUpDown, ArrowUp, ArrowDown, Download, Eye, Funnel, Check, Upload, Monitor, AlertTriangle, Trophy, Loader2, Clock, RefreshCw, History
 } from 'lucide-react';
 import { GoogleMap, useLoadScript, Marker } from '@react-google-maps/api';
 import { GOOGLE_MAPS_LOADER_OPTIONS } from '../../config/googleMaps';
@@ -12,10 +12,11 @@ import { AdvancedMapComponent } from './AdvancedMapComponent';
 import { capasMapaService } from '../../services/capasMapa.service';
 import type { NuevaCapa } from './capasMapa';
 import { CapasCircuitoPanel } from './CapasCircuitoPanel';
+import { HistorialInventarioPanel } from './HistorialInventarioPanel';
 import { Propuesta } from '../../types';
 import { solicitudesService, UserOption } from '../../services/solicitudes.service';
 import { inventariosService, InventarioDisponible } from '../../services/inventarios.service';
-import { propuestasService, ReservaModalItem, CaraUpdateData } from '../../services/propuestas.service';
+import { propuestasService, ReservaModalItem, CaraUpdateData, type ReservaHistorialItem } from '../../services/propuestas.service';
 import { formatCurrency } from '../../lib/utils';
 import { parseCircuitoDigital } from '../../lib/circuitos';
 import { articuloValidoEnPeriodo } from '../../lib/periodos';
@@ -96,6 +97,8 @@ interface CaraItem {
   anio_fin?: number;
   autorizacion_dg?: string;
   autorizacion_dcm?: string;
+  // true si hay una tarea 'Filtro Autorización DG' abierta — pinta embudo cyan junto al "Pend. DG".
+  en_filtro_dg?: boolean;
   _originalDg?: string;
   _originalDcm?: string;
   // Baseline INMUTABLE de BD (DG/DCM aprobados al cargar) para la regla de conservar
@@ -918,6 +921,13 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
   // "no quede nada". Al guardar, se limpian (ya quedan confirmadas). No es estado
   // de render (useRef) para no re-renderizar en cada agregado.
   const sessionNewCaraIdsRef = useRef<Set<number>>(new Set());
+  // DIFERIDO (feedback jefe oct-2026 "cerré sin guardar y se vació"): ids de
+  // caras YA guardadas (originales) que el usuario eliminó pero que NO se mandan
+  // al back hasta "Guardar Cambios". Si cierra sin guardar, no se tocaron (al
+  // reabrir se reconstruyen de la data cacheada). Las caras agregadas EN la
+  // sesión se siguen borrando directo (deshacer el alta).
+  const [pendingCaraDeletions, setPendingCaraDeletions] = useState<number[]>([]);
+  const hasPendingDeletions = pendingCaraDeletions.length > 0;
 
   // New cara form
   const [newCara, setNewCara] = useState<Omit<CaraItem, 'localId'>>(EMPTY_CARA);
@@ -1107,8 +1117,8 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
   // Expanded groups state for collapsible groups
   const [expandedGroups, setExpandedGroups] = useState<Set<string>>(new Set(['Grupo 1']));
 
-  // Tab state for search view (buscar / reservados / capas)
-  const [searchViewTab, setSearchViewTab] = useState<'buscar' | 'reservados' | 'capas'>('buscar');
+  // Tab state for search view (buscar / reservados / capas / historial)
+  const [searchViewTab, setSearchViewTab] = useState<'buscar' | 'reservados' | 'capas' | 'historial'>('buscar');
 
   // Disponibles data
   const [inventarioDisponible, setInventarioDisponible] = useState<InventarioDisponible[]>([]);
@@ -1119,6 +1129,10 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
   // disparan autorización DG/DCM). Feedback Jos 2026-07-08.
   const [showNotaDireccionModal, setShowNotaDireccionModal] = useState(false);
   const [pendingAuthTipo, setPendingAuthTipo] = useState<'dg' | 'dcm' | 'ambas' | null>(null);
+  // DIFERIDO (igual que en campañas, fix jefe oct-2026): la Nota de Dirección se
+  // ENCOLA y se crea junto con el guardado (no al confirmar la nota), para que
+  // todo se guarde o se cancele junto.
+  const pendingNotaDireccionRef = useRef<string | null>(null);
 
   // Real-time: cuando OTRO usuario reserva un espacio cuyo período se solapa
   // con la cara que estoy buscando, quitarlo de mi listado de disponibles en
@@ -1216,6 +1230,14 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
   const { data: existingReservas, isLoading: reservasLoading } = useQuery({
     queryKey: ['propuesta-reservas-modal', propuesta.id],
     queryFn: () => propuestasService.getReservasForModal(propuesta.id),
+    enabled: isOpen && !!propuesta.id,
+    refetchOnMount: 'always',
+  });
+
+  // Historial del circuito (reservas que salieron: quitadas/desplazadas/bloqueo)
+  const { data: historialInventario, refetch: refetchHistorial, isFetching: historialFetching } = useQuery({
+    queryKey: ['propuesta-reservas-historial', propuesta.id],
+    queryFn: () => propuestasService.getReservasHistorial(propuesta.id),
     enabled: isOpen && !!propuesta.id,
     refetchOnMount: 'always',
   });
@@ -2357,38 +2379,33 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
       isDeleting: false,
       onConfirm: async () => {
         setDeleteCircuitoModal(prev => ({ ...prev, isDeleting: true }));
-        if (caraToDelete?.id) {
+        const dbIds = [caraToDelete?.id, pairCara?.id].filter((x): x is number => !!x);
+        // Nuevas de esta sesión (reservadas al agregar) → borrado directo: es
+        // deshacer el alta. Originales ya guardadas → DIFERIR al Guardar (si
+        // cierra sin guardar no se tocan; al reabrir reaparecen).
+        const nuevas = dbIds.filter(id => sessionNewCaraIdsRef.current.has(id));
+        const originales = dbIds.filter(id => !sessionNewCaraIdsRef.current.has(id));
+        for (const id of nuevas) {
           try {
-            await propuestasService.deleteCara(propuesta.id, caraToDelete.id);
+            await propuestasService.deleteCara(propuesta.id, id);
           } catch (error) {
-            console.error('Error deleting cara:', error);
+            console.error('Error deleting cara (nueva):', error);
             alert('Error al eliminar el formato de la base de datos');
             setDeleteCircuitoModal(prev => ({ ...prev, isOpen: false, isDeleting: false }));
             return;
           }
+          sessionNewCaraIdsRef.current.delete(id);
         }
-        if (pairCara?.id) {
-          try {
-            await propuestasService.deleteCara(propuesta.id, pairCara.id);
-          } catch (error) {
-            console.error('Error deleting RT/BF pair cara:', error);
-            alert('Error al eliminar la cara par (RT/BF) de la base de datos');
-            setDeleteCircuitoModal(prev => ({ ...prev, isOpen: false, isDeleting: false }));
-            return;
-          }
-        }
+        if (originales.length > 0) setPendingCaraDeletions(prev => [...prev, ...originales]);
+
         const idsToRemove = new Set<string>([localId]);
         if (pairCara) idsToRemove.add(pairCara.localId);
-        const dbIdsToRemove = new Set<number>();
-        if (caraToDelete?.id) dbIdsToRemove.add(caraToDelete.id);
-        if (pairCara?.id) dbIdsToRemove.add(pairCara.id);
+        const dbIdsToRemove = new Set<number>(dbIds);
         setModifiedCaras(prev => {
           const next = new Map(prev);
           for (const id of dbIdsToRemove) next.delete(id);
           return next;
         });
-        // Ya se borraron de BD: sacarlas del set de rollback para no re-borrarlas al cerrar.
-        for (const id of dbIdsToRemove) sessionNewCaraIdsRef.current.delete(id);
         setCaras(prev => prev.filter(c => !idsToRemove.has(c.localId)));
         setReservas(prev => prev.filter(r =>
           ![...idsToRemove].some(id => r.id.startsWith(id)) &&
@@ -2472,24 +2489,32 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
       onConfirm: async () => {
         setDeleteCircuitoModal(prev => ({ ...prev, isDeleting: true }));
 
-        // Eliminar primero las persistidas en BD; si una falla, detener y limpiar solo lo borrado
+        // Nuevas de esta sesión → borrado directo (deshacer alta); si una falla,
+        // detener. Originales ya guardadas → DIFERIR al Guardar (encolar).
         const removedLocalIds = new Set<string>();
         const removedDbIds = new Set<number>();
+        const originalesACola: number[] = [];
         let failed: CaraItem | null = null;
         for (const cara of carasToDelete) {
           if (cara.id) {
-            try {
-              await propuestasService.deleteCara(propuesta.id, cara.id);
-              removedDbIds.add(cara.id);
-            } catch (error) {
-              console.error('Error deleting cara (bulk):', error);
-              failed = cara;
-              break;
+            if (sessionNewCaraIdsRef.current.has(cara.id)) {
+              try {
+                await propuestasService.deleteCara(propuesta.id, cara.id);
+                sessionNewCaraIdsRef.current.delete(cara.id);
+              } catch (error) {
+                console.error('Error deleting cara (bulk, nueva):', error);
+                failed = cara;
+                break;
+              }
+            } else {
+              originalesACola.push(cara.id);
             }
+            removedDbIds.add(cara.id);
           }
           removedLocalIds.add(cara.localId);
         }
 
+        if (originalesACola.length > 0) setPendingCaraDeletions(prev => [...prev, ...originalesACola]);
         setModifiedCaras(prev => {
           const next = new Map(prev);
           for (const id of removedDbIds) next.delete(id);
@@ -3362,8 +3387,10 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
     const hasPropuestaChanges = hasChanges;
     const hasCaraChanges = modifiedCaras.size > 0;
     const hasBitacoraChanges = bitacoraRef.current?.hasPending() === true;
+    const hasNotaDireccion = !!pendingNotaDireccionRef.current;
+    const hasDeletions = pendingCaraDeletions.length > 0;
 
-    if (!hasPropuestaChanges && !hasCaraChanges && !hasBitacoraChanges) {
+    if (!hasPropuestaChanges && !hasCaraChanges && !hasBitacoraChanges && !hasNotaDireccion && !hasDeletions) {
       showToast('No hay cambios pendientes', 'info');
       return;
     }
@@ -3419,20 +3446,11 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
     try {
       const messages: string[] = [];
 
-      // 0. Bitacora inline (estatus + comentarios). Se aplica ANTES del bulk
-      // de caras: si el cambio de estatus revienta por el back (autorizacion
-      // abierta, etc.), abortamos antes de tocar caras y mostramos el error.
-      if (hasBitacoraChanges && bitacoraRef.current) {
-        try {
-          await bitacoraRef.current.commit();
-          messages.push('Estatus/bitácora actualizados');
-        } catch (bitErr) {
-          const bmsg = bitErr instanceof Error ? bitErr.message : (bitErr as any)?.response?.data?.error || 'Error al actualizar estatus/bitácora';
-          showToast(`Estatus/bitácora: ${bmsg}`, 'error');
-          setIsSaving(false);
-          return;
-        }
-      }
+      // ORDEN (fix jefe oct-2026 "guarda parte"): primero lo ESTRUCTURAL
+      // (encabezado, bulk de caras) y la nota/bitácora AL FINAL. Antes la
+      // bitácora se aplicaba PRIMERO: si el bulk tronaba, el comentario/estatus
+      // ya había quedado guardado y los circuitos no. Ahora, si algo estructural
+      // falla, ni la nota ni la bitácora se aplicaron.
 
       // 1. Save propuesta summary changes if any
       if (hasPropuestaChanges) {
@@ -3535,6 +3553,38 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
         messages.push(result.message || `${carasArray.length} circuito(s) actualizados`);
       }
 
+      // 1b. Eliminaciones DIFERIDAS de circuitos ya guardados (propuesta =
+      // borrador, sin autorización). Van después del bulk: si algo estructural
+      // de arriba tronó, no llegamos aquí y los circuitos siguen intactos.
+      if (hasDeletions) {
+        for (const caraId of pendingCaraDeletions) {
+          await propuestasService.deleteCara(propuesta.id, caraId);
+        }
+        messages.push(`${pendingCaraDeletions.length} circuito(s) eliminados`);
+        setPendingCaraDeletions([]);
+      }
+
+      // 2. Nota de Dirección ENCOLADA (autorización DG/DCM). Aditiva, después de
+      // lo estructural: si el bulk de arriba tronó, no llegamos aquí.
+      if (pendingNotaDireccionRef.current && propuesta.solicitud_id) {
+        await notasDireccionService.create(propuesta.solicitud_id, pendingNotaDireccionRef.current);
+        pendingNotaDireccionRef.current = null;
+        messages.push('Nota de Dirección registrada');
+      }
+
+      // 3. Bitácora inline (estatus + comentarios) — AL FINAL (aditiva). Si algo
+      // estructural falló arriba, no se aplicó. Si falla SOLO la bitácora, lo
+      // estructural ya quedó guardado, así que no abortamos: avisamos aparte.
+      let bitacoraError: string | null = null;
+      if (hasBitacoraChanges && bitacoraRef.current) {
+        try {
+          await bitacoraRef.current.commit();
+          messages.push('Estatus/bitácora actualizados');
+        } catch (bitErr) {
+          bitacoraError = bitErr instanceof Error ? bitErr.message : (bitErr as any)?.response?.data?.error || 'Error al actualizar estatus/bitácora';
+        }
+      }
+
       // Refresh data — incluye reservas modal para que circuitos se redibujen verdes/llenos tras redistribuir
       await Promise.all([
         queryClient.invalidateQueries({ queryKey: ['propuesta-full', propuesta.id] }),
@@ -3548,7 +3598,11 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
       // generó una sola vez en bulkUpdateCaras. Ya no son candidatas a rollback.
       sessionNewCaraIdsRef.current.clear();
 
-      showToast(messages.join(' | '), 'success');
+      if (bitacoraError) {
+        showToast(`Los cambios se guardaron, pero la bitácora/estatus falló: ${bitacoraError}`, 'error');
+      } else {
+        showToast(messages.join(' | '), 'success');
+      }
     } catch (error) {
       console.error('Error in bulk save:', error);
       const axiosError = error as { response?: { data?: { error?: string; message?: string } }; message?: string };
@@ -5024,6 +5078,49 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
     );
   }, [reservas, selectedCaraForSearch]);
 
+  // Historial (reservas que salieron) de la cara seleccionada — para el tab Historial.
+  const currentCaraHistorial = useMemo(() => {
+    if (!selectedCaraForSearch?.id) return [];
+    return (historialInventario || []).filter(h => h.solicitud_cara_id === selectedCaraForSearch.id);
+  }, [historialInventario, selectedCaraForSearch]);
+
+  const [reReservandoHistId, setReReservandoHistId] = useState<number | null>(null);
+  // Regresar a reservados un inventario del historial (solo si sigue disponible).
+  const handleReReservarHistorial = async (item: ReservaHistorialItem) => {
+    if (!item.disponible) return;
+    const cara = caras.find(c => c.id === item.solicitud_cara_id) || selectedCaraForSearch;
+    if (!cara?.id) { showToast('No se encontró el circuito de esta reserva', 'error'); return; }
+    const clienteId = solicitudDetails?.propuesta?.cliente_id ?? propuesta.cliente_id;
+    if (clienteId === undefined || clienteId === null) { showToast('Cliente ID no encontrado', 'error'); return; }
+    const fechaInicio = cara.inicio_periodo || item.inicio_periodo || solicitudDetails?.cotizacion?.fecha_inicio || new Date().toISOString();
+    const fechaFin = cara.fin_periodo || item.fin_periodo || solicitudDetails?.cotizacion?.fecha_fin || new Date().toISOString();
+    const esBonif = /bonific/i.test(item.estatus || '') || /bonific/i.test(item.estatus_original || '');
+    const tipo: 'Flujo' | 'Bonificacion' = esBonif ? 'Bonificacion' : 'Flujo';
+    setReReservandoHistId(item.reserva_id);
+    try {
+      const result = await propuestasService.createReservas(propuesta.id, {
+        reservas: [{ inventario_id: item.inventario_id, tipo, latitud: 0, longitud: 0 }],
+        solicitudCaraId: cara.id,
+        clienteId,
+        fechaInicio,
+        fechaFin,
+        agruparComoCompleto: false,
+      });
+      if ((result.reservasCreadas ?? 0) > 0) {
+        showToast(`${item.codigo_unico} regresó a reservados`, 'success');
+      } else {
+        showToast(result.omitidos?.[0]?.motivo || 'No se pudo regresar (quizá ya está ocupado)', 'error');
+      }
+      queryClient.invalidateQueries({ queryKey: ['propuesta-reservas-modal', propuesta.id] });
+      queryClient.invalidateQueries({ queryKey: ['propuesta-reservas-historial', propuesta.id] });
+      queryClient.invalidateQueries({ queryKey: ['propuesta-inventario', propuesta.id] });
+    } catch (e) {
+      showToast(e instanceof Error ? e.message : 'Error al regresar la reserva', 'error');
+    } finally {
+      setReReservandoHistId(null);
+    }
+  };
+
   // Group reservas by grupo_completo_id - shows pairs as single "Completo" item
   const currentCaraReservasMerged = useMemo(() => {
     const result: ReservaItem[] = [];
@@ -6004,6 +6101,21 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
                 {capasCircuito.length > 0 && (
                   <span className="px-1.5 py-0.5 bg-sky-500/30 text-sky-300 rounded-full text-xs">
                     {capasCircuito.length}
+                  </span>
+                )}
+              </button>
+              <button
+                onClick={() => setSearchViewTab('historial')}
+                className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all ${searchViewTab === 'historial'
+                  ? 'bg-purple-500/20 text-purple-300 border border-purple-500/40'
+                  : `${isDark ? 'text-zinc-400' : 'text-gray-500'} ${isDark ? 'hover:text-white' : 'hover:text-gray-900'} ${isDark ? 'hover:bg-zinc-800' : 'hover:bg-gray-100'}`
+                  }`}
+              >
+                <History className="h-4 w-4" />
+                Historial
+                {currentCaraHistorial.length > 0 && (
+                  <span className="px-1.5 py-0.5 bg-purple-500/30 text-purple-300 rounded-full text-xs">
+                    {currentCaraHistorial.length}
                   </span>
                 )}
               </button>
@@ -7074,6 +7186,18 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
               canEdit={effectiveCanEdit}
               isDark={isDark}
             />
+          ) : searchViewTab === 'historial' ? (
+            /* HISTORIAL TAB CONTENT */
+            <HistorialInventarioPanel
+              items={currentCaraHistorial}
+              isDark={isDark}
+              tipoPeriodo={tipoPeriodo}
+              canEdit={effectiveCanEdit}
+              reReservandoId={reReservandoHistId}
+              onReReservar={handleReReservarHistorial}
+              onRefresh={() => refetchHistorial()}
+              refreshing={historialFetching}
+            />
           ) : (
             /* RESERVADOS TAB CONTENT */
             <div className="flex-1 flex overflow-hidden">
@@ -7946,13 +8070,15 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
 
   const handleClose = () => {
     const hayCarasNuevas = sessionNewCaraIdsRef.current.size > 0;
-    if (hasChanges || modifiedCaras.size > 0 || hayCarasNuevas || bitacoraPending) {
+    const hayEliminaciones = pendingCaraDeletions.length > 0;
+    if (hasChanges || modifiedCaras.size > 0 || hayCarasNuevas || hayEliminaciones || bitacoraPending) {
       setConfirmModal({
         isOpen: true,
         title: 'Cambios sin guardar',
         message: `Tienes ${[
           hasChanges ? 'cambios en la propuesta' : '',
           modifiedCaras.size > 0 ? `${modifiedCaras.size} circuito(s) sin guardar` : '',
+          hayEliminaciones ? `${pendingCaraDeletions.length} circuito(s) por eliminar` : '',
           bitacoraPending ? `${bitacoraPendingCount} cambio(s) en la bitácora` : '',
         ].filter(Boolean).join(' y ') || 'cambios'} sin guardar.${hayCarasNuevas ? ' Los circuitos agregados se descartarán.' : ''} ¿Seguro que quieres cerrar?`,
         confirmText: 'Cerrar sin guardar',
@@ -7961,10 +8087,14 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
         onConfirm: async () => {
           setConfirmModal(prev => ({ ...prev, isOpen: false }));
           await rollbackCarasNuevasSinGuardar();
+          pendingNotaDireccionRef.current = null; // descartar nota encolada
+          setPendingCaraDeletions([]); // descartar eliminaciones encoladas (no se tocaron en BD)
           onClose();
         },
       });
     } else {
+      pendingNotaDireccionRef.current = null;
+      setPendingCaraDeletions([]);
       onClose();
     }
   };
@@ -9537,7 +9667,17 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
                                           <span className="text-[10px] px-1.5 py-0.5 rounded bg-orange-500/20 text-orange-300">Corrección</span>
                                         )}
                                         {dgDisplay === 'pendiente' && dcmDisplay !== 'rechazado' && (
-                                          <span className="text-[10px] px-1.5 py-0.5 rounded bg-red-500/20 text-red-300">Pend. DG</span>
+                                          <>
+                                            {/* Etapa visual: la cara esta en el filtro del Gerente Comercial
+                                                (previo a DG). Al aprobar el GC la tarea pasa a 'Autorizacion DG'
+                                                y en_filtro_dg se apaga -> embudo desaparece y queda solo Pend. DG. */}
+                                            {cara.en_filtro_dg && (
+                                              <span className="inline-flex items-center gap-1 text-[10px] px-1.5 py-0.5 rounded bg-cyan-500/20 text-cyan-300" title="En filtro del Gerente Comercial (previo a DG)">
+                                                <Funnel className="w-3 h-3" /> Filtro GC
+                                              </span>
+                                            )}
+                                            <span className="text-[10px] px-1.5 py-0.5 rounded bg-red-500/20 text-red-300">Pend. DG</span>
+                                          </>
                                         )}
                                         {dcmDisplay === 'pendiente' && dgDisplay !== 'rechazado' && (
                                           <span className="text-[10px] px-1.5 py-0.5 rounded bg-amber-500/20 text-amber-300">Pend. DCM</span>
@@ -9601,19 +9741,40 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
                                             <RefreshCw className="h-4 w-4" />
                                           </button>
                                         )}
-                                        {puedeEditarCircuito && (
+                                        {puedeEditarCircuito && (() => {
+                                          // Regla pedida por Jos (2026-10-30): si CUALQUIER cara de la
+                                          // propuesta tiene autorizacion pendiente (DG o DCM), nadie puede
+                                          // tocar circuitos. Toda la propuesta queda "congelada" visualmente
+                                          // hasta que direccion resuelva, porque editar un circuito
+                                          // mientras otros estan en revision mezcla cambios dentro de un
+                                          // flujo ya enviado. Vuelve al comportamiento previo al
+                                          // 2026-10-23 — el caso de migraciones SAP grandes (80617 TELCEL)
+                                          // se maneja esperando a que direccion revise, no abriendo la
+                                          // propuesta a edicion.
+                                          const caraTienePendienteGuardada =
+                                            cara.id != null &&
+                                            !modifiedCaras.has(cara.id) &&
+                                            ((cara as any)._originalDg === 'pendiente' || (cara as any)._originalDcm === 'pendiente');
+                                          const editBlocked = caraTienePendienteGuardada || hasPendingAuthorization;
+                                          const blockReason = caraTienePendienteGuardada
+                                            ? 'Este circuito esta pendiente de autorizacion - no se puede editar hasta que direccion resuelva'
+                                            : hasPendingAuthorization
+                                              ? 'Hay otro circuito en esta propuesta pendiente de autorizacion. Aprobalo primero.'
+                                              : 'Editar';
+                                          return (
                                           <button
-                                            onClick={(e) => { e.stopPropagation(); if (!hasSavedPendingAuth) handleEditCara(cara); }}
-                                            disabled={hasSavedPendingAuth}
-                                            className={`p-2 rounded-lg border transition-colors ${hasSavedPendingAuth
+                                            onClick={(e) => { e.stopPropagation(); if (!editBlocked) handleEditCara(cara); }}
+                                            disabled={editBlocked}
+                                            className={`p-2 rounded-lg border transition-colors ${editBlocked
                                               ? `bg-zinc-500/10 ${isDark ? 'text-zinc-500' : 'text-gray-400'} border-zinc-500/20 cursor-not-allowed`
                                               : 'bg-amber-500/10 text-amber-400 border-amber-500/20 hover:bg-amber-500/20'
                                             }`}
-                                            title={hasSavedPendingAuth ? 'Hay circuitos pendientes de autorizacion - no se pueden editar otros' : 'Editar'}
+                                            title={blockReason}
                                           >
                                             <Pencil className="h-4 w-4" />
                                           </button>
-                                        )}
+                                          );
+                                        })()}
                                         {canEditResumen && permissions.canEditCircuitoExistente && (() => {
                                             // Feedback 2026-08-13: el bote de basura siempre debe permitir eliminar
                                             // circuitos con reservas (libera inventario). Solo se bloquea si el rol
@@ -10408,7 +10569,7 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
               </button>
               {effectiveCanEdit && (
                 <button
-                  disabled={(!hasChanges && modifiedCaras.size === 0 && !bitacoraPending) || isSaving || ((hasChanges || modifiedCaras.size > 0) && invalidCaras.length > 0)}
+                  disabled={(!hasChanges && modifiedCaras.size === 0 && !bitacoraPending && !hasPendingDeletions) || isSaving || ((hasChanges || modifiedCaras.size > 0) && invalidCaras.length > 0)}
                   title={((hasChanges || modifiedCaras.size > 0) && invalidCaras.length > 0)
                     ? `${invalidCaras.length} cara(s) tienen catorcenas fuera del rango actual. Ajusta el rango o elimínalas para poder guardar.`
                     : undefined}
@@ -10417,7 +10578,7 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
                     // saltamos el gate de Nota Direccion y el modal de confirmar
                     // cambios — no hay re-envio de caras y no hay que resumir
                     // cambios de propuesta. Sencillo y directo.
-                    const onlyBitacora = !hasChanges && modifiedCaras.size === 0 && bitacoraPending;
+                    const onlyBitacora = !hasChanges && modifiedCaras.size === 0 && !hasPendingDeletions && bitacoraPending;
                     if (onlyBitacora) {
                       setIsSaving(true);
                       try {
@@ -10454,7 +10615,7 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
                     setShowSaveConfirm(true);
                   }}
                   className={`px-6 py-2 rounded-lg text-sm font-medium transition-all ${
-                    (hasChanges || modifiedCaras.size > 0 || bitacoraPending) && !isSaving && !((hasChanges || modifiedCaras.size > 0) && invalidCaras.length > 0)
+                    (hasChanges || modifiedCaras.size > 0 || bitacoraPending || hasPendingDeletions) && !isSaving && !((hasChanges || modifiedCaras.size > 0) && invalidCaras.length > 0)
                       ? 'bg-purple-500 text-white hover:bg-purple-600 shadow-lg shadow-purple-500/25'
                       : `${isDark ? 'bg-zinc-700' : 'bg-gray-200'} ${isDark ? 'text-zinc-500' : 'text-gray-400'} cursor-not-allowed`
                   }`}
@@ -10464,7 +10625,7 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
                   ) : (
                     <Save className="h-4 w-4 inline-block mr-2" />
                   )}
-                  {isSaving ? 'Guardando...' : `Guardar Cambios${(hasChanges || modifiedCaras.size > 0 || bitacoraPending) ? ` (${(hasChanges ? 1 : 0) + modifiedCaras.size + (bitacoraPending ? 1 : 0)})` : ''}`}
+                  {isSaving ? 'Guardando...' : `Guardar Cambios${(hasChanges || modifiedCaras.size > 0 || bitacoraPending || hasPendingDeletions) ? ` (${(hasChanges ? 1 : 0) + modifiedCaras.size + (bitacoraPending ? 1 : 0) + pendingCaraDeletions.length})` : ''}`}
                 </button>
               )}
             </div>
@@ -10503,7 +10664,10 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
         }}
         onConfirm={async (texto) => {
           if (!propuesta.solicitud_id) return;
-          await notasDireccionService.create(propuesta.solicitud_id, texto);
+          // DIFERIDO: la Nota de Dirección se crea junto con el guardado (en
+          // handleBulkSaveChanges), no aquí, para que todo se guarde o se cancele
+          // junto. Si el usuario cancela el Confirmar Cambios, no se creó.
+          pendingNotaDireccionRef.current = texto;
           setShowNotaDireccionModal(false);
           setPendingAuthTipo(null);
           // Cadena al Confirmar Cambios (Save Confirm) — ya no ejecutamos save

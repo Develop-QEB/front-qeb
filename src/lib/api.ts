@@ -17,6 +17,14 @@ api.interceptors.request.use(
     if (token && config.headers) {
       config.headers.Authorization = `Bearer ${token}`;
     }
+    // Para FormData, dejar que el browser setee Content-Type con el boundary
+    // correcto. Si no borramos el default 'application/json', axios lo manda
+    // sin boundary y multer no reconoce el multipart → responde "No se recibio
+    // ningun archivo". Reportado por Jos 2026-10-12 al adjuntar PDF guia en
+    // Cliente imprime; aplica a cualquier upload que use este `api` instance.
+    if (config.data instanceof FormData && config.headers) {
+      delete config.headers['Content-Type'];
+    }
     return config;
   },
   (error) => Promise.reject(error)

@@ -19,6 +19,12 @@ import {
   MatrizOcupacion,
   cellKeyOf,
 } from '../../services/analisisOcupacion.service';
+import {
+  TIPO_BLOQUEO_DEFAULT,
+  TIPO_BLOQUEO_TEXTOS,
+  TipoBloqueoInventario,
+} from '../../lib/bloqueoInventario';
+import { TipoBloqueoSelector } from './TipoBloqueoSelector';
 
 type Step = 'select' | 'periodos' | 'matriz';
 
@@ -132,6 +138,8 @@ export function BloqueoMasivoModal({ open, onClose, initialInventarios }: Bloque
 
   const [confirmBloqueoOpen, setConfirmBloqueoOpen] = useState(false);
   const [motivo, setMotivo] = useState('');
+  const [tipo, setTipo] = useState<TipoBloqueoInventario>(TIPO_BLOQUEO_DEFAULT);
+  const textos = TIPO_BLOQUEO_TEXTOS[tipo];
   const [bloqueando, setBloqueando] = useState(false);
   const [bloqueoResultado, setBloqueoResultado] = useState<BloqueoResultado | null>(null);
   const [resultadoOpen, setResultadoOpen] = useState(false);
@@ -156,6 +164,7 @@ export function BloqueoMasivoModal({ open, onClose, initialInventarios }: Bloque
     setBloqueadosLocal(new Set());
     setCsvFeedback(null);
     setMotivo('');
+    setTipo(TIPO_BLOQUEO_DEFAULT);
     setConfirmBloqueoOpen(false);
     setBloqueoResultado(null);
     setResultadoOpen(false);
@@ -364,7 +373,7 @@ export function BloqueoMasivoModal({ open, onClose, initialInventarios }: Bloque
     //    Loop secuencial para no saturar al backend (no hay endpoint bulk).
     for (const invId of inventariosObjetivo) {
       try {
-        await inventariosService.toggleBlock(invId);
+        await inventariosService.toggleBlock(invId, tipo);
         bloqueadosOk.add(invId);
         resultado.inventariosBloqueados += 1;
       } catch (err) {
@@ -404,9 +413,10 @@ export function BloqueoMasivoModal({ open, onClose, initialInventarios }: Bloque
         '',
         `Editar campaña: ${window.location.origin}/campanas/detail/${card.campana_id}`,
         '',
-        `Fecha de bloqueo: ${fechaBloqueo}`,
+        `Tipo: ${textos.opcion}`,
+        `Fecha de ${textos.sustantivo}: ${fechaBloqueo}`,
         motivoTexto ? `Motivo: ${motivoTexto}` : null,
-        user ? `Bloqueado por: ${user.nombre}` : null,
+        user ? `${textos.participio} por: ${user.nombre}` : null,
       ].filter(Boolean).join('\n');
 
       tareasJobs.push(
@@ -465,14 +475,14 @@ export function BloqueoMasivoModal({ open, onClose, initialInventarios }: Bloque
         if (!celda || !celda.ocupado || celda.campanas.length === 0) {
           rows.push([
             String(inv.id), inv.codigo_unico || '', inv.mueble || '', inv.plaza || '', inv.ubicacion || '',
-            catLabel, bloqueadosLocal.has(inv.id) ? 'Bloqueado' : 'Disponible', '', '', '', '', '', '', '', '', '', '',
+            catLabel, bloqueadosLocal.has(inv.id) ? textos.participio : 'Disponible', '', '', '', '', '', '', '', '', '', '',
           ]);
           continue;
         }
         for (const c of celda.campanas) {
           const esPropuesta = !c.campana_id;
           const estatus = bloqueadosLocal.has(inv.id)
-            ? 'Bloqueado (recién)'
+            ? `${textos.participio} (recién)`
             : esPropuesta ? 'Reservado' : 'Ocupado';
           rows.push([
             String(inv.id), inv.codigo_unico || '', inv.mueble || '', inv.plaza || '', inv.ubicacion || '',
@@ -834,19 +844,20 @@ export function BloqueoMasivoModal({ open, onClose, initialInventarios }: Bloque
                 </div>
                 <div className="flex-1 min-w-0">
                   <h3 className={`text-base font-semibold ${isDark ? 'text-white' : 'text-gray-900'}`}>
-                    Bloquear {inventariosObjetivo.size} {inventariosObjetivo.size === 1 ? 'inventario' : 'inventarios'}
+                    {textos.infinitivo} — {inventariosObjetivo.size} {inventariosObjetivo.size === 1 ? 'inventario' : 'inventarios'}
                   </h3>
                   <p className={`text-xs mt-1 ${isDark ? 'text-zinc-400' : 'text-gray-600'}`}>
                     Se eliminarán automáticamente las reservas activas sobre estos inventarios (con o sin APS).
-                    Las tarjetas no desaparecen de la matriz: se marcarán como bloqueadas para que puedas seguirlas reasignando.
+                    Las tarjetas no desaparecen de la matriz: se marcarán como No Disponibles para que puedas seguirlas reasignando.
                   </p>
                 </div>
               </div>
             </div>
             <div className="p-5 space-y-3 text-xs">
+              <TipoBloqueoSelector value={tipo} onChange={setTipo} isDark={isDark} disabled={bloqueando} />
               <div className={`rounded-lg border p-3 space-y-1.5 ${isDark ? 'border-zinc-700 bg-zinc-800/50' : 'border-gray-200 bg-gray-50'}`}>
                 <div className="flex justify-between">
-                  <span className={isDark ? 'text-zinc-400' : 'text-gray-500'}>Inventarios a bloquear</span>
+                  <span className={isDark ? 'text-zinc-400' : 'text-gray-500'}>Inventarios a {textos.infinitivo.toLowerCase()}</span>
                   <span className={`font-semibold ${isDark ? 'text-white' : 'text-gray-900'}`}>{inventariosObjetivo.size}</span>
                 </div>
                 <div className="flex justify-between">
@@ -874,7 +885,7 @@ export function BloqueoMasivoModal({ open, onClose, initialInventarios }: Bloque
               </div>
               <div>
                 <label className={`block text-xs font-medium mb-1 ${isDark ? 'text-zinc-300' : 'text-gray-700'}`}>
-                  Motivo del bloqueo <span className={isDark ? 'text-zinc-500' : 'text-gray-400'}>(se incluye en cada tarea)</span>
+                  Motivo <span className={isDark ? 'text-zinc-500' : 'text-gray-400'}>(se incluye en cada tarea)</span>
                 </label>
                 <textarea
                   value={motivo}
@@ -905,7 +916,7 @@ export function BloqueoMasivoModal({ open, onClose, initialInventarios }: Bloque
                 className={`flex items-center gap-2 px-4 py-1.5 rounded-lg text-sm font-medium ${isDark ? 'bg-rose-500 text-white hover:bg-rose-600' : 'bg-rose-600 text-white hover:bg-rose-700'} disabled:opacity-50`}
               >
                 {bloqueando ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Ban className="h-3.5 w-3.5" />}
-                {bloqueando ? 'Bloqueando...' : 'Confirmar bloqueo'}
+                {bloqueando ? `${textos.gerundio}...` : `Confirmar ${textos.sustantivo}`}
               </button>
             </div>
           </div>
@@ -929,13 +940,13 @@ export function BloqueoMasivoModal({ open, onClose, initialInventarios }: Bloque
               <div className="flex-1">
                 <h3 className={`text-base font-semibold ${isDark ? 'text-white' : 'text-gray-900'}`}>Bloqueo completado</h3>
                 <p className={`text-xs ${isDark ? 'text-zinc-400' : 'text-gray-600'}`}>
-                  Las tarjetas afectadas siguen visibles en la matriz, ahora marcadas como bloqueadas.
+                  Las tarjetas afectadas siguen visibles en la matriz, ahora marcadas como No Disponibles.
                 </p>
               </div>
             </div>
             <div className="p-5 space-y-3 text-xs overflow-y-auto">
               <div className={`grid grid-cols-2 gap-2`}>
-                <ResultStat isDark={isDark} label="Inventarios bloqueados" value={bloqueoResultado.inventariosBloqueados} tone="emerald" />
+                <ResultStat isDark={isDark} label="Inventarios No Disponibles" value={bloqueoResultado.inventariosBloqueados} tone="emerald" />
                 <ResultStat isDark={isDark} label="Inventarios fallidos" value={bloqueoResultado.inventariosFallidos} tone={bloqueoResultado.inventariosFallidos > 0 ? 'red' : 'zinc'} />
                 <ResultStat isDark={isDark} label="Tareas creadas" value={bloqueoResultado.tareasCreadas} tone="emerald" />
                 <ResultStat isDark={isDark} label="Tareas fallidas" value={bloqueoResultado.tareasFallidas} tone={bloqueoResultado.tareasFallidas > 0 ? 'red' : 'zinc'} />
@@ -1345,7 +1356,7 @@ function MatrizBloqueoView({
         <div className={`flex items-center gap-2 px-3 py-1.5 rounded-lg border text-xs ${isDark ? 'border-zinc-700 bg-zinc-800/60 text-zinc-300' : 'border-gray-200 bg-gray-50 text-gray-700'}`}>
           <Ban className={`h-3.5 w-3.5 ${isDark ? 'text-zinc-400' : 'text-gray-500'}`} />
           <span>
-            {bloqueadosLocal.size} {bloqueadosLocal.size === 1 ? 'inventario bloqueado' : 'inventarios bloqueados'} en esta sesión. Sus tarjetas siguen visibles en gris.
+            {bloqueadosLocal.size} {bloqueadosLocal.size === 1 ? 'inventario marcado No Disponible' : 'inventarios marcados No Disponibles'} en esta sesión. Sus tarjetas siguen visibles en gris.
           </span>
           <button
             onClick={() => void onRefresh()}
@@ -1410,7 +1421,7 @@ function MatrizBloqueoView({
                           onChange={() => toggleInventarioRow(inv.id)}
                           disabled={isBloqueadoLocal}
                           className="accent-rose-500 h-3.5 w-3.5 shrink-0"
-                          title={isBloqueadoLocal ? 'Inventario ya bloqueado en esta sesión' : 'Seleccionar inventario para bloqueo'}
+                          title={isBloqueadoLocal ? 'Inventario ya marcado No Disponible en esta sesión' : 'Seleccionar inventario para bloqueo'}
                         />
                       )}
                       <div className="min-w-0 flex-1">
@@ -1421,7 +1432,7 @@ function MatrizBloqueoView({
                           </span>
                           {isBloqueadoLocal && (
                             <span className={`shrink-0 inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded-full text-[9px] font-medium border ${isDark ? 'bg-zinc-700/60 text-zinc-300 border-zinc-600' : 'bg-gray-200 text-gray-700 border-gray-300'}`}>
-                              <Ban className="h-2.5 w-2.5" /> Bloqueado
+                              <Ban className="h-2.5 w-2.5" /> No Disponible
                             </span>
                           )}
                         </div>
@@ -1449,7 +1460,7 @@ function MatrizBloqueoView({
                         <td key={cellKeyOf(cat)} className="px-1.5 py-1.5 align-top">
                           <div className={`w-full rounded-md p-2 border ${disponibleClass}`}>
                             <div className={`flex items-center gap-1 text-[10px] font-bold uppercase tracking-wide ${txtClass}`}>
-                              {isBloqueadoLocal ? 'Bloqueado' : 'Disponible'}
+                              {isBloqueadoLocal ? 'No Disponible' : 'Disponible'}
                             </div>
                           </div>
                         </td>
@@ -1483,7 +1494,7 @@ function MatrizBloqueoView({
                               cardClass = isDark
                                 ? 'bg-zinc-800/60 border-zinc-600 hover:bg-zinc-800'
                                 : 'bg-gray-100 border-gray-300 hover:bg-gray-200';
-                              statusLabel = 'Bloqueado';
+                              statusLabel = 'No Disponible';
                               statusTextClass = isDark ? 'text-zinc-300' : 'text-gray-600';
                             } else if (esPropuesta) {
                               cardClass = isDark

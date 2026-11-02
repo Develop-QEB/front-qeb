@@ -4,7 +4,7 @@ import { useQuery, useQueryClient, useMutation } from '@tanstack/react-query';
 import {
   X, Search, Plus, Trash2, ChevronDown, ChevronRight, ChevronUp, Users,
   FileText, MapPin, Layers, Pencil, Map as MapIcon, Package, Calendar,
-  Gift, Target, Save, ArrowLeft, Filter, Grid, LayoutGrid, Ruler, ArrowUpDown, ArrowUp, ArrowDown, Download, Eye, Funnel, Check, Upload, Monitor, Loader2, Trophy, AlertTriangle, RefreshCw
+  Gift, Target, Save, ArrowLeft, Filter, Grid, LayoutGrid, Ruler, ArrowUpDown, ArrowUp, ArrowDown, Download, Eye, Funnel, Check, Upload, Monitor, Loader2, Trophy, AlertTriangle, RefreshCw, History
 } from 'lucide-react';
 import { GoogleMap, useLoadScript, Marker } from '@react-google-maps/api';
 import { GOOGLE_MAPS_LOADER_OPTIONS } from '../../config/googleMaps';
@@ -12,10 +12,12 @@ import { AdvancedMapComponent } from '../propuestas/AdvancedMapComponent';
 import { capasMapaService } from '../../services/capasMapa.service';
 import type { NuevaCapa } from '../propuestas/capasMapa';
 import { CapasCircuitoPanel } from '../propuestas/CapasCircuitoPanel';
+import { HistorialInventarioPanel } from '../propuestas/HistorialInventarioPanel';
 import { Campana, CampanaWithComments } from '../../types';
 import { solicitudesService, UserOption } from '../../services/solicitudes.service';
 import { inventariosService, InventarioDisponible } from '../../services/inventarios.service';
 import { campanasService, ReservaModalItem } from '../../services/campanas.service';
+import type { ReservaHistorialItem } from '../../services/propuestas.service';
 import { clientesService } from '../../services/clientes.service';
 import { formatCurrency } from '../../lib/utils';
 import { monthLabelLong, monthLabelShort, dayMonthShort, articuloValidoEnPeriodo } from '../../lib/periodos';
@@ -98,6 +100,8 @@ interface CaraItem {
   autorizacion_dcm?: string;
   // Cara con una tarea de eliminación abierta (autorización de Gerencia) → badge "Pend. Ger. (elim.)".
   pendiente_eliminacion?: boolean;
+  // true si hay una tarea 'Filtro Autorización DG' abierta — pinta embudo cyan junto al "Pend. DG".
+  en_filtro_dg?: boolean;
   _originalDg?: string;
   _originalDcm?: string;
   // Baseline INMUTABLE de BD (DG/DCM aprobados al cargar) para conservar aprobación.
@@ -1067,8 +1071,8 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
   // Expanded groups state for collapsible groups
   const [expandedGroups, setExpandedGroups] = useState<Set<string>>(new Set(['Grupo 1']));
 
-  // Tab state for search view (buscar / reservados / capas)
-  const [searchViewTab, setSearchViewTab] = useState<'buscar' | 'reservados' | 'capas'>('buscar');
+  // Tab state for search view (buscar / reservados / capas / historial)
+  const [searchViewTab, setSearchViewTab] = useState<'buscar' | 'reservados' | 'capas' | 'historial'>('buscar');
 
   // Disponibles data
   const [inventarioDisponible, setInventarioDisponible] = useState<InventarioDisponible[]>([]);
@@ -1083,6 +1087,14 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
   // la nota (obligatoria, igual que el flujo normal de autorización) antes de mandar
   // la eliminación a DG. Guarda las cara-ids a eliminar mientras se escribe la nota.
   const [deleteNota, setDeleteNota] = useState<{ open: boolean; caraIds: number[] }>({ open: false, caraIds: [] });
+  // DIFERIDO (feedback jefe oct-2026 "se guardó sin picarle guardar"): las
+  // solicitudes de eliminación y la Nota de Dirección NO se mandan al back al
+  // confirmarlas; se ENCOLAN aquí y se aplican junto con el resto hasta que el
+  // usuario le da "Guardar Cambios". Así todo se guarda o se cancela junto, y
+  // "Cerrar sin guardar" no deja nada aplicado.
+  const [pendingEliminaciones, setPendingEliminaciones] = useState<Array<{ caraIds: number[]; motivo: string }>>([]);
+  const pendingNotaDireccionRef = useRef<string | null>(null);
+  const hasPendingEliminaciones = pendingEliminaciones.length > 0;
 
   // Real-time: cuando OTRO usuario reserva un espacio cuyo período se solapa
   // con la cara que estoy buscando, lo quito de mi listado en vivo.
@@ -1260,6 +1272,14 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
   const { data: existingReservas, isLoading: reservasLoading } = useQuery({
     queryKey: ['campana-reservas-modal', campana!.id],
     queryFn: () => campanasService.getReservasForModal(campana!.id),
+    enabled: isOpen && !!campana!.id,
+    refetchOnMount: 'always',
+  });
+
+  // Historial del circuito (reservas que salieron: quitadas/desplazadas/bloqueo)
+  const { data: historialInventario, refetch: refetchHistorial, isFetching: historialFetching } = useQuery({
+    queryKey: ['campana-reservas-historial', campana!.id],
+    queryFn: () => campanasService.getReservasHistorial(campana!.id),
     enabled: isOpen && !!campana!.id,
     refetchOnMount: 'always',
   });
@@ -1481,8 +1501,10 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
       setClienteSearchTerm('');
       setShowClienteDropdown(false);
 
-      // Store initial values for change detection — only on first load
-      if (!initialValuesSetRef.current) {
+      // Store initial values for change detection — only on first load.
+      // Esperar a `users`: si la campaña llega antes, los asignados salen vacíos,
+      // luego se llenan y el modal marca "Campaña" como cambio fantasma (caso 80617).
+      if (!initialValuesSetRef.current && users) {
         const asignadosIdsStr = loadedAsignados.map(u => u.id).join(',');
         setInitialValues({
           nombreCampania: campaniaNombre,
@@ -2600,6 +2622,13 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
             const nuevoLocalIds = new Set(conIdNuevo.map(c => c.localId));
             setCaras(prev => prev.filter(c => !nuevoLocalIds.has(c.localId)));
             setReservas(prev => prev.filter(r => !conIdNuevo.some(c => r.id.startsWith(c.localId) || r.solicitudCaraId === c.id)));
+            // Sacarlas también de los pendientes: si no, "Guardar Cambios" manda un id
+            // borrado y el bulk truena con "Record to update not found" (caso 80617).
+            setModifiedCaras(prev => {
+              const next = new Map(prev);
+              for (const c of conIdNuevo) next.delete(c.id);
+              return next;
+            });
           } catch (e) {
             console.error('Error eliminando circuito nuevo (sin auth):', e);
           }
@@ -3540,8 +3569,10 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
     const hasCampanaChanges = hasChanges;
     const hasCaraChanges = modifiedCaras.size > 0;
     const hasBitacoraChanges = bitacoraRef.current?.hasPending() === true;
+    const hasEliminaciones = pendingEliminaciones.length > 0;
+    const hasNotaDireccion = !!pendingNotaDireccionRef.current;
 
-    if (!hasCampanaChanges && !hasCaraChanges && !hasBitacoraChanges) {
+    if (!hasCampanaChanges && !hasCaraChanges && !hasBitacoraChanges && !hasEliminaciones && !hasNotaDireccion) {
       showToast('No hay cambios pendientes', 'info');
       return;
     }
@@ -3595,19 +3626,12 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
     try {
       const messages: string[] = [];
 
-      // 0. Bitacora inline (estatus + comentarios). Se aplica ANTES del bulk
-      // de caras: si el cambio de estatus revienta por el back, abortamos.
-      if (hasBitacoraChanges && bitacoraRef.current) {
-        try {
-          await bitacoraRef.current.commit();
-          messages.push('Estatus/bitácora actualizados');
-        } catch (bitErr) {
-          const bmsg = bitErr instanceof Error ? bitErr.message : (bitErr as any)?.response?.data?.error || 'Error al actualizar estatus/bitácora';
-          showToast(`Estatus/bitácora: ${bmsg}`, 'error');
-          setIsSaving(false);
-          return;
-        }
-      }
+      // ORDEN (fix jefe oct-2026 "guarda parte"): primero lo ESTRUCTURAL y
+      // riesgoso (encabezado/recorrer, bulk de caras, eliminaciones), y la
+      // bitácora/estatus + notas AL FINAL. Antes la bitácora se aplicaba PRIMERO:
+      // si el bulk de caras tronaba (MariaDB/timeout en release), el comentario/
+      // estatus ya había quedado guardado y los circuitos no. Ahora, si algo
+      // estructural falla, ni la bitácora ni las notas se aplicaron.
 
       // 1. Save campaign summary changes if any
       if (hasCampanaChanges) {
@@ -3688,6 +3712,42 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
         messages.push(result.message || `${carasArray.length} circuito(s) actualizados`);
       }
 
+      // 3. Eliminaciones ENCOLADAS (cada una trae su motivo). Van después de lo
+      // estructural: si el update/bulk de arriba tronó, no llegamos aquí y nada
+      // de esto se envía. Cada deleteCara crea la tarea de autorización (el
+      // motivo viaja en la tarea).
+      if (hasEliminaciones) {
+        let elimCount = 0;
+        for (const { caraIds, motivo } of pendingEliminaciones) {
+          if (!caraIds.length) continue;
+          const [primero, ...resto] = caraIds;
+          await campanasService.deleteCara(campana!.id, primero, false, resto, false, motivo);
+          elimCount += caraIds.length;
+        }
+        setPendingEliminaciones([]);
+        messages.push(`${elimCount} circuito(s) enviados a autorización de eliminación`);
+      }
+
+      // 4. Nota de Dirección ENCOLADA (autorización DG/DCM). Aditiva.
+      if (pendingNotaDireccionRef.current && campanaDetails?.solicitud_id) {
+        await notasDireccionService.create(campanaDetails.solicitud_id, pendingNotaDireccionRef.current);
+        pendingNotaDireccionRef.current = null;
+        messages.push('Nota de Dirección registrada');
+      }
+
+      // 5. Bitácora inline (estatus + comentarios) — AL FINAL (aditiva). Si algo
+      // estructural falló arriba, no se aplicó. Si falla SOLO la bitácora, lo
+      // estructural ya quedó guardado, así que no abortamos: avisamos aparte.
+      let bitacoraError: string | null = null;
+      if (hasBitacoraChanges && bitacoraRef.current) {
+        try {
+          await bitacoraRef.current.commit();
+          messages.push('Estatus/bitácora actualizados');
+        } catch (bitErr) {
+          bitacoraError = bitErr instanceof Error ? bitErr.message : (bitErr as any)?.response?.data?.error || 'Error al actualizar estatus/bitácora';
+        }
+      }
+
       // Refresh data — incluye reservas modal para que circuitos se redibujen verdes/llenos tras redistribuir
       await Promise.all([
         queryClient.invalidateQueries({ queryKey: ['campana-full', campana!.id] }),
@@ -3697,7 +3757,11 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
         queryClient.invalidateQueries({ queryKey: ['campana-reservas-modal', campana!.id] }),
       ]);
 
-      showToast(messages.join(' | '), 'success');
+      if (bitacoraError) {
+        showToast(`Los cambios se guardaron, pero la bitácora/estatus falló: ${bitacoraError}`, 'error');
+      } else {
+        showToast(messages.join(' | '), 'success');
+      }
     } catch (error) {
       console.error('Error in bulk save:', error);
       // Extraer mensaje del backend si es AxiosError
@@ -5047,6 +5111,47 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
     );
   }, [reservas, selectedCaraForSearch]);
 
+  // Historial (reservas que salieron) de la cara seleccionada — tab Historial.
+  const currentCaraHistorial = useMemo(() => {
+    if (!selectedCaraForSearch?.id) return [];
+    return (historialInventario || []).filter(h => h.solicitud_cara_id === selectedCaraForSearch.id);
+  }, [historialInventario, selectedCaraForSearch]);
+
+  const [reReservandoHistId, setReReservandoHistId] = useState<number | null>(null);
+  const handleReReservarHistorial = async (item: ReservaHistorialItem) => {
+    if (!item.disponible) return;
+    const cara = caras.find(c => c.id === item.solicitud_cara_id) || selectedCaraForSearch;
+    if (!cara?.id) { showToast('No se encontró el circuito de esta reserva', 'error'); return; }
+    const clienteId = campanaDetails?.cliente_id ?? campana?.cliente_id;
+    if (clienteId === undefined || clienteId === null) { showToast('Cliente ID no encontrado', 'error'); return; }
+    const fechaInicio = cara.inicio_periodo || item.inicio_periodo || campanaDetails?.fecha_inicio || new Date().toISOString();
+    const fechaFin = cara.fin_periodo || item.fin_periodo || campanaDetails?.fecha_fin || new Date().toISOString();
+    const esBonif = /bonific/i.test(item.estatus || '') || /bonific/i.test(item.estatus_original || '');
+    const tipo: 'Flujo' | 'Bonificacion' = esBonif ? 'Bonificacion' : 'Flujo';
+    setReReservandoHistId(item.reserva_id);
+    try {
+      const result = await campanasService.createReservas(campana!.id, {
+        reservas: [{ inventario_id: item.inventario_id, tipo, latitud: 0, longitud: 0 }],
+        solicitudCaraId: cara.id,
+        clienteId,
+        fechaInicio,
+        fechaFin,
+        agruparComoCompleto: false,
+      });
+      if ((result.reservasCreadas ?? 0) > 0) {
+        showToast(`${item.codigo_unico} regresó a reservados`, 'success');
+      } else {
+        showToast(result.omitidos?.[0]?.motivo || 'No se pudo regresar (quizá ya está ocupado)', 'error');
+      }
+      queryClient.invalidateQueries({ queryKey: ['campana-reservas-modal', campana!.id] });
+      queryClient.invalidateQueries({ queryKey: ['campana-reservas-historial', campana!.id] });
+    } catch (e) {
+      showToast(e instanceof Error ? e.message : 'Error al regresar la reserva', 'error');
+    } finally {
+      setReReservandoHistId(null);
+    }
+  };
+
   // Group reservas by grupo_completo_id - shows pairs as single "Completo" item
   const currentCaraReservasMerged = useMemo(() => {
     const result: ReservaItem[] = [];
@@ -6056,6 +6161,21 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
                   </span>
                 )}
               </button>
+              <button
+                onClick={() => setSearchViewTab('historial')}
+                className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all ${searchViewTab === 'historial'
+                  ? 'bg-purple-500/20 text-purple-300 border border-purple-500/40'
+                  : 'text-zinc-400 hover:text-white hover:bg-zinc-800'
+                  }`}
+              >
+                <History className="h-4 w-4" />
+                Historial
+                {currentCaraHistorial.length > 0 && (
+                  <span className={`px-1.5 py-0.5 ${isDark ? 'bg-purple-500/30 text-purple-300' : 'bg-purple-100 text-purple-700'} rounded-full text-xs`}>
+                    {currentCaraHistorial.length}
+                  </span>
+                )}
+              </button>
             </div>
           </div>
 
@@ -7031,6 +7151,18 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
               canEdit={effectiveCanEdit}
               isDark={isDark}
             />
+          ) : searchViewTab === 'historial' ? (
+            /* HISTORIAL TAB CONTENT */
+            <HistorialInventarioPanel
+              items={currentCaraHistorial}
+              isDark={isDark}
+              tipoPeriodo={tipoPeriodo}
+              canEdit={effectiveCanEdit}
+              reReservandoId={reReservandoHistId}
+              onReReservar={handleReReservarHistorial}
+              onRefresh={() => refetchHistorial()}
+              refreshing={historialFetching}
+            />
           ) : (
             /* RESERVADOS TAB CONTENT */
             <div className="flex-1 flex overflow-hidden">
@@ -7889,13 +8021,25 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
 
   // Handle close with unsaved changes warning
   const handleClose = () => {
-    if (hasChanges || modifiedCaras.size > 0 || bitacoraPending) {
+    const discardQueues = () => {
+      // Descartar lo ENCOLADO (eliminaciones + nota) y quitar el badge optimista
+      // de "pendiente de eliminación" que pusimos solo de forma visual. Como nada
+      // se envió al back, cerrar sin guardar no deja nada aplicado.
+      const queuedElimIds = new Set(pendingEliminaciones.flatMap(e => e.caraIds));
+      if (queuedElimIds.size > 0) {
+        setCaras(prev => prev.map(c => (c.id && queuedElimIds.has(c.id)) ? { ...c, pendiente_eliminacion: false } : c));
+      }
+      setPendingEliminaciones([]);
+      pendingNotaDireccionRef.current = null;
+    };
+    if (hasChanges || modifiedCaras.size > 0 || bitacoraPending || hasPendingEliminaciones) {
       setConfirmModal({
         isOpen: true,
         title: 'Cambios sin guardar',
         message: `Tienes ${[
           hasChanges ? 'cambios en la campaña' : '',
           modifiedCaras.size > 0 ? `${modifiedCaras.size} circuito(s) editado(s)` : '',
+          hasPendingEliminaciones ? `${pendingEliminaciones.reduce((n, e) => n + e.caraIds.length, 0)} circuito(s) por eliminar` : '',
           bitacoraPending ? `${bitacoraPendingCount} cambio(s) en la bitácora` : '',
         ].filter(Boolean).join(' y ')} sin guardar. ¿Seguro que quieres cerrar?`,
         confirmText: 'Cerrar sin guardar',
@@ -7903,10 +8047,12 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
         isDestructive: true,
         onConfirm: () => {
           setConfirmModal(prev => ({ ...prev, isOpen: false }));
+          discardQueues();
           onClose();
         },
       });
     } else {
+      discardQueues();
       onClose();
     }
   };
@@ -9403,7 +9549,17 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
                                           <span className={`text-[10px] px-1.5 py-0.5 rounded ${isDark ? 'bg-orange-500/20 text-orange-300' : 'bg-orange-100 text-orange-700'}`}>Corrección</span>
                                         )}
                                         {dgDisplay === 'pendiente' && dcmDisplay !== 'rechazado' && (
-                                          <span className={`text-[10px] px-1.5 py-0.5 rounded ${isDark ? 'bg-red-500/20 text-red-300' : 'bg-red-100 text-red-700'}`}>Pend. DG</span>
+                                          <>
+                                            {/* Etapa visual: la cara esta en el filtro del Gerente Comercial
+                                                (previo a DG). Al aprobar el GC la tarea pasa a 'Autorizacion DG'
+                                                y en_filtro_dg se apaga -> embudo desaparece y queda solo Pend. DG. */}
+                                            {cara.en_filtro_dg && (
+                                              <span className={`inline-flex items-center gap-1 text-[10px] px-1.5 py-0.5 rounded ${isDark ? 'bg-cyan-500/20 text-cyan-300' : 'bg-cyan-100 text-cyan-700'}`} title="En filtro del Gerente Comercial (previo a DG)">
+                                                <Funnel className="w-3 h-3" /> Filtro GC
+                                              </span>
+                                            )}
+                                            <span className={`text-[10px] px-1.5 py-0.5 rounded ${isDark ? 'bg-red-500/20 text-red-300' : 'bg-red-100 text-red-700'}`}>Pend. DG</span>
+                                          </>
                                         )}
                                         {dcmDisplay === 'pendiente' && dgDisplay !== 'rechazado' && (
                                           <span className={`text-[10px] px-1.5 py-0.5 rounded ${isDark ? 'bg-amber-500/20 text-amber-300' : 'bg-amber-100 text-amber-700'}`}>Pend. DCM</span>
@@ -9460,9 +9616,28 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
                                       );
                                     })()}
                                     {effectiveCanEdit && (() => {
-                                      const editBlocked = hasSavedPendingAuth || caraAPSBlocked;
+                                      // Regla pedida por Jos (2026-10-30): si CUALQUIER cara de la
+                                      // campana tiene autorizacion pendiente (DG o DCM), nadie puede
+                                      // tocar circuitos. Toda la campana queda "congelada" visualmente
+                                      // hasta que direccion resuelva, porque editar un circuito
+                                      // mientras otros estan en revision mezcla cambios dentro de un
+                                      // flujo ya enviado. Vuelve al comportamiento previo al
+                                      // 2026-10-23 — el caso de migraciones SAP grandes (80617 TELCEL)
+                                      // se maneja esperando a que direccion revise, no abriendo la
+                                      // campana a edicion.
+                                      const caraTienePendienteGuardada =
+                                        cara.id != null &&
+                                        !modifiedCaras.has(cara.id) &&
+                                        ((cara as any)._originalDg === 'pendiente' || (cara as any)._originalDcm === 'pendiente');
+                                      const editBlocked = caraTienePendienteGuardada || caraAPSBlocked || hasPendingAuthorization;
                                       const isLoadingThis = loadingCaraAction?.caraId === cara.localId && loadingCaraAction?.action === 'edit';
-                                      const blockReason = caraAPSBlocked ? 'Grupo con APS asignado - no se puede editar' : hasSavedPendingAuth ? 'Hay circuitos pendientes de autorizacion - no se pueden editar otros' : isLoadingThis ? 'Cargando editor...' : 'Editar';
+                                      const blockReason = caraAPSBlocked
+                                        ? 'Grupo con APS asignado - no se puede editar'
+                                        : caraTienePendienteGuardada
+                                          ? 'Este circuito esta pendiente de autorizacion - no se puede editar hasta que direccion resuelva'
+                                          : hasPendingAuthorization
+                                            ? 'Hay otro circuito en esta campana pendiente de autorizacion. Aprobalo primero.'
+                                            : isLoadingThis ? 'Cargando editor...' : 'Editar';
                                       return (
                                       <>
                                         {(cara.autorizacion_dg === 'rechazado' || cara.autorizacion_dcm === 'rechazado' || cara.autorizacion_dg === 'correccion') && (
@@ -10193,13 +10368,13 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
               </button>
               {effectiveCanEdit && (
                 <button
-                  disabled={(!hasChanges && modifiedCaras.size === 0 && !bitacoraPending) || isSaving || ((hasChanges || modifiedCaras.size > 0) && invalidCaras.length > 0)}
+                  disabled={(!hasChanges && modifiedCaras.size === 0 && !bitacoraPending && !hasPendingEliminaciones) || isSaving || ((hasChanges || modifiedCaras.size > 0) && invalidCaras.length > 0)}
                   title={((hasChanges || modifiedCaras.size > 0) && invalidCaras.length > 0)
                     ? `${invalidCaras.length} cara(s) tienen catorcenas fuera del rango actual. Ajusta el rango o elimínalas para poder guardar.`
                     : undefined}
                   onClick={async () => {
                     // Bitacora-only: saltar gates y confirmar modal.
-                    const onlyBitacora = !hasChanges && modifiedCaras.size === 0 && bitacoraPending;
+                    const onlyBitacora = !hasChanges && modifiedCaras.size === 0 && !hasPendingEliminaciones && bitacoraPending;
                     if (onlyBitacora) {
                       setIsSaving(true);
                       try {
@@ -10240,7 +10415,7 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
                     setShowSaveConfirm(true);
                   }}
                   className={`px-6 py-2 rounded-lg text-sm font-medium transition-all ${
-                    (hasChanges || modifiedCaras.size > 0 || bitacoraPending) && !isSaving && !((hasChanges || modifiedCaras.size > 0) && invalidCaras.length > 0)
+                    (hasChanges || modifiedCaras.size > 0 || bitacoraPending || hasPendingEliminaciones) && !isSaving && !((hasChanges || modifiedCaras.size > 0) && invalidCaras.length > 0)
                       ? 'bg-purple-500 text-white hover:bg-purple-600 shadow-lg shadow-purple-500/25'
                       : `${isDark ? 'bg-zinc-700 text-zinc-500' : 'bg-gray-200 text-gray-400'} cursor-not-allowed`
                   }`}
@@ -10250,7 +10425,7 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
                   ) : (
                     <Save className="h-4 w-4 inline-block mr-2" />
                   )}
-                  {isSaving ? 'Guardando...' : `Guardar Cambios${(hasChanges || modifiedCaras.size > 0 || bitacoraPending) ? ` (${(hasChanges ? 1 : 0) + modifiedCaras.size + (bitacoraPending ? 1 : 0)})` : ''}`}
+                  {isSaving ? 'Guardando...' : `Guardar Cambios${(hasChanges || modifiedCaras.size > 0 || bitacoraPending || hasPendingEliminaciones) ? ` (${(hasChanges ? 1 : 0) + modifiedCaras.size + (bitacoraPending ? 1 : 0) + pendingEliminaciones.length})` : ''}`}
                 </button>
               )}
             </div>
@@ -10290,7 +10465,10 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
         }}
         onConfirm={async (texto) => {
           if (!campanaDetails?.solicitud_id) return;
-          await notasDireccionService.create(campanaDetails.solicitud_id, texto);
+          // DIFERIDO: la Nota de Dirección se crea junto con el guardado (en
+          // handleBulkSaveChanges), no aquí, para que todo se guarde o se
+          // cancele junto. Si el usuario cancela el Confirmar Cambios, no se creó.
+          pendingNotaDireccionRef.current = texto;
           setShowNotaDireccionModal(false);
           setPendingAuthTipo(null);
           setShowSaveConfirm(true);
@@ -10310,19 +10488,14 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
         onConfirm={async (texto) => {
           const ids = deleteNota.caraIds;
           if (ids.length === 0) { setDeleteNota({ open: false, caraIds: [] }); return; }
-          try {
-            const [primero, ...resto] = ids;
-            // El motivo (texto) viaja en la solicitud de eliminación → descripción de la tarea.
-            const resp = await campanasService.deleteCara(campana!.id, primero, false, resto, false, texto);
-            setDeleteNota({ open: false, caraIds: [] });
-            // Optimista: marcar las caras como pendientes de eliminación → badge "Pend. Ger. (elim.)".
-            setCaras(prev => prev.map(c => (c.id && ids.includes(c.id)) ? { ...c, pendiente_eliminacion: true } : c));
-            alert(resp?.message || 'Solicitud de eliminación enviada a autorización.');
-          } catch (error) {
-            console.error('Error solicitando eliminación:', error);
-            alert(error instanceof Error ? error.message : 'Error al solicitar la eliminación');
-            setDeleteNota({ open: false, caraIds: [] });
-          }
+          // DIFERIDO: no se manda al back aquí. Se ENCOLA {caraIds, motivo} y la
+          // solicitud de eliminación se aplica en "Guardar Cambios" junto con el
+          // resto (el motivo viajará en la tarea). Si el usuario cierra sin
+          // guardar, nada se envió.
+          setPendingEliminaciones(prev => [...prev, { caraIds: ids, motivo: texto }]);
+          setDeleteNota({ open: false, caraIds: [] });
+          // Optimista (solo visual): badge "Pend. Ger. (elim.)" mientras tanto.
+          setCaras(prev => prev.map(c => (c.id && ids.includes(c.id)) ? { ...c, pendiente_eliminacion: true } : c));
         }}
       />
       {/* Delete Circuito Confirm Modal — confirmación al usar bote de basura */}

@@ -3,7 +3,7 @@ import { useModalTracker } from '../../hooks/useModalTracker';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import {
   X, Search, Plus, Trash2, Upload, ChevronDown, ChevronRight, Check, Users, Building2,
-  Package, Calendar, FileText, MapPin, Layers, Hash, RefreshCw, AlertTriangle, Pencil
+  Package, Calendar, FileText, MapPin, Layers, Hash, RefreshCw, AlertTriangle, Pencil, Funnel
 } from 'lucide-react';
 import { solicitudesService, UserOption } from '../../services/solicitudes.service';
 import { clientesService } from '../../services/clientes.service';
@@ -355,6 +355,8 @@ interface CaraEntry {
   precioTotal: number;
   autorizacion_dg?: 'aprobado' | 'pendiente' | 'rechazado' | 'correccion';
   autorizacion_dcm?: 'aprobado' | 'pendiente' | 'rechazado' | 'correccion';
+  // true si hay una tarea 'Filtro Autorización DG' abierta — pinta embudo cyan junto al "Pend. DG".
+  en_filtro_dg?: boolean;
   // Valores originales del backend (antes de contaminación)
   _originalDg?: 'aprobado' | 'pendiente' | 'rechazado' | 'correccion';
   _originalDcm?: 'aprobado' | 'pendiente' | 'rechazado' | 'correccion';
@@ -3912,8 +3914,19 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
                                             // no requerian autorizacion, pero pueden ser escaladas a DG y
                                             // rechazadas — el back si las valida (commit 79c59e5) y bloquea
                                             // Atender si hay rechazos. Caso reproducido en 80822.
-                                            const dgEfectivo = cara.autorizacion_dg;
-                                            const dcmEfectivo = cara.autorizacion_dcm;
+                                            // "Contaminacion DG": si al menos una cara de la solicitud esta
+                                            // Pend. DG, la regla del back es que todo escala a DG al guardar.
+                                            // Reflejamos esa regla en vivo para que la badge coincida con lo
+                                            // que se guardara (mismo patron que SolicitudModals.tsx).
+                                            const algunaPendDg = caras.some(c => (c.autorizacion_dg || 'aprobado') === 'pendiente');
+                                            const authDgRaw = cara.autorizacion_dg || 'aprobado';
+                                            const authDcmRaw = cara.autorizacion_dcm || 'aprobado';
+                                            const escalaPorContaminacion = algunaPendDg
+                                              && authDgRaw !== 'pendiente'
+                                              && authDgRaw !== 'rechazado'
+                                              && authDcmRaw === 'pendiente';
+                                            const dgEfectivo = escalaPorContaminacion ? 'pendiente' : authDgRaw;
+                                            const dcmEfectivo = escalaPorContaminacion ? 'aprobado' : authDcmRaw;
                                             return (
                                               <div className="flex flex-col gap-0.5">
                                                 {dgEfectivo === 'aprobado' && dcmEfectivo === 'aprobado' && (
@@ -3933,9 +3946,17 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
                                                   </span>
                                                 )}
                                                 {dgEfectivo === 'pendiente' && dcmEfectivo !== 'rechazado' && (
-                                                  <span className="text-[10px] px-1.5 py-0.5 rounded bg-red-500/20 text-red-300" title="Requiere autorización DG">
-                                                    Pend. DG
-                                                  </span>
+                                                  <>
+                                                    {/* Etapa visual: en filtro del Gerente Comercial previo a DG. */}
+                                                    {cara.en_filtro_dg && (
+                                                      <span className="inline-flex items-center gap-1 text-[10px] px-1.5 py-0.5 rounded bg-cyan-500/20 text-cyan-300" title="En filtro del Gerente Comercial (previo a DG)">
+                                                        <Funnel className="w-3 h-3" /> Filtro GC
+                                                      </span>
+                                                    )}
+                                                    <span className="text-[10px] px-1.5 py-0.5 rounded bg-red-500/20 text-red-300" title="Requiere autorización DG">
+                                                      Pend. DG
+                                                    </span>
+                                                  </>
                                                 )}
                                                 {dcmEfectivo === 'pendiente' && dgEfectivo !== 'rechazado' && (
                                                   <span className="text-[10px] px-1.5 py-0.5 rounded bg-amber-500/20 text-amber-300" title="Requiere autorización DCM">
