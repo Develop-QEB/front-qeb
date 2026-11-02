@@ -984,6 +984,13 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
   // reservas que no corresponden a la plaza/formato de la cara.
   // Ciudades queda FUERA de este bloqueo: es editable siempre (ver campo Ciudades).
   const caraFiltersLocked = editingCaraHasReservas || (!!editingCaraId && !permissions.canEditCaraFiltersOnEdit);
+  // EXCEPCION (2026-11-02): el area de Trafico si puede corregir el FORMATO de
+  // un circuito aunque ya tenga inventario reservado: son quienes cuadran el
+  // inventario contra la cara y a veces el formato capturado por comercial no
+  // corresponde a lo que realmente se reservo. Plazas sigue bloqueado. El back
+  // ya aceptaba el cambio (updateCara escribe `formato` y recalcula DG/DCM);
+  // el candado era solo de UI.
+  const formatoLocked = (editingCaraHasReservas && !esTrafico(user?.rol)) || (!!editingCaraId && !permissions.canEditCaraFiltersOnEdit);
 
   // Inventory search state
   const [searchFilters, setSearchFilters] = useState({
@@ -9423,8 +9430,17 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
                         )}
                       </div>
                       <div className="space-y-1">
-                        <label title={editingCaraHasReservas ? 'Bloqueado: el circuito tiene inventario reservado' : undefined} className={`text-xs ${(!editingCaraHasReservas && caraFiltersLocked) ? 'text-zinc-800' : `${isDark ? 'text-zinc-500' : 'text-gray-400'}`}`}>Formatos {editingCaraHasReservas ? <span className="text-amber-400 text-[10px]">(bloqueado)</span> : newCara.formato && !caraFiltersLocked && <span className="text-purple-400">({newCara.formato.split(',').filter(Boolean).length})</span>}</label>
-                        {canEditResumen && !caraFiltersLocked ? (
+                        <label
+                          title={editingCaraHasReservas
+                            ? (formatoLocked ? 'Bloqueado: el circuito tiene inventario reservado' : 'Editable por Tráfico aunque haya inventario reservado: verifica que las reservas correspondan al formato nuevo')
+                            : undefined}
+                          className={`text-xs ${(!editingCaraHasReservas && formatoLocked) ? 'text-zinc-800' : `${isDark ? 'text-zinc-500' : 'text-gray-400'}`}`}
+                        >
+                          Formatos {editingCaraHasReservas
+                            ? <span className="text-amber-400 text-[10px]">{formatoLocked ? '(bloqueado)' : '(con inventario reservado)'}</span>
+                            : newCara.formato && !formatoLocked && <span className="text-purple-400">({newCara.formato.split(',').filter(Boolean).length})</span>}
+                        </label>
+                        {canEditResumen && !formatoLocked ? (
                           <MultiSelectDropdown
                             options={esUDC ? Array.from(new Set([UDC_FORMATO, ...(solicitudFilters?.formatos || [])])) : (solicitudFilters?.formatos || [])}
                             selected={newCara.formato ? newCara.formato.split(',').map(s => s.trim()).filter(Boolean) : []}

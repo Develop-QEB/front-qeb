@@ -1254,6 +1254,10 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
   // reservas que no corresponden a la plaza/formato de la cara.
   // Ciudades queda FUERA de este bloqueo: es editable siempre (ver campo Ciudades).
   const caraFiltersLocked = editingCaraGrupoConReservas || (!!editingCaraId && !permissions.canEditCaraFiltersOnEdit);
+  // EXCEPCION (2026-11-02): Trafico si puede corregir el FORMATO aunque el
+  // circuito tenga inventario reservado (mismo criterio que AssignInventarioModal
+  // de propuestas). Plazas sigue bloqueado. El back ya aceptaba el cambio.
+  const formatoLocked = (editingCaraGrupoConReservas && !esTrafico(user?.rol)) || (!!editingCaraId && !permissions.canEditCaraFiltersOnEdit);
 
   // Check if the selected cara for search/reservas view is APS blocked
   const selectedCaraAPSBlocked = useMemo(() => {
@@ -9467,8 +9471,17 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
                         )}
                       </div>
                       <div className="space-y-1">
-                        <label title={editingCaraGrupoConReservas ? 'Bloqueado: el circuito tiene inventario reservado' : undefined} className={`text-xs ${(!editingCaraGrupoConReservas && caraFiltersLocked) ? 'text-zinc-800' : 'text-zinc-500'}`}>Formatos {editingCaraGrupoConReservas ? <span className="text-amber-400 text-[10px]">(bloqueado)</span> : newCara.formato && !caraFiltersLocked && <span className="text-purple-400">({newCara.formato.split(',').filter(Boolean).length})</span>}</label>
-                        {canEditResumen && !caraFiltersLocked ? (
+                        <label
+                          title={editingCaraGrupoConReservas
+                            ? (formatoLocked ? 'Bloqueado: el circuito tiene inventario reservado' : 'Editable por Tráfico aunque haya inventario reservado: verifica que las reservas correspondan al formato nuevo')
+                            : undefined}
+                          className={`text-xs ${(!editingCaraGrupoConReservas && formatoLocked) ? 'text-zinc-800' : 'text-zinc-500'}`}
+                        >
+                          Formatos {editingCaraGrupoConReservas
+                            ? <span className="text-amber-400 text-[10px]">{formatoLocked ? '(bloqueado)' : '(con inventario reservado)'}</span>
+                            : newCara.formato && !formatoLocked && <span className="text-purple-400">({newCara.formato.split(',').filter(Boolean).length})</span>}
+                        </label>
+                        {canEditResumen && !formatoLocked ? (
                           <MultiSelectDropdown
                             options={esUDC ? Array.from(new Set([UDC_FORMATO, ...(solicitudFilters?.formatos || [])])) : (solicitudFilters?.formatos || [])}
                             selected={newCara.formato ? newCara.formato.split(',').map(s => s.trim()).filter(Boolean) : []}
