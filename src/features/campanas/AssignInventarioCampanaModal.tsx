@@ -5051,6 +5051,7 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
         }
 
         queryClient.invalidateQueries({ queryKey: ['campana-reservas-modal', campana!.id] });
+        queryClient.invalidateQueries({ queryKey: ['campana-reservas-historial', campana!.id] });
         queryClient.invalidateQueries({ queryKey: ['campana-inventario', campana!.id] }); // Refresh map
         queryClient.invalidateQueries({ queryKey: ['campanas'] });
         // Also refresh disponibles
@@ -5224,6 +5225,7 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
         }
 
         queryClient.invalidateQueries({ queryKey: ['campana-reservas-modal', campana!.id] });
+        queryClient.invalidateQueries({ queryKey: ['campana-reservas-historial', campana!.id] });
         queryClient.invalidateQueries({ queryKey: ['campana-inventario', campana!.id] });
         queryClient.invalidateQueries({ queryKey: ['campanas'] });
         handleRefetchDisponibles();
@@ -5320,11 +5322,18 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
     );
   }, [reservas, selectedCaraForSearch]);
 
-  // Historial (reservas que salieron) de la cara seleccionada — tab Historial.
-  const currentCaraHistorial = useMemo(() => {
+  // Historial (reservas que salieron) — tab Historial. Por default el de la
+  // cara seleccionada; sin cara seleccionada (o con "Todos los circuitos") el
+  // de toda la campana, para que una eliminacion en otro circuito no parezca
+  // que no se guardo. Mismo criterio que AssignInventarioModal (propuestas).
+  const [historialTodos, setHistorialTodos] = useState(false);
+  const historialCaraActual = useMemo(() => {
     if (!selectedCaraForSearch?.id) return [];
     return (historialInventario || []).filter(h => h.solicitud_cara_id === selectedCaraForSearch.id);
   }, [historialInventario, selectedCaraForSearch]);
+  const historialMostrandoTodos = historialTodos || !selectedCaraForSearch?.id;
+  const currentCaraHistorial = historialMostrandoTodos ? (historialInventario || []) : historialCaraActual;
+  const historialOtrosCircuitos = (historialInventario?.length ?? 0) - historialCaraActual.length;
 
   const [reReservandoHistId, setReReservandoHistId] = useState<number | null>(null);
   // Regresar a reservados un inventario del historial (solo si sigue disponible).
@@ -5669,6 +5678,7 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
           try {
             await campanasService.deleteReservas(campana!.id, backendIds);
             queryClient.invalidateQueries({ queryKey: ['campana-reservas-modal', campana!.id] });
+            queryClient.invalidateQueries({ queryKey: ['campana-reservas-historial', campana!.id] });
             queryClient.invalidateQueries({ queryKey: ['campana-inventario', campana!.id] });
             queryClient.invalidateQueries({ queryKey: ['campanas'] });
             handleRefetchDisponibles();
@@ -5729,6 +5739,7 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
           const ids = reservasAEliminar.map(r => r.reservaId!).filter(Boolean);
           await campanasService.deleteReservas(campana!.id, ids);
           queryClient.invalidateQueries({ queryKey: ['campana-reservas-modal', campana!.id] });
+          queryClient.invalidateQueries({ queryKey: ['campana-reservas-historial', campana!.id] });
           queryClient.invalidateQueries({ queryKey: ['campana-inventario', campana!.id] });
           queryClient.invalidateQueries({ queryKey: ['campanas'] });
           handleRefetchDisponibles();
@@ -5857,6 +5868,7 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
           if (backendIds.length > 0) {
             await campanasService.deleteReservas(campana!.id, backendIds);
             queryClient.invalidateQueries({ queryKey: ['campana-reservas-modal', campana!.id] });
+            queryClient.invalidateQueries({ queryKey: ['campana-reservas-historial', campana!.id] });
             queryClient.invalidateQueries({ queryKey: ['campana-inventario', campana!.id] });
             queryClient.invalidateQueries({ queryKey: ['campanas'] });
             handleRefetchDisponibles();
@@ -7469,6 +7481,9 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
               onReReservar={handleReReservarHistorial}
               onRefresh={() => refetchHistorial()}
               refreshing={historialFetching}
+              mostrandoTodos={historialMostrandoTodos}
+              onToggleTodos={selectedCaraForSearch?.id ? () => setHistorialTodos(v => !v) : undefined}
+              totalOtrosCircuitos={historialOtrosCircuitos}
             />
           ) : searchViewTab === 'capas' ? (
             /* CAPAS TAB CONTENT: gestion de capas de POI/KML del circuito */

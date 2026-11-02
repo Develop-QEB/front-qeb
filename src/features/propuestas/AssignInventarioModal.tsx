@@ -4912,6 +4912,7 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
         }
 
         queryClient.invalidateQueries({ queryKey: ['propuesta-reservas-modal', propuesta.id] });
+        queryClient.invalidateQueries({ queryKey: ['propuesta-reservas-historial', propuesta.id] });
         queryClient.invalidateQueries({ queryKey: ['propuesta-inventario', propuesta.id] }); // Refresh map
         // Also refresh disponibles
         handleRefetchDisponibles();
@@ -5084,6 +5085,7 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
         }
 
         queryClient.invalidateQueries({ queryKey: ['propuesta-reservas-modal', propuesta.id] });
+        queryClient.invalidateQueries({ queryKey: ['propuesta-reservas-historial', propuesta.id] });
         queryClient.invalidateQueries({ queryKey: ['propuesta-inventario', propuesta.id] });
         handleRefetchDisponibles();
 
@@ -5181,10 +5183,19 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
   }, [reservas, selectedCaraForSearch]);
 
   // Historial (reservas que salieron) de la cara seleccionada — para el tab Historial.
-  const currentCaraHistorial = useMemo(() => {
+  // Historial: por default el del circuito seleccionado en el buscador. Sin
+  // circuito seleccionado (o con "Todos los circuitos") se muestra el de toda
+  // la propuesta. Antes, sin circuito, el tab decia "Sin movimientos en este
+  // circuito" aunque hubiera eliminaciones en otros, y parecia que no se
+  // habian guardado.
+  const [historialTodos, setHistorialTodos] = useState(false);
+  const historialCaraActual = useMemo(() => {
     if (!selectedCaraForSearch?.id) return [];
     return (historialInventario || []).filter(h => h.solicitud_cara_id === selectedCaraForSearch.id);
   }, [historialInventario, selectedCaraForSearch]);
+  const historialMostrandoTodos = historialTodos || !selectedCaraForSearch?.id;
+  const currentCaraHistorial = historialMostrandoTodos ? (historialInventario || []) : historialCaraActual;
+  const historialOtrosCircuitos = (historialInventario?.length ?? 0) - historialCaraActual.length;
 
   const [reReservandoHistId, setReReservandoHistId] = useState<number | null>(null);
   // Regresar a reservados un inventario del historial (solo si sigue disponible).
@@ -5526,6 +5537,7 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
           try {
             await propuestasService.deleteReservas(propuesta.id, backendIds);
             queryClient.invalidateQueries({ queryKey: ['propuesta-reservas-modal', propuesta.id] });
+            queryClient.invalidateQueries({ queryKey: ['propuesta-reservas-historial', propuesta.id] });
             queryClient.invalidateQueries({ queryKey: ['propuesta-inventario', propuesta.id] });
             handleRefetchDisponibles();
 
@@ -5581,6 +5593,7 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
           const ids = reservasAEliminar.map(r => r.reservaId!).filter(Boolean);
           await propuestasService.deleteReservas(propuesta.id, ids);
           queryClient.invalidateQueries({ queryKey: ['propuesta-reservas-modal', propuesta.id] });
+          queryClient.invalidateQueries({ queryKey: ['propuesta-reservas-historial', propuesta.id] });
           queryClient.invalidateQueries({ queryKey: ['propuesta-inventario', propuesta.id] });
           handleRefetchDisponibles();
 
@@ -5694,6 +5707,7 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
           if (backendIds.length > 0) {
             await propuestasService.deleteReservas(propuesta.id, backendIds);
             queryClient.invalidateQueries({ queryKey: ['propuesta-reservas-modal', propuesta.id] });
+            queryClient.invalidateQueries({ queryKey: ['propuesta-reservas-historial', propuesta.id] });
             queryClient.invalidateQueries({ queryKey: ['propuesta-inventario', propuesta.id] });
             handleRefetchDisponibles();
           }
@@ -7328,6 +7342,9 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
               onReReservar={handleReReservarHistorial}
               onRefresh={() => refetchHistorial()}
               refreshing={historialFetching}
+              mostrandoTodos={historialMostrandoTodos}
+              onToggleTodos={selectedCaraForSearch?.id ? () => setHistorialTodos(v => !v) : undefined}
+              totalOtrosCircuitos={historialOtrosCircuitos}
             />
           ) : searchViewTab === 'capas' ? (
             /* CAPAS TAB CONTENT: gestion de capas de POI/KML del circuito */

@@ -57,9 +57,18 @@ interface Props {
   onReReservar?: (item: ReservaHistorialItem) => void;
   onRefresh?: () => void;   // refetch manual del historial (botón)
   refreshing?: boolean;     // spinner mientras refetchea
+  /** true = `items` trae todos los circuitos de la propuesta, no solo el seleccionado. */
+  mostrandoTodos?: boolean;
+  /** Alterna circuito seleccionado / todos. undefined = no hay circuito seleccionado (siempre todos). */
+  onToggleTodos?: () => void;
+  /** Movimientos que hay en OTROS circuitos cuando se muestra solo el seleccionado. */
+  totalOtrosCircuitos?: number;
 }
 
-export function HistorialInventarioPanel({ items, isDark, canEdit, reReservandoId, onReReservar, onRefresh, refreshing }: Props) {
+export function HistorialInventarioPanel({
+  items, isDark, canEdit, reReservandoId, onReReservar, onRefresh, refreshing,
+  mostrandoTodos = false, onToggleTodos, totalOtrosCircuitos = 0,
+}: Props) {
   const [q, setQ] = useState('');
   const [motivoFilter, setMotivoFilter] = useState<'all' | Motivo>('all');
   const [soloDisponibles, setSoloDisponibles] = useState(false);
@@ -86,9 +95,10 @@ export function HistorialInventarioPanel({ items, isDark, canEdit, reReservandoI
   const td = `px-3 py-2.5 text-xs ${isDark ? 'text-zinc-300' : 'text-gray-700'}`;
 
   const downloadCsv = () => {
-    const header = ['Codigo', 'Ubicacion', 'Mueble', 'Plaza', 'Municipio', 'Motivo salida', 'Estatus previo', 'Fecha salida', 'Periodo', 'Disponible'];
+    const header = ['Codigo', 'Circuito', 'Ubicacion', 'Mueble', 'Plaza', 'Municipio', 'Motivo salida', 'Estatus previo', 'Fecha salida', 'Periodo', 'Disponible'];
     const filas = filtered.map(it => [
       it.codigo_unico || '',
+      it.articulo || '',
       it.ubicacion || '',
       it.formato || '',
       it.plaza || '',
@@ -116,8 +126,13 @@ export function HistorialInventarioPanel({ items, isDark, canEdit, reReservandoI
         <div className="flex items-center justify-between gap-3 flex-wrap">
           <h3 className={`text-sm font-semibold flex items-center gap-2 ${isDark ? 'text-purple-300' : 'text-purple-700'}`}>
             <History className="h-4 w-4" />
-            Historial del circuito
+            {mostrandoTodos ? 'Historial de todos los circuitos' : 'Historial del circuito'}
             <span className={`text-xs font-normal ${isDark ? 'text-zinc-500' : 'text-gray-400'}`}>({items.length} · {nDisponibles} disponible{nDisponibles !== 1 ? 's' : ''})</span>
+            {onToggleTodos && (
+              <Chip active={mostrandoTodos} onClick={onToggleTodos} isDark={isDark}>
+                Todos los circuitos{!mostrandoTodos && totalOtrosCircuitos > 0 ? ` (+${totalOtrosCircuitos})` : ''}
+              </Chip>
+            )}
           </h3>
           <div className="flex items-center gap-2">
             <div className="relative">
@@ -170,13 +185,31 @@ export function HistorialInventarioPanel({ items, isDark, canEdit, reReservandoI
         {filtered.length === 0 ? (
           <div className={`flex flex-col items-center justify-center h-full ${isDark ? 'text-zinc-500' : 'text-gray-400'}`}>
             <History className="h-10 w-10 mb-2 opacity-30" />
-            <p className="text-sm">{items.length === 0 ? 'Sin movimientos en este circuito' : 'Sin resultados con esos filtros'}</p>
+            <p className="text-sm">
+              {items.length > 0
+                ? 'Sin resultados con esos filtros'
+                : mostrandoTodos
+                  ? 'Sin movimientos en esta propuesta'
+                  : 'Sin movimientos en este circuito'}
+            </p>
+            {/* Sin esto parecia que una eliminacion "no se guardo" cuando en
+                realidad estaba en otro circuito. */}
+            {items.length === 0 && !mostrandoTodos && totalOtrosCircuitos > 0 && onToggleTodos && (
+              <button
+                type="button"
+                onClick={onToggleTodos}
+                className="mt-2 text-xs text-purple-400 hover:text-purple-300 underline underline-offset-2"
+              >
+                Hay {totalOtrosCircuitos} movimiento{totalOtrosCircuitos !== 1 ? 's' : ''} en otros circuitos — ver todos
+              </button>
+            )}
           </div>
         ) : (
           <table className="w-full text-sm">
             <thead className={`${isDark ? 'bg-zinc-800/50' : 'bg-gray-50'} sticky top-0`}>
               <tr>
                 <th className={th}>Código</th>
+                {mostrandoTodos && <th className={th}>Circuito</th>}
                 <th className={th}>Ubicación / Mueble</th>
                 <th className={th}>Plaza</th>
                 <th className={th}>Motivo</th>
@@ -193,6 +226,12 @@ export function HistorialInventarioPanel({ items, isDark, canEdit, reReservandoI
                 return (
                   <tr key={`${it.reserva_id}-${i}`} className={`border-t ${isDark ? 'border-zinc-800 hover:bg-purple-500/5' : 'border-gray-100 hover:bg-purple-50/40'}`}>
                     <td className={`${td} font-semibold ${isDark ? 'text-white' : 'text-gray-900'}`}>{it.codigo_unico || '—'}</td>
+                    {mostrandoTodos && (
+                      <td className={td}>
+                        <div className="truncate max-w-[160px]" title={it.articulo || ''}>{it.articulo || '—'}</div>
+                        <div className={`text-[10px] ${isDark ? 'text-zinc-500' : 'text-gray-400'}`}>{fmtPeriodo(it.inicio_periodo, it.fin_periodo)}</div>
+                      </td>
+                    )}
                     <td className={td}>
                       <div className="truncate max-w-[220px]" title={it.ubicacion || ''}>{it.ubicacion || '—'}</div>
                       <div className={`text-[10px] ${isDark ? 'text-zinc-500' : 'text-gray-400'}`}>{it.formato || ''}</div>
