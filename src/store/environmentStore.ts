@@ -8,7 +8,7 @@ export type Environment = SapDatabase;
 // humano en Vercel por proyecto: dev/prod pueden tener URLs distintas sin tocar
 // código). Respaldo = el túnel cloudflared viejo, por si la variable no existe.
 // Nuevo proxy fijo y permanente: https://sap.qeb.mx
-export const SAP_BASE_URL = import.meta.env.VITE_SAP_URL || 'https://workflow-namely-changes-nothing.trycloudflare.com';
+export const SAP_BASE_URL = import.meta.env.VITE_SAP_URL || 'https://sap.qeb.mx';
 
 // Configuracion por BD SAP
 const ENDPOINT_CONFIG: Record<SapDatabase, { cuic: string; deliveryNotes: string; series: number }> = {
