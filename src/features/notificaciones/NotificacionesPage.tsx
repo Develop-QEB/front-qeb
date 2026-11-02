@@ -1620,6 +1620,14 @@ function getNavigationLabel(tipo: string, tipoTarea?: string, campaniaId?: numbe
   if (isRecepcionParcialTarea(tipoTarea)) {
     return 'Ver Recepción Parcial';
   }
+  // Aviso de Eliminación (informativo al asesor): ya es campaña, así que el
+  // botón debe decir Campaña y llevar al detalle, no a la propuesta editable.
+  // Antes caía al fallback de `propuestaId` y decía "Ver Propuesta".
+  if (tipoTarea === 'Aviso Eliminación') {
+    if (tipo === 'campana' || campaniaId) return 'Ver Campaña';
+    if (tipo === 'propuesta' || propuestaId) return 'Ver Propuesta';
+    return 'Ver Solicitud';
+  }
   // Tareas de Rechazo: usar referencia_tipo para el label correcto
   if (tipoTarea?.includes('Rechazo')) {
     if (tipo === 'propuesta') return 'Editar Propuesta';
@@ -1754,6 +1762,15 @@ function getDirectNavigationPath(tipo: string, id: number, titulo: string, tipoT
   // ir directo a Gestión de Artes de la campaña.
   if (isArtesNotification(titulo) && campaniaId) {
     return `/campanas/${campaniaId}/tareas`;
+  }
+
+  // Aviso de Eliminación: el circuito ya era de campaña. Al detalle de campaña
+  // (solo lectura), nunca a la propuesta editable. Se resuelve antes del
+  // fallback por `propuestaId`, que es el que lo mandaba a /propuestas.
+  if (tipoTarea === 'Aviso Eliminación') {
+    if (campaniaId) return `/campanas/detail/${campaniaId}`;
+    if (tipo === 'campana' && id) return `/campanas/detail/${id}`;
+    if (propuestaId) return `/propuestas?viewId=${propuestaId}`;
   }
 
   // Si es tarea de propuesta (ajuste cto, etc.) o tiene id_propuesta, ir al detalle de propuesta
@@ -2669,6 +2686,12 @@ function TaskDrawer({
         onNavigate(getDirectNavigationPath('solicitud', solicitudId, tarea.titulo || '', tarea.tipo || undefined));
         return;
       }
+    }
+    // Aviso de Eliminación → detalle de campaña (no depende de referencia_tipo,
+    // que en filas viejas/cacheadas podía venir como 'solicitud').
+    if (tarea.tipo === 'Aviso Eliminación' && tarea.campania_id) {
+      onNavigate(`/campanas/detail/${tarea.campania_id}`);
+      return;
     }
     // Si tiene referencia_tipo y referencia_id, usar esos
     if (tarea.referencia_tipo && tarea.referencia_id) {
@@ -4735,6 +4758,11 @@ export function NotificacionesPage() {
                                     const rejSolId = getRejectionSolicitudId(tarea);
                                     if (rejSolId) setEditSolicitudId(rejSolId);
                                   }
+                                  return;
+                                }
+                                // Aviso de Eliminación → detalle de campaña (solo lectura).
+                                if (tarea.tipo === 'Aviso Eliminación' && tarea.campania_id) {
+                                  navigate(`/campanas/detail/${tarea.campania_id}`);
                                   return;
                                 }
                                 // Si tiene referencia_tipo y referencia_id, usar esos
