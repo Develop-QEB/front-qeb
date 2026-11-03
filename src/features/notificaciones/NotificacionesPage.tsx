@@ -16,6 +16,7 @@ import { notasService, NotaPersonal } from '../../services/notas.service';
 import { usuariosService } from '../../services/usuarios.service';
 import { Notificacion, ComentarioTarea } from '../../types';
 import { formatDate, formatDateCompact } from '../../lib/utils';
+import { motivoRechazoValido, limpiarMotivo } from '../../lib/historial';
 import { STATUS_CONFIG, getTipoConfig, getStatusConfig } from '../../lib/taskConfig';
 import { useAuthStore } from '../../store/authStore';
 import { useThemeStore } from '../../store/themeStore';
@@ -2293,7 +2294,7 @@ function ApprovalModal({
                       <div className="flex-1 min-w-0">
                         <p className={`text-xs font-medium ${isDark ? 'text-zinc-300' : 'text-gray-700'}`}>{entry.accion}</p>
                         {isRechazo && entry.detalles?.motivo && (
-                          <p className={`text-[11px] ${isDark ? 'text-red-400/70' : 'text-red-600/70'} mt-0.5`}>Motivo: {entry.detalles.motivo}</p>
+                          <p className={`text-[11px] ${isDark ? 'text-red-400/70' : 'text-red-600/70'} mt-0.5`}>Motivo: {limpiarMotivo(entry.detalles.motivo) || 'no especificado'}</p>
                         )}
                         {isSolicitud && entry.detalles?.caras && (
                           <p className={`text-[11px] ${isDark ? 'text-zinc-500' : 'text-gray-400'} mt-0.5`}>
@@ -2410,7 +2411,7 @@ function ApprovalModal({
                 <div className="flex gap-2">
                   <button
                     onClick={() => isFiltroTask ? rechazarFiltroMutation.mutate(rechazoMotivo) : rechazarMutation.mutate(rechazoMotivo)}
-                    disabled={(isFiltroTask ? rechazarFiltroMutation.isPending : rechazarMutation.isPending) || !rechazoMotivo.trim()}
+                    disabled={(isFiltroTask ? rechazarFiltroMutation.isPending : rechazarMutation.isPending) || !motivoRechazoValido(rechazoMotivo)}
                     className="flex-1 flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl bg-red-600 text-white text-sm font-medium hover:bg-red-700 disabled:opacity-50 disabled:cursor-not-allowed transition-all"
                   >
                     {(isFiltroTask ? rechazarFiltroMutation.isPending : rechazarMutation.isPending) && <Loader2 className="h-4 w-4 animate-spin" />}
@@ -2642,7 +2643,7 @@ function TaskDrawer({
   };
 
   const handleRechazar = () => {
-    if (!rechazoMotivo.trim()) return;
+    if (!motivoRechazoValido(rechazoMotivo)) return;
     rechazarMutation.mutate(rechazoMotivo);
   };
 
