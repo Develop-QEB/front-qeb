@@ -45,6 +45,12 @@ export function limpiarMotivo(v: unknown): string {
   return s;
 }
 
+// Un motivo de rechazo debe EXPLICAR algo (no solo "." o puntuación). Espejo de
+// la validación del back (≥3 caracteres reales). Evita el "Motivo: ." (Jos).
+export function motivoRechazoValido(v: unknown): boolean {
+  return String(v ?? '').replace(/[\s\p{P}\p{S}]+/gu, '').length >= 3;
+}
+
 const money = (v: unknown): string => `$${Number(v).toLocaleString('es-MX')}`;
 
 // Formatea un "circuito" del detalle (eliminar/crear circuito, eliminar
