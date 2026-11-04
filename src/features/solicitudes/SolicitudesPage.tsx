@@ -3,8 +3,8 @@ import { useSearchParams } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import {
   Search, Download, Trash2, FileText,
-  Filter, ChevronDown, ChevronRight, X, Layers, SlidersHorizontal,
-  ArrowUpDown, Calendar, Clock, Plus, List, Columns3
+  Filter, ChevronDown, ChevronRight, X, SlidersHorizontal,
+  Calendar, Clock, Plus, List, Columns3
 } from 'lucide-react';
 import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip as RechartsTooltip, Legend } from 'recharts';
 
@@ -24,14 +24,16 @@ import SolicitudesTableroView, {
   SOLICITUDES_COLUMNAS, SOLICITUDES_COLUMNAS_KEYS, esSolicitudIncompleta,
 } from './SolicitudesTableroView';
 import {
-  ordenarTablero, ORDEN_RAPIDO_DEFAULT, ORDEN_RAPIDO_TABLA_DEFAULT, type OrdenRapido,
+  ordenarTablero, ordenCampo, ordenEsAsc, ORDEN_RAPIDO_DEFAULT, ORDEN_RAPIDO_TABLA_DEFAULT, type OrdenRapido,
   construirOpcionesCambio, fechaUltimoCambio,
 } from '../../lib/tableroVistas';
 import { AUTORIZACION_LABELS, evalAutorizacionAvanzado, splitStatusSeleccion, estatusValorIncluye } from '../../lib/autorizacionFiltro';
 import { MultiSelectChip } from '../../components/MultiSelectChip';
 import { RefreshButton } from '../../components/RefreshButton';
 import { TableroVistasControls } from '../../components/tablero/TableroVistasControls';
-import { OrdenRapidoChips } from '../../components/tablero/OrdenRapidoChips';
+import { OrdenRapidoMenu } from '../../components/tablero/OrdenRapidoMenu';
+import { VistasGuardadasMenu } from '../../components/tablero/VistasGuardadasMenu';
+import { leerCondiciones, leerNumeroOpcional, leerObjetoStrings, leerString, leerStrings, type FiltrosDatos } from '../../lib/filtrosGuardados';
 import { VistaSelector, type VistaOpcion } from '../../components/tablero/VistaSelector';
 import { loadVistaFijaModulo, saveVistaFijaModulo } from '../../lib/vistaFija';
 import { SolicitudAcciones, puedeCambiarStatusSolicitud } from './SolicitudAcciones';
@@ -702,7 +704,6 @@ export function SolicitudesPage() {
   const [catorcenaFin, setCatorcenaFin] = useState<number | undefined>(undefined);
   const [historialFilter, setHistorialFilter] = useState<HistorialFilterValues>({});
   const [tipoPeriodo, setTipoPeriodo] = useState('');
-  const [sortBy, setSortBy] = useState('fecha');
   // Vista fija del modulo (por usuario, localStorage): con cual de las dos
   // vistas abre Solicitudes. null = default ('tabla').
   const [vistaFija, setVistaFija] = useState<VistaSolicitudes | null>(
@@ -847,11 +848,14 @@ export function SolicitudesPage() {
   // Default de orden según la vista (ver ORDEN_RAPIDO_TABLA_DEFAULT).
   const ordenDefaultVista = activeView === 'tablero' ? ORDEN_RAPIDO_DEFAULT : ORDEN_RAPIDO_TABLA_DEFAULT;
   // A diferencia de Propuestas/Campañas, aquí el backend sí acepta
-  // sortBy/sortOrder, así que 'nueva_vieja' y 'vieja_nueva' viajan como
-  // dirección del ORDER BY y siguen paginando barato. Solo 'reciente' ordena
-  // en cliente (por updated_at) y necesita el universo completo.
-  const backendSortOrder: 'asc' | 'desc' = ordenRapido === 'vieja_nueva' ? 'asc' : 'desc';
-  const ordenNecesitaTodo = ordenRapido === 'reciente';
+  // sortBy/sortOrder, así que 'Fecha de creación' y 'Presupuesto' viajan como
+  // columna + dirección del ORDER BY y siguen paginando barato. Solo 'Último
+  // cambio' ordena en cliente (updated_at + historial) y necesita el universo
+  // completo; para ese caso el backend recibe el default (fecha desc).
+  const campoOrden = ordenCampo(ordenRapido);
+  const backendSortBy = campoOrden === 'presupuesto' ? 'presupuesto' : 'fecha';
+  const backendSortOrder: 'asc' | 'desc' = campoOrden !== 'cambio' && ordenEsAsc(ordenRapido) ? 'asc' : 'desc';
+  const ordenNecesitaTodo = campoOrden === 'cambio';
   // El tablero necesita TODAS las solicitudes para que los conteos por
   // columna sean reales; va aquí (y no solo en el limit) porque needsAllData
   // es lo que fija page=1.
@@ -875,7 +879,7 @@ export function SolicitudesPage() {
   const statusFiltro = splitStatusSeleccion(statusSel);
   // Fechas de último cambio por estatus/autorización: solo hacen falta para
   // el orden "Último cambio" (el back las calcula desde historial).
-  const includeCambios = ordenRapido === 'reciente';
+  const includeCambios = campoOrden === 'cambio';
 
   // Fetch stats with all active filters.
   // staleTime corto: el WebSocket invalida la query en cambios reales, así
@@ -902,7 +906,7 @@ export function SolicitudesPage() {
 
   // Fetch solicitudes
   const { data, isLoading } = useQuery({
-    queryKey: ['solicitudes', needsAllData ? 1 : page, statusSel, searchForBackend, yearInicio, yearFin, catorcenaInicio, catorcenaFin, sortBy, backendSortOrder, groupBy, tipoPeriodo, needsAllData, historialFilter, effectiveExcludeRechazadas, includeCambios],
+    queryKey: ['solicitudes', needsAllData ? 1 : page, statusSel, searchForBackend, yearInicio, yearFin, catorcenaInicio, catorcenaFin, backendSortBy, backendSortOrder, groupBy, tipoPeriodo, needsAllData, historialFilter, effectiveExcludeRechazadas, includeCambios],
     queryFn: () =>
       solicitudesService.getAll({
         page: needsAllData ? 1 : page,
@@ -915,7 +919,7 @@ export function SolicitudesPage() {
         yearFin,
         catorcenaInicio,
         catorcenaFin,
-        sortBy,
+        sortBy: backendSortBy,
         sortOrder: backendSortOrder,
         groupBy: groupBy || undefined,
         tipoPeriodo: tipoPeriodo || undefined,
@@ -1043,7 +1047,7 @@ export function SolicitudesPage() {
   };
 
   const hasPeriodFilter = yearInicio !== undefined && yearFin !== undefined;
-  const hasActiveFilters = !!(statusSel.length > 0 || hasPeriodFilter || groupBy || sortBy !== 'fecha' || ordenRapido !== ordenDefaultVista || soloIncompletos || advancedFilters.length > 0 || searchTags.length > 0);
+  const hasActiveFilters = !!(statusSel.length > 0 || hasPeriodFilter || groupBy || ordenRapido !== ordenDefaultVista || soloIncompletos || advancedFilters.length > 0 || searchTags.length > 0);
 
   // Get unique values for each field (for advanced filter dropdowns).
   // Solo se calcula cuando el panel de filtros avanzados está abierto: evita
@@ -1081,11 +1085,12 @@ export function SolicitudesPage() {
     let result = applyAdvancedFilters(data.data, advancedFilters);
     // Filtro rápido: solicitudes sin circuitos cargados (ver esSolicitudIncompleta).
     if (soloIncompletos) result = result.filter(esSolicitudIncompleta);
-    // 'reciente' es el único orden que corre en cliente; los otros dos ya
-    // vienen ordenados del backend. Solo con el universo completo, para no
-    // reordenar nada más la página visible. La fecha considera edición,
-    // cambios de estatus y de autorización según `cambiosSeleccion`.
-    if (ordenRapido === 'reciente' && needsAllData) {
+    // 'Último cambio' es el único orden que corre en cliente; creación y
+    // presupuesto ya vienen ordenados del backend. Solo con el universo
+    // completo, para no reordenar nada más la página visible. La fecha
+    // considera edición, cambios de estatus y de autorización según
+    // `cambiosSeleccion`.
+    if (ordenCampo(ordenRapido) === 'cambio' && needsAllData) {
       result = ordenarTablero(result, ordenRapido, s => s.fecha, s => fechaUltimoCambio(s, cambiosSeleccion));
     }
     return result;
@@ -1162,6 +1167,33 @@ export function SolicitudesPage() {
     setAdvancedFilters([]);
   };
 
+  // Foto de la barra de filtros que guarda una vista (menu "Vistas" junto al
+  // boton Filtros), y como volver a aplicarla. El orden y "solo incompletos"
+  // van aparte en la vista (son campos propios de VistaTablero). Lo que no
+  // venga en la foto se resetea: aplicar una vista es "dejar la barra asi",
+  // no "sumar a lo que ya tenia". Ver lib/filtrosGuardados.
+  const filtrosSnapshot = useMemo<FiltrosDatos>(() => ({
+    statusSel, tipoPeriodo, yearInicio, yearFin, catorcenaInicio, catorcenaFin,
+    historialFilter, cambiosSeleccion, groupBy, advancedFilters, searchTags,
+  }), [statusSel, tipoPeriodo, yearInicio, yearFin, catorcenaInicio, catorcenaFin, historialFilter, cambiosSeleccion, groupBy, advancedFilters, searchTags]);
+  const aplicarFiltrosGuardados = React.useCallback((d: FiltrosDatos) => {
+    setStatusSel(leerStrings(d.statusSel));
+    setTipoPeriodo(leerString(d.tipoPeriodo));
+    setYearInicio(leerNumeroOpcional(d.yearInicio));
+    setYearFin(leerNumeroOpcional(d.yearFin));
+    setCatorcenaInicio(leerNumeroOpcional(d.catorcenaInicio));
+    setCatorcenaFin(leerNumeroOpcional(d.catorcenaFin));
+    setHistorialFilter(leerObjetoStrings(d.historialFilter) as HistorialFilterValues);
+    setCambiosSeleccion(Array.isArray(d.cambiosSeleccion) ? leerStrings(d.cambiosSeleccion) : null);
+    setGroupBy(leerString(d.groupBy));
+    setAdvancedFilters(leerCondiciones<AdvancedFilterCondition>(d.advancedFilters));
+    setSearchTags(leerStrings(d.searchTags));
+    setSearchInput('');
+    setExpandedGroups(new Set());
+    setShowFilters(true);
+    setPage(1);
+  }, []);
+
   const clearAllFilters = () => {
     setStatusSel([]);
     setTipoPeriodo('');
@@ -1170,7 +1202,6 @@ export function SolicitudesPage() {
     setCatorcenaInicio(undefined);
     setCatorcenaFin(undefined);
     setHistorialFilter({});
-    setSortBy('fecha');
     setOrdenRapido(ordenDefaultVista);
     setCambiosSeleccion(null);
     setSoloIncompletos(false);
@@ -1318,7 +1349,7 @@ export function SolicitudesPage() {
         <div className={`rounded-2xl border ${isDark ? 'border-purple-500/20 bg-gradient-to-br from-zinc-900/90 via-purple-950/20 to-zinc-900/90' : 'border-purple-200 bg-white'} backdrop-blur-xl p-4 relative z-30`}>
           <div className="flex flex-col gap-4">
             {/* Top Row: Search + Filter Toggle + Export */}
-            <div className="flex flex-col lg:flex-row items-start lg:items-center gap-4">
+            <div className="flex flex-col lg:flex-row lg:flex-wrap items-start lg:items-center gap-3">
               {/* Search with Tags */}
               <div className={`relative flex-1 w-full lg:max-w-xl flex items-center flex-wrap gap-1.5 min-h-[44px] px-3 py-1.5 rounded-xl border ${isDark ? 'border-purple-500/20 bg-zinc-900/80 hover:border-purple-500/40' : 'border-purple-200 bg-gray-50 hover:border-purple-300'} focus-within:ring-2 focus-within:ring-purple-500/30 focus-within:border-purple-500/40 transition-all`}>
                 <Search className={`h-4 w-4 shrink-0 ${isDark ? 'text-purple-400' : 'text-purple-500'}`} />
@@ -1369,17 +1400,35 @@ export function SolicitudesPage() {
               {/* Filter Toggle */}
               <button
                 onClick={() => setShowFilters(!showFilters)}
-                className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-medium transition-all ${showFilters || hasActiveFilters
+                title="Filtros"
+                className={`flex shrink-0 items-center gap-2 px-3 py-2 rounded-xl text-sm font-medium whitespace-nowrap transition-all ${showFilters || hasActiveFilters
                   ? isDark ? 'bg-purple-500/20 text-purple-300 border border-purple-500/40' : 'bg-purple-50 text-purple-700 border border-purple-200'
                   : `${isDark ? 'bg-zinc-800/60 text-zinc-400 border border-zinc-700/50 hover:bg-zinc-800' : 'bg-gray-100 text-gray-500 border border-gray-200 hover:bg-gray-200'}`
                   }`}
               >
                 <SlidersHorizontal className="h-4 w-4" />
-                Filtros
+                <span className="hidden xl:inline">Filtros</span>
                 {hasActiveFilters && (
                   <span className="w-2 h-2 rounded-full bg-purple-400" />
                 )}
               </button>
+
+              {/* Vistas guardadas por usuario: filtros + orden + incompletos +
+                  columnas del tablero. Guardar / aplicar / renombrar / fijar. */}
+              <VistasGuardadasMenu
+                isDark={isDark}
+                scope="solicitudes"
+                userId={user?.id}
+                columnasValidas={SOLICITUDES_COLUMNAS_KEYS}
+                columnasVisibles={tableroColumnas}
+                onColumnasChange={setTableroColumnas}
+                orden={ordenRapido}
+                onOrdenChange={setOrdenRapido}
+                soloIncompletos={soloIncompletos}
+                onSoloIncompletosChange={setSoloIncompletos}
+                filtrosActuales={filtrosSnapshot}
+                onAplicarFiltros={aplicarFiltrosGuardados}
+              />
 
               {/* Selector de vista (Tabla / Tablero) + estrella para fijar con
                   cual abre el modulo. Mismo control que Propuestas y Campanas. */}
@@ -1395,17 +1444,18 @@ export function SolicitudesPage() {
               {/* Export CSV */}
               <button
                 onClick={handleExportCSV}
-                className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-medium ${isDark ? 'bg-zinc-800/60 text-zinc-400 border border-zinc-700/50 hover:bg-zinc-800 hover:text-zinc-200' : 'bg-gray-100 text-gray-500 border border-gray-200 hover:bg-gray-200 hover:text-gray-700'} transition-all`}
+                title="Exportar CSV"
+                className={`flex shrink-0 items-center gap-2 px-3 py-2 rounded-xl text-sm font-medium whitespace-nowrap ${isDark ? 'bg-zinc-800/60 text-zinc-400 border border-zinc-700/50 hover:bg-zinc-800 hover:text-zinc-200' : 'bg-gray-100 text-gray-500 border border-gray-200 hover:bg-gray-200 hover:text-gray-700'} transition-all`}
               >
                 <Download className="h-4 w-4" />
-                Exportar CSV
+                <span className="hidden xl:inline">Exportar CSV</span>
               </button>
 
               {/* Nueva Solicitud */}
               {permissions.canCreateSolicitudes && (
                 <button
                   onClick={() => setShowCreateModal(true)}
-                  className="flex items-center gap-2 px-5 py-3 rounded-xl text-sm font-semibold text-white bg-gradient-to-r from-purple-600 to-fuchsia-600 hover:from-purple-500 hover:to-fuchsia-500 shadow-lg shadow-purple-500/25 hover:shadow-purple-500/40 transition-all"
+                  className="flex shrink-0 items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-semibold whitespace-nowrap text-white bg-gradient-to-r from-purple-600 to-fuchsia-600 hover:from-purple-500 hover:to-fuchsia-500 shadow-lg shadow-purple-500/25 hover:shadow-purple-500/40 transition-all"
                 >
                   <Plus className="h-4 w-4" />
                   Nueva Solicitud
@@ -1567,7 +1617,6 @@ export function SolicitudesPage() {
                 <div className={`h-4 w-px ${isDark ? 'bg-zinc-700' : 'bg-gray-200'} mx-1`} />
 
                 {/* Status Filter — estatus de solicitud + autorización de circuitos */}
-                <span className={`text-xs ${isDark ? 'text-zinc-500' : 'text-gray-400'} mr-1`}>Status:</span>
                 <MultiSelectChip
                   label="Status"
                   options={[...allStatuses, ...AUTORIZACION_LABELS]}
@@ -1581,7 +1630,6 @@ export function SolicitudesPage() {
                 <div className={`h-4 w-px ${isDark ? 'bg-zinc-700' : 'bg-gray-200'} mx-1`} />
 
                 {/* Tipo Periodo Filter */}
-                <span className={`text-xs ${isDark ? 'text-zinc-500' : 'text-gray-400'} mr-1`}>Periodo:</span>
                 <FilterChip
                   label="Tipo Periodo"
                   options={['catorcena', 'mensual']}
@@ -1639,10 +1687,11 @@ export function SolicitudesPage() {
 
                 <div className={`h-4 w-px ${isDark ? 'bg-zinc-700' : 'bg-gray-200'} mx-1`} />
 
-                {/* Filtros rápidos de orden + incompletos (aplican a Tabla y
-                    Tablero). Sustituyen al chip "Orden: asc/desc"; el chip
-                    "Campo" sigue decidiendo POR QUÉ columna ordena el backend. */}
-                <OrdenRapidoChips
+                {/* Menú "Ordenar" (creación / presupuesto / último cambio) +
+                    chip de incompletos (aplican a Tabla y Tablero). Sustituyen
+                    a los chips "Orden: asc/desc" y "Campo": la columna y la
+                    dirección del ORDER BY del backend salen de aquí. */}
+                <OrdenRapidoMenu
                   isDark={isDark}
                   orden={ordenRapido}
                   onOrdenChange={(o) => { setOrdenRapido(o); setPage(1); }}
@@ -1657,26 +1706,7 @@ export function SolicitudesPage() {
 
                 <div className={`h-4 w-px ${isDark ? 'bg-zinc-700' : 'bg-gray-200'} mx-1`} />
 
-                <span className={`text-xs ${isDark ? 'text-zinc-500' : 'text-gray-400'} mr-1`}>
-                  <ArrowUpDown className="h-3 w-3 inline mr-1" />
-                  Campo:
-                </span>
-                <FilterChip
-                  label="Campo"
-                  options={['fecha', 'presupuesto', 'razon_social', 'status']}
-                  value={sortBy}
-                  onChange={(val) => { setSortBy(val); setPage(1); }}
-                  onClear={() => { setSortBy('fecha'); setPage(1); }}
-                  isDark={isDark}
-                />
-
-                <div className={`h-4 w-px ${isDark ? 'bg-zinc-700' : 'bg-gray-200'} mx-1`} />
-
                 {/* Group By */}
-                <span className={`text-xs ${isDark ? 'text-zinc-500' : 'text-gray-400'} mr-1`}>
-                  <Layers className="h-3 w-3 inline mr-1" />
-                  Agrupar:
-                </span>
                 <FilterChip
                   label="Sin agrupar"
                   options={['status', 'marca_nombre', 'asignado', 'razon_social', 'asesor', 'nombre_usuario']}
@@ -1722,15 +1752,9 @@ export function SolicitudesPage() {
               </span>
               <TableroVistasControls
                 isDark={isDark}
-                scope="solicitudes"
-                userId={user?.id}
                 todasColumnas={SOLICITUDES_COLUMNAS}
                 columnasVisibles={tableroColumnas}
                 onColumnasChange={setTableroColumnas}
-                orden={ordenRapido}
-                onOrdenChange={setOrdenRapido}
-                soloIncompletos={soloIncompletos}
-                onSoloIncompletosChange={setSoloIncompletos}
               />
             </div>
             <SolicitudesTableroView

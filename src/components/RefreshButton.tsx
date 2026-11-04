@@ -55,7 +55,7 @@ export function RefreshButton({
   }, [refreshing, onRefresh, queryKeys, queryClient]);
 
   const base = variant === 'toolbar'
-    ? 'flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-medium border transition-all'
+    ? 'flex shrink-0 items-center gap-2 px-3 py-2 rounded-xl text-sm font-medium border transition-all whitespace-nowrap'
     : 'flex items-center gap-1 sm:gap-1.5 px-2 sm:px-3 py-1 sm:py-1.5 rounded-lg text-xs border transition-all';
   const colores = isDark
     ? 'bg-zinc-800/60 text-zinc-400 border-zinc-700/50 hover:bg-zinc-800 hover:text-zinc-200'
@@ -72,7 +72,8 @@ export function RefreshButton({
       className={`${base} ${colores} ${refreshing ? 'opacity-70 cursor-wait' : ''} ${className}`}
     >
       <RefreshCw className={`${iconCls} ${refreshing ? 'animate-spin' : ''}`} />
-      {label && <span>{refreshing ? 'Actualizando...' : label}</span>}
+      {/* En la toolbar la etiqueta solo cabe en pantallas grandes; abajo queda el icono + tooltip. */}
+      {label && <span className={variant === 'toolbar' ? 'hidden xl:inline' : ''}>{refreshing ? 'Actualizando...' : label}</span>}
     </button>
   );
 }

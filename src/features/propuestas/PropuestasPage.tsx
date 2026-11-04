@@ -41,14 +41,16 @@ import PropuestasTableroView, {
   PROPUESTAS_COLUMNAS, PROPUESTAS_COLUMNAS_KEYS,
 } from './PropuestasTableroView';
 import {
-  ordenarTablero, ORDEN_RAPIDO_DEFAULT, ORDEN_RAPIDO_TABLA_DEFAULT, type OrdenRapido,
+  ordenarTablero, ordenCampo, ORDEN_RAPIDO_DEFAULT, ORDEN_RAPIDO_TABLA_DEFAULT, type OrdenRapido,
   construirOpcionesCambio, fechaUltimoCambio,
 } from '../../lib/tableroVistas';
 import { AUTORIZACION_LABELS, evalAutorizacionAvanzado, splitStatusSeleccion, estatusValorIncluye } from '../../lib/autorizacionFiltro';
 import { MultiSelectChip } from '../../components/MultiSelectChip';
 import { RefreshButton } from '../../components/RefreshButton';
 import { TableroVistasControls } from '../../components/tablero/TableroVistasControls';
-import { OrdenRapidoChips } from '../../components/tablero/OrdenRapidoChips';
+import { OrdenRapidoMenu } from '../../components/tablero/OrdenRapidoMenu';
+import { VistasGuardadasMenu } from '../../components/tablero/VistasGuardadasMenu';
+import { leerCondiciones, leerNumeroOpcional, leerObjetoStrings, leerString, leerStrings, type FiltrosDatos } from '../../lib/filtrosGuardados';
 import { VistaSelector, type VistaOpcion } from '../../components/tablero/VistaSelector';
 import { loadVistaFijaModulo, saveVistaFijaModulo } from '../../lib/vistaFija';
 import { PropuestaAcciones } from './PropuestaAcciones';
@@ -1663,7 +1665,7 @@ export function PropuestasPage() {
   const statusFiltro = splitStatusSeleccion(statusSel, COMPLETITUD_STATUS);
   // Fechas de último cambio por estatus/autorización: solo hacen falta para
   // el orden "Último cambio" (el back las calcula desde historial).
-  const includeCambios = ordenRapido === 'reciente';
+  const includeCambios = ordenCampo(ordenRapido) === 'cambio';
 
   // Stats: WS invalida en cambios reales; staleTime corto evita refetches en
   // re-renders del padre. Pasamos `search` para que total/chart reflejen los
@@ -1772,11 +1774,11 @@ export function PropuestasPage() {
     // paginando, ordenar aquí reacomodaría únicamente las 20 filas visibles y
     // daría una lista que miente sobre el orden global; en ese caso vale el
     // ORDER BY pr.id DESC del backend, que es justo 'nueva_vieja'.
-    // 'reciente' considera edición (updated_at), cambios de estatus y cambios
-    // de autorización de circuitos según `cambiosSeleccion`; los otros dos
-    // usan `fecha`, la de creación.
+    // 'Último cambio' considera edición (updated_at), cambios de estatus y
+    // cambios de autorización de circuitos según `cambiosSeleccion`; 'Fecha
+    // de creación' usa `fecha` y 'Presupuesto' usa `inversion`.
     if (!needsAllData) return result;
-    return ordenarTablero(result, ordenRapido, p => p.fecha, p => fechaUltimoCambio(p, cambiosSeleccion));
+    return ordenarTablero(result, ordenRapido, p => p.fecha, p => fechaUltimoCambio(p, cambiosSeleccion), p => p.inversion);
   }, [data?.data, advancedFilters, completitudSel, soloIncompletos, ordenRapido, needsAllData, cambiosSeleccion]);
 
   // Sólo cuando hay filtros avanzados activos necesitamos recalcular stats en
@@ -1819,6 +1821,33 @@ export function PropuestasPage() {
   const clearAdvancedFilters = () => {
     setAdvancedFilters([]);
   };
+
+  // Foto de la barra de filtros que guarda una vista (menu "Vistas" junto al
+  // boton Filtros), y como volver a aplicarla. El orden y "solo incompletos"
+  // van aparte en la vista (son campos propios de VistaTablero). Lo que no
+  // venga en la foto se resetea: aplicar una vista es "dejar la barra asi",
+  // no "sumar a lo que ya tenia". Ver lib/filtrosGuardados.
+  const filtrosSnapshot = useMemo<FiltrosDatos>(() => ({
+    statusSel, tipoPeriodo, yearInicio, yearFin, catorcenaInicio, catorcenaFin,
+    historialFilter, cambiosSeleccion, groupBy, advancedFilters, searchTags,
+  }), [statusSel, tipoPeriodo, yearInicio, yearFin, catorcenaInicio, catorcenaFin, historialFilter, cambiosSeleccion, groupBy, advancedFilters, searchTags]);
+  const aplicarFiltrosGuardados = React.useCallback((d: FiltrosDatos) => {
+    setStatusSel(leerStrings(d.statusSel));
+    setTipoPeriodo(leerString(d.tipoPeriodo));
+    setYearInicio(leerNumeroOpcional(d.yearInicio));
+    setYearFin(leerNumeroOpcional(d.yearFin));
+    setCatorcenaInicio(leerNumeroOpcional(d.catorcenaInicio));
+    setCatorcenaFin(leerNumeroOpcional(d.catorcenaFin));
+    setHistorialFilter(leerObjetoStrings(d.historialFilter) as HistorialFilterValues);
+    setCambiosSeleccion(Array.isArray(d.cambiosSeleccion) ? leerStrings(d.cambiosSeleccion) : null);
+    setGroupBy(leerString(d.groupBy));
+    setAdvancedFilters(leerCondiciones<AdvancedFilterCondition>(d.advancedFilters));
+    setSearchTags(leerStrings(d.searchTags));
+    setSearchInput('');
+    setExpandedGroups(new Set());
+    setShowFilters(true);
+    setPage(1);
+  }, []);
 
   const clearAllFilters = () => {
     setStatusSel([]);
@@ -2265,7 +2294,7 @@ export function PropuestasPage() {
         <div className={`rounded-2xl border ${isDark ? 'border-purple-500/20 bg-gradient-to-br from-zinc-900/90 via-purple-950/20 to-zinc-900/90' : 'border-gray-200 bg-white'} backdrop-blur-xl p-4 relative z-30`}>
           <div className="flex flex-col gap-4">
             {/* Top Row: Search + Filter Toggle + Export */}
-            <div className="flex flex-col lg:flex-row items-start lg:items-center gap-4">
+            <div className="flex flex-col lg:flex-row lg:flex-wrap items-start lg:items-center gap-3">
               {/* Search with Tags */}
               <div className={`relative flex-1 w-full lg:max-w-xl flex items-center flex-wrap gap-1.5 min-h-[44px] px-3 py-1.5 rounded-xl border ${isDark ? 'border-purple-500/20 bg-zinc-900/80 hover:border-purple-500/40' : 'border-gray-200 bg-gray-50 hover:border-gray-300'} focus-within:ring-2 focus-within:ring-purple-500/30 focus-within:border-purple-500/40 transition-all`}>
                 <Search className={`h-4 w-4 shrink-0 ${isDark ? 'text-purple-400' : 'text-purple-500'}`} />
@@ -2316,7 +2345,8 @@ export function PropuestasPage() {
               {/* Filter Toggle */}
               <button
                 onClick={() => setShowFilters(!showFilters)}
-                className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-medium transition-all ${showFilters || hasActiveFilters
+                title="Filtros"
+                className={`flex shrink-0 items-center gap-2 px-3 py-2 rounded-xl text-sm font-medium whitespace-nowrap transition-all ${showFilters || hasActiveFilters
                   ? isDark ? 'bg-purple-500/20 text-purple-300 border border-purple-500/40' : 'bg-purple-50 text-purple-700 border border-purple-200'
                   : isDark
                     ? 'bg-zinc-800/60 text-zinc-400 border border-zinc-700/50 hover:bg-zinc-800'
@@ -2324,11 +2354,28 @@ export function PropuestasPage() {
                   }`}
               >
                 <SlidersHorizontal className="h-4 w-4" />
-                Filtros
+                <span className="hidden xl:inline">Filtros</span>
                 {hasActiveFilters && (
                   <span className={`w-2 h-2 rounded-full ${isDark ? 'bg-purple-400' : 'bg-purple-500'}`} />
                 )}
               </button>
+
+              {/* Vistas guardadas por usuario: filtros + orden + incompletos +
+                  columnas del tablero. Guardar / aplicar / renombrar / fijar. */}
+              <VistasGuardadasMenu
+                isDark={isDark}
+                scope="propuestas"
+                userId={user?.id}
+                columnasValidas={PROPUESTAS_COLUMNAS_KEYS}
+                columnasVisibles={tableroColumnas}
+                onColumnasChange={setTableroColumnas}
+                orden={ordenRapido}
+                onOrdenChange={setOrdenRapido}
+                soloIncompletos={soloIncompletos}
+                onSoloIncompletosChange={setSoloIncompletos}
+                filtrosActuales={filtrosSnapshot}
+                onAplicarFiltros={aplicarFiltrosGuardados}
+              />
 
               {/* Selector de vista (Tabla / Desglose / Tablero) + estrella para
                   fijar con cual abre el modulo. Un solo grupo compacto en vez
@@ -2348,29 +2395,30 @@ export function PropuestasPage() {
                   <button
                     onClick={handleExportLayout}
                     disabled={exportingLayout || exportingOcupacion}
-                    className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-medium ${isDark ? 'bg-zinc-800/60 text-zinc-400 border-zinc-700/50 hover:bg-zinc-800 hover:text-zinc-200' : 'bg-gray-100 text-gray-500 border-gray-200 hover:bg-gray-200 hover:text-gray-900'} border transition-all ${exportingLayout || exportingOcupacion ? 'opacity-50 cursor-not-allowed' : ''}`}
+                    className={`flex shrink-0 items-center gap-2 px-3 py-2 rounded-xl text-sm font-medium whitespace-nowrap ${isDark ? 'bg-zinc-800/60 text-zinc-400 border-zinc-700/50 hover:bg-zinc-800 hover:text-zinc-200' : 'bg-gray-100 text-gray-500 border-gray-200 hover:bg-gray-200 hover:text-gray-900'} border transition-all ${exportingLayout || exportingOcupacion ? 'opacity-50 cursor-not-allowed' : ''}`}
                     title="Exporta CSV en formato Layout (Campaña, Anunciante, Inversión, APS, etc.)"
                   >
                     {exportingLayout ? <Loader2 className="h-4 w-4 animate-spin" /> : <Download className="h-4 w-4" />}
-                    {exportingLayout ? 'Generando...' : 'Exportar Layout'}
+                    <span className="hidden xl:inline">{exportingLayout ? 'Generando...' : 'Exportar Layout'}</span>
                   </button>
                   <button
                     onClick={handleExportOcupacion}
                     disabled={exportingLayout || exportingOcupacion}
-                    className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-medium ${isDark ? 'bg-zinc-800/60 text-zinc-400 border-zinc-700/50 hover:bg-zinc-800 hover:text-zinc-200' : 'bg-gray-100 text-gray-500 border-gray-200 hover:bg-gray-200 hover:text-gray-900'} border transition-all ${exportingLayout || exportingOcupacion ? 'opacity-50 cursor-not-allowed' : ''}`}
+                    className={`flex shrink-0 items-center gap-2 px-3 py-2 rounded-xl text-sm font-medium whitespace-nowrap ${isDark ? 'bg-zinc-800/60 text-zinc-400 border-zinc-700/50 hover:bg-zinc-800 hover:text-zinc-200' : 'bg-gray-100 text-gray-500 border-gray-200 hover:bg-gray-200 hover:text-gray-900'} border transition-all ${exportingLayout || exportingOcupacion ? 'opacity-50 cursor-not-allowed' : ''}`}
                     title="Exporta Excel formato Orden de Montaje (Plaza, Tipo, Vendedor, APS, CUIC, Caras, Tarifa, Monto)"
                   >
                     {exportingOcupacion ? <Loader2 className="h-4 w-4 animate-spin" /> : <Download className="h-4 w-4" />}
-                    {exportingOcupacion ? 'Generando...' : 'Exportar Ocupación'}
+                    <span className="hidden xl:inline">{exportingOcupacion ? 'Generando...' : 'Exportar Ocupación'}</span>
                   </button>
                 </>
               ) : (
                 <button
                   onClick={handleExportCSV}
-                  className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-medium ${isDark ? 'bg-zinc-800/60 text-zinc-400 border-zinc-700/50 hover:bg-zinc-800 hover:text-zinc-200' : 'bg-gray-100 text-gray-500 border-gray-200 hover:bg-gray-200 hover:text-gray-900'} border transition-all`}
+                  title="Exportar CSV"
+                  className={`flex shrink-0 items-center gap-2 px-3 py-2 rounded-xl text-sm font-medium whitespace-nowrap ${isDark ? 'bg-zinc-800/60 text-zinc-400 border-zinc-700/50 hover:bg-zinc-800 hover:text-zinc-200' : 'bg-gray-100 text-gray-500 border-gray-200 hover:bg-gray-200 hover:text-gray-900'} border transition-all`}
                 >
                   <Download className="h-4 w-4" />
-                  Exportar CSV
+                  <span className="hidden xl:inline">Exportar CSV</span>
                 </button>
               )}
             </div>
@@ -2531,7 +2579,6 @@ export function PropuestasPage() {
                 <div className={`h-4 w-px ${isDark ? 'bg-zinc-700' : 'bg-gray-200'} mx-1`} />
 
                 {/* Status Filter */}
-                <span className={`text-xs ${isDark ? 'text-zinc-500' : 'text-gray-400'} mr-1`}>Status:</span>
                 <MultiSelectChip
                   label="Status"
                   options={allStatuses}
@@ -2545,7 +2592,6 @@ export function PropuestasPage() {
                 <div className={`h-4 w-px ${isDark ? 'bg-zinc-700' : 'bg-gray-200'} mx-1`} />
 
                 {/* Tipo Periodo Filter */}
-                <span className={`text-xs ${isDark ? 'text-zinc-500' : 'text-gray-400'} mr-1`}>Periodo:</span>
                 <FilterChip
                   label="Tipo Periodo"
                   options={['catorcena', 'mensual']}
@@ -2604,12 +2650,12 @@ export function PropuestasPage() {
                 {/* Divider */}
                 <div className={`h-4 w-px ${isDark ? 'bg-zinc-700/50' : 'bg-gray-200'} mx-1`} />
 
-                {/* Filtros rápidos de orden + incompletos.
-                    Reemplazan al chip "Ordenar: Campo / Asc-Desc" anterior, que
-                    no ordenaba nada: sortBy/sortOrder viajaban en el queryKey
-                    pero nunca llegaban al backend (que ordena fijo por
-                    pr.id DESC) ni se aplicaban en cliente. */}
-                <OrdenRapidoChips
+                {/* Menú "Ordenar" (creación / presupuesto / último cambio) +
+                    chip de incompletos. Reemplazan al chip "Ordenar: Campo /
+                    Asc-Desc" anterior, que no ordenaba nada: sortBy/sortOrder
+                    viajaban en el queryKey pero nunca llegaban al backend (que
+                    ordena fijo por pr.id DESC) ni se aplicaban en cliente. */}
+                <OrdenRapidoMenu
                   isDark={isDark}
                   orden={ordenRapido}
                   onOrdenChange={(o) => { setOrdenRapido(o); setPage(1); }}
@@ -2726,15 +2772,9 @@ export function PropuestasPage() {
               </span>
               <TableroVistasControls
                 isDark={isDark}
-                scope="propuestas"
-                userId={user?.id}
                 todasColumnas={PROPUESTAS_COLUMNAS}
                 columnasVisibles={tableroColumnas}
                 onColumnasChange={setTableroColumnas}
-                orden={ordenRapido}
-                onOrdenChange={setOrdenRapido}
-                soloIncompletos={soloIncompletos}
-                onSoloIncompletosChange={setSoloIncompletos}
               />
             </div>
             <PropuestasTableroView

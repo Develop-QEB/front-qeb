@@ -11,18 +11,74 @@ import { AUTORIZACION_OPCIONES, AUTORIZACION_PREFIX } from './autorizacionFiltro
 
 export type TableroScope = 'solicitudes' | 'propuestas' | 'campanas';
 
-// Orden de las tarjetas dentro de cada columna.
+// Orden de las tarjetas del tablero y de las filas de la tabla.
 //
-// 'reciente' es el default FIJO del tablero: arriba lo que cambió de estatus
-// (o se editó) más recientemente, que es lo que el tablero debe responder de
-// un vistazo. Los otros dos ordenan por fecha de creación.
-export type OrdenRapido = 'reciente' | 'nueva_vieja' | 'vieja_nueva';
+// Un solo criterio a la vez, cada uno con sus dos sentidos:
+//   - 'nueva_vieja' / 'vieja_nueva'       → fecha de creación
+//   - 'presupuesto_alto' / 'presupuesto_bajo' → presupuesto / inversión
+//   - 'reciente' / 'reciente_viejo'       → último cambio (edición, estatus,
+//     autorización de circuitos; ver fechaUltimoCambio)
+//
+// 'reciente' es el default FIJO del tablero: arriba lo que cambió más
+// recientemente, que es lo que el tablero debe responder de un vistazo.
+// Las claves viejas ('reciente', 'nueva_vieja', 'vieja_nueva') se conservan a
+// propósito: viven en las vistas guardadas en localStorage.
+export type OrdenRapido =
+  | 'reciente' | 'reciente_viejo'
+  | 'nueva_vieja' | 'vieja_nueva'
+  | 'presupuesto_alto' | 'presupuesto_bajo';
 
-export const ORDEN_RAPIDO_OPCIONES: { value: OrdenRapido; label: string; hint: string }[] = [
-  { value: 'reciente', label: 'Último cambio', hint: 'Arriba lo que cambió de estatus o se editó más recientemente' },
-  { value: 'nueva_vieja', label: 'Más nueva', hint: 'De la más nueva a la más vieja (fecha de creación)' },
-  { value: 'vieja_nueva', label: 'Más vieja', hint: 'De la más vieja a la más nueva (fecha de creación)' },
+export type OrdenCampo = 'creacion' | 'presupuesto' | 'cambio';
+
+export interface OrdenOpcion { value: OrdenRapido; label: string; hint: string }
+export interface OrdenCriterio {
+  campo: OrdenCampo;
+  label: string;
+  hint: string;
+  /** [sentido descendente, sentido ascendente] */
+  opciones: readonly [OrdenOpcion, OrdenOpcion];
+}
+
+/** Criterios del menú "Ordenar", en el orden en que se pintan. */
+export const ORDEN_CRITERIOS: readonly OrdenCriterio[] = [
+  {
+    campo: 'creacion', label: 'Fecha de creación', hint: 'Por la fecha en que se creó el registro',
+    opciones: [
+      { value: 'nueva_vieja', label: 'Nueva', hint: 'De la más nueva a la más vieja (fecha de creación)' },
+      { value: 'vieja_nueva', label: 'Vieja', hint: 'De la más vieja a la más nueva (fecha de creación)' },
+    ],
+  },
+  {
+    campo: 'presupuesto', label: 'Presupuesto', hint: 'Por presupuesto / inversión',
+    opciones: [
+      { value: 'presupuesto_alto', label: 'Alto', hint: 'Del presupuesto más alto al más bajo' },
+      { value: 'presupuesto_bajo', label: 'Bajo', hint: 'Del presupuesto más bajo al más alto' },
+    ],
+  },
+  {
+    campo: 'cambio', label: 'Último cambio', hint: 'Por la fecha del último cambio: edición, cambio de estatus o autorización de circuitos',
+    opciones: [
+      { value: 'reciente', label: 'Nueva', hint: 'Arriba lo que cambió más recientemente' },
+      { value: 'reciente_viejo', label: 'Vieja', hint: 'Arriba lo que lleva más tiempo sin cambios' },
+    ],
+  },
 ];
+
+/** Lista plana (una entrada por orden) con etiqueta "Criterio · Sentido". */
+export const ORDEN_RAPIDO_OPCIONES: { value: OrdenRapido; label: string; hint: string; campo: OrdenCampo; asc: boolean }[] =
+  ORDEN_CRITERIOS.flatMap(c => c.opciones.map((o, i) => ({
+    value: o.value, label: `${c.label} · ${o.label}`, hint: o.hint, campo: c.campo, asc: i === 1,
+  })));
+
+export function ordenCampo(orden: OrdenRapido): OrdenCampo {
+  return ORDEN_RAPIDO_OPCIONES.find(o => o.value === orden)?.campo ?? 'creacion';
+}
+export function ordenEsAsc(orden: OrdenRapido): boolean {
+  return ORDEN_RAPIDO_OPCIONES.find(o => o.value === orden)?.asc ?? false;
+}
+export function ordenLabel(orden: OrdenRapido): string {
+  return ORDEN_RAPIDO_OPCIONES.find(o => o.value === orden)?.label ?? orden;
+}
 
 // Default FIJO del tablero: arriba el cambio mas reciente.
 export const ORDEN_RAPIDO_DEFAULT: OrdenRapido = 'reciente';
@@ -34,13 +90,26 @@ export const ORDEN_RAPIDO_DEFAULT: OrdenRapido = 'reciente';
 // ordenar solo la pagina visible, y eso no debe pagarse en cada visita.
 export const ORDEN_RAPIDO_TABLA_DEFAULT: OrdenRapido = 'nueva_vieja';
 
-/** Una vista guardada: qué columnas ver y con qué orden/filtro. */
+/**
+ * Foto de la barra de filtros de un modulo (estatus, periodo, historial,
+ * agrupacion, filtros avanzados, busqueda...). JSON plano: cada pagina decide
+ * que guarda y lo lee de vuelta con validacion (ver lib/filtrosGuardados).
+ */
+export type FiltrosDatos = Record<string, unknown>;
+
+/**
+ * Una vista guardada: columnas del tablero, orden, "solo incompletos" y la
+ * foto de la barra de filtros. Aplica igual en Tabla, Desglose y Tablero (las
+ * columnas solo se notan en el tablero).
+ */
 export interface VistaTablero {
   id: string;
   nombre: string;
   columnas: string[];
   orden: OrdenRapido;
   soloIncompletos: boolean;
+  /** Ausente en vistas guardadas antes de que existiera: equivale a "sin filtros". */
+  filtros?: FiltrosDatos;
   /**
    * Vista fija: se aplica sola cada vez que el usuario entra al tablero.
    * Como mucho una por modulo; marcar otra desmarca la anterior.
@@ -100,21 +169,34 @@ export function parseFechaMs(valor: string | Date | null | undefined): number | 
 /**
  * Ordena una copia de `items` según el orden rápido elegido.
  *
- * Los registros sin fecha van siempre al final (en los dos sentidos): un nulo
- * no es "lo más viejo", es un dato que falta, y colarlo arriba en 'vieja_nueva'
- * llenaría el tope de la columna con tarjetas sin fecha.
+ * Los registros sin valor van siempre al final (en los dos sentidos): un nulo
+ * no es "lo más viejo" ni "lo más barato", es un dato que falta, y colarlo
+ * arriba en el sentido ascendente llenaría el tope con tarjetas sin dato.
+ *
+ * `getPresupuesto` es opcional: sin él, un orden por presupuesto deja la
+ * lista como está (todo cuenta como "sin dato") en vez de fingir un orden.
  */
 export function ordenarTablero<T>(
   items: T[],
   orden: OrdenRapido,
   getCreado: (item: T) => string | Date | null | undefined,
   getEditado: (item: T) => string | Date | null | undefined,
+  getPresupuesto?: (item: T) => number | string | null | undefined,
 ): T[] {
-  const get = orden === 'reciente' ? getEditado : getCreado;
-  const asc = orden === 'vieja_nueva';
+  const campo = ordenCampo(orden);
+  const asc = ordenEsAsc(orden);
+  const valor = (item: T): number | null => {
+    if (campo === 'presupuesto') {
+      const raw = getPresupuesto?.(item);
+      if (raw === null || raw === undefined || raw === '') return null;
+      const n = Number(raw);
+      return Number.isFinite(n) ? n : null;
+    }
+    return parseFechaMs(campo === 'cambio' ? getEditado(item) : getCreado(item));
+  };
   return [...items].sort((a, b) => {
-    const ta = parseFechaMs(get(a));
-    const tb = parseFechaMs(get(b));
+    const ta = valor(a);
+    const tb = valor(b);
     if (ta === null && tb === null) return 0;
     if (ta === null) return 1;
     if (tb === null) return -1;
@@ -202,8 +284,8 @@ function storageKey(scope: TableroScope, userId: number | string | null | undefi
   return `${STORAGE_PREFIX}:${scope}:v1:${userId ?? 'anon'}`;
 }
 
-function esOrdenValido(v: unknown): v is OrdenRapido {
-  return v === 'reciente' || v === 'nueva_vieja' || v === 'vieja_nueva';
+export function esOrdenValido(v: unknown): v is OrdenRapido {
+  return typeof v === 'string' && ORDEN_RAPIDO_OPCIONES.some(o => o.value === v);
 }
 
 /**
@@ -236,6 +318,7 @@ export function loadVistas(
         columnas,
         orden: esOrdenValido(o.orden) ? o.orden : ORDEN_RAPIDO_DEFAULT,
         soloIncompletos: o.soloIncompletos === true,
+        filtros: o.filtros && typeof o.filtros === 'object' && !Array.isArray(o.filtros) ? (o.filtros as FiltrosDatos) : undefined,
         predeterminada: o.predeterminada === true,
       }];
     });
