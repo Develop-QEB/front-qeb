@@ -308,6 +308,23 @@ export const propuestasService = {
     return response.data.data;
   },
 
+  // Bloquear / desbloquear un circuito (apartado exclusivo de Tráfico). El back
+  // responde con la forma plana { success, bloqueado, message, ... }.
+  async toggleBloqueoCircuito(
+    propuestaId: number,
+    caraId: number,
+    activo: boolean,
+  ): Promise<{ success: boolean; bloqueado?: boolean; message?: string; bloqueadas?: number; desbloqueadas?: number; desplazadas?: number; error?: string }> {
+    const response = await api.post<{ success: boolean; bloqueado?: boolean; message?: string; bloqueadas?: number; desbloqueadas?: number; desplazadas?: number; error?: string }>(
+      `/propuestas/${propuestaId}/circuito/${caraId}/bloqueo`,
+      { activo },
+    );
+    if (!response.data.success) {
+      throw new Error(response.data.error || 'Error al cambiar el bloqueo del circuito');
+    }
+    return response.data;
+  },
+
   async createReservas(
     propuestaId: number,
     data: {
