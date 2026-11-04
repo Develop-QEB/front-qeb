@@ -1,9 +1,9 @@
 import { useCallback, useMemo } from 'react';
-import { Building2, Calendar, DollarSign, History, LayoutList, User } from 'lucide-react';
+import { Building2, Calendar, Clock, DollarSign, History, LayoutList, User } from 'lucide-react';
 import { Solicitud } from '../../types';
 import { formatCurrency, formatDate, formatDateCompact } from '../../lib/utils';
 import { TableroBoard, TableroCard, type TableroColumna } from '../../components/tablero/TableroBoard';
-import { buildMapaColumnas, normalizaEstatus } from '../../lib/tableroVistas';
+import { buildMapaColumnas, fechaUltimoCambio, normalizaEstatus } from '../../lib/tableroVistas';
 import { SolicitudAcciones, puedeCambiarStatusSolicitud, type SolicitudAccionesProps } from './SolicitudAcciones';
 
 /** Permisos y callbacks de la fila de acciones; los mismos que recibe la fila de la tabla. */
@@ -154,15 +154,27 @@ function TarjetaSolicitud({
         <span className={`font-mono text-[10px] px-1.5 py-0.5 rounded ${isDark ? 'bg-purple-500/10 text-purple-300' : 'bg-purple-50 text-purple-700'}`}>
           #{solicitud.campania_id || solicitud.id}
         </span>
-        {/* Fecha de ultima edicion. Requiere solicitud.updated_at (columna +
-            schema de prisma): mientras no exista llega vacia y se dice "—". */}
-        <span
-          className={`inline-flex items-center gap-1 text-[10px] ${sub}`}
-          title={solicitud.updated_at ? `Última edición: ${formatDate(solicitud.updated_at)}` : 'Sin registro de edición'}
-        >
-          <History className="h-3 w-3" />
-          {solicitud.updated_at ? formatDateCompact(solicitud.updated_at) : '—'}
-        </span>
+        {/* Fecha del ultimo cambio: la misma que usa el orden "Ultimo cambio"
+            (edicion = updated_at, mas cambios de estatus y de autorizacion de
+            circuitos que vienen del historial). Sin ningun cambio registrado
+            se muestra la fecha de creacion con otro icono y tooltip claro,
+            en vez de un "—" que parece error. */}
+        {(() => {
+          const ultimo = fechaUltimoCambio(solicitud, null);
+          const creado = solicitud.fecha;
+          const fecha = ultimo ?? creado;
+          return (
+            <span
+              className={`inline-flex items-center gap-1 text-[10px] ${sub}`}
+              title={ultimo
+                ? `Último cambio: ${formatDate(ultimo)}`
+                : creado ? `Sin cambios registrados · creada el ${formatDate(creado)}` : 'Sin registro de cambios'}
+            >
+              {ultimo ? <History className="h-3 w-3" /> : <Clock className="h-3 w-3" />}
+              {fecha ? formatDateCompact(fecha) : '—'}
+            </span>
+          );
+        })()}
       </div>
 
       <p className={`text-xs font-semibold truncate ${txt}`} title={titulo}>{titulo}</p>

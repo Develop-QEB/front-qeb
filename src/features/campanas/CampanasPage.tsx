@@ -1338,7 +1338,8 @@ export function CampanasPage() {
   const statusFiltro = splitStatusSeleccion(statusSel, ['Incompleta']);
   // Fechas de último cambio por estatus/autorización: solo hacen falta para
   // el orden "Último cambio" (el back las calcula desde historial).
-  const includeCambios = ordenCampo(ordenRapido) === 'cambio';
+  // El tablero los pide siempre: la tarjeta muestra la fecha del ultimo cambio.
+  const includeCambios = ordenCampo(ordenRapido) === 'cambio' || activeView === 'tablero';
 
   const { data, isLoading } = useQuery({
     queryKey: ['campanas', needsAllData ? 1 : page, statusSel, yearInicio, yearFin, catorcenaInicio, catorcenaFin, tipoPeriodo, needsAllData, serverSearch, effectiveLimit, historialFilter, effectiveExcludeRechazadas, includeCambios],

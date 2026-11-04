@@ -1,9 +1,9 @@
 import { useCallback, useMemo } from 'react';
-import { Building2, Calendar, DollarSign, History, User } from 'lucide-react';
+import { Building2, Calendar, Clock, DollarSign, History, User } from 'lucide-react';
 import { Propuesta } from '../../types';
 import { formatCurrency, formatDate, formatDateCompact } from '../../lib/utils';
 import { TableroBoard, TableroCard, type TableroColumna } from '../../components/tablero/TableroBoard';
-import { buildMapaColumnas, normalizaEstatus } from '../../lib/tableroVistas';
+import { buildMapaColumnas, fechaUltimoCambio, normalizaEstatus } from '../../lib/tableroVistas';
 import { getStatusColor, esPropuestaIncompleta, IncompletaBadge } from './propuestaEstatus';
 import { PropuestaAcciones, type PropuestaAccionesProps } from './PropuestaAcciones';
 
@@ -177,15 +177,27 @@ function TarjetaPropuesta({
         <span className={`font-mono text-[10px] px-1.5 py-0.5 rounded ${isDark ? 'bg-purple-500/10 text-purple-300' : 'bg-purple-50 text-purple-700'}`}>
           #{propuesta.campania_id || propuesta.id}
         </span>
-        {/* Fecha de ultima edicion: lo que el tablero usa para ordenar por
-            "ultimo cambio". Sin dato, se dice, no se inventa. */}
-        <span
-          className={`inline-flex items-center gap-1 text-[10px] ${sub}`}
-          title={propuesta.updated_at ? `Última edición: ${formatDate(propuesta.updated_at)}` : 'Sin registro de edición'}
-        >
-          <History className="h-3 w-3" />
-          {propuesta.updated_at ? formatDateCompact(propuesta.updated_at) : '—'}
-        </span>
+        {/* Fecha del ultimo cambio: la misma que usa el orden "Ultimo cambio"
+            (edicion = updated_at, mas cambios de estatus y de autorizacion de
+            circuitos que vienen del historial). Sin ningun cambio registrado
+            se muestra la fecha de creacion con otro icono y tooltip claro,
+            en vez de un "—" que parece error. */}
+        {(() => {
+          const ultimo = fechaUltimoCambio(propuesta, null);
+          const creado = propuesta.fecha;
+          const fecha = ultimo ?? creado;
+          return (
+            <span
+              className={`inline-flex items-center gap-1 text-[10px] ${sub}`}
+              title={ultimo
+                ? `Último cambio: ${formatDate(ultimo)}`
+                : creado ? `Sin cambios registrados · creada el ${formatDate(creado)}` : 'Sin registro de cambios'}
+            >
+              {ultimo ? <History className="h-3 w-3" /> : <Clock className="h-3 w-3" />}
+              {fecha ? formatDateCompact(fecha) : '—'}
+            </span>
+          );
+        })()}
       </div>
 
       <p className={`text-xs font-semibold truncate ${txt}`} title={titulo}>{titulo}</p>

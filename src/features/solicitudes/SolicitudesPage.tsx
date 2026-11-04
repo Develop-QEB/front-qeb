@@ -879,7 +879,8 @@ export function SolicitudesPage() {
   const statusFiltro = splitStatusSeleccion(statusSel);
   // Fechas de último cambio por estatus/autorización: solo hacen falta para
   // el orden "Último cambio" (el back las calcula desde historial).
-  const includeCambios = campoOrden === 'cambio';
+  // El tablero los pide siempre: la tarjeta muestra la fecha del ultimo cambio.
+  const includeCambios = campoOrden === 'cambio' || activeView === 'tablero';
 
   // Fetch stats with all active filters.
   // staleTime corto: el WebSocket invalida la query en cambios reales, así
