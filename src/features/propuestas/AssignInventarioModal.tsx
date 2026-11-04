@@ -4,7 +4,7 @@ import { useQuery, useQueryClient, useMutation } from '@tanstack/react-query';
 import {
   X, Search, Plus, Trash2, ChevronDown, ChevronRight, ChevronUp, Users,
   FileText, MapPin, Layers, Pencil, Map as MapIcon, Package, Calendar,
-  Gift, Target, Save, ArrowLeft, Filter, Grid, LayoutGrid, Ruler, ArrowUpDown, ArrowUp, ArrowDown, Download, Eye, Funnel, Check, Upload, Monitor, AlertTriangle, Trophy, Loader2, Clock, RefreshCw, History
+  Gift, Target, Save, ArrowLeft, Filter, Grid, LayoutGrid, Ruler, ArrowUpDown, ArrowUp, ArrowDown, Download, Eye, Funnel, Check, Upload, Monitor, AlertTriangle, Trophy, Loader2, Clock, RefreshCw, History, Lock, Unlock
 } from 'lucide-react';
 import { GoogleMap, useLoadScript, Marker } from '@react-google-maps/api';
 import { GOOGLE_MAPS_LOADER_OPTIONS } from '../../config/googleMaps';
@@ -1312,6 +1312,38 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
     queryFn: () => propuestasService.getHistorial(propuesta.id),
     enabled: isOpen && !!propuesta.id,
   });
+
+  // ── Bloqueo de circuito (apartado exclusivo — SOLO Tráfico) ─────────────────
+  // Marca las reservas del circuito como 'Reservado Bloqueado': ocupan en
+  // exclusiva (nadie más las aparta ni las roba una campaña) sin ser venta.
+  const puedeBloquearCircuito = esTrafico(user?.rol);
+  const [bloqueoCircuitoLoading, setBloqueoCircuitoLoading] = useState(false);
+  // ¿El circuito activo del buscador ya está bloqueado? (lee el estatus crudo).
+  const circuitoActivoBloqueado = useMemo(() => {
+    if (!selectedCaraForSearch || !existingReservas) return false;
+    return existingReservas.some(
+      (r) => r.solicitud_cara_id === selectedCaraForSearch.id &&
+        (r.estatus === 'Reservado Bloqueado' || r.estatus === 'Bonificado Bloqueado'),
+    );
+  }, [selectedCaraForSearch, existingReservas]);
+
+  const handleToggleBloqueoCircuito = async () => {
+    const caraId = selectedCaraForSearch?.id;
+    if (caraId == null || bloqueoCircuitoLoading) return;
+    const activar = !circuitoActivoBloqueado;
+    setBloqueoCircuitoLoading(true);
+    try {
+      const r = await propuestasService.toggleBloqueoCircuito(propuesta.id, caraId, activar);
+      showToast(r.message || (activar ? 'Circuito bloqueado' : 'Circuito desbloqueado'), 'success');
+      // Refrescar reservas (nuevo estatus) + historial del circuito.
+      await queryClient.invalidateQueries({ queryKey: ['propuesta-reservas-modal', propuesta.id] });
+      refetchHistorial();
+    } catch (e) {
+      showToast(e instanceof Error ? e.message : 'No se pudo cambiar el bloqueo del circuito', 'error');
+    } finally {
+      setBloqueoCircuitoLoading(false);
+    }
+  };
 
   // Fetch CUIC data for client editing
   const { data: cuicData, isLoading: cuicLoading } = useQuery({
@@ -5907,9 +5939,31 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
                 </p>
               </div>
             </div>
-            <button onClick={handleBackToMain} className={`p-2 rounded-lg ${isDark ? 'text-zinc-400' : 'text-gray-500'} ${isDark ? 'hover:text-white' : 'hover:text-gray-900'}`}>
-              <X className="h-5 w-5" />
-            </button>
+            <div className="flex items-center gap-3">
+              {/* Bloquear circuito (apartado exclusivo) — SOLO Tráfico. Feature 2026-11. */}
+              {puedeBloquearCircuito && selectedCaraForSearch && (
+                <button
+                  onClick={handleToggleBloqueoCircuito}
+                  disabled={bloqueoCircuitoLoading}
+                  title={circuitoActivoBloqueado
+                    ? 'Quitar el bloqueo: el circuito regresa a multireserva (otras propuestas podrán compartirlo)'
+                    : 'Bloquear el circuito: aparta en EXCLUSIVA lo reservado — nadie más lo puede tomar ni se lo roba una campaña'}
+                  className={`flex items-center gap-2 px-3 py-2 rounded-lg text-sm font-medium transition-colors disabled:opacity-50 ${
+                    circuitoActivoBloqueado
+                      ? (isDark ? 'bg-amber-500/20 text-amber-300 border border-amber-500/40 hover:bg-amber-500/30' : 'bg-amber-50 text-amber-700 border border-amber-300 hover:bg-amber-100')
+                      : (isDark ? 'bg-zinc-800 text-zinc-300 border border-zinc-700 hover:text-white' : 'bg-gray-50 text-gray-600 border border-gray-200 hover:text-gray-900')
+                  }`}
+                >
+                  {bloqueoCircuitoLoading
+                    ? <Loader2 className="h-4 w-4 animate-spin" />
+                    : circuitoActivoBloqueado ? <Lock className="h-4 w-4" /> : <Unlock className="h-4 w-4" />}
+                  {bloqueoCircuitoLoading ? 'Guardando…' : circuitoActivoBloqueado ? 'Circuito bloqueado' : 'Bloquear circuito'}
+                </button>
+              )}
+              <button onClick={handleBackToMain} className={`p-2 rounded-lg ${isDark ? 'text-zinc-400' : 'text-gray-500'} ${isDark ? 'hover:text-white' : 'hover:text-gray-900'}`}>
+                <X className="h-5 w-5" />
+              </button>
+            </div>
           </div>
 
           {avisoAjusteComercialJSX}
