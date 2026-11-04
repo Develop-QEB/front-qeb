@@ -20,7 +20,7 @@ import { useSocketCampana } from '../../hooks/useSocket';
 import { NotasDireccionBitacora } from '../notificaciones/NotasDireccionBitacora';
 import { DesposteoModal } from '../desposteo/DesposteoModal';
 import { puedeSolicitarDesposteo, puedeBypassearDesposteo, esRolTIDesposteo, desposteoService, EstadoAps } from '../../services/desposteo.service';
-import { udcFichaDe } from '../../lib/udc';
+import { udcFichaDe, contratoDeArticulo } from '../../lib/udc';
 import { esArticuloGranFormato } from '../../lib/periodos';
 import { esInventarioBloqueado } from '../../lib/bloqueoInventario';
 
@@ -704,6 +704,24 @@ function renderReservadoCell(item: InventarioReservado, col: TableColumn, p = 'p
     const f = udcFichaDe(item.codigo_unico);
     const anchoM = item.ancho || f?.ancho; const altoM = item.alto || f?.alto;
     return <td key={col.field} className={`${p} ${isDark ? 'text-zinc-400' : 'text-gray-500'} text-[10px]`}>{anchoM && altoM ? `${anchoM}×${altoM}` : '-'}</td>;
+  }
+  if (col.field === 'articulo') {
+    // UDC: bajo el artículo mostramos el nº de contrato con el AICM (feedback Jos).
+    // contratoDeArticulo solo devuelve algo para artículos UDC → las filas no-UDC
+    // se ven idénticas. NO va en Compartir ni en descargables (se arman aparte).
+    const ctr = contratoDeArticulo(item.articulo);
+    return (
+      <td key={col.field} className={`${p} ${isDark ? 'text-zinc-300' : 'text-gray-700'}`}>
+        <div className="flex flex-col">
+          <span>{item.articulo !== null && item.articulo !== undefined ? String(item.articulo) : '-'}</span>
+          {ctr && (
+            <span className={`text-[9px] ${isDark ? 'text-zinc-500' : 'text-gray-400'}`} title="Contrato con el AICM">
+              Contrato {ctr.contrato}
+            </span>
+          )}
+        </div>
+      </td>
+    );
   }
   const value = item[col.field as keyof InventarioReservado];
   return <td key={col.field} className={`${p} ${isDark ? 'text-zinc-300' : 'text-gray-700'}`}>{value !== null && value !== undefined ? String(value) : '-'}</td>;

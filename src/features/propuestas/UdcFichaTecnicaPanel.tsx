@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState, type ReactNode } from 'react';
-import { Monitor, Clock, Users, Search, Plane, Maximize2, CheckSquare, Square, Download, Filter } from 'lucide-react';
-import { UDC_FICHA_TECNICA, UDC_ZONAS_ORDEN, udcPantallaNum, articuloUDCPantallas, type UdcPantalla } from '../../lib/udc';
+import { Monitor, Clock, Users, Search, Plane, Maximize2, CheckSquare, Square, Download, Filter, FileText } from 'lucide-react';
+import { UDC_FICHA_TECNICA, UDC_ZONAS_ORDEN, udcPantallaNum, articuloUDCPantallas, contratoDePantalla, type UdcPantalla } from '../../lib/udc';
 
 // Panel de "lista de inventarios" UDC (aeropuerto AICM). Reemplaza al mapa en el
 // buscador cuando la propuesta/campaña es UDC: los inventarios del aeropuerto no
@@ -291,6 +291,7 @@ export function UdcFichaTecnicaPanel({ isDark, selected, keyByNombre, onToggle, 
               {items.map(p => {
                 const checked = isChecked(p);
                 const k = keyOf(p);
+                const ctr = contratoDePantalla(p.nombre);
                 return (
                   <div
                     key={p.nombre}
@@ -313,6 +314,12 @@ export function UdcFichaTecnicaPanel({ isDark, selected, keyByNombre, onToggle, 
                         <Monitor className="h-3 w-3" />
                         <span className="truncate">{p.medida}{p.ancho && p.alto ? ' px' : ''}</span>
                       </div>
+                      {ctr && (
+                        <div className={`flex items-center gap-1 text-[11px] mt-0.5 ${isDark ? 'text-zinc-400' : 'text-gray-500'}`}>
+                          <FileText className="h-3 w-3" />
+                          <span className="truncate">Contrato {ctr.contrato}</span>
+                        </div>
+                      )}
                     </div>
                     <div className="flex flex-col items-end gap-1 shrink-0">
                       <span className="inline-flex items-center gap-1 text-[10px] font-medium px-1.5 py-0.5 rounded-md bg-cyan-500/15 text-cyan-300 border border-cyan-500/25">
