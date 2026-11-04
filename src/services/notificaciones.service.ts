@@ -323,6 +323,23 @@ export const notificacionesService = {
     }));
   },
 
+  async getSolicitudesParaActividad(search?: string): Promise<ActividadRef[]> {
+    const response = await api.get<ApiResponse<ActividadRefPropuesta[]>>(
+      '/notificaciones/actividad-comercial/solicitudes',
+      { params: search ? { search } : undefined }
+    );
+    if (!response.data.success || !response.data.data) {
+      throw new Error(response.data.error || 'Error al obtener solicitudes');
+    }
+    return response.data.data.map(s => ({
+      id: s.id,
+      label: `#${s.id}${s.cliente ? ' — ' + s.cliente : ''}`,
+      cliente: s.cliente,
+      marca: s.marca,
+      status: s.status,
+    }));
+  },
+
   async crearActividadComercial(payload: CrearActividadComercialInput): Promise<ActividadComercialCreated> {
     const response = await api.post<ApiResponse<ActividadComercialCreated>>(
       '/notificaciones/actividad-comercial',
@@ -348,7 +365,9 @@ export const notificacionesService = {
 
 // ==================== TIPOS ACTIVIDAD COMERCIAL ====================
 
-export type ActividadSubtipo = 'Campaña' | 'Propuesta' | 'Lead';
+export type ActividadSubtipo = 'Campaña' | 'Propuesta' | 'Solicitud' | 'Lead';
+export type ActividadTipoCliente = 'Lead' | 'Cliente';
+export type ActividadTipoActividad = 'Llamada' | 'Mail' | 'Visita';
 
 export interface ActividadRefCampana {
   id: number;
@@ -394,6 +413,9 @@ export interface CrearActividadComercialInput {
   catorcenas?: number[];                // Periodo multi (feedback Jos 2026-10-19)
   estatus_actividad?: 'Abierto' | 'Activo' | 'Finalizado' | 'Cerrado'; // 'Cerrado' = alias legacy
   base?: 'CIMU' | 'TRADE' | 'UDC';      // Base SAP
+  // Feedback Jos 2026-11-04:
+  tipo_cliente?: ActividadTipoCliente;        // Lead / Cliente
+  tipo_actividad?: ActividadTipoActividad;    // Llamada / Mail / Visita
 }
 
 export interface ActividadComercialCreated {
