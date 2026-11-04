@@ -10859,6 +10859,7 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
         contextLabel="campaña"
         hasGeneralChanges={hasChanges}
         modifiedCircuitos={modifiedCircuitosForConfirm}
+        pendingDeletions={pendingEliminaciones.reduce((n, e) => n + e.caraIds.length, 0)}
       />
 
       {/* Mini-modal Nueva Nota Dirección — obligatorio cuando la edición
