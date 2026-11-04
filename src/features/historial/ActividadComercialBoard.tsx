@@ -9,7 +9,7 @@ import { useAuthStore } from '../../store/authStore';
 import { UserAvatar } from '../../components/ui/user-avatar';
 import { formatDate } from '../../lib/utils';
 import { NuevaActividadComercialModal } from '../notificaciones/NuevaActividadComercialModal';
-import { FiltroMultiple } from './FiltroMultiple';
+import { FiltroMultiple } from '../../components/FiltroMultiple';
 import { DetalleActividadModal } from './DetalleActividadModal';
 import { ActividadComercialKpis } from './ActividadComercialKpis';
 import {

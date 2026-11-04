@@ -13,7 +13,7 @@ import { getPermissions } from '../../lib/permissions';
 import { useSocketHistorialAcciones } from '../../hooks/useSocket';
 import { formatHistorialDetalles, formatValue, isPlainObject, limpiarMotivo } from '../../lib/historial';
 import { ActividadComercialBoard } from './ActividadComercialBoard';
-import { FiltroMultiple } from './FiltroMultiple';
+import { FiltroMultiple } from '../../components/FiltroMultiple';
 
 function formatFechaHora(fecha: string): string {
   const d = new Date(fecha);

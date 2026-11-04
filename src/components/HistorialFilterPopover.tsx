@@ -1,22 +1,32 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { History, X, ChevronDown } from 'lucide-react';
-import { AUTORIZACION_OPCIONES, estatusValorDeAutorizacion, labelDeEstatusValor } from '../lib/autorizacionFiltro';
+import {
+  AUTORIZACION_OPCIONES, estatusValorDeAutorizacion,
+  estatusValorLista, estatusValorDesdeLista, labelsDeEstatusValor,
+} from '../lib/autorizacionFiltro';
+import { ListaOpciones, type OpcionFiltro } from './FiltroMultiple';
 
 // Filtro por historial — rangos de fecha aplicados al historial guardado del
 // registro (tabla `historial`). Se usa en los listados de Solicitudes,
 // Propuestas y Campanas. Independiente del filtro de Periodo (catorcena).
 //
 // UX: el usuario primero elige el MODO (creacion o cambio de estatus) y
-// despues las fechas. Si elige "cambio de estatus" puede ademas elegir un
-// estatus especifico (ej. "Pase a ventas") para filtrar solo los registros
-// que tuvieron ese cambio en el rango.
+// despues las fechas. Si elige "cambio de estatus" puede ademas elegir uno o
+// varios estatus (ej. "Pase a ventas" + "Aprobada") para filtrar solo los
+// registros que tuvieron alguno de esos cambios en el rango.
 export type HistorialFilterModo = 'creacion' | 'cambio_estatus';
 
 export interface HistorialFilterValues {
   modo?: HistorialFilterModo;
   fechaDesde?: string;
   fechaHasta?: string;
-  estatusValor?: string; // solo aplica si modo === 'cambio_estatus'
+  /**
+   * Solo aplica si modo === 'cambio_estatus'. Es MULTISELECT y viaja como
+   * CSV ('Aprobada,auth:pend_dg'), igual que `status`/`autorizacion`, para
+   * que las paginas lo pasen tal cual al service con `...historialFilter`.
+   * Leer/armar siempre con estatusValorLista / estatusValorDesdeLista.
+   */
+  estatusValor?: string;
 }
 
 interface Props {
@@ -33,7 +43,7 @@ function formatChip(values: HistorialFilterValues): string {
   const hasta = values.fechaHasta || '...';
   if (values.modo === 'creacion') return `Creación: ${desde} → ${hasta}`;
   // `auth:<key>` llega como estatus de autorización de circuitos.
-  const estatus = labelDeEstatusValor(values.estatusValor) || 'cualquier estatus';
+  const estatus = labelsDeEstatusValor(values.estatusValor) || 'cualquier estatus';
   return `Cambió a ${estatus}: ${desde} → ${hasta}`;
 }
 
@@ -48,14 +58,25 @@ export function HistorialFilterPopover({
   const [modo, setModo] = useState<HistorialFilterModo>(values.modo || 'creacion');
   const [desde, setDesde] = useState(values.fechaDesde || '');
   const [hasta, setHasta] = useState(values.fechaHasta || '');
-  const [estatus, setEstatus] = useState(values.estatusValor || '');
+  const [estatus, setEstatus] = useState<string[]>(estatusValorLista(values.estatusValor));
 
   useEffect(() => {
     setModo(values.modo || 'creacion');
     setDesde(values.fechaDesde || '');
     setHasta(values.fechaHasta || '');
-    setEstatus(values.estatusValor || '');
+    setEstatus(estatusValorLista(values.estatusValor));
   }, [values.modo, values.fechaDesde, values.fechaHasta, values.estatusValor]);
+
+  // Estatus de la entidad + estatus de autorización de circuitos, en dos
+  // secciones. Los de autorización filtran por la fecha en que los circuitos
+  // del registro pasaron a ese estatus (historial de autorización) y viajan
+  // como auth:<key>.
+  const opcionesEstatus = useMemo<OpcionFiltro[]>(() => [
+    ...estatusOptions.map(s => ({ label: s, value: s, grupo: 'Estatus' })),
+    ...AUTORIZACION_OPCIONES.map(o => ({
+      label: o.label, value: estatusValorDeAutorizacion(o.key), grupo: 'Autorización de circuitos',
+    })),
+  ], [estatusOptions]);
 
   const isActive = !!values.modo;
   const canApply = !!(desde || hasta);
@@ -65,7 +86,7 @@ export function HistorialFilterPopover({
       modo,
       fechaDesde: desde || undefined,
       fechaHasta: hasta || undefined,
-      estatusValor: modo === 'cambio_estatus' ? (estatus || undefined) : undefined,
+      estatusValor: modo === 'cambio_estatus' ? estatusValorDesdeLista(estatus) : undefined,
     });
     setOpen(false);
   };
@@ -74,7 +95,7 @@ export function HistorialFilterPopover({
     setModo('creacion');
     setDesde('');
     setHasta('');
-    setEstatus('');
+    setEstatus([]);
     onClear();
     setOpen(false);
   };
@@ -143,31 +164,28 @@ export function HistorialFilterPopover({
             </div>
 
             <div className="p-3 space-y-3">
-              {/* Si modo=cambio_estatus, dropdown para elegir un estatus
-                  especifico (o cualquiera). */}
+              {/* Si modo=cambio_estatus, lista multiselect de estatus. Va
+                  INLINE (no como dropdown) porque este panel tiene
+                  overflow-hidden y recortaria cualquier menu flotante. */}
               {modo === 'cambio_estatus' && (
                 <div>
-                  <label className={labelCls}>Estatus al que cambió</label>
-                  <select
-                    value={estatus}
-                    onChange={(e) => setEstatus(e.target.value)}
-                    className={inputCls}
-                  >
-                    <option value="">Cualquier estatus</option>
-                    <optgroup label="Estatus">
-                      {estatusOptions.map(s => (
-                        <option key={s} value={s}>{s}</option>
-                      ))}
-                    </optgroup>
-                    {/* Autorización de circuitos: filtra por la fecha en que
-                        los circuitos del registro pasaron a ese estatus
-                        (historial de autorización). Viaja como auth:<key>. */}
-                    <optgroup label="Autorización de circuitos">
-                      {AUTORIZACION_OPCIONES.map(o => (
-                        <option key={o.key} value={estatusValorDeAutorizacion(o.key)}>{o.label}</option>
-                      ))}
-                    </optgroup>
-                  </select>
+                  <label className={labelCls}>
+                    Estatus al que cambió
+                    {estatus.length > 0 && <span className="ml-1 text-purple-400">({estatus.length})</span>}
+                  </label>
+                  <div className={`rounded-lg border overflow-hidden ${isDark ? 'border-zinc-700 bg-zinc-900' : 'border-gray-200 bg-white'}`}>
+                    <ListaOpciones
+                      options={opcionesEstatus}
+                      selected={estatus}
+                      onChange={setEstatus}
+                      isDark={isDark}
+                      placeholder="Buscar estatus..."
+                      maxHeight="max-h-44"
+                    />
+                  </div>
+                  <p className={`text-[10px] mt-1 ${isDark ? 'text-zinc-500' : 'text-gray-400'}`}>
+                    Sin selección: cualquier estatus. Con varios: cualquiera de ellos.
+                  </p>
                 </div>
               )}
 
