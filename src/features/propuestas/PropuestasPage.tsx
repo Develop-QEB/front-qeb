@@ -2152,8 +2152,19 @@ export function PropuestasPage() {
   // aplica: se pidió el universo completo (needsAllData) y la tabla pinta todo
   // filteredData, así que el contador y las páginas salen de aquí.
   const hasLocalFilters = advancedFilters.length > 0 || statusCompletitud || soloIncompletos || ordenNecesitaTodo;
-  const totalPages = hasLocalFilters ? 1 : (data?.pagination?.totalPages || 1);
+  // Con filtros/orden en cliente se pagina en cliente sobre filteredData con
+  // el mismo `limit` (antes se pintaba todo en una sola página). Con
+  // agrupación no se pagina: cada grupo pinta completo.
+  const paginaEnCliente = hasLocalFilters && !groupBy;
+  const totalPages = paginaEnCliente
+    ? Math.max(1, Math.ceil(filteredData.length / limit))
+    : (data?.pagination?.totalPages || 1);
   const total = hasLocalFilters ? filteredData.length : (data?.pagination?.total ?? 0);
+  // `page` puede quedar arriba del total al cambiar de modo/filtro: se acota.
+  const pageActual = Math.min(page, totalPages);
+  const filasTabla = paginaEnCliente
+    ? filteredData.slice((pageActual - 1) * limit, pageActual * limit)
+    : filteredData;
 
   return (
     <div className="min-h-screen">
@@ -2784,20 +2795,20 @@ export function PropuestasPage() {
           {!groupBy && data?.pagination && totalPages > 1 && (
             <div className={`flex items-center justify-between border-b px-4 py-3 ${isDark ? 'border-purple-500/20 bg-gradient-to-r from-purple-900/20 via-transparent to-fuchsia-900/20' : 'border-gray-200 bg-gray-50'}`}>
               <span className={`text-sm ${isDark ? 'text-purple-300/70' : 'text-gray-500'}`}>
-                Página <span className={`font-semibold ${isDark ? 'text-purple-300' : 'text-gray-700'}`}>{page}</span> de <span className={`font-semibold ${isDark ? 'text-purple-300' : 'text-gray-700'}`}>{totalPages}</span>
+                Página <span className={`font-semibold ${isDark ? 'text-purple-300' : 'text-gray-700'}`}>{pageActual}</span> de <span className={`font-semibold ${isDark ? 'text-purple-300' : 'text-gray-700'}`}>{totalPages}</span>
                 <span className={`ml-2 ${isDark ? 'text-purple-300/50' : 'text-gray-400'}`}>({total} total)</span>
               </span>
               <div className="flex items-center gap-2">
                 <button
-                  onClick={() => setPage(Math.max(1, page - 1))}
-                  disabled={page === 1}
+                  onClick={() => setPage(Math.max(1, pageActual - 1))}
+                  disabled={pageActual === 1}
                   className={`px-4 py-2 rounded-lg border text-sm font-medium disabled:opacity-40 disabled:cursor-not-allowed transition-all ${isDark ? 'border-purple-500/30 bg-purple-500/10 text-purple-300 hover:bg-purple-500/20 hover:border-purple-500/50' : 'border-gray-200 bg-white text-gray-700 hover:bg-gray-50 hover:border-gray-300'}`}
                 >
                   Anterior
                 </button>
                 <button
-                  onClick={() => setPage(Math.min(totalPages, page + 1))}
-                  disabled={page === totalPages}
+                  onClick={() => setPage(Math.min(totalPages, pageActual + 1))}
+                  disabled={pageActual === totalPages}
                   className={`px-4 py-2 rounded-lg border text-sm font-medium disabled:opacity-40 disabled:cursor-not-allowed transition-all ${isDark ? 'border-purple-500/30 bg-purple-500/10 text-purple-300 hover:bg-purple-500/20 hover:border-purple-500/50' : 'border-gray-200 bg-white text-gray-700 hover:bg-gray-50 hover:border-gray-300'}`}
                 >
                   Siguiente
@@ -2882,7 +2893,7 @@ export function PropuestasPage() {
                     </td>
                   </tr>
                 ) : (
-                  filteredData.map((item, idx) => (
+                  filasTabla.map((item, idx) => (
                     <PropuestaRow
                       key={`prop-${item.id}-${idx}`}
                       item={item}
@@ -2910,20 +2921,20 @@ export function PropuestasPage() {
           {!groupBy && data?.pagination && totalPages > 1 && (
             <div className={`flex items-center justify-between border-t px-4 py-3 ${isDark ? 'border-purple-500/20 bg-gradient-to-r from-purple-900/20 via-transparent to-fuchsia-900/20' : 'border-gray-200 bg-gray-50'}`}>
               <span className={`text-sm ${isDark ? 'text-purple-300/70' : 'text-gray-500'}`}>
-                Página <span className={`font-semibold ${isDark ? 'text-purple-300' : 'text-gray-700'}`}>{page}</span> de <span className={`font-semibold ${isDark ? 'text-purple-300' : 'text-gray-700'}`}>{totalPages}</span>
+                Página <span className={`font-semibold ${isDark ? 'text-purple-300' : 'text-gray-700'}`}>{pageActual}</span> de <span className={`font-semibold ${isDark ? 'text-purple-300' : 'text-gray-700'}`}>{totalPages}</span>
                 <span className={`ml-2 ${isDark ? 'text-purple-300/50' : 'text-gray-400'}`}>({total} total)</span>
               </span>
               <div className="flex items-center gap-2">
                 <button
-                  onClick={() => setPage(Math.max(1, page - 1))}
-                  disabled={page === 1}
+                  onClick={() => setPage(Math.max(1, pageActual - 1))}
+                  disabled={pageActual === 1}
                   className={`px-4 py-2 rounded-lg border text-sm font-medium disabled:opacity-40 disabled:cursor-not-allowed transition-all ${isDark ? 'border-purple-500/30 bg-purple-500/10 text-purple-300 hover:bg-purple-500/20 hover:border-purple-500/50' : 'border-gray-200 bg-white text-gray-700 hover:bg-gray-50 hover:border-gray-300'}`}
                 >
                   Anterior
                 </button>
                 <button
-                  onClick={() => setPage(Math.min(totalPages, page + 1))}
-                  disabled={page === totalPages}
+                  onClick={() => setPage(Math.min(totalPages, pageActual + 1))}
+                  disabled={pageActual === totalPages}
                   className={`px-4 py-2 rounded-lg border text-sm font-medium disabled:opacity-40 disabled:cursor-not-allowed transition-all ${isDark ? 'border-purple-500/30 bg-purple-500/10 text-purple-300 hover:bg-purple-500/20 hover:border-purple-500/50' : 'border-gray-200 bg-white text-gray-700 hover:bg-gray-50 hover:border-gray-300'}`}
                 >
                   Siguiente

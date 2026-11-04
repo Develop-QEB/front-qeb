@@ -1203,8 +1203,21 @@ export function SolicitudesPage() {
     saveVistaFijaModulo('solicitudes', user?.id, v);
   };
 
-  const totalPages = data?.pagination?.totalPages || 1;
-  const total = data?.pagination?.total ?? 0;
+  // Paginación. Cuando el filtrado/orden corre en cliente (needsAllData: orden
+  // "Último cambio", filtros avanzados, incompletos...) se pidió el universo
+  // completo y la paginación del servidor ya no aplica: se pagina en cliente
+  // sobre filteredData con el mismo `limit`, en vez de pintar todo de golpe.
+  // Con agrupación no se pagina (cada grupo pinta completo).
+  const paginaEnCliente = needsAllData && !groupBy;
+  const totalPages = paginaEnCliente
+    ? Math.max(1, Math.ceil(filteredData.length / limit))
+    : (data?.pagination?.totalPages || 1);
+  const total = paginaEnCliente ? filteredData.length : (data?.pagination?.total ?? 0);
+  // `page` puede quedar arriba del total al cambiar de modo/filtro: se acota.
+  const pageActual = Math.min(page, totalPages);
+  const filasTabla = paginaEnCliente
+    ? filteredData.slice((pageActual - 1) * limit, pageActual * limit)
+    : filteredData;
 
   return (
     <div className="min-h-screen">
@@ -1755,20 +1768,20 @@ export function SolicitudesPage() {
               {!groupBy && data?.pagination && totalPages > 1 && (
                 <div className={`flex items-center justify-between border-b px-4 py-3 ${isDark ? 'border-purple-500/20 bg-gradient-to-r from-purple-900/20 via-transparent to-fuchsia-900/20' : 'border-purple-200 bg-gradient-to-r from-purple-50/50 via-transparent to-fuchsia-50/50'}`}>
                   <span className={`text-sm ${isDark ? 'text-purple-300/70' : 'text-purple-600/70'}`}>
-                    Página <span className={`font-semibold ${isDark ? 'text-purple-300' : 'text-purple-700'}`}>{page}</span> de <span className={`font-semibold ${isDark ? 'text-purple-300' : 'text-purple-700'}`}>{totalPages}</span>
-                    <span className={`ml-2 ${isDark ? 'text-purple-300/50' : 'text-purple-600/50'}`}>({data.pagination.total} total)</span>
+                    Página <span className={`font-semibold ${isDark ? 'text-purple-300' : 'text-purple-700'}`}>{pageActual}</span> de <span className={`font-semibold ${isDark ? 'text-purple-300' : 'text-purple-700'}`}>{totalPages}</span>
+                    <span className={`ml-2 ${isDark ? 'text-purple-300/50' : 'text-purple-600/50'}`}>({total} total)</span>
                   </span>
                   <div className="flex items-center gap-2">
                     <button
-                      onClick={() => setPage(p => Math.max(1, p - 1))}
-                      disabled={page === 1}
+                      onClick={() => setPage(Math.max(1, pageActual - 1))}
+                      disabled={pageActual === 1}
                       className={`px-4 py-2 rounded-lg border text-sm font-medium disabled:opacity-40 disabled:cursor-not-allowed transition-all ${isDark ? 'border-purple-500/30 bg-purple-500/10 text-purple-300 hover:bg-purple-500/20 hover:border-purple-500/50' : 'border-purple-200 bg-purple-50 text-purple-700 hover:bg-purple-100 hover:border-purple-300'}`}
                     >
                       Anterior
                     </button>
                     <button
-                      onClick={() => setPage(p => Math.min(totalPages, p + 1))}
-                      disabled={page === totalPages}
+                      onClick={() => setPage(Math.min(totalPages, pageActual + 1))}
+                      disabled={pageActual === totalPages}
                       className={`px-4 py-2 rounded-lg border text-sm font-medium disabled:opacity-40 disabled:cursor-not-allowed transition-all ${isDark ? 'border-purple-500/30 bg-purple-500/10 text-purple-300 hover:bg-purple-500/20 hover:border-purple-500/50' : 'border-purple-200 bg-purple-50 text-purple-700 hover:bg-purple-100 hover:border-purple-300'}`}
                     >
                       Siguiente
@@ -1825,7 +1838,7 @@ export function SolicitudesPage() {
                         </React.Fragment>
                       ))
                     ) : (
-                      filteredData.map((item, idx) => (
+                      filasTabla.map((item, idx) => (
                         <SolicitudRow
                           key={`sol-${item.id}-${idx}`}
                           item={item}
@@ -1863,20 +1876,20 @@ export function SolicitudesPage() {
               {!groupBy && data?.pagination && totalPages > 1 && (
                 <div className={`flex items-center justify-between border-t px-4 py-3 ${isDark ? 'border-purple-500/20 bg-gradient-to-r from-purple-900/20 via-transparent to-fuchsia-900/20' : 'border-purple-200 bg-gradient-to-r from-purple-50/50 via-transparent to-fuchsia-50/50'}`}>
                   <span className={`text-sm ${isDark ? 'text-purple-300/70' : 'text-purple-600/70'}`}>
-                    Página <span className={`font-semibold ${isDark ? 'text-purple-300' : 'text-purple-700'}`}>{page}</span> de <span className={`font-semibold ${isDark ? 'text-purple-300' : 'text-purple-700'}`}>{totalPages}</span>
-                    <span className={`ml-2 ${isDark ? 'text-purple-300/50' : 'text-purple-600/50'}`}>({data.pagination.total} total)</span>
+                    Página <span className={`font-semibold ${isDark ? 'text-purple-300' : 'text-purple-700'}`}>{pageActual}</span> de <span className={`font-semibold ${isDark ? 'text-purple-300' : 'text-purple-700'}`}>{totalPages}</span>
+                    <span className={`ml-2 ${isDark ? 'text-purple-300/50' : 'text-purple-600/50'}`}>({total} total)</span>
                   </span>
                   <div className="flex items-center gap-2">
                     <button
-                      onClick={() => setPage(p => Math.max(1, p - 1))}
-                      disabled={page === 1}
+                      onClick={() => setPage(Math.max(1, pageActual - 1))}
+                      disabled={pageActual === 1}
                       className={`px-4 py-2 rounded-lg border text-sm font-medium disabled:opacity-40 disabled:cursor-not-allowed transition-all ${isDark ? 'border-purple-500/30 bg-purple-500/10 text-purple-300 hover:bg-purple-500/20 hover:border-purple-500/50' : 'border-purple-200 bg-purple-50 text-purple-700 hover:bg-purple-100 hover:border-purple-300'}`}
                     >
                       Anterior
                     </button>
                     <button
-                      onClick={() => setPage(p => Math.min(totalPages, p + 1))}
-                      disabled={page === totalPages}
+                      onClick={() => setPage(Math.min(totalPages, pageActual + 1))}
+                      disabled={pageActual === totalPages}
                       className={`px-4 py-2 rounded-lg border text-sm font-medium disabled:opacity-40 disabled:cursor-not-allowed transition-all ${isDark ? 'border-purple-500/30 bg-purple-500/10 text-purple-300 hover:bg-purple-500/20 hover:border-purple-500/50' : 'border-purple-200 bg-purple-50 text-purple-700 hover:bg-purple-100 hover:border-purple-300'}`}
                     >
                       Siguiente
