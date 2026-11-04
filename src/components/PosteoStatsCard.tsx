@@ -7,12 +7,14 @@ import { formatMoneyMXN } from '../lib/utils';
 
 const fmtExacto = (n: number) => `$${n.toLocaleString('es-MX', { minimumFractionDigits: 2 })} MXN`;
 
-// Estado contraído/expandido por vista, recordado en el navegador. Si el
-// storage no está disponible (privado, bloqueado), simplemente no persiste.
+// Estado contraído/expandido por vista, recordado en el navegador. Por
+// default el bloque arranca CONTRAÍDO; solo se expande si el usuario lo abrió
+// antes. Si el storage no está disponible (privado, bloqueado), no persiste y
+// siempre arranca contraído.
 const storageKey = (k: string) => `posteo-card:collapsed:${k}`;
 function readCollapsed(k?: string): boolean {
   if (!k) return false;
-  try { return localStorage.getItem(storageKey(k)) === '1'; } catch { return false; }
+  try { return localStorage.getItem(storageKey(k)) !== '0'; } catch { return true; }
 }
 function writeCollapsed(k: string, v: boolean): void {
   try { localStorage.setItem(storageKey(k), v ? '1' : '0'); } catch { /* sin persistencia */ }
