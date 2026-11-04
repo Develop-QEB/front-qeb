@@ -250,6 +250,66 @@ export function articuloUDCPantallas(itemCode?: string | null): string[] | null 
   return UDC_ARTICULO_PANTALLAS[claveBase] ?? null;    // sin mapeo → mostrar todo
 }
 
+// ── Número de contrato por artículo ──────────────────────────────────────────
+// Cada pantalla/circuito del aeropuerto cae bajo un CONTRATO con el AICM (el
+// "contrato" que pidió Jos). Igual que las pantallas, el prefijo de operación
+// (RT/CT/BF/IN…) NO cambia el contrato, así que el mapeo va por la clave_base.
+// Fuente: Excel "Articulos UDC CON CONTRATO_REV.4", hoja "NUEVOS ARTICULOS"
+// (columnas CONTRATO + ZONA CONTRATO; 16 bases, los 4 prefijos comparten valor).
+// 'S/N' = sin número de contrato asignado (SAL NAC T2). Claves en MAYÚSCULAS.
+// OJO: el contrato NO se muestra en Compartir ni en descargables (Excel/PDF);
+// solo en el buscador de formatos y en "ver campaña"/APS.
+const UDC_ARTICULO_CONTRATO: Record<string, { contrato: string; zona: string }> = {
+  'PANT-NAL-01':        { contrato: '829243', zona: 'A' },
+  'PANT-P10-03':        { contrato: '728127', zona: 'B' },
+  'CIR-5-PANT-SUE-INT': { contrato: '728127', zona: 'B' },
+  'CIR-8-PANT-INT':     { contrato: '728127', zona: 'B' },
+  'PANT-MIGRA':         { contrato: '728127', zona: 'B' },
+  'PANT-41-ASC-VP':     { contrato: '728127', zona: 'B' },
+  'PANT-LLEGD-INT-43':  { contrato: '728127', zona: 'B' },
+  'PANT-DUPLA':         { contrato: '728127', zona: 'B' },
+  'PANT-FIL-INT':       { contrato: '728127', zona: 'B' },
+  'PANT-1-A':           { contrato: '951231', zona: 'C' },
+  'PANT-1-B':           { contrato: '951231', zona: 'C' },
+  'PANT-PAS-VIP':       { contrato: '989217', zona: 'D' },
+  'CIR-PAN-TAXIS':      { contrato: '838235', zona: 'E' },
+  'PANT-SAL-INT-T2':    { contrato: '945218', zona: 'F' },
+  'CIR-PAN-SUES-L-T2':  { contrato: '960219', zona: 'G' },
+  'PANT-SAL-NAC-T2':    { contrato: 'S/N',    zona: 'H' },
+};
+
+export function contratoDeArticulo(
+  itemCode?: string | null,
+): { contrato: string; zona: string } | null {
+  const c = normCode(itemCode);
+  if (!c) return null;
+  const partes = c.split('-');
+  const claveBase = PREFIJOS_REALES.has(partes[0]) ? partes.slice(1).join('-') : c;
+  return UDC_ARTICULO_CONTRATO[claveBase] ?? null;
+}
+
+// Reverse: número de pantalla canónico → contrato. Se deriva de los dos maps
+// (artículo→pantallas y artículo→contrato) para no re-transcribir el Excel.
+// Permite mostrar el contrato en la info de CADA pantalla del buscador de
+// formatos (los números de un mismo circuito comparten contrato, sin conflicto).
+const UDC_PANTALLA_CONTRATO: Record<string, { contrato: string; zona: string }> = (() => {
+  const out: Record<string, { contrato: string; zona: string }> = {};
+  for (const [base, nums] of Object.entries(UDC_ARTICULO_PANTALLAS)) {
+    const ctr = UDC_ARTICULO_CONTRATO[base];
+    if (!ctr) continue;
+    for (const n of nums) out[n] = ctr;
+  }
+  return out;
+})();
+
+export function contratoDePantalla(
+  nombreOrNum?: string | null,
+): { contrato: string; zona: string } | null {
+  const num = udcPantallaNum(nombreOrNum);
+  if (!num) return null;
+  return UDC_PANTALLA_CONTRATO[num] ?? null;
+}
+
 // ── Ficha técnica en imagen (JPG) por pantalla ───────────────────────────────
 // Cada pantalla del aeropuerto tiene una ficha técnica (imagen). Viven en
 // `front/public/udc-fichas/`. Hay imagen individual para 1A/1B/2/3/17/18/19/41/
