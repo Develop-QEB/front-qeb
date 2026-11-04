@@ -2567,6 +2567,10 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
             esBf: isBfCfArticle(cara.articulo),
             autorizacion_dg: cara.autorizacion_dg as CaraEntry['autorizacion_dg'],
             autorizacion_dcm: cara.autorizacion_dcm as CaraEntry['autorizacion_dcm'],
+            // true si hay tarea 'Filtro Autorización DG' abierta — pinta chip
+            // cyan "Filtro GC" junto al badge rojo "Pend. DG". El mapping antes
+            // no copiaba este campo (reporte Jos 2026-11-04).
+            en_filtro_dg: (cara as any).en_filtro_dg === true,
             _originalDg: cara.autorizacion_dg as CaraEntry['autorizacion_dg'],
             _originalDcm: cara.autorizacion_dcm as CaraEntry['autorizacion_dcm'],
             // Costo/caras de BD (para la regla "Direcciones Aprobadas" en el front).

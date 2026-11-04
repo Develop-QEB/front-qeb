@@ -1658,6 +1658,11 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
           anio_inicio: anioInicioCara,
           autorizacion_dg: cara.autorizacion_dg || 'aprobado',
           autorizacion_dcm: cara.autorizacion_dcm || 'aprobado',
+          // true si hay una tarea 'Filtro Autorización DG' abierta — pinta el
+          // chip cyan "Filtro GC" junto al badge rojo "Pend. DG". Antes se
+          // mapeaba la respuesta del back SIN este campo, por eso aunque el
+          // back lo expone, el chip no se dibujaba (reporte Jos 2026-11-04).
+          en_filtro_dg: (cara as any).en_filtro_dg === true,
           pendiente_eliminacion: (cara as any).pendiente_eliminacion === true,
           _originalDg: cara.autorizacion_dg || 'aprobado',
           _originalDcm: cara.autorizacion_dcm || 'aprobado',

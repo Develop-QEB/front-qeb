@@ -1665,6 +1665,10 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
             anio_inicio: anioInicioCara,
             autorizacion_dg: cara.autorizacion_dg || 'aprobado',
             autorizacion_dcm: cara.autorizacion_dcm || 'aprobado',
+            // true si hay una tarea 'Filtro Autorización DG' abierta — pinta
+            // el chip cyan "Filtro GC" junto al badge rojo "Pend. DG". El
+            // mapping antes no copiaba este campo (reporte Jos 2026-11-04).
+            en_filtro_dg: (cara as any).en_filtro_dg === true,
             _originalDg: cara.autorizacion_dg || 'aprobado',
             _originalDcm: cara.autorizacion_dcm || 'aprobado',
             // Baseline INMUTABLE para conservar aprobación (no drifta al reeditar).
