@@ -1,11 +1,22 @@
-import React from 'react';
-import { Clock3, Send, DollarSign } from 'lucide-react';
+import React, { useState } from 'react';
+import { Clock3, Send, DollarSign, ChevronDown } from 'lucide-react';
 import { Skeleton } from './ui/skeleton';
 import { useThemeStore } from '../store/themeStore';
 import type { PosteoStats } from '../services/dashboard.service';
 import { formatMoneyMXN } from '../lib/utils';
 
 const fmtExacto = (n: number) => `$${n.toLocaleString('es-MX', { minimumFractionDigits: 2 })} MXN`;
+
+// Estado contraído/expandido por vista, recordado en el navegador. Si el
+// storage no está disponible (privado, bloqueado), simplemente no persiste.
+const storageKey = (k: string) => `posteo-card:collapsed:${k}`;
+function readCollapsed(k?: string): boolean {
+  if (!k) return false;
+  try { return localStorage.getItem(storageKey(k)) === '1'; } catch { return false; }
+}
+function writeCollapsed(k: string, v: boolean): void {
+  try { localStorage.setItem(storageKey(k), v ? '1' : '0'); } catch { /* sin persistencia */ }
+}
 
 // Bloque: estado de POST a SAP (pendientes por postear vs posteadas), con
 // conteo y monto. El monto total exacto se muestra en el tooltip.
@@ -21,6 +32,7 @@ export function PosteoStatsCard({
   periodoLabel,
   inversionTotal,
   inversionSubLabel,
+  collapseKey,
 }: {
   data?: PosteoStats | null;
   isLoading: boolean;
@@ -29,8 +41,16 @@ export function PosteoStatsCard({
   inversionTotal?: number | null;
   /** Texto chico bajo la inversión total (p. ej. "799 campañas · Todas"). */
   inversionSubLabel?: string | null;
+  /** Si se pasa, el bloque se puede contraer/expandir y recuerda el estado bajo esta llave. */
+  collapseKey?: string;
 }) {
   const isDark = useThemeStore((s) => s.theme) === 'dark';
+  const [collapsed, setCollapsed] = useState<boolean>(() => readCollapsed(collapseKey));
+  const toggle = () => {
+    const next = !collapsed;
+    setCollapsed(next);
+    if (collapseKey) writeCollapsed(collapseKey, next);
+  };
 
   const pendientes = data?.pendientes ?? { count: 0, monto: 0 };
   const posteadas = data?.posteadas ?? { count: 0, monto: 0 };
@@ -67,12 +87,42 @@ export function PosteoStatsCard({
             </span>
           )}
         </h3>
-        {data && (
-          <span className={`text-[10px] ${isDark ? 'text-zinc-500' : 'text-gray-400'}`} title={fmtExacto(data.total.monto)}>
-            {data.total.count.toLocaleString()} circuitos · {formatMoneyMXN(data.total.monto)}
-          </span>
-        )}
+        <div className="flex items-center gap-3">
+          {/* Contraído: resumen compacto en el encabezado para no perder los números clave. */}
+          {collapsed && !isLoading && conInversion && (
+            <span className={`text-xs font-semibold ${isDark ? 'text-purple-300' : 'text-purple-600'}`} title={fmtExacto(inversionTotal as number)}>
+              Inversión {formatMoneyMXN(inversionTotal as number)}
+            </span>
+          )}
+          {collapsed && !isLoading && data && (
+            <>
+              <span className={`text-xs font-semibold ${isDark ? 'text-amber-300' : 'text-amber-600'}`} title={fmtExacto(pendientes.monto)}>
+                {pendientes.count.toLocaleString()} pendientes · {formatMoneyMXN(pendientes.monto)}
+              </span>
+              <span className={`text-xs font-semibold ${isDark ? 'text-emerald-300' : 'text-emerald-600'}`} title={fmtExacto(posteadas.monto)}>
+                {posteadas.count.toLocaleString()} posteadas · {formatMoneyMXN(posteadas.monto)}
+              </span>
+            </>
+          )}
+          {data && (
+            <span className={`text-[10px] ${isDark ? 'text-zinc-500' : 'text-gray-400'}`} title={fmtExacto(data.total.monto)}>
+              {data.total.count.toLocaleString()} circuitos · {formatMoneyMXN(data.total.monto)}
+            </span>
+          )}
+          {collapseKey && (
+            <button
+              type="button"
+              onClick={toggle}
+              aria-expanded={!collapsed}
+              title={collapsed ? 'Mostrar indicadores' : 'Ocultar indicadores'}
+              className={`p-1 rounded-lg border transition-colors ${isDark ? 'border-purple-500/20 text-zinc-400 hover:text-white hover:bg-purple-500/10' : 'border-purple-200 text-gray-500 hover:text-gray-800 hover:bg-purple-50'}`}
+            >
+              <ChevronDown className={`h-4 w-4 transition-transform duration-200 ${collapsed ? '-rotate-90' : ''}`} />
+            </button>
+          )}
+        </div>
       </div>
+      {!collapsed && (
       <div className="p-4">
         <div className={`grid gap-3 ${conInversion ? 'sm:grid-cols-3' : 'sm:grid-cols-2'}`}>
           {/* Inversión total: suma de la columna Inversión del listado (con o sin filtro). */}
@@ -134,6 +184,7 @@ export function PosteoStatsCard({
           </div>
         )}
       </div>
+      )}
     </div>
   );
 }

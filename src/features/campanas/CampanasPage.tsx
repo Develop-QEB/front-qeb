@@ -3365,6 +3365,7 @@ export function CampanasPage() {
           periodoLabel={inversionPeriodoLabel}
           inversionTotal={effectiveStats?.montoTotal ?? 0}
           inversionSubLabel={`${(effectiveStats?.total ?? 0).toLocaleString()} campañas · ${hasActiveFilters ? 'Filtrado' : 'Todas'}`}
+          collapseKey="campanas"
         />
 
         {/* Control Bar */}
