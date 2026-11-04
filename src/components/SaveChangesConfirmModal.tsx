@@ -1,4 +1,4 @@
-import { Save, FileEdit, AlertCircle } from 'lucide-react';
+import { Save, FileEdit, AlertCircle, Trash2 } from 'lucide-react';
 import { useThemeStore } from '../store/themeStore';
 
 export interface ModifiedCircuito {
@@ -16,6 +16,10 @@ interface SaveChangesConfirmModalProps {
   contextLabel: string;
   hasGeneralChanges: boolean;
   modifiedCircuitos: ModifiedCircuito[];
+  /** Nº de circuitos encolados para ELIMINAR (pendingEliminaciones/pendingCaraDeletions).
+   *  Cuentan como cambio pendiente aunque no haya cambios generales ni circuitos
+   *  modificados — si no, el modal decía "Sin cambios" y no dejaba guardar la baja. */
+  pendingDeletions?: number;
 }
 
 export function SaveChangesConfirmModal({
@@ -26,10 +30,11 @@ export function SaveChangesConfirmModal({
   contextLabel,
   hasGeneralChanges,
   modifiedCircuitos,
+  pendingDeletions = 0,
 }: SaveChangesConfirmModalProps) {
   const isDark = useThemeStore((s) => s.theme) === 'dark';
   if (!isOpen) return null;
-  const total = (hasGeneralChanges ? 1 : 0) + modifiedCircuitos.length;
+  const total = (hasGeneralChanges ? 1 : 0) + modifiedCircuitos.length + pendingDeletions;
 
   return (
     <div className="fixed inset-0 z-[60] flex items-center justify-center">
@@ -109,7 +114,23 @@ export function SaveChangesConfirmModal({
             </div>
           )}
 
-          {!hasGeneralChanges && modifiedCircuitos.length === 0 && (
+          {pendingDeletions > 0 && (
+            <div
+              className={`flex items-start gap-3 p-3 rounded-lg ${isDark ? 'bg-red-500/10 border-red-500/30' : 'bg-red-50 border-red-200'} border`}
+            >
+              <Trash2 className="h-4 w-4 text-red-400 mt-0.5 shrink-0" />
+              <div>
+                <p className={`text-sm font-medium ${isDark ? 'text-red-200' : 'text-red-700'}`}>
+                  {pendingDeletions} circuito{pendingDeletions !== 1 ? 's' : ''} por eliminar
+                </p>
+                <p className={`text-xs ${isDark ? 'text-red-300/70' : 'text-red-600/80'}`}>
+                  Se solicitará la eliminación al guardar
+                </p>
+              </div>
+            </div>
+          )}
+
+          {!hasGeneralChanges && modifiedCircuitos.length === 0 && pendingDeletions === 0 && (
             <div className={`flex items-center gap-2 p-3 rounded-lg ${isDark ? 'bg-zinc-800/50' : 'bg-gray-50'}`}>
               <AlertCircle className="h-4 w-4 text-zinc-400" />
               <p className={`text-sm ${isDark ? 'text-zinc-400' : 'text-gray-500'}`}>
