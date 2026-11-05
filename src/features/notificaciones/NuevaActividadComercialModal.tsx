@@ -202,26 +202,35 @@ export function NuevaActividadComercialModal({ isOpen, onClose, editing }: Props
 
   // Autocomplete de clientes reales para el campo Cliente cuando el usuario
   // eligio "Cliente" en Tipo Cliente (feedback Jos 2026-11-04). Sigue siendo
-  // texto libre — las sugerencias solo ayudan a elegir uno existente.
+  // texto libre — las sugerencias solo ayudan a elegir uno existente. Devuelve
+  // combinaciones (cliente, marca) para que al elegir del dropdown se auto-
+  // rellene tambien el campo Marca (feedback Jos 2026-11-05).
   const debouncedCliente = useDebounced(cliente, 300);
+  const [clienteDropdownOpen, setClienteDropdownOpen] = useState(false);
   const clientesSuggest = useQuery({
     queryKey: ['clientes-suggest', debouncedCliente],
     queryFn: async () => {
       try {
         const r = await clientesService.getAllFull(debouncedCliente || undefined);
-        const arr: Array<{ T0_U_Cliente?: string | null; T0_U_RazonSocial?: string | null }> =
+        const arr: Array<{ T0_U_Cliente?: string | null; T0_U_RazonSocial?: string | null; T2_U_Marca?: string | null }> =
           (r && Array.isArray((r as unknown as { data?: unknown[] }).data))
-            ? (r as unknown as { data: Array<{ T0_U_Cliente?: string | null; T0_U_RazonSocial?: string | null }> }).data
+            ? (r as unknown as { data: Array<{ T0_U_Cliente?: string | null; T0_U_RazonSocial?: string | null; T2_U_Marca?: string | null }> }).data
             : [];
-        const names = new Set<string>();
+        const seen = new Set<string>();
+        const out: Array<{ cliente: string; marca: string | null }> = [];
         for (const c of arr) {
-          const n = (c.T0_U_Cliente && c.T0_U_Cliente !== 'Cliente' ? c.T0_U_Cliente : null) || c.T0_U_RazonSocial || null;
-          if (n) names.add(n);
-          if (names.size >= 20) break;
+          const nombre = (c.T0_U_Cliente && c.T0_U_Cliente !== 'Cliente' ? c.T0_U_Cliente : null) || c.T0_U_RazonSocial || null;
+          if (!nombre) continue;
+          const marca = c.T2_U_Marca || null;
+          const key = `${nombre}||${marca || ''}`;
+          if (seen.has(key)) continue;
+          seen.add(key);
+          out.push({ cliente: nombre, marca });
+          if (out.length >= 20) break;
         }
-        return [...names];
+        return out;
       } catch {
-        return [] as string[];
+        return [] as Array<{ cliente: string; marca: string | null }>;
       }
     },
     enabled: isOpen && tipoCliente === 'Cliente' && debouncedCliente.trim().length > 0,
@@ -562,22 +571,53 @@ export function NuevaActividadComercialModal({ isOpen, onClose, editing }: Props
                 Al elegir campaña/propuesta se autorellenan como sugerencia
                 pero el usuario puede editarlos o escribirlos a mano. */}
             <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-              <div>
+              <div className="relative">
                 <label className={labelCls}>Cliente</label>
                 <input
                   className={inputCls}
                   placeholder={tipoCliente === 'Cliente' ? 'Busca o escribe un cliente...' : 'Nombre del cliente'}
                   value={cliente}
-                  onChange={(e) => setCliente(e.target.value)}
-                  list={tipoCliente === 'Cliente' ? 'actividad-clientes-list' : undefined}
+                  onChange={(e) => { setCliente(e.target.value); setClienteDropdownOpen(true); }}
+                  onFocus={() => setClienteDropdownOpen(true)}
+                  onBlur={() => { setTimeout(() => setClienteDropdownOpen(false), 150); }}
                   autoComplete="off"
                 />
-                {tipoCliente === 'Cliente' && (
-                  <datalist id="actividad-clientes-list">
-                    {(clientesSuggest.data || []).map((name) => (
-                      <option key={name} value={name} />
+                {tipoCliente === 'Cliente' && clienteDropdownOpen && cliente.trim().length > 0 && (
+                  <div className={`absolute z-20 mt-1 w-full max-h-52 overflow-y-auto rounded-lg border shadow-lg ${isDark ? 'bg-zinc-900 border-zinc-700' : 'bg-white border-gray-200'}`}>
+                    {clientesSuggest.isLoading && (
+                      <div className={`px-3 py-2 text-xs flex items-center gap-2 ${isDark ? 'text-zinc-500' : 'text-gray-400'}`}>
+                        <Loader2 className="h-3 w-3 animate-spin" /> Buscando...
+                      </div>
+                    )}
+                    {!clientesSuggest.isLoading && (clientesSuggest.data?.length ?? 0) === 0 && (
+                      <div className={`px-3 py-2 text-xs ${isDark ? 'text-zinc-500' : 'text-gray-400'}`}>
+                        Sin coincidencias. Puedes dejarlo como texto libre.
+                      </div>
+                    )}
+                    {(clientesSuggest.data || []).map((opt, idx) => (
+                      <button
+                        key={`${opt.cliente}||${opt.marca || ''}||${idx}`}
+                        type="button"
+                        onMouseDown={(e) => e.preventDefault()}
+                        onClick={() => {
+                          setCliente(opt.cliente);
+                          if (opt.marca) setMarca(opt.marca);
+                          setClienteDropdownOpen(false);
+                        }}
+                        className={`w-full text-left px-3 py-2 text-xs transition-colors flex items-center justify-between gap-2 ${
+                          isDark ? 'hover:bg-zinc-800 text-zinc-200 border-b border-zinc-800/60'
+                                 : 'hover:bg-amber-50 text-gray-700 border-b border-gray-100'
+                        }`}
+                      >
+                        <span className="font-medium truncate">{opt.cliente}</span>
+                        <span className={`shrink-0 text-[10px] px-2 py-0.5 rounded-full ${
+                          isDark ? 'bg-zinc-800 text-zinc-400' : 'bg-gray-100 text-gray-500'
+                        }`}>
+                          {opt.marca || 'Sin marca'}
+                        </span>
+                      </button>
                     ))}
-                  </datalist>
+                  </div>
                 )}
               </div>
               <div>
