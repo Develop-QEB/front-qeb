@@ -14,6 +14,7 @@ const DashboardPage = lazy(() => import('./features/dashboard/DashboardPage').th
 const ClientesPage = lazy(() => import('./features/clientes/ClientesPage').then(m => ({ default: m.ClientesPage })));
 const ProveedoresPage = lazy(() => import('./features/proveedores/ProveedoresPage').then(m => ({ default: m.ProveedoresPage })));
 const InventariosPage = lazy(() => import('./features/inventarios/InventariosPage').then(m => ({ default: m.InventariosPage })));
+const AlmacenArtesPage = lazy(() => import('./features/almacen-artes/AlmacenArtesPage').then(m => ({ default: m.AlmacenArtesPage })));
 const AnalisisOcupacionCompartidoPage = lazy(() => import('./features/inventarios/AnalisisOcupacionCompartidoPage').then(m => ({ default: m.AnalisisOcupacionCompartidoPage })));
 const SolicitudesPage = lazy(() => import('./features/solicitudes/SolicitudesPage').then(m => ({ default: m.SolicitudesPage })));
 const PropuestasPage = lazy(() => import('./features/propuestas/PropuestasPage').then(m => ({ default: m.PropuestasPage })));
@@ -237,6 +238,7 @@ function App() {
             <Route path="/proveedores" element={<Suspense fallback={null}><ProveedoresPage /></Suspense>} />
             <Route path="/inventarios" element={<Suspense fallback={null}><InventariosRoute /></Suspense>} />
             <Route path="/inventarios/analisis/:analisisId" element={<Suspense fallback={null}><InventariosRoute /></Suspense>} />
+            <Route path="/almacen-artes" element={<Suspense fallback={null}><AlmacenArtesPage /></Suspense>} />
             <Route path="/solicitudes" element={<Suspense fallback={null}><SolicitudesPage /></Suspense>} />
             <Route path="/propuestas" element={<Suspense fallback={null}><PropuestasPage /></Suspense>} />
             <Route path="/propuestas/compartir/:id" element={<Suspense fallback={null}><CompartirPropuestaPage /></Suspense>} />

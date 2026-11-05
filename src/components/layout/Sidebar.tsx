@@ -15,6 +15,7 @@ import {
   Ticket,
   BarChart3,
   History,
+  Archive,
   X,
 } from 'lucide-react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
@@ -60,6 +61,10 @@ const navigation: { name: string; href: string; icon: React.ElementType; prefetc
   { name: 'Propuestas', href: '/propuestas', icon: Send, prefetchKey: 'prefetchPropuestas', permissionKey: 'canSeePropuestas' },
   { name: 'Campañas', href: '/campanas', icon: Megaphone, prefetchKey: 'prefetchCampanas', permissionKey: 'canSeeCampanas' },
   { name: 'Inventarios', href: '/inventarios', icon: MapPin, prefetchKey: 'prefetchInventarios', permissionKey: 'canSeeInventarios' },
+  // Jos 2026-11-05: modulo nuevo Almacen Artes (fase 1 MVP). Visibilidad
+  // reusando canSeeCampanas (quien ve campanas ve su stock); el back filtra
+  // quien puede crear movimientos manuales.
+  { name: 'Almacén Artes', href: '/almacen-artes', icon: Archive, permissionKey: 'canSeeCampanas' },
 ];
 
 export function Sidebar({ collapsed, onToggle }: SidebarProps) {
