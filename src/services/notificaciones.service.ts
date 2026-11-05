@@ -246,24 +246,6 @@ export const notificacionesService = {
     return response.data.data;
   },
 
-  // Filtro DCM (Gerente Comercial Aeropuerto) — espejo del filtro DG para
-  // la dimensión DCM. Feedback 2026-08-15.
-  async aprobarFiltroDcm(tareaId: number, comentario?: string): Promise<{ tareaDcmId: number; tareaNotifAsesorId: number | null }> {
-    const response = await api.post<ApiResponse<{ tareaDcmId: number; tareaNotifAsesorId: number | null }>>(`/solicitudes/filtro-dcm/${tareaId}/aprobar`, { comentario });
-    if (!response.data.success || !response.data.data) {
-      throw new Error(response.data.error || 'Error al aprobar filtro DCM');
-    }
-    return response.data.data;
-  },
-
-  async rechazarFiltroDcm(tareaId: number, motivo: string): Promise<{ tareaCorreccionId: number }> {
-    const response = await api.post<ApiResponse<{ tareaCorreccionId: number }>>(`/solicitudes/filtro-dcm/${tareaId}/rechazar`, { motivo });
-    if (!response.data.success || !response.data.data) {
-      throw new Error(response.data.error || 'Error al rechazar filtro DCM');
-    }
-    return response.data.data;
-  },
-
   // ==================== PREFERENCIAS ====================
 
   async getPreferencias(): Promise<{ preferencias: PreferenciasNotif; catalogo: CatalogoNotif }> {

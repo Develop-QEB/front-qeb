@@ -493,7 +493,7 @@ function TareaRow({
     if (isCancelado) return { bg: 'bg-zinc-500/20', border: 'border-zinc-500/30', color: 'text-zinc-400', label: 'Cancelado' };
     // Filtro DG/DCM devuelto a corrección: se marca 'Rechazado' en BD, pero NO es un rechazo
     // total — el Gerente lo devolvió al asesor para corregir. Badge ámbar, no rojo/verde.
-    if ((tarea.tipo === 'Filtro Autorización DG' || tarea.tipo === 'Filtro Autorización DCM') && isRechazado) return { bg: 'bg-amber-500/20', border: 'border-amber-500/30', color: 'text-amber-400', label: 'Devuelta a corrección' };
+    if (tarea.tipo === 'Filtro Autorización DG' && isRechazado) return { bg: 'bg-amber-500/20', border: 'border-amber-500/30', color: 'text-amber-400', label: 'Devuelta a corrección' };
     if (isRechazo) return { bg: 'bg-red-500/20', border: 'border-red-500/30', color: 'text-red-400', label: 'Rechazo' };
     if (isAprobacion) return { bg: 'bg-emerald-500/20', border: 'border-emerald-500/30', color: 'text-emerald-400', label: 'Aprobada' };
     if (isRechazado) return { bg: 'bg-red-500/20', border: 'border-red-500/30', color: 'text-red-400', label: 'Rechazo' };
@@ -1933,24 +1933,18 @@ function ApprovalModal({
     },
   });
 
-  // Filtro DG / DCM (paso previo con Gerente Comercial) — no aprueba/rechaza
-  // caras, solo decide "Enviar a Dirección" o "Rechazar como Corrección" a
-  // nivel tarea. Feedback 2026-08-15: espejo del flujo DG para DCM +
-  // comentario opcional al aprobar.
+  // Filtro DG (paso previo con Gerente Comercial) — no aprueba/rechaza
+  // caras, solo decide "Enviar a Dirección General" o "Rechazar como
+  // Corrección" a nivel tarea. Feedback Jos 2026-11-05: el espejo para DCM
+  // con GC se eliminó, solo queda el filtro para DG.
   const isFiltroDgTask = tarea.tipo === 'Filtro Autorización DG';
-  const isFiltroDcmTask = tarea.tipo === 'Filtro Autorización DCM';
-  const isFiltroTask = isFiltroDgTask || isFiltroDcmTask;
-  const filtroDireccion: 'DG' | 'DCM' = isFiltroDcmTask ? 'DCM' : 'DG';
-  const filtroDireccionLabel = filtroDireccion === 'DG' ? 'Dirección General' : 'Dirección Comercial';
+  const isFiltroTask = isFiltroDgTask;
+  const filtroDireccionLabel = 'Dirección General';
   const [comentarioAprobacionFiltro, setComentarioAprobacionFiltro] = useState('');
 
   const aprobarFiltroMutation = useMutation({
-    // Ambas funciones devuelven objetos con propiedades distintas
-    // (tareaDgId vs tareaDcmId). Como onSuccess no usa el retorno, se envuelve
-    // en Promise<void> para que TS reconcilie los tipos del union.
     mutationFn: async (comentario?: string): Promise<void> => {
-      if (filtroDireccion === 'DG') await notificacionesService.aprobarFiltroDg(tarea.id, comentario);
-      else await notificacionesService.aprobarFiltroDcm(tarea.id, comentario);
+      await notificacionesService.aprobarFiltroDg(tarea.id, comentario);
     },
     onSuccess: () => {
       setComentarioAprobacionFiltro('');
@@ -1962,8 +1956,7 @@ function ApprovalModal({
   });
   const rechazarFiltroMutation = useMutation({
     mutationFn: async (motivo: string): Promise<void> => {
-      if (filtroDireccion === 'DG') await notificacionesService.rechazarFiltroDg(tarea.id, motivo);
-      else await notificacionesService.rechazarFiltroDcm(tarea.id, motivo);
+      await notificacionesService.rechazarFiltroDg(tarea.id, motivo);
     },
     onSuccess: () => {
       setShowRechazoInput(false);
@@ -4574,7 +4567,7 @@ export function NotificacionesPage() {
                     if (isCanceladoInline) return { bg: 'bg-zinc-500/20', border: 'border-zinc-500/30', color: 'text-zinc-400', label: 'Cancelado' };
                     // Filtro DG/DCM devuelto a corrección: 'Rechazado' en BD pero NO es rechazo total
                     // (el Gerente lo devolvió al asesor para corregir). Badge ámbar, no rojo/verde.
-                    if ((tarea.tipo === 'Filtro Autorización DG' || tarea.tipo === 'Filtro Autorización DCM') && isRechazadoInline) return { bg: 'bg-amber-500/20', border: 'border-amber-500/30', color: 'text-amber-400', label: 'Devuelta a corrección' };
+                    if (tarea.tipo === 'Filtro Autorización DG' && isRechazadoInline) return { bg: 'bg-amber-500/20', border: 'border-amber-500/30', color: 'text-amber-400', label: 'Devuelta a corrección' };
                     if (isRechazoInline) return { bg: 'bg-red-500/20', border: 'border-red-500/30', color: 'text-red-400', label: 'Rechazo' };
                     if (isAprobacionInline) return { bg: 'bg-emerald-500/20', border: 'border-emerald-500/30', color: 'text-emerald-400', label: 'Aprobada' };
                     if (isRechazadoInline) return { bg: 'bg-red-500/20', border: 'border-red-500/30', color: 'text-red-400', label: 'Rechazo' };
