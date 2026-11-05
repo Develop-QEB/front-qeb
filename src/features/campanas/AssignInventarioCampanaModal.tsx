@@ -5209,7 +5209,7 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
 
         // Replicar bonificación a todas las caras BF del grupo masivo si reservaMasivaC está ON
         const carasObjetivo = (reservaMasivaC && selectedCaraForSearch.grupo_masivo_id)
-          ? caras.filter(c => c.grupo_masivo_id === selectedCaraForSearch.grupo_masivo_id && c.esBf && c.id)
+          ? caras.filter(c => c.grupo_masivo_id === selectedCaraForSearch.grupo_masivo_id && (c.esBf || (c.articulo || '').toUpperCase().startsWith('CT')) && c.id)
           : [selectedCaraForSearch];
 
         let totalReservasCreadas = 0;
@@ -5267,7 +5267,7 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
     const isCT = (selectedCaraForSearch?.articulo || '').toUpperCase().startsWith('CT');
     // Si reserva masiva está ON, mostrar mensaje específico
     if (reservaMasivaC && selectedCaraForSearch?.grupo_masivo_id) {
-      const grupoBfCount = caras.filter(c => c.grupo_masivo_id === selectedCaraForSearch.grupo_masivo_id && c.esBf && c.id).length;
+      const grupoBfCount = caras.filter(c => c.grupo_masivo_id === selectedCaraForSearch.grupo_masivo_id && (c.esBf || (c.articulo || '').toUpperCase().startsWith('CT')) && c.id).length;
       setConfirmModal({
         isOpen: true,
         title: isCT ? 'Cortesía Masiva' : 'Bonificación Masiva',
