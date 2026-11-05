@@ -1600,8 +1600,8 @@ function UploadArtModal({
   selectedInventory: InventoryRow[];
   onSubmit: (data: { option: UploadOption; value: string | File; inventoryIds: string[]; markInstalado?: boolean; instalacionMode?: 'instalado' | 'rotacion'; operacionesAsignados?: { ids: number[]; nombres: string[] } | null }) => void;
   onSubmitDigital?: (data: { files: { file: File; spot: number }[]; inventoryIds: string[]; markInstalado?: boolean; instalacionMode?: 'instalado' | 'rotacion'; operacionesAsignados?: { ids: number[]; nombres: string[] } | null }) => void;
-  onSubmitTradicional?: (data: { archivos: { archivo: string; nota: string; spot: number; nombre_arte?: string | null; estatus_operaciones?: string | null }[]; inventoryIds: string[]; markInstalado?: boolean; instalacionMode?: 'instalado' | 'rotacion'; operacionesAsignados?: { ids: number[]; nombres: string[] } | null }) => void;
-  onSubmitDigitalFromLibrary?: (data: { archivos: { archivo: string; nota: string; spot: number; tipo: string; nombre_arte?: string | null; estatus_operaciones?: string | null }[]; inventoryIds: string[]; markInstalado?: boolean; instalacionMode?: 'instalado' | 'rotacion'; operacionesAsignados?: { ids: number[]; nombres: string[] } | null }) => void;
+  onSubmitTradicional?: (data: { archivos: { archivo: string; nota: string; spot: number; nombre_arte?: string | null; estatus_operaciones?: string | null; cantidad_inicial?: number | null }[]; inventoryIds: string[]; markInstalado?: boolean; instalacionMode?: 'instalado' | 'rotacion'; operacionesAsignados?: { ids: number[]; nombres: string[] } | null }) => void;
+  onSubmitDigitalFromLibrary?: (data: { archivos: { archivo: string; nota: string; spot: number; tipo: string; nombre_arte?: string | null; estatus_operaciones?: string | null; cantidad_inicial?: number | null }[]; inventoryIds: string[]; markInstalado?: boolean; instalacionMode?: 'instalado' | 'rotacion'; operacionesAsignados?: { ids: number[]; nombres: string[] } | null }) => void;
   artesExistentes: ArteExistente[];
   addedArtes: ArteExistente[];
   onAddedArtesChange: (artes: ArteExistente[]) => void;
@@ -1714,6 +1714,10 @@ function UploadArtModal({
   const [imageNames, setImageNames] = useState<Map<string, string>>(new Map());
   // Estatus Operaciones (texto manual opcional) por imagen — tradicional
   const [imageEstatusOps, setImageEstatusOps] = useState<Map<string, string>>(new Map());
+  // Cantidad inicial del almacen por arte (opcional) — Almacen Artes fase 1.
+  // Mapa compartido tradicional/digital (feedback Jos 2026-11-05).
+  // #1219184885843086
+  const [imageCantidadesInicial, setImageCantidadesInicial] = useState<Map<string, number>>(new Map());
   // Modo del step 2 — tradicional. Espejo del digital.
   const [wizardModo, setWizardModo] = useState<'versionado' | 'generico'>('versionado');
   const [nombreGenerico, setNombreGenerico] = useState('');
@@ -2069,6 +2073,7 @@ function UploadArtModal({
         nombre_arte: digitalImageNames.get(key)?.trim() || null,
         estatus_operaciones: digitalImageEstatusOps.get(key)?.trim() || null,
         nombre_generico: digitalGenericoVal || null,
+        cantidad_inicial: imageCantidadesInicial.get(key) ?? null,
       }));
       const { proceed, markInstalado, instalacionMode, operacionesAsignados } = await checkAndConfirmInstalado(archivos.map(a => a.archivo));
       if (!proceed) return;
@@ -2104,6 +2109,7 @@ function UploadArtModal({
         nombre_arte: imageNames.get(key)?.trim() || null,
         estatus_operaciones: imageEstatusOps.get(key)?.trim() || null,
         nombre_generico: genericoVal || null,
+        cantidad_inicial: imageCantidadesInicial.get(key) ?? null,
       }));
       const { proceed, markInstalado, instalacionMode, operacionesAsignados } = await checkAndConfirmInstalado(archivos.map(a => a.archivo));
       if (!proceed) return;
@@ -3307,6 +3313,28 @@ function UploadArtModal({
                                     placeholder="Estatus de operaciones (opcional)"
                                   />
                                 </div>
+                                <label className={`block text-[10px] font-medium mb-1 mt-1.5 ${isDark ? 'text-zinc-400' : 'text-gray-600'}`}>
+                                  Cantidad inicial en almacén {idx + 1}
+                                </label>
+                                <input
+                                  type="number"
+                                  min={0}
+                                  value={imageCantidadesInicial.get(id) ?? ''}
+                                  onChange={(e) => {
+                                    const raw = e.target.value;
+                                    setImageCantidadesInicial(prev => {
+                                      const next = new Map(prev);
+                                      if (raw === '') next.delete(id);
+                                      else {
+                                        const n = Number(raw);
+                                        if (Number.isFinite(n) && n >= 0) next.set(id, Math.trunc(n));
+                                      }
+                                      return next;
+                                    });
+                                  }}
+                                  placeholder="0 (opcional)"
+                                  className="w-full px-2 py-1.5 text-xs bg-background border border-border rounded-lg focus:outline-none focus:ring-1 focus:ring-purple-500"
+                                />
                               </div>
                             </div>
                           </div>
@@ -18519,7 +18547,7 @@ export function TareaSeguimientoPage() {
   }, [campanaId]);
 
   // Handler para asignar arte digital desde biblioteca (wizard con notas)
-  const handleUploadDigitalFromLibrary = useCallback(async (data: { archivos: { archivo: string; nota: string; spot: number; tipo: string; nombre_arte?: string | null; estatus_operaciones?: string | null }[]; inventoryIds: string[]; markInstalado?: boolean; instalacionMode?: 'instalado' | 'rotacion'; operacionesAsignados?: { ids: number[]; nombres: string[] } | null }) => {
+  const handleUploadDigitalFromLibrary = useCallback(async (data: { archivos: { archivo: string; nota: string; spot: number; tipo: string; nombre_arte?: string | null; estatus_operaciones?: string | null; cantidad_inicial?: number | null }[]; inventoryIds: string[]; markInstalado?: boolean; instalacionMode?: 'instalado' | 'rotacion'; operacionesAsignados?: { ids: number[]; nombres: string[] } | null }) => {
     const reservaIds = selectedInventoryItems.flatMap(item =>
       item.rsv_id.split(',').map(id => parseInt(id.trim())).filter(id => !isNaN(id))
     );
@@ -18547,6 +18575,9 @@ export function TareaSeguimientoPage() {
         nota: a.nota,
         nombre_arte: a.nombre_arte ?? null,
         estatus_operaciones: a.estatus_operaciones ?? null,
+        // Almacen Artes: cantidad inicial opcional capturada en el modal de
+        // carga (feedback Jos 2026-11-05). #1219184885843086
+        cantidad_inicial: a.cantidad_inicial ?? null,
       }));
 
       await campanasService.assignArteDigital(campanaId, reservaIds, filesWithMeta, data.markInstalado === true, data.instalacionMode, data.operacionesAsignados);
@@ -18568,7 +18599,7 @@ export function TareaSeguimientoPage() {
   }, [selectedInventoryItems, campanaId, queryClient]);
 
   // Handler para subir artes tradicionales (múltiples con notas)
-  const handleUploadTradicionalArt = useCallback(async (data: { archivos: { archivo: string; nota: string; spot: number; nombre_arte?: string | null; estatus_operaciones?: string | null }[]; inventoryIds: string[]; markInstalado?: boolean; instalacionMode?: 'instalado' | 'rotacion'; operacionesAsignados?: { ids: number[]; nombres: string[] } | null }) => {
+  const handleUploadTradicionalArt = useCallback(async (data: { archivos: { archivo: string; nota: string; spot: number; nombre_arte?: string | null; estatus_operaciones?: string | null; cantidad_inicial?: number | null }[]; inventoryIds: string[]; markInstalado?: boolean; instalacionMode?: 'instalado' | 'rotacion'; operacionesAsignados?: { ids: number[]; nombres: string[] } | null }) => {
     const reservaIds = selectedInventoryItems.flatMap(item =>
       item.rsv_id.split(',').map(id => parseInt(id.trim())).filter(id => !isNaN(id))
     );

@@ -1201,7 +1201,7 @@ export const campanasService = {
   async assignArteDigital(
     id: number,
     reservaIds: number[],
-    archivos: { archivo: string; spot: number; nombre: string; tipo: string; nota?: string; nombre_arte?: string | null; estatus_operaciones?: string | null; nombre_generico?: string | null }[],
+    archivos: { archivo: string; spot: number; nombre: string; tipo: string; nota?: string; nombre_arte?: string | null; estatus_operaciones?: string | null; nombre_generico?: string | null; cantidad_inicial?: number | null }[],
     markInstalado: boolean = false,
     instalacionMode?: 'instalado' | 'rotacion',
     operacionesAsignados?: { ids: number[]; nombres: string[] } | null
@@ -1314,7 +1314,7 @@ export const campanasService = {
   async assignArteTradicional(
     id: number,
     reservaIds: number[],
-    archivos: { archivo: string; nota: string; spot: number; nombre_arte?: string | null; estatus_operaciones?: string | null; nombre_generico?: string | null }[],
+    archivos: { archivo: string; nota: string; spot: number; nombre_arte?: string | null; estatus_operaciones?: string | null; nombre_generico?: string | null; cantidad_inicial?: number | null }[],
     markInstalado: boolean = false,
     instalacionMode?: 'instalado' | 'rotacion',
     operacionesAsignados?: { ids: number[]; nombres: string[] } | null
