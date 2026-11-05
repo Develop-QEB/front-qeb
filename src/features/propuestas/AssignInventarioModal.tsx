@@ -10648,6 +10648,7 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
         contextLabel="propuesta"
         hasGeneralChanges={hasChanges}
         modifiedCircuitos={modifiedCircuitosForConfirm}
+        pendingDeletions={pendingCaraDeletions.length}
       />
 
       {/* Mini-modal Nueva Nota Dirección — obligatorio cuando la edición dispara
