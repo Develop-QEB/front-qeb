@@ -1723,6 +1723,14 @@ export function PropuestasPage() {
             setPruebaColorInitialTab(undefined);
             setPruebaColorPropuesta(propuesta);
           } else {
+            // Guard: no abrir el modal de Asignar Inventario si la propuesta
+            // ya paso a ventas (caso Oral B 30-oct-2026). El modal permitia
+            // agregar circuitos y las reservas nacian 'Reservado' colgadas,
+            // invisibles para candados anti-choque.
+            if (propuesta.status === 'Aprobada' || propuesta.status === 'Pase a ventas') {
+              alert('Esta propuesta ya paso a ventas. Agrega los circuitos desde Campanas.');
+              return;
+            }
             setSelectedPropuestaForAssign(propuesta);
             setShowAssignModal(true);
           }
