@@ -108,6 +108,8 @@ export interface ReservaEnCelda {
    *  venta que nunca se marcó como tal (caso ORAL B 82120). Ocupa para el
    *  detector y la celda nunca se limpia sola. */
   tentativa_en_campania?: boolean;
+  /** Cuándo se apartó/vendió la pieza (YYYY-MM-DD). */
+  fecha_reserva?: string | null;
   reserva_id: number;
   /** Estatus crudo de la columna `estatus` (puede traer 'Con Arte'/'Sin Arte'). */
   estatus: string;
