@@ -62,16 +62,8 @@ export function PropuestaAprobadaInfoModal({ isOpen, onClose, propuestaStatus }:
               .
             </p>
             <p>
-              Si agregas caras desde aquí, el sistema las guardaría como{' '}
-              <span className="text-amber-300 font-medium">Reservado</span> colgado,
-              invisibles para los candados anti-choque. Fue lo que pasó con{' '}
-              <span className="text-foreground font-medium">Oral B el 30-oct</span>.
-            </p>
-            <p>
               Para agregar circuitos a una campaña ya vendida, hazlo desde el{' '}
-              <span className="text-foreground font-medium">módulo de Campañas</span> —
-              ahí nacen como{' '}
-              <span className="text-emerald-300 font-medium">Vendido</span> correctamente.
+              <span className="text-foreground font-medium">módulo de Campañas</span>.
             </p>
           </div>
 
