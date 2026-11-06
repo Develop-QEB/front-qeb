@@ -454,7 +454,7 @@ export function AuditoriaConflictosModal({ open, onClose, onOpenEnMatriz, autoIn
           codigo: r.codigo_unico || `#${r.inventario_id}`,
           cat: `C${r.numero_catorcena}`,
           anio: r.anio,
-          tipo: esChoque ? 'Choque' : 'Duplicado',
+          tipo: (r.tentativas_campania ?? 0) > 0 ? 'Doble venta' : esChoque ? 'Choque' : 'Duplicado',
           // Numéricos de verdad, para poder ordenar y filtrar en Excel.
           n: r.n,
           // Desglose de estatus: todas ocupan, pero no es lo mismo un 'Vendido'
@@ -1106,7 +1106,14 @@ export function AuditoriaConflictosModal({ open, onClose, onOpenEnMatriz, autoIn
                         <td className={`px-3 py-1.5 font-mono font-medium ${isDark ? 'text-white' : 'text-gray-900'}`}>{r.codigo_unico || `#${r.inventario_id}`}</td>
                         <td className={`px-3 py-1.5 ${isDark ? 'text-zinc-300' : 'text-gray-700'}`}>C{r.numero_catorcena}-{r.anio}</td>
                         <td className="px-3 py-1.5 text-center">
-                          {r.origenes >= 2 ? (
+                          {(r.tentativas_campania ?? 0) > 0 ? (
+                            <span
+                              title="Doble venta: una campaña ya vendida tiene la cara solo como apartado tentativo (nunca se marcó Vendido) y otra campaña la vendió en firme encima. No se limpia sola: decidir con Comercial y revisar APS en SAP"
+                              className={`px-1.5 py-0.5 rounded-full text-[10px] font-bold border ${isDark ? 'bg-red-600/30 text-red-200 border-red-500/60' : 'bg-red-100 text-red-800 border-red-400'}`}
+                            >
+                              Doble venta
+                            </span>
+                          ) : r.origenes >= 2 ? (
                             <span
                               title="Campañas distintas en la misma cara. Se resuelve solo: se conserva la venta más antigua (salvo APS)"
                               className={`px-1.5 py-0.5 rounded-full text-[10px] font-medium border ${isDark ? 'bg-red-500/15 text-red-300 border-red-500/30' : 'bg-red-50 text-red-700 border-red-200'}`}
@@ -1234,6 +1241,14 @@ export function AuditoriaConflictosModal({ open, onClose, onOpenEnMatriz, autoIn
                                           {res.campana_id && res.propuesta_id && (
                                             <span className={`ml-1.5 ${isDark ? 'text-zinc-600' : 'text-gray-400'}`}>
                                               (prop. #{res.propuesta_id})
+                                            </span>
+                                          )}
+                                          {res.tentativa_en_campania && (
+                                            <span
+                                              title="Reserva tentativa dentro de una campaña ya vendida: nunca se marcó como venta, no bloqueó inventario y otra campaña vendió encima"
+                                              className={`ml-1.5 px-1.5 py-0.5 rounded-full text-[10px] font-bold border ${isDark ? 'bg-red-600/30 text-red-200 border-red-500/60' : 'bg-red-100 text-red-800 border-red-400'}`}
+                                            >
+                                              Apartado de campaña vendida
                                             </span>
                                           )}
                                         </td>
