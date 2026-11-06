@@ -1,5 +1,7 @@
 import * as React from 'react';
 import { AlertTriangle, X } from 'lucide-react';
+import { Button } from './ui/button';
+import { cn } from '../lib/utils';
 
 interface Props {
   isOpen: boolean;
@@ -10,13 +12,9 @@ interface Props {
 /**
  * Modal informativo que se muestra cuando se intenta abrir el modal de
  * Asignar Inventario sobre una propuesta ya pasada a ventas.
- *
- * Caso Oral B 30-oct-2026: agregar caras a propuestas 'Aprobada' las
- * creaba en estatus 'Reservado' colgado, invisibles para los candados
- * anti-choque. Se bloquea la apertura y se redirige al modulo de Campanas.
+ * Mismo patron visual que ConfirmModal (bg-popover, border-border, rounded-xl).
  */
 export function PropuestaAprobadaInfoModal({ isOpen, onClose, propuestaStatus }: Props) {
-  // Handle ESC key
   React.useEffect(() => {
     const handleEsc = (e: KeyboardEvent) => {
       if (e.key === 'Escape' && isOpen) onClose();
@@ -28,52 +26,50 @@ export function PropuestaAprobadaInfoModal({ isOpen, onClose, propuestaStatus }:
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 z-[110] flex items-center justify-center">
+    <div className="fixed inset-0 z-[100] flex items-center justify-center">
+      {/* Backdrop */}
       <div
         className="absolute inset-0 bg-black/60 backdrop-blur-sm"
         onClick={onClose}
       />
-      <div className="relative bg-popover border border-border rounded-xl shadow-2xl w-full max-w-lg mx-4">
+
+      {/* Modal */}
+      <div className="relative bg-popover border border-border rounded-xl shadow-2xl w-full max-w-md mx-4 animate-in fade-in zoom-in-95 duration-200">
+        {/* Close button */}
         <button
           onClick={onClose}
           className="absolute top-3 right-3 p-1 rounded-lg text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
-          aria-label="Cerrar"
         >
           <X className="h-4 w-4" />
         </button>
 
         <div className="p-6">
-          <div className="w-12 h-12 rounded-full bg-amber-500/20 flex items-center justify-center mx-auto mb-4">
-            <AlertTriangle className="h-6 w-6 text-amber-400" />
+          {/* Icon */}
+          <div className={cn('w-12 h-12 rounded-full flex items-center justify-center mx-auto mb-4', 'bg-yellow-500/20')}>
+            <AlertTriangle className={cn('h-6 w-6', 'text-yellow-400')} />
           </div>
 
-          <h3 className="text-lg font-semibold text-foreground text-center mb-3">
+          {/* Title */}
+          <h3 className="text-lg font-semibold text-foreground text-center mb-2">
             No se puede editar esta propuesta
           </h3>
 
-          <div className="text-sm text-muted-foreground space-y-3 leading-relaxed">
-            <p>
-              Esta propuesta ya pasó a ventas
-              {propuestaStatus ? (
-                <>
-                  {' '}(<span className="text-foreground font-medium">{propuestaStatus}</span>)
-                </>
-              ) : null}
-              .
-            </p>
-            <p>
-              Para agregar circuitos a una campaña ya vendida, hazlo desde el{' '}
-              <span className="text-foreground font-medium">módulo de Campañas</span>.
-            </p>
-          </div>
+          {/* Message */}
+          <p className="text-sm text-muted-foreground text-center mb-6">
+            Esta propuesta ya pasó a ventas
+            {propuestaStatus ? (
+              <>
+                {' '}(<span className="text-foreground font-medium">{propuestaStatus}</span>)
+              </>
+            ) : null}
+            . Para agregar circuitos a una campaña ya vendida, hazlo desde el módulo de Campañas.
+          </p>
 
-          <div className="mt-6 flex justify-end">
-            <button
-              onClick={onClose}
-              className="px-5 py-2 rounded-lg bg-primary text-primary-foreground hover:bg-primary/90 transition-colors font-medium"
-            >
+          {/* Button */}
+          <div className="flex">
+            <Button className="flex-1" onClick={onClose}>
               Entendido
-            </button>
+            </Button>
           </div>
         </div>
       </div>
