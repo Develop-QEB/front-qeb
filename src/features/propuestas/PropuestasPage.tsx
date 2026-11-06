@@ -33,6 +33,7 @@ import { getPermissions } from '../../lib/permissions';
 import { useSocketEquipos, useSocketPropuestas } from '../../hooks/useSocket';
 import { HistorialFilterPopover, type HistorialFilterValues } from '../../components/HistorialFilterPopover';
 import { ConfirmModal } from '../../components/ui/confirm-modal';
+import { PropuestaAprobadaInfoModal } from '../../components/PropuestaAprobadaInfoModal';
 import { monthLabelShort } from '../../lib/periodos';
 import { RefreshButton } from '../../components/RefreshButton';
 
@@ -1692,6 +1693,8 @@ export function PropuestasPage() {
   const [pruebaColorInitialTab, setPruebaColorInitialTab] = useState<'pruebas' | 'nueva' | undefined>(undefined);
   const puedePruebaColor = puedeGestionarPruebaColor(user?.rol);
   const [selectedPropuestaForAssign, setSelectedPropuestaForAssign] = useState<Propuesta | null>(null);
+  // Modal informativo cuando se intenta abrir el modal sobre propuesta ya pasada a ventas (bug Oral B)
+  const [propuestaBloqueadaStatus, setPropuestaBloqueadaStatus] = useState<string | null>(null);
 
   // Handle URL params: viewId opens modal, search fills search bar
   useEffect(() => {
@@ -1728,7 +1731,7 @@ export function PropuestasPage() {
             // agregar circuitos y las reservas nacian 'Reservado' colgadas,
             // invisibles para candados anti-choque.
             if (propuesta.status === 'Aprobada' || propuesta.status === 'Pase a ventas') {
-              alert('Esta propuesta ya paso a ventas. Agrega los circuitos desde Campanas.');
+              setPropuestaBloqueadaStatus(propuesta.status);
               return;
             }
             setSelectedPropuestaForAssign(propuesta);
@@ -3056,6 +3059,12 @@ export function PropuestasPage() {
           readOnly={!permissions.canAsignarInventario || selectedPropuestaForAssign.status === 'Pase a ventas'}
         />
       )}
+
+      <PropuestaAprobadaInfoModal
+        isOpen={!!propuestaBloqueadaStatus}
+        onClose={() => setPropuestaBloqueadaStatus(null)}
+        propuestaStatus={propuestaBloqueadaStatus ?? undefined}
+      />
 
       {pruebaColorPropuesta && (
         <PruebasColorModal
