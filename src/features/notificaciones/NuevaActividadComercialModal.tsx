@@ -7,7 +7,10 @@ import {
   notificacionesService,
   ActividadRef,
   ActividadSubtipo,
+  ActividadTipoCliente,
+  ActividadTipoActividad,
 } from '../../services/notificaciones.service';
+import { clientesService } from '../../services/clientes.service';
 
 // Tarea a editar. Estos son los campos que precargamos. Todos opcionales
 // para tolerar filas viejas con contenido incompleto o parseo fallido.
@@ -67,6 +70,12 @@ export function NuevaActividadComercialModal({ isOpen, onClose, editing }: Props
   const [catorcenaDropdownOpen, setCatorcenaDropdownOpen] = useState(false);
   const [estatusActividad, setEstatusActividad] = useState<'' | 'Abierto' | 'Activo' | 'Finalizado'>('Abierto');
   const [base, setBase] = useState<'' | 'CIMU' | 'TRADE' | 'UDC'>('');
+  // Feedback Jos 2026-11-04: Tipo Cliente (Lead/Cliente) y Tipo Actividad
+  // (Llamada/Mail/Visita). Cuando tipoCliente === 'Cliente', el input Cliente
+  // se convierte en autocomplete contra la BD, pero sigue permitiendo texto
+  // libre si el cliente aun no esta registrado.
+  const [tipoCliente, setTipoCliente] = useState<'' | ActividadTipoCliente>('');
+  const [tipoActividad, setTipoActividad] = useState<'' | ActividadTipoActividad>('');
 
   const debouncedSearch = useDebounced(search, 300);
 
@@ -91,6 +100,8 @@ export function NuevaActividadComercialModal({ isOpen, onClose, editing }: Props
     // el useEffect de abajo precarga el valor guardado.
     setEstatusActividad(editing ? '' : 'Abierto');
     setBase('');
+    setTipoCliente('');
+    setTipoActividad('');
 
     if (!editing) return;
     // Precarga desde `editing` (modo edición).
@@ -109,11 +120,12 @@ export function NuevaActividadComercialModal({ isOpen, onClose, editing }: Props
           activar_recordatorio?: boolean; recordar_dias_antes?: number;
           anio?: number; catorcena?: number; catorcenas?: number[];
           estatus_actividad?: string; base?: string;
+          tipo_cliente?: string; tipo_actividad?: string;
         };
-        if (c.subtipo === 'Campaña' || c.subtipo === 'Propuesta' || c.subtipo === 'Lead') {
+        if (c.subtipo === 'Campaña' || c.subtipo === 'Propuesta' || c.subtipo === 'Solicitud' || c.subtipo === 'Lead') {
           setSubtipo(c.subtipo);
         }
-        if (c.ref_id && (c.subtipo === 'Campaña' || c.subtipo === 'Propuesta')) {
+        if (c.ref_id && (c.subtipo === 'Campaña' || c.subtipo === 'Propuesta' || c.subtipo === 'Solicitud')) {
           // Marcamos un placeholder para conservar el ref_id aunque el user
           // no vuelva a buscar. El objeto se refresca cuando la query traiga
           // la lista y encontremos el id real (ver useEffect refresh abajo).
@@ -145,6 +157,12 @@ export function NuevaActividadComercialModal({ isOpen, onClose, editing }: Props
         if (c.base === 'CIMU' || c.base === 'TRADE' || c.base === 'UDC') {
           setBase(c.base);
         }
+        if (c.tipo_cliente === 'Lead' || c.tipo_cliente === 'Cliente') {
+          setTipoCliente(c.tipo_cliente);
+        }
+        if (c.tipo_actividad === 'Llamada' || c.tipo_actividad === 'Mail' || c.tipo_actividad === 'Visita') {
+          setTipoActividad(c.tipo_actividad);
+        }
       } catch (e) {
         console.warn('[ActividadComercial] no se pudo parsear contenido para editar:', e);
       }
@@ -171,11 +189,52 @@ export function NuevaActividadComercialModal({ isOpen, onClose, editing }: Props
 
   const listQuery = useQuery({
     queryKey: ['actividad-comercial-refs', subtipo, debouncedSearch],
-    queryFn: () => subtipo === 'Campaña'
-      ? notificacionesService.getCampanasParaActividad(debouncedSearch || undefined)
-      : notificacionesService.getPropuestasParaActividad(debouncedSearch || undefined),
-    // Lead no tiene busqueda (no hay campaña/propuesta que traer).
-    enabled: isOpen && subtipo !== 'Lead',
+    queryFn: () => {
+      if (subtipo === 'Campaña') return notificacionesService.getCampanasParaActividad(debouncedSearch || undefined);
+      if (subtipo === 'Propuesta') return notificacionesService.getPropuestasParaActividad(debouncedSearch || undefined);
+      if (subtipo === 'Solicitud') return notificacionesService.getSolicitudesParaActividad(debouncedSearch || undefined);
+      return Promise.resolve([] as ActividadRef[]);
+    },
+    // Lead no tiene busqueda (no hay campaña/propuesta/solicitud que traer).
+    enabled: isOpen,
+    retry: false,
+  });
+
+  // Autocomplete de clientes reales para el campo Cliente cuando el usuario
+  // eligio "Cliente" en Tipo Cliente (feedback Jos 2026-11-04). Sigue siendo
+  // texto libre — las sugerencias solo ayudan a elegir uno existente. Devuelve
+  // combinaciones (cliente, marca) para que al elegir del dropdown se auto-
+  // rellene tambien el campo Marca (feedback Jos 2026-11-05).
+  const debouncedCliente = useDebounced(cliente, 300);
+  const [clienteDropdownOpen, setClienteDropdownOpen] = useState(false);
+  const clientesSuggest = useQuery({
+    queryKey: ['clientes-suggest', debouncedCliente],
+    queryFn: async () => {
+      try {
+        const r = await clientesService.getAllFull(debouncedCliente || undefined);
+        const arr: Array<{ T0_U_Cliente?: string | null; T0_U_RazonSocial?: string | null; T2_U_Marca?: string | null }> =
+          (r && Array.isArray((r as unknown as { data?: unknown[] }).data))
+            ? (r as unknown as { data: Array<{ T0_U_Cliente?: string | null; T0_U_RazonSocial?: string | null; T2_U_Marca?: string | null }> }).data
+            : [];
+        const seen = new Set<string>();
+        const out: Array<{ cliente: string; marca: string | null }> = [];
+        for (const c of arr) {
+          const nombre = (c.T0_U_Cliente && c.T0_U_Cliente !== 'Cliente' ? c.T0_U_Cliente : null) || c.T0_U_RazonSocial || null;
+          if (!nombre) continue;
+          const marca = c.T2_U_Marca || null;
+          const key = `${nombre}||${marca || ''}`;
+          if (seen.has(key)) continue;
+          seen.add(key);
+          out.push({ cliente: nombre, marca });
+          if (out.length >= 20) break;
+        }
+        return out;
+      } catch {
+        return [] as Array<{ cliente: string; marca: string | null }>;
+      }
+    },
+    enabled: isOpen && tipoCliente === 'Cliente' && debouncedCliente.trim().length > 0,
+    retry: false,
   });
 
   // Reemplaza el placeholder `#id` del chip en modo edición con el label real
@@ -230,10 +289,9 @@ export function NuevaActividadComercialModal({ isOpen, onClose, editing }: Props
     const dias = activarRecordatorio && fechaEntrega
       ? Math.max(0, Math.min(365, parseInt(diasAntes || '0', 10) || 0))
       : undefined;
-    const isLead = subtipo === 'Lead';
     const payload: import('../../services/notificaciones.service').CrearActividadComercialInput = {
-      subtipo: isLead ? 'Lead' : (selected ? subtipo : undefined),
-      ref_id: isLead ? undefined : selected?.id,
+      subtipo: selected ? subtipo : undefined,
+      ref_id: selected?.id,
       cliente: cliente.trim() || undefined,
       marca: marca.trim() || undefined,
       descripcion: desc,
@@ -247,6 +305,8 @@ export function NuevaActividadComercialModal({ isOpen, onClose, editing }: Props
       catorcena: catorcenas[0] ?? undefined,
       estatus_actividad: estatusActividad || undefined,
       base: base || undefined,
+      tipo_cliente: tipoCliente || undefined,
+      tipo_actividad: tipoActividad || undefined,
     };
     if (isEditMode) {
       editMutation.mutate(payload);
@@ -291,7 +351,7 @@ export function NuevaActividadComercialModal({ isOpen, onClose, editing }: Props
               <p className={`mt-0.5 text-xs ${isDark ? 'text-zinc-400' : 'text-gray-500'}`}>
                 {isEditMode
                   ? `Editando actividad #${editing?.id}. Los cambios quedan en el historial.`
-                  : 'Registra una tarea manual sobre una campaña o propuesta.'}
+                  : 'Registra una tarea manual sobre una campaña, propuesta o solicitud.'}
               </p>
             </div>
           </div>
@@ -367,10 +427,12 @@ export function NuevaActividadComercialModal({ isOpen, onClose, editing }: Props
               </div>
             </div>
 
-            {/* Tipo + selector de referencia (OPCIONAL) */}
+            {/* Etapa + selector de referencia (OPCIONAL)
+                Feedback Jos 2026-11-04: "Tipo" se renombra a "Etapa".
+                Se quita "Lead" (ahora va en Tipo Cliente). Se agrega "Solicitud". */}
             <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
               <div>
-                <label className={labelCls}>Tipo</label>
+                <label className={labelCls}>Etapa</label>
                 <select
                   className={inputCls}
                   value={subtipo}
@@ -382,42 +444,72 @@ export function NuevaActividadComercialModal({ isOpen, onClose, editing }: Props
                 >
                   <option value="Campaña">Campaña</option>
                   <option value="Propuesta">Propuesta</option>
-                  <option value="Lead">Lead</option>
+                  <option value="Solicitud">Solicitud</option>
                 </select>
               </div>
               <div>
-                {/* Lead no tiene campaña ni propuesta asociada: el buscador se
-                    bloquea (ajuste 2026-08-13). El usuario captura cliente y
-                    marca a mano en los inputs de abajo. */}
                 <label className={labelCls}>
-                  {subtipo === 'Lead'
-                    ? 'Buscar (no aplica para Lead)'
-                    : `Buscar ${subtipo.toLowerCase()} (opcional)`}
+                  Buscar {subtipo.toLowerCase()} (opcional)
                 </label>
                 <div className="relative">
                   <Search className={`absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 ${isDark ? 'text-zinc-500' : 'text-gray-400'}`} />
                   <input
-                    className={`${inputCls} pl-9 ${subtipo === 'Lead' ? 'opacity-50 cursor-not-allowed' : ''}`}
-                    placeholder={subtipo === 'Lead' ? 'Lead — captura cliente/marca abajo' : 'Nombre, ID, cliente o marca...'}
-                    value={subtipo === 'Lead' ? '' : search}
+                    className={`${inputCls} pl-9`}
+                    placeholder="Nombre, ID, cliente o marca..."
+                    value={search}
                     onChange={(e) => { setSearch(e.target.value); setSelected(null); }}
-                    disabled={subtipo === 'Lead'}
                   />
                 </div>
+              </div>
+            </div>
+
+            {/* Tipo Cliente + Tipo Actividad (feedback Jos 2026-11-04) */}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+              <div>
+                <label className={labelCls}>Tipo Cliente</label>
+                <select
+                  className={inputCls}
+                  value={tipoCliente}
+                  onChange={(e) => setTipoCliente(e.target.value as '' | ActividadTipoCliente)}
+                >
+                  <option value="">Selecciona...</option>
+                  <option value="Lead">Lead</option>
+                  <option value="Cliente">Cliente</option>
+                </select>
+              </div>
+              <div>
+                <label className={labelCls}>Tipo Actividad</label>
+                <select
+                  className={inputCls}
+                  value={tipoActividad}
+                  onChange={(e) => setTipoActividad(e.target.value as '' | ActividadTipoActividad)}
+                >
+                  <option value="">Selecciona...</option>
+                  <option value="Llamada">Llamada</option>
+                  <option value="Mail">Mail</option>
+                  <option value="Visita">Visita</option>
+                </select>
               </div>
             </div>
 
             {/* Resultados (solo cuando el usuario esta buscando y aun no ha
                 seleccionado). Al elegir uno, se autorellenan Cliente/Marca abajo
                 sin bloquearlos. */}
-            {subtipo !== 'Lead' && !selected && search.trim().length > 0 && (
+            {!selected && search.trim().length > 0 && (
               <div className={`rounded-lg border max-h-52 overflow-y-auto ${isDark ? 'border-zinc-800' : 'border-gray-200'}`}>
                 {listQuery.isLoading && (
                   <div className={`px-3 py-3 text-xs flex items-center gap-2 ${isDark ? 'text-zinc-500' : 'text-gray-400'}`}>
                     <Loader2 className="h-3 w-3 animate-spin" /> Cargando...
                   </div>
                 )}
-                {!listQuery.isLoading && (listQuery.data?.length ?? 0) === 0 && (
+                {!listQuery.isLoading && listQuery.isError && (
+                  <div className={`px-3 py-3 text-xs text-center ${isDark ? 'text-red-400' : 'text-red-600'}`}>
+                    {/^.*(autorizado|permiso).*$/i.test(listQuery.error?.message || '')
+                      ? 'No tienes permiso para buscar actividades comerciales.'
+                      : (listQuery.error?.message || 'Error al buscar.')}
+                  </div>
+                )}
+                {!listQuery.isLoading && !listQuery.isError && (listQuery.data?.length ?? 0) === 0 && (
                   <div className={`px-3 py-3 text-xs text-center ${isDark ? 'text-zinc-500' : 'text-gray-400'}`}>
                     Sin resultados. Prueba con otro término.
                   </div>
@@ -479,14 +571,54 @@ export function NuevaActividadComercialModal({ isOpen, onClose, editing }: Props
                 Al elegir campaña/propuesta se autorellenan como sugerencia
                 pero el usuario puede editarlos o escribirlos a mano. */}
             <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-              <div>
+              <div className="relative">
                 <label className={labelCls}>Cliente</label>
                 <input
                   className={inputCls}
-                  placeholder="Nombre del cliente"
+                  placeholder={tipoCliente === 'Cliente' ? 'Busca o escribe un cliente...' : 'Nombre del cliente'}
                   value={cliente}
-                  onChange={(e) => setCliente(e.target.value)}
+                  onChange={(e) => { setCliente(e.target.value); setClienteDropdownOpen(true); }}
+                  onFocus={() => setClienteDropdownOpen(true)}
+                  onBlur={() => { setTimeout(() => setClienteDropdownOpen(false), 150); }}
+                  autoComplete="off"
                 />
+                {tipoCliente === 'Cliente' && clienteDropdownOpen && cliente.trim().length > 0 && (
+                  <div className={`absolute z-20 mt-1 w-full max-h-52 overflow-y-auto rounded-lg border shadow-lg ${isDark ? 'bg-zinc-900 border-zinc-700' : 'bg-white border-gray-200'}`}>
+                    {clientesSuggest.isLoading && (
+                      <div className={`px-3 py-2 text-xs flex items-center gap-2 ${isDark ? 'text-zinc-500' : 'text-gray-400'}`}>
+                        <Loader2 className="h-3 w-3 animate-spin" /> Buscando...
+                      </div>
+                    )}
+                    {!clientesSuggest.isLoading && (clientesSuggest.data?.length ?? 0) === 0 && (
+                      <div className={`px-3 py-2 text-xs ${isDark ? 'text-zinc-500' : 'text-gray-400'}`}>
+                        Sin coincidencias. Puedes dejarlo como texto libre.
+                      </div>
+                    )}
+                    {(clientesSuggest.data || []).map((opt, idx) => (
+                      <button
+                        key={`${opt.cliente}||${opt.marca || ''}||${idx}`}
+                        type="button"
+                        onMouseDown={(e) => e.preventDefault()}
+                        onClick={() => {
+                          setCliente(opt.cliente);
+                          if (opt.marca) setMarca(opt.marca);
+                          setClienteDropdownOpen(false);
+                        }}
+                        className={`w-full text-left px-3 py-2 text-xs transition-colors flex items-center justify-between gap-2 ${
+                          isDark ? 'hover:bg-zinc-800 text-zinc-200 border-b border-zinc-800/60'
+                                 : 'hover:bg-amber-50 text-gray-700 border-b border-gray-100'
+                        }`}
+                      >
+                        <span className="font-medium truncate">{opt.cliente}</span>
+                        <span className={`shrink-0 text-[10px] px-2 py-0.5 rounded-full ${
+                          isDark ? 'bg-zinc-800 text-zinc-400' : 'bg-gray-100 text-gray-500'
+                        }`}>
+                          {opt.marca || 'Sin marca'}
+                        </span>
+                      </button>
+                    ))}
+                  </div>
+                )}
               </div>
               <div>
                 <label className={labelCls}>Marca</label>
