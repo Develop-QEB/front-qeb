@@ -491,6 +491,7 @@ export function AuditoriaConflictosModal({ open, onClose, onOpenEnMatriz, autoIn
           circuito: res.solicitud_cara_id,
           espacio: res.espacio_id,
           periodo: res.inicio_periodo && res.fin_periodo ? `${res.inicio_periodo} a ${res.fin_periodo}` : '',
+          fecha_reserva: res.fecha_reserva ?? '',
           aps: res.aps && res.aps > 0 ? res.aps : '',
           post: res.posted ? 'Sí' : '',
           reserva: res.reserva_id,
@@ -511,6 +512,7 @@ export function AuditoriaConflictosModal({ open, onClose, onOpenEnMatriz, autoIn
           { header: 'Circuito', key: 'circuito', width: 10 },
           { header: 'Espacio', key: 'espacio', width: 10 },
           { header: 'Periodo del circuito', key: 'periodo', width: 26 },
+          { header: 'Fecha reserva', key: 'fecha_reserva', width: 18 },
           { header: 'APS', key: 'aps', width: 10 },
           { header: 'POST', key: 'post', width: 8 },
           { header: 'Reserva', key: 'reserva', width: 10 },
@@ -586,7 +588,7 @@ export function AuditoriaConflictosModal({ open, onClose, onOpenEnMatriz, autoIn
   return (
     <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50 p-4" onClick={onClose}>
       <div
-        className={`${isDark ? 'bg-zinc-900' : 'bg-white'} rounded-2xl border ${isDark ? 'border-amber-500/20' : 'border-amber-200'} w-full max-w-5xl max-h-[92vh] overflow-hidden flex flex-col shadow-2xl shadow-amber-500/10`}
+        className={`${isDark ? 'bg-zinc-900' : 'bg-white'} rounded-2xl border ${isDark ? 'border-amber-500/20' : 'border-amber-200'} w-[96vw] max-w-[1600px] max-h-[92vh] overflow-hidden flex flex-col shadow-2xl shadow-amber-500/10`}
         onClick={e => e.stopPropagation()}
       >
         {/* Header */}
@@ -1158,7 +1160,7 @@ export function AuditoriaConflictosModal({ open, onClose, onOpenEnMatriz, autoIn
                         <td className={`px-3 py-1.5 text-center font-medium ${isDark ? 'text-zinc-300' : 'text-gray-700'}`}>{r.origenes}</td>
                         <td className={`px-3 py-1.5 ${isDark ? 'text-zinc-400' : 'text-gray-600'}`}>{r.plaza || '-'}</td>
                         <td className={`px-3 py-1.5 ${isDark ? 'text-zinc-400' : 'text-gray-600'}`}>{r.mueble || '-'}</td>
-                        <td className={`px-3 py-1.5 ${isDark ? 'text-zinc-500' : 'text-gray-500'} max-w-[280px] truncate`} title={r.ubicacion || undefined}>{r.ubicacion || '-'}</td>
+                        <td className={`px-3 py-1.5 ${isDark ? 'text-zinc-500' : 'text-gray-500'} max-w-[420px] truncate`} title={r.ubicacion || undefined}>{r.ubicacion || '-'}</td>
                         <td className="px-2 py-1.5 text-center">
                           {r.origenes < 2 && (
                             <button
@@ -1188,6 +1190,7 @@ export function AuditoriaConflictosModal({ open, onClose, onOpenEnMatriz, autoIn
                                     <th className="px-2 py-1.5 text-left font-medium w-28">Articulo</th>
                                     <th className="px-2 py-1.5 text-left font-medium">Donde esta</th>
                                     <th className="px-2 py-1.5 text-left font-medium w-44">Periodo del circuito</th>
+                                    <th className="px-2 py-1.5 text-left font-medium w-32" title="Cuándo se apartó o vendió la pieza (reservas.fecha_reserva). En una doble venta dice quién llegó primero.">Fecha reserva</th>
                                     <th className="px-2 py-1.5 text-left font-medium w-24">Circuito</th>
                                     <th className="px-2 py-1.5 text-left font-medium w-24">Espacio</th>
                                     <th className="px-2 py-1.5 text-left font-medium w-28">APS</th>
@@ -1254,6 +1257,9 @@ export function AuditoriaConflictosModal({ open, onClose, onOpenEnMatriz, autoIn
                                         </td>
                                         <td className={`px-2 py-1.5 font-mono ${isDark ? 'text-zinc-400' : 'text-gray-600'}`}>
                                           {res.inicio_periodo && res.fin_periodo ? `${res.inicio_periodo} a ${res.fin_periodo}` : '-'}
+                                        </td>
+                                        <td className={`px-2 py-1.5 font-mono whitespace-nowrap ${isDark ? 'text-zinc-300' : 'text-gray-700'}`}>
+                                          {res.fecha_reserva || '-'}
                                         </td>
                                         <td className={`px-2 py-1.5 font-mono ${isDark ? 'text-zinc-500' : 'text-gray-500'}`} title="solicitudCaras.id">
                                           #{res.solicitud_cara_id}
