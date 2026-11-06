@@ -4947,7 +4947,7 @@ export function NotificacionesPage() {
           isOpen={!!editPropuesta}
           onClose={() => setEditPropuesta(null)}
           propuesta={editPropuesta}
-          readOnly={false}
+          readOnly={editPropuesta?.status === 'Aprobada' || editPropuesta?.status === 'Pase a ventas'}
         />
       )}
 
