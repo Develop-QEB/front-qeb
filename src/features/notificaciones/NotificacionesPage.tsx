@@ -25,6 +25,7 @@ import { UserAvatar } from '../../components/ui/user-avatar';
 import { useSocketNotificaciones } from '../../hooks/useSocket';
 import { CreateSolicitudModal } from '../solicitudes/CreateSolicitudModal';
 import { AssignInventarioModal } from '../propuestas/AssignInventarioModal';
+import { PropuestaAprobadaInfoModal } from '../../components/PropuestaAprobadaInfoModal';
 import { AssignInventarioCampanaModal } from '../campanas/AssignInventarioCampanaModal';
 import { propuestasService } from '../../services/propuestas.service';
 import { campanasService } from '../../services/campanas.service';
@@ -3591,6 +3592,8 @@ export function NotificacionesPage() {
   const [editSolicitudId, setEditSolicitudId] = useState<number | null>(null);
   const [editPropuesta, setEditPropuesta] = useState<any>(null);
   const [editCampana, setEditCampana] = useState<any>(null);
+  // Modal informativo cuando se intenta abrir el modal sobre propuesta ya pasada a ventas (bug Oral B)
+  const [propuestaBloqueadaStatus, setPropuestaBloqueadaStatus] = useState<string | null>(null);
 
   // Handler para cerrar el drawer con animación
   const handleCloseDrawer = useCallback(() => {
@@ -4748,7 +4751,7 @@ export function NotificacionesPage() {
                                     propuestasService.getById(parseInt(tarea.id_propuesta)).then(p => {
                                       // Guard caso Oral B 30-oct-2026: no abrir modal sobre propuesta ya aprobada
                                       if (p.status === 'Aprobada' || p.status === 'Pase a ventas') {
-                                        alert('Esta propuesta ya paso a ventas. Agrega los circuitos desde Campanas.');
+                                        setPropuestaBloqueadaStatus(p.status);
                                         return;
                                       }
                                       setEditPropuesta(p);
@@ -4867,7 +4870,7 @@ export function NotificacionesPage() {
                   propuestasService.getById(parseInt(selectedTarea.id_propuesta)).then(p => {
                     // Guard caso Oral B 30-oct-2026: no abrir modal sobre propuesta ya aprobada
                     if (p.status === 'Aprobada' || p.status === 'Pase a ventas') {
-                      alert('Esta propuesta ya paso a ventas. Agrega los circuitos desde Campanas.');
+                      setPropuestaBloqueadaStatus(p.status);
                       return;
                     }
                     setTimeout(() => setEditPropuesta(p), 250);
@@ -4964,6 +4967,12 @@ export function NotificacionesPage() {
           readOnly={editPropuesta?.status === 'Aprobada' || editPropuesta?.status === 'Pase a ventas'}
         />
       )}
+
+      <PropuestaAprobadaInfoModal
+        isOpen={!!propuestaBloqueadaStatus}
+        onClose={() => setPropuestaBloqueadaStatus(null)}
+        propuestaStatus={propuestaBloqueadaStatus ?? undefined}
+      />
 
       {/* Modal de Asignar Inventario Campaña (para tareas de rechazo de campaña) */}
       {editCampana && (
