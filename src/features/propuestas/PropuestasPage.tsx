@@ -16,6 +16,7 @@ import { solicitudesService, UserOption } from '../../services/solicitudes.servi
 import { Propuesta, Catorcena } from '../../types';
 import { formatCurrency, formatDate } from '../../lib/utils';
 import { AssignInventarioModal } from './AssignInventarioModal';
+import { PropuestaAprobadaInfoModal } from '../../components/PropuestaAprobadaInfoModal';
 import { PruebasColorModal } from '../pruebas-color/PruebasColorModal';
 import { puedeGestionarPruebaColor } from '../../services/pruebasColor.service';
 import PropuestasVersionarioView, {
@@ -1684,6 +1685,7 @@ export function PropuestasPage() {
   const [pruebaColorPropuesta, setPruebaColorPropuesta] = useState<Propuesta | null>(null);
   const puedePruebaColor = puedeGestionarPruebaColor(user?.rol);
   const [selectedPropuestaForAssign, setSelectedPropuestaForAssign] = useState<Propuesta | null>(null);
+  const [propuestaBloqueadaStatus, setPropuestaBloqueadaStatus] = useState<string | null>(null);
 
   // Handle URL params: viewId opens modal, search fills search bar
   useEffect(() => {
@@ -1695,6 +1697,10 @@ export function PropuestasPage() {
       if (!isNaN(id)) {
         // Fetch propuesta and open modal
         propuestasService.getById(id).then((propuesta) => {
+          if (propuesta.status === 'Aprobada' || propuesta.status === 'Pase a ventas') {
+            setPropuestaBloqueadaStatus(propuesta.status);
+            return;
+          }
           setSelectedPropuestaForAssign(propuesta);
           setShowAssignModal(true);
         }).catch(console.error);
@@ -3013,9 +3019,15 @@ export function PropuestasPage() {
           isOpen={showAssignModal}
           onClose={() => { setShowAssignModal(false); queryClient.invalidateQueries({ queryKey: ['propuesta-caras', selectedPropuestaForAssign?.id] }); queryClient.invalidateQueries({ queryKey: ['propuesta-reservas-modal', selectedPropuestaForAssign?.id] }); queryClient.invalidateQueries({ queryKey: ['propuesta-fresh'] }); queryClient.invalidateQueries({ queryKey: ['propuestas'] }); setSelectedPropuestaForAssign(null); }}
           propuesta={selectedPropuestaForAssign}
-          readOnly={!permissions.canAsignarInventario || selectedPropuestaForAssign.status === 'Pase a ventas'}
+          readOnly={!permissions.canAsignarInventario || selectedPropuestaForAssign.status === 'Pase a ventas' || selectedPropuestaForAssign.status === 'Aprobada'}
         />
       )}
+
+      <PropuestaAprobadaInfoModal
+        isOpen={!!propuestaBloqueadaStatus}
+        onClose={() => setPropuestaBloqueadaStatus(null)}
+        propuestaStatus={propuestaBloqueadaStatus ?? undefined}
+      />
 
       {pruebaColorPropuesta && (
         <PruebasColorModal
