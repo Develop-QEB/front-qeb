@@ -10033,17 +10033,22 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
                                       // 2026-10-23 — el caso de migraciones SAP grandes (80617 TELCEL)
                                       // se maneja esperando a que direccion revise, no abriendo la
                                       // campana a edicion.
+                                      // Ajuste 2026-11-06 (caso 80553): el candado solo aplica a pendientes YA
+                                      // GUARDADAS en BD (hasSavedPendingAuth). Un circuito que queda 'pendiente'
+                                      // solo en local (editado o reenviado, sin guardar) NO congela la pluma de
+                                      // los demas: con 3 rechazados, editar el 1o dejaba el 2o y 3o sin pluma y
+                                      // sin poder guardar (candado de rechazados sin resolver) -> callejon sin salida.
                                       const caraTienePendienteGuardada =
                                         cara.id != null &&
                                         !modifiedCaras.has(cara.id) &&
                                         ((cara as any)._originalDg === 'pendiente' || (cara as any)._originalDcm === 'pendiente');
-                                      const editBlocked = caraTienePendienteGuardada || caraAPSBlocked || hasPendingAuthorization;
+                                      const editBlocked = caraTienePendienteGuardada || caraAPSBlocked || hasSavedPendingAuth;
                                       const isLoadingThis = loadingCaraAction?.caraId === cara.localId && loadingCaraAction?.action === 'edit';
                                       const blockReason = caraAPSBlocked
                                         ? 'Grupo con APS asignado - no se puede editar'
                                         : caraTienePendienteGuardada
                                           ? 'Este circuito esta pendiente de autorizacion - no se puede editar hasta que direccion resuelva'
-                                          : hasPendingAuthorization
+                                          : hasSavedPendingAuth
                                             ? 'Hay otro circuito en esta campana pendiente de autorizacion. Aprobalo primero.'
                                             : isLoadingThis ? 'Cargando editor...' : 'Editar';
                                       return (
