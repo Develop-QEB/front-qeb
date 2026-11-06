@@ -104,6 +104,10 @@ export interface DisponiblesResponse {
 export interface ReservaEnCelda {
   /** true = apartado tentativo de propuesta. Solo viene en "apartados sobre venta". */
   es_apartado?: boolean;
+  /** true = apartado tentativo que vive dentro de una campaña YA VENDIDA: una
+   *  venta que nunca se marcó como tal (caso ORAL B 82120). Ocupa para el
+   *  detector y la celda nunca se limpia sola. */
+  tentativa_en_campania?: boolean;
   reserva_id: number;
   /** Estatus crudo de la columna `estatus` (puede traer 'Con Arte'/'Sin Arte'). */
   estatus: string;
@@ -155,6 +159,9 @@ export interface ConflictoOcupacionRow {
   firmes?: number;
   /** Solo en "apartados sobre venta": apartados tentativos encima. */
   apartados?: number;
+  /** Reservas tentativas de una campaña ya vendida en la celda. > 0 = DOBLE
+   *  VENTA silenciosa: revisión manual con Comercial y SAP, sin auto limpieza. */
+  tentativas_campania?: number;
 }
 
 /** Celda a limpiar en `/inventarios/conflictos/limpiar-duplicados`. */
