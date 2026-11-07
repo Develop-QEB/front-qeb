@@ -3186,6 +3186,7 @@ export function NotificacionesPage() {
   const [approvalModalTarea, setApprovalModalTarea] = useState<Notificacion | null>(null);
   const [editSolicitudId, setEditSolicitudId] = useState<number | null>(null);
   const [editPropuesta, setEditPropuesta] = useState<any>(null);
+  const [propuestaBloqueadaStatus, setPropuestaBloqueadaStatus] = useState<string | null>(null);
   const [editCampana, setEditCampana] = useState<any>(null);
 
   // Handler para cerrar el drawer con animación
@@ -4239,7 +4240,13 @@ export function NotificacionesPage() {
                                 }
                                 if (tarea.tipo?.includes('Rechazo')) {
                                   if (tarea.referencia_tipo === 'propuesta' && tarea.id_propuesta) {
-                                    propuestasService.getById(parseInt(tarea.id_propuesta)).then(p => setEditPropuesta(p)).catch(console.error);
+                                    propuestasService.getById(parseInt(tarea.id_propuesta)).then(p => {
+                                      if (p.status === 'Aprobada' || p.status === 'Pase a ventas') {
+                                        setPropuestaBloqueadaStatus(p.status);
+                                        return;
+                                      }
+                                      setEditPropuesta(p);
+                                    }).catch(console.error);
                                   } else if (tarea.referencia_tipo === 'campana' && tarea.campania_id) {
                                     campanasService.getById(tarea.campania_id).then(c => setEditCampana(c)).catch(console.error);
                                   } else {
@@ -4342,7 +4349,13 @@ export function NotificacionesPage() {
               if (selectedTarea.tipo?.includes('Rechazo')) {
                 handleCloseDrawer();
                 if (selectedTarea.referencia_tipo === 'propuesta' && selectedTarea.id_propuesta) {
-                  propuestasService.getById(parseInt(selectedTarea.id_propuesta)).then(p => setTimeout(() => setEditPropuesta(p), 250)).catch(console.error);
+                  propuestasService.getById(parseInt(selectedTarea.id_propuesta)).then(p => {
+                    if (p.status === 'Aprobada' || p.status === 'Pase a ventas') {
+                      setPropuestaBloqueadaStatus(p.status);
+                      return;
+                    }
+                    setTimeout(() => setEditPropuesta(p), 250);
+                  }).catch(console.error);
                 } else if (selectedTarea.referencia_tipo === 'campana' && selectedTarea.campania_id) {
                   campanasService.getById(selectedTarea.campania_id).then(c => setTimeout(() => setEditCampana(c), 250)).catch(console.error);
                 } else {
@@ -4393,9 +4406,15 @@ export function NotificacionesPage() {
           isOpen={!!editPropuesta}
           onClose={() => setEditPropuesta(null)}
           propuesta={editPropuesta}
-          readOnly={false}
+          readOnly={editPropuesta?.status === 'Aprobada' || editPropuesta?.status === 'Pase a ventas'}
         />
       )}
+
+      <PropuestaAprobadaInfoModal
+        isOpen={!!propuestaBloqueadaStatus}
+        onClose={() => setPropuestaBloqueadaStatus(null)}
+        propuestaStatus={propuestaBloqueadaStatus ?? undefined}
+      />
 
       {/* Modal de Asignar Inventario Campaña (para tareas de rechazo de campaña) */}
       {editCampana && (
