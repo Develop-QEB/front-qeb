@@ -353,7 +353,7 @@ export function NuevaActividadComercialModal({ isOpen, onClose, editing }: Props
 
   return (
     <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm">
-      <div className={`w-full max-w-2xl rounded-2xl shadow-2xl border max-h-[92vh] overflow-y-auto ${
+      <div className={`w-full max-w-2xl rounded-2xl shadow-2xl border max-h-[92dvh] max-lg:landscape:h-[100dvh] max-lg:landscape:max-h-[100dvh] max-lg:landscape:rounded-none max-lg:landscape:mx-0 overflow-y-auto ${
         isDark ? 'bg-zinc-900 border-zinc-800' : 'bg-white border-gray-200'
       }`}>
         {/* Header */}
@@ -518,7 +518,7 @@ export function NuevaActividadComercialModal({ isOpen, onClose, editing }: Props
                 seleccionado). Al elegir uno, se autorellenan Cliente/Marca abajo
                 sin bloquearlos. */}
             {!selected && search.trim().length > 0 && (
-              <div className={`rounded-lg border max-h-52 overflow-y-auto ${isDark ? 'border-zinc-800' : 'border-gray-200'}`}>
+              <div className={`rounded-lg border max-h-52 max-lg:landscape:max-h-32 overflow-y-auto ${isDark ? 'border-zinc-800' : 'border-gray-200'}`}>
                 {listQuery.isLoading && (
                   <div className={`px-3 py-3 text-xs flex items-center gap-2 ${isDark ? 'text-zinc-500' : 'text-gray-400'}`}>
                     <Loader2 className="h-3 w-3 animate-spin" /> Cargando...
@@ -604,8 +604,8 @@ export function NuevaActividadComercialModal({ isOpen, onClose, editing }: Props
                   onBlur={() => { setTimeout(() => setClienteDropdownOpen(false), 150); }}
                   autoComplete="off"
                 />
-                {tipoCliente === 'Cliente' && clienteDropdownOpen && (
-                  <div className={`absolute z-20 mt-1 w-full max-h-72 overflow-hidden rounded-lg border shadow-lg flex flex-col ${isDark ? 'bg-zinc-900 border-zinc-700' : 'bg-white border-gray-200'}`}>
+                {tipoCliente === 'Cliente' && clienteDropdownOpen && cliente.trim().length > 0 && (
+                  <div className={`fixed inset-x-2 top-16 bottom-16 mt-0 w-auto max-w-none max-h-[calc(100dvh-5rem)] overflow-hidden rounded-lg border shadow-lg flex flex-col z-20 lg:absolute lg:inset-auto lg:top-full lg:left-0 lg:right-0 lg:bottom-auto lg:mt-1 lg:w-full lg:max-w-[calc(100vw-2rem)] lg:max-h-72 ${isDark ? 'bg-zinc-900 border-zinc-700' : 'bg-white border-gray-200'}`}>
                     {/* Tabs de base (feedback Jos 2026-11-06: como el selector de solicitudes) */}
                     <div className={`flex items-center gap-1 px-2 py-1.5 border-b ${isDark ? 'border-zinc-800 bg-zinc-900' : 'border-gray-100 bg-gray-50'}`}>
                       {(['ALL', 'CIMU', 'TRADE', 'UDC'] as const).map(tab => (
@@ -627,7 +627,7 @@ export function NuevaActividadComercialModal({ isOpen, onClose, editing }: Props
                         {clientesFiltrados.length} de {clientesSuggest.data?.length ?? 0}
                       </span>
                     </div>
-                    <div className="max-h-56 overflow-y-auto">
+                    <div className="flex-1 max-h-56 max-lg:flex-1 max-lg:max-h-none overflow-y-auto">
                     {clientesSuggest.isLoading && (
                       <div className={`px-3 py-2 text-xs flex items-center gap-2 ${isDark ? 'text-zinc-500' : 'text-gray-400'}`}>
                         <Loader2 className="h-3 w-3 animate-spin" /> Cargando clientes...
@@ -715,7 +715,7 @@ export function NuevaActividadComercialModal({ isOpen, onClose, editing }: Props
                   <span className={`text-[10px] shrink-0 ${isDark ? 'text-zinc-500' : 'text-gray-400'}`}>▾</span>
                 </button>
                 {catorcenaDropdownOpen && (
-                  <div className={`absolute z-20 mt-1 w-full max-h-56 overflow-y-auto rounded-lg border shadow-lg ${isDark ? 'bg-zinc-900 border-zinc-700' : 'bg-white border-gray-200'}`}>
+                  <div className={`fixed inset-x-2 top-16 bottom-16 mt-0 w-auto max-w-none max-h-[calc(100dvh-5rem)] overflow-y-auto rounded-lg border shadow-lg z-20 lg:absolute lg:inset-auto lg:top-full lg:left-0 lg:right-0 lg:bottom-auto lg:mt-1 lg:w-full lg:max-w-[calc(100vw-2rem)] lg:max-h-56 ${isDark ? 'bg-zinc-900 border-zinc-700' : 'bg-white border-gray-200'}`}>
                     <div className={`sticky top-0 flex items-center justify-between px-2 py-1 border-b text-[10px] ${isDark ? 'bg-zinc-900 border-zinc-800 text-zinc-500' : 'bg-white border-gray-100 text-gray-500'}`}>
                       <button type="button" onClick={() => setCatorcenas([])} className="hover:underline">Limpiar</button>
                       <button type="button" onClick={() => setCatorcenaDropdownOpen(false)} className="hover:underline">Cerrar</button>
@@ -827,7 +827,7 @@ export function NuevaActividadComercialModal({ isOpen, onClose, editing }: Props
               </div>
             )}
 
-            <div className={`pt-3 border-t flex justify-end gap-2 ${isDark ? 'border-zinc-800' : 'border-gray-200'}`}>
+            <div className={`pt-3 max-lg:landscape:pt-2 border-t flex flex-wrap justify-end gap-2 ${isDark ? 'border-zinc-800' : 'border-gray-200'}`}>
               <button
                 type="button"
                 onClick={onClose}

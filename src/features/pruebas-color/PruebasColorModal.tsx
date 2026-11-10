@@ -386,7 +386,7 @@ export function PruebasColorModal({ isOpen, onClose, propuestaId, contextoNombre
           abajo), asi NUNCA se corta sin importar el tamaño del modal. Aqui
           solo se ajusta el layout a flex-col con el scroll en el body para
           que sea consistente. */}
-      <div className={`w-full max-w-4xl rounded-2xl shadow-2xl border max-h-[95vh] flex flex-col ${
+      <div className={`w-full max-w-4xl rounded-2xl shadow-2xl border max-h-[95dvh] flex flex-col max-lg:landscape:h-[100dvh] max-lg:landscape:max-h-[100dvh] max-lg:landscape:rounded-none max-lg:landscape:mx-0 ${
         isDark ? 'bg-zinc-900 border-zinc-800' : 'bg-white border-gray-200'
       }`}>
         {/* Header */}
@@ -805,7 +805,7 @@ export function PruebasColorModal({ isOpen, onClose, propuestaId, contextoNombre
                   </div>
                 )}
 
-                <div className="flex justify-end gap-2 pt-1">
+                <div className="flex flex-wrap justify-end gap-2 pt-1 max-lg:landscape:py-2 max-lg:landscape:px-3">
                   <button
                     onClick={() => setActiveTab('pruebas')}
                     className={`px-4 py-2 rounded-lg text-sm font-medium border ${isDark ? 'bg-zinc-800 border-zinc-700 text-zinc-300 hover:bg-zinc-700' : 'bg-white border-gray-300 text-gray-700 hover:bg-gray-50'}`}
@@ -1431,7 +1431,7 @@ function AtenderTareaModal({
     >
       <div
         onClick={(e) => e.stopPropagation()}
-        className={`w-full max-w-2xl rounded-xl border shadow-2xl flex flex-col max-h-[92vh] ${isDark ? 'bg-zinc-900 border-zinc-700 text-zinc-100' : 'bg-white border-gray-200 text-gray-900'}`}
+        className={`w-full max-w-2xl rounded-xl border shadow-2xl flex flex-col max-h-[92dvh] max-lg:landscape:h-[100dvh] max-lg:landscape:max-h-[100dvh] max-lg:landscape:rounded-none max-lg:landscape:mx-0 ${isDark ? 'bg-zinc-900 border-zinc-700 text-zinc-100' : 'bg-white border-gray-200 text-gray-900'}`}
       >
         {/* Header */}
         <div className={`shrink-0 px-5 py-3 flex items-start justify-between gap-3 border-b ${isDark ? 'border-zinc-800' : 'border-gray-200'}`}>
@@ -1486,7 +1486,7 @@ function AtenderTareaModal({
               <button
                 type="button"
                 onClick={() => setLightboxOpen(true)}
-                className={`relative w-full h-64 rounded-lg overflow-hidden border transition-all group ${isDark ? 'border-zinc-700 bg-zinc-800 hover:border-fuchsia-500/60' : 'border-gray-300 bg-gray-50 hover:border-fuchsia-400'}`}
+                className={`relative w-full h-64 max-lg:landscape:h-32 rounded-lg overflow-hidden border transition-all group ${isDark ? 'border-zinc-700 bg-zinc-800 hover:border-fuchsia-500/60' : 'border-gray-300 bg-gray-50 hover:border-fuchsia-400'}`}
                 title="Click para ver en grande"
               >
                 <img
@@ -1858,7 +1858,7 @@ function AtenderTareaModal({
         </div>
 
         {/* Footer con acciones */}
-        <div className={`shrink-0 px-5 py-3 flex items-center justify-end gap-2 border-t ${isDark ? 'border-zinc-800 bg-zinc-900/60' : 'border-gray-200 bg-gray-50/60'}`}>
+        <div className={`shrink-0 px-5 py-3 max-lg:landscape:py-2 max-lg:landscape:px-3 flex flex-wrap items-center justify-end gap-2 border-t ${isDark ? 'border-zinc-800 bg-zinc-900/60' : 'border-gray-200 bg-gray-50/60'}`}>
           {yaResuelta ? (
             // Tarea ya atendida: Cerrar + "Subir arte / Reenviar" si fue rechazada.
             // Jos 2026-10-12: el creador puede editar la MISMA prueba inline en
@@ -2221,18 +2221,29 @@ function CircuitoCombobox({
     if (!btnRef.current) return;
     const rect = btnRef.current.getBoundingClientRect();
     const vh = window.innerHeight;
+    const vw = window.innerWidth;
     const spaceBelow = vh - rect.bottom - 8;
     const spaceAbove = rect.top - 8;
     // Preferir abrir hacia abajo. Si abajo hay < 280px y arriba hay mas espacio,
     // abrir hacia arriba.
     const openUp = spaceBelow < 280 && spaceAbove > spaceBelow;
+    // Jos 2026-11-10: el Math.max(200, ...) hacia overflow en viewports chicos
+    // (celular landscape) porque forzaba 200px aunque solo hubiera 100px libres.
+    // Ahora el min(200, espacioDisponible) respeta el viewport real.
+    const available = openUp ? spaceAbove : spaceBelow;
+    const maxHeight = Math.min(Math.max(160, available), vh - 16);
+    // Clamp del width al viewport con 8px de margen a cada lado para que
+    // nunca se salga por derecha en mobile.
+    const maxPanelWidth = vw - 16;
+    const panelWidth = Math.min(rect.width, maxPanelWidth);
+    const panelLeft = Math.min(rect.left, vw - panelWidth - 8);
     setPanelStyle({
       position: 'fixed',
-      left: rect.left,
-      width: rect.width,
+      left: Math.max(8, panelLeft),
+      width: panelWidth,
       top: openUp ? undefined : rect.bottom + 4,
       bottom: openUp ? vh - rect.top + 4 : undefined,
-      maxHeight: openUp ? Math.max(200, spaceAbove) : Math.max(200, spaceBelow),
+      maxHeight,
     });
   };
 

@@ -5925,7 +5925,7 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
       {omitidosReservaJSX}
         <div className="absolute inset-0 bg-black/70 backdrop-blur-sm" onClick={handleBackToMain} />
 
-        <div className={`relative w-[97vw] max-w-[1800px] h-[92vh] ${isDark ? 'bg-zinc-900' : 'bg-white'} rounded-2xl border border-purple-500/20 shadow-2xl flex flex-col overflow-hidden`}>
+        <div className={`relative w-[97vw] max-w-[1800px] h-[92dvh] max-lg:landscape:h-[100dvh] max-lg:landscape:max-h-[100dvh] max-lg:landscape:w-screen max-lg:landscape:rounded-none max-lg:landscape:mx-0 ${isDark ? 'bg-zinc-900' : 'bg-white'} rounded-2xl border border-purple-500/20 shadow-2xl flex flex-col overflow-hidden`}>
           {/* Header */}
           <div className={`flex items-center justify-between px-6 py-4 border-b ${isDark ? 'border-zinc-800' : 'border-gray-200'}`}>
             <div className="flex items-center gap-4">
@@ -6511,7 +6511,7 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
                       )}
                     </button>
                     {showDisponiblesAdvFilters && (
-                      <div className={`absolute left-0 top-full mt-1 z-[100] w-[540px] ${isDark ? 'bg-zinc-900 border-purple-500/30' : 'bg-white border-gray-200'} border rounded-xl shadow-2xl p-4`}>
+                      <div className={`fixed inset-x-2 top-16 bottom-16 mt-0 w-auto max-w-none max-h-[calc(100dvh-5rem)] overflow-y-auto overscroll-contain lg:absolute lg:inset-auto lg:top-full lg:left-0 lg:bottom-auto lg:mt-1 lg:w-[540px] lg:max-w-[calc(100vw-2rem)] lg:max-h-none lg:overflow-visible z-[100] ${isDark ? 'bg-zinc-900 border-purple-500/30' : 'bg-white border-gray-200'} border rounded-xl shadow-2xl p-4`}>
                         <div className="flex items-center justify-between mb-3">
                           <span className={`text-sm font-medium ${isDark ? 'text-purple-300' : 'text-purple-700'}`}>Filtros avanzados</span>
                           <button
@@ -6521,7 +6521,7 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
                             <X className="h-4 w-4" />
                           </button>
                         </div>
-                        <div className="space-y-2 max-h-[300px] overflow-visible pr-1">
+                        <div className="space-y-2 max-h-[300px] max-lg:landscape:max-h-32 overflow-visible pr-1">
                           {disponiblesAdvFilters.map((filter, index) => (
                             <div key={filter.id} className="flex items-center gap-2">
                               {index > 0 ? (
@@ -7066,7 +7066,7 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
                         <p className="text-sm">Intenta cambiar los filtros o la cara seleccionada</p>
                       </div>
                     ) : (
-                      <table className="w-full text-sm">
+                      <table className="w-full min-w-[640px] text-sm">
                         <thead className={`${isDark ? 'bg-zinc-800/50' : 'bg-gray-50/50'} sticky top-0`}>
                           <tr>
                             <th className={`px-3 py-2 text-left text-xs ${isDark ? 'text-zinc-400' : 'text-gray-500'} font-medium w-10`}>
@@ -7686,7 +7686,7 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
                   </div>
                 ) : (
                   <div className="flex-1 overflow-auto">
-                    <table className="w-full">
+                    <table className="w-full min-w-[640px]">
                       <thead className={`sticky top-0 ${isDark ? 'bg-zinc-900' : 'bg-white'}/95 backdrop-blur-sm z-10`}>
                         <tr className={`border-b ${isDark ? 'border-zinc-800' : 'border-gray-200'}`}>
                           <th className="px-3 py-3 text-center">
@@ -8088,7 +8088,7 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
 
                 {/* Lateral Edit Panel */}
                 {editingReserva && (
-                  <div className={`absolute right-0 top-0 bottom-0 w-80 ${isDark ? 'bg-zinc-900' : 'bg-white'} border-l ${isDark ? 'border-zinc-700' : 'border-gray-200'} shadow-2xl z-20 flex flex-col animate-in slide-in-from-right duration-200`}>
+                  <div className={`absolute right-0 top-0 bottom-0 w-full max-w-[20rem] sm:w-80 ${isDark ? 'bg-zinc-900' : 'bg-white'} border-l ${isDark ? 'border-zinc-700' : 'border-gray-200'} shadow-2xl z-20 flex flex-col animate-in slide-in-from-right duration-200`}>
                     <div className={`px-4 py-3 border-b ${isDark ? 'border-zinc-800' : 'border-gray-200'} flex items-center justify-between`}>
                       <h3 className={`text-sm font-semibold ${isDark ? 'text-white' : 'text-gray-900'}`}>Editar Reserva</h3>
                       <button
@@ -8349,7 +8349,7 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
     <div className="fixed inset-0 z-50 flex items-center justify-center">
       <div className="absolute inset-0 bg-black/70 backdrop-blur-sm" onClick={handleClose} />
 
-      <div className={`relative w-[97vw] max-w-[1800px] h-[92vh] ${isDark ? 'bg-zinc-900' : 'bg-white'} rounded-2xl border border-purple-500/20 shadow-2xl flex flex-col overflow-hidden`}>
+      <div className={`relative w-[97vw] max-w-[1800px] h-[92dvh] max-lg:landscape:h-[100dvh] max-lg:landscape:max-h-[100dvh] max-lg:landscape:w-screen max-lg:landscape:rounded-none max-lg:landscape:mx-0 ${isDark ? 'bg-zinc-900' : 'bg-white'} rounded-2xl border border-purple-500/20 shadow-2xl flex flex-col overflow-hidden`}>
         {/* Header */}
         <div className={`flex items-center justify-between px-6 py-4 border-b ${isDark ? 'border-zinc-800' : 'border-gray-200'}`}>
           <div>
@@ -8495,7 +8495,7 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
                         )}
                       </div>
                       {/* Show selected or current client details */}
-                      <div className="grid grid-cols-4 gap-4">
+                      <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4">
                         <div className="space-y-1">
                           <label className={`text-xs ${isDark ? 'text-zinc-500' : 'text-gray-400'}`}>CUIC</label>
                           <div className={`px-3 py-2 ${isDark ? 'bg-zinc-800/50' : 'bg-gray-50/50'} rounded-lg text-sm ${isDark ? 'text-zinc-300' : 'text-gray-700'} border ${isDark ? 'border-zinc-700/30' : 'border-gray-200/30'}`}>
@@ -8523,7 +8523,7 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
                       </div>
                     </div>
                   ) : (
-                    <div className="grid grid-cols-4 gap-4">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4">
                       <div className="space-y-1">
                         <label className={`text-xs ${isDark ? 'text-zinc-500' : 'text-gray-400'}`}>CUIC</label>
                         <div className={`px-3 py-2 ${isDark ? 'bg-zinc-800/50' : 'bg-gray-50/50'} rounded-lg text-sm ${isDark ? 'text-zinc-300' : 'text-gray-700'} border ${isDark ? 'border-zinc-700/30' : 'border-gray-200/30'}`}>
@@ -8552,7 +8552,7 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
                   )}
 
                   {/* Editable fields */}
-                  <div className="grid grid-cols-2 gap-4">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                     <div className="space-y-1">
                       <label className={`text-xs ${isDark ? 'text-zinc-500' : 'text-gray-400'}`}>Nombre de Campaña</label>
                       <input
@@ -8615,7 +8615,7 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
                   </div>
 
                   {/* Period - Same style as EditSolicitudModal */}
-                  <div className="grid grid-cols-4 gap-4">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4">
                     <div className="space-y-1">
                       <label className={`text-xs ${isDark ? 'text-zinc-500' : 'text-gray-400'}`}>Año Inicio</label>
                       <select
@@ -8675,7 +8675,7 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
                   </div>
 
                   {/* Notes and Description */}
-                  <div className="grid grid-cols-2 gap-4">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                     <div className="space-y-1">
                       {propuesta.solicitud_id ? (
                         // Modo edición de propuesta: bitácora readonly. La nota
@@ -9134,7 +9134,7 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
                               }
                             }
                             return (
-                          <div className="grid grid-cols-3 gap-2">
+                          <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
                             <div>
                               <label className={`text-[10px] ${isDark ? 'text-zinc-600' : 'text-gray-400'} block mb-1`}>Mes</label>
                               <select
@@ -9244,7 +9244,7 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
                             );
                           })()
                         ) : (
-                        <div className="grid grid-cols-2 gap-2">
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                           {/* Catorcena Inicio */}
                           <select
                             value={newCara.catorcena_inicio && newCara.anio_inicio ? `${newCara.anio_inicio}-${newCara.catorcena_inicio}` : ''}
@@ -9412,7 +9412,7 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
                       </div>
                     </div>
 
-                    <div className="grid grid-cols-4 gap-4 mb-4">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4 mb-4">
                       <div className="space-y-1">
                         <label title={editingCaraHasReservas ? 'Bloqueado: el circuito tiene inventario reservado' : undefined} className={`text-xs ${(!editingCaraHasReservas && caraFiltersLocked) ? 'text-zinc-800' : `${isDark ? 'text-zinc-500' : 'text-gray-400'}`}`}>Plazas {editingCaraHasReservas ? <span className="text-amber-400 text-[10px]">(bloqueado)</span> : newCara.estados && !caraFiltersLocked && <span className="text-purple-400">({newCara.estados.split(',').filter(Boolean).length})</span>}</label>
                         {canEditResumen && !caraFiltersLocked ? (
@@ -9532,7 +9532,7 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
                         </select>
                       </div>
                     </div>
-                    <div className="grid grid-cols-4 gap-4 mb-4">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4 mb-4">
                       <div className="space-y-1">
                         <label className={`text-xs ${isDark ? 'text-zinc-500' : 'text-gray-400'}`}>
                           {isEspecialArticle((newCara.articulo || '').toUpperCase()) ? 'Ejec. Especiales' : newCara.articulo?.toUpperCase().startsWith('IM') ? 'Impresiones' : isServicioCFArticle(newCara.articulo) ? 'Servicios' : newCara.articulo?.toUpperCase().startsWith('IN') ? 'Intercambio' : (newCara.formato || '').toUpperCase().includes('PUENTE PEATONAL') ? 'Puentes en Renta' : 'Caras en Renta'}
@@ -9869,7 +9869,7 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
                                     statusColor === 'blue' ? 'bg-blue-500' : statusColor === 'red' ? 'bg-red-500 animate-pulse' : statusColor === 'emerald' ? 'bg-emerald-500' : 'bg-amber-500 animate-pulse'
                                   }`} />
 
-                                  <div className="flex-1 grid grid-cols-8 gap-3 text-sm">
+                                  <div className="flex-1 grid grid-cols-2 sm:grid-cols-4 md:grid-cols-8 gap-3 text-sm">
                                     <div>
                                       <span className={`${isDark ? 'text-zinc-500' : 'text-gray-400'} text-xs`}>Formato</span>
                                       <p className={`${isDark ? 'text-white' : 'text-gray-900'} font-medium`}>{cara.formato || '-'}</p>
@@ -10282,14 +10282,14 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
                             )}
                           </button>
                           {showFiltersReservas && (
-                            <div className="fixed inset-x-2 top-16 mt-0 w-auto max-w-none max-h-[calc(100vh-5rem)] overflow-auto sm:absolute sm:inset-auto sm:top-full sm:right-0 sm:mt-1 sm:w-[520px] sm:max-h-none sm:overflow-visible z-[60] bg-[#1a1025] border border-purple-900/50 rounded-lg shadow-xl p-4">
+                            <div className="fixed inset-x-2 top-16 mt-0 w-auto max-w-none max-h-[calc(100dvh-5rem)] overflow-auto sm:absolute sm:inset-auto sm:top-full sm:right-0 sm:mt-1 sm:w-[520px] sm:max-h-none sm:overflow-visible z-[60] bg-[#1a1025] border border-purple-900/50 rounded-lg shadow-xl p-4">
                               <div className="flex items-center justify-between mb-3">
                                 <span className="text-sm font-medium text-purple-300">Filtros de búsqueda</span>
                                 <button onClick={() => setShowFiltersReservas(false)} className={`${isDark ? 'text-zinc-400' : 'text-gray-500'} ${isDark ? 'hover:text-white' : 'hover:text-gray-900'}`}>
                                   <X className="h-4 w-4" />
                                 </button>
                               </div>
-                              <div className="space-y-3 max-h-[300px] overflow-y-auto scrollbar-purple pr-1">
+                              <div className="space-y-3 max-h-[300px] max-lg:landscape:max-h-32 overflow-y-auto scrollbar-purple pr-1">
                                 {filtersReservas.map((filter, index) => (
                                   <div key={filter.id} className="flex items-center gap-2">
                                     {index > 0 && <span className="text-[10px] text-purple-400 font-medium w-8">AND</span>}
@@ -10368,7 +10368,7 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
                             )}
                           </button>
                           {showGroupingConfigReservas && (
-                            <div className="absolute right-0 top-full mt-1 z-50 bg-[#1a1025] border border-purple-900/50 rounded-lg shadow-xl p-2 min-w-[200px]">
+                            <div className="fixed inset-x-2 top-16 bottom-16 mt-0 w-auto max-w-none max-h-[calc(100dvh-5rem)] overflow-y-auto overscroll-contain lg:absolute lg:inset-auto lg:top-full lg:right-0 lg:bottom-auto lg:mt-1 lg:w-auto lg:min-w-[200px] lg:max-w-[calc(100vw-2rem)] lg:max-h-none lg:overflow-visible z-50 bg-[#1a1025] border border-purple-900/50 rounded-lg shadow-xl p-2">
                               <p className={`text-[10px] ${isDark ? 'text-zinc-500' : 'text-gray-400'} uppercase tracking-wide px-2 py-1`}>Agrupar por (max 3)</p>
                               {AVAILABLE_GROUPINGS_RESERVAS.map(({ field, label }) => (
                                 <button
@@ -10408,7 +10408,7 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
                             <ArrowUpDown className="h-3.5 w-3.5" />
                           </button>
                           {showSortReservas && (
-                            <div className="absolute right-0 top-full mt-1 z-50 bg-[#1a1025] border border-purple-900/50 rounded-lg shadow-xl p-2 min-w-[180px]">
+                            <div className="fixed inset-x-2 top-16 bottom-16 mt-0 w-auto max-w-none max-h-[calc(100dvh-5rem)] overflow-y-auto overscroll-contain lg:absolute lg:inset-auto lg:top-full lg:right-0 lg:bottom-auto lg:mt-1 lg:w-auto lg:min-w-[180px] lg:max-w-[calc(100vw-2rem)] lg:max-h-none lg:overflow-visible z-50 bg-[#1a1025] border border-purple-900/50 rounded-lg shadow-xl p-2">
                               <p className={`text-[10px] ${isDark ? 'text-zinc-500' : 'text-gray-400'} uppercase tracking-wide px-2 py-1`}>Ordenar por</p>
                               {FILTER_FIELDS_RESERVAS.map(({ field, label }) => (
                                 <button
@@ -10640,7 +10640,7 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
                         </div>
                         {/* KPIs Mini Summary */}
                         <div className={`p-3 border-t ${isDark ? 'border-zinc-700/50' : 'border-gray-200/50'} ${isDark ? 'bg-zinc-800/50' : 'bg-gray-50/50'}`}>
-                          <div className={`grid gap-2 text-center text-xs ${reservasKPIs.completos > 0 ? 'grid-cols-4' : 'grid-cols-3'}`}>
+                          <div className={`grid gap-2 text-center text-xs ${reservasKPIs.completos > 0 ? 'grid-cols-2 sm:grid-cols-4' : 'grid-cols-3'}`}>
                             <div>
                               <p className={`${isDark ? 'text-zinc-500' : 'text-gray-400'}`}>Flujo</p>
                               <p className="text-blue-400 font-bold">{reservasKPIs.flujo}</p>
@@ -10824,7 +10824,7 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
 
         {/* Footer with Guardar Cambios button */}
         {(caras.length > 0 || hasChanges || bitacoraPending) && (
-          <div className={`px-6 py-4 border-t ${isDark ? 'border-zinc-800' : 'border-gray-200'} ${isDark ? 'bg-zinc-900' : 'bg-white'}/80 flex items-center justify-between`}>
+          <div className={`px-4 sm:px-6 py-3 sm:py-4 max-lg:landscape:py-2 max-lg:landscape:px-3 border-t ${isDark ? 'border-zinc-800' : 'border-gray-200'} ${isDark ? 'bg-zinc-900' : 'bg-white'}/80 flex flex-wrap items-center justify-between gap-2`}>
             <div className="flex items-center gap-4">
               {/* Status summary */}
               <div className="flex items-center gap-3 text-sm">
