@@ -343,7 +343,27 @@ export const notificacionesService = {
     }
     return response.data.data;
   },
+
+  // Historial (bitacora) de una tarea especifica. Lo consume el drawer lateral
+  // para mostrar las ediciones de la Actividad Comercial. El endpoint retorna
+  // filas de historial con cambios: [{ campo, label, antes, despues }]
+  // embebidos dentro de `detalles` (JSON string).
+  async getHistorialTarea(tareaId: number): Promise<HistorialTareaRow[]> {
+    const response = await api.get<ApiResponse<HistorialTareaRow[]>>(`/historial/tarea/${tareaId}`);
+    if (!response.data.success || !response.data.data) return [];
+    return response.data.data;
+  },
 };
+
+export interface HistorialTareaRow {
+  id: number | string;
+  tipo: string;
+  ref_id: number;
+  accion: string;
+  fecha_hora: string;
+  detalles: string | null;
+  usuario_id: number | null;
+}
 
 // ==================== TIPOS ACTIVIDAD COMERCIAL ====================
 
