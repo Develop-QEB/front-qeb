@@ -23,8 +23,13 @@ import {
   TIPO_BLOQUEO_DEFAULT,
   TIPO_BLOQUEO_TEXTOS,
   TipoBloqueoInventario,
+  VigenciaBloqueo,
+  VIGENCIA_INDEFINIDA,
+  describirVigencia,
+  vigenciaValida,
 } from '../../lib/bloqueoInventario';
 import { TipoBloqueoSelector } from './TipoBloqueoSelector';
+import { VigenciaBloqueoFields } from './VigenciaBloqueoFields';
 
 type Step = 'select' | 'periodos' | 'matriz';
 
@@ -139,6 +144,7 @@ export function BloqueoMasivoModal({ open, onClose, initialInventarios }: Bloque
   const [confirmBloqueoOpen, setConfirmBloqueoOpen] = useState(false);
   const [motivo, setMotivo] = useState('');
   const [tipo, setTipo] = useState<TipoBloqueoInventario>(TIPO_BLOQUEO_DEFAULT);
+  const [vigencia, setVigencia] = useState<VigenciaBloqueo>(VIGENCIA_INDEFINIDA);
   const textos = TIPO_BLOQUEO_TEXTOS[tipo];
   const [bloqueando, setBloqueando] = useState(false);
   const [bloqueoResultado, setBloqueoResultado] = useState<BloqueoResultado | null>(null);
@@ -165,6 +171,7 @@ export function BloqueoMasivoModal({ open, onClose, initialInventarios }: Bloque
     setCsvFeedback(null);
     setMotivo('');
     setTipo(TIPO_BLOQUEO_DEFAULT);
+    setVigencia(VIGENCIA_INDEFINIDA);
     setConfirmBloqueoOpen(false);
     setBloqueoResultado(null);
     setResultadoOpen(false);
@@ -373,7 +380,7 @@ export function BloqueoMasivoModal({ open, onClose, initialInventarios }: Bloque
     //    Loop secuencial para no saturar al backend (no hay endpoint bulk).
     for (const invId of inventariosObjetivo) {
       try {
-        await inventariosService.toggleBlock(invId, tipo);
+        await inventariosService.toggleBlock(invId, tipo, vigencia);
         bloqueadosOk.add(invId);
         resultado.inventariosBloqueados += 1;
       } catch (err) {
@@ -415,6 +422,7 @@ export function BloqueoMasivoModal({ open, onClose, initialInventarios }: Bloque
         '',
         `Tipo: ${textos.opcion}`,
         `Fecha de ${textos.sustantivo}: ${fechaBloqueo}`,
+        `Vigencia: ${describirVigencia(vigencia)}`,
         motivoTexto ? `Motivo: ${motivoTexto}` : null,
         user ? `${textos.participio} por: ${user.nombre}` : null,
       ].filter(Boolean).join('\n');
@@ -855,6 +863,7 @@ export function BloqueoMasivoModal({ open, onClose, initialInventarios }: Bloque
             </div>
             <div className="p-5 space-y-3 text-xs">
               <TipoBloqueoSelector value={tipo} onChange={setTipo} isDark={isDark} disabled={bloqueando} />
+              <VigenciaBloqueoFields value={vigencia} onChange={setVigencia} isDark={isDark} disabled={bloqueando} />
               <div className={`rounded-lg border p-3 space-y-1.5 ${isDark ? 'border-zinc-700 bg-zinc-800/50' : 'border-gray-200 bg-gray-50'}`}>
                 <div className="flex justify-between">
                   <span className={isDark ? 'text-zinc-400' : 'text-gray-500'}>Inventarios a {textos.infinitivo.toLowerCase()}</span>
@@ -912,7 +921,7 @@ export function BloqueoMasivoModal({ open, onClose, initialInventarios }: Bloque
               </button>
               <button
                 onClick={handleConfirmBloqueoMasivo}
-                disabled={bloqueando || inventariosObjetivo.size === 0}
+                disabled={bloqueando || inventariosObjetivo.size === 0 || !vigenciaValida(vigencia)}
                 className={`flex items-center gap-2 px-4 py-1.5 rounded-lg text-sm font-medium ${isDark ? 'bg-rose-500 text-white hover:bg-rose-600' : 'bg-rose-600 text-white hover:bg-rose-700'} disabled:opacity-50`}
               >
                 {bloqueando ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Ban className="h-3.5 w-3.5" />}

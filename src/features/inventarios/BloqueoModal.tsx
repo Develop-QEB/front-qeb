@@ -8,9 +8,13 @@ import {
   TIPO_BLOQUEO_DEFAULT,
   TIPO_BLOQUEO_TEXTOS,
   TipoBloqueoInventario,
+  VigenciaBloqueo,
+  VIGENCIA_INDEFINIDA,
   esInventarioBloqueado,
+  vigenciaValida,
 } from '../../lib/bloqueoInventario';
 import { TipoBloqueoSelector } from './TipoBloqueoSelector';
+import { VigenciaBloqueoFields } from './VigenciaBloqueoFields';
 
 interface InventarioBasico {
   id: number;
@@ -36,6 +40,8 @@ export interface CampanaBloqueoEntry {
 export interface BloqueoData {
   // Clasificación a aplicar: 'No Disponible' | 'Inhabilitado' (mismo comportamiento).
   tipo: TipoBloqueoInventario;
+  // Periodo del bloqueo: indefinido (ambas null) o con fechas. Ver lib/bloqueoInventario.ts.
+  vigencia: VigenciaBloqueo;
   motivo: string;
   analistas: UserOption[];
   trafico: UserOption[];
@@ -121,6 +127,7 @@ function UserSelector({
 export function BloqueoModal({ isOpen, onClose, item, onConfirm, isSubmitting }: Props) {
   const [motivo, setMotivo] = useState('');
   const [tipo, setTipo] = useState<TipoBloqueoInventario>(TIPO_BLOQUEO_DEFAULT);
+  const [vigencia, setVigencia] = useState<VigenciaBloqueo>(VIGENCIA_INDEFINIDA);
   // Wizard: step 0 = motivo + overview, step 1..N = per-campaign assignment
   const [step, setStep] = useState(0);
   // Per-campaign selections stored by index
@@ -278,7 +285,7 @@ export function BloqueoModal({ isOpen, onClose, item, onConfirm, isSubmitting }:
   const totalSteps = campanasActivas.length; // step 0 + N campaign steps
 
   const canContinue = step === 0
-    ? motivo.trim().length > 0
+    ? motivo.trim().length > 0 && vigenciaValida(vigencia)
     : (currentAnalistas.length > 0 || currentTrafico.length > 0);
 
   const isLastStep = step === totalSteps;
@@ -298,18 +305,19 @@ export function BloqueoModal({ isOpen, onClose, item, onConfirm, isSubmitting }:
     // For backwards compat, also flatten all analistas/trafico
     const allAnalistas = perCampana.flatMap(e => e.analistas);
     const allTrafico = perCampana.flatMap(e => e.trafico);
-    await onConfirm({ tipo, motivo, analistas: allAnalistas, trafico: allTrafico, campanas: campanasActivas, perCampana });
+    await onConfirm({ tipo, vigencia, motivo, analistas: allAnalistas, trafico: allTrafico, campanas: campanasActivas, perCampana });
     reset();
   };
 
   const handleConfirmSimple = async () => {
-    await onConfirm({ tipo, motivo, analistas: [], trafico: [], campanas: [] });
+    await onConfirm({ tipo, vigencia, motivo, analistas: [], trafico: [], campanas: [] });
     reset();
   };
 
   const reset = () => {
     setMotivo('');
     setTipo(TIPO_BLOQUEO_DEFAULT);
+    setVigencia(VIGENCIA_INDEFINIDA);
     setStep(0);
     setPerCampanaSelections({});
     setSearchAnalista('');
@@ -389,7 +397,10 @@ export function BloqueoModal({ isOpen, onClose, item, onConfirm, isSubmitting }:
 
           {/* Clasificación — solo al bloquear (no aplica si ya está bloqueado) */}
           {!yaEstaBloquedo && step === 0 && (
-            <TipoBloqueoSelector value={tipo} onChange={setTipo} disabled={isSubmitting} />
+            <>
+              <TipoBloqueoSelector value={tipo} onChange={setTipo} disabled={isSubmitting} />
+              <VigenciaBloqueoFields value={vigencia} onChange={setVigencia} disabled={isSubmitting} />
+            </>
           )}
 
           {esDisponible ? (
@@ -539,7 +550,7 @@ export function BloqueoModal({ isOpen, onClose, item, onConfirm, isSubmitting }:
           {esDisponible ? (
             <button
               onClick={handleConfirmSimple}
-              disabled={isSubmitting || !motivo.trim()}
+              disabled={isSubmitting || !motivo.trim() || !vigenciaValida(vigencia)}
               className="flex-1 flex items-center justify-center gap-2 px-3 py-2 text-sm font-medium bg-red-600 hover:bg-red-500 disabled:bg-zinc-700 disabled:text-zinc-500 text-white rounded-lg transition-colors"
             >
               {isSubmitting ? <Loader2 className="h-4 w-4 animate-spin" /> : <Ban className="h-4 w-4" />}

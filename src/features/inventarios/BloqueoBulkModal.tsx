@@ -8,9 +8,13 @@ import {
   TIPO_BLOQUEO_DEFAULT,
   TIPO_BLOQUEO_TEXTOS,
   TipoBloqueoInventario,
+  VigenciaBloqueo,
+  VIGENCIA_INDEFINIDA,
   esInventarioBloqueado,
+  vigenciaValida,
 } from '../../lib/bloqueoInventario';
 import { TipoBloqueoSelector } from './TipoBloqueoSelector';
+import { VigenciaBloqueoFields } from './VigenciaBloqueoFields';
 
 export interface InventarioBasico {
   id: number;
@@ -37,6 +41,8 @@ export interface PairAssignment {
 export interface BloqueoBulkData {
   // Clasificación a aplicar a todos: 'No Disponible' | 'Inhabilitado'.
   tipo: TipoBloqueoInventario;
+  // Vigencia (misma para todos): indefinida o con fechas. Ver lib/bloqueoInventario.ts.
+  vigencia: VigenciaBloqueo;
   motivo: string;
   // Por cada inventario, lo que se necesita aplicar al confirmar:
   // - campañas afectadas y sus asignaciones (para crear tareas)
@@ -131,6 +137,7 @@ function UserSelector({
 export function BloqueoBulkModal({ isOpen, onClose, items, onConfirm, isSubmitting }: Props) {
   const [motivo, setMotivo] = useState('');
   const [tipo, setTipo] = useState<TipoBloqueoInventario>(TIPO_BLOQUEO_DEFAULT);
+  const [vigencia, setVigencia] = useState<VigenciaBloqueo>(VIGENCIA_INDEFINIDA);
   const textos = TIPO_BLOQUEO_TEXTOS[tipo];
   const [step, setStep] = useState(0);
   // Asignaciones por pareja (inv, campaña). Key = `${invId}::${campanaId}`.
@@ -325,6 +332,7 @@ export function BloqueoBulkModal({ isOpen, onClose, items, onConfirm, isSubmitti
   const reset = () => {
     setMotivo('');
     setTipo(TIPO_BLOQUEO_DEFAULT);
+    setVigencia(VIGENCIA_INDEFINIDA);
     setStep(0);
     setPairSelections({});
     setSearchAnalista('');
@@ -335,7 +343,7 @@ export function BloqueoBulkModal({ isOpen, onClose, items, onConfirm, isSubmitti
 
   // === Confirmar ===
   const canContinue = step === 0
-    ? motivo.trim().length > 0
+    ? motivo.trim().length > 0 && vigenciaValida(vigencia)
     : (currentAnalistas.length > 0 || currentTrafico.length > 0);
   const isLastStep = step === totalSteps;
 
@@ -360,7 +368,7 @@ export function BloqueoBulkModal({ isOpen, onClose, items, onConfirm, isSubmitti
         })),
       };
     });
-    await onConfirm({ tipo, motivo, perItem });
+    await onConfirm({ tipo, vigencia, motivo, perItem });
     reset();
   };
 
@@ -407,6 +415,7 @@ export function BloqueoBulkModal({ isOpen, onClose, items, onConfirm, isSubmitti
             /* ===== STEP 0: motivo + overview ===== */
             <>
               <TipoBloqueoSelector value={tipo} onChange={setTipo} disabled={isSubmitting} />
+              <VigenciaBloqueoFields value={vigencia} onChange={setVigencia} disabled={isSubmitting} />
 
               <div className="flex items-start gap-2.5 px-3 py-2.5 bg-amber-500/10 border border-amber-500/30 rounded-lg">
                 <AlertTriangle className="h-4 w-4 text-amber-400 flex-shrink-0 mt-0.5" />
@@ -551,7 +560,7 @@ export function BloqueoBulkModal({ isOpen, onClose, items, onConfirm, isSubmitti
           {step === 0 && totalSteps === 0 ? (
             <button
               onClick={handleConfirm}
-              disabled={isSubmitting || !motivo.trim() || loadingHistorial}
+              disabled={isSubmitting || !motivo.trim() || !vigenciaValida(vigencia) || loadingHistorial}
               className="flex-1 flex items-center justify-center gap-2 px-3 py-2 text-sm font-medium bg-red-600 hover:bg-red-500 disabled:bg-zinc-700 disabled:text-zinc-500 text-white rounded-lg transition-colors"
             >
               {isSubmitting ? <Loader2 className="h-4 w-4 animate-spin" /> : <Ban className="h-4 w-4" />}
