@@ -792,7 +792,10 @@ export function NuevaActividadComercialModal({ isOpen, onClose, editing }: Props
               </div>
             )}
 
-            <div className={`pt-3 max-lg:landscape:pt-2 border-t flex flex-wrap justify-end gap-2 ${isDark ? 'border-zinc-800' : 'border-gray-200'}`}>
+            {/* Jos 2026-11-10: footer sticky bottom en mobile/tablet para que
+                Cancelar y Crear actividad siempre sean visibles sin hacer scroll
+                hasta el fondo. En desktop queda igual (lg:static). */}
+            <div className={`pt-3 max-lg:landscape:pt-2 border-t flex flex-wrap justify-end gap-2 max-lg:sticky max-lg:bottom-0 max-lg:-mx-5 max-lg:px-5 max-lg:pb-3 max-lg:z-10 ${isDark ? 'border-zinc-800 max-lg:bg-zinc-900' : 'border-gray-200 max-lg:bg-white'}`}>
               <button
                 type="button"
                 onClick={onClose}
