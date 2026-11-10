@@ -9,6 +9,7 @@ import {
   ActividadSubtipo,
   ActividadTipoCliente,
   ActividadTipoActividad,
+  ACTIVIDAD_TIPOS_ACTIVIDAD_PICKER,
 } from '../../services/notificaciones.service';
 import { clientesService } from '../../services/clientes.service';
 
@@ -122,7 +123,7 @@ export function NuevaActividadComercialModal({ isOpen, onClose, editing }: Props
           estatus_actividad?: string; base?: string;
           tipo_cliente?: string; tipo_actividad?: string;
         };
-        if (c.subtipo === 'Campaña' || c.subtipo === 'Propuesta' || c.subtipo === 'Solicitud' || c.subtipo === 'Lead') {
+        if (c.subtipo === 'Campaña' || c.subtipo === 'Propuesta' || c.subtipo === 'Solicitud' || c.subtipo === 'Lead' || c.subtipo === 'Actividad') {
           setSubtipo(c.subtipo);
         }
         if (c.ref_id && (c.subtipo === 'Campaña' || c.subtipo === 'Propuesta' || c.subtipo === 'Solicitud')) {
@@ -160,8 +161,14 @@ export function NuevaActividadComercialModal({ isOpen, onClose, editing }: Props
         if (c.tipo_cliente === 'Lead' || c.tipo_cliente === 'Cliente') {
           setTipoCliente(c.tipo_cliente);
         }
-        if (c.tipo_actividad === 'Llamada' || c.tipo_actividad === 'Mail' || c.tipo_actividad === 'Visita') {
-          setTipoActividad(c.tipo_actividad);
+        // Acepta los 10 valores nuevos del picker + legacy 'Mail'/'Visita'
+        // para no perder actividades viejas al reabrirlas en edicion.
+        const TIPO_ACT_ACEPTADOS: readonly string[] = [
+          ...ACTIVIDAD_TIPOS_ACTIVIDAD_PICKER,
+          'Mail', 'Visita',
+        ];
+        if (c.tipo_actividad && TIPO_ACT_ACEPTADOS.includes(c.tipo_actividad)) {
+          setTipoActividad(c.tipo_actividad as ActividadTipoActividad);
         }
       } catch (e) {
         console.warn('[ActividadComercial] no se pudo parsear contenido para editar:', e);
@@ -467,21 +474,33 @@ export function NuevaActividadComercialModal({ isOpen, onClose, editing }: Props
                   <option value="Campaña">Campaña</option>
                   <option value="Propuesta">Propuesta</option>
                   <option value="Solicitud">Solicitud</option>
+                  <option value="Actividad">Actividad</option>
                 </select>
               </div>
               <div>
-                <label className={labelCls}>
-                  Buscar {subtipo.toLowerCase()} (opcional)
-                </label>
-                <div className="relative">
-                  <Search className={`absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 ${isDark ? 'text-zinc-500' : 'text-gray-400'}`} />
-                  <input
-                    className={`${inputCls} pl-9`}
-                    placeholder="Nombre, ID, cliente o marca..."
-                    value={search}
-                    onChange={(e) => { setSearch(e.target.value); setSelected(null); }}
-                  />
-                </div>
+                {/* "Actividad" es standalone: no se vincula a ninguna
+                    campania/propuesta/solicitud, asi que el buscador sale
+                    sobra. Feedback Jos 2026-11-10. */}
+                {subtipo === 'Actividad' ? (
+                  <div className={`${inputCls} flex items-center text-xs ${isDark ? 'text-zinc-500' : 'text-gray-400'}`}>
+                    Actividad sin vincular — llena Cliente y Marca abajo.
+                  </div>
+                ) : (
+                  <>
+                    <label className={labelCls}>
+                      Buscar {subtipo.toLowerCase()} (opcional)
+                    </label>
+                    <div className="relative">
+                      <Search className={`absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 ${isDark ? 'text-zinc-500' : 'text-gray-400'}`} />
+                      <input
+                        className={`${inputCls} pl-9`}
+                        placeholder="Nombre, ID, cliente o marca..."
+                        value={search}
+                        onChange={(e) => { setSearch(e.target.value); setSelected(null); }}
+                      />
+                    </div>
+                  </>
+                )}
               </div>
             </div>
 
@@ -507,9 +526,16 @@ export function NuevaActividadComercialModal({ isOpen, onClose, editing }: Props
                   onChange={(e) => setTipoActividad(e.target.value as '' | ActividadTipoActividad)}
                 >
                   <option value="">Selecciona...</option>
-                  <option value="Llamada">Llamada</option>
-                  <option value="Mail">Mail</option>
-                  <option value="Visita">Visita</option>
+                  {ACTIVIDAD_TIPOS_ACTIVIDAD_PICKER.map(t => (
+                    <option key={t} value={t}>{t}</option>
+                  ))}
+                  {/* Compatibilidad: si la actividad en edicion tenia 'Mail'
+                      o 'Visita' (valores legacy pre 2026-11-10), los
+                      mostramos como opcion disabled para que no se pierda
+                      el label al reabrir el modal. */}
+                  {(tipoActividad === 'Mail' || tipoActividad === 'Visita') && (
+                    <option value={tipoActividad} disabled>{tipoActividad} (legacy)</option>
+                  )}
                 </select>
               </div>
             </div>

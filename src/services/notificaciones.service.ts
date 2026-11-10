@@ -367,9 +367,43 @@ export interface HistorialTareaRow {
 
 // ==================== TIPOS ACTIVIDAD COMERCIAL ====================
 
-export type ActividadSubtipo = 'Campaña' | 'Propuesta' | 'Solicitud' | 'Lead';
+// 'Lead' se quito del picker en 2026-11-04 pero se mantiene en el union para
+// no romper filas viejas guardadas con ese subtipo. 'Actividad' agregado por
+// Jos 2026-11-10: para registrar actividades que no van vinculadas a ninguna
+// campana/propuesta/solicitud concreta (standalone).
+export type ActividadSubtipo = 'Campaña' | 'Propuesta' | 'Solicitud' | 'Lead' | 'Actividad';
 export type ActividadTipoCliente = 'Lead' | 'Cliente';
-export type ActividadTipoActividad = 'Llamada' | 'Mail' | 'Visita';
+// 10 opciones fijas por feedback Jos 2026-11-10. 'Mail'/'Visita' legacy se
+// mantienen en el union para filas viejas pero no son seleccionables en el
+// picker nuevo (ver NuevaActividadComercialModal).
+export type ActividadTipoActividad =
+  | 'Llamada'
+  | 'Correo'
+  | 'Reunión virtual'
+  | 'Reunión en oficina'
+  | 'Reunión fuera de oficina'
+  | 'Recorrido'
+  | 'Presentación general virtual'
+  | 'Presentación general presencial'
+  | 'Presentación estratégica virtual'
+  | 'Presentación estratégica presencial'
+  | 'Mail'
+  | 'Visita';
+// Para el <select> del modal: solo las 10 opciones nuevas en el orden que
+// Jos definio. Las legacy 'Mail'/'Visita' no entran aqui, se muestran como
+// estan guardadas pero no se eligen desde cero.
+export const ACTIVIDAD_TIPOS_ACTIVIDAD_PICKER: ActividadTipoActividad[] = [
+  'Llamada',
+  'Correo',
+  'Reunión virtual',
+  'Reunión en oficina',
+  'Reunión fuera de oficina',
+  'Recorrido',
+  'Presentación general virtual',
+  'Presentación general presencial',
+  'Presentación estratégica virtual',
+  'Presentación estratégica presencial',
+];
 
 export interface ActividadRefCampana {
   id: number;
