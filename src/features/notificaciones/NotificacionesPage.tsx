@@ -4278,8 +4278,10 @@ export function NotificacionesPage() {
             ))}
           </div>
 
-          {/* Botones de acción */}
-          <div className="flex items-center gap-2">
+          {/* Botones de acción — max-lg:flex-shrink-0 para que en mobile/tablet
+              el grupo izquierdo (tabs) scrolle y nunca encime con estos.
+              En desktop (lg+) queda igual que antes. */}
+          <div className="flex items-center gap-2 max-lg:flex-shrink-0">
             {contentType === 'tareas' && puedeCrearActividadComercial && (
               <button
                 onClick={() => setShowActividadModal(true)}
