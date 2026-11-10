@@ -61,6 +61,9 @@ const ROLES_ACTIVIDAD_COMERCIAL = new Set([
 // este componente solo lo renderiza. Para no romper si una fila trae mal el
 // JSON de `detalles`, cada parse se protege con try/catch.
 function BitacoraTareaInline({ tareaId, isDark }: { tareaId: number; isDark: boolean }) {
+  // Colapsado por defecto: una tarea puede acumular muchas ediciones y no
+  // conviene que ocupe la mitad del drawer antes de que el usuario pida verlo.
+  const [collapsed, setCollapsed] = useState(true);
   const { data: rows = [], isLoading } = useQuery<HistorialTareaRow[]>({
     queryKey: ['historial-tarea', tareaId],
     queryFn: () => notificacionesService.getHistorialTarea(tareaId),
@@ -88,49 +91,65 @@ function BitacoraTareaInline({ tareaId, isDark }: { tareaId: number; isDark: boo
   const subText = isDark ? 'text-zinc-500' : 'text-gray-400';
   const headText = isDark ? 'text-zinc-400' : 'text-gray-500';
 
+  // Formato: fechas ISO salen bonitas, el resto va tal cual. Detectar fecha
+  // por regex para no confundir con numeros u otros strings (el back no manda
+  // tipo).
   const fmt = (v: unknown): string => {
     if (v == null || v === '') return '—';
-    if (Array.isArray(v)) return v.length === 0 ? '—' : v.join(', ');
+    if (Array.isArray(v)) return v.length === 0 ? '—' : v.map(x => fmt(x)).join(', ');
     if (typeof v === 'boolean') return v ? 'Sí' : 'No';
+    if (typeof v === 'string' && /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}/.test(v)) {
+      try { return formatDate(v); } catch { return v; }
+    }
     return String(v);
   };
 
   return (
     <div className={`p-5 border-b ${borderCls}`}>
-      <h3 className={`text-xs font-medium ${headText} uppercase tracking-wider mb-3`}>
-        Historial de cambios
-      </h3>
-      <div className="space-y-3 max-h-96 overflow-y-auto pr-1">
-        {parsed.map((row, idx) => (
-          <div key={`${row.id}-${idx}`} className={`rounded-lg border px-3 py-2 ${isDark ? 'bg-zinc-900/40 border-zinc-800' : 'bg-gray-50 border-gray-200'}`}>
-            <div className="flex items-start justify-between gap-2">
-              <div className={`text-xs font-medium ${isDark ? 'text-zinc-200' : 'text-gray-800'}`}>
-                {row.accion}
+      <button
+        type="button"
+        onClick={() => setCollapsed(c => !c)}
+        className={`w-full flex items-center justify-between gap-2 ${collapsed ? '' : 'mb-3'} transition-colors`}
+      >
+        <h3 className={`text-xs font-medium ${headText} uppercase tracking-wider flex items-center gap-1.5`}>
+          {collapsed ? <ChevronRight className="h-3 w-3" /> : <ChevronDown className="h-3 w-3" />}
+          Historial de cambios
+          <span className={`normal-case tracking-normal font-normal ${subText}`}>({parsed.length})</span>
+        </h3>
+      </button>
+      {!collapsed && (
+        <div className="space-y-3 max-h-96 overflow-y-auto pr-1">
+          {parsed.map((row, idx) => (
+            <div key={`${row.id}-${idx}`} className={`rounded-lg border px-3 py-2 ${isDark ? 'bg-zinc-900/40 border-zinc-800' : 'bg-gray-50 border-gray-200'}`}>
+              <div className="flex items-start justify-between gap-2">
+                <div className={`text-xs font-medium ${isDark ? 'text-zinc-200' : 'text-gray-800'}`}>
+                  {row.accion}
+                </div>
+                <div className={`text-[10px] shrink-0 ${subText}`}>
+                  {formatDate(row.fecha_hora)}
+                </div>
               </div>
-              <div className={`text-[10px] shrink-0 ${subText}`}>
-                {formatDate(row.fecha_hora)}
-              </div>
+              {row.usuarioNombre && (
+                <div className={`text-[10px] mt-0.5 ${subText}`}>por {row.usuarioNombre}</div>
+              )}
+              {row.cambios.length > 0 && (
+                <div className="mt-2 space-y-1">
+                  {row.cambios.map((c, i) => (
+                    <div key={i} className="text-[11px] flex items-start gap-2">
+                      <span className={`shrink-0 font-medium ${isDark ? 'text-amber-300' : 'text-amber-700'}`}>{c.label || c.campo || '—'}:</span>
+                      <span className={isDark ? 'text-zinc-300' : 'text-gray-700'}>
+                        <span className={isDark ? 'text-zinc-500 line-through' : 'text-gray-400 line-through'}>{fmt(c.antes)}</span>
+                        <span className="mx-1">→</span>
+                        <span className={isDark ? 'text-zinc-100 font-medium' : 'text-gray-900 font-medium'}>{fmt(c.despues)}</span>
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              )}
             </div>
-            {row.usuarioNombre && (
-              <div className={`text-[10px] mt-0.5 ${subText}`}>por {row.usuarioNombre}</div>
-            )}
-            {row.cambios.length > 0 && (
-              <div className="mt-2 space-y-1">
-                {row.cambios.map((c, i) => (
-                  <div key={i} className="text-[11px] flex items-start gap-2">
-                    <span className={`shrink-0 font-medium ${isDark ? 'text-amber-300' : 'text-amber-700'}`}>{c.label || c.campo || '—'}:</span>
-                    <span className={isDark ? 'text-zinc-300' : 'text-gray-700'}>
-                      <span className={isDark ? 'text-zinc-500 line-through' : 'text-gray-400 line-through'}>{fmt(c.antes)}</span>
-                      <span className="mx-1">→</span>
-                      <span className={isDark ? 'text-zinc-100 font-medium' : 'text-gray-900 font-medium'}>{fmt(c.despues)}</span>
-                    </span>
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
-        ))}
-      </div>
+          ))}
+        </div>
+      )}
     </div>
   );
 }
@@ -3505,7 +3524,7 @@ function TaskDrawer({
                   <ChevronDown className={`h-3 w-3 flex-shrink-0 ${isDark ? 'text-zinc-400' : 'text-gray-500'}`} />
                 </button>
                 {asignadoOpen && (
-                  <div className={`absolute right-0 top-full mt-1 z-50 ${isDark ? 'bg-zinc-900 border-zinc-700' : 'bg-white border-gray-200'} border rounded-lg shadow-xl p-1.5 min-w-[180px] max-h-[220px] overflow-y-auto`}>
+                  <div className={`fixed inset-x-2 top-16 bottom-16 mt-0 w-auto max-w-none max-h-[calc(100dvh-5rem)] overflow-y-auto overscroll-contain lg:absolute lg:inset-auto lg:top-full lg:right-0 lg:bottom-auto lg:mt-1 lg:w-auto lg:min-w-[180px] lg:max-w-[calc(100vw-2rem)] lg:max-h-[220px] z-50 ${isDark ? 'bg-zinc-900 border-zinc-700' : 'bg-white border-gray-200'} border rounded-lg shadow-xl p-1.5`}>
                     {usuarios.map(u => (
                       <label key={u.id} className={`flex items-center gap-2 px-2 py-1.5 ${isDark ? 'hover:bg-zinc-800' : 'hover:bg-gray-100'} rounded cursor-pointer`}>
                         <input
