@@ -73,7 +73,7 @@ function FilterChip({
       {open && (
         <>
           <div className="fixed inset-0 z-40" onClick={handleClose} />
-          <div className={`absolute top-full left-0 mt-1.5 z-50 w-64 rounded-xl border ${isDark ? 'border-purple-500/20' : 'border-purple-200'} ${isDark ? 'bg-zinc-900' : 'bg-white'} backdrop-blur-xl shadow-2xl overflow-hidden`}>
+          <div className={`fixed inset-x-2 top-16 bottom-16 mt-0 w-auto max-w-none max-h-[calc(100dvh-5rem)] overflow-y-auto overscroll-contain lg:absolute lg:inset-auto lg:top-full lg:left-0 lg:right-auto lg:bottom-auto lg:mt-1.5 lg:w-64 lg:max-w-[calc(100vw-2rem)] lg:max-h-none lg:overflow-hidden z-50 rounded-xl border ${isDark ? 'border-purple-500/20' : 'border-purple-200'} ${isDark ? 'bg-zinc-900' : 'bg-white'} backdrop-blur-xl shadow-2xl`}>
             <div className={`p-2 border-b ${isDark ? 'border-zinc-800' : 'border-gray-200'}`}>
               <input
                 type="text"
@@ -309,7 +309,7 @@ function PeriodFilterPopover({
       {open && (
         <>
           <div className="fixed inset-0 z-40" onClick={() => setOpen(false)} />
-          <div className={`absolute top-full left-0 mt-1.5 z-50 w-80 rounded-xl border ${isDark ? 'border-purple-500/20' : 'border-purple-200'} ${isDark ? 'bg-zinc-900' : 'bg-white'} backdrop-blur-xl shadow-2xl overflow-hidden`}>
+          <div className={`fixed inset-x-2 top-16 bottom-16 mt-0 w-auto max-w-none max-h-[calc(100dvh-5rem)] overflow-y-auto overscroll-contain lg:absolute lg:inset-auto lg:top-full lg:left-0 lg:right-auto lg:bottom-auto lg:mt-1.5 lg:w-80 lg:max-w-[calc(100vw-2rem)] lg:max-h-none lg:overflow-hidden z-50 rounded-xl border ${isDark ? 'border-purple-500/20' : 'border-purple-200'} ${isDark ? 'bg-zinc-900' : 'bg-white'} backdrop-blur-xl shadow-2xl`}>
             <div className={`p-3 border-b ${isDark ? 'border-zinc-800' : 'border-gray-200'}`}>
               <h3 className={`text-sm font-semibold ${isDark ? 'text-white' : 'text-gray-900'} flex items-center gap-2`}>
                 <Calendar className={`h-4 w-4 ${isDark ? 'text-purple-400' : 'text-purple-600'}`} />
@@ -1179,7 +1179,7 @@ export function SolicitudesPage() {
             <div className={`absolute top-0 right-0 w-32 h-32 rounded-full blur-3xl -mr-10 -mt-10 pointer-events-none transition-all duration-500 ${isDark ? 'bg-purple-500/10 group-hover:bg-purple-500/20' : 'bg-purple-200/30 group-hover:bg-purple-200/50'}`} />
             <div>
               <p className={`${isDark ? 'text-zinc-400' : 'text-gray-500'} text-sm font-medium mb-1`}>Total Solicitudes</p>
-              <h3 className={`text-4xl font-bold ${isDark ? 'text-white' : 'text-gray-900'} tracking-tight`}>
+              <h3 className={`text-3xl sm:text-4xl font-bold ${isDark ? 'text-white' : 'text-gray-900'} tracking-tight`}>
                 {(effectiveStats?.total ?? data?.pagination?.total ?? 0).toLocaleString()}
               </h3>
             </div>
@@ -1194,8 +1194,8 @@ export function SolicitudesPage() {
           <div className={`col-span-1 md:col-span-2 lg:col-span-2 rounded-2xl border ${isDark ? 'border-zinc-800/80 bg-zinc-900/50' : 'border-gray-200 bg-white'} backdrop-blur-sm p-4 flex items-center relative overflow-hidden`}>
 
             {chartData ? (
-              <div className="w-full h-[140px] flex items-center">
-                <div className="h-full min-w-[140px]">
+              <div className="w-full min-h-[140px] flex flex-col sm:flex-row sm:h-[140px] sm:items-center gap-3 sm:gap-0">
+                <div className="h-[140px] w-full sm:h-full sm:w-auto sm:min-w-[140px]">
                   <ResponsiveContainer width="100%" height="100%">
                     <PieChart>
                       <Pie
@@ -1218,7 +1218,7 @@ export function SolicitudesPage() {
                 </div>
 
                 {/* Legend / List */}
-                <div className="flex-1 grid grid-cols-2 sm:grid-cols-3 gap-2 pl-4 h-full overflow-y-auto custom-scrollbar auto-rows-min content-start">
+                <div className="flex-1 grid grid-cols-2 sm:grid-cols-3 gap-2 sm:pl-4 max-sm:max-h-[180px] sm:h-full overflow-y-auto custom-scrollbar auto-rows-min content-start">
                   {chartData.map((item, i) => (
                     <div key={i} className={`flex items-center gap-2 p-2 rounded-lg ${isDark ? 'bg-zinc-800/30 border-zinc-800/50' : 'bg-gray-50 border-gray-200'} border min-w-0`}>
                       <div className="w-2 h-8 rounded-full flex-shrink-0" style={{ backgroundColor: item.color }} />
@@ -1243,7 +1243,7 @@ export function SolicitudesPage() {
             <div>
               <p className={`${isDark ? 'text-zinc-400' : 'text-gray-500'} text-sm font-medium mb-1`}>Pendientes / Ajustar</p>
               <div className="flex items-baseline gap-2">
-                <h3 className={`text-3xl font-bold ${isDark ? 'text-amber-400' : 'text-amber-600'}`}>
+                <h3 className={`text-2xl sm:text-3xl font-bold ${isDark ? 'text-amber-400' : 'text-amber-600'}`}>
                   {((effectiveStats?.byStatus['Pendiente'] || 0) + (effectiveStats?.byStatus['Ajustar'] || 0)).toLocaleString()}
                 </h3>
                 <span className={`text-xs font-medium ${isDark ? 'text-amber-500/80' : 'text-amber-600/80'}`}>Atención requerida</span>
@@ -1372,7 +1372,7 @@ export function SolicitudesPage() {
                     )}
                   </button>
                   {showAdvancedFilters && (
-                    <div className={`absolute left-0 top-full mt-1 z-[100] w-[520px] ${isDark ? 'bg-zinc-900 border-purple-500/30' : 'bg-white border-purple-200'} border rounded-xl shadow-2xl p-4`}>
+                    <div className={`fixed inset-x-2 top-16 bottom-16 mt-0 w-auto max-w-none max-h-[calc(100dvh-5rem)] overflow-y-auto overscroll-contain lg:absolute lg:inset-auto lg:left-0 lg:right-auto lg:top-full lg:bottom-auto lg:mt-1 lg:w-[520px] lg:max-w-[calc(100vw-2rem)] lg:max-h-none lg:overflow-visible z-[100] ${isDark ? 'bg-zinc-900 border-purple-500/30' : 'bg-white border-purple-200'} border rounded-xl shadow-2xl p-4`}>
                       <div className="flex items-center justify-between mb-3">
                         <span className={`text-sm font-medium ${isDark ? 'text-purple-300' : 'text-purple-700'}`}>Filtros avanzados</span>
                         <button
@@ -1382,9 +1382,9 @@ export function SolicitudesPage() {
                           <X className="h-4 w-4" />
                         </button>
                       </div>
-                      <div className="space-y-2 max-h-[300px] overflow-visible pr-1">
+                      <div className="space-y-2 max-h-[300px] max-lg:landscape:max-h-32 overflow-visible pr-1">
                         {advancedFilters.map((filter, index) => (
-                          <div key={filter.id} className="flex items-center gap-2">
+                          <div key={filter.id} className="flex flex-wrap lg:flex-nowrap items-center gap-2">
                             {index > 0 && (
                               <button
                                 onClick={() => {
@@ -1795,14 +1795,14 @@ export function SolicitudesPage() {
       {/* Rechazo Confirmation Modal — NO elimina, solo marca status='Rechazada'
           (el back libera reservas y oculta del listado). */}
       {deleteId && (
-        <div className={`fixed inset-0 ${isDark ? 'bg-black/70' : 'bg-black/40'} flex items-center justify-center z-50`}>
-          <div className={`${isDark ? 'bg-zinc-900 border-zinc-700' : 'bg-white border-gray-200'} border rounded-2xl p-6 max-w-md`}>
+        <div className={`fixed inset-0 ${isDark ? 'bg-black/70' : 'bg-black/40'} flex items-center justify-center z-50 p-3 sm:p-4`}>
+          <div className={`${isDark ? 'bg-zinc-900 border-zinc-700' : 'bg-white border-gray-200'} border rounded-2xl p-4 sm:p-6 w-full max-w-md max-h-[calc(100dvh-1.5rem)] overflow-y-auto`}>
             <h3 className={`text-lg font-semibold ${isDark ? 'text-white' : 'text-gray-900'} mb-2`}>Rechazar solicitud</h3>
             <p className={`${isDark ? 'text-zinc-400' : 'text-gray-500'} mb-6`}>
               Esto cambiara el status a <strong>Rechazada</strong> y liberara las reservas asociadas.
               La solicitud no se borra: puedes verla filtrando por status &ldquo;Rechazada&rdquo;.
             </p>
-            <div className="flex justify-end gap-3">
+            <div className="flex flex-wrap justify-end gap-2 sm:gap-3">
               <button
                 onClick={() => setDeleteId(null)}
                 className={`px-4 py-2 rounded-lg text-sm border ${isDark ? 'bg-zinc-800 text-zinc-300 hover:bg-zinc-700 border-zinc-700' : 'bg-gray-100 text-gray-700 hover:bg-gray-200 border-gray-200'}`}

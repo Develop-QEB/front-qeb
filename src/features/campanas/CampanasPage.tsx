@@ -906,7 +906,7 @@ function ArtGalleryModal({
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center">
       <div className="absolute inset-0 bg-black/80" onClick={onClose} />
-      <div className={`relative ${isDark ? 'bg-zinc-900' : 'bg-white'} border ${isDark ? 'border-zinc-700' : 'border-gray-200'} rounded-xl w-full max-w-4xl mx-4 max-h-[90vh] flex flex-col`}>
+      <div className={`relative ${isDark ? 'bg-zinc-900' : 'bg-white'} border ${isDark ? 'border-zinc-700' : 'border-gray-200'} rounded-xl w-full max-w-4xl mx-4 max-h-[90dvh] max-lg:landscape:h-[100dvh] max-lg:landscape:max-h-[100dvh] max-lg:landscape:rounded-none max-lg:landscape:mx-0 flex flex-col`}>
         {/* Header */}
         <div className={`flex items-center justify-between p-4 border-b ${isDark ? 'border-zinc-700' : 'border-gray-200'} flex-shrink-0`}>
           <h3 className={`text-lg font-semibold flex items-center gap-2 ${isDark ? 'text-white' : 'text-gray-900'}`}>
@@ -3485,7 +3485,7 @@ export function CampanasPage() {
                         {quickActive && <span className="w-1.5 h-1.5 rounded-full bg-white" />}
                       </button>
                       {showQuickFilters && (
-                        <div className={`absolute left-0 top-full mt-1 z-[100] w-[300px] ${isDark ? 'bg-zinc-900 border-purple-500/30' : 'bg-white border-purple-200'} border rounded-xl shadow-2xl p-4`}>
+                        <div className={`fixed inset-x-2 top-16 bottom-16 mt-0 w-auto max-w-none max-h-[calc(100dvh-5rem)] overflow-y-auto overscroll-contain lg:absolute lg:inset-auto lg:left-0 lg:top-full lg:right-auto lg:bottom-auto lg:mt-1 lg:w-[300px] lg:max-w-[calc(100vw-2rem)] lg:max-h-none lg:overflow-visible z-[100] ${isDark ? 'bg-zinc-900 border-purple-500/30' : 'bg-white border-purple-200'} border rounded-xl shadow-2xl p-4`}>
                           <div className="flex items-center justify-between mb-3">
                             <span className={`text-sm font-medium ${isDark ? 'text-purple-300' : 'text-purple-700'}`}>Filtros rápidos</span>
                             <button onClick={() => setShowQuickFilters(false)} className={`${isDark ? 'text-zinc-500 hover:text-white' : 'text-gray-400 hover:text-gray-900'}`}>
@@ -3563,7 +3563,7 @@ export function CampanasPage() {
                     )}
                   </button>
                   {showAdvancedFilters && (
-                    <div className={`absolute left-0 top-full mt-1 z-[100] w-[520px] ${isDark ? 'bg-zinc-900' : 'bg-white'} border ${isDark ? 'border-purple-500/30' : 'border-purple-200'} rounded-xl shadow-2xl p-4`}>
+                    <div className={`fixed inset-x-2 top-16 bottom-16 mt-0 w-auto max-w-none max-h-[calc(100dvh-5rem)] overflow-y-auto overscroll-contain lg:absolute lg:inset-auto lg:left-0 lg:top-full lg:right-auto lg:bottom-auto lg:mt-1 lg:w-[520px] lg:max-w-[calc(100vw-2rem)] lg:max-h-none lg:overflow-visible z-[100] ${isDark ? 'bg-zinc-900' : 'bg-white'} border ${isDark ? 'border-purple-500/30' : 'border-purple-200'} rounded-xl shadow-2xl p-4`}>
                       <div className="flex items-center justify-between mb-3">
                         <span className={`text-sm font-medium ${isDark ? 'text-purple-300' : 'text-purple-700'}`}>Filtros avanzados</span>
                         <button
@@ -3628,7 +3628,7 @@ export function CampanasPage() {
                                   ? allOptions.filter(val => val.toLowerCase().includes(filter.value.toLowerCase()))
                                   : allOptions;
                                 return filtered.length > 0 ? (
-                                  <div className={`absolute left-0 top-full mt-1 w-full max-h-[200px] overflow-y-auto z-[300] rounded border shadow-xl ${isDark ? 'bg-zinc-800 border-zinc-600' : 'bg-white border-gray-200'}`}>
+                                  <div className={`absolute left-0 top-full mt-1 w-full max-h-[200px] max-lg:landscape:max-h-32 overflow-y-auto overscroll-contain z-[300] rounded border shadow-xl ${isDark ? 'bg-zinc-800 border-zinc-600' : 'bg-white border-gray-200'}`}>
                                     {filtered.map((val) => (
                                       <button
                                         key={val}

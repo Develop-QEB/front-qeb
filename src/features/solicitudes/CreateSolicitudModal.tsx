@@ -475,7 +475,7 @@ function SearchableSelect({
       {open && (
         <>
           <div className="fixed inset-0 z-40" onClick={handleClose} />
-          <div className={`absolute top-full left-0 right-0 mt-1 z-50 w-full min-w-[350px] rounded-xl border border-purple-500/20 ${isDark ? 'bg-zinc-900' : 'bg-white'} backdrop-blur-xl shadow-2xl overflow-hidden`}>
+          <div className={`fixed inset-x-2 top-16 bottom-16 mt-0 z-50 w-auto max-w-none max-h-[calc(100dvh-5rem)] overflow-y-auto overscroll-contain lg:absolute lg:inset-auto lg:top-full lg:left-0 lg:right-0 lg:bottom-auto lg:mt-1 lg:w-full lg:min-w-[350px] lg:max-w-[calc(100vw-2rem)] lg:max-h-none lg:overflow-visible rounded-xl border border-purple-500/20 ${isDark ? 'bg-zinc-900' : 'bg-white'} backdrop-blur-xl shadow-2xl overflow-hidden`}>
             <div className={`p-2 border-b ${isDark ? 'border-zinc-800' : 'border-gray-200'}`}>
               <div className="relative">
                 <Search className={`absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 ${isDark ? 'text-zinc-500' : 'text-gray-400'}`} />
@@ -490,7 +490,7 @@ function SearchableSelect({
                 />
               </div>
             </div>
-            <div className="max-h-72 overflow-auto">
+            <div className="max-h-72 max-lg:landscape:max-h-32 overflow-auto">
               {loading ? (
                 <div className={`px-3 py-4 text-center ${isDark ? 'text-zinc-500' : 'text-gray-400'} text-sm`}>Cargando...</div>
               ) : filteredOptions.length === 0 ? (
@@ -583,7 +583,7 @@ function MultiSelectTags({
         {open && (
           <>
             <div className="fixed inset-0 z-40" onClick={() => { setOpen(false); setSearchTerm(''); }} />
-            <div className={`absolute top-full left-0 mt-1 z-50 w-72 rounded-xl border border-purple-500/20 ${isDark ? 'bg-zinc-900' : 'bg-white'} backdrop-blur-xl shadow-2xl overflow-hidden`}>
+            <div className={`fixed inset-x-2 top-16 bottom-16 mt-0 z-50 w-auto max-w-none max-h-[calc(100dvh-5rem)] overflow-y-auto overscroll-contain lg:absolute lg:inset-auto lg:top-full lg:left-0 lg:right-auto lg:bottom-auto lg:mt-1 lg:w-72 lg:max-w-[calc(100vw-2rem)] lg:max-h-none lg:overflow-visible rounded-xl border border-purple-500/20 ${isDark ? 'bg-zinc-900' : 'bg-white'} backdrop-blur-xl shadow-2xl overflow-hidden`}>
               {/* Search at top */}
               <div className={`p-2 border-b ${isDark ? 'border-zinc-800' : 'border-gray-200'}`}>
                 <input
@@ -596,7 +596,7 @@ function MultiSelectTags({
                 />
               </div>
               {/* Options below */}
-              <div className="max-h-52 overflow-auto">
+              <div className="max-h-52 max-lg:landscape:max-h-32 overflow-auto">
                 {filteredOptions.map((option) => {
                   const isSelected = selected.find(s => s[valueKey] === option[valueKey]);
                   return (
@@ -695,7 +695,7 @@ function MultiSelectDropdown({
         <ChevronDown className={`h-4 w-4 ${isDark ? 'text-zinc-400' : 'text-gray-500'} transition-transform ${isOpen ? 'rotate-180' : ''}`} />
       </button>
       {isOpen && (
-        <div className={`absolute z-50 mt-1 w-full ${isDark ? 'bg-zinc-800' : 'bg-white'} border ${isDark ? 'border-zinc-700' : 'border-gray-200'} rounded-lg shadow-xl max-h-48 overflow-y-auto`}>
+        <div className={`fixed inset-x-2 top-16 bottom-16 mt-0 z-50 w-auto max-w-none max-h-[calc(100dvh-5rem)] overflow-y-auto overscroll-contain lg:absolute lg:inset-auto lg:top-full lg:left-0 lg:right-auto lg:bottom-auto lg:mt-1 lg:w-full lg:max-w-[calc(100vw-2rem)] lg:max-h-48 ${isDark ? 'bg-zinc-800' : 'bg-white'} border ${isDark ? 'border-zinc-700' : 'border-gray-200'} rounded-lg shadow-xl`}>
           {options.map(option => (
             <label
               key={option}
@@ -2701,9 +2701,9 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center">
       <div className="absolute inset-0 bg-black/80 backdrop-blur-sm" />
-      <div className={`relative w-[97vw] max-w-[1800px] max-h-[95vh] h-[95vh] ${isDark ? 'bg-zinc-900 border-zinc-700' : 'bg-white border-gray-200'} rounded-2xl border shadow-2xl overflow-hidden flex flex-col`}>
+      <div className={`relative w-[97vw] max-w-[1800px] max-h-[95dvh] h-[95dvh] max-lg:landscape:h-[100dvh] max-lg:landscape:max-h-[100dvh] max-lg:landscape:rounded-none max-lg:landscape:mx-0 max-sm:w-full max-sm:h-[100dvh] max-sm:max-h-[100dvh] max-sm:rounded-none ${isDark ? 'bg-zinc-900 border-zinc-700' : 'bg-white border-gray-200'} rounded-2xl border shadow-2xl overflow-hidden flex flex-col`}>
         {/* Header */}
-        <div className={`flex items-center justify-between px-6 py-4 border-b ${isDark ? 'border-zinc-800' : 'border-gray-200'}`}>
+        <div className={`flex items-center justify-between px-4 sm:px-6 py-3 sm:py-4 max-lg:landscape:py-2 max-lg:landscape:px-3 border-b ${isDark ? 'border-zinc-800' : 'border-gray-200'}`}>
           <div className="flex items-center gap-4">
             <h2 className={`text-xl font-bold ${isDark ? 'text-white' : 'text-gray-900'}`}>
               {isEditMode ? 'Editar Solicitud' : 'Nueva Solicitud'}
@@ -2780,7 +2780,7 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
         )}
 
         {/* Content */}
-        <div className="flex-1 overflow-y-auto overscroll-contain p-6">
+        <div className="flex-1 overflow-y-auto overscroll-contain p-4 sm:p-6 max-lg:landscape:p-3">
           {/* Step 1: Cliente */}
           {step === 1 && (
             <div className="space-y-6">
@@ -2901,7 +2901,7 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
                   </div>
 
                   {/* Grid de información 2 columnas */}
-                  <div className="grid grid-cols-2 gap-x-6 gap-y-2 text-sm">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-2 text-sm">
                     <div className="flex justify-between">
                       <span className={isDark ? 'text-zinc-500' : 'text-gray-400'}>Marca:</span>
                       <span className={`${isDark ? 'text-white' : 'text-gray-900'} font-medium`}>{selectedCuic.T2_U_Marca || '-'}</span>
@@ -3036,7 +3036,7 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
                 </div>
 
                 {tipoPeriodo === 'catorcena' ? (
-                  <div className="grid grid-cols-2 gap-4">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                     {/* Años */}
                     <div className="flex gap-2">
                       <div className="flex-1">
@@ -3109,7 +3109,7 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
                     </div>
                   </div>
                 ) : (
-                  <div className="grid grid-cols-2 gap-4">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                     {/* Años */}
                     <div className="flex gap-2">
                       <div className="flex-1">
@@ -3228,7 +3228,7 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
             <div className="space-y-6">
               {/* KPIs Totales */}
               <div className="p-4 bg-purple-500/10 rounded-xl border border-purple-500/30">
-                <div className="grid grid-cols-4 gap-4">
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
                   <div className="text-center">
                     <div className={`text-2xl font-bold ${isDark ? 'text-white' : 'text-gray-900'}`}>{totals.totalRenta}</div>
                     <div className={`text-xs ${isDark ? 'text-zinc-400' : 'text-gray-500'}`}>Renta</div>
@@ -3483,7 +3483,7 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
                 )}
 
                 {/* Row 2: Plaza, Ciudad (opcional), Formato, Tipo */}
-                <div className="grid grid-cols-4 gap-3 mb-4">
+                <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-3 mb-4">
                   {/* Plaza (UI); internally seleciona estado+ciudades */}
                   <div>
                     <label className={`text-xs ${isDark ? 'text-zinc-500' : 'text-gray-500'}`}>Plaza</label>
@@ -3598,7 +3598,7 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
                 </div>
 
                 {/* Row 3: Periodo, Renta, Bonificación, Tarifa Pública */}
-                <div className={`grid ${tipoPeriodo === 'mensual' ? 'grid-cols-6' : 'grid-cols-4'} gap-3 mb-4`}>
+                <div className={`grid grid-cols-1 sm:grid-cols-2 ${tipoPeriodo === 'mensual' ? 'md:grid-cols-3 lg:grid-cols-6' : 'md:grid-cols-4'} gap-3 mb-4`}>
                   {/* Periodo */}
                   {tipoPeriodo === 'mensual' ? (
                     <>
@@ -4222,7 +4222,7 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
                 </div>
               )}
               {/* Summary cards */}
-              <div className="grid grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div className={`p-4 ${isDark ? 'bg-zinc-800/30 border-zinc-700/50' : 'bg-gray-50 border-gray-200'} rounded-xl border`}>
                   <h3 className={`text-sm font-semibold ${isDark ? 'text-zinc-400' : 'text-gray-500'} mb-3`}>Cliente</h3>
                   <div className="space-y-2">
@@ -4273,7 +4273,7 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
 
               {/* Totals */}
               <div className="p-4 bg-purple-500/10 rounded-xl border border-purple-500/30">
-                <div className="grid grid-cols-4 gap-4">
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
                   <div className="text-center">
                     <div className={`text-2xl font-bold ${isDark ? 'text-white' : 'text-gray-900'}`}>{totals.totalRenta}</div>
                     <div className={`text-xs ${isDark ? 'text-zinc-400' : 'text-gray-500'}`}>Renta</div>
@@ -4432,7 +4432,7 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
         </div>
 
         {/* Footer */}
-        <div className={`flex items-center justify-between px-6 py-4 border-t ${isDark ? 'border-zinc-800 bg-zinc-900/50' : 'border-gray-200 bg-gray-50/50'}`}>
+        <div className={`flex flex-wrap items-center justify-between gap-2 px-4 sm:px-6 py-3 sm:py-4 max-lg:landscape:py-2 max-lg:landscape:px-3 border-t ${isDark ? 'border-zinc-800 bg-zinc-900/50' : 'border-gray-200 bg-gray-50/50'}`}>
           <button
             type="button"
             onClick={() => step > 1 ? setStep(step - 1) : handleAttemptClose()}
