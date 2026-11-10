@@ -109,13 +109,26 @@ function BitacoraTareaInline({ tareaId, isDark }: { tareaId: number; isDark: boo
       <button
         type="button"
         onClick={() => setCollapsed(c => !c)}
-        className={`w-full flex items-center justify-between gap-2 ${collapsed ? '' : 'mb-3'} transition-colors`}
+        className={`w-full flex items-center justify-between gap-2 rounded-lg transition-colors ${
+          collapsed
+            ? (isDark
+              ? 'bg-amber-500/10 border border-amber-500/30 px-3 py-2 hover:bg-amber-500/20'
+              : 'bg-amber-50 border border-amber-300 px-3 py-2 hover:bg-amber-100')
+            : 'mb-3'
+        }`}
       >
-        <h3 className={`text-xs font-medium ${headText} uppercase tracking-wider flex items-center gap-1.5`}>
-          {collapsed ? <ChevronRight className="h-3 w-3" /> : <ChevronDown className="h-3 w-3" />}
+        <h3 className={`text-xs font-semibold uppercase tracking-wider flex items-center gap-1.5 ${
+          collapsed ? (isDark ? 'text-amber-200' : 'text-amber-700') : headText
+        }`}>
+          {collapsed ? <ChevronRight className="h-3.5 w-3.5" /> : <ChevronDown className="h-3.5 w-3.5" />}
           Historial de cambios
-          <span className={`normal-case tracking-normal font-normal ${subText}`}>({parsed.length})</span>
+          <span className={`normal-case tracking-normal font-normal ${
+            collapsed ? (isDark ? 'text-amber-300/80' : 'text-amber-600') : subText
+          }`}>({parsed.length})</span>
         </h3>
+        {collapsed && (
+          <span className={`text-[10px] font-medium ${isDark ? 'text-amber-300/80' : 'text-amber-600'}`}>Ver</span>
+        )}
       </button>
       {!collapsed && (
         <div className="space-y-3 max-h-96 overflow-y-auto pr-1">
