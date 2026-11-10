@@ -893,7 +893,9 @@ export function ViewSolicitudModal({ isOpen, onClose, solicitudId, onEdit, onAte
                 )}
               </div>
             </div>
-            <div className="flex items-center gap-2">
+            {/* Jos 2026-11-10: en movil (<1024px) los 5 botones no caben en
+                una sola fila — permitimos wrap. Desktop queda igual. */}
+            <div className="flex items-center gap-2 max-lg:flex-wrap max-lg:justify-end">
               {onEdit && (
                 <button
                   onClick={() => { onClose(); onEdit(); }}
