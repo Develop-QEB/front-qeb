@@ -2028,10 +2028,11 @@ function ApprovalModal({
       <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={onClose} />
       {/* Mobile: modal a pantalla completa (h + w) para que se vea todo el contenido
           al rotar entre portrait/landscape sin cortar. Feedback usuario 2026-09-21.
-          Desktop: se conserva max-w-4xl y max-h-[90vh] centrado. dvh (dynamic
-          viewport) mide bien el alto real cuando el teclado o la barra del
-          navegador aparecen. */}
-      <div className={`relative w-full h-[100dvh] sm:h-auto max-w-4xl sm:max-h-[90vh] mx-0 sm:mx-4 rounded-none sm:rounded-2xl ${isDark ? 'bg-zinc-900 border-zinc-700' : 'bg-white border-gray-200'} border-0 sm:border shadow-2xl flex flex-col overflow-hidden`}>
+          Jos 2026-11-10: en landscape movil 90vh ~= 315px y el body se recortaba
+          sin scroll. Forzamos h/max-h al 100dvh en landscape pero SOLO en
+          viewports <lg (1024px) para no romper desktop. Tambien movemos de 90vh
+          a 90dvh — mas preciso cuando teclado o barra del navegador aparecen. */}
+      <div className={`relative w-full h-[100dvh] sm:h-auto max-w-4xl sm:max-h-[90dvh] max-lg:landscape:h-[100dvh] max-lg:landscape:max-h-[100dvh] max-lg:landscape:rounded-none max-lg:landscape:mx-0 mx-0 sm:mx-4 rounded-none sm:rounded-2xl ${isDark ? 'bg-zinc-900 border-zinc-700' : 'bg-white border-gray-200'} border-0 sm:border shadow-2xl flex flex-col overflow-hidden`}>
         {/* Header */}
         <div className={`p-4 sm:p-6 border-b flex-shrink-0 ${isDark ? 'border-zinc-800' : 'border-gray-200'}`}>
           <div className="flex items-center justify-between mb-4 gap-3">
@@ -2263,7 +2264,7 @@ function ApprovalModal({
                 <Clock className="h-3.5 w-3.5" />
                 Historial de cambios
               </h3>
-              <div className={`rounded-xl border ${isDark ? 'border-zinc-700/50' : 'border-gray-200'} overflow-hidden max-h-60 overflow-y-auto`}>
+              <div className={`rounded-xl border ${isDark ? 'border-zinc-700/50' : 'border-gray-200'} overflow-hidden max-h-60 max-lg:landscape:max-h-32 overflow-y-auto`}>
                 {historialData.map((entry, idx) => {
                   const isAprobacion = entry.tipo.includes('aprobacion');
                   const isRechazo = entry.tipo.includes('rechazo');
@@ -2328,7 +2329,7 @@ function ApprovalModal({
 
         {/* Footer con acciones */}
         {isAutorizacionTask && tarea.estatus !== 'Atendido' && tarea.estatus !== 'Cancelado' && (
-          <div className={`p-4 sm:p-6 border-t flex-shrink-0 ${isDark ? 'border-zinc-800' : 'border-gray-200'}`}>
+          <div className={`p-4 sm:p-6 max-lg:landscape:py-2 max-lg:landscape:px-3 border-t flex-shrink-0 ${isDark ? 'border-zinc-800' : 'border-gray-200'}`}>
             {!showRechazoInput ? (
               <>
                 {/* Feedback 2026-08-15: comentario opcional para filtros DG/DCM.
