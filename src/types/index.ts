@@ -135,6 +135,13 @@ export interface Inventario {
   tarifa_publica: number | null;
   cto?: string | null;
   estatus_real?: string | null;
+  // Vigencia del bloqueo administrativo (ver lib/bloqueoInventario.ts).
+  // Fechas DATE serializadas por el back como ISO ('YYYY-MM-DDT00:00:00.000Z').
+  bloqueo_tipo?: string | null;
+  bloqueo_fecha_inicio?: string | null;
+  bloqueo_fecha_fin?: string | null;
+  bloqueo_usuario_id?: number | null;
+  bloqueo_aviso_at?: string | null;
 }
 
 // Inventario para mapa (campos reducidos)

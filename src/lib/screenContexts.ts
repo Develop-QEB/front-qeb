@@ -274,6 +274,7 @@ MODALES ESPECIALIZADOS (visibles para Trafico/Admin):
 - ReorganizarOcupacionModal: reorganiza qué espacios atienden qué campañas cuando hay conflicto.
 - AnalisisOcupacionModal: análisis masivo de ocupación por período/plaza; se puede generar un link público /inventarios/analisis/:analisisId que comparte el análisis sin requerir permiso al módulo.
 - Modal de Bloqueo individual (espacio en uso): obliga a motivo + lista de Analistas/Trafico. Al enviar genera tareas 'Ajuste Inventario Bloqueado' en cada campaña afectada.
+- Vigencia del bloqueo (individual, bulk y masivo): al marcar No Disponible/Inhabilitado se elige "Indefinida" (queda así hasta habilitar a mano) o "Con fechas" (desde/hasta). Si la fecha de inicio es futura el bloqueo queda PROGRAMADO (badge ámbar en la tabla; la pieza sigue disponible y el sistema lo aplica ese día). Al cumplirse la fecha fin, a quien bloqueó le llega la tarea 'Vigencia Bloqueo Inventario' en Notificaciones, desde donde puede rehabilitar la pieza con un botón. El bloqueo nunca se levanta solo.
 
 Carga masiva CSV: subir, verificar, resultado (3 pasos). Campos requeridos: codigo_unico, tipo_de_mueble, tipo_de_cara (Flujo/Contraflujo), tradicional_digital, plaza, estado, municipio. Descarga de plantilla disponible.`,
 

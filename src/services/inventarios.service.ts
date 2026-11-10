@@ -1,6 +1,6 @@
 import api from '../lib/api';
 import { Inventario, InventarioMapItem, InventarioStats, PaginatedResponse, ApiResponse } from '../types';
-import type { TipoBloqueoInventario } from '../lib/bloqueoInventario';
+import type { TipoBloqueoInventario, VigenciaBloqueo } from '../lib/bloqueoInventario';
 
 /**
  * Un evento de la timeline de un inventario. La arma el back combinando varias
@@ -563,11 +563,20 @@ export const inventariosService = {
 
   // Toggle block/unblock
   // `tipo` = clasificación a aplicar al bloquear ('No Disponible' | 'Inhabilitado').
-  // Al desbloquear se ignora. Sin `tipo` el back usa 'No Disponible'.
-  async toggleBlock(id: number, tipo?: TipoBloqueoInventario): Promise<Inventario> {
+  // `vigencia` = periodo opcional del bloqueo (solo se manda junto con `tipo`):
+  //   sin fechas = indefinido; fecha_inicio futura = bloqueo programado.
+  // Sin `tipo` (desbloqueo / cancelar programado) no se manda body.
+  async toggleBlock(id: number, tipo?: TipoBloqueoInventario, vigencia?: VigenciaBloqueo): Promise<Inventario> {
+    const body = tipo
+      ? {
+          tipo,
+          ...(vigencia?.fecha_inicio ? { fecha_inicio: vigencia.fecha_inicio } : {}),
+          ...(vigencia?.fecha_fin ? { fecha_fin: vigencia.fecha_fin } : {}),
+        }
+      : undefined;
     const response = await api.patch<ApiResponse<Inventario>>(
       `/inventarios/${id}/toggle-block`,
-      tipo ? { tipo } : undefined,
+      body,
     );
     if (!response.data.success || !response.data.data) {
       throw new Error(response.data.error || 'Error al bloquear/desbloquear inventario');

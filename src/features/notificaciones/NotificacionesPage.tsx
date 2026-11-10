@@ -33,6 +33,8 @@ import { NotasDireccionBitacora } from './NotasDireccionBitacora';
 import { DesposteoModal, ModoDesposteo } from '../desposteo/DesposteoModal';
 import { puedeFiltrarDesposteo, puedeAprobarDesposteoFacturacion } from '../../services/desposteo.service';
 import { NuevaActividadComercialModal } from './NuevaActividadComercialModal';
+import { inventariosService } from '../../services/inventarios.service';
+import { TAREA_TIPO_VIGENCIA_BLOQUEO, esInventarioBloqueado, describirVigencia } from '../../lib/bloqueoInventario';
 
 // [TEMPORAL] Ocultar "Actividad Comercial" en producción (pedido de Dirección,
 // oct 2026): la feature de Akary entró a main con el merge de release del 29-sep
@@ -1560,10 +1562,105 @@ function isConflictoOcupacionNotification(titulo?: string | null): boolean {
   return /conflictos? de ocupaci[oó]n/i.test(titulo);
 }
 
+// Tarea 'Vigencia Bloqueo Inventario': la crea el job diario del back cuando se
+// cumple la fecha fin de un bloqueo (No Disponible / Inhabilitado) y le llega a
+// quien bloqueó. Pinta la pieza con su vigencia y permite rehabilitarla desde
+// aquí: toggle-block sin tipo (= habilitar) y la tarea pasa a Atendido. Si
+// alguien ya la habilitó desde Inventarios, lo indica y solo queda finalizar.
+function VigenciaBloqueoTareaCard({ tarea, isDark }: { tarea: Notificacion; isDark: boolean }) {
+  const queryClient = useQueryClient();
+  const contenido = useMemo(() => {
+    try {
+      const c = JSON.parse(tarea.contenido || '') as {
+        inventario_id?: number;
+        codigo_unico?: string | null;
+        ubicacion?: string | null;
+        plaza?: string | null;
+        tipo?: string | null;
+        fecha_inicio?: string | null;
+        fecha_fin?: string | null;
+      };
+      return c && typeof c.inventario_id === 'number' ? c : null;
+    } catch {
+      return null;
+    }
+  }, [tarea.contenido]);
+  const inventarioId = contenido?.inventario_id ?? null;
+
+  const { data: inventario, isLoading } = useQuery({
+    queryKey: ['inventario-vigencia-tarea', inventarioId],
+    queryFn: () => inventariosService.getById(inventarioId as number),
+    enabled: inventarioId !== null,
+  });
+
+  const rehabilitar = useMutation({
+    mutationFn: async () => {
+      await inventariosService.toggleBlock(inventarioId as number);
+      await notificacionesService.update(tarea.id, { estatus: 'Atendido' });
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['inventario-vigencia-tarea', inventarioId] });
+      queryClient.invalidateQueries({ queryKey: ['inventarios'] });
+      queryClient.invalidateQueries({ queryKey: ['notificaciones'] });
+      queryClient.invalidateQueries({ queryKey: ['notificaciones-stats'] });
+    },
+  });
+
+  if (!contenido || inventarioId === null) return null;
+
+  const bloqueada = inventario ? esInventarioBloqueado(inventario.estatus) : true;
+  const etiqueta = (inventario?.estatus ?? contenido.tipo) === 'Inhabilitado' ? 'Habilitar' : 'Marcar Disponible';
+
+  return (
+    <div className={`p-5 border-b ${isDark ? 'border-zinc-800/50' : 'border-gray-200'}`}>
+      <h3 className="text-xs font-medium text-amber-400 uppercase tracking-wider mb-3 flex items-center gap-2">
+        <Ban className="h-3.5 w-3.5" />
+        Vigencia de bloqueo cumplida
+      </h3>
+      <div className={`px-3 py-2.5 rounded-lg border space-y-0.5 ${isDark ? 'bg-zinc-800/60 border-zinc-700' : 'bg-gray-50 border-gray-200'}`}>
+        <p className={`text-xs ${isDark ? 'text-zinc-400' : 'text-gray-500'}`}>
+          <span className={isDark ? 'text-zinc-500' : 'text-gray-400'}>ID:</span>{' '}
+          <span className={`font-mono ${isDark ? 'text-white' : 'text-gray-900'}`}>#{inventarioId}</span>
+          {contenido.codigo_unico && <span className="ml-2">· {contenido.codigo_unico}</span>}
+        </p>
+        {contenido.ubicacion && <p className={`text-xs truncate ${isDark ? 'text-zinc-400' : 'text-gray-500'}`}>{contenido.ubicacion}</p>}
+        {contenido.plaza && <p className={`text-xs ${isDark ? 'text-zinc-500' : 'text-gray-400'}`}>{contenido.plaza}</p>}
+        <p className={`text-xs ${isDark ? 'text-amber-300/90' : 'text-amber-700'}`}>Vigencia: {describirVigencia(contenido)}</p>
+        <p className={`text-xs ${isDark ? 'text-zinc-400' : 'text-gray-500'}`}>
+          Estatus actual:{' '}
+          <span className={bloqueada ? 'text-red-400 font-medium' : 'text-emerald-400 font-medium'}>
+            {isLoading ? '...' : (inventario?.estatus ?? '—')}
+          </span>
+        </p>
+      </div>
+
+      {bloqueada ? (
+        <button
+          onClick={() => rehabilitar.mutate()}
+          disabled={rehabilitar.isPending || isLoading}
+          className="mt-3 w-full flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl bg-gradient-to-r from-emerald-600 to-teal-600 text-white text-sm font-medium hover:from-emerald-500 hover:to-teal-500 transition-all hover:scale-[1.02] active:scale-[0.98] shadow-lg shadow-emerald-500/20 disabled:opacity-50 disabled:hover:scale-100"
+        >
+          {rehabilitar.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <CheckCircle className="h-4 w-4" />}
+          {rehabilitar.isPending ? 'Habilitando...' : `${etiqueta} y finalizar tarea`}
+        </button>
+      ) : (
+        <p className={`mt-3 text-xs flex items-center gap-1.5 ${isDark ? 'text-emerald-300' : 'text-emerald-700'}`}>
+          <CheckCircle className="h-3.5 w-3.5" />
+          Esta pieza ya está disponible. Solo falta finalizar la tarea.
+        </p>
+      )}
+      {rehabilitar.isError && (
+        <p className="mt-2 text-xs text-red-400">{rehabilitar.error instanceof Error ? rehabilitar.error.message : 'No se pudo habilitar el inventario'}</p>
+      )}
+    </div>
+  );
+}
+
 // Función para verificar si hay navegación disponible
 function hasNavigationRoute(tarea: Notificacion): boolean {
-  // Tareas de Ajuste Inventario Bloqueado no tienen navegación
-  if (tarea.tipo === 'Ajuste Inventario Bloqueado') {
+  // Tareas de Ajuste Inventario Bloqueado y de vigencia de bloqueo no tienen
+  // navegación: se atienden desde el propio panel.
+  if (tarea.tipo === 'Ajuste Inventario Bloqueado' || tarea.tipo === TAREA_TIPO_VIGENCIA_BLOQUEO) {
     return false;
   }
   // Menciones en ticket siempre tienen navegación
@@ -3147,6 +3244,11 @@ function TaskDrawer({
             );
           } catch { return null; }
         })()}
+
+        {/* Vigencia de bloqueo cumplida — pieza + botón para rehabilitar */}
+        {tarea.tipo === TAREA_TIPO_VIGENCIA_BLOQUEO && tarea.contenido && (
+          <VigenciaBloqueoTareaCard tarea={tarea} isDark={isDark} />
+        )}
 
         {/* Campañas afectadas — Ajuste Inventario Bloqueado */}
         {tarea.tipo === 'Ajuste Inventario Bloqueado' && tarea.contenido && (() => {
