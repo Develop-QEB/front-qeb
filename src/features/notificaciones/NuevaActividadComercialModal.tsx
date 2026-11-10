@@ -204,38 +204,60 @@ export function NuevaActividadComercialModal({ isOpen, onClose, editing }: Props
   // eligio "Cliente" en Tipo Cliente (feedback Jos 2026-11-04). Sigue siendo
   // texto libre — las sugerencias solo ayudan a elegir uno existente. Devuelve
   // combinaciones (cliente, marca) para que al elegir del dropdown se auto-
-  // rellene tambien el campo Marca (feedback Jos 2026-11-05).
-  const debouncedCliente = useDebounced(cliente, 300);
+  // rellene tambien el campo Marca (feedback Jos 2026-11-05) y Base por CUIC
+  // (feedback Jos 2026-11-06: "campo cliente que salga y detecte tambien cuic,
+  // segun el cuic ya tiene una Base correspondiente, si se selecciona uno que
+  // se llene la base"). Patron copiado del selector CUIC de CreateSolicitudModal.
   const [clienteDropdownOpen, setClienteDropdownOpen] = useState(false);
+  const [sapDbFilter, setSapDbFilter] = useState<'ALL' | 'CIMU' | 'TRADE' | 'UDC'>('ALL');
+  type ClienteOption = { cliente: string; marca: string | null; cuic: number | null; razon_social: string | null; sap_database: 'CIMU' | 'TRADE' | 'UDC' | null };
   const clientesSuggest = useQuery({
-    queryKey: ['clientes-suggest', debouncedCliente],
+    queryKey: ['clientes-suggest-full'],
     queryFn: async () => {
       try {
-        const r = await clientesService.getAllFull(debouncedCliente || undefined);
-        const arr: Array<{ T0_U_Cliente?: string | null; T0_U_RazonSocial?: string | null; T2_U_Marca?: string | null }> =
+        const r = await clientesService.getAllFull();
+        const arr: Array<{ T0_U_Cliente?: string | null; T0_U_RazonSocial?: string | null; T2_U_Marca?: string | null; CUIC?: number | null; sap_database?: string | null }> =
           (r && Array.isArray((r as unknown as { data?: unknown[] }).data))
-            ? (r as unknown as { data: Array<{ T0_U_Cliente?: string | null; T0_U_RazonSocial?: string | null; T2_U_Marca?: string | null }> }).data
+            ? (r as unknown as { data: Array<{ T0_U_Cliente?: string | null; T0_U_RazonSocial?: string | null; T2_U_Marca?: string | null; CUIC?: number | null; sap_database?: string | null }> }).data
             : [];
         const seen = new Set<string>();
-        const out: Array<{ cliente: string; marca: string | null }> = [];
+        const out: ClienteOption[] = [];
         for (const c of arr) {
           const nombre = (c.T0_U_Cliente && c.T0_U_Cliente !== 'Cliente' ? c.T0_U_Cliente : null) || c.T0_U_RazonSocial || null;
           if (!nombre) continue;
           const marca = c.T2_U_Marca || null;
-          const key = `${nombre}||${marca || ''}`;
+          const cuic = c.CUIC ?? null;
+          const key = `${cuic ?? ''}||${nombre}||${marca || ''}`;
           if (seen.has(key)) continue;
           seen.add(key);
-          out.push({ cliente: nombre, marca });
-          if (out.length >= 20) break;
+          const sdb = (c.sap_database || '').toUpperCase();
+          const sap_database = (sdb === 'CIMU' || sdb === 'TRADE' || sdb === 'UDC') ? (sdb as 'CIMU' | 'TRADE' | 'UDC') : null;
+          out.push({ cliente: nombre, marca, cuic, razon_social: c.T0_U_RazonSocial || null, sap_database });
         }
         return out;
       } catch {
-        return [] as Array<{ cliente: string; marca: string | null }>;
+        return [] as ClienteOption[];
       }
     },
-    enabled: isOpen && tipoCliente === 'Cliente' && debouncedCliente.trim().length > 0,
+    enabled: isOpen && tipoCliente === 'Cliente',
+    staleTime: 2 * 60 * 1000,
     retry: false,
   });
+
+  // Filtrado client-side: tab de base + busqueda por nombre/cuic. Max 50 visibles.
+  const clientesFiltrados = useMemo(() => {
+    const data = clientesSuggest.data || [];
+    const q = cliente.trim().toLowerCase();
+    const filtroTab = sapDbFilter === 'ALL' ? data : data.filter(c => c.sap_database === sapDbFilter);
+    const filtroTexto = q
+      ? filtroTab.filter(c =>
+          c.cliente.toLowerCase().includes(q)
+          || (c.cuic != null && String(c.cuic).includes(q))
+          || (c.razon_social || '').toLowerCase().includes(q)
+        )
+      : filtroTab;
+    return filtroTexto.slice(0, 50);
+  }, [clientesSuggest.data, cliente, sapDbFilter]);
 
   // Reemplaza el placeholder `#id` del chip en modo edición con el label real
   // en cuanto la query devuelve datos (fix al bug donde el chip quedaba como
@@ -582,26 +604,49 @@ export function NuevaActividadComercialModal({ isOpen, onClose, editing }: Props
                   onBlur={() => { setTimeout(() => setClienteDropdownOpen(false), 150); }}
                   autoComplete="off"
                 />
-                {tipoCliente === 'Cliente' && clienteDropdownOpen && cliente.trim().length > 0 && (
-                  <div className={`absolute z-20 mt-1 w-full max-h-52 overflow-y-auto rounded-lg border shadow-lg ${isDark ? 'bg-zinc-900 border-zinc-700' : 'bg-white border-gray-200'}`}>
+                {tipoCliente === 'Cliente' && clienteDropdownOpen && (
+                  <div className={`absolute z-20 mt-1 w-full max-h-72 overflow-hidden rounded-lg border shadow-lg flex flex-col ${isDark ? 'bg-zinc-900 border-zinc-700' : 'bg-white border-gray-200'}`}>
+                    {/* Tabs de base (feedback Jos 2026-11-06: como el selector de solicitudes) */}
+                    <div className={`flex items-center gap-1 px-2 py-1.5 border-b ${isDark ? 'border-zinc-800 bg-zinc-900' : 'border-gray-100 bg-gray-50'}`}>
+                      {(['ALL', 'CIMU', 'TRADE', 'UDC'] as const).map(tab => (
+                        <button
+                          key={tab}
+                          type="button"
+                          onMouseDown={(e) => e.preventDefault()}
+                          onClick={() => setSapDbFilter(tab)}
+                          className={`px-2 py-0.5 rounded text-[10px] font-medium transition-colors ${
+                            sapDbFilter === tab
+                              ? (isDark ? 'bg-amber-500 text-black' : 'bg-amber-600 text-white')
+                              : (isDark ? 'text-zinc-400 hover:bg-zinc-800' : 'text-gray-500 hover:bg-gray-200')
+                          }`}
+                        >
+                          {tab === 'ALL' ? 'Todos' : tab}
+                        </button>
+                      ))}
+                      <span className={`ml-auto text-[10px] ${isDark ? 'text-zinc-500' : 'text-gray-400'}`}>
+                        {clientesFiltrados.length} de {clientesSuggest.data?.length ?? 0}
+                      </span>
+                    </div>
+                    <div className="max-h-56 overflow-y-auto">
                     {clientesSuggest.isLoading && (
                       <div className={`px-3 py-2 text-xs flex items-center gap-2 ${isDark ? 'text-zinc-500' : 'text-gray-400'}`}>
-                        <Loader2 className="h-3 w-3 animate-spin" /> Buscando...
+                        <Loader2 className="h-3 w-3 animate-spin" /> Cargando clientes...
                       </div>
                     )}
-                    {!clientesSuggest.isLoading && (clientesSuggest.data?.length ?? 0) === 0 && (
+                    {!clientesSuggest.isLoading && clientesFiltrados.length === 0 && (
                       <div className={`px-3 py-2 text-xs ${isDark ? 'text-zinc-500' : 'text-gray-400'}`}>
                         Sin coincidencias. Puedes dejarlo como texto libre.
                       </div>
                     )}
-                    {(clientesSuggest.data || []).map((opt, idx) => (
+                    {clientesFiltrados.map((opt, idx) => (
                       <button
-                        key={`${opt.cliente}||${opt.marca || ''}||${idx}`}
+                        key={`${opt.cuic ?? ''}||${opt.cliente}||${opt.marca || ''}||${idx}`}
                         type="button"
                         onMouseDown={(e) => e.preventDefault()}
                         onClick={() => {
                           setCliente(opt.cliente);
                           if (opt.marca) setMarca(opt.marca);
+                          if (opt.sap_database) setBase(opt.sap_database);
                           setClienteDropdownOpen(false);
                         }}
                         className={`w-full text-left px-3 py-2 text-xs transition-colors flex items-center justify-between gap-2 ${
@@ -609,14 +654,26 @@ export function NuevaActividadComercialModal({ isOpen, onClose, editing }: Props
                                  : 'hover:bg-amber-50 text-gray-700 border-b border-gray-100'
                         }`}
                       >
-                        <span className="font-medium truncate">{opt.cliente}</span>
-                        <span className={`shrink-0 text-[10px] px-2 py-0.5 rounded-full ${
-                          isDark ? 'bg-zinc-800 text-zinc-400' : 'bg-gray-100 text-gray-500'
-                        }`}>
-                          {opt.marca || 'Sin marca'}
-                        </span>
+                        <div className="min-w-0">
+                          <div className="font-medium truncate">{opt.cliente}</div>
+                          <div className={`text-[10px] mt-0.5 truncate ${isDark ? 'text-zinc-500' : 'text-gray-500'}`}>
+                            {opt.cuic != null ? `CUIC ${opt.cuic}` : 'Sin CUIC'}
+                            {opt.razon_social ? ` · ${opt.razon_social}` : ''}
+                            {opt.marca ? ` · ${opt.marca}` : ''}
+                          </div>
+                        </div>
+                        {opt.sap_database && (
+                          <span className={`shrink-0 text-[10px] font-semibold px-2 py-0.5 rounded-full ${
+                            opt.sap_database === 'CIMU' ? (isDark ? 'bg-blue-500/20 text-blue-300' : 'bg-blue-100 text-blue-700')
+                            : opt.sap_database === 'TRADE' ? (isDark ? 'bg-emerald-500/20 text-emerald-300' : 'bg-emerald-100 text-emerald-700')
+                            : (isDark ? 'bg-amber-500/20 text-amber-300' : 'bg-amber-100 text-amber-700')
+                          }`}>
+                            {opt.sap_database}
+                          </span>
+                        )}
                       </button>
                     ))}
+                    </div>
                   </div>
                 )}
               </div>
