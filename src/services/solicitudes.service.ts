@@ -82,6 +82,8 @@ export interface SolicitudCaraInput {
   tarifa_publica?: number;
   inicio_periodo: string;
   fin_periodo: string;
+  hora_inicio?: string;
+  hora_fin?: string;
   caras_flujo?: number;
   caras_contraflujo?: number;
   descuento?: number;
@@ -358,6 +360,8 @@ export interface SolicitudCara {
   tarifa_publica: number;
   inicio_periodo: string;
   fin_periodo: string;
+  hora_inicio?: string | null;
+  hora_fin?: string | null;
   caras_flujo: number;
   caras_contraflujo: number;
   articulo: string;

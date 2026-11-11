@@ -21,7 +21,7 @@ import { inventariosService, InventarioDisponible } from '../../services/inventa
 import { propuestasService, ReservaModalItem, CaraUpdateData, type ReservaHistorialItem } from '../../services/propuestas.service';
 import { formatCurrency } from '../../lib/utils';
 import { parseCircuitoDigital } from '../../lib/circuitos';
-import { articuloValidoEnPeriodo, esArticuloGranFormato } from '../../lib/periodos';
+import { articuloValidoEnPeriodo, esArticuloGranFormato, horarioLabel } from '../../lib/periodos';
 import { circuitosService } from '../../services/circuitos.service';
 import { clientesService } from '../../services/clientes.service';
 import { useEnvironmentStore, getEndpoints } from '../../store/environmentStore';
@@ -105,6 +105,10 @@ interface CaraItem {
   tarifa_publica: number;
   inicio_periodo: string;
   fin_periodo: string;
+  // Horario diario (solo circuitos DIGITALES en periodo mensual): franja "HH:MM"
+  // que aplica a todos los dias del rango. Feature "Horario inicio/fin - Digital".
+  hora_inicio?: string;
+  hora_fin?: string;
   caras_flujo: number;
   caras_contraflujo: number;
   articulo: string;
@@ -683,6 +687,8 @@ const EMPTY_CARA: Omit<CaraItem, 'localId'> = {
   tarifa_publica: 0,
   inicio_periodo: '',
   fin_periodo: '',
+  hora_inicio: '',
+  hora_fin: '',
   caras_flujo: 0,
   caras_contraflujo: 0,
   articulo: '',
@@ -1657,6 +1663,8 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
             // Truncar a YYYY-MM-DD para que <input type="date"> autocomplete al editar
             inicio_periodo: String(cara.inicio_periodo || '').slice(0, 10),
             fin_periodo: String(cara.fin_periodo || '').slice(0, 10),
+            hora_inicio: (cara as any).hora_inicio || '',
+            hora_fin: (cara as any).hora_fin || '',
             caras_flujo: Number(cara.caras_flujo) || 0,
             caras_contraflujo: Number(cara.caras_contraflujo) || 0,
             articulo: cara.articulo || '',
@@ -2743,6 +2751,8 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
       // Truncar a YYYY-MM-DD para que <input type="date"> lo reconozca
       inicio_periodo: String(cara.inicio_periodo || '').slice(0, 10),
       fin_periodo: String(cara.fin_periodo || '').slice(0, 10),
+      hora_inicio: (cara as any).hora_inicio || '',
+      hora_fin: (cara as any).hora_fin || '',
       caras_flujo: carasFlujoPrefill,
       caras_contraflujo: carasContraflujoPrefill,
       articulo: cara.articulo,
@@ -2849,6 +2859,8 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
       tarifa_publica: newCara.tarifa_publica,
       inicio_periodo: inicioPeriodoUsar,
       fin_periodo: finPeriodoUsar,
+      hora_inicio: newCara.tipo === 'Digital' ? (newCara.hora_inicio || undefined) : undefined,
+      hora_fin: newCara.tipo === 'Digital' ? (newCara.hora_fin || undefined) : undefined,
       caras_flujo: newCara.caras_flujo,
       caras_contraflujo: newCara.caras_contraflujo,
       articulo: newCara.articulo,
@@ -2878,6 +2890,8 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
           tarifa_publica: 0,
           inicio_periodo: inicioPeriodoUsar,
           fin_periodo: finPeriodoUsar,
+          hora_inicio: newCara.tipo === 'Digital' ? (newCara.hora_inicio || undefined) : undefined,
+          hora_fin: newCara.tipo === 'Digital' ? (newCara.hora_fin || undefined) : undefined,
           caras_flujo: 0,
           caras_contraflujo: 0,
           articulo: newCara.articuloBf.ItemCode,
@@ -3464,6 +3478,8 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
           tarifa_publica: target.tarifa_publica,
           inicio_periodo: target.inicio_periodo,
           fin_periodo: target.fin_periodo,
+          hora_inicio: target.tipo === 'Digital' ? (target.hora_inicio || undefined) : undefined,
+          hora_fin: target.tipo === 'Digital' ? (target.hora_fin || undefined) : undefined,
           caras_flujo: target.caras_flujo,
           caras_contraflujo: target.caras_contraflujo,
           articulo: target.articulo,
@@ -9134,6 +9150,7 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
                               }
                             }
                             return (
+                          <>
                           <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
                             <div>
                               <label className={`text-[10px] ${isDark ? 'text-zinc-600' : 'text-gray-400'} block mb-1`}>Mes</label>
@@ -9241,6 +9258,32 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
                               />
                             </div>
                           </div>
+                          {/* Horario diario: SOLO circuitos digitales (UN+, UDC, VP digital). Aplica a todos los dias del rango. */}
+                          {newCara.tipo === 'Digital' && (
+                          <div className="grid grid-cols-2 gap-2 mt-2">
+                            <div>
+                              <label className={`text-[10px] ${isDark ? 'text-zinc-600' : 'text-gray-400'} block mb-1`}>Hora Inicio</label>
+                              <input
+                                type="time"
+                                value={newCara.hora_inicio || ''}
+                                onChange={(e) => { if (!canEditResumen) return; setNewCara({ ...newCara, hora_inicio: e.target.value }); }}
+                                disabled={!canEditResumen}
+                                className={`w-full px-3 py-2 ${isDark ? 'bg-zinc-800' : 'bg-gray-50'} border ${isDark ? 'border-zinc-700' : 'border-gray-200'} rounded-lg text-sm ${isDark ? 'text-white' : 'text-gray-900'} focus:outline-none focus:ring-1 focus:ring-purple-500/50 ${!canEditResumen ? 'opacity-60 cursor-not-allowed' : ''}`}
+                              />
+                            </div>
+                            <div>
+                              <label className={`text-[10px] ${isDark ? 'text-zinc-600' : 'text-gray-400'} block mb-1`}>Hora Fin</label>
+                              <input
+                                type="time"
+                                value={newCara.hora_fin || ''}
+                                onChange={(e) => { if (!canEditResumen) return; setNewCara({ ...newCara, hora_fin: e.target.value }); }}
+                                disabled={!canEditResumen}
+                                className={`w-full px-3 py-2 ${isDark ? 'bg-zinc-800' : 'bg-gray-50'} border ${isDark ? 'border-zinc-700' : 'border-gray-200'} rounded-lg text-sm ${isDark ? 'text-white' : 'text-gray-900'} focus:outline-none focus:ring-1 focus:ring-purple-500/50 ${!canEditResumen ? 'opacity-60 cursor-not-allowed' : ''}`}
+                              />
+                            </div>
+                          </div>
+                          )}
+                          </>
                             );
                           })()
                         ) : (
@@ -9911,6 +9954,12 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
                                         return `${dia} ${meses[parseInt(s[1]) - 1] || ''} ${s[0]}`;
                                       })()}</p>
                                     </div>
+                                    {cara.tipo === 'Digital' && (cara.hora_inicio || cara.hora_fin) && (
+                                    <div>
+                                      <span className={`${isDark ? 'text-zinc-500' : 'text-gray-400'} text-xs`}>Horario</span>
+                                      <p className={`${isDark ? 'text-zinc-300' : 'text-gray-700'} text-xs`}>{horarioLabel(cara.hora_inicio, cara.hora_fin)}</p>
+                                    </div>
+                                    )}
                                     <div>
                                       <span className={`${isDark ? 'text-zinc-500' : 'text-gray-400'} text-xs`}>{(cara.formato || '').toUpperCase().includes('PUENTE PEATONAL') ? 'Puentes' : 'Caras'}</span>
                                       {esImpresion ? (

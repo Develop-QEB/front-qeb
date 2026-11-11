@@ -99,6 +99,9 @@ export interface InventarioReservado {
   tipo_medio: string | null;
   inicio_periodo: string | null;
   fin_periodo: string | null;
+  // Horario diario del circuito digital (feature Horario inicio/fin). null si no aplica.
+  hora_inicio?: string | null;
+  hora_fin?: string | null;
   tradicional_digital: string | null;
   tipo_de_mueble: string | null;
   ancho: number | null;
@@ -491,6 +494,10 @@ export interface CaraUpdateData {
   articulo?: string;
   descuento?: number;
   grupo_rt_bf?: number | null;
+  // Horario diario (solo circuitos DIGITALES): franja "HH:MM" aplicada a todo el
+  // rango. Feature "Horario inicio/fin - Digital".
+  hora_inicio?: string;
+  hora_fin?: string;
   // Si true, propaga este update a todas las caras del mismo grupo_masivo_id
   aplicarAGrupo?: boolean;
   // Solo para createCara desde el modal de edición: persiste la cara pero NO
@@ -522,6 +529,8 @@ export interface SolicitudCara {
   autorizacion_dcm?: string;
   grupo_rt_bf?: number | null;
   en_filtro_dg?: boolean;
+  hora_inicio?: string | null;
+  hora_fin?: string | null;
 }
 
 export interface ReservaModalItem {

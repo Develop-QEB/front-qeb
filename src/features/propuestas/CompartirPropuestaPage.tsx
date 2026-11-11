@@ -16,6 +16,7 @@ import udcMapaPB from './assets/udc-mapa-aicm-t1-pb.jpg';
 import { formatCurrency, formatDate } from '../../lib/utils';
 import { toNum } from '../../utils/excelFormat';
 import { descargarExcelCompartir, FMT_COORD } from '../../utils/excelCompartir';
+import { horarioLabel } from '../../lib/periodos';
 import { useThemeStore } from '../../store/themeStore';
 // Versionado de circuitos completados: filas/pines 'no_vigente' en gris,
 // leyenda "Última versión completada", estilos de PDF/Excel.
@@ -716,7 +717,7 @@ export function CompartirPropuestaPage() {
     if (source.length === 0) return;
     // codigo_unico (completo) va ANTES de Clave (que es solo el prefijo).
     // "Estado" marca las piezas no vigentes (ademas la fila va en gris).
-    const headers = ['codigo_unico', 'Clave', 'Plaza', 'Ubicación', 'Formato', 'Tipo Inventario', 'Periodo', 'Lat', 'Long', 'Estado', ...(mostrarOrigen ? ['Origen'] : []), 'NOTAS'];
+    const headers = ['codigo_unico', 'Clave', 'Plaza', 'Ubicación', 'Formato', 'Tipo Inventario', 'Periodo', 'Horario', 'Lat', 'Long', 'Estado', ...(mostrarOrigen ? ['Origen'] : []), 'NOTAS'];
     const byPlaza: Record<string, InventarioReservado[]> = {};
     for (const i of source) {
       const plaza = i.plaza || 'Sin Plaza';
@@ -743,6 +744,7 @@ export function CompartirPropuestaPage() {
           i.mueble || '',
           i.tradicional_digital || '',
           formatInicioPeriodo(i, tipoPeriodo),
+          i.tradicional_digital === 'Digital' ? horarioLabel(i.hora_inicio, i.hora_fin) : '',
           toNum(i.latitud),
           toNum(i.longitud),
           estadoTexto(i),
@@ -750,10 +752,8 @@ export function CompartirPropuestaPage() {
           '',
         ],
       })),
-      // Lat (col 8) y Long (col 9) como celdas tipo número
-      // Lat (7) y Long (8) como celdas tipo número. Corridos una posición al
-      // quitar "Tipo de Cara".
-      formatos: { 7: FMT_COORD, 8: FMT_COORD },
+      // Lat y Long como celdas tipo número. Corridos a 8/9 al insertar "Horario".
+      formatos: { 8: FMT_COORD, 9: FMT_COORD },
     }));
     const sufijo = selectedItems.size > 0 ? '_seleccion' : '';
     const notaPie = mostrarOrigen ? `${NO_VIGENTE_LEYENDA}  ·  ${ORIGEN_LEYENDA}` : NO_VIGENTE_LEYENDA;
@@ -1421,7 +1421,7 @@ export function CompartirPropuestaPage() {
             (i.ubicacion || '').substring(0, 50),
             i.mueble || '',
             i.tradicional_digital || '',
-            formatInicioPeriodo(i, tipoPeriodo),
+            formatInicioPeriodo(i, tipoPeriodo) + (i.tradicional_digital === 'Digital' && (i.hora_inicio || i.hora_fin) ? `\n${horarioLabel(i.hora_inicio, i.hora_fin)}` : ''),
             i.latitud?.toFixed(6) || '-',
             i.longitud?.toFixed(6) || '-',
             estadoTexto(i),

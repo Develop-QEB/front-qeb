@@ -9,6 +9,7 @@ import {
   Image, Link2, Film, FileText, ChevronLeft, Play, Search
 } from 'lucide-react';
 import { campanasService, OrdenMontajeCAT, OrdenMontajeINVIAN, ImagenDigital } from '../../services/campanas.service';
+import { horarioLabel } from '../../lib/periodos';
 import { ALLOWED_DIGITAL_ITEM_CODES } from '../../config/allowedDigitalArticles';
 import { solicitudesService } from '../../services/solicitudes.service';
 import { Catorcena } from '../../types';
@@ -1530,6 +1531,7 @@ export function OrdenesMontajeModal({ isOpen, onClose, canExport = true }: Orden
         'APS Específico': item.aps_especifico || '',
         'Fecha Inicio': item.fecha_inicio_periodo ? formatDate(item.fecha_inicio_periodo) : '',
         'Fecha Fin': item.fecha_fin_periodo ? formatDate(item.fecha_fin_periodo) : '',
+        'Horario': horarioLabel(item.hora_inicio, item.hora_fin),
         'Cliente': item.cliente || '',
         'Marca': item.marca || '',
         'Campaña': item.campania || '',
@@ -1555,6 +1557,7 @@ export function OrdenesMontajeModal({ isOpen, onClose, canExport = true }: Orden
         'APS Específico': item.aps_especifico || '',
         'Fecha Inicio': item.fecha_inicio_periodo ? formatDate(item.fecha_inicio_periodo) : '',
         'Fecha Fin': item.fecha_fin_periodo ? formatDate(item.fecha_fin_periodo) : '',
+        'Horario': horarioLabel(item.hora_inicio, item.hora_fin),
         'Cliente': item.cliente || '',
         'Marca': item.marca || '',
         'Campaña': item.campania || '',
@@ -1582,6 +1585,7 @@ export function OrdenesMontajeModal({ isOpen, onClose, canExport = true }: Orden
         'CUIC': item.cuic || '',
         'Fecha Inicio': item.fecha_inicio_periodo ? new Date(item.fecha_inicio_periodo).toLocaleDateString() : '',
         'Fecha Fin': item.fecha_fin_periodo ? new Date(item.fecha_fin_periodo).toLocaleDateString() : '',
+        'Horario': horarioLabel(item.hora_inicio, item.hora_fin),
         'Cliente': item.cliente || '',
         'Marca': item.marca || '',
         'Campaña': item.campania || '',
@@ -2973,7 +2977,12 @@ const CATRow = React.memo(function CATRow({ item, isDark, showApsEspecifico = fa
         )}
       </td>
       <td className={`px-3 py-2 text-xs ${isDark ? 'text-zinc-400' : 'text-gray-500'}`}>{formatDate(item.fecha_inicio_periodo)}</td>
-      <td className={`px-3 py-2 text-xs ${isDark ? 'text-zinc-400' : 'text-gray-500'}`}>{formatDate(item.fecha_fin_periodo)}</td>
+      <td className={`px-3 py-2 text-xs ${isDark ? 'text-zinc-400' : 'text-gray-500'}`}>
+        {formatDate(item.fecha_fin_periodo)}
+        {(item.hora_inicio || item.hora_fin) && (
+          <span className="block text-[10px] text-purple-400 font-medium" title="Horario diario (digital)">⏱ {horarioLabel(item.hora_inicio, item.hora_fin)}</span>
+        )}
+      </td>
       <td className={`px-3 py-2 text-xs ${isDark ? 'text-zinc-300' : 'text-gray-700'} max-w-[120px] truncate`} title={item.cliente || ''}>{item.cliente || '-'}</td>
       <td className={`px-3 py-2 text-xs ${isDark ? 'text-zinc-300' : 'text-gray-700'}`}>{item.marca || '-'}</td>
       <td className={`px-3 py-2 text-xs ${isDark ? 'text-white' : 'text-gray-900'} font-medium max-w-[150px] truncate`} title={item.campania || ''}>{item.campania || '-'}</td>

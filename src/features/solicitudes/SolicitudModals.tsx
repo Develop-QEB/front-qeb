@@ -13,6 +13,7 @@ import { notificacionesService, ResumenAutorizacion } from '../../services/notif
 import { NotasDireccionBitacora } from '../notificaciones/NotasDireccionBitacora';
 import { Solicitud, Catorcena } from '../../types';
 import { formatCurrency, formatDate } from '../../lib/utils';
+import { horarioLabel } from '../../lib/periodos';
 import { formatHistorialDetalles } from '../../lib/historial';
 import { UserAvatar } from '../../components/ui/user-avatar';
 import { useThemeStore } from '../../store/themeStore';
@@ -1289,7 +1290,12 @@ export function ViewSolicitudModal({ isOpen, onClose, solicitudId, onEdit, onAte
                                                   <td className={`px-3 py-2 ${isDark ? 'text-zinc-300' : 'text-gray-700'}`}>{cara.formato || '-'}</td>
                                                   <td className={`px-3 py-2 ${isDark ? 'text-zinc-300' : 'text-gray-700'}`}>{cara.tipo || '-'}</td>
                                                   <td className={`px-3 py-2 ${isDark ? 'text-zinc-400' : 'text-gray-500'} text-xs`}>{cara.inicio_periodo ? formatDate(cara.inicio_periodo) : '-'}</td>
-                                                  <td className={`px-3 py-2 ${isDark ? 'text-zinc-400' : 'text-gray-500'} text-xs`}>{cara.fin_periodo ? formatDate(cara.fin_periodo) : '-'}</td>
+                                                  <td className={`px-3 py-2 ${isDark ? 'text-zinc-400' : 'text-gray-500'} text-xs`}>
+                                                    {cara.fin_periodo ? formatDate(cara.fin_periodo) : '-'}
+                                                    {cara.tipo === 'Digital' && (cara.hora_inicio || cara.hora_fin) && (
+                                                      <span className="block text-[10px] text-purple-400 font-medium" title="Horario diario (digital)">⏱ {horarioLabel(cara.hora_inicio, cara.hora_fin)}</span>
+                                                    )}
+                                                  </td>
                                                   <td className={`px-3 py-2 text-center ${isDark ? 'text-white' : 'text-gray-900'} font-medium`}>{Number(cara.caras) || 0}</td>
                                                   <td className={`px-3 py-2 text-center ${isDark ? 'text-white' : 'text-gray-900'} font-medium`}>{Number(cara.bonificacion) || 0}</td>
                                                   <td className={`px-3 py-2 text-center ${isDark ? 'text-white' : 'text-gray-900'} font-bold`}>{(Number(cara.caras) || 0) + (Number(cara.bonificacion) || 0)}</td>

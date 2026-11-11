@@ -348,6 +348,10 @@ interface CaraEntry {
   catorcenaYear: number;
   periodoInicio: string;
   periodoFin: string;
+  // Horario diario (solo circuitos DIGITALES en periodo mensual): franja "HH:MM"
+  // que aplica a todos los dias del rango. Feature "Horario inicio/fin - Digital".
+  horaInicio?: string;
+  horaFin?: string;
   renta: number;
   bonificacion: number;
   tarifaPublica: number;
@@ -822,6 +826,9 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
     // Custom period dates (mensual mode - per cara dates within month)
     periodoInicioCustom: '',
     periodoFinCustom: '',
+    // Horario diario (solo digital en mensual): franja "HH:MM" para todo el rango.
+    horaInicio: '',
+    horaFin: '',
     renta: 0,
     bonificacion: 0,
     tarifaPublica: 0,
@@ -1191,6 +1198,8 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
         periodoFinCat: '',
         periodoInicioCustom: '',
         periodoFinCustom: '',
+        horaInicio: '',
+        horaFin: '',
         renta: 0,
         bonificacion: 0,
         tarifaPublica: 0,
@@ -1651,6 +1660,8 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
         catorcenaYear: period.catorcenaYear,
         periodoInicio: period.periodoInicio,
         periodoFin: period.periodoFin,
+        horaInicio: newCara.tipo === 'Digital' ? newCara.horaInicio : undefined,
+        horaFin: newCara.tipo === 'Digital' ? newCara.horaFin : undefined,
         renta: rentaRT,
         bonificacion: grupoRtBf ? 0 : newCara.bonificacion, // If BF separate, RT has 0 bonif
         tarifaPublica: newCara.tarifaPublica,
@@ -1689,6 +1700,8 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
           catorcenaYear: period.catorcenaYear,
           periodoInicio: period.periodoInicio,
           periodoFin: period.periodoFin,
+          horaInicio: newCara.tipo === 'Digital' ? newCara.horaInicio : undefined,
+          horaFin: newCara.tipo === 'Digital' ? newCara.horaFin : undefined,
           renta: newCara.bonificacion, // BF caras go in renta field
           bonificacion: 0,
           tarifaPublica: 0, // BF is free
@@ -1793,6 +1806,8 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
       periodoFinCat: '',
       periodoInicioCustom: '',
       periodoFinCustom: '',
+      horaInicio: '',
+      horaFin: '',
       renta: 0,
       bonificacion: 0,
       tarifaPublica: 0,
@@ -1969,6 +1984,8 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
       // <input type="date"> espera 'YYYY-MM-DD'; truncamos por si viene como ISO completo
       periodoInicioCustom: tipoPeriodo === 'mensual' ? String(cara.periodoInicio || '').slice(0, 10) : '',
       periodoFinCustom: tipoPeriodo === 'mensual' ? String(cara.periodoFin || '').slice(0, 10) : '',
+      horaInicio: cara.horaInicio || '',
+      horaFin: cara.horaFin || '',
       renta: cara.renta,
       bonificacion: bfPair ? bfPair.renta : cara.bonificacion,
       tarifaPublica: cara.tarifaPublica,
@@ -1993,6 +2010,8 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
       periodoFinCat: '',
       periodoInicioCustom: '',
       periodoFinCustom: '',
+      horaInicio: '',
+      horaFin: '',
       renta: 0,
       bonificacion: 0,
       tarifaPublica: 0,
@@ -2276,6 +2295,9 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
         tarifa_publica: c.tarifaPublica,
         inicio_periodo: c.periodoInicio,
         fin_periodo: c.periodoFin,
+        // Horario diario solo para circuitos digitales (feature Horario inicio/fin).
+        hora_inicio: c.tipo === 'Digital' ? (c.horaInicio || undefined) : undefined,
+        hora_fin: c.tipo === 'Digital' ? (c.horaFin || undefined) : undefined,
         // Para circuito: si la renta es < total del circuito, distribuir flujo/contraflujo
         // proporcionalmente respetando los topes del circuito
         caras_flujo: treatAsBf ? 0 : (() => {
@@ -2549,6 +2571,8 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
             // Truncar a YYYY-MM-DD para que <input type="date"> lo reconozca al editar
             periodoInicio: String(cara.inicio_periodo || '').slice(0, 10),
             periodoFin: String(cara.fin_periodo || '').slice(0, 10),
+            horaInicio: (cara as any).hora_inicio || '',
+            horaFin: (cara as any).hora_fin || '',
             // Convención frontend: BF guarda cantidad en renta. Backend persiste BF con
             // caras=0 y bonificacion=cantidad, así que invertimos al cargar.
             // (CF-#### servicio NO invierte: es renta normal.)
@@ -3650,6 +3674,31 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
                           className={`w-full px-2 py-2 ${isDark ? 'bg-zinc-800 border-zinc-700 text-white' : 'bg-gray-100 border-gray-200 text-gray-900'} border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-purple-500/50 disabled:opacity-50`}
                         />
                       </div>
+                      {/* Horario diario: SOLO circuitos digitales (UN+, UDC, VP digital). Aplica a todo el rango. */}
+                      {newCara.tipo === 'Digital' && (
+                        <>
+                        <div>
+                          <label className={`text-xs ${isDark ? 'text-zinc-500' : 'text-gray-500'}`}>Hora Inicio</label>
+                          <input
+                            type="time"
+                            value={newCara.horaInicio}
+                            onChange={(e) => setNewCara({ ...newCara, horaInicio: e.target.value })}
+                            disabled={!newCara.periodo}
+                            className={`w-full px-2 py-2 ${isDark ? 'bg-zinc-800 border-zinc-700 text-white' : 'bg-gray-100 border-gray-200 text-gray-900'} border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-purple-500/50 disabled:opacity-50`}
+                          />
+                        </div>
+                        <div>
+                          <label className={`text-xs ${isDark ? 'text-zinc-500' : 'text-gray-500'}`}>Hora Fin</label>
+                          <input
+                            type="time"
+                            value={newCara.horaFin}
+                            onChange={(e) => setNewCara({ ...newCara, horaFin: e.target.value })}
+                            disabled={!newCara.periodo}
+                            className={`w-full px-2 py-2 ${isDark ? 'bg-zinc-800 border-zinc-700 text-white' : 'bg-gray-100 border-gray-200 text-gray-900'} border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-purple-500/50 disabled:opacity-50`}
+                          />
+                        </div>
+                        </>
+                      )}
                     </>
                   ) : (
                     <>

@@ -10,6 +10,7 @@ import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContaine
 import { formatCurrency, formatDate } from '../../lib/utils';
 import { toNum } from '../../utils/excelFormat';
 import { descargarExcelCompartir, FMT_ENTERO, FMT_COORD } from '../../utils/excelCompartir';
+import { horarioLabel } from '../../lib/periodos';
 import { useThemeStore } from '../../store/themeStore';
 // Versionado de circuitos completados (ultima version completada; piezas
 // desplazadas/quitadas en gris). Mismos helpers que la Vista Compartir interna.
@@ -81,6 +82,9 @@ interface InventarioReservado extends ConVersion, ConOrigen {
   anio_catorcena?: number | null;
   inicio_periodo?: string | null;
   fin_periodo?: string | null;
+  // Horario diario del circuito digital (feature Horario inicio/fin). null si no aplica.
+  hora_inicio?: string | null;
+  hora_fin?: string | null;
   formato?: string | null;
   tradicional_digital?: string | null;
 }
@@ -504,14 +508,16 @@ export function ClientePropuestaPage() {
     // la fila atenuada en gris.
     // Mismas columnas acordadas que el Excel del mapa: fuera Tipo Cara, Articulo
     // y Tarifa; "Codigo" se llama "Clave única".
-    const headers = ['Clave única', 'Plaza', 'Ubicacion', 'Formato', 'Tipo Inventario', 'Caras', 'Periodo', 'Latitud', 'Longitud', ...(mostrarOrigen ? ['Origen'] : [])];
+    const headers = ['Clave única', 'Plaza', 'Ubicacion', 'Formato', 'Tipo Inventario', 'Caras', 'Periodo', 'Horario', 'Latitud', 'Longitud', ...(mostrarOrigen ? ['Origen'] : [])];
     const filas = inventario.map(i => ({
       noVigente: esNoVigente(i),
       // Tinte azul/verde por origen (solo campañas); el gris de no vigente gana.
       fondoArgb: excelFondoOrigen(i, mostrarOrigen),
       valores: [
         i.codigo_unico, i.plaza, i.ubicacion, i.mueble, i.tradicional_digital || '',
-        toNum(i.caras_totales), formatInicioPeriodo(i, tipoPeriodo), toNum(i.latitud), toNum(i.longitud),
+        toNum(i.caras_totales), formatInicioPeriodo(i, tipoPeriodo),
+        i.tradicional_digital === 'Digital' ? horarioLabel(i.hora_inicio, i.hora_fin) : '',
+        toNum(i.latitud), toNum(i.longitud),
         ...(mostrarOrigen ? [origenTexto(i, true)] : []),
       ],
     }));
@@ -522,8 +528,8 @@ export function ClientePropuestaPage() {
       subLeyenda: leyendaVersion(inventario) || undefined,
       headers,
       filas,
-      // Caras (5), Latitud (7), Longitud (8) como celdas tipo número
-      formatos: { 5: FMT_ENTERO, 7: FMT_COORD, 8: FMT_COORD },
+      // Caras (5), Latitud (8), Longitud (9) como celdas tipo número (corridos al insertar Horario).
+      formatos: { 5: FMT_ENTERO, 8: FMT_COORD, 9: FMT_COORD },
     }], mostrarOrigen ? ORIGEN_LEYENDA : undefined)
       .catch(err => console.error('Error generando Excel:', err));
   };
@@ -849,7 +855,7 @@ export function ClientePropuestaPage() {
               String(i.caras_totales || 0),
               i.latitud?.toFixed(6) || '-',
               i.longitud?.toFixed(6) || '-',
-              formatInicioPeriodo(i, tipoPeriodo),
+              formatInicioPeriodo(i, tipoPeriodo) + (i.tradicional_digital === 'Digital' && (i.hora_inicio || i.hora_fin) ? `\n${horarioLabel(i.hora_inicio, i.hora_fin)}` : ''),
               ...(mostrarOrigen ? [origenTexto(i, true)] : []),
             ]),
             startY: y,
