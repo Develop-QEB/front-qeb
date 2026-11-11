@@ -280,6 +280,11 @@ const DetailRow = memo(function DetailRow({ item, isSelected, isDark, mostrarOri
             Nuevo en campaña
           </span>
         )}
+        {/* Horario diario (digital): no hay columna Periodo en pantalla (va en el header
+            de grupo), así que la franja del circuito se cuelga bajo el código. */}
+        {item.tradicional_digital === 'Digital' && (item.hora_inicio || item.hora_fin) && (
+          <span className="block text-[10px] text-purple-400 font-medium mt-0.5 not-italic font-sans" title="Horario diario (digital)">⏱ {horarioLabel(item.hora_inicio, item.hora_fin)}</span>
+        )}
       </td>
       <td className={`px-3 py-2 text-xs ${isDark ? 'text-zinc-300' : 'text-gray-700'}`}>{item.plaza || '-'}</td>
       <td className={`px-3 py-2 text-xs ${isDark ? 'text-zinc-400' : 'text-gray-600'}`}>

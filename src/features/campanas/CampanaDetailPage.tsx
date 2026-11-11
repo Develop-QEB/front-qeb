@@ -709,6 +709,11 @@ function renderReservadoCell(item: InventarioReservado, col: TableColumn, p = 'p
             +{groupInfo.reservadas - groupInfo.esperadas}
           </span>
         )}
+        {/* Horario diario (digital): la columna "Fin" solo existe en las tablas IM,
+            así que en las tablas normales (Sin APS / por APS) la franja se cuelga aquí. */}
+        {((item as any).hora_inicio || (item as any).hora_fin) && (
+          <span className="px-1.5 py-0.5 rounded text-[9px] font-semibold bg-purple-500/20 text-purple-400 border border-purple-500/30" title="Horario diario (digital)">⏱ {horarioLabel((item as any).hora_inicio, (item as any).hora_fin)}</span>
+        )}
       </div>
     </td>
   );
