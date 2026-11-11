@@ -1437,6 +1437,11 @@ export function ClientePropuestaPage() {
                                               {item.tipo_de_mueble && item.tipo_de_mueble?.toUpperCase() !== item.mueble?.toUpperCase() && (
                                                 <span className="block text-[10px] text-gray-400">{item.tipo_de_mueble}</span>
                                               )}
+                                              {/* Horario diario (digital): la tabla no tiene columna Periodo (va en el
+                                                  header de grupo), así que la franja se muestra aquí. */}
+                                              {item.tradicional_digital === 'Digital' && (item.hora_inicio || item.hora_fin) && (
+                                                <span className="block text-[10px] text-purple-600 font-medium mt-0.5" title="Horario diario (digital)">⏱ {horarioLabel(item.hora_inicio, item.hora_fin)}</span>
+                                              )}
                                             </td>
                                             <td className="px-3 py-2 text-center font-semibold text-gray-800 text-xs">{item.caras_totales}</td>
                                             <td className="px-3 py-2 text-right text-gray-400 text-xs font-mono">{item.latitud?.toFixed(6) || '-'}</td>

@@ -2,6 +2,7 @@ import { useMemo, useState } from 'react';
 import { Plane, Monitor, Search, Image as ImageIcon, X, ExternalLink, Clock, Users, ChevronDown, ChevronRight, Calendar, FileSpreadsheet } from 'lucide-react';
 import type { InventarioReservado } from '../../services/propuestas.service';
 import { udcFichaImg, udcFichaDe } from '../../lib/udc';
+import { horarioLabel } from '../../lib/periodos';
 
 // Tarifa bruta unitaria (misma lógica que la vista de compartir): tarifa sin
 // descuento por cara. $ MXN.
@@ -305,7 +306,12 @@ export function UdcReservadosTable({ items, isDark, tipoPeriodo }: { items: Inve
                       )}
                     </div>
                   </td>
-                  <td className={`${td} ${mono}`}>{periodoLabel(it, tipoPeriodo)}</td>
+                  <td className={`${td} ${mono}`}>
+                    {periodoLabel(it, tipoPeriodo)}
+                    {((it as any).hora_inicio || (it as any).hora_fin) && (
+                      <span className="block text-[10px] text-purple-400 font-medium mt-0.5" title="Horario diario (digital)">⏱ {horarioLabel((it as any).hora_inicio, (it as any).hora_fin)}</span>
+                    )}
+                  </td>
                   <td className={`${td} ${mono} text-right ${isDark ? 'text-emerald-300' : 'text-emerald-700'}`}>{fmtMXN(tarifaBruta(it))}</td>
                   <td className={`${td} ${mono} text-right font-semibold`}>{it.caras_totales ?? 0}</td>
                 </tr>
