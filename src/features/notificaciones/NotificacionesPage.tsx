@@ -8,14 +8,15 @@ import {
   MessageSquare, Send, Plus, Pencil, Trash2, StickyNote,
   Users, Tag, Building2, Download, Table2, ExternalLink, Bell, ClipboardList,
   Filter, Layers, ArrowUpDown, ArrowUp, ArrowDown, Check, Loader2, UserCheck, UserPlus,
-  ShieldCheck, DollarSign, Ban, Briefcase
+  ShieldCheck, DollarSign, Ban, Briefcase, Upload
 } from 'lucide-react';
 import { Header } from '../../components/layout/Header';
-import { notificacionesService, CaraAutorizacion, ResumenAutorizacion, HistorialAutorizacion } from '../../services/notificaciones.service';
+import { notificacionesService, CaraAutorizacion, ResumenAutorizacion, HistorialAutorizacion, HistorialTareaRow } from '../../services/notificaciones.service';
 import { notasService, NotaPersonal } from '../../services/notas.service';
 import { usuariosService } from '../../services/usuarios.service';
 import { Notificacion, ComentarioTarea } from '../../types';
 import { formatDate, formatDateCompact } from '../../lib/utils';
+import { motivoRechazoValido, limpiarMotivo } from '../../lib/historial';
 import { STATUS_CONFIG, getTipoConfig, getStatusConfig } from '../../lib/taskConfig';
 import { useAuthStore } from '../../store/authStore';
 import { useThemeStore } from '../../store/themeStore';
@@ -24,18 +25,17 @@ import { UserAvatar } from '../../components/ui/user-avatar';
 import { useSocketNotificaciones } from '../../hooks/useSocket';
 import { CreateSolicitudModal } from '../solicitudes/CreateSolicitudModal';
 import { AssignInventarioModal } from '../propuestas/AssignInventarioModal';
+import { PropuestaAprobadaInfoModal } from '../../components/PropuestaAprobadaInfoModal';
 import { AssignInventarioCampanaModal } from '../campanas/AssignInventarioCampanaModal';
 import { propuestasService } from '../../services/propuestas.service';
 import { campanasService } from '../../services/campanas.service';
 import { NotasDireccionBitacora } from './NotasDireccionBitacora';
 import { NuevaActividadComercialModal } from './NuevaActividadComercialModal';
+import { inventariosService } from '../../services/inventarios.service';
 
 // [TEMPORAL] Ocultar "Actividad Comercial" en producción (pedido de Dirección,
 // oct 2026): la feature de Akary entró a main con el merge de release del 29-sep
 // pero aún no debía estar visible. Para reactivarla: poner en false.
-// 2026-10-30: reactivado en RELEASE por decisión de Mario (QA del tablero
-// Actividad Comercial). OJO: si se mergea release→main volvería a prod — ahí
-// Dirección pidió esconderlo, así que al liberar/mergear revisar este flag.
 const OCULTAR_ACTIVIDAD_COMERCIAL = false;
 
 // Roles que pueden crear tarea manual "Actividad Comercial".
@@ -51,6 +51,133 @@ const ROLES_ACTIVIDAD_COMERCIAL = new Set([
 ]);
 
 // ============ HELPERS ============
+
+// Bitacora de ediciones de la tarea. Se muestra en el drawer lateral debajo
+// del bloque amarillo "Informacion de la Actividad" (feedback Jos 2026-11-06).
+// El back ya registra cada edicion via logHistorial con un diff por campo;
+// este componente solo lo renderiza. Para no romper si una fila trae mal el
+// JSON de `detalles`, cada parse se protege con try/catch.
+function BitacoraTareaInline({ tareaId, isDark }: { tareaId: number; isDark: boolean }) {
+  // Colapsado por defecto: una tarea puede acumular muchas ediciones y no
+  // conviene que ocupe la mitad del drawer antes de que el usuario pida verlo.
+  const [collapsed, setCollapsed] = useState(true);
+  const { data: rows = [], isLoading } = useQuery<HistorialTareaRow[]>({
+    queryKey: ['historial-tarea', tareaId],
+    queryFn: () => notificacionesService.getHistorialTarea(tareaId),
+    staleTime: 30_000,
+    retry: false,
+  });
+
+  const parsed = useMemo(() => rows.map(r => {
+    let cambios: Array<{ campo?: string; label?: string; antes?: unknown; despues?: unknown }> = [];
+    let usuarioNombre: string | null = null;
+    try {
+      if (r.detalles) {
+        const j = JSON.parse(r.detalles) as { cambios?: typeof cambios; usuario?: string };
+        if (Array.isArray(j.cambios)) cambios = j.cambios;
+        if (typeof j.usuario === 'string') usuarioNombre = j.usuario;
+      }
+    } catch { /* fila corrupta: la ignoramos silenciosamente */ }
+    return { ...r, cambios, usuarioNombre };
+  }), [rows]);
+
+  if (isLoading) return null;
+  if (parsed.length === 0) return null;
+
+  const borderCls = isDark ? 'border-zinc-800/50' : 'border-gray-200';
+  const subText = isDark ? 'text-zinc-500' : 'text-gray-400';
+  const headText = isDark ? 'text-zinc-400' : 'text-gray-500';
+
+  // Formato: fechas ISO salen bonitas, el resto va tal cual. Detectar fecha
+  // por regex para no confundir con numeros u otros strings (el back no manda
+  // tipo).
+  const fmt = (v: unknown): string => {
+    if (v == null || v === '') return '—';
+    if (Array.isArray(v)) return v.length === 0 ? '—' : v.map(x => fmt(x)).join(', ');
+    if (typeof v === 'boolean') return v ? 'Sí' : 'No';
+    if (typeof v === 'string' && /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}/.test(v)) {
+      try { return formatDate(v); } catch { return v; }
+    }
+    return String(v);
+  };
+
+  return (
+    <div className={`p-5 border-b ${borderCls}`}>
+      <button
+        type="button"
+        onClick={() => setCollapsed(c => !c)}
+        className={`w-full flex items-center justify-between gap-2 rounded-lg transition-colors ${
+          collapsed
+            ? (isDark
+              ? 'bg-amber-500/10 border border-amber-500/30 px-3 py-2 hover:bg-amber-500/20'
+              : 'bg-amber-50 border border-amber-300 px-3 py-2 hover:bg-amber-100')
+            : 'mb-3'
+        }`}
+      >
+        <h3 className={`text-xs font-semibold uppercase tracking-wider flex items-center gap-1.5 ${
+          collapsed ? (isDark ? 'text-amber-200' : 'text-amber-700') : headText
+        }`}>
+          {collapsed ? <ChevronRight className="h-3.5 w-3.5" /> : <ChevronDown className="h-3.5 w-3.5" />}
+          Historial de cambios
+          <span className={`normal-case tracking-normal font-normal ${
+            collapsed ? (isDark ? 'text-amber-300/80' : 'text-amber-600') : subText
+          }`}>({parsed.length})</span>
+        </h3>
+        {collapsed && (
+          <span className={`text-[10px] font-medium ${isDark ? 'text-amber-300/80' : 'text-amber-600'}`}>Ver</span>
+        )}
+      </button>
+      {!collapsed && (
+        <div className="space-y-3 max-h-96 overflow-y-auto pr-1">
+          {parsed.map((row, idx) => (
+            <div key={`${row.id}-${idx}`} className={`rounded-lg border px-3 py-2 ${isDark ? 'bg-zinc-900/40 border-zinc-800' : 'bg-gray-50 border-gray-200'}`}>
+              <div className="flex items-start justify-between gap-2">
+                <div className={`text-xs font-medium ${isDark ? 'text-zinc-200' : 'text-gray-800'}`}>
+                  {row.accion}
+                </div>
+                <div className={`text-[10px] shrink-0 ${subText}`}>
+                  {formatDate(row.fecha_hora)}
+                </div>
+              </div>
+              {row.usuarioNombre && (
+                <div className={`text-[10px] mt-0.5 ${subText}`}>por {row.usuarioNombre}</div>
+              )}
+              {row.cambios.length > 0 && (
+                <div className="mt-2 space-y-1">
+                  {row.cambios.map((c, i) => (
+                    <div key={i} className="text-[11px] flex items-start gap-2">
+                      <span className={`shrink-0 font-medium ${isDark ? 'text-amber-300' : 'text-amber-700'}`}>{c.label || c.campo || '—'}:</span>
+                      <span className={isDark ? 'text-zinc-300' : 'text-gray-700'}>
+                        <span className={isDark ? 'text-zinc-500 line-through' : 'text-gray-400 line-through'}>{fmt(c.antes)}</span>
+                        <span className="mx-1">→</span>
+                        <span className={isDark ? 'text-zinc-100 font-medium' : 'text-gray-900 font-medium'}>{fmt(c.despues)}</span>
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// El id de la solicitud de desposteo viaja serializado en `contenido` de la
+// tarea ({"desposteoId":N}), no en una columna propia. Si el JSON viene mal
+// devolvemos null y el botón simplemente no se pinta, en vez de tronar.
+function getDesposteoIdDeTarea(tarea: { contenido?: string | null }): number | null {
+  try {
+    const raw = typeof tarea.contenido === 'string' ? tarea.contenido : '';
+    if (!raw) return null;
+    const id = Number(JSON.parse(raw)?.desposteoId);
+    return Number.isFinite(id) && id > 0 ? id : null;
+  } catch {
+    return null;
+  }
+}
+
 // Tipos de tareas creadas desde el Gestor de Artes. Estas tareas se
 // atienden en su modal real (con side-effects: aprobar arte, subir foto,
 // rotar roles, marcar instalado, etc). NUNCA deben cerrarse via el boton
@@ -152,6 +279,29 @@ type QuickFilterKey =
 // (notificaciones.controller.ts) o el conteo de la lista se descuadra del badge.
 const ESTATUS_RESUELTOS = ['Atendido', 'Rechazado', 'Cancelado'];
 const esResuelta = (estatus?: string | null) => !!estatus && ESTATUS_RESUELTOS.includes(estatus);
+
+// Roles de dirección: su listado de tareas se muestra SIEMPRE extendido (los
+// grupos nunca arrancan contraídos) y no cierran tareas a mano.
+const ROLES_DIRECCION = ['Director General', 'Director Comercial'];
+
+// Roles que NO pueden marcar tareas como finalizadas / sin finalizar a mano.
+// Mismo criterio que el botón del drawer de "Mis Tareas".
+const ROLES_SIN_CIERRE_MANUAL = ['Director General', 'Gerente Comercial Vía Pública', 'Gerente Comercial Plazas', 'Gerente Comercial'];
+
+// ¿Esta fila admite selección masiva para finalizar / reabrir?
+// - En Notificaciones: siempre (Atendido = leída).
+// - En Mis Tareas: solo tareas cuyo cierre es manual. Quedan fuera las de
+//   Autorización / Filtro (las cierra aprobar/rechazar), las del gestor de
+//   artes (las cierra su flujo) y las de Desposteo (su propio modal).
+function esSeleccionableMasivo(tarea: Notificacion, contentType: ContentType, rol?: string | null): boolean {
+  if (contentType === 'notificaciones') return true;
+  if (ROLES_SIN_CIERRE_MANUAL.includes(rol || '')) return false;
+  const tipo = tarea.tipo || '';
+  if (tipo.includes('Autorización') || tipo.includes('Autorizacion')) return false;
+  if (isTareaGestorArtes(tipo)) return false;
+  if (tipo === 'Filtro Desposteo') return false;
+  return true;
+}
 
 const QUICK_FILTERS_NOTIFICACIONES: { key: QuickFilter; label: string }[] = [
   { key: 'all', label: 'Todas' },
@@ -423,6 +573,7 @@ function TareaRow({
   showBorder = true,
   selected,
   onToggleSelection,
+  canSelect,
   currentUserId,
   onEditActividad,
 }: {
@@ -431,6 +582,9 @@ function TareaRow({
   showBorder?: boolean;
   selected?: boolean;
   onToggleSelection?: (id: number) => void;
+  // Si viene, decide por fila si se pinta el checkbox. Si la fila no es
+  // seleccionable se deja un espaciador para no desalinear el listado.
+  canSelect?: (tarea: Notificacion) => boolean;
   // Si el user actual es creador de la Actividad Comercial, mostramos plumita.
   currentUserId?: number;
   onEditActividad?: (tarea: Notificacion) => void;
@@ -452,7 +606,7 @@ function TareaRow({
     if (isCancelado) return { bg: 'bg-zinc-500/20', border: 'border-zinc-500/30', color: 'text-zinc-400', label: 'Cancelado' };
     // Filtro DG/DCM devuelto a corrección: se marca 'Rechazado' en BD, pero NO es un rechazo
     // total — el Gerente lo devolvió al asesor para corregir. Badge ámbar, no rojo/verde.
-    if ((tarea.tipo === 'Filtro Autorización DG' || tarea.tipo === 'Filtro Autorización DCM') && isRechazado) return { bg: 'bg-amber-500/20', border: 'border-amber-500/30', color: 'text-amber-400', label: 'Devuelta a corrección' };
+    if (tarea.tipo === 'Filtro Autorización DG' && isRechazado) return { bg: 'bg-amber-500/20', border: 'border-amber-500/30', color: 'text-amber-400', label: 'Devuelta a corrección' };
     if (isRechazo) return { bg: 'bg-red-500/20', border: 'border-red-500/30', color: 'text-red-400', label: 'Rechazo' };
     if (isAprobacion) return { bg: 'bg-emerald-500/20', border: 'border-emerald-500/30', color: 'text-emerald-400', label: 'Aprobada' };
     if (isRechazado) return { bg: 'bg-red-500/20', border: 'border-red-500/30', color: 'text-red-400', label: 'Rechazo' };
@@ -469,13 +623,17 @@ function TareaRow({
     >
       {/* Checkbox de selección masiva */}
       {onToggleSelection && (
-        <input
-          type="checkbox"
-          checked={!!selected}
-          onClick={(e) => e.stopPropagation()}
-          onChange={(e) => { e.stopPropagation(); onToggleSelection(tarea.id); }}
-          className="w-4 h-4 accent-purple-500 cursor-pointer flex-shrink-0"
-        />
+        (!canSelect || canSelect(tarea)) ? (
+          <input
+            type="checkbox"
+            checked={!!selected}
+            onClick={(e) => e.stopPropagation()}
+            onChange={(e) => { e.stopPropagation(); onToggleSelection(tarea.id); }}
+            className="w-4 h-4 accent-purple-500 cursor-pointer flex-shrink-0"
+          />
+        ) : (
+          <span className="w-4 h-4 flex-shrink-0" aria-hidden="true" />
+        )
       )}
 
       {/* Indicador de estado visual */}
@@ -696,8 +854,10 @@ function NestedSection({
   onSelectTarea,
   selectedIds,
   onToggleSelection,
+  canSelect,
   currentUserId,
   onEditActividad,
+  defaultOpen = true,
 }: {
   group: NestedGroup;
   level?: number;
@@ -705,11 +865,15 @@ function NestedSection({
   onSelectTarea: (tarea: Notificacion) => void;
   selectedIds?: Set<number>;
   onToggleSelection?: (id: number) => void;
+  canSelect?: (tarea: Notificacion) => boolean;
   currentUserId?: number;
   onEditActividad?: (tarea: Notificacion) => void;
+  // Estado inicial del grupo. En "Mis Tareas" arranca contraído (salvo roles de
+  // dirección); en Notificaciones, extendido.
+  defaultOpen?: boolean;
 }) {
   const isDark = useThemeStore((s) => s.theme) === 'dark';
-  const [open, setOpen] = useState(true);
+  const [open, setOpen] = useState(defaultOpen);
   const statusConfig = getStatusConfig(group.key);
   const currentGroupType = groupByList[level];
   const groupOption = GROUP_BY_OPTIONS.find(o => o.value === currentGroupType);
@@ -736,6 +900,7 @@ function NestedSection({
                 showBorder={idx !== group.tareas.length - 1}
                 selected={selectedIds?.has(tarea.id)}
                 onToggleSelection={onToggleSelection}
+                canSelect={canSelect}
                 currentUserId={currentUserId}
                 onEditActividad={onEditActividad}
               />
@@ -788,8 +953,10 @@ function NestedSection({
                   onSelectTarea={onSelectTarea}
                   selectedIds={selectedIds}
                   onToggleSelection={onToggleSelection}
+                  canSelect={canSelect}
                   currentUserId={currentUserId}
                   onEditActividad={onEditActividad}
+                  defaultOpen={defaultOpen}
                 />
               ))}
             </div>
@@ -803,6 +970,7 @@ function NestedSection({
                 showBorder={idx !== group.tareas.length - 1}
                 selected={selectedIds?.has(tarea.id)}
                 onToggleSelection={onToggleSelection}
+                canSelect={canSelect}
                 currentUserId={currentUserId}
                 onEditActividad={onEditActividad}
               />
@@ -1437,6 +1605,45 @@ function isGestionArtesTarea(tipo?: string | null): boolean {
   return !!tipo && GESTION_ARTES_TIPOS.includes(tipo);
 }
 
+// Las tareas "Revisión de artes" generadas desde el modulo de prueba de color
+// NO pertenecen al flujo de gestion de artes de campaña — se consumen desde el
+// modal de prueba de color (de propuesta o campaña). Las identificamos por el
+// prefijo del titulo que les asigna crearTareaRevisionArte en el back.
+// Feedback Jos 2026-10-06: abrir estas tareas enviaba al gestor de artes modo
+// campaña aunque la prueba se originó en propuesta, lo cual confundia porque
+// el arte no se mostraba y la "campaña" aún no estaba lista para ese flujo.
+function isPruebaColorRevisionTarea(tipo?: string | null, titulo?: string | null): boolean {
+  if (tipo !== 'Revisión de artes') return false;
+  if (!titulo) return false;
+  const t = titulo.toLowerCase();
+  return t.includes('prueba de color');
+}
+
+// Tarea de Seguimiento de prueba de color — misma logica: se consume desde
+// el modal, no desde gestor de artes.
+function isPruebaColorSeguimientoTarea(tipo?: string | null): boolean {
+  return tipo === 'Seguimiento Prueba de color';
+}
+
+// Tarea de notificacion al creador cuando cambia el estatus de la prueba
+// (incluye el flujo de rechazo con requiereNuevaVersion). Jos 2026-10-12:
+// desde el boton 'Ver' se abre el modal con el acordeon del circuito
+// expandido para que el analista vea la prueba rechazada y re-suba v2.
+function isPruebaColorNotificacionTarea(tipo?: string | null): boolean {
+  return tipo === 'Prueba de Color';
+}
+// Parsea el contenido JSON de una tarea tipo 'Prueba de Color' para
+// extraer scId / propuestaId / requiereNuevaVersion.
+function parsePruebaColorNotifContent(contenido?: string | null): {
+  scId?: number; propuestaId?: number; requiereNuevaVersion?: boolean;
+} {
+  if (!contenido) return {};
+  try {
+    const c = JSON.parse(contenido);
+    return { scId: c.scId, propuestaId: c.propuestaId, requiereNuevaVersion: !!c.requiereNuevaVersion };
+  } catch { return {}; }
+}
+
 // Tarea informativa "Gestión de Recepción Parcial" (ASC): navega al gestor
 // de artes → tab Impresiones → sub-tab Pend. Recepción para ver el detalle.
 function isRecepcionParcialTarea(tipo?: string | null): boolean {
@@ -1465,9 +1672,11 @@ function isConflictoOcupacionNotification(titulo?: string | null): boolean {
   return /conflictos? de ocupaci[oó]n/i.test(titulo);
 }
 
+
 // Función para verificar si hay navegación disponible
 function hasNavigationRoute(tarea: Notificacion): boolean {
-  // Tareas de Ajuste Inventario Bloqueado no tienen navegación
+  // Tareas de Ajuste Inventario Bloqueado y de vigencia de bloqueo no tienen
+  // navegación: se atienden desde el propio panel.
   if (tarea.tipo === 'Ajuste Inventario Bloqueado') {
     return false;
   }
@@ -1477,6 +1686,17 @@ function hasNavigationRoute(tarea: Notificacion): boolean {
   }
   // Si tiene referencia_tipo y referencia_id válidos
   if (tarea.referencia_tipo && tarea.referencia_id && tarea.referencia_tipo !== 'sistema') {
+    return true;
+  }
+  // Prueba de color: tiene navegacion si hay propuesta o campaña asociada
+  // (abre modal, no gestor). Chequear antes del gate generico de Gestion de Artes
+  // porque isGestionArtesTarea('Revisión de artes') es true y bloquearia el
+  // caso propuesta-sin-campania.
+  if ((isPruebaColorRevisionTarea(tarea.tipo, tarea.titulo) || isPruebaColorSeguimientoTarea(tarea.tipo)) && (tarea.id_propuesta || tarea.campania_id)) {
+    return true;
+  }
+  // Notificacion de cambio de estatus de prueba de color (incluye rechazo).
+  if (isPruebaColorNotificacionTarea(tarea.tipo) && (tarea.id_propuesta || tarea.campania_id)) {
     return true;
   }
   // Tareas de Gestión de Artes con campania_id
@@ -1504,6 +1724,10 @@ function getNavigationLabel(tipo: string, tipoTarea?: string, campaniaId?: numbe
   if (isArtesNotification(titulo)) {
     return 'Ver Gestión de Artes';
   }
+  // Prueba de color (Revisión o Seguimiento o Notificacion de estatus) → abrir modal.
+  if (isPruebaColorRevisionTarea(tipoTarea, titulo) || isPruebaColorSeguimientoTarea(tipoTarea) || isPruebaColorNotificacionTarea(tipoTarea)) {
+    return 'Ver Prueba de Color';
+  }
   // Tareas de Gestión de Artes → Ver Gestión de Artes
   if (isGestionArtesTarea(tipoTarea)) {
     return 'Ver Gestión de Artes';
@@ -1511,6 +1735,14 @@ function getNavigationLabel(tipo: string, tipoTarea?: string, campaniaId?: numbe
   // Gestión de Recepción Parcial (informativa ASC) → sub-tab Pend. Recepción
   if (isRecepcionParcialTarea(tipoTarea)) {
     return 'Ver Recepción Parcial';
+  }
+  // Aviso de Eliminación (informativo al asesor): ya es campaña, así que el
+  // botón debe decir Campaña y llevar al detalle, no a la propuesta editable.
+  // Antes caía al fallback de `propuestaId` y decía "Ver Propuesta".
+  if (tipoTarea === 'Aviso Eliminación') {
+    if (tipo === 'campana' || campaniaId) return 'Ver Campaña';
+    if (tipo === 'propuesta' || propuestaId) return 'Ver Propuesta';
+    return 'Ver Solicitud';
   }
   // Tareas de Rechazo: usar referencia_tipo para el label correcto
   if (tipoTarea?.includes('Rechazo')) {
@@ -1598,9 +1830,39 @@ function getRejectionSolicitudId(tarea: Notificacion): number | null {
 }
 
 // Función para obtener la ruta de navegación directa al detalle
-function getDirectNavigationPath(tipo: string, id: number, titulo: string, tipoTarea?: string, campaniaId?: number | null, propuestaId?: number | null, tareaId?: number): string {
+function getDirectNavigationPath(tipo: string, id: number, titulo: string, tipoTarea?: string, campaniaId?: number | null, propuestaId?: number | null, tareaId?: number, contenido?: string | null): string {
   const isComment = isCommentNotification(titulo);
   const isRejection = isRejectionTask(titulo);
+
+  // Prueba de color (Revisión o Seguimiento) → abrir modal de prueba.
+  // Si la prueba todavia vive en propuesta (propuestaId > 0), ir a /propuestas
+  // y abrir modal con pruebaId. Si ya avanzo a campaña, ir a /campanas/:id con
+  // query param que detona el modal. Feedback Jos 2026-10-06.
+  if (isPruebaColorRevisionTarea(tipoTarea, titulo) || isPruebaColorSeguimientoTarea(tipoTarea)) {
+    if (propuestaId) {
+      return `/propuestas?viewId=${propuestaId}&pruebaColorTareaId=${tareaId || id}`;
+    }
+    if (campaniaId) {
+      return `/campanas/${campaniaId}?pruebaColorTareaId=${tareaId || id}`;
+    }
+  }
+
+  // Notificacion de prueba de color (rechazo / cambios de estatus): abre
+  // modal en tab 'nueva' si requiere nueva version, si no en 'pruebas'
+  // con el circuito expandido (via pruebaColorNuevaScId que setea el
+  // acordeon expandido en PruebasColorModal).
+  if (isPruebaColorNotificacionTarea(tipoTarea)) {
+    const parsed = parsePruebaColorNotifContent(contenido);
+    if (propuestaId && parsed.scId && parsed.requiereNuevaVersion) {
+      return `/propuestas?viewId=${propuestaId}&pruebaColorNuevaScId=${parsed.scId}`;
+    }
+    if (propuestaId) {
+      return `/propuestas?viewId=${propuestaId}&pruebaColorTareaId=${tareaId || id}`;
+    }
+    if (campaniaId) {
+      return `/campanas/${campaniaId}?pruebaColorTareaId=${tareaId || id}`;
+    }
+  }
 
   // Tareas de Gestión de Artes → Gestión de Artes con auto-open del modal (prioridad sobre propuesta)
   if (isGestionArtesTarea(tipoTarea) && campaniaId) {
@@ -1616,6 +1878,15 @@ function getDirectNavigationPath(tipo: string, id: number, titulo: string, tipoT
   // ir directo a Gestión de Artes de la campaña.
   if (isArtesNotification(titulo) && campaniaId) {
     return `/campanas/${campaniaId}/tareas`;
+  }
+
+  // Aviso de Eliminación: el circuito ya era de campaña. Al detalle de campaña
+  // (solo lectura), nunca a la propuesta editable. Se resuelve antes del
+  // fallback por `propuestaId`, que es el que lo mandaba a /propuestas.
+  if (tipoTarea === 'Aviso Eliminación') {
+    if (campaniaId) return `/campanas/detail/${campaniaId}`;
+    if (tipo === 'campana' && id) return `/campanas/detail/${id}`;
+    if (propuestaId) return `/propuestas?viewId=${propuestaId}`;
   }
 
   // Si es tarea de propuesta (ajuste cto, etc.) o tiene id_propuesta, ir al detalle de propuesta
@@ -1777,24 +2048,18 @@ function ApprovalModal({
     },
   });
 
-  // Filtro DG / DCM (paso previo con Gerente Comercial) — no aprueba/rechaza
-  // caras, solo decide "Enviar a Dirección" o "Rechazar como Corrección" a
-  // nivel tarea. Feedback 2026-08-15: espejo del flujo DG para DCM +
-  // comentario opcional al aprobar.
+  // Filtro DG (paso previo con Gerente Comercial) — no aprueba/rechaza
+  // caras, solo decide "Enviar a Dirección General" o "Rechazar como
+  // Corrección" a nivel tarea. Feedback Jos 2026-11-05: el espejo para DCM
+  // con GC se eliminó, solo queda el filtro para DG.
   const isFiltroDgTask = tarea.tipo === 'Filtro Autorización DG';
-  const isFiltroDcmTask = tarea.tipo === 'Filtro Autorización DCM';
-  const isFiltroTask = isFiltroDgTask || isFiltroDcmTask;
-  const filtroDireccion: 'DG' | 'DCM' = isFiltroDcmTask ? 'DCM' : 'DG';
-  const filtroDireccionLabel = filtroDireccion === 'DG' ? 'Dirección General' : 'Dirección Comercial';
+  const isFiltroTask = isFiltroDgTask;
+  const filtroDireccionLabel = 'Dirección General';
   const [comentarioAprobacionFiltro, setComentarioAprobacionFiltro] = useState('');
 
   const aprobarFiltroMutation = useMutation({
-    // Ambas funciones devuelven objetos con propiedades distintas
-    // (tareaDgId vs tareaDcmId). Como onSuccess no usa el retorno, se envuelve
-    // en Promise<void> para que TS reconcilie los tipos del union.
     mutationFn: async (comentario?: string): Promise<void> => {
-      if (filtroDireccion === 'DG') await notificacionesService.aprobarFiltroDg(tarea.id, comentario);
-      else await notificacionesService.aprobarFiltroDcm(tarea.id, comentario);
+      await notificacionesService.aprobarFiltroDg(tarea.id, comentario);
     },
     onSuccess: () => {
       setComentarioAprobacionFiltro('');
@@ -1806,8 +2071,7 @@ function ApprovalModal({
   });
   const rechazarFiltroMutation = useMutation({
     mutationFn: async (motivo: string): Promise<void> => {
-      if (filtroDireccion === 'DG') await notificacionesService.rechazarFiltroDg(tarea.id, motivo);
-      else await notificacionesService.rechazarFiltroDcm(tarea.id, motivo);
+      await notificacionesService.rechazarFiltroDg(tarea.id, motivo);
     },
     onSuccess: () => {
       setShowRechazoInput(false);
@@ -1889,10 +2153,11 @@ function ApprovalModal({
       <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={onClose} />
       {/* Mobile: modal a pantalla completa (h + w) para que se vea todo el contenido
           al rotar entre portrait/landscape sin cortar. Feedback usuario 2026-09-21.
-          Desktop: se conserva max-w-4xl y max-h-[90vh] centrado. dvh (dynamic
-          viewport) mide bien el alto real cuando el teclado o la barra del
-          navegador aparecen. */}
-      <div className={`relative w-full h-[100dvh] sm:h-auto max-w-4xl sm:max-h-[90vh] mx-0 sm:mx-4 rounded-none sm:rounded-2xl ${isDark ? 'bg-zinc-900 border-zinc-700' : 'bg-white border-gray-200'} border-0 sm:border shadow-2xl flex flex-col overflow-hidden`}>
+          Jos 2026-11-10: en landscape movil 90vh ~= 315px y el body se recortaba
+          sin scroll. Forzamos h/max-h al 100dvh en landscape pero SOLO en
+          viewports <lg (1024px) para no romper desktop. Tambien movemos de 90vh
+          a 90dvh — mas preciso cuando teclado o barra del navegador aparecen. */}
+      <div className={`relative w-full h-[100dvh] sm:h-auto max-w-4xl sm:max-h-[90dvh] max-lg:landscape:h-[100dvh] max-lg:landscape:max-h-[100dvh] max-lg:landscape:rounded-none max-lg:landscape:mx-0 mx-0 sm:mx-4 rounded-none sm:rounded-2xl ${isDark ? 'bg-zinc-900 border-zinc-700' : 'bg-white border-gray-200'} border-0 sm:border shadow-2xl flex flex-col overflow-hidden`}>
         {/* Header */}
         <div className={`p-4 sm:p-6 border-b flex-shrink-0 ${isDark ? 'border-zinc-800' : 'border-gray-200'}`}>
           <div className="flex items-center justify-between mb-4 gap-3">
@@ -2124,7 +2389,7 @@ function ApprovalModal({
                 <Clock className="h-3.5 w-3.5" />
                 Historial de cambios
               </h3>
-              <div className={`rounded-xl border ${isDark ? 'border-zinc-700/50' : 'border-gray-200'} overflow-hidden max-h-60 overflow-y-auto`}>
+              <div className={`rounded-xl border ${isDark ? 'border-zinc-700/50' : 'border-gray-200'} overflow-hidden max-h-60 max-lg:landscape:max-h-32 overflow-y-auto`}>
                 {historialData.map((entry, idx) => {
                   const isAprobacion = entry.tipo.includes('aprobacion');
                   const isRechazo = entry.tipo.includes('rechazo');
@@ -2138,7 +2403,7 @@ function ApprovalModal({
                       <div className="flex-1 min-w-0">
                         <p className={`text-xs font-medium ${isDark ? 'text-zinc-300' : 'text-gray-700'}`}>{entry.accion}</p>
                         {isRechazo && entry.detalles?.motivo && (
-                          <p className={`text-[11px] ${isDark ? 'text-red-400/70' : 'text-red-600/70'} mt-0.5`}>Motivo: {entry.detalles.motivo}</p>
+                          <p className={`text-[11px] ${isDark ? 'text-red-400/70' : 'text-red-600/70'} mt-0.5`}>Motivo: {limpiarMotivo(entry.detalles.motivo) || 'no especificado'}</p>
                         )}
                         {isSolicitud && entry.detalles?.caras && (
                           <p className={`text-[11px] ${isDark ? 'text-zinc-500' : 'text-gray-400'} mt-0.5`}>
@@ -2189,7 +2454,7 @@ function ApprovalModal({
 
         {/* Footer con acciones */}
         {isAutorizacionTask && tarea.estatus !== 'Atendido' && tarea.estatus !== 'Cancelado' && (
-          <div className={`p-4 sm:p-6 border-t flex-shrink-0 ${isDark ? 'border-zinc-800' : 'border-gray-200'}`}>
+          <div className={`p-4 sm:p-6 max-lg:landscape:py-2 max-lg:landscape:px-3 border-t flex-shrink-0 ${isDark ? 'border-zinc-800' : 'border-gray-200'}`}>
             {!showRechazoInput ? (
               <>
                 {/* Feedback 2026-08-15: comentario opcional para filtros DG/DCM.
@@ -2255,7 +2520,7 @@ function ApprovalModal({
                 <div className="flex gap-2">
                   <button
                     onClick={() => isFiltroTask ? rechazarFiltroMutation.mutate(rechazoMotivo) : rechazarMutation.mutate(rechazoMotivo)}
-                    disabled={(isFiltroTask ? rechazarFiltroMutation.isPending : rechazarMutation.isPending) || !rechazoMotivo.trim()}
+                    disabled={(isFiltroTask ? rechazarFiltroMutation.isPending : rechazarMutation.isPending) || !motivoRechazoValido(rechazoMotivo)}
                     className="flex-1 flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl bg-red-600 text-white text-sm font-medium hover:bg-red-700 disabled:opacity-50 disabled:cursor-not-allowed transition-all"
                   >
                     {(isFiltroTask ? rechazarFiltroMutation.isPending : rechazarMutation.isPending) && <Loader2 className="h-4 w-4 animate-spin" />}
@@ -2377,8 +2642,16 @@ function TaskDrawer({
     },
   });
 
+  // Tareas del flujo de desposteo. Se evalúan ANTES que isAutorizacionTask
+  // porque 'Autorización Desposteo' también contiene la palabra
+  // "Autorización" y no debe entrar por el camino del ApprovalModal (que
+  // consulta caras/resumen de una propuesta y aquí no aplica).
+  const esDesposteoTask = tarea.tipo === 'Filtro Desposteo' || tarea.tipo === 'Autorización Desposteo';
+  // Desposteo está EXCLUIDO en release (decisión del jefe): nunca accionable aquí.
+  const puedeActuarDesposteo = false;
+
   // Detectar si es tarea de autorización
-  const isAutorizacionTask = tarea.tipo?.includes('Autorización');
+  const isAutorizacionTask = !esDesposteoTask && tarea.tipo?.includes('Autorización');
   const tipoAutorizacion = tarea.tipo?.includes('DG') ? 'dg' : tarea.tipo?.includes('DCM') ? 'dcm' : null;
 
   const [idPropuestaState, setIdPropuestaState] = useState<string | null>(tarea.id_propuesta || null);
@@ -2476,7 +2749,7 @@ function TaskDrawer({
   };
 
   const handleRechazar = () => {
-    if (!rechazoMotivo.trim()) return;
+    if (!motivoRechazoValido(rechazoMotivo)) return;
     rechazarMutation.mutate(rechazoMotivo);
   };
 
@@ -2521,10 +2794,16 @@ function TaskDrawer({
         return;
       }
     }
+    // Aviso de Eliminación → detalle de campaña (no depende de referencia_tipo,
+    // que en filas viejas/cacheadas podía venir como 'solicitud').
+    if (tarea.tipo === 'Aviso Eliminación' && tarea.campania_id) {
+      onNavigate(`/campanas/detail/${tarea.campania_id}`);
+      return;
+    }
     // Si tiene referencia_tipo y referencia_id, usar esos
     if (tarea.referencia_tipo && tarea.referencia_id) {
       const propId = tarea.id_propuesta ? parseInt(tarea.id_propuesta) : null;
-      const path = getDirectNavigationPath(tarea.referencia_tipo, tarea.referencia_id, tarea.titulo || '', tarea.tipo || undefined, tarea.campania_id, propId, tarea.id);
+      const path = getDirectNavigationPath(tarea.referencia_tipo, tarea.referencia_id, tarea.titulo || '', tarea.tipo || undefined, tarea.campania_id, propId, tarea.id, tarea.contenido);
       onNavigate(path);
       return;
     }
@@ -2664,7 +2943,7 @@ function TaskDrawer({
           )}
 
           {/* Botón Ir a ver (oculto para directores en tareas de autorización) */}
-          {canNavigate && onNavigate && !(isAutorizacionTask && ['Director General', 'Director Comercial', 'Gerente Comercial Vía Pública', 'Gerente Comercial Plazas', 'Gerente Comercial'].includes(user?.rol || '')) && (
+          {canNavigate && onNavigate && !(isAutorizacionTask && ['Director General', 'Director Comercial', 'Director Comercial Aeropuerto', 'Gerente Comercial Vía Pública', 'Gerente Comercial Plazas', 'Gerente Comercial'].includes(user?.rol || '')) && (
             <button
               onClick={handleNavigate}
               className="mt-4 w-full flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl bg-gradient-to-r from-purple-600 to-pink-600 text-white text-sm font-medium hover:from-purple-500 hover:to-pink-500 transition-all hover:scale-[1.02] active:scale-[0.98] shadow-lg shadow-purple-500/20"
@@ -2675,7 +2954,7 @@ function TaskDrawer({
           )}
 
           {/* Botón Revisar y Autorizar para directores (visible incluso en finalizadas) */}
-          {isAutorizacionTask && ['Director General', 'Director Comercial', 'Gerente Comercial Vía Pública', 'Gerente Comercial Plazas', 'Gerente Comercial'].includes(user?.rol || '') && tarea.estatus !== 'Cancelado' && onOpenApprovalModal && (
+          {isAutorizacionTask && ['Director General', 'Director Comercial', 'Director Comercial Aeropuerto', 'Gerente Comercial Vía Pública', 'Gerente Comercial Plazas', 'Gerente Comercial'].includes(user?.rol || '') && tarea.estatus !== 'Cancelado' && onOpenApprovalModal && (
             <button
               onClick={() => onOpenApprovalModal()}
               className={`mt-4 w-full flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl text-sm font-bold transition-all hover:scale-[1.02] active:scale-[0.98] ${
@@ -2689,16 +2968,43 @@ function TaskDrawer({
             </button>
           )}
 
+          {/* Desposteo: abre el modal de autorización del desposteo desde la
+              ventana lateral (antes la tarea abría el modal directo y se
+              saltaba este panel). La tarea NO se finaliza a mano: el back la
+              cierra al aprobar o rechazar. Feedback 2026-09-17 (Jos). */}
+          {esDesposteoTask && puedeActuarDesposteo && tarea.estatus === 'Pendiente' && onOpenDesposteoModal && (
+            <button
+              onClick={() => onOpenDesposteoModal()}
+              className="mt-4 w-full flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl text-sm font-bold transition-all hover:scale-[1.02] active:scale-[0.98] bg-gradient-to-r from-rose-500 to-red-500 text-white hover:from-rose-400 hover:to-red-400 shadow-lg shadow-rose-500/20"
+            >
+              <Ban className="h-4 w-4" />
+              {tarea.tipo === 'Filtro Desposteo' ? 'Revisar y dar check' : 'Revisar y autorizar desposteo'}
+            </button>
+          )}
+          {esDesposteoTask && onOpenDesposteoModal && tarea.estatus !== 'Pendiente' && (
+            <button
+              onClick={() => onOpenDesposteoModal()}
+              className={`mt-4 w-full flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl text-sm font-bold transition-all ${isDark ? 'bg-zinc-700 text-zinc-200 hover:bg-zinc-600' : 'bg-gray-200 text-gray-700 hover:bg-gray-300'}`}
+            >
+              <Ban className="h-4 w-4" />
+              Ver desposteo
+            </button>
+          )}
+
           {/* Botón finalizar tarea.
               Oculto para todas las tareas generadas en Gestor de Artes: se
               atienden en la tarea real del modal de Gestor, no en el preview
               lateral. Finalizar aquí solo marcaria estatus=Atendido sin
               disparar los side-effects reales (aprobar arte, subir foto,
               rotar roles, marcar reserva como instalada, etc). Feedback de
-              Jos 2026-07-09 — antes solo se excluia 'Revisión de artes'. */}
+              Jos 2026-07-09 — antes solo se excluia 'Revisión de artes'.
+              Mismo criterio para las tareas de desposteo (2026-09-17): el
+              back las cierra al aprobar/rechazar, y marcarlas Atendido a mano
+              dejaria la solicitud sin resolver. */}
           {contentType === 'tareas'
             && !['Director General', 'Gerente Comercial Vía Pública', 'Gerente Comercial Plazas', 'Gerente Comercial'].includes(user?.rol || '')
-            && !isTareaGestorArtes(tarea.tipo) && (
+            && !isTareaGestorArtes(tarea.tipo)
+            && !esDesposteoTask && (
             <button
               onClick={(e) => {
                 e.stopPropagation();
@@ -2888,6 +3194,79 @@ function TaskDrawer({
           } catch { return null; }
         })()}
 
+        {/* Bitacora de ediciones de la Actividad Comercial (feedback Jos
+            2026-11-06). El componente solo pinta algo si la tarea tiene
+            historial registrado; para tareas nuevas sin ediciones no aparece. */}
+        {tarea.tipo === 'Actividad Comercial' && (
+          <BitacoraTareaInline tareaId={tarea.id} isDark={isDark} />
+        )}
+
+        {/* Prueba de color rechazada: mostrar motivo + boton para subir v2.
+            Jos 2026-10-12: tarea tipo 'Prueba de Color' con contenido JSON
+            que incluye requiereNuevaVersion=true. */}
+        {tarea.tipo === 'Prueba de Color' && tarea.contenido && (() => {
+          try {
+            const c = JSON.parse(tarea.contenido) as {
+              pruebaColorId?: number;
+              scId?: number;
+              propuestaId?: number;
+              version?: number;
+              estatus?: string;
+              origen?: string;
+              requiereNuevaVersion?: boolean;
+              motivoRechazo?: string;
+              archivoAdjunto?: string;
+              enlaceAdjunto?: string;
+            };
+            if (!c.requiereNuevaVersion) return null;
+            return (
+              <div className={`p-5 border-b ${isDark ? 'border-zinc-800/50' : 'border-gray-200'}`}>
+                <h3 className="text-xs font-medium text-red-400 uppercase tracking-wider mb-3 flex items-center gap-2">
+                  <AlertCircle className="h-3.5 w-3.5" />
+                  Prueba de color rechazada
+                </h3>
+                <div className={`rounded-xl p-3 border space-y-2 ${isDark ? 'bg-red-500/5 border-red-500/20' : 'bg-red-50/70 border-red-200'}`}>
+                  {c.motivoRechazo && (
+                    <div>
+                      <div className={`text-[10px] uppercase tracking-wide font-semibold mb-1 ${isDark ? 'text-red-300' : 'text-red-700'}`}>Motivo del rechazo</div>
+                      <div className={`text-sm whitespace-pre-wrap ${isDark ? 'text-zinc-100' : 'text-gray-800'}`}>{c.motivoRechazo}</div>
+                    </div>
+                  )}
+                  {/* Adjuntos opcionales del rechazo. Jos 2026-10-12. */}
+                  {(c.archivoAdjunto || c.enlaceAdjunto) && (
+                    <div className="space-y-1.5 pt-1">
+                      <div className={`text-[10px] uppercase tracking-wide font-semibold ${isDark ? 'text-red-300' : 'text-red-700'}`}>Referencias del rechazo</div>
+                      <div className="flex items-center gap-2 flex-wrap">
+                        {c.archivoAdjunto && (
+                          <a href={c.archivoAdjunto} target="_blank" rel="noreferrer" className={`inline-flex items-center gap-1.5 text-xs font-medium px-2.5 py-1 rounded border ${isDark ? 'text-fuchsia-200 border-fuchsia-500/40 bg-fuchsia-500/10 hover:bg-fuchsia-500/20' : 'text-fuchsia-800 border-fuchsia-300 bg-fuchsia-50 hover:bg-fuchsia-100'}`}>
+                            <FileText className="h-3 w-3" /> Ver archivo
+                          </a>
+                        )}
+                        {c.enlaceAdjunto && (
+                          <a href={c.enlaceAdjunto} target="_blank" rel="noreferrer" className={`inline-flex items-center gap-1.5 text-xs font-medium px-2.5 py-1 rounded border ${isDark ? 'text-cyan-200 border-cyan-500/40 bg-cyan-500/10 hover:bg-cyan-500/20' : 'text-cyan-800 border-cyan-300 bg-cyan-50 hover:bg-cyan-100'}`}>
+                            <ExternalLink className="h-3 w-3" /> Abrir link
+                          </a>
+                        )}
+                      </div>
+                    </div>
+                  )}
+                  <div className={`text-[11px] ${isDark ? 'text-zinc-400' : 'text-gray-600'}`}>
+                    {c.version ? `v${c.version} ` : ''}{c.scId ? `· Circuito #${c.scId} ` : ''}{c.propuestaId ? `· Propuesta #${c.propuestaId}` : ''}
+                  </div>
+                  {c.propuestaId && c.scId && onNavigate && (
+                    <button
+                      onClick={() => onNavigate(`/propuestas?viewId=${c.propuestaId}&pruebaColorNuevaScId=${c.scId}`)}
+                      className={`mt-1 inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold border transition-colors ${isDark ? 'border-fuchsia-500/60 text-fuchsia-100 bg-fuchsia-500/20 hover:bg-fuchsia-500/30' : 'border-fuchsia-400 text-fuchsia-800 bg-fuchsia-50 hover:bg-fuchsia-100'}`}
+                    >
+                      <Upload className="h-3.5 w-3.5" /> Subir nueva versión
+                    </button>
+                  )}
+                </div>
+              </div>
+            );
+          } catch { return null; }
+        })()}
+
         {/* Campañas afectadas — Ajuste Inventario Bloqueado */}
         {tarea.tipo === 'Ajuste Inventario Bloqueado' && tarea.contenido && (() => {
           try {
@@ -3054,7 +3433,7 @@ function TaskDrawer({
                   <ChevronDown className={`h-3 w-3 flex-shrink-0 ${isDark ? 'text-zinc-400' : 'text-gray-500'}`} />
                 </button>
                 {asignadoOpen && (
-                  <div className={`absolute right-0 top-full mt-1 z-50 ${isDark ? 'bg-zinc-900 border-zinc-700' : 'bg-white border-gray-200'} border rounded-lg shadow-xl p-1.5 min-w-[180px] max-h-[220px] overflow-y-auto`}>
+                  <div className={`fixed inset-x-2 top-16 bottom-16 mt-0 w-auto max-w-none max-h-[calc(100dvh-5rem)] overflow-y-auto overscroll-contain lg:absolute lg:inset-auto lg:top-full lg:right-0 lg:bottom-auto lg:mt-1 lg:w-auto lg:min-w-[180px] lg:max-w-[calc(100vw-2rem)] lg:max-h-[220px] z-50 ${isDark ? 'bg-zinc-900 border-zinc-700' : 'bg-white border-gray-200'} border rounded-lg shadow-xl p-1.5`}>
                     {usuarios.map(u => (
                       <label key={u.id} className={`flex items-center gap-2 px-2 py-1.5 ${isDark ? 'hover:bg-zinc-800' : 'hover:bg-gray-100'} rounded cursor-pointer`}>
                         <input
@@ -3168,7 +3547,7 @@ function TaskDrawer({
 
         {/* Notas Dirección — bitácora acumulable, visible para directores y admins en tareas de autorización */}
         {isAutorizacionTask
-          && ['Director General', 'Director Comercial', 'Administrador', 'DEV'].includes(user?.rol || '')
+          && ['Director General', 'Director Comercial', 'Director Comercial Aeropuerto', 'Administrador', 'DEV'].includes(user?.rol || '')
           && tarea.id_solicitud && (
           <NotasDireccionBitacora
             idSolicitud={parseInt(tarea.id_solicitud)}
@@ -3178,7 +3557,7 @@ function TaskDrawer({
         )}
 
         {/* Comentarios (oculto para directores en tareas de autorización) */}
-        {!(isAutorizacionTask && ['Director General', 'Director Comercial', 'Gerente Comercial Vía Pública', 'Gerente Comercial Plazas', 'Gerente Comercial'].includes(user?.rol || '')) && <div className={`p-5 border-t ${isDark ? 'border-zinc-800/50' : 'border-gray-200'}`}>
+        {!(isAutorizacionTask && ['Director General', 'Director Comercial', 'Director Comercial Aeropuerto', 'Gerente Comercial Vía Pública', 'Gerente Comercial Plazas', 'Gerente Comercial'].includes(user?.rol || '')) && <div className={`p-5 border-t ${isDark ? 'border-zinc-800/50' : 'border-gray-200'}`}>
           <div className="flex items-center justify-between mb-4">
             <h3 className={`text-xs font-medium ${isDark ? 'text-zinc-500' : 'text-gray-400'} uppercase tracking-wider flex items-center gap-2`}>
               <MessageSquare className="h-3.5 w-3.5" />
@@ -3283,6 +3662,21 @@ export function NotificacionesPage() {
   const [quickFilter, setQuickFilter] = useState<QuickFilter>('pendientes');
   const [filtersOpen, setFiltersOpen] = useState(false);
 
+  // Chips por tipo de tarea (pestaña Mis Tareas). Acumulables: vacío = todos.
+  const [tiposSeleccionados, setTiposSeleccionados] = useState<Set<string>>(new Set());
+  useEffect(() => { setTiposSeleccionados(new Set()); }, [contentType]);
+  const toggleTipoSeleccionado = useCallback((tipo: string) => {
+    setTiposSeleccionados(prev => {
+      const next = new Set(prev);
+      if (next.has(tipo)) next.delete(tipo); else next.add(tipo);
+      return next;
+    });
+  }, []);
+  // El Tablero (columnas por tipo) solo aplica a Mis Tareas.
+  useEffect(() => {
+    if (contentType === 'notificaciones' && view === 'tablero') setView('lista');
+  }, [contentType, view]);
+
 
   // Estados para filtros avanzados (estilo Proveedores)
   const [filters, setFilters] = useState<FilterCondition[]>([]);
@@ -3314,8 +3708,9 @@ export function NotificacionesPage() {
   const [approvalModalTarea, setApprovalModalTarea] = useState<Notificacion | null>(null);
   const [editSolicitudId, setEditSolicitudId] = useState<number | null>(null);
   const [editPropuesta, setEditPropuesta] = useState<any>(null);
-  const [propuestaBloqueadaStatus, setPropuestaBloqueadaStatus] = useState<string | null>(null);
   const [editCampana, setEditCampana] = useState<any>(null);
+  // Modal informativo cuando se intenta abrir el modal sobre propuesta ya pasada a ventas (bug Oral B)
+  const [propuestaBloqueadaStatus, setPropuestaBloqueadaStatus] = useState<string | null>(null);
 
   // Handler para cerrar el drawer con animación
   const handleCloseDrawer = useCallback(() => {
@@ -3419,6 +3814,8 @@ export function NotificacionesPage() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['notificaciones'] });
       queryClient.invalidateQueries({ queryKey: ['notificaciones-stats'] });
+      // En Mis Tareas el cambio de estatus también se refleja en las tareas de campaña.
+      queryClient.invalidateQueries({ queryKey: ['campana-tareas'], exact: false });
       setSelectedTareaIds(new Set());
     },
   });
@@ -3522,10 +3919,34 @@ export function NotificacionesPage() {
       });
     }, [baseTareas, quickFilter, user?.rol]);
 
-  const filteredTareas = tareasConQuickFilter;
+  // Tipos disponibles (con conteo) bajo el filtro rápido actual, para pintar
+  // los chips de tipo. Se calculan ANTES de aplicar el filtro de tipo para que
+  // un chip no desaparezca al seleccionar otro.
+  const tiposDisponibles = useMemo(() => {
+    const counts = new Map<string, number>();
+    for (const t of tareasConQuickFilter) {
+      const tipo = t.tipo || 'Sin tipo';
+      counts.set(tipo, (counts.get(tipo) || 0) + 1);
+    }
+    return Array.from(counts.entries())
+      .map(([tipo, count]) => ({ tipo, count }))
+      .sort((a, b) => b.count - a.count || a.tipo.localeCompare(b.tipo));
+  }, [tareasConQuickFilter]);
 
-  // Selección masiva: master checkbox que marca/desmarca todas las visibles.
-  const allFilteredIds = useMemo(() => filteredTareas.map(t => t.id), [filteredTareas]);
+  const filteredTareas = useMemo(() => {
+    if (contentType !== 'tareas' || tiposSeleccionados.size === 0) return tareasConQuickFilter;
+    return tareasConQuickFilter.filter(t => tiposSeleccionados.has(t.tipo || 'Sin tipo'));
+  }, [tareasConQuickFilter, tiposSeleccionados, contentType]);
+
+  // Selección masiva: solo las filas que admiten cierre manual (en Mis Tareas
+  // quedan fuera autorizaciones, gestor de artes y desposteo).
+  const puedeSeleccionar = useCallback(
+    (t: Notificacion) => esSeleccionableMasivo(t, contentType, user?.rol),
+    [contentType, user?.rol]
+  );
+  const haySeleccionables = useMemo(() => filteredTareas.some(puedeSeleccionar), [filteredTareas, puedeSeleccionar]);
+  // Master checkbox que marca/desmarca todas las visibles seleccionables.
+  const allFilteredIds = useMemo(() => filteredTareas.filter(puedeSeleccionar).map(t => t.id), [filteredTareas, puedeSeleccionar]);
   const allFilteredSelected = allFilteredIds.length > 0 && allFilteredIds.every(id => selectedTareaIds.has(id));
   const someFilteredSelected = !allFilteredSelected && allFilteredIds.some(id => selectedTareaIds.has(id));
   const toggleAllFilteredSelection = useCallback(() => {
@@ -3648,6 +4069,13 @@ export function NotificacionesPage() {
 
   // Handlers
   const handleSelectTarea = useCallback(async (tarea: Notificacion) => {
+    // Desposteo: ANTES estas dos tareas abrían el DesposteoModal directo y se
+    // saltaban el TaskDrawer con un `return`. Consecuencia: no había panel
+    // lateral, ni comentarios, ni botón de finalizar, así que la tarea se
+    // quedaba activa aunque el gerente ya hubiera dado check.
+    // Feedback 2026-09-17 (Jos): abrir la ventana lateral y desde ahí el modal.
+    // Ahora cae al flujo normal de abajo y el drawer pinta el botón "Revisar
+    // desposteo" (ver esDesposteoTask en el TaskDrawer).
     const isDirectorUser = ['Director General', 'Director Comercial'].includes(user?.rol || '');
     const isAuthTask = tarea.tipo?.includes('Autorización');
     if (isDirectorUser && isAuthTask) {
@@ -3659,12 +4087,13 @@ export function NotificacionesPage() {
   }, [user?.rol]);
 
   // Vista de tabs
-  const viewTabs = [
+  // Tablero (columnas por tipo de tarea) solo en Mis Tareas.
+  const viewTabs: { key: ViewType; label: string; icon: typeof List }[] = [
     { key: 'lista', label: 'Lista', icon: List },
-    //{ key: 'tablero', label: 'Tablero', icon: LayoutGrid },
+    ...(contentType === 'tareas' ? [{ key: 'tablero' as ViewType, label: 'Tablero', icon: LayoutGrid }] : []),
     { key: 'calendario', label: 'Calendario', icon: CalendarDays },
     { key: 'notas', label: 'Notas', icon: StickyNote },
-  ] as const;
+  ];
 
   return (
     <div className="min-h-screen flex flex-col">
@@ -3743,8 +4172,10 @@ export function NotificacionesPage() {
             ))}
           </div>
 
-          {/* Botones de acción */}
-          <div className="flex items-center gap-2">
+          {/* Botones de acción — max-lg:flex-shrink-0 para que en mobile/tablet
+              el grupo izquierdo (tabs) scrolle y nunca encime con estos.
+              En desktop (lg+) queda igual que antes. */}
+          <div className="flex items-center gap-2 max-lg:flex-shrink-0">
             {contentType === 'tareas' && puedeCrearActividadComercial && (
               <button
                 onClick={() => setShowActividadModal(true)}
@@ -4116,6 +4547,49 @@ export function NotificacionesPage() {
             </div>
           </div>
         )}
+
+        {/* Chips por tipo de tarea — filtros rápidos acumulables (solo Mis Tareas,
+            en Lista y Tablero). Vacío = todos los tipos. */}
+        {contentType === 'tareas' && (view === 'lista' || view === 'tablero') && tiposDisponibles.length > 0 && (
+          <div className={`flex flex-wrap items-center gap-2 px-3 md:px-6 pb-3`}>
+            <button
+              onClick={() => setTiposSeleccionados(new Set())}
+              className={`px-3 py-1 rounded-full text-xs font-medium border transition-colors ${
+                tiposSeleccionados.size === 0
+                  ? 'bg-purple-600 text-white border-purple-500'
+                  : isDark ? 'bg-zinc-800/60 text-zinc-300 border-zinc-700 hover:bg-zinc-800' : 'bg-gray-50 text-gray-600 border-gray-200 hover:bg-gray-100'
+              }`}
+            >
+              Todas
+            </button>
+            {tiposDisponibles.map(({ tipo, count }) => {
+              const activo = tiposSeleccionados.has(tipo);
+              const cfg = getTipoConfig(tipo);
+              const TipoIcon = cfg.icon;
+              return (
+                <button
+                  key={tipo}
+                  onClick={() => toggleTipoSeleccionado(tipo)}
+                  aria-pressed={activo}
+                  className={`flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-medium border transition-colors ${
+                    activo
+                      ? `${cfg.bg} ${cfg.color} ${cfg.border} ring-1 ring-current/40`
+                      : isDark ? 'bg-zinc-800/60 text-zinc-300 border-zinc-700 hover:bg-zinc-800' : 'bg-gray-50 text-gray-600 border-gray-200 hover:bg-gray-100'
+                  }`}
+                >
+                  <TipoIcon className={`h-3 w-3 ${activo ? cfg.color : isDark ? 'text-zinc-500' : 'text-gray-400'}`} />
+                  {tipo}
+                  <span className={`px-1.5 rounded-full text-[10px] ${activo ? 'bg-black/20' : isDark ? 'bg-zinc-700 text-zinc-400' : 'bg-gray-200 text-gray-500'}`}>{count}</span>
+                </button>
+              );
+            })}
+            {tiposSeleccionados.size > 0 && (
+              <span className={`text-[11px] ${isDark ? 'text-zinc-500' : 'text-gray-400'}`}>
+                {tiposSeleccionados.size} tipo{tiposSeleccionados.size === 1 ? '' : 's'} · {filteredTareas.length} tarea{filteredTareas.length === 1 ? '' : 's'}
+              </span>
+            )}
+          </div>
+        )}
       </div>
 
       {/* Contenido principal */}
@@ -4130,7 +4604,7 @@ export function NotificacionesPage() {
           <div className="space-y-3">
             <div className="flex items-center justify-between gap-3">
               <div className="flex items-center gap-3">
-                {filteredTareas.length > 0 && contentType === 'notificaciones' && (
+                {filteredTareas.length > 0 && haySeleccionables && (
                   <label className="flex items-center gap-2 cursor-pointer select-none">
                     <input
                       type="checkbox"
@@ -4150,21 +4624,21 @@ export function NotificacionesPage() {
                   {activeGroupings.length > 0 && <span className={isDark ? 'text-zinc-600' : 'text-gray-400'}> · {activeGroupings.length} agrupación{activeGroupings.length > 1 ? 'es' : ''}</span>}
                 </span>
               </div>
-              {contentType === 'notificaciones' && selectedTareaIds.size > 0 && (
+              {selectedTareaIds.size > 0 && (
                 <div className="flex items-center gap-2">
                   <button
                     onClick={() => bulkUpdateEstatusMutation.mutate({ ids: Array.from(selectedTareaIds), estatus: 'Atendido' })}
                     disabled={bulkUpdateEstatusMutation.isPending}
                     className="px-3 py-1.5 text-xs font-medium bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg disabled:opacity-50 transition-colors"
                   >
-                    Marcar como leídas
+                    {contentType === 'notificaciones' ? 'Marcar como leídas' : 'Marcar como finalizadas'}
                   </button>
                   <button
                     onClick={() => bulkUpdateEstatusMutation.mutate({ ids: Array.from(selectedTareaIds), estatus: 'Pendiente' })}
                     disabled={bulkUpdateEstatusMutation.isPending}
                     className="px-3 py-1.5 text-xs font-medium bg-amber-600 hover:bg-amber-700 text-white rounded-lg disabled:opacity-50 transition-colors"
                   >
-                    Marcar como no leídas
+                    {contentType === 'notificaciones' ? 'Marcar como no leídas' : 'Marcar sin finalizar'}
                   </button>
                   <button
                     onClick={() => setSelectedTareaIds(new Set())}
@@ -4178,16 +4652,20 @@ export function NotificacionesPage() {
             </div>
 
             {activeGroupings.length > 0 ? (
-              /* Vista con agrupaciones */
-              <div className="space-y-3">
+              /* Vista con agrupaciones. key por pestaña: remonta los grupos al
+                 cambiar de tab para que aplique su estado inicial (contraído /
+                 extendido) y no herede el de la otra pestaña. */
+              <div className="space-y-3" key={contentType}>
                 {nestedGroups.map((group) => (
                   <NestedSection
                     key={group.key}
                     group={group}
                     groupByList={activeGroupings}
                     onSelectTarea={handleSelectTarea}
-                    selectedIds={contentType === 'notificaciones' ? selectedTareaIds : undefined}
-                    onToggleSelection={contentType === 'notificaciones' ? toggleTareaSelection : undefined}
+                    selectedIds={haySeleccionables ? selectedTareaIds : undefined}
+                    onToggleSelection={haySeleccionables ? toggleTareaSelection : undefined}
+                    canSelect={puedeSeleccionar}
+                    defaultOpen={contentType !== 'tareas' || isDirector}
                     currentUserId={currentUserId}
                     onEditActividad={puedeCrearActividadComercial ? (t) => setEditingActividad({ id: t.id, descripcion: t.mensaje || t.titulo, fecha_fin: t.fecha_fin, contenido: t.contenido }) : undefined}
                   />
@@ -4211,7 +4689,7 @@ export function NotificacionesPage() {
                     if (isCanceladoInline) return { bg: 'bg-zinc-500/20', border: 'border-zinc-500/30', color: 'text-zinc-400', label: 'Cancelado' };
                     // Filtro DG/DCM devuelto a corrección: 'Rechazado' en BD pero NO es rechazo total
                     // (el Gerente lo devolvió al asesor para corregir). Badge ámbar, no rojo/verde.
-                    if ((tarea.tipo === 'Filtro Autorización DG' || tarea.tipo === 'Filtro Autorización DCM') && isRechazadoInline) return { bg: 'bg-amber-500/20', border: 'border-amber-500/30', color: 'text-amber-400', label: 'Devuelta a corrección' };
+                    if (tarea.tipo === 'Filtro Autorización DG' && isRechazadoInline) return { bg: 'bg-amber-500/20', border: 'border-amber-500/30', color: 'text-amber-400', label: 'Devuelta a corrección' };
                     if (isRechazoInline) return { bg: 'bg-red-500/20', border: 'border-red-500/30', color: 'text-red-400', label: 'Rechazo' };
                     if (isAprobacionInline) return { bg: 'bg-emerald-500/20', border: 'border-emerald-500/30', color: 'text-emerald-400', label: 'Aprobada' };
                     if (isRechazadoInline) return { bg: 'bg-red-500/20', border: 'border-red-500/30', color: 'text-red-400', label: 'Rechazo' };
@@ -4231,15 +4709,19 @@ export function NotificacionesPage() {
                         {/* Checkbox de selección masiva — solo en tab Notificaciones,
                             porque en Mis Tareas 'estatus=Atendido' significa tarea
                             completada, no solo "leída". */}
-                        {contentType === 'notificaciones' && (
+                        {haySeleccionables && (
                           <div className="pt-1.5">
-                            <input
-                              type="checkbox"
-                              checked={selectedTareaIds.has(tarea.id)}
-                              onClick={(e) => e.stopPropagation()}
-                              onChange={(e) => { e.stopPropagation(); toggleTareaSelection(tarea.id); }}
-                              className="w-4 h-4 accent-purple-500 cursor-pointer"
-                            />
+                            {puedeSeleccionar(tarea) ? (
+                              <input
+                                type="checkbox"
+                                checked={selectedTareaIds.has(tarea.id)}
+                                onClick={(e) => e.stopPropagation()}
+                                onChange={(e) => { e.stopPropagation(); toggleTareaSelection(tarea.id); }}
+                                className="w-4 h-4 accent-purple-500 cursor-pointer"
+                              />
+                            ) : (
+                              <span className="block w-4 h-4" aria-hidden="true" />
+                            )}
                           </div>
                         )}
                         {/* Indicador de estado + icono (oculto para auth) */}
@@ -4386,6 +4868,7 @@ export function NotificacionesPage() {
                                 if (tarea.tipo?.includes('Rechazo')) {
                                   if (tarea.referencia_tipo === 'propuesta' && tarea.id_propuesta) {
                                     propuestasService.getById(parseInt(tarea.id_propuesta)).then(p => {
+                                      // Guard caso Oral B 30-oct-2026: no abrir modal sobre propuesta ya aprobada
                                       if (p.status === 'Aprobada' || p.status === 'Pase a ventas') {
                                         setPropuestaBloqueadaStatus(p.status);
                                         return;
@@ -4400,10 +4883,15 @@ export function NotificacionesPage() {
                                   }
                                   return;
                                 }
+                                // Aviso de Eliminación → detalle de campaña (solo lectura).
+                                if (tarea.tipo === 'Aviso Eliminación' && tarea.campania_id) {
+                                  navigate(`/campanas/detail/${tarea.campania_id}`);
+                                  return;
+                                }
                                 // Si tiene referencia_tipo y referencia_id, usar esos
                                 if (tarea.referencia_tipo && tarea.referencia_id) {
                                   const propId = tarea.id_propuesta ? parseInt(tarea.id_propuesta) : null;
-                                  const path = getDirectNavigationPath(tarea.referencia_tipo, tarea.referencia_id, tarea.titulo || '', tarea.tipo || undefined, tarea.campania_id, propId, tarea.id);
+                                  const path = getDirectNavigationPath(tarea.referencia_tipo, tarea.referencia_id, tarea.titulo || '', tarea.tipo || undefined, tarea.campania_id, propId, tarea.id, tarea.contenido);
                                   navigate(path);
                                   return;
                                 }
@@ -4499,6 +4987,7 @@ export function NotificacionesPage() {
                 handleCloseDrawer();
                 if (selectedTarea.referencia_tipo === 'propuesta' && selectedTarea.id_propuesta) {
                   propuestasService.getById(parseInt(selectedTarea.id_propuesta)).then(p => {
+                    // Guard caso Oral B 30-oct-2026: no abrir modal sobre propuesta ya aprobada
                     if (p.status === 'Aprobada' || p.status === 'Pase a ventas') {
                       setPropuestaBloqueadaStatus(p.status);
                       return;
@@ -4522,7 +5011,11 @@ export function NotificacionesPage() {
               queryClient.invalidateQueries({ queryKey: ['notificaciones-stats'] });
             }}
             contentType={contentType}
-            onOpenApprovalModal={selectedTarea.tipo?.includes('Autorización') ? () => setApprovalModalTarea(selectedTarea) : undefined}
+            onOpenApprovalModal={
+              selectedTarea.tipo?.includes('Autorización') && selectedTarea.tipo !== 'Autorización Desposteo'
+                ? () => setApprovalModalTarea(selectedTarea)
+                : undefined
+            }
           />
         </>
       )}

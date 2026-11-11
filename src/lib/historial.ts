@@ -35,6 +35,21 @@ const formatValue = (v: unknown): string => {
   return String(v);
 };
 
+// Un motivo "trivial" (vacío, solo espacios o solo signos de puntuación como
+// ".", "-", "..") se trata como SIN motivo, para no mostrar "Motivo: ." .
+export function limpiarMotivo(v: unknown): string {
+  const s = v === null || v === undefined ? '' : String(v).trim();
+  if (!s) return '';
+  if (!/[0-9A-Za-zÁÉÍÓÚÜÑáéíóúüñ]/.test(s)) return ''; // sin letras ni números → trivial
+  return s;
+}
+
+// Un motivo de rechazo debe EXPLICAR algo (no solo "." o puntuación). Espejo de
+// la validación del back (≥3 caracteres reales). Evita el "Motivo: ." (Jos).
+export function motivoRechazoValido(v: unknown): boolean {
+  return String(v ?? '').replace(/[\s\p{P}\p{S}]+/gu, '').length >= 3;
+}
+
 export function formatHistorialDetalles(detalles: string | null | undefined): string {
   if (!detalles) return '';
   const s = String(detalles).trim();
