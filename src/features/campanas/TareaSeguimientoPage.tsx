@@ -1202,7 +1202,7 @@ function DigitalGalleryModal({
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center">
       <div className="absolute inset-0 bg-black/80" onClick={onClose} />
-      <div className="relative bg-card border border-border rounded-xl w-full max-w-4xl mx-4 max-h-[90vh] flex flex-col">
+      <div className="relative bg-card border border-border rounded-xl w-full max-w-4xl mx-4 max-h-[90dvh] max-lg:landscape:h-[100dvh] max-lg:landscape:max-h-[100dvh] max-lg:landscape:rounded-none max-lg:landscape:mx-0 flex flex-col">
         {/* Header */}
         <div className="flex items-center justify-between p-4 border-b border-border flex-shrink-0">
           <h3 className="text-lg font-semibold flex items-center gap-2">
@@ -1416,7 +1416,7 @@ function TradicionalGalleryModal({
   return (
     <div className="fixed inset-0 z-[60] flex items-center justify-center">
       <div className="absolute inset-0 bg-black/80" onClick={onClose} />
-      <div className="relative bg-card border border-border rounded-xl w-full max-w-4xl mx-4 max-h-[90vh] flex flex-col">
+      <div className="relative bg-card border border-border rounded-xl w-full max-w-4xl mx-4 max-h-[90dvh] max-lg:landscape:h-[100dvh] max-lg:landscape:max-h-[100dvh] max-lg:landscape:rounded-none max-lg:landscape:mx-0 flex flex-col">
         {/* Header */}
         <div className="flex items-center justify-between p-4 border-b border-border flex-shrink-0">
           <h3 className="text-lg font-semibold flex items-center gap-2">
@@ -1600,8 +1600,8 @@ function UploadArtModal({
   selectedInventory: InventoryRow[];
   onSubmit: (data: { option: UploadOption; value: string | File; inventoryIds: string[]; markInstalado?: boolean; instalacionMode?: 'instalado' | 'rotacion'; operacionesAsignados?: { ids: number[]; nombres: string[] } | null }) => void;
   onSubmitDigital?: (data: { files: { file: File; spot: number }[]; inventoryIds: string[]; markInstalado?: boolean; instalacionMode?: 'instalado' | 'rotacion'; operacionesAsignados?: { ids: number[]; nombres: string[] } | null }) => void;
-  onSubmitTradicional?: (data: { archivos: { archivo: string; nota: string; spot: number; nombre_arte?: string | null; estatus_operaciones?: string | null }[]; inventoryIds: string[]; markInstalado?: boolean; instalacionMode?: 'instalado' | 'rotacion'; operacionesAsignados?: { ids: number[]; nombres: string[] } | null }) => void;
-  onSubmitDigitalFromLibrary?: (data: { archivos: { archivo: string; nota: string; spot: number; tipo: string; nombre_arte?: string | null; estatus_operaciones?: string | null }[]; inventoryIds: string[]; markInstalado?: boolean; instalacionMode?: 'instalado' | 'rotacion'; operacionesAsignados?: { ids: number[]; nombres: string[] } | null }) => void;
+  onSubmitTradicional?: (data: { archivos: { archivo: string; nota: string; spot: number; nombre_arte?: string | null; estatus_operaciones?: string | null; cantidad_inicial?: number | null }[]; inventoryIds: string[]; markInstalado?: boolean; instalacionMode?: 'instalado' | 'rotacion'; operacionesAsignados?: { ids: number[]; nombres: string[] } | null }) => void;
+  onSubmitDigitalFromLibrary?: (data: { archivos: { archivo: string; nota: string; spot: number; tipo: string; nombre_arte?: string | null; estatus_operaciones?: string | null; cantidad_inicial?: number | null }[]; inventoryIds: string[]; markInstalado?: boolean; instalacionMode?: 'instalado' | 'rotacion'; operacionesAsignados?: { ids: number[]; nombres: string[] } | null }) => void;
   artesExistentes: ArteExistente[];
   addedArtes: ArteExistente[];
   onAddedArtesChange: (artes: ArteExistente[]) => void;
@@ -1714,6 +1714,10 @@ function UploadArtModal({
   const [imageNames, setImageNames] = useState<Map<string, string>>(new Map());
   // Estatus Operaciones (texto manual opcional) por imagen — tradicional
   const [imageEstatusOps, setImageEstatusOps] = useState<Map<string, string>>(new Map());
+  // Cantidad inicial del almacen por arte (opcional) — Almacen Artes fase 1.
+  // Mapa compartido tradicional/digital (feedback Jos 2026-11-05).
+  // #1219184885843086
+  const [imageCantidadesInicial, setImageCantidadesInicial] = useState<Map<string, number>>(new Map());
   // Modo del step 2 — tradicional. Espejo del digital.
   const [wizardModo, setWizardModo] = useState<'versionado' | 'generico'>('versionado');
   const [nombreGenerico, setNombreGenerico] = useState('');
@@ -2069,6 +2073,7 @@ function UploadArtModal({
         nombre_arte: digitalImageNames.get(key)?.trim() || null,
         estatus_operaciones: digitalImageEstatusOps.get(key)?.trim() || null,
         nombre_generico: digitalGenericoVal || null,
+        cantidad_inicial: imageCantidadesInicial.get(key) ?? null,
       }));
       const { proceed, markInstalado, instalacionMode, operacionesAsignados } = await checkAndConfirmInstalado(archivos.map(a => a.archivo));
       if (!proceed) return;
@@ -2104,6 +2109,7 @@ function UploadArtModal({
         nombre_arte: imageNames.get(key)?.trim() || null,
         estatus_operaciones: imageEstatusOps.get(key)?.trim() || null,
         nombre_generico: genericoVal || null,
+        cantidad_inicial: imageCantidadesInicial.get(key) ?? null,
       }));
       const { proceed, markInstalado, instalacionMode, operacionesAsignados } = await checkAndConfirmInstalado(archivos.map(a => a.archivo));
       if (!proceed) return;
@@ -3307,6 +3313,28 @@ function UploadArtModal({
                                     placeholder="Estatus de operaciones (opcional)"
                                   />
                                 </div>
+                                <label className={`block text-[10px] font-medium mb-1 mt-1.5 ${isDark ? 'text-zinc-400' : 'text-gray-600'}`}>
+                                  Cantidad inicial en almacén {idx + 1}
+                                </label>
+                                <input
+                                  type="number"
+                                  min={0}
+                                  value={imageCantidadesInicial.get(id) ?? ''}
+                                  onChange={(e) => {
+                                    const raw = e.target.value;
+                                    setImageCantidadesInicial(prev => {
+                                      const next = new Map(prev);
+                                      if (raw === '') next.delete(id);
+                                      else {
+                                        const n = Number(raw);
+                                        if (Number.isFinite(n) && n >= 0) next.set(id, Math.trunc(n));
+                                      }
+                                      return next;
+                                    });
+                                  }}
+                                  placeholder="0 (opcional)"
+                                  className="w-full px-2 py-1.5 text-xs bg-background border border-border rounded-lg focus:outline-none focus:ring-1 focus:ring-purple-500"
+                                />
                               </div>
                             </div>
                           </div>
@@ -3602,7 +3630,7 @@ function UploadArtModal({
           onKeyDown={(e) => { if (e.key === 'Escape') setPreviewArte(null); }}
           tabIndex={-1}
         >
-          <div className="relative w-full max-w-[95vw] max-h-[95vh] flex flex-col items-center gap-3" onClick={(e) => e.stopPropagation()}>
+          <div className="relative w-full max-w-[95vw] max-h-[95dvh] max-lg:landscape:h-[100dvh] max-lg:landscape:max-h-[100dvh] max-lg:landscape:rounded-none max-lg:landscape:mx-0 flex flex-col items-center gap-3" onClick={(e) => e.stopPropagation()}>
             <button
               type="button"
               onClick={() => setPreviewArte(null)}
@@ -7220,7 +7248,7 @@ function TaskDetailModal({
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70">
-      <div className="bg-card border border-border rounded-xl w-full max-w-[95vw] max-h-[95vh] shadow-2xl flex flex-col">
+      <div className="bg-card border border-border rounded-xl w-full max-w-[95vw] max-h-[95dvh] max-lg:landscape:h-[100dvh] max-lg:landscape:max-h-[100dvh] max-lg:landscape:rounded-none max-lg:landscape:mx-0 shadow-2xl flex flex-col">
         {/* Header */}
         <div className="px-4 sm:px-6 py-4 border-b border-border bg-gradient-to-r from-purple-900/30 to-transparent flex-shrink-0">
           <div className="flex items-start sm:items-center justify-between gap-2">
@@ -10704,7 +10732,7 @@ function TaskDetailModal({
                         </div>
                       ) : (
                         /* Vista sin agrupar - tabla plana */
-                        <table className="w-full text-sm">
+                        <table className="w-full text-sm min-w-[640px]">
                           <thead className="bg-zinc-800/80 sticky top-0 z-10">
                             <tr>
                               <th className="p-2 text-left text-xs font-medium text-zinc-400">ID</th>
@@ -11139,7 +11167,7 @@ function TaskDetailModal({
                   </div>
 
                   <div className="max-h-[500px] overflow-auto border border-border rounded-lg">
-                    <table className="w-full text-sm">
+                    <table className="w-full text-sm min-w-[640px]">
                       <thead className="bg-zinc-800/80 sticky top-0 z-10">
                         <tr>
                           <th className="p-2 text-left text-xs font-medium text-zinc-400">ID</th>
@@ -11259,7 +11287,7 @@ function TaskDetailModal({
                           <ChevronDown className="h-3 w-3 flex-shrink-0 text-zinc-400" />
                         </button>
                         {asigDropdownOpen && (
-                          <div className="absolute left-0 top-full mt-1 z-50 bg-zinc-900 border border-zinc-700 rounded-lg shadow-xl p-1.5 min-w-[220px] max-h-[260px] overflow-y-auto">
+                          <div className="fixed inset-x-2 top-16 bottom-16 mt-0 w-auto max-w-none max-h-[calc(100dvh-5rem)] overflow-y-auto overscroll-contain lg:absolute lg:inset-auto lg:left-0 lg:top-full lg:right-auto lg:bottom-auto lg:mt-1 lg:w-auto lg:min-w-[220px] lg:max-w-[calc(100vw-2rem)] lg:max-h-[260px] z-50 bg-zinc-900 border border-zinc-700 rounded-lg shadow-xl p-1.5">
                             {usuariosParaAsignar.map(u => (
                               <label key={u.id} className="flex items-center gap-2 px-2 py-1.5 hover:bg-zinc-800 rounded cursor-pointer">
                                 <input
@@ -11901,7 +11929,7 @@ function TaskDetailModal({
                                 </div>
                               </div>
                             ) : (
-                              <div className="grid grid-cols-4 gap-1.5">
+                              <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-1.5">
                                 {digitalEditLocalArtes.map((art) => {
                                   const isVideo = /\.(mp4|mov|webm|avi)$/i.test(art.url || '');
                                   const isSelected = selectedDigitalEditImages.has(art.id);
@@ -12146,7 +12174,7 @@ function TaskDetailModal({
                                 </div>
                               </div>
                             ) : (
-                              <div className="grid grid-cols-4 gap-1.5">
+                              <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-1.5">
                                 {artesExistentes.map((art) => {
                                   const isSelected = editSelectedImages.has(art.id);
                                   return (
@@ -13100,7 +13128,7 @@ function OrdenImpresionModal({
 
   return (
     <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4" onClick={onClose}>
-      <div className="bg-card border border-border rounded-xl w-full max-w-lg max-h-[90vh] overflow-y-auto shadow-2xl" onClick={e => e.stopPropagation()}>
+      <div className="bg-card border border-border rounded-xl w-full max-w-lg max-h-[90dvh] max-lg:landscape:h-[100dvh] max-lg:landscape:max-h-[100dvh] max-lg:landscape:rounded-none max-lg:landscape:mx-0 overflow-y-auto shadow-2xl" onClick={e => e.stopPropagation()}>
         {/* Header */}
         <div className="px-5 py-4 border-b border-border bg-gradient-to-r from-blue-500/10 to-purple-500/10">
           <div className="flex items-center justify-between">
@@ -14046,7 +14074,7 @@ function CreateTaskModal({
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center">
       <div className="absolute inset-0 bg-black/50 backdrop-blur-sm" onClick={handleClose} />
-      <div className="relative bg-card border border-border rounded-xl w-full max-w-lg mx-4 p-6 max-h-[90vh] overflow-y-auto">
+      <div className="relative bg-card border border-border rounded-xl w-full max-w-lg mx-4 p-6 max-h-[90dvh] max-lg:landscape:h-[100dvh] max-lg:landscape:max-h-[100dvh] max-lg:landscape:rounded-none max-lg:landscape:mx-0 overflow-y-auto">
         <div className="flex items-center justify-between mb-4">
           <h3 className="text-lg font-semibold flex items-center gap-2">
             <Plus className="h-5 w-5 text-purple-400" />
@@ -18519,7 +18547,7 @@ export function TareaSeguimientoPage() {
   }, [campanaId]);
 
   // Handler para asignar arte digital desde biblioteca (wizard con notas)
-  const handleUploadDigitalFromLibrary = useCallback(async (data: { archivos: { archivo: string; nota: string; spot: number; tipo: string; nombre_arte?: string | null; estatus_operaciones?: string | null }[]; inventoryIds: string[]; markInstalado?: boolean; instalacionMode?: 'instalado' | 'rotacion'; operacionesAsignados?: { ids: number[]; nombres: string[] } | null }) => {
+  const handleUploadDigitalFromLibrary = useCallback(async (data: { archivos: { archivo: string; nota: string; spot: number; tipo: string; nombre_arte?: string | null; estatus_operaciones?: string | null; cantidad_inicial?: number | null }[]; inventoryIds: string[]; markInstalado?: boolean; instalacionMode?: 'instalado' | 'rotacion'; operacionesAsignados?: { ids: number[]; nombres: string[] } | null }) => {
     const reservaIds = selectedInventoryItems.flatMap(item =>
       item.rsv_id.split(',').map(id => parseInt(id.trim())).filter(id => !isNaN(id))
     );
@@ -18547,6 +18575,9 @@ export function TareaSeguimientoPage() {
         nota: a.nota,
         nombre_arte: a.nombre_arte ?? null,
         estatus_operaciones: a.estatus_operaciones ?? null,
+        // Almacen Artes: cantidad inicial opcional capturada en el modal de
+        // carga (feedback Jos 2026-11-05). #1219184885843086
+        cantidad_inicial: a.cantidad_inicial ?? null,
       }));
 
       await campanasService.assignArteDigital(campanaId, reservaIds, filesWithMeta, data.markInstalado === true, data.instalacionMode, data.operacionesAsignados);
@@ -18568,7 +18599,7 @@ export function TareaSeguimientoPage() {
   }, [selectedInventoryItems, campanaId, queryClient]);
 
   // Handler para subir artes tradicionales (múltiples con notas)
-  const handleUploadTradicionalArt = useCallback(async (data: { archivos: { archivo: string; nota: string; spot: number; nombre_arte?: string | null; estatus_operaciones?: string | null }[]; inventoryIds: string[]; markInstalado?: boolean; instalacionMode?: 'instalado' | 'rotacion'; operacionesAsignados?: { ids: number[]; nombres: string[] } | null }) => {
+  const handleUploadTradicionalArt = useCallback(async (data: { archivos: { archivo: string; nota: string; spot: number; nombre_arte?: string | null; estatus_operaciones?: string | null; cantidad_inicial?: number | null }[]; inventoryIds: string[]; markInstalado?: boolean; instalacionMode?: 'instalado' | 'rotacion'; operacionesAsignados?: { ids: number[]; nombres: string[] } | null }) => {
     const reservaIds = selectedInventoryItems.flatMap(item =>
       item.rsv_id.split(',').map(id => parseInt(id.trim())).filter(id => !isNaN(id))
     );
@@ -21233,8 +21264,8 @@ export function TareaSeguimientoPage() {
                                             </div>
                                           </button>
                                           {level3Expanded && (
-                                            <div className="bg-card/50 ml-4">
-                                              <table className="w-full text-xs">
+                                            <div className="bg-card/50 ml-4 overflow-x-auto scrollbar-purple">
+                                              <table className="w-full text-xs min-w-[640px]">
                                                 <thead className="bg-purple-900/20">
                                                   <tr className="border-b border-border text-left">
                                                     <th className="p-1.5 w-6"></th>
@@ -21272,8 +21303,8 @@ export function TareaSeguimientoPage() {
               </div>
             ) : activeMainTab === 'atender' && activeGroupingsAtender.length === 0 ? (
               // Tabla plana de Revisar y Aprobar (sin agrupaciones)
-              <div className="bg-card/50">
-                <table className="w-full text-xs">
+              <div className="bg-card/50 overflow-x-auto scrollbar-purple">
+                <table className="w-full text-xs min-w-[640px]">
                   <thead className="sticky top-0 bg-purple-900/20 z-10">
                     <tr className="border-b border-border text-left">
                       <th className="p-2 w-8">
@@ -21468,8 +21499,8 @@ export function TareaSeguimientoPage() {
                                             <span className="text-[10px] text-zinc-500">{items.length}</span>
                                           </button>
                                           {level3Expanded && (
-                                            <div className="bg-zinc-900/20">
-                                              <table className="w-full text-xs">
+                                            <div className="bg-zinc-900/20 overflow-x-auto scrollbar-purple">
+                                              <table className="w-full text-xs min-w-[640px]">
                                                 <thead className="bg-purple-900/20">
                                                   <tr className="border-b border-border text-left">
                                                     <th className="p-2 w-8">
@@ -21527,8 +21558,8 @@ export function TareaSeguimientoPage() {
               </div>
             ) : activeMainTab === 'programacion' && activeGroupingsProgramacion.length === 0 ? (
               // Tabla plana de Programación (sin agrupaciones)
-              <div className="bg-card/50">
-                <table className="w-full text-xs">
+              <div className="bg-card/50 overflow-x-auto scrollbar-purple">
+                <table className="w-full text-xs min-w-[640px]">
                   <thead className="sticky top-0 bg-purple-900/20 z-10">
                     <tr className="border-b border-border text-left">
                       <th className="p-2 w-8">
@@ -21923,8 +21954,8 @@ export function TareaSeguimientoPage() {
                                             </div>
                                           </button>
                                           {level3Expanded && (
-                                            <div className="bg-card/50 ml-4">
-                                              <table className="w-full text-xs">
+                                            <div className="bg-card/50 ml-4 overflow-x-auto scrollbar-purple">
+                                              <table className="w-full text-xs min-w-[640px]">
                                                 <thead className="bg-purple-900/20">
                                                   <tr className="border-b border-border text-left">
                                                     <th className="p-2 w-8"></th>
@@ -21962,8 +21993,8 @@ export function TareaSeguimientoPage() {
               </div>
             ) : activeMainTab === 'testigo' && activeGroupingsTestigo.length === 0 ? (
               // Tabla plana de Validar Instalación (sin agrupaciones)
-              <div className="bg-card/50">
-                <table className="w-full text-xs">
+              <div className="bg-card/50 overflow-x-auto scrollbar-purple">
+                <table className="w-full text-xs min-w-[640px]">
                   <thead className="sticky top-0 bg-purple-900/20 z-10">
                     <tr className="border-b border-border text-left">
                       <th className="p-2 w-8">
@@ -22141,7 +22172,7 @@ export function TareaSeguimientoPage() {
                       icon={ClipboardList}
                     />
                   ) : (
-                    <table className="w-full text-xs">
+                    <table className="w-full text-xs min-w-[640px]">
                       <thead className="sticky top-0 bg-card z-10">
                         <tr className="border-b border-border text-left">
                           <th className="p-2 font-medium text-purple-300">Tipo</th>
@@ -22219,7 +22250,7 @@ export function TareaSeguimientoPage() {
                       icon={CheckCircle2}
                     />
                   ) : (
-                    <table className="w-full text-xs">
+                    <table className="w-full text-xs min-w-[640px]">
                       <thead className="sticky top-0 bg-card z-10">
                         <tr className="border-b border-border text-left">
                           <th className="p-2 font-medium text-purple-300">ID</th>

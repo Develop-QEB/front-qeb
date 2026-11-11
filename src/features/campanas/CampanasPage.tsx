@@ -4,7 +4,7 @@ import { useQuery } from '@tanstack/react-query';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import {
   Search, Download, Filter, ChevronDown, ChevronRight, ChevronLeft, X, Layers,
-  Calendar, Clock, Eye, Megaphone, Edit2, Check, Minus, ArrowUpDown, User,
+  Calendar, Clock, Eye, Megaphone, Edit2, Check, Minus, User,
   List, LayoutGrid, Building2, MapPin, Loader2, Package, ClipboardList, Plus, Trash2,
   ArrowUp, ArrowDown, Lock, SlidersHorizontal, Upload, Printer, Monitor, Camera, Share2, Columns3,
   Image, FileText, DollarSign, Hash, Gift, AlertTriangle, Film, Play, Zap
@@ -48,14 +48,16 @@ import CampanasTableroView, {
   CAMPANAS_COLUMNAS, CAMPANAS_COLUMNAS_KEYS,
 } from './CampanasTableroView';
 import {
-  ordenarTablero, ORDEN_RAPIDO_DEFAULT, ORDEN_RAPIDO_TABLA_DEFAULT, type OrdenRapido,
+  ordenarTablero, ordenCampo, ORDEN_RAPIDO_DEFAULT, ORDEN_RAPIDO_TABLA_DEFAULT, type OrdenRapido,
   construirOpcionesCambio, fechaUltimoCambio,
 } from '../../lib/tableroVistas';
-import { AUTORIZACION_LABELS, evalAutorizacionAvanzado, splitStatusSeleccion } from '../../lib/autorizacionFiltro';
+import { AUTORIZACION_LABELS, evalAutorizacionAvanzado, splitStatusSeleccion, estatusValorIncluye } from '../../lib/autorizacionFiltro';
 import { MultiSelectChip } from '../../components/MultiSelectChip';
 import { RefreshButton } from '../../components/RefreshButton';
 import { TableroVistasControls } from '../../components/tablero/TableroVistasControls';
-import { OrdenRapidoChips } from '../../components/tablero/OrdenRapidoChips';
+import { OrdenRapidoMenu } from '../../components/tablero/OrdenRapidoMenu';
+import { VistasGuardadasMenu } from '../../components/tablero/VistasGuardadasMenu';
+import { leerCondiciones, leerEnum, leerEnums, leerNumeroOpcional, leerObjetoStrings, leerString, leerStrings, type FiltrosDatos } from '../../lib/filtrosGuardados';
 import { VistaSelector, type VistaOpcion } from '../../components/tablero/VistaSelector';
 import { loadVistaFijaModulo, saveVistaFijaModulo } from '../../lib/vistaFija';
 import { CampanaAcciones } from './CampanaAcciones';
@@ -344,14 +346,6 @@ const AVAILABLE_GROUPINGS: GroupConfig[] = [
   { field: 'catorcena_inicio', label: 'Fecha Inicio' },
   { field: 'creador_nombre', label: 'Creador' },
   { field: 'T0_U_Asesor', label: 'Asesor' },
-];
-
-// Campos disponibles para ordenar
-const SORT_FIELDS = [
-  { field: 'fecha_inicio', label: 'Fecha Inicio' },
-  { field: 'nombre', label: 'Nombre' },
-  { field: 'cliente_nombre', label: 'Cliente' },
-  { field: 'status', label: 'Estatus' },
 ];
 
 // Function to apply advanced filters to data
@@ -796,7 +790,7 @@ function ArtGalleryModal({
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center">
       <div className="absolute inset-0 bg-black/80" onClick={onClose} />
-      <div className={`relative ${isDark ? 'bg-zinc-900' : 'bg-white'} border ${isDark ? 'border-zinc-700' : 'border-gray-200'} rounded-xl w-full max-w-4xl mx-4 max-h-[90vh] flex flex-col`}>
+      <div className={`relative ${isDark ? 'bg-zinc-900' : 'bg-white'} border ${isDark ? 'border-zinc-700' : 'border-gray-200'} rounded-xl w-full max-w-4xl mx-4 max-h-[90dvh] max-lg:landscape:h-[100dvh] max-lg:landscape:max-h-[100dvh] max-lg:landscape:rounded-none max-lg:landscape:mx-0 flex flex-col`}>
         {/* Header */}
         <div className={`flex items-center justify-between p-4 border-b ${isDark ? 'border-zinc-700' : 'border-gray-200'} flex-shrink-0`}>
           <h3 className={`text-lg font-semibold flex items-center gap-2 ${isDark ? 'text-white' : 'text-gray-900'}`}>
@@ -1162,8 +1156,6 @@ export function CampanasPage() {
   const [catorcenaFin, setCatorcenaFin] = useState<number | undefined>(undefined);
   const [historialFilter, setHistorialFilter] = useState<HistorialFilterValues>({});
   // Estados para filtros/ordenamiento/agrupación con popups
-  const [sortField, setSortField] = useState<string | null>(null);
-  const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('desc');
   const [advancedFilters, setAdvancedFilters] = useState<AdvancedFilterCondition[]>([]);
   // Vista fija del modulo (por usuario, localStorage): con cual de las tres
   // vistas abre Campanas. null = default ('tabla'). Va antes de
@@ -1336,7 +1328,7 @@ export function CampanasPage() {
   // exclude por default — si no, el filtro daria 0 porque la pagina oculta
   // todo lo que tiene status='Rechazada' actual.
   const effectiveExcludeRechazadas = (
-    historialFilter.modo === 'cambio_estatus' && historialFilter.estatusValor === 'Rechazada'
+    historialFilter.modo === 'cambio_estatus' && (estatusValorIncluye(historialFilter.estatusValor, 'Rechazada') || estatusValorIncluye(historialFilter.estatusValor, 'Cancelada'))
   ) ? false : excludeRechazadas;
 
   // El chip "Status" (multiselect) mezcla estatus de campaña, el pseudo-estatus
@@ -1346,7 +1338,8 @@ export function CampanasPage() {
   const statusFiltro = splitStatusSeleccion(statusSel, ['Incompleta']);
   // Fechas de último cambio por estatus/autorización: solo hacen falta para
   // el orden "Último cambio" (el back las calcula desde historial).
-  const includeCambios = ordenRapido === 'reciente';
+  // El tablero los pide siempre: la tarjeta muestra la fecha del ultimo cambio.
+  const includeCambios = ordenCampo(ordenRapido) === 'cambio' || activeView === 'tablero';
 
   const { data, isLoading } = useQuery({
     queryKey: ['campanas', needsAllData ? 1 : page, statusSel, yearInicio, yearFin, catorcenaInicio, catorcenaFin, tipoPeriodo, needsAllData, serverSearch, effectiveLimit, historialFilter, effectiveExcludeRechazadas, includeCambios],
@@ -1550,54 +1543,22 @@ export function CampanasPage() {
     // 'reciente' usa updated_at, que requiere la columna campania.updated_at
     // (ver scripts/sql): sin ella todas llegan nulas y ordenarTablero las deja
     // al final sin reordenar nada, en vez de fingir un orden.
-    // Ademas de updated_at, 'reciente' considera los cambios de estatus y de
-    // autorizacion de circuitos que el usuario eligio en `cambiosSeleccion`.
+    // Ademas de updated_at, 'Último cambio' considera los cambios de estatus
+    // y de autorizacion de circuitos que el usuario eligio en
+    // `cambiosSeleccion`. 'Presupuesto' ordena por `inversion` (la de la
+    // campaña, no la prorrateada por catorcena del Versionario).
     if (needsAllData) {
       items = ordenarTablero(
         items,
         ordenRapido,
         c => c.fecha_aprobacion || c.fecha_inicio,
         c => fechaUltimoCambio(c, cambiosSeleccion),
+        c => c.inversion,
       );
     }
 
-    // Apply sorting
-    // Va despues del orden rapido a proposito: si el usuario eligio un campo
-    // explicito (Nombre, Cliente...), ese gana y el orden rapido queda como
-    // criterio de fondo.
-    if (sortField && items.length > 0) {
-      items = [...items].sort((a, b) => {
-        let aVal: string | number | null = null;
-        let bVal: string | number | null = null;
-
-        switch (sortField) {
-          case 'fecha_inicio':
-            aVal = a.fecha_inicio;
-            bVal = b.fecha_inicio;
-            break;
-          case 'nombre':
-            aVal = a.nombre?.toLowerCase() || '';
-            bVal = b.nombre?.toLowerCase() || '';
-            break;
-          case 'cliente_nombre':
-            aVal = (a.cliente_nombre || a.cliente_razon_social || '').toLowerCase();
-            bVal = (b.cliente_nombre || b.cliente_razon_social || '').toLowerCase();
-            break;
-          case 'status':
-            aVal = a.status?.toLowerCase() || '';
-            bVal = b.status?.toLowerCase() || '';
-            break;
-        }
-
-        if (aVal === null || bVal === null) return 0;
-        if (aVal < bVal) return sortDirection === 'asc' ? -1 : 1;
-        if (aVal > bVal) return sortDirection === 'asc' ? 1 : -1;
-        return 0;
-      });
-    }
-
     return items;
-  }, [data?.data, selectedCatorcenaInicio, statusIncompleta, sapDbFilter, advancedFilters, sortField, sortDirection, campanaInventarios, soloIncompletos, ordenRapido, needsAllData, cambiosSeleccion]);
+  }, [data?.data, selectedCatorcenaInicio, statusIncompleta, sapDbFilter, advancedFilters, campanaInventarios, soloIncompletos, ordenRapido, needsAllData, cambiosSeleccion]);
 
   // Recalculate stats from filteredData when client-side filters are active.
   // El search ya viaja al backend y stats lo recibe via queryKey, así que NO
@@ -2452,7 +2413,7 @@ export function CampanasPage() {
   };
 
   const hasPeriodFilter = yearInicio !== undefined && yearFin !== undefined;
-  const hasActiveFilters = !!(statusSel.length > 0 || hasPeriodFilter || activeGroupings.length > 0 || searchTags.length > 0 || selectedCatorcenaInicio || advancedFilters.length > 0 || sortField !== null || ordenRapido !== ordenDefaultVista || soloIncompletos || apsFilter !== 'todas' || postFilter !== 'todas' || sapDbFilter !== 'todas');
+  const hasActiveFilters = !!(statusSel.length > 0 || hasPeriodFilter || activeGroupings.length > 0 || searchTags.length > 0 || selectedCatorcenaInicio || advancedFilters.length > 0 || ordenRapido !== ordenDefaultVista || soloIncompletos || apsFilter !== 'todas' || postFilter !== 'todas' || sapDbFilter !== 'todas');
 
   // Get unique values for each field (for advanced filter dropdowns).
   // Solo se calcula cuando el panel de filtros avanzados está abierto: evita
@@ -2515,6 +2476,39 @@ export function CampanasPage() {
     return construirOpcionesCambio(Array.from(estatus));
   }, [data?.data]);
 
+  // Foto de la barra de filtros que guarda una vista (menu "Vistas" junto al
+  // boton Filtros), incluidos los rapidos APS/POST/Base SAP y la catorcena
+  // del Versionario, y como volver a aplicarla. El orden y "solo incompletos"
+  // van aparte en la vista. Lo que no venga en la foto se resetea. Ver
+  // lib/filtrosGuardados.
+  const filtrosSnapshot = useMemo<FiltrosDatos>(() => ({
+    statusSel, tipoPeriodo, yearInicio, yearFin, catorcenaInicio, catorcenaFin,
+    historialFilter, cambiosSeleccion, activeGroupings,
+    advancedFilters, searchTags, apsFilter, postFilter, sapDbFilter, selectedCatorcenaInicio,
+  }), [statusSel, tipoPeriodo, yearInicio, yearFin, catorcenaInicio, catorcenaFin, historialFilter, cambiosSeleccion, activeGroupings, advancedFilters, searchTags, apsFilter, postFilter, sapDbFilter, selectedCatorcenaInicio]);
+  const aplicarFiltrosGuardados = useCallback((d: FiltrosDatos) => {
+    setStatusSel(leerStrings(d.statusSel));
+    setTipoPeriodo(leerString(d.tipoPeriodo));
+    setYearInicio(leerNumeroOpcional(d.yearInicio));
+    setYearFin(leerNumeroOpcional(d.yearFin));
+    setCatorcenaInicio(leerNumeroOpcional(d.catorcenaInicio));
+    setCatorcenaFin(leerNumeroOpcional(d.catorcenaFin));
+    setHistorialFilter(leerObjetoStrings(d.historialFilter) as HistorialFilterValues);
+    setCambiosSeleccion(Array.isArray(d.cambiosSeleccion) ? leerStrings(d.cambiosSeleccion) : null);
+    // Maximo 2 agrupaciones, igual que el selector del Versionario.
+    setActiveGroupings(leerEnums(d.activeGroupings, AVAILABLE_GROUPINGS.map(g => g.field)).slice(0, 2));
+    setAdvancedFilters(leerCondiciones<AdvancedFilterCondition>(d.advancedFilters));
+    setSearchTags(leerStrings(d.searchTags));
+    setApsFilter(leerEnum(d.apsFilter, ['todas', 'con', 'sin'] as const, 'todas'));
+    setPostFilter(leerEnum(d.postFilter, ['todas', 'con', 'sin'] as const, 'todas'));
+    setSapDbFilter(leerEnum(d.sapDbFilter, ['todas', 'CIMU', 'TRADE', 'TEST', 'UDC'] as const, 'todas'));
+    setSelectedCatorcenaInicio(leerString(d.selectedCatorcenaInicio));
+    setSearchInput('');
+    setExpandedGroups(new Set());
+    setShowFilters(true);
+    setPage(1);
+  }, []);
+
   const clearAllFilters = () => {
     setSearchTags([]);
     setSearchInput('');
@@ -2526,8 +2520,6 @@ export function CampanasPage() {
     setCatorcenaFin(undefined);
     setHistorialFilter({});
     setSelectedCatorcenaInicio('');
-    setSortField(null);
-    setSortDirection('desc');
     setOrdenRapido(ordenDefaultVista);
     setCambiosSeleccion(null);
     setSoloIncompletos(false);
@@ -3244,10 +3236,21 @@ export function CampanasPage() {
 
   // Calcular paginación basada en si hay filtros locales activos
   const hasLocalFilters = !!(selectedCatorcenaInicio || advancedFilters.length > 0 || statusIncompleta);
-  const totalPages = hasLocalFilters || needsAllData ? 1 : (data?.pagination?.totalPages || 1);
+  // Con filtros/orden en cliente (universo completo) se pagina en cliente
+  // sobre filteredData con el mismo `limit`, en vez de pintar todo de golpe.
+  // Con agrupaciones no se pagina: cada grupo pinta completo.
+  const paginaEnCliente = (hasLocalFilters || needsAllData) && activeGroupings.length === 0;
+  const totalPages = paginaEnCliente
+    ? Math.max(1, Math.ceil(filteredData.length / limit))
+    : (data?.pagination?.totalPages || 1);
   const total = hasLocalFilters || needsAllData ? filteredData.length : (data?.pagination?.total ?? 0);
-  const startItem = hasLocalFilters || needsAllData ? (filteredData.length > 0 ? 1 : 0) : ((page - 1) * limit + 1);
-  const endItem = hasLocalFilters || needsAllData ? filteredData.length : Math.min(page * limit, data?.pagination?.total ?? 0);
+  // `page` puede quedar arriba del total al cambiar de modo/filtro: se acota.
+  const pageActual = Math.min(page, totalPages);
+  const filasTabla = paginaEnCliente
+    ? filteredData.slice((pageActual - 1) * limit, pageActual * limit)
+    : filteredData;
+  const startItem = total > 0 ? (pageActual - 1) * limit + 1 : 0;
+  const endItem = Math.min(pageActual * limit, total);
 
   return (
     <div className="min-h-screen">
@@ -3365,13 +3368,14 @@ export function CampanasPage() {
           periodoLabel={inversionPeriodoLabel}
           inversionTotal={effectiveStats?.montoTotal ?? 0}
           inversionSubLabel={`${(effectiveStats?.total ?? 0).toLocaleString()} campañas · ${hasActiveFilters ? 'Filtrado' : 'Todas'}`}
+          collapseKey="campanas"
         />
 
         {/* Control Bar */}
         <div className={`rounded-2xl border ${isDark ? 'border-purple-500/20 bg-gradient-to-br from-zinc-900/90 via-purple-950/20 to-zinc-900/90' : 'border-purple-200 bg-white'} backdrop-blur-xl p-4 relative z-30`}>
           <div className="flex flex-col gap-4">
             {/* Top Row: Search + Filter Toggle + Export */}
-            <div className="flex flex-col lg:flex-row items-start lg:items-center gap-4">
+            <div className="flex flex-col lg:flex-row lg:flex-wrap items-start lg:items-center gap-3">
               {/* Search with Tags */}
               <div className={`relative flex-1 w-full lg:max-w-xl flex items-center flex-wrap gap-1.5 min-h-[44px] px-3 py-1.5 rounded-xl border ${isDark ? 'border-purple-500/20 bg-zinc-900/80 hover:border-purple-500/40' : 'border-purple-200 bg-gray-50 hover:border-gray-300'} focus-within:ring-2 focus-within:ring-purple-500/30 focus-within:border-purple-500/40 transition-all`}>
                 <Search className={`h-4 w-4 shrink-0 ${isDark ? 'text-purple-400' : 'text-purple-500'}`} />
@@ -3437,7 +3441,8 @@ export function CampanasPage() {
               {/* Filter Toggle */}
               <button
                 onClick={() => setShowFilters(!showFilters)}
-                className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-medium transition-all ${showFilters || hasActiveFilters
+                title="Filtros"
+                className={`flex shrink-0 items-center gap-2 px-3 py-2 rounded-xl text-sm font-medium whitespace-nowrap transition-all ${showFilters || hasActiveFilters
                   ? isDark ? 'bg-purple-500/20 text-purple-300 border border-purple-500/40' : 'bg-purple-100 text-purple-700 border border-purple-200'
                   : isDark
                     ? 'bg-zinc-800/60 text-zinc-400 border border-zinc-700/50 hover:bg-zinc-800'
@@ -3445,30 +3450,49 @@ export function CampanasPage() {
                   }`}
               >
                 <SlidersHorizontal className="h-4 w-4" />
-                Filtros
+                <span className="hidden xl:inline">Filtros</span>
                 {hasActiveFilters && (
                   <span className="w-2 h-2 rounded-full bg-purple-400" />
                 )}
               </button>
 
+              {/* Vistas guardadas por usuario: filtros + orden + incompletos +
+                  columnas del tablero. Guardar / aplicar / renombrar / fijar. */}
+              <VistasGuardadasMenu
+                isDark={isDark}
+                scope="campanas"
+                userId={user?.id}
+                columnasValidas={CAMPANAS_COLUMNAS_KEYS}
+                columnasVisibles={tableroColumnas}
+                onColumnasChange={setTableroColumnas}
+                orden={ordenRapido}
+                onOrdenChange={setOrdenRapido}
+                soloIncompletos={soloIncompletos}
+                onSoloIncompletosChange={setSoloIncompletos}
+                filtrosActuales={filtrosSnapshot}
+                onAplicarFiltros={aplicarFiltrosGuardados}
+              />
+
               {/* Export CSV */}
               <button
                 onClick={activeView === 'catorcena' ? handleExportVersionarioCSV : handleExportCSV}
                 disabled={exportingLayout}
-                className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-medium ${isDark ? 'bg-zinc-800/60 text-zinc-400 border-zinc-700/50 hover:bg-zinc-800 hover:text-zinc-200' : 'bg-gray-100 text-gray-500 border-gray-200 hover:bg-gray-200 hover:text-gray-700'} border transition-all ${exportingLayout ? 'opacity-50 cursor-not-allowed' : ''}`}
+                title={activeView === 'catorcena' ? 'Exportar Layout' : 'Exportar CSV'}
+                className={`flex shrink-0 items-center gap-2 px-3 py-2 rounded-xl text-sm font-medium whitespace-nowrap ${isDark ? 'bg-zinc-800/60 text-zinc-400 border-zinc-700/50 hover:bg-zinc-800 hover:text-zinc-200' : 'bg-gray-100 text-gray-500 border-gray-200 hover:bg-gray-200 hover:text-gray-700'} border transition-all ${exportingLayout ? 'opacity-50 cursor-not-allowed' : ''}`}
               >
                 {exportingLayout ? <Loader2 className="h-4 w-4 animate-spin" /> : <Download className="h-4 w-4" />}
-                {exportingLayout ? 'Generando...' : activeView === 'catorcena' ? 'Exportar Layout' : 'Exportar CSV'}
+                <span className="hidden xl:inline">{exportingLayout ? 'Generando...' : activeView === 'catorcena' ? 'Exportar Layout' : 'Exportar CSV'}</span>
               </button>
 
               {/* Órdenes de Montaje */}
               {permissions.canSeeOrdenesMontajeButton && (
                 <button
                   onClick={() => setOrdenesMontajeModalOpen(true)}
-                  className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-medium ${isDark ? 'bg-purple-500/20 text-purple-300 border-purple-500/40 hover:bg-purple-500/30' : 'bg-purple-100 text-purple-700 border-purple-200 hover:bg-purple-200'} border transition-all`}
+                  title="Órdenes de Montaje"
+                  className={`flex shrink-0 items-center gap-2 px-3 py-2 rounded-xl text-sm font-medium whitespace-nowrap ${isDark ? 'bg-purple-500/20 text-purple-300 border-purple-500/40 hover:bg-purple-500/30' : 'bg-purple-100 text-purple-700 border-purple-200 hover:bg-purple-200'} border transition-all`}
                 >
                   <ClipboardList className="h-4 w-4" />
-                  Órdenes de Montaje
+                  <span className="hidden xl:inline">Órdenes de Montaje</span>
                 </button>
               )}
 
@@ -3477,13 +3501,15 @@ export function CampanasPage() {
                 <button
                   onClick={handleExportVersionarioArtes}
                   disabled={exportingVersionarioArtes || campanasPorCatorcena.length === 0}
-                  className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-medium ${isDark ? 'bg-purple-500/20 text-purple-300 border-purple-500/40 hover:bg-purple-500/30' : 'bg-purple-100 text-purple-700 border-purple-200 hover:bg-purple-200'} border transition-all ${exportingVersionarioArtes ? 'opacity-50 cursor-not-allowed' : ''}`}
+                  className={`flex shrink-0 items-center gap-2 px-3 py-2 rounded-xl text-sm font-medium whitespace-nowrap ${isDark ? 'bg-purple-500/20 text-purple-300 border-purple-500/40 hover:bg-purple-500/30' : 'bg-purple-100 text-purple-700 border-purple-200 hover:bg-purple-200'} border transition-all ${exportingVersionarioArtes ? 'opacity-50 cursor-not-allowed' : ''}`}
                   title="Descargar Excel con versionario de artes (1 fila por campaña/plaza, columnas Arte 1..N)"
                 >
                   {exportingVersionarioArtes ? <Loader2 className="h-4 w-4 animate-spin" /> : <Image className="h-4 w-4" />}
-                  {exportingVersionarioArtes
-                    ? `Procesando ${versionarioArtesProgress.current}/${versionarioArtesProgress.total}...`
-                    : 'Versionario Artes'}
+                  <span className="hidden xl:inline">
+                    {exportingVersionarioArtes
+                      ? `Procesando ${versionarioArtesProgress.current}/${versionarioArtesProgress.total}...`
+                      : 'Versionario Artes'}
+                  </span>
                 </button>
               )}
             </div>
@@ -3510,7 +3536,7 @@ export function CampanasPage() {
                         {quickActive && <span className="w-1.5 h-1.5 rounded-full bg-white" />}
                       </button>
                       {showQuickFilters && (
-                        <div className={`absolute left-0 top-full mt-1 z-[100] w-[300px] ${isDark ? 'bg-zinc-900 border-purple-500/30' : 'bg-white border-purple-200'} border rounded-xl shadow-2xl p-4`}>
+                        <div className={`fixed inset-x-2 top-16 bottom-16 mt-0 w-auto max-w-none max-h-[calc(100dvh-5rem)] overflow-y-auto overscroll-contain lg:absolute lg:inset-auto lg:left-0 lg:top-full lg:right-auto lg:bottom-auto lg:mt-1 lg:w-[300px] lg:max-w-[calc(100vw-2rem)] lg:max-h-none lg:overflow-visible z-[100] ${isDark ? 'bg-zinc-900 border-purple-500/30' : 'bg-white border-purple-200'} border rounded-xl shadow-2xl p-4`}>
                           <div className="flex items-center justify-between mb-3">
                             <span className={`text-sm font-medium ${isDark ? 'text-purple-300' : 'text-purple-700'}`}>Filtros rápidos</span>
                             <button onClick={() => setShowQuickFilters(false)} className={`${isDark ? 'text-zinc-500 hover:text-white' : 'text-gray-400 hover:text-gray-900'}`}>
@@ -3588,7 +3614,7 @@ export function CampanasPage() {
                     )}
                   </button>
                   {showAdvancedFilters && (
-                    <div className={`absolute left-0 top-full mt-1 z-[100] w-[520px] ${isDark ? 'bg-zinc-900' : 'bg-white'} border ${isDark ? 'border-purple-500/30' : 'border-purple-200'} rounded-xl shadow-2xl p-4`}>
+                    <div className={`fixed inset-x-2 top-16 bottom-16 mt-0 w-auto max-w-none max-h-[calc(100dvh-5rem)] overflow-y-auto overscroll-contain lg:absolute lg:inset-auto lg:left-0 lg:top-full lg:right-auto lg:bottom-auto lg:mt-1 lg:w-[520px] lg:max-w-[calc(100vw-2rem)] lg:max-h-none lg:overflow-visible z-[100] ${isDark ? 'bg-zinc-900' : 'bg-white'} border ${isDark ? 'border-purple-500/30' : 'border-purple-200'} rounded-xl shadow-2xl p-4`}>
                       <div className="flex items-center justify-between mb-3">
                         <span className={`text-sm font-medium ${isDark ? 'text-purple-300' : 'text-purple-700'}`}>Filtros avanzados</span>
                         <button
@@ -3653,7 +3679,7 @@ export function CampanasPage() {
                                   ? allOptions.filter(val => val.toLowerCase().includes(filter.value.toLowerCase()))
                                   : allOptions;
                                 return filtered.length > 0 ? (
-                                  <div className={`absolute left-0 top-full mt-1 w-full max-h-[200px] overflow-y-auto z-[300] rounded border shadow-xl ${isDark ? 'bg-zinc-800 border-zinc-600' : 'bg-white border-gray-200'}`}>
+                                  <div className={`absolute left-0 top-full mt-1 w-full max-h-[200px] max-lg:landscape:max-h-32 overflow-y-auto overscroll-contain z-[300] rounded border shadow-xl ${isDark ? 'bg-zinc-800 border-zinc-600' : 'bg-white border-gray-200'}`}>
                                     {filtered.map((val) => (
                                       <button
                                         key={val}
@@ -3716,7 +3742,6 @@ export function CampanasPage() {
                 <div className={`h-4 w-px ${isDark ? 'bg-zinc-700' : 'bg-gray-300'} mx-1`} />
 
                 {/* Status Filter */}
-                <span className={`text-xs ${isDark ? 'text-zinc-500' : 'text-gray-400'} mr-1`}>Status:</span>
                 <MultiSelectChip
                   label="Status"
                   options={allStatuses}
@@ -3730,7 +3755,6 @@ export function CampanasPage() {
                 <div className={`h-4 w-px ${isDark ? 'bg-zinc-700' : 'bg-gray-300'} mx-1`} />
 
                 {/* Tipo Periodo Filter */}
-                <span className={`text-xs ${isDark ? 'text-zinc-500' : 'text-gray-400'} mr-1`}>Periodo:</span>
                 <FilterChip
                   label="Tipo Periodo"
                   options={['catorcena', 'mensual']}
@@ -3789,10 +3813,11 @@ export function CampanasPage() {
                 {/* Divider */}
                 <div className={`h-4 w-px ${isDark ? 'bg-zinc-700/50' : 'bg-gray-300'} mx-1`} />
 
-                {/* Filtros rapidos de orden + incompletos. Aplican a Tabla y
-                    a Tablero; el chip "Campo" de abajo sigue disponible y gana
-                    cuando se elige un campo explicito. */}
-                <OrdenRapidoChips
+                {/* Menú "Ordenar" (creación / presupuesto / último cambio) +
+                    chip de incompletos. Aplican a Tabla y a Tablero. El chip
+                    "Campo" (Nombre, Cliente, Estatus...) se quitó: ordenaba
+                    en cliente sobre la página visible. */}
+                <OrdenRapidoMenu
                   isDark={isDark}
                   orden={ordenRapido}
                   onOrdenChange={(o) => { setOrdenRapido(o); setPage(1); }}
@@ -3803,29 +3828,6 @@ export function CampanasPage() {
                   onCambiosSeleccionChange={setCambiosSeleccion}
                   entidadPlural="campañas"
                 />
-
-                {/* Divider */}
-                <div className={`h-4 w-px ${isDark ? 'bg-zinc-700/50' : 'bg-gray-300'} mx-1`} />
-
-                {/* Sort Options */}
-                <span className={`text-xs ${isDark ? 'text-zinc-500' : 'text-gray-400'} mr-1`}>
-                  <ArrowUpDown className="h-3 w-3 inline mr-1" />
-                  Campo:
-                </span>
-                <FilterChip
-                  label="Campo"
-                  options={['fecha_inicio', 'nombre', 'cliente_nombre', 'status']}
-                  value={sortField || ''}
-                  onChange={(val) => { setSortField(val); setPage(1); }}
-                  onClear={() => { setSortField(null); setPage(1); }}
-                  isDark={isDark}
-                />
-                <button
-                  onClick={() => setSortDirection(sortDirection === 'asc' ? 'desc' : 'asc')}
-                  className={`flex items-center gap-1 px-2 py-1 rounded-full text-xs ${isDark ? 'bg-zinc-800/80 text-zinc-400 border-zinc-700/50 hover:border-zinc-600' : 'bg-gray-100 text-gray-500 border-gray-200 hover:border-gray-300'} border transition-all`}
-                >
-                  {sortDirection === 'asc' ? '↑ Asc' : '↓ Desc'}
-                </button>
 
                 {/* Divider */}
                 <div className={`h-4 w-px ${isDark ? 'bg-zinc-700/50' : 'bg-gray-300'} mx-1`} />
@@ -3900,9 +3902,6 @@ export function CampanasPage() {
                   | Agrupado por {activeGroupings.map(g => AVAILABLE_GROUPINGS.find(ag => ag.field === g)?.label).join(' → ')}
                 </span>
               )}
-              {sortField && (
-                <span className={isDark ? 'text-zinc-500' : 'text-gray-400'}>| Ordenado por {SORT_FIELDS.find(f => f.field === sortField)?.label} ({sortDirection === 'asc' ? '↑' : '↓'})</span>
-              )}
             </div>
           </div>
         )}
@@ -3917,15 +3916,9 @@ export function CampanasPage() {
               </span>
               <TableroVistasControls
                 isDark={isDark}
-                scope="campanas"
-                userId={user?.id}
                 todasColumnas={CAMPANAS_COLUMNAS}
                 columnasVisibles={tableroColumnas}
                 onColumnasChange={setTableroColumnas}
-                orden={ordenRapido}
-                onOrdenChange={setOrdenRapido}
-                soloIncompletos={soloIncompletos}
-                onSoloIncompletosChange={setSoloIncompletos}
               />
             </div>
             <CampanasTableroView
@@ -3963,20 +3956,20 @@ export function CampanasPage() {
               {activeGroupings.length === 0 && data?.pagination && totalPages > 1 && (
                 <div className={`flex items-center justify-between border-b ${isDark ? 'border-purple-500/20 bg-gradient-to-r from-purple-900/20 via-transparent to-fuchsia-900/20' : 'border-purple-200 bg-purple-50/50'} px-4 py-3`}>
                   <span className={`text-sm ${isDark ? 'text-purple-300/70' : 'text-purple-600/70'}`}>
-                    Página <span className={`font-semibold ${isDark ? 'text-purple-300' : 'text-purple-700'}`}>{page}</span> de <span className={`font-semibold ${isDark ? 'text-purple-300' : 'text-purple-700'}`}>{totalPages}</span>
+                    Página <span className={`font-semibold ${isDark ? 'text-purple-300' : 'text-purple-700'}`}>{pageActual}</span> de <span className={`font-semibold ${isDark ? 'text-purple-300' : 'text-purple-700'}`}>{totalPages}</span>
                     <span className={`${isDark ? 'text-purple-300/50' : 'text-purple-500/50'} ml-2`}>({total} total)</span>
                   </span>
                   <div className="flex items-center gap-2">
                     <button
-                      onClick={() => setPage(p => Math.max(1, p - 1))}
-                      disabled={page === 1}
+                      onClick={() => setPage(Math.max(1, pageActual - 1))}
+                      disabled={pageActual === 1}
                       className={`px-4 py-2 rounded-lg border ${isDark ? 'border-purple-500/30 bg-purple-500/10 text-purple-300 hover:bg-purple-500/20 hover:border-purple-500/50' : 'border-purple-200 bg-purple-50 text-purple-700 hover:bg-purple-100 hover:border-purple-300'} text-sm font-medium disabled:opacity-40 disabled:cursor-not-allowed transition-all`}
                     >
                       Anterior
                     </button>
                     <button
-                      onClick={() => setPage(p => Math.min(totalPages, p + 1))}
-                      disabled={page === totalPages}
+                      onClick={() => setPage(Math.min(totalPages, pageActual + 1))}
+                      disabled={pageActual === totalPages}
                       className={`px-4 py-2 rounded-lg border ${isDark ? 'border-purple-500/30 bg-purple-500/10 text-purple-300 hover:bg-purple-500/20 hover:border-purple-500/50' : 'border-purple-200 bg-purple-50 text-purple-700 hover:bg-purple-100 hover:border-purple-300'} text-sm font-medium disabled:opacity-40 disabled:cursor-not-allowed transition-all`}
                     >
                       Siguiente
@@ -4053,7 +4046,7 @@ export function CampanasPage() {
                         </React.Fragment>
                       ))
                     ) : (
-                      filteredData.map((item, idx) => renderRow(item, idx))
+                      filasTabla.map((item, idx) => renderRow(item, idx))
                     )}
                     {filteredData.length === 0 && !groupedData && (
                       <tr>
@@ -4075,20 +4068,20 @@ export function CampanasPage() {
               {activeGroupings.length === 0 && data?.pagination && totalPages > 1 && (
                 <div className={`flex items-center justify-between border-t ${isDark ? 'border-purple-500/20 bg-gradient-to-r from-purple-900/20 via-transparent to-fuchsia-900/20' : 'border-purple-200 bg-purple-50/50'} px-4 py-3`}>
                   <span className={`text-sm ${isDark ? 'text-purple-300/70' : 'text-purple-600/70'}`}>
-                    Página <span className={`font-semibold ${isDark ? 'text-purple-300' : 'text-purple-700'}`}>{page}</span> de <span className={`font-semibold ${isDark ? 'text-purple-300' : 'text-purple-700'}`}>{totalPages}</span>
+                    Página <span className={`font-semibold ${isDark ? 'text-purple-300' : 'text-purple-700'}`}>{pageActual}</span> de <span className={`font-semibold ${isDark ? 'text-purple-300' : 'text-purple-700'}`}>{totalPages}</span>
                     <span className={`${isDark ? 'text-purple-300/50' : 'text-purple-500/50'} ml-2`}>({total} total)</span>
                   </span>
                   <div className="flex items-center gap-2">
                     <button
-                      onClick={() => setPage(p => Math.max(1, p - 1))}
-                      disabled={page === 1}
+                      onClick={() => setPage(Math.max(1, pageActual - 1))}
+                      disabled={pageActual === 1}
                       className={`px-4 py-2 rounded-lg border ${isDark ? 'border-purple-500/30 bg-purple-500/10 text-purple-300 hover:bg-purple-500/20 hover:border-purple-500/50' : 'border-purple-200 bg-purple-50 text-purple-700 hover:bg-purple-100 hover:border-purple-300'} text-sm font-medium disabled:opacity-40 disabled:cursor-not-allowed transition-all`}
                     >
                       Anterior
                     </button>
                     <button
-                      onClick={() => setPage(p => Math.min(totalPages, p + 1))}
-                      disabled={page === totalPages}
+                      onClick={() => setPage(Math.min(totalPages, pageActual + 1))}
+                      disabled={pageActual === totalPages}
                       className={`px-4 py-2 rounded-lg border ${isDark ? 'border-purple-500/30 bg-purple-500/10 text-purple-300 hover:bg-purple-500/20 hover:border-purple-500/50' : 'border-purple-200 bg-purple-50 text-purple-700 hover:bg-purple-100 hover:border-purple-300'} text-sm font-medium disabled:opacity-40 disabled:cursor-not-allowed transition-all`}
                     >
                       Siguiente

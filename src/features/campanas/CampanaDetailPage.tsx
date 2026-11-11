@@ -2896,7 +2896,7 @@ export function CampanaDetailPage() {
                       </span>
                       {isAuthEntry && parsedDetalles ? (
                         <div className="mt-0.5">
-                          {isRechazo && (
+                          {isRechazo && parsedDetalles.motivo && (
                             <p className={`text-xs ${isDark ? 'text-red-400/70' : 'text-red-600/70'}`}>Motivo: {limpiarMotivo(parsedDetalles.motivo) || 'no especificado'}</p>
                           )}
                           {isCambio && parsedDetalles.cambios && (

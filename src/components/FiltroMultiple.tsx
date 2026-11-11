@@ -12,7 +12,113 @@ import { ChevronDown, X, Check } from 'lucide-react';
 // Con `grupo` las opciones se renderizan en secciones con encabezado, en el
 // orden en que llegan. Es lo que usan los filtros de Módulo y Tipo de acción
 // del Historial, donde una lista plana de ~20 entradas se vuelve ilegible.
+//
+// La lista en si (buscador + secciones + checkboxes) es `ListaOpciones`, que
+// tambien se usa INLINE dentro de otros paneles (ej. el "Estatus al que
+// cambió" del filtro por Historial), donde un dropdown anidado se recortaria
+// por el overflow del panel padre.
 export type OpcionFiltro = string | { label: string; value: string; grupo?: string };
+
+const normalizar = (o: OpcionFiltro) =>
+  (typeof o === 'string' ? { label: o, value: o, grupo: undefined as string | undefined } : o);
+const joinKey = (xs: string[]) => xs.join('\u0000');
+
+interface ListaProps {
+  options: OpcionFiltro[];
+  selected: string[];
+  onChange: (next: string[]) => void;
+  isDark: boolean;
+  placeholder?: string;
+  /** Clase de alto maximo del area scrolleable. */
+  maxHeight?: string;
+  /** Foco automatico en el buscador (si en un dropdown, no inline). */
+  autoFocus?: boolean;
+}
+
+/** Buscador + opciones (agrupadas o planas) con checkboxes. Sin boton disparador. */
+export function ListaOpciones({
+  options, selected, onChange, isDark, placeholder = 'Buscar...', maxHeight = 'max-h-64', autoFocus = false,
+}: ListaProps) {
+  const [search, setSearch] = useState('');
+  const opciones = useMemo(() => options.map(normalizar), [options]);
+
+  const q = search.trim().toLowerCase();
+  const visibles = q ? opciones.filter(o => o.label.toLowerCase().includes(q)) : opciones;
+  const sel = new Set(selected);
+
+  // Secciones en el orden en que llegan las opciones. Un grupo que se queda
+  // sin opciones tras buscar simplemente no aparece.
+  const secciones: { grupo?: string; items: typeof visibles }[] = [];
+  for (const o of visibles) {
+    const ultima = secciones[secciones.length - 1];
+    if (ultima && ultima.grupo === o.grupo) ultima.items.push(o);
+    else secciones.push({ grupo: o.grupo, items: [o] });
+  }
+
+  const toggle = (value: string) => {
+    const next = new Set(sel);
+    if (next.has(value)) next.delete(value); else next.add(value);
+    onChange(Array.from(next));
+  };
+
+  const inputCls = isDark
+    ? 'bg-zinc-800 border-zinc-700 text-white placeholder:text-zinc-600'
+    : 'bg-white border-gray-300 text-gray-900 placeholder:text-gray-400';
+
+  return (
+    <>
+      <div className="p-2 flex items-center gap-2">
+        <input
+          type="text"
+          value={search}
+          onChange={e => setSearch(e.target.value)}
+          placeholder={placeholder}
+          className={`flex-1 min-w-0 rounded-md border px-2.5 py-1.5 text-sm ${inputCls}`}
+          autoFocus={autoFocus}
+        />
+        {selected.length > 0 && (
+          <button type="button" onClick={() => onChange([])} className="text-xs text-red-400 hover:text-red-300 shrink-0">Limpiar</button>
+        )}
+      </div>
+      <div className={`${maxHeight} overflow-y-auto`}>
+        {secciones.map((sec, i) => (
+          <div key={sec.grupo ?? `s${i}`}>
+            {sec.grupo && (
+              <div className={`px-3 pt-2 pb-1 text-[10px] font-semibold uppercase tracking-wider ${
+                isDark ? 'text-zinc-500' : 'text-gray-400'
+              }`}>
+                {sec.grupo}
+              </div>
+            )}
+            {sec.items.map(o => {
+              const on = sel.has(o.value);
+              return (
+                <button
+                  key={o.value}
+                  type="button"
+                  onClick={() => toggle(o.value)}
+                  className={`w-full flex items-center gap-2 text-left px-3 py-1.5 text-sm transition-colors ${
+                    on
+                      ? 'bg-purple-500/10 text-purple-500 font-medium'
+                      : isDark ? 'text-zinc-300 hover:bg-zinc-800' : 'text-gray-700 hover:bg-gray-50'
+                  }`}
+                >
+                  <span className={`h-3.5 w-3.5 rounded border flex items-center justify-center shrink-0 ${on ? 'bg-purple-500 border-purple-500' : isDark ? 'border-zinc-600' : 'border-gray-300'}`}>
+                    {on && <Check className="h-2.5 w-2.5 text-white" />}
+                  </span>
+                  <span className="truncate">{o.label}</span>
+                </button>
+              );
+            })}
+          </div>
+        ))}
+        {visibles.length === 0 && (
+          <div className={`px-3 py-3 text-sm text-center ${isDark ? 'text-zinc-500' : 'text-gray-400'}`}>Sin resultados</div>
+        )}
+      </div>
+    </>
+  );
+}
 
 interface Props {
   label: string;
@@ -35,26 +141,20 @@ interface Props {
   commitOnClose?: boolean;
 }
 
-const normalizar = (o: OpcionFiltro) =>
-  (typeof o === 'string' ? { label: o, value: o, grupo: undefined as string | undefined } : o);
-const joinKey = (xs: string[]) => xs.join('\u0000');
-
 export function FiltroMultiple({
   label, icon: Icon, options, selected, onChange, isDark,
   placeholder = 'Buscar...', className = '', commitOnClose = false,
 }: Props) {
   const [open, setOpen] = useState(false);
-  const [search, setSearch] = useState('');
   // Seleccion en edicion. Con commitOnClose vive aqui hasta que se cierra el
   // dropdown; sin el, va siempre un paso detras de `selected` (que es quien
   // manda) porque cada toggle emite onChange de inmediato.
   const [draft, setDraft] = useState<string[]>(selected);
   const ref = useRef<HTMLDivElement>(null);
 
-  const opciones = useMemo(() => options.map(normalizar), [options]);
   const labelPorValor = useMemo(
-    () => new Map(opciones.map(o => [o.value, o.label])),
-    [opciones],
+    () => new Map(options.map(normalizar).map(o => [o.value, o.label])),
+    [options],
   );
 
   // Resincroniza cuando el padre cambia la seleccion por fuera (ej. "Limpiar
@@ -87,28 +187,9 @@ export function FiltroMultiple({
     };
   }, [open, cerrar]);
 
-  const q = search.trim().toLowerCase();
-  const visibles = q ? opciones.filter(o => o.label.toLowerCase().includes(q)) : opciones;
-  const sel = new Set(draft);
-
-  // Secciones en el orden en que llegan las opciones. Un grupo que se queda
-  // sin opciones tras buscar simplemente no aparece.
-  const secciones: { grupo?: string; items: typeof visibles }[] = [];
-  for (const o of visibles) {
-    const ultima = secciones[secciones.length - 1];
-    if (ultima && ultima.grupo === o.grupo) ultima.items.push(o);
-    else secciones.push({ grupo: o.grupo, items: [o] });
-  }
-
   const aplicar = (next: string[]) => {
     setDraft(next);
     if (!commitOnClose) onChange(next);
-  };
-
-  const toggle = (value: string) => {
-    const next = new Set(sel);
-    if (next.has(value)) next.delete(value); else next.add(value);
-    aplicar(Array.from(next));
   };
 
   // Limpiar desde el chip (control cerrado): gesto explicito, se emite ya.
@@ -127,7 +208,7 @@ export function FiltroMultiple({
     <div ref={ref} className={`relative ${className}`}>
       <button
         type="button"
-        onClick={() => { if (open) { cerrar(); } else { setSearch(''); setOpen(true); } }}
+        onClick={() => { if (open) cerrar(); else setOpen(true); }}
         className={`flex items-center gap-2 rounded-lg border px-3 py-2 text-sm min-w-[160px] transition-colors ${inputCls} ${
           activo ? 'border-purple-500 text-purple-500' : isDark ? 'text-zinc-400' : 'text-gray-500'
         }`}
@@ -152,55 +233,14 @@ export function FiltroMultiple({
         <div className={`absolute top-full left-0 mt-1 w-72 rounded-lg border shadow-xl z-50 overflow-hidden ${
           isDark ? 'bg-zinc-900 border-zinc-700' : 'bg-white border-gray-200'
         }`}>
-          <div className="p-2 flex items-center gap-2">
-            <input
-              type="text"
-              value={search}
-              onChange={e => setSearch(e.target.value)}
-              placeholder={placeholder}
-              className={`flex-1 rounded-md border px-2.5 py-1.5 text-sm ${inputCls}`}
-              autoFocus
-            />
-            {activo && (
-              <button onClick={() => aplicar([])} className="text-xs text-red-400 hover:text-red-300 shrink-0">Limpiar</button>
-            )}
-          </div>
-          <div className="max-h-64 overflow-y-auto">
-            {secciones.map((sec, i) => (
-              <div key={sec.grupo ?? `s${i}`}>
-                {sec.grupo && (
-                  <div className={`px-3 pt-2 pb-1 text-[10px] font-semibold uppercase tracking-wider ${
-                    isDark ? 'text-zinc-500' : 'text-gray-400'
-                  }`}>
-                    {sec.grupo}
-                  </div>
-                )}
-                {sec.items.map(o => {
-                  const on = sel.has(o.value);
-                  return (
-                    <button
-                      key={o.value}
-                      type="button"
-                      onClick={() => toggle(o.value)}
-                      className={`w-full flex items-center gap-2 text-left px-3 py-1.5 text-sm transition-colors ${
-                        on
-                          ? 'bg-purple-500/10 text-purple-500 font-medium'
-                          : isDark ? 'text-zinc-300 hover:bg-zinc-800' : 'text-gray-700 hover:bg-gray-50'
-                      }`}
-                    >
-                      <span className={`h-3.5 w-3.5 rounded border flex items-center justify-center shrink-0 ${on ? 'bg-purple-500 border-purple-500' : isDark ? 'border-zinc-600' : 'border-gray-300'}`}>
-                        {on && <Check className="h-2.5 w-2.5 text-white" />}
-                      </span>
-                      <span className="truncate">{o.label}</span>
-                    </button>
-                  );
-                })}
-              </div>
-            ))}
-            {visibles.length === 0 && (
-              <div className={`px-3 py-3 text-sm text-center ${isDark ? 'text-zinc-500' : 'text-gray-400'}`}>Sin resultados</div>
-            )}
-          </div>
+          <ListaOpciones
+            options={options}
+            selected={draft}
+            onChange={aplicar}
+            isDark={isDark}
+            placeholder={placeholder}
+            autoFocus
+          />
           {commitOnClose && (
             <div className={`px-3 py-1.5 border-t text-[10px] ${isDark ? 'border-zinc-800 text-zinc-500' : 'border-gray-100 text-gray-400'}`}>
               Se aplica al cerrar

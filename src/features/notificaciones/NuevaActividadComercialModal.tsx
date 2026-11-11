@@ -7,7 +7,11 @@ import {
   notificacionesService,
   ActividadRef,
   ActividadSubtipo,
+  ActividadTipoCliente,
+  ActividadTipoActividad,
+  ACTIVIDAD_TIPOS_ACTIVIDAD_PICKER,
 } from '../../services/notificaciones.service';
+import { clientesService } from '../../services/clientes.service';
 
 // Tarea a editar. Estos son los campos que precargamos. Todos opcionales
 // para tolerar filas viejas con contenido incompleto o parseo fallido.
@@ -67,6 +71,12 @@ export function NuevaActividadComercialModal({ isOpen, onClose, editing }: Props
   const [catorcenaDropdownOpen, setCatorcenaDropdownOpen] = useState(false);
   const [estatusActividad, setEstatusActividad] = useState<'' | 'Abierto' | 'Activo' | 'Finalizado'>('Abierto');
   const [base, setBase] = useState<'' | 'CIMU' | 'TRADE' | 'UDC'>('');
+  // Feedback Jos 2026-11-04: Tipo Cliente (Lead/Cliente) y Tipo Actividad
+  // (Llamada/Mail/Visita). Cuando tipoCliente === 'Cliente', el input Cliente
+  // se convierte en autocomplete contra la BD, pero sigue permitiendo texto
+  // libre si el cliente aun no esta registrado.
+  const [tipoCliente, setTipoCliente] = useState<'' | ActividadTipoCliente>('');
+  const [tipoActividad, setTipoActividad] = useState<'' | ActividadTipoActividad>('');
 
   const debouncedSearch = useDebounced(search, 300);
 
@@ -91,6 +101,8 @@ export function NuevaActividadComercialModal({ isOpen, onClose, editing }: Props
     // el useEffect de abajo precarga el valor guardado.
     setEstatusActividad(editing ? '' : 'Abierto');
     setBase('');
+    setTipoCliente('');
+    setTipoActividad('');
 
     if (!editing) return;
     // Precarga desde `editing` (modo edición).
@@ -109,11 +121,12 @@ export function NuevaActividadComercialModal({ isOpen, onClose, editing }: Props
           activar_recordatorio?: boolean; recordar_dias_antes?: number;
           anio?: number; catorcena?: number; catorcenas?: number[];
           estatus_actividad?: string; base?: string;
+          tipo_cliente?: string; tipo_actividad?: string;
         };
-        if (c.subtipo === 'Campaña' || c.subtipo === 'Propuesta' || c.subtipo === 'Lead') {
+        if (c.subtipo === 'Campaña' || c.subtipo === 'Propuesta' || c.subtipo === 'Solicitud' || c.subtipo === 'Lead' || c.subtipo === 'Actividad') {
           setSubtipo(c.subtipo);
         }
-        if (c.ref_id && (c.subtipo === 'Campaña' || c.subtipo === 'Propuesta')) {
+        if (c.ref_id && (c.subtipo === 'Campaña' || c.subtipo === 'Propuesta' || c.subtipo === 'Solicitud')) {
           // Marcamos un placeholder para conservar el ref_id aunque el user
           // no vuelva a buscar. El objeto se refresca cuando la query traiga
           // la lista y encontremos el id real (ver useEffect refresh abajo).
@@ -145,6 +158,18 @@ export function NuevaActividadComercialModal({ isOpen, onClose, editing }: Props
         if (c.base === 'CIMU' || c.base === 'TRADE' || c.base === 'UDC') {
           setBase(c.base);
         }
+        if (c.tipo_cliente === 'Lead' || c.tipo_cliente === 'Cliente') {
+          setTipoCliente(c.tipo_cliente);
+        }
+        // Acepta los 10 valores nuevos del picker + legacy 'Mail'/'Visita'
+        // para no perder actividades viejas al reabrirlas en edicion.
+        const TIPO_ACT_ACEPTADOS: readonly string[] = [
+          ...ACTIVIDAD_TIPOS_ACTIVIDAD_PICKER,
+          'Mail', 'Visita',
+        ];
+        if (c.tipo_actividad && TIPO_ACT_ACEPTADOS.includes(c.tipo_actividad)) {
+          setTipoActividad(c.tipo_actividad as ActividadTipoActividad);
+        }
       } catch (e) {
         console.warn('[ActividadComercial] no se pudo parsear contenido para editar:', e);
       }
@@ -171,12 +196,75 @@ export function NuevaActividadComercialModal({ isOpen, onClose, editing }: Props
 
   const listQuery = useQuery({
     queryKey: ['actividad-comercial-refs', subtipo, debouncedSearch],
-    queryFn: () => subtipo === 'Campaña'
-      ? notificacionesService.getCampanasParaActividad(debouncedSearch || undefined)
-      : notificacionesService.getPropuestasParaActividad(debouncedSearch || undefined),
-    // Lead no tiene busqueda (no hay campaña/propuesta que traer).
-    enabled: isOpen && subtipo !== 'Lead',
+    queryFn: () => {
+      if (subtipo === 'Campaña') return notificacionesService.getCampanasParaActividad(debouncedSearch || undefined);
+      if (subtipo === 'Propuesta') return notificacionesService.getPropuestasParaActividad(debouncedSearch || undefined);
+      if (subtipo === 'Solicitud') return notificacionesService.getSolicitudesParaActividad(debouncedSearch || undefined);
+      return Promise.resolve([] as ActividadRef[]);
+    },
+    // Lead no tiene busqueda (no hay campaña/propuesta/solicitud que traer).
+    enabled: isOpen,
+    retry: false,
   });
+
+  // Autocomplete de clientes reales para el campo Cliente cuando el usuario
+  // eligio "Cliente" en Tipo Cliente (feedback Jos 2026-11-04). Sigue siendo
+  // texto libre — las sugerencias solo ayudan a elegir uno existente. Devuelve
+  // combinaciones (cliente, marca) para que al elegir del dropdown se auto-
+  // rellene tambien el campo Marca (feedback Jos 2026-11-05) y Base por CUIC
+  // (feedback Jos 2026-11-06: "campo cliente que salga y detecte tambien cuic,
+  // segun el cuic ya tiene una Base correspondiente, si se selecciona uno que
+  // se llene la base"). Patron copiado del selector CUIC de CreateSolicitudModal.
+  const [clienteDropdownOpen, setClienteDropdownOpen] = useState(false);
+  const [sapDbFilter, setSapDbFilter] = useState<'ALL' | 'CIMU' | 'TRADE' | 'UDC'>('ALL');
+  type ClienteOption = { cliente: string; marca: string | null; cuic: number | null; razon_social: string | null; sap_database: 'CIMU' | 'TRADE' | 'UDC' | null };
+  const clientesSuggest = useQuery({
+    queryKey: ['clientes-suggest-full'],
+    queryFn: async () => {
+      try {
+        const r = await clientesService.getAllFull();
+        const arr: Array<{ T0_U_Cliente?: string | null; T0_U_RazonSocial?: string | null; T2_U_Marca?: string | null; CUIC?: number | null; sap_database?: string | null }> =
+          (r && Array.isArray((r as unknown as { data?: unknown[] }).data))
+            ? (r as unknown as { data: Array<{ T0_U_Cliente?: string | null; T0_U_RazonSocial?: string | null; T2_U_Marca?: string | null; CUIC?: number | null; sap_database?: string | null }> }).data
+            : [];
+        const seen = new Set<string>();
+        const out: ClienteOption[] = [];
+        for (const c of arr) {
+          const nombre = (c.T0_U_Cliente && c.T0_U_Cliente !== 'Cliente' ? c.T0_U_Cliente : null) || c.T0_U_RazonSocial || null;
+          if (!nombre) continue;
+          const marca = c.T2_U_Marca || null;
+          const cuic = c.CUIC ?? null;
+          const key = `${cuic ?? ''}||${nombre}||${marca || ''}`;
+          if (seen.has(key)) continue;
+          seen.add(key);
+          const sdb = (c.sap_database || '').toUpperCase();
+          const sap_database = (sdb === 'CIMU' || sdb === 'TRADE' || sdb === 'UDC') ? (sdb as 'CIMU' | 'TRADE' | 'UDC') : null;
+          out.push({ cliente: nombre, marca, cuic, razon_social: c.T0_U_RazonSocial || null, sap_database });
+        }
+        return out;
+      } catch {
+        return [] as ClienteOption[];
+      }
+    },
+    enabled: isOpen && tipoCliente === 'Cliente',
+    staleTime: 2 * 60 * 1000,
+    retry: false,
+  });
+
+  // Filtrado client-side: tab de base + busqueda por nombre/cuic. Max 50 visibles.
+  const clientesFiltrados = useMemo(() => {
+    const data = clientesSuggest.data || [];
+    const q = cliente.trim().toLowerCase();
+    const filtroTab = sapDbFilter === 'ALL' ? data : data.filter(c => c.sap_database === sapDbFilter);
+    const filtroTexto = q
+      ? filtroTab.filter(c =>
+          c.cliente.toLowerCase().includes(q)
+          || (c.cuic != null && String(c.cuic).includes(q))
+          || (c.razon_social || '').toLowerCase().includes(q)
+        )
+      : filtroTab;
+    return filtroTexto.slice(0, 50);
+  }, [clientesSuggest.data, cliente, sapDbFilter]);
 
   // Reemplaza el placeholder `#id` del chip en modo edición con el label real
   // en cuanto la query devuelve datos (fix al bug donde el chip quedaba como
@@ -230,10 +318,9 @@ export function NuevaActividadComercialModal({ isOpen, onClose, editing }: Props
     const dias = activarRecordatorio && fechaEntrega
       ? Math.max(0, Math.min(365, parseInt(diasAntes || '0', 10) || 0))
       : undefined;
-    const isLead = subtipo === 'Lead';
     const payload: import('../../services/notificaciones.service').CrearActividadComercialInput = {
-      subtipo: isLead ? 'Lead' : (selected ? subtipo : undefined),
-      ref_id: isLead ? undefined : selected?.id,
+      subtipo: selected ? subtipo : undefined,
+      ref_id: selected?.id,
       cliente: cliente.trim() || undefined,
       marca: marca.trim() || undefined,
       descripcion: desc,
@@ -247,6 +334,8 @@ export function NuevaActividadComercialModal({ isOpen, onClose, editing }: Props
       catorcena: catorcenas[0] ?? undefined,
       estatus_actividad: estatusActividad || undefined,
       base: base || undefined,
+      tipo_cliente: tipoCliente || undefined,
+      tipo_actividad: tipoActividad || undefined,
     };
     if (isEditMode) {
       editMutation.mutate(payload);
@@ -271,7 +360,7 @@ export function NuevaActividadComercialModal({ isOpen, onClose, editing }: Props
 
   return (
     <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm">
-      <div className={`w-full max-w-2xl rounded-2xl shadow-2xl border max-h-[92vh] overflow-y-auto ${
+      <div className={`w-full max-w-2xl rounded-2xl shadow-2xl border max-h-[92dvh] max-lg:landscape:h-[100dvh] max-lg:landscape:max-h-[100dvh] max-lg:landscape:rounded-none max-lg:landscape:mx-0 overflow-y-auto ${
         isDark ? 'bg-zinc-900 border-zinc-800' : 'bg-white border-gray-200'
       }`}>
         {/* Header */}
@@ -291,7 +380,7 @@ export function NuevaActividadComercialModal({ isOpen, onClose, editing }: Props
               <p className={`mt-0.5 text-xs ${isDark ? 'text-zinc-400' : 'text-gray-500'}`}>
                 {isEditMode
                   ? `Editando actividad #${editing?.id}. Los cambios quedan en el historial.`
-                  : 'Registra una tarea manual sobre una campaña o propuesta.'}
+                  : 'Registra una tarea manual sobre una campaña, propuesta o solicitud.'}
               </p>
             </div>
           </div>
@@ -367,10 +456,12 @@ export function NuevaActividadComercialModal({ isOpen, onClose, editing }: Props
               </div>
             </div>
 
-            {/* Tipo + selector de referencia (OPCIONAL) */}
+            {/* Etapa + selector de referencia (OPCIONAL)
+                Feedback Jos 2026-11-04: "Tipo" se renombra a "Etapa".
+                Se quita "Lead" (ahora va en Tipo Cliente). Se agrega "Solicitud". */}
             <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
               <div>
-                <label className={labelCls}>Tipo</label>
+                <label className={labelCls}>Etapa</label>
                 <select
                   className={inputCls}
                   value={subtipo}
@@ -382,42 +473,91 @@ export function NuevaActividadComercialModal({ isOpen, onClose, editing }: Props
                 >
                   <option value="Campaña">Campaña</option>
                   <option value="Propuesta">Propuesta</option>
-                  <option value="Lead">Lead</option>
+                  <option value="Solicitud">Solicitud</option>
+                  <option value="Actividad">Actividad</option>
                 </select>
               </div>
               <div>
-                {/* Lead no tiene campaña ni propuesta asociada: el buscador se
-                    bloquea (ajuste 2026-08-13). El usuario captura cliente y
-                    marca a mano en los inputs de abajo. */}
-                <label className={labelCls}>
-                  {subtipo === 'Lead'
-                    ? 'Buscar (no aplica para Lead)'
-                    : `Buscar ${subtipo.toLowerCase()} (opcional)`}
-                </label>
-                <div className="relative">
-                  <Search className={`absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 ${isDark ? 'text-zinc-500' : 'text-gray-400'}`} />
-                  <input
-                    className={`${inputCls} pl-9 ${subtipo === 'Lead' ? 'opacity-50 cursor-not-allowed' : ''}`}
-                    placeholder={subtipo === 'Lead' ? 'Lead — captura cliente/marca abajo' : 'Nombre, ID, cliente o marca...'}
-                    value={subtipo === 'Lead' ? '' : search}
-                    onChange={(e) => { setSearch(e.target.value); setSelected(null); }}
-                    disabled={subtipo === 'Lead'}
-                  />
-                </div>
+                {/* "Actividad" es standalone: no se vincula a ninguna
+                    campania/propuesta/solicitud, asi que el buscador sale
+                    sobra. Feedback Jos 2026-11-10. */}
+                {subtipo === 'Actividad' ? (
+                  <div className={`${inputCls} flex items-center text-xs ${isDark ? 'text-zinc-500' : 'text-gray-400'}`}>
+                    Actividad sin vincular — llena Cliente y Marca abajo.
+                  </div>
+                ) : (
+                  <>
+                    <label className={labelCls}>
+                      Buscar {subtipo.toLowerCase()} (opcional)
+                    </label>
+                    <div className="relative">
+                      <Search className={`absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 ${isDark ? 'text-zinc-500' : 'text-gray-400'}`} />
+                      <input
+                        className={`${inputCls} pl-9`}
+                        placeholder="Nombre, ID, cliente o marca..."
+                        value={search}
+                        onChange={(e) => { setSearch(e.target.value); setSelected(null); }}
+                      />
+                    </div>
+                  </>
+                )}
+              </div>
+            </div>
+
+            {/* Tipo Cliente + Tipo Actividad (feedback Jos 2026-11-04) */}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+              <div>
+                <label className={labelCls}>Tipo Cliente</label>
+                <select
+                  className={inputCls}
+                  value={tipoCliente}
+                  onChange={(e) => setTipoCliente(e.target.value as '' | ActividadTipoCliente)}
+                >
+                  <option value="">Selecciona...</option>
+                  <option value="Lead">Lead</option>
+                  <option value="Cliente">Cliente</option>
+                </select>
+              </div>
+              <div>
+                <label className={labelCls}>Tipo Actividad</label>
+                <select
+                  className={inputCls}
+                  value={tipoActividad}
+                  onChange={(e) => setTipoActividad(e.target.value as '' | ActividadTipoActividad)}
+                >
+                  <option value="">Selecciona...</option>
+                  {ACTIVIDAD_TIPOS_ACTIVIDAD_PICKER.map(t => (
+                    <option key={t} value={t}>{t}</option>
+                  ))}
+                  {/* Compatibilidad: si la actividad en edicion tenia 'Mail'
+                      o 'Visita' (valores legacy pre 2026-11-10), los
+                      mostramos como opcion disabled para que no se pierda
+                      el label al reabrir el modal. */}
+                  {(tipoActividad === 'Mail' || tipoActividad === 'Visita') && (
+                    <option value={tipoActividad} disabled>{tipoActividad} (legacy)</option>
+                  )}
+                </select>
               </div>
             </div>
 
             {/* Resultados (solo cuando el usuario esta buscando y aun no ha
                 seleccionado). Al elegir uno, se autorellenan Cliente/Marca abajo
                 sin bloquearlos. */}
-            {subtipo !== 'Lead' && !selected && search.trim().length > 0 && (
-              <div className={`rounded-lg border max-h-52 overflow-y-auto ${isDark ? 'border-zinc-800' : 'border-gray-200'}`}>
+            {!selected && search.trim().length > 0 && (
+              <div className={`rounded-lg border max-h-52 max-lg:landscape:max-h-32 overflow-y-auto ${isDark ? 'border-zinc-800' : 'border-gray-200'}`}>
                 {listQuery.isLoading && (
                   <div className={`px-3 py-3 text-xs flex items-center gap-2 ${isDark ? 'text-zinc-500' : 'text-gray-400'}`}>
                     <Loader2 className="h-3 w-3 animate-spin" /> Cargando...
                   </div>
                 )}
-                {!listQuery.isLoading && (listQuery.data?.length ?? 0) === 0 && (
+                {!listQuery.isLoading && listQuery.isError && (
+                  <div className={`px-3 py-3 text-xs text-center ${isDark ? 'text-red-400' : 'text-red-600'}`}>
+                    {/^.*(autorizado|permiso).*$/i.test(listQuery.error?.message || '')
+                      ? 'No tienes permiso para buscar actividades comerciales.'
+                      : (listQuery.error?.message || 'Error al buscar.')}
+                  </div>
+                )}
+                {!listQuery.isLoading && !listQuery.isError && (listQuery.data?.length ?? 0) === 0 && (
                   <div className={`px-3 py-3 text-xs text-center ${isDark ? 'text-zinc-500' : 'text-gray-400'}`}>
                     Sin resultados. Prueba con otro término.
                   </div>
@@ -479,14 +619,89 @@ export function NuevaActividadComercialModal({ isOpen, onClose, editing }: Props
                 Al elegir campaña/propuesta se autorellenan como sugerencia
                 pero el usuario puede editarlos o escribirlos a mano. */}
             <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-              <div>
+              <div className="relative">
                 <label className={labelCls}>Cliente</label>
                 <input
                   className={inputCls}
-                  placeholder="Nombre del cliente"
+                  placeholder={tipoCliente === 'Cliente' ? 'Busca o escribe un cliente...' : 'Nombre del cliente'}
                   value={cliente}
-                  onChange={(e) => setCliente(e.target.value)}
+                  onChange={(e) => { setCliente(e.target.value); setClienteDropdownOpen(true); }}
+                  onFocus={() => setClienteDropdownOpen(true)}
+                  onBlur={() => { setTimeout(() => setClienteDropdownOpen(false), 150); }}
+                  autoComplete="off"
                 />
+                {tipoCliente === 'Cliente' && clienteDropdownOpen && cliente.trim().length > 0 && (
+                  <div className={`fixed inset-x-2 top-16 bottom-16 mt-0 w-auto max-w-none max-h-[calc(100dvh-5rem)] overflow-hidden rounded-lg border shadow-lg flex flex-col z-20 lg:absolute lg:inset-auto lg:top-full lg:left-0 lg:right-0 lg:bottom-auto lg:mt-1 lg:w-full lg:max-w-[calc(100vw-2rem)] lg:max-h-72 ${isDark ? 'bg-zinc-900 border-zinc-700' : 'bg-white border-gray-200'}`}>
+                    {/* Tabs de base (feedback Jos 2026-11-06: como el selector de solicitudes) */}
+                    <div className={`flex items-center gap-1 px-2 py-1.5 border-b ${isDark ? 'border-zinc-800 bg-zinc-900' : 'border-gray-100 bg-gray-50'}`}>
+                      {(['ALL', 'CIMU', 'TRADE', 'UDC'] as const).map(tab => (
+                        <button
+                          key={tab}
+                          type="button"
+                          onMouseDown={(e) => e.preventDefault()}
+                          onClick={() => setSapDbFilter(tab)}
+                          className={`px-2 py-0.5 rounded text-[10px] font-medium transition-colors ${
+                            sapDbFilter === tab
+                              ? (isDark ? 'bg-amber-500 text-black' : 'bg-amber-600 text-white')
+                              : (isDark ? 'text-zinc-400 hover:bg-zinc-800' : 'text-gray-500 hover:bg-gray-200')
+                          }`}
+                        >
+                          {tab === 'ALL' ? 'Todos' : tab}
+                        </button>
+                      ))}
+                      <span className={`ml-auto text-[10px] ${isDark ? 'text-zinc-500' : 'text-gray-400'}`}>
+                        {clientesFiltrados.length} de {clientesSuggest.data?.length ?? 0}
+                      </span>
+                    </div>
+                    <div className="flex-1 max-h-56 max-lg:flex-1 max-lg:max-h-none overflow-y-auto">
+                    {clientesSuggest.isLoading && (
+                      <div className={`px-3 py-2 text-xs flex items-center gap-2 ${isDark ? 'text-zinc-500' : 'text-gray-400'}`}>
+                        <Loader2 className="h-3 w-3 animate-spin" /> Cargando clientes...
+                      </div>
+                    )}
+                    {!clientesSuggest.isLoading && clientesFiltrados.length === 0 && (
+                      <div className={`px-3 py-2 text-xs ${isDark ? 'text-zinc-500' : 'text-gray-400'}`}>
+                        Sin coincidencias. Puedes dejarlo como texto libre.
+                      </div>
+                    )}
+                    {clientesFiltrados.map((opt, idx) => (
+                      <button
+                        key={`${opt.cuic ?? ''}||${opt.cliente}||${opt.marca || ''}||${idx}`}
+                        type="button"
+                        onMouseDown={(e) => e.preventDefault()}
+                        onClick={() => {
+                          setCliente(opt.cliente);
+                          if (opt.marca) setMarca(opt.marca);
+                          if (opt.sap_database) setBase(opt.sap_database);
+                          setClienteDropdownOpen(false);
+                        }}
+                        className={`w-full text-left px-3 py-2 text-xs transition-colors flex items-center justify-between gap-2 ${
+                          isDark ? 'hover:bg-zinc-800 text-zinc-200 border-b border-zinc-800/60'
+                                 : 'hover:bg-amber-50 text-gray-700 border-b border-gray-100'
+                        }`}
+                      >
+                        <div className="min-w-0">
+                          <div className="font-medium truncate">{opt.cliente}</div>
+                          <div className={`text-[10px] mt-0.5 truncate ${isDark ? 'text-zinc-500' : 'text-gray-500'}`}>
+                            {opt.cuic != null ? `CUIC ${opt.cuic}` : 'Sin CUIC'}
+                            {opt.razon_social ? ` · ${opt.razon_social}` : ''}
+                            {opt.marca ? ` · ${opt.marca}` : ''}
+                          </div>
+                        </div>
+                        {opt.sap_database && (
+                          <span className={`shrink-0 text-[10px] font-semibold px-2 py-0.5 rounded-full ${
+                            opt.sap_database === 'CIMU' ? (isDark ? 'bg-blue-500/20 text-blue-300' : 'bg-blue-100 text-blue-700')
+                            : opt.sap_database === 'TRADE' ? (isDark ? 'bg-emerald-500/20 text-emerald-300' : 'bg-emerald-100 text-emerald-700')
+                            : (isDark ? 'bg-amber-500/20 text-amber-300' : 'bg-amber-100 text-amber-700')
+                          }`}>
+                            {opt.sap_database}
+                          </span>
+                        )}
+                      </button>
+                    ))}
+                    </div>
+                  </div>
+                )}
               </div>
               <div>
                 <label className={labelCls}>Marca</label>
@@ -526,7 +741,7 @@ export function NuevaActividadComercialModal({ isOpen, onClose, editing }: Props
                   <span className={`text-[10px] shrink-0 ${isDark ? 'text-zinc-500' : 'text-gray-400'}`}>▾</span>
                 </button>
                 {catorcenaDropdownOpen && (
-                  <div className={`absolute z-20 mt-1 w-full max-h-56 overflow-y-auto rounded-lg border shadow-lg ${isDark ? 'bg-zinc-900 border-zinc-700' : 'bg-white border-gray-200'}`}>
+                  <div className={`fixed inset-x-2 top-16 bottom-16 mt-0 w-auto max-w-none max-h-[calc(100dvh-5rem)] overflow-y-auto rounded-lg border shadow-lg z-20 lg:absolute lg:inset-auto lg:top-full lg:left-0 lg:right-0 lg:bottom-auto lg:mt-1 lg:w-full lg:max-w-[calc(100vw-2rem)] lg:max-h-56 ${isDark ? 'bg-zinc-900 border-zinc-700' : 'bg-white border-gray-200'}`}>
                     <div className={`sticky top-0 flex items-center justify-between px-2 py-1 border-b text-[10px] ${isDark ? 'bg-zinc-900 border-zinc-800 text-zinc-500' : 'bg-white border-gray-100 text-gray-500'}`}>
                       <button type="button" onClick={() => setCatorcenas([])} className="hover:underline">Limpiar</button>
                       <button type="button" onClick={() => setCatorcenaDropdownOpen(false)} className="hover:underline">Cerrar</button>
@@ -638,7 +853,10 @@ export function NuevaActividadComercialModal({ isOpen, onClose, editing }: Props
               </div>
             )}
 
-            <div className={`pt-3 border-t flex justify-end gap-2 ${isDark ? 'border-zinc-800' : 'border-gray-200'}`}>
+            {/* Jos 2026-11-10: footer sticky bottom en mobile/tablet para que
+                Cancelar y Crear actividad siempre sean visibles sin hacer scroll
+                hasta el fondo. En desktop queda igual (lg:static). */}
+            <div className={`pt-3 max-lg:landscape:pt-2 border-t flex flex-wrap justify-end gap-2 max-lg:sticky max-lg:bottom-0 max-lg:-mx-5 max-lg:px-5 max-lg:pb-3 max-lg:z-10 ${isDark ? 'border-zinc-800 max-lg:bg-zinc-900' : 'border-gray-200 max-lg:bg-white'}`}>
               <button
                 type="button"
                 onClick={onClose}

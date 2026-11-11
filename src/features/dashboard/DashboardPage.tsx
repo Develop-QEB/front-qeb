@@ -2497,7 +2497,7 @@ export function DashboardPage() {
         </div>
 
         {/* Estado de POST a SAP: pendientes por postear vs posteadas */}
-        <PosteoStatsCard data={posteoStats} isLoading={loadingPosteo} periodoLabel={posteoPeriodoLabel} />
+        <PosteoStatsCard data={posteoStats} isLoading={loadingPosteo} periodoLabel={posteoPeriodoLabel} collapseKey="dashboard" />
 
         {/* Charts Row 1 */}
         {(loadingEstatus || loadingInventory) && (

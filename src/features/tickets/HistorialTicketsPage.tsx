@@ -954,8 +954,10 @@ export function HistorialTicketsPage() {
           </div>
         </div>
 
-        {/* Tabs */}
-        <div className={`flex gap-1 p-1 rounded-xl ${isDark ? 'bg-zinc-800/50' : 'bg-gray-100'}`}>
+        {/* Tabs — Jos 2026-11-10: 5 tabs (Pendientes/En Proceso/Validación/
+            Resueltos/Cerrados) no caben en movil (<500px). overflow-x-auto
+            permite scroll horizontal del grupo. Desktop queda igual. */}
+        <div className={`flex gap-1 p-1 rounded-xl overflow-x-auto scrollbar-purple ${isDark ? 'bg-zinc-800/50' : 'bg-gray-100'}`}>
           {adminTabs.map((tab) => {
             const count = filteredByTecnico.filter(t => t.status === tab.key).length;
             const hasUnread = filteredByTecnico.some(t => t.status === tab.key && (t.has_unread || t.has_chat_unread));

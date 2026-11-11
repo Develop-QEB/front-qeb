@@ -874,7 +874,7 @@ export function ViewSolicitudModal({ isOpen, onClose, solicitudId, onEdit, onAte
 
   return (
     <div className="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center z-50 p-4 isolate">
-      <div className={`${isDark ? 'bg-gradient-to-br from-zinc-900 via-zinc-900 to-zinc-950 border-zinc-800/50' : 'bg-white border-gray-200'} border rounded-3xl w-[97vw] max-w-[1800px] max-h-[92vh] overflow-hidden flex flex-col shadow-2xl relative z-50`}>
+      <div className={`${isDark ? 'bg-gradient-to-br from-zinc-900 via-zinc-900 to-zinc-950 border-zinc-800/50' : 'bg-white border-gray-200'} border rounded-3xl w-[97vw] max-w-[1800px] max-h-[92vh] sm:max-h-[92dvh] max-lg:landscape:h-[100dvh] max-lg:landscape:max-h-[100dvh] max-lg:landscape:rounded-none max-lg:landscape:mx-0 overflow-hidden flex flex-col shadow-2xl relative z-50`}>
         {/* Header - Estilo violeta consistente */}
         <div className="relative px-6 py-5 border-b border-violet-500/20 bg-gradient-to-r from-violet-600/20 via-purple-600/15 to-fuchsia-600/10">
           <div className="flex items-center justify-between">
@@ -894,7 +894,9 @@ export function ViewSolicitudModal({ isOpen, onClose, solicitudId, onEdit, onAte
                 )}
               </div>
             </div>
-            <div className="flex items-center gap-2">
+            {/* Jos 2026-11-10: en movil (<1024px) los 5 botones no caben en
+                una sola fila — permitimos wrap. Desktop queda igual. */}
+            <div className="flex items-center gap-2 max-lg:flex-wrap max-lg:justify-end">
               {onEdit && (
                 <button
                   onClick={() => { onClose(); onEdit(); }}
@@ -955,7 +957,7 @@ export function ViewSolicitudModal({ isOpen, onClose, solicitudId, onEdit, onAte
             <div className="space-y-5">
               {/* Stats Row - Centrado y limpio */}
               <div className={`rounded-2xl p-5 border ${isDark ? 'bg-gradient-to-r from-violet-600/10 via-purple-600/10 to-fuchsia-600/10 border-violet-500/20' : 'bg-violet-50 border-violet-200'}`}>
-                <div className="grid grid-cols-4 gap-6">
+                <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-6">
                   <div className="text-center">
                     <p className={`text-2xl font-bold ${isDark ? 'text-white' : 'text-gray-900'}`}>{totalCaras}</p>
                     <p className={`text-xs ${isDark ? 'text-zinc-400' : 'text-gray-500'} mt-1`}>Total {allPuentePeatonal ? 'Puentes' : 'Caras'}</p>
@@ -1117,9 +1119,9 @@ export function ViewSolicitudModal({ isOpen, onClose, solicitudId, onEdit, onAte
                         {/* Catorcena Header (Parent Level) */}
                         <button
                           onClick={() => toggleGroup(catorcenaGroup.catorcena)}
-                          className={`w-full px-5 py-3 flex items-center justify-between transition-colors ${isDark ? 'hover:bg-violet-600/10 bg-violet-600/5' : 'hover:bg-violet-50 bg-white'}`}
+                          className={`w-full px-5 py-3 flex flex-wrap items-center justify-between gap-y-2 transition-colors ${isDark ? 'hover:bg-violet-600/10 bg-violet-600/5' : 'hover:bg-violet-50 bg-white'}`}
                         >
-                          <div className="flex items-center gap-3">
+                          <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
                             {expandedGroups.has(catorcenaGroup.catorcena) ? (
                               <ChevronDown className="h-4 w-4 text-violet-400" />
                             ) : (
@@ -1137,7 +1139,7 @@ export function ViewSolicitudModal({ isOpen, onClose, solicitudId, onEdit, onAte
                               ({catorcenaGroup.articulos.length} artículo{catorcenaGroup.articulos.length > 1 ? 's' : ''})
                             </span>
                           </div>
-                          <div className="flex items-center gap-4">
+                          <div className="flex flex-wrap items-center justify-end gap-x-4 gap-y-1">
                             <div className="flex items-center gap-1.5">
                               <span className={`${isDark ? 'text-zinc-400' : 'text-gray-500'} text-xs`}>Renta:</span>
                               <span className={`${isDark ? 'text-white' : 'text-gray-900'} text-sm font-semibold`}>{catorcenaGroup.totalCaras}</span>
@@ -1190,8 +1192,8 @@ export function ViewSolicitudModal({ isOpen, onClose, solicitudId, onEdit, onAte
 
                                   {expandedGroups.has(articuloKey) && (
                                     <div className="px-4 pb-3">
-                                      <div className={`overflow-x-auto rounded-xl border ${isDark ? 'border-violet-500/20 bg-zinc-900/50' : 'border-gray-200 bg-white'}`}>
-                                        <table className="w-full text-sm">
+                                      <div className={`overflow-x-auto scrollbar-purple rounded-xl border ${isDark ? 'border-violet-500/20 bg-zinc-900/50' : 'border-gray-200 bg-white'}`}>
+                                        <table className="w-full min-w-[900px] text-sm">
                                           <thead>
                                             <tr className={isDark ? 'bg-violet-600/20' : 'bg-violet-50'}>
                                               <th className={`px-3 py-2 text-left text-xs font-semibold ${isDark ? 'text-violet-200' : 'text-violet-700'}`}>Plaza</th>

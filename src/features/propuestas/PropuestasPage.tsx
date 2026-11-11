@@ -33,6 +33,7 @@ import { getPermissions } from '../../lib/permissions';
 import { useSocketEquipos, useSocketPropuestas } from '../../hooks/useSocket';
 import { HistorialFilterPopover, type HistorialFilterValues } from '../../components/HistorialFilterPopover';
 import { ConfirmModal } from '../../components/ui/confirm-modal';
+import { PropuestaAprobadaInfoModal } from '../../components/PropuestaAprobadaInfoModal';
 import { monthLabelShort } from '../../lib/periodos';
 import {
   getStatusColor, STATUS_OPTIONS, COMPLETITUD_STATUS, esPropuestaIncompleta, IncompletaBadge,
@@ -42,14 +43,16 @@ import PropuestasTableroView, {
   PROPUESTAS_COLUMNAS, PROPUESTAS_COLUMNAS_KEYS,
 } from './PropuestasTableroView';
 import {
-  ordenarTablero, ORDEN_RAPIDO_DEFAULT, ORDEN_RAPIDO_TABLA_DEFAULT, type OrdenRapido,
+  ordenarTablero, ordenCampo, ORDEN_RAPIDO_DEFAULT, ORDEN_RAPIDO_TABLA_DEFAULT, type OrdenRapido,
   construirOpcionesCambio, fechaUltimoCambio,
 } from '../../lib/tableroVistas';
-import { AUTORIZACION_LABELS, evalAutorizacionAvanzado, splitStatusSeleccion } from '../../lib/autorizacionFiltro';
+import { AUTORIZACION_LABELS, evalAutorizacionAvanzado, splitStatusSeleccion, estatusValorIncluye } from '../../lib/autorizacionFiltro';
 import { MultiSelectChip } from '../../components/MultiSelectChip';
 import { RefreshButton } from '../../components/RefreshButton';
 import { TableroVistasControls } from '../../components/tablero/TableroVistasControls';
-import { OrdenRapidoChips } from '../../components/tablero/OrdenRapidoChips';
+import { OrdenRapidoMenu } from '../../components/tablero/OrdenRapidoMenu';
+import { VistasGuardadasMenu } from '../../components/tablero/VistasGuardadasMenu';
+import { leerCondiciones, leerNumeroOpcional, leerObjetoStrings, leerString, leerStrings, type FiltrosDatos } from '../../lib/filtrosGuardados';
 import { VistaSelector, type VistaOpcion } from '../../components/tablero/VistaSelector';
 import { loadVistaFijaModulo, saveVistaFijaModulo } from '../../lib/vistaFija';
 import { PropuestaAcciones } from './PropuestaAcciones';
@@ -292,7 +295,7 @@ function FilterChip({
       {open && (
         <>
           <div className="fixed inset-0 z-40" onClick={handleClose} />
-          <div className={`absolute top-full left-0 mt-1.5 z-50 w-64 rounded-xl border ${isDark ? 'border-purple-500/20 bg-zinc-900' : 'border-gray-200 bg-white'} backdrop-blur-xl shadow-2xl overflow-hidden`}>
+          <div className={`fixed inset-x-2 top-16 bottom-16 mt-0 w-auto max-w-none max-h-[calc(100dvh-5rem)] overflow-y-auto overscroll-contain lg:absolute lg:inset-auto lg:top-full lg:left-0 lg:right-auto lg:bottom-auto lg:mt-1.5 lg:w-64 lg:max-w-[calc(100vw-2rem)] lg:max-h-none lg:overflow-hidden z-50 rounded-xl border ${isDark ? 'border-purple-500/20 bg-zinc-900' : 'border-gray-200 bg-white'} backdrop-blur-xl shadow-2xl`}>
             <div className={`p-2 border-b ${isDark ? 'border-zinc-800' : 'border-gray-200'}`}>
               <input
                 type="text"
@@ -530,7 +533,7 @@ function PeriodFilterPopover({
       {open && (
         <>
           <div className="fixed inset-0 z-40" onClick={() => setOpen(false)} />
-          <div className={`absolute top-full left-0 mt-1.5 z-50 w-80 rounded-xl border ${isDark ? 'border-purple-500/20 bg-zinc-900' : 'border-gray-200 bg-white'} backdrop-blur-xl shadow-2xl overflow-hidden`}>
+          <div className={`fixed inset-x-2 top-16 bottom-16 mt-0 w-auto max-w-none max-h-[calc(100dvh-5rem)] overflow-y-auto overscroll-contain lg:absolute lg:inset-auto lg:top-full lg:left-0 lg:right-auto lg:bottom-auto lg:mt-1.5 lg:w-80 lg:max-w-[calc(100vw-2rem)] lg:max-h-none lg:overflow-hidden z-50 rounded-xl border ${isDark ? 'border-purple-500/20 bg-zinc-900' : 'border-gray-200 bg-white'} backdrop-blur-xl shadow-2xl`}>
             <div className={`p-3 border-b ${isDark ? 'border-zinc-800' : 'border-gray-200'}`}>
               <h3 className={`text-sm font-semibold ${isDark ? 'text-white' : 'text-gray-900'} flex items-center gap-2`}>
                 <Calendar className={`h-4 w-4 ${isDark ? 'text-purple-400' : 'text-purple-600'}`} />
@@ -875,7 +878,7 @@ function StatusModal({ isOpen, onClose, propuesta, onStatusChange, allowedStatus
 
   return (
     <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50 p-4">
-      <div className={`${isDark ? 'bg-zinc-900 border-zinc-700' : 'bg-white border-gray-200'} border rounded-2xl w-full max-w-2xl max-h-[85vh] overflow-hidden flex flex-col`}>
+      <div className={`${isDark ? 'bg-zinc-900 border-zinc-700' : 'bg-white border-gray-200'} border rounded-2xl w-full max-w-2xl max-h-[85dvh] max-lg:landscape:h-[100dvh] max-lg:landscape:max-h-[100dvh] max-lg:landscape:rounded-none max-lg:landscape:mx-0 overflow-hidden flex flex-col`}>
         {/* Header */}
         <div className={`flex items-center justify-between px-6 py-4 border-b ${isDark ? 'border-zinc-800' : 'border-gray-200'}`}>
           <div className="flex items-center gap-3">
@@ -944,7 +947,7 @@ function StatusModal({ isOpen, onClose, propuesta, onStatusChange, allowedStatus
             </div>
           )}
           <label className={`block text-sm ${isDark ? 'text-zinc-400' : 'text-gray-500'} mb-2`}>Cambiar estado a:</label>
-          <div className="flex items-center gap-3">
+          <div className="flex flex-col sm:flex-row sm:items-center gap-3">
             <select
               value={selectedStatus}
               onChange={(e) => setSelectedStatus(e.target.value)}
@@ -1247,7 +1250,7 @@ function ApproveModal({ isOpen, onClose, propuesta, onSuccess }: ApproveModalPro
 
   return (
     <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50 p-2 sm:p-4">
-      <div className={`${isDark ? 'bg-zinc-900 border-zinc-700' : 'bg-white border-gray-200'} border rounded-2xl w-full max-w-xl max-h-[92vh] sm:max-h-[85vh] overflow-hidden flex flex-col`}>
+      <div className={`${isDark ? 'bg-zinc-900 border-zinc-700' : 'bg-white border-gray-200'} border rounded-2xl w-full max-w-xl max-h-[92dvh] sm:max-h-[85dvh] max-lg:landscape:h-[100dvh] max-lg:landscape:max-h-[100dvh] max-lg:landscape:rounded-none max-lg:landscape:mx-0 overflow-hidden flex flex-col`}>
         {/* Header */}
         <div className={`flex items-center justify-between px-4 sm:px-6 py-3 sm:py-4 border-b ${isDark ? 'border-zinc-800' : 'border-gray-200'} bg-gradient-to-r from-emerald-600/20 to-green-600/10`}>
           <div className="flex items-center gap-3 min-w-0">
@@ -1655,6 +1658,8 @@ export function PropuestasPage() {
   const [pruebaColorInitialTab, setPruebaColorInitialTab] = useState<'pruebas' | 'nueva' | undefined>(undefined);
   const puedePruebaColor = puedeGestionarPruebaColor(user?.rol);
   const [selectedPropuestaForAssign, setSelectedPropuestaForAssign] = useState<Propuesta | null>(null);
+  // Modal informativo cuando se intenta abrir el modal sobre propuesta ya pasada a ventas (bug Oral B)
+  const [propuestaBloqueadaStatus, setPropuestaBloqueadaStatus] = useState<string | null>(null);
 
   // Handle URL params: viewId opens modal, search fills search bar
   useEffect(() => {
@@ -1686,6 +1691,14 @@ export function PropuestasPage() {
             setPruebaColorInitialTab(undefined);
             setPruebaColorPropuesta(propuesta);
           } else {
+            // Guard: no abrir el modal de Asignar Inventario si la propuesta
+            // ya paso a ventas (caso Oral B 30-oct-2026). El modal permitia
+            // agregar circuitos y las reservas nacian 'Reservado' colgadas,
+            // invisibles para candados anti-choque.
+            if (propuesta.status === 'Aprobada' || propuesta.status === 'Pase a ventas') {
+              setPropuestaBloqueadaStatus(propuesta.status);
+              return;
+            }
             setSelectedPropuestaForAssign(propuesta);
             setShowAssignModal(true);
           }
@@ -1788,7 +1801,7 @@ export function PropuestasPage() {
   // exclude por default — si no, el filtro daria 0 porque la pagina oculta
   // todo lo que tiene status='Rechazada' actual.
   const effectiveExcludeRechazadas = (
-    historialFilter.modo === 'cambio_estatus' && historialFilter.estatusValor === 'Rechazada'
+    historialFilter.modo === 'cambio_estatus' && estatusValorIncluye(historialFilter.estatusValor, 'Rechazada')
   ) ? false : excludeRechazadas;
 
   // El chip "Status" (multiselect) mezcla estatus de propuesta, pseudo-estatus
@@ -1798,7 +1811,8 @@ export function PropuestasPage() {
   const statusFiltro = splitStatusSeleccion(statusSel, COMPLETITUD_STATUS);
   // Fechas de último cambio por estatus/autorización: solo hacen falta para
   // el orden "Último cambio" (el back las calcula desde historial).
-  const includeCambios = ordenRapido === 'reciente';
+  // El tablero los pide siempre: la tarjeta muestra la fecha del ultimo cambio.
+  const includeCambios = ordenCampo(ordenRapido) === 'cambio' || activeView === 'tablero';
 
   // Stats: WS invalida en cambios reales; staleTime corto evita refetches en
   // re-renders del padre. Pasamos `search` para que total/chart reflejen los
@@ -1907,11 +1921,11 @@ export function PropuestasPage() {
     // paginando, ordenar aquí reacomodaría únicamente las 20 filas visibles y
     // daría una lista que miente sobre el orden global; en ese caso vale el
     // ORDER BY pr.id DESC del backend, que es justo 'nueva_vieja'.
-    // 'reciente' considera edición (updated_at), cambios de estatus y cambios
-    // de autorización de circuitos según `cambiosSeleccion`; los otros dos
-    // usan `fecha`, la de creación.
+    // 'Último cambio' considera edición (updated_at), cambios de estatus y
+    // cambios de autorización de circuitos según `cambiosSeleccion`; 'Fecha
+    // de creación' usa `fecha` y 'Presupuesto' usa `inversion`.
     if (!needsAllData) return result;
-    return ordenarTablero(result, ordenRapido, p => p.fecha, p => fechaUltimoCambio(p, cambiosSeleccion));
+    return ordenarTablero(result, ordenRapido, p => p.fecha, p => fechaUltimoCambio(p, cambiosSeleccion), p => p.inversion);
   }, [data?.data, advancedFilters, completitudSel, soloIncompletos, ordenRapido, needsAllData, cambiosSeleccion]);
 
   // Sólo cuando hay filtros avanzados activos necesitamos recalcular stats en
@@ -1954,6 +1968,33 @@ export function PropuestasPage() {
   const clearAdvancedFilters = () => {
     setAdvancedFilters([]);
   };
+
+  // Foto de la barra de filtros que guarda una vista (menu "Vistas" junto al
+  // boton Filtros), y como volver a aplicarla. El orden y "solo incompletos"
+  // van aparte en la vista (son campos propios de VistaTablero). Lo que no
+  // venga en la foto se resetea: aplicar una vista es "dejar la barra asi",
+  // no "sumar a lo que ya tenia". Ver lib/filtrosGuardados.
+  const filtrosSnapshot = useMemo<FiltrosDatos>(() => ({
+    statusSel, tipoPeriodo, yearInicio, yearFin, catorcenaInicio, catorcenaFin,
+    historialFilter, cambiosSeleccion, groupBy, advancedFilters, searchTags,
+  }), [statusSel, tipoPeriodo, yearInicio, yearFin, catorcenaInicio, catorcenaFin, historialFilter, cambiosSeleccion, groupBy, advancedFilters, searchTags]);
+  const aplicarFiltrosGuardados = React.useCallback((d: FiltrosDatos) => {
+    setStatusSel(leerStrings(d.statusSel));
+    setTipoPeriodo(leerString(d.tipoPeriodo));
+    setYearInicio(leerNumeroOpcional(d.yearInicio));
+    setYearFin(leerNumeroOpcional(d.yearFin));
+    setCatorcenaInicio(leerNumeroOpcional(d.catorcenaInicio));
+    setCatorcenaFin(leerNumeroOpcional(d.catorcenaFin));
+    setHistorialFilter(leerObjetoStrings(d.historialFilter) as HistorialFilterValues);
+    setCambiosSeleccion(Array.isArray(d.cambiosSeleccion) ? leerStrings(d.cambiosSeleccion) : null);
+    setGroupBy(leerString(d.groupBy));
+    setAdvancedFilters(leerCondiciones<AdvancedFilterCondition>(d.advancedFilters));
+    setSearchTags(leerStrings(d.searchTags));
+    setSearchInput('');
+    setExpandedGroups(new Set());
+    setShowFilters(true);
+    setPage(1);
+  }, []);
 
   const clearAllFilters = () => {
     setStatusSel([]);
@@ -2287,8 +2328,19 @@ export function PropuestasPage() {
   // aplica: se pidió el universo completo (needsAllData) y la tabla pinta todo
   // filteredData, así que el contador y las páginas salen de aquí.
   const hasLocalFilters = advancedFilters.length > 0 || statusCompletitud || soloIncompletos || ordenNecesitaTodo;
-  const totalPages = hasLocalFilters ? 1 : (data?.pagination?.totalPages || 1);
+  // Con filtros/orden en cliente se pagina en cliente sobre filteredData con
+  // el mismo `limit` (antes se pintaba todo en una sola página). Con
+  // agrupación no se pagina: cada grupo pinta completo.
+  const paginaEnCliente = hasLocalFilters && !groupBy;
+  const totalPages = paginaEnCliente
+    ? Math.max(1, Math.ceil(filteredData.length / limit))
+    : (data?.pagination?.totalPages || 1);
   const total = hasLocalFilters ? filteredData.length : (data?.pagination?.total ?? 0);
+  // `page` puede quedar arriba del total al cambiar de modo/filtro: se acota.
+  const pageActual = Math.min(page, totalPages);
+  const filasTabla = paginaEnCliente
+    ? filteredData.slice((pageActual - 1) * limit, pageActual * limit)
+    : filteredData;
 
   return (
     <div className="min-h-screen">
@@ -2389,7 +2441,7 @@ export function PropuestasPage() {
         <div className={`rounded-2xl border ${isDark ? 'border-purple-500/20 bg-gradient-to-br from-zinc-900/90 via-purple-950/20 to-zinc-900/90' : 'border-gray-200 bg-white'} backdrop-blur-xl p-4 relative z-30`}>
           <div className="flex flex-col gap-4">
             {/* Top Row: Search + Filter Toggle + Export */}
-            <div className="flex flex-col lg:flex-row items-start lg:items-center gap-4">
+            <div className="flex flex-col lg:flex-row lg:flex-wrap items-start lg:items-center gap-3">
               {/* Search with Tags */}
               <div className={`relative flex-1 w-full lg:max-w-xl flex items-center flex-wrap gap-1.5 min-h-[44px] px-3 py-1.5 rounded-xl border ${isDark ? 'border-purple-500/20 bg-zinc-900/80 hover:border-purple-500/40' : 'border-gray-200 bg-gray-50 hover:border-gray-300'} focus-within:ring-2 focus-within:ring-purple-500/30 focus-within:border-purple-500/40 transition-all`}>
                 <Search className={`h-4 w-4 shrink-0 ${isDark ? 'text-purple-400' : 'text-purple-500'}`} />
@@ -2440,7 +2492,8 @@ export function PropuestasPage() {
               {/* Filter Toggle */}
               <button
                 onClick={() => setShowFilters(!showFilters)}
-                className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-medium transition-all ${showFilters || hasActiveFilters
+                title="Filtros"
+                className={`flex shrink-0 items-center gap-2 px-3 py-2 rounded-xl text-sm font-medium whitespace-nowrap transition-all ${showFilters || hasActiveFilters
                   ? isDark ? 'bg-purple-500/20 text-purple-300 border border-purple-500/40' : 'bg-purple-50 text-purple-700 border border-purple-200'
                   : isDark
                     ? 'bg-zinc-800/60 text-zinc-400 border border-zinc-700/50 hover:bg-zinc-800'
@@ -2448,11 +2501,28 @@ export function PropuestasPage() {
                   }`}
               >
                 <SlidersHorizontal className="h-4 w-4" />
-                Filtros
+                <span className="hidden xl:inline">Filtros</span>
                 {hasActiveFilters && (
                   <span className={`w-2 h-2 rounded-full ${isDark ? 'bg-purple-400' : 'bg-purple-500'}`} />
                 )}
               </button>
+
+              {/* Vistas guardadas por usuario: filtros + orden + incompletos +
+                  columnas del tablero. Guardar / aplicar / renombrar / fijar. */}
+              <VistasGuardadasMenu
+                isDark={isDark}
+                scope="propuestas"
+                userId={user?.id}
+                columnasValidas={PROPUESTAS_COLUMNAS_KEYS}
+                columnasVisibles={tableroColumnas}
+                onColumnasChange={setTableroColumnas}
+                orden={ordenRapido}
+                onOrdenChange={setOrdenRapido}
+                soloIncompletos={soloIncompletos}
+                onSoloIncompletosChange={setSoloIncompletos}
+                filtrosActuales={filtrosSnapshot}
+                onAplicarFiltros={aplicarFiltrosGuardados}
+              />
 
               {/* Selector de vista (Tabla / Desglose / Tablero) + estrella para
                   fijar con cual abre el modulo. Un solo grupo compacto en vez
@@ -2472,29 +2542,30 @@ export function PropuestasPage() {
                   <button
                     onClick={handleExportLayout}
                     disabled={exportingLayout || exportingOcupacion}
-                    className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-medium ${isDark ? 'bg-zinc-800/60 text-zinc-400 border-zinc-700/50 hover:bg-zinc-800 hover:text-zinc-200' : 'bg-gray-100 text-gray-500 border-gray-200 hover:bg-gray-200 hover:text-gray-900'} border transition-all ${exportingLayout || exportingOcupacion ? 'opacity-50 cursor-not-allowed' : ''}`}
+                    className={`flex shrink-0 items-center gap-2 px-3 py-2 rounded-xl text-sm font-medium whitespace-nowrap ${isDark ? 'bg-zinc-800/60 text-zinc-400 border-zinc-700/50 hover:bg-zinc-800 hover:text-zinc-200' : 'bg-gray-100 text-gray-500 border-gray-200 hover:bg-gray-200 hover:text-gray-900'} border transition-all ${exportingLayout || exportingOcupacion ? 'opacity-50 cursor-not-allowed' : ''}`}
                     title="Exporta CSV en formato Layout (Campaña, Anunciante, Inversión, APS, etc.)"
                   >
                     {exportingLayout ? <Loader2 className="h-4 w-4 animate-spin" /> : <Download className="h-4 w-4" />}
-                    {exportingLayout ? 'Generando...' : 'Exportar Layout'}
+                    <span className="hidden xl:inline">{exportingLayout ? 'Generando...' : 'Exportar Layout'}</span>
                   </button>
                   <button
                     onClick={handleExportOcupacion}
                     disabled={exportingLayout || exportingOcupacion}
-                    className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-medium ${isDark ? 'bg-zinc-800/60 text-zinc-400 border-zinc-700/50 hover:bg-zinc-800 hover:text-zinc-200' : 'bg-gray-100 text-gray-500 border-gray-200 hover:bg-gray-200 hover:text-gray-900'} border transition-all ${exportingLayout || exportingOcupacion ? 'opacity-50 cursor-not-allowed' : ''}`}
+                    className={`flex shrink-0 items-center gap-2 px-3 py-2 rounded-xl text-sm font-medium whitespace-nowrap ${isDark ? 'bg-zinc-800/60 text-zinc-400 border-zinc-700/50 hover:bg-zinc-800 hover:text-zinc-200' : 'bg-gray-100 text-gray-500 border-gray-200 hover:bg-gray-200 hover:text-gray-900'} border transition-all ${exportingLayout || exportingOcupacion ? 'opacity-50 cursor-not-allowed' : ''}`}
                     title="Exporta Excel formato Orden de Montaje (Plaza, Tipo, Vendedor, APS, CUIC, Caras, Tarifa, Monto)"
                   >
                     {exportingOcupacion ? <Loader2 className="h-4 w-4 animate-spin" /> : <Download className="h-4 w-4" />}
-                    {exportingOcupacion ? 'Generando...' : 'Exportar Ocupación'}
+                    <span className="hidden xl:inline">{exportingOcupacion ? 'Generando...' : 'Exportar Ocupación'}</span>
                   </button>
                 </>
               ) : (
                 <button
                   onClick={handleExportCSV}
-                  className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-medium ${isDark ? 'bg-zinc-800/60 text-zinc-400 border-zinc-700/50 hover:bg-zinc-800 hover:text-zinc-200' : 'bg-gray-100 text-gray-500 border-gray-200 hover:bg-gray-200 hover:text-gray-900'} border transition-all`}
+                  title="Exportar CSV"
+                  className={`flex shrink-0 items-center gap-2 px-3 py-2 rounded-xl text-sm font-medium whitespace-nowrap ${isDark ? 'bg-zinc-800/60 text-zinc-400 border-zinc-700/50 hover:bg-zinc-800 hover:text-zinc-200' : 'bg-gray-100 text-gray-500 border-gray-200 hover:bg-gray-200 hover:text-gray-900'} border transition-all`}
                 >
                   <Download className="h-4 w-4" />
-                  Exportar CSV
+                  <span className="hidden xl:inline">Exportar CSV</span>
                 </button>
               )}
             </div>
@@ -2524,7 +2595,7 @@ export function PropuestasPage() {
                     )}
                   </button>
                   {showAdvancedFilters && (
-                    <div className={`absolute left-0 top-full mt-1 z-[100] w-[520px] ${isDark ? 'bg-zinc-900 border-purple-500/30' : 'bg-white border-gray-200'} border rounded-xl shadow-2xl p-4`}>
+                    <div className={`fixed inset-x-2 top-16 bottom-16 mt-0 w-auto max-w-none max-h-[calc(100dvh-5rem)] overflow-y-auto overscroll-contain lg:absolute lg:inset-auto lg:top-full lg:right-auto lg:left-0 lg:bottom-auto lg:mt-1 lg:w-[520px] lg:max-w-[calc(100vw-2rem)] lg:max-h-none lg:overflow-visible z-[100] ${isDark ? 'bg-zinc-900 border-purple-500/30' : 'bg-white border-gray-200'} border rounded-xl shadow-2xl p-4`}>
                       <div className="flex items-center justify-between mb-3">
                         <span className={`text-sm font-medium ${isDark ? 'text-purple-300' : 'text-purple-700'}`}>Filtros avanzados</span>
                         <button
@@ -2536,7 +2607,7 @@ export function PropuestasPage() {
                       </div>
                       <div className="space-y-2 max-h-[300px] overflow-visible pr-1">
                         {advancedFilters.map((filter, index) => (
-                          <div key={filter.id} className="flex items-center gap-2">
+                          <div key={filter.id} className="flex flex-wrap items-center gap-2">
                             {index > 0 && (
                               <button
                                 onClick={() => {
@@ -2655,7 +2726,6 @@ export function PropuestasPage() {
                 <div className={`h-4 w-px ${isDark ? 'bg-zinc-700' : 'bg-gray-200'} mx-1`} />
 
                 {/* Status Filter */}
-                <span className={`text-xs ${isDark ? 'text-zinc-500' : 'text-gray-400'} mr-1`}>Status:</span>
                 <MultiSelectChip
                   label="Status"
                   options={allStatuses}
@@ -2669,7 +2739,6 @@ export function PropuestasPage() {
                 <div className={`h-4 w-px ${isDark ? 'bg-zinc-700' : 'bg-gray-200'} mx-1`} />
 
                 {/* Tipo Periodo Filter */}
-                <span className={`text-xs ${isDark ? 'text-zinc-500' : 'text-gray-400'} mr-1`}>Periodo:</span>
                 <FilterChip
                   label="Tipo Periodo"
                   options={['catorcena', 'mensual']}
@@ -2728,12 +2797,12 @@ export function PropuestasPage() {
                 {/* Divider */}
                 <div className={`h-4 w-px ${isDark ? 'bg-zinc-700/50' : 'bg-gray-200'} mx-1`} />
 
-                {/* Filtros rápidos de orden + incompletos.
-                    Reemplazan al chip "Ordenar: Campo / Asc-Desc" anterior, que
-                    no ordenaba nada: sortBy/sortOrder viajaban en el queryKey
-                    pero nunca llegaban al backend (que ordena fijo por
-                    pr.id DESC) ni se aplicaban en cliente. */}
-                <OrdenRapidoChips
+                {/* Menú "Ordenar" (creación / presupuesto / último cambio) +
+                    chip de incompletos. Reemplazan al chip "Ordenar: Campo /
+                    Asc-Desc" anterior, que no ordenaba nada: sortBy/sortOrder
+                    viajaban en el queryKey pero nunca llegaban al backend (que
+                    ordena fijo por pr.id DESC) ni se aplicaban en cliente. */}
+                <OrdenRapidoMenu
                   isDark={isDark}
                   orden={ordenRapido}
                   onOrdenChange={(o) => { setOrdenRapido(o); setPage(1); }}
@@ -2850,15 +2919,9 @@ export function PropuestasPage() {
               </span>
               <TableroVistasControls
                 isDark={isDark}
-                scope="propuestas"
-                userId={user?.id}
                 todasColumnas={PROPUESTAS_COLUMNAS}
                 columnasVisibles={tableroColumnas}
                 onColumnasChange={setTableroColumnas}
-                orden={ordenRapido}
-                onOrdenChange={setOrdenRapido}
-                soloIncompletos={soloIncompletos}
-                onSoloIncompletosChange={setSoloIncompletos}
               />
             </div>
             <PropuestasTableroView
@@ -2919,20 +2982,20 @@ export function PropuestasPage() {
           {!groupBy && data?.pagination && totalPages > 1 && (
             <div className={`flex items-center justify-between border-b px-4 py-3 ${isDark ? 'border-purple-500/20 bg-gradient-to-r from-purple-900/20 via-transparent to-fuchsia-900/20' : 'border-gray-200 bg-gray-50'}`}>
               <span className={`text-sm ${isDark ? 'text-purple-300/70' : 'text-gray-500'}`}>
-                Página <span className={`font-semibold ${isDark ? 'text-purple-300' : 'text-gray-700'}`}>{page}</span> de <span className={`font-semibold ${isDark ? 'text-purple-300' : 'text-gray-700'}`}>{totalPages}</span>
+                Página <span className={`font-semibold ${isDark ? 'text-purple-300' : 'text-gray-700'}`}>{pageActual}</span> de <span className={`font-semibold ${isDark ? 'text-purple-300' : 'text-gray-700'}`}>{totalPages}</span>
                 <span className={`ml-2 ${isDark ? 'text-purple-300/50' : 'text-gray-400'}`}>({total} total)</span>
               </span>
               <div className="flex items-center gap-2">
                 <button
-                  onClick={() => setPage(Math.max(1, page - 1))}
-                  disabled={page === 1}
+                  onClick={() => setPage(Math.max(1, pageActual - 1))}
+                  disabled={pageActual === 1}
                   className={`px-4 py-2 rounded-lg border text-sm font-medium disabled:opacity-40 disabled:cursor-not-allowed transition-all ${isDark ? 'border-purple-500/30 bg-purple-500/10 text-purple-300 hover:bg-purple-500/20 hover:border-purple-500/50' : 'border-gray-200 bg-white text-gray-700 hover:bg-gray-50 hover:border-gray-300'}`}
                 >
                   Anterior
                 </button>
                 <button
-                  onClick={() => setPage(Math.min(totalPages, page + 1))}
-                  disabled={page === totalPages}
+                  onClick={() => setPage(Math.min(totalPages, pageActual + 1))}
+                  disabled={pageActual === totalPages}
                   className={`px-4 py-2 rounded-lg border text-sm font-medium disabled:opacity-40 disabled:cursor-not-allowed transition-all ${isDark ? 'border-purple-500/30 bg-purple-500/10 text-purple-300 hover:bg-purple-500/20 hover:border-purple-500/50' : 'border-gray-200 bg-white text-gray-700 hover:bg-gray-50 hover:border-gray-300'}`}
                 >
                   Siguiente
@@ -3017,7 +3080,7 @@ export function PropuestasPage() {
                     </td>
                   </tr>
                 ) : (
-                  filteredData.map((item, idx) => (
+                  filasTabla.map((item, idx) => (
                     <PropuestaRow
                       key={`prop-${item.id}-${idx}`}
                       item={item}
@@ -3045,20 +3108,20 @@ export function PropuestasPage() {
           {!groupBy && data?.pagination && totalPages > 1 && (
             <div className={`flex items-center justify-between border-t px-4 py-3 ${isDark ? 'border-purple-500/20 bg-gradient-to-r from-purple-900/20 via-transparent to-fuchsia-900/20' : 'border-gray-200 bg-gray-50'}`}>
               <span className={`text-sm ${isDark ? 'text-purple-300/70' : 'text-gray-500'}`}>
-                Página <span className={`font-semibold ${isDark ? 'text-purple-300' : 'text-gray-700'}`}>{page}</span> de <span className={`font-semibold ${isDark ? 'text-purple-300' : 'text-gray-700'}`}>{totalPages}</span>
+                Página <span className={`font-semibold ${isDark ? 'text-purple-300' : 'text-gray-700'}`}>{pageActual}</span> de <span className={`font-semibold ${isDark ? 'text-purple-300' : 'text-gray-700'}`}>{totalPages}</span>
                 <span className={`ml-2 ${isDark ? 'text-purple-300/50' : 'text-gray-400'}`}>({total} total)</span>
               </span>
               <div className="flex items-center gap-2">
                 <button
-                  onClick={() => setPage(Math.max(1, page - 1))}
-                  disabled={page === 1}
+                  onClick={() => setPage(Math.max(1, pageActual - 1))}
+                  disabled={pageActual === 1}
                   className={`px-4 py-2 rounded-lg border text-sm font-medium disabled:opacity-40 disabled:cursor-not-allowed transition-all ${isDark ? 'border-purple-500/30 bg-purple-500/10 text-purple-300 hover:bg-purple-500/20 hover:border-purple-500/50' : 'border-gray-200 bg-white text-gray-700 hover:bg-gray-50 hover:border-gray-300'}`}
                 >
                   Anterior
                 </button>
                 <button
-                  onClick={() => setPage(Math.min(totalPages, page + 1))}
-                  disabled={page === totalPages}
+                  onClick={() => setPage(Math.min(totalPages, pageActual + 1))}
+                  disabled={pageActual === totalPages}
                   className={`px-4 py-2 rounded-lg border text-sm font-medium disabled:opacity-40 disabled:cursor-not-allowed transition-all ${isDark ? 'border-purple-500/30 bg-purple-500/10 text-purple-300 hover:bg-purple-500/20 hover:border-purple-500/50' : 'border-gray-200 bg-white text-gray-700 hover:bg-gray-50 hover:border-gray-300'}`}
                 >
                   Siguiente
@@ -3102,9 +3165,15 @@ export function PropuestasPage() {
           isOpen={showAssignModal}
           onClose={() => { setShowAssignModal(false); queryClient.invalidateQueries({ queryKey: ['propuesta-caras', selectedPropuestaForAssign?.id] }); queryClient.invalidateQueries({ queryKey: ['propuesta-reservas-modal', selectedPropuestaForAssign?.id] }); queryClient.invalidateQueries({ queryKey: ['propuesta-fresh'] }); queryClient.invalidateQueries({ queryKey: ['propuestas'] }); setSelectedPropuestaForAssign(null); }}
           propuesta={selectedPropuestaForAssign}
-          readOnly={!permissions.canAsignarInventario || selectedPropuestaForAssign.status === 'Pase a ventas'}
+          readOnly={!permissions.canAsignarInventario || selectedPropuestaForAssign.status === 'Pase a ventas' || selectedPropuestaForAssign.status === 'Aprobada'}
         />
       )}
+
+      <PropuestaAprobadaInfoModal
+        isOpen={!!propuestaBloqueadaStatus}
+        onClose={() => setPropuestaBloqueadaStatus(null)}
+        propuestaStatus={propuestaBloqueadaStatus ?? undefined}
+      />
 
       {pruebaColorPropuesta && (
         <PruebasColorModal

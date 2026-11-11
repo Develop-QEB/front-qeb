@@ -767,7 +767,7 @@ function SearchableSelect({
       {open && (
         <>
           <div className="fixed inset-0 z-40" onClick={handleClose} />
-          <div className="absolute top-full left-0 right-0 mt-1 z-50 w-full min-w-[350px] rounded-xl border border-purple-500/20 bg-zinc-900 backdrop-blur-xl shadow-2xl overflow-hidden">
+          <div className="fixed inset-x-2 top-16 bottom-16 mt-0 w-auto max-w-none max-h-[calc(100dvh-5rem)] overflow-y-auto overscroll-contain lg:absolute lg:inset-auto lg:top-full lg:left-0 lg:right-0 lg:bottom-auto lg:mt-1 lg:w-full lg:min-w-[350px] lg:max-w-[calc(100vw-2rem)] lg:max-h-none lg:overflow-visible z-50 rounded-xl border border-purple-500/20 bg-zinc-900 backdrop-blur-xl shadow-2xl overflow-hidden">
             <div className="p-2 border-b border-zinc-800">
               <div className="relative">
                 <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-zinc-500" />
@@ -1120,6 +1120,14 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
   // la nota (obligatoria, igual que el flujo normal de autorización) antes de mandar
   // la eliminación a DG. Guarda las cara-ids a eliminar mientras se escribe la nota.
   const [deleteNota, setDeleteNota] = useState<{ open: boolean; caraIds: number[] }>({ open: false, caraIds: [] });
+  // DIFERIDO (feedback jefe oct-2026 "se guardó sin picarle guardar"): las
+  // solicitudes de eliminación y la Nota de Dirección NO se mandan al back al
+  // confirmarlas; se ENCOLAN aquí y se aplican junto con el resto hasta que el
+  // usuario le da "Guardar Cambios". Así todo se guarda o se cancela junto, y
+  // "Cerrar sin guardar" no deja nada aplicado.
+  const [pendingEliminaciones, setPendingEliminaciones] = useState<Array<{ caraIds: number[]; motivo: string }>>([]);
+  const pendingNotaDireccionRef = useRef<string | null>(null);
+  const hasPendingEliminaciones = pendingEliminaciones.length > 0;
 
   // Real-time: cuando OTRO usuario reserva un espacio cuyo período se solapa
   // con la cara que estoy buscando, lo quito de mi listado en vivo.
@@ -1252,6 +1260,10 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
   // reservas que no corresponden a la plaza/formato de la cara.
   // Ciudades queda FUERA de este bloqueo: es editable siempre (ver campo Ciudades).
   const caraFiltersLocked = editingCaraGrupoConReservas || (!!editingCaraId && !permissions.canEditCaraFiltersOnEdit);
+  // EXCEPCION (2026-11-02): Trafico si puede corregir el FORMATO aunque el
+  // circuito tenga inventario reservado (mismo criterio que AssignInventarioModal
+  // de propuestas). Plazas sigue bloqueado. El back ya aceptaba el cambio.
+  const formatoLocked = (editingCaraGrupoConReservas && !esTrafico(user?.rol)) || (!!editingCaraId && !permissions.canEditCaraFiltersOnEdit);
 
   // Check if the selected cara for search/reservas view is APS blocked
   const selectedCaraAPSBlocked = useMemo(() => {
@@ -1654,6 +1666,11 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
           anio_inicio: anioInicioCara,
           autorizacion_dg: cara.autorizacion_dg || 'aprobado',
           autorizacion_dcm: cara.autorizacion_dcm || 'aprobado',
+          // true si hay una tarea 'Filtro Autorización DG' abierta — pinta el
+          // chip cyan "Filtro GC" junto al badge rojo "Pend. DG". Antes se
+          // mapeaba la respuesta del back SIN este campo, por eso aunque el
+          // back lo expone, el chip no se dibujaba (reporte Jos 2026-11-04).
+          en_filtro_dg: (cara as any).en_filtro_dg === true,
           pendiente_eliminacion: (cara as any).pendiente_eliminacion === true,
           _originalDg: cara.autorizacion_dg || 'aprobado',
           _originalDcm: cara.autorizacion_dcm || 'aprobado',
@@ -3641,8 +3658,10 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
     const hasCampanaChanges = hasChanges;
     const hasCaraChanges = modifiedCaras.size > 0;
     const hasBitacoraChanges = bitacoraRef.current?.hasPending() === true;
+    const hasEliminaciones = pendingEliminaciones.length > 0;
+    const hasNotaDireccion = !!pendingNotaDireccionRef.current;
 
-    if (!hasCampanaChanges && !hasCaraChanges && !hasBitacoraChanges) {
+    if (!hasCampanaChanges && !hasCaraChanges && !hasBitacoraChanges && !hasEliminaciones && !hasNotaDireccion) {
       showToast('No hay cambios pendientes', 'info');
       return;
     }
@@ -3696,19 +3715,12 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
     try {
       const messages: string[] = [];
 
-      // 0. Bitacora inline (estatus + comentarios). Se aplica ANTES del bulk
-      // de caras: si el cambio de estatus revienta por el back, abortamos.
-      if (hasBitacoraChanges && bitacoraRef.current) {
-        try {
-          await bitacoraRef.current.commit();
-          messages.push('Estatus/bitácora actualizados');
-        } catch (bitErr) {
-          const bmsg = bitErr instanceof Error ? bitErr.message : (bitErr as any)?.response?.data?.error || 'Error al actualizar estatus/bitácora';
-          showToast(`Estatus/bitácora: ${bmsg}`, 'error');
-          setIsSaving(false);
-          return;
-        }
-      }
+      // ORDEN (fix jefe oct-2026 "guarda parte"): primero lo ESTRUCTURAL y
+      // riesgoso (encabezado/recorrer, bulk de caras, eliminaciones), y la
+      // bitácora/estatus + notas AL FINAL. Antes la bitácora se aplicaba PRIMERO:
+      // si el bulk de caras tronaba (MariaDB/timeout en release), el comentario/
+      // estatus ya había quedado guardado y los circuitos no. Ahora, si algo
+      // estructural falla, ni la bitácora ni las notas se aplicaron.
 
       // 1. Save campaign summary changes if any
       if (hasCampanaChanges) {
@@ -3789,6 +3801,42 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
         messages.push(result.message || `${carasArray.length} circuito(s) actualizados`);
       }
 
+      // 3. Eliminaciones ENCOLADAS (cada una trae su motivo). Van después de lo
+      // estructural: si el update/bulk de arriba tronó, no llegamos aquí y nada
+      // de esto se envía. Cada deleteCara crea la tarea de autorización (el
+      // motivo viaja en la tarea).
+      if (hasEliminaciones) {
+        let elimCount = 0;
+        for (const { caraIds, motivo } of pendingEliminaciones) {
+          if (!caraIds.length) continue;
+          const [primero, ...resto] = caraIds;
+          await campanasService.deleteCara(campana!.id, primero, false, resto, false, motivo);
+          elimCount += caraIds.length;
+        }
+        setPendingEliminaciones([]);
+        messages.push(`${elimCount} circuito(s) enviados a autorización de eliminación`);
+      }
+
+      // 4. Nota de Dirección ENCOLADA (autorización DG/DCM). Aditiva.
+      if (pendingNotaDireccionRef.current && campanaDetails?.solicitud_id) {
+        await notasDireccionService.create(campanaDetails.solicitud_id, pendingNotaDireccionRef.current);
+        pendingNotaDireccionRef.current = null;
+        messages.push('Nota de Dirección registrada');
+      }
+
+      // 5. Bitácora inline (estatus + comentarios) — AL FINAL (aditiva). Si algo
+      // estructural falló arriba, no se aplicó. Si falla SOLO la bitácora, lo
+      // estructural ya quedó guardado, así que no abortamos: avisamos aparte.
+      let bitacoraError: string | null = null;
+      if (hasBitacoraChanges && bitacoraRef.current) {
+        try {
+          await bitacoraRef.current.commit();
+          messages.push('Estatus/bitácora actualizados');
+        } catch (bitErr) {
+          bitacoraError = bitErr instanceof Error ? bitErr.message : (bitErr as any)?.response?.data?.error || 'Error al actualizar estatus/bitácora';
+        }
+      }
+
       // Refresh data — incluye reservas modal para que circuitos se redibujen verdes/llenos tras redistribuir
       await Promise.all([
         queryClient.invalidateQueries({ queryKey: ['campana-full', campana!.id] }),
@@ -3798,7 +3846,11 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
         queryClient.invalidateQueries({ queryKey: ['campana-reservas-modal', campana!.id] }),
       ]);
 
-      showToast(messages.join(' | '), 'success');
+      if (bitacoraError) {
+        showToast(`Los cambios se guardaron, pero la bitácora/estatus falló: ${bitacoraError}`, 'error');
+      } else {
+        showToast(messages.join(' | '), 'success');
+      }
     } catch (error) {
       console.error('Error in bulk save:', error);
       // Extraer mensaje del backend si es AxiosError
@@ -5022,6 +5074,7 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
         }
 
         queryClient.invalidateQueries({ queryKey: ['campana-reservas-modal', campana!.id] });
+        queryClient.invalidateQueries({ queryKey: ['campana-reservas-historial', campana!.id] });
         queryClient.invalidateQueries({ queryKey: ['campana-inventario', campana!.id] }); // Refresh map
         queryClient.invalidateQueries({ queryKey: ['campanas'] });
         // Also refresh disponibles
@@ -5195,6 +5248,7 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
         }
 
         queryClient.invalidateQueries({ queryKey: ['campana-reservas-modal', campana!.id] });
+        queryClient.invalidateQueries({ queryKey: ['campana-reservas-historial', campana!.id] });
         queryClient.invalidateQueries({ queryKey: ['campana-inventario', campana!.id] });
         queryClient.invalidateQueries({ queryKey: ['campanas'] });
         handleRefetchDisponibles();
@@ -5291,11 +5345,18 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
     );
   }, [reservas, selectedCaraForSearch]);
 
-  // Historial (reservas que salieron) de la cara seleccionada — tab Historial.
-  const currentCaraHistorial = useMemo(() => {
+  // Historial (reservas que salieron) — tab Historial. Por default el de la
+  // cara seleccionada; sin cara seleccionada (o con "Todos los circuitos") el
+  // de toda la campana, para que una eliminacion en otro circuito no parezca
+  // que no se guardo. Mismo criterio que AssignInventarioModal (propuestas).
+  const [historialTodos, setHistorialTodos] = useState(false);
+  const historialCaraActual = useMemo(() => {
     if (!selectedCaraForSearch?.id) return [];
     return (historialInventario || []).filter(h => h.solicitud_cara_id === selectedCaraForSearch.id);
   }, [historialInventario, selectedCaraForSearch]);
+  const historialMostrandoTodos = historialTodos || !selectedCaraForSearch?.id;
+  const currentCaraHistorial = historialMostrandoTodos ? (historialInventario || []) : historialCaraActual;
+  const historialOtrosCircuitos = (historialInventario?.length ?? 0) - historialCaraActual.length;
 
   const [reReservandoHistId, setReReservandoHistId] = useState<number | null>(null);
   // Regresar a reservados un inventario del historial (solo si sigue disponible).
@@ -5640,6 +5701,7 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
           try {
             await campanasService.deleteReservas(campana!.id, backendIds);
             queryClient.invalidateQueries({ queryKey: ['campana-reservas-modal', campana!.id] });
+            queryClient.invalidateQueries({ queryKey: ['campana-reservas-historial', campana!.id] });
             queryClient.invalidateQueries({ queryKey: ['campana-inventario', campana!.id] });
             queryClient.invalidateQueries({ queryKey: ['campanas'] });
             handleRefetchDisponibles();
@@ -5700,6 +5762,7 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
           const ids = reservasAEliminar.map(r => r.reservaId!).filter(Boolean);
           await campanasService.deleteReservas(campana!.id, ids);
           queryClient.invalidateQueries({ queryKey: ['campana-reservas-modal', campana!.id] });
+          queryClient.invalidateQueries({ queryKey: ['campana-reservas-historial', campana!.id] });
           queryClient.invalidateQueries({ queryKey: ['campana-inventario', campana!.id] });
           queryClient.invalidateQueries({ queryKey: ['campanas'] });
           handleRefetchDisponibles();
@@ -5828,6 +5891,7 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
           if (backendIds.length > 0) {
             await campanasService.deleteReservas(campana!.id, backendIds);
             queryClient.invalidateQueries({ queryKey: ['campana-reservas-modal', campana!.id] });
+            queryClient.invalidateQueries({ queryKey: ['campana-reservas-historial', campana!.id] });
             queryClient.invalidateQueries({ queryKey: ['campana-inventario', campana!.id] });
             queryClient.invalidateQueries({ queryKey: ['campanas'] });
             handleRefetchDisponibles();
@@ -6002,9 +6066,9 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
       {omitidosReservaJSX}
         <div className="absolute inset-0 bg-black/70 backdrop-blur-sm" onClick={handleBackToMain} />
 
-        <div className={`relative w-[97vw] max-w-[1800px] h-[92vh] ${isDark ? 'bg-zinc-900' : 'bg-white'} rounded-2xl border border-purple-500/20 shadow-2xl flex flex-col overflow-hidden`}>
+        <div className={`relative w-[97vw] max-w-[1800px] h-[100dvh] sm:h-[92vh] max-lg:landscape:h-[100dvh] max-lg:landscape:max-h-[100dvh] max-lg:landscape:rounded-none max-lg:landscape:mx-0 ${isDark ? 'bg-zinc-900' : 'bg-white'} rounded-2xl border border-purple-500/20 shadow-2xl flex flex-col overflow-hidden`}>
           {/* Header */}
-          <div className={`flex items-center justify-between px-6 py-4 border-b ${isDark ? 'border-zinc-800' : 'border-gray-200'}`}>
+          <div className={`flex items-center justify-between px-4 py-3 sm:px-6 sm:py-4 max-lg:landscape:py-2 border-b ${isDark ? 'border-zinc-800' : 'border-gray-200'}`}>
             <div className="flex items-center gap-4">
               <button
                 onClick={handleBackToMain}
@@ -6564,7 +6628,7 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
                       )}
                     </button>
                     {showDisponiblesAdvFilters && (
-                      <div className="absolute left-0 top-full mt-1 z-[100] w-[540px] bg-zinc-900 border border-purple-500/30 rounded-xl shadow-2xl p-4">
+                      <div className="fixed inset-x-2 top-16 bottom-16 mt-0 w-auto max-w-none max-h-[calc(100dvh-5rem)] overflow-y-auto overscroll-contain lg:absolute lg:inset-auto lg:left-0 lg:top-full lg:bottom-auto lg:mt-1 lg:w-[540px] lg:max-w-[calc(100vw-2rem)] lg:max-h-none lg:overflow-visible z-[100] bg-zinc-900 border border-purple-500/30 rounded-xl shadow-2xl p-4">
                         <div className="flex items-center justify-between mb-3">
                           <span className="text-sm font-medium text-purple-300">Filtros avanzados</span>
                           <button
@@ -6859,7 +6923,7 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
                     {disponibilidadMultiC && showPeriodosDropdownC && (
                       <>
                         <div className="fixed inset-0 z-40" onClick={() => setShowPeriodosDropdownC(false)} />
-                        <div className="absolute left-0 top-full mt-1 z-50 w-64 max-h-72 overflow-y-auto rounded-lg border shadow-xl bg-zinc-900 border-zinc-700">
+                        <div className="fixed inset-x-2 top-16 bottom-16 mt-0 w-auto max-w-none max-h-[calc(100dvh-5rem)] overflow-y-auto overscroll-contain lg:absolute lg:inset-auto lg:left-0 lg:top-full lg:bottom-auto lg:mt-1 lg:w-64 lg:max-w-[calc(100vw-2rem)] lg:max-h-72 z-50 rounded-lg border shadow-xl bg-zinc-900 border-zinc-700">
                           <div className="sticky top-0 px-3 py-2 text-[11px] border-b bg-zinc-900 border-zinc-800 text-zinc-400">
                             Periodos extra (además del circuito)
                             {periodosExtraC.size > 0 && (
@@ -7036,7 +7100,7 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
                         </button>
                       </div>
                     </div>
-                    <div className="flex flex-wrap gap-2 max-h-32 overflow-auto">
+                    <div className="flex flex-wrap gap-2 max-h-32 max-lg:landscape:max-h-24 overflow-auto">
                       {csvData.map((item, idx) => {
                         const styles = item.estado === 'libre'
                           ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500/30'
@@ -7099,7 +7163,7 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
                         <p className="text-sm">Intenta cambiar los filtros o la cara seleccionada</p>
                       </div>
                     ) : (
-                      <table className="w-full text-sm">
+                      <table className="w-full text-sm min-w-[640px]">
                         <thead className={`${isDark ? 'bg-zinc-800/50' : 'bg-gray-100'} sticky top-0`}>
                           <tr>
                             <th className={`px-3 py-2 text-left text-xs ${isDark ? 'text-zinc-400' : 'text-gray-500'} font-medium w-10`}>
@@ -7440,6 +7504,9 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
               onReReservar={handleReReservarHistorial}
               onRefresh={() => refetchHistorial()}
               refreshing={historialFetching}
+              mostrandoTodos={historialMostrandoTodos}
+              onToggleTodos={selectedCaraForSearch?.id ? () => setHistorialTodos(v => !v) : undefined}
+              totalOtrosCircuitos={historialOtrosCircuitos}
             />
           ) : searchViewTab === 'capas' ? (
             /* CAPAS TAB CONTENT: gestion de capas de POI/KML del circuito */
@@ -7718,7 +7785,7 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
                   </div>
                 ) : (
                   <div className="flex-1 overflow-auto">
-                    <table className="w-full">
+                    <table className="w-full min-w-[640px]">
                       <thead className={`sticky top-0 ${isDark ? 'bg-zinc-900/95' : 'bg-white/95'} backdrop-blur-sm z-10`}>
                         <tr className={`border-b ${isDark ? 'border-zinc-800' : 'border-gray-200'}`}>
                           <th className="px-3 py-3 text-center">
@@ -8331,13 +8398,25 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
 
   // Handle close with unsaved changes warning
   const handleClose = () => {
-    if (hasChanges || modifiedCaras.size > 0 || bitacoraPending) {
+    const discardQueues = () => {
+      // Descartar lo ENCOLADO (eliminaciones + nota) y quitar el badge optimista
+      // de "pendiente de eliminación" que pusimos solo de forma visual. Como nada
+      // se envió al back, cerrar sin guardar no deja nada aplicado.
+      const queuedElimIds = new Set(pendingEliminaciones.flatMap(e => e.caraIds));
+      if (queuedElimIds.size > 0) {
+        setCaras(prev => prev.map(c => (c.id && queuedElimIds.has(c.id)) ? { ...c, pendiente_eliminacion: false } : c));
+      }
+      setPendingEliminaciones([]);
+      pendingNotaDireccionRef.current = null;
+    };
+    if (hasChanges || modifiedCaras.size > 0 || bitacoraPending || hasPendingEliminaciones) {
       setConfirmModal({
         isOpen: true,
         title: 'Cambios sin guardar',
         message: `Tienes ${[
           hasChanges ? 'cambios en la campaña' : '',
           modifiedCaras.size > 0 ? `${modifiedCaras.size} circuito(s) editado(s)` : '',
+          hasPendingEliminaciones ? `${pendingEliminaciones.reduce((n, e) => n + e.caraIds.length, 0)} circuito(s) por eliminar` : '',
           bitacoraPending ? `${bitacoraPendingCount} cambio(s) en la bitácora` : '',
         ].filter(Boolean).join(' y ')} sin guardar. ¿Seguro que quieres cerrar?`,
         confirmText: 'Cerrar sin guardar',
@@ -8345,10 +8424,12 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
         isDestructive: true,
         onConfirm: () => {
           setConfirmModal(prev => ({ ...prev, isOpen: false }));
+          discardQueues();
           onClose();
         },
       });
     } else {
+      discardQueues();
       onClose();
     }
   };
@@ -8358,9 +8439,9 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
     <div className="fixed inset-0 z-50 flex items-center justify-center">
       <div className="absolute inset-0 bg-black/70 backdrop-blur-sm" onClick={handleClose} />
 
-      <div className={`relative w-[97vw] max-w-[1800px] h-[92vh] ${isDark ? 'bg-zinc-900' : 'bg-white'} rounded-2xl border border-purple-500/20 shadow-2xl flex flex-col overflow-hidden`}>
+      <div className={`relative w-[97vw] max-w-[1800px] h-[100dvh] sm:h-[92vh] max-lg:landscape:h-[100dvh] max-lg:landscape:max-h-[100dvh] max-lg:landscape:rounded-none max-lg:landscape:mx-0 ${isDark ? 'bg-zinc-900' : 'bg-white'} rounded-2xl border border-purple-500/20 shadow-2xl flex flex-col overflow-hidden`}>
         {/* Header */}
-        <div className={`flex items-center justify-between px-6 py-4 border-b ${isDark ? 'border-zinc-800' : 'border-gray-200'}`}>
+        <div className={`flex items-center justify-between px-4 py-3 sm:px-6 sm:py-4 max-lg:landscape:py-2 border-b ${isDark ? 'border-zinc-800' : 'border-gray-200'}`}>
           <div>
             <h2 className={`text-lg font-semibold ${isDark ? 'text-white' : 'text-gray-900'}`}>Asignar Inventario</h2>
             <p className={`text-sm ${isDark ? 'text-zinc-400' : 'text-gray-500'}`}>Propuesta #{campana!.id}</p>
@@ -8376,7 +8457,7 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
         {avisoAjusteComercialJSX}
 
         {/* Content */}
-        <div className="flex-1 overflow-auto p-6 space-y-6">
+        <div className="flex-1 overflow-auto p-4 sm:p-6 max-lg:landscape:p-3 space-y-4 sm:space-y-6">
           {detailsLoading ? (
             <div className="flex items-center justify-center h-full">
               <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-purple-500" />
@@ -8445,7 +8526,7 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
                         {showClienteDropdown && (
                           <>
                             <div className="fixed inset-0 z-40" onClick={() => { setShowClienteDropdown(false); setClienteSearchTerm(''); }} />
-                            <div className={`absolute top-full left-0 right-0 mt-1 z-50 w-full min-w-[350px] rounded-xl border border-purple-500/20 ${isDark ? 'bg-zinc-900' : 'bg-white'} backdrop-blur-xl shadow-2xl overflow-hidden`}>
+                            <div className={`fixed inset-x-2 top-16 bottom-16 mt-0 w-auto max-w-none max-h-[calc(100dvh-5rem)] overflow-y-auto overscroll-contain lg:absolute lg:inset-auto lg:top-full lg:left-0 lg:right-0 lg:bottom-auto lg:mt-1 lg:w-full lg:min-w-[350px] lg:max-w-[calc(100vw-2rem)] lg:max-h-none lg:overflow-visible z-50 rounded-xl border border-purple-500/20 ${isDark ? 'bg-zinc-900' : 'bg-white'} backdrop-blur-xl shadow-2xl overflow-hidden`}>
                               <div className={`p-2 border-b ${isDark ? 'border-zinc-800' : 'border-gray-200'}`}>
                                 <div className="relative">
                                   <Search className={`absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 ${isDark ? 'text-zinc-500' : 'text-gray-400'}`} />
@@ -8503,7 +8584,7 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
                           </>
                         )}
                       </div>
-                      <div className="grid grid-cols-4 gap-4">
+                      <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4">
                         <div className="space-y-1">
                           <label className={`text-xs ${isDark ? 'text-zinc-500' : 'text-gray-400'}`}>CUIC</label>
                           <div className={`px-3 py-2 ${isDark ? 'bg-zinc-800/50' : 'bg-gray-50/50'} rounded-lg text-sm ${isDark ? 'text-zinc-300' : 'text-gray-700'} border ${isDark ? 'border-zinc-700/30' : 'border-gray-200/30'}`}>
@@ -8531,7 +8612,7 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
                       </div>
                     </div>
                   ) : (
-                    <div className="grid grid-cols-4 gap-4">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4">
                       <div className="space-y-1">
                         <label className={`text-xs ${isDark ? 'text-zinc-500' : 'text-gray-500'}`}>CUIC</label>
                         <div className={`px-3 py-2 rounded-lg text-sm border ${isDark ? 'bg-zinc-800/50 text-zinc-300 border-zinc-700/30' : 'bg-gray-100 text-gray-700 border-gray-200'}`}>
@@ -8560,7 +8641,7 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
                   )}
 
                   {/* Editable fields */}
-                  <div className="grid grid-cols-2 gap-4">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                     <div className="space-y-1">
                       <label className={`text-xs ${isDark ? 'text-zinc-500' : 'text-gray-500'}`}>Nombre de Campaña</label>
                       <input
@@ -8623,7 +8704,7 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
                   </div>
 
                   {/* Period - Same style as EditSolicitudModal */}
-                  <div className="grid grid-cols-4 gap-4">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4">
                     <div className="space-y-1">
                       <label className={`text-xs ${isDark ? 'text-zinc-500' : 'text-gray-500'}`}>Año Inicio</label>
                       <select
@@ -8687,7 +8768,7 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
                   </div>
 
                   {/* Notes and Description */}
-                  <div className="grid grid-cols-2 gap-4">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                     <div className="space-y-1">
                       {campanaDetails?.solicitud_id ? (
                         // Edición de campaña: bitácora readonly. La nota nueva
@@ -9133,7 +9214,7 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
                             }
                             return (
                           <>
-                          <div className="grid grid-cols-3 gap-2">
+                          <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
                             <div>
                               <label className="text-[10px] text-zinc-600 block mb-1">Mes</label>
                               <select
@@ -9356,7 +9437,7 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
                       </div>
                     </div>
 
-                    <div className="grid grid-cols-4 gap-4 mb-4">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4 mb-4">
                       <div className="space-y-1">
                         <label title={editingCaraGrupoConReservas ? 'Bloqueado: el circuito tiene inventario reservado' : undefined} className={`text-xs ${(!editingCaraGrupoConReservas && caraFiltersLocked) ? 'text-zinc-800' : 'text-zinc-500'}`}>Plazas {editingCaraGrupoConReservas ? <span className="text-amber-400 text-[10px]">(bloqueado)</span> : newCara.estados && !caraFiltersLocked && <span className="text-purple-400">({newCara.estados.split(',').filter(Boolean).length})</span>}</label>
                         {canEditResumen && !caraFiltersLocked ? (
@@ -9436,8 +9517,17 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
                         )}
                       </div>
                       <div className="space-y-1">
-                        <label title={editingCaraGrupoConReservas ? 'Bloqueado: el circuito tiene inventario reservado' : undefined} className={`text-xs ${(!editingCaraGrupoConReservas && caraFiltersLocked) ? 'text-zinc-800' : 'text-zinc-500'}`}>Formatos {editingCaraGrupoConReservas ? <span className="text-amber-400 text-[10px]">(bloqueado)</span> : newCara.formato && !caraFiltersLocked && <span className="text-purple-400">({newCara.formato.split(',').filter(Boolean).length})</span>}</label>
-                        {canEditResumen && !caraFiltersLocked ? (
+                        <label
+                          title={editingCaraGrupoConReservas
+                            ? (formatoLocked ? 'Bloqueado: el circuito tiene inventario reservado' : 'Editable por Tráfico aunque haya inventario reservado: verifica que las reservas correspondan al formato nuevo')
+                            : undefined}
+                          className={`text-xs ${(!editingCaraGrupoConReservas && formatoLocked) ? 'text-zinc-800' : 'text-zinc-500'}`}
+                        >
+                          Formatos {editingCaraGrupoConReservas
+                            ? <span className="text-amber-400 text-[10px]">{formatoLocked ? '(bloqueado)' : '(con inventario reservado)'}</span>
+                            : newCara.formato && !formatoLocked && <span className="text-purple-400">({newCara.formato.split(',').filter(Boolean).length})</span>}
+                        </label>
+                        {canEditResumen && !formatoLocked ? (
                           <MultiSelectDropdown
                             options={esUDC ? Array.from(new Set([UDC_FORMATO, ...(solicitudFilters?.formatos || [])])) : (solicitudFilters?.formatos || [])}
                             selected={newCara.formato ? newCara.formato.split(',').map(s => s.trim()).filter(Boolean) : []}
@@ -9471,7 +9561,7 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
                         </select>
                       </div>
                     </div>
-                    <div className="grid grid-cols-4 gap-4 mb-4">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4 mb-4">
                       <div className="space-y-1">
                         <label className={`text-xs ${isDark ? 'text-zinc-500' : 'text-gray-500'}`}>
                           {newCara.articulo?.toUpperCase().startsWith('IM') ? 'Impresiones' : isServicioCFArticle(newCara.articulo) ? 'Servicios' : newCara.articulo?.toUpperCase().startsWith('IN') ? 'Intercambio' : isEspecialArticle(newCara.articulo || '') ? 'Ejec. Especiales' : (newCara.formato || '').toUpperCase().includes('PUENTE PEATONAL') ? 'Puentes en Renta' : 'Caras en Renta'}
@@ -9824,7 +9914,7 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
                                     statusColor === 'blue' ? 'bg-blue-500' : statusColor === 'purple' ? 'bg-purple-500' : statusColor === 'red' ? 'bg-red-500' : statusColor === 'emerald' ? 'bg-emerald-500' : 'bg-amber-500 animate-pulse'
                                   }`} />
 
-                                  <div className="flex-1 grid grid-cols-8 gap-3 text-sm">
+                                  <div className="flex-1 grid grid-cols-2 sm:grid-cols-4 md:grid-cols-8 gap-3 text-sm">
                                     <div>
                                       <span className={`${isDark ? 'text-zinc-500' : 'text-gray-400'} text-xs`}>Formato</span>
                                       <p className={`${isDark ? 'text-white' : 'text-gray-900'} font-medium`}>{cara.formato || '-'}</p>
@@ -9981,23 +10071,33 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
                                       );
                                     })()}
                                     {effectiveCanEdit && (() => {
-                                      // Antes bloqueabamos TODOS los botones de editar si HAY alguna cara
-                                      // con autorizacion pendiente guardada (hasSavedPendingAuth). En
-                                      // migraciones SAP grandes (reporte Aylin/Aldonza 80617 TELCEL
-                                      // 2026-10-23) eso dejaba la campana completa inoperable: ya traia
-                                      // caras pendientes desde la migracion, entonces al abrir el modal
-                                      // todos los botones salian disabled sin que el asesor tocara nada.
-                                      // Ahora solo bloqueamos la cara que ESTA puntualmente pendiente
-                                      // (para no editarla mientras direccion la revisa). Las demas quedan
-                                      // libres para seguir ajustando. "Agregar circuito nuevo" sigue
-                                      // bloqueado globalmente arriba.
+                                      // Regla pedida por Jos (2026-10-30): si CUALQUIER cara de la
+                                      // campana tiene autorizacion pendiente (DG o DCM), nadie puede
+                                      // tocar circuitos. Toda la campana queda "congelada" visualmente
+                                      // hasta que direccion resuelva, porque editar un circuito
+                                      // mientras otros estan en revision mezcla cambios dentro de un
+                                      // flujo ya enviado. Vuelve al comportamiento previo al
+                                      // 2026-10-23 — el caso de migraciones SAP grandes (80617 TELCEL)
+                                      // se maneja esperando a que direccion revise, no abriendo la
+                                      // campana a edicion.
+                                      // Ajuste 2026-11-06 (caso 80553): el candado solo aplica a pendientes YA
+                                      // GUARDADAS en BD (hasSavedPendingAuth). Un circuito que queda 'pendiente'
+                                      // solo en local (editado o reenviado, sin guardar) NO congela la pluma de
+                                      // los demas: con 3 rechazados, editar el 1o dejaba el 2o y 3o sin pluma y
+                                      // sin poder guardar (candado de rechazados sin resolver) -> callejon sin salida.
                                       const caraTienePendienteGuardada =
                                         cara.id != null &&
                                         !modifiedCaras.has(cara.id) &&
                                         ((cara as any)._originalDg === 'pendiente' || (cara as any)._originalDcm === 'pendiente');
-                                      const editBlocked = caraTienePendienteGuardada || caraAPSBlocked;
+                                      const editBlocked = caraTienePendienteGuardada || caraAPSBlocked || hasSavedPendingAuth;
                                       const isLoadingThis = loadingCaraAction?.caraId === cara.localId && loadingCaraAction?.action === 'edit';
-                                      const blockReason = caraAPSBlocked ? 'Grupo con APS asignado - no se puede editar' : caraTienePendienteGuardada ? 'Este circuito esta pendiente de autorizacion - no se puede editar hasta que direccion resuelva' : isLoadingThis ? 'Cargando editor...' : 'Editar';
+                                      const blockReason = caraAPSBlocked
+                                        ? 'Grupo con APS asignado - no se puede editar'
+                                        : caraTienePendienteGuardada
+                                          ? 'Este circuito esta pendiente de autorizacion - no se puede editar hasta que direccion resuelva'
+                                          : hasSavedPendingAuth
+                                            ? 'Hay otro circuito en esta campana pendiente de autorizacion. Aprobalo primero.'
+                                            : isLoadingThis ? 'Cargando editor...' : 'Editar';
                                       return (
                                       <>
                                         {(cara.autorizacion_dg === 'rechazado' || cara.autorizacion_dcm === 'rechazado' || cara.autorizacion_dg === 'correccion') && (
@@ -10258,7 +10358,7 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
                             )}
                           </button>
                           {showGroupingConfigReservas && (
-                            <div className="absolute right-0 top-full mt-1 z-50 bg-[#1a1025] border border-purple-900/50 rounded-lg shadow-xl p-2 min-w-[200px]">
+                            <div className="fixed inset-x-2 top-16 bottom-16 mt-0 w-auto max-w-none max-h-[calc(100dvh-5rem)] overflow-y-auto overscroll-contain lg:absolute lg:inset-auto lg:right-0 lg:top-full lg:bottom-auto lg:mt-1 lg:w-auto lg:max-w-[calc(100vw-2rem)] lg:max-h-none lg:overflow-visible z-50 bg-[#1a1025] border border-purple-900/50 rounded-lg shadow-xl p-2 min-w-[200px]">
                               <p className="text-[10px] text-zinc-500 uppercase tracking-wide px-2 py-1">Agrupar por (max 3)</p>
                               {AVAILABLE_GROUPINGS_RESERVAS.map(({ field, label }) => (
                                 <button
@@ -10298,7 +10398,7 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
                             <ArrowUpDown className="h-3.5 w-3.5" />
                           </button>
                           {showSortReservas && (
-                            <div className="absolute right-0 top-full mt-1 z-50 bg-[#1a1025] border border-purple-900/50 rounded-lg shadow-xl p-2 min-w-[180px]">
+                            <div className="fixed inset-x-2 top-16 bottom-16 mt-0 w-auto max-w-none max-h-[calc(100dvh-5rem)] overflow-y-auto overscroll-contain lg:absolute lg:inset-auto lg:right-0 lg:top-full lg:bottom-auto lg:mt-1 lg:w-auto lg:max-w-[calc(100vw-2rem)] lg:max-h-none lg:overflow-visible z-50 bg-[#1a1025] border border-purple-900/50 rounded-lg shadow-xl p-2 min-w-[180px]">
                               <p className="text-[10px] text-zinc-500 uppercase tracking-wide px-2 py-1">Ordenar por</p>
                               {FILTER_FIELDS_RESERVAS.map(({ field, label }) => (
                                 <button
@@ -10540,7 +10640,7 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
                         </div>
                         {/* KPIs Mini Summary */}
                         <div className={`p-3 border-t ${isDark ? 'border-zinc-700/50 bg-zinc-800/50' : 'border-gray-200 bg-gray-50'}`}>
-                          <div className={`grid gap-2 text-center text-xs ${reservasKPIs.completos > 0 ? 'grid-cols-4' : 'grid-cols-3'}`}>
+                          <div className={`grid gap-2 text-center text-xs ${reservasKPIs.completos > 0 ? 'grid-cols-2 sm:grid-cols-4' : 'grid-cols-2 sm:grid-cols-3'}`}>
                             <div>
                               <p className={isDark ? 'text-zinc-500' : 'text-gray-400'}>Flujo</p>
                               <p className={`${isDark ? 'text-blue-400' : 'text-blue-600'} font-bold`}>{reservasKPIs.flujo}</p>
@@ -10688,7 +10788,7 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
 
         {/* Footer with Guardar Cambios button */}
         {(caras.length > 0 || hasChanges || bitacoraPending) && (
-          <div className={`px-6 py-4 border-t flex items-center justify-between ${isDark ? 'border-zinc-800 bg-zinc-900/80' : 'border-gray-200 bg-white'}`}>
+          <div className={`px-4 py-4 sm:px-6 max-lg:landscape:py-2 max-lg:landscape:px-3 border-t flex flex-wrap items-center justify-between gap-2 ${isDark ? 'border-zinc-800 bg-zinc-900/80' : 'border-gray-200 bg-white'}`}>
             <div className="flex items-center gap-4">
               {/* Status summary */}
               <div className="flex items-center gap-3 text-sm">
@@ -10731,13 +10831,13 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
               </button>
               {effectiveCanEdit && (
                 <button
-                  disabled={(!hasChanges && modifiedCaras.size === 0 && !bitacoraPending) || isSaving || ((hasChanges || modifiedCaras.size > 0) && invalidCaras.length > 0)}
+                  disabled={(!hasChanges && modifiedCaras.size === 0 && !bitacoraPending && !hasPendingEliminaciones) || isSaving || ((hasChanges || modifiedCaras.size > 0) && invalidCaras.length > 0)}
                   title={((hasChanges || modifiedCaras.size > 0) && invalidCaras.length > 0)
                     ? `${invalidCaras.length} cara(s) tienen catorcenas fuera del rango actual. Ajusta el rango o elimínalas para poder guardar.`
                     : undefined}
                   onClick={async () => {
                     // Bitacora-only: saltar gates y confirmar modal.
-                    const onlyBitacora = !hasChanges && modifiedCaras.size === 0 && bitacoraPending;
+                    const onlyBitacora = !hasChanges && modifiedCaras.size === 0 && !hasPendingEliminaciones && bitacoraPending;
                     if (onlyBitacora) {
                       setIsSaving(true);
                       try {
@@ -10778,7 +10878,7 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
                     setShowSaveConfirm(true);
                   }}
                   className={`px-6 py-2 rounded-lg text-sm font-medium transition-all ${
-                    (hasChanges || modifiedCaras.size > 0 || bitacoraPending) && !isSaving && !((hasChanges || modifiedCaras.size > 0) && invalidCaras.length > 0)
+                    (hasChanges || modifiedCaras.size > 0 || bitacoraPending || hasPendingEliminaciones) && !isSaving && !((hasChanges || modifiedCaras.size > 0) && invalidCaras.length > 0)
                       ? 'bg-purple-500 text-white hover:bg-purple-600 shadow-lg shadow-purple-500/25'
                       : `${isDark ? 'bg-zinc-700 text-zinc-500' : 'bg-gray-200 text-gray-400'} cursor-not-allowed`
                   }`}
@@ -10788,7 +10888,7 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
                   ) : (
                     <Save className="h-4 w-4 inline-block mr-2" />
                   )}
-                  {isSaving ? 'Guardando...' : `Guardar Cambios${(hasChanges || modifiedCaras.size > 0 || bitacoraPending) ? ` (${(hasChanges ? 1 : 0) + modifiedCaras.size + (bitacoraPending ? 1 : 0)})` : ''}`}
+                  {isSaving ? 'Guardando...' : `Guardar Cambios${(hasChanges || modifiedCaras.size > 0 || bitacoraPending || hasPendingEliminaciones) ? ` (${(hasChanges ? 1 : 0) + modifiedCaras.size + (bitacoraPending ? 1 : 0) + pendingEliminaciones.length})` : ''}`}
                 </button>
               )}
             </div>
@@ -10811,6 +10911,7 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
         contextLabel="campaña"
         hasGeneralChanges={hasChanges}
         modifiedCircuitos={modifiedCircuitosForConfirm}
+        pendingDeletions={pendingEliminaciones.reduce((n, e) => n + e.caraIds.length, 0)}
       />
 
       {/* Mini-modal Nueva Nota Dirección — obligatorio cuando la edición
@@ -10828,7 +10929,10 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
         }}
         onConfirm={async (texto) => {
           if (!campanaDetails?.solicitud_id) return;
-          await notasDireccionService.create(campanaDetails.solicitud_id, texto);
+          // DIFERIDO: la Nota de Dirección se crea junto con el guardado (en
+          // handleBulkSaveChanges), no aquí, para que todo se guarde o se
+          // cancele junto. Si el usuario cancela el Confirmar Cambios, no se creó.
+          pendingNotaDireccionRef.current = texto;
           setShowNotaDireccionModal(false);
           setPendingAuthTipo(null);
           setShowSaveConfirm(true);
@@ -10848,19 +10952,14 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
         onConfirm={async (texto) => {
           const ids = deleteNota.caraIds;
           if (ids.length === 0) { setDeleteNota({ open: false, caraIds: [] }); return; }
-          try {
-            const [primero, ...resto] = ids;
-            // El motivo (texto) viaja en la solicitud de eliminación → descripción de la tarea.
-            const resp = await campanasService.deleteCara(campana!.id, primero, false, resto, false, texto);
-            setDeleteNota({ open: false, caraIds: [] });
-            // Optimista: marcar las caras como pendientes de eliminación → badge "Pend. Ger. (elim.)".
-            setCaras(prev => prev.map(c => (c.id && ids.includes(c.id)) ? { ...c, pendiente_eliminacion: true } : c));
-            alert(resp?.message || 'Solicitud de eliminación enviada a autorización.');
-          } catch (error) {
-            console.error('Error solicitando eliminación:', error);
-            alert(error instanceof Error ? error.message : 'Error al solicitar la eliminación');
-            setDeleteNota({ open: false, caraIds: [] });
-          }
+          // DIFERIDO: no se manda al back aquí. Se ENCOLA {caraIds, motivo} y la
+          // solicitud de eliminación se aplica en "Guardar Cambios" junto con el
+          // resto (el motivo viajará en la tarea). Si el usuario cierra sin
+          // guardar, nada se envió.
+          setPendingEliminaciones(prev => [...prev, { caraIds: ids, motivo: texto }]);
+          setDeleteNota({ open: false, caraIds: [] });
+          // Optimista (solo visual): badge "Pend. Ger. (elim.)" mientras tanto.
+          setCaras(prev => prev.map(c => (c.id && ids.includes(c.id)) ? { ...c, pendiente_eliminacion: true } : c));
         }}
       />
       {/* Delete Circuito Confirm Modal — confirmación al usar bote de basura */}

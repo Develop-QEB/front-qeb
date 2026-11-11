@@ -246,24 +246,6 @@ export const notificacionesService = {
     return response.data.data;
   },
 
-  // Filtro DCM (Gerente Comercial Aeropuerto) — espejo del filtro DG para
-  // la dimensión DCM. Feedback 2026-08-15.
-  async aprobarFiltroDcm(tareaId: number, comentario?: string): Promise<{ tareaDcmId: number; tareaNotifAsesorId: number | null }> {
-    const response = await api.post<ApiResponse<{ tareaDcmId: number; tareaNotifAsesorId: number | null }>>(`/solicitudes/filtro-dcm/${tareaId}/aprobar`, { comentario });
-    if (!response.data.success || !response.data.data) {
-      throw new Error(response.data.error || 'Error al aprobar filtro DCM');
-    }
-    return response.data.data;
-  },
-
-  async rechazarFiltroDcm(tareaId: number, motivo: string): Promise<{ tareaCorreccionId: number }> {
-    const response = await api.post<ApiResponse<{ tareaCorreccionId: number }>>(`/solicitudes/filtro-dcm/${tareaId}/rechazar`, { motivo });
-    if (!response.data.success || !response.data.data) {
-      throw new Error(response.data.error || 'Error al rechazar filtro DCM');
-    }
-    return response.data.data;
-  },
-
   // ==================== PREFERENCIAS ====================
 
   async getPreferencias(): Promise<{ preferencias: PreferenciasNotif; catalogo: CatalogoNotif }> {
@@ -323,6 +305,23 @@ export const notificacionesService = {
     }));
   },
 
+  async getSolicitudesParaActividad(search?: string): Promise<ActividadRef[]> {
+    const response = await api.get<ApiResponse<ActividadRefPropuesta[]>>(
+      '/notificaciones/actividad-comercial/solicitudes',
+      { params: search ? { search } : undefined }
+    );
+    if (!response.data.success || !response.data.data) {
+      throw new Error(response.data.error || 'Error al obtener solicitudes');
+    }
+    return response.data.data.map(s => ({
+      id: s.id,
+      label: `#${s.id}${s.cliente ? ' — ' + s.cliente : ''}`,
+      cliente: s.cliente,
+      marca: s.marca,
+      status: s.status,
+    }));
+  },
+
   async crearActividadComercial(payload: CrearActividadComercialInput): Promise<ActividadComercialCreated> {
     const response = await api.post<ApiResponse<ActividadComercialCreated>>(
       '/notificaciones/actividad-comercial',
@@ -344,11 +343,67 @@ export const notificacionesService = {
     }
     return response.data.data;
   },
+
+  // Historial (bitacora) de una tarea especifica. Lo consume el drawer lateral
+  // para mostrar las ediciones de la Actividad Comercial. El endpoint retorna
+  // filas de historial con cambios: [{ campo, label, antes, despues }]
+  // embebidos dentro de `detalles` (JSON string).
+  async getHistorialTarea(tareaId: number): Promise<HistorialTareaRow[]> {
+    const response = await api.get<ApiResponse<HistorialTareaRow[]>>(`/historial/tarea/${tareaId}`);
+    if (!response.data.success || !response.data.data) return [];
+    return response.data.data;
+  },
 };
+
+export interface HistorialTareaRow {
+  id: number | string;
+  tipo: string;
+  ref_id: number;
+  accion: string;
+  fecha_hora: string;
+  detalles: string | null;
+  usuario_id: number | null;
+}
 
 // ==================== TIPOS ACTIVIDAD COMERCIAL ====================
 
-export type ActividadSubtipo = 'Campaña' | 'Propuesta' | 'Lead';
+// 'Lead' se quito del picker en 2026-11-04 pero se mantiene en el union para
+// no romper filas viejas guardadas con ese subtipo. 'Actividad' agregado por
+// Jos 2026-11-10: para registrar actividades que no van vinculadas a ninguna
+// campana/propuesta/solicitud concreta (standalone).
+export type ActividadSubtipo = 'Campaña' | 'Propuesta' | 'Solicitud' | 'Lead' | 'Actividad';
+export type ActividadTipoCliente = 'Lead' | 'Cliente';
+// 10 opciones fijas por feedback Jos 2026-11-10. 'Mail'/'Visita' legacy se
+// mantienen en el union para filas viejas pero no son seleccionables en el
+// picker nuevo (ver NuevaActividadComercialModal).
+export type ActividadTipoActividad =
+  | 'Llamada'
+  | 'Correo'
+  | 'Reunión virtual'
+  | 'Reunión en oficina'
+  | 'Reunión fuera de oficina'
+  | 'Recorrido'
+  | 'Presentación general virtual'
+  | 'Presentación general presencial'
+  | 'Presentación estratégica virtual'
+  | 'Presentación estratégica presencial'
+  | 'Mail'
+  | 'Visita';
+// Para el <select> del modal: solo las 10 opciones nuevas en el orden que
+// Jos definio. Las legacy 'Mail'/'Visita' no entran aqui, se muestran como
+// estan guardadas pero no se eligen desde cero.
+export const ACTIVIDAD_TIPOS_ACTIVIDAD_PICKER: ActividadTipoActividad[] = [
+  'Llamada',
+  'Correo',
+  'Reunión virtual',
+  'Reunión en oficina',
+  'Reunión fuera de oficina',
+  'Recorrido',
+  'Presentación general virtual',
+  'Presentación general presencial',
+  'Presentación estratégica virtual',
+  'Presentación estratégica presencial',
+];
 
 export interface ActividadRefCampana {
   id: number;
@@ -394,6 +449,9 @@ export interface CrearActividadComercialInput {
   catorcenas?: number[];                // Periodo multi (feedback Jos 2026-10-19)
   estatus_actividad?: 'Abierto' | 'Activo' | 'Finalizado' | 'Cerrado'; // 'Cerrado' = alias legacy
   base?: 'CIMU' | 'TRADE' | 'UDC';      // Base SAP
+  // Feedback Jos 2026-11-04:
+  tipo_cliente?: ActividadTipoCliente;        // Lead / Cliente
+  tipo_actividad?: ActividadTipoActividad;    // Llamada / Mail / Visita
 }
 
 export interface ActividadComercialCreated {

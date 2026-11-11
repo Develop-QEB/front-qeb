@@ -61,7 +61,7 @@ export function estatusValorDeAutorizacion(key: AutorizacionFiltroKey): string {
   return `${AUTORIZACION_PREFIX}${key}`;
 }
 
-/** Texto visible de un `estatusValor` (estatus de entidad o `auth:<key>`). */
+/** Texto visible de UN `estatusValor` (estatus de entidad o `auth:<key>`). */
 export function labelDeEstatusValor(estatusValor: string | null | undefined): string {
   if (!estatusValor) return '';
   if (estatusValor.startsWith(AUTORIZACION_PREFIX)) {
@@ -69,6 +69,39 @@ export function labelDeEstatusValor(estatusValor: string | null | undefined): st
     return autorizacionLabelDeKey(k);
   }
   return estatusValor;
+}
+
+// El "Estatus al que cambió" del filtro de Historial es multiselect. Viaja a
+// los services y al back como CSV en `estatusValor` (misma convención que
+// `status` y `autorizacion`), así las páginas lo siguen pasando tal cual con
+// `...historialFilter`. Estos helpers son la única forma de leerlo/armarlo.
+export const ESTATUS_VALOR_SEP = ',';
+
+/** 'Aprobada,auth:pend_dg' → ['Aprobada', 'auth:pend_dg']. */
+export function estatusValorLista(csv: string | null | undefined): string[] {
+  if (!csv) return [];
+  const out: string[] = [];
+  for (const p of csv.split(ESTATUS_VALOR_SEP)) {
+    const v = p.trim();
+    if (v && !out.includes(v)) out.push(v);
+  }
+  return out;
+}
+
+export function estatusValorDesdeLista(valores: readonly string[]): string | undefined {
+  const limpios = valores.map(v => v.trim()).filter(Boolean);
+  return limpios.length > 0 ? limpios.join(ESTATUS_VALOR_SEP) : undefined;
+}
+
+export function estatusValorIncluye(csv: string | null | undefined, valor: string): boolean {
+  return estatusValorLista(csv).includes(valor);
+}
+
+/** Etiqueta del chip: "Aprobada, Aut. Pend. DG" o "Aprobada +2" si son muchos. */
+export function labelsDeEstatusValor(csv: string | null | undefined, max = 2): string {
+  const labels = estatusValorLista(csv).map(labelDeEstatusValor);
+  if (labels.length <= max) return labels.join(', ');
+  return `${labels.slice(0, max).join(', ')} +${labels.length - max}`;
 }
 
 /**

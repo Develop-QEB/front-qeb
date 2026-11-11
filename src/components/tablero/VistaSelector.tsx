@@ -3,7 +3,7 @@ import { Star, type LucideIcon } from 'lucide-react';
 // Selector compacto de vista del modulo (Tabla / Desglose / Tablero...).
 //
 // Sustituye a los 2-3 botones sueltos que tenian las paginas: un solo grupo
-// segmentado con icono + etiqueta (la etiqueta se esconde en pantallas chicas
+// segmentado con icono + etiqueta (la etiqueta se esconde debajo de xl
 // y queda el icono con tooltip), mas una estrella para FIJAR la vista actual
 // como la que abre el modulo. Asi cabe en la barra aunque haya tres vistas y
 // la estrella no se repite tres veces.
@@ -36,7 +36,7 @@ export function VistaSelector<T extends string>({
 
   return (
     <div
-      className={`inline-flex items-center rounded-xl border p-1 gap-0.5 ${
+      className={`inline-flex shrink-0 items-center rounded-xl border p-1 gap-0.5 ${
         isDark ? 'bg-zinc-800/60 border-zinc-700/50' : 'bg-gray-100 border-gray-200'
       }`}
       role="tablist"
@@ -52,14 +52,14 @@ export function VistaSelector<T extends string>({
             aria-selected={activa}
             onClick={() => onChange(op.key)}
             title={op.key === fija ? `${op.label} (vista fija)` : op.label}
-            className={`flex items-center gap-1.5 px-3 py-2 rounded-lg text-sm font-medium transition-all ${
+            className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-sm font-medium whitespace-nowrap transition-all ${
               activa
                 ? isDark ? 'bg-purple-500/20 text-purple-300 border border-purple-500/40' : 'bg-white text-purple-700 border border-purple-200 shadow-sm'
                 : isDark ? 'text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800 border border-transparent' : 'text-gray-500 hover:text-gray-700 hover:bg-gray-200 border border-transparent'
             }`}
           >
             <Icon className="h-4 w-4 flex-shrink-0" />
-            <span className="hidden lg:inline">{op.label}</span>
+            <span className="hidden xl:inline">{op.label}</span>
             {/* Marca discreta en la vista fija para que se vea cual es sin abrir nada */}
             {op.key === fija && !activa && (
               <Star className="h-2.5 w-2.5 text-amber-400" fill="currentColor" />
@@ -75,7 +75,7 @@ export function VistaSelector<T extends string>({
         title={esFijaLaActual
           ? 'El módulo abre en esta vista. Clic para quitarla como fija.'
           : 'Fijar esta vista: el módulo abrirá siempre aquí'}
-        className={`p-2 rounded-lg transition-all ${
+        className={`p-1.5 rounded-lg transition-all ${
           esFijaLaActual
             ? 'text-amber-400 hover:text-amber-300 hover:bg-amber-500/10'
             : isDark ? 'text-zinc-500 hover:text-amber-300 hover:bg-zinc-800' : 'text-gray-400 hover:text-amber-500 hover:bg-gray-200'

@@ -11,9 +11,9 @@ import { useThemeStore } from '../../store/themeStore';
 import { useAuthStore } from '../../store/authStore';
 import { getPermissions } from '../../lib/permissions';
 import { useSocketHistorialAcciones } from '../../hooks/useSocket';
-import { formatHistorialDetalles, formatValue, isPlainObject } from '../../lib/historial';
+import { formatHistorialDetalles, formatValue, isPlainObject, limpiarMotivo } from '../../lib/historial';
 import { ActividadComercialBoard } from './ActividadComercialBoard';
-import { FiltroMultiple } from './FiltroMultiple';
+import { FiltroMultiple } from '../../components/FiltroMultiple';
 
 function formatFechaHora(fecha: string): string {
   const d = new Date(fecha);
@@ -942,7 +942,7 @@ export function HistorialAccionesPage() {
                   )}
                   {!!obj.rechazadoPor && (
                     <Campo label="Rechazado por">
-                      {formatValue(obj.rechazadoPor)}{obj.motivo ? ` · Motivo: ${formatValue(obj.motivo)}` : ''}
+                      {formatValue(obj.rechazadoPor)}{obj.motivo ? ` · Motivo: ${limpiarMotivo(obj.motivo) || 'no especificado'}` : ''}
                     </Campo>
                   )}
 
@@ -998,7 +998,7 @@ export function HistorialAccionesPage() {
 
                   {!!obj['campaña'] && <Campo label="Campaña">{formatValue(obj['campaña'])}</Campo>}
                   {!!obj.articulo && <Campo label="Artículo">{formatValue(obj.articulo)}</Campo>}
-                  {!obj.rechazadoPor && !!obj.motivo && <Campo label="Motivo">{formatValue(obj.motivo)}</Campo>}
+                  {!obj.rechazadoPor && !!obj.motivo && <Campo label="Motivo">{limpiarMotivo(obj.motivo) || 'no especificado'}</Campo>}
                   {obj.reservas_eliminadas != null && (
                     <Campo label="Reservas eliminadas"><span className="text-red-400 font-medium">{formatValue(obj.reservas_eliminadas)}</span></Campo>
                   )}

@@ -1,6 +1,6 @@
 import api from '../lib/api';
 import { Inventario, InventarioMapItem, InventarioStats, PaginatedResponse, ApiResponse } from '../types';
-import type { TipoBloqueoInventario } from '../lib/bloqueoInventario';
+import type { TipoBloqueoInventario, VigenciaBloqueo } from '../lib/bloqueoInventario';
 
 /**
  * Un evento de la timeline de un inventario. La arma el back combinando varias
@@ -104,6 +104,12 @@ export interface DisponiblesResponse {
 export interface ReservaEnCelda {
   /** true = apartado tentativo de propuesta. Solo viene en "apartados sobre venta". */
   es_apartado?: boolean;
+  /** true = apartado tentativo que vive dentro de una campaña YA VENDIDA: una
+   *  venta que nunca se marcó como tal (caso ORAL B 82120). Ocupa para el
+   *  detector y la celda nunca se limpia sola. */
+  tentativa_en_campania?: boolean;
+  /** Cuándo se apartó/vendió la pieza (YYYY-MM-DD). */
+  fecha_reserva?: string | null;
   reserva_id: number;
   /** Estatus crudo de la columna `estatus` (puede traer 'Con Arte'/'Sin Arte'). */
   estatus: string;
@@ -155,6 +161,9 @@ export interface ConflictoOcupacionRow {
   firmes?: number;
   /** Solo en "apartados sobre venta": apartados tentativos encima. */
   apartados?: number;
+  /** Reservas tentativas de una campaña ya vendida en la celda. > 0 = DOBLE
+   *  VENTA silenciosa: revisión manual con Comercial y SAP, sin auto limpieza. */
+  tentativas_campania?: number;
 }
 
 /** Celda a limpiar en `/inventarios/conflictos/limpiar-duplicados`. */
@@ -554,11 +563,20 @@ export const inventariosService = {
 
   // Toggle block/unblock
   // `tipo` = clasificación a aplicar al bloquear ('No Disponible' | 'Inhabilitado').
-  // Al desbloquear se ignora. Sin `tipo` el back usa 'No Disponible'.
-  async toggleBlock(id: number, tipo?: TipoBloqueoInventario): Promise<Inventario> {
+  // `vigencia` = periodo opcional del bloqueo (solo se manda junto con `tipo`):
+  //   sin fechas = indefinido; fecha_inicio futura = bloqueo programado.
+  // Sin `tipo` (desbloqueo / cancelar programado) no se manda body.
+  async toggleBlock(id: number, tipo?: TipoBloqueoInventario, vigencia?: VigenciaBloqueo): Promise<Inventario> {
+    const body = tipo
+      ? {
+          tipo,
+          ...(vigencia?.fecha_inicio ? { fecha_inicio: vigencia.fecha_inicio } : {}),
+          ...(vigencia?.fecha_fin ? { fecha_fin: vigencia.fecha_fin } : {}),
+        }
+      : undefined;
     const response = await api.patch<ApiResponse<Inventario>>(
       `/inventarios/${id}/toggle-block`,
-      tipo ? { tipo } : undefined,
+      body,
     );
     if (!response.data.success || !response.data.data) {
       throw new Error(response.data.error || 'Error al bloquear/desbloquear inventario');

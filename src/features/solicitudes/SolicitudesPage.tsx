@@ -3,8 +3,8 @@ import { useSearchParams } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import {
   Search, Download, Trash2, FileText,
-  Filter, ChevronDown, ChevronRight, X, Layers, SlidersHorizontal,
-  ArrowUpDown, Calendar, Clock, Plus, List, Columns3
+  Filter, ChevronDown, ChevronRight, X, SlidersHorizontal,
+  Calendar, Clock, Plus, List, Columns3
 } from 'lucide-react';
 import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip as RechartsTooltip, Legend } from 'recharts';
 
@@ -24,14 +24,16 @@ import SolicitudesTableroView, {
   SOLICITUDES_COLUMNAS, SOLICITUDES_COLUMNAS_KEYS, esSolicitudIncompleta,
 } from './SolicitudesTableroView';
 import {
-  ordenarTablero, ORDEN_RAPIDO_DEFAULT, ORDEN_RAPIDO_TABLA_DEFAULT, type OrdenRapido,
+  ordenarTablero, ordenCampo, ordenEsAsc, ORDEN_RAPIDO_DEFAULT, ORDEN_RAPIDO_TABLA_DEFAULT, type OrdenRapido,
   construirOpcionesCambio, fechaUltimoCambio,
 } from '../../lib/tableroVistas';
-import { AUTORIZACION_LABELS, evalAutorizacionAvanzado, splitStatusSeleccion } from '../../lib/autorizacionFiltro';
+import { AUTORIZACION_LABELS, evalAutorizacionAvanzado, splitStatusSeleccion, estatusValorIncluye } from '../../lib/autorizacionFiltro';
 import { MultiSelectChip } from '../../components/MultiSelectChip';
 import { RefreshButton } from '../../components/RefreshButton';
 import { TableroVistasControls } from '../../components/tablero/TableroVistasControls';
-import { OrdenRapidoChips } from '../../components/tablero/OrdenRapidoChips';
+import { OrdenRapidoMenu } from '../../components/tablero/OrdenRapidoMenu';
+import { VistasGuardadasMenu } from '../../components/tablero/VistasGuardadasMenu';
+import { leerCondiciones, leerNumeroOpcional, leerObjetoStrings, leerString, leerStrings, type FiltrosDatos } from '../../lib/filtrosGuardados';
 import { VistaSelector, type VistaOpcion } from '../../components/tablero/VistaSelector';
 import { loadVistaFijaModulo, saveVistaFijaModulo } from '../../lib/vistaFija';
 import { SolicitudAcciones, puedeCambiarStatusSolicitud } from './SolicitudAcciones';
@@ -95,7 +97,7 @@ function FilterChip({
       {open && (
         <>
           <div className="fixed inset-0 z-40" onClick={handleClose} />
-          <div className={`absolute top-full left-0 mt-1.5 z-50 w-64 rounded-xl border ${isDark ? 'border-purple-500/20' : 'border-purple-200'} ${isDark ? 'bg-zinc-900' : 'bg-white'} backdrop-blur-xl shadow-2xl overflow-hidden`}>
+          <div className={`fixed inset-x-2 top-16 bottom-16 mt-0 w-auto max-w-none max-h-[calc(100dvh-5rem)] overflow-y-auto overscroll-contain lg:absolute lg:inset-auto lg:top-full lg:left-0 lg:right-auto lg:bottom-auto lg:mt-1.5 lg:w-64 lg:max-w-[calc(100vw-2rem)] lg:max-h-none lg:overflow-hidden z-50 rounded-xl border ${isDark ? 'border-purple-500/20' : 'border-purple-200'} ${isDark ? 'bg-zinc-900' : 'bg-white'} backdrop-blur-xl shadow-2xl`}>
             <div className={`p-2 border-b ${isDark ? 'border-zinc-800' : 'border-gray-200'}`}>
               <input
                 type="text"
@@ -337,7 +339,7 @@ function PeriodFilterPopover({
       {open && (
         <>
           <div className="fixed inset-0 z-40" onClick={() => setOpen(false)} />
-          <div className={`absolute top-full left-0 mt-1.5 z-50 w-80 rounded-xl border ${isDark ? 'border-purple-500/20' : 'border-purple-200'} ${isDark ? 'bg-zinc-900' : 'bg-white'} backdrop-blur-xl shadow-2xl overflow-hidden`}>
+          <div className={`fixed inset-x-2 top-16 bottom-16 mt-0 w-auto max-w-none max-h-[calc(100dvh-5rem)] overflow-y-auto overscroll-contain lg:absolute lg:inset-auto lg:top-full lg:left-0 lg:right-auto lg:bottom-auto lg:mt-1.5 lg:w-80 lg:max-w-[calc(100vw-2rem)] lg:max-h-none lg:overflow-hidden z-50 rounded-xl border ${isDark ? 'border-purple-500/20' : 'border-purple-200'} ${isDark ? 'bg-zinc-900' : 'bg-white'} backdrop-blur-xl shadow-2xl`}>
             <div className={`p-3 border-b ${isDark ? 'border-zinc-800' : 'border-gray-200'}`}>
               <h3 className={`text-sm font-semibold ${isDark ? 'text-white' : 'text-gray-900'} flex items-center gap-2`}>
                 <Calendar className={`h-4 w-4 ${isDark ? 'text-purple-400' : 'text-purple-600'}`} />
@@ -702,7 +704,6 @@ export function SolicitudesPage() {
   const [catorcenaFin, setCatorcenaFin] = useState<number | undefined>(undefined);
   const [historialFilter, setHistorialFilter] = useState<HistorialFilterValues>({});
   const [tipoPeriodo, setTipoPeriodo] = useState('');
-  const [sortBy, setSortBy] = useState('fecha');
   // Vista fija del modulo (por usuario, localStorage): con cual de las dos
   // vistas abre Solicitudes. null = default ('tabla').
   const [vistaFija, setVistaFija] = useState<VistaSolicitudes | null>(
@@ -847,11 +848,14 @@ export function SolicitudesPage() {
   // Default de orden según la vista (ver ORDEN_RAPIDO_TABLA_DEFAULT).
   const ordenDefaultVista = activeView === 'tablero' ? ORDEN_RAPIDO_DEFAULT : ORDEN_RAPIDO_TABLA_DEFAULT;
   // A diferencia de Propuestas/Campañas, aquí el backend sí acepta
-  // sortBy/sortOrder, así que 'nueva_vieja' y 'vieja_nueva' viajan como
-  // dirección del ORDER BY y siguen paginando barato. Solo 'reciente' ordena
-  // en cliente (por updated_at) y necesita el universo completo.
-  const backendSortOrder: 'asc' | 'desc' = ordenRapido === 'vieja_nueva' ? 'asc' : 'desc';
-  const ordenNecesitaTodo = ordenRapido === 'reciente';
+  // sortBy/sortOrder, así que 'Fecha de creación' y 'Presupuesto' viajan como
+  // columna + dirección del ORDER BY y siguen paginando barato. Solo 'Último
+  // cambio' ordena en cliente (updated_at + historial) y necesita el universo
+  // completo; para ese caso el backend recibe el default (fecha desc).
+  const campoOrden = ordenCampo(ordenRapido);
+  const backendSortBy = campoOrden === 'presupuesto' ? 'presupuesto' : 'fecha';
+  const backendSortOrder: 'asc' | 'desc' = campoOrden !== 'cambio' && ordenEsAsc(ordenRapido) ? 'asc' : 'desc';
+  const ordenNecesitaTodo = campoOrden === 'cambio';
   // El tablero necesita TODAS las solicitudes para que los conteos por
   // columna sean reales; va aquí (y no solo en el limit) porque needsAllData
   // es lo que fija page=1.
@@ -866,7 +870,7 @@ export function SolicitudesPage() {
   // exclude por default — si no, el filtro daria 0 porque la pagina oculta
   // todo lo que tiene status='Rechazada' actual.
   const effectiveExcludeRechazadas = (
-    historialFilter.modo === 'cambio_estatus' && historialFilter.estatusValor === 'Rechazada'
+    historialFilter.modo === 'cambio_estatus' && estatusValorIncluye(historialFilter.estatusValor, 'Rechazada')
   ) ? false : excludeRechazadas;
 
   // El chip "Status" (multiselect) mezcla estatus de solicitud y estatus de
@@ -875,7 +879,8 @@ export function SolicitudesPage() {
   const statusFiltro = splitStatusSeleccion(statusSel);
   // Fechas de último cambio por estatus/autorización: solo hacen falta para
   // el orden "Último cambio" (el back las calcula desde historial).
-  const includeCambios = ordenRapido === 'reciente';
+  // El tablero los pide siempre: la tarjeta muestra la fecha del ultimo cambio.
+  const includeCambios = campoOrden === 'cambio' || activeView === 'tablero';
 
   // Fetch stats with all active filters.
   // staleTime corto: el WebSocket invalida la query en cambios reales, así
@@ -902,7 +907,7 @@ export function SolicitudesPage() {
 
   // Fetch solicitudes
   const { data, isLoading } = useQuery({
-    queryKey: ['solicitudes', needsAllData ? 1 : page, statusSel, searchForBackend, yearInicio, yearFin, catorcenaInicio, catorcenaFin, sortBy, backendSortOrder, groupBy, tipoPeriodo, needsAllData, historialFilter, effectiveExcludeRechazadas, includeCambios],
+    queryKey: ['solicitudes', needsAllData ? 1 : page, statusSel, searchForBackend, yearInicio, yearFin, catorcenaInicio, catorcenaFin, backendSortBy, backendSortOrder, groupBy, tipoPeriodo, needsAllData, historialFilter, effectiveExcludeRechazadas, includeCambios],
     queryFn: () =>
       solicitudesService.getAll({
         page: needsAllData ? 1 : page,
@@ -915,7 +920,7 @@ export function SolicitudesPage() {
         yearFin,
         catorcenaInicio,
         catorcenaFin,
-        sortBy,
+        sortBy: backendSortBy,
         sortOrder: backendSortOrder,
         groupBy: groupBy || undefined,
         tipoPeriodo: tipoPeriodo || undefined,
@@ -1043,7 +1048,7 @@ export function SolicitudesPage() {
   };
 
   const hasPeriodFilter = yearInicio !== undefined && yearFin !== undefined;
-  const hasActiveFilters = !!(statusSel.length > 0 || hasPeriodFilter || groupBy || sortBy !== 'fecha' || ordenRapido !== ordenDefaultVista || soloIncompletos || advancedFilters.length > 0 || searchTags.length > 0);
+  const hasActiveFilters = !!(statusSel.length > 0 || hasPeriodFilter || groupBy || ordenRapido !== ordenDefaultVista || soloIncompletos || advancedFilters.length > 0 || searchTags.length > 0);
 
   // Get unique values for each field (for advanced filter dropdowns).
   // Solo se calcula cuando el panel de filtros avanzados está abierto: evita
@@ -1081,11 +1086,12 @@ export function SolicitudesPage() {
     let result = applyAdvancedFilters(data.data, advancedFilters);
     // Filtro rápido: solicitudes sin circuitos cargados (ver esSolicitudIncompleta).
     if (soloIncompletos) result = result.filter(esSolicitudIncompleta);
-    // 'reciente' es el único orden que corre en cliente; los otros dos ya
-    // vienen ordenados del backend. Solo con el universo completo, para no
-    // reordenar nada más la página visible. La fecha considera edición,
-    // cambios de estatus y de autorización según `cambiosSeleccion`.
-    if (ordenRapido === 'reciente' && needsAllData) {
+    // 'Último cambio' es el único orden que corre en cliente; creación y
+    // presupuesto ya vienen ordenados del backend. Solo con el universo
+    // completo, para no reordenar nada más la página visible. La fecha
+    // considera edición, cambios de estatus y de autorización según
+    // `cambiosSeleccion`.
+    if (ordenCampo(ordenRapido) === 'cambio' && needsAllData) {
       result = ordenarTablero(result, ordenRapido, s => s.fecha, s => fechaUltimoCambio(s, cambiosSeleccion));
     }
     return result;
@@ -1162,6 +1168,33 @@ export function SolicitudesPage() {
     setAdvancedFilters([]);
   };
 
+  // Foto de la barra de filtros que guarda una vista (menu "Vistas" junto al
+  // boton Filtros), y como volver a aplicarla. El orden y "solo incompletos"
+  // van aparte en la vista (son campos propios de VistaTablero). Lo que no
+  // venga en la foto se resetea: aplicar una vista es "dejar la barra asi",
+  // no "sumar a lo que ya tenia". Ver lib/filtrosGuardados.
+  const filtrosSnapshot = useMemo<FiltrosDatos>(() => ({
+    statusSel, tipoPeriodo, yearInicio, yearFin, catorcenaInicio, catorcenaFin,
+    historialFilter, cambiosSeleccion, groupBy, advancedFilters, searchTags,
+  }), [statusSel, tipoPeriodo, yearInicio, yearFin, catorcenaInicio, catorcenaFin, historialFilter, cambiosSeleccion, groupBy, advancedFilters, searchTags]);
+  const aplicarFiltrosGuardados = React.useCallback((d: FiltrosDatos) => {
+    setStatusSel(leerStrings(d.statusSel));
+    setTipoPeriodo(leerString(d.tipoPeriodo));
+    setYearInicio(leerNumeroOpcional(d.yearInicio));
+    setYearFin(leerNumeroOpcional(d.yearFin));
+    setCatorcenaInicio(leerNumeroOpcional(d.catorcenaInicio));
+    setCatorcenaFin(leerNumeroOpcional(d.catorcenaFin));
+    setHistorialFilter(leerObjetoStrings(d.historialFilter) as HistorialFilterValues);
+    setCambiosSeleccion(Array.isArray(d.cambiosSeleccion) ? leerStrings(d.cambiosSeleccion) : null);
+    setGroupBy(leerString(d.groupBy));
+    setAdvancedFilters(leerCondiciones<AdvancedFilterCondition>(d.advancedFilters));
+    setSearchTags(leerStrings(d.searchTags));
+    setSearchInput('');
+    setExpandedGroups(new Set());
+    setShowFilters(true);
+    setPage(1);
+  }, []);
+
   const clearAllFilters = () => {
     setStatusSel([]);
     setTipoPeriodo('');
@@ -1170,7 +1203,6 @@ export function SolicitudesPage() {
     setCatorcenaInicio(undefined);
     setCatorcenaFin(undefined);
     setHistorialFilter({});
-    setSortBy('fecha');
     setOrdenRapido(ordenDefaultVista);
     setCambiosSeleccion(null);
     setSoloIncompletos(false);
@@ -1203,8 +1235,21 @@ export function SolicitudesPage() {
     saveVistaFijaModulo('solicitudes', user?.id, v);
   };
 
-  const totalPages = data?.pagination?.totalPages || 1;
-  const total = data?.pagination?.total ?? 0;
+  // Paginación. Cuando el filtrado/orden corre en cliente (needsAllData: orden
+  // "Último cambio", filtros avanzados, incompletos...) se pidió el universo
+  // completo y la paginación del servidor ya no aplica: se pagina en cliente
+  // sobre filteredData con el mismo `limit`, en vez de pintar todo de golpe.
+  // Con agrupación no se pagina (cada grupo pinta completo).
+  const paginaEnCliente = needsAllData && !groupBy;
+  const totalPages = paginaEnCliente
+    ? Math.max(1, Math.ceil(filteredData.length / limit))
+    : (data?.pagination?.totalPages || 1);
+  const total = paginaEnCliente ? filteredData.length : (data?.pagination?.total ?? 0);
+  // `page` puede quedar arriba del total al cambiar de modo/filtro: se acota.
+  const pageActual = Math.min(page, totalPages);
+  const filasTabla = paginaEnCliente
+    ? filteredData.slice((pageActual - 1) * limit, pageActual * limit)
+    : filteredData;
 
   return (
     <div className="min-h-screen">
@@ -1219,7 +1264,7 @@ export function SolicitudesPage() {
             <div className={`absolute top-0 right-0 w-32 h-32 rounded-full blur-3xl -mr-10 -mt-10 pointer-events-none transition-all duration-500 ${isDark ? 'bg-purple-500/10 group-hover:bg-purple-500/20' : 'bg-purple-200/30 group-hover:bg-purple-200/50'}`} />
             <div>
               <p className={`${isDark ? 'text-zinc-400' : 'text-gray-500'} text-sm font-medium mb-1`}>Total Solicitudes</p>
-              <h3 className={`text-4xl font-bold ${isDark ? 'text-white' : 'text-gray-900'} tracking-tight`}>
+              <h3 className={`text-3xl sm:text-4xl font-bold ${isDark ? 'text-white' : 'text-gray-900'} tracking-tight`}>
                 {(effectiveStats?.total ?? data?.pagination?.total ?? 0).toLocaleString()}
               </h3>
             </div>
@@ -1234,8 +1279,8 @@ export function SolicitudesPage() {
           <div className={`col-span-1 md:col-span-2 lg:col-span-2 rounded-2xl border ${isDark ? 'border-zinc-800/80 bg-zinc-900/50' : 'border-gray-200 bg-white'} backdrop-blur-sm p-4 flex items-center relative overflow-hidden`}>
 
             {chartData ? (
-              <div className="w-full h-[140px] flex items-center">
-                <div className="h-full min-w-[140px]">
+              <div className="w-full min-h-[140px] flex flex-col sm:flex-row sm:h-[140px] sm:items-center gap-3 sm:gap-0">
+                <div className="h-[140px] w-full sm:h-full sm:w-auto sm:min-w-[140px]">
                   <ResponsiveContainer width="100%" height="100%">
                     <PieChart>
                       <Pie
@@ -1258,7 +1303,7 @@ export function SolicitudesPage() {
                 </div>
 
                 {/* Legend / List */}
-                <div className="flex-1 grid grid-cols-2 sm:grid-cols-3 gap-2 pl-4 h-full overflow-y-auto custom-scrollbar auto-rows-min content-start">
+                <div className="flex-1 grid grid-cols-2 sm:grid-cols-3 gap-2 sm:pl-4 max-sm:max-h-[180px] sm:h-full overflow-y-auto custom-scrollbar auto-rows-min content-start">
                   {chartData.map((item, i) => (
                     <div key={i} className={`flex items-center gap-2 p-2 rounded-lg ${isDark ? 'bg-zinc-800/30 border-zinc-800/50' : 'bg-gray-50 border-gray-200'} border min-w-0`}>
                       <div className="w-2 h-8 rounded-full flex-shrink-0" style={{ backgroundColor: item.color }} />
@@ -1283,7 +1328,7 @@ export function SolicitudesPage() {
             <div>
               <p className={`${isDark ? 'text-zinc-400' : 'text-gray-500'} text-sm font-medium mb-1`}>Pendientes / Ajustar</p>
               <div className="flex items-baseline gap-2">
-                <h3 className={`text-3xl font-bold ${isDark ? 'text-amber-400' : 'text-amber-600'}`}>
+                <h3 className={`text-2xl sm:text-3xl font-bold ${isDark ? 'text-amber-400' : 'text-amber-600'}`}>
                   {((effectiveStats?.byStatus['Pendiente'] || 0) + (effectiveStats?.byStatus['Ajustar'] || 0)).toLocaleString()}
                 </h3>
                 <span className={`text-xs font-medium ${isDark ? 'text-amber-500/80' : 'text-amber-600/80'}`}>Atención requerida</span>
@@ -1305,7 +1350,7 @@ export function SolicitudesPage() {
         <div className={`rounded-2xl border ${isDark ? 'border-purple-500/20 bg-gradient-to-br from-zinc-900/90 via-purple-950/20 to-zinc-900/90' : 'border-purple-200 bg-white'} backdrop-blur-xl p-4 relative z-30`}>
           <div className="flex flex-col gap-4">
             {/* Top Row: Search + Filter Toggle + Export */}
-            <div className="flex flex-col lg:flex-row items-start lg:items-center gap-4">
+            <div className="flex flex-col lg:flex-row lg:flex-wrap items-start lg:items-center gap-3">
               {/* Search with Tags */}
               <div className={`relative flex-1 w-full lg:max-w-xl flex items-center flex-wrap gap-1.5 min-h-[44px] px-3 py-1.5 rounded-xl border ${isDark ? 'border-purple-500/20 bg-zinc-900/80 hover:border-purple-500/40' : 'border-purple-200 bg-gray-50 hover:border-purple-300'} focus-within:ring-2 focus-within:ring-purple-500/30 focus-within:border-purple-500/40 transition-all`}>
                 <Search className={`h-4 w-4 shrink-0 ${isDark ? 'text-purple-400' : 'text-purple-500'}`} />
@@ -1356,17 +1401,35 @@ export function SolicitudesPage() {
               {/* Filter Toggle */}
               <button
                 onClick={() => setShowFilters(!showFilters)}
-                className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-medium transition-all ${showFilters || hasActiveFilters
+                title="Filtros"
+                className={`flex shrink-0 items-center gap-2 px-3 py-2 rounded-xl text-sm font-medium whitespace-nowrap transition-all ${showFilters || hasActiveFilters
                   ? isDark ? 'bg-purple-500/20 text-purple-300 border border-purple-500/40' : 'bg-purple-50 text-purple-700 border border-purple-200'
                   : `${isDark ? 'bg-zinc-800/60 text-zinc-400 border border-zinc-700/50 hover:bg-zinc-800' : 'bg-gray-100 text-gray-500 border border-gray-200 hover:bg-gray-200'}`
                   }`}
               >
                 <SlidersHorizontal className="h-4 w-4" />
-                Filtros
+                <span className="hidden xl:inline">Filtros</span>
                 {hasActiveFilters && (
                   <span className="w-2 h-2 rounded-full bg-purple-400" />
                 )}
               </button>
+
+              {/* Vistas guardadas por usuario: filtros + orden + incompletos +
+                  columnas del tablero. Guardar / aplicar / renombrar / fijar. */}
+              <VistasGuardadasMenu
+                isDark={isDark}
+                scope="solicitudes"
+                userId={user?.id}
+                columnasValidas={SOLICITUDES_COLUMNAS_KEYS}
+                columnasVisibles={tableroColumnas}
+                onColumnasChange={setTableroColumnas}
+                orden={ordenRapido}
+                onOrdenChange={setOrdenRapido}
+                soloIncompletos={soloIncompletos}
+                onSoloIncompletosChange={setSoloIncompletos}
+                filtrosActuales={filtrosSnapshot}
+                onAplicarFiltros={aplicarFiltrosGuardados}
+              />
 
               {/* Selector de vista (Tabla / Tablero) + estrella para fijar con
                   cual abre el modulo. Mismo control que Propuestas y Campanas. */}
@@ -1382,17 +1445,18 @@ export function SolicitudesPage() {
               {/* Export CSV */}
               <button
                 onClick={handleExportCSV}
-                className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-medium ${isDark ? 'bg-zinc-800/60 text-zinc-400 border border-zinc-700/50 hover:bg-zinc-800 hover:text-zinc-200' : 'bg-gray-100 text-gray-500 border border-gray-200 hover:bg-gray-200 hover:text-gray-700'} transition-all`}
+                title="Exportar CSV"
+                className={`flex shrink-0 items-center gap-2 px-3 py-2 rounded-xl text-sm font-medium whitespace-nowrap ${isDark ? 'bg-zinc-800/60 text-zinc-400 border border-zinc-700/50 hover:bg-zinc-800 hover:text-zinc-200' : 'bg-gray-100 text-gray-500 border border-gray-200 hover:bg-gray-200 hover:text-gray-700'} transition-all`}
               >
                 <Download className="h-4 w-4" />
-                Exportar CSV
+                <span className="hidden xl:inline">Exportar CSV</span>
               </button>
 
               {/* Nueva Solicitud */}
               {permissions.canCreateSolicitudes && (
                 <button
                   onClick={() => setShowCreateModal(true)}
-                  className="flex items-center gap-2 px-5 py-3 rounded-xl text-sm font-semibold text-white bg-gradient-to-r from-purple-600 to-fuchsia-600 hover:from-purple-500 hover:to-fuchsia-500 shadow-lg shadow-purple-500/25 hover:shadow-purple-500/40 transition-all"
+                  className="flex shrink-0 items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-semibold whitespace-nowrap text-white bg-gradient-to-r from-purple-600 to-fuchsia-600 hover:from-purple-500 hover:to-fuchsia-500 shadow-lg shadow-purple-500/25 hover:shadow-purple-500/40 transition-all"
                 >
                   <Plus className="h-4 w-4" />
                   Nueva Solicitud
@@ -1423,7 +1487,7 @@ export function SolicitudesPage() {
                     )}
                   </button>
                   {showAdvancedFilters && (
-                    <div className={`absolute left-0 top-full mt-1 z-[100] w-[520px] ${isDark ? 'bg-zinc-900 border-purple-500/30' : 'bg-white border-purple-200'} border rounded-xl shadow-2xl p-4`}>
+                    <div className={`fixed inset-x-2 top-16 bottom-16 mt-0 w-auto max-w-none max-h-[calc(100dvh-5rem)] overflow-y-auto overscroll-contain lg:absolute lg:inset-auto lg:left-0 lg:right-auto lg:top-full lg:bottom-auto lg:mt-1 lg:w-[520px] lg:max-w-[calc(100vw-2rem)] lg:max-h-none lg:overflow-visible z-[100] ${isDark ? 'bg-zinc-900 border-purple-500/30' : 'bg-white border-purple-200'} border rounded-xl shadow-2xl p-4`}>
                       <div className="flex items-center justify-between mb-3">
                         <span className={`text-sm font-medium ${isDark ? 'text-purple-300' : 'text-purple-700'}`}>Filtros avanzados</span>
                         <button
@@ -1433,9 +1497,9 @@ export function SolicitudesPage() {
                           <X className="h-4 w-4" />
                         </button>
                       </div>
-                      <div className="space-y-2 max-h-[300px] overflow-visible pr-1">
+                      <div className="space-y-2 max-h-[300px] max-lg:landscape:max-h-32 overflow-visible pr-1">
                         {advancedFilters.map((filter, index) => (
-                          <div key={filter.id} className="flex items-center gap-2">
+                          <div key={filter.id} className="flex flex-wrap lg:flex-nowrap items-center gap-2">
                             {index > 0 && (
                               <button
                                 onClick={() => {
@@ -1554,7 +1618,6 @@ export function SolicitudesPage() {
                 <div className={`h-4 w-px ${isDark ? 'bg-zinc-700' : 'bg-gray-200'} mx-1`} />
 
                 {/* Status Filter — estatus de solicitud + autorización de circuitos */}
-                <span className={`text-xs ${isDark ? 'text-zinc-500' : 'text-gray-400'} mr-1`}>Status:</span>
                 <MultiSelectChip
                   label="Status"
                   options={[...allStatuses, ...AUTORIZACION_LABELS]}
@@ -1568,7 +1631,6 @@ export function SolicitudesPage() {
                 <div className={`h-4 w-px ${isDark ? 'bg-zinc-700' : 'bg-gray-200'} mx-1`} />
 
                 {/* Tipo Periodo Filter */}
-                <span className={`text-xs ${isDark ? 'text-zinc-500' : 'text-gray-400'} mr-1`}>Periodo:</span>
                 <FilterChip
                   label="Tipo Periodo"
                   options={['catorcena', 'mensual']}
@@ -1626,10 +1688,11 @@ export function SolicitudesPage() {
 
                 <div className={`h-4 w-px ${isDark ? 'bg-zinc-700' : 'bg-gray-200'} mx-1`} />
 
-                {/* Filtros rápidos de orden + incompletos (aplican a Tabla y
-                    Tablero). Sustituyen al chip "Orden: asc/desc"; el chip
-                    "Campo" sigue decidiendo POR QUÉ columna ordena el backend. */}
-                <OrdenRapidoChips
+                {/* Menú "Ordenar" (creación / presupuesto / último cambio) +
+                    chip de incompletos (aplican a Tabla y Tablero). Sustituyen
+                    a los chips "Orden: asc/desc" y "Campo": la columna y la
+                    dirección del ORDER BY del backend salen de aquí. */}
+                <OrdenRapidoMenu
                   isDark={isDark}
                   orden={ordenRapido}
                   onOrdenChange={(o) => { setOrdenRapido(o); setPage(1); }}
@@ -1644,26 +1707,7 @@ export function SolicitudesPage() {
 
                 <div className={`h-4 w-px ${isDark ? 'bg-zinc-700' : 'bg-gray-200'} mx-1`} />
 
-                <span className={`text-xs ${isDark ? 'text-zinc-500' : 'text-gray-400'} mr-1`}>
-                  <ArrowUpDown className="h-3 w-3 inline mr-1" />
-                  Campo:
-                </span>
-                <FilterChip
-                  label="Campo"
-                  options={['fecha', 'presupuesto', 'razon_social', 'status']}
-                  value={sortBy}
-                  onChange={(val) => { setSortBy(val); setPage(1); }}
-                  onClear={() => { setSortBy('fecha'); setPage(1); }}
-                  isDark={isDark}
-                />
-
-                <div className={`h-4 w-px ${isDark ? 'bg-zinc-700' : 'bg-gray-200'} mx-1`} />
-
                 {/* Group By */}
-                <span className={`text-xs ${isDark ? 'text-zinc-500' : 'text-gray-400'} mr-1`}>
-                  <Layers className="h-3 w-3 inline mr-1" />
-                  Agrupar:
-                </span>
                 <FilterChip
                   label="Sin agrupar"
                   options={['status', 'marca_nombre', 'asignado', 'razon_social', 'asesor', 'nombre_usuario']}
@@ -1709,15 +1753,9 @@ export function SolicitudesPage() {
               </span>
               <TableroVistasControls
                 isDark={isDark}
-                scope="solicitudes"
-                userId={user?.id}
                 todasColumnas={SOLICITUDES_COLUMNAS}
                 columnasVisibles={tableroColumnas}
                 onColumnasChange={setTableroColumnas}
-                orden={ordenRapido}
-                onOrdenChange={setOrdenRapido}
-                soloIncompletos={soloIncompletos}
-                onSoloIncompletosChange={setSoloIncompletos}
               />
             </div>
             <SolicitudesTableroView
@@ -1755,20 +1793,20 @@ export function SolicitudesPage() {
               {!groupBy && data?.pagination && totalPages > 1 && (
                 <div className={`flex items-center justify-between border-b px-4 py-3 ${isDark ? 'border-purple-500/20 bg-gradient-to-r from-purple-900/20 via-transparent to-fuchsia-900/20' : 'border-purple-200 bg-gradient-to-r from-purple-50/50 via-transparent to-fuchsia-50/50'}`}>
                   <span className={`text-sm ${isDark ? 'text-purple-300/70' : 'text-purple-600/70'}`}>
-                    Página <span className={`font-semibold ${isDark ? 'text-purple-300' : 'text-purple-700'}`}>{page}</span> de <span className={`font-semibold ${isDark ? 'text-purple-300' : 'text-purple-700'}`}>{totalPages}</span>
-                    <span className={`ml-2 ${isDark ? 'text-purple-300/50' : 'text-purple-600/50'}`}>({data.pagination.total} total)</span>
+                    Página <span className={`font-semibold ${isDark ? 'text-purple-300' : 'text-purple-700'}`}>{pageActual}</span> de <span className={`font-semibold ${isDark ? 'text-purple-300' : 'text-purple-700'}`}>{totalPages}</span>
+                    <span className={`ml-2 ${isDark ? 'text-purple-300/50' : 'text-purple-600/50'}`}>({total} total)</span>
                   </span>
                   <div className="flex items-center gap-2">
                     <button
-                      onClick={() => setPage(p => Math.max(1, p - 1))}
-                      disabled={page === 1}
+                      onClick={() => setPage(Math.max(1, pageActual - 1))}
+                      disabled={pageActual === 1}
                       className={`px-4 py-2 rounded-lg border text-sm font-medium disabled:opacity-40 disabled:cursor-not-allowed transition-all ${isDark ? 'border-purple-500/30 bg-purple-500/10 text-purple-300 hover:bg-purple-500/20 hover:border-purple-500/50' : 'border-purple-200 bg-purple-50 text-purple-700 hover:bg-purple-100 hover:border-purple-300'}`}
                     >
                       Anterior
                     </button>
                     <button
-                      onClick={() => setPage(p => Math.min(totalPages, p + 1))}
-                      disabled={page === totalPages}
+                      onClick={() => setPage(Math.min(totalPages, pageActual + 1))}
+                      disabled={pageActual === totalPages}
                       className={`px-4 py-2 rounded-lg border text-sm font-medium disabled:opacity-40 disabled:cursor-not-allowed transition-all ${isDark ? 'border-purple-500/30 bg-purple-500/10 text-purple-300 hover:bg-purple-500/20 hover:border-purple-500/50' : 'border-purple-200 bg-purple-50 text-purple-700 hover:bg-purple-100 hover:border-purple-300'}`}
                     >
                       Siguiente
@@ -1825,7 +1863,7 @@ export function SolicitudesPage() {
                         </React.Fragment>
                       ))
                     ) : (
-                      filteredData.map((item, idx) => (
+                      filasTabla.map((item, idx) => (
                         <SolicitudRow
                           key={`sol-${item.id}-${idx}`}
                           item={item}
@@ -1863,20 +1901,20 @@ export function SolicitudesPage() {
               {!groupBy && data?.pagination && totalPages > 1 && (
                 <div className={`flex items-center justify-between border-t px-4 py-3 ${isDark ? 'border-purple-500/20 bg-gradient-to-r from-purple-900/20 via-transparent to-fuchsia-900/20' : 'border-purple-200 bg-gradient-to-r from-purple-50/50 via-transparent to-fuchsia-50/50'}`}>
                   <span className={`text-sm ${isDark ? 'text-purple-300/70' : 'text-purple-600/70'}`}>
-                    Página <span className={`font-semibold ${isDark ? 'text-purple-300' : 'text-purple-700'}`}>{page}</span> de <span className={`font-semibold ${isDark ? 'text-purple-300' : 'text-purple-700'}`}>{totalPages}</span>
-                    <span className={`ml-2 ${isDark ? 'text-purple-300/50' : 'text-purple-600/50'}`}>({data.pagination.total} total)</span>
+                    Página <span className={`font-semibold ${isDark ? 'text-purple-300' : 'text-purple-700'}`}>{pageActual}</span> de <span className={`font-semibold ${isDark ? 'text-purple-300' : 'text-purple-700'}`}>{totalPages}</span>
+                    <span className={`ml-2 ${isDark ? 'text-purple-300/50' : 'text-purple-600/50'}`}>({total} total)</span>
                   </span>
                   <div className="flex items-center gap-2">
                     <button
-                      onClick={() => setPage(p => Math.max(1, p - 1))}
-                      disabled={page === 1}
+                      onClick={() => setPage(Math.max(1, pageActual - 1))}
+                      disabled={pageActual === 1}
                       className={`px-4 py-2 rounded-lg border text-sm font-medium disabled:opacity-40 disabled:cursor-not-allowed transition-all ${isDark ? 'border-purple-500/30 bg-purple-500/10 text-purple-300 hover:bg-purple-500/20 hover:border-purple-500/50' : 'border-purple-200 bg-purple-50 text-purple-700 hover:bg-purple-100 hover:border-purple-300'}`}
                     >
                       Anterior
                     </button>
                     <button
-                      onClick={() => setPage(p => Math.min(totalPages, p + 1))}
-                      disabled={page === totalPages}
+                      onClick={() => setPage(Math.min(totalPages, pageActual + 1))}
+                      disabled={pageActual === totalPages}
                       className={`px-4 py-2 rounded-lg border text-sm font-medium disabled:opacity-40 disabled:cursor-not-allowed transition-all ${isDark ? 'border-purple-500/30 bg-purple-500/10 text-purple-300 hover:bg-purple-500/20 hover:border-purple-500/50' : 'border-purple-200 bg-purple-50 text-purple-700 hover:bg-purple-100 hover:border-purple-300'}`}
                     >
                       Siguiente
@@ -1902,14 +1940,14 @@ export function SolicitudesPage() {
       {/* Rechazo Confirmation Modal — NO elimina, solo marca status='Rechazada'
           (el back libera reservas y oculta del listado). */}
       {deleteId && (
-        <div className={`fixed inset-0 ${isDark ? 'bg-black/70' : 'bg-black/40'} flex items-center justify-center z-50`}>
-          <div className={`${isDark ? 'bg-zinc-900 border-zinc-700' : 'bg-white border-gray-200'} border rounded-2xl p-6 max-w-md`}>
+        <div className={`fixed inset-0 ${isDark ? 'bg-black/70' : 'bg-black/40'} flex items-center justify-center z-50 p-3 sm:p-4`}>
+          <div className={`${isDark ? 'bg-zinc-900 border-zinc-700' : 'bg-white border-gray-200'} border rounded-2xl p-4 sm:p-6 w-full max-w-md max-h-[calc(100dvh-1.5rem)] overflow-y-auto`}>
             <h3 className={`text-lg font-semibold ${isDark ? 'text-white' : 'text-gray-900'} mb-2`}>Rechazar solicitud</h3>
             <p className={`${isDark ? 'text-zinc-400' : 'text-gray-500'} mb-6`}>
               Esto cambiara el status a <strong>Rechazada</strong> y liberara las reservas asociadas.
               La solicitud no se borra: puedes verla filtrando por status &ldquo;Rechazada&rdquo;.
             </p>
-            <div className="flex justify-end gap-3">
+            <div className="flex flex-wrap justify-end gap-2 sm:gap-3">
               <button
                 onClick={() => setDeleteId(null)}
                 className={`px-4 py-2 rounded-lg text-sm border ${isDark ? 'bg-zinc-800 text-zinc-300 hover:bg-zinc-700 border-zinc-700' : 'bg-gray-100 text-gray-700 hover:bg-gray-200 border-gray-200'}`}

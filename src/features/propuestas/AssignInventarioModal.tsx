@@ -947,6 +947,13 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
   // "no quede nada". Al guardar, se limpian (ya quedan confirmadas). No es estado
   // de render (useRef) para no re-renderizar en cada agregado.
   const sessionNewCaraIdsRef = useRef<Set<number>>(new Set());
+  // DIFERIDO (feedback jefe oct-2026 "cerré sin guardar y se vació"): ids de
+  // caras YA guardadas (originales) que el usuario eliminó pero que NO se mandan
+  // al back hasta "Guardar Cambios". Si cierra sin guardar, no se tocaron (al
+  // reabrir se reconstruyen de la data cacheada). Las caras agregadas EN la
+  // sesión se siguen borrando directo (deshacer el alta).
+  const [pendingCaraDeletions, setPendingCaraDeletions] = useState<number[]>([]);
+  const hasPendingDeletions = pendingCaraDeletions.length > 0;
 
   // New cara form
   const [newCara, setNewCara] = useState<Omit<CaraItem, 'localId'>>(EMPTY_CARA);
@@ -983,6 +990,13 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
   // reservas que no corresponden a la plaza/formato de la cara.
   // Ciudades queda FUERA de este bloqueo: es editable siempre (ver campo Ciudades).
   const caraFiltersLocked = editingCaraHasReservas || (!!editingCaraId && !permissions.canEditCaraFiltersOnEdit);
+  // EXCEPCION (2026-11-02): el area de Trafico si puede corregir el FORMATO de
+  // un circuito aunque ya tenga inventario reservado: son quienes cuadran el
+  // inventario contra la cara y a veces el formato capturado por comercial no
+  // corresponde a lo que realmente se reservo. Plazas sigue bloqueado. El back
+  // ya aceptaba el cambio (updateCara escribe `formato` y recalcula DG/DCM);
+  // el candado era solo de UI.
+  const formatoLocked = (editingCaraHasReservas && !esTrafico(user?.rol)) || (!!editingCaraId && !permissions.canEditCaraFiltersOnEdit);
 
   // Inventory search state
   const [searchFilters, setSearchFilters] = useState({
@@ -1148,6 +1162,10 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
   // disparan autorización DG/DCM). Feedback Jos 2026-07-08.
   const [showNotaDireccionModal, setShowNotaDireccionModal] = useState(false);
   const [pendingAuthTipo, setPendingAuthTipo] = useState<'dg' | 'dcm' | 'ambas' | null>(null);
+  // DIFERIDO (igual que en campañas, fix jefe oct-2026): la Nota de Dirección se
+  // ENCOLA y se crea junto con el guardado (no al confirmar la nota), para que
+  // todo se guarde o se cancele junto.
+  const pendingNotaDireccionRef = useRef<string | null>(null);
 
   // Real-time: cuando OTRO usuario reserva un espacio cuyo período se solapa
   // con la cara que estoy buscando, quitarlo de mi listado de disponibles en
@@ -1655,6 +1673,10 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
             anio_inicio: anioInicioCara,
             autorizacion_dg: cara.autorizacion_dg || 'aprobado',
             autorizacion_dcm: cara.autorizacion_dcm || 'aprobado',
+            // true si hay una tarea 'Filtro Autorización DG' abierta — pinta
+            // el chip cyan "Filtro GC" junto al badge rojo "Pend. DG". El
+            // mapping antes no copiaba este campo (reporte Jos 2026-11-04).
+            en_filtro_dg: (cara as any).en_filtro_dg === true,
             _originalDg: cara.autorizacion_dg || 'aprobado',
             _originalDcm: cara.autorizacion_dcm || 'aprobado',
             // Baseline INMUTABLE para conservar aprobación (no drifta al reeditar).
@@ -2459,38 +2481,33 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
       isDeleting: false,
       onConfirm: async () => {
         setDeleteCircuitoModal(prev => ({ ...prev, isDeleting: true }));
-        if (caraToDelete?.id) {
+        const dbIds = [caraToDelete?.id, pairCara?.id].filter((x): x is number => !!x);
+        // Nuevas de esta sesión (reservadas al agregar) → borrado directo: es
+        // deshacer el alta. Originales ya guardadas → DIFERIR al Guardar (si
+        // cierra sin guardar no se tocan; al reabrir reaparecen).
+        const nuevas = dbIds.filter(id => sessionNewCaraIdsRef.current.has(id));
+        const originales = dbIds.filter(id => !sessionNewCaraIdsRef.current.has(id));
+        for (const id of nuevas) {
           try {
-            await propuestasService.deleteCara(propuesta.id, caraToDelete.id);
+            await propuestasService.deleteCara(propuesta.id, id);
           } catch (error) {
-            console.error('Error deleting cara:', error);
+            console.error('Error deleting cara (nueva):', error);
             alert('Error al eliminar el formato de la base de datos');
             setDeleteCircuitoModal(prev => ({ ...prev, isOpen: false, isDeleting: false }));
             return;
           }
+          sessionNewCaraIdsRef.current.delete(id);
         }
-        if (pairCara?.id) {
-          try {
-            await propuestasService.deleteCara(propuesta.id, pairCara.id);
-          } catch (error) {
-            console.error('Error deleting RT/BF pair cara:', error);
-            alert('Error al eliminar la cara par (RT/BF) de la base de datos');
-            setDeleteCircuitoModal(prev => ({ ...prev, isOpen: false, isDeleting: false }));
-            return;
-          }
-        }
+        if (originales.length > 0) setPendingCaraDeletions(prev => [...prev, ...originales]);
+
         const idsToRemove = new Set<string>([localId]);
         if (pairCara) idsToRemove.add(pairCara.localId);
-        const dbIdsToRemove = new Set<number>();
-        if (caraToDelete?.id) dbIdsToRemove.add(caraToDelete.id);
-        if (pairCara?.id) dbIdsToRemove.add(pairCara.id);
+        const dbIdsToRemove = new Set<number>(dbIds);
         setModifiedCaras(prev => {
           const next = new Map(prev);
           for (const id of dbIdsToRemove) next.delete(id);
           return next;
         });
-        // Ya se borraron de BD: sacarlas del set de rollback para no re-borrarlas al cerrar.
-        for (const id of dbIdsToRemove) sessionNewCaraIdsRef.current.delete(id);
         setCaras(prev => prev.filter(c => !idsToRemove.has(c.localId)));
         setReservas(prev => prev.filter(r =>
           ![...idsToRemove].some(id => r.id.startsWith(id)) &&
@@ -2574,24 +2591,32 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
       onConfirm: async () => {
         setDeleteCircuitoModal(prev => ({ ...prev, isDeleting: true }));
 
-        // Eliminar primero las persistidas en BD; si una falla, detener y limpiar solo lo borrado
+        // Nuevas de esta sesión → borrado directo (deshacer alta); si una falla,
+        // detener. Originales ya guardadas → DIFERIR al Guardar (encolar).
         const removedLocalIds = new Set<string>();
         const removedDbIds = new Set<number>();
+        const originalesACola: number[] = [];
         let failed: CaraItem | null = null;
         for (const cara of carasToDelete) {
           if (cara.id) {
-            try {
-              await propuestasService.deleteCara(propuesta.id, cara.id);
-              removedDbIds.add(cara.id);
-            } catch (error) {
-              console.error('Error deleting cara (bulk):', error);
-              failed = cara;
-              break;
+            if (sessionNewCaraIdsRef.current.has(cara.id)) {
+              try {
+                await propuestasService.deleteCara(propuesta.id, cara.id);
+                sessionNewCaraIdsRef.current.delete(cara.id);
+              } catch (error) {
+                console.error('Error deleting cara (bulk, nueva):', error);
+                failed = cara;
+                break;
+              }
+            } else {
+              originalesACola.push(cara.id);
             }
+            removedDbIds.add(cara.id);
           }
           removedLocalIds.add(cara.localId);
         }
 
+        if (originalesACola.length > 0) setPendingCaraDeletions(prev => [...prev, ...originalesACola]);
         setModifiedCaras(prev => {
           const next = new Map(prev);
           for (const id of removedDbIds) next.delete(id);
@@ -3474,8 +3499,10 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
     const hasPropuestaChanges = hasChanges;
     const hasCaraChanges = modifiedCaras.size > 0;
     const hasBitacoraChanges = bitacoraRef.current?.hasPending() === true;
+    const hasNotaDireccion = !!pendingNotaDireccionRef.current;
+    const hasDeletions = pendingCaraDeletions.length > 0;
 
-    if (!hasPropuestaChanges && !hasCaraChanges && !hasBitacoraChanges) {
+    if (!hasPropuestaChanges && !hasCaraChanges && !hasBitacoraChanges && !hasNotaDireccion && !hasDeletions) {
       showToast('No hay cambios pendientes', 'info');
       return;
     }
@@ -3531,20 +3558,11 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
     try {
       const messages: string[] = [];
 
-      // 0. Bitacora inline (estatus + comentarios). Se aplica ANTES del bulk
-      // de caras: si el cambio de estatus revienta por el back (autorizacion
-      // abierta, etc.), abortamos antes de tocar caras y mostramos el error.
-      if (hasBitacoraChanges && bitacoraRef.current) {
-        try {
-          await bitacoraRef.current.commit();
-          messages.push('Estatus/bitácora actualizados');
-        } catch (bitErr) {
-          const bmsg = bitErr instanceof Error ? bitErr.message : (bitErr as any)?.response?.data?.error || 'Error al actualizar estatus/bitácora';
-          showToast(`Estatus/bitácora: ${bmsg}`, 'error');
-          setIsSaving(false);
-          return;
-        }
-      }
+      // ORDEN (fix jefe oct-2026 "guarda parte"): primero lo ESTRUCTURAL
+      // (encabezado, bulk de caras) y la nota/bitácora AL FINAL. Antes la
+      // bitácora se aplicaba PRIMERO: si el bulk tronaba, el comentario/estatus
+      // ya había quedado guardado y los circuitos no. Ahora, si algo estructural
+      // falla, ni la nota ni la bitácora se aplicaron.
 
       // 1. Save propuesta summary changes if any
       if (hasPropuestaChanges) {
@@ -3647,6 +3665,38 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
         messages.push(result.message || `${carasArray.length} circuito(s) actualizados`);
       }
 
+      // 1b. Eliminaciones DIFERIDAS de circuitos ya guardados (propuesta =
+      // borrador, sin autorización). Van después del bulk: si algo estructural
+      // de arriba tronó, no llegamos aquí y los circuitos siguen intactos.
+      if (hasDeletions) {
+        for (const caraId of pendingCaraDeletions) {
+          await propuestasService.deleteCara(propuesta.id, caraId);
+        }
+        messages.push(`${pendingCaraDeletions.length} circuito(s) eliminados`);
+        setPendingCaraDeletions([]);
+      }
+
+      // 2. Nota de Dirección ENCOLADA (autorización DG/DCM). Aditiva, después de
+      // lo estructural: si el bulk de arriba tronó, no llegamos aquí.
+      if (pendingNotaDireccionRef.current && propuesta.solicitud_id) {
+        await notasDireccionService.create(propuesta.solicitud_id, pendingNotaDireccionRef.current);
+        pendingNotaDireccionRef.current = null;
+        messages.push('Nota de Dirección registrada');
+      }
+
+      // 3. Bitácora inline (estatus + comentarios) — AL FINAL (aditiva). Si algo
+      // estructural falló arriba, no se aplicó. Si falla SOLO la bitácora, lo
+      // estructural ya quedó guardado, así que no abortamos: avisamos aparte.
+      let bitacoraError: string | null = null;
+      if (hasBitacoraChanges && bitacoraRef.current) {
+        try {
+          await bitacoraRef.current.commit();
+          messages.push('Estatus/bitácora actualizados');
+        } catch (bitErr) {
+          bitacoraError = bitErr instanceof Error ? bitErr.message : (bitErr as any)?.response?.data?.error || 'Error al actualizar estatus/bitácora';
+        }
+      }
+
       // Refresh data — incluye reservas modal para que circuitos se redibujen verdes/llenos tras redistribuir
       await Promise.all([
         queryClient.invalidateQueries({ queryKey: ['propuesta-full', propuesta.id] }),
@@ -3660,7 +3710,11 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
       // generó una sola vez en bulkUpdateCaras. Ya no son candidatas a rollback.
       sessionNewCaraIdsRef.current.clear();
 
-      showToast(messages.join(' | '), 'success');
+      if (bitacoraError) {
+        showToast(`Los cambios se guardaron, pero la bitácora/estatus falló: ${bitacoraError}`, 'error');
+      } else {
+        showToast(messages.join(' | '), 'success');
+      }
     } catch (error) {
       console.error('Error in bulk save:', error);
       const axiosError = error as { response?: { data?: { error?: string; message?: string } }; message?: string };
@@ -4917,6 +4971,7 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
         }
 
         queryClient.invalidateQueries({ queryKey: ['propuesta-reservas-modal', propuesta.id] });
+        queryClient.invalidateQueries({ queryKey: ['propuesta-reservas-historial', propuesta.id] });
         queryClient.invalidateQueries({ queryKey: ['propuesta-inventario', propuesta.id] }); // Refresh map
         // Also refresh disponibles
         handleRefetchDisponibles();
@@ -5089,6 +5144,7 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
         }
 
         queryClient.invalidateQueries({ queryKey: ['propuesta-reservas-modal', propuesta.id] });
+        queryClient.invalidateQueries({ queryKey: ['propuesta-reservas-historial', propuesta.id] });
         queryClient.invalidateQueries({ queryKey: ['propuesta-inventario', propuesta.id] });
         handleRefetchDisponibles();
 
@@ -5186,10 +5242,19 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
   }, [reservas, selectedCaraForSearch]);
 
   // Historial (reservas que salieron) de la cara seleccionada — para el tab Historial.
-  const currentCaraHistorial = useMemo(() => {
+  // Historial: por default el del circuito seleccionado en el buscador. Sin
+  // circuito seleccionado (o con "Todos los circuitos") se muestra el de toda
+  // la propuesta. Antes, sin circuito, el tab decia "Sin movimientos en este
+  // circuito" aunque hubiera eliminaciones en otros, y parecia que no se
+  // habian guardado.
+  const [historialTodos, setHistorialTodos] = useState(false);
+  const historialCaraActual = useMemo(() => {
     if (!selectedCaraForSearch?.id) return [];
     return (historialInventario || []).filter(h => h.solicitud_cara_id === selectedCaraForSearch.id);
   }, [historialInventario, selectedCaraForSearch]);
+  const historialMostrandoTodos = historialTodos || !selectedCaraForSearch?.id;
+  const currentCaraHistorial = historialMostrandoTodos ? (historialInventario || []) : historialCaraActual;
+  const historialOtrosCircuitos = (historialInventario?.length ?? 0) - historialCaraActual.length;
 
   const [reReservandoHistId, setReReservandoHistId] = useState<number | null>(null);
   // Regresar a reservados un inventario del historial (solo si sigue disponible).
@@ -5531,6 +5596,7 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
           try {
             await propuestasService.deleteReservas(propuesta.id, backendIds);
             queryClient.invalidateQueries({ queryKey: ['propuesta-reservas-modal', propuesta.id] });
+            queryClient.invalidateQueries({ queryKey: ['propuesta-reservas-historial', propuesta.id] });
             queryClient.invalidateQueries({ queryKey: ['propuesta-inventario', propuesta.id] });
             handleRefetchDisponibles();
 
@@ -5586,6 +5652,7 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
           const ids = reservasAEliminar.map(r => r.reservaId!).filter(Boolean);
           await propuestasService.deleteReservas(propuesta.id, ids);
           queryClient.invalidateQueries({ queryKey: ['propuesta-reservas-modal', propuesta.id] });
+          queryClient.invalidateQueries({ queryKey: ['propuesta-reservas-historial', propuesta.id] });
           queryClient.invalidateQueries({ queryKey: ['propuesta-inventario', propuesta.id] });
           handleRefetchDisponibles();
 
@@ -5699,6 +5766,7 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
           if (backendIds.length > 0) {
             await propuestasService.deleteReservas(propuesta.id, backendIds);
             queryClient.invalidateQueries({ queryKey: ['propuesta-reservas-modal', propuesta.id] });
+            queryClient.invalidateQueries({ queryKey: ['propuesta-reservas-historial', propuesta.id] });
             queryClient.invalidateQueries({ queryKey: ['propuesta-inventario', propuesta.id] });
             handleRefetchDisponibles();
           }
@@ -5873,7 +5941,7 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
       {omitidosReservaJSX}
         <div className="absolute inset-0 bg-black/70 backdrop-blur-sm" onClick={handleBackToMain} />
 
-        <div className={`relative w-[97vw] max-w-[1800px] h-[92vh] ${isDark ? 'bg-zinc-900' : 'bg-white'} rounded-2xl border border-purple-500/20 shadow-2xl flex flex-col overflow-hidden`}>
+        <div className={`relative w-[97vw] max-w-[1800px] h-[92dvh] max-lg:landscape:h-[100dvh] max-lg:landscape:max-h-[100dvh] max-lg:landscape:w-screen max-lg:landscape:rounded-none max-lg:landscape:mx-0 ${isDark ? 'bg-zinc-900' : 'bg-white'} rounded-2xl border border-purple-500/20 shadow-2xl flex flex-col overflow-hidden`}>
           {/* Header */}
           <div className={`flex items-center justify-between px-6 py-4 border-b ${isDark ? 'border-zinc-800' : 'border-gray-200'}`}>
             <div className="flex items-center gap-4">
@@ -6459,7 +6527,7 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
                       )}
                     </button>
                     {showDisponiblesAdvFilters && (
-                      <div className={`absolute left-0 top-full mt-1 z-[100] w-[540px] ${isDark ? 'bg-zinc-900 border-purple-500/30' : 'bg-white border-gray-200'} border rounded-xl shadow-2xl p-4`}>
+                      <div className={`fixed inset-x-2 top-16 bottom-16 mt-0 w-auto max-w-none max-h-[calc(100dvh-5rem)] overflow-y-auto overscroll-contain lg:absolute lg:inset-auto lg:top-full lg:left-0 lg:bottom-auto lg:mt-1 lg:w-[540px] lg:max-w-[calc(100vw-2rem)] lg:max-h-none lg:overflow-visible z-[100] ${isDark ? 'bg-zinc-900 border-purple-500/30' : 'bg-white border-gray-200'} border rounded-xl shadow-2xl p-4`}>
                         <div className="flex items-center justify-between mb-3">
                           <span className={`text-sm font-medium ${isDark ? 'text-purple-300' : 'text-purple-700'}`}>Filtros avanzados</span>
                           <button
@@ -6469,7 +6537,7 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
                             <X className="h-4 w-4" />
                           </button>
                         </div>
-                        <div className="space-y-2 max-h-[300px] overflow-visible pr-1">
+                        <div className="space-y-2 max-h-[300px] max-lg:landscape:max-h-32 overflow-visible pr-1">
                           {disponiblesAdvFilters.map((filter, index) => (
                             <div key={filter.id} className="flex items-center gap-2">
                               {index > 0 ? (
@@ -7014,7 +7082,7 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
                         <p className="text-sm">Intenta cambiar los filtros o la cara seleccionada</p>
                       </div>
                     ) : (
-                      <table className="w-full text-sm">
+                      <table className="w-full min-w-[640px] text-sm">
                         <thead className={`${isDark ? 'bg-zinc-800/50' : 'bg-gray-50/50'} sticky top-0`}>
                           <tr>
                             <th className={`px-3 py-2 text-left text-xs ${isDark ? 'text-zinc-400' : 'text-gray-500'} font-medium w-10`}>
@@ -7355,6 +7423,9 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
               onReReservar={handleReReservarHistorial}
               onRefresh={() => refetchHistorial()}
               refreshing={historialFetching}
+              mostrandoTodos={historialMostrandoTodos}
+              onToggleTodos={selectedCaraForSearch?.id ? () => setHistorialTodos(v => !v) : undefined}
+              totalOtrosCircuitos={historialOtrosCircuitos}
             />
           ) : searchViewTab === 'capas' ? (
             /* CAPAS TAB CONTENT: gestion de capas de POI/KML del circuito */
@@ -7631,7 +7702,7 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
                   </div>
                 ) : (
                   <div className="flex-1 overflow-auto">
-                    <table className="w-full">
+                    <table className="w-full min-w-[640px]">
                       <thead className={`sticky top-0 ${isDark ? 'bg-zinc-900' : 'bg-white'}/95 backdrop-blur-sm z-10`}>
                         <tr className={`border-b ${isDark ? 'border-zinc-800' : 'border-gray-200'}`}>
                           <th className="px-3 py-3 text-center">
@@ -8033,7 +8104,7 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
 
                 {/* Lateral Edit Panel */}
                 {editingReserva && (
-                  <div className={`absolute right-0 top-0 bottom-0 w-80 ${isDark ? 'bg-zinc-900' : 'bg-white'} border-l ${isDark ? 'border-zinc-700' : 'border-gray-200'} shadow-2xl z-20 flex flex-col animate-in slide-in-from-right duration-200`}>
+                  <div className={`absolute right-0 top-0 bottom-0 w-full max-w-[20rem] sm:w-80 ${isDark ? 'bg-zinc-900' : 'bg-white'} border-l ${isDark ? 'border-zinc-700' : 'border-gray-200'} shadow-2xl z-20 flex flex-col animate-in slide-in-from-right duration-200`}>
                     <div className={`px-4 py-3 border-b ${isDark ? 'border-zinc-800' : 'border-gray-200'} flex items-center justify-between`}>
                       <h3 className={`text-sm font-semibold ${isDark ? 'text-white' : 'text-gray-900'}`}>Editar Reserva</h3>
                       <button
@@ -8260,13 +8331,15 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
 
   const handleClose = () => {
     const hayCarasNuevas = sessionNewCaraIdsRef.current.size > 0;
-    if (hasChanges || modifiedCaras.size > 0 || hayCarasNuevas || bitacoraPending) {
+    const hayEliminaciones = pendingCaraDeletions.length > 0;
+    if (hasChanges || modifiedCaras.size > 0 || hayCarasNuevas || hayEliminaciones || bitacoraPending) {
       setConfirmModal({
         isOpen: true,
         title: 'Cambios sin guardar',
         message: `Tienes ${[
           hasChanges ? 'cambios en la propuesta' : '',
           modifiedCaras.size > 0 ? `${modifiedCaras.size} circuito(s) sin guardar` : '',
+          hayEliminaciones ? `${pendingCaraDeletions.length} circuito(s) por eliminar` : '',
           bitacoraPending ? `${bitacoraPendingCount} cambio(s) en la bitácora` : '',
         ].filter(Boolean).join(' y ') || 'cambios'} sin guardar.${hayCarasNuevas ? ' Los circuitos agregados se descartarán.' : ''} ¿Seguro que quieres cerrar?`,
         confirmText: 'Cerrar sin guardar',
@@ -8275,10 +8348,14 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
         onConfirm: async () => {
           setConfirmModal(prev => ({ ...prev, isOpen: false }));
           await rollbackCarasNuevasSinGuardar();
+          pendingNotaDireccionRef.current = null; // descartar nota encolada
+          setPendingCaraDeletions([]); // descartar eliminaciones encoladas (no se tocaron en BD)
           onClose();
         },
       });
     } else {
+      pendingNotaDireccionRef.current = null;
+      setPendingCaraDeletions([]);
       onClose();
     }
   };
@@ -8288,7 +8365,7 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
     <div className="fixed inset-0 z-50 flex items-center justify-center">
       <div className="absolute inset-0 bg-black/70 backdrop-blur-sm" onClick={handleClose} />
 
-      <div className={`relative w-[97vw] max-w-[1800px] h-[92vh] ${isDark ? 'bg-zinc-900' : 'bg-white'} rounded-2xl border border-purple-500/20 shadow-2xl flex flex-col overflow-hidden`}>
+      <div className={`relative w-[97vw] max-w-[1800px] h-[92dvh] max-lg:landscape:h-[100dvh] max-lg:landscape:max-h-[100dvh] max-lg:landscape:w-screen max-lg:landscape:rounded-none max-lg:landscape:mx-0 ${isDark ? 'bg-zinc-900' : 'bg-white'} rounded-2xl border border-purple-500/20 shadow-2xl flex flex-col overflow-hidden`}>
         {/* Header */}
         <div className={`flex items-center justify-between px-6 py-4 border-b ${isDark ? 'border-zinc-800' : 'border-gray-200'}`}>
           <div>
@@ -8434,7 +8511,7 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
                         )}
                       </div>
                       {/* Show selected or current client details */}
-                      <div className="grid grid-cols-4 gap-4">
+                      <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4">
                         <div className="space-y-1">
                           <label className={`text-xs ${isDark ? 'text-zinc-500' : 'text-gray-400'}`}>CUIC</label>
                           <div className={`px-3 py-2 ${isDark ? 'bg-zinc-800/50' : 'bg-gray-50/50'} rounded-lg text-sm ${isDark ? 'text-zinc-300' : 'text-gray-700'} border ${isDark ? 'border-zinc-700/30' : 'border-gray-200/30'}`}>
@@ -8462,7 +8539,7 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
                       </div>
                     </div>
                   ) : (
-                    <div className="grid grid-cols-4 gap-4">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4">
                       <div className="space-y-1">
                         <label className={`text-xs ${isDark ? 'text-zinc-500' : 'text-gray-400'}`}>CUIC</label>
                         <div className={`px-3 py-2 ${isDark ? 'bg-zinc-800/50' : 'bg-gray-50/50'} rounded-lg text-sm ${isDark ? 'text-zinc-300' : 'text-gray-700'} border ${isDark ? 'border-zinc-700/30' : 'border-gray-200/30'}`}>
@@ -8491,7 +8568,7 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
                   )}
 
                   {/* Editable fields */}
-                  <div className="grid grid-cols-2 gap-4">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                     <div className="space-y-1">
                       <label className={`text-xs ${isDark ? 'text-zinc-500' : 'text-gray-400'}`}>Nombre de Campaña</label>
                       <input
@@ -8554,7 +8631,7 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
                   </div>
 
                   {/* Period - Same style as EditSolicitudModal */}
-                  <div className="grid grid-cols-4 gap-4">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4">
                     <div className="space-y-1">
                       <label className={`text-xs ${isDark ? 'text-zinc-500' : 'text-gray-400'}`}>Año Inicio</label>
                       <select
@@ -8614,7 +8691,7 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
                   </div>
 
                   {/* Notes and Description */}
-                  <div className="grid grid-cols-2 gap-4">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                     <div className="space-y-1">
                       {propuesta.solicitud_id ? (
                         // Modo edición de propuesta: bitácora readonly. La nota
@@ -9074,7 +9151,7 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
                             }
                             return (
                           <>
-                          <div className="grid grid-cols-3 gap-2">
+                          <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
                             <div>
                               <label className={`text-[10px] ${isDark ? 'text-zinc-600' : 'text-gray-400'} block mb-1`}>Mes</label>
                               <select
@@ -9210,7 +9287,7 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
                             );
                           })()
                         ) : (
-                        <div className="grid grid-cols-2 gap-2">
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                           {/* Catorcena Inicio */}
                           <select
                             value={newCara.catorcena_inicio && newCara.anio_inicio ? `${newCara.anio_inicio}-${newCara.catorcena_inicio}` : ''}
@@ -9378,7 +9455,7 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
                       </div>
                     </div>
 
-                    <div className="grid grid-cols-4 gap-4 mb-4">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4 mb-4">
                       <div className="space-y-1">
                         <label title={editingCaraHasReservas ? 'Bloqueado: el circuito tiene inventario reservado' : undefined} className={`text-xs ${(!editingCaraHasReservas && caraFiltersLocked) ? 'text-zinc-800' : `${isDark ? 'text-zinc-500' : 'text-gray-400'}`}`}>Plazas {editingCaraHasReservas ? <span className="text-amber-400 text-[10px]">(bloqueado)</span> : newCara.estados && !caraFiltersLocked && <span className="text-purple-400">({newCara.estados.split(',').filter(Boolean).length})</span>}</label>
                         {canEditResumen && !caraFiltersLocked ? (
@@ -9454,8 +9531,17 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
                         )}
                       </div>
                       <div className="space-y-1">
-                        <label title={editingCaraHasReservas ? 'Bloqueado: el circuito tiene inventario reservado' : undefined} className={`text-xs ${(!editingCaraHasReservas && caraFiltersLocked) ? 'text-zinc-800' : `${isDark ? 'text-zinc-500' : 'text-gray-400'}`}`}>Formatos {editingCaraHasReservas ? <span className="text-amber-400 text-[10px]">(bloqueado)</span> : newCara.formato && !caraFiltersLocked && <span className="text-purple-400">({newCara.formato.split(',').filter(Boolean).length})</span>}</label>
-                        {canEditResumen && !caraFiltersLocked ? (
+                        <label
+                          title={editingCaraHasReservas
+                            ? (formatoLocked ? 'Bloqueado: el circuito tiene inventario reservado' : 'Editable por Tráfico aunque haya inventario reservado: verifica que las reservas correspondan al formato nuevo')
+                            : undefined}
+                          className={`text-xs ${(!editingCaraHasReservas && formatoLocked) ? 'text-zinc-800' : `${isDark ? 'text-zinc-500' : 'text-gray-400'}`}`}
+                        >
+                          Formatos {editingCaraHasReservas
+                            ? <span className="text-amber-400 text-[10px]">{formatoLocked ? '(bloqueado)' : '(con inventario reservado)'}</span>
+                            : newCara.formato && !formatoLocked && <span className="text-purple-400">({newCara.formato.split(',').filter(Boolean).length})</span>}
+                        </label>
+                        {canEditResumen && !formatoLocked ? (
                           <MultiSelectDropdown
                             options={esUDC ? Array.from(new Set([UDC_FORMATO, ...(solicitudFilters?.formatos || [])])) : (solicitudFilters?.formatos || [])}
                             selected={newCara.formato ? newCara.formato.split(',').map(s => s.trim()).filter(Boolean) : []}
@@ -9489,7 +9575,7 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
                         </select>
                       </div>
                     </div>
-                    <div className="grid grid-cols-4 gap-4 mb-4">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4 mb-4">
                       <div className="space-y-1">
                         <label className={`text-xs ${isDark ? 'text-zinc-500' : 'text-gray-400'}`}>
                           {isEspecialArticle((newCara.articulo || '').toUpperCase()) ? 'Ejec. Especiales' : newCara.articulo?.toUpperCase().startsWith('IM') ? 'Impresiones' : isServicioCFArticle(newCara.articulo) ? 'Servicios' : newCara.articulo?.toUpperCase().startsWith('IN') ? 'Intercambio' : (newCara.formato || '').toUpperCase().includes('PUENTE PEATONAL') ? 'Puentes en Renta' : 'Caras en Renta'}
@@ -9826,7 +9912,7 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
                                     statusColor === 'blue' ? 'bg-blue-500' : statusColor === 'red' ? 'bg-red-500 animate-pulse' : statusColor === 'emerald' ? 'bg-emerald-500' : 'bg-amber-500 animate-pulse'
                                   }`} />
 
-                                  <div className="flex-1 grid grid-cols-8 gap-3 text-sm">
+                                  <div className="flex-1 grid grid-cols-2 sm:grid-cols-4 md:grid-cols-8 gap-3 text-sm">
                                     <div>
                                       <span className={`${isDark ? 'text-zinc-500' : 'text-gray-400'} text-xs`}>Formato</span>
                                       <p className={`${isDark ? 'text-white' : 'text-gray-900'} font-medium`}>{cara.formato || '-'}</p>
@@ -9995,22 +10081,30 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
                                           </button>
                                         )}
                                         {puedeEditarCircuito && (() => {
-                                          // Antes bloqueabamos TODOS los botones de editar si HAY alguna
-                                          // cara con autorizacion pendiente guardada (hasSavedPendingAuth).
-                                          // En migraciones SAP grandes (reporte Aylin/Aldonza 80617 TELCEL
-                                          // 2026-10-23) eso dejaba la propuesta inoperable: ya traia caras
-                                          // pendientes desde la migracion, entonces al abrir el modal todos
-                                          // los botones salian disabled sin que el asesor tocara nada.
-                                          // Ahora solo bloqueamos la cara que ESTA puntualmente pendiente
-                                          // (para no editarla mientras direccion la revisa). Las demas
-                                          // quedan libres para seguir ajustando. "Agregar circuito nuevo"
-                                          // sigue bloqueado globalmente arriba.
+                                          // Regla pedida por Jos (2026-10-30): si CUALQUIER cara de la
+                                          // propuesta tiene autorizacion pendiente (DG o DCM), nadie puede
+                                          // tocar circuitos. Toda la propuesta queda "congelada" visualmente
+                                          // hasta que direccion resuelva, porque editar un circuito
+                                          // mientras otros estan en revision mezcla cambios dentro de un
+                                          // flujo ya enviado. Vuelve al comportamiento previo al
+                                          // 2026-10-23 — el caso de migraciones SAP grandes (80617 TELCEL)
+                                          // se maneja esperando a que direccion revise, no abriendo la
+                                          // propuesta a edicion.
+                                          // Ajuste 2026-11-06 (caso 80553): el candado solo aplica a pendientes YA
+                                          // GUARDADAS en BD (hasSavedPendingAuth). Un circuito que queda 'pendiente'
+                                          // solo en local (editado o reenviado, sin guardar) NO congela la pluma de
+                                          // los demas: con 3 rechazados, editar el 1o dejaba el 2o y 3o sin pluma y
+                                          // sin poder guardar (candado de rechazados sin resolver) -> callejon sin salida.
                                           const caraTienePendienteGuardada =
                                             cara.id != null &&
                                             !modifiedCaras.has(cara.id) &&
                                             ((cara as any)._originalDg === 'pendiente' || (cara as any)._originalDcm === 'pendiente');
-                                          const editBlocked = caraTienePendienteGuardada;
-                                          const blockReason = caraTienePendienteGuardada ? 'Este circuito esta pendiente de autorizacion - no se puede editar hasta que direccion resuelva' : 'Editar';
+                                          const editBlocked = caraTienePendienteGuardada || hasSavedPendingAuth;
+                                          const blockReason = caraTienePendienteGuardada
+                                            ? 'Este circuito esta pendiente de autorizacion - no se puede editar hasta que direccion resuelva'
+                                            : hasSavedPendingAuth
+                                              ? 'Hay otro circuito en esta propuesta pendiente de autorizacion. Aprobalo primero.'
+                                              : 'Editar';
                                           return (
                                           <button
                                             onClick={(e) => { e.stopPropagation(); if (!editBlocked) handleEditCara(cara); }}
@@ -10237,14 +10331,14 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
                             )}
                           </button>
                           {showFiltersReservas && (
-                            <div className="fixed inset-x-2 top-16 mt-0 w-auto max-w-none max-h-[calc(100vh-5rem)] overflow-auto sm:absolute sm:inset-auto sm:top-full sm:right-0 sm:mt-1 sm:w-[520px] sm:max-h-none sm:overflow-visible z-[60] bg-[#1a1025] border border-purple-900/50 rounded-lg shadow-xl p-4">
+                            <div className="fixed inset-x-2 top-16 mt-0 w-auto max-w-none max-h-[calc(100dvh-5rem)] overflow-auto sm:absolute sm:inset-auto sm:top-full sm:right-0 sm:mt-1 sm:w-[520px] sm:max-h-none sm:overflow-visible z-[60] bg-[#1a1025] border border-purple-900/50 rounded-lg shadow-xl p-4">
                               <div className="flex items-center justify-between mb-3">
                                 <span className="text-sm font-medium text-purple-300">Filtros de búsqueda</span>
                                 <button onClick={() => setShowFiltersReservas(false)} className={`${isDark ? 'text-zinc-400' : 'text-gray-500'} ${isDark ? 'hover:text-white' : 'hover:text-gray-900'}`}>
                                   <X className="h-4 w-4" />
                                 </button>
                               </div>
-                              <div className="space-y-3 max-h-[300px] overflow-y-auto scrollbar-purple pr-1">
+                              <div className="space-y-3 max-h-[300px] max-lg:landscape:max-h-32 overflow-y-auto scrollbar-purple pr-1">
                                 {filtersReservas.map((filter, index) => (
                                   <div key={filter.id} className="flex items-center gap-2">
                                     {index > 0 && <span className="text-[10px] text-purple-400 font-medium w-8">AND</span>}
@@ -10323,7 +10417,7 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
                             )}
                           </button>
                           {showGroupingConfigReservas && (
-                            <div className="absolute right-0 top-full mt-1 z-50 bg-[#1a1025] border border-purple-900/50 rounded-lg shadow-xl p-2 min-w-[200px]">
+                            <div className="fixed inset-x-2 top-16 bottom-16 mt-0 w-auto max-w-none max-h-[calc(100dvh-5rem)] overflow-y-auto overscroll-contain lg:absolute lg:inset-auto lg:top-full lg:right-0 lg:bottom-auto lg:mt-1 lg:w-auto lg:min-w-[200px] lg:max-w-[calc(100vw-2rem)] lg:max-h-none lg:overflow-visible z-50 bg-[#1a1025] border border-purple-900/50 rounded-lg shadow-xl p-2">
                               <p className={`text-[10px] ${isDark ? 'text-zinc-500' : 'text-gray-400'} uppercase tracking-wide px-2 py-1`}>Agrupar por (max 3)</p>
                               {AVAILABLE_GROUPINGS_RESERVAS.map(({ field, label }) => (
                                 <button
@@ -10363,7 +10457,7 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
                             <ArrowUpDown className="h-3.5 w-3.5" />
                           </button>
                           {showSortReservas && (
-                            <div className="absolute right-0 top-full mt-1 z-50 bg-[#1a1025] border border-purple-900/50 rounded-lg shadow-xl p-2 min-w-[180px]">
+                            <div className="fixed inset-x-2 top-16 bottom-16 mt-0 w-auto max-w-none max-h-[calc(100dvh-5rem)] overflow-y-auto overscroll-contain lg:absolute lg:inset-auto lg:top-full lg:right-0 lg:bottom-auto lg:mt-1 lg:w-auto lg:min-w-[180px] lg:max-w-[calc(100vw-2rem)] lg:max-h-none lg:overflow-visible z-50 bg-[#1a1025] border border-purple-900/50 rounded-lg shadow-xl p-2">
                               <p className={`text-[10px] ${isDark ? 'text-zinc-500' : 'text-gray-400'} uppercase tracking-wide px-2 py-1`}>Ordenar por</p>
                               {FILTER_FIELDS_RESERVAS.map(({ field, label }) => (
                                 <button
@@ -10595,7 +10689,7 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
                         </div>
                         {/* KPIs Mini Summary */}
                         <div className={`p-3 border-t ${isDark ? 'border-zinc-700/50' : 'border-gray-200/50'} ${isDark ? 'bg-zinc-800/50' : 'bg-gray-50/50'}`}>
-                          <div className={`grid gap-2 text-center text-xs ${reservasKPIs.completos > 0 ? 'grid-cols-4' : 'grid-cols-3'}`}>
+                          <div className={`grid gap-2 text-center text-xs ${reservasKPIs.completos > 0 ? 'grid-cols-2 sm:grid-cols-4' : 'grid-cols-3'}`}>
                             <div>
                               <p className={`${isDark ? 'text-zinc-500' : 'text-gray-400'}`}>Flujo</p>
                               <p className="text-blue-400 font-bold">{reservasKPIs.flujo}</p>
@@ -10779,7 +10873,7 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
 
         {/* Footer with Guardar Cambios button */}
         {(caras.length > 0 || hasChanges || bitacoraPending) && (
-          <div className={`px-6 py-4 border-t ${isDark ? 'border-zinc-800' : 'border-gray-200'} ${isDark ? 'bg-zinc-900' : 'bg-white'}/80 flex items-center justify-between`}>
+          <div className={`px-4 sm:px-6 py-3 sm:py-4 max-lg:landscape:py-2 max-lg:landscape:px-3 border-t ${isDark ? 'border-zinc-800' : 'border-gray-200'} ${isDark ? 'bg-zinc-900' : 'bg-white'}/80 flex flex-wrap items-center justify-between gap-2`}>
             <div className="flex items-center gap-4">
               {/* Status summary */}
               <div className="flex items-center gap-3 text-sm">
@@ -10822,7 +10916,7 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
               </button>
               {effectiveCanEdit && (
                 <button
-                  disabled={(!hasChanges && modifiedCaras.size === 0 && !bitacoraPending) || isSaving || ((hasChanges || modifiedCaras.size > 0) && invalidCaras.length > 0)}
+                  disabled={(!hasChanges && modifiedCaras.size === 0 && !bitacoraPending && !hasPendingDeletions) || isSaving || ((hasChanges || modifiedCaras.size > 0) && invalidCaras.length > 0)}
                   title={((hasChanges || modifiedCaras.size > 0) && invalidCaras.length > 0)
                     ? `${invalidCaras.length} cara(s) tienen catorcenas fuera del rango actual. Ajusta el rango o elimínalas para poder guardar.`
                     : undefined}
@@ -10831,7 +10925,7 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
                     // saltamos el gate de Nota Direccion y el modal de confirmar
                     // cambios — no hay re-envio de caras y no hay que resumir
                     // cambios de propuesta. Sencillo y directo.
-                    const onlyBitacora = !hasChanges && modifiedCaras.size === 0 && bitacoraPending;
+                    const onlyBitacora = !hasChanges && modifiedCaras.size === 0 && !hasPendingDeletions && bitacoraPending;
                     if (onlyBitacora) {
                       setIsSaving(true);
                       try {
@@ -10868,7 +10962,7 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
                     setShowSaveConfirm(true);
                   }}
                   className={`px-6 py-2 rounded-lg text-sm font-medium transition-all ${
-                    (hasChanges || modifiedCaras.size > 0 || bitacoraPending) && !isSaving && !((hasChanges || modifiedCaras.size > 0) && invalidCaras.length > 0)
+                    (hasChanges || modifiedCaras.size > 0 || bitacoraPending || hasPendingDeletions) && !isSaving && !((hasChanges || modifiedCaras.size > 0) && invalidCaras.length > 0)
                       ? 'bg-purple-500 text-white hover:bg-purple-600 shadow-lg shadow-purple-500/25'
                       : `${isDark ? 'bg-zinc-700' : 'bg-gray-200'} ${isDark ? 'text-zinc-500' : 'text-gray-400'} cursor-not-allowed`
                   }`}
@@ -10878,7 +10972,7 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
                   ) : (
                     <Save className="h-4 w-4 inline-block mr-2" />
                   )}
-                  {isSaving ? 'Guardando...' : `Guardar Cambios${(hasChanges || modifiedCaras.size > 0 || bitacoraPending) ? ` (${(hasChanges ? 1 : 0) + modifiedCaras.size + (bitacoraPending ? 1 : 0)})` : ''}`}
+                  {isSaving ? 'Guardando...' : `Guardar Cambios${(hasChanges || modifiedCaras.size > 0 || bitacoraPending || hasPendingDeletions) ? ` (${(hasChanges ? 1 : 0) + modifiedCaras.size + (bitacoraPending ? 1 : 0) + pendingCaraDeletions.length})` : ''}`}
                 </button>
               )}
             </div>
@@ -10901,6 +10995,7 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
         contextLabel="propuesta"
         hasGeneralChanges={hasChanges}
         modifiedCircuitos={modifiedCircuitosForConfirm}
+        pendingDeletions={pendingCaraDeletions.length}
       />
 
       {/* Mini-modal Nueva Nota Dirección — obligatorio cuando la edición dispara
@@ -10917,7 +11012,10 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
         }}
         onConfirm={async (texto) => {
           if (!propuesta.solicitud_id) return;
-          await notasDireccionService.create(propuesta.solicitud_id, texto);
+          // DIFERIDO: la Nota de Dirección se crea junto con el guardado (en
+          // handleBulkSaveChanges), no aquí, para que todo se guarde o se cancele
+          // junto. Si el usuario cancela el Confirmar Cambios, no se creó.
+          pendingNotaDireccionRef.current = texto;
           setShowNotaDireccionModal(false);
           setPendingAuthTipo(null);
           // Cadena al Confirmar Cambios (Save Confirm) — ya no ejecutamos save

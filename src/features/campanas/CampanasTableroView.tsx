@@ -1,9 +1,9 @@
 import { useCallback, useMemo } from 'react';
-import { Building2, Calendar, DollarSign, History, Megaphone } from 'lucide-react';
+import { Building2, Calendar, Clock, DollarSign, History, Megaphone } from 'lucide-react';
 import { Campana } from '../../types';
 import { formatCurrency, formatDate, formatDateCompact } from '../../lib/utils';
 import { TableroBoard, TableroCard, type TableroColumna } from '../../components/tablero/TableroBoard';
-import { buildMapaColumnas, normalizaEstatus } from '../../lib/tableroVistas';
+import { buildMapaColumnas, fechaUltimoCambio, normalizaEstatus } from '../../lib/tableroVistas';
 import { esCampanaIncompleta, IncompletaBadge } from './campanaCompletitud';
 import { CampanaAcciones, type CampanaAccionesProps } from './CampanaAcciones';
 
@@ -173,16 +173,27 @@ function TarjetaCampana({
         <span className={`font-mono text-[10px] px-1.5 py-0.5 rounded ${isDark ? 'bg-purple-500/10 text-purple-300' : 'bg-purple-50 text-purple-700'}`}>
           #{campana.id}
         </span>
-        {/* Fecha de ultima edicion. Requiere la columna campania.updated_at:
-            mientras no exista en esa BD llega vacia y se muestra "—" en vez de
-            inventar una fecha con fecha_inicio, que no es una edicion. */}
-        <span
-          className={`inline-flex items-center gap-1 text-[10px] ${sub}`}
-          title={campana.updated_at ? `Última edición: ${formatDate(campana.updated_at)}` : 'Sin registro de edición'}
-        >
-          <History className="h-3 w-3" />
-          {campana.updated_at ? formatDateCompact(campana.updated_at) : '—'}
-        </span>
+        {/* Fecha del ultimo cambio: la misma que usa el orden "Ultimo cambio"
+            (edicion = updated_at, mas cambios de estatus y de autorizacion de
+            circuitos que vienen del historial). Sin ningun cambio registrado
+            se muestra la fecha de creacion con otro icono y tooltip claro,
+            en vez de un "—" que parece error. */}
+        {(() => {
+          const ultimo = fechaUltimoCambio(campana, null);
+          const creado = campana.fecha_aprobacion || campana.fecha_inicio;
+          const fecha = ultimo ?? creado;
+          return (
+            <span
+              className={`inline-flex items-center gap-1 text-[10px] ${sub}`}
+              title={ultimo
+                ? `Último cambio: ${formatDate(ultimo)}`
+                : creado ? `Sin cambios registrados · creada el ${formatDate(creado)}` : 'Sin registro de cambios'}
+            >
+              {ultimo ? <History className="h-3 w-3" /> : <Clock className="h-3 w-3" />}
+              {fecha ? formatDateCompact(fecha) : '—'}
+            </span>
+          );
+        })()}
       </div>
 
       <p className={`text-xs font-semibold truncate ${txt}`} title={campana.nombre}>
