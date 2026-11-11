@@ -3708,6 +3708,7 @@ export function NotificacionesPage() {
   const [approvalModalTarea, setApprovalModalTarea] = useState<Notificacion | null>(null);
   const [editSolicitudId, setEditSolicitudId] = useState<number | null>(null);
   const [editPropuesta, setEditPropuesta] = useState<any>(null);
+  const [propuestaBloqueadaStatus, setPropuestaBloqueadaStatus] = useState<string | null>(null);
   const [editCampana, setEditCampana] = useState<any>(null);
   // Modal informativo cuando se intenta abrir el modal sobre propuesta ya pasada a ventas (bug Oral B)
   const [propuestaBloqueadaStatus, setPropuestaBloqueadaStatus] = useState<string | null>(null);
