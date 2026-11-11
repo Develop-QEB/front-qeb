@@ -155,6 +155,25 @@ export function articuloValidoEnPeriodo(
   return false;
 }
 
+// Franja horaria de un circuito digital: "08:00–22:00". Vacío si no hay horas.
+// Feature "Horario inicio/fin - Digital": aplica a todos los días del rango.
+export function horarioLabel(horaInicio?: string | null, horaFin?: string | null): string {
+  const a = (horaInicio ?? '').toString().trim().slice(0, 5);
+  const b = (horaFin ?? '').toString().trim().slice(0, 5);
+  if (a && b) return `${a}–${b}`;
+  if (a) return `desde ${a}`;
+  if (b) return `hasta ${b}`;
+  return '';
+}
+
+// Agrega la franja horaria a un texto de periodo ya formateado:
+// "1 Abr – 30 Abr" + ("08:00","22:00") => "1 Abr – 30 Abr · 08:00–22:00".
+export function conHorario(periodoTexto: string, horaInicio?: string | null, horaFin?: string | null): string {
+  const h = horarioLabel(horaInicio, horaFin);
+  if (!h) return periodoTexto;
+  return periodoTexto ? `${periodoTexto} · ${h}` : h;
+}
+
 // Format a date range as "1 Abr – 30 Abr" (same month) or "1 Abr – 15 May" (cross month)
 export function dateRangeShort(from: unknown, to: unknown): string {
   const a = dayMonthShort(from);

@@ -197,6 +197,9 @@ export interface InventarioReservado {
   tipo_medio: string | null;
   inicio_periodo: string | null;
   fin_periodo: string | null;
+  // Horario diario del circuito digital (feature Horario inicio/fin). null si no aplica.
+  hora_inicio?: string | null;
+  hora_fin?: string | null;
   tradicional_digital: string | null;
   grupo_completo_id: number | null;
   numero_catorcena?: number | null;
@@ -305,6 +308,8 @@ export interface SolicitudCara {
   en_filtro_dg?: boolean;
   grupo_rt_bf?: number | null;
   cortesia?: number | null;
+  hora_inicio?: string | null;
+  hora_fin?: string | null;
 }
 
 export interface CampanaUpdateData {
@@ -426,6 +431,9 @@ export interface OrdenMontajeCAT {
   cuic: number | null;
   fecha_inicio_periodo: string | null;
   fecha_fin_periodo: string | null;
+  // Horario diario del circuito digital (feature Horario inicio/fin). null si no aplica.
+  hora_inicio?: string | null;
+  hora_fin?: string | null;
   cliente: string | null;
   marca: string | null;
   unidad_negocio: string | null;
@@ -1791,4 +1799,7 @@ export interface CaraUpdateData {
   articulo?: string;
   descuento?: number;
   grupo_rt_bf?: number | null;
+  // Horario diario (solo circuitos DIGITALES): franja "HH:MM" para todo el rango.
+  hora_inicio?: string;
+  hora_fin?: string;
 }

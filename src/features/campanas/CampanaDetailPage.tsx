@@ -22,7 +22,7 @@ import { NotasDireccionBitacora } from '../notificaciones/NotasDireccionBitacora
 import { DesposteoModal } from '../desposteo/DesposteoModal';
 import { puedeSolicitarDesposteo, puedeBypassearDesposteo, esRolTIDesposteo, desposteoService, EstadoAps } from '../../services/desposteo.service';
 import { udcFichaDe, contratoDeArticulo } from '../../lib/udc';
-import { esArticuloGranFormato } from '../../lib/periodos';
+import { esArticuloGranFormato, horarioLabel } from '../../lib/periodos';
 import { esInventarioBloqueado } from '../../lib/bloqueoInventario';
 
 // Mini-preview (cuadrito cyan con el aspect-ratio real de la pantalla) para las
@@ -774,7 +774,8 @@ function renderIMCell(item: InventarioReservado, col: TableColumn, p = 'p-1.5', 
   }
   if (col.field === 'fin_periodo') {
     const d = (item as any).fin_periodo ? new Date((item as any).fin_periodo).toLocaleDateString('es-MX', { day: '2-digit', month: 'short', year: 'numeric' }) : '-';
-    return <td key={col.field} className={`${p} ${isDark ? 'text-zinc-400' : 'text-gray-500'} text-[10px]`}>{d}</td>;
+    const h = ((item as any).hora_inicio || (item as any).hora_fin) ? horarioLabel((item as any).hora_inicio, (item as any).hora_fin) : '';
+    return <td key={col.field} className={`${p} ${isDark ? 'text-zinc-400' : 'text-gray-500'} text-[10px]`}>{d}{h && <span className="block text-[9px] text-purple-400 font-medium" title="Horario diario (digital)">⏱ {h}</span>}</td>;
   }
   if (col.field === 'estatus_reserva') return <td key={col.field} className={p}><span className={`px-1.5 py-0.5 rounded text-[10px] ${isDark ? 'bg-blue-500/20 text-blue-300' : 'bg-blue-50 text-blue-700'}`}>{(item as any).estatus_reserva || 'Impresión'}</span></td>;
   const value = (item as any)[col.field];
