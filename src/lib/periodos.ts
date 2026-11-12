@@ -115,20 +115,30 @@ export function getRequiredPeriodoForArticulo(itemName: string, itemCode?: strin
   return 'catorcena';
 }
 
+// ¿El artículo es DIGITAL? Código con DIG o nombre con DIGITAL (mismo criterio que
+// getTipoFromName del flujo de alta). Los digitales PROGRAMÁTICOS (ej. RT-DIG-01-MX)
+// traen DIG en el código aunque el nombre no diga el formato.
+export function esArticuloDigital(itemName?: string, itemCode?: string): boolean {
+  if ((itemCode || '').toUpperCase().includes('DIG')) return true;
+  return (itemName || '').toUpperCase().includes('DIGITAL');
+}
+
 // ¿Un artículo se puede SELECCIONAR bajo este tipo de periodo?
 // Base: cada formato tiene su periodo natural (getRequiredPeriodoForArticulo).
-// EXCEPCIÓN (oct 2026, pedido Dirección): los artículos DIGITALES de Parabús y
-// Columna también se permiten en MENSUAL (además de su catorcena natural), para
-// probar digital con rangos libres de días / un solo día. Se reflejan como
-// periodos mensuales y entran al tab UN+ de órdenes de montaje.
-// Detección por NOMBRE (PARABUS/COLUMNA) + código digital (contiene DIG). NO por
-// el sufijo del código: ahí el token final es la PLAZA (ej. -PB = Puebla, no
-// parabús; -CL no es plaza → seguro).
-export function esDigitalParabusColumna(itemName: string, itemCode?: string): boolean {
-  const esDigital = (itemCode || '').toUpperCase().includes('DIG');
-  if (!esDigital) return false;
-  const name = (itemName || '').toUpperCase();
-  return name.includes('PARABUS') || name.includes('COLUMNA');
+// EXCEPCIÓN (oct 2026, pedido Dirección): los artículos DIGITALES de pantalla
+// (parabús, columna y los digitales PROGRAMÁTICOS) también se permiten en MENSUAL
+// (además de su catorcena natural), para probar digital con rangos libres de días
+// / un solo día. Se reflejan como periodos mensuales y entran al tab UN+.
+//
+// Se habilita cualquier DIGITAL cuyo periodo natural sea CATORCENA. Eso:
+//   - deja fuera lo que YA es mensual (UDC aeropuerto, gran formato digital),
+//   - incluye TODO el inventario digital de pantalla, incluidos los programáticos
+//     cuyo nombre no trae "PARABUS"/"COLUMNA" (ej. RT-DIG-01-MX).
+// Antes se exigía PARABUS/COLUMNA en el nombre + DIG en el código, y por eso
+// faltaban los digitales programáticos (reporte Jos: solo salía RT-DIG-PRG-PB).
+export function esDigitalSeleccionableEnMensual(itemName: string, itemCode?: string): boolean {
+  if (!esArticuloDigital(itemName, itemCode)) return false;
+  return getRequiredPeriodoForArticulo(itemName, itemCode) === 'catorcena';
 }
 
 // ¿El artículo es GRAN FORMATO "mensual" (Kioscos, Boleros, Mi Macro, Puentes
@@ -151,7 +161,7 @@ export function articuloValidoEnPeriodo(
 ): boolean {
   if (getRequiredPeriodoForArticulo(itemName, itemCode) === tipoPeriodo) return true;
   // Digital PB/CL: permitido también en mensual.
-  if (tipoPeriodo === 'mensual' && esDigitalParabusColumna(itemName, itemCode)) return true;
+  if (tipoPeriodo === 'mensual' && esDigitalSeleccionableEnMensual(itemName, itemCode)) return true;
   return false;
 }
 
