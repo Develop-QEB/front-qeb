@@ -126,6 +126,7 @@ export function UdcReservadosTable({ items, isDark, tipoPeriodo }: { items: Inve
           'Ficha técnica': img ? `${window.location.origin}${img}` : '',
           Tipo: esBonif ? 'Bonificación' : 'Renta',
           Periodo: periodoLabel(it, tipoPeriodo),
+          Horario: horarioLabel((it as any).hora_inicio, (it as any).hora_fin),
           Tarifa: tarifaBruta(it),
           Caras: it.caras_totales ?? 0,
         };
