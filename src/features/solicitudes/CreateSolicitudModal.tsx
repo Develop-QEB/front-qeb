@@ -3740,10 +3740,7 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
                   {/* Renta */}
                   <div>
                     <label className={`text-xs ${isDark ? 'text-zinc-500' : 'text-gray-500'}`}>
-                      {newCara.articulo?.ItemCode?.toUpperCase().startsWith('IM') ? 'Impresiones' : isServicioCFArticle(newCara.articulo?.ItemCode) ? 'Servicios' : newCara.articulo?.ItemCode?.toUpperCase().startsWith('IN') ? 'Intercambio' : isEspecialArticle(newCara.articulo?.ItemCode || '') ? 'Ejec. Especiales' : 'Caras'}
-                      {newCara.articulo?.ItemCode?.toUpperCase().startsWith('CT') && (
-                        <span className="ml-1 text-cyan-400 text-[10px]">(Cortesía)</span>
-                      )}
+                      {newCara.articulo?.ItemCode?.toUpperCase().startsWith('CT') ? 'Caras en Cortesía' : newCara.articulo?.ItemCode?.toUpperCase().startsWith('IM') ? 'Impresiones' : isServicioCFArticle(newCara.articulo?.ItemCode) ? 'Servicios' : newCara.articulo?.ItemCode?.toUpperCase().startsWith('IN') ? 'Intercambio' : isEspecialArticle(newCara.articulo?.ItemCode || '') ? 'Ejec. Especiales' : 'Caras'}
                     </label>
                     <input
                       type="number"
@@ -3760,10 +3757,11 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
                     />
                   </div>
 
-                  {/* Bonificacion */}
+                  {/* Bonificacion (oculto para CT: el campo de Caras ya es la cortesía) */}
+                  {!newCara.articulo?.ItemCode?.toUpperCase().startsWith('CT') && (
                   <div>
                     <label className={`text-xs ${isDark ? 'text-zinc-500' : 'text-gray-500'}`}>
-                      {newCara.articulo?.ItemCode?.toUpperCase().startsWith('CT') ? 'Cortesía' : 'Bonificación'}
+                      Bonificación
                     </label>
                     <input
                       type="number"
@@ -3779,6 +3777,7 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
                       className={`w-full px-3 py-2 ${isDark ? 'bg-zinc-800 border-zinc-700 text-white' : 'bg-gray-100 border-gray-200 text-gray-900'} border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-purple-500/50 ${(newCara.articulo?.ItemCode?.toUpperCase().startsWith('IM') || newCara.articulo?.ItemCode?.toUpperCase().startsWith('IN') || isEspecialArticle(newCara.articulo?.ItemCode || '') || isServicioCFArticle(newCara.articulo?.ItemCode)) ? 'opacity-40 cursor-not-allowed' : ''}`}
                     />
                   </div>
+                  )}
 
                   {/* Tarifa Publica - Editable. Display siempre con 2 decimales (6127 → 6127.00).
                       Usa type="text" porque type="number" descarta trailing zeros del valor mostrado. */}
