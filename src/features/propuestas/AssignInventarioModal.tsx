@@ -895,6 +895,7 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
   const [imu, setImu] = useState(false);
   const periodInitializedRef = useRef(false);
   const initialValuesSetRef = useRef(false);
+  const asignadosInitializedRef = useRef(false);
 
   // Client editing state
   interface CuicItem {
@@ -1470,8 +1471,32 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
   // Initialize form from propuesta and solicitud details
   useEffect(() => {
     if (solicitudDetails && isOpen) {
-      // Set asignados - match with users to get area
-      if (propuesta.asignado && propuesta.id_asignado) {
+      // Set asignados - match with users to get area.
+      // SOLO en la primera carga: `propuesta` es una copia tomada al abrir el
+      // modal y no se refresca. Este efecto se re-ejecuta en cada refetch de
+      // solicitud-full-details (p.ej. tras guardar); si volviera a leer el prop
+      // restablecería los asignados a los de antes de editar, y el siguiente
+      // guardado los escribiría de vuelta en la base.
+      if (asignadosInitializedRef.current) {
+        // Ya inicializados: solo completar area/puesto si `users` llegó después.
+        if (users) {
+          setAsignados(prev => {
+            let changed = false;
+            const next = prev.map(a => {
+              if (a.area && a.puesto) return a;
+              const foundUser = users.find((u: UserOption) => u.id === a.id);
+              if (!foundUser) return a;
+              const area = a.area || foundUser.area || '';
+              const puesto = a.puesto || foundUser.puesto || '';
+              if (area === a.area && puesto === a.puesto) return a;
+              changed = true;
+              return { ...a, area, puesto };
+            });
+            return changed ? next : prev;
+          });
+        }
+      } else if (propuesta.asignado && propuesta.id_asignado) {
+        asignadosInitializedRef.current = true;
         const asignadosNames = propuesta.asignado.split(',').map(s => s.trim());
         const asignadosIds = propuesta.id_asignado.split(',').map(s => s.trim());
         const asignadosList: UserOption[] = asignadosNames.map((name, idx) => {
@@ -1486,6 +1511,8 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
           };
         });
         setAsignados(asignadosList);
+      } else {
+        asignadosInitializedRef.current = true;
       }
 
       // Set campaign name
@@ -1714,6 +1741,7 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
       setSelectedArticulo(null);
       periodInitializedRef.current = false;
       initialValuesSetRef.current = false;
+      asignadosInitializedRef.current = false;
       setCsvFile(null);
       setCsvData([]);
       setShowCsvSection(false);
