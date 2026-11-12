@@ -14,6 +14,9 @@ interface Cambio {
   label?: string;
   antes?: unknown;
   despues?: unknown;
+  // Cambios de cara (registrarCambiosCaras) traen el artículo del circuito, para
+  // saber CUÁL cambió cuando hay varios circuitos (feedback Jos).
+  articulo?: string;
 }
 
 interface CaraInfo {
@@ -113,7 +116,8 @@ export function formatHistorialDetalles(detalles: string | null | undefined): st
       const etiqueta = c.label || c.campo || 'Campo';
       const antes = c.antes !== undefined && c.antes !== null && c.antes !== '' ? formatValue(c.antes) : '(vacio)';
       const despues = c.despues !== undefined && c.despues !== null && c.despues !== '' ? formatValue(c.despues) : '(vacio)';
-      parts.push(`${etiqueta}: ${antes} → ${despues}`);
+      const art = c.articulo ? `${c.articulo} · ` : '';
+      parts.push(`${art}${etiqueta}: ${antes} → ${despues}`);
     }
   }
 
