@@ -5395,6 +5395,40 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
     }
   };
 
+  // Regresar en masa (multi-select del tab Historial): recorre los seleccionados
+  // (solo disponibles), re-reserva cada uno y al final invalida el historial.
+  const handleReReservarHistorialBulk = async (sel: ReservaHistorialItem[]) => {
+    const clienteId = campanaDetails?.cliente_id ?? campana?.cliente_id;
+    if (clienteId === undefined || clienteId === null) { showToast('Cliente ID no encontrado', 'error'); return; }
+    let ok = 0; let fail = 0;
+    for (const item of sel) {
+      if (!item.disponible) { fail++; continue; }
+      const cara = caras.find(c => c.id === item.solicitud_cara_id) || selectedCaraForSearch;
+      if (!cara?.id) { fail++; continue; }
+      const fechaInicio = cara.inicio_periodo || item.inicio_periodo || campanaDetails?.fecha_inicio || new Date().toISOString();
+      const fechaFin = cara.fin_periodo || item.fin_periodo || campanaDetails?.fecha_fin || new Date().toISOString();
+      const esBonif = /bonific/i.test(item.estatus || '') || /bonific/i.test(item.estatus_original || '');
+      const tipo: 'Flujo' | 'Bonificacion' = esBonif ? 'Bonificacion' : 'Flujo';
+      try {
+        const result = await campanasService.createReservas(campana!.id, {
+          reservas: [{ inventario_id: item.inventario_id, tipo, latitud: 0, longitud: 0 }],
+          solicitudCaraId: cara.id,
+          clienteId,
+          fechaInicio,
+          fechaFin,
+          agruparComoCompleto: false,
+        });
+        if ((result.reservasCreadas ?? 0) > 0) ok++; else fail++;
+      } catch { fail++; }
+    }
+    if (ok > 0) showToast(`${ok} inventario${ok !== 1 ? 's' : ''} regresó a reservados${fail > 0 ? ` · ${fail} no se pudo` : ''}`, 'success');
+    else showToast('No se pudo regresar ninguno (quizá ya están ocupados)', 'error');
+    queryClient.invalidateQueries({ queryKey: ['campana-reservas-modal', campana!.id] });
+    queryClient.invalidateQueries({ queryKey: ['campana-reservas-historial', campana!.id] });
+    queryClient.invalidateQueries({ queryKey: ['campana-inventario', campana!.id] });
+    queryClient.invalidateQueries({ queryKey: ['campanas'] });
+  };
+
   // Group reservas by grupo_completo_id - shows pairs as single "Completo" item
   const currentCaraReservasMerged = useMemo(() => {
     const result: ReservaItem[] = [];
@@ -7503,6 +7537,7 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
               canEdit={effectiveCanEdit}
               reReservandoId={reReservandoHistId}
               onReReservar={handleReReservarHistorial}
+              onReReservarBulk={handleReReservarHistorialBulk}
               onRefresh={() => refetchHistorial()}
               refreshing={historialFetching}
               mostrandoTodos={historialMostrandoTodos}
