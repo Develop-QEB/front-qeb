@@ -28,6 +28,7 @@ import { NotasDireccionBitacora } from '../notificaciones/NotasDireccionBitacora
 import { NuevaNotaDireccionModal } from '../notificaciones/NuevaNotaDireccionModal';
 import { notasDireccionService } from '../../services/notasDireccion.service';
 import { articuloValidoEnPeriodo, esArticuloGranFormato } from '../../lib/periodos';
+import { TimeInput } from '../../components/ui/TimeInput';
 
 // Tarifas now come from SAP (U_IMU_PublicPrice = tarifa publica, PriceList 11 = tarifa piso)
 
@@ -3661,6 +3662,13 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
                           max={newCara.periodoFinCustom || (availablePeriods.length > 0 ? availablePeriods[availablePeriods.length - 1].fecha_fin : undefined)}
                           className={`w-full px-2 py-2 ${isDark ? 'bg-zinc-800 border-zinc-700 text-white' : 'bg-gray-100 border-gray-200 text-gray-900'} border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-purple-500/50 disabled:opacity-50`}
                         />
+                        {/* Hora inicio (solo digital): agrupada con su fecha (feedback Jos). */}
+                        {newCara.tipo === 'Digital' && (
+                          <div className="mt-1.5">
+                            <label className={`text-xs ${isDark ? 'text-zinc-500' : 'text-gray-500'} block mb-1`}>Hora inicio</label>
+                            <TimeInput value={newCara.horaInicio} onChange={(val) => setNewCara({ ...newCara, horaInicio: val })} disabled={!newCara.periodo} isDark={isDark} ariaLabel="Hora inicio" />
+                          </div>
+                        )}
                       </div>
                       <div>
                         <label className={`text-xs ${isDark ? 'text-zinc-500' : 'text-gray-500'}`}>Fecha Fin</label>
@@ -3673,32 +3681,14 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
                           max={availablePeriods.length > 0 ? availablePeriods[availablePeriods.length - 1].fecha_fin : undefined}
                           className={`w-full px-2 py-2 ${isDark ? 'bg-zinc-800 border-zinc-700 text-white' : 'bg-gray-100 border-gray-200 text-gray-900'} border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-purple-500/50 disabled:opacity-50`}
                         />
+                        {/* Hora fin (solo digital): agrupada con su fecha (feedback Jos). */}
+                        {newCara.tipo === 'Digital' && (
+                          <div className="mt-1.5">
+                            <label className={`text-xs ${isDark ? 'text-zinc-500' : 'text-gray-500'} block mb-1`}>Hora fin</label>
+                            <TimeInput value={newCara.horaFin} onChange={(val) => setNewCara({ ...newCara, horaFin: val })} disabled={!newCara.periodo} isDark={isDark} ariaLabel="Hora fin" />
+                          </div>
+                        )}
                       </div>
-                      {/* Horario diario: SOLO circuitos digitales (UN+, UDC, VP digital). Aplica a todo el rango. */}
-                      {newCara.tipo === 'Digital' && (
-                        <>
-                        <div>
-                          <label className={`text-xs ${isDark ? 'text-zinc-500' : 'text-gray-500'}`}>Hora Inicio</label>
-                          <input
-                            type="time"
-                            value={newCara.horaInicio}
-                            onChange={(e) => setNewCara({ ...newCara, horaInicio: e.target.value })}
-                            disabled={!newCara.periodo}
-                            className={`w-full px-2 py-2 ${isDark ? 'bg-zinc-800 border-zinc-700 text-white' : 'bg-gray-100 border-gray-200 text-gray-900'} border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-purple-500/50 disabled:opacity-50`}
-                          />
-                        </div>
-                        <div>
-                          <label className={`text-xs ${isDark ? 'text-zinc-500' : 'text-gray-500'}`}>Hora Fin</label>
-                          <input
-                            type="time"
-                            value={newCara.horaFin}
-                            onChange={(e) => setNewCara({ ...newCara, horaFin: e.target.value })}
-                            disabled={!newCara.periodo}
-                            className={`w-full px-2 py-2 ${isDark ? 'bg-zinc-800 border-zinc-700 text-white' : 'bg-gray-100 border-gray-200 text-gray-900'} border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-purple-500/50 disabled:opacity-50`}
-                          />
-                        </div>
-                        </>
-                      )}
                     </>
                   ) : (
                     <>

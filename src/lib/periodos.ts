@@ -176,6 +176,18 @@ export function horarioLabel(horaInicio?: string | null, horaFin?: string | null
   return '';
 }
 
+// Hora HH:MM (24h) → 12h con am/pm para mostrar junto a la fecha en la tarjeta
+// del circuito: "23:51" → "11:51 pm", "08:00" → "8:00 am". Vacío si no es válida.
+export function hora12h(hhmm?: string | null): string {
+  const m = (hhmm ?? '').toString().trim().slice(0, 5).match(/^(\d{1,2}):(\d{2})$/);
+  if (!m) return '';
+  let h = parseInt(m[1], 10);
+  if (isNaN(h) || h > 23) return '';
+  const ampm = h < 12 ? 'am' : 'pm';
+  h = h % 12; if (h === 0) h = 12;
+  return `${h}:${m[2]} ${ampm}`;
+}
+
 // Agrega la franja horaria a un texto de periodo ya formateado:
 // "1 Abr – 30 Abr" + ("08:00","22:00") => "1 Abr – 30 Abr · 08:00–22:00".
 export function conHorario(periodoTexto: string, horaInicio?: string | null, horaFin?: string | null): string {

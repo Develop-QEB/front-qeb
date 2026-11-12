@@ -22,7 +22,8 @@ import { campanasService, ReservaModalItem } from '../../services/campanas.servi
 import type { ReservaHistorialItem } from '../../services/propuestas.service';
 import { clientesService } from '../../services/clientes.service';
 import { formatCurrency } from '../../lib/utils';
-import { monthLabelLong, monthLabelShort, dayMonthShort, articuloValidoEnPeriodo, esArticuloGranFormato, horarioLabel } from '../../lib/periodos';
+import { monthLabelLong, monthLabelShort, dayMonthShort, articuloValidoEnPeriodo, esArticuloGranFormato, hora12h } from '../../lib/periodos';
+import { TimeInput } from '../../components/ui/TimeInput';
 import { parseCircuitoDigital } from '../../lib/circuitos';
 import { esInventarioBloqueado } from '../../lib/bloqueoInventario';
 import { circuitosService } from '../../services/circuitos.service';
@@ -9291,6 +9292,13 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
                                 disabled={!canEditResumen}
                                 className={`w-full px-3 py-2 ${isDark ? 'bg-zinc-800 border-zinc-700 text-white' : 'bg-white border-gray-300 text-gray-900'} border rounded-lg text-sm focus:outline-none focus:ring-1 focus:ring-purple-500/50 ${!canEditResumen ? 'opacity-60 cursor-not-allowed' : ''}`}
                               />
+                              {/* Hora inicio (solo digital): agrupada con su fecha (feedback Jos). */}
+                              {newCara.tipo === 'Digital' && (
+                                <div className="mt-1.5">
+                                  <label className="text-[10px] text-zinc-600 block mb-1">Hora inicio</label>
+                                  <TimeInput value={newCara.hora_inicio} onChange={(val) => { if (!canEditResumen) return; setNewCara({ ...newCara, hora_inicio: val }); }} disabled={!canEditResumen} isDark={isDark} ariaLabel="Hora inicio" />
+                                </div>
+                              )}
                             </div>
                             <div>
                               <label className="text-[10px] text-zinc-600 block mb-1">Fecha Fin</label>
@@ -9314,33 +9322,15 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
                                 disabled={!canEditResumen || !newCara.inicio_periodo}
                                 className={`w-full px-3 py-2 ${isDark ? 'bg-zinc-800 border-zinc-700 text-white' : 'bg-white border-gray-300 text-gray-900'} border rounded-lg text-sm focus:outline-none focus:ring-1 focus:ring-purple-500/50 ${(!canEditResumen || !newCara.inicio_periodo) ? 'opacity-60 cursor-not-allowed' : ''}`}
                               />
+                              {/* Hora fin (solo digital): agrupada con su fecha (feedback Jos). */}
+                              {newCara.tipo === 'Digital' && (
+                                <div className="mt-1.5">
+                                  <label className="text-[10px] text-zinc-600 block mb-1">Hora fin</label>
+                                  <TimeInput value={newCara.hora_fin} onChange={(val) => { if (!canEditResumen) return; setNewCara({ ...newCara, hora_fin: val }); }} disabled={!canEditResumen} isDark={isDark} ariaLabel="Hora fin" />
+                                </div>
+                              )}
                             </div>
                           </div>
-                          {/* Horario diario: SOLO circuitos digitales (UN+, UDC, VP digital). Aplica a todos los dias del rango. */}
-                          {newCara.tipo === 'Digital' && (
-                          <div className="grid grid-cols-2 gap-2 mt-2">
-                            <div>
-                              <label className="text-[10px] text-zinc-600 block mb-1">Hora Inicio</label>
-                              <input
-                                type="time"
-                                value={newCara.hora_inicio || ''}
-                                onChange={(e) => { if (!canEditResumen) return; setNewCara({ ...newCara, hora_inicio: e.target.value }); }}
-                                disabled={!canEditResumen}
-                                className={`w-full px-3 py-2 ${isDark ? 'bg-zinc-800 border-zinc-700 text-white' : 'bg-white border-gray-300 text-gray-900'} border rounded-lg text-sm focus:outline-none focus:ring-1 focus:ring-purple-500/50 ${!canEditResumen ? 'opacity-60 cursor-not-allowed' : ''}`}
-                              />
-                            </div>
-                            <div>
-                              <label className="text-[10px] text-zinc-600 block mb-1">Hora Fin</label>
-                              <input
-                                type="time"
-                                value={newCara.hora_fin || ''}
-                                onChange={(e) => { if (!canEditResumen) return; setNewCara({ ...newCara, hora_fin: e.target.value }); }}
-                                disabled={!canEditResumen}
-                                className={`w-full px-3 py-2 ${isDark ? 'bg-zinc-800 border-zinc-700 text-white' : 'bg-white border-gray-300 text-gray-900'} border rounded-lg text-sm focus:outline-none focus:ring-1 focus:ring-purple-500/50 ${!canEditResumen ? 'opacity-60 cursor-not-allowed' : ''}`}
-                              />
-                            </div>
-                          </div>
-                          )}
                           </>
                             );
                           })()
@@ -9941,7 +9931,7 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
                                         if (!m) return '-';
                                         const meses = ['ene','feb','mar','abr','may','jun','jul','ago','sep','oct','nov','dic'];
                                         return `${m[3]} ${meses[parseInt(m[2]) - 1]} ${m[1]}`;
-                                      })()}</p>
+                                      })()}{cara.tipo === 'Digital' && cara.hora_inicio ? <span className="text-purple-400"> · {hora12h(cara.hora_inicio)}</span> : null}</p>
                                     </div>
                                     <div>
                                       <span className={`${isDark ? 'text-zinc-500' : 'text-gray-400'} text-xs`}>F. Fin</span>
@@ -9950,14 +9940,8 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
                                         if (!m) return '-';
                                         const meses = ['ene','feb','mar','abr','may','jun','jul','ago','sep','oct','nov','dic'];
                                         return `${m[3]} ${meses[parseInt(m[2]) - 1]} ${m[1]}`;
-                                      })()}</p>
+                                      })()}{cara.tipo === 'Digital' && cara.hora_fin ? <span className="text-purple-400"> · {hora12h(cara.hora_fin)}</span> : null}</p>
                                     </div>
-                                    {cara.tipo === 'Digital' && (cara.hora_inicio || cara.hora_fin) && (
-                                    <div>
-                                      <span className={`${isDark ? 'text-zinc-500' : 'text-gray-400'} text-xs`}>Horario</span>
-                                      <p className={`${isDark ? 'text-zinc-300' : 'text-gray-700'} text-xs`}>{horarioLabel(cara.hora_inicio, cara.hora_fin)}</p>
-                                    </div>
-                                    )}
                                     <div>
                                       <span className={`${isDark ? 'text-zinc-500' : 'text-gray-400'} text-xs`}>Caras</span>
                                       {esImpresion ? (
