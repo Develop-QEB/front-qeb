@@ -9569,10 +9569,7 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
                     <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4 mb-4">
                       <div className="space-y-1">
                         <label className={`text-xs ${isDark ? 'text-zinc-500' : 'text-gray-400'}`}>
-                          {isEspecialArticle((newCara.articulo || '').toUpperCase()) ? 'Ejec. Especiales' : newCara.articulo?.toUpperCase().startsWith('IM') ? 'Impresiones' : isServicioCFArticle(newCara.articulo) ? 'Servicios' : newCara.articulo?.toUpperCase().startsWith('IN') ? 'Intercambio' : (newCara.formato || '').toUpperCase().includes('PUENTE PEATONAL') ? 'Puentes en Renta' : 'Caras en Renta'}
-                          {newCara.articulo?.toUpperCase().startsWith('CT') && (
-                            <span className="ml-1 text-cyan-400 text-[10px]">(Cortesía)</span>
-                          )}
+                          {newCara.articulo?.toUpperCase().startsWith('CT') ? 'Caras en Cortesía' : isEspecialArticle((newCara.articulo || '').toUpperCase()) ? 'Ejec. Especiales' : newCara.articulo?.toUpperCase().startsWith('IM') ? 'Impresiones' : isServicioCFArticle(newCara.articulo) ? 'Servicios' : newCara.articulo?.toUpperCase().startsWith('IN') ? 'Intercambio' : (newCara.formato || '').toUpperCase().includes('PUENTE PEATONAL') ? 'Puentes en Renta' : 'Caras en Renta'}
                         </label>
                         <input
                           type="number"
@@ -9592,8 +9589,9 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
                         />
                         <span className={`text-[10px] ${isDark ? 'text-zinc-600' : 'text-gray-400'}`}>Flujo: {newCara.caras_flujo || 0} | Contraflujo: {newCara.caras_contraflujo || 0}</span>
                       </div>
+                      {!newCara.articulo?.toUpperCase().startsWith('CT') && (
                       <div className="space-y-1">
-                        <label className={`text-xs ${isDark ? 'text-zinc-500' : 'text-gray-400'}`}>{newCara.articulo?.toUpperCase().startsWith('CT') ? 'Cortesía' : (newCara.formato || '').toUpperCase().includes('PUENTE PEATONAL') ? 'Puentes Bonificados' : 'Caras Bonificadas'}</label>
+                        <label className={`text-xs ${isDark ? 'text-zinc-500' : 'text-gray-400'}`}>{(newCara.formato || '').toUpperCase().includes('PUENTE PEATONAL') ? 'Puentes Bonificados' : 'Caras Bonificadas'}</label>
                         <input
                           type="number"
                           value={newCara.bonificacion || ''}
@@ -9607,6 +9605,7 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
                           min="0"
                         />
                       </div>
+                      )}
                       <div className="space-y-1">
                         <label className={`text-xs ${isDark ? 'text-zinc-500' : 'text-gray-400'}`}>Tarifa Pública</label>
                         <input
