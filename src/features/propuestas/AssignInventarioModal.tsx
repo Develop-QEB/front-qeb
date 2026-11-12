@@ -22,6 +22,7 @@ import { propuestasService, ReservaModalItem, CaraUpdateData, type ReservaHistor
 import { formatCurrency } from '../../lib/utils';
 import { parseCircuitoDigital } from '../../lib/circuitos';
 import { articuloValidoEnPeriodo, esArticuloGranFormato, horarioLabel } from '../../lib/periodos';
+import { HistorialFiltrado } from '../historial/HistorialFiltrado';
 import { circuitosService } from '../../services/circuitos.service';
 import { clientesService } from '../../services/clientes.service';
 import { useEnvironmentStore, getEndpoints } from '../../store/environmentStore';
@@ -10853,8 +10854,7 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
                     <Clock className="h-4 w-4" />
                     Historial
                   </h3>
-                  <div className="space-y-3">
-                    {historialData.map((h, idx) => {
+                  <HistorialFiltrado items={historialData} isDark={isDark} renderItem={(h, idx) => {
                       let detailText = h.detalles || '';
                       try {
                         const obj = JSON.parse(detailText);
@@ -10891,8 +10891,7 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
                           <span className={`${isDark ? 'text-zinc-400' : 'text-gray-500'} truncate`}>{detailText}</span>
                         </div>
                       );
-                    })}
-                  </div>
+                    }} />
                 </div>
               )}
             </>
