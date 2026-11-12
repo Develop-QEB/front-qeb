@@ -1320,7 +1320,7 @@ export function CompartirPropuestaPage() {
             const img0 = u0 ? fichaImgCache.get(u0) : undefined;
             const colW0 = (pageWidth - marginX * 2 - 10 - 6) / 2;
             const ratio0 = img0 && img0.naturalWidth > 0 ? img0.naturalWidth / img0.naturalHeight : 1.647;
-            const need = 8 /*sub-header*/ + colW0 / ratio0 + 11 /*datos debajo*/;
+            const need = 8 /*sub-header*/ + colW0 / ratio0 + 14 /*datos + horario debajo*/;
             if (y + need > pageHeight - 16) { doc.addPage(); y = 20; }
           }
 
@@ -1372,7 +1372,7 @@ export function CompartirPropuestaPage() {
               const img = url ? fichaImgCache.get(url) : undefined;
               const ratio = img && img.naturalWidth > 0 ? img.naturalWidth / img.naturalHeight : 1.647;
               const imgH = colW / ratio;
-              const cellH = imgH + 11;
+              const cellH = imgH + 14;
               // Salto de página si la ficha no cabe
               if (rowTop + cellH > pageHeight - 16) {
                 doc.addPage();
@@ -1407,6 +1407,14 @@ export function CompartirPropuestaPage() {
               doc.setFont('helvetica', 'normal');
               doc.setTextColor(90, 90, 90);
               doc.text([medida, dur, tipo, tarifaStr].filter(Boolean).join('   ·   '), x + 1, rowTop + imgH + 9);
+              // Horario diario (digital): la pantalla UDC siempre es digital, la
+              // franja va en violeta debajo de los datos básicos (feedback Jos).
+              const horarioStr = (it.hora_inicio || it.hora_fin) ? horarioLabel(it.hora_inicio, it.hora_fin) : '';
+              if (horarioStr) {
+                doc.setFontSize(7.5);
+                doc.setTextColor(124, 58, 237);
+                doc.text(`Horario diario: ${horarioStr}`, x + 1, rowTop + imgH + 12.5);
+              }
               rowMaxH = Math.max(rowMaxH, cellH);
               col++;
               if (col === 2) { col = 0; rowTop += rowMaxH + gap; rowMaxH = 0; }
