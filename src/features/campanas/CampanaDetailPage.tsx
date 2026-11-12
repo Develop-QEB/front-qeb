@@ -14,6 +14,7 @@ import { Badge } from '../../components/ui/badge';
 import { UserAvatar } from '../../components/ui/user-avatar';
 import { formatDate } from '../../lib/utils';
 import { formatHistorialDetalles, limpiarMotivo } from '../../lib/historial';
+import { HistorialFiltrado } from '../historial/HistorialFiltrado';
 import { useAuthStore } from '../../store/authStore';
 import { useThemeStore } from '../../store/themeStore';
 import { getPermissions } from '../../lib/permissions';
@@ -2874,8 +2875,7 @@ export function CampanaDetailPage() {
               No hay acciones registradas
             </div>
           ) : (
-            <div className="space-y-2 max-h-[300px] overflow-y-auto scrollbar-purple">
-              {historial.map((item) => {
+            <HistorialFiltrado items={historial} isDark={isDark} maxH="max-h-[300px]" renderItem={(item) => {
                 const fechaObj = item.fecha_hora ? new Date(item.fecha_hora) : null;
                 const fecha = fechaObj ? fechaObj.toLocaleDateString('es-MX') : '';
                 const hora = fechaObj ? fechaObj.toLocaleTimeString('es-MX', { hour: '2-digit', minute: '2-digit', hour12: true }) : '';
@@ -2940,8 +2940,7 @@ export function CampanaDetailPage() {
                     </div>
                   </div>
                 );
-              })}
-            </div>
+              }} />
           )}
         </div>
 
