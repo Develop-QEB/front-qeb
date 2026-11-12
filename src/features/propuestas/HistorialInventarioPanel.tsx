@@ -55,6 +55,8 @@ interface Props {
   canEdit?: boolean;
   reReservandoId?: number | null; // reserva_id en curso (spinner)
   onReReservar?: (item: ReservaHistorialItem) => void;
+  /** Regresa en masa los seleccionados (solo disponibles). Devuelve promesa para el spinner. */
+  onReReservarBulk?: (items: ReservaHistorialItem[]) => Promise<void> | void;
   onRefresh?: () => void;   // refetch manual del historial (botón)
   refreshing?: boolean;     // spinner mientras refetchea
   /** true = `items` trae todos los circuitos de la propuesta, no solo el seleccionado. */
@@ -66,12 +68,14 @@ interface Props {
 }
 
 export function HistorialInventarioPanel({
-  items, isDark, canEdit, reReservandoId, onReReservar, onRefresh, refreshing,
+  items, isDark, canEdit, reReservandoId, onReReservar, onReReservarBulk, onRefresh, refreshing,
   mostrandoTodos = false, onToggleTodos, totalOtrosCircuitos = 0,
 }: Props) {
   const [q, setQ] = useState('');
   const [motivoFilter, setMotivoFilter] = useState<'all' | Motivo>('all');
   const [soloDisponibles, setSoloDisponibles] = useState(false);
+  const [selected, setSelected] = useState<Set<number>>(new Set());
+  const [bulkBusy, setBulkBusy] = useState(false);
 
   const motivosPresentes = useMemo(() => {
     const s = new Set<string>();
@@ -90,6 +94,30 @@ export function HistorialInventarioPanel({
   }, [items, q, motivoFilter, soloDisponibles]);
 
   const nDisponibles = useMemo(() => filtered.filter(it => it.disponible).length, [filtered]);
+
+  // Multi-select: solo sobre filas disponibles (las únicas que se pueden regresar).
+  const multiEnabled = !!(canEdit && onReReservarBulk);
+  const selectableIds = useMemo(
+    () => new Set(filtered.filter(it => it.disponible).map(it => it.reserva_id)),
+    [filtered],
+  );
+  const selectedItems = useMemo(
+    () => filtered.filter(it => it.disponible && selected.has(it.reserva_id)),
+    [filtered, selected],
+  );
+  const allSelected = selectableIds.size > 0 && selectedItems.length === selectableIds.size;
+  const toggleOne = (id: number) => setSelected(prev => {
+    const n = new Set(prev);
+    if (n.has(id)) n.delete(id); else n.add(id);
+    return n;
+  });
+  const toggleAll = () => setSelected(() => (allSelected ? new Set<number>() : new Set(selectableIds)));
+  const doBulk = async () => {
+    if (!onReReservarBulk || selectedItems.length === 0) return;
+    setBulkBusy(true);
+    try { await onReReservarBulk(selectedItems); setSelected(new Set()); }
+    finally { setBulkBusy(false); }
+  };
 
   const th = `px-3 py-2 text-left text-[10px] font-bold uppercase tracking-wide ${isDark ? 'text-purple-300/80' : 'text-purple-700'}`;
   const td = `px-3 py-2.5 text-xs ${isDark ? 'text-zinc-300' : 'text-gray-700'}`;
@@ -178,6 +206,33 @@ export function HistorialInventarioPanel({
             <Chip active={soloDisponibles} onClick={() => setSoloDisponibles(v => !v)} isDark={isDark}>Solo disponibles</Chip>
           </div>
         )}
+
+        {multiEnabled && selectedItems.length > 0 && (
+          <div className="flex items-center gap-3 flex-wrap mt-2.5">
+            <span className={`text-xs font-medium ${isDark ? 'text-purple-300' : 'text-purple-700'}`}>
+              {selectedItems.length} seleccionado{selectedItems.length !== 1 ? 's' : ''}
+            </span>
+            <button
+              type="button"
+              onClick={doBulk}
+              disabled={bulkBusy}
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 hover:bg-emerald-500/30 transition-colors disabled:opacity-50"
+            >
+              {bulkBusy ? (
+                <><div className="h-3.5 w-3.5 border-2 border-emerald-300 border-t-transparent rounded-full animate-spin" /> Regresando {selectedItems.length}…</>
+              ) : (
+                <><RotateCcw className="h-3.5 w-3.5" /> Regresar seleccionados</>
+              )}
+            </button>
+            <button
+              type="button"
+              onClick={() => setSelected(new Set())}
+              className={`text-xs ${isDark ? 'text-zinc-400 hover:text-zinc-200' : 'text-gray-500 hover:text-gray-800'}`}
+            >
+              Limpiar
+            </button>
+          </div>
+        )}
       </div>
 
       {/* Tabla */}
@@ -208,6 +263,19 @@ export function HistorialInventarioPanel({
           <table className="w-full text-sm">
             <thead className={`${isDark ? 'bg-zinc-800/50' : 'bg-gray-50'} sticky top-0`}>
               <tr>
+                {multiEnabled && (
+                  <th className={`${th} w-8`}>
+                    <input
+                      type="checkbox"
+                      className="checkbox-purple"
+                      checked={allSelected}
+                      ref={el => { if (el) el.indeterminate = selectedItems.length > 0 && !allSelected; }}
+                      onChange={toggleAll}
+                      disabled={selectableIds.size === 0}
+                      title="Seleccionar todos los disponibles"
+                    />
+                  </th>
+                )}
                 <th className={th}>Código</th>
                 {mostrandoTodos && <th className={th}>Circuito</th>}
                 <th className={th}>Ubicación / Mueble</th>
@@ -225,6 +293,18 @@ export function HistorialInventarioPanel({
                 const enCurso = reReservandoId === it.reserva_id;
                 return (
                   <tr key={`${it.reserva_id}-${i}`} className={`border-t ${isDark ? 'border-zinc-800 hover:bg-purple-500/5' : 'border-gray-100 hover:bg-purple-50/40'}`}>
+                    {multiEnabled && (
+                      <td className={`${td} w-8`}>
+                        {it.disponible ? (
+                          <input
+                            type="checkbox"
+                            className="checkbox-purple"
+                            checked={selected.has(it.reserva_id)}
+                            onChange={() => toggleOne(it.reserva_id)}
+                          />
+                        ) : null}
+                      </td>
+                    )}
                     <td className={`${td} font-semibold ${isDark ? 'text-white' : 'text-gray-900'}`}>{it.codigo_unico || '—'}</td>
                     {mostrandoTodos && (
                       <td className={td}>
