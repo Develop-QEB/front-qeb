@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { AlertCircle, Check, CheckCircle2, ChevronDown, Loader2, Paintbrush, Search, Send, Trash2, X, Upload, FileImage, ClipboardList, Plus, Users, XCircle, Flag, ChevronRight, ExternalLink, Printer } from 'lucide-react';
+import { AlertCircle, Check, CheckCircle2, ChevronDown, Loader2, Paintbrush, Search, Send, Trash2, X, Upload, FileImage, ClipboardList, Plus, Users, XCircle, Flag, ChevronRight, ExternalLink, Printer, Download } from 'lucide-react';
 import { useThemeStore } from '../../store/themeStore';
 import { useAuthStore } from '../../store/authStore';
 import {
@@ -18,6 +18,7 @@ import {
 import { propuestasService, SolicitudCara } from '../../services/propuestas.service';
 import { uploadsService } from '../../services/uploads.service';
 import { campanasService } from '../../services/campanas.service';
+import { notificacionesService } from '../../services/notificaciones.service';
 import { formatDate } from '../../lib/utils';
 
 // Valida que un string sea un URL http(s) real. Rechaza basura como
@@ -94,13 +95,18 @@ interface Props {
   // Jos 2026-10-12: abrir en el tab 'nueva' con el formulario listo para
   // subir una v2 (caso: analista entra desde la tarea de rechazo).
   initialTab?: 'pruebas' | 'nueva';
+  // Jos 2026-11-12: deep-link desde Mis Tareas / Notificaciones. Si viene,
+  // al cargar la lista de tareas de la prueba se abre el modal de atender
+  // esa tarea específica automáticamente (evita que el usuario tenga que
+  // navegar y clickear la tarea manualmente).
+  initialTareaId?: number;
 }
 
 // Modal reusable de Prueba de Color. Se usa desde 3 lugares:
 // (1) listado de propuestas — sin initialScId (el usuario elige circuito).
 // (2) listado de campañas — igual, sin initialScId.
 // (3) gestión de artes (campaña con APS) — con initialScId preseleccionado.
-export function PruebasColorModal({ isOpen, onClose, propuestaId, contextoNombre, initialScId, initialTab }: Props) {
+export function PruebasColorModal({ isOpen, onClose, propuestaId, contextoNombre, initialScId, initialTab, initialTareaId }: Props) {
   const isDark = useThemeStore(s => s.theme) === 'dark';
   const user = useAuthStore(s => s.user);
   const queryClient = useQueryClient();
@@ -167,6 +173,7 @@ export function PruebasColorModal({ isOpen, onClose, propuestaId, contextoNombre
     }
   }, [isOpen, initialScId, initialTab]);
 
+
   // Circuitos de la propuesta (para el dropdown de selección).
   const carasQuery = useQuery({
     queryKey: ['propuesta-caras-prueba-color', propuestaId],
@@ -184,6 +191,65 @@ export function PruebasColorModal({ isOpen, onClose, propuestaId, contextoNombre
   });
 
   const pruebasAll = useMemo(() => pruebasQuery.data || [], [pruebasQuery.data]);
+  // Jos 2026-11-12: cuando el deep-link trae initialTareaId (desde Mis
+  // Tareas / Notificaciones), expandir todos los grupos de circuito para
+  // que las PruebaCard se monten y puedan auto-abrir la tarea. Sin esto
+  // los grupos quedan colapsados y nunca se renderiza la tarea. One-shot
+  // con useRef para no re-expandir después de que el usuario colapse (bug
+  // Akary "cada que pico tareas abre recepción"). Se resetea al cerrar
+  // el modal (isOpen=false) o al limpiar el initialTareaId desde el padre.
+  // Guardar el initialTareaId consumido (en vez de un boolean) para que un
+  // deep-link nuevo (282092) que llega sin haber pasado por null — porque el
+  // modal grande sigue montado desde el deep-link anterior (282087) — SÍ
+  // vuelva a expandir los grupos. Feedback Akary 2026-11-13.
+  const lastExpandedForTareaIdRef = useRef<number | null>(null);
+  useEffect(() => {
+    if (!isOpen || !initialTareaId) {
+      lastExpandedForTareaIdRef.current = null;
+      return;
+    }
+    if (lastExpandedForTareaIdRef.current === initialTareaId) return;
+    if (pruebasAll.length === 0) return;
+    const scIdsPresentes = new Set<number>(pruebasAll.map(p => p.sc_id).filter((x): x is number => Number.isFinite(x)));
+    if (scIdsPresentes.size > 0) {
+      setExpandedGroups(scIdsPresentes);
+      lastExpandedForTareaIdRef.current = initialTareaId;
+    }
+  }, [isOpen, initialTareaId, pruebasAll]);
+
+
+  // Akary 2026-11-13: cuando llega initialTareaId cuya prueba madre pertenece
+  // al OTRO flujo (p.ej. deep-link de Revisión de artes de una Revisión
+  // Anticipada mientras el modal arrancó en 'prueba_color'), cambiar la
+  // pestaña antes de expandir. Sin esto el modal se queda en el flujo
+  // default y muestra una prueba equivocada ("picas Ver Prueba de Color de
+  // #282012 y te manda a la prueba 39 que no es").
+  const switchedFlujoForTareaRef = useRef<number | null>(null);
+  useEffect(() => {
+    if (!isOpen || !initialTareaId) {
+      switchedFlujoForTareaRef.current = null;
+      return;
+    }
+    if (switchedFlujoForTareaRef.current === initialTareaId) return;
+    if (pruebasAll.length === 0) return;
+    (async () => {
+      try {
+        const tarea = await notificacionesService.getById(initialTareaId);
+        let pid: number | undefined;
+        try {
+          const c = tarea.contenido ? (typeof tarea.contenido === 'string' ? JSON.parse(tarea.contenido) : tarea.contenido) : null;
+          pid = c?.pruebaColorId;
+        } catch {}
+        if (!pid) return;
+        const prueba = pruebasAll.find(p => p.id === pid);
+        if (!prueba) return;
+        const flujo = (prueba.tipo || 'prueba_color') as TipoPrueba;
+        setActiveFlujo(flujo);
+        switchedFlujoForTareaRef.current = initialTareaId;
+      } catch { /* silencioso */ }
+    })();
+  }, [isOpen, initialTareaId, pruebasAll]);
+
   // Jos 2026-10-23: contadores por flujo para los badges de la pestana
   // superior. Los registros viejos sin `tipo` cuentan como 'prueba_color'
   // (coincide con el default del back y del esquema).
@@ -611,6 +677,7 @@ export function PruebasColorModal({ isOpen, onClose, propuestaId, contextoNombre
                                 puedeRevisar={puedeRevisar}
                                 isUpdating={updateEstatusMutation.isPending || deleteMutation.isPending}
                                 totalVersiones={grupo.pruebas.length}
+                                initialTareaId={initialTareaId}
                                 onDelete={() => {
                                   if (confirm(`¿Eliminar la prueba v${p.version}?`)) deleteMutation.mutate(p.id);
                                 }}
@@ -970,6 +1037,8 @@ function PruebaCard({
   isUpdating,
   onDelete,
   totalVersiones,
+  initialTareaId,
+  onInitialTareaIdConsumed,
 }: {
   prueba: PruebaColor;
   cara: SolicitudCara | null;
@@ -979,6 +1048,13 @@ function PruebaCard({
   puedeRevisar: boolean;
   isUpdating: boolean;
   onDelete: () => void;
+  // Jos 2026-11-12: deep-link desde Notificaciones (pruebaColorTareaId).
+  // Si la tarea existe en esta prueba se abre su modal automático.
+  initialTareaId?: number;
+  // Akary 2026-11-13: callback al padre PruebasColorModal cuando se auto-abre
+  // el submodal, para que el padre marque ese id como consumido y no se
+  // vuelva a abrir al remontar (bug cambio de tab + crear nueva solicitud).
+  onInitialTareaIdConsumed?: (id: number) => void;
   // Jos 2026-10-23: total de versiones vivas de este arte en el circuito.
   // Permite pintar "v2 de 3" para dar contexto al revisor.
   totalVersiones?: number;
@@ -1085,6 +1161,8 @@ function PruebaCard({
         puedeGestionar={puedeGestionar}
         puedeCrear={puedeCrear}
         puedeRevisar={puedeRevisar}
+        initialTareaId={initialTareaId}
+        onInitialTareaIdConsumed={onInitialTareaIdConsumed}
       />
     </div>
   );
@@ -1103,6 +1181,8 @@ function TareasAsociadasSection({
   puedeGestionar,
   puedeCrear,
   puedeRevisar,
+  initialTareaId,
+  onInitialTareaIdConsumed,
 }: {
   prueba: PruebaColor;
   cara: SolicitudCara | null;
@@ -1110,6 +1190,8 @@ function TareasAsociadasSection({
   puedeGestionar: boolean;
   puedeCrear: boolean;
   puedeRevisar: boolean;
+  initialTareaId?: number;
+  onInitialTareaIdConsumed?: (id: number) => void;
 }) {
   const pruebaId = prueba.id;
   const queryClient = useQueryClient();
@@ -1118,7 +1200,25 @@ function TareasAsociadasSection({
   // acciones de aprobar/rechazar/finalizar. El modal principal de prueba de
   // color NO tiene esas acciones directamente — solo las presenta cuando el
   // usuario explícitamente "abre" la tarea.
+  // Jos 2026-11-12: initialTareaId (deep-link desde Mis Tareas) consumido
+  // UNA sola vez via useRef para evitar re-apertura al cambiar de tab o
+  // crear otra solicitud (bug Akary "cada que pico tareas abre recepción").
+  // El ref se resetea cuando initialTareaId vuelve a undefined (modal se
+  // cerró y el padre limpia el state), así el siguiente deep-link sí abre.
+  // One-shot: consumir el initialTareaId cada vez que cambia su valor
+  // (incluido el salto de 282087 → 282092). Se resetea cuando vuelve a null.
+  const consumedInitialTareaIdRef = useRef<number | null>(null);
   const [openTareaId, setOpenTareaId] = useState<number | null>(null);
+  useEffect(() => {
+    if (initialTareaId == null) {
+      consumedInitialTareaIdRef.current = null;
+      return;
+    }
+    if (consumedInitialTareaIdRef.current !== initialTareaId) {
+      consumedInitialTareaIdRef.current = initialTareaId;
+      setOpenTareaId(initialTareaId);
+    }
+  }, [initialTareaId]);
 
   const tareasQuery = useQuery({
     queryKey: ['pruebas-color', 'tareas', pruebaId],
@@ -1239,6 +1339,8 @@ function TareasAsociadasSection({
           puedeCrear={puedeCrear}
           puedeRevisar={puedeRevisar}
           esUltimaRevision={tareaAbierta.id === idUltimaRevision}
+          yaTieneImpresion={tareas.some(t => t.tipo === 'Impresión')}
+          yaTieneRecepcion={tareas.some(t => t.tipo === 'Recepción')}
           onClose={() => setOpenTareaId(null)}
           onAprobar={(opts) => resolver.mutate({ tareaId: tareaAbierta.id, accion: 'aprobar', comentario: opts?.comentario, archivo_adjunto: opts?.archivo_adjunto, enlace_adjunto: opts?.enlace_adjunto })}
           onRechazar={(comentario, adjuntos) => resolver.mutate({ tareaId: tareaAbierta.id, accion: 'rechazar', comentario, archivo_adjunto: adjuntos?.archivo_adjunto, enlace_adjunto: adjuntos?.enlace_adjunto })}
@@ -1261,6 +1363,8 @@ function AtenderTareaModal({
   puedeCrear,
   puedeRevisar,
   esUltimaRevision,
+  yaTieneImpresion,
+  yaTieneRecepcion,
   onClose,
   onAprobar,
   onRechazar,
@@ -1276,6 +1380,12 @@ function AtenderTareaModal({
   // true si esta es la tarea de Revision mas reciente de la prueba.
   // Rechazos viejos (de iteraciones anteriores) tienen esto en false.
   esUltimaRevision: boolean;
+  // Jos 2026-11-12: true si ya existe una tarea de Impresion para esta prueba.
+  // Se usa para deshabilitar el botón "Pedido de impresión" y evitar duplicados.
+  yaTieneImpresion: boolean;
+  // Jos 2026-11-12: true si ya existe una tarea de Recepción para esta prueba.
+  // Se usa para ocultar el botón "Crear recepción" en la tarea Impresión.
+  yaTieneRecepcion: boolean;
   onClose: () => void;
   // Jos 2026-10-29: en Revision Anticipada la aprobacion abre modal con
   // motivo + archivo + enlace (igual al rechazo pero en verde). Para PC
@@ -1287,7 +1397,27 @@ function AtenderTareaModal({
 }) {
   const esRevision = tarea.tipo === 'Revisión de artes';
   const esSeguimiento = tarea.tipo === 'Seguimiento Prueba de color';
+  const esImpresion = tarea.tipo === 'Impresión';
+  const esRecepcion = tarea.tipo === 'Recepción';
   const esRevisionAnticipada = prueba.tipo === 'revision_anticipada';
+  // Jos 2026-11-12: la tarea Recepción guarda la guía PDF en evidencia
+  // (JSON) y la fecha estimada en fecha_fin. Las leemos para mostrar al
+  // abrir el detalle (así el usuario puede revisar antes de atenderla).
+  const recepcionGuiaPdfUrl = useMemo(() => {
+    if (!esRecepcion || !tarea.evidencia) return null;
+    try {
+      const obj = JSON.parse(tarea.evidencia);
+      return typeof obj?.guia_pdf === 'string' ? obj.guia_pdf : null;
+    } catch { return null; }
+  }, [esRecepcion, tarea.evidencia]);
+  const recepcionFechaEstimada = esRecepcion ? tarea.fecha_fin : null;
+  const numImpresionesRecibidas = useMemo(() => {
+    if (!esRecepcion || !tarea.evidencia) return null;
+    try {
+      const obj = JSON.parse(tarea.evidencia);
+      return typeof obj?.num_recibidas === 'number' ? obj.num_recibidas : null;
+    } catch { return null; }
+  }, [esRecepcion, tarea.evidencia]);
   const asignados = tarea.asignado ? tarea.asignado.split(',').map(s => s.trim()).filter(Boolean) : [];
   const [showRechazoInput, setShowRechazoInput] = useState(false);
   const [comentarioRechazo, setComentarioRechazo] = useState('');
@@ -1314,6 +1444,7 @@ function AtenderTareaModal({
   };
   // Jos 2026-10-29: pedido de impresion desde la tarea Seguimiento.
   const [showPedidoImpresion, setShowPedidoImpresion] = useState(false);
+  const [showRecepcion, setShowRecepcion] = useState(false);
   // Jos 2026-10-12: scroll automatico al abrir el form de rechazo para
   // que los campos de adjuntos sean visibles sin scroll manual.
   const rechazoFormRef = useRef<HTMLDivElement | null>(null);
@@ -1359,6 +1490,42 @@ function AtenderTareaModal({
   const [reenviarError, setReenviarError] = useState<string | null>(null);
   const [reenviarUploading, setReenviarUploading] = useState(false);
   const queryClientLocal = useQueryClient();
+  // Jos 2026-11-12: marcar Recepción como recibida (Finalizada).
+  // No pasa por resolverTareaAsociada porque ese endpoint solo acepta
+  // finalizar sobre 'Seguimiento Prueba de color'. Usamos el PATCH de
+  // campanas directo y refrescamos las queries del drawer.
+  const [recibiendoRecepcion, setRecibiendoRecepcion] = useState(false);
+  const [showConfirmarRecibidas, setShowConfirmarRecibidas] = useState(false);
+  const [cantidadRecibidasInput, setCantidadRecibidasInput] = useState<string>('');
+  useEffect(() => {
+    if (showConfirmarRecibidas && tarea.num_impresiones != null) {
+      setCantidadRecibidasInput(String(tarea.num_impresiones));
+    }
+  }, [showConfirmarRecibidas, tarea.num_impresiones]);
+  const handleMarcarRecibida = async (cantidad: number) => {
+    if (!prueba.campania_id) return;
+    setRecibiendoRecepcion(true);
+    try {
+      const evidenciaPrev = (() => {
+        try { return tarea.evidencia ? JSON.parse(tarea.evidencia) : {}; } catch { return {}; }
+      })();
+      const evidenciaNueva = JSON.stringify({ ...evidenciaPrev, num_recibidas: cantidad });
+      await campanasService.updateTarea(prueba.campania_id, tarea.id, {
+        estatus: 'Finalizada',
+        evidencia: evidenciaNueva,
+      });
+      queryClientLocal.invalidateQueries({ queryKey: ['tareas-campana', prueba.campania_id] });
+      queryClientLocal.invalidateQueries({ queryKey: ['campanas', prueba.campania_id, 'tareas'] });
+      queryClientLocal.invalidateQueries({ queryKey: ['pruebas-color', 'tareas', prueba.id] });
+      queryClientLocal.invalidateQueries({ queryKey: ['pruebas-color', 'propuesta', prueba.propuesta_id] });
+      queryClientLocal.invalidateQueries({ queryKey: ['pruebas-color'] });
+      onClose();
+    } catch (e) {
+      alert(e instanceof Error ? e.message : 'No se pudo marcar la recepción como recibida');
+    } finally {
+      setRecibiendoRecepcion(false);
+    }
+  };
   const reenviarMutation = useMutation({
     mutationFn: () => {
       const enlaceLimpio = reenviarEnlace.trim();
@@ -1720,7 +1887,60 @@ function AtenderTareaModal({
             );
           })()}
 
-          {!yaResuelta && (
+          {/* Jos 2026-11-12: número de impresiones visible en Impresión Y
+              Recepción (al crear la Recepción se arrastra el número de la
+              Impresión para que Operaciones vea cuántas debe recibir). */}
+          {(esImpresion || esRecepcion) && tarea.num_impresiones != null && (
+            <div className={`rounded-md px-3 py-2 border flex items-center gap-2 ${isDark ? 'bg-indigo-500/10 border-indigo-500/30 text-indigo-100' : 'bg-indigo-50 border-indigo-200 text-indigo-900'}`}>
+              <Printer className={`h-4 w-4 ${isDark ? 'text-indigo-300' : 'text-indigo-700'}`} />
+              <div className="flex-1">
+                <div className={`text-[10px] font-semibold uppercase tracking-wide ${isDark ? 'text-indigo-200' : 'text-indigo-700'}`}>
+                  {esRecepcion ? 'Impresiones a recibir' : 'Impresiones solicitadas'}
+                </div>
+                <div className="text-sm font-semibold">{tarea.num_impresiones}</div>
+              </div>
+            </div>
+          )}
+          {esRecepcion && numImpresionesRecibidas != null && (
+            <div className={`rounded-md px-3 py-2 border flex items-center gap-2 ${isDark ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-100' : 'bg-emerald-50 border-emerald-200 text-emerald-900'}`}>
+              <CheckCircle2 className={`h-4 w-4 ${isDark ? 'text-emerald-300' : 'text-emerald-700'}`} />
+              <div className="flex-1">
+                <div className={`text-[10px] font-semibold uppercase tracking-wide ${isDark ? 'text-emerald-200' : 'text-emerald-700'}`}>
+                  Impresiones recibidas
+                </div>
+                <div className="text-sm font-semibold">{numImpresionesRecibidas}</div>
+              </div>
+            </div>
+          )}
+
+          {/* Jos 2026-11-12: en la tarea Recepción mostramos los datos que
+              se capturaron al crearla (fecha estimada + PDF guía) para que
+              Operaciones pueda revisar antes de registrar la recepción. */}
+          {esRecepcion && (recepcionFechaEstimada || recepcionGuiaPdfUrl) && (
+            <div className={`rounded-md px-3 py-2 border ${isDark ? 'bg-indigo-500/10 border-indigo-500/30 text-indigo-100' : 'bg-indigo-50 border-indigo-200 text-indigo-900'} space-y-1.5`}>
+              <div className={`text-[10px] font-semibold uppercase tracking-wide ${isDark ? 'text-indigo-200' : 'text-indigo-700'}`}>
+                Datos de la recepción
+              </div>
+              {recepcionFechaEstimada && (
+                <div className="flex items-center gap-1.5 text-xs">
+                  <span className={`${isDark ? 'text-indigo-300' : 'text-indigo-700'}`}>Fecha estimada:</span>
+                  <span className="font-medium">{new Date(recepcionFechaEstimada).toLocaleDateString('es-MX', { day: '2-digit', month: 'long', year: 'numeric' })}</span>
+                </div>
+              )}
+              {recepcionGuiaPdfUrl && (
+                <a
+                  href={recepcionGuiaPdfUrl}
+                  target="_blank"
+                  rel="noreferrer"
+                  className={`inline-flex items-center gap-1.5 text-xs font-semibold px-2 py-1 rounded border ${isDark ? 'border-indigo-400/50 text-indigo-100 bg-indigo-500/15 hover:bg-indigo-500/25' : 'border-indigo-300 text-indigo-800 bg-white hover:bg-indigo-100'}`}
+                >
+                  <FileImage className="h-3 w-3" /> Ver guía del proveedor (PDF)
+                </a>
+              )}
+            </div>
+          )}
+
+          {!yaResuelta && !esRecepcion && (
             <div className={`text-xs rounded-md px-3 py-2 ${isDark ? 'bg-zinc-800/60 text-zinc-300 border border-zinc-700' : 'bg-gray-50 text-gray-600 border border-gray-200'}`}>
               {esRevision
                 ? 'Aprobar permite al arte avanzar a producción. Rechazar devuelve la prueba al diseñador con un comentario.'
@@ -1890,6 +2110,32 @@ function AtenderTareaModal({
                   >
                     Cerrar
                   </button>
+                  {/* Jos 2026-11-12: Descargar arte visible en el detalle de
+                      la tarea Impresión (activa/finalizada) para reenviarlo
+                      al proveedor en cualquier momento. */}
+                  {esImpresion && (prueba.archivo || prueba.enlace_externo) && (
+                    <a
+                      href={prueba.archivo || prueba.enlace_externo || '#'}
+                      target="_blank"
+                      rel="noreferrer"
+                      download={prueba.archivo ? (prueba.nombre_arte || `arte-prueba-${prueba.id}`) : undefined}
+                      className={`text-xs font-semibold px-4 py-2 rounded border transition-colors inline-flex items-center gap-1 ${isDark ? 'border-emerald-500/60 text-emerald-100 bg-emerald-500/20 hover:bg-emerald-500/30' : 'border-emerald-400 text-emerald-800 bg-emerald-50 hover:bg-emerald-100'}`}
+                    >
+                      <Download className="h-3.5 w-3.5" /> Descargar arte
+                    </a>
+                  )}
+                  {/* Jos 2026-11-12: Crear tarea Recepción desde aquí (como
+                      en Gestor de Artes). PDF guía opcional, asignado hereda
+                      de la tarea Impresión. Se oculta si ya existe Recepción. */}
+                  {esImpresion && !yaTieneRecepcion && prueba.campania_id && (
+                    <button
+                      onClick={() => setShowRecepcion(true)}
+                      disabled={isSaving}
+                      className={`text-xs font-semibold px-4 py-2 rounded border transition-colors inline-flex items-center gap-1 ${isDark ? 'border-indigo-500/60 text-indigo-100 bg-indigo-500/20 hover:bg-indigo-500/30' : 'border-indigo-400 text-indigo-800 bg-indigo-50 hover:bg-indigo-100'} disabled:opacity-50`}
+                    >
+                      <ClipboardList className="h-3.5 w-3.5" /> Crear recepción
+                    </button>
+                  )}
                   {puedeReenviar && (
                     <button
                       onClick={() => setShowReenviarForm(true)}
@@ -1987,7 +2233,7 @@ function AtenderTareaModal({
                     <XCircle className="h-3 w-3" /> Rechazar
                   </button>
                   <button
-                    onClick={() => esRevisionAnticipada ? setShowAprobacionInput(true) : onAprobar()}
+                    onClick={() => setShowAprobacionInput(true)}
                     disabled={isSaving}
                     className={`text-xs font-semibold px-3 py-1.5 rounded border transition-colors inline-flex items-center gap-1 ${isDark ? 'border-emerald-500/60 text-emerald-100 bg-emerald-500/20 hover:bg-emerald-500/30' : 'border-emerald-400 text-emerald-800 bg-emerald-50 hover:bg-emerald-100'} disabled:opacity-50`}
                   >
@@ -1998,27 +2244,60 @@ function AtenderTareaModal({
               )}
               {esSeguimiento && puedeCrear && (
                 <>
-                  {/* Jos 2026-10-29: desde la tarea Seguimiento se puede crear
-                      directamente el pedido de impresion. Solo si la prueba
-                      ya esta vinculada a campania (POST /campanas/:id/tareas
-                      exige campania_id). */}
-                  <button
-                    onClick={() => setShowPedidoImpresion(true)}
-                    disabled={isSaving || !prueba.campania_id}
-                    title={prueba.campania_id ? 'Crear pedido de impresión al proveedor' : 'Disponible cuando la propuesta se apruebe como campaña'}
-                    className={`text-xs font-semibold px-3 py-1.5 rounded border transition-colors inline-flex items-center gap-1 ${isDark ? 'border-indigo-500/60 text-indigo-100 bg-indigo-500/20 hover:bg-indigo-500/30' : 'border-indigo-400 text-indigo-800 bg-indigo-50 hover:bg-indigo-100'} disabled:opacity-50 disabled:cursor-not-allowed`}
-                  >
-                    <Printer className="h-3 w-3" /> Pedido de impresión
-                  </button>
-                  <button
-                    onClick={onFinalizar}
-                    disabled={isSaving}
-                    className={`text-xs font-semibold px-3 py-1.5 rounded border transition-colors inline-flex items-center gap-1 ${isDark ? 'border-emerald-500/60 text-emerald-100 bg-emerald-500/20 hover:bg-emerald-500/30' : 'border-emerald-400 text-emerald-800 bg-emerald-50 hover:bg-emerald-100'} disabled:opacity-50`}
-                  >
-                    {isSaving ? <Loader2 className="h-3 w-3 animate-spin" /> : <Flag className="h-3 w-3" />}
-                    Finalizar
-                  </button>
+                  {/* Jos 2026-11-12: Pedido de impresion SOLO aplica al flujo de
+                      Prueba de Color (no en Revision Anticipada; RA no imprime).
+                      Ademas requiere que la prueba ya este vinculada a campania
+                      (POST /campanas/:id/tareas exige campania_id). */}
+                  {!esRevisionAnticipada && (
+                    <button
+                      onClick={() => setShowPedidoImpresion(true)}
+                      disabled={isSaving || !prueba.campania_id || yaTieneImpresion}
+                      title={
+                        !prueba.campania_id
+                          ? 'Disponible cuando la propuesta se apruebe como campaña'
+                          : yaTieneImpresion
+                            ? 'Ya se generó un pedido de impresión para esta prueba. No puedes crear otro.'
+                            : 'Crear pedido de impresión al proveedor'
+                      }
+                      className={`text-xs font-semibold px-3 py-1.5 rounded border transition-colors inline-flex items-center gap-1 ${isDark ? 'border-indigo-500/60 text-indigo-100 bg-indigo-500/20 hover:bg-indigo-500/30' : 'border-indigo-400 text-indigo-800 bg-indigo-50 hover:bg-indigo-100'} disabled:opacity-50 disabled:cursor-not-allowed`}
+                    >
+                      <Printer className="h-3 w-3" /> {yaTieneImpresion ? 'Pedido de impresión ya enviado' : 'Pedido de impresión'}
+                    </button>
+                  )}
+                  {/* Jos 2026-11-12: se quitó el botón "Finalizar" del
+                      Seguimiento porque el seguimiento se da por cerrado
+                      cuando se crea el Pedido de impresión; mantener el
+                      botón confundía a los usuarios. */}
                 </>
+              )}
+              {/* Jos 2026-11-12: botón único para la tarea Recepción =
+                  "Marcar como recibida" (finaliza la tarea). Reemplaza al
+                  genérico Aprobar/Finalizar porque Operaciones solo necesita
+                  confirmar que llegó la impresión. */}
+              {esRecepcion && !yaResuelta && (
+                <button
+                  onClick={() => setShowConfirmarRecibidas(true)}
+                  disabled={isSaving || recibiendoRecepcion}
+                  className={`text-xs font-semibold px-3 py-1.5 rounded border transition-colors inline-flex items-center gap-1 ${isDark ? 'border-emerald-500/60 text-emerald-100 bg-emerald-500/20 hover:bg-emerald-500/30' : 'border-emerald-400 text-emerald-800 bg-emerald-50 hover:bg-emerald-100'} disabled:opacity-50`}
+                >
+                  {recibiendoRecepcion ? <Loader2 className="h-3 w-3 animate-spin" /> : <CheckCircle2 className="h-3 w-3" />}
+                  Marcar como recibida
+                </button>
+              )}
+              {/* Jos 2026-11-12: en el detalle de la tarea Impresión mostramos
+                  botón para descargar el arte (que el usuario ya vio en el
+                  submodal de crear pedido, pero también lo quiere acá para
+                  reenviárselo al proveedor en cualquier momento). */}
+              {esImpresion && (prueba.archivo || prueba.enlace_externo) && (
+                <a
+                  href={prueba.archivo || prueba.enlace_externo || '#'}
+                  target="_blank"
+                  rel="noreferrer"
+                  download={prueba.archivo ? (prueba.nombre_arte || `arte-prueba-${prueba.id}`) : undefined}
+                  className={`text-xs font-semibold px-3 py-1.5 rounded border transition-colors inline-flex items-center gap-1 ${isDark ? 'border-emerald-500/60 text-emerald-100 bg-emerald-500/20 hover:bg-emerald-500/30' : 'border-emerald-400 text-emerald-800 bg-emerald-50 hover:bg-emerald-100'}`}
+                >
+                  <Download className="h-3 w-3" /> Descargar arte
+                </a>
               )}
             </>
           )}
@@ -2068,14 +2347,85 @@ function AtenderTareaModal({
       {/* Jos 2026-10-29: sub-modal pedido de impresion desde la tarea
           Seguimiento. Captura num_impresiones y crea tarea tipo 'Impresión'
           en la campania asociada via POST /campanas/:id/tareas. */}
+      {showRecepcion && prueba.campania_id && (
+        <RecepcionSubmodal
+          tareaImpresion={tarea}
+          prueba={prueba}
+          cara={cara}
+          isDark={isDark}
+          onClose={() => setShowRecepcion(false)}
+          onCreated={() => { setShowRecepcion(false); onClose(); }}
+        />
+      )}
       {showPedidoImpresion && prueba.campania_id && (
         <PedidoImpresionSubmodal
           prueba={prueba}
           cara={cara}
+          tareaSeguimientoId={esSeguimiento ? tarea.id : null}
           isDark={isDark}
           onClose={() => setShowPedidoImpresion(false)}
           onCreated={() => { setShowPedidoImpresion(false); onClose(); }}
         />
+      )}
+      {showConfirmarRecibidas && (
+        <div
+          className="fixed inset-0 z-[80] flex items-center justify-center p-4 bg-black/60"
+          onClick={() => !recibiendoRecepcion && setShowConfirmarRecibidas(false)}
+        >
+          <div
+            onClick={(e) => e.stopPropagation()}
+            className={`w-full max-w-sm rounded-lg border shadow-xl ${isDark ? 'bg-zinc-900 border-zinc-700 text-zinc-100' : 'bg-white border-gray-200 text-gray-900'}`}
+          >
+            <div className="p-4 border-b border-current/10">
+              <h3 className="text-sm font-semibold">Confirmar recepción</h3>
+              <p className={`text-xs mt-0.5 ${isDark ? 'text-zinc-400' : 'text-gray-500'}`}>
+                Registra cuántas impresiones llegaron. Se guarda al finalizar la tarea.
+              </p>
+            </div>
+            <div className="p-4 space-y-3">
+              {tarea.num_impresiones != null && (
+                <div className={`text-xs ${isDark ? 'text-zinc-400' : 'text-gray-500'}`}>
+                  Solicitadas: <span className="font-semibold">{tarea.num_impresiones}</span>
+                </div>
+              )}
+              <label className="block">
+                <span className="text-xs font-medium">Impresiones recibidas</span>
+                <input
+                  type="number"
+                  min={0}
+                  value={cantidadRecibidasInput}
+                  onChange={(e) => setCantidadRecibidasInput(e.target.value)}
+                  disabled={recibiendoRecepcion}
+                  autoFocus
+                  className={`mt-1 w-full px-3 py-2 rounded border text-sm ${isDark ? 'bg-zinc-800 border-zinc-700 text-white' : 'bg-white border-gray-300'} focus:outline-none focus:ring-2 focus:ring-emerald-500/50`}
+                />
+              </label>
+            </div>
+            <div className="p-3 border-t border-current/10 flex items-center justify-end gap-2">
+              <button
+                type="button"
+                disabled={recibiendoRecepcion}
+                onClick={() => setShowConfirmarRecibidas(false)}
+                className={`text-xs font-semibold px-3 py-1.5 rounded border ${isDark ? 'border-zinc-700 text-zinc-200 hover:bg-zinc-800' : 'border-gray-300 text-gray-700 hover:bg-gray-50'} disabled:opacity-50`}
+              >
+                Cancelar
+              </button>
+              <button
+                type="button"
+                disabled={recibiendoRecepcion || cantidadRecibidasInput.trim() === '' || Number.isNaN(Number(cantidadRecibidasInput)) || Number(cantidadRecibidasInput) < 0}
+                onClick={async () => {
+                  const cantidad = Number(cantidadRecibidasInput);
+                  await handleMarcarRecibida(cantidad);
+                  setShowConfirmarRecibidas(false);
+                }}
+                className={`text-xs font-semibold px-3 py-1.5 rounded border inline-flex items-center gap-1 ${isDark ? 'border-emerald-500/60 text-emerald-100 bg-emerald-500/20 hover:bg-emerald-500/30' : 'border-emerald-400 text-emerald-800 bg-emerald-50 hover:bg-emerald-100'} disabled:opacity-50 disabled:cursor-not-allowed`}
+              >
+                {recibiendoRecepcion ? <Loader2 className="h-3 w-3 animate-spin" /> : <CheckCircle2 className="h-3 w-3" />}
+                Confirmar recepción
+              </button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );
@@ -2087,16 +2437,23 @@ function AtenderTareaModal({
 function PedidoImpresionSubmodal({
   prueba,
   cara,
+  tareaSeguimientoId,
   isDark,
   onClose,
   onCreated,
 }: {
   prueba: PruebaColor;
   cara: SolicitudCara | null;
+  // Jos 2026-11-12: id de la tarea Seguimiento desde la que se abrió el
+  // submodal. Al crear el pedido de impresión la marcamos Atendido para
+  // que el seguimiento se cierre automáticamente (Akary: "la de seguimiento
+  // que se marque como atendida después de crear la tarea de impresión").
+  tareaSeguimientoId: number | null;
   isDark: boolean;
   onClose: () => void;
   onCreated: () => void;
 }) {
+  const queryClient = useQueryClient();
   const [numImpresiones, setNumImpresiones] = useState<number>(1);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -2117,7 +2474,32 @@ function PedidoImpresionSubmodal({
         num_impresiones: numImpresiones,
         ids_reservas: circuitoId ? String(circuitoId) : undefined,
         evidencia: prueba.archivo || undefined,
+        // Jos 2026-11-12: guardar pruebaColorId en contenido para que
+        // listarTareasAsociadas pueda regresar esta tarea en el drawer
+        // "TAREAS DE LA PRUEBA" (el filtro del back matchea por contenido.pruebaColorId).
+        contenido: JSON.stringify({ pruebaColorId: prueba.id }),
       });
+      // Jos 2026-11-12: la tarea Seguimiento ya cumplió su función (el
+      // asesor confirmó que el cliente aprobó y mandamos a imprimir), la
+      // cerramos automáticamente. Es tolerante al fallo porque el usuario
+      // puede cerrarla a mano después si algo truena.
+      if (tareaSeguimientoId) {
+        try {
+          await campanasService.updateTarea(campaniaId, tareaSeguimientoId, {
+            estatus: 'Atendido',
+          });
+        } catch (e) {
+          console.error('No se pudo marcar la tarea Seguimiento como Atendido:', e);
+        }
+      }
+      // Jos 2026-11-12: tras crear el pedido, refrescar las listas de tareas
+      // para que la tarea nueva (tipo 'Impresion') aparezca sin recargar.
+      // Antes del fix el submodal cerraba pero nada se veia -> "no sucede nada".
+      queryClient.invalidateQueries({ queryKey: ['tareas-campana', campaniaId] });
+      queryClient.invalidateQueries({ queryKey: ['campanas', campaniaId, 'tareas'] });
+      queryClient.invalidateQueries({ queryKey: ['pruebas-color', 'tareas', prueba.id] });
+      queryClient.invalidateQueries({ queryKey: ['pruebas-color', 'propuesta', prueba.propuesta_id] });
+      queryClient.invalidateQueries({ queryKey: ['pruebas-color'] });
       onCreated();
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Error al crear pedido de impresión');
@@ -2150,6 +2532,21 @@ function PedidoImpresionSubmodal({
           <div className={`text-[11px] rounded px-2 py-1.5 ${isDark ? 'bg-zinc-800/60 text-zinc-300 border border-zinc-700' : 'bg-gray-50 text-gray-600 border border-gray-200'}`}>
             {prueba.nombre_arte || `Prueba #${prueba.id}`}{cara?.articulo ? ` · ${cara.articulo}` : ''}
           </div>
+          {/* Jos 2026-11-12: botón para descargar el arte y mandarselo al
+              proveedor desde este mismo submodal. Abre en nueva pestaña con
+              download attr; si solo hay enlace externo (sin archivo subido),
+              abre el enlace tal cual. */}
+          {(prueba.archivo || prueba.enlace_externo) && (
+            <a
+              href={prueba.archivo || prueba.enlace_externo || '#'}
+              target="_blank"
+              rel="noreferrer"
+              download={prueba.archivo ? (prueba.nombre_arte || `arte-prueba-${prueba.id}`) : undefined}
+              className={`w-full text-xs font-semibold px-3 py-1.5 rounded border transition-colors inline-flex items-center justify-center gap-1.5 ${isDark ? 'border-emerald-500/60 text-emerald-100 bg-emerald-500/15 hover:bg-emerald-500/25' : 'border-emerald-400 text-emerald-800 bg-emerald-50 hover:bg-emerald-100'}`}
+            >
+              <Download className="h-3.5 w-3.5" /> Descargar arte
+            </a>
+          )}
           <div>
             <label className={`text-[11px] font-semibold ${isDark ? 'text-zinc-300' : 'text-gray-700'}`}># de impresiones *</label>
             <input
@@ -2181,6 +2578,195 @@ function PedidoImpresionSubmodal({
           >
             {saving ? <Loader2 className="h-3 w-3 animate-spin" /> : <Printer className="h-3 w-3" />}
             Crear pedido
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ─── Sub-modal: crear recepción desde una tarea Impresión ──────────────
+// Jos 2026-11-12: cuando ya se mandó a impresión y el proveedor va a
+// entregar las impresiones, desde la tarea Impresión del drawer de Pruebas
+// de Color se puede crear una tarea tipo Recepción (el asignado es el mismo
+// que la Impresión, no se pregunta de nuevo). Se puede adjuntar PDF de guía
+// del proveedor como evidencia.
+function RecepcionSubmodal({
+  tareaImpresion,
+  prueba,
+  cara,
+  isDark,
+  onClose,
+  onCreated,
+}: {
+  tareaImpresion: TareaAsociadaPruebaColor;
+  prueba: PruebaColor;
+  cara: SolicitudCara | null;
+  isDark: boolean;
+  onClose: () => void;
+  onCreated: () => void;
+}) {
+  const queryClient = useQueryClient();
+  const [guiaPdfFile, setGuiaPdfFile] = useState<File | null>(null);
+  const [guiaPdfUrl, setGuiaPdfUrl] = useState<string | null>(null);
+  const [guiaUploading, setGuiaUploading] = useState(false);
+  const [fechaRecepcion, setFechaRecepcion] = useState<string>('');
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const handleUploadGuia = async (file: File) => {
+    setGuiaUploading(true);
+    setError(null);
+    try {
+      const res = await campanasService.uploadTestigoFile(file);
+      setGuiaPdfFile(file);
+      setGuiaPdfUrl(res.url);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'No se pudo subir el PDF');
+      setGuiaPdfFile(null);
+      setGuiaPdfUrl(null);
+    } finally {
+      setGuiaUploading(false);
+    }
+  };
+
+  const handleCrear = async () => {
+    const campaniaId = prueba.campania_id;
+    if (!campaniaId) { setError('La prueba no está vinculada a una campaña'); return; }
+    setSaving(true);
+    setError(null);
+    try {
+      // 1. Marcar la tarea Impresión como Atendido (ya cumplió su propósito,
+      //    la Recepción toma el relevo del seguimiento).
+      await campanasService.updateTarea(campaniaId, tareaImpresion.id, {
+        estatus: 'Atendido',
+      });
+
+      // 2. Crear tarea Recepción. Asignado = mismo que la Impresión (feedback
+      //    Jos 2026-11-12: "que se siga asignando a la misma persona").
+      const circuitoId = cara?.id || prueba.sc_id;
+      const tituloRecep = `Recepción - ${prueba.nombre_arte || `Prueba #${prueba.id}`}`;
+      const descripcionRecep = `Recepción de impresiones del pedido "${tareaImpresion.titulo || `Impresión #${tareaImpresion.id}`}".${prueba.nombre_arte ? ` Arte: ${prueba.nombre_arte}.` : ''}${cara?.articulo ? ` Circuito: ${cara.articulo}.` : ''} Por favor registra la cantidad recibida.`;
+      // Evidencia tipo recepcion_normal + referencia al PDF guía si existe
+      // (misma convención que usa TareaSeguimientoPage/CampanaDetailPage).
+      const evidenciaObj: Record<string, unknown> = { tipo: 'recepcion_normal' };
+      if (guiaPdfUrl) evidenciaObj.guia_pdf = guiaPdfUrl;
+      await campanasService.createTarea(campaniaId, {
+        titulo: tituloRecep,
+        descripcion: descripcionRecep,
+        tipo: 'Recepción',
+        asignado: tareaImpresion.asignado || undefined,
+        ids_reservas: circuitoId ? String(circuitoId) : undefined,
+        evidencia: JSON.stringify(evidenciaObj),
+        contenido: JSON.stringify({ pruebaColorId: prueba.id }),
+        fecha_fin: fechaRecepcion || undefined,
+        // Jos 2026-11-12: arrastrar el num_impresiones de la tarea Impresión
+        // a la Recepción para que Operaciones vea cuántas debe recibir.
+        num_impresiones: tareaImpresion.num_impresiones || undefined,
+      });
+
+      // 3. Refrescar las vistas que dependen de la lista de tareas.
+      queryClient.invalidateQueries({ queryKey: ['tareas-campana', campaniaId] });
+      queryClient.invalidateQueries({ queryKey: ['campanas', campaniaId, 'tareas'] });
+      queryClient.invalidateQueries({ queryKey: ['pruebas-color', 'tareas', prueba.id] });
+      queryClient.invalidateQueries({ queryKey: ['pruebas-color', 'propuesta', prueba.propuesta_id] });
+      queryClient.invalidateQueries({ queryKey: ['pruebas-color'] });
+      onCreated();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Error al crear tarea de recepción');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <div
+      className="fixed inset-0 z-[95] flex items-center justify-center p-4 bg-black/70"
+      onClick={(e) => { e.stopPropagation(); onClose(); }}
+    >
+      <div
+        onClick={(e) => e.stopPropagation()}
+        className={`w-full max-w-sm rounded-xl shadow-2xl border overflow-hidden ${isDark ? 'bg-zinc-900 border-zinc-700' : 'bg-white border-gray-200'}`}
+      >
+        <div className={`px-4 py-3 border-b flex items-center justify-between ${isDark ? 'border-zinc-800' : 'border-gray-200'}`}>
+          <div className="flex items-center gap-2">
+            <ClipboardList className={`h-4 w-4 ${isDark ? 'text-indigo-300' : 'text-indigo-600'}`} />
+            <div>
+              <div className={`text-sm font-semibold ${isDark ? 'text-zinc-100' : 'text-gray-900'}`}>Crear tarea de recepción</div>
+              <div className={`text-[10px] ${isDark ? 'text-zinc-400' : 'text-gray-500'}`}>
+                {tareaImpresion.asignado ? `Asignada a ${tareaImpresion.asignado}` : 'Sin asignado'}
+              </div>
+            </div>
+          </div>
+          <button onClick={onClose} className={`p-1 rounded ${isDark ? 'hover:bg-zinc-800 text-zinc-400' : 'hover:bg-gray-100 text-gray-500'}`}>
+            <X className="h-4 w-4" />
+          </button>
+        </div>
+        <div className="px-4 py-3 space-y-3">
+          <div className={`text-[11px] rounded px-2 py-1.5 ${isDark ? 'bg-zinc-800/60 text-zinc-300 border border-zinc-700' : 'bg-gray-50 text-gray-600 border border-gray-200'}`}>
+            {prueba.nombre_arte || `Prueba #${prueba.id}`}{cara?.articulo ? ` · ${cara.articulo}` : ''}
+          </div>
+          <div>
+            <label className={`text-[11px] font-semibold ${isDark ? 'text-zinc-300' : 'text-gray-700'}`}>Fecha estimada de recepción</label>
+            <input
+              type="date"
+              value={fechaRecepcion}
+              onChange={(e) => setFechaRecepcion(e.target.value)}
+              className={`mt-1 w-full text-sm rounded-md border px-2.5 py-1.5 outline-none ${isDark ? 'bg-zinc-800 border-zinc-700 text-zinc-100 focus:border-indigo-500/60 [color-scheme:dark]' : 'bg-white border-gray-300 text-gray-900 focus:border-indigo-400'}`}
+            />
+          </div>
+          <div>
+            <label className={`text-[11px] font-semibold ${isDark ? 'text-zinc-300' : 'text-gray-700'}`}>Guía del proveedor (PDF opcional)</label>
+            {guiaPdfFile && guiaPdfUrl ? (
+              <div className={`mt-1 flex items-center gap-2 text-[11px] px-2 py-1.5 rounded border ${isDark ? 'bg-zinc-800/60 text-zinc-200 border-zinc-700' : 'bg-gray-50 text-gray-700 border-gray-200'}`}>
+                <FileImage className="h-3.5 w-3.5 flex-shrink-0" />
+                <span className="truncate flex-1">{guiaPdfFile.name}</span>
+                <button
+                  onClick={() => { setGuiaPdfFile(null); setGuiaPdfUrl(null); }}
+                  className={`text-[10px] px-1.5 py-0.5 rounded ${isDark ? 'hover:bg-zinc-700 text-zinc-300' : 'hover:bg-gray-200 text-gray-600'}`}
+                >
+                  Quitar
+                </button>
+              </div>
+            ) : (
+              <label className={`mt-1 flex items-center gap-2 text-[11px] px-2 py-1.5 rounded border cursor-pointer ${isDark ? 'bg-zinc-800/40 text-zinc-300 border-zinc-700 hover:bg-zinc-800/60' : 'bg-white text-gray-600 border-gray-300 hover:bg-gray-50'} ${guiaUploading ? 'opacity-50 cursor-not-allowed' : ''}`}>
+                <Upload className="h-3.5 w-3.5" />
+                <span>{guiaUploading ? 'Subiendo PDF...' : 'Seleccionar PDF'}</span>
+                <input
+                  type="file"
+                  accept="application/pdf"
+                  className="hidden"
+                  disabled={guiaUploading}
+                  onChange={(e) => {
+                    const f = e.target.files?.[0];
+                    if (f) handleUploadGuia(f);
+                    e.target.value = '';
+                  }}
+                />
+              </label>
+            )}
+          </div>
+          {error && (
+            <div className={`text-[11px] px-2 py-1 rounded ${isDark ? 'bg-red-500/15 text-red-200 border border-red-500/30' : 'bg-red-50 text-red-700 border border-red-200'}`}>
+              {error}
+            </div>
+          )}
+        </div>
+        <div className={`px-4 py-3 border-t flex items-center justify-end gap-2 ${isDark ? 'border-zinc-800 bg-zinc-900/60' : 'border-gray-200 bg-gray-50/60'}`}>
+          <button
+            onClick={onClose}
+            disabled={saving || guiaUploading}
+            className={`text-xs font-medium px-3 py-1.5 rounded border transition-colors ${isDark ? 'border-zinc-700 text-zinc-300 hover:bg-zinc-800' : 'border-gray-300 text-gray-700 hover:bg-gray-100'} disabled:opacity-50`}
+          >
+            Cancelar
+          </button>
+          <button
+            onClick={handleCrear}
+            disabled={saving || guiaUploading}
+            className={`text-xs font-semibold px-3 py-1.5 rounded border transition-colors inline-flex items-center gap-1 ${isDark ? 'border-indigo-500/60 text-indigo-100 bg-indigo-500/20 hover:bg-indigo-500/30' : 'border-indigo-400 text-indigo-800 bg-indigo-50 hover:bg-indigo-100'} disabled:opacity-50`}
+          >
+            {saving ? <Loader2 className="h-3 w-3 animate-spin" /> : <ClipboardList className="h-3 w-3" />}
+            Crear recepción
           </button>
         </div>
       </div>

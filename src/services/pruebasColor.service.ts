@@ -74,10 +74,16 @@ export interface ListarPruebaColorParams {
   tipo?: TipoPrueba;
 }
 
-// Tarea asociada a una prueba de color (Revisión de artes / Seguimiento).
+// Tarea asociada a una prueba de color. Incluye Revisión de artes,
+// Seguimiento Prueba de color, Impresión y Recepción (Jos 2026-11-12:
+// se añaden Impresión y Recepción al drawer para gestionar el ciclo
+// completo del arte desde la misma vista).
 export interface TareaAsociadaPruebaColor {
   id: number;
   tipo: string | null;
+  // Jos 2026-11-12: num_impresiones aparece en tareas tipo 'Impresión' /
+  // 'Recepción' (cantidad que se pidió al proveedor). Null en las demás.
+  num_impresiones: number | null;
   titulo: string | null;
   descripcion: string | null;
   estatus: string | null;
