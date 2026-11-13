@@ -1636,6 +1636,17 @@ function isPruebaColorSeguimientoTarea(tipo?: string | null): boolean {
 function isPruebaColorNotificacionTarea(tipo?: string | null): boolean {
   return tipo === 'Prueba de Color';
 }
+// Tarea Impresión/Recepción originada desde el drawer de Pruebas de Color:
+// detectar por tipo + presencia de pruebaColorId en contenido JSON. Permite
+// deep-linkear al submodal de la prueba en vez de al Gestor de Artes.
+function isPruebaColorImpresionORecepcionTarea(tipo?: string | null, contenido?: string | null): boolean {
+  if (tipo !== 'Impresión' && tipo !== 'Recepción') return false;
+  if (!contenido) return false;
+  try {
+    const c = JSON.parse(contenido);
+    return Number.isFinite(Number(c?.pruebaColorId));
+  } catch { return false; }
+}
 // Parsea el contenido JSON de una tarea tipo 'Prueba de Color' para
 // extraer scId / propuestaId / requiereNuevaVersion.
 function parsePruebaColorNotifContent(contenido?: string | null): {
