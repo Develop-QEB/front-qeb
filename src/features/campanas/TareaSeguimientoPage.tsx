@@ -1621,6 +1621,10 @@ function UploadArtModal({
   const [duplicateWarning, setDuplicateWarning] = useState<{ nombre: string; usos: number; url: string } | null>(null);
   const [isCheckingDuplicate, setIsCheckingDuplicate] = useState(false);
 
+  // Akary 2026-11-13: para invalidar la cache de artes-existentes tras
+  // persistir un arte subido en biblioteca_artes del back.
+  const queryClient = useQueryClient();
+
   // Local library: extends artesExistentes with uploaded files/URLs (addedArtes persists in parent)
   // Dedup por URL: si un arte subido localmente ya coincide con uno existente
   // del backend (porque ya se subió y el backend lo devolvió), evitar duplicado
@@ -2261,6 +2265,26 @@ function UploadArtModal({
     }
   };
 
+  // Akary 2026-11-13: persiste un arte subido en biblioteca_artes del back
+  // apenas se sube. Antes solo se guardaba al terminar el wizard, por eso un
+  // F5 lo perdia. Si falla, no interrumpimos el flujo: el arte sigue en
+  // addedArtes (state local) para que la UX no se rompa.
+  const persistArteEnBiblioteca = (
+    archivo: string,
+    tipo: 'tradicional' | 'digital',
+    nombreArte?: string | null,
+  ) => {
+    if (!campanaId || !archivo) return;
+    campanasService
+      .addToBibliotecaArtes(campanaId, { archivo, tipo, nombre_arte: nombreArte ?? null })
+      .then(() => {
+        queryClient.invalidateQueries({ queryKey: ['campana-artes-existentes', campanaId], exact: false });
+      })
+      .catch((err) => {
+        console.warn('[biblioteca-artes] persistencia fallo, el arte queda solo en addedArtes:', err);
+      });
+  };
+
   const addUploadedFile = async (selectedFile: File) => {
     const id = `upload-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
 
@@ -2274,6 +2298,7 @@ function UploadArtModal({
         url: uploadResult.url,
         usos: 0,
       }]);
+      persistArteEnBiblioteca(uploadResult.url, 'tradicional', selectedFile.name);
     } catch (err: any) {
       console.error('Error uploading file:', err);
       const backendError = err?.response?.data?.error
@@ -2296,6 +2321,7 @@ function UploadArtModal({
       url: trimmed,
       usos: 0,
     }]);
+    persistArteEnBiblioteca(trimmed, 'tradicional', trimmed.split('/').pop() || null);
   };
 
   // URL upload para flujo digital (imagen o video). Mismo patrón que addUrlImage
@@ -2311,6 +2337,7 @@ function UploadArtModal({
       url: trimmed,
       usos: 0,
     }]);
+    persistArteEnBiblioteca(trimmed, 'digital', trimmed.split('/').pop() || null);
   };
 
   // Helpers para el wizard digital
@@ -2343,6 +2370,7 @@ function UploadArtModal({
         url: uploadResult.url,
         usos: 0,
       }]);
+      persistArteEnBiblioteca(uploadResult.url, 'digital', selectedFile.name);
     } catch (err: any) {
       console.error('Error uploading digital file:', err);
       // Mostrar al usuario el mensaje real del backend (ej. "El archivo es demasiado

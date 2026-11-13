@@ -1562,6 +1562,30 @@ export const campanasService = {
     return response.data.data;
   },
 
+  // Akary 2026-11-13: persistir arte en biblioteca_artes DESDE que se sube
+  // (antes solo entraba al completar assignArte*). Idempotente por
+  // (campania_id, archivo). Si el POST falla el front debe seguir funcionando
+  // con addedArtes (fallback), por eso el caller lo maneja con try/catch.
+  async addToBibliotecaArtes(
+    id: number,
+    payload: {
+      archivo: string;
+      tipo: 'tradicional' | 'digital';
+      nombre_arte?: string | null;
+      nota?: string | null;
+      estatus_operaciones?: string | null;
+      nombre_generico?: string | null;
+    },
+  ): Promise<void> {
+    const response = await api.post<ApiResponse<{ archivo: string; tipo: string }>>(
+      `/campanas/${id}/biblioteca-artes`,
+      payload,
+    );
+    if (!response.data.success) {
+      throw new Error(response.data.error || 'Error al persistir arte en biblioteca');
+    }
+  },
+
   async verificarArteExistente(id: number, params: { nombre?: string; url?: string }): Promise<{ existe: boolean; nombre: string; usos: number; url: string | null }> {
     const response = await api.post<ApiResponse<{ existe: boolean; nombre: string; usos: number; url: string | null }>>(
       `/campanas/${id}/verificar-arte`,
