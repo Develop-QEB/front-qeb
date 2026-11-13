@@ -1521,6 +1521,11 @@ export function PropuestasPage() {
   // solicitud con el circuito original preseleccionado para subir v2.
   const [pruebaColorInitialScId, setPruebaColorInitialScId] = useState<number | undefined>(undefined);
   const [pruebaColorInitialTab, setPruebaColorInitialTab] = useState<'pruebas' | 'nueva' | undefined>(undefined);
+  // Jos 2026-11-12: deep-link desde Mis Tareas para abrir la tarea exacta.
+  // El consumo one-shot lo hace el propio PruebasColorModal con useRef, así
+  // que aquí lo mantenemos vivo mientras el modal esté abierto; sólo se
+  // limpia en el onClose del modal junto con el resto del state de contexto.
+  const [pruebaColorInitialTareaId, setPruebaColorInitialTareaId] = useState<number | undefined>(undefined);
   const puedePruebaColor = puedeGestionarPruebaColor(user?.rol);
   const [selectedPropuestaForAssign, setSelectedPropuestaForAssign] = useState<Propuesta | null>(null);
   // Modal informativo cuando se intenta abrir el modal sobre propuesta ya pasada a ventas (bug Oral B)
@@ -1554,6 +1559,8 @@ export function PropuestasPage() {
           } else if (pruebaColorTareaId) {
             setPruebaColorInitialScId(undefined);
             setPruebaColorInitialTab(undefined);
+            const parsed = parseInt(pruebaColorTareaId, 10);
+            setPruebaColorInitialTareaId(Number.isFinite(parsed) ? parsed : undefined);
             setPruebaColorPropuesta(propuesta);
           } else {
             // Guard: no abrir el modal de Asignar Inventario si la propuesta
@@ -3047,11 +3054,13 @@ export function PropuestasPage() {
             setPruebaColorPropuesta(null);
             setPruebaColorInitialScId(undefined);
             setPruebaColorInitialTab(undefined);
+            setPruebaColorInitialTareaId(undefined);
           }}
           propuestaId={pruebaColorPropuesta.id}
           contextoNombre={pruebaColorPropuesta.nombre_campania || undefined}
           initialScId={pruebaColorInitialScId}
           initialTab={pruebaColorInitialTab}
+          initialTareaId={pruebaColorInitialTareaId}
         />
       )}
     </div>

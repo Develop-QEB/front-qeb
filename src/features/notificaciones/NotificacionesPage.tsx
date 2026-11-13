@@ -200,6 +200,7 @@ const TIPOS_GESTOR_ARTES = new Set([
   'Programación para Tráfico', 'Programacion para Trafico',
   'Orden de Programación', 'Orden de Programacion',
   'Orden de Instalación', 'Orden de Instalacion',
+  'Seguimiento Prueba de color', 'Seguimiento prueba de color',
 ]);
 function isTareaGestorArtes(tipo?: string | null): boolean {
   if (!tipo) return false;
@@ -280,7 +281,7 @@ type QuickFilterKey =
 // Estatus "resueltos": no cuentan en la campanita ni en "Sin finalizar" / "No
 // leídas". Debe coincidir con ESTATUS_RESUELTOS del backend
 // (notificaciones.controller.ts) o el conteo de la lista se descuadra del badge.
-const ESTATUS_RESUELTOS = ['Atendido', 'Rechazado', 'Cancelado'];
+const ESTATUS_RESUELTOS = ['Atendido', 'Finalizada', 'Aprobada', 'Completado', 'Rechazado', 'Cancelado'];
 const esResuelta = (estatus?: string | null) => !!estatus && ESTATUS_RESUELTOS.includes(estatus);
 
 // Roles de dirección: su listado de tareas se muestra SIEMPRE extendido (los
@@ -2870,6 +2871,21 @@ function TaskDrawer({
       onNavigate(`/admin/tickets-historial?ticketId=${tarea.id_solicitud}`);
       return;
     }
+    // Pruebas de Color (Revisión / Seguimiento / Notificación / Impresión / Recepción):
+    // propuesta o campaña + id de la TAREA para que el modal haga deep-link al submodal
+    // específico. Sin este branch el handler caía sin llamar onNavigate, o pasaba el id
+    // de la propuesta como tareaId (feedback Akary 2026-11-13: "no me abrio el modal de la tarea").
+    if ((isPruebaColorRevisionTarea(tarea.tipo, tarea.titulo) || isPruebaColorSeguimientoTarea(tarea.tipo) || isPruebaColorNotificacionTarea(tarea.tipo) || isPruebaColorImpresionORecepcionTarea(tarea.tipo, tarea.contenido))) {
+      const propId = tarea.id_propuesta ? parseInt(tarea.id_propuesta) : NaN;
+      if (!isNaN(propId)) {
+        onNavigate(getDirectNavigationPath('propuesta', propId, tarea.titulo || '', tarea.tipo || undefined, tarea.campania_id, propId, tarea.id, tarea.contenido));
+        return;
+      }
+      if (tarea.campania_id) {
+        onNavigate(getDirectNavigationPath('campana', tarea.campania_id, tarea.titulo || '', tarea.tipo || undefined, tarea.campania_id, null, tarea.id, tarea.contenido));
+        return;
+      }
+    }
     // Notif de comentario: el titulo dice donde fue dejado (solicitud / propuesta / campaña).
     // Sin esto el handler caia al ultimo branch (que solo entra si tipo es
     // Autorización/Rechazo) o al de referencia_tipo+referencia_id (que no existen),
@@ -4950,6 +4966,18 @@ export function NotificacionesPage() {
                                 if (tarea.tipo === 'Mención en Ticket' && tarea.id_solicitud) {
                                   navigate(`/admin/tickets-historial?ticketId=${tarea.id_solicitud}`);
                                   return;
+                                }
+                                // Pruebas de Color: deep-link al submodal de la tarea específica.
+                                if ((isPruebaColorRevisionTarea(tarea.tipo, tarea.titulo) || isPruebaColorSeguimientoTarea(tarea.tipo) || isPruebaColorNotificacionTarea(tarea.tipo) || isPruebaColorImpresionORecepcionTarea(tarea.tipo, tarea.contenido))) {
+                                  const propId = tarea.id_propuesta ? parseInt(tarea.id_propuesta) : NaN;
+                                  if (!isNaN(propId)) {
+                                    navigate(getDirectNavigationPath('propuesta', propId, tarea.titulo || '', tarea.tipo || undefined, tarea.campania_id, propId, tarea.id, tarea.contenido));
+                                    return;
+                                  }
+                                  if (tarea.campania_id) {
+                                    navigate(getDirectNavigationPath('campana', tarea.campania_id, tarea.titulo || '', tarea.tipo || undefined, tarea.campania_id, null, tarea.id, tarea.contenido));
+                                    return;
+                                  }
                                 }
                                 // Notif de comentario: navegar segun el titulo (solicitud / propuesta / campana).
                                 const commentEntity = getCommentEntity(tarea.titulo || '');
