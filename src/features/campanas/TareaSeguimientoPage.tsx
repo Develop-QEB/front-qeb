@@ -15851,7 +15851,10 @@ export function TareaSeguimientoPage() {
   const { data: artesExistentes = [], isLoading: isLoadingArtes } = useQuery({
     queryKey: ['campana-artes-existentes', campanaId],
     queryFn: () => campanasService.getArtesExistentes(campanaId),
-    enabled: campanaId > 0 && (isUploadArtModalOpen || isTaskDetailModalOpen),
+    // Akary 2026-11-13: tambien habilitar en el tab "atender" (Revisar y Aprobar),
+    // porque la logica del boton Aprobar directo necesita saber que artes vienen
+    // de una Revision Anticipada ya aprobada para permitir saltarse la Revision.
+    enabled: campanaId > 0 && (isUploadArtModalOpen || isTaskDetailModalOpen || activeMainTab === 'atender'),
     placeholderData: (prev) => prev,
   });
 
@@ -19642,7 +19645,11 @@ export function TareaSeguimientoPage() {
                       Habilitado en sub-tabs Sin Revisar, En Revisión y Rechazado
                       (los estados pre-aprobación). Jos 2026-10-28: para evitar que
                       se use como atajo indiscriminado, solo se activa cuando TODOS
-                      los artes seleccionados tienen Estatus Operaciones = "En Uso". */}
+                      los artes seleccionados tienen Estatus Operaciones = "En Uso".
+                      Akary 2026-11-13: tambien se activa cuando TODOS los artes de
+                      los items seleccionados provienen de una Revision Anticipada
+                      ya aprobada (biblioteca de artes RA), para saltarse la tarea
+                      de Revision cuando el arte ya fue validado upstream. */}
                   {permissions.canApproveArteSinRevisar
                     && activeEstadoArteTab !== 'aprobado'
                     && (() => {
@@ -19667,11 +19674,33 @@ export function TareaSeguimientoPage() {
                       }
                     };
                     const allEnUso = hasItems && itemsPreAprobacion.every(itemAllEnUso);
-                    const canApprove = hasItems && allEnUso;
+                    // Akary 2026-11-13: set de URLs de artes que estan en la biblioteca
+                    // como RA aprobada. Un item califica para skip-revision si TODOS
+                    // sus artes (artes_detalle) tienen archivo en este set.
+                    const raAprobadaUrls = new Set(
+                      (artesExistentes || [])
+                        .filter(a => a.origen_prueba_color && a.prueba_color_tipo === 'revision_anticipada')
+                        .map(a => (a.url || '').trim())
+                        .filter(Boolean)
+                    );
+                    const itemAllFromRAAprobada = (item: InventoryRow): boolean => {
+                      if (!item.artes_detalle || raAprobadaUrls.size === 0) return false;
+                      try {
+                        const parsed = JSON.parse(item.artes_detalle);
+                        if (!Array.isArray(parsed) || parsed.length === 0) return false;
+                        return parsed.every((art: { archivo?: string | null }) =>
+                          raAprobadaUrls.has(((art?.archivo || '') + '').trim())
+                        );
+                      } catch {
+                        return false;
+                      }
+                    };
+                    const allFromRA = hasItems && itemsPreAprobacion.every(itemAllFromRAAprobada);
+                    const canApprove = hasItems && (allEnUso || allFromRA);
                     const disabledReason = !hasItems
                       ? 'Selecciona artes pendientes de aprobación'
-                      : !allEnUso
-                        ? 'Solo se puede aprobar directo si todos los artes seleccionados tienen Estatus Operaciones = "En Uso"'
+                      : (!allEnUso && !allFromRA)
+                        ? 'Solo se puede aprobar directo si todos los artes seleccionados tienen Estatus Operaciones = "En Uso" o provienen de una Revisión Anticipada aprobada'
                         : '';
                     return (
                       <button
@@ -19680,10 +19709,13 @@ export function TareaSeguimientoPage() {
                             item.rsv_id.split(',').map(id => parseInt(id.trim())).filter(id => !isNaN(id))
                           );
                           if (reservaIds.length > 0) {
+                            const comentario = allEnUso
+                              ? 'Aprobación directa (Estatus Operaciones: En Uso)'
+                              : 'Aprobación directa (arte proviene de Revisión Anticipada aprobada)';
                             updateArteStatusMutation.mutate({
                               reservaIds,
                               status: 'Aprobado',
-                              comentario: 'Aprobación directa (Estatus Operaciones: En Uso)',
+                              comentario,
                             });
                           }
                         }}
