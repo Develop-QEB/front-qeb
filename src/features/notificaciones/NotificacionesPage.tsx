@@ -1729,7 +1729,7 @@ function hasNavigationRoute(tarea: Notificacion): boolean {
 }
 
 // Función para obtener la etiqueta del botón
-function getNavigationLabel(tipo: string, tipoTarea?: string, campaniaId?: number | null, propuestaId?: string | null, idSolicitud?: string | null, titulo?: string): string {
+function getNavigationLabel(tipo: string, tipoTarea?: string, campaniaId?: number | null, propuestaId?: string | null, idSolicitud?: string | null, titulo?: string, contenido?: string | null): string {
   if (tipoTarea === 'Mención en Ticket') {
     return 'Ver Ticket';
   }
@@ -1740,6 +1740,12 @@ function getNavigationLabel(tipo: string, tipoTarea?: string, campaniaId?: numbe
   }
   // Prueba de color (Revisión o Seguimiento o Notificacion de estatus) → abrir modal.
   if (isPruebaColorRevisionTarea(tipoTarea, titulo) || isPruebaColorSeguimientoTarea(tipoTarea) || isPruebaColorNotificacionTarea(tipoTarea)) {
+    return 'Ver Prueba de Color';
+  }
+  // Impresión/Recepción originadas desde Prueba de Color (contienen pruebaColorId):
+  // abrir el submodal de la prueba, no el gestor de artes. Debe ir antes de
+  // isGestionArtesTarea porque Impresión/Recepción también match ahí.
+  if (isPruebaColorImpresionORecepcionTarea(tipoTarea, contenido)) {
     return 'Ver Prueba de Color';
   }
   // Tareas de Gestión de Artes → Ver Gestión de Artes
@@ -2981,7 +2987,7 @@ function TaskDrawer({
               className="mt-4 w-full flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl bg-gradient-to-r from-purple-600 to-pink-600 text-white text-sm font-medium hover:from-purple-500 hover:to-pink-500 transition-all hover:scale-[1.02] active:scale-[0.98] shadow-lg shadow-purple-500/20"
             >
               <ExternalLink className="h-4 w-4" />
-              {getNavigationLabel(tarea.referencia_tipo || '', tarea.tipo || undefined, tarea.campania_id, tarea.id_propuesta, tarea.id_solicitud, tarea.titulo || '')}
+              {getNavigationLabel(tarea.referencia_tipo || '', tarea.tipo || undefined, tarea.campania_id, tarea.id_propuesta, tarea.id_solicitud, tarea.titulo || '', tarea.contenido)}
             </button>
           )}
 
