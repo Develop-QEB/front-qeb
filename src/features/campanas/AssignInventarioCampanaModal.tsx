@@ -5421,7 +5421,7 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
         if ((result.reservasCreadas ?? 0) > 0) ok++; else fail++;
       } catch { fail++; }
     }
-    if (ok > 0) showToast(`${ok} inventario${ok !== 1 ? 's' : ''} regresó a reservados${fail > 0 ? ` · ${fail} no se pudo` : ''}`, 'success');
+    if (ok > 0) showToast(`${ok} inventario${ok !== 1 ? 's' : ''} regres${ok !== 1 ? 'aron' : 'ó'} a reservados${fail > 0 ? ` · ${fail} no se ${fail !== 1 ? 'pudieron' : 'pudo'}` : ''}`, 'success');
     else showToast('No se pudo regresar ninguno (quizá ya están ocupados)', 'error');
     queryClient.invalidateQueries({ queryKey: ['campana-reservas-modal', campana!.id] });
     queryClient.invalidateQueries({ queryKey: ['campana-reservas-historial', campana!.id] });
