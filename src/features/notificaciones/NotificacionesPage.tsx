@@ -1978,6 +1978,19 @@ function getDirectNavigationPath(tipo: string, id: number, titulo: string, tipoT
     }
   }
 
+  // Impresión / Recepción de Prueba de Color → modal PC con deep-link al submodal
+  // de la tarea. Debe ir ANTES de isGestionArtesTarea porque 'Impresión'/'Recepción'
+  // también son tipos de Gestión de Artes: sin este guard la tarea se navega al
+  // Gestor y no al modal de PC. Feedback Jos 2026-11-13.
+  if (isPruebaColorImpresionORecepcionTarea(tipoTarea, contenido)) {
+    if (propuestaId) {
+      return `/propuestas?viewId=${propuestaId}&pruebaColorTareaId=${tareaId || id}`;
+    }
+    if (campaniaId) {
+      return `/campanas/${campaniaId}?pruebaColorTareaId=${tareaId || id}`;
+    }
+  }
+
   // Tareas de Gestión de Artes → Gestión de Artes con auto-open del modal (prioridad sobre propuesta)
   if (isGestionArtesTarea(tipoTarea) && campaniaId) {
     return `/campanas/${campaniaId}/tareas?taskId=${tareaId || id}`;
