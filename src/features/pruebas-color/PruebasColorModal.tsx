@@ -1624,7 +1624,7 @@ function AtenderTareaModal({
               {yaResuelta ? 'Detalle de la tarea' : 'Atender tarea'}
             </div>
             <div className="text-base font-semibold mt-0.5">
-              {esRevision ? 'Revisión de artes' : esSeguimiento ? 'Seguimiento Prueba de color' : tarea.tipo}
+              {esRevision ? 'Revisión de artes' : esSeguimiento ? (esRevisionAnticipada ? 'Seguimiento Revisión Anticipada' : 'Seguimiento Prueba de color') : tarea.tipo}
             </div>
             <div className={`text-[11px] mt-0.5 ${isDark ? 'text-zinc-400' : 'text-gray-500'}`}>
               Tarea #{tarea.id} · {tarea.estatus || 'Sin estado'}
@@ -2285,6 +2285,19 @@ function AtenderTareaModal({
                       Seguimiento porque el seguimiento se da por cerrado
                       cuando se crea el Pedido de impresión; mantener el
                       botón confundía a los usuarios. */}
+                  {/* Jos 2026-11-13: en Revisión Anticipada NO hay Pedido
+                      de impresión, así que el único camino para cerrar el
+                      seguimiento es un botón explícito "Finalizar". */}
+                  {esRevisionAnticipada && !yaResuelta && (
+                    <button
+                      onClick={onFinalizar}
+                      disabled={isSaving}
+                      className={`text-xs font-semibold px-3 py-1.5 rounded border transition-colors inline-flex items-center gap-1 ${isDark ? 'border-emerald-500/60 text-emerald-100 bg-emerald-500/20 hover:bg-emerald-500/30' : 'border-emerald-400 text-emerald-800 bg-emerald-50 hover:bg-emerald-100'} disabled:opacity-50`}
+                    >
+                      {isSaving ? <Loader2 className="h-3 w-3 animate-spin" /> : <CheckCircle2 className="h-3 w-3" />}
+                      Finalizar
+                    </button>
+                  )}
                 </>
               )}
               {/* Jos 2026-11-12: botón único para la tarea Recepción =
