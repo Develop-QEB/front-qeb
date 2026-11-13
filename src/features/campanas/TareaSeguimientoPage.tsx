@@ -3313,28 +3313,9 @@ function UploadArtModal({
                                     placeholder="Estatus de operaciones (opcional)"
                                   />
                                 </div>
-                                <label className={`block text-[10px] font-medium mb-1 mt-1.5 ${isDark ? 'text-zinc-400' : 'text-gray-600'}`}>
-                                  Cantidad inicial en almacén {idx + 1}
-                                </label>
-                                <input
-                                  type="number"
-                                  min={0}
-                                  value={imageCantidadesInicial.get(id) ?? ''}
-                                  onChange={(e) => {
-                                    const raw = e.target.value;
-                                    setImageCantidadesInicial(prev => {
-                                      const next = new Map(prev);
-                                      if (raw === '') next.delete(id);
-                                      else {
-                                        const n = Number(raw);
-                                        if (Number.isFinite(n) && n >= 0) next.set(id, Math.trunc(n));
-                                      }
-                                      return next;
-                                    });
-                                  }}
-                                  placeholder="0 (opcional)"
-                                  className="w-full px-2 py-1.5 text-xs bg-background border border-border rounded-lg focus:outline-none focus:ring-1 focus:ring-purple-500"
-                                />
+                                {/* Akary 2026-11-13: ocultar "Cantidad inicial en almacén"
+                                    aquí (Asignar Arte); la captura inicial se hace en
+                                    Almacén Artes. El campo del back se envía como null. */}
                               </div>
                             </div>
                           </div>
