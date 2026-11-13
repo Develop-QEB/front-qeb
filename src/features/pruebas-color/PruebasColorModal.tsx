@@ -218,6 +218,21 @@ export function PruebasColorModal({ isOpen, onClose, propuestaId, contextoNombre
   }, [isOpen, initialTareaId, pruebasAll]);
 
 
+  // Akary 2026-11-13: trackear qué initialTareaId ya se auto-abrió desde el
+  // padre PruebasColorModal (que NO se desmonta al cambiar de tab). Las
+  // PruebaCard y TareasAsociadasSection SÍ se desmontan al cambiar entre
+  // 'Prueba de color ↔ Revisión Anticipada' o 'Tareas ↔ Nueva solicitud',
+  // así que su useRef interno se perdía y reabría el submodal. Con el state
+  // acá arriba el id consumido sobrevive al remount. Se resetea sólo cuando
+  // el modal se cierra.
+  const [lastAutoOpenedTareaId, setLastAutoOpenedTareaId] = useState<number | null>(null);
+  useEffect(() => {
+    if (!isOpen) setLastAutoOpenedTareaId(null);
+  }, [isOpen]);
+  const effectiveInitialTareaId = (initialTareaId != null && initialTareaId !== lastAutoOpenedTareaId)
+    ? initialTareaId
+    : undefined;
+
   // Akary 2026-11-13: cuando llega initialTareaId cuya prueba madre pertenece
   // al OTRO flujo (p.ej. deep-link de Revisión de artes de una Revisión
   // Anticipada mientras el modal arrancó en 'prueba_color'), cambiar la
@@ -677,7 +692,8 @@ export function PruebasColorModal({ isOpen, onClose, propuestaId, contextoNombre
                                 puedeRevisar={puedeRevisar}
                                 isUpdating={updateEstatusMutation.isPending || deleteMutation.isPending}
                                 totalVersiones={grupo.pruebas.length}
-                                initialTareaId={initialTareaId}
+                                initialTareaId={effectiveInitialTareaId}
+                                onInitialTareaIdConsumed={(id) => setLastAutoOpenedTareaId(id)}
                                 onDelete={() => {
                                   if (confirm(`¿Eliminar la prueba v${p.version}?`)) deleteMutation.mutate(p.id);
                                 }}
@@ -1217,6 +1233,7 @@ function TareasAsociadasSection({
     if (consumedInitialTareaIdRef.current !== initialTareaId) {
       consumedInitialTareaIdRef.current = initialTareaId;
       setOpenTareaId(initialTareaId);
+      onInitialTareaIdConsumed?.(initialTareaId);
     }
   }, [initialTareaId]);
 
