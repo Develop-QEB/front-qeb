@@ -29,7 +29,7 @@ export function TimeInput({
   const handleBlur = () => {
     const d = v.replace(/\D/g, '');
     if (!d) { onChange(''); return; }
-    const hh = Math.min(23, parseInt(d.slice(0, 2).padEnd(2, '0'), 10) || 0);
+    const hh = Math.min(23, parseInt(d.slice(0, 2).padStart(2, '0'), 10) || 0);
     const mm = Math.min(59, parseInt((d.slice(2) || '0').padEnd(2, '0'), 10) || 0);
     onChange(`${String(hh).padStart(2, '0')}:${String(mm).padStart(2, '0')}`);
   };
