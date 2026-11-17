@@ -3044,6 +3044,11 @@ export function esTrafico(rol?: string | null): boolean {
   return !!rol && /trafico/i.test(rol);
 }
 
+// Admin del sistema: Administrador y DEV (case-insensitive, tolerante a espacios).
+export function esAdmin(rol?: string | null): boolean {
+  return /^(administrador|dev)$/i.test(String(rol || '').trim());
+}
+
 // Usuarios con acceso UDC por EXCEPCIÓN (además de los ROLES_UDC), por nombre.
 // Para dar UDC a alguien puntual sin cambiarle el rol. Comparación tolerante a
 // acentos / mayúsculas / espacios dobles.

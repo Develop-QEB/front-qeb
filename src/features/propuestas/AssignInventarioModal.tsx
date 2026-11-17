@@ -28,7 +28,7 @@ import { circuitosService } from '../../services/circuitos.service';
 import { clientesService } from '../../services/clientes.service';
 import { useEnvironmentStore, getEndpoints } from '../../store/environmentStore';
 import { useAuthStore } from '../../store/authStore';
-import { getPermissions, esAsesorComercial, esTrafico } from '../../lib/permissions';
+import { getPermissions, esAsesorComercial, esTrafico, esAdmin } from '../../lib/permissions';
 import { filterAllowedArticulos } from '../../config/allowedDigitalArticles';
 import { parseArticuloUDC, esArticuloUDCBasura, buildUdcInventarioDisponible, udcPantallaNum, udcFichaDe, UDC_FORMATO } from '../../lib/udc';
 
@@ -1321,10 +1321,10 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
     enabled: isOpen && !!propuesta.id,
   });
 
-  // ── Bloqueo de circuito (apartado exclusivo — SOLO Tráfico) ─────────────────
+  // ── Bloqueo de circuito (apartado exclusivo — Tráfico y Admin) ──────────────
   // Marca las reservas del circuito como 'Reservado Bloqueado': ocupan en
   // exclusiva (nadie más las aparta ni las roba una campaña) sin ser venta.
-  const puedeBloquearCircuito = esTrafico(user?.rol);
+  const puedeBloquearCircuito = esTrafico(user?.rol) || esAdmin(user?.rol);
   const [bloqueoCircuitoLoading, setBloqueoCircuitoLoading] = useState(false);
   // ¿El circuito activo del buscador ya está bloqueado? (lee el estatus crudo).
   const circuitoActivoBloqueado = useMemo(() => {
