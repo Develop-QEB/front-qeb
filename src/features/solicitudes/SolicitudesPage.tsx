@@ -4,7 +4,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import {
   Search, Download, Trash2, FileText,
   Filter, ChevronDown, ChevronRight, X, Layers, SlidersHorizontal,
-  ArrowUpDown, Calendar, Clock, Plus, Eye, Edit2, PlayCircle, MessageSquare
+  ArrowUpDown, Calendar, Clock, Plus, Eye, Edit2, PlayCircle, MessageSquare, Calculator
 } from 'lucide-react';
 import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip as RechartsTooltip, Legend } from 'recharts';
 
@@ -14,6 +14,7 @@ import { Solicitud, Catorcena } from '../../types';
 import { formatCurrency, formatDate } from '../../lib/utils';
 import { tablePeriodoLabel } from '../../lib/periodos';
 import { CreateSolicitudModal } from './CreateSolicitudModal';
+import { PropuestaEconomicaModal } from './PropuestaEconomicaModal';
 import { ViewSolicitudModal, StatusModal, AtenderModal } from './SolicitudModals';
 import { useAuthStore } from '../../store/authStore';
 import { useThemeStore } from '../../store/themeStore';
@@ -745,6 +746,7 @@ export function SolicitudesPage() {
   const [page, setPage] = useState(1);
   const [deleteId, setDeleteId] = useState<number | null>(null);
   const [showCreateModal, setShowCreateModal] = useState(false);
+  const [showPropuestaEconomica, setShowPropuestaEconomica] = useState(false);
   const [viewSolicitudId, setViewSolicitudId] = useState<number | null>(null);
   const [editSolicitud, setEditSolicitud] = useState<Solicitud | null>(null);
 
@@ -1337,6 +1339,20 @@ export function SolicitudesPage() {
                 Exportar CSV
               </button>
 
+              {/* Propuesta económica (cotización formato GRUPO IMU) */}
+              {permissions.canCreateSolicitudes && (
+                <button
+                  onClick={() => setShowPropuestaEconomica(true)}
+                  title="Propuesta económica"
+                  className={`flex shrink-0 items-center gap-2 px-3 py-2 rounded-xl text-sm font-medium whitespace-nowrap ${isDark ? 'bg-purple-500/15 text-purple-300 border border-purple-500/30 hover:bg-purple-500/25' : 'bg-purple-50 text-purple-700 border border-purple-200 hover:bg-purple-100'} transition-all`}
+                >
+                  <Calculator className="h-4 w-4" />
+                  {/* Texto solo en pantallas muy anchas: a menos de 1900px empuja
+                      "Nueva Solicitud" a una segunda fila. */}
+                  <span className="hidden min-[1900px]:inline">Propuesta económica</span>
+                </button>
+              )}
+
               {/* Nueva Solicitud */}
               {permissions.canCreateSolicitudes && (
                 <button
@@ -1827,6 +1843,14 @@ export function SolicitudesPage() {
         <CreateSolicitudModal
           isOpen={showCreateModal}
           onClose={() => setShowCreateModal(false)}
+        />
+      )}
+
+      {/* Propuesta económica — lazy-mount para no cargar clientes en background. */}
+      {showPropuestaEconomica && (
+        <PropuestaEconomicaModal
+          isOpen={showPropuestaEconomica}
+          onClose={() => setShowPropuestaEconomica(false)}
         />
       )}
 
