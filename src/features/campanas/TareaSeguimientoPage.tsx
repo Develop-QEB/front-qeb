@@ -185,7 +185,21 @@ const getImageUrl = (url: string | undefined | null): string | null => {
       // includes('/uploads') reescribía URLs externas tipo /wp-content/uploads/...
       // y las rompía mandándolas al backend local.
       if (path.startsWith('/uploads')) {
-        return `${STATIC_URL}${path}`;
+        // Akary 2026-11-17: si la URL absoluta ya apunta a OTRO host (ej. foto
+        // guardada apuntando a back prod y abierta desde dev), reescribirla al
+        // STATIC_URL local rompe (devuelve 404 y ArteImg pinta placeholder
+        // "sin imagen"). Solo reescribir cuando el origen coincide o el host
+        // es local (localhost/127.0.0.1).
+        try {
+          const staticOrigin = new URL(STATIC_URL).origin;
+          const isLocalHost = /^localhost(:|$)|^127\.0\.0\.1(:|$)/.test(urlObj.host);
+          if (urlObj.origin === staticOrigin || isLocalHost) {
+            return `${STATIC_URL}${path}`;
+          }
+          return url;
+        } catch {
+          return `${STATIC_URL}${path}`;
+        }
       }
       // URL externa válida: pasa tal cual.
       return url;
@@ -7194,7 +7208,15 @@ function TaskDetailModal({
         );
       }
 
-      // Subir fotos comprobatorias si existen
+      // Subir fotos comprobatorias si existen.
+      // Akary 2026-11-17: antes el catch era silencioso: si el upload tronaba
+      // (red tirada, archivo corrupto, 413 del back), archivoTestigoUrl quedaba
+      // undefined, onTaskComplete lo omitia del payload y la tarea quedaba
+      // Atendido con archivo_testigo=NULL. El usuario pensaba que habia subido
+      // la foto pero al reabrir el detalle no habia nada ("no sirve" de Jos
+      // 2026-11-10). Ahora el error se muestra con alert y ABORTA la
+      // finalizacion para que el usuario reintente conservando los files en
+      // memoria (no se cierra el modal, no se marca Atendido).
       let archivoTestigoUrl: string | undefined;
       if (recepcionFiles.length > 0) {
         setIsUploadingRecepcion(true);
@@ -7207,6 +7229,12 @@ function TaskDetailModal({
           archivoTestigoUrl = JSON.stringify(uploadedUrls);
         } catch (uploadErr) {
           console.error('Error al subir fotos comprobatorias:', uploadErr);
+          const msg = uploadErr instanceof Error ? uploadErr.message : 'Error desconocido';
+          alert(
+            `No se pudieron subir las fotos comprobatorias:\n\n${msg}\n\n` +
+            'La recepción NO se marco como completada. Revisa tu conexión o el tamaño/formato de las fotos y vuelve a intentar.'
+          );
+          return;
         } finally {
           setIsUploadingRecepcion(false);
         }
@@ -8864,22 +8892,29 @@ function TaskDetailModal({
                           // ni manejo de error — si Spaces respondia con
                           // referrer policy fallido el thumbnail quedaba en 0px
                           // y solo se veia el texto del alt.
+                          // Akary 2026-11-17: antes era <button onClick=window.open>
+                          // y los popup blockers o cualquier error silencioso del navegador
+                          // hacian que al click no pasara nada ("no sirve" de Jos 2026-11-10).
+                          // Un <a href target=_blank> es nativo y nunca se bloquea cuando
+                          // el click viene del usuario. Fallback por si getImageUrl devuelve
+                          // null (url rara): abrir la url cruda igual.
                           return urls.map((url, idx) => {
                             const imgUrl = getImageUrl(url) || url;
                             return (
-                              <button
+                              <a
                                 key={idx}
-                                type="button"
-                                onClick={() => window.open(imgUrl, '_blank')}
+                                href={imgUrl}
+                                target="_blank"
+                                rel="noopener noreferrer"
                                 className="w-32 h-32 rounded-lg border border-border overflow-hidden cursor-pointer hover:opacity-90 transition-opacity bg-zinc-900/50 flex items-center justify-center"
-                                title={`Comprobante ${idx + 1}`}
+                                title={`Abrir comprobante ${idx + 1} en nueva pestaña`}
                               >
                                 <ArteImg
                                   src={url}
                                   alt={`Comprobante ${idx + 1}`}
                                   className="w-full h-full object-cover"
                                 />
-                              </button>
+                              </a>
                             );
                           });
                         })()}
