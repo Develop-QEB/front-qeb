@@ -1485,6 +1485,53 @@ export function CampanaDetailPage() {
       });
   }, [selectedItems, inventarioReservado, groupCompletenessMap]);
 
+  // Circuitos (solicitudCaras) con faltante o excedente entre los items dados.
+  // Lo usa la Lista por APS: ahí un grupo (un APS) puede traer varios
+  // circuitos, así que no aplica el "exactamente un circuito" de la lista Sin APS.
+  const getCompletenessIssues = useCallback((items: Array<{ solicitud_caras_id: number | null }>) => {
+    const ids = [...new Set(items.map(i => i.solicitud_caras_id).filter((id): id is number => id != null))];
+    return ids
+      .map(id => groupCompletenessMap.get(id))
+      .filter((info): info is NonNullable<typeof info> => !!info && (info.exceso || !info.completo));
+  }, [groupCompletenessMap]);
+
+  // Badges de faltante/excedente para las cabeceras de grupo de la Lista por
+  // APS. Mismo estilo que la lista Sin APS (naranja = excedente, amarillo = faltante).
+  const renderAPSCompletenessBadges = (items: Array<{ solicitud_caras_id: number | null }>) => {
+    const issues = getCompletenessIssues(items);
+    if (issues.length === 0) return null;
+    const excesos = issues.filter(i => i.exceso);
+    const faltantes = issues.filter(i => !i.completo);
+    const totalExceso = excesos.reduce((s, i) => s + (i.reservadas - i.esperadas), 0);
+    const totalFaltan = faltantes.reduce((s, i) => s + (i.esperadas - i.reservadas), 0);
+    return (
+      <>
+        {excesos.length > 0 && (
+          <span className="flex items-center gap-1 shrink-0">
+            <AlertTriangle className="h-3 w-3 text-orange-400 shrink-0" />
+            <span
+              className="px-1.5 py-0.5 rounded text-[9px] font-semibold bg-orange-500/20 text-orange-400 border border-orange-500/30"
+              title={`Exceso: ${excesos.map(i => `${i.reservadas}/${i.esperadas} caras`).join(', ')}`}
+            >
+              +{totalExceso}
+            </span>
+          </span>
+        )}
+        {faltantes.length > 0 && (
+          <span className="flex items-center gap-1 shrink-0">
+            <AlertTriangle className="h-3 w-3 text-yellow-400 shrink-0" />
+            <span
+              className="px-1.5 py-0.5 rounded text-[9px] font-semibold bg-yellow-500/20 text-yellow-400 border border-yellow-500/30"
+              title={`Incompleto: ${faltantes.map(i => `${i.reservadas}/${i.esperadas} caras`).join(', ')}`}
+            >
+              {faltantes.length === 1 ? `${faltantes[0].reservadas}/${faltantes[0].esperadas}` : `Faltan ${totalFaltan}`}
+            </span>
+          </span>
+        )}
+      </>
+    );
+  };
+
   // Items de inventarioReservado cuyos grupos están incompletos → aparecen en tabla APS como pendientes
   const incompleteReservadoForAPS = useMemo(() => {
     return inventarioReservado.filter(item => {
@@ -4446,7 +4493,14 @@ export function CampanaDetailPage() {
                   inventarioConAPS.filter(i => selectedItemsAPS.has(String(i.rsv_ids))).some(i => postedAPSGroups.has(i.aps));
                 const selectedHavePrefacturaAPS = selectedItemsAPS.size > 0 &&
                   inventarioConAPS.filter(i => selectedItemsAPS.has(String(i.rsv_ids))).some(i => prefacturaAPSGroups.has(i.aps));
-                const isPostDisabled = alreadyPosted || selectedHavePostedAPS || selectedHavePrefacturaAPS;
+                // Faltantes/excedentes: no se postea a SAP un circuito que no cuadra
+                // (lo seleccionado, o todo si no hay selección — es lo que se enviaría).
+                // Las cortesías se marcan pero no bloquean, igual que al asignar APS.
+                const itemsAPostear = selectedItemsAPS.size > 0
+                  ? inventarioConAPS.filter(i => selectedItemsAPS.has(String(i.rsv_ids)))
+                  : inventarioConAPS;
+                const hayFaltanteOExcedente = getCompletenessIssues(itemsAPostear).some(i => !i.cortesia);
+                const isPostDisabled = alreadyPosted || selectedHavePostedAPS || selectedHavePrefacturaAPS || hayFaltanteOExcedente;
                 return (
                   <button
                     onClick={() => {
@@ -4462,7 +4516,7 @@ export function CampanaDetailPage() {
                     }}
                     disabled={isPostDisabled}
                     className={`flex items-center justify-center px-2 sm:px-3 py-1 sm:py-1.5 rounded-lg border transition-colors ${isPostDisabled ? (isDark ? 'bg-zinc-800/50 border-zinc-700' : 'bg-gray-100 border-gray-200') + ' cursor-not-allowed opacity-50' : (isDark ? 'bg-cyan-900/30' : 'bg-cyan-50') + ' border-cyan-500/20 hover:bg-cyan-500/20 hover:border-cyan-500/40'}`}
-                    title={alreadyPosted ? 'Ya se envió a SAP' : selectedHavePostedAPS ? 'Este APS ya fue enviado a SAP' : selectedHavePrefacturaAPS ? 'Este APS está etiquetado como Pre Factura — no se puede mandar a SAP. Cancela la etiqueta primero.' : 'Enviar a SAP'}
+                    title={alreadyPosted ? 'Ya se envió a SAP' : selectedHavePostedAPS ? 'Este APS ya fue enviado a SAP' : selectedHavePrefacturaAPS ? 'Este APS está etiquetado como Pre Factura — no se puede mandar a SAP. Cancela la etiqueta primero.' : hayFaltanteOExcedente ? 'Hay circuitos con faltantes o excedentes de caras — ajusta el inventario antes de enviar a SAP' : 'Enviar a SAP'}
                   >
                     <Upload className={`h-3 sm:h-3.5 w-3 sm:w-3.5 mr-1 ${isPostDisabled ? (isDark ? 'text-zinc-500' : 'text-gray-400') : (isDark ? 'text-cyan-400' : 'text-cyan-600')}`} />
                     <span className={`text-[10px] sm:text-xs font-medium ${isPostDisabled ? (isDark ? 'text-zinc-500' : 'text-gray-400') : (isDark ? 'text-cyan-300' : 'text-cyan-700')}`}>{alreadyPosted ? 'ENVIADO' : 'POST'}</span>
@@ -5183,6 +5237,7 @@ export function CampanaDetailPage() {
                               <DesposteoBadge estado={estadosDesposteoAps[allGroupItemsAPS[0].aps]} />
                             )}
                             <GroupSummaryInline items={allGroupItemsAPS} groupField={activeGroupingsAPS[0]} />
+                            {renderAPSCompletenessBadges(allGroupItemsAPS)}
                             <span className="ml-auto text-[10px] text-muted-foreground shrink-0">
                               {totalItems} items
                             </span>
@@ -5339,6 +5394,7 @@ export function CampanaDetailPage() {
                                             <DesposteoBadge estado={estadosDesposteoAps[allSubItemsAPS[0].aps]} />
                                           )}
                                           <GroupSummaryInline items={allSubItemsAPS} groupField={activeGroupingsAPS[1]} />
+                                          {renderAPSCompletenessBadges(allSubItemsAPS)}
                                           <span className="ml-auto text-[10px] text-muted-foreground shrink-0">
                                             {subTotalItems}
                                           </span>
@@ -5490,6 +5546,7 @@ export function CampanaDetailPage() {
                                                           <DesposteoBadge estado={estadosDesposteoAps[thirdItems[0].aps]} />
                                                         )}
                                                         <GroupSummaryInline items={thirdItems} groupField={activeGroupingsAPS[2]} />
+                                                        {renderAPSCompletenessBadges(thirdItems)}
                                                         <span className="ml-auto text-[10px] text-muted-foreground shrink-0">
                                                           {thirdItems.length}
                                                         </span>
