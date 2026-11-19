@@ -185,7 +185,21 @@ const getImageUrl = (url: string | undefined | null): string | null => {
       // includes('/uploads') reescribía URLs externas tipo /wp-content/uploads/...
       // y las rompía mandándolas al backend local.
       if (path.startsWith('/uploads')) {
-        return `${STATIC_URL}${path}`;
+        // Akary 2026-11-17: si la URL absoluta ya apunta a OTRO host (ej. foto
+        // guardada apuntando a back prod y abierta desde dev), reescribirla al
+        // STATIC_URL local rompe (devuelve 404 y ArteImg pinta placeholder
+        // "sin imagen"). Solo reescribir cuando el origen coincide o el host
+        // es local (localhost/127.0.0.1).
+        try {
+          const staticOrigin = new URL(STATIC_URL).origin;
+          const isLocalHost = /^localhost(:|$)|^127\.0\.0\.1(:|$)/.test(urlObj.host);
+          if (urlObj.origin === staticOrigin || isLocalHost) {
+            return `${STATIC_URL}${path}`;
+          }
+          return url;
+        } catch {
+          return `${STATIC_URL}${path}`;
+        }
       }
       // URL externa válida: pasa tal cual.
       return url;
@@ -1621,6 +1635,10 @@ function UploadArtModal({
   const [duplicateWarning, setDuplicateWarning] = useState<{ nombre: string; usos: number; url: string } | null>(null);
   const [isCheckingDuplicate, setIsCheckingDuplicate] = useState(false);
 
+  // Akary 2026-11-13: para invalidar la cache de artes-existentes tras
+  // persistir un arte subido en biblioteca_artes del back.
+  const queryClient = useQueryClient();
+
   // Local library: extends artesExistentes with uploaded files/URLs (addedArtes persists in parent)
   // Dedup por URL: si un arte subido localmente ya coincide con uno existente
   // del backend (porque ya se subió y el backend lo devolvió), evitar duplicado
@@ -2267,6 +2285,26 @@ function UploadArtModal({
     }
   };
 
+  // Akary 2026-11-13: persiste un arte subido en biblioteca_artes del back
+  // apenas se sube. Antes solo se guardaba al terminar el wizard, por eso un
+  // F5 lo perdia. Si falla, no interrumpimos el flujo: el arte sigue en
+  // addedArtes (state local) para que la UX no se rompa.
+  const persistArteEnBiblioteca = (
+    archivo: string,
+    tipo: 'tradicional' | 'digital',
+    nombreArte?: string | null,
+  ) => {
+    if (!campanaId || !archivo) return;
+    campanasService
+      .addToBibliotecaArtes(campanaId, { archivo, tipo, nombre_arte: nombreArte ?? null })
+      .then(() => {
+        queryClient.invalidateQueries({ queryKey: ['campana-artes-existentes', campanaId], exact: false });
+      })
+      .catch((err) => {
+        console.warn('[biblioteca-artes] persistencia fallo, el arte queda solo en addedArtes:', err);
+      });
+  };
+
   const addUploadedFile = async (selectedFile: File) => {
     const id = `upload-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
 
@@ -2280,6 +2318,7 @@ function UploadArtModal({
         url: uploadResult.url,
         usos: 0,
       }]);
+      persistArteEnBiblioteca(uploadResult.url, 'tradicional', selectedFile.name);
     } catch (err: any) {
       console.error('Error uploading file:', err);
       const backendError = err?.response?.data?.error
@@ -2302,6 +2341,7 @@ function UploadArtModal({
       url: trimmed,
       usos: 0,
     }]);
+    persistArteEnBiblioteca(trimmed, 'tradicional', trimmed.split('/').pop() || null);
   };
 
   // URL upload para flujo digital (imagen o video). Mismo patrón que addUrlImage
@@ -2317,6 +2357,7 @@ function UploadArtModal({
       url: trimmed,
       usos: 0,
     }]);
+    persistArteEnBiblioteca(trimmed, 'digital', trimmed.split('/').pop() || null);
   };
 
   // Helpers para el wizard digital
@@ -2349,6 +2390,7 @@ function UploadArtModal({
         url: uploadResult.url,
         usos: 0,
       }]);
+      persistArteEnBiblioteca(uploadResult.url, 'digital', selectedFile.name);
     } catch (err: any) {
       console.error('Error uploading digital file:', err);
       // Mostrar al usuario el mensaje real del backend (ej. "El archivo es demasiado
@@ -3313,28 +3355,9 @@ function UploadArtModal({
                                     placeholder="Estatus de operaciones (opcional)"
                                   />
                                 </div>
-                                <label className={`block text-[10px] font-medium mb-1 mt-1.5 ${isDark ? 'text-zinc-400' : 'text-gray-600'}`}>
-                                  Cantidad inicial en almacén {idx + 1}
-                                </label>
-                                <input
-                                  type="number"
-                                  min={0}
-                                  value={imageCantidadesInicial.get(id) ?? ''}
-                                  onChange={(e) => {
-                                    const raw = e.target.value;
-                                    setImageCantidadesInicial(prev => {
-                                      const next = new Map(prev);
-                                      if (raw === '') next.delete(id);
-                                      else {
-                                        const n = Number(raw);
-                                        if (Number.isFinite(n) && n >= 0) next.set(id, Math.trunc(n));
-                                      }
-                                      return next;
-                                    });
-                                  }}
-                                  placeholder="0 (opcional)"
-                                  className="w-full px-2 py-1.5 text-xs bg-background border border-border rounded-lg focus:outline-none focus:ring-1 focus:ring-purple-500"
-                                />
+                                {/* Akary 2026-11-13: ocultar "Cantidad inicial en almacén"
+                                    aquí (Asignar Arte); la captura inicial se hace en
+                                    Almacén Artes. El campo del back se envía como null. */}
                               </div>
                             </div>
                           </div>
@@ -7185,7 +7208,15 @@ function TaskDetailModal({
         );
       }
 
-      // Subir fotos comprobatorias si existen
+      // Subir fotos comprobatorias si existen.
+      // Akary 2026-11-17: antes el catch era silencioso: si el upload tronaba
+      // (red tirada, archivo corrupto, 413 del back), archivoTestigoUrl quedaba
+      // undefined, onTaskComplete lo omitia del payload y la tarea quedaba
+      // Atendido con archivo_testigo=NULL. El usuario pensaba que habia subido
+      // la foto pero al reabrir el detalle no habia nada ("no sirve" de Jos
+      // 2026-11-10). Ahora el error se muestra con alert y ABORTA la
+      // finalizacion para que el usuario reintente conservando los files en
+      // memoria (no se cierra el modal, no se marca Atendido).
       let archivoTestigoUrl: string | undefined;
       if (recepcionFiles.length > 0) {
         setIsUploadingRecepcion(true);
@@ -7198,6 +7229,12 @@ function TaskDetailModal({
           archivoTestigoUrl = JSON.stringify(uploadedUrls);
         } catch (uploadErr) {
           console.error('Error al subir fotos comprobatorias:', uploadErr);
+          const msg = uploadErr instanceof Error ? uploadErr.message : 'Error desconocido';
+          alert(
+            `No se pudieron subir las fotos comprobatorias:\n\n${msg}\n\n` +
+            'La recepción NO se marco como completada. Revisa tu conexión o el tamaño/formato de las fotos y vuelve a intentar.'
+          );
+          return;
         } finally {
           setIsUploadingRecepcion(false);
         }
@@ -8855,22 +8892,29 @@ function TaskDetailModal({
                           // ni manejo de error — si Spaces respondia con
                           // referrer policy fallido el thumbnail quedaba en 0px
                           // y solo se veia el texto del alt.
+                          // Akary 2026-11-17: antes era <button onClick=window.open>
+                          // y los popup blockers o cualquier error silencioso del navegador
+                          // hacian que al click no pasara nada ("no sirve" de Jos 2026-11-10).
+                          // Un <a href target=_blank> es nativo y nunca se bloquea cuando
+                          // el click viene del usuario. Fallback por si getImageUrl devuelve
+                          // null (url rara): abrir la url cruda igual.
                           return urls.map((url, idx) => {
                             const imgUrl = getImageUrl(url) || url;
                             return (
-                              <button
+                              <a
                                 key={idx}
-                                type="button"
-                                onClick={() => window.open(imgUrl, '_blank')}
+                                href={imgUrl}
+                                target="_blank"
+                                rel="noopener noreferrer"
                                 className="w-32 h-32 rounded-lg border border-border overflow-hidden cursor-pointer hover:opacity-90 transition-opacity bg-zinc-900/50 flex items-center justify-center"
-                                title={`Comprobante ${idx + 1}`}
+                                title={`Abrir comprobante ${idx + 1} en nueva pestaña`}
                               >
                                 <ArteImg
                                   src={url}
                                   alt={`Comprobante ${idx + 1}`}
                                   className="w-full h-full object-cover"
                                 />
-                              </button>
+                              </a>
                             );
                           });
                         })()}
@@ -15870,7 +15914,10 @@ export function TareaSeguimientoPage() {
   const { data: artesExistentes = [], isLoading: isLoadingArtes } = useQuery({
     queryKey: ['campana-artes-existentes', campanaId],
     queryFn: () => campanasService.getArtesExistentes(campanaId),
-    enabled: campanaId > 0 && (isUploadArtModalOpen || isTaskDetailModalOpen),
+    // Akary 2026-11-13: tambien habilitar en el tab "atender" (Revisar y Aprobar),
+    // porque la logica del boton Aprobar directo necesita saber que artes vienen
+    // de una Revision Anticipada ya aprobada para permitir saltarse la Revision.
+    enabled: campanaId > 0 && (isUploadArtModalOpen || isTaskDetailModalOpen || activeMainTab === 'atender'),
     placeholderData: (prev) => prev,
   });
 
@@ -19661,7 +19708,11 @@ export function TareaSeguimientoPage() {
                       Habilitado en sub-tabs Sin Revisar, En Revisión y Rechazado
                       (los estados pre-aprobación). Jos 2026-10-28: para evitar que
                       se use como atajo indiscriminado, solo se activa cuando TODOS
-                      los artes seleccionados tienen Estatus Operaciones = "En Uso". */}
+                      los artes seleccionados tienen Estatus Operaciones = "En Uso".
+                      Akary 2026-11-13: tambien se activa cuando TODOS los artes de
+                      los items seleccionados provienen de una Revision Anticipada
+                      ya aprobada (biblioteca de artes RA), para saltarse la tarea
+                      de Revision cuando el arte ya fue validado upstream. */}
                   {permissions.canApproveArteSinRevisar
                     && activeEstadoArteTab !== 'aprobado'
                     && (() => {
@@ -19686,11 +19737,33 @@ export function TareaSeguimientoPage() {
                       }
                     };
                     const allEnUso = hasItems && itemsPreAprobacion.every(itemAllEnUso);
-                    const canApprove = hasItems && allEnUso;
+                    // Akary 2026-11-13: set de URLs de artes que estan en la biblioteca
+                    // como RA aprobada. Un item califica para skip-revision si TODOS
+                    // sus artes (artes_detalle) tienen archivo en este set.
+                    const raAprobadaUrls = new Set(
+                      (artesExistentes || [])
+                        .filter(a => a.origen_prueba_color && a.prueba_color_tipo === 'revision_anticipada')
+                        .map(a => (a.url || '').trim())
+                        .filter(Boolean)
+                    );
+                    const itemAllFromRAAprobada = (item: InventoryRow): boolean => {
+                      if (!item.artes_detalle || raAprobadaUrls.size === 0) return false;
+                      try {
+                        const parsed = JSON.parse(item.artes_detalle);
+                        if (!Array.isArray(parsed) || parsed.length === 0) return false;
+                        return parsed.every((art: { archivo?: string | null }) =>
+                          raAprobadaUrls.has(((art?.archivo || '') + '').trim())
+                        );
+                      } catch {
+                        return false;
+                      }
+                    };
+                    const allFromRA = hasItems && itemsPreAprobacion.every(itemAllFromRAAprobada);
+                    const canApprove = hasItems && (allEnUso || allFromRA);
                     const disabledReason = !hasItems
                       ? 'Selecciona artes pendientes de aprobación'
-                      : !allEnUso
-                        ? 'Solo se puede aprobar directo si todos los artes seleccionados tienen Estatus Operaciones = "En Uso"'
+                      : (!allEnUso && !allFromRA)
+                        ? 'Solo se puede aprobar directo si todos los artes seleccionados tienen Estatus Operaciones = "En Uso" o provienen de una Revisión Anticipada aprobada'
                         : '';
                     return (
                       <button
@@ -19699,10 +19772,13 @@ export function TareaSeguimientoPage() {
                             item.rsv_id.split(',').map(id => parseInt(id.trim())).filter(id => !isNaN(id))
                           );
                           if (reservaIds.length > 0) {
+                            const comentario = allEnUso
+                              ? 'Aprobación directa (Estatus Operaciones: En Uso)'
+                              : 'Aprobación directa (arte proviene de Revisión Anticipada aprobada)';
                             updateArteStatusMutation.mutate({
                               reservaIds,
                               status: 'Aprobado',
-                              comentario: 'Aprobación directa (Estatus Operaciones: En Uso)',
+                              comentario,
                             });
                           }
                         }}

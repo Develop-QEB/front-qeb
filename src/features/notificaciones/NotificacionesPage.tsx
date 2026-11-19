@@ -200,6 +200,7 @@ const TIPOS_GESTOR_ARTES = new Set([
   'Programación para Tráfico', 'Programacion para Trafico',
   'Orden de Programación', 'Orden de Programacion',
   'Orden de Instalación', 'Orden de Instalacion',
+  'Seguimiento Prueba de color', 'Seguimiento prueba de color',
 ]);
 function isTareaGestorArtes(tipo?: string | null): boolean {
   if (!tipo) return false;
@@ -280,7 +281,7 @@ type QuickFilterKey =
 // Estatus "resueltos": no cuentan en la campanita ni en "Sin finalizar" / "No
 // leídas". Debe coincidir con ESTATUS_RESUELTOS del backend
 // (notificaciones.controller.ts) o el conteo de la lista se descuadra del badge.
-const ESTATUS_RESUELTOS = ['Atendido', 'Rechazado', 'Cancelado'];
+const ESTATUS_RESUELTOS = ['Atendido', 'Finalizada', 'Aprobada', 'Completado', 'Rechazado', 'Cancelado'];
 const esResuelta = (estatus?: string | null) => !!estatus && ESTATUS_RESUELTOS.includes(estatus);
 
 // Roles de dirección: su listado de tareas se muestra SIEMPRE extendido (los
@@ -1635,6 +1636,17 @@ function isPruebaColorSeguimientoTarea(tipo?: string | null): boolean {
 function isPruebaColorNotificacionTarea(tipo?: string | null): boolean {
   return tipo === 'Prueba de Color';
 }
+// Tarea Impresión/Recepción originada desde el drawer de Pruebas de Color:
+// detectar por tipo + presencia de pruebaColorId en contenido JSON. Permite
+// deep-linkear al submodal de la prueba en vez de al Gestor de Artes.
+function isPruebaColorImpresionORecepcionTarea(tipo?: string | null, contenido?: string | null): boolean {
+  if (tipo !== 'Impresión' && tipo !== 'Recepción') return false;
+  if (!contenido) return false;
+  try {
+    const c = JSON.parse(contenido);
+    return Number.isFinite(Number(c?.pruebaColorId));
+  } catch { return false; }
+}
 // Parsea el contenido JSON de una tarea tipo 'Prueba de Color' para
 // extraer scId / propuestaId / requiereNuevaVersion.
 function parsePruebaColorNotifContent(contenido?: string | null): {
@@ -1811,7 +1823,7 @@ function hasNavigationRoute(tarea: Notificacion): boolean {
 }
 
 // Función para obtener la etiqueta del botón
-function getNavigationLabel(tipo: string, tipoTarea?: string, campaniaId?: number | null, propuestaId?: string | null, idSolicitud?: string | null, titulo?: string): string {
+function getNavigationLabel(tipo: string, tipoTarea?: string, campaniaId?: number | null, propuestaId?: string | null, idSolicitud?: string | null, titulo?: string, contenido?: string | null): string {
   if (tipoTarea === 'Mención en Ticket') {
     return 'Ver Ticket';
   }
@@ -1822,6 +1834,12 @@ function getNavigationLabel(tipo: string, tipoTarea?: string, campaniaId?: numbe
   }
   // Prueba de color (Revisión o Seguimiento o Notificacion de estatus) → abrir modal.
   if (isPruebaColorRevisionTarea(tipoTarea, titulo) || isPruebaColorSeguimientoTarea(tipoTarea) || isPruebaColorNotificacionTarea(tipoTarea)) {
+    return 'Ver Prueba de Color';
+  }
+  // Impresión/Recepción originadas desde Prueba de Color (contienen pruebaColorId):
+  // abrir el submodal de la prueba, no el gestor de artes. Debe ir antes de
+  // isGestionArtesTarea porque Impresión/Recepción también match ahí.
+  if (isPruebaColorImpresionORecepcionTarea(tipoTarea, contenido)) {
     return 'Ver Prueba de Color';
   }
   // Tareas de Gestión de Artes → Ver Gestión de Artes
@@ -1952,6 +1970,19 @@ function getDirectNavigationPath(tipo: string, id: number, titulo: string, tipoT
     if (propuestaId && parsed.scId && parsed.requiereNuevaVersion) {
       return `/propuestas?viewId=${propuestaId}&pruebaColorNuevaScId=${parsed.scId}`;
     }
+    if (propuestaId) {
+      return `/propuestas?viewId=${propuestaId}&pruebaColorTareaId=${tareaId || id}`;
+    }
+    if (campaniaId) {
+      return `/campanas/${campaniaId}?pruebaColorTareaId=${tareaId || id}`;
+    }
+  }
+
+  // Impresión / Recepción de Prueba de Color → modal PC con deep-link al submodal
+  // de la tarea. Debe ir ANTES de isGestionArtesTarea porque 'Impresión'/'Recepción'
+  // también son tipos de Gestión de Artes: sin este guard la tarea se navega al
+  // Gestor y no al modal de PC. Feedback Jos 2026-11-13.
+  if (isPruebaColorImpresionORecepcionTarea(tipoTarea, contenido)) {
     if (propuestaId) {
       return `/propuestas?viewId=${propuestaId}&pruebaColorTareaId=${tareaId || id}`;
     }
@@ -2870,6 +2901,21 @@ function TaskDrawer({
       onNavigate(`/admin/tickets-historial?ticketId=${tarea.id_solicitud}`);
       return;
     }
+    // Pruebas de Color (Revisión / Seguimiento / Notificación / Impresión / Recepción):
+    // propuesta o campaña + id de la TAREA para que el modal haga deep-link al submodal
+    // específico. Sin este branch el handler caía sin llamar onNavigate, o pasaba el id
+    // de la propuesta como tareaId (feedback Akary 2026-11-13: "no me abrio el modal de la tarea").
+    if ((isPruebaColorRevisionTarea(tarea.tipo, tarea.titulo) || isPruebaColorSeguimientoTarea(tarea.tipo) || isPruebaColorNotificacionTarea(tarea.tipo) || isPruebaColorImpresionORecepcionTarea(tarea.tipo, tarea.contenido))) {
+      const propId = tarea.id_propuesta ? parseInt(tarea.id_propuesta) : NaN;
+      if (!isNaN(propId)) {
+        onNavigate(getDirectNavigationPath('propuesta', propId, tarea.titulo || '', tarea.tipo || undefined, tarea.campania_id, propId, tarea.id, tarea.contenido));
+        return;
+      }
+      if (tarea.campania_id) {
+        onNavigate(getDirectNavigationPath('campana', tarea.campania_id, tarea.titulo || '', tarea.tipo || undefined, tarea.campania_id, null, tarea.id, tarea.contenido));
+        return;
+      }
+    }
     // Notif de comentario: el titulo dice donde fue dejado (solicitud / propuesta / campaña).
     // Sin esto el handler caia al ultimo branch (que solo entra si tipo es
     // Autorización/Rechazo) o al de referencia_tipo+referencia_id (que no existen),
@@ -3048,7 +3094,7 @@ function TaskDrawer({
               className="mt-4 w-full flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl bg-gradient-to-r from-purple-600 to-pink-600 text-white text-sm font-medium hover:from-purple-500 hover:to-pink-500 transition-all hover:scale-[1.02] active:scale-[0.98] shadow-lg shadow-purple-500/20"
             >
               <ExternalLink className="h-4 w-4" />
-              {getNavigationLabel(tarea.referencia_tipo || '', tarea.tipo || undefined, tarea.campania_id, tarea.id_propuesta, tarea.id_solicitud, tarea.titulo || '')}
+              {getNavigationLabel(tarea.referencia_tipo || '', tarea.tipo || undefined, tarea.campania_id, tarea.id_propuesta, tarea.id_solicitud, tarea.titulo || '', tarea.contenido)}
             </button>
           )}
 
@@ -4950,6 +4996,18 @@ export function NotificacionesPage() {
                                 if (tarea.tipo === 'Mención en Ticket' && tarea.id_solicitud) {
                                   navigate(`/admin/tickets-historial?ticketId=${tarea.id_solicitud}`);
                                   return;
+                                }
+                                // Pruebas de Color: deep-link al submodal de la tarea específica.
+                                if ((isPruebaColorRevisionTarea(tarea.tipo, tarea.titulo) || isPruebaColorSeguimientoTarea(tarea.tipo) || isPruebaColorNotificacionTarea(tarea.tipo) || isPruebaColorImpresionORecepcionTarea(tarea.tipo, tarea.contenido))) {
+                                  const propId = tarea.id_propuesta ? parseInt(tarea.id_propuesta) : NaN;
+                                  if (!isNaN(propId)) {
+                                    navigate(getDirectNavigationPath('propuesta', propId, tarea.titulo || '', tarea.tipo || undefined, tarea.campania_id, propId, tarea.id, tarea.contenido));
+                                    return;
+                                  }
+                                  if (tarea.campania_id) {
+                                    navigate(getDirectNavigationPath('campana', tarea.campania_id, tarea.titulo || '', tarea.tipo || undefined, tarea.campania_id, null, tarea.id, tarea.contenido));
+                                    return;
+                                  }
                                 }
                                 // Notif de comentario: navegar segun el titulo (solicitud / propuesta / campana).
                                 const commentEntity = getCommentEntity(tarea.titulo || '');
