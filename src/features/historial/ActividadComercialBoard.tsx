@@ -83,6 +83,8 @@ export function ActividadComercialBoard({ isDark }: Props) {
     onSettled: () => {
       queryClient.invalidateQueries({ queryKey: QK_ACTIVIDAD_COMERCIAL });
       queryClient.invalidateQueries({ queryKey: ['historial-acciones'] });
+      // Mover de columna también queda en el historial de cambios de la tarea.
+      queryClient.invalidateQueries({ queryKey: ['historial-tarea'] });
     },
   });
 
@@ -411,6 +413,8 @@ export function ActividadComercialBoard({ isDark }: Props) {
         onClose={() => {
           setEditing(null);
           queryClient.invalidateQueries({ queryKey: QK_ACTIVIDAD_COMERCIAL });
+          // El historial de cambios del detalle debe reflejar la edición recién hecha.
+          queryClient.invalidateQueries({ queryKey: ['historial-tarea'] });
         }}
         editing={editing ? { id: editing.id, descripcion: editing.descripcion, fecha_fin: editing.fecha_fin, contenido: editing.contenido } : null}
       />

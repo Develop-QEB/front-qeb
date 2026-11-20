@@ -6,6 +6,8 @@ import {
   COLUMNAS_AC, COLUMNA_LABEL, COLUMNA_COLOR, type ColumnaAC,
   columnaDeEstatus, esCancelada, parseContenidoAC, tituloCorto, estaVencida,
 } from './actividadComercial';
+import { BitacoraTareaInline } from '../notificaciones/BitacoraTareaInline';
+import { ComentariosTarea } from './ComentariosTarea';
 
 // Detalle de una Actividad Comercial (click en la tarjeta del tablero).
 // Ver todo + cambiar de columna + abrir el modal de edicion (si tiene permiso).
@@ -159,6 +161,13 @@ export function DetalleActividadModal({ tarea, isDark, puedeEditar, moviendo, on
               {moviendo && <Loader2 className={`h-4 w-4 animate-spin self-center ${subText}`} />}
             </div>
           </div>
+
+          {/* Historial de cambios de la tarea (mismo componente que el drawer de
+              Notificaciones). No pinta nada si la tarea aún no tiene ediciones. */}
+          <BitacoraTareaInline tareaId={tarea.id} isDark={isDark} className="" />
+
+          {/* Bitácora de comentarios de la tarea. */}
+          <ComentariosTarea tareaId={tarea.id} isDark={isDark} />
         </div>
 
         {/* Footer */}
