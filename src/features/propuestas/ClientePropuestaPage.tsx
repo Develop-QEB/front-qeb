@@ -8,6 +8,7 @@ import {
 import { GoogleMap, useLoadScript, Marker, Circle, Autocomplete, InfoWindow } from '@react-google-maps/api';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell } from 'recharts';
 import { formatCurrency, formatDate } from '../../lib/utils';
+import { conShareToken, shareTokenDeUrl } from '../../lib/shareLink';
 import { toNum } from '../../utils/excelFormat';
 import { descargarExcelCompartir, FMT_ENTERO, FMT_COORD } from '../../utils/excelCompartir';
 import { horarioLabel } from '../../lib/periodos';
@@ -230,10 +231,11 @@ function applyFilters(data: InventarioReservado[], filters: FilterCondition[]): 
   });
 }
 
-// Fetch from public endpoint
-async function fetchPublicPropuesta(id: number): Promise<PublicPropuestaData> {
+// Fetch from public endpoint. El token firmado (`?t=`) viaja en la liga que
+// recibió el cliente: sin él el backend ya no entrega la propuesta.
+async function fetchPublicPropuesta(id: number, token: string | null): Promise<PublicPropuestaData> {
   const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3000';
-  const response = await fetch(`${API_URL}/public/propuestas/${id}`);
+  const response = await fetch(conShareToken(`${API_URL}/public/propuestas/${id}`, token));
   const data = await response.json();
   if (!data.success) throw new Error(data.error);
   return data.data;
@@ -282,9 +284,13 @@ export function ClientePropuestaPage() {
 
   const { isLoaded } = useLoadScript(GOOGLE_MAPS_LOADER_OPTIONS);
 
+  // Token de la liga con la que entró el cliente; se arrastra a la petición y
+  // a cualquier liga que esta vista genere.
+  const shareToken = shareTokenDeUrl();
+
   const { data, isLoading, error } = useQuery({
-    queryKey: ['public-propuesta', propuestaId],
-    queryFn: () => fetchPublicPropuesta(propuestaId),
+    queryKey: ['public-propuesta', propuestaId, shareToken],
+    queryFn: () => fetchPublicPropuesta(propuestaId, shareToken),
     enabled: propuestaId > 0,
   });
 
@@ -646,7 +652,10 @@ export function ClientePropuestaPage() {
       return w;
     };
 
-    const clientViewUrl = `${window.location.origin}/cliente/propuesta/${propuestaId}${esCampana ? '?ctx=campana' : ''}`;
+    const clientViewUrl = conShareToken(
+      `${window.location.origin}/cliente/propuesta/${propuestaId}${esCampana ? '?ctx=campana' : ''}`,
+      shareToken
+    );
 
     const addSectionTitle = (title: string, yPos: number) => {
       doc.setFillColor(PDF_BLUE[0], PDF_BLUE[1], PDF_BLUE[2]);
