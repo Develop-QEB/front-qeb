@@ -7,6 +7,7 @@ import {
 } from 'lucide-react';
 import { GoogleMap, useLoadScript, Marker, InfoWindow } from '@react-google-maps/api';
 import { formatCurrency } from '../../lib/utils';
+import { conShareToken, shareTokenDeUrl } from '../../lib/shareLink';
 import { toNum } from '../../utils/excelFormat';
 import { descargarExcelCompartir, FMT_ENTERO, FMT_COORD } from '../../utils/excelCompartir';
 // Versionado de circuitos completados: pines/filas 'no_vigente' en gris.
@@ -152,9 +153,11 @@ function kmlEscape(v: unknown): string {
   return String(v ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 }
 
-async function fetchPublicPropuesta(id: number): Promise<PublicPropuestaData> {
+// El token firmado (`?t=`) viaja en la liga que recibió el cliente: sin él el
+// backend ya no entrega la propuesta.
+async function fetchPublicPropuesta(id: number, token: string | null): Promise<PublicPropuestaData> {
   const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3000';
-  const response = await fetch(`${API_URL}/public/propuestas/${id}`);
+  const response = await fetch(conShareToken(`${API_URL}/public/propuestas/${id}`, token));
   const data = await response.json();
   if (!data.success) throw new Error(data.error);
   return data.data;
@@ -242,9 +245,13 @@ export function ClientePropuestaMapPage() {
 
   const { isLoaded } = useLoadScript(GOOGLE_MAPS_LOADER_OPTIONS);
 
+  // Token de la liga con la que entró el cliente; se arrastra a la petición y
+  // a cualquier liga que esta vista genere.
+  const shareToken = shareTokenDeUrl();
+
   const { data, isLoading, error } = useQuery({
-    queryKey: ['public-propuesta', propuestaId],
-    queryFn: () => fetchPublicPropuesta(propuestaId),
+    queryKey: ['public-propuesta', propuestaId, shareToken],
+    queryFn: () => fetchPublicPropuesta(propuestaId, shareToken),
     enabled: propuestaId > 0,
   });
 
@@ -551,7 +558,10 @@ export function ClientePropuestaMapPage() {
     const capasSel = capas.filter(c => capasActivas.has(c.id)).map(c => c.id);
     if (capasSel.length > 0) params.set('capas', capasSel.join(','));
     const qs = params.toString();
-    const publicUrl = `${window.location.origin}/cliente/propuesta/${propuestaId}/mapa${qs ? `?${qs}` : ''}`;
+    const publicUrl = conShareToken(
+      `${window.location.origin}/cliente/propuesta/${propuestaId}/mapa${qs ? `?${qs}` : ''}`,
+      shareToken
+    );
     navigator.clipboard.writeText(publicUrl);
     setCopied(true);
     setTimeout(() => setCopied(false), 2000);

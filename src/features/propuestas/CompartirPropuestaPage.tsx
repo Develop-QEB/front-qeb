@@ -14,6 +14,7 @@ import { udcFichaImg, udcFichaDe, udcMapaCoord, UDC_MAPA_COORDS, UDC_MAPA_COORDS
 import udcMapaPA from './assets/udc-mapa-aicm-t1.jpg';
 import udcMapaPB from './assets/udc-mapa-aicm-t1-pb.jpg';
 import { formatCurrency, formatDate } from '../../lib/utils';
+import { conShareToken, pedirShareToken } from '../../lib/shareLink';
 import { toNum } from '../../utils/excelFormat';
 import { descargarExcelCompartir, FMT_COORD } from '../../utils/excelCompartir';
 import { horarioLabel } from '../../lib/periodos';
@@ -365,6 +366,16 @@ export function CompartirPropuestaPage() {
     enabled: propuestaId > 0,
   });
 
+  // Token firmado de la liga del cliente. Se pide una vez y se usa en todas
+  // las ligas que genera esta vista (copiar, abrir mapa, PDF): el endpoint
+  // público ya no acepta solo el id de la propuesta. Ver lib/shareLink.ts.
+  const { data: shareToken } = useQuery({
+    queryKey: ['share-token', propuestaId],
+    queryFn: () => pedirShareToken(propuestaId),
+    enabled: propuestaId > 0,
+    staleTime: 30 * 60 * 1000,
+  });
+
   const tipoPeriodo = (details?.cotizacion as any)?.tipo_periodo || 'catorcena';
   // UDC (aeropuerto AICM): sin geolocalización → en compartir se oculta el
   // "Resumen de Circuitos" + mapa y se muestra la ficha técnica de reservados.
@@ -706,7 +717,10 @@ export function CompartirPropuestaPage() {
       params.set('periodo', filterPeriodo);
     }
     const qs = params.toString();
-    const publicUrl = `${window.location.origin}/cliente/propuesta/${propuestaId}${qs ? `?${qs}` : ''}`;
+    const publicUrl = conShareToken(
+      `${window.location.origin}/cliente/propuesta/${propuestaId}${qs ? `?${qs}` : ''}`,
+      shareToken
+    );
     navigator.clipboard.writeText(publicUrl);
     setCopied(true);
     setTimeout(() => setCopied(false), 2000);
@@ -875,7 +889,11 @@ export function CompartirPropuestaPage() {
     if (capasSel.length > 0) params.set('capas', capasSel.join(','));
 
     const qs = params.toString();
-    window.open(`/cliente/propuesta/${propuestaId}/mapa${qs ? `?${qs}` : ''}`, '_blank', 'noopener,noreferrer');
+    window.open(
+      conShareToken(`/cliente/propuesta/${propuestaId}/mapa${qs ? `?${qs}` : ''}`, shareToken),
+      '_blank',
+      'noopener,noreferrer'
+    );
   };
 
   // Download KML for a specific group
@@ -1079,7 +1097,10 @@ export function CompartirPropuestaPage() {
     doc.text(`Propuesta #${propuestaId}`, pageWidth - marginX, 16, { align: 'right' });
 
     // Link styled as button
-    const clientViewUrl = `${window.location.origin}/cliente/propuesta/${propuestaId}${esCampana ? '?ctx=campana' : ''}`;
+    const clientViewUrl = conShareToken(
+      `${window.location.origin}/cliente/propuesta/${propuestaId}${esCampana ? '?ctx=campana' : ''}`,
+      shareToken
+    );
     doc.setFillColor(...IMU_GREEN);
     doc.roundedRect(pageWidth - marginX - 45, 19, 45, 6, 1, 1, 'F');
     doc.setFontSize(7);
@@ -1629,7 +1650,7 @@ export function CompartirPropuestaPage() {
 
           <div className="flex items-center gap-2">
             <a
-              href={`/cliente/propuesta/${propuestaId}${esCampana ? '?ctx=campana' : ''}`}
+              href={conShareToken(`/cliente/propuesta/${propuestaId}${esCampana ? '?ctx=campana' : ''}`, shareToken)}
               target="_blank"
               rel="noopener noreferrer"
               className="flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-pink-500 to-purple-500 hover:from-pink-400 hover:to-purple-400 text-white rounded-lg text-sm font-medium transition-all shadow-lg shadow-purple-500/20"
@@ -1640,7 +1661,7 @@ export function CompartirPropuestaPage() {
             {/* UDC (aeropuerto): sin mapa geográfico ni KML */}
             {!esUDC && (
             <a
-              href={`/cliente/propuesta/${propuestaId}/mapa${esCampana ? '?ctx=campana' : ''}`}
+              href={conShareToken(`/cliente/propuesta/${propuestaId}/mapa${esCampana ? '?ctx=campana' : ''}`, shareToken)}
               target="_blank"
               rel="noopener noreferrer"
               className="flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-blue-500 to-cyan-500 hover:from-blue-400 hover:to-cyan-400 text-white rounded-lg text-sm font-medium transition-all shadow-lg shadow-blue-500/20"

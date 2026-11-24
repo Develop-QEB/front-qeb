@@ -1,25 +1,12 @@
 import api from '../lib/api';
 import { AuthResponse, ApiResponse, User } from '../types';
 
-export interface RegisterData {
-  nombre: string;
-  correo: string;
-  password: string;
-  area: string;
-  puesto: string;
-}
+// Se quitó el alta auto-servicio (nov-2026): la pantalla /register y el
+// endpoint POST /auth/register permitían crearse una cuenta desde internet,
+// con el rol tomado del propio formulario. El alta de usuarios se hace en
+// Administración > Usuarios, que exige sesión y rol administrador.
 
 export const authService = {
-  async register(data: RegisterData): Promise<{ message: string }> {
-    const response = await api.post<ApiResponse<{ message: string }>>('/auth/register', data);
-
-    if (!response.data.success) {
-      throw new Error(response.data.error || 'Error al registrarse');
-    }
-
-    return response.data.data || { message: 'Usuario registrado correctamente' };
-  },
-
   async login(email: string, password: string): Promise<AuthResponse> {
     const response = await api.post<ApiResponse<AuthResponse>>('/auth/login', {
       email,
