@@ -173,11 +173,15 @@ export const solicitudesService = {
     return response.data.data;
   },
 
-  async getUsers(area?: string, filterByTeam: boolean = true): Promise<UserOption[]> {
+  // Akary 2026-11-24: forUserId permite filtrar por el equipo de otro usuario
+  // (no el logueado). Lo usa AtenderModal para traer el equipo del creador de
+  // la solicitud (feedback Jos 2026-11-18).
+  async getUsers(area?: string, filterByTeam: boolean = true, forUserId?: number): Promise<UserOption[]> {
     const response = await api.get<ApiResponse<UserOption[]>>('/solicitudes/users', {
       params: {
         ...(area && { area }),
         filterByTeam: filterByTeam.toString(),
+        ...(forUserId ? { forUserId: forUserId.toString() } : {}),
       },
     });
     if (!response.data.success || !response.data.data) {
