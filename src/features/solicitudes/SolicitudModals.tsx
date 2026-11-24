@@ -1779,6 +1779,18 @@ export function AtenderModal({ isOpen, onClose, solicitud, onSuccess }: AtenderM
     enabled: isOpen,
   });
 
+  // Akary 2026-11-24 (feedback Jos 2026-11-18): traer los miembros del equipo
+  // del CREADOR de la solicitud (no del que esta atendiendo), para precargar
+  // automaticamente a los Analistas de Servicio al Cliente de su red en el
+  // modal. El back (getUsers) ahora acepta forUserId para filtrar por el
+  // equipo de otro usuario.
+  const creadorSolicitudId = solicitud?.usuario_id;
+  const { data: teamUsers = [] } = useQuery({
+    queryKey: ['solicitudes-users', 'team', 'atender-modal', creadorSolicitudId],
+    queryFn: () => solicitudesService.getUsers(undefined, true, creadorSolicitudId),
+    enabled: isOpen && !!creadorSolicitudId,
+  });
+
   // Caras de la solicitud — para detectar circuitos rechazados por DG o DCM
   // y bloquear el botón "Atender Solicitud" antes de que el back lo rechace
   // con 400. El back igual valida, esto es UX.
@@ -1799,7 +1811,13 @@ export function AtenderModal({ isOpen, onClose, solicitud, onSuccess }: AtenderM
     };
   }, [fullDetails]);
 
-  // Pre-populate asignados with: 1) Original assignees from solicitud + 2) All users from "Tráfico" area
+  // Pre-populate asignados with: 1) Original assignees from solicitud,
+  // 2) All users from "Tráfico" area (como ya ocurria antes),
+  // 3) Akary 2026-11-24 (feedback Jos 2026-11-18): los Analistas de Servicio al
+  //    Cliente del EQUIPO del creador de la solicitud. Antes el back los
+  //    agregaba por su cuenta (sin filtrar por equipo) y el user no los veia
+  //    en el modal para poder editarlos. Ahora el front los precarga y el back
+  //    respeta lo que el user deja seleccionado.
   useEffect(() => {
     if (isOpen && solicitud && users) {
       const combinedAsignados: { id: number; nombre: string }[] = [];
@@ -1831,9 +1849,23 @@ export function AtenderModal({ isOpen, onClose, solicitud, onSuccess }: AtenderM
         }
       });
 
+      // 3. Analistas de Servicio al Cliente del equipo del creador.
+      // teamUsers ya viene filtrado por el equipo del creador (getUsers con
+      // forUserId = solicitud.usuario_id). Precargamos solo los de ese puesto
+      // concreto (Jos: no coord de diseño ni diseñadores aqui, solo analistas).
+      // Excluimos al propio creador (no auto-asignarlo).
+      teamUsers.forEach(u => {
+        if (!addedIds.has(u.id)
+            && u.id !== creadorSolicitudId
+            && (u.puesto || '').trim().toLowerCase() === 'analista de servicio al cliente') {
+          combinedAsignados.push({ id: u.id, nombre: u.nombre });
+          addedIds.add(u.id);
+        }
+      });
+
       setSelectedAsignados(combinedAsignados);
     }
-  }, [isOpen, solicitud, users]);
+  }, [isOpen, solicitud, users, teamUsers, creadorSolicitudId]);
 
   // Close dropdown when clicking outside
   useEffect(() => {
