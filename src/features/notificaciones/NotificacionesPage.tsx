@@ -2076,6 +2076,12 @@ function ApprovalModal({
   // Autorización de ELIMINACIÓN de circuitos (campañas): aprobar = borrar, rechazar
   // = no borrar + motivo. Va por tareaId (endpoint dedicado), no por idquote.
   const isEliminacionTask = tarea.tipo === 'Autorización Eliminación' || tarea.tipo === 'Filtro Autorización Eliminación';
+  // Autorización de CAMBIO DE PERIODO (campañas): aprobar = mover el circuito al
+  // periodo nuevo, rechazar = dejarlo en el original + motivo. Va por tareaId.
+  const isCambioPeriodoTask = tarea.tipo === 'Autorización Cambio Periodo' || tarea.tipo === 'Filtro Autorización Cambio Periodo';
+  // Tareas que se resuelven por tareaId (no por idquote/caras): eliminación y cambio
+  // de periodo. Comparten los gates de habilitar botones y ocultar stats de tarifa.
+  const isTareaIdAuth = isEliminacionTask || isCambioPeriodoTask;
 
   const [idPropuestaState, setIdPropuestaState] = useState<string | null>(tarea.id_propuesta || null);
   const [solicitudFallbackTried, setSolicitudFallbackTried] = useState(false);
@@ -2148,6 +2154,7 @@ function ApprovalModal({
   const aprobarMutation = useMutation({
     mutationFn: async () => {
       if (isEliminacionTask) { await notificacionesService.aprobarEliminacion(tarea.id); return; }
+      if (isCambioPeriodoTask) { await notificacionesService.aprobarCambioPeriodo(tarea.id); return; }
       await notificacionesService.aprobarAutorizacion(idPropuesta || '', tipoAutorizacion as 'dg' | 'dcm');
     },
     onSuccess: () => {
@@ -2163,6 +2170,7 @@ function ApprovalModal({
   const rechazarMutation = useMutation({
     mutationFn: async (motivo: string) => {
       if (isEliminacionTask) { await notificacionesService.rechazarEliminacion(tarea.id, motivo); return; }
+      if (isCambioPeriodoTask) { await notificacionesService.rechazarCambioPeriodo(tarea.id, motivo); return; }
       await notificacionesService.rechazarAutorizacion(idPropuesta || '', motivo);
     },
     onSuccess: () => {
@@ -2329,7 +2337,7 @@ function ApprovalModal({
           <div className="grid grid-cols-3 md:grid-cols-5 gap-1.5 sm:gap-3">
             {/* Stats de tarifa (Aprobadas / Pend. DG) — no aplican a eliminación (esa
                 va a Gerencia y es sobre circuitos puntuales, no aprobación de caras). */}
-            {resumenData && !isEliminacionTask && (
+            {resumenData && !isTareaIdAuth && (
               <>
                 <div className="px-1.5 py-1 sm:p-2 rounded-md sm:rounded-lg bg-emerald-500/10 border border-emerald-500/20 text-center">
                   <div className="text-sm sm:text-lg font-bold text-emerald-400 leading-tight">{resumenData.aprobadas}</div>
@@ -2382,6 +2390,22 @@ function ApprovalModal({
               </div>
             ) : (
               <span className={`text-[10px] sm:text-xs italic ${isDark ? 'text-zinc-500' : 'text-gray-500'}`}>Los circuitos marcados abajo con "A eliminar".</span>
+            )}
+          </div>
+        )}
+
+        {/* Aviso de CAMBIO DE PERIODO — de qué periodo a cuál se mueve + el motivo
+            (lo que escribió el asesor). Todo viaja en la descripción de la tarea. */}
+        {isCambioPeriodoTask && (
+          <div className={`px-3 sm:px-6 py-2.5 sm:py-3 border-b ${isDark ? 'border-zinc-800 bg-cyan-500/5' : 'border-gray-200 bg-cyan-50/60'}`}>
+            <div className="flex items-center gap-2 mb-1.5">
+              <Calendar className="h-4 w-4 text-cyan-400 shrink-0" />
+              <span className={`text-xs sm:text-sm font-semibold ${isDark ? 'text-cyan-300' : 'text-cyan-700'}`}>
+                Cambio de periodo pendiente de autorización
+              </span>
+            </div>
+            {tarea.mensaje && (
+              <p className={`text-[11px] sm:text-xs whitespace-pre-line ${isDark ? 'text-zinc-300' : 'text-gray-600'}`}>{tarea.mensaje}</p>
             )}
           </div>
         )}
@@ -2607,7 +2631,7 @@ function ApprovalModal({
                       : aprobarMutation.mutate()}
                     disabled={isFiltroTask
                       ? aprobarFiltroMutation.isPending
-                      : (aprobarMutation.isPending || (!isEliminacionTask && carasPendientes.length === 0))}
+                      : (aprobarMutation.isPending || (!isTareaIdAuth && carasPendientes.length === 0))}
                     className="flex-1 flex items-center justify-center gap-2 px-3 sm:px-4 py-3 rounded-xl bg-emerald-600 text-white text-sm font-medium hover:bg-emerald-700 disabled:opacity-50 disabled:cursor-not-allowed transition-all"
                   >
                     {(isFiltroTask ? aprobarFiltroMutation.isPending : aprobarMutation.isPending) ? (
@@ -2620,12 +2644,14 @@ function ApprovalModal({
                         ? (aprobarFiltroMutation.isPending ? 'Enviando...' : `Enviar a ${filtroDireccionLabel}`)
                         : isEliminacionTask
                           ? (aprobarMutation.isPending ? 'Autorizando...' : 'Autorizar eliminación')
-                          : (aprobarMutation.isPending ? 'Aprobando...' : `Aprobar ${carasPendientes.length} circuito${carasPendientes.length !== 1 ? 's' : ''}`)}
+                          : isCambioPeriodoTask
+                            ? (aprobarMutation.isPending ? 'Autorizando...' : 'Autorizar cambio de periodo')
+                            : (aprobarMutation.isPending ? 'Aprobando...' : `Aprobar ${carasPendientes.length} circuito${carasPendientes.length !== 1 ? 's' : ''}`)}
                     </span>
                   </button>
                   <button
                     onClick={() => setShowRechazoInput(true)}
-                    disabled={!isFiltroTask && !isEliminacionTask && carasPendientes.length === 0}
+                    disabled={!isFiltroTask && !isTareaIdAuth && carasPendientes.length === 0}
                     className="flex items-center justify-center gap-2 px-4 sm:px-6 py-3 rounded-xl bg-red-600/20 text-red-400 text-sm font-medium hover:bg-red-600/30 border border-red-500/30 disabled:opacity-50 disabled:cursor-not-allowed transition-all"
                   >
                     <X className="h-4 w-4" />
