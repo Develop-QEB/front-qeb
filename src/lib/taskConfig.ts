@@ -1,4 +1,4 @@
-import { Circle, Clock, CheckCircle, AlertCircle, FileText, Send, Bell, Briefcase, Target, ClipboardList, ShieldCheck, ShieldX, XCircle, AtSign, Trash2 } from 'lucide-react';
+import { Circle, Clock, CheckCircle, AlertCircle, FileText, Send, Bell, Briefcase, Target, ClipboardList, ShieldCheck, ShieldX, XCircle, AtSign, Trash2, Calendar } from 'lucide-react';
 
 // ============ CONFIGURACIÓN DE ESTATUS ============
 export const STATUS_CONFIG = {
@@ -214,6 +214,31 @@ export const TIPO_CONFIG = {
     bg: 'bg-red-500/20',
     border: 'border-red-500/30',
     icon: ShieldX
+  },
+  // Autorización de CAMBIO DE PERIODO de circuitos (campañas) - Cyan + calendario.
+  'Filtro Autorización Cambio Periodo': {
+    color: 'text-cyan-400',
+    bg: 'bg-cyan-500/20',
+    border: 'border-cyan-500/30',
+    icon: Calendar
+  },
+  'Autorización Cambio Periodo': {
+    color: 'text-cyan-400',
+    bg: 'bg-cyan-500/20',
+    border: 'border-cyan-500/30',
+    icon: Calendar
+  },
+  'Rechazo Cambio Periodo': {
+    color: 'text-red-400',
+    bg: 'bg-red-500/20',
+    border: 'border-red-500/30',
+    icon: ShieldX
+  },
+  'Aviso Cambio Periodo': {
+    color: 'text-cyan-400',
+    bg: 'bg-cyan-500/20',
+    border: 'border-cyan-500/30',
+    icon: Calendar
   },
   // Aviso al asesor de que su circuito YA fue eliminado (tras autorizar).
   // Informativo (no acción): ámbar + campana para distinguirlo de las auth rojas.

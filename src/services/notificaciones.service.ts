@@ -219,6 +219,23 @@ export const notificacionesService = {
     }
   },
 
+  // Cambio de periodo: aprobar → mueve el circuito al periodo nuevo; rechazar →
+  // lo deja en el periodo original + motivo. Va por tareaId (endpoint dedicado).
+  async aprobarCambioPeriodo(tareaId: number, comentario?: string): Promise<{ accion: string; caras?: number }> {
+    const response = await api.post<ApiResponse<{ accion: string; caras?: number }>>(`/notificaciones/autorizacion/cambio-periodo/${tareaId}/aprobar`, { comentario });
+    if (!response.data.success) {
+      throw new Error(response.data.error || 'Error al aprobar cambio de periodo');
+    }
+    return response.data.data || { accion: 'ok' };
+  },
+
+  async rechazarCambioPeriodo(tareaId: number, motivo: string): Promise<void> {
+    const response = await api.post<ApiResponse<null>>(`/notificaciones/autorizacion/cambio-periodo/${tareaId}/rechazar`, { motivo });
+    if (!response.data.success) {
+      throw new Error(response.data.error || 'Error al rechazar cambio de periodo');
+    }
+  },
+
   async getHistorialAutorizacion(idquote: string): Promise<HistorialAutorizacion[]> {
     const response = await api.get<ApiResponse<HistorialAutorizacion[]>>(`/notificaciones/autorizacion/${idquote}/historial`);
     if (!response.data.success || !response.data.data) {

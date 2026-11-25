@@ -119,6 +119,9 @@ interface CaraItem {
   autorizacion_dcm?: string;
   // Cara con una tarea de eliminación abierta (autorización de Gerencia) → badge "Pend. Ger. (elim.)".
   pendiente_eliminacion?: boolean;
+  // Cara con una tarea de CAMBIO DE PERIODO abierta (autorización de Gerencia) → badge
+  // "Pend. Ger. (periodo)". El circuito sigue en su periodo original hasta aprobar.
+  pendiente_cambio_periodo?: boolean;
   // true si hay una tarea 'Filtro Autorización DG' abierta — pinta embudo cyan junto al "Pend. DG".
   en_filtro_dg?: boolean;
   _originalDg?: string;
@@ -1655,6 +1658,7 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
           autorizacion_dg: cara.autorizacion_dg || 'aprobado',
           autorizacion_dcm: cara.autorizacion_dcm || 'aprobado',
           pendiente_eliminacion: (cara as any).pendiente_eliminacion === true,
+          pendiente_cambio_periodo: (cara as any).pendiente_cambio_periodo === true,
           _originalDg: cara.autorizacion_dg || 'aprobado',
           _originalDcm: cara.autorizacion_dcm || 'aprobado',
           // Baseline INMUTABLE para conservar aprobación (no drifta al reeditar).
@@ -9943,6 +9947,11 @@ export function AssignInventarioCampanaModal({ isOpen, onClose, campana }: Props
                                             viva hasta que el Gerente apruebe el borrado. */}
                                         {cara.pendiente_eliminacion && (
                                           <span className={`text-[10px] px-1.5 py-0.5 rounded ${isDark ? 'bg-red-500/20 text-red-300' : 'bg-red-100 text-red-700'}`} title="Eliminación pendiente de autorización de Gerencia">Pend. Ger. (elim.)</span>
+                                        )}
+                                        {/* Cambio de periodo pendiente de autorización de Gerencia — el circuito
+                                            sigue en su periodo original hasta que el Gerente apruebe. */}
+                                        {cara.pendiente_cambio_periodo && (
+                                          <span className={`text-[10px] px-1.5 py-0.5 rounded ${isDark ? 'bg-cyan-500/20 text-cyan-300' : 'bg-cyan-100 text-cyan-700'}`} title="Cambio de periodo pendiente de autorización de Gerencia">Pend. Ger. (periodo)</span>
                                         )}
                                       </div>
                                         );
