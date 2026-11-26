@@ -15,6 +15,7 @@ import { useSocketClientes } from '../../hooks/useSocket';
 import { useThemeStore } from '../../store/themeStore';
 import { SAP_BASE_URL } from '../../store/environmentStore';
 import { ClientesSyncModal } from './ClientesSyncModal';
+import { sapFetch } from '../../lib/sapFetch';
 
 // ============ TIPOS Y CONFIGURACIÓN DE FILTROS/ORDENAMIENTO ============
 type FilterOperator = '=' | '!=' | 'contains' | 'not_contains';
@@ -642,10 +643,10 @@ export function ClientesPage() {
     // Clear SAP proxy cache for cuic data
     try {
       await Promise.all([
-        fetch(`${SAP_BASE_URL}/clear-cache?key=cuic`),
-        fetch(`${SAP_BASE_URL}/clear-cache?key=cuic-test`),
-        fetch(`${SAP_BASE_URL}/clear-cache?key=cuic-trade`),
-        fetch(`${SAP_BASE_URL}/clear-cache?key=cuic-udc`),
+        sapFetch(`${SAP_BASE_URL}/clear-cache?key=cuic`),
+        sapFetch(`${SAP_BASE_URL}/clear-cache?key=cuic-test`),
+        sapFetch(`${SAP_BASE_URL}/clear-cache?key=cuic-trade`),
+        sapFetch(`${SAP_BASE_URL}/clear-cache?key=cuic-udc`),
       ]);
     } catch (e) { /* ignore */ }
     if (activeSapRefetch) {

@@ -29,6 +29,7 @@ import { NuevaNotaDireccionModal } from '../notificaciones/NuevaNotaDireccionMod
 import { notasDireccionService } from '../../services/notasDireccion.service';
 import { articuloValidoEnPeriodo, esArticuloGranFormato } from '../../lib/periodos';
 import { TimeInput } from '../../components/ui/TimeInput';
+import { sapFetch } from '../../lib/sapFetch';
 
 // Tarifas now come from SAP (U_IMU_PublicPrice = tarifa publica, PriceList 11 = tarifa piso)
 
@@ -994,7 +995,7 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
       // UDC (aeropuerto AICM): catálogo aparte (/articulos-udc), sin la caché
       // compartida de CIMU y filtrando las filas basura del catálogo.
       if (sapDbArticulos === 'UDC') {
-        const response = await fetch(getEndpoints('UDC').articulos);
+        const response = await sapFetch(getEndpoints('UDC').articulos);
         if (!response.ok) throw new Error('Error fetching articulos UDC');
         const data = await response.json();
         const raw = (data.value || data) as SAPArticulo[];
@@ -1013,7 +1014,7 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
       }
       // Fetch from SAP
       try {
-        const response = await fetch(`${SAP_BASE_URL}/articulos`);
+        const response = await sapFetch(`${SAP_BASE_URL}/articulos`);
         if (!response.ok) throw new Error('Error fetching articulos data');
         const data = await response.json();
         const raw = (data.value || data) as SAPArticulo[];

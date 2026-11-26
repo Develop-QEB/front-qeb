@@ -105,6 +105,11 @@ function getSocket(): Socket {
       reconnection: true,
       reconnectionAttempts: 5,
       reconnectionDelay: 1000,
+      // El servidor ahora verifica la sesión en el handshake: sin token no se
+      // entra a ningún room. `auth` como función (no como objeto) se vuelve a
+      // evaluar en cada reconexión, así que después de refrescar el token se
+      // reconecta con el nuevo y no con el viejo ya expirado.
+      auth: (cb) => cb({ token: localStorage.getItem('accessToken') || undefined }),
     });
 
     socketInstance.on('connect', () => {
@@ -123,6 +128,13 @@ function getSocket(): Socket {
     });
 
     socketInstance.on('connect_error', (error) => {
+      // NO_AUTENTICADO / TOKEN_EXPIRADO / TOKEN_INVALIDO los manda el
+      // handshake del servidor. No se reintenta en bucle con el mismo token:
+      // el usuario tiene que volver a entrar.
+      if (['NO_AUTENTICADO', 'TOKEN_INVALIDO', 'TOKEN_EXPIRADO'].includes(error.message)) {
+        console.warn(`[Socket] Sesión rechazada por el servidor (${error.message}). Tiempo real desactivado hasta volver a entrar.`);
+        return;
+      }
       console.error('[Socket] Error de conexión:', error.message);
     });
   }

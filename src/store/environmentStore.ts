@@ -4,11 +4,26 @@ import { persist } from 'zustand/middleware';
 export type SapDatabase = 'CIMU' | 'TEST' | 'TRADE' | 'UDC';
 export type Environment = SapDatabase;
 
-// URL del proxy SAP. Se lee de la variable de entorno VITE_SAP_URL (la pone el
-// humano en Vercel por proyecto: dev/prod pueden tener URLs distintas sin tocar
-// código). Respaldo = el túnel cloudflared viejo, por si la variable no existe.
-// Nuevo proxy fijo y permanente: https://sap.qeb.mx
-export const SAP_BASE_URL = import.meta.env.VITE_SAP_URL || 'https://sap.qeb.mx';
+// Base de las llamadas a SAP.
+//
+// Desde nov-2026 el navegador NO llama a `sap.qeb.mx` directo. Llama al
+// backend de QEB, que reenvía al proxy con la sesión del usuario ya validada
+// (`/api/sap/...`, ver src/routes/sap.routes.ts en el back). El proxy no pide
+// ningún token, así que mientras el navegador lo llamaba de frente, el
+// catálogo de clientes de SAP estaba abierto a cualquiera en internet.
+//
+// Las rutas de abajo (/cuic, /articulos, /delivery-notes, ...) no cambian:
+// solo cambia el host, así que el back expone exactamente las mismas.
+//
+// Salida de emergencia: VITE_SAP_DIRECTO=true en Vercel vuelve al
+// comportamiento anterior (navegador → sap.qeb.mx) sin tocar código. Es para
+// desatorar un incidente, no para dejarlo prendido.
+const API_BASE = (import.meta.env.VITE_API_URL || 'http://localhost:3000/api').replace(/\/+$/, '');
+const SAP_DIRECTO = import.meta.env.VITE_SAP_DIRECTO === 'true';
+
+export const SAP_BASE_URL = SAP_DIRECTO
+  ? (import.meta.env.VITE_SAP_URL || 'https://sap.qeb.mx')
+  : `${API_BASE}/sap`;
 
 // SERIES por BD SAP (CIMU=164, TRADE=95, UDC=91). UDC ya trae su serie real
 // confirmada por IMU (91, misma en PB_SBOUDC pruebas y SBOUDC producción), así

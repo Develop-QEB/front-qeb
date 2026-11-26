@@ -25,6 +25,7 @@ import { puedeSolicitarDesposteo, puedeBypassearDesposteo, esRolTIDesposteo, des
 import { udcFichaDe, contratoDeArticulo } from '../../lib/udc';
 import { esArticuloGranFormato, horarioLabel } from '../../lib/periodos';
 import { esInventarioBloqueado } from '../../lib/bloqueoInventario';
+import { sapFetch } from '../../lib/sapFetch';
 
 // Mini-preview (cuadrito cyan con el aspect-ratio real de la pantalla) para las
 // listas UDC del aeropuerto. Solo se pinta si el código corresponde a una
@@ -1807,7 +1808,7 @@ export function CampanaDetailPage() {
       const { getEndpoints } = await import('../../store/environmentStore');
       const sapDb = (campana.sap_database || 'CIMU') as import('../../store/environmentStore').SapDatabase;
       try {
-        const artResponse = await fetch(getEndpoints(sapDb).articulos);
+        const artResponse = await sapFetch(getEndpoints(sapDb).articulos);
         const artData = await artResponse.json();
         const items = artData.value || artData || [];
         items.forEach((a: { ItemCode: string; U_IMU_OcrCode?: string; U_IMU_cod_sitio?: number; U_IMU_dscSitio?: string }) => {
@@ -1823,7 +1824,7 @@ export function CampanaDetailPage() {
       // de gran formato (sin pisar los de UDC). El posteo sigue yendo a UDC.
       if (sapDb === 'UDC') {
         try {
-          const rc = await fetch(getEndpoints('CIMU').articulos);
+          const rc = await sapFetch(getEndpoints('CIMU').articulos);
           const dc = await rc.json();
           const cimu = (dc.value || dc || []) as { ItemCode: string; ItemName?: string; U_IMU_OcrCode?: string; U_IMU_cod_sitio?: number; U_IMU_dscSitio?: string }[];
           cimu.forEach(a => {
@@ -1840,7 +1841,7 @@ export function CampanaDetailPage() {
       let resolvedCampana = campana;
       if (!campana.card_code && campana.cuic) {
         try {
-          const cuicResponse = await fetch(getEndpoints(sapDb).cuic);
+          const cuicResponse = await sapFetch(getEndpoints(sapDb).cuic);
           const cuicData = await cuicResponse.json();
           const cuicList: { CUIC?: number; ACA_U_SAPCode?: string }[] = cuicData.value || cuicData || [];
           const match = cuicList.find(c => String(c.CUIC) === String(campana.cuic));

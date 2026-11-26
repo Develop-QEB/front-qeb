@@ -4,6 +4,7 @@ import type { ReservaHistorialItem } from './propuestas.service';
 
 import { useEnvironmentStore, getEndpoints, getDeliveryNotesEndpoint, getSeriesForSapDatabase, getSapCompanyDb, SAP_BASE_URL } from '../store/environmentStore';
 import type { SapDatabase } from '../store/environmentStore';
+import { sapFetch } from '../lib/sapFetch';
 export type { CampanaWithComments };
 
 // SAP_BASE_URL viene de environmentStore (una sola fuente; lee VITE_SAP_URL).
@@ -710,7 +711,7 @@ export async function resolveBaseEntry(
   // Compañía SAP real (respeta desvío a pruebas: PB_SBOCIMU / PB_SBOUDC).
   const db = getSapCompanyDb(sapDatabase as SapDatabase);
 
-  const response = await fetch(`${SAP_BASE_URL}/order-by-docnum/${db}/${docNum}`);
+  const response = await sapFetch(`${SAP_BASE_URL}/order-by-docnum/${db}/${docNum}`);
   if (!response.ok) {
     throw new Error(`No se encontró la Order con DocNum ${docNum} en ${db}`);
   }
@@ -750,7 +751,7 @@ export async function postDeliveryNoteToSAP(deliveryNote: SAPDeliveryNote | SAPD
 
   // Paso 1: hacer el fetch — si esto falla es problema de red / tunnel / CORS.
   try {
-    response = await fetch(endpoint, {
+    response = await sapFetch(endpoint, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(deliveryNote),
@@ -853,7 +854,7 @@ export interface ExistingDeliveryNote {
 export async function findExistingDeliveryNote(numAtCard: string | number, sapDatabase?: string | null): Promise<ExistingDeliveryNote | null> {
   const db = getSapCompanyDb((sapDatabase || 'TEST') as SapDatabase);
   const url = `${SAP_BASE_URL}/delivery-note-by-numatcard/${db}/${numAtCard}`;
-  const response = await fetch(url);
+  const response = await sapFetch(url);
   if (response.status === 404) return null;
   if (!response.ok) {
     throw new Error(`No se pudo verificar DN existente (HTTP ${response.status})`);
@@ -869,7 +870,7 @@ export async function patchDeliveryNoteToSAP(docEntry: number, deliveryNote: SAP
 
   let response: Response;
   try {
-    response = await fetch(endpoint, {
+    response = await sapFetch(endpoint, {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(deliveryNote),

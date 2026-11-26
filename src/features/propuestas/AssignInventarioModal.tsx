@@ -57,6 +57,7 @@ import { NotasDireccionBitacora } from '../notificaciones/NotasDireccionBitacora
 import { NuevaNotaDireccionModal } from '../notificaciones/NuevaNotaDireccionModal';
 import { notasDireccionService } from '../../services/notasDireccion.service';
 import { BitacoraEstatusInline, type BitacoraEstatusInlineHandle, type StatusValidation } from '../../components/BitacoraEstatusInline';
+import { sapFetch } from '../../lib/sapFetch';
 
 // GOOGLE_MAPS_API_KEY / LIBRARIES centralizados en src/config/googleMaps.ts.
 
@@ -1261,7 +1262,7 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
     queryKey: ['sap-articulos', sapDbArticulos],
     queryFn: async () => {
       try {
-        const response = await fetch(getEndpoints(sapDbArticulos).articulos);
+        const response = await sapFetch(getEndpoints(sapDbArticulos).articulos);
         if (!response.ok) throw new Error('Error fetching articulos');
         const data = await response.json();
         let list = (data.value || data) as SAPArticulo[];

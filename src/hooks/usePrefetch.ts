@@ -12,6 +12,7 @@ import { dashboardService, resolveCatorcenaActual, FilterOptions } from '../serv
 import { getSapCache, setSapCache, SAP_CACHE_KEYS } from '../lib/sapCache';
 import { filterAllowedArticulos } from '../config/allowedDigitalArticles';
 import { SAP_BASE_URL } from '../store/environmentStore';
+import { sapFetch } from '../lib/sapFetch';
 
 // SAP_BASE_URL viene de environmentStore (una sola fuente; lee VITE_SAP_URL).
 
@@ -68,7 +69,7 @@ export function usePrefetch() {
           return cached;
         }
         // Fetch from SAP
-        const response = await fetch(`${SAP_BASE_URL}/cuic`);
+        const response = await sapFetch(`${SAP_BASE_URL}/cuic`);
         if (!response.ok) throw new Error('Error fetching CUIC');
         const data = await response.json();
         const items = (data.value || data) as SAPCuicItem[];
@@ -92,7 +93,7 @@ export function usePrefetch() {
           return cached;
         }
         // Fetch from SAP
-        const response = await fetch(`${SAP_BASE_URL}/articulos`);
+        const response = await sapFetch(`${SAP_BASE_URL}/articulos`);
         if (!response.ok) throw new Error('Error fetching Articulos');
         const data = await response.json();
         const raw = (data.value || data) as SAPArticulo[];
