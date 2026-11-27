@@ -1960,6 +1960,12 @@ function AtenderTareaModal({
   const esImpresion = tarea.tipo === 'Impresión';
   const esRecepcion = tarea.tipo === 'Recepción';
   const esRevisionAnticipada = prueba.tipo === 'revision_anticipada';
+  // Jos 2026-11-27: la tarea Corrección queda SOLO LECTURA cuando ya fue
+  // atendida (asesor ya reenvió y nueva Revisión creada). Antes el modal
+  // seguía mostrando el form "Subir nueva versión" aunque la tarea estaba
+  // Finalizada, lo que permitía duplicar reenvíos.
+  const tareaEstatusLower = (tarea.estatus || '').toLowerCase();
+  const tareaYaCerrada = ['atendido', 'rechazado', 'finalizada', 'finalizado', 'cerrada', 'cerrado'].includes(tareaEstatusLower);
   // Jos 2026-11-27: tareas tipo 'Prueba de Color' con requiereNuevaVersion
   // son el aviso al asesor de que su arte fue RECHAZADO. Render especial
   // con motivo + archivos de referencia + botón para subir nueva versión.
@@ -2080,10 +2086,11 @@ function AtenderTareaModal({
   // auto-abrimos el form de TODOS los artes para forzar al asesor a
   // corregirlos todos antes de habilitar el botón masivo (no se permite
   // enviar parcial — debe corregir las N pruebas para crear UNA sola
-  // tarea Revisión de artes nueva).
+  // tarea Revisión de artes nueva). NO abrir si la tarea ya está cerrada.
   useEffect(() => {
     if (!avisoRechazo) return;
     if (avisoRechazo.artes.length <= 1) return;
+    if (tareaYaCerrada) return;
     setReenvioForms(prev => {
       let next = prev;
       for (const arte of avisoRechazo.artes) {
@@ -2389,6 +2396,11 @@ function AtenderTareaModal({
                 <AlertCircle className="h-3.5 w-3.5" />
                 {avisoRechazo.artes.length === 1 ? 'Prueba de color rechazada' : `${avisoRechazo.artes.length} artes rechazados`}
               </div>
+              {tareaYaCerrada && (
+                <div className={`text-[11px] rounded-md px-2.5 py-2 ${isDark ? 'bg-zinc-900/70 text-zinc-200 border border-zinc-700' : 'bg-white text-gray-700 border border-gray-200'}`}>
+                  Esta corrección ya fue atendida (<span className="font-semibold">{tarea.estatus}</span>). La nueva versión del arte ya se envió a Diseño; para ver el estado actual consulta la tarea de Revisión de artes nueva en el drawer de la prueba.
+                </div>
+              )}
               <div className="space-y-2">
                 {avisoRechazo.artes.map((arte, idx) => (
                   <div
@@ -2425,7 +2437,7 @@ function AtenderTareaModal({
                     )}
                     {/* Botón "Subir nueva versión" por arte: abre el form
                         inline específico de ese arte. */}
-                    {arte.pruebaColorId && !reenvioForms.has(arte.pruebaColorId) && (
+                    {arte.pruebaColorId && !reenvioForms.has(arte.pruebaColorId) && !tareaYaCerrada && (
                       <button
                         onClick={() => openReenvio(arte.pruebaColorId!, arte.nombreArte || '')}
                         className={`mt-1 inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold border transition-colors ${isDark ? 'border-fuchsia-500/60 text-fuchsia-100 bg-fuchsia-500/20 hover:bg-fuchsia-500/30' : 'border-fuchsia-400 text-fuchsia-800 bg-fuchsia-50 hover:bg-fuchsia-100'}`}
