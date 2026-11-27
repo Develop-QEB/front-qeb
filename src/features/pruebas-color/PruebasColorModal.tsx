@@ -2430,15 +2430,45 @@ function AtenderTareaModal({
                     key={arte.pruebaColorId ?? idx}
                     className={`rounded-lg p-2.5 border space-y-1.5 ${isDark ? 'bg-zinc-900/40 border-zinc-700' : 'bg-white border-gray-200'}`}
                   >
-                    <div className="flex items-center gap-2">
+                    <div className="flex items-start gap-2.5">
+                      {/* Miniatura clicable — Jos 2026-11-27: en batch cada arte
+                          tiene su propio preview + boton "Ver arte" que abre el
+                          lightbox independiente. */}
                       {arte.arte && (
-                        <img src={arte.arte} alt={arte.nombreArte || ''} className="h-10 w-10 object-cover rounded border border-zinc-700" />
+                        <button
+                          type="button"
+                          onClick={() => setLightboxArteBatch({
+                            url: arte.arte!,
+                            label: `${arte.version ? `v${arte.version}` : ''}${arte.nombreArte ? ` · ${arte.nombreArte}` : ''}`.trim() || `Arte #${arte.pruebaColorId}`,
+                          })}
+                          className={`relative shrink-0 w-20 h-20 rounded-md overflow-hidden border transition-all group ${isDark ? 'border-zinc-700 bg-zinc-800 hover:border-emerald-500/60' : 'border-gray-300 bg-gray-50 hover:border-emerald-400'}`}
+                          title="Click para ver en grande"
+                        >
+                          <img src={arte.arte} alt={arte.nombreArte || ''} className="w-full h-full object-contain" />
+                          <div className={`absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity ${isDark ? 'bg-black/50' : 'bg-black/40'}`}>
+                            <Search className="h-4 w-4 text-white" />
+                          </div>
+                        </button>
                       )}
                       <div className={`text-[11px] font-semibold flex-1 min-w-0 ${isDark ? 'text-zinc-100' : 'text-gray-800'}`}>
-                        <div>
-                          {arte.version ? `v${arte.version}` : ''}
-                          {arte.nombreArte ? ` · ${arte.nombreArte}` : ''}
-                          {!arte.version && !arte.nombreArte ? `Arte #${arte.pruebaColorId}` : ''}
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <span>
+                            {arte.version ? `v${arte.version}` : ''}
+                            {arte.nombreArte ? ` · ${arte.nombreArte}` : ''}
+                            {!arte.version && !arte.nombreArte ? `Arte #${arte.pruebaColorId}` : ''}
+                          </span>
+                          {arte.arte && (
+                            <button
+                              type="button"
+                              onClick={() => setLightboxArteBatch({
+                                url: arte.arte!,
+                                label: `${arte.version ? `v${arte.version}` : ''}${arte.nombreArte ? ` · ${arte.nombreArte}` : ''}`.trim() || `Arte #${arte.pruebaColorId}`,
+                              })}
+                              className={`inline-flex items-center gap-1 text-[10px] font-medium px-2 py-0.5 rounded border transition-colors ${isDark ? 'border-emerald-500/50 text-emerald-200 bg-emerald-500/10 hover:bg-emerald-500/20' : 'border-emerald-300 text-emerald-700 bg-emerald-50 hover:bg-emerald-100'}`}
+                            >
+                              <Search className="h-3 w-3" /> Ver arte
+                            </button>
+                          )}
                         </div>
                       </div>
                     </div>
@@ -2700,10 +2730,12 @@ function AtenderTareaModal({
               esa tarea) y NO prueba.archivo, para que al abrir una tarea
               rechazada vieja se vea el arte original rechazado, no el que
               se subio despues en el reenvio.
-              Jos 2026-11-27: en Correccion batch (N>1 artes) cada card ya
-              muestra su propia miniatura y boton "Ver arte", asi que ocultar
-              este preview global para no confundir. */}
-          {(tarea.archivo || prueba.archivo) && !(avisoRechazo && avisoRechazo.artes.length > 1) && (
+              Jos 2026-11-27: en Correccion batch y Seguimiento batch (N>1
+              artes) cada card ya muestra su propia miniatura y boton "Ver
+              arte", asi que ocultar este preview global para no confundir. */}
+          {(tarea.archivo || prueba.archivo)
+            && !(avisoRechazo && avisoRechazo.artes.length > 1)
+            && !(avisoSeguimiento && avisoSeguimiento.artes.length > 1) && (
             <div>
               <div className={`flex items-center gap-1.5 text-[10px] uppercase tracking-wide font-semibold mb-1.5 ${isDark ? 'text-zinc-400' : 'text-gray-500'}`}>
                 <FileImage className="h-3 w-3" /> Arte revisado en esta tarea
