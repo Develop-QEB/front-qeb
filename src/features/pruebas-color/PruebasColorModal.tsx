@@ -1445,6 +1445,7 @@ function PruebaBatchCard({
         puedeRevisar={puedeRevisar}
         initialTareaId={initialTareaId}
         onInitialTareaIdConsumed={onInitialTareaIdConsumed}
+        pruebasHermanas={pruebas}
       />
     </div>
   );
@@ -1465,6 +1466,7 @@ function TareasAsociadasSection({
   puedeRevisar,
   initialTareaId,
   onInitialTareaIdConsumed,
+  pruebasHermanas,
 }: {
   prueba: PruebaColor;
   cara: SolicitudCara | null;
@@ -1474,6 +1476,9 @@ function TareasAsociadasSection({
   puedeRevisar: boolean;
   initialTareaId?: number;
   onInitialTareaIdConsumed?: (id: number) => void;
+  // Jos 2026-11-27: pruebas del mismo batch (si aplica) — para mostrar en
+  // cada tarea del drawer a cuál arte específico corresponde (v4, v3, etc.).
+  pruebasHermanas?: PruebaColor[];
 }) {
   const pruebaId = prueba.id;
   const queryClient = useQueryClient();
@@ -1607,6 +1612,20 @@ function TareasAsociadasSection({
           // Jos 2026-10-12: una tarea ya resuelta (Rechazado/Atendido/
           // Finalizada) tambien debe poder abrirse — en modo solo lectura —
           // para consultar el motivo que quedo guardado en la evidencia.
+          // Jos 2026-11-27: si la tarea pertenece al batch (hermanas disponibles),
+          // mostramos a QUÉ arte específico corresponde la tarea (v4, v3…).
+          let arteAsociado: { version: number; nombre: string | null } | null = null;
+          if (pruebasHermanas && pruebasHermanas.length > 1 && t.contenido) {
+            try {
+              const c = JSON.parse(t.contenido);
+              const pid = Number(c.pruebaColorId);
+              if (Number.isFinite(pid)) {
+                const p = pruebasHermanas.find(x => x.id === pid);
+                if (p) arteAsociado = { version: p.version, nombre: p.nombre_arte };
+              }
+            } catch { /* ignore */ }
+          }
+          const nombreTarea = esRevision ? 'Revisión de artes' : esSeguimiento ? 'Seguimiento' : t.tipo;
           return (
             <button
               key={t.id}
@@ -1616,13 +1635,18 @@ function TareasAsociadasSection({
               title={tieneAcciones ? 'Abrir tarea para atender' : 'Ver detalle de la tarea'}
             >
               <div className="px-2.5 py-2 flex items-center justify-between gap-2">
-                <div className="flex items-center gap-1.5 min-w-0 flex-1">
+                <div className="flex items-center gap-1.5 min-w-0 flex-1 flex-wrap">
                   <span className={`shrink-0 px-1.5 py-0.5 rounded-full text-[10px] font-semibold ${estadoColor(t.estatus)}`}>
                     {t.estatus || 'Sin estado'}
                   </span>
                   <span className={`text-xs font-medium truncate ${isDark ? 'text-zinc-100' : 'text-gray-800'}`} title={t.tipo || ''}>
-                    {esRevision ? 'Revisión de artes' : esSeguimiento ? 'Seguimiento' : t.tipo}
+                    {nombreTarea}
                   </span>
+                  {arteAsociado && (
+                    <span className={`text-[10px] px-1.5 py-0.5 rounded font-medium truncate max-w-[160px] ${isDark ? 'bg-fuchsia-500/15 text-fuchsia-200 border border-fuchsia-500/30' : 'bg-fuchsia-50 text-fuchsia-700 border border-fuchsia-200'}`} title={arteAsociado.nombre || ''}>
+                      v{arteAsociado.version}{arteAsociado.nombre ? ` · ${arteAsociado.nombre}` : ''}
+                    </span>
+                  )}
                 </div>
                 <ChevronRight className={`h-3.5 w-3.5 shrink-0 ${isDark ? 'text-fuchsia-300' : 'text-fuchsia-600'}`} />
               </div>
