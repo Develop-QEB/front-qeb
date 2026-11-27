@@ -2358,12 +2358,16 @@ function AtenderTareaModal({
     } catch { return null; }
   }, [tarea.evidencia]);
 
-  // Jos 2026-11-27: una tarea "Activo" o "En proceso" NO está resuelta aún —
-  // es un estatus intermedio en el flujo de Impresión/Instalación. Antes el
-  // modal decía "Esta tarea ya fue atendida" y bloqueaba acciones en tareas
-  // Activas que aún se podían atender.
-  const estatusActivos = ['pendiente', 'activo', 'en proceso'];
-  const yaResuelta = !estatusActivos.includes((tarea.estatus || '').toLowerCase());
+  // Jos 2026-11-27: `yaResuelta` decide qué footer se muestra.
+  //  - En Impresión/Recepción, "Activo" / "En proceso" significa que YA se
+  //    aceptó la tarea y ahora el siguiente paso es crear Recepción / marcar
+  //    recibida (no Aprobar/Rechazar). Esos estatus son "ya resuelto" para
+  //    efectos del footer: lleva al bloque que incluye "Crear recepción".
+  //  - En Revisión/Seguimiento/Corrección "Activo" sigue siendo activo y el
+  //    footer debe mostrar los botones Aprobar/Rechazar/Finalizar normales.
+  const yaResuelta = (esImpresion || esRecepcion)
+    ? tarea.estatus !== 'Pendiente'
+    : !['pendiente', 'activo', 'en proceso'].includes((tarea.estatus || '').toLowerCase());
   const esRechazada = (tarea.estatus || '').toLowerCase().includes('rechaz');
   const esAtendidaOk = ['atendido', 'finalizada'].includes((tarea.estatus || '').toLowerCase());
   // Jos 2026-10-12: solo permitir editar/reenviar si la prueba sigue
