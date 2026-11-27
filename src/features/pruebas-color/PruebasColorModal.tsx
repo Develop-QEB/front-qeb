@@ -3498,37 +3498,41 @@ function AtenderRevisionBatchModal({
             className={`w-full text-xs p-2 rounded border resize-y ${isDark ? 'bg-zinc-800 border-zinc-700 text-zinc-100 placeholder:text-zinc-500' : 'bg-white border-gray-300 text-gray-900 placeholder:text-gray-400'}`}
           />
         </div>
-        <div className="grid grid-cols-2 gap-2">
-          <div>
-            <label className={`text-[11px] font-medium mb-1 block ${isDark ? 'text-zinc-400' : 'text-gray-600'}`}>
-              {/* Jos 2026-11-27: "reemplazar" (no "adjuntar") — el archivo que
-                  subas SUSTITUYE al arte original en biblioteca. */}
-              Reemplazar arte ({EXTENSIONES_PERMITIDAS_LABEL}, opcional)
-            </label>
-            <input
-              type="file"
-              accept="image/jpeg,image/png,video/mp4,.jpg,.jpeg,.png,.mp4"
-              onChange={(e) => {
-                const f = e.target.files?.[0] || null;
-                if (f) handleUploadAdjunto(f);
-              }}
-              disabled={adjFileUploading}
-              className={`block w-full text-[11px] ${isDark ? 'text-zinc-300' : 'text-gray-700'} file:mr-2 file:py-1 file:px-2 file:rounded file:border-0 file:text-[11px] file:font-medium ${isDark ? 'file:bg-zinc-700 file:text-zinc-100' : 'file:bg-gray-200 file:text-gray-800'}`}
-            />
-            {adjFileUploading && <Loader2 className="h-3 w-3 animate-spin mt-1" />}
-            {adjFile && !adjFileUploading && <div className={`text-[10px] mt-0.5 truncate ${isDark ? 'text-zinc-400' : 'text-gray-500'}`}>{adjFile.name}</div>}
+        {/* Jos 2026-11-27: en masivo NO mostrar reemplazo ni enlace — son N artes
+            distintos, un solo archivo/link no aplica a todos. Solo motivo. */}
+        {!esMasivo && (
+          <div className="grid grid-cols-2 gap-2">
+            <div>
+              <label className={`text-[11px] font-medium mb-1 block ${isDark ? 'text-zinc-400' : 'text-gray-600'}`}>
+                {/* Jos 2026-11-27: "reemplazar" (no "adjuntar") — el archivo que
+                    subas SUSTITUYE al arte original en biblioteca. */}
+                Reemplazar arte ({EXTENSIONES_PERMITIDAS_LABEL}, opcional)
+              </label>
+              <input
+                type="file"
+                accept="image/jpeg,image/png,video/mp4,.jpg,.jpeg,.png,.mp4"
+                onChange={(e) => {
+                  const f = e.target.files?.[0] || null;
+                  if (f) handleUploadAdjunto(f);
+                }}
+                disabled={adjFileUploading}
+                className={`block w-full text-[11px] ${isDark ? 'text-zinc-300' : 'text-gray-700'} file:mr-2 file:py-1 file:px-2 file:rounded file:border-0 file:text-[11px] file:font-medium ${isDark ? 'file:bg-zinc-700 file:text-zinc-100' : 'file:bg-gray-200 file:text-gray-800'}`}
+              />
+              {adjFileUploading && <Loader2 className="h-3 w-3 animate-spin mt-1" />}
+              {adjFile && !adjFileUploading && <div className={`text-[10px] mt-0.5 truncate ${isDark ? 'text-zinc-400' : 'text-gray-500'}`}>{adjFile.name}</div>}
+            </div>
+            <div>
+              <label className={`text-[11px] font-medium mb-1 block ${isDark ? 'text-zinc-400' : 'text-gray-600'}`}>Enlace</label>
+              <input
+                type="url"
+                value={adjEnlace}
+                onChange={(e) => setAdjEnlace(e.target.value)}
+                placeholder="https://..."
+                className={`w-full text-xs p-1.5 rounded border ${isDark ? 'bg-zinc-800 border-zinc-700 text-zinc-100 placeholder:text-zinc-500' : 'bg-white border-gray-300 text-gray-900 placeholder:text-gray-400'}`}
+              />
+            </div>
           </div>
-          <div>
-            <label className={`text-[11px] font-medium mb-1 block ${isDark ? 'text-zinc-400' : 'text-gray-600'}`}>Enlace</label>
-            <input
-              type="url"
-              value={adjEnlace}
-              onChange={(e) => setAdjEnlace(e.target.value)}
-              placeholder="https://..."
-              className={`w-full text-xs p-1.5 rounded border ${isDark ? 'bg-zinc-800 border-zinc-700 text-zinc-100 placeholder:text-zinc-500' : 'bg-white border-gray-300 text-gray-900 placeholder:text-gray-400'}`}
-            />
-          </div>
-        </div>
+        )}
         {formError && (
           <div className={`text-[11px] px-2 py-1 rounded ${isDark ? 'bg-red-500/15 text-red-200 border border-red-500/30' : 'bg-red-50 text-red-700 border border-red-200'}`}>
             {formError}
