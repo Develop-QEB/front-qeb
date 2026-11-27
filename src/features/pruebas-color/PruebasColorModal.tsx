@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useSocketPruebasColor } from '../../hooks/useSocket';
 import { AlertCircle, Check, CheckCircle2, ChevronDown, Loader2, Paintbrush, Search, Send, Trash2, X, Upload, FileImage, ClipboardList, Plus, Users, XCircle, Flag, ChevronRight, ExternalLink, Printer, Download } from 'lucide-react';
 import { useThemeStore } from '../../store/themeStore';
 import { useAuthStore } from '../../store/authStore';
@@ -189,6 +190,11 @@ export function PruebasColorModal({ isOpen, onClose, propuestaId, contextoNombre
     queryFn: () => pruebasColorService.listar({ propuesta_id: propuestaId }),
     enabled: isOpen && !!propuestaId,
   });
+
+  // Jos 2026-11-27: real-time del modal — cuando otro usuario aprueba/
+  // rechaza/reenvía una prueba del mismo circuito, la lista + tareas de
+  // este modal se refrescan en vivo (antes había que recargar la página).
+  useSocketPruebasColor(isOpen ? propuestaId : null);
 
   const pruebasAll = useMemo(() => pruebasQuery.data || [], [pruebasQuery.data]);
   // Jos 2026-11-12: cuando el deep-link trae initialTareaId (desde Mis
