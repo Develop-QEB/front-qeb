@@ -1472,6 +1472,14 @@ function PruebaBatchCard({
 
 // ─── Tareas asociadas a una prueba (Revisión + Seguimiento) ─────────────
 // [Fix #258 — expand inline] Jos: las acciones aprobar/rechazar/finalizar
+// Jos 2026-11-27: estatus terminal = tarea cerrada (ya no activa). Se usa
+// para los flags "ya tiene Impresión/Recepción" de modo que solo cuente
+// cuando hay una abierta aún; una tarea Finalizada no bloquea crear otra.
+function esEstatusTerminal(estatus: string | null | undefined): boolean {
+  const s = (estatus || '').toLowerCase();
+  return ['atendido', 'rechazado', 'finalizada', 'finalizado', 'cerrada', 'cerrado'].includes(s);
+}
+
 // Jos 2026-11-27: helper para saber si una tarea (Impresión / Recepción /
 // cualquier tipo) referencia a una prueba específica en su contenido JSON.
 // Soporta ambos formatos: `pruebaColorId` singular y `pruebaColorIds` array
@@ -1796,8 +1804,8 @@ function TareasAsociadasSection({
             puedeCrear={puedeCrear}
             puedeRevisar={puedeRevisar}
             esUltimaRevision={tareaAbierta.id === idUltimaRevision}
-            yaTieneImpresion={tareas.some(t => tareaReferenciaA(t, pruebaParaModal.id, 'Impresión'))}
-            yaTieneRecepcion={tareas.some(t => tareaReferenciaA(t, pruebaParaModal.id, 'Recepción'))}
+            yaTieneImpresion={tareas.some(t => tareaReferenciaA(t, pruebaParaModal.id, 'Impresión') && !esEstatusTerminal(t.estatus))}
+            yaTieneRecepcion={tareas.some(t => tareaReferenciaA(t, pruebaParaModal.id, 'Recepción') && !esEstatusTerminal(t.estatus))}
             onClose={() => setOpenTareaId(null)}
             onAprobar={(opts) => resolver.mutate({ tareaId: tareaAbierta.id, accion: 'aprobar', comentario: opts?.comentario, archivo_adjunto: opts?.archivo_adjunto, enlace_adjunto: opts?.enlace_adjunto, pruebaIdObjetivo: pruebaParaModal.id })}
             onRechazar={(comentario, adjuntos) => resolver.mutate({ tareaId: tareaAbierta.id, accion: 'rechazar', comentario, archivo_adjunto: adjuntos?.archivo_adjunto, enlace_adjunto: adjuntos?.enlace_adjunto, pruebaIdObjetivo: pruebaParaModal.id })}
