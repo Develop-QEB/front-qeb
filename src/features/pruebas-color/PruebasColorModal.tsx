@@ -683,24 +683,81 @@ export function PruebasColorModal({ isOpen, onClose, propuestaId, contextoNombre
                         </button>
                         {!colapsado && (
                           <div className={`px-3 py-2 space-y-2 ${isDark ? 'bg-zinc-950/40' : 'bg-white'}`}>
-                            {grupo.pruebas.map(p => (
-                              <PruebaCard
-                                key={p.id}
-                                prueba={p}
-                                cara={grupo.cara}
-                                isDark={isDark}
-                                puedeGestionar={puedeGestionar}
-                                puedeCrear={puedeCrear}
-                                puedeRevisar={puedeRevisar}
-                                isUpdating={updateEstatusMutation.isPending || deleteMutation.isPending}
-                                totalVersiones={grupo.pruebas.length}
-                                initialTareaId={effectiveInitialTareaId}
-                                onInitialTareaIdConsumed={(id) => setLastAutoOpenedTareaId(id)}
-                                onDelete={() => {
-                                  if (confirm(`¿Eliminar la prueba v${p.version}?`)) deleteMutation.mutate(p.id);
-                                }}
-                              />
-                            ))}
+                            {/* Jos 2026-11-27: colapsar en UNA card las pruebas que comparten
+                                tarea_revision_id (= mismo batch). Agrupa dentro del circuito. */}
+                            {(() => {
+                              const subgrupos: Array<{ key: string; pruebas: PruebaColor[] }> = [];
+                              const porTarea = new Map<number, PruebaColor[]>();
+                              const individuales: PruebaColor[] = [];
+                              for (const p of grupo.pruebas) {
+                                if (p.tarea_revision_id != null) {
+                                  const arr = porTarea.get(p.tarea_revision_id) || [];
+                                  arr.push(p);
+                                  porTarea.set(p.tarea_revision_id, arr);
+                                } else {
+                                  individuales.push(p);
+                                }
+                              }
+                              for (const [tareaId, arr] of porTarea.entries()) {
+                                // Preservar orden: por version desc (mas reciente primero).
+                                arr.sort((a, b) => b.version - a.version);
+                                subgrupos.push({ key: `t${tareaId}`, pruebas: arr });
+                              }
+                              for (const p of individuales) {
+                                subgrupos.push({ key: `p${p.id}`, pruebas: [p] });
+                              }
+                              // Ordenar subgrupos: el del arte mas reciente primero.
+                              const tsPrueba = (p: PruebaColor) => (p.created_at ? new Date(p.created_at).getTime() : 0) || p.id;
+                              subgrupos.sort((a, b) => {
+                                const maxA = Math.max(...a.pruebas.map(tsPrueba));
+                                const maxB = Math.max(...b.pruebas.map(tsPrueba));
+                                return maxB - maxA;
+                              });
+
+                              return subgrupos.map(sg => {
+                                if (sg.pruebas.length > 1) {
+                                  return (
+                                    <PruebaBatchCard
+                                      key={sg.key}
+                                      pruebas={sg.pruebas}
+                                      cara={grupo.cara}
+                                      isDark={isDark}
+                                      puedeGestionar={puedeGestionar}
+                                      puedeCrear={puedeCrear}
+                                      puedeRevisar={puedeRevisar}
+                                      isUpdating={updateEstatusMutation.isPending || deleteMutation.isPending}
+                                      initialTareaId={effectiveInitialTareaId}
+                                      onInitialTareaIdConsumed={(id) => setLastAutoOpenedTareaId(id)}
+                                      onDelete={(pid) => {
+                                        const p = sg.pruebas.find(x => x.id === pid);
+                                        if (p && confirm(`¿Eliminar la prueba v${p.version} (${p.nombre_arte || 'sin nombre'})?`)) {
+                                          deleteMutation.mutate(pid);
+                                        }
+                                      }}
+                                    />
+                                  );
+                                }
+                                const p = sg.pruebas[0];
+                                return (
+                                  <PruebaCard
+                                    key={p.id}
+                                    prueba={p}
+                                    cara={grupo.cara}
+                                    isDark={isDark}
+                                    puedeGestionar={puedeGestionar}
+                                    puedeCrear={puedeCrear}
+                                    puedeRevisar={puedeRevisar}
+                                    isUpdating={updateEstatusMutation.isPending || deleteMutation.isPending}
+                                    totalVersiones={grupo.pruebas.length}
+                                    initialTareaId={effectiveInitialTareaId}
+                                    onInitialTareaIdConsumed={(id) => setLastAutoOpenedTareaId(id)}
+                                    onDelete={() => {
+                                      if (confirm(`¿Eliminar la prueba v${p.version}?`)) deleteMutation.mutate(p.id);
+                                    }}
+                                  />
+                                );
+                              });
+                            })()}
                           </div>
                         )}
                       </div>
@@ -1211,6 +1268,176 @@ function PruebaCard({
           se sincronizan al gestor de artes vía campania_id. */}
       <TareasAsociadasSection
         prueba={prueba}
+        cara={cara}
+        isDark={isDark}
+        puedeGestionar={puedeGestionar}
+        puedeCrear={puedeCrear}
+        puedeRevisar={puedeRevisar}
+        initialTareaId={initialTareaId}
+        onInitialTareaIdConsumed={onInitialTareaIdConsumed}
+      />
+    </div>
+  );
+}
+
+// ─── Card AGRUPADA: N pruebas que comparten tarea de Revisión (batch) ───
+// Jos 2026-11-27: antes se pintaba UNA card por cada prueba del batch, lo
+// que dejaba v1/v2/... con la MISMA tarea de Revisión duplicada. Ahora las
+// N pruebas se colapsan en una sola card con la lista de artes adentro y
+// UNA sola sección de tareas asociadas (tareasAsociadasSection reutilizada).
+function PruebaBatchCard({
+  pruebas,
+  cara,
+  isDark,
+  puedeGestionar,
+  puedeCrear,
+  puedeRevisar,
+  isUpdating,
+  onDelete,
+  initialTareaId,
+  onInitialTareaIdConsumed,
+}: {
+  pruebas: PruebaColor[]; // N > 1, mismo tarea_revision_id
+  cara: SolicitudCara | null;
+  isDark: boolean;
+  puedeGestionar: boolean;
+  puedeCrear: boolean;
+  puedeRevisar: boolean;
+  isUpdating: boolean;
+  onDelete: (pruebaId: number) => void;
+  initialTareaId?: number;
+  onInitialTareaIdConsumed?: (id: number) => void;
+}) {
+  // Representante del batch (usado para TareasAsociadasSection — carga las
+  // tareas via listarTareas(pruebaId) que ya detecta pruebaColorIds array).
+  const representante = pruebas[0];
+  const totalArtes = pruebas.length;
+
+  // Resumen de estatus del batch para el badge principal.
+  const resumen = useMemo(() => {
+    let aprobadas = 0, rechazadas = 0, pendientes = 0;
+    for (const p of pruebas) {
+      if (p.estatus === 'arte_aprobado' || p.estatus === 'aprobada' || p.estatus === 'enviada_proveedor') aprobadas++;
+      else if (p.estatus === 'rechazada') rechazadas++;
+      else pendientes++;
+    }
+    return { aprobadas, rechazadas, pendientes };
+  }, [pruebas]);
+
+  const estatusBadge = (() => {
+    if (resumen.pendientes === totalArtes) {
+      return { label: `Pendiente de revisión (${totalArtes})`, cls: isDark ? 'bg-amber-500/15 text-amber-200 border-amber-500/40' : 'bg-amber-50 text-amber-800 border-amber-300' };
+    }
+    if (resumen.aprobadas === totalArtes) {
+      return { label: `Todas aprobadas (${totalArtes})`, cls: isDark ? 'bg-emerald-500/15 text-emerald-200 border-emerald-500/40' : 'bg-emerald-50 text-emerald-800 border-emerald-300' };
+    }
+    if (resumen.rechazadas === totalArtes) {
+      return { label: `Todas rechazadas (${totalArtes})`, cls: isDark ? 'bg-red-500/15 text-red-200 border-red-500/40' : 'bg-red-50 text-red-800 border-red-300' };
+    }
+    const partes: string[] = [];
+    if (resumen.aprobadas) partes.push(`${resumen.aprobadas} aprobad${resumen.aprobadas === 1 ? 'o' : 'os'}`);
+    if (resumen.rechazadas) partes.push(`${resumen.rechazadas} rechazad${resumen.rechazadas === 1 ? 'o' : 'os'}`);
+    if (resumen.pendientes) partes.push(`${resumen.pendientes} pendiente${resumen.pendientes === 1 ? '' : 's'}`);
+    return { label: partes.join(' · '), cls: isDark ? 'bg-fuchsia-500/15 text-fuchsia-200 border-fuchsia-500/40' : 'bg-fuchsia-50 text-fuchsia-800 border-fuchsia-300' };
+  })();
+
+  const artesEstatusStyle = (estatus: EstatusPruebaColor): string => {
+    if (estatus === 'arte_aprobado' || estatus === 'aprobada' || estatus === 'enviada_proveedor')
+      return isDark ? 'bg-emerald-500/15 text-emerald-200 border-emerald-500/40' : 'bg-emerald-50 text-emerald-800 border-emerald-300';
+    if (estatus === 'rechazada')
+      return isDark ? 'bg-red-500/15 text-red-200 border-red-500/40' : 'bg-red-50 text-red-800 border-red-300';
+    return isDark ? 'bg-amber-500/15 text-amber-200 border-amber-500/40' : 'bg-amber-50 text-amber-800 border-amber-300';
+  };
+
+  return (
+    <div className={`rounded-lg border overflow-hidden ${isDark ? 'bg-zinc-800/50 border-zinc-700' : 'bg-white border-gray-200'}`}>
+      {/* Header batch: badge resumen + total artes + info solicitante */}
+      <div className={`px-3 py-2.5 flex items-start justify-between gap-3 border-b ${isDark ? 'border-zinc-800 bg-zinc-900/40' : 'border-gray-100 bg-gray-50/60'}`}>
+        <div className="flex items-center gap-2 min-w-0 flex-1 flex-wrap">
+          <span className={`text-[11px] px-1.5 py-0.5 rounded font-bold ${isDark ? 'bg-fuchsia-500/20 text-fuchsia-200' : 'bg-fuchsia-100 text-fuchsia-700'}`}>
+            Lote de {totalArtes} artes
+          </span>
+          <span className={`text-[10px] px-2 py-0.5 rounded-full border font-semibold ${estatusBadge.cls}`}>
+            {estatusBadge.label}
+          </span>
+        </div>
+      </div>
+
+      <div className="px-3 py-2.5 space-y-2">
+        {/* Info del circuito */}
+        {cara && (() => {
+          const periodo = formatPeriodo(cara.inicio_periodo, cara.fin_periodo);
+          const items: Array<[string, string]> = [];
+          const plaza = cara.ciudad || cara.estados;
+          if (plaza) items.push(['Plaza', plaza]);
+          if (cara.formato) items.push(['Formato', cara.formato]);
+          if (periodo) items.push(['Catorcena', periodo]);
+          if (items.length === 0) return null;
+          return (
+            <div className={`text-[11px] flex flex-wrap gap-x-3 gap-y-1 rounded-md px-2 py-1.5 ${isDark ? 'bg-zinc-900/50 border border-zinc-800' : 'bg-gray-50 border border-gray-200'}`}>
+              {items.map(([k, v]) => (
+                <span key={k} className={isDark ? 'text-zinc-400' : 'text-gray-600'}>
+                  <span className={isDark ? 'text-zinc-500' : 'text-gray-500'}>{k}:</span>{' '}
+                  <span className={`font-medium ${isDark ? 'text-zinc-200' : 'text-gray-800'}`}>{v}</span>
+                </span>
+              ))}
+            </div>
+          );
+        })()}
+
+        <div className={`text-[11px] ${isDark ? 'text-zinc-400' : 'text-gray-600'}`}>
+          Solicitado por <span className={isDark ? 'text-zinc-200' : 'text-gray-800'}>{representante.created_by_nombre}</span> · {formatDate(representante.created_at)}
+        </div>
+
+        {representante.notas && (
+          <div className={`text-xs rounded-md px-2.5 py-1.5 whitespace-pre-wrap ${isDark ? 'bg-zinc-900/60 text-zinc-200 border border-zinc-800' : 'bg-gray-50 text-gray-700 border border-gray-200'}`}>
+            {representante.notas}
+          </div>
+        )}
+
+        {/* Lista compacta de los N artes del batch */}
+        <div className={`rounded-md border divide-y ${isDark ? 'border-zinc-800 divide-zinc-800' : 'border-gray-200 divide-gray-200'}`}>
+          {pruebas.map(p => (
+            <div key={p.id} className={`px-2.5 py-2 flex items-center gap-2 flex-wrap ${isDark ? 'bg-zinc-900/30' : 'bg-white'}`}>
+              <span className={`text-[10px] px-1.5 py-0.5 rounded font-bold shrink-0 ${isDark ? 'bg-fuchsia-500/20 text-fuchsia-200' : 'bg-fuchsia-100 text-fuchsia-700'}`}>
+                v{p.version}
+              </span>
+              <span className={`text-[10px] px-2 py-0.5 rounded-full border font-semibold shrink-0 ${artesEstatusStyle(p.estatus)}`}>
+                {ESTATUS_LABEL[p.estatus]}
+              </span>
+              <span className={`text-xs font-medium truncate flex-1 min-w-[120px] ${isDark ? 'text-zinc-100' : 'text-gray-900'}`} title={p.nombre_arte || `Prueba #${p.id}`}>
+                {p.nombre_arte || `Prueba #${p.id}`}
+              </span>
+              {p.archivo && (
+                <a href={p.archivo} target="_blank" rel="noreferrer" className={`inline-flex items-center gap-1 text-[11px] font-medium px-2 py-1 rounded border shrink-0 ${isDark ? 'text-fuchsia-300 border-fuchsia-500/40 hover:bg-fuchsia-500/10' : 'text-fuchsia-700 border-fuchsia-300 hover:bg-fuchsia-50'}`}>
+                  <FileImage className="h-3 w-3" /> Ver
+                </a>
+              )}
+              {p.enlace_externo && (
+                <a href={p.enlace_externo} target="_blank" rel="noreferrer" className={`inline-flex items-center gap-1 text-[11px] font-medium px-2 py-1 rounded border shrink-0 ${isDark ? 'text-cyan-300 border-cyan-500/40 hover:bg-cyan-500/10' : 'text-cyan-700 border-cyan-300 hover:bg-cyan-50'}`}>
+                  <ExternalLink className="h-3 w-3" /> Link
+                </a>
+              )}
+              {puedeGestionar && (
+                <button
+                  onClick={() => onDelete(p.id)}
+                  disabled={isUpdating}
+                  className={`shrink-0 p-1 rounded transition-colors ${isDark ? 'text-zinc-500 hover:text-red-300 hover:bg-red-500/10' : 'text-gray-400 hover:text-red-600 hover:bg-red-50'} disabled:opacity-50`}
+                  title={`Eliminar v${p.version}`}
+                >
+                  <Trash2 className="h-3.5 w-3.5" />
+                </button>
+              )}
+            </div>
+          ))}
+        </div>
+      </div>
+
+      {/* UNA sola sección de tareas asociadas para todo el batch (la query
+          usa el id del representante, pero el back filtra también por
+          contenido.pruebaColorIds, así que siempre devuelve la tarea batch). */}
+      <TareasAsociadasSection
+        prueba={representante}
         cara={cara}
         isDark={isDark}
         puedeGestionar={puedeGestionar}
