@@ -1782,7 +1782,7 @@ export function AtenderModal({ isOpen, onClose, solicitud, onSuccess }: AtenderM
   const creadorSolicitudId = solicitud?.usuario_id;
   const { data: teamUsers = [] } = useQuery({
     queryKey: ['solicitudes-users', 'team', 'atender-modal', creadorSolicitudId],
-    queryFn: () => solicitudesService.getUsers(undefined, true, creadorSolicitudId),
+    queryFn: () => solicitudesService.getUsers(undefined, true, creadorSolicitudId ?? undefined),
     enabled: isOpen && !!creadorSolicitudId,
   });
 
