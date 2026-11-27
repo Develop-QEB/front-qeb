@@ -50,6 +50,10 @@ export interface PruebaColor {
   // migracion no tienen el campo. Si falta, trata como 'prueba_color'.
   tipo?: TipoPrueba | null;
   version: number;
+  // Jos 2026-11-27: id de la tarea 'Revisión de artes' que agrupa esta
+  // prueba. Pruebas creadas en el mismo batch comparten el id; el modal
+  // colapsa las N en UNA sola card con N artes.
+  tarea_revision_id: number | null;
   created_by: number;
   created_by_nombre: string;
   created_at: string;
