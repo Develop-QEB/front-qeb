@@ -1204,8 +1204,10 @@ function PruebaCard({
         {cara && (() => {
           const periodo = formatPeriodo(cara.inicio_periodo, cara.fin_periodo);
           const items: Array<[string, string, string?]> = [];
-          // Jos 2026-11-27: abreviar Plaza larga (circuitos multi-plaza).
-          const plazaRaw = (cara.ciudad || cara.estados || '').trim();
+          // Jos 2026-11-27: "Plaza" es el campo `plaza` del circuito
+          // (ej. "CIUDAD DE MÉXICO"), NO la ciudad ni el estado. Fallback
+          // por si algún circuito viejo no lo trae.
+          const plazaRaw = (cara.plaza || cara.estados || cara.ciudad || '').trim();
           if (plazaRaw) {
             const partes = plazaRaw.split(',').map(s => s.trim()).filter(Boolean);
             const plazaCorta = partes.length > 1
@@ -1375,19 +1377,12 @@ function PruebaBatchCard({
         {cara && (() => {
           const periodo = formatPeriodo(cara.inicio_periodo, cara.fin_periodo);
           const items: Array<[string, string, string?]> = [];
-          // Jos 2026-11-27: en circuitos multi-plaza (red PARABUS, etc.)
-          // `cara.ciudad` trae todas las ciudades concatenadas con comas y
-          // ocupaba 3 líneas. Mostramos solo la PRIMERA + contador "+N" y
-          // dejamos el listado completo en el tooltip (title) para quien
-          // quiera verlas.
-          const plazaRaw = (cara.ciudad || cara.estados || '').trim();
-          if (plazaRaw) {
-            const partes = plazaRaw.split(',').map(s => s.trim()).filter(Boolean);
-            const plazaCorta = partes.length > 1
-              ? `${partes[0]} + ${partes.length - 1} más`
-              : plazaRaw;
-            items.push(['Plaza', plazaCorta, plazaRaw]);
-          }
+          // Jos 2026-11-27: "Plaza" es el campo `plaza` del circuito (ej.
+          // "CIUDAD DE MÉXICO"), que viene del inventario — NO la ciudad ni
+          // los estados. Si el endpoint no lo trae, no mostramos nada en
+          // Plaza (preferible al listado de 20+ municipios anterior).
+          const plazaRaw = (cara.plaza || '').trim();
+          if (plazaRaw) items.push(['Plaza', plazaRaw, plazaRaw]);
           if (cara.formato) items.push(['Formato', cara.formato]);
           if (periodo) items.push(['Catorcena', periodo]);
           if (items.length === 0) return null;
