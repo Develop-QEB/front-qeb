@@ -3124,8 +3124,9 @@ function AtenderTareaModal({
                   {/* Jos 2026-11-27: la campaña puede venir de la tarea
                       (heredada al crearse) aunque la prueba_color.campania_id
                       aún esté null porque nació en propuesta. Preferimos la
-                      de la tarea. */}
-                  {esImpresion && !yaTieneRecepcion && (tarea.campania_id || prueba.campania_id) && (
+                      de la tarea. Si ni la tarea ni la prueba la tienen,
+                      permitimos crear igual (con el guard en el submodal). */}
+                  {esImpresion && !yaTieneRecepcion && (
                     <button
                       onClick={() => setShowRecepcion(true)}
                       disabled={isSaving}
