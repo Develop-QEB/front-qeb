@@ -689,6 +689,42 @@ export function useSocketInventarioRealtime(
 }
 
 /**
+ * Jos 2026-11-27: hook para que el modal de Pruebas de Color se actualice
+ * EN VIVO cuando otro usuario aprueba/rechaza/reenvía pruebas del mismo
+ * circuito (ej. Jos marca desde Diseño mientras el asesor mira el modal).
+ * Invalida las queries de pruebas y tareas de la propuesta — react-query
+ * refetcha solo las que estén montadas en pantalla.
+ */
+export function useSocketPruebasColor(propuestaId: number | null) {
+  const queryClient = useQueryClient();
+  useEffect(() => {
+    if (!propuestaId || propuestaId <= 0) return;
+    const socket = getSocket();
+    const refrescar = () => {
+      queryClient.invalidateQueries({ queryKey: ['pruebas-color'] });
+      queryClient.invalidateQueries({ queryKey: ['pruebas-color', 'propuesta', propuestaId] });
+      queryClient.invalidateQueries({ queryKey: ['pruebas-color', 'tareas'] });
+      queryClient.invalidateQueries({ queryKey: ['tareas'] });
+      queryClient.invalidateQueries({ queryKey: ['notificaciones'] });
+    };
+    socket.on(SOCKET_EVENTS.NOTIFICACION_NUEVA, refrescar);
+    socket.on(SOCKET_EVENTS.TAREA_CREADA, refrescar);
+    socket.on(SOCKET_EVENTS.TAREA_ACTUALIZADA, refrescar);
+    socket.on(SOCKET_EVENTS.ARTE_APROBADO, refrescar);
+    socket.on(SOCKET_EVENTS.ARTE_RECHAZADO, refrescar);
+    socket.on(SOCKET_EVENTS.ARTE_SUBIDO, refrescar);
+    return () => {
+      socket.off(SOCKET_EVENTS.NOTIFICACION_NUEVA, refrescar);
+      socket.off(SOCKET_EVENTS.TAREA_CREADA, refrescar);
+      socket.off(SOCKET_EVENTS.TAREA_ACTUALIZADA, refrescar);
+      socket.off(SOCKET_EVENTS.ARTE_APROBADO, refrescar);
+      socket.off(SOCKET_EVENTS.ARTE_RECHAZADO, refrescar);
+      socket.off(SOCKET_EVENTS.ARTE_SUBIDO, refrescar);
+    };
+  }, [propuestaId, queryClient]);
+}
+
+/**
  * Hook para escuchar cambios en miembros de equipos (para actualizar selects de asignados)
  */
 export function useSocketEquipos() {
