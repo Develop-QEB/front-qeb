@@ -2017,6 +2017,7 @@ function AtenderTareaModal({
     version: number | null;
     nombreArte: string | null;
     scId: number | null;
+    arte: string | null;
     motivo: string;
     archivoAdjunto: string | null;
     enlaceAdjunto: string | null;
@@ -2086,6 +2087,7 @@ function AtenderTareaModal({
           version?: number;
           scId?: number;
           nombreArte?: string | null;
+          arte?: string | null;
           motivoRechazo?: string | null;
           archivoAdjunto?: string | null;
           enlaceAdjunto?: string | null;
@@ -2101,6 +2103,7 @@ function AtenderTareaModal({
             version: a.version ?? null,
             nombreArte: a.nombreArte ?? null,
             scId: a.scId ?? c.scId ?? null,
+            arte: a.arte ?? null,
             motivo: a.motivoRechazo || '',
             archivoAdjunto: a.archivoAdjunto || null,
             enlaceAdjunto: a.enlaceAdjunto || null,
@@ -2115,6 +2118,7 @@ function AtenderTareaModal({
           version: c.version ?? null,
           nombreArte: null,
           scId: c.scId ?? null,
+          arte: null,
           motivo: c.motivoRechazo || '',
           archivoAdjunto: c.archivoAdjunto || null,
           enlaceAdjunto: c.enlaceAdjunto || null,
@@ -2227,6 +2231,10 @@ function AtenderTareaModal({
   // Lightbox del arte de la prueba — Jos pidió preview + click para abrir
   // el visor grande (reutiliza el patrón del modal de galeria de artes).
   const [lightboxOpen, setLightboxOpen] = useState(false);
+  // Jos 2026-11-27: lightbox para cards del batch Corrección — cada arte
+  // rechazado tiene su propio archivo; este state guarda cuál arte (URL +
+  // etiqueta) mostrar en grande cuando el revisor da clic en "Ver arte".
+  const [lightboxArteBatch, setLightboxArteBatch] = useState<{ url: string; label: string } | null>(null);
 
   // Reenvio inline — Jos 2026-10-12: cuando la tarea es Revisión Rechazada,
   // el creador puede re-subir arte sobre la misma prueba (NO crea v2).
@@ -2480,10 +2488,51 @@ function AtenderTareaModal({
                     key={arte.pruebaColorId ?? idx}
                     className={`rounded-lg p-2.5 border space-y-1.5 ${isDark ? 'bg-zinc-900/40 border-zinc-700' : 'bg-white border-gray-200'}`}
                   >
-                    <div className={`text-[11px] font-semibold ${isDark ? 'text-zinc-100' : 'text-gray-800'}`}>
-                      {arte.version ? `v${arte.version}` : ''}
-                      {arte.nombreArte ? ` · ${arte.nombreArte}` : ''}
-                      {!arte.version && !arte.nombreArte ? `Arte #${arte.pruebaColorId}` : ''}
+                    <div className={`flex items-start gap-2.5`}>
+                      {/* Preview del arte rechazado — Jos 2026-11-27: una
+                          miniatura clicable por card para distinguir visualmente
+                          cada arte en el batch. Click abre el lightbox. */}
+                      {arte.arte && (
+                        <button
+                          type="button"
+                          onClick={() => setLightboxArteBatch({
+                            url: arte.arte!,
+                            label: `${arte.version ? `v${arte.version}` : ''}${arte.nombreArte ? ` · ${arte.nombreArte}` : ''}`.trim() || `Arte #${arte.pruebaColorId}`,
+                          })}
+                          className={`relative shrink-0 w-20 h-20 rounded-md overflow-hidden border transition-all group ${isDark ? 'border-zinc-700 bg-zinc-800 hover:border-fuchsia-500/60' : 'border-gray-300 bg-gray-50 hover:border-fuchsia-400'}`}
+                          title="Click para ver en grande"
+                        >
+                          <img
+                            src={arte.arte}
+                            alt={arte.nombreArte || `Arte #${arte.pruebaColorId}`}
+                            className="w-full h-full object-contain"
+                          />
+                          <div className={`absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity ${isDark ? 'bg-black/50' : 'bg-black/40'}`}>
+                            <Search className="h-4 w-4 text-white" />
+                          </div>
+                        </button>
+                      )}
+                      <div className="flex-1 min-w-0 space-y-1.5">
+                        <div className={`text-[11px] font-semibold flex items-center gap-2 flex-wrap ${isDark ? 'text-zinc-100' : 'text-gray-800'}`}>
+                          <span>
+                            {arte.version ? `v${arte.version}` : ''}
+                            {arte.nombreArte ? ` · ${arte.nombreArte}` : ''}
+                            {!arte.version && !arte.nombreArte ? `Arte #${arte.pruebaColorId}` : ''}
+                          </span>
+                          {arte.arte && (
+                            <button
+                              type="button"
+                              onClick={() => setLightboxArteBatch({
+                                url: arte.arte!,
+                                label: `${arte.version ? `v${arte.version}` : ''}${arte.nombreArte ? ` · ${arte.nombreArte}` : ''}`.trim() || `Arte #${arte.pruebaColorId}`,
+                              })}
+                              className={`inline-flex items-center gap-1 text-[10px] font-medium px-2 py-0.5 rounded border transition-colors ${isDark ? 'border-fuchsia-500/50 text-fuchsia-200 bg-fuchsia-500/10 hover:bg-fuchsia-500/20' : 'border-fuchsia-300 text-fuchsia-700 bg-fuchsia-50 hover:bg-fuchsia-100'}`}
+                            >
+                              <Search className="h-3 w-3" /> Ver arte
+                            </button>
+                          )}
+                        </div>
+                      </div>
                     </div>
                     {arte.motivo && (
                       <div>
@@ -3329,6 +3378,44 @@ function AtenderTareaModal({
       </div>
 
       {/* Lightbox del arte — overlay por encima de todo (z-[90]) */}
+      {lightboxArteBatch && (
+        <div
+          className="fixed inset-0 z-[90] flex items-center justify-center p-4 bg-black/90"
+          onClick={(e) => { e.stopPropagation(); setLightboxArteBatch(null); }}
+        >
+          <button
+            onClick={(e) => { e.stopPropagation(); setLightboxArteBatch(null); }}
+            className="absolute top-4 right-4 p-2 rounded-full bg-black/60 text-white hover:bg-black/80 transition-colors z-10"
+            title="Cerrar"
+          >
+            <X className="h-5 w-5" />
+          </button>
+          <a
+            href={lightboxArteBatch.url}
+            target="_blank"
+            rel="noreferrer"
+            onClick={(e) => e.stopPropagation()}
+            className="absolute top-4 left-4 inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-black/60 text-white text-xs font-medium hover:bg-black/80 transition-colors z-10"
+            title="Abrir original en pestaña nueva"
+          >
+            <FileImage className="h-3.5 w-3.5" /> Abrir original
+          </a>
+          <img
+            src={lightboxArteBatch.url}
+            alt={lightboxArteBatch.label}
+            onClick={(e) => e.stopPropagation()}
+            className="max-w-full max-h-full object-contain rounded shadow-2xl"
+          />
+          {lightboxArteBatch.label && (
+            <div
+              onClick={(e) => e.stopPropagation()}
+              className="absolute bottom-4 left-1/2 -translate-x-1/2 px-3 py-1.5 rounded-full bg-black/60 text-white text-xs font-medium"
+            >
+              {lightboxArteBatch.label}
+            </div>
+          )}
+        </div>
+      )}
       {lightboxOpen && (tarea.archivo || prueba.archivo) && (
         <div
           className="fixed inset-0 z-[90] flex items-center justify-center p-4 bg-black/90"
