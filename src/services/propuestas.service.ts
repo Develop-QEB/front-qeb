@@ -497,6 +497,7 @@ export interface CaraUpdateData {
 export interface SolicitudCara {
   id: number;
   idquote?: string;
+  plaza?: string;
   ciudad?: string;
   estados?: string;
   tipo?: string;
