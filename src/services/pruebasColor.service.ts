@@ -102,6 +102,12 @@ export interface TareaAsociadaPruebaColor {
   evidencia: string | null;
   fecha_inicio: string | null;
   fecha_fin: string | null;
+  // Jos 2026-11-27: la tarea Impresión/Recepción pertenece a una campaña
+  // concreta; se usa para heredar al crear la tarea Recepción siguiente
+  // cuando la prueba no tiene su propio campania_id sincronizado.
+  campania_id?: number | null;
+  id_responsable?: number | null;
+  id_asignado?: string | null;
 }
 
 export type AccionResolverTarea = 'aprobar' | 'rechazar' | 'finalizar';

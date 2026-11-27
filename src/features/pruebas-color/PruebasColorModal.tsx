@@ -1993,6 +1993,11 @@ function AtenderTareaModal({
   // Finalizada, lo que permitía duplicar reenvíos.
   const tareaEstatusLower = (tarea.estatus || '').toLowerCase();
   const tareaYaCerrada = ['atendido', 'rechazado', 'finalizada', 'finalizado', 'cerrada', 'cerrado'].includes(tareaEstatusLower);
+  // Jos 2026-11-27: la tarea Impresión/Recepción tiene su propio campania_id
+  // (se heredó al crear la tarea). Preferimos ese al de la prueba porque la
+  // prueba puede estar sin sincronizar (nacida en propuesta). Fallback a
+  // prueba.campania_id para flows donde la tarea no lo tiene.
+  const campaniaIdEfectivo: number | null = (tarea.campania_id as number | null | undefined) ?? prueba.campania_id ?? null;
   // Jos 2026-11-27: tareas tipo 'Prueba de Color' con requiereNuevaVersion
   // son el aviso al asesor de que su arte fue RECHAZADO. Render especial
   // con motivo + archivos de referencia + botón para subir nueva versión.
@@ -2241,14 +2246,15 @@ function AtenderTareaModal({
     }
   }, [showConfirmarRecibidas, tarea.num_impresiones]);
   const handleMarcarRecibida = async (cantidad: number) => {
-    if (!prueba.campania_id) return;
+    const campaniaId = campaniaIdEfectivo;
+    if (!campaniaId) return;
     setRecibiendoRecepcion(true);
     try {
       const evidenciaPrev = (() => {
         try { return tarea.evidencia ? JSON.parse(tarea.evidencia) : {}; } catch { return {}; }
       })();
       const evidenciaNueva = JSON.stringify({ ...evidenciaPrev, num_recibidas: cantidad });
-      await campanasService.updateTarea(prueba.campania_id, tarea.id, {
+      await campanasService.updateTarea(campaniaId, tarea.id, {
         estatus: 'Finalizada',
         evidencia: evidenciaNueva,
       });
@@ -2260,7 +2266,7 @@ function AtenderTareaModal({
       if (total !== null && cantidad < total) {
         const faltantes = total - cantidad;
         try {
-          await campanasService.createTarea(prueba.campania_id, {
+          await campanasService.createTarea(campaniaId, {
             titulo: `Recepción pendiente — ${faltantes} impresión${faltantes === 1 ? '' : 'es'} por recibir`,
             descripcion: `Seguimiento de recepción de la tarea #${tarea.id}. Se recibieron ${cantidad} de ${total}; quedan ${faltantes} por recibir.`,
             tipo: 'Recepción',
@@ -3115,7 +3121,11 @@ function AtenderTareaModal({
                   {/* Jos 2026-11-12: Crear tarea Recepción desde aquí (como
                       en Gestor de Artes). PDF guía opcional, asignado hereda
                       de la tarea Impresión. Se oculta si ya existe Recepción. */}
-                  {esImpresion && !yaTieneRecepcion && prueba.campania_id && (
+                  {/* Jos 2026-11-27: la campaña puede venir de la tarea
+                      (heredada al crearse) aunque la prueba_color.campania_id
+                      aún esté null porque nació en propuesta. Preferimos la
+                      de la tarea. */}
+                  {esImpresion && !yaTieneRecepcion && (tarea.campania_id || prueba.campania_id) && (
                     <button
                       onClick={() => setShowRecepcion(true)}
                       disabled={isSaving}
