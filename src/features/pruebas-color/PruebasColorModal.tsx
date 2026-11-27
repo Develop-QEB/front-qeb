@@ -1767,6 +1767,33 @@ function AtenderTareaModal({
   const esImpresion = tarea.tipo === 'Impresión';
   const esRecepcion = tarea.tipo === 'Recepción';
   const esRevisionAnticipada = prueba.tipo === 'revision_anticipada';
+  // Jos 2026-11-27: tareas tipo 'Prueba de Color' con requiereNuevaVersion
+  // son el aviso al asesor de que su arte fue RECHAZADO. Render especial
+  // con motivo + archivos de referencia + botón para subir nueva versión.
+  const avisoRechazo = useMemo(() => {
+    if (tarea.tipo !== 'Prueba de Color' || !tarea.contenido) return null;
+    try {
+      const c = JSON.parse(tarea.contenido) as {
+        pruebaColorId?: number;
+        scId?: number;
+        propuestaId?: number;
+        version?: number;
+        requiereNuevaVersion?: boolean;
+        motivoRechazo?: string;
+        archivoAdjunto?: string;
+        enlaceAdjunto?: string;
+      };
+      if (!c.requiereNuevaVersion) return null;
+      return {
+        propuestaId: c.propuestaId || null,
+        scId: c.scId || null,
+        version: c.version || null,
+        motivo: c.motivoRechazo || '',
+        archivoAdjunto: c.archivoAdjunto || null,
+        enlaceAdjunto: c.enlaceAdjunto || null,
+      };
+    } catch { return null; }
+  }, [tarea.tipo, tarea.contenido]);
   // Jos 2026-11-12: la tarea Recepción guarda la guía PDF en evidencia
   // (JSON) y la fecha estimada en fecha_fin. Las leemos para mostrar al
   // abrir el detalle (así el usuario puede revisar antes de atenderla).
@@ -1990,6 +2017,59 @@ function AtenderTareaModal({
 
         {/* Body (scrolleable para que crezca sin desbordar) */}
         <div className="flex-1 overflow-y-auto px-5 py-4 space-y-4">
+          {/* Jos 2026-11-27: aviso de arte rechazado — motivo + referencias
+              + botón para subir nueva versión. Mismo UI que en Mis Tareas
+              (NotificacionesPage) para una experiencia consistente. */}
+          {avisoRechazo && (
+            <div className={`rounded-xl p-3 border space-y-2 ${isDark ? 'bg-red-500/5 border-red-500/30' : 'bg-red-50/70 border-red-200'}`}>
+              <div className={`text-xs font-semibold uppercase tracking-wider flex items-center gap-2 ${isDark ? 'text-red-300' : 'text-red-700'}`}>
+                <AlertCircle className="h-3.5 w-3.5" />
+                Prueba de color rechazada
+              </div>
+              {avisoRechazo.motivo && (
+                <div>
+                  <div className={`text-[10px] uppercase tracking-wide font-semibold mb-1 ${isDark ? 'text-red-300' : 'text-red-700'}`}>Motivo del rechazo</div>
+                  <div className={`text-sm whitespace-pre-wrap ${isDark ? 'text-zinc-100' : 'text-gray-800'}`}>{avisoRechazo.motivo}</div>
+                </div>
+              )}
+              {(avisoRechazo.archivoAdjunto || avisoRechazo.enlaceAdjunto) && (
+                <div className="space-y-1.5 pt-1">
+                  <div className={`text-[10px] uppercase tracking-wide font-semibold ${isDark ? 'text-red-300' : 'text-red-700'}`}>Referencias del rechazo</div>
+                  <div className="flex items-center gap-2 flex-wrap">
+                    {avisoRechazo.archivoAdjunto && (
+                      <a href={avisoRechazo.archivoAdjunto} target="_blank" rel="noreferrer" className={`inline-flex items-center gap-1.5 text-xs font-medium px-2.5 py-1 rounded border ${isDark ? 'text-fuchsia-200 border-fuchsia-500/40 bg-fuchsia-500/10 hover:bg-fuchsia-500/20' : 'text-fuchsia-800 border-fuchsia-300 bg-fuchsia-50 hover:bg-fuchsia-100'}`}>
+                        <FileImage className="h-3 w-3" /> Ver archivo
+                      </a>
+                    )}
+                    {avisoRechazo.enlaceAdjunto && (
+                      <a href={avisoRechazo.enlaceAdjunto} target="_blank" rel="noreferrer" className={`inline-flex items-center gap-1.5 text-xs font-medium px-2.5 py-1 rounded border ${isDark ? 'text-cyan-200 border-cyan-500/40 bg-cyan-500/10 hover:bg-cyan-500/20' : 'text-cyan-800 border-cyan-300 bg-cyan-50 hover:bg-cyan-100'}`}>
+                        <ExternalLink className="h-3 w-3" /> Abrir link
+                      </a>
+                    )}
+                  </div>
+                </div>
+              )}
+              <div className={`text-[11px] ${isDark ? 'text-zinc-400' : 'text-gray-600'}`}>
+                {avisoRechazo.version ? `v${avisoRechazo.version} ` : ''}{avisoRechazo.scId ? `· Circuito #${avisoRechazo.scId} ` : ''}{avisoRechazo.propuestaId ? `· Propuesta #${avisoRechazo.propuestaId}` : ''}
+              </div>
+              {avisoRechazo.propuestaId && avisoRechazo.scId && (
+                <button
+                  onClick={() => {
+                    // Navegar al modal de propuestas pre-cargado con el circuito
+                    // para que el asesor pueda subir nueva versión. Cierra este
+                    // modal antes de redirigir para no dejar overlays colgados.
+                    const url = `/propuestas?viewId=${avisoRechazo.propuestaId}&pruebaColorNuevaScId=${avisoRechazo.scId}`;
+                    onClose();
+                    window.location.href = url;
+                  }}
+                  className={`mt-1 inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold border transition-colors ${isDark ? 'border-fuchsia-500/60 text-fuchsia-100 bg-fuchsia-500/20 hover:bg-fuchsia-500/30' : 'border-fuchsia-400 text-fuchsia-800 bg-fuchsia-50 hover:bg-fuchsia-100'}`}
+                >
+                  <Upload className="h-3.5 w-3.5" /> Subir nueva versión
+                </button>
+              )}
+            </div>
+          )}
+
           {/* Plaza / circuito — Jos 2026-10-12: mismo detalle que se ve en el
               header del acordeon del modal padre, para que el revisor sepa de
               un vistazo donde va la prueba. */}
