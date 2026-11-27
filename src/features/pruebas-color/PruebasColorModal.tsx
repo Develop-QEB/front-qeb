@@ -1799,6 +1799,7 @@ function TareasAsociadasSection({
           <AtenderTareaModal
             tarea={tareaAbierta}
             prueba={pruebaParaModal}
+            pruebasHermanas={pruebasHermanas}
             cara={cara}
             isDark={isDark}
             puedeCrear={puedeCrear}
@@ -1824,6 +1825,7 @@ function TareasAsociadasSection({
 function AtenderTareaModal({
   tarea,
   prueba,
+  pruebasHermanas,
   cara,
   isDark,
   puedeCrear,
@@ -1839,6 +1841,10 @@ function AtenderTareaModal({
 }: {
   tarea: TareaAsociadaPruebaColor;
   prueba: PruebaColor;
+  // Jos 2026-11-27: pruebas hermanas del batch — permite al submodal Pedido
+  // de Impresion crear una tarea Impresion por cada arte aprobado cuando la
+  // tarea Seguimiento es batch (N>=2 artes).
+  pruebasHermanas?: PruebaColor[];
   cara: SolicitudCara | null;
   isDark: boolean;
   puedeCrear: boolean;
@@ -3506,6 +3512,14 @@ function AtenderTareaModal({
       {showPedidoImpresion && prueba.campania_id && (
         <PedidoImpresionSubmodal
           prueba={prueba}
+          // Jos 2026-11-27: en Seguimiento batch pasamos las pruebas aprobadas
+          // (match por pruebaColorId del aviso) para que el submodal muestre
+          // un input de # impresiones por cada arte y cree N tareas Impresión.
+          pruebasBatch={(esSeguimiento && avisoSeguimiento && avisoSeguimiento.artes.length > 1 && pruebasHermanas)
+            ? (avisoSeguimiento.artes
+                .map(a => pruebasHermanas.find(p => p.id === a.pruebaColorId))
+                .filter((p): p is PruebaColor => !!p))
+            : undefined}
           cara={cara}
           tareaSeguimientoId={esSeguimiento ? tarea.id : null}
           isDark={isDark}
@@ -3580,8 +3594,13 @@ function AtenderTareaModal({
 // ─── Sub-modal: pedido de impresión desde Seguimiento ──────────────────
 // Crea una tarea tipo 'Impresión' en la campaña con los datos de la prueba
 // (arte, circuito, num_impresiones). Reusa POST /campanas/:id/tareas.
+// Jos 2026-11-27: soporta modo batch — cuando la tarea Seguimiento abarca N
+// artes aprobados, el submodal muestra un input de # impresiones POR CADA
+// arte y crea N tareas Impresión individuales (cada una con su pruebaColorId
+// singular para que siga el flujo independiente de cada arte).
 function PedidoImpresionSubmodal({
   prueba,
+  pruebasBatch,
   cara,
   tareaSeguimientoId,
   isDark,
@@ -3589,6 +3608,10 @@ function PedidoImpresionSubmodal({
   onCreated,
 }: {
   prueba: PruebaColor;
+  // Jos 2026-11-27: en batch, lista de pruebas aprobadas que cubre la tarea
+  // Seguimiento (>=2 artes). Si está indefinido o length<=1 se comporta como
+  // antes (un solo arte = `prueba`).
+  pruebasBatch?: PruebaColor[];
   cara: SolicitudCara | null;
   // Jos 2026-11-12: id de la tarea Seguimiento desde la que se abrió el
   // submodal. Al crear el pedido de impresión la marcamos Atendido para
@@ -3600,31 +3623,56 @@ function PedidoImpresionSubmodal({
   onCreated: () => void;
 }) {
   const queryClient = useQueryClient();
-  const [numImpresiones, setNumImpresiones] = useState<number>(1);
+  // Lista efectiva de pruebas a imprimir: en batch son >=2, en single es solo
+  // la prueba del submodal (envoltorio para unificar el render y el handler).
+  const pruebasAImprimir: PruebaColor[] = (pruebasBatch && pruebasBatch.length > 1)
+    ? pruebasBatch
+    : [prueba];
+  const esBatch = pruebasAImprimir.length > 1;
+  // Map pruebaId -> num_impresiones. Default 1 por arte.
+  const [cantidadesPorArte, setCantidadesPorArte] = useState<Map<number, number>>(() => {
+    const m = new Map<number, number>();
+    for (const p of pruebasAImprimir) m.set(p.id, 1);
+    return m;
+  });
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const setCantidad = (pruebaId: number, valor: number) => {
+    setCantidadesPorArte(prev => {
+      const next = new Map(prev);
+      next.set(pruebaId, Math.max(1, valor || 1));
+      return next;
+    });
+  };
   const handleCrear = async () => {
     const campaniaId = prueba.campania_id;
     if (!campaniaId) { setError('La prueba no está vinculada a una campaña'); return; }
-    if (!numImpresiones || numImpresiones < 1) { setError('Captura al menos 1 impresión'); return; }
+    for (const p of pruebasAImprimir) {
+      const n = cantidadesPorArte.get(p.id) ?? 1;
+      if (!n || n < 1) { setError(`Captura al menos 1 impresión para "${p.nombre_arte || `Prueba #${p.id}`}"`); return; }
+    }
     setSaving(true);
     setError(null);
     try {
-      const circuitoId = cara?.id || prueba.sc_id;
-      const titulo = `Pedido de impresión - ${prueba.nombre_arte || `Prueba #${prueba.id}`}`;
-      const descripcion = `Pedido de impresión generado desde Seguimiento Prueba de color #${prueba.id}.${prueba.nombre_arte ? ` Arte: ${prueba.nombre_arte}.` : ''}${cara?.articulo ? ` Circuito: ${cara.articulo}.` : ''}`;
-      await campanasService.createTarea(campaniaId, {
-        titulo,
-        descripcion,
-        tipo: 'Impresión',
-        num_impresiones: numImpresiones,
-        ids_reservas: circuitoId ? String(circuitoId) : undefined,
-        evidencia: prueba.archivo || undefined,
-        // Jos 2026-11-12: guardar pruebaColorId en contenido para que
-        // listarTareasAsociadas pueda regresar esta tarea en el drawer
-        // "TAREAS DE LA PRUEBA" (el filtro del back matchea por contenido.pruebaColorId).
-        contenido: JSON.stringify({ pruebaColorId: prueba.id }),
-      });
+      // Crear UNA tarea Impresión POR CADA arte aprobado (independiente).
+      for (const p of pruebasAImprimir) {
+        const n = cantidadesPorArte.get(p.id) ?? 1;
+        const circuitoId = cara?.id || p.sc_id;
+        const titulo = `Pedido de impresión - ${p.nombre_arte || `Prueba #${p.id}`}`;
+        const descripcion = `Pedido de impresión generado desde Seguimiento Prueba de color #${p.id}.${p.nombre_arte ? ` Arte: ${p.nombre_arte}.` : ''}${cara?.articulo ? ` Circuito: ${cara.articulo}.` : ''}`;
+        await campanasService.createTarea(campaniaId, {
+          titulo,
+          descripcion,
+          tipo: 'Impresión',
+          num_impresiones: n,
+          ids_reservas: circuitoId ? String(circuitoId) : undefined,
+          evidencia: p.archivo || undefined,
+          // Jos 2026-11-12: guardar pruebaColorId en contenido para que
+          // listarTareasAsociadas pueda regresar esta tarea en el drawer
+          // "TAREAS DE LA PRUEBA" (el filtro del back matchea por contenido.pruebaColorId).
+          contenido: JSON.stringify({ pruebaColorId: p.id }),
+        });
+      }
       // Jos 2026-11-12: la tarea Seguimiento ya cumplió su función (el
       // asesor confirmó que el cliente aprobó y mandamos a imprimir), la
       // cerramos automáticamente. Es tolerante al fallo porque el usuario
@@ -3640,10 +3688,11 @@ function PedidoImpresionSubmodal({
       }
       // Jos 2026-11-12: tras crear el pedido, refrescar las listas de tareas
       // para que la tarea nueva (tipo 'Impresion') aparezca sin recargar.
-      // Antes del fix el submodal cerraba pero nada se veia -> "no sucede nada".
       queryClient.invalidateQueries({ queryKey: ['tareas-campana', campaniaId] });
       queryClient.invalidateQueries({ queryKey: ['campanas', campaniaId, 'tareas'] });
-      queryClient.invalidateQueries({ queryKey: ['pruebas-color', 'tareas', prueba.id] });
+      for (const p of pruebasAImprimir) {
+        queryClient.invalidateQueries({ queryKey: ['pruebas-color', 'tareas', p.id] });
+      }
       queryClient.invalidateQueries({ queryKey: ['pruebas-color', 'propuesta', prueba.propuesta_id] });
       queryClient.invalidateQueries({ queryKey: ['pruebas-color'] });
       onCreated();
@@ -3660,56 +3709,80 @@ function PedidoImpresionSubmodal({
     >
       <div
         onClick={(e) => e.stopPropagation()}
-        className={`w-full max-w-sm rounded-xl shadow-2xl border overflow-hidden ${isDark ? 'bg-zinc-900 border-zinc-700' : 'bg-white border-gray-200'}`}
+        className={`w-full max-w-md rounded-xl shadow-2xl border overflow-hidden flex flex-col max-h-[90vh] ${isDark ? 'bg-zinc-900 border-zinc-700' : 'bg-white border-gray-200'}`}
       >
-        <div className={`px-4 py-3 border-b flex items-center justify-between ${isDark ? 'border-zinc-800' : 'border-gray-200'}`}>
+        <div className={`shrink-0 px-4 py-3 border-b flex items-center justify-between ${isDark ? 'border-zinc-800' : 'border-gray-200'}`}>
           <div className="flex items-center gap-2">
             <Printer className={`h-4 w-4 ${isDark ? 'text-indigo-300' : 'text-indigo-600'}`} />
             <div>
               <div className={`text-sm font-semibold ${isDark ? 'text-zinc-100' : 'text-gray-900'}`}>Crear pedido de impresión</div>
-              <div className={`text-[10px] ${isDark ? 'text-zinc-400' : 'text-gray-500'}`}>Campaña #{prueba.campania_id}</div>
+              <div className={`text-[10px] ${isDark ? 'text-zinc-400' : 'text-gray-500'}`}>
+                Campaña #{prueba.campania_id}{esBatch ? ` · ${pruebasAImprimir.length} artes` : ''}
+              </div>
             </div>
           </div>
           <button onClick={onClose} className={`p-1 rounded ${isDark ? 'hover:bg-zinc-800 text-zinc-400' : 'hover:bg-gray-100 text-gray-500'}`}>
             <X className="h-4 w-4" />
           </button>
         </div>
-        <div className="px-4 py-3 space-y-3">
-          <div className={`text-[11px] rounded px-2 py-1.5 ${isDark ? 'bg-zinc-800/60 text-zinc-300 border border-zinc-700' : 'bg-gray-50 text-gray-600 border border-gray-200'}`}>
-            {prueba.nombre_arte || `Prueba #${prueba.id}`}{cara?.articulo ? ` · ${cara.articulo}` : ''}
-          </div>
-          {/* Jos 2026-11-12: botón para descargar el arte y mandarselo al
-              proveedor desde este mismo submodal. Abre en nueva pestaña con
-              download attr; si solo hay enlace externo (sin archivo subido),
-              abre el enlace tal cual. */}
-          {(prueba.archivo || prueba.enlace_externo) && (
-            <a
-              href={prueba.archivo || prueba.enlace_externo || '#'}
-              target="_blank"
-              rel="noreferrer"
-              download={prueba.archivo ? (prueba.nombre_arte || `arte-prueba-${prueba.id}`) : undefined}
-              className={`w-full text-xs font-semibold px-3 py-1.5 rounded border transition-colors inline-flex items-center justify-center gap-1.5 ${isDark ? 'border-emerald-500/60 text-emerald-100 bg-emerald-500/15 hover:bg-emerald-500/25' : 'border-emerald-400 text-emerald-800 bg-emerald-50 hover:bg-emerald-100'}`}
-            >
-              <Download className="h-3.5 w-3.5" /> Descargar arte
-            </a>
+        <div className="px-4 py-3 space-y-3 overflow-y-auto">
+          {esBatch && (
+            <div className={`text-[11px] rounded px-2 py-1.5 ${isDark ? 'bg-indigo-500/10 text-indigo-200 border border-indigo-500/30' : 'bg-indigo-50 text-indigo-800 border border-indigo-200'}`}>
+              Captura cuántas impresiones pedir para cada arte aprobado. Se crea una tarea Impresión independiente por cada uno.
+            </div>
           )}
-          <div>
-            <label className={`text-[11px] font-semibold ${isDark ? 'text-zinc-300' : 'text-gray-700'}`}># de impresiones *</label>
-            <input
-              type="number"
-              min={1}
-              value={numImpresiones}
-              onChange={(e) => setNumImpresiones(Math.max(1, parseInt(e.target.value) || 1))}
-              className={`mt-1 w-full text-sm rounded-md border px-2.5 py-1.5 outline-none ${isDark ? 'bg-zinc-800 border-zinc-700 text-zinc-100 focus:border-indigo-500/60' : 'bg-white border-gray-300 text-gray-900 focus:border-indigo-400'}`}
-            />
-          </div>
+          {pruebasAImprimir.map((p) => {
+            const n = cantidadesPorArte.get(p.id) ?? 1;
+            return (
+              <div
+                key={p.id}
+                className={`rounded-lg border p-2.5 space-y-2 ${isDark ? 'bg-zinc-800/40 border-zinc-700' : 'bg-gray-50 border-gray-200'}`}
+              >
+                <div className="flex items-start gap-2.5">
+                  {p.archivo && (
+                    <img
+                      src={p.archivo}
+                      alt={p.nombre_arte || ''}
+                      className={`shrink-0 w-14 h-14 rounded border object-contain ${isDark ? 'bg-zinc-900 border-zinc-700' : 'bg-white border-gray-300'}`}
+                    />
+                  )}
+                  <div className="flex-1 min-w-0 space-y-1">
+                    <div className={`text-[11px] font-semibold ${isDark ? 'text-zinc-100' : 'text-gray-900'}`}>
+                      v{p.version} · {p.nombre_arte || `Prueba #${p.id}`}
+                    </div>
+                    {(p.archivo || p.enlace_externo) && (
+                      <a
+                        href={p.archivo || p.enlace_externo || '#'}
+                        target="_blank"
+                        rel="noreferrer"
+                        download={p.archivo ? (p.nombre_arte || `arte-prueba-${p.id}`) : undefined}
+                        className={`inline-flex items-center gap-1 text-[10px] font-semibold px-2 py-0.5 rounded border transition-colors ${isDark ? 'border-emerald-500/60 text-emerald-100 bg-emerald-500/15 hover:bg-emerald-500/25' : 'border-emerald-400 text-emerald-800 bg-emerald-50 hover:bg-emerald-100'}`}
+                      >
+                        <Download className="h-3 w-3" /> Descargar arte
+                      </a>
+                    )}
+                  </div>
+                </div>
+                <div>
+                  <label className={`text-[11px] font-semibold ${isDark ? 'text-zinc-300' : 'text-gray-700'}`}># de impresiones *</label>
+                  <input
+                    type="number"
+                    min={1}
+                    value={n}
+                    onChange={(e) => setCantidad(p.id, parseInt(e.target.value) || 1)}
+                    className={`mt-1 w-full text-sm rounded-md border px-2.5 py-1.5 outline-none ${isDark ? 'bg-zinc-800 border-zinc-700 text-zinc-100 focus:border-indigo-500/60' : 'bg-white border-gray-300 text-gray-900 focus:border-indigo-400'}`}
+                  />
+                </div>
+              </div>
+            );
+          })}
           {error && (
             <div className={`text-[11px] px-2 py-1 rounded ${isDark ? 'bg-red-500/15 text-red-200 border border-red-500/30' : 'bg-red-50 text-red-700 border border-red-200'}`}>
               {error}
             </div>
           )}
         </div>
-        <div className={`px-4 py-3 border-t flex items-center justify-end gap-2 ${isDark ? 'border-zinc-800 bg-zinc-900/60' : 'border-gray-200 bg-gray-50/60'}`}>
+        <div className={`shrink-0 px-4 py-3 border-t flex items-center justify-end gap-2 ${isDark ? 'border-zinc-800 bg-zinc-900/60' : 'border-gray-200 bg-gray-50/60'}`}>
           <button
             onClick={onClose}
             disabled={saving}
@@ -3723,7 +3796,7 @@ function PedidoImpresionSubmodal({
             className={`text-xs font-semibold px-3 py-1.5 rounded border transition-colors inline-flex items-center gap-1 ${isDark ? 'border-indigo-500/60 text-indigo-100 bg-indigo-500/20 hover:bg-indigo-500/30' : 'border-indigo-400 text-indigo-800 bg-indigo-50 hover:bg-indigo-100'} disabled:opacity-50`}
           >
             {saving ? <Loader2 className="h-3 w-3 animate-spin" /> : <Printer className="h-3 w-3" />}
-            Crear pedido
+            {esBatch ? `Crear ${pruebasAImprimir.length} pedidos` : 'Crear pedido'}
           </button>
         </div>
       </div>
