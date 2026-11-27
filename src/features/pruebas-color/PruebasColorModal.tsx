@@ -3414,8 +3414,25 @@ function AtenderRevisionBatchModal({
     setFormError(null);
   };
 
+  // Jos 2026-11-27: solo imagen (JPG/PNG) o video (MP4) como reemplazo.
+  const TIPOS_REEMPLAZO_PERMITIDOS = ['image/jpeg', 'image/jpg', 'image/png', 'video/mp4'];
+  const EXTENSIONES_PERMITIDAS_LABEL = 'JPG, PNG o MP4';
+  const esTipoReemplazoPermitido = (file: File) => {
+    const tipo = (file.type || '').toLowerCase();
+    if (TIPOS_REEMPLAZO_PERMITIDOS.includes(tipo)) return true;
+    // Fallback por extensión (algunos navegadores no setean MIME bien).
+    const name = file.name.toLowerCase();
+    return name.endsWith('.jpg') || name.endsWith('.jpeg') || name.endsWith('.png') || name.endsWith('.mp4');
+  };
+
   const handleUploadAdjunto = async (file: File) => {
     try {
+      // Jos 2026-11-27: restringir a JPG/PNG/MP4 porque este archivo
+      // REEMPLAZA al arte original — solo tiene sentido con imagen o video.
+      if (!esTipoReemplazoPermitido(file)) {
+        setFormError(`Solo se permite ${EXTENSIONES_PERMITIDAS_LABEL} como reemplazo del arte.`);
+        return;
+      }
       setAdjFileUploading(true);
       setFormError(null);
       const folder = resolverForm?.accion === 'rechazar' ? 'pruebas-color/rechazos' : 'pruebas-color/aprobaciones';
@@ -3429,6 +3446,89 @@ function AtenderRevisionBatchModal({
     } finally {
       setAdjFileUploading(false);
     }
+  };
+
+  // Jos 2026-11-27: el sub-form se renderiza INLINE debajo del arte
+  // seleccionado (acordeón) cuando es individual, o al final para masivo.
+  // Esto deja claro qué arte se está resolviendo sin modal flotante.
+  const renderSubForm = (contexto: 'individual' | 'masivo') => {
+    if (!resolverForm || resolverForm.modo !== contexto) return null;
+    const esMasivo = contexto === 'masivo';
+    const pruebaObjetivo = !esMasivo ? pruebas.find(p => p.id === resolverForm.pruebaId) : null;
+    return (
+      <div className={`rounded-lg border p-3 space-y-2 ${resolverForm.accion === 'aprobar' ? (isDark ? 'bg-emerald-500/5 border-emerald-500/40' : 'bg-emerald-50 border-emerald-300') : (isDark ? 'bg-red-500/5 border-red-500/40' : 'bg-red-50 border-red-300')}`}>
+        <div className={`text-xs font-semibold ${isDark ? 'text-zinc-100' : 'text-gray-900'}`}>
+          {esMasivo
+            ? `${resolverForm.accion === 'aprobar' ? 'Aprobar' : 'Rechazar'} todos los pendientes (${pruebasPendientes.length})`
+            : `${resolverForm.accion === 'aprobar' ? 'Aprobar' : 'Rechazar'}: ${pruebaObjetivo?.nombre_arte || `Arte #${pruebaObjetivo?.id || ''}`}`}
+        </div>
+        <div>
+          <label className={`text-[11px] font-medium mb-1 block ${isDark ? 'text-zinc-400' : 'text-gray-600'}`}>
+            Motivo {resolverForm.accion === 'rechazar' ? '*' : '(opcional)'}
+          </label>
+          <textarea
+            value={comentario}
+            onChange={(e) => setComentario(e.target.value)}
+            rows={3}
+            placeholder={resolverForm.accion === 'rechazar' ? 'Describe el motivo del rechazo' : 'Comentario opcional'}
+            className={`w-full text-xs p-2 rounded border resize-y ${isDark ? 'bg-zinc-800 border-zinc-700 text-zinc-100 placeholder:text-zinc-500' : 'bg-white border-gray-300 text-gray-900 placeholder:text-gray-400'}`}
+          />
+        </div>
+        <div className="grid grid-cols-2 gap-2">
+          <div>
+            <label className={`text-[11px] font-medium mb-1 block ${isDark ? 'text-zinc-400' : 'text-gray-600'}`}>
+              {/* Jos 2026-11-27: "reemplazar" (no "adjuntar") — el archivo que
+                  subas SUSTITUYE al arte original en biblioteca. */}
+              Reemplazar arte ({EXTENSIONES_PERMITIDAS_LABEL}, opcional)
+            </label>
+            <input
+              type="file"
+              accept="image/jpeg,image/png,video/mp4,.jpg,.jpeg,.png,.mp4"
+              onChange={(e) => {
+                const f = e.target.files?.[0] || null;
+                if (f) handleUploadAdjunto(f);
+              }}
+              disabled={adjFileUploading}
+              className={`block w-full text-[11px] ${isDark ? 'text-zinc-300' : 'text-gray-700'} file:mr-2 file:py-1 file:px-2 file:rounded file:border-0 file:text-[11px] file:font-medium ${isDark ? 'file:bg-zinc-700 file:text-zinc-100' : 'file:bg-gray-200 file:text-gray-800'}`}
+            />
+            {adjFileUploading && <Loader2 className="h-3 w-3 animate-spin mt-1" />}
+            {adjFile && !adjFileUploading && <div className={`text-[10px] mt-0.5 truncate ${isDark ? 'text-zinc-400' : 'text-gray-500'}`}>{adjFile.name}</div>}
+          </div>
+          <div>
+            <label className={`text-[11px] font-medium mb-1 block ${isDark ? 'text-zinc-400' : 'text-gray-600'}`}>Enlace</label>
+            <input
+              type="url"
+              value={adjEnlace}
+              onChange={(e) => setAdjEnlace(e.target.value)}
+              placeholder="https://..."
+              className={`w-full text-xs p-1.5 rounded border ${isDark ? 'bg-zinc-800 border-zinc-700 text-zinc-100 placeholder:text-zinc-500' : 'bg-white border-gray-300 text-gray-900 placeholder:text-gray-400'}`}
+            />
+          </div>
+        </div>
+        {formError && (
+          <div className={`text-[11px] px-2 py-1 rounded ${isDark ? 'bg-red-500/15 text-red-200 border border-red-500/30' : 'bg-red-50 text-red-700 border border-red-200'}`}>
+            {formError}
+          </div>
+        )}
+        <div className="flex items-center justify-end gap-2 pt-1">
+          <button
+            onClick={resetForm}
+            disabled={isSaving}
+            className={`text-xs font-medium px-3 py-1.5 rounded border ${isDark ? 'border-zinc-700 text-zinc-300 hover:bg-zinc-800' : 'border-gray-300 text-gray-700 hover:bg-gray-100'}`}
+          >
+            Cancelar
+          </button>
+          <button
+            onClick={confirmarResolucion}
+            disabled={isSaving || adjFileUploading}
+            className={`inline-flex items-center gap-1 text-xs font-semibold px-3 py-1.5 rounded border transition-colors ${resolverForm.accion === 'aprobar' ? (isDark ? 'border-emerald-500/60 text-emerald-100 bg-emerald-500/20 hover:bg-emerald-500/30' : 'border-emerald-400 text-emerald-800 bg-emerald-50 hover:bg-emerald-100') : (isDark ? 'border-red-500/60 text-red-100 bg-red-500/20 hover:bg-red-500/30' : 'border-red-400 text-red-800 bg-red-50 hover:bg-red-100')} disabled:opacity-50`}
+          >
+            {isSaving ? <Loader2 className="h-3 w-3 animate-spin" /> : resolverForm.accion === 'aprobar' ? <CheckCircle2 className="h-3 w-3" /> : <XCircle className="h-3 w-3" />}
+            Confirmar {resolverForm.accion === 'aprobar' ? 'aprobación' : 'rechazo'}
+          </button>
+        </div>
+      </div>
+    );
   };
 
   const pruebasPendientes = useMemo(
@@ -3577,151 +3677,98 @@ function AtenderRevisionBatchModal({
             <div className="space-y-2">
               {pruebas.map((p) => {
                 const esPendiente = p.estatus === 'revision_artes' || p.estatus === 'solicitada';
+                // Jos 2026-11-27: resaltar la card del arte que se está
+                // resolviendo + renderizar el sub-form inline debajo.
+                const seleccionada = resolverForm?.modo === 'individual' && resolverForm.pruebaId === p.id;
+                const bordeResaltado = seleccionada
+                  ? (resolverForm?.accion === 'aprobar'
+                      ? (isDark ? 'border-emerald-500/60 ring-1 ring-emerald-500/40' : 'border-emerald-400 ring-1 ring-emerald-300')
+                      : (isDark ? 'border-red-500/60 ring-1 ring-red-500/40' : 'border-red-400 ring-1 ring-red-300'))
+                  : (isDark ? 'border-zinc-700' : 'border-gray-200');
                 return (
-                  <div
-                    key={p.id}
-                    className={`rounded-lg border p-3 ${isDark ? 'bg-zinc-800/60 border-zinc-700' : 'bg-white border-gray-200'}`}
-                  >
-                    <div className="flex items-start gap-3">
-                      {p.archivo ? (
-                        <a href={p.archivo} target="_blank" rel="noreferrer" className="shrink-0">
-                          <img
-                            src={p.archivo}
-                            alt={p.nombre_arte || `Arte ${p.id}`}
-                            className="w-16 h-16 object-cover rounded border border-zinc-700"
-                            onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }}
-                          />
-                        </a>
-                      ) : (
-                        <div className={`w-16 h-16 rounded flex items-center justify-center shrink-0 ${isDark ? 'bg-zinc-800 border border-zinc-700' : 'bg-gray-100 border border-gray-200'}`}>
-                          <FileImage className={`h-5 w-5 ${isDark ? 'text-zinc-600' : 'text-gray-400'}`} />
-                        </div>
-                      )}
-                      <div className="flex-1 min-w-0">
-                        <div className="flex items-center gap-2 flex-wrap">
-                          <span className={`text-[10px] px-1.5 py-0.5 rounded font-bold ${isDark ? 'bg-fuchsia-500/20 text-fuchsia-200' : 'bg-fuchsia-100 text-fuchsia-700'}`}>
-                            v{p.version}
-                          </span>
-                          <span className={`text-[10px] px-2 py-0.5 rounded-full border font-semibold ${estatusStyle(p.estatus)}`}>
-                            {estatusLabel(p.estatus)}
-                          </span>
-                          <span className={`text-sm font-semibold truncate ${isDark ? 'text-zinc-100' : 'text-gray-900'}`}>
-                            {p.nombre_arte || `Arte #${p.id}`}
-                          </span>
-                        </div>
-                        {p.notas && (
-                          <div className={`text-[11px] mt-1 whitespace-pre-wrap ${isDark ? 'text-zinc-400' : 'text-gray-600'}`}>
-                            {p.notas}
+                  <div key={p.id}>
+                    <div
+                      className={`rounded-lg border p-3 ${isDark ? 'bg-zinc-800/60' : 'bg-white'} ${bordeResaltado} transition-colors`}
+                    >
+                      <div className="flex items-start gap-3">
+                        {p.archivo ? (
+                          <a href={p.archivo} target="_blank" rel="noreferrer" className="shrink-0">
+                            <img
+                              src={p.archivo}
+                              alt={p.nombre_arte || `Arte ${p.id}`}
+                              className="w-16 h-16 object-cover rounded border border-zinc-700"
+                              onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }}
+                            />
+                          </a>
+                        ) : (
+                          <div className={`w-16 h-16 rounded flex items-center justify-center shrink-0 ${isDark ? 'bg-zinc-800 border border-zinc-700' : 'bg-gray-100 border border-gray-200'}`}>
+                            <FileImage className={`h-5 w-5 ${isDark ? 'text-zinc-600' : 'text-gray-400'}`} />
                           </div>
                         )}
-                        <div className="flex items-center gap-1.5 mt-2 flex-wrap">
-                          {p.archivo && (
-                            <a href={p.archivo} target="_blank" rel="noreferrer" className={`inline-flex items-center gap-1 text-[11px] font-medium px-2 py-1 rounded border ${isDark ? 'text-fuchsia-300 border-fuchsia-500/40 hover:bg-fuchsia-500/10' : 'text-fuchsia-700 border-fuchsia-300 hover:bg-fuchsia-50'}`}>
-                              <FileImage className="h-3 w-3" /> Ver arte
-                            </a>
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <span className={`text-[10px] px-1.5 py-0.5 rounded font-bold ${isDark ? 'bg-fuchsia-500/20 text-fuchsia-200' : 'bg-fuchsia-100 text-fuchsia-700'}`}>
+                              v{p.version}
+                            </span>
+                            <span className={`text-[10px] px-2 py-0.5 rounded-full border font-semibold ${estatusStyle(p.estatus)}`}>
+                              {estatusLabel(p.estatus)}
+                            </span>
+                            <span className={`text-sm font-semibold truncate ${isDark ? 'text-zinc-100' : 'text-gray-900'}`}>
+                              {p.nombre_arte || `Arte #${p.id}`}
+                            </span>
+                          </div>
+                          {p.notas && (
+                            <div className={`text-[11px] mt-1 whitespace-pre-wrap ${isDark ? 'text-zinc-400' : 'text-gray-600'}`}>
+                              {p.notas}
+                            </div>
                           )}
-                          {p.enlace_externo && (
-                            <a href={p.enlace_externo} target="_blank" rel="noreferrer" className={`inline-flex items-center gap-1 text-[11px] font-medium px-2 py-1 rounded border ${isDark ? 'text-cyan-300 border-cyan-500/40 hover:bg-cyan-500/10' : 'text-cyan-700 border-cyan-300 hover:bg-cyan-50'}`}>
-                              <ExternalLink className="h-3 w-3" /> Link
-                            </a>
-                          )}
-                          {puedeRevisar && esPendiente && (
-                            <>
-                              <button
-                                onClick={() => setResolverForm({ modo: 'individual', accion: 'aprobar', pruebaId: p.id })}
-                                disabled={isSaving}
-                                className={`inline-flex items-center gap-1 text-[11px] font-semibold px-2 py-1 rounded border transition-colors ${isDark ? 'border-emerald-500/60 text-emerald-100 bg-emerald-500/20 hover:bg-emerald-500/30' : 'border-emerald-400 text-emerald-800 bg-emerald-50 hover:bg-emerald-100'} disabled:opacity-50`}
-                              >
-                                <CheckCircle2 className="h-3 w-3" /> Aprobar
-                              </button>
-                              <button
-                                onClick={() => setResolverForm({ modo: 'individual', accion: 'rechazar', pruebaId: p.id })}
-                                disabled={isSaving}
-                                className={`inline-flex items-center gap-1 text-[11px] font-semibold px-2 py-1 rounded border transition-colors ${isDark ? 'border-red-500/60 text-red-100 bg-red-500/20 hover:bg-red-500/30' : 'border-red-400 text-red-800 bg-red-50 hover:bg-red-100'} disabled:opacity-50`}
-                              >
-                                <XCircle className="h-3 w-3" /> Rechazar
-                              </button>
-                            </>
-                          )}
+                          <div className="flex items-center gap-1.5 mt-2 flex-wrap">
+                            {p.archivo && (
+                              <a href={p.archivo} target="_blank" rel="noreferrer" className={`inline-flex items-center gap-1 text-[11px] font-medium px-2 py-1 rounded border ${isDark ? 'text-fuchsia-300 border-fuchsia-500/40 hover:bg-fuchsia-500/10' : 'text-fuchsia-700 border-fuchsia-300 hover:bg-fuchsia-50'}`}>
+                                <FileImage className="h-3 w-3" /> Ver arte
+                              </a>
+                            )}
+                            {p.enlace_externo && (
+                              <a href={p.enlace_externo} target="_blank" rel="noreferrer" className={`inline-flex items-center gap-1 text-[11px] font-medium px-2 py-1 rounded border ${isDark ? 'text-cyan-300 border-cyan-500/40 hover:bg-cyan-500/10' : 'text-cyan-700 border-cyan-300 hover:bg-cyan-50'}`}>
+                                <ExternalLink className="h-3 w-3" /> Link
+                              </a>
+                            )}
+                            {puedeRevisar && esPendiente && (
+                              <>
+                                <button
+                                  onClick={() => { resetForm(); setResolverForm({ modo: 'individual', accion: 'aprobar', pruebaId: p.id }); }}
+                                  disabled={isSaving}
+                                  className={`inline-flex items-center gap-1 text-[11px] font-semibold px-2 py-1 rounded border transition-colors ${isDark ? 'border-emerald-500/60 text-emerald-100 bg-emerald-500/20 hover:bg-emerald-500/30' : 'border-emerald-400 text-emerald-800 bg-emerald-50 hover:bg-emerald-100'} disabled:opacity-50`}
+                                >
+                                  <CheckCircle2 className="h-3 w-3" /> Aprobar
+                                </button>
+                                <button
+                                  onClick={() => { resetForm(); setResolverForm({ modo: 'individual', accion: 'rechazar', pruebaId: p.id }); }}
+                                  disabled={isSaving}
+                                  className={`inline-flex items-center gap-1 text-[11px] font-semibold px-2 py-1 rounded border transition-colors ${isDark ? 'border-red-500/60 text-red-100 bg-red-500/20 hover:bg-red-500/30' : 'border-red-400 text-red-800 bg-red-50 hover:bg-red-100'} disabled:opacity-50`}
+                                >
+                                  <XCircle className="h-3 w-3" /> Rechazar
+                                </button>
+                              </>
+                            )}
+                          </div>
                         </div>
                       </div>
                     </div>
+                    {/* Sub-form inline debajo del arte seleccionado */}
+                    {seleccionada && (
+                      <div className="mt-2 ml-4">
+                        {renderSubForm('individual')}
+                      </div>
+                    )}
                   </div>
                 );
               })}
             </div>
           )}
 
-          {/* Sub-form de resolución (individual o masiva) */}
-          {resolverForm && (
-            <div className={`rounded-lg border p-3 space-y-2 ${resolverForm.accion === 'aprobar' ? (isDark ? 'bg-emerald-500/5 border-emerald-500/40' : 'bg-emerald-50 border-emerald-300') : (isDark ? 'bg-red-500/5 border-red-500/40' : 'bg-red-50 border-red-300')}`}>
-              <div className={`text-xs font-semibold ${isDark ? 'text-zinc-100' : 'text-gray-900'}`}>
-                {resolverForm.modo === 'masivo'
-                  ? `${resolverForm.accion === 'aprobar' ? 'Aprobar' : 'Rechazar'} todos los pendientes (${pruebasPendientes.length})`
-                  : `${resolverForm.accion === 'aprobar' ? 'Aprobar' : 'Rechazar'} arte individual`}
-              </div>
-              <div>
-                <label className={`text-[11px] font-medium mb-1 block ${isDark ? 'text-zinc-400' : 'text-gray-600'}`}>
-                  Motivo {resolverForm.accion === 'rechazar' ? '*' : '(opcional)'}
-                </label>
-                <textarea
-                  value={comentario}
-                  onChange={(e) => setComentario(e.target.value)}
-                  rows={3}
-                  placeholder={resolverForm.accion === 'rechazar' ? 'Describe el motivo del rechazo' : 'Comentario opcional'}
-                  className={`w-full text-xs p-2 rounded border resize-y ${isDark ? 'bg-zinc-800 border-zinc-700 text-zinc-100 placeholder:text-zinc-500' : 'bg-white border-gray-300 text-gray-900 placeholder:text-gray-400'}`}
-                />
-              </div>
-              <div className="grid grid-cols-2 gap-2">
-                <div>
-                  <label className={`text-[11px] font-medium mb-1 block ${isDark ? 'text-zinc-400' : 'text-gray-600'}`}>Adjuntar archivo</label>
-                  <input
-                    type="file"
-                    onChange={(e) => {
-                      const f = e.target.files?.[0] || null;
-                      if (f) handleUploadAdjunto(f);
-                    }}
-                    disabled={adjFileUploading}
-                    className={`block w-full text-[11px] ${isDark ? 'text-zinc-300' : 'text-gray-700'} file:mr-2 file:py-1 file:px-2 file:rounded file:border-0 file:text-[11px] file:font-medium ${isDark ? 'file:bg-zinc-700 file:text-zinc-100' : 'file:bg-gray-200 file:text-gray-800'}`}
-                  />
-                  {adjFileUploading && <Loader2 className="h-3 w-3 animate-spin mt-1" />}
-                  {adjFile && !adjFileUploading && <div className={`text-[10px] mt-0.5 truncate ${isDark ? 'text-zinc-400' : 'text-gray-500'}`}>{adjFile.name}</div>}
-                </div>
-                <div>
-                  <label className={`text-[11px] font-medium mb-1 block ${isDark ? 'text-zinc-400' : 'text-gray-600'}`}>Enlace</label>
-                  <input
-                    type="url"
-                    value={adjEnlace}
-                    onChange={(e) => setAdjEnlace(e.target.value)}
-                    placeholder="https://..."
-                    className={`w-full text-xs p-1.5 rounded border ${isDark ? 'bg-zinc-800 border-zinc-700 text-zinc-100 placeholder:text-zinc-500' : 'bg-white border-gray-300 text-gray-900 placeholder:text-gray-400'}`}
-                  />
-                </div>
-              </div>
-              {formError && (
-                <div className={`text-[11px] px-2 py-1 rounded ${isDark ? 'bg-red-500/15 text-red-200 border border-red-500/30' : 'bg-red-50 text-red-700 border border-red-200'}`}>
-                  {formError}
-                </div>
-              )}
-              <div className="flex items-center justify-end gap-2 pt-1">
-                <button
-                  onClick={resetForm}
-                  disabled={isSaving}
-                  className={`text-xs font-medium px-3 py-1.5 rounded border ${isDark ? 'border-zinc-700 text-zinc-300 hover:bg-zinc-800' : 'border-gray-300 text-gray-700 hover:bg-gray-100'}`}
-                >
-                  Cancelar
-                </button>
-                <button
-                  onClick={confirmarResolucion}
-                  disabled={isSaving || adjFileUploading}
-                  className={`inline-flex items-center gap-1 text-xs font-semibold px-3 py-1.5 rounded border transition-colors ${resolverForm.accion === 'aprobar' ? (isDark ? 'border-emerald-500/60 text-emerald-100 bg-emerald-500/20 hover:bg-emerald-500/30' : 'border-emerald-400 text-emerald-800 bg-emerald-50 hover:bg-emerald-100') : (isDark ? 'border-red-500/60 text-red-100 bg-red-500/20 hover:bg-red-500/30' : 'border-red-400 text-red-800 bg-red-50 hover:bg-red-100')} disabled:opacity-50`}
-                >
-                  {isSaving ? <Loader2 className="h-3 w-3 animate-spin" /> : resolverForm.accion === 'aprobar' ? <CheckCircle2 className="h-3 w-3" /> : <XCircle className="h-3 w-3" />}
-                  Confirmar {resolverForm.accion === 'aprobar' ? 'aprobación' : 'rechazo'}
-                </button>
-              </div>
-            </div>
-          )}
+          {/* Sub-form masivo (al final de la lista) */}
+          {renderSubForm('masivo')}
         </div>
 
         {/* Footer */}
