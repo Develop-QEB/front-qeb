@@ -1536,8 +1536,11 @@ function TareasAsociadasSection({
       enlace_adjunto?: string | null;
       // Jos 2026-11-24: cuando la tarea agrupa N pruebas, apunta a cuál
       // se está resolviendo. En individual queda undefined.
-      pruebaIdObjetivo?: number;
-    }) => pruebasColorService.resolverTarea(pruebaId, tareaId, accion, comentario, { archivo_adjunto, enlace_adjunto }, pruebaIdObjetivo),
+      // Jos 2026-11-27: también sirve cuando la tarea es de una prueba
+      // hermana distinta del representante del batch — el path y el body
+      // se construyen con el objetivo para que el back valide correcto.
+    pruebaIdObjetivo?: number;
+    }) => pruebasColorService.resolverTarea(pruebaIdObjetivo ?? pruebaId, tareaId, accion, comentario, { archivo_adjunto, enlace_adjunto }, pruebaIdObjetivo),
     onSuccess: (_data, variables) => {
       queryClient.invalidateQueries({ queryKey: ['pruebas-color', 'tareas', pruebaId] });
       queryClient.invalidateQueries({ queryKey: ['pruebas-color'] });
