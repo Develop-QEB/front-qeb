@@ -17514,6 +17514,21 @@ export function TareaSeguimientoPage() {
     return values;
   }, [inventoryTestigosData]);
 
+  // Jos 2026-11-27: una tarea Impresión/Recepción originada desde el drawer de
+  // Pruebas de Color (RA) NO pertenece al Gestor de Artes — se consume desde el
+  // submodal del arte de la prueba de color. La detectamos por el contenido
+  // JSON: trae pruebaColorId (singular legacy) o pruebaColorIds (array batch).
+  const esTareaDePruebaColor = (t: typeof tareasAPI[number]): boolean => {
+    if (t.tipo !== 'Impresión' && t.tipo !== 'Recepción') return false;
+    if (!t.contenido) return false;
+    try {
+      const c = JSON.parse(t.contenido);
+      if (Number.isFinite(Number(c?.pruebaColorId))) return true;
+      if (Array.isArray(c?.pruebaColorIds) && c.pruebaColorIds.some((x: unknown) => Number.isFinite(Number(x)))) return true;
+      return false;
+    } catch { return false; }
+  };
+
   // Transform tareas from API to TaskRow format (excluye "Seguimiento Campaña" que pertenece a otra pantalla)
   const tasks = useMemo((): TaskRow[] => {
     return tareasAPI
@@ -17521,7 +17536,9 @@ export function TareaSeguimientoPage() {
         if (t.estatus === 'Atendido' || t.estatus === 'Completado' || t.estatus === 'Finalizada' || t.estatus === 'Activada') return false;
         // Solo mostrar tipos que pertenecen al flujo de gestión de artes
         const TIPOS_GESTION_ARTES = ['Revisión de artes', 'Correccion', 'Impresión', 'Recepción', 'Instalación', 'Testigo', 'Programación', 'Programación para Tráfico', 'Orden de Programación', 'Orden de Instalación', 'Orden de Impresión'];
-        return TIPOS_GESTION_ARTES.includes(t.tipo || '');
+        if (!TIPOS_GESTION_ARTES.includes(t.tipo || '')) return false;
+        if (esTareaDePruebaColor(t)) return false;
+        return true;
       })
       .sort((a, b) => b.id - a.id) // Más recientes primero
       .map((t) => ({
@@ -17554,7 +17571,9 @@ export function TareaSeguimientoPage() {
         if (t.estatus !== 'Atendido' && t.estatus !== 'Completado' && t.estatus !== 'Finalizada' && t.estatus !== 'Activada') return false;
         // Solo mostrar tipos que pertenecen al flujo de gestión de artes
         const TIPOS_GESTION_ARTES = ['Revisión de artes', 'Correccion', 'Impresión', 'Recepción', 'Instalación', 'Testigo', 'Programación', 'Programación para Tráfico', 'Orden de Programación', 'Orden de Instalación', 'Orden de Impresión'];
-        return TIPOS_GESTION_ARTES.includes(t.tipo || '');
+        if (!TIPOS_GESTION_ARTES.includes(t.tipo || '')) return false;
+        if (esTareaDePruebaColor(t)) return false;
+        return true;
       })
       .sort((a, b) => b.id - a.id) // Más recientes primero
       .map((t) => ({

@@ -1526,14 +1526,19 @@ function isPruebaColorNotificacionTarea(tipo?: string | null): boolean {
   return tipo === 'Prueba de Color';
 }
 // Tarea Impresión/Recepción originada desde el drawer de Pruebas de Color:
-// detectar por tipo + presencia de pruebaColorId en contenido JSON. Permite
-// deep-linkear al submodal de la prueba en vez de al Gestor de Artes.
+// detectar por tipo + presencia de pruebaColorId (singular legacy) o
+// pruebaColorIds (array batch RA) en contenido JSON. Jos 2026-11-27:
+// el flujo batch de Revisión Anticipada crea tareas con pruebaColorIds
+// plural; sin esta rama caían al Gestor de Artes por error.
+// Permite deep-linkear al submodal de la prueba en vez de al Gestor de Artes.
 function isPruebaColorImpresionORecepcionTarea(tipo?: string | null, contenido?: string | null): boolean {
   if (tipo !== 'Impresión' && tipo !== 'Recepción') return false;
   if (!contenido) return false;
   try {
     const c = JSON.parse(contenido);
-    return Number.isFinite(Number(c?.pruebaColorId));
+    if (Number.isFinite(Number(c?.pruebaColorId))) return true;
+    if (Array.isArray(c?.pruebaColorIds) && c.pruebaColorIds.some((x: unknown) => Number.isFinite(Number(x)))) return true;
+    return false;
   } catch { return false; }
 }
 // Parsea el contenido JSON de una tarea tipo 'Prueba de Color' para
