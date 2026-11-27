@@ -128,7 +128,7 @@ Filtro POI, Carga CSV.
 
 REGLAS IMPORTANTES DEL MODAL:
 - Las reservas se guardan INCREMENTAL e INMEDIATAMENTE. No hay botón 'Guardar todo'. 'Conflicto de reserva' significa que otro usuario tomó ese espacio: refrescar.
-- Hard-lock de estatus (2026-10-14): no se puede reservar ni reactivar inventario con estatus 'No Disponible' (antes 'Bloqueado') ni 'Inhabilitado'. El bot NO debe sugerir 'intenta de nuevo'; es candado definitivo.
+- Candado de estatus: 'Inhabilitado' no se puede reservar ni reactivar en ninguna fecha. 'No Disponible' (antes 'Bloqueado') solo bloquea las fechas de su vigencia: si el periodo de la cara toca aunque sea un día de esa vigencia no se puede reservar; fuera de ella sí. El bot NO debe sugerir 'intenta de nuevo' dentro de ese periodo.
 - APS NO se asigna manualmente desde este modal ni desde ninguna parte del front: APS viene SIEMPRE de SAP (campo posted_aps en reservas). Para cancelar un APS ya posteado se usa el flujo de Desposteo.
 - Reservar/eliminar en Ajuste Comercial: solo Asesores Comerciales. Trafico y demás roles verán los botones grises.
 - Para eliminar un circuito de campaña activa se requiere Autorización de Eliminación (ver pantalla 'Autorizaciones de Eliminación').
@@ -176,7 +176,7 @@ Panel derecho - Tabla de inventario disponible con:
 Sección inferior - "Reservados": lista de espacios ya asignados a la campaña, con los mismos controles de agrupación por distancia.
 Botón "Quitar reservas": libera espacios ya reservados.
 
-RECORDATORIOS: Trafico NO puede editar tarifa/costo/caras (candado 2026-10-07). Hard-lock sobre inventario No Disponible/Inhabilitado (2026-10-14). Para eliminar un circuito se requiere Autorización de Eliminación.`,
+RECORDATORIOS: Trafico NO puede editar tarifa/costo/caras (candado 2026-10-07). Candado sobre inventario Inhabilitado (todas las fechas) y No Disponible (solo dentro de su vigencia). Para eliminar un circuito se requiere Autorización de Eliminación.`,
 
   'Campanas:Nueva Incidencia': `El usuario tiene abierto IncidenciaModal.
 Muestra nombre de campaña.
@@ -246,9 +246,9 @@ ESTATUS REALES de inventario (usa 'No Disponible', NUNCA 'Bloqueado'):
 - Reservado (ámbar): comprometido en una propuesta/campaña.
 - Ocupado (cyan): en uso activo con APS.
 - Mantenimiento (gris): en reparación.
-- No Disponible (rojo): bloqueado administrativamente, no se puede ocupar. Antes se llamaba 'Bloqueado' (renombrado 2026-10-14).
+- No Disponible (rojo): a la pieza le pasó algo; no se puede ocupar durante su vigencia (fecha inicio a fecha fin, o indefinida). Fuera de la vigencia sí se puede reservar y al terminar regresa sola a Disponible. Antes se llamaba 'Bloqueado' (renombrado 2026-10-14).
 - Inhabilitado: variante dura, no se puede reactivar automáticamente.
-HARD-LOCK (2026-10-14): no se puede reservar ni reactivar un inventario con estatus 'No Disponible' ni 'Inhabilitado'. Si el usuario reporta 'no puedo reservar este espacio', es por este candado.
+CANDADO: un inventario 'Inhabilitado' no se puede reservar en ninguna fecha. Uno 'No Disponible' no se puede reservar en periodos que toquen su vigencia (catorcenas completas aunque la vigencia solo toque un día). Si el usuario reporta 'no puedo reservar este espacio', revisa si es por este candado.
 
 Vistas: toggle Tabla / Mapa (Google Maps con pins coloreados).
 Filtros: búsqueda (código/ubicación/municipio), Tipo, Estatus, Plaza. Combinables.

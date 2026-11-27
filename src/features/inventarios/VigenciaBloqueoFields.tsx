@@ -14,11 +14,12 @@ interface Props {
   disabled?: boolean;
 }
 
-// Vigencia del bloqueo (No Disponible / Inhabilitado). Dos modos:
+// Vigencia del bloqueo No Disponible (Inhabilitado no lleva). Dos modos:
 //  - Indefinida: sin fechas; queda bloqueado hasta que alguien lo habilite.
-//  - Con fechas: inicio (default hoy, mínimo hoy) y fin obligatorios. Al
-//    cumplirse la fecha fin, a quien bloqueó le llega una tarea para
-//    rehabilitar. Inicio futuro = bloqueo programado (se aplica ese día).
+//  - Con fechas: inicio (default hoy, mínimo hoy) y fin obligatorios. Solo se
+//    bloquea ese rango: fuera de él la pieza se puede reservar. Al pasar la
+//    fecha fin regresa sola a Disponible y a quien bloqueó le llega un aviso.
+//    Inicio futuro = bloqueo programado (el estatus cambia ese día).
 // Mismo patrón visual que TipoBloqueoSelector.
 export function VigenciaBloqueoFields({ value, onChange, isDark = true, disabled }: Props) {
   const hoy = hoyLocalISO();
@@ -28,7 +29,7 @@ export function VigenciaBloqueoFields({ value, onChange, isDark = true, disabled
 
   const opciones: Array<{ key: 'indefinida' | 'fechas'; label: string; desc: string; Icon: typeof CalendarDays }> = [
     { key: 'indefinida', label: 'Indefinida', desc: 'Hasta que alguien lo habilite manualmente.', Icon: InfinityIcon },
-    { key: 'fechas', label: 'Con fechas', desc: 'Al terminar te llega una tarea para rehabilitar.', Icon: CalendarDays },
+    { key: 'fechas', label: 'Con fechas', desc: 'Solo bloquea ese rango; al terminar vuelve sola a Disponible.', Icon: CalendarDays },
   ];
 
   const inputCls = `w-full rounded-lg border px-2.5 py-1.5 text-xs focus:outline-none ${
@@ -100,11 +101,11 @@ export function VigenciaBloqueoFields({ value, onChange, isDark = true, disabled
             <p className={`text-[10px] ${isDark ? 'text-zinc-500' : 'text-gray-500'}`}>Captura la fecha fin para continuar.</p>
           ) : programada ? (
             <p className={`text-[10px] ${isDark ? 'text-amber-300' : 'text-amber-700'}`}>
-              Bloqueo programado: se aplicará automáticamente el {fechaCorta(value.fecha_inicio)}. Hasta entonces la pieza sigue disponible.
+              Bloqueo programado: el estatus cambia el {fechaCorta(value.fecha_inicio)}. Desde ahora ya no se puede reservar del {fechaCorta(value.fecha_inicio)} al {fechaCorta(value.fecha_fin)} y se liberan las reservas de esas fechas.
             </p>
           ) : (
             <p className={`text-[10px] ${isDark ? 'text-zinc-500' : 'text-gray-500'}`}>
-              El {fechaCorta(value.fecha_fin)} te llegará una tarea para rehabilitar la pieza. No se habilita sola.
+              Se liberan las reservas que toquen esas fechas (catorcenas completas). Después del {fechaCorta(value.fecha_fin)} se puede reservar otra vez y la pieza regresa sola a Disponible.
             </p>
           )}
         </div>
