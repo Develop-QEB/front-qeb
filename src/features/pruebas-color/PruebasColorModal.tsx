@@ -2252,6 +2252,29 @@ function AtenderTareaModal({
         estatus: 'Finalizada',
         evidencia: evidenciaNueva,
       });
+      // Jos 2026-11-27: si llegó parcial (cantidad < num_impresiones) crear
+      // una NUEVA tarea Recepción esperando las faltantes. Así el flujo no
+      // pierde las impresiones no recibidas: se encadenan Recepciones hasta
+      // completar el total original.
+      const total = typeof tarea.num_impresiones === 'number' ? tarea.num_impresiones : null;
+      if (total !== null && cantidad < total) {
+        const faltantes = total - cantidad;
+        try {
+          await campanasService.createTarea(prueba.campania_id, {
+            titulo: `Recepción pendiente — ${faltantes} impresión${faltantes === 1 ? '' : 'es'} por recibir`,
+            descripcion: `Seguimiento de recepción de la tarea #${tarea.id}. Se recibieron ${cantidad} de ${total}; quedan ${faltantes} por recibir.`,
+            tipo: 'Recepción',
+            id_responsable: tarea.id_responsable || undefined,
+            responsable: tarea.responsable || undefined,
+            id_asignado: tarea.id_asignado || undefined,
+            asignado: tarea.asignado || undefined,
+            contenido: tarea.contenido || undefined,
+            num_impresiones: faltantes,
+          });
+        } catch (e) {
+          console.error('[pruebas-color] crear Recepción faltante falló:', e);
+        }
+      }
       queryClientLocal.invalidateQueries({ queryKey: ['tareas-campana', prueba.campania_id] });
       queryClientLocal.invalidateQueries({ queryKey: ['campanas', prueba.campania_id, 'tareas'] });
       queryClientLocal.invalidateQueries({ queryKey: ['pruebas-color', 'tareas', prueba.id] });
