@@ -225,6 +225,27 @@ export const pruebasColorService = {
     }
   },
 
+  // Jos 2026-11-27: reenvío EN LOTE — N pruebas rechazadas del mismo batch
+  // generan UNA sola tarea Revisión de artes agrupada para Diseño.
+  async reenviarBatch(payload: {
+    pruebas: Array<{
+      pruebaId: number;
+      archivo: string;
+      archivo_data?: string | null;
+      enlace_externo?: string | null;
+      nombre_arte?: string;
+      notas?: string;
+    }>;
+  }): Promise<{ pruebas: PruebaColor[]; tareaId: number | null }> {
+    try {
+      const { data } = await api.post(`/pruebas-color/batch/reenviar`, payload);
+      if (!data.success) throw new Error(data.error || 'Error al reenviar pruebas en lote');
+      return data.data;
+    } catch (err) {
+      throw extractApiError(err, 'Error al reenviar pruebas en lote');
+    }
+  },
+
   // Jos 2026-11-24: descargar en un ZIP TODOS los artes de una prueba:
   //   - El arte principal (prueba.archivo).
   //   - Los artes de cada tarea asociada que tenga archivo propio
