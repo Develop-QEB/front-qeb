@@ -2699,8 +2699,11 @@ function AtenderTareaModal({
               Jos 2026-10-12: usamos tarea.archivo (el arte en el momento de
               esa tarea) y NO prueba.archivo, para que al abrir una tarea
               rechazada vieja se vea el arte original rechazado, no el que
-              se subio despues en el reenvio. */}
-          {(tarea.archivo || prueba.archivo) && (
+              se subio despues en el reenvio.
+              Jos 2026-11-27: en Correccion batch (N>1 artes) cada card ya
+              muestra su propia miniatura y boton "Ver arte", asi que ocultar
+              este preview global para no confundir. */}
+          {(tarea.archivo || prueba.archivo) && !(avisoRechazo && avisoRechazo.artes.length > 1) && (
             <div>
               <div className={`flex items-center gap-1.5 text-[10px] uppercase tracking-wide font-semibold mb-1.5 ${isDark ? 'text-zinc-400' : 'text-gray-500'}`}>
                 <FileImage className="h-3 w-3" /> Arte revisado en esta tarea
