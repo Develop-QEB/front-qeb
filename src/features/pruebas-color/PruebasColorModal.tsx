@@ -1075,6 +1075,27 @@ function PruebaCard({
   // Permite pintar "v2 de 3" para dar contexto al revisor.
   totalVersiones?: number;
 }) {
+  // Jos 2026-11-24: botón para bajar en un ZIP todos los artes adjuntados en
+  // las tareas de la prueba. Usa el mismo queryKey que TareasAsociadasSection
+  // para reutilizar el cache de react-query (sin doble fetch).
+  const tareasArtesQuery = useQuery({
+    queryKey: ['pruebas-color', 'tareas', prueba.id],
+    queryFn: () => pruebasColorService.listarTareas(prueba.id),
+    staleTime: 10_000,
+  });
+  const [descargandoZip, setDescargandoZip] = useState(false);
+  const handleDescargarZip = async () => {
+    if (descargandoZip) return;
+    try {
+      setDescargandoZip(true);
+      const tareas = tareasArtesQuery.data || [];
+      await pruebasColorService.descargarArtesZip(prueba, tareas);
+    } catch (e) {
+      alert(e instanceof Error ? e.message : 'Error al descargar ZIP de artes');
+    } finally {
+      setDescargandoZip(false);
+    }
+  };
   const estatusStyle: Record<EstatusPruebaColor, string> = {
     solicitada: isDark ? 'bg-amber-500/15 text-amber-200 border-amber-500/40' : 'bg-amber-50 text-amber-800 border-amber-300',
     revision_artes: isDark ? 'bg-amber-500/15 text-amber-200 border-amber-500/40' : 'bg-amber-50 text-amber-800 border-amber-300',
@@ -1162,6 +1183,18 @@ function PruebaCard({
               <ExternalLink className="h-3 w-3" /> Abrir link
             </a>
           )}
+          {/* Jos 2026-11-24: Descarga en ZIP de TODOS los artes adjuntados
+              (arte principal + archivos de cada tarea + adjuntos de resolucion). */}
+          <button
+            type="button"
+            onClick={handleDescargarZip}
+            disabled={descargandoZip || tareasArtesQuery.isLoading}
+            className={`inline-flex items-center gap-1 text-xs font-medium px-2 py-1 rounded border transition-colors ${isDark ? 'text-emerald-300 border-emerald-500/40 hover:bg-emerald-500/10' : 'text-emerald-700 border-emerald-300 hover:bg-emerald-50'} disabled:opacity-50`}
+            title="Descargar todos los artes de esta prueba en un ZIP"
+          >
+            {descargandoZip ? <Loader2 className="h-3 w-3 animate-spin" /> : <Download className="h-3 w-3" />}
+            {descargandoZip ? 'Preparando ZIP...' : 'Descargar artes (ZIP)'}
+          </button>
         </div>
       </div>
 
