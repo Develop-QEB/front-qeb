@@ -29,6 +29,10 @@ jobs:
           VITE_SAP_URL: https://sap.qeb.mx
         run: npm run build
 
+      - name: Sellar commit en version.json
+        run: |
+          node -e "const fs=require('fs');const f='dist/version.json';let v={};try{v=JSON.parse(fs.readFileSync(f,'utf8'))}catch(e){};v.commit=process.env.GITHUB_SHA;v.commitShort=(process.env.GITHUB_SHA||'').slice(0,7);v.ref=process.env.GITHUB_REF_NAME;v.deployedAt=new Date().toISOString();fs.writeFileSync(f,JSON.stringify(v));console.log('version.json ->',fs.readFileSync(f,'utf8'))"
+
       - name: Subir dist al VPS (rsync)
         env:
           DEPLOY_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
