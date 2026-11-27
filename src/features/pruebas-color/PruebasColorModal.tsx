@@ -3960,6 +3960,12 @@ function AtenderRevisionBatchModal({
   ) => Promise<void>;
   isSaving: boolean;
 }) {
+  // Jos 2026-11-27: una tarea Revisión ya resuelta (Atendido / Finalizada /
+  // Rechazado) debe abrirse en modo SOLO LECTURA. Antes el modal permitía
+  // volver a aprobar/rechazar los artes aunque la tarea estuviera cerrada.
+  const estatusBajo = (tarea.estatus || '').toLowerCase();
+  const tareaCerrada = ['atendido', 'rechazado', 'finalizada', 'finalizado', 'cerrada', 'cerrado'].includes(estatusBajo);
+  const puedeRevisarEfectivo = puedeRevisar && !tareaCerrada;
   // Jos 2026-11-27: sub-formulario de "marcado preliminar". El usuario
   // marca cada arte como aprobado/rechazado (con su motivo/reemplazo) en el
   // state local — NO se escribe en BD hasta clickear Finalizar. Así el
@@ -4254,6 +4260,13 @@ function AtenderRevisionBatchModal({
 
         {/* Body */}
         <div className="flex-1 overflow-y-auto px-5 py-4 space-y-4">
+          {/* Jos 2026-11-27: banner cuando la tarea ya está cerrada —
+              se abre en modo solo lectura para consulta, sin acciones. */}
+          {tareaCerrada && (
+            <div className={`rounded-lg border px-3 py-2 text-xs ${isDark ? 'bg-zinc-800/60 border-zinc-700 text-zinc-300' : 'bg-gray-50 border-gray-200 text-gray-700'}`}>
+              Esta tarea ya está <span className="font-semibold">{tarea.estatus}</span>. Modo solo lectura — las resoluciones de los artes ya fueron aplicadas en su momento; cualquier cambio posterior se maneja en la tarea nueva (Corrección o Seguimiento) que apareció al cerrarla.
+            </div>
+          )}
           {cara && (
             <div className={`rounded-lg border px-3 py-2 flex items-center gap-2 flex-wrap text-xs ${isDark ? 'bg-fuchsia-500/5 border-fuchsia-500/30' : 'bg-fuchsia-50/60 border-fuchsia-200'}`}>
               <span className={`text-[10px] px-1.5 py-0.5 rounded font-medium ${isDark ? 'bg-fuchsia-500/20 text-fuchsia-200' : 'bg-fuchsia-100 text-fuchsia-700'}`}>
@@ -4286,7 +4299,7 @@ function AtenderRevisionBatchModal({
           })()}
 
           {/* Botones masivos — también son marcas preliminares */}
-          {puedeRevisar && pruebasPendientes.filter(p => !marcasLocales.has(p.id)).length > 0 && (
+          {puedeRevisarEfectivo && pruebasPendientes.filter(p => !marcasLocales.has(p.id)).length > 0 && (
             <div className={`flex items-center gap-2 flex-wrap p-3 rounded-lg border ${isDark ? 'bg-zinc-800/60 border-zinc-700' : 'bg-gray-50 border-gray-200'}`}>
               <span className={`text-xs font-medium ${isDark ? 'text-zinc-300' : 'text-gray-700'}`}>Acciones masivas:</span>
               <button
@@ -4430,7 +4443,7 @@ function AtenderRevisionBatchModal({
                                 <ExternalLink className="h-3 w-3" /> Link
                               </a>
                             )}
-                            {puedeRevisar && esPendienteEfectivo && (
+                            {puedeRevisarEfectivo && esPendienteEfectivo && (
                               <>
                                 <button
                                   onClick={() => { resetForm(); setResolverForm({ modo: 'individual', accion: 'aprobar', pruebaId: p.id }); }}
@@ -4448,7 +4461,7 @@ function AtenderRevisionBatchModal({
                                 </button>
                               </>
                             )}
-                            {puedeRevisar && marcaLocal && !finalizando && (
+                            {puedeRevisarEfectivo && marcaLocal && !finalizando && (
                               <button
                                 onClick={() => deshacerMarca(p.id)}
                                 className={`inline-flex items-center gap-1 text-[11px] font-semibold px-2 py-1 rounded border transition-colors ${isDark ? 'border-zinc-600 text-zinc-300 hover:bg-zinc-700' : 'border-gray-300 text-gray-700 hover:bg-gray-100'}`}
@@ -4505,7 +4518,7 @@ function AtenderRevisionBatchModal({
             >
               Cerrar
             </button>
-            {puedeRevisar && pruebasPendientes.length > 0 && (() => {
+            {puedeRevisarEfectivo && pruebasPendientes.length > 0 && (() => {
               const pendientesSinMarca = pruebasPendientes.filter(p => !marcasLocales.has(p.id)).length;
               const puedeFinalizar = pendientesSinMarca === 0 && marcasLocales.size > 0;
               return (
