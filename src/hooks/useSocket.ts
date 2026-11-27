@@ -707,19 +707,18 @@ export function useSocketPruebasColor(propuestaId: number | null) {
       queryClient.invalidateQueries({ queryKey: ['tareas'] });
       queryClient.invalidateQueries({ queryKey: ['notificaciones'] });
     };
-    socket.on(SOCKET_EVENTS.NOTIFICACION_NUEVA, refrescar);
-    socket.on(SOCKET_EVENTS.TAREA_CREADA, refrescar);
-    socket.on(SOCKET_EVENTS.TAREA_ACTUALIZADA, refrescar);
-    socket.on(SOCKET_EVENTS.ARTE_APROBADO, refrescar);
-    socket.on(SOCKET_EVENTS.ARTE_RECHAZADO, refrescar);
-    socket.on(SOCKET_EVENTS.ARTE_SUBIDO, refrescar);
+    const eventos = [
+      SOCKET_EVENTS.NOTIFICACION_NUEVA,
+      SOCKET_EVENTS.TAREA_CREADA,
+      SOCKET_EVENTS.TAREA_ACTUALIZADA,
+      SOCKET_EVENTS.TAREA_ELIMINADA,
+      SOCKET_EVENTS.ARTE_APROBADO,
+      SOCKET_EVENTS.ARTE_RECHAZADO,
+      SOCKET_EVENTS.ARTE_SUBIDO,
+    ];
+    for (const ev of eventos) socket.on(ev, refrescar);
     return () => {
-      socket.off(SOCKET_EVENTS.NOTIFICACION_NUEVA, refrescar);
-      socket.off(SOCKET_EVENTS.TAREA_CREADA, refrescar);
-      socket.off(SOCKET_EVENTS.TAREA_ACTUALIZADA, refrescar);
-      socket.off(SOCKET_EVENTS.ARTE_APROBADO, refrescar);
-      socket.off(SOCKET_EVENTS.ARTE_RECHAZADO, refrescar);
-      socket.off(SOCKET_EVENTS.ARTE_SUBIDO, refrescar);
+      for (const ev of eventos) socket.off(ev, refrescar);
     };
   }, [propuestaId, queryClient]);
 }
