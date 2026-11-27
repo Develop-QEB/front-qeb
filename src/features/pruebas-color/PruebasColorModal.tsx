@@ -1203,16 +1203,23 @@ function PruebaCard({
             no tenga que ir a propuestas a verificar que esta aprobando. */}
         {cara && (() => {
           const periodo = formatPeriodo(cara.inicio_periodo, cara.fin_periodo);
-          const items: Array<[string, string]> = [];
-          const plaza = cara.ciudad || cara.estados;
-          if (plaza) items.push(['Plaza', plaza]);
+          const items: Array<[string, string, string?]> = [];
+          // Jos 2026-11-27: abreviar Plaza larga (circuitos multi-plaza).
+          const plazaRaw = (cara.ciudad || cara.estados || '').trim();
+          if (plazaRaw) {
+            const partes = plazaRaw.split(',').map(s => s.trim()).filter(Boolean);
+            const plazaCorta = partes.length > 1
+              ? `${partes[0]} + ${partes.length - 1} más`
+              : plazaRaw;
+            items.push(['Plaza', plazaCorta, plazaRaw]);
+          }
           if (cara.formato) items.push(['Formato', cara.formato]);
           if (periodo) items.push(['Catorcena', periodo]);
           if (items.length === 0) return null;
           return (
             <div className={`text-[11px] flex flex-wrap gap-x-3 gap-y-1 rounded-md px-2 py-1.5 ${isDark ? 'bg-zinc-900/50 border border-zinc-800' : 'bg-gray-50 border border-gray-200'}`}>
-              {items.map(([k, v]) => (
-                <span key={k} className={isDark ? 'text-zinc-400' : 'text-gray-600'}>
+              {items.map(([k, v, title]) => (
+                <span key={k} className={isDark ? 'text-zinc-400' : 'text-gray-600'} title={title}>
                   <span className={isDark ? 'text-zinc-500' : 'text-gray-500'}>{k}:</span>{' '}
                   <span className={`font-medium ${isDark ? 'text-zinc-200' : 'text-gray-800'}`}>{v}</span>
                 </span>
@@ -1367,16 +1374,27 @@ function PruebaBatchCard({
         {/* Info del circuito */}
         {cara && (() => {
           const periodo = formatPeriodo(cara.inicio_periodo, cara.fin_periodo);
-          const items: Array<[string, string]> = [];
-          const plaza = cara.ciudad || cara.estados;
-          if (plaza) items.push(['Plaza', plaza]);
+          const items: Array<[string, string, string?]> = [];
+          // Jos 2026-11-27: en circuitos multi-plaza (red PARABUS, etc.)
+          // `cara.ciudad` trae todas las ciudades concatenadas con comas y
+          // ocupaba 3 líneas. Mostramos solo la PRIMERA + contador "+N" y
+          // dejamos el listado completo en el tooltip (title) para quien
+          // quiera verlas.
+          const plazaRaw = (cara.ciudad || cara.estados || '').trim();
+          if (plazaRaw) {
+            const partes = plazaRaw.split(',').map(s => s.trim()).filter(Boolean);
+            const plazaCorta = partes.length > 1
+              ? `${partes[0]} + ${partes.length - 1} más`
+              : plazaRaw;
+            items.push(['Plaza', plazaCorta, plazaRaw]);
+          }
           if (cara.formato) items.push(['Formato', cara.formato]);
           if (periodo) items.push(['Catorcena', periodo]);
           if (items.length === 0) return null;
           return (
             <div className={`text-[11px] flex flex-wrap gap-x-3 gap-y-1 rounded-md px-2 py-1.5 ${isDark ? 'bg-zinc-900/50 border border-zinc-800' : 'bg-gray-50 border border-gray-200'}`}>
-              {items.map(([k, v]) => (
-                <span key={k} className={isDark ? 'text-zinc-400' : 'text-gray-600'}>
+              {items.map(([k, v, title]) => (
+                <span key={k} className={isDark ? 'text-zinc-400' : 'text-gray-600'} title={title}>
                   <span className={isDark ? 'text-zinc-500' : 'text-gray-500'}>{k}:</span>{' '}
                   <span className={`font-medium ${isDark ? 'text-zinc-200' : 'text-gray-800'}`}>{v}</span>
                 </span>
