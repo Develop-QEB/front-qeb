@@ -288,10 +288,12 @@ export function PruebasColorModal({ isOpen, onClose, propuestaId, contextoNombre
     return pruebasDelFlujo.filter(p => setScs.has(p.sc_id));
   }, [pruebasDelFlujo, scIds]);
 
-  // Crear multiples pruebas (una por circuito seleccionado) en paralelo.
+  // Jos 2026-11-24: crear multiples pruebas en UN solo batch — el back
+  // agrupa todos los artes de un mismo circuito en UNA sola tarea de
+  // Revisión (antes eran N tareas sueltas).
   const createMutation = useMutation({
-    mutationFn: async (inputs: Array<Parameters<typeof pruebasColorService.crear>[0]>) => {
-      await Promise.all(inputs.map(i => pruebasColorService.crear(i)));
+    mutationFn: async (input: Parameters<typeof pruebasColorService.crearBatch>[0]) => {
+      await pruebasColorService.crearBatch(input);
     },
     onSuccess: () => {
       setArtes([crearSlotArte()]);
@@ -926,20 +928,24 @@ export function PruebasColorModal({ isOpen, onClose, propuestaId, contextoNombre
                         return;
                       }
                       try {
-                        // Producto cartesiano: una prueba por combinacion
-                        // (circuito, arte). createMutation ya paraleliza.
-                        const inputs = scIds.flatMap(sc_id =>
+                        // Jos 2026-11-24: un solo request batch. El back
+                        // agrupa todos los artes del mismo circuito en UNA
+                        // tarea de Revision para que Diseno los apruebe/
+                        // rechace individual o masivo.
+                        const artes = scIds.flatMap(sc_id =>
                           slotsValidos.map(a => ({
-                            propuesta_id: propuestaId,
                             sc_id,
                             archivo: a.archivo,
                             enlace_externo: a.enlace,
                             nombre_arte: a.nombre,
                             notas: notas.trim() || undefined,
-                            tipo: activeFlujo,
                           })),
                         );
-                        await createMutation.mutateAsync(inputs);
+                        await createMutation.mutateAsync({
+                          propuesta_id: propuestaId,
+                          tipo: activeFlujo,
+                          artes,
+                        });
                         setActiveTab('pruebas');
                       } catch {
                         // onError ya setea el error en el estado
@@ -1277,23 +1283,57 @@ function TareasAsociadasSection({
   });
 
   const resolver = useMutation({
-    mutationFn: ({ tareaId, accion, comentario, archivo_adjunto, enlace_adjunto }: {
+    mutationFn: ({ tareaId, accion, comentario, archivo_adjunto, enlace_adjunto, pruebaIdObjetivo }: {
       tareaId: number;
       accion: AccionResolverTarea;
       comentario?: string;
       archivo_adjunto?: string | null;
       enlace_adjunto?: string | null;
-    }) => pruebasColorService.resolverTarea(pruebaId, tareaId, accion, comentario, { archivo_adjunto, enlace_adjunto }),
-    onSuccess: () => {
+      // Jos 2026-11-24: cuando la tarea agrupa N pruebas, apunta a cuál
+      // se está resolviendo. En individual queda undefined.
+      pruebaIdObjetivo?: number;
+    }) => pruebasColorService.resolverTarea(pruebaId, tareaId, accion, comentario, { archivo_adjunto, enlace_adjunto }, pruebaIdObjetivo),
+    onSuccess: (_data, variables) => {
       queryClient.invalidateQueries({ queryKey: ['pruebas-color', 'tareas', pruebaId] });
       queryClient.invalidateQueries({ queryKey: ['pruebas-color'] });
-      setOpenTareaId(null);
+      // Jos 2026-11-24: en batch no cerramos el modal automaticamente —
+      // quedan más artes por resolver. El modal se cierra cuando el
+      // usuario quiere, o cuando ya todas están resueltas y la tarea pasa
+      // a Atendido/Rechazado.
+      if (!variables.pruebaIdObjetivo) setOpenTareaId(null);
     },
     onError: (e: Error) => alert(e.message),
   });
 
   const tareas = tareasQuery.data || [];
   const tareaAbierta = tareas.find(t => t.id === openTareaId) || null;
+
+  // Jos 2026-11-24: detectar si la tarea abierta agrupa N pruebas (batch).
+  // Si sí, cargamos las N pruebas de la propuesta y filtramos por los ids
+  // del contenido JSON para pasarlas al AtenderRevisionBatchModal.
+  const contenidoBatch = useMemo(() => {
+    if (!tareaAbierta || !tareaAbierta.contenido) return null;
+    try {
+      const c = JSON.parse(tareaAbierta.contenido);
+      const ids = Array.isArray(c.pruebaColorIds)
+        ? (c.pruebaColorIds as unknown[]).map(v => Number(v)).filter(n => Number.isFinite(n) && n > 0)
+        : null;
+      if (!ids || ids.length <= 1) return null;
+      return { ids, propuestaId: Number(c.propuestaId) || prueba.propuesta_id };
+    } catch { return null; }
+  }, [tareaAbierta, prueba.propuesta_id]);
+
+  const pruebasBatchQuery = useQuery({
+    queryKey: ['pruebas-color', 'propuesta', contenidoBatch?.propuestaId, 'all-tipos'],
+    queryFn: () => pruebasColorService.listar({ propuesta_id: contenidoBatch!.propuestaId }),
+    staleTime: 10_000,
+    enabled: !!contenidoBatch,
+  });
+  const pruebasDelBatch = useMemo<PruebaColor[]>(() => {
+    if (!contenidoBatch || !pruebasBatchQuery.data) return [];
+    const idSet = new Set(contenidoBatch.ids);
+    return pruebasBatchQuery.data.filter(p => idSet.has(p.id));
+  }, [contenidoBatch, pruebasBatchQuery.data]);
   // Jos 2026-10-12: la ultima tarea de Revision de artes (por id desc) es
   // la "activa"; si hay varias rechazadas, solo la mas reciente permite
   // reeditar. Las viejas son registro historico de rechazos anteriores.
@@ -1381,22 +1421,48 @@ function TareasAsociadasSection({
           z-index mayor al principal (z-[80]) y stop-propagation al clickear el
           contenido para que no cierre el modal padre. */}
       {tareaAbierta && (
-        <AtenderTareaModal
-          tarea={tareaAbierta}
-          prueba={prueba}
-          cara={cara}
-          isDark={isDark}
-          puedeCrear={puedeCrear}
-          puedeRevisar={puedeRevisar}
-          esUltimaRevision={tareaAbierta.id === idUltimaRevision}
-          yaTieneImpresion={tareas.some(t => t.tipo === 'Impresión')}
-          yaTieneRecepcion={tareas.some(t => t.tipo === 'Recepción')}
-          onClose={() => setOpenTareaId(null)}
-          onAprobar={(opts) => resolver.mutate({ tareaId: tareaAbierta.id, accion: 'aprobar', comentario: opts?.comentario, archivo_adjunto: opts?.archivo_adjunto, enlace_adjunto: opts?.enlace_adjunto })}
-          onRechazar={(comentario, adjuntos) => resolver.mutate({ tareaId: tareaAbierta.id, accion: 'rechazar', comentario, archivo_adjunto: adjuntos?.archivo_adjunto, enlace_adjunto: adjuntos?.enlace_adjunto })}
-          onFinalizar={() => resolver.mutate({ tareaId: tareaAbierta.id, accion: 'finalizar' })}
-          isSaving={resolver.isPending}
-        />
+        contenidoBatch ? (
+          <AtenderRevisionBatchModal
+            tarea={tareaAbierta}
+            pruebas={pruebasDelBatch}
+            isLoadingPruebas={pruebasBatchQuery.isLoading}
+            cara={cara}
+            isDark={isDark}
+            puedeRevisar={puedeRevisar}
+            onClose={() => setOpenTareaId(null)}
+            // Jos 2026-11-24: usar mutateAsync para que el masivo pueda
+            // serializar las resoluciones con await y evitar race en la
+            // evidencia de la tarea (el back lee/escribe evidencia JSON).
+            onResolverArte={async (pruebaIdObjetivo, accion, opts) => {
+              await resolver.mutateAsync({
+                tareaId: tareaAbierta.id,
+                accion,
+                comentario: opts?.comentario,
+                archivo_adjunto: opts?.archivo_adjunto,
+                enlace_adjunto: opts?.enlace_adjunto,
+                pruebaIdObjetivo,
+              });
+            }}
+            isSaving={resolver.isPending}
+          />
+        ) : (
+          <AtenderTareaModal
+            tarea={tareaAbierta}
+            prueba={prueba}
+            cara={cara}
+            isDark={isDark}
+            puedeCrear={puedeCrear}
+            puedeRevisar={puedeRevisar}
+            esUltimaRevision={tareaAbierta.id === idUltimaRevision}
+            yaTieneImpresion={tareas.some(t => t.tipo === 'Impresión')}
+            yaTieneRecepcion={tareas.some(t => t.tipo === 'Recepción')}
+            onClose={() => setOpenTareaId(null)}
+            onAprobar={(opts) => resolver.mutate({ tareaId: tareaAbierta.id, accion: 'aprobar', comentario: opts?.comentario, archivo_adjunto: opts?.archivo_adjunto, enlace_adjunto: opts?.enlace_adjunto })}
+            onRechazar={(comentario, adjuntos) => resolver.mutate({ tareaId: tareaAbierta.id, accion: 'rechazar', comentario, archivo_adjunto: adjuntos?.archivo_adjunto, enlace_adjunto: adjuntos?.enlace_adjunto })}
+            onFinalizar={() => resolver.mutate({ tareaId: tareaAbierta.id, accion: 'finalizar' })}
+            isSaving={resolver.isPending}
+          />
+        )
       )}
     </div>
   );
@@ -3060,6 +3126,387 @@ function CircuitoCombobox({
           </div>
         </div>
       )}
+    </div>
+  );
+}
+
+// ─── Modal de atención de tarea de Revisión en BATCH ────────────────────
+// Jos 2026-11-24: cuando una tarea de Revisión agrupa N artes (varios artes
+// del mismo circuito solicitados en un solo lote), este modal reemplaza al
+// AtenderTareaModal individual. Diseño aprueba/rechaza cada arte por
+// separado o en masivo; la tarea solo se cierra cuando TODOS están
+// resueltos (lo hace el back automáticamente al llegar al último).
+function AtenderRevisionBatchModal({
+  tarea,
+  pruebas,
+  isLoadingPruebas,
+  cara,
+  isDark,
+  puedeRevisar,
+  onClose,
+  onResolverArte,
+  isSaving,
+}: {
+  tarea: TareaAsociadaPruebaColor;
+  pruebas: PruebaColor[];
+  isLoadingPruebas: boolean;
+  cara: SolicitudCara | null;
+  isDark: boolean;
+  puedeRevisar: boolean;
+  onClose: () => void;
+  onResolverArte: (
+    pruebaIdObjetivo: number,
+    accion: 'aprobar' | 'rechazar',
+    opts?: { comentario?: string; archivo_adjunto?: string | null; enlace_adjunto?: string | null },
+  ) => Promise<void>;
+  isSaving: boolean;
+}) {
+  // Sub-formulario de resolución que se abre al clickear Aprobar/Rechazar
+  // (individual o masivo). Captura motivo + archivo + enlace opcionales.
+  const [resolverForm, setResolverForm] = useState<
+    | null
+    | {
+        modo: 'individual' | 'masivo';
+        accion: 'aprobar' | 'rechazar';
+        pruebaId?: number;
+      }
+  >(null);
+  const [comentario, setComentario] = useState('');
+  const [adjFile, setAdjFile] = useState<File | null>(null);
+  const [adjFileUrl, setAdjFileUrl] = useState<string | null>(null);
+  const [adjFileUploading, setAdjFileUploading] = useState(false);
+  const [adjEnlace, setAdjEnlace] = useState('');
+  const [formError, setFormError] = useState<string | null>(null);
+
+  const resetForm = () => {
+    setResolverForm(null);
+    setComentario('');
+    setAdjFile(null);
+    setAdjFileUrl(null);
+    setAdjEnlace('');
+    setFormError(null);
+  };
+
+  const handleUploadAdjunto = async (file: File) => {
+    try {
+      setAdjFileUploading(true);
+      setFormError(null);
+      const folder = resolverForm?.accion === 'rechazar' ? 'pruebas-color/rechazos' : 'pruebas-color/aprobaciones';
+      const res = await uploadsService.uploadFile(file, folder);
+      setAdjFile(file);
+      setAdjFileUrl(res.url);
+    } catch (e) {
+      setFormError(e instanceof Error ? e.message : 'Error al subir archivo');
+      setAdjFile(null);
+      setAdjFileUrl(null);
+    } finally {
+      setAdjFileUploading(false);
+    }
+  };
+
+  const pruebasPendientes = useMemo(
+    () => pruebas.filter(p => p.estatus === 'revision_artes' || p.estatus === 'solicitada'),
+    [pruebas],
+  );
+  const pruebasAprobadas = useMemo(() => pruebas.filter(p => p.estatus === 'arte_aprobado' || p.estatus === 'aprobada'), [pruebas]);
+  const pruebasRechazadas = useMemo(() => pruebas.filter(p => p.estatus === 'rechazada'), [pruebas]);
+
+  const confirmarResolucion = async () => {
+    if (!resolverForm) return;
+    const comentarioTrim = comentario.trim();
+    if (resolverForm.accion === 'rechazar' && !comentarioTrim) {
+      setFormError('El motivo del rechazo es obligatorio');
+      return;
+    }
+    const enlaceTrim = adjEnlace.trim();
+    if (enlaceTrim && !esUrlValido(enlaceTrim)) {
+      setFormError('El enlace no es un URL válido');
+      return;
+    }
+    const opts = {
+      comentario: comentarioTrim || undefined,
+      archivo_adjunto: adjFileUrl || null,
+      enlace_adjunto: enlaceTrim || null,
+    };
+    try {
+      if (resolverForm.modo === 'individual' && resolverForm.pruebaId) {
+        await onResolverArte(resolverForm.pruebaId, resolverForm.accion, opts);
+      } else if (resolverForm.modo === 'masivo') {
+        // Masivo: resoluciones en SERIE para evitar race en la evidencia
+        // JSON de la tarea (el back lee/escribe el mismo objeto). El back
+        // cierra la tarea al llegar a la última.
+        for (const p of pruebasPendientes) {
+          await onResolverArte(p.id, resolverForm.accion, opts);
+        }
+      }
+      resetForm();
+    } catch (e) {
+      setFormError(e instanceof Error ? e.message : 'Error al resolver');
+    }
+  };
+
+  const estatusStyle = (estatus: string): string => {
+    if (estatus === 'arte_aprobado' || estatus === 'aprobada')
+      return isDark ? 'bg-emerald-500/15 text-emerald-200 border-emerald-500/40' : 'bg-emerald-50 text-emerald-800 border-emerald-300';
+    if (estatus === 'rechazada')
+      return isDark ? 'bg-red-500/15 text-red-200 border-red-500/40' : 'bg-red-50 text-red-800 border-red-300';
+    return isDark ? 'bg-amber-500/15 text-amber-200 border-amber-500/40' : 'bg-amber-50 text-amber-800 border-amber-300';
+  };
+  const estatusLabel = (estatus: string): string => {
+    if (estatus === 'arte_aprobado') return 'Aprobado';
+    if (estatus === 'aprobada') return 'Aprobado';
+    if (estatus === 'rechazada') return 'Rechazado';
+    if (estatus === 'solicitada' || estatus === 'revision_artes') return 'Pendiente';
+    return estatus;
+  };
+
+  return (
+    <div
+      className="fixed inset-0 z-[80] flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm"
+      onClick={onClose}
+    >
+      <div
+        onClick={(e) => e.stopPropagation()}
+        className={`w-full max-w-3xl rounded-xl border shadow-2xl flex flex-col max-h-[92dvh] max-lg:landscape:h-[100dvh] max-lg:landscape:max-h-[100dvh] max-lg:landscape:rounded-none max-lg:landscape:mx-0 ${isDark ? 'bg-zinc-900 border-zinc-700 text-zinc-100' : 'bg-white border-gray-200 text-gray-900'}`}
+      >
+        {/* Header */}
+        <div className={`shrink-0 px-5 py-3 flex items-start justify-between gap-3 border-b ${isDark ? 'border-zinc-800' : 'border-gray-200'}`}>
+          <div className="flex-1 min-w-0">
+            <div className={`text-[10px] uppercase tracking-wide font-semibold ${isDark ? 'text-fuchsia-300' : 'text-fuchsia-700'}`}>
+              Atender revisión — varios artes
+            </div>
+            <div className="text-base font-semibold mt-0.5">
+              Revisión de {pruebas.length} artes
+            </div>
+            <div className={`text-[11px] mt-0.5 ${isDark ? 'text-zinc-400' : 'text-gray-500'}`}>
+              Tarea #{tarea.id} · {tarea.estatus || 'Sin estado'}
+            </div>
+          </div>
+          <button
+            onClick={onClose}
+            className={`shrink-0 p-1 rounded transition-colors ${isDark ? 'text-zinc-400 hover:text-zinc-100 hover:bg-zinc-800' : 'text-gray-500 hover:text-gray-900 hover:bg-gray-100'}`}
+          >
+            <X className="h-4 w-4" />
+          </button>
+        </div>
+
+        {/* Body */}
+        <div className="flex-1 overflow-y-auto px-5 py-4 space-y-4">
+          {cara && (
+            <div className={`rounded-lg border px-3 py-2 flex items-center gap-2 flex-wrap text-xs ${isDark ? 'bg-fuchsia-500/5 border-fuchsia-500/30' : 'bg-fuchsia-50/60 border-fuchsia-200'}`}>
+              <span className={`text-[10px] px-1.5 py-0.5 rounded font-medium ${isDark ? 'bg-fuchsia-500/20 text-fuchsia-200' : 'bg-fuchsia-100 text-fuchsia-700'}`}>
+                #{cara.id}
+              </span>
+              {cara.articulo && <span>{cara.articulo}</span>}
+              {cara.formato && <span className={isDark ? 'text-zinc-400' : 'text-gray-500'}>· {cara.formato}</span>}
+              {cara.ciudad && <span className={isDark ? 'text-zinc-400' : 'text-gray-500'}>· {cara.ciudad}</span>}
+            </div>
+          )}
+
+          {/* Contadores */}
+          <div className={`flex items-center gap-2 text-[11px] flex-wrap`}>
+            <span className={`px-2 py-0.5 rounded-full border font-medium ${isDark ? 'bg-amber-500/15 text-amber-200 border-amber-500/40' : 'bg-amber-50 text-amber-800 border-amber-300'}`}>
+              {pruebasPendientes.length} pendiente{pruebasPendientes.length === 1 ? '' : 's'}
+            </span>
+            <span className={`px-2 py-0.5 rounded-full border font-medium ${isDark ? 'bg-emerald-500/15 text-emerald-200 border-emerald-500/40' : 'bg-emerald-50 text-emerald-800 border-emerald-300'}`}>
+              {pruebasAprobadas.length} aprobado{pruebasAprobadas.length === 1 ? '' : 's'}
+            </span>
+            <span className={`px-2 py-0.5 rounded-full border font-medium ${isDark ? 'bg-red-500/15 text-red-200 border-red-500/40' : 'bg-red-50 text-red-800 border-red-300'}`}>
+              {pruebasRechazadas.length} rechazado{pruebasRechazadas.length === 1 ? '' : 's'}
+            </span>
+          </div>
+
+          {/* Botones masivos */}
+          {puedeRevisar && pruebasPendientes.length > 0 && (
+            <div className={`flex items-center gap-2 flex-wrap p-3 rounded-lg border ${isDark ? 'bg-zinc-800/60 border-zinc-700' : 'bg-gray-50 border-gray-200'}`}>
+              <span className={`text-xs font-medium ${isDark ? 'text-zinc-300' : 'text-gray-700'}`}>Acciones masivas:</span>
+              <button
+                onClick={() => setResolverForm({ modo: 'masivo', accion: 'aprobar' })}
+                disabled={isSaving}
+                className={`inline-flex items-center gap-1 text-xs font-semibold px-3 py-1.5 rounded border transition-colors ${isDark ? 'border-emerald-500/60 text-emerald-100 bg-emerald-500/20 hover:bg-emerald-500/30' : 'border-emerald-400 text-emerald-800 bg-emerald-50 hover:bg-emerald-100'} disabled:opacity-50`}
+              >
+                <CheckCircle2 className="h-3.5 w-3.5" /> Aprobar todos ({pruebasPendientes.length})
+              </button>
+              <button
+                onClick={() => setResolverForm({ modo: 'masivo', accion: 'rechazar' })}
+                disabled={isSaving}
+                className={`inline-flex items-center gap-1 text-xs font-semibold px-3 py-1.5 rounded border transition-colors ${isDark ? 'border-red-500/60 text-red-100 bg-red-500/20 hover:bg-red-500/30' : 'border-red-400 text-red-800 bg-red-50 hover:bg-red-100'} disabled:opacity-50`}
+              >
+                <XCircle className="h-3.5 w-3.5" /> Rechazar todos ({pruebasPendientes.length})
+              </button>
+            </div>
+          )}
+
+          {/* Lista de artes */}
+          {isLoadingPruebas ? (
+            <div className={`flex items-center justify-center py-8 text-sm ${isDark ? 'text-zinc-400' : 'text-gray-500'}`}>
+              <Loader2 className="h-4 w-4 animate-spin mr-2" /> Cargando artes...
+            </div>
+          ) : pruebas.length === 0 ? (
+            <div className={`text-sm text-center py-8 ${isDark ? 'text-zinc-500' : 'text-gray-400'}`}>
+              No se encontraron artes para esta revisión.
+            </div>
+          ) : (
+            <div className="space-y-2">
+              {pruebas.map((p) => {
+                const esPendiente = p.estatus === 'revision_artes' || p.estatus === 'solicitada';
+                return (
+                  <div
+                    key={p.id}
+                    className={`rounded-lg border p-3 ${isDark ? 'bg-zinc-800/60 border-zinc-700' : 'bg-white border-gray-200'}`}
+                  >
+                    <div className="flex items-start gap-3">
+                      {p.archivo ? (
+                        <a href={p.archivo} target="_blank" rel="noreferrer" className="shrink-0">
+                          <img
+                            src={p.archivo}
+                            alt={p.nombre_arte || `Arte ${p.id}`}
+                            className="w-16 h-16 object-cover rounded border border-zinc-700"
+                            onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }}
+                          />
+                        </a>
+                      ) : (
+                        <div className={`w-16 h-16 rounded flex items-center justify-center shrink-0 ${isDark ? 'bg-zinc-800 border border-zinc-700' : 'bg-gray-100 border border-gray-200'}`}>
+                          <FileImage className={`h-5 w-5 ${isDark ? 'text-zinc-600' : 'text-gray-400'}`} />
+                        </div>
+                      )}
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <span className={`text-[10px] px-1.5 py-0.5 rounded font-bold ${isDark ? 'bg-fuchsia-500/20 text-fuchsia-200' : 'bg-fuchsia-100 text-fuchsia-700'}`}>
+                            v{p.version}
+                          </span>
+                          <span className={`text-[10px] px-2 py-0.5 rounded-full border font-semibold ${estatusStyle(p.estatus)}`}>
+                            {estatusLabel(p.estatus)}
+                          </span>
+                          <span className={`text-sm font-semibold truncate ${isDark ? 'text-zinc-100' : 'text-gray-900'}`}>
+                            {p.nombre_arte || `Arte #${p.id}`}
+                          </span>
+                        </div>
+                        {p.notas && (
+                          <div className={`text-[11px] mt-1 whitespace-pre-wrap ${isDark ? 'text-zinc-400' : 'text-gray-600'}`}>
+                            {p.notas}
+                          </div>
+                        )}
+                        <div className="flex items-center gap-1.5 mt-2 flex-wrap">
+                          {p.archivo && (
+                            <a href={p.archivo} target="_blank" rel="noreferrer" className={`inline-flex items-center gap-1 text-[11px] font-medium px-2 py-1 rounded border ${isDark ? 'text-fuchsia-300 border-fuchsia-500/40 hover:bg-fuchsia-500/10' : 'text-fuchsia-700 border-fuchsia-300 hover:bg-fuchsia-50'}`}>
+                              <FileImage className="h-3 w-3" /> Ver arte
+                            </a>
+                          )}
+                          {p.enlace_externo && (
+                            <a href={p.enlace_externo} target="_blank" rel="noreferrer" className={`inline-flex items-center gap-1 text-[11px] font-medium px-2 py-1 rounded border ${isDark ? 'text-cyan-300 border-cyan-500/40 hover:bg-cyan-500/10' : 'text-cyan-700 border-cyan-300 hover:bg-cyan-50'}`}>
+                              <ExternalLink className="h-3 w-3" /> Link
+                            </a>
+                          )}
+                          {puedeRevisar && esPendiente && (
+                            <>
+                              <button
+                                onClick={() => setResolverForm({ modo: 'individual', accion: 'aprobar', pruebaId: p.id })}
+                                disabled={isSaving}
+                                className={`inline-flex items-center gap-1 text-[11px] font-semibold px-2 py-1 rounded border transition-colors ${isDark ? 'border-emerald-500/60 text-emerald-100 bg-emerald-500/20 hover:bg-emerald-500/30' : 'border-emerald-400 text-emerald-800 bg-emerald-50 hover:bg-emerald-100'} disabled:opacity-50`}
+                              >
+                                <CheckCircle2 className="h-3 w-3" /> Aprobar
+                              </button>
+                              <button
+                                onClick={() => setResolverForm({ modo: 'individual', accion: 'rechazar', pruebaId: p.id })}
+                                disabled={isSaving}
+                                className={`inline-flex items-center gap-1 text-[11px] font-semibold px-2 py-1 rounded border transition-colors ${isDark ? 'border-red-500/60 text-red-100 bg-red-500/20 hover:bg-red-500/30' : 'border-red-400 text-red-800 bg-red-50 hover:bg-red-100'} disabled:opacity-50`}
+                              >
+                                <XCircle className="h-3 w-3" /> Rechazar
+                              </button>
+                            </>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+
+          {/* Sub-form de resolución (individual o masiva) */}
+          {resolverForm && (
+            <div className={`rounded-lg border p-3 space-y-2 ${resolverForm.accion === 'aprobar' ? (isDark ? 'bg-emerald-500/5 border-emerald-500/40' : 'bg-emerald-50 border-emerald-300') : (isDark ? 'bg-red-500/5 border-red-500/40' : 'bg-red-50 border-red-300')}`}>
+              <div className={`text-xs font-semibold ${isDark ? 'text-zinc-100' : 'text-gray-900'}`}>
+                {resolverForm.modo === 'masivo'
+                  ? `${resolverForm.accion === 'aprobar' ? 'Aprobar' : 'Rechazar'} todos los pendientes (${pruebasPendientes.length})`
+                  : `${resolverForm.accion === 'aprobar' ? 'Aprobar' : 'Rechazar'} arte individual`}
+              </div>
+              <div>
+                <label className={`text-[11px] font-medium mb-1 block ${isDark ? 'text-zinc-400' : 'text-gray-600'}`}>
+                  Motivo {resolverForm.accion === 'rechazar' ? '*' : '(opcional)'}
+                </label>
+                <textarea
+                  value={comentario}
+                  onChange={(e) => setComentario(e.target.value)}
+                  rows={3}
+                  placeholder={resolverForm.accion === 'rechazar' ? 'Describe el motivo del rechazo' : 'Comentario opcional'}
+                  className={`w-full text-xs p-2 rounded border resize-y ${isDark ? 'bg-zinc-800 border-zinc-700 text-zinc-100 placeholder:text-zinc-500' : 'bg-white border-gray-300 text-gray-900 placeholder:text-gray-400'}`}
+                />
+              </div>
+              <div className="grid grid-cols-2 gap-2">
+                <div>
+                  <label className={`text-[11px] font-medium mb-1 block ${isDark ? 'text-zinc-400' : 'text-gray-600'}`}>Adjuntar archivo</label>
+                  <input
+                    type="file"
+                    onChange={(e) => {
+                      const f = e.target.files?.[0] || null;
+                      if (f) handleUploadAdjunto(f);
+                    }}
+                    disabled={adjFileUploading}
+                    className={`block w-full text-[11px] ${isDark ? 'text-zinc-300' : 'text-gray-700'} file:mr-2 file:py-1 file:px-2 file:rounded file:border-0 file:text-[11px] file:font-medium ${isDark ? 'file:bg-zinc-700 file:text-zinc-100' : 'file:bg-gray-200 file:text-gray-800'}`}
+                  />
+                  {adjFileUploading && <Loader2 className="h-3 w-3 animate-spin mt-1" />}
+                  {adjFile && !adjFileUploading && <div className={`text-[10px] mt-0.5 truncate ${isDark ? 'text-zinc-400' : 'text-gray-500'}`}>{adjFile.name}</div>}
+                </div>
+                <div>
+                  <label className={`text-[11px] font-medium mb-1 block ${isDark ? 'text-zinc-400' : 'text-gray-600'}`}>Enlace</label>
+                  <input
+                    type="url"
+                    value={adjEnlace}
+                    onChange={(e) => setAdjEnlace(e.target.value)}
+                    placeholder="https://..."
+                    className={`w-full text-xs p-1.5 rounded border ${isDark ? 'bg-zinc-800 border-zinc-700 text-zinc-100 placeholder:text-zinc-500' : 'bg-white border-gray-300 text-gray-900 placeholder:text-gray-400'}`}
+                  />
+                </div>
+              </div>
+              {formError && (
+                <div className={`text-[11px] px-2 py-1 rounded ${isDark ? 'bg-red-500/15 text-red-200 border border-red-500/30' : 'bg-red-50 text-red-700 border border-red-200'}`}>
+                  {formError}
+                </div>
+              )}
+              <div className="flex items-center justify-end gap-2 pt-1">
+                <button
+                  onClick={resetForm}
+                  disabled={isSaving}
+                  className={`text-xs font-medium px-3 py-1.5 rounded border ${isDark ? 'border-zinc-700 text-zinc-300 hover:bg-zinc-800' : 'border-gray-300 text-gray-700 hover:bg-gray-100'}`}
+                >
+                  Cancelar
+                </button>
+                <button
+                  onClick={confirmarResolucion}
+                  disabled={isSaving || adjFileUploading}
+                  className={`inline-flex items-center gap-1 text-xs font-semibold px-3 py-1.5 rounded border transition-colors ${resolverForm.accion === 'aprobar' ? (isDark ? 'border-emerald-500/60 text-emerald-100 bg-emerald-500/20 hover:bg-emerald-500/30' : 'border-emerald-400 text-emerald-800 bg-emerald-50 hover:bg-emerald-100') : (isDark ? 'border-red-500/60 text-red-100 bg-red-500/20 hover:bg-red-500/30' : 'border-red-400 text-red-800 bg-red-50 hover:bg-red-100')} disabled:opacity-50`}
+                >
+                  {isSaving ? <Loader2 className="h-3 w-3 animate-spin" /> : resolverForm.accion === 'aprobar' ? <CheckCircle2 className="h-3 w-3" /> : <XCircle className="h-3 w-3" />}
+                  Confirmar {resolverForm.accion === 'aprobar' ? 'aprobación' : 'rechazo'}
+                </button>
+              </div>
+            </div>
+          )}
+        </div>
+
+        {/* Footer */}
+        <div className={`shrink-0 px-5 py-3 flex items-center justify-end gap-2 border-t ${isDark ? 'border-zinc-800 bg-zinc-900/60' : 'border-gray-200 bg-gray-50/60'}`}>
+          <button
+            onClick={onClose}
+            className={`text-xs font-semibold px-4 py-2 rounded border transition-colors ${isDark ? 'border-zinc-700 text-zinc-200 bg-zinc-800 hover:bg-zinc-700' : 'border-gray-300 text-gray-800 bg-white hover:bg-gray-50'}`}
+          >
+            Cerrar
+          </button>
+        </div>
+      </div>
     </div>
   );
 }
