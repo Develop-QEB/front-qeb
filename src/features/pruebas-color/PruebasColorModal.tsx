@@ -1601,6 +1601,10 @@ function TareasAsociadasSection({
         {tareas.map(t => {
           const esRevision = t.tipo === 'Revisión de artes';
           const esSeguimiento = t.tipo === 'Seguimiento Prueba de color';
+          // Jos 2026-11-27: la tarea de rechazo ahora es 'Corrección' (tipo
+          // que ya existía). La detectamos para mostrar la etiqueta correcta
+          // en el drawer y no pintar "Corrección" a secas (viene de RA).
+          const esCorreccionArte = t.tipo === 'Corrección';
           const asignados = t.asignado ? t.asignado.split(',').map(s => s.trim()).filter(Boolean) : [];
           const asignadosMostrar = asignados.slice(0, 2);
           const extra = asignados.length - asignadosMostrar.length;
@@ -1633,7 +1637,7 @@ function TareasAsociadasSection({
               }
             } catch { /* ignore */ }
           }
-          const nombreTarea = esRevision ? 'Revisión de artes' : esSeguimiento ? 'Seguimiento' : t.tipo;
+          const nombreTarea = esRevision ? 'Revisión de artes' : esSeguimiento ? 'Seguimiento' : esCorreccionArte ? 'Corrección de arte' : t.tipo;
           return (
             <button
               key={t.id}
@@ -1840,7 +1844,9 @@ function AtenderTareaModal({
     } catch { return null; }
   }, [tarea.tipo, tarea.contenido]);
   const avisoRechazo = useMemo((): { propuestaId: number | null; artes: ArteRechazado[] } | null => {
-    if (tarea.tipo !== 'Prueba de Color' || !tarea.contenido) return null;
+    // Jos 2026-11-27: la tarea de rechazo ahora se crea como 'Corrección'
+    // (antes 'Prueba de Color'). Soportamos ambas para no romper tareas viejas.
+    if ((tarea.tipo !== 'Prueba de Color' && tarea.tipo !== 'Corrección') || !tarea.contenido) return null;
     try {
       const c = JSON.parse(tarea.contenido) as {
         pruebaColorId?: number;

@@ -3375,7 +3375,7 @@ function TaskDrawer({
         {/* Prueba de color rechazada: mostrar motivo + boton para subir v2.
             Jos 2026-10-12: tarea tipo 'Prueba de Color' con contenido JSON
             que incluye requiereNuevaVersion=true. */}
-        {tarea.tipo === 'Prueba de Color' && tarea.contenido && (() => {
+        {(tarea.tipo === 'Prueba de Color' || tarea.tipo === 'Corrección') && tarea.contenido && (() => {
           try {
             const c = JSON.parse(tarea.contenido) as {
               pruebaColorId?: number;
