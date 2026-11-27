@@ -1615,13 +1615,21 @@ function TareasAsociadasSection({
           // Jos 2026-11-27: si la tarea pertenece al batch (hermanas disponibles),
           // mostramos a QUÉ arte específico corresponde la tarea (v4, v3…).
           let arteAsociado: { version: number; nombre: string | null } | null = null;
-          if (pruebasHermanas && pruebasHermanas.length > 1 && t.contenido) {
+          // Jos 2026-11-27: la tarea puede ser (a) individual con pruebaColorId
+          // -> etiquetamos con v+nombre de esa prueba; (b) batch con
+          // pruebaColorIds array -> mostramos "N artes" para avisar que agrupa.
+          let countBatch: number | null = null;
+          if (t.contenido) {
             try {
               const c = JSON.parse(t.contenido);
-              const pid = Number(c.pruebaColorId);
-              if (Number.isFinite(pid)) {
-                const p = pruebasHermanas.find(x => x.id === pid);
-                if (p) arteAsociado = { version: p.version, nombre: p.nombre_arte };
+              if (Array.isArray(c.pruebaColorIds) && c.pruebaColorIds.length > 1) {
+                countBatch = c.pruebaColorIds.length;
+              } else if (pruebasHermanas && pruebasHermanas.length > 1) {
+                const pid = Number(c.pruebaColorId);
+                if (Number.isFinite(pid)) {
+                  const p = pruebasHermanas.find(x => x.id === pid);
+                  if (p) arteAsociado = { version: p.version, nombre: p.nombre_arte };
+                }
               }
             } catch { /* ignore */ }
           }
@@ -1645,6 +1653,11 @@ function TareasAsociadasSection({
                   {arteAsociado && (
                     <span className={`text-[10px] px-1.5 py-0.5 rounded font-medium truncate max-w-[160px] ${isDark ? 'bg-fuchsia-500/15 text-fuchsia-200 border border-fuchsia-500/30' : 'bg-fuchsia-50 text-fuchsia-700 border border-fuchsia-200'}`} title={arteAsociado.nombre || ''}>
                       v{arteAsociado.version}{arteAsociado.nombre ? ` · ${arteAsociado.nombre}` : ''}
+                    </span>
+                  )}
+                  {countBatch && (
+                    <span className={`text-[10px] px-1.5 py-0.5 rounded font-medium ${isDark ? 'bg-fuchsia-500/15 text-fuchsia-200 border border-fuchsia-500/30' : 'bg-fuchsia-50 text-fuchsia-700 border border-fuchsia-200'}`}>
+                      {countBatch} artes
                     </span>
                   )}
                 </div>
@@ -1770,27 +1783,114 @@ function AtenderTareaModal({
   // Jos 2026-11-27: tareas tipo 'Prueba de Color' con requiereNuevaVersion
   // son el aviso al asesor de que su arte fue RECHAZADO. Render especial
   // con motivo + archivos de referencia + botón para subir nueva versión.
-  const avisoRechazo = useMemo(() => {
+  // Soporta DOS variantes: (a) 1 arte rechazado (contenido raíz) y (b)
+  // batch de N artes rechazados (contenido.artes array). El render pinta
+  // una card por arte.
+  type ArteRechazado = {
+    pruebaColorId: number | null;
+    version: number | null;
+    nombreArte: string | null;
+    scId: number | null;
+    motivo: string;
+    archivoAdjunto: string | null;
+    enlaceAdjunto: string | null;
+  };
+  // Jos 2026-11-27: Seguimiento batch — N artes aprobados en una sola tarea.
+  // El render lista cada arte con su motivo de aprobación (si lo hay) para
+  // que el analista sepa qué va a avanzar al proveedor y pueda finalizar
+  // todo el grupo de un solo click.
+  type ArteSeguimiento = {
+    pruebaColorId: number | null;
+    version: number | null;
+    nombreArte: string | null;
+    arte: string | null;
+    motivoAprobacion: string | null;
+    aprobacionArchivo: string | null;
+    aprobacionEnlace: string | null;
+  };
+  const avisoSeguimiento = useMemo((): { propuestaId: number | null; artes: ArteSeguimiento[] } | null => {
+    if (tarea.tipo !== 'Seguimiento Prueba de color' || !tarea.contenido) return null;
+    try {
+      const c = JSON.parse(tarea.contenido) as {
+        esBatch?: boolean;
+        propuestaId?: number;
+        artes?: Array<{
+          pruebaColorId?: number;
+          version?: number;
+          nombreArte?: string | null;
+          arte?: string | null;
+          motivoAprobacion?: string | null;
+          aprobacionArchivo?: string | null;
+          aprobacionEnlace?: string | null;
+        }>;
+      };
+      if (!c.esBatch || !Array.isArray(c.artes) || c.artes.length === 0) return null;
+      return {
+        propuestaId: c.propuestaId || null,
+        artes: c.artes.map(a => ({
+          pruebaColorId: a.pruebaColorId ?? null,
+          version: a.version ?? null,
+          nombreArte: a.nombreArte ?? null,
+          arte: a.arte ?? null,
+          motivoAprobacion: a.motivoAprobacion ?? null,
+          aprobacionArchivo: a.aprobacionArchivo ?? null,
+          aprobacionEnlace: a.aprobacionEnlace ?? null,
+        })),
+      };
+    } catch { return null; }
+  }, [tarea.tipo, tarea.contenido]);
+  const avisoRechazo = useMemo((): { propuestaId: number | null; artes: ArteRechazado[] } | null => {
     if (tarea.tipo !== 'Prueba de Color' || !tarea.contenido) return null;
     try {
       const c = JSON.parse(tarea.contenido) as {
         pruebaColorId?: number;
+        pruebaColorIds?: number[];
         scId?: number;
         propuestaId?: number;
         version?: number;
         requiereNuevaVersion?: boolean;
+        esBatch?: boolean;
         motivoRechazo?: string;
         archivoAdjunto?: string;
         enlaceAdjunto?: string;
+        artes?: Array<{
+          pruebaColorId?: number;
+          version?: number;
+          scId?: number;
+          nombreArte?: string | null;
+          motivoRechazo?: string | null;
+          archivoAdjunto?: string | null;
+          enlaceAdjunto?: string | null;
+        }>;
       };
       if (!c.requiereNuevaVersion) return null;
+      // Variante batch
+      if (c.esBatch && Array.isArray(c.artes) && c.artes.length > 0) {
+        return {
+          propuestaId: c.propuestaId || null,
+          artes: c.artes.map(a => ({
+            pruebaColorId: a.pruebaColorId ?? null,
+            version: a.version ?? null,
+            nombreArte: a.nombreArte ?? null,
+            scId: a.scId ?? c.scId ?? null,
+            motivo: a.motivoRechazo || '',
+            archivoAdjunto: a.archivoAdjunto || null,
+            enlaceAdjunto: a.enlaceAdjunto || null,
+          })),
+        };
+      }
+      // Variante individual (legacy / 1-arte)
       return {
         propuestaId: c.propuestaId || null,
-        scId: c.scId || null,
-        version: c.version || null,
-        motivo: c.motivoRechazo || '',
-        archivoAdjunto: c.archivoAdjunto || null,
-        enlaceAdjunto: c.enlaceAdjunto || null,
+        artes: [{
+          pruebaColorId: c.pruebaColorId ?? null,
+          version: c.version ?? null,
+          nombreArte: null,
+          scId: c.scId ?? null,
+          motivo: c.motivoRechazo || '',
+          archivoAdjunto: c.archivoAdjunto || null,
+          enlaceAdjunto: c.enlaceAdjunto || null,
+        }],
       };
     } catch { return null; }
   }, [tarea.tipo, tarea.contenido]);
@@ -2017,56 +2117,117 @@ function AtenderTareaModal({
 
         {/* Body (scrolleable para que crezca sin desbordar) */}
         <div className="flex-1 overflow-y-auto px-5 py-4 space-y-4">
-          {/* Jos 2026-11-27: aviso de arte rechazado — motivo + referencias
-              + botón para subir nueva versión. Mismo UI que en Mis Tareas
-              (NotificacionesPage) para una experiencia consistente. */}
-          {avisoRechazo && (
-            <div className={`rounded-xl p-3 border space-y-2 ${isDark ? 'bg-red-500/5 border-red-500/30' : 'bg-red-50/70 border-red-200'}`}>
-              <div className={`text-xs font-semibold uppercase tracking-wider flex items-center gap-2 ${isDark ? 'text-red-300' : 'text-red-700'}`}>
-                <AlertCircle className="h-3.5 w-3.5" />
-                Prueba de color rechazada
+          {/* Jos 2026-11-27: Seguimiento batch — lista de N artes aprobados.
+              Al Finalizar la tarea, el back aprueba las N pruebas de una vez
+              (onFinalizarTareaSeguimiento itera pruebaColorIds). */}
+          {avisoSeguimiento && avisoSeguimiento.artes.length > 0 && (
+            <div className={`rounded-xl p-3 border space-y-3 ${isDark ? 'bg-emerald-500/5 border-emerald-500/30' : 'bg-emerald-50/70 border-emerald-200'}`}>
+              <div className={`text-xs font-semibold uppercase tracking-wider flex items-center gap-2 ${isDark ? 'text-emerald-300' : 'text-emerald-700'}`}>
+                <CheckCircle2 className="h-3.5 w-3.5" />
+                {avisoSeguimiento.artes.length} artes aprobados — listos para proveedor
               </div>
-              {avisoRechazo.motivo && (
-                <div>
-                  <div className={`text-[10px] uppercase tracking-wide font-semibold mb-1 ${isDark ? 'text-red-300' : 'text-red-700'}`}>Motivo del rechazo</div>
-                  <div className={`text-sm whitespace-pre-wrap ${isDark ? 'text-zinc-100' : 'text-gray-800'}`}>{avisoRechazo.motivo}</div>
-                </div>
-              )}
-              {(avisoRechazo.archivoAdjunto || avisoRechazo.enlaceAdjunto) && (
-                <div className="space-y-1.5 pt-1">
-                  <div className={`text-[10px] uppercase tracking-wide font-semibold ${isDark ? 'text-red-300' : 'text-red-700'}`}>Referencias del rechazo</div>
-                  <div className="flex items-center gap-2 flex-wrap">
-                    {avisoRechazo.archivoAdjunto && (
-                      <a href={avisoRechazo.archivoAdjunto} target="_blank" rel="noreferrer" className={`inline-flex items-center gap-1.5 text-xs font-medium px-2.5 py-1 rounded border ${isDark ? 'text-fuchsia-200 border-fuchsia-500/40 bg-fuchsia-500/10 hover:bg-fuchsia-500/20' : 'text-fuchsia-800 border-fuchsia-300 bg-fuchsia-50 hover:bg-fuchsia-100'}`}>
-                        <FileImage className="h-3 w-3" /> Ver archivo
-                      </a>
+              <div className="space-y-2">
+                {avisoSeguimiento.artes.map((arte, idx) => (
+                  <div
+                    key={arte.pruebaColorId ?? idx}
+                    className={`rounded-lg p-2.5 border space-y-1.5 ${isDark ? 'bg-zinc-900/40 border-zinc-700' : 'bg-white border-gray-200'}`}
+                  >
+                    <div className="flex items-center gap-2">
+                      {arte.arte && (
+                        <img src={arte.arte} alt={arte.nombreArte || ''} className="h-10 w-10 object-cover rounded border border-zinc-700" />
+                      )}
+                      <div className={`text-[11px] font-semibold flex-1 min-w-0 ${isDark ? 'text-zinc-100' : 'text-gray-800'}`}>
+                        <div>
+                          {arte.version ? `v${arte.version}` : ''}
+                          {arte.nombreArte ? ` · ${arte.nombreArte}` : ''}
+                          {!arte.version && !arte.nombreArte ? `Arte #${arte.pruebaColorId}` : ''}
+                        </div>
+                      </div>
+                    </div>
+                    {arte.motivoAprobacion && (
+                      <div>
+                        <div className={`text-[10px] uppercase tracking-wide font-semibold mb-0.5 ${isDark ? 'text-emerald-300' : 'text-emerald-700'}`}>Nota de aprobación</div>
+                        <div className={`text-sm whitespace-pre-wrap ${isDark ? 'text-zinc-100' : 'text-gray-800'}`}>{arte.motivoAprobacion}</div>
+                      </div>
                     )}
-                    {avisoRechazo.enlaceAdjunto && (
-                      <a href={avisoRechazo.enlaceAdjunto} target="_blank" rel="noreferrer" className={`inline-flex items-center gap-1.5 text-xs font-medium px-2.5 py-1 rounded border ${isDark ? 'text-cyan-200 border-cyan-500/40 bg-cyan-500/10 hover:bg-cyan-500/20' : 'text-cyan-800 border-cyan-300 bg-cyan-50 hover:bg-cyan-100'}`}>
-                        <ExternalLink className="h-3 w-3" /> Abrir link
-                      </a>
+                    {(arte.aprobacionArchivo || arte.aprobacionEnlace) && (
+                      <div className="flex items-center gap-2 flex-wrap">
+                        {arte.aprobacionArchivo && (
+                          <a href={arte.aprobacionArchivo} target="_blank" rel="noreferrer" className={`inline-flex items-center gap-1.5 text-xs font-medium px-2.5 py-1 rounded border ${isDark ? 'text-emerald-200 border-emerald-500/40 bg-emerald-500/10 hover:bg-emerald-500/20' : 'text-emerald-800 border-emerald-300 bg-emerald-50 hover:bg-emerald-100'}`}>
+                            <FileImage className="h-3 w-3" /> Ver archivo
+                          </a>
+                        )}
+                        {arte.aprobacionEnlace && (
+                          <a href={arte.aprobacionEnlace} target="_blank" rel="noreferrer" className={`inline-flex items-center gap-1.5 text-xs font-medium px-2.5 py-1 rounded border ${isDark ? 'text-cyan-200 border-cyan-500/40 bg-cyan-500/10 hover:bg-cyan-500/20' : 'text-cyan-800 border-cyan-300 bg-cyan-50 hover:bg-cyan-100'}`}>
+                            <ExternalLink className="h-3 w-3" /> Abrir link
+                          </a>
+                        )}
+                      </div>
                     )}
                   </div>
-                </div>
-              )}
-              <div className={`text-[11px] ${isDark ? 'text-zinc-400' : 'text-gray-600'}`}>
-                {avisoRechazo.version ? `v${avisoRechazo.version} ` : ''}{avisoRechazo.scId ? `· Circuito #${avisoRechazo.scId} ` : ''}{avisoRechazo.propuestaId ? `· Propuesta #${avisoRechazo.propuestaId}` : ''}
+                ))}
               </div>
-              {avisoRechazo.propuestaId && avisoRechazo.scId && (
-                <button
-                  onClick={() => {
-                    // Navegar al modal de propuestas pre-cargado con el circuito
-                    // para que el asesor pueda subir nueva versión. Cierra este
-                    // modal antes de redirigir para no dejar overlays colgados.
-                    const url = `/propuestas?viewId=${avisoRechazo.propuestaId}&pruebaColorNuevaScId=${avisoRechazo.scId}`;
-                    onClose();
-                    window.location.href = url;
-                  }}
-                  className={`mt-1 inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold border transition-colors ${isDark ? 'border-fuchsia-500/60 text-fuchsia-100 bg-fuchsia-500/20 hover:bg-fuchsia-500/30' : 'border-fuchsia-400 text-fuchsia-800 bg-fuchsia-50 hover:bg-fuchsia-100'}`}
-                >
-                  <Upload className="h-3.5 w-3.5" /> Subir nueva versión
-                </button>
-              )}
+            </div>
+          )}
+
+          {/* Jos 2026-11-27: aviso de arte(s) rechazado(s). Soporta 1 o N artes:
+              pinta una card por cada arte con su motivo, referencias y botón
+              "Subir nueva versión" propio. */}
+          {avisoRechazo && avisoRechazo.artes.length > 0 && (
+            <div className={`rounded-xl p-3 border space-y-3 ${isDark ? 'bg-red-500/5 border-red-500/30' : 'bg-red-50/70 border-red-200'}`}>
+              <div className={`text-xs font-semibold uppercase tracking-wider flex items-center gap-2 ${isDark ? 'text-red-300' : 'text-red-700'}`}>
+                <AlertCircle className="h-3.5 w-3.5" />
+                {avisoRechazo.artes.length === 1 ? 'Prueba de color rechazada' : `${avisoRechazo.artes.length} artes rechazados`}
+              </div>
+              <div className="space-y-2">
+                {avisoRechazo.artes.map((arte, idx) => (
+                  <div
+                    key={arte.pruebaColorId ?? idx}
+                    className={`rounded-lg p-2.5 border space-y-1.5 ${isDark ? 'bg-zinc-900/40 border-zinc-700' : 'bg-white border-gray-200'}`}
+                  >
+                    <div className={`text-[11px] font-semibold ${isDark ? 'text-zinc-100' : 'text-gray-800'}`}>
+                      {arte.version ? `v${arte.version}` : ''}
+                      {arte.nombreArte ? ` · ${arte.nombreArte}` : ''}
+                      {!arte.version && !arte.nombreArte ? `Arte #${arte.pruebaColorId}` : ''}
+                    </div>
+                    {arte.motivo && (
+                      <div>
+                        <div className={`text-[10px] uppercase tracking-wide font-semibold mb-0.5 ${isDark ? 'text-red-300' : 'text-red-700'}`}>Motivo del rechazo</div>
+                        <div className={`text-sm whitespace-pre-wrap ${isDark ? 'text-zinc-100' : 'text-gray-800'}`}>{arte.motivo}</div>
+                      </div>
+                    )}
+                    {(arte.archivoAdjunto || arte.enlaceAdjunto) && (
+                      <div className="space-y-1">
+                        <div className={`text-[10px] uppercase tracking-wide font-semibold ${isDark ? 'text-red-300' : 'text-red-700'}`}>Referencias</div>
+                        <div className="flex items-center gap-2 flex-wrap">
+                          {arte.archivoAdjunto && (
+                            <a href={arte.archivoAdjunto} target="_blank" rel="noreferrer" className={`inline-flex items-center gap-1.5 text-xs font-medium px-2.5 py-1 rounded border ${isDark ? 'text-fuchsia-200 border-fuchsia-500/40 bg-fuchsia-500/10 hover:bg-fuchsia-500/20' : 'text-fuchsia-800 border-fuchsia-300 bg-fuchsia-50 hover:bg-fuchsia-100'}`}>
+                              <FileImage className="h-3 w-3" /> Ver archivo
+                            </a>
+                          )}
+                          {arte.enlaceAdjunto && (
+                            <a href={arte.enlaceAdjunto} target="_blank" rel="noreferrer" className={`inline-flex items-center gap-1.5 text-xs font-medium px-2.5 py-1 rounded border ${isDark ? 'text-cyan-200 border-cyan-500/40 bg-cyan-500/10 hover:bg-cyan-500/20' : 'text-cyan-800 border-cyan-300 bg-cyan-50 hover:bg-cyan-100'}`}>
+                              <ExternalLink className="h-3 w-3" /> Abrir link
+                            </a>
+                          )}
+                        </div>
+                      </div>
+                    )}
+                    {avisoRechazo.propuestaId && arte.scId && (
+                      <button
+                        onClick={() => {
+                          const url = `/propuestas?viewId=${avisoRechazo.propuestaId}&pruebaColorNuevaScId=${arte.scId}`;
+                          onClose();
+                          window.location.href = url;
+                        }}
+                        className={`mt-1 inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold border transition-colors ${isDark ? 'border-fuchsia-500/60 text-fuchsia-100 bg-fuchsia-500/20 hover:bg-fuchsia-500/30' : 'border-fuchsia-400 text-fuchsia-800 bg-fuchsia-50 hover:bg-fuchsia-100'}`}
+                      >
+                        <Upload className="h-3.5 w-3.5" /> Subir nueva versión
+                      </button>
+                    )}
+                  </div>
+                ))}
+              </div>
             </div>
           )}
 
