@@ -1,6 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { useNavigate } from 'react-router-dom';
 import { AlertCircle, Check, CheckCircle2, ChevronDown, Loader2, Paintbrush, Search, Send, Trash2, X, Upload, FileImage, ClipboardList, Plus, Users, XCircle, Flag, ChevronRight, ExternalLink, Printer, Download } from 'lucide-react';
 import { useThemeStore } from '../../store/themeStore';
 import { useAuthStore } from '../../store/authStore';
@@ -1793,7 +1792,68 @@ function AtenderTareaModal({
   onFinalizar: () => void;
   isSaving: boolean;
 }) {
-  const navigate = useNavigate();
+  const queryClient = useQueryClient();
+  // Jos 2026-11-27: form inline de "Subir nueva versión" dentro de la tarea
+  // Corrección — en vez de navegar a Propuestas, el asesor sube el archivo
+  // aquí mismo. Al guardar: pruebasColorService.reenviar() sobreescribe la
+  // prueba con el nuevo arte, vuelve a 'revision_artes' y el back crea una
+  // nueva tarea de Revisión para Diseño (mismo flujo que al crear la prueba).
+  const [reenvioOpen, setReenvioOpen] = useState<{ pruebaId: number; nombre: string } | null>(null);
+  const [reenvioArchivoUrl, setReenvioArchivoUrl] = useState<string | null>(null);
+  const [reenvioArchivoNombre, setReenvioArchivoNombre] = useState<string>('');
+  const [reenvioEnlace, setReenvioEnlace] = useState('');
+  const [reenvioNombre, setReenvioNombre] = useState('');
+  const [reenvioSubiendo, setReenvioSubiendo] = useState(false);
+  const [reenvioGuardando, setReenvioGuardando] = useState(false);
+  const [reenvioError, setReenvioError] = useState<string | null>(null);
+  const resetReenvio = () => {
+    setReenvioOpen(null);
+    setReenvioArchivoUrl(null);
+    setReenvioArchivoNombre('');
+    setReenvioEnlace('');
+    setReenvioNombre('');
+    setReenvioError(null);
+  };
+  const subirReenvioArchivo = async (file: File) => {
+    setReenvioSubiendo(true);
+    setReenvioError(null);
+    try {
+      const res = await uploadsService.uploadFile(file, 'pruebas-color');
+      setReenvioArchivoUrl(res.url);
+      setReenvioArchivoNombre(file.name);
+    } catch (e) {
+      setReenvioError(e instanceof Error ? e.message : 'Error al subir archivo');
+    } finally {
+      setReenvioSubiendo(false);
+    }
+  };
+  const confirmarReenvio = async () => {
+    if (!reenvioOpen) return;
+    if (!reenvioArchivoUrl && !reenvioEnlace.trim()) {
+      setReenvioError('Debes subir un archivo o pegar un link del arte.');
+      return;
+    }
+    setReenvioGuardando(true);
+    setReenvioError(null);
+    try {
+      await pruebasColorService.reenviar(reenvioOpen.pruebaId, {
+        archivo: reenvioArchivoUrl || '',
+        enlace_externo: reenvioEnlace.trim() || null,
+        nombre_arte: reenvioNombre.trim() || reenvioOpen.nombre,
+      });
+      // Refrescar listados y cerrar el modal padre (la tarea Corrección se
+      // cierra en el back vía cerrarTareaAsociada).
+      queryClient.invalidateQueries({ queryKey: ['pruebas-color'] });
+      queryClient.invalidateQueries({ queryKey: ['tareas'] });
+      queryClient.invalidateQueries({ queryKey: ['notificaciones'] });
+      resetReenvio();
+      onClose();
+    } catch (e) {
+      setReenvioError(e instanceof Error ? e.message : 'Error al reenviar la prueba');
+    } finally {
+      setReenvioGuardando(false);
+    }
+  };
   const esRevision = tarea.tipo === 'Revisión de artes';
   const esSeguimiento = tarea.tipo === 'Seguimiento Prueba de color';
   const esImpresion = tarea.tipo === 'Impresión';
@@ -2234,19 +2294,99 @@ function AtenderTareaModal({
                         </div>
                       </div>
                     )}
-                    {avisoRechazo.propuestaId && arte.scId && (
+                    {arte.pruebaColorId && (
                       <button
                         onClick={() => {
-                          // Jos 2026-11-27: navigate() de react-router en vez
-                          // de window.location.href para no recargar la página
-                          // (antes el reload partía el flujo del asesor).
-                          onClose();
-                          navigate(`/propuestas?viewId=${avisoRechazo.propuestaId}&pruebaColorNuevaScId=${arte.scId}`);
+                          // Jos 2026-11-27: abre form inline aquí mismo para
+                          // subir la nueva versión del arte. Al guardar:
+                          // reenviar() sobreescribe la prueba, el back cierra
+                          // la tarea Corrección y crea una nueva Revisión de
+                          // artes para Diseño. No se navega a Propuestas.
+                          setReenvioOpen({ pruebaId: arte.pruebaColorId!, nombre: arte.nombreArte || '' });
+                          setReenvioNombre(arte.nombreArte || '');
                         }}
                         className={`mt-1 inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold border transition-colors ${isDark ? 'border-fuchsia-500/60 text-fuchsia-100 bg-fuchsia-500/20 hover:bg-fuchsia-500/30' : 'border-fuchsia-400 text-fuchsia-800 bg-fuchsia-50 hover:bg-fuchsia-100'}`}
                       >
                         <Upload className="h-3.5 w-3.5" /> Subir nueva versión
                       </button>
+                    )}
+                    {/* Form inline de reenvío — solo se pinta para el arte
+                        específico que el asesor eligió corregir. */}
+                    {reenvioOpen && reenvioOpen.pruebaId === arte.pruebaColorId && (
+                      <div className={`mt-3 rounded-lg border p-3 space-y-3 ${isDark ? 'bg-zinc-900/70 border-fuchsia-500/40' : 'bg-fuchsia-50/60 border-fuchsia-300'}`}>
+                        <div className={`text-xs font-semibold flex items-center gap-1.5 ${isDark ? 'text-fuchsia-200' : 'text-fuchsia-800'}`}>
+                          <Upload className="h-3.5 w-3.5" /> Subir nueva versión del arte
+                        </div>
+                        <div>
+                          <label className={`block text-[11px] font-medium mb-1 ${isDark ? 'text-zinc-300' : 'text-gray-700'}`}>Nombre del arte</label>
+                          <input
+                            type="text"
+                            value={reenvioNombre}
+                            onChange={(e) => setReenvioNombre(e.target.value)}
+                            placeholder={arte.nombreArte || 'Nombre'}
+                            disabled={reenvioGuardando}
+                            className={`w-full text-xs rounded border px-2 py-1.5 ${isDark ? 'bg-zinc-800 border-zinc-700 text-zinc-100' : 'bg-white border-gray-300 text-gray-900'}`}
+                          />
+                        </div>
+                        <div>
+                          <label className={`block text-[11px] font-medium mb-1 ${isDark ? 'text-zinc-300' : 'text-gray-700'}`}>Archivo (JPG/PNG/MP4)</label>
+                          <input
+                            type="file"
+                            accept="image/jpeg,image/png,video/mp4,.jpg,.jpeg,.png,.mp4"
+                            disabled={reenvioSubiendo || reenvioGuardando}
+                            onChange={(e) => {
+                              const f = e.target.files?.[0];
+                              if (f) subirReenvioArchivo(f);
+                            }}
+                            className={`block text-xs ${isDark ? 'text-zinc-300' : 'text-gray-700'}`}
+                          />
+                          {reenvioSubiendo && (
+                            <div className={`text-[11px] mt-1 flex items-center gap-1 ${isDark ? 'text-zinc-400' : 'text-gray-500'}`}>
+                              <Loader2 className="h-3 w-3 animate-spin" /> Subiendo…
+                            </div>
+                          )}
+                          {reenvioArchivoNombre && !reenvioSubiendo && (
+                            <div className={`text-[11px] mt-1 ${isDark ? 'text-emerald-300' : 'text-emerald-700'}`}>
+                              Archivo cargado: {reenvioArchivoNombre}
+                            </div>
+                          )}
+                        </div>
+                        <div>
+                          <label className={`block text-[11px] font-medium mb-1 ${isDark ? 'text-zinc-300' : 'text-gray-700'}`}>O pega un link (Drive, Dropbox, etc.)</label>
+                          <input
+                            type="url"
+                            value={reenvioEnlace}
+                            onChange={(e) => setReenvioEnlace(e.target.value)}
+                            placeholder="https://..."
+                            disabled={reenvioGuardando}
+                            className={`w-full text-xs rounded border px-2 py-1.5 ${isDark ? 'bg-zinc-800 border-zinc-700 text-zinc-100' : 'bg-white border-gray-300 text-gray-900'}`}
+                          />
+                        </div>
+                        {reenvioError && (
+                          <div className={`text-[11px] rounded px-2 py-1.5 ${isDark ? 'bg-red-500/15 text-red-200' : 'bg-red-50 text-red-700'}`}>
+                            {reenvioError}
+                          </div>
+                        )}
+                        <div className="flex items-center gap-2">
+                          <button
+                            type="button"
+                            onClick={confirmarReenvio}
+                            disabled={reenvioSubiendo || reenvioGuardando || (!reenvioArchivoUrl && !reenvioEnlace.trim())}
+                            className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded text-xs font-semibold transition-colors disabled:opacity-50 ${isDark ? 'bg-fuchsia-500/30 text-fuchsia-100 hover:bg-fuchsia-500/40' : 'bg-fuchsia-500 text-white hover:bg-fuchsia-600'}`}
+                          >
+                            {reenvioGuardando ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Send className="h-3.5 w-3.5" />}
+                            Guardar y enviar a revisión
+                          </button>
+                          <button
+                            type="button"
+                            onClick={resetReenvio}
+                            disabled={reenvioGuardando}
+                            className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded text-xs font-medium transition-colors ${isDark ? 'text-zinc-300 hover:bg-zinc-800' : 'text-gray-700 hover:bg-gray-100'}`}
+                          >
+                            Cancelar
+                          </button>
+                        </div>
+                      </div>
                     )}
                   </div>
                 ))}
