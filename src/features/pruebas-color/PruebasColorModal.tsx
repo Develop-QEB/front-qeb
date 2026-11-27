@@ -1700,9 +1700,28 @@ function TareasAsociadasSection({
           [Fix #258] Jos: debe abrirse "otro modal" encima del principal con la
           info de la tarea + acciones aprobar/rechazar/finalizar. Overlay con
           z-index mayor al principal (z-[80]) y stop-propagation al clickear el
-          contenido para que no cierre el modal padre. */}
-      {tareaAbierta && (
-        contenidoBatch ? (
+          contenido para que no cierre el modal padre.
+          Jos 2026-11-27: si la tarea es de una prueba individual del batch
+          (contenido.pruebaColorId apunta a una hermana distinta del
+          representante), usar ESA prueba. Antes se mostraba el representante
+          (v2) incluso en tareas de v1 (nombre/version incorrectos en el modal). */}
+      {tareaAbierta && (() => {
+        // Jos 2026-11-27: si la tarea referencia una prueba individual
+        // distinta del representante del batch, usar ESA. Antes se pasaba
+        // siempre el representante (v2) incluso en tareas de v1 — el back
+        // lanzaba "La tarea no pertenece a esta prueba de color".
+        let pruebaParaModal = prueba;
+        if (tareaAbierta.contenido && pruebasHermanas) {
+          try {
+            const c = JSON.parse(tareaAbierta.contenido);
+            const pidSingular = Number(c.pruebaColorId);
+            if (Number.isFinite(pidSingular)) {
+              const match = pruebasHermanas.find(p => p.id === pidSingular);
+              if (match) pruebaParaModal = match;
+            }
+          } catch { /* ignore */ }
+        }
+        return contenidoBatch ? (
           <AtenderRevisionBatchModal
             tarea={tareaAbierta}
             pruebas={pruebasDelBatch}
@@ -1729,7 +1748,7 @@ function TareasAsociadasSection({
         ) : (
           <AtenderTareaModal
             tarea={tareaAbierta}
-            prueba={prueba}
+            prueba={pruebaParaModal}
             cara={cara}
             isDark={isDark}
             puedeCrear={puedeCrear}
@@ -1738,13 +1757,13 @@ function TareasAsociadasSection({
             yaTieneImpresion={tareas.some(t => t.tipo === 'Impresión')}
             yaTieneRecepcion={tareas.some(t => t.tipo === 'Recepción')}
             onClose={() => setOpenTareaId(null)}
-            onAprobar={(opts) => resolver.mutate({ tareaId: tareaAbierta.id, accion: 'aprobar', comentario: opts?.comentario, archivo_adjunto: opts?.archivo_adjunto, enlace_adjunto: opts?.enlace_adjunto })}
-            onRechazar={(comentario, adjuntos) => resolver.mutate({ tareaId: tareaAbierta.id, accion: 'rechazar', comentario, archivo_adjunto: adjuntos?.archivo_adjunto, enlace_adjunto: adjuntos?.enlace_adjunto })}
-            onFinalizar={() => resolver.mutate({ tareaId: tareaAbierta.id, accion: 'finalizar' })}
+            onAprobar={(opts) => resolver.mutate({ tareaId: tareaAbierta.id, accion: 'aprobar', comentario: opts?.comentario, archivo_adjunto: opts?.archivo_adjunto, enlace_adjunto: opts?.enlace_adjunto, pruebaIdObjetivo: pruebaParaModal.id })}
+            onRechazar={(comentario, adjuntos) => resolver.mutate({ tareaId: tareaAbierta.id, accion: 'rechazar', comentario, archivo_adjunto: adjuntos?.archivo_adjunto, enlace_adjunto: adjuntos?.enlace_adjunto, pruebaIdObjetivo: pruebaParaModal.id })}
+            onFinalizar={() => resolver.mutate({ tareaId: tareaAbierta.id, accion: 'finalizar', pruebaIdObjetivo: pruebaParaModal.id })}
             isSaving={resolver.isPending}
           />
-        )
-      )}
+        );
+      })()}
     </div>
   );
 }
