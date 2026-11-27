@@ -92,7 +92,9 @@ import { useThemeStore } from '../../store/themeStore';
 import { getPermissions } from '../../lib/permissions';
 import { useSocketCampana, useSocketEquipos } from '../../hooks/useSocket';
 import { LinkPreview } from '../../components/ui/LinkPreview';
-import { exportVersionarioArtesMulti } from '../../utils/exportVersionarioArtes';
+import { exportVersionarioArtesMulti, buildVersionarioArtesPreview } from '../../utils/exportVersionarioArtes';
+import type { VersionarioArtesPreview, VersionarioArtesMultiArgs } from '../../utils/exportVersionarioArtes';
+import { VersionarioArtesPreviewModal } from './VersionarioArtesPreviewModal';
 import * as XLSX from 'xlsx';
 import { CargaCsvModal } from './CargaCsvModal';
 
@@ -15788,6 +15790,13 @@ export function TareaSeguimientoPage() {
   // con SOLO los items que matchearon, y deselecciona los no-matched.
   const [isCargaCsvModalOpen, setIsCargaCsvModalOpen] = useState(false);
   const [isExportingVersionarioArtes, setIsExportingVersionarioArtes] = useState(false);
+  // Jos 2026-11-26: preview del versionario con filtros desde el gestor de
+  // artes — mismo flujo que Campañas > Versionario pero limitado a la campaña
+  // actual (y a la selección si hay).
+  const [versionarioPreviewOpen, setVersionarioPreviewOpen] = useState(false);
+  const [versionarioPreview, setVersionarioPreview] = useState<VersionarioArtesPreview | null>(null);
+  const [versionarioRawData, setVersionarioRawData] = useState<VersionarioArtesMultiArgs['campanas'] | null>(null);
+  const [versionarioDownloading, setVersionarioDownloading] = useState(false);
   const [parentAddedArtes, setParentAddedArtes] = useState<ArteExistente[]>([]);
   const [isTaskDetailModalOpen, setIsTaskDetailModalOpen] = useState(false);
   const [selectedTask, setSelectedTask] = useState<TaskRow | null>(null);
@@ -18297,12 +18306,22 @@ export function TareaSeguimientoPage() {
     }
   }, [selectedInventoryIds, selectedInventoryItems, campanaId, calculateTaskTiposConfig, getSelectedImpresionFlowConflicts]);
 
+  // Jos 2026-11-26: abre el modal de preview del Versionario Artes con los
+  // items de la campaña actual. Si hay items seleccionados filtra por ellos;
+  // si no hay selección descarga TODO lo visible en la campaña. Usa el mismo
+  // modal/exporter que el screen Campañas > Versionario para que el Excel
+  // tenga exactamente el mismo formato.
   const handleExportVersionarioArtesSelected = useCallback(async (filterIds?: Set<string>) => {
     if (isExportingVersionarioArtes) return;
+    // Jos 2026-11-26: sin selección = todos los items visibles.
     const idsToUse = filterIds instanceof Set && filterIds.size > 0 ? filterIds : selectedInventoryIds;
-    if (idsToUse.size === 0) return;
+    const hayFiltro = idsToUse.size > 0;
     try {
       setIsExportingVersionarioArtes(true);
+      setVersionarioRawData(null);
+      setVersionarioPreview(null);
+      setVersionarioPreviewOpen(true);
+
       const [conArte, sinArte] = await Promise.all([
         campanasService.getInventarioConArte(campanaId).catch(() => [] as InventarioConArte[]),
         campanasService.getInventarioSinArte(campanaId).catch(() => [] as InventarioConArte[]),
@@ -18310,9 +18329,14 @@ export function TareaSeguimientoPage() {
       const allItems: InventarioConArte[] = [...(conArte || []), ...(sinArte || [])];
       // Misma clave que transformInventarioToRow: `${id}_${grupo}` o `${id}`
       const buildRowKey = (it: any) => it?.grupo ? `${it.id}_${it.grupo}` : String(it.id);
-      const items = allItems.filter(it => idsToUse.has(buildRowKey(it)));
+      const items = hayFiltro
+        ? allItems.filter(it => idsToUse.has(buildRowKey(it)))
+        : allItems;
       if (items.length === 0) {
-        alert('No se encontró inventario para los items seleccionados.');
+        alert(hayFiltro
+          ? 'No se encontró inventario para los items seleccionados.'
+          : 'No hay inventario para descargar en esta campaña.');
+        setVersionarioPreviewOpen(false);
         return;
       }
       // Cargar imagenes_digitales por cada reserva para soportar artes múltiples
@@ -18347,21 +18371,42 @@ export function TareaSeguimientoPage() {
           }
         } catch {/* ignorar reservas sin tradicionales */}
       }));
-      // Usar el mismo exporter que descarga desde el screen Campañas > Versionario
-      // para que el formato del Excel sea el mismo (agrupa por circuito, cabecera,
-      // miniaturas). exportVersionarioArtes (single, legado) tenia bug: nunca setea
-      // a.href al blob y por eso el archivo no bajaba.
-      await exportVersionarioArtesMulti({
-        campanas: [{ campana: campana as any, items, digitalFilesByReserva, notesByUrl }],
-        fileNameSuffix: campana?.nombre ? `_${(campana.nombre as string).replace(/[^\w\-]+/g, '_')}` : `_${campanaId}`,
-      });
+
+      // Jos 2026-11-26: abrir el modal preview (mismo que Campañas > Versionario).
+      const campanasArg: VersionarioArtesMultiArgs['campanas'] = [
+        { campana: campana as any, items, digitalFilesByReserva, notesByUrl },
+      ];
+      setVersionarioRawData(campanasArg);
+      const preview = buildVersionarioArtesPreview({ campanas: campanasArg });
+      setVersionarioPreview(preview);
     } catch (e) {
-      console.error('Error exportando versionario artes:', e);
-      alert('Error al generar el Excel de Versionario Artes. Revisa la consola.');
+      console.error('Error preparando versionario artes:', e);
+      alert('Error al preparar el preview del Versionario Artes. Revisa la consola.');
+      setVersionarioPreviewOpen(false);
     } finally {
       setIsExportingVersionarioArtes(false);
     }
   }, [isExportingVersionarioArtes, selectedInventoryIds, campanaId, campana]);
+
+  // Jos 2026-11-26: descarga desde el modal preview — respeta filtros del
+  // modal (filterKeys) y la opción de descarga rápida (skipImages).
+  const handleDownloadVersionarioFromPreview = useCallback(async (opts: { filterKeys: Set<string> | null; skipImages: boolean }) => {
+    if (!versionarioRawData || versionarioDownloading) return;
+    try {
+      setVersionarioDownloading(true);
+      await exportVersionarioArtesMulti({
+        campanas: versionarioRawData,
+        fileNameSuffix: campana?.nombre ? `_${(campana.nombre as string).replace(/[^\w\-]+/g, '_')}` : `_${campanaId}`,
+        filterKeys: opts.filterKeys,
+        skipImages: opts.skipImages,
+      });
+    } catch (e) {
+      console.error('Error descargando versionario artes:', e);
+      alert('Error al generar el Excel. Revisa la consola.');
+    } finally {
+      setVersionarioDownloading(false);
+    }
+  }, [versionarioRawData, versionarioDownloading, campana, campanaId]);
 
   const handleCreateTask = useCallback(async (task: Partial<TaskRow> & { proveedores_id?: number; nombre_proveedores?: string; impresiones?: Record<string, number> }) => {
     if (task.tipo === 'Impresión') {
@@ -19636,21 +19681,23 @@ export function TareaSeguimientoPage() {
                 {activeEstadoArteTab === 'aprobado' && (
                   <button
                     onClick={() => handleExportVersionarioArtesSelected(selectedAprobadosIds)}
-                    disabled={isExportingVersionarioArtes || selectedAprobadosIds.size === 0}
-                    className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium border rounded-lg transition-colors disabled:opacity-60 disabled:cursor-not-allowed ${
-                      selectedAprobadosIds.size > 0
-                        ? 'bg-green-900/50 hover:bg-green-900/70 border-green-500/30'
-                        : 'bg-zinc-800/40 border-zinc-700/40'
-                    }`}
-                    title={selectedAprobadosIds.size === 0 ? 'Selecciona artes aprobados con el checkbox para exportar' : `Descargar Versionario Artes de ${selectedAprobadosIds.size} arte(s) aprobado(s)`}
+                    disabled={isExportingVersionarioArtes}
+                    className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium border rounded-lg transition-colors disabled:opacity-60 disabled:cursor-not-allowed bg-green-900/50 hover:bg-green-900/70 border-green-500/30`}
+                    title={selectedAprobadosIds.size > 0
+                      ? `Descargar Versionario Artes de ${selectedAprobadosIds.size} arte(s) seleccionado(s)`
+                      : 'Descargar Versionario Artes de toda la campaña (sin selección)'}
                   >
                     {isExportingVersionarioArtes ? (
                       <Loader2 className="h-3.5 w-3.5 text-green-400 animate-spin" />
                     ) : (
-                      <Download className={`h-3.5 w-3.5 ${selectedAprobadosIds.size > 0 ? 'text-green-400' : 'text-zinc-500'}`} />
+                      <Download className="h-3.5 w-3.5 text-green-400" />
                     )}
-                    <span className={selectedAprobadosIds.size > 0 ? 'text-green-300' : 'text-zinc-500'}>
-                      {isExportingVersionarioArtes ? 'Generando...' : 'Versionario Artes'}
+                    <span className="text-green-300">
+                      {isExportingVersionarioArtes
+                        ? 'Generando...'
+                        : selectedAprobadosIds.size > 0
+                          ? `Versionario Artes (${selectedAprobadosIds.size})`
+                          : 'Versionario Artes'}
                     </span>
                   </button>
                 )}
@@ -23159,6 +23206,19 @@ Por favor registra la cantidad de impresiones recibidas.`,
           contextoNombre={campana.nombre}
         />
       )}
+
+      {/* Jos 2026-11-26: preview del Versionario Artes desde el gestor de
+          artes — mismo modal que Campañas > Versionario pero cargado SOLO
+          con los items de la campaña actual (filtrado por selección si la
+          hay). Permite filtrar en el modal y descargar el Excel. */}
+      <VersionarioArtesPreviewModal
+        isOpen={versionarioPreviewOpen}
+        onClose={() => setVersionarioPreviewOpen(false)}
+        preview={versionarioPreview}
+        isLoading={isExportingVersionarioArtes && !versionarioPreview}
+        isDownloading={versionarioDownloading}
+        onDownload={handleDownloadVersionarioFromPreview}
+      />
 
     </div>
   );
