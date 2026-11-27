@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useNavigate } from 'react-router-dom';
 import { AlertCircle, Check, CheckCircle2, ChevronDown, Loader2, Paintbrush, Search, Send, Trash2, X, Upload, FileImage, ClipboardList, Plus, Users, XCircle, Flag, ChevronRight, ExternalLink, Printer, Download } from 'lucide-react';
 import { useThemeStore } from '../../store/themeStore';
 import { useAuthStore } from '../../store/authStore';
@@ -1792,6 +1793,7 @@ function AtenderTareaModal({
   onFinalizar: () => void;
   isSaving: boolean;
 }) {
+  const navigate = useNavigate();
   const esRevision = tarea.tipo === 'Revisión de artes';
   const esSeguimiento = tarea.tipo === 'Seguimiento Prueba de color';
   const esImpresion = tarea.tipo === 'Impresión';
@@ -2235,9 +2237,11 @@ function AtenderTareaModal({
                     {avisoRechazo.propuestaId && arte.scId && (
                       <button
                         onClick={() => {
-                          const url = `/propuestas?viewId=${avisoRechazo.propuestaId}&pruebaColorNuevaScId=${arte.scId}`;
+                          // Jos 2026-11-27: navigate() de react-router en vez
+                          // de window.location.href para no recargar la página
+                          // (antes el reload partía el flujo del asesor).
                           onClose();
-                          window.location.href = url;
+                          navigate(`/propuestas?viewId=${avisoRechazo.propuestaId}&pruebaColorNuevaScId=${arte.scId}`);
                         }}
                         className={`mt-1 inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold border transition-colors ${isDark ? 'border-fuchsia-500/60 text-fuchsia-100 bg-fuchsia-500/20 hover:bg-fuchsia-500/30' : 'border-fuchsia-400 text-fuchsia-800 bg-fuchsia-50 hover:bg-fuchsia-100'}`}
                       >
