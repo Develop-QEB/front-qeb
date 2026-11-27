@@ -3388,8 +3388,11 @@ function AtenderRevisionBatchModal({
   ) => Promise<void>;
   isSaving: boolean;
 }) {
-  // Sub-formulario de resolución que se abre al clickear Aprobar/Rechazar
-  // (individual o masivo). Captura motivo + archivo + enlace opcionales.
+  // Jos 2026-11-27: sub-formulario de "marcado preliminar". El usuario
+  // marca cada arte como aprobado/rechazado (con su motivo/reemplazo) en el
+  // state local — NO se escribe en BD hasta clickear Finalizar. Así el
+  // batch NO queda a medias en la BD (arte aprobado + Seguimiento creada)
+  // mientras otros artes siguen pendientes.
   const [resolverForm, setResolverForm] = useState<
     | null
     | {
@@ -3405,6 +3408,19 @@ function AtenderRevisionBatchModal({
   const [adjEnlace, setAdjEnlace] = useState('');
   const [formError, setFormError] = useState<string | null>(null);
 
+  // Marcas locales: pruebaId → { accion, comentario, archivo_adjunto, enlace_adjunto }.
+  // Se envían al back al clickear Finalizar.
+  type MarcaLocal = {
+    accion: 'aprobar' | 'rechazar';
+    comentario?: string;
+    archivo_adjunto: string | null;
+    enlace_adjunto: string | null;
+    archivo_adjunto_nombre?: string;
+  };
+  const [marcasLocales, setMarcasLocales] = useState<Map<number, MarcaLocal>>(new Map());
+  const [finalizando, setFinalizando] = useState(false);
+  const [finalizarError, setFinalizarError] = useState<string | null>(null);
+
   const resetForm = () => {
     setResolverForm(null);
     setComentario('');
@@ -3412,6 +3428,14 @@ function AtenderRevisionBatchModal({
     setAdjFileUrl(null);
     setAdjEnlace('');
     setFormError(null);
+  };
+
+  const deshacerMarca = (pruebaId: number) => {
+    setMarcasLocales(prev => {
+      const next = new Map(prev);
+      next.delete(pruebaId);
+      return next;
+    });
   };
 
   // Jos 2026-11-27: solo imagen (JPG/PNG) o video (MP4) como reemplazo.
@@ -3538,7 +3562,9 @@ function AtenderRevisionBatchModal({
   const pruebasAprobadas = useMemo(() => pruebas.filter(p => p.estatus === 'arte_aprobado' || p.estatus === 'aprobada'), [pruebas]);
   const pruebasRechazadas = useMemo(() => pruebas.filter(p => p.estatus === 'rechazada'), [pruebas]);
 
-  const confirmarResolucion = async () => {
+  // Jos 2026-11-27: confirmar en el sub-form ahora solo MARCA LOCALMENTE.
+  // Nada se escribe en BD aqui — la escritura ocurre al Finalizar.
+  const confirmarResolucion = () => {
     if (!resolverForm) return;
     const comentarioTrim = comentario.trim();
     if (resolverForm.accion === 'rechazar' && !comentarioTrim) {
@@ -3550,25 +3576,58 @@ function AtenderRevisionBatchModal({
       setFormError('El enlace no es un URL válido');
       return;
     }
-    const opts = {
+    const marca: MarcaLocal = {
+      accion: resolverForm.accion,
       comentario: comentarioTrim || undefined,
       archivo_adjunto: adjFileUrl || null,
       enlace_adjunto: enlaceTrim || null,
+      archivo_adjunto_nombre: adjFile?.name,
     };
-    try {
+    setMarcasLocales(prev => {
+      const next = new Map(prev);
       if (resolverForm.modo === 'individual' && resolverForm.pruebaId) {
-        await onResolverArte(resolverForm.pruebaId, resolverForm.accion, opts);
+        next.set(resolverForm.pruebaId, marca);
       } else if (resolverForm.modo === 'masivo') {
-        // Masivo: resoluciones en SERIE para evitar race en la evidencia
-        // JSON de la tarea (el back lee/escribe el mismo objeto). El back
-        // cierra la tarea al llegar a la última.
+        // Masivo: marca todos los pendientes con la misma accion/motivo.
         for (const p of pruebasPendientes) {
-          await onResolverArte(p.id, resolverForm.accion, opts);
+          next.set(p.id, marca);
         }
       }
-      resetForm();
+      return next;
+    });
+    resetForm();
+  };
+
+  // Jos 2026-11-27: Finalizar envía todas las marcas al back SECUENCIAL.
+  // El back (con `diferirHooks=true`) solo dispara los side-effects al
+  // resolver la ultima — asi los artes aprobados NO aparecen en biblioteca
+  // ni se crea Seguimiento hasta que la revisión queda cerrada.
+  const finalizarRevision = async () => {
+    if (finalizando) return;
+    setFinalizarError(null);
+    // Validar que todas las pruebas pendientes tienen marca.
+    const faltantes = pruebasPendientes.filter(p => !marcasLocales.has(p.id));
+    if (faltantes.length > 0) {
+      setFinalizarError(`Falta marcar ${faltantes.length} arte(s) antes de finalizar.`);
+      return;
+    }
+    try {
+      setFinalizando(true);
+      for (const [pruebaId, marca] of marcasLocales.entries()) {
+        await onResolverArte(pruebaId, marca.accion, {
+          comentario: marca.comentario,
+          archivo_adjunto: marca.archivo_adjunto,
+          enlace_adjunto: marca.enlace_adjunto,
+        });
+      }
+      // Al terminar, el modal se cierra desde fuera (el refetch invalida
+      // la query y el parent detecta que la tarea ya no es batch pendiente).
+      setMarcasLocales(new Map());
+      onClose();
     } catch (e) {
-      setFormError(e instanceof Error ? e.message : 'Error al resolver');
+      setFinalizarError(e instanceof Error ? e.message : 'Error al finalizar la revisión');
+    } finally {
+      setFinalizando(false);
     }
   };
 
@@ -3630,36 +3689,43 @@ function AtenderRevisionBatchModal({
             </div>
           )}
 
-          {/* Contadores */}
-          <div className={`flex items-center gap-2 text-[11px] flex-wrap`}>
-            <span className={`px-2 py-0.5 rounded-full border font-medium ${isDark ? 'bg-amber-500/15 text-amber-200 border-amber-500/40' : 'bg-amber-50 text-amber-800 border-amber-300'}`}>
-              {pruebasPendientes.length} pendiente{pruebasPendientes.length === 1 ? '' : 's'}
-            </span>
-            <span className={`px-2 py-0.5 rounded-full border font-medium ${isDark ? 'bg-emerald-500/15 text-emerald-200 border-emerald-500/40' : 'bg-emerald-50 text-emerald-800 border-emerald-300'}`}>
-              {pruebasAprobadas.length} aprobado{pruebasAprobadas.length === 1 ? '' : 's'}
-            </span>
-            <span className={`px-2 py-0.5 rounded-full border font-medium ${isDark ? 'bg-red-500/15 text-red-200 border-red-500/40' : 'bg-red-50 text-red-800 border-red-300'}`}>
-              {pruebasRechazadas.length} rechazado{pruebasRechazadas.length === 1 ? '' : 's'}
-            </span>
-          </div>
+          {/* Contadores — pendientes efectivos = sin marca local */}
+          {(() => {
+            const marcadosAprobar = pruebas.filter(p => marcasLocales.get(p.id)?.accion === 'aprobar').length;
+            const marcadosRechazar = pruebas.filter(p => marcasLocales.get(p.id)?.accion === 'rechazar').length;
+            const pendientesSinMarca = pruebasPendientes.filter(p => !marcasLocales.has(p.id)).length;
+            return (
+              <div className={`flex items-center gap-2 text-[11px] flex-wrap`}>
+                <span className={`px-2 py-0.5 rounded-full border font-medium ${isDark ? 'bg-amber-500/15 text-amber-200 border-amber-500/40' : 'bg-amber-50 text-amber-800 border-amber-300'}`}>
+                  {pendientesSinMarca} sin marcar
+                </span>
+                <span className={`px-2 py-0.5 rounded-full border font-medium ${isDark ? 'bg-emerald-500/15 text-emerald-200 border-emerald-500/40' : 'bg-emerald-50 text-emerald-800 border-emerald-300'}`}>
+                  {marcadosAprobar + pruebasAprobadas.length} para aprobar
+                </span>
+                <span className={`px-2 py-0.5 rounded-full border font-medium ${isDark ? 'bg-red-500/15 text-red-200 border-red-500/40' : 'bg-red-50 text-red-800 border-red-300'}`}>
+                  {marcadosRechazar + pruebasRechazadas.length} para rechazar
+                </span>
+              </div>
+            );
+          })()}
 
-          {/* Botones masivos */}
-          {puedeRevisar && pruebasPendientes.length > 0 && (
+          {/* Botones masivos — también son marcas preliminares */}
+          {puedeRevisar && pruebasPendientes.filter(p => !marcasLocales.has(p.id)).length > 0 && (
             <div className={`flex items-center gap-2 flex-wrap p-3 rounded-lg border ${isDark ? 'bg-zinc-800/60 border-zinc-700' : 'bg-gray-50 border-gray-200'}`}>
               <span className={`text-xs font-medium ${isDark ? 'text-zinc-300' : 'text-gray-700'}`}>Acciones masivas:</span>
               <button
                 onClick={() => setResolverForm({ modo: 'masivo', accion: 'aprobar' })}
-                disabled={isSaving}
+                disabled={finalizando}
                 className={`inline-flex items-center gap-1 text-xs font-semibold px-3 py-1.5 rounded border transition-colors ${isDark ? 'border-emerald-500/60 text-emerald-100 bg-emerald-500/20 hover:bg-emerald-500/30' : 'border-emerald-400 text-emerald-800 bg-emerald-50 hover:bg-emerald-100'} disabled:opacity-50`}
               >
-                <CheckCircle2 className="h-3.5 w-3.5" /> Aprobar todos ({pruebasPendientes.length})
+                <CheckCircle2 className="h-3.5 w-3.5" /> Marcar todos para aprobar ({pruebasPendientes.length})
               </button>
               <button
                 onClick={() => setResolverForm({ modo: 'masivo', accion: 'rechazar' })}
-                disabled={isSaving}
+                disabled={finalizando}
                 className={`inline-flex items-center gap-1 text-xs font-semibold px-3 py-1.5 rounded border transition-colors ${isDark ? 'border-red-500/60 text-red-100 bg-red-500/20 hover:bg-red-500/30' : 'border-red-400 text-red-800 bg-red-50 hover:bg-red-100'} disabled:opacity-50`}
               >
-                <XCircle className="h-3.5 w-3.5" /> Rechazar todos ({pruebasPendientes.length})
+                <XCircle className="h-3.5 w-3.5" /> Marcar todos para rechazar ({pruebasPendientes.length})
               </button>
             </div>
           )}
@@ -3676,7 +3742,15 @@ function AtenderRevisionBatchModal({
           ) : (
             <div className="space-y-2">
               {pruebas.map((p) => {
-                const esPendiente = p.estatus === 'revision_artes' || p.estatus === 'solicitada';
+                const esPendienteBD = p.estatus === 'revision_artes' || p.estatus === 'solicitada';
+                const marcaLocal = marcasLocales.get(p.id);
+                const estatusMostrado = marcaLocal
+                  ? (marcaLocal.accion === 'aprobar' ? 'arte_aprobado' : 'rechazada')
+                  : p.estatus;
+                const etiquetaMarca = marcaLocal
+                  ? (marcaLocal.accion === 'aprobar' ? 'Marcado para aprobar' : 'Marcado para rechazar')
+                  : estatusLabel(p.estatus);
+                const esPendienteEfectivo = esPendienteBD && !marcaLocal;
                 // Jos 2026-11-27: resaltar la card del arte que se está
                 // resolviendo + renderizar el sub-form inline debajo.
                 const seleccionada = resolverForm?.modo === 'individual' && resolverForm.pruebaId === p.id;
@@ -3684,7 +3758,11 @@ function AtenderRevisionBatchModal({
                   ? (resolverForm?.accion === 'aprobar'
                       ? (isDark ? 'border-emerald-500/60 ring-1 ring-emerald-500/40' : 'border-emerald-400 ring-1 ring-emerald-300')
                       : (isDark ? 'border-red-500/60 ring-1 ring-red-500/40' : 'border-red-400 ring-1 ring-red-300'))
-                  : (isDark ? 'border-zinc-700' : 'border-gray-200');
+                  : marcaLocal
+                    ? (marcaLocal.accion === 'aprobar'
+                        ? (isDark ? 'border-emerald-500/40' : 'border-emerald-300')
+                        : (isDark ? 'border-red-500/40' : 'border-red-300'))
+                    : (isDark ? 'border-zinc-700' : 'border-gray-200');
                 return (
                   <div key={p.id}>
                     <div
@@ -3710,8 +3788,8 @@ function AtenderRevisionBatchModal({
                             <span className={`text-[10px] px-1.5 py-0.5 rounded font-bold ${isDark ? 'bg-fuchsia-500/20 text-fuchsia-200' : 'bg-fuchsia-100 text-fuchsia-700'}`}>
                               v{p.version}
                             </span>
-                            <span className={`text-[10px] px-2 py-0.5 rounded-full border font-semibold ${estatusStyle(p.estatus)}`}>
-                              {estatusLabel(p.estatus)}
+                            <span className={`text-[10px] px-2 py-0.5 rounded-full border font-semibold ${estatusStyle(estatusMostrado)}`}>
+                              {etiquetaMarca}
                             </span>
                             <span className={`text-sm font-semibold truncate ${isDark ? 'text-zinc-100' : 'text-gray-900'}`}>
                               {p.nombre_arte || `Arte #${p.id}`}
@@ -3720,6 +3798,13 @@ function AtenderRevisionBatchModal({
                           {p.notas && (
                             <div className={`text-[11px] mt-1 whitespace-pre-wrap ${isDark ? 'text-zinc-400' : 'text-gray-600'}`}>
                               {p.notas}
+                            </div>
+                          )}
+                          {marcaLocal && (
+                            <div className={`text-[11px] mt-1 italic ${isDark ? 'text-zinc-400' : 'text-gray-600'}`}>
+                              {marcaLocal.comentario && <div>Motivo: {marcaLocal.comentario}</div>}
+                              {marcaLocal.archivo_adjunto_nombre && <div>Reemplazo: {marcaLocal.archivo_adjunto_nombre}</div>}
+                              {marcaLocal.enlace_adjunto && <div>Enlace: {marcaLocal.enlace_adjunto}</div>}
                             </div>
                           )}
                           <div className="flex items-center gap-1.5 mt-2 flex-wrap">
@@ -3733,23 +3818,31 @@ function AtenderRevisionBatchModal({
                                 <ExternalLink className="h-3 w-3" /> Link
                               </a>
                             )}
-                            {puedeRevisar && esPendiente && (
+                            {puedeRevisar && esPendienteEfectivo && (
                               <>
                                 <button
                                   onClick={() => { resetForm(); setResolverForm({ modo: 'individual', accion: 'aprobar', pruebaId: p.id }); }}
-                                  disabled={isSaving}
+                                  disabled={finalizando}
                                   className={`inline-flex items-center gap-1 text-[11px] font-semibold px-2 py-1 rounded border transition-colors ${isDark ? 'border-emerald-500/60 text-emerald-100 bg-emerald-500/20 hover:bg-emerald-500/30' : 'border-emerald-400 text-emerald-800 bg-emerald-50 hover:bg-emerald-100'} disabled:opacity-50`}
                                 >
                                   <CheckCircle2 className="h-3 w-3" /> Aprobar
                                 </button>
                                 <button
                                   onClick={() => { resetForm(); setResolverForm({ modo: 'individual', accion: 'rechazar', pruebaId: p.id }); }}
-                                  disabled={isSaving}
+                                  disabled={finalizando}
                                   className={`inline-flex items-center gap-1 text-[11px] font-semibold px-2 py-1 rounded border transition-colors ${isDark ? 'border-red-500/60 text-red-100 bg-red-500/20 hover:bg-red-500/30' : 'border-red-400 text-red-800 bg-red-50 hover:bg-red-100'} disabled:opacity-50`}
                                 >
                                   <XCircle className="h-3 w-3" /> Rechazar
                                 </button>
                               </>
+                            )}
+                            {puedeRevisar && marcaLocal && !finalizando && (
+                              <button
+                                onClick={() => deshacerMarca(p.id)}
+                                className={`inline-flex items-center gap-1 text-[11px] font-semibold px-2 py-1 rounded border transition-colors ${isDark ? 'border-zinc-600 text-zinc-300 hover:bg-zinc-700' : 'border-gray-300 text-gray-700 hover:bg-gray-100'}`}
+                              >
+                                Deshacer marca
+                              </button>
                             )}
                           </div>
                         </div>
@@ -3772,13 +3865,50 @@ function AtenderRevisionBatchModal({
         </div>
 
         {/* Footer */}
-        <div className={`shrink-0 px-5 py-3 flex items-center justify-end gap-2 border-t ${isDark ? 'border-zinc-800 bg-zinc-900/60' : 'border-gray-200 bg-gray-50/60'}`}>
-          <button
-            onClick={onClose}
-            className={`text-xs font-semibold px-4 py-2 rounded border transition-colors ${isDark ? 'border-zinc-700 text-zinc-200 bg-zinc-800 hover:bg-zinc-700' : 'border-gray-300 text-gray-800 bg-white hover:bg-gray-50'}`}
-          >
-            Cerrar
-          </button>
+        <div className={`shrink-0 px-5 py-3 flex items-center justify-between gap-2 border-t flex-wrap ${isDark ? 'border-zinc-800 bg-zinc-900/60' : 'border-gray-200 bg-gray-50/60'}`}>
+          {/* Resumen a la izquierda */}
+          {(() => {
+            const pendientesSinMarca = pruebasPendientes.filter(p => !marcasLocales.has(p.id)).length;
+            const marcados = marcasLocales.size;
+            const total = pruebasPendientes.length;
+            return (
+              <div className={`text-[11px] ${isDark ? 'text-zinc-400' : 'text-gray-600'}`}>
+                {total > 0 ? (
+                  pendientesSinMarca > 0
+                    ? <>Marca cada arte antes de finalizar <span className="font-semibold">({marcados} de {total})</span></>
+                    : <span className={isDark ? 'text-emerald-300 font-semibold' : 'text-emerald-700 font-semibold'}>Todos los artes están marcados ✓</span>
+                ) : <span>No hay artes pendientes</span>}
+                {finalizarError && (
+                  <div className={`mt-1 text-[11px] ${isDark ? 'text-red-300' : 'text-red-700'}`}>{finalizarError}</div>
+                )}
+              </div>
+            );
+          })()}
+
+          <div className="flex items-center gap-2">
+            <button
+              onClick={onClose}
+              disabled={finalizando}
+              className={`text-xs font-semibold px-4 py-2 rounded border transition-colors ${isDark ? 'border-zinc-700 text-zinc-200 bg-zinc-800 hover:bg-zinc-700' : 'border-gray-300 text-gray-800 bg-white hover:bg-gray-50'} disabled:opacity-50`}
+            >
+              Cerrar
+            </button>
+            {puedeRevisar && pruebasPendientes.length > 0 && (() => {
+              const pendientesSinMarca = pruebasPendientes.filter(p => !marcasLocales.has(p.id)).length;
+              const puedeFinalizar = pendientesSinMarca === 0 && marcasLocales.size > 0;
+              return (
+                <button
+                  onClick={finalizarRevision}
+                  disabled={!puedeFinalizar || finalizando}
+                  title={!puedeFinalizar ? 'Marca todos los artes antes de finalizar' : 'Aplica todas las resoluciones y cierra la tarea'}
+                  className={`inline-flex items-center gap-1 text-xs font-semibold px-4 py-2 rounded border transition-colors ${isDark ? 'border-fuchsia-500/60 text-fuchsia-100 bg-fuchsia-500/20 hover:bg-fuchsia-500/30' : 'border-fuchsia-400 text-fuchsia-800 bg-fuchsia-50 hover:bg-fuchsia-100'} disabled:opacity-40 disabled:cursor-not-allowed`}
+                >
+                  {finalizando ? <Loader2 className="h-3 w-3 animate-spin" /> : <Flag className="h-3 w-3" />}
+                  {finalizando ? 'Finalizando...' : 'Finalizar revisión'}
+                </button>
+              );
+            })()}
+          </div>
         </div>
       </div>
     </div>
