@@ -10,11 +10,14 @@
 // un valor VÁLIDO en BD (filas legacy pre-migración) — se reconoce como bloqueado
 // pero ya no aparece en el selector.
 //
-// Vigencia (nov-2026): al bloquear se puede capturar un periodo opcional
-// (fecha inicio/fin). Sin fechas = indefinido hasta habilitar a mano. Con fecha
-// inicio futura el bloqueo queda PROGRAMADO (la pieza sigue Disponible hasta
-// ese día). Al cumplirse la fecha fin, el back crea una tarea
-// 'Vigencia Bloqueo Inventario' a quien bloqueó para que rehabilite desde ahí.
+// Vigencia (rediseño 2026-11-27): solo 'No Disponible' lleva vigencia
+// (fecha inicio/fin, ambas inclusivas) y bloquea SOLO ese rango: fuera de él la
+// pieza se puede reservar. Sin fechas = indefinido hasta habilitar a mano. Con
+// fecha inicio futura el bloqueo queda PROGRAMADO (el estatus sigue Disponible
+// hasta ese día, pero el rango ya no se puede reservar). Al bloquear se liberan
+// las reservas que tocan el rango. Al pasar la fecha fin la pieza regresa SOLA
+// a Disponible y a quien bloqueó le llega una notificación.
+// 'Inhabilitado' no lleva vigencia: bloquea todas las fechas.
 // Espejo de qeb-Back/services/vigencia-bloqueo.service.ts.
 
 export const TIPOS_BLOQUEO_INVENTARIO = ['No Disponible', 'Inhabilitado'] as const;
@@ -65,6 +68,37 @@ export function vigenciaEsProgramada(v: VigenciaBloqueo): boolean {
   return !!v.fecha_inicio && v.fecha_inicio > hoyLocalISO();
 }
 
+/** ¿Este tipo de bloqueo lleva vigencia? Solo No Disponible; Inhabilitado bloquea todas las fechas. */
+export function tipoLlevaVigencia(tipo: TipoBloqueoInventario): boolean {
+  return tipo === 'No Disponible';
+}
+
+/** Vigencia que realmente se manda/aplica para el tipo elegido. */
+export function vigenciaParaTipo(tipo: TipoBloqueoInventario, v: VigenciaBloqueo): VigenciaBloqueo {
+  return tipoLlevaVigencia(tipo) ? v : VIGENCIA_INDEFINIDA;
+}
+
+/**
+ * ¿Una reserva con periodo [ini, fin] se libera al aplicar este bloqueo?
+ * Mismo criterio que el back (liberarReservasEnVigencia): se traslapa con
+ * [max(inicio, hoy), fin] — fin null = sin límite. Fechas 'YYYY-MM-DD' o ISO.
+ */
+export function periodoTocaVigencia(
+  ini: string | null | undefined,
+  fin: string | null | undefined,
+  tipo: TipoBloqueoInventario,
+  v: VigenciaBloqueo,
+): boolean {
+  const pFin = (fin || '').slice(0, 10);
+  if (!pFin) return false;
+  const pIni = (ini || pFin).slice(0, 10);
+  const efectiva = vigenciaParaTipo(tipo, v);
+  const hoy = hoyLocalISO();
+  const desde = efectiva.fecha_inicio && efectiva.fecha_inicio > hoy ? efectiva.fecha_inicio : hoy;
+  if (pFin < desde) return false;
+  return !efectiva.fecha_fin || pIni <= efectiva.fecha_fin;
+}
+
 /** 'YYYY-MM-DD' o ISO datetime (columna DATE serializada) → 'dd/mm/aaaa'. */
 export function fechaCorta(fecha: string | null | undefined): string {
   if (!fecha) return '';
@@ -108,7 +142,7 @@ export const TIPO_BLOQUEO_TEXTOS: Record<TipoBloqueoInventario, {
 }> = {
   'No Disponible': {
     opcion: 'No Disponible',
-    descripcion: 'La pieza queda No Disponible y no se puede ocupar.',
+    descripcion: 'Algo le pasó a la pieza: no se puede ocupar durante la vigencia.',
     infinitivo: 'Marcar No Disponible',
     gerundio: 'Marcando No Disponible',
     participio: 'No Disponible',
@@ -117,7 +151,7 @@ export const TIPO_BLOQUEO_TEXTOS: Record<TipoBloqueoInventario, {
   },
   Inhabilitado: {
     opcion: 'Inhabilitado',
-    descripcion: 'La pieza queda inhabilitada y no se puede ocupar.',
+    descripcion: 'Sin vigencia: no se puede ocupar en ninguna fecha hasta habilitarla.',
     infinitivo: 'Inhabilitar',
     gerundio: 'Inhabilitando',
     participio: 'Inhabilitado',

@@ -27,6 +27,9 @@ import {
   VIGENCIA_INDEFINIDA,
   describirVigencia,
   vigenciaValida,
+  periodoTocaVigencia,
+  tipoLlevaVigencia,
+  vigenciaParaTipo,
 } from '../../lib/bloqueoInventario';
 import { TipoBloqueoSelector } from './TipoBloqueoSelector';
 import { VigenciaBloqueoFields } from './VigenciaBloqueoFields';
@@ -98,15 +101,6 @@ const hoyISO = (): string => {
   const mes = String(d.getMonth() + 1).padStart(2, '0');
   const dia = String(d.getDate()).padStart(2, '0');
   return `${d.getFullYear()}-${mes}-${dia}`;
-};
-
-// Una tarjeta es "pasada" si su período ya terminó (fin_periodo < hoy). Alinea
-// con el filtro `sc.fin_periodo >= CURDATE()` del backend (toggleBlock): esas
-// reservas NO se liberan, así que tampoco deben contar ni generar tareas.
-// Comparamos por date-part del string ISO para evitar corrimientos de timezone.
-const esPeriodoPasado = (fin: string | null | undefined): boolean => {
-  if (!fin) return false; // sin fecha → conservador: no la descartamos
-  return fin.slice(0, 10) < hoyISO();
 };
 
 const labelForCampana = (c: CampanaEnCelda): string => {
@@ -339,9 +333,12 @@ export function BloqueoMasivoModal({ open, onClose, initialInventarios }: Bloque
     return out;
   }, [matriz, selectedInventarios, selectedReservas, bloqueadosLocal]);
 
-  // === Tarjetas afectadas: cards ACTUALES/FUTURAS en los inventarios objetivo ===
-  // Se excluyen las de período ya vencido: el backend (toggleBlock) no las
-  // libera, así que no deben contar ni generar tareas "Sustituir Inventario".
+  // Vigencia que realmente aplica (Inhabilitado no lleva: todas las fechas).
+  const vigenciaEfectiva = vigenciaParaTipo(tipo, vigencia);
+
+  // === Tarjetas afectadas: cards cuyo periodo toca la vigencia ===
+  // Solo esas se liberan en el back (liberarReservasEnVigencia): las pasadas o
+  // las que caen fuera del rango no cuentan ni generan "Sustituir Inventario".
   const tarjetasAfectadas = useMemo(() => {
     if (!matriz) return [] as { card: CampanaEnCelda; inv: InventarioResumen; cat: CatorcenaRef }[];
     const out: { card: CampanaEnCelda; inv: InventarioResumen; cat: CatorcenaRef }[] = [];
@@ -353,13 +350,14 @@ export function BloqueoMasivoModal({ open, onClose, initialInventarios }: Bloque
         const celda = invCeldas[cellKeyOf(cat)];
         if (!celda) continue;
         for (const card of celda.campanas) {
-          if (esPeriodoPasado(card.fin_periodo)) continue;
+          // Sin fecha fin → conservador: se cuenta.
+          if (card.fin_periodo && !periodoTocaVigencia(card.inicio_periodo, card.fin_periodo, tipo, vigencia)) continue;
           out.push({ card, inv, cat });
         }
       }
     }
     return out;
-  }, [matriz, inventariosObjetivo]);
+  }, [matriz, inventariosObjetivo, tipo, vigencia]);
 
   const handleConfirmBloqueoMasivo = async () => {
     if (!matriz || inventariosObjetivo.size === 0) return;
@@ -380,7 +378,7 @@ export function BloqueoMasivoModal({ open, onClose, initialInventarios }: Bloque
     //    Loop secuencial para no saturar al backend (no hay endpoint bulk).
     for (const invId of inventariosObjetivo) {
       try {
-        await inventariosService.toggleBlock(invId, tipo, vigencia);
+        await inventariosService.toggleBlock(invId, tipo, vigenciaEfectiva);
         bloqueadosOk.add(invId);
         resultado.inventariosBloqueados += 1;
       } catch (err) {
@@ -422,7 +420,7 @@ export function BloqueoMasivoModal({ open, onClose, initialInventarios }: Bloque
         '',
         `Tipo: ${textos.opcion}`,
         `Fecha de ${textos.sustantivo}: ${fechaBloqueo}`,
-        `Vigencia: ${describirVigencia(vigencia)}`,
+        tipoLlevaVigencia(tipo) ? `Vigencia: ${describirVigencia(vigencia)}` : 'Vigencia: sin vigencia (todas las fechas)',
         motivoTexto ? `Motivo: ${motivoTexto}` : null,
         user ? `${textos.participio} por: ${user.nombre}` : null,
       ].filter(Boolean).join('\n');
@@ -863,7 +861,10 @@ export function BloqueoMasivoModal({ open, onClose, initialInventarios }: Bloque
             </div>
             <div className="p-5 space-y-3 text-xs">
               <TipoBloqueoSelector value={tipo} onChange={setTipo} isDark={isDark} disabled={bloqueando} />
-              <VigenciaBloqueoFields value={vigencia} onChange={setVigencia} isDark={isDark} disabled={bloqueando} />
+              {/* Inhabilitado no lleva vigencia: bloquea todas las fechas. */}
+              {tipoLlevaVigencia(tipo) && (
+                <VigenciaBloqueoFields value={vigencia} onChange={setVigencia} isDark={isDark} disabled={bloqueando} />
+              )}
               <div className={`rounded-lg border p-3 space-y-1.5 ${isDark ? 'border-zinc-700 bg-zinc-800/50' : 'border-gray-200 bg-gray-50'}`}>
                 <div className="flex justify-between">
                   <span className={isDark ? 'text-zinc-400' : 'text-gray-500'}>Inventarios a {textos.infinitivo.toLowerCase()}</span>
@@ -921,7 +922,7 @@ export function BloqueoMasivoModal({ open, onClose, initialInventarios }: Bloque
               </button>
               <button
                 onClick={handleConfirmBloqueoMasivo}
-                disabled={bloqueando || inventariosObjetivo.size === 0 || !vigenciaValida(vigencia)}
+                disabled={bloqueando || inventariosObjetivo.size === 0 || !vigenciaValida(vigenciaEfectiva)}
                 className={`flex items-center gap-2 px-4 py-1.5 rounded-lg text-sm font-medium ${isDark ? 'bg-rose-500 text-white hover:bg-rose-600' : 'bg-rose-600 text-white hover:bg-rose-700'} disabled:opacity-50`}
               >
                 {bloqueando ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Ban className="h-3.5 w-3.5" />}

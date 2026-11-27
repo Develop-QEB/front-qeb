@@ -12,6 +12,9 @@ import {
   VIGENCIA_INDEFINIDA,
   esInventarioBloqueado,
   vigenciaValida,
+  periodoTocaVigencia,
+  tipoLlevaVigencia,
+  vigenciaParaTipo,
 } from '../../lib/bloqueoInventario';
 import { TipoBloqueoSelector } from './TipoBloqueoSelector';
 import { VigenciaBloqueoFields } from './VigenciaBloqueoFields';
@@ -165,11 +168,8 @@ export function BloqueoBulkModal({ isOpen, onClose, items, onConfirm, isSubmitti
   // === Campañas activas por inventario (deduplicadas dentro del mismo inv) ===
   const campanasPorInv = useMemo((): Map<number, CampanaActivaBulk[]> => {
     const map = new Map<number, CampanaActivaBulk[]>();
-    // "Actual o futuro" por FECHA (no por hora), alineado con el backend
-    // (toggleBlock: sc.fin_periodo >= CURDATE()). Comparar por date-part evita
-    // corrimientos de timezone y el caso límite de un período que termina hoy.
-    const d = new Date();
-    const hoyStr = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+    // Solo las campañas cuyas reservas se liberan: periodo que se traslapa con
+    // la vigencia. Mismo criterio que el back (liberarReservasEnVigencia).
     for (let i = 0; i < items.length; i++) {
       const inv = items[i];
       const h = historialQueries[i]?.data;
@@ -179,7 +179,7 @@ export function BloqueoBulkModal({ isOpen, onClose, items, onConfirm, isSubmitti
       for (const ev of h.historial) {
         if (
           ['Reservado', 'Ocupado', 'Vendido'].includes(ev.reserva_estatus) &&
-          (ev.fin_periodo || '').slice(0, 10) >= hoyStr &&
+          periodoTocaVigencia(ev.inicio_periodo, ev.fin_periodo, tipo, vigencia) &&
           !seen.has(ev.campana_id)
         ) {
           seen.add(ev.campana_id);
@@ -189,7 +189,7 @@ export function BloqueoBulkModal({ isOpen, onClose, items, onConfirm, isSubmitti
       map.set(inv.id, list);
     }
     return map;
-  }, [items, historialQueries]);
+  }, [items, historialQueries, tipo, vigencia]);
 
   // === Detalle de cada campaña (para pre-seleccionar asignados como en el individual) ===
   // Lista plana de todas las campañas únicas a través de todos los inventarios.
@@ -343,7 +343,7 @@ export function BloqueoBulkModal({ isOpen, onClose, items, onConfirm, isSubmitti
 
   // === Confirmar ===
   const canContinue = step === 0
-    ? motivo.trim().length > 0 && vigenciaValida(vigencia)
+    ? motivo.trim().length > 0 && vigenciaValida(vigenciaParaTipo(tipo, vigencia))
     : (currentAnalistas.length > 0 || currentTrafico.length > 0);
   const isLastStep = step === totalSteps;
 
@@ -368,7 +368,7 @@ export function BloqueoBulkModal({ isOpen, onClose, items, onConfirm, isSubmitti
         })),
       };
     });
-    await onConfirm({ tipo, vigencia, motivo, perItem });
+    await onConfirm({ tipo, vigencia: vigenciaParaTipo(tipo, vigencia), motivo, perItem });
     reset();
   };
 
@@ -415,7 +415,10 @@ export function BloqueoBulkModal({ isOpen, onClose, items, onConfirm, isSubmitti
             /* ===== STEP 0: motivo + overview ===== */
             <>
               <TipoBloqueoSelector value={tipo} onChange={setTipo} disabled={isSubmitting} />
-              <VigenciaBloqueoFields value={vigencia} onChange={setVigencia} disabled={isSubmitting} />
+              {/* Inhabilitado no lleva vigencia: bloquea todas las fechas. */}
+              {tipoLlevaVigencia(tipo) && (
+                <VigenciaBloqueoFields value={vigencia} onChange={setVigencia} disabled={isSubmitting} />
+              )}
 
               <div className="flex items-start gap-2.5 px-3 py-2.5 bg-amber-500/10 border border-amber-500/30 rounded-lg">
                 <AlertTriangle className="h-4 w-4 text-amber-400 flex-shrink-0 mt-0.5" />
@@ -560,7 +563,7 @@ export function BloqueoBulkModal({ isOpen, onClose, items, onConfirm, isSubmitti
           {step === 0 && totalSteps === 0 ? (
             <button
               onClick={handleConfirm}
-              disabled={isSubmitting || !motivo.trim() || !vigenciaValida(vigencia) || loadingHistorial}
+              disabled={isSubmitting || !motivo.trim() || !vigenciaValida(vigenciaParaTipo(tipo, vigencia)) || loadingHistorial}
               className="flex-1 flex items-center justify-center gap-2 px-3 py-2 text-sm font-medium bg-red-600 hover:bg-red-500 disabled:bg-zinc-700 disabled:text-zinc-500 text-white rounded-lg transition-colors"
             >
               {isSubmitting ? <Loader2 className="h-4 w-4 animate-spin" /> : <Ban className="h-4 w-4" />}

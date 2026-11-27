@@ -12,6 +12,9 @@ import {
   VIGENCIA_INDEFINIDA,
   esInventarioBloqueado,
   vigenciaValida,
+  periodoTocaVigencia,
+  tipoLlevaVigencia,
+  vigenciaParaTipo,
 } from '../../lib/bloqueoInventario';
 import { TipoBloqueoSelector } from './TipoBloqueoSelector';
 import { VigenciaBloqueoFields } from './VigenciaBloqueoFields';
@@ -149,18 +152,14 @@ export function BloqueoModal({ isOpen, onClose, item, onConfirm, isSubmitting }:
 
   const campanasActivas = useMemo((): CampanaActiva[] => {
     if (!historialData) return [];
-    // "Actual o futuro": el período no ha terminado (fin_periodo >= hoy, por
-    // FECHA, no por hora). Alinea con el filtro del backend (toggleBlock:
-    // sc.fin_periodo >= CURDATE()), que es el que realmente libera la reserva.
-    // Comparar por date-part evita corrimientos de timezone y el caso límite
-    // de un período que termina hoy.
-    const d = new Date();
-    const hoyStr = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+    // Solo las campañas cuyas reservas se liberan: periodo que se traslapa con
+    // la vigencia (desde max(inicio, hoy) hasta fin). Mismo criterio que el back
+    // (liberarReservasEnVigencia). Inhabilitado = todo lo actual/futuro.
     const seen = new Set<number>();
     return historialData.historial
       .filter(h =>
         ['Reservado', 'Ocupado', 'Vendido'].includes(h.reserva_estatus) &&
-        (h.fin_periodo || '').slice(0, 10) >= hoyStr
+        periodoTocaVigencia(h.inicio_periodo, h.fin_periodo, tipo, vigencia)
       )
       .reduce<CampanaActiva[]>((acc, h) => {
         if (!seen.has(h.campana_id)) {
@@ -169,7 +168,7 @@ export function BloqueoModal({ isOpen, onClose, item, onConfirm, isSubmitting }:
         }
         return acc;
       }, []);
-  }, [historialData]);
+  }, [historialData, tipo, vigencia]);
 
   // Fetch each affected campaign to get its assigned user IDs
   const campanaQueries = useQueries({
@@ -285,7 +284,7 @@ export function BloqueoModal({ isOpen, onClose, item, onConfirm, isSubmitting }:
   const totalSteps = campanasActivas.length; // step 0 + N campaign steps
 
   const canContinue = step === 0
-    ? motivo.trim().length > 0 && vigenciaValida(vigencia)
+    ? motivo.trim().length > 0 && vigenciaValida(vigenciaParaTipo(tipo, vigencia))
     : (currentAnalistas.length > 0 || currentTrafico.length > 0);
 
   const isLastStep = step === totalSteps;
@@ -305,12 +304,12 @@ export function BloqueoModal({ isOpen, onClose, item, onConfirm, isSubmitting }:
     // For backwards compat, also flatten all analistas/trafico
     const allAnalistas = perCampana.flatMap(e => e.analistas);
     const allTrafico = perCampana.flatMap(e => e.trafico);
-    await onConfirm({ tipo, vigencia, motivo, analistas: allAnalistas, trafico: allTrafico, campanas: campanasActivas, perCampana });
+    await onConfirm({ tipo, vigencia: vigenciaParaTipo(tipo, vigencia), motivo, analistas: allAnalistas, trafico: allTrafico, campanas: campanasActivas, perCampana });
     reset();
   };
 
   const handleConfirmSimple = async () => {
-    await onConfirm({ tipo, vigencia, motivo, analistas: [], trafico: [], campanas: [] });
+    await onConfirm({ tipo, vigencia: vigenciaParaTipo(tipo, vigencia), motivo, analistas: [], trafico: [], campanas: [] });
     reset();
   };
 
@@ -399,7 +398,10 @@ export function BloqueoModal({ isOpen, onClose, item, onConfirm, isSubmitting }:
           {!yaEstaBloquedo && step === 0 && (
             <>
               <TipoBloqueoSelector value={tipo} onChange={setTipo} disabled={isSubmitting} />
-              <VigenciaBloqueoFields value={vigencia} onChange={setVigencia} disabled={isSubmitting} />
+              {/* Inhabilitado no lleva vigencia: bloquea todas las fechas. */}
+              {tipoLlevaVigencia(tipo) && (
+                <VigenciaBloqueoFields value={vigencia} onChange={setVigencia} disabled={isSubmitting} />
+              )}
             </>
           )}
 
@@ -550,7 +552,7 @@ export function BloqueoModal({ isOpen, onClose, item, onConfirm, isSubmitting }:
           {esDisponible ? (
             <button
               onClick={handleConfirmSimple}
-              disabled={isSubmitting || !motivo.trim() || !vigenciaValida(vigencia)}
+              disabled={isSubmitting || !motivo.trim() || !vigenciaValida(vigenciaParaTipo(tipo, vigencia))}
               className="flex-1 flex items-center justify-center gap-2 px-3 py-2 text-sm font-medium bg-red-600 hover:bg-red-500 disabled:bg-zinc-700 disabled:text-zinc-500 text-white rounded-lg transition-colors"
             >
               {isSubmitting ? <Loader2 className="h-4 w-4 animate-spin" /> : <Ban className="h-4 w-4" />}
