@@ -4038,20 +4038,40 @@ function AtenderRevisionBatchModal({
                       className={`rounded-lg border p-3 ${isDark ? 'bg-zinc-800/60' : 'bg-white'} ${bordeResaltado} transition-colors`}
                     >
                       <div className="flex items-start gap-3">
-                        {p.archivo ? (
-                          <a href={p.archivo} target="_blank" rel="noreferrer" className="shrink-0">
-                            <img
-                              src={p.archivo}
-                              alt={p.nombre_arte || `Arte ${p.id}`}
-                              className="w-16 h-16 object-cover rounded border border-zinc-700"
-                              onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }}
-                            />
-                          </a>
-                        ) : (
-                          <div className={`w-16 h-16 rounded flex items-center justify-center shrink-0 ${isDark ? 'bg-zinc-800 border border-zinc-700' : 'bg-gray-100 border border-gray-200'}`}>
-                            <FileImage className={`h-5 w-5 ${isDark ? 'text-zinc-600' : 'text-gray-400'}`} />
-                          </div>
-                        )}
+                        {/* Jos 2026-11-27: si la marca local trae un archivo
+                            de reemplazo, el thumbnail ya muestra el NUEVO
+                            arte (el que va a quedar al finalizar) + badge
+                            visible "REEMPLAZADO" + link al original. Antes
+                            solo salía un texto chiquito en cursiva y no se
+                            notaba que el adjunto se había cargado. */}
+                        {(() => {
+                          const archivoReemplazo = marcaLocal?.archivo_adjunto || null;
+                          const archivoMostrado = archivoReemplazo || p.archivo;
+                          if (!archivoMostrado) {
+                            return (
+                              <div className={`w-16 h-16 rounded flex items-center justify-center shrink-0 ${isDark ? 'bg-zinc-800 border border-zinc-700' : 'bg-gray-100 border border-gray-200'}`}>
+                                <FileImage className={`h-5 w-5 ${isDark ? 'text-zinc-600' : 'text-gray-400'}`} />
+                              </div>
+                            );
+                          }
+                          return (
+                            <div className="shrink-0 relative">
+                              <a href={archivoMostrado} target="_blank" rel="noreferrer">
+                                <img
+                                  src={archivoMostrado}
+                                  alt={p.nombre_arte || `Arte ${p.id}`}
+                                  className={`w-16 h-16 object-cover rounded border ${archivoReemplazo ? 'border-amber-400 ring-2 ring-amber-400/40' : 'border-zinc-700'}`}
+                                  onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }}
+                                />
+                              </a>
+                              {archivoReemplazo && (
+                                <span className="absolute -top-1 -right-1 text-[9px] font-bold uppercase tracking-wide px-1.5 py-0.5 rounded bg-amber-500 text-black shadow">
+                                  Nuevo
+                                </span>
+                              )}
+                            </div>
+                          );
+                        })()}
                         <div className="flex-1 min-w-0">
                           <div className="flex items-center gap-2 flex-wrap">
                             <span className={`text-[10px] px-1.5 py-0.5 rounded font-bold ${isDark ? 'bg-fuchsia-500/20 text-fuchsia-200' : 'bg-fuchsia-100 text-fuchsia-700'}`}>
@@ -4070,10 +4090,26 @@ function AtenderRevisionBatchModal({
                             </div>
                           )}
                           {marcaLocal && (
-                            <div className={`text-[11px] mt-1 italic ${isDark ? 'text-zinc-400' : 'text-gray-600'}`}>
-                              {marcaLocal.comentario && <div>Motivo: {marcaLocal.comentario}</div>}
-                              {marcaLocal.archivo_adjunto_nombre && <div>Reemplazo: {marcaLocal.archivo_adjunto_nombre}</div>}
-                              {marcaLocal.enlace_adjunto && <div>Enlace: {marcaLocal.enlace_adjunto}</div>}
+                            <div className={`mt-1.5 space-y-1 ${isDark ? 'text-zinc-300' : 'text-gray-700'}`}>
+                              {marcaLocal.comentario && <div className="text-[11px] italic">Motivo: {marcaLocal.comentario}</div>}
+                              {marcaLocal.archivo_adjunto_nombre && (
+                                <div className={`inline-flex items-center gap-1.5 text-[11px] font-semibold px-2 py-0.5 rounded border ${isDark ? 'bg-amber-500/15 border-amber-400/50 text-amber-200' : 'bg-amber-50 border-amber-300 text-amber-800'}`}>
+                                  <FileImage className="h-3 w-3" />
+                                  Arte reemplazado: {marcaLocal.archivo_adjunto_nombre}
+                                  {p.archivo && (
+                                    <a
+                                      href={p.archivo}
+                                      target="_blank"
+                                      rel="noreferrer"
+                                      className={`ml-1 underline text-[10px] font-normal ${isDark ? 'text-amber-300/80 hover:text-amber-200' : 'text-amber-700 hover:text-amber-900'}`}
+                                      onClick={(e) => e.stopPropagation()}
+                                    >
+                                      ver original
+                                    </a>
+                                  )}
+                                </div>
+                              )}
+                              {marcaLocal.enlace_adjunto && <div className="text-[11px] italic truncate">Enlace: {marcaLocal.enlace_adjunto}</div>}
                             </div>
                           )}
                           <div className="flex items-center gap-1.5 mt-2 flex-wrap">
