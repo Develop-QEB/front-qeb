@@ -1321,6 +1321,24 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
     );
   }, [selectedCaraForSearch, existingReservas]);
 
+  // Set de ids de solicitudCara que tienen al menos una reserva bloqueada
+  // ('Reservado Bloqueado' / 'Bonificado Bloqueado'). Sirve para pintar el
+  // badge "Bloqueado" en el listado de circuitos (afuera del buscador).
+  const carasBloqueadasIds = useMemo(() => {
+    const s = new Set<number>();
+    if (existingReservas) {
+      for (const r of existingReservas) {
+        if (
+          r.solicitud_cara_id != null &&
+          (r.estatus === 'Reservado Bloqueado' || r.estatus === 'Bonificado Bloqueado')
+        ) {
+          s.add(r.solicitud_cara_id);
+        }
+      }
+    }
+    return s;
+  }, [existingReservas]);
+
   const handleToggleBloqueoCircuito = async () => {
     const caraId = selectedCaraForSearch?.id;
     if (caraId == null || bloqueoCircuitoLoading) return;
@@ -9816,6 +9834,7 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
 
                           {isCatorcenaExpanded && groupData.caras.map((cara) => {
                             const isExpanded = expandedCaras.has(cara.localId);
+                            const caraBloqueada = cara.id != null && carasBloqueadasIds.has(cara.id);
                             const caraReservas = reservas.filter(r =>
                               r.id.startsWith(cara.localId) || r.solicitudCaraId === cara.id
                             );
@@ -9863,7 +9882,14 @@ export function AssignInventarioModal({ isOpen, onClose, propuesta, readOnly = f
                                   <div className="flex-1 grid grid-cols-2 sm:grid-cols-4 md:grid-cols-8 gap-3 text-sm">
                                     <div>
                                       <span className={`${isDark ? 'text-zinc-500' : 'text-gray-400'} text-xs`}>Formato</span>
-                                      <p className={`${isDark ? 'text-white' : 'text-gray-900'} font-medium`}>{cara.formato || '-'}</p>
+                                      <p className={`${isDark ? 'text-white' : 'text-gray-900'} font-medium flex items-center gap-1.5`}>
+                                        <span className="truncate">{cara.formato || '-'}</span>
+                                        {caraBloqueada && (
+                                          <span title="Circuito bloqueado por Tráfico — apartado en exclusiva (no es venta)" className="inline-flex items-center gap-1 text-[10px] px-1.5 py-0.5 rounded bg-amber-500/20 text-amber-300 font-medium whitespace-nowrap">
+                                            <Lock className="h-3 w-3" /> Bloqueado
+                                          </span>
+                                        )}
+                                      </p>
                                     </div>
                                     <div>
                                       <span className={`${isDark ? 'text-zinc-500' : 'text-gray-400'} text-xs`}>Tipo</span>
