@@ -334,7 +334,8 @@ export function QEBooh() {
   return (
     <>
       {isOpen && (
-        <div className={`fixed bottom-6 right-6 z-50 w-[460px] max-w-[calc(100vw-3rem)] h-[620px] max-h-[calc(100vh-7rem)] rounded-2xl shadow-2xl border flex flex-col overflow-hidden ${
+        // Ocupa toda la altura disponible: de debajo del encabezado (h-16 + margen) al fondo.
+        <div className={`fixed top-20 bottom-6 right-6 z-50 w-[460px] max-w-[calc(100vw-3rem)] rounded-2xl shadow-2xl border flex flex-col overflow-hidden ${
           isDark ? 'bg-zinc-900 border-purple-500/20' : 'bg-white border-gray-200'
         }`}>
           {/* Header */}

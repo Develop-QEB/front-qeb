@@ -2862,8 +2862,12 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
 
     // NSE: si la plaza no cambió, las opciones ya cargadas sirven para validar; si
     // cambió, el formulario descarta solo los que no existan al cargar las nuevas.
-    if (orden.nse?.length && !esCircuitoDig) {
-      const mismaPlaza = nuevo.estado === newCara.estado && nuevo.ciudades.join('|') === newCara.ciudades.join('|');
+    const mismaPlaza = nuevo.estado === newCara.estado && nuevo.ciudades.join('|') === newCara.ciudades.join('|');
+    if (orden.nseTodos && !esCircuitoDig) {
+      // "Todos": con la misma plaza, las opciones ya cargadas; con otra plaza, el
+      // catálogo completo, que el formulario recorta solo a las de la plaza al cargarlas.
+      nuevo.nse = mismaPlaza ? [...filteredNse] : [...(inventarioFilters?.nse || filteredNse)];
+    } else if (orden.nse?.length && !esCircuitoDig) {
       const validos = mismaPlaza ? orden.nse.filter(n => filteredNse.includes(n)) : orden.nse;
       if (validos.length < orden.nse.length) avisos.push(`NSE no disponible en la plaza: ${orden.nse.filter(n => !validos.includes(n)).join(', ')}`);
       nuevo.nse = validos;

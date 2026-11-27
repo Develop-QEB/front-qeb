@@ -87,6 +87,8 @@ export interface OrdenCircuito {
   renta?: number;
   bonificacion?: number;
   nse?: string[];
+  /** "Todos" los NSE: se seleccionan todos los que existan en la plaza del artículo. */
+  nseTodos?: boolean;
   tarifaPublica?: number;
   descripcion?: string;
 }
