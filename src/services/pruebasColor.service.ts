@@ -1,4 +1,5 @@
 import { AxiosError } from 'axios';
+import JSZip from 'jszip';
 import api from '../lib/api';
 
 // Extrae el `error` que devuelve el back en `{success:false, error:'...'}`
@@ -190,6 +191,92 @@ export const pruebasColorService = {
     } catch (err) {
       throw extractApiError(err, 'Error al reenviar prueba');
     }
+  },
+
+  // Jos 2026-11-24: descargar en un ZIP TODOS los artes de una prueba:
+  //   - El arte principal (prueba.archivo).
+  //   - Los artes de cada tarea asociada que tenga archivo propio
+  //     (ej: arte corregido en reenvio, Impresion, Recepcion).
+  //   - Los archivos adjuntos de la resolucion de cada tarea
+  //     (evidencia JSON → archivo_adjunto, p.ej. motivo de aprobacion/rechazo
+  //     de Revision Anticipada).
+  // Fetch via /uploads/proxy-image para bypass de CORS.
+  async descargarArtesZip(prueba: PruebaColor, tareas: TareaAsociadaPruebaColor[]): Promise<void> {
+    const zip = new JSZip();
+    const items: Array<{ url: string; nameInZip: string }> = [];
+    const usados = new Set<string>();
+    const normalize = (s: string | null | undefined) => (s || '').toLowerCase().replace(/[^a-z0-9._-]+/g, '-').replace(/-+/g, '-').replace(/^-|-$/g, '');
+
+    const extFromUrl = (url: string): string => {
+      try {
+        const path = url.split('?')[0];
+        const last = decodeURIComponent(path.split('/').pop() || '');
+        const m = last.match(/\.([a-z0-9]+)$/i);
+        return m ? m[1].toLowerCase() : 'bin';
+      } catch { return 'bin'; }
+    };
+    const filenameFromUrl = (url: string): string => {
+      try {
+        const path = url.split('?')[0];
+        const last = decodeURIComponent(path.split('/').pop() || '');
+        return last.replace(/^\d{10,}-[a-z0-9]+-/i, '') || last;
+      } catch { return ''; }
+    };
+    const addItem = (url: string | null | undefined, prefix: string) => {
+      if (!url) return;
+      const clean = url.trim();
+      if (!clean) return;
+      if (usados.has(clean)) return;
+      usados.add(clean);
+      const original = filenameFromUrl(clean);
+      const ext = extFromUrl(clean);
+      const base = original ? original.replace(/\.[a-z0-9]+$/i, '') : `arte-${items.length + 1}`;
+      items.push({ url: clean, nameInZip: `${normalize(prefix)}__${normalize(base)}.${ext}` });
+    };
+
+    addItem(prueba.archivo, `v${prueba.version}_arte-principal`);
+
+    for (const t of tareas) {
+      const tipoNorm = normalize(t.tipo || 'tarea');
+      addItem(t.archivo, `tarea-${t.id}_${tipoNorm}`);
+      if (t.evidencia) {
+        try {
+          const obj = JSON.parse(t.evidencia);
+          const archivoAdjunto = typeof obj?.archivo_adjunto === 'string' ? obj.archivo_adjunto : null;
+          addItem(archivoAdjunto, `tarea-${t.id}_${tipoNorm}_resolucion`);
+        } catch { /* evidencia no es JSON parseable, se ignora */ }
+      }
+    }
+
+    if (items.length === 0) {
+      throw new Error('No hay artes adjuntos que descargar en esta prueba.');
+    }
+
+    const fetchOne = async (item: { url: string; nameInZip: string }) => {
+      try {
+        const res = await api.get('/uploads/proxy-image', {
+          params: { url: item.url },
+          responseType: 'arraybuffer',
+        });
+        zip.file(item.nameInZip, res.data as ArrayBuffer);
+      } catch {
+        // Si falla un arte individual, lo marcamos con un .txt dentro del zip
+        // para que el usuario sepa que no se pudo bajar en lugar de fallar todo.
+        zip.file(`${item.nameInZip}.ERROR.txt`, `No se pudo descargar: ${item.url}`);
+      }
+    };
+    await Promise.all(items.map(fetchOne));
+
+    const blob = await zip.generateAsync({ type: 'blob' });
+    const nombre = normalize(prueba.nombre_arte || `prueba-${prueba.id}`);
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `artes_${nombre}_v${prueba.version}.zip`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
   },
 };
 
