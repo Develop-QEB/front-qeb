@@ -160,12 +160,15 @@ export const pruebasColorService = {
   },
 
   // Resuelve una tarea asociada (aprobar / rechazar / finalizar) desde el modal.
+  // Jos 2026-11-24: `pruebaIdObjetivo` se usa cuando la tarea agrupa N pruebas
+  // y Diseño resuelve una a la vez; en individual queda undefined.
   async resolverTarea(
     pruebaId: number,
     tareaId: number,
     accion: AccionResolverTarea,
     comentario?: string,
     adjuntos?: { archivo_adjunto?: string | null; enlace_adjunto?: string | null },
+    pruebaIdObjetivo?: number,
   ): Promise<void> {
     try {
       const { data } = await api.patch(`/pruebas-color/${pruebaId}/tareas/${tareaId}`, {
@@ -173,10 +176,35 @@ export const pruebasColorService = {
         comentario,
         archivo_adjunto: adjuntos?.archivo_adjunto || null,
         enlace_adjunto: adjuntos?.enlace_adjunto || null,
+        prueba_id_objetivo: pruebaIdObjetivo || undefined,
       });
       if (!data.success) throw new Error(data.error || 'Error al resolver tarea');
     } catch (err) {
       throw extractApiError(err, 'Error al resolver tarea');
+    }
+  },
+
+  // Jos 2026-11-24: crea N pruebas de un mismo "lote" (varios artes para 1
+  // o más circuitos) en una sola operación. El back genera UNA tarea de
+  // Revisión por cada circuito que agrupa todos sus artes.
+  async crearBatch(input: {
+    propuesta_id: number;
+    tipo?: TipoPrueba;
+    artes: Array<{
+      sc_id: number;
+      archivo: string;
+      archivo_data?: string | null;
+      enlace_externo?: string | null;
+      nombre_arte: string;
+      notas?: string | null;
+    }>;
+  }): Promise<Array<{ scId: number; pruebas: Array<{ id: number }>; tareaId: number | null }>> {
+    try {
+      const { data } = await api.post(`/pruebas-color/batch`, input);
+      if (!data.success) throw new Error(data.error || 'Error al crear batch de pruebas');
+      return data.data;
+    } catch (err) {
+      throw extractApiError(err, 'Error al crear batch de pruebas');
     }
   },
 
