@@ -38,6 +38,7 @@ import { leerCondiciones, leerNumeroOpcional, leerObjetoStrings, leerString, lee
 import { VistaSelector, type VistaOpcion } from '../../components/tablero/VistaSelector';
 import { loadVistaFijaModulo, saveVistaFijaModulo } from '../../lib/vistaFija';
 import { SolicitudAcciones, puedeCambiarStatusSolicitud } from './SolicitudAcciones';
+import { useQeboohStore } from '../../store/qeboohStore';
 
 // Vistas del modulo (selector compacto + vista fija por usuario).
 type VistaSolicitudes = 'tabla' | 'tablero';
@@ -733,6 +734,19 @@ export function SolicitudesPage() {
   const [page, setPage] = useState(1);
   const [deleteId, setDeleteId] = useState<number | null>(null);
   const [showCreateModal, setShowCreateModal] = useState(false);
+  // QEBooh pidió abrir "Nueva solicitud" con un borrador prellenado (ya escrito en
+  // localStorage; el formulario lo restaura al montarse). Se consume para que no
+  // se reabra al volver a esta página.
+  const solicitudPendienteQEBooh = useQeboohStore((s) => s.solicitudPendiente);
+  const consumirSolicitudQEBooh = useQeboohStore((s) => s.consumirNuevaSolicitud);
+  useEffect(() => {
+    if (!solicitudPendienteQEBooh) return;
+    consumirSolicitudQEBooh();
+    // Sincroniza con una orden externa (el chat), una sola vez: el flag se consume
+    // en la misma corrida, así que no hay renders en cascada.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setShowCreateModal(true);
+  }, [solicitudPendienteQEBooh, consumirSolicitudQEBooh]);
   const [showPropuestaEconomica, setShowPropuestaEconomica] = useState(false);
   const [viewSolicitudId, setViewSolicitudId] = useState<number | null>(null);
   const [editSolicitud, setEditSolicitud] = useState<Solicitud | null>(null);

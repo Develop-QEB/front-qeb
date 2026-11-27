@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useEffect, useRef } from 'react';
+import React, { useState, useMemo, useEffect, useRef, useEffectEvent } from 'react';
 import { useModalTracker } from '../../hooks/useModalTracker';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import {
@@ -30,6 +30,9 @@ import { notasDireccionService } from '../../services/notasDireccion.service';
 import { articuloValidoEnPeriodo, esArticuloGranFormato } from '../../lib/periodos';
 import { TimeInput } from '../../components/ui/TimeInput';
 import { sapFetch } from '../../lib/sapFetch';
+import { clienteACuicItem, type OrdenCircuito } from '../../lib/solicitudPrefill';
+import { useQeboohStore } from '../../store/qeboohStore';
+import { useChatStore } from '../../store/chatStore';
 
 // Tarifas now come from SAP (U_IMU_PublicPrice = tarifa publica, PriceList 11 = tarifa piso)
 
@@ -849,6 +852,8 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
 
   // Draft persistence
   const [restoredFromDraft, setRestoredFromDraft] = useState(false);
+  // El borrador restaurado lo armó QEBooh (prellenado desde el chat), no el usuario.
+  const [prefillQEBooh, setPrefillQEBooh] = useState(false);
   const { save: saveDraft, load: loadDraft, clear: clearDraft } = useFormPersist('qeb_solicitud_draft');
 
   // Expanded catorcenas in table
@@ -909,26 +914,8 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
     queryKey: ['clientes-full-for-solicitud'],
     queryFn: async () => {
       const result = await clientesService.getAllFull();
-      // Map to SAPCuicItem-compatible format
-      return (result.data || []).map(c => ({
-        id: c.id,
-        CUIC: c.CUIC!,
-        T0_U_RazonSocial: c.T0_U_RazonSocial || '',
-        T0_U_Cliente: c.T0_U_Cliente || '',
-        T1_U_UnidadNegocio: c.T1_U_UnidadNegocio || '',
-        T0_U_Agencia: c.T0_U_Agencia || '',
-        ASESOR_U_IDAsesor: c.ASESOR_U_IDAsesor || String(c.T0_U_IDAsesor || ''),
-        ASESOR_U_Asesor: c.ASESOR_U_Asesor || c.T0_U_Asesor || '',
-        T1_U_IDMarca: c.T1_U_IDMarca || 0,
-        T2_U_Marca: c.T2_U_Marca || '',
-        T2_U_IDProducto: c.T2_U_IDProducto || 0,
-        T2_U_Producto: c.T2_U_Producto || '',
-        T2_U_IDCategoria: c.T2_U_IDCategoria || 0,
-        T2_U_Categoria: c.T2_U_Categoria || '',
-        ACA_U_SAPCode: c.card_code || '',
-        ASESOR_U_SAPCode_Original: c.salesperson_code ?? undefined,
-        sap_database: c.sap_database || null,
-      }));
+      // Map to SAPCuicItem-compatible format (mismo mapeo que el prellenado de QEBooh)
+      return (result.data || []).map(clienteACuicItem);
     },
     enabled: isOpen,
     staleTime: 2 * 60 * 1000,
@@ -1092,6 +1079,7 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
   useEffect(() => {
     if (isEditMode) return;
     const draft = loadDraft<{
+      origen?: string;
       step: number;
       selectedCuic: typeof selectedCuic;
       selectedAsignados: typeof selectedAsignados;
@@ -1123,6 +1111,7 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
     if (draft.caras?.length) setCaras(draft.caras);
     if (draft.imu !== undefined) setImu(draft.imu);
     if (draft.newCara) setNewCara(draft.newCara);
+    setPrefillQEBooh(draft.origen === 'qebooh');
     setRestoredFromDraft(true);
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -2687,6 +2676,237 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
     }
   };
 
+  // Lo que hace el formulario al elegir un "Artículo SAP": deriva tarifa, plaza,
+  // ciudades, formato y tipo (y para circuitos digitales carga su detalle).
+  // Devuelve el nuevo estado del circuito en captura a partir de `base`, o null
+  // si no se pudo. La usan el selector de artículo y las órdenes de QEBooh.
+  const camposAlElegirArticulo = async (item: SAPArticulo, base: typeof newCara): Promise<typeof newCara | null> => {
+    // Detectar CIRCUITO DIGITAL
+    const circuito = parseCircuitoDigital(item.ItemCode);
+    if (circuito) {
+      // Unicidad por catorcena se valida en handleAddCara — el mismo CTO+plaza
+      // se permite en distintas catorcenas/meses
+      try {
+        const det = await circuitosService.detalle(item.ItemCode);
+        const tarifa = getTarifaFromArticulo(item);
+        setCircuitoMuebles(det.muebles);
+        setCircuitoFlujoContra({ flujo: det.flujo, contraflujo: det.contraflujo });
+        // Formato como lista de los muebles reales del circuito (en lugar
+        // del placeholder "MIXTO"). Como es multi-select, se ven varios
+        // chips con cada formato presente en los inventarios del circuito.
+        const formatosCircuito = Object.keys(det.muebles || {}).filter(Boolean);
+        return {
+          ...base,
+          articulo: item,
+          plaza: circuito.plazaLabel,
+          estado: circuito.plazaLabel,
+          ciudades: [],
+          formato: formatosCircuito.length > 0 ? formatosCircuito.join(', ') : 'MIXTO',
+          tipo: 'Digital',
+          tarifaPublica: tarifa.tarifa_publica,
+          renta: det.total, // fijo al tamaño del circuito
+          bonificacion: 0,
+          articuloBf: null,
+        };
+      } catch (e: any) {
+        alert(`Error al cargar circuito: ${e?.message || e}`);
+        return null;
+      }
+    }
+
+    // UDC (aeropuerto AICM): todo Digital, mensual, plaza AICM.
+    // Excepción: gran formato (puente/cartelera) dentro de UDC cae
+    // a la rama normal de abajo (autollenado CIMU: tipo/plaza reales).
+    if (sapDbArticulos === 'UDC' && !esArticuloGranFormato(item.ItemName, item.ItemCode)) {
+      const udc = parseArticuloUDC(item.ItemCode, item.ItemName);
+      const tarifaUdc = getTarifaFromArticulo(item);
+      const esCT = item.ItemCode.toUpperCase().startsWith('CT');
+      const esIN = item.ItemCode.toUpperCase().startsWith('IN');
+      const esIM = item.ItemCode.toUpperCase().startsWith('IM');
+      const esESP = isEspecialArticle(item.ItemCode);
+      const esSrvCF = isServicioCFArticle(item.ItemCode);
+      // Pantallas físicas que mapea el artículo (digital: sin reserva
+      // real, solo auto-selección/visual). Con mapeo, las "caras" se
+      // autollenan al # de pantallas; sin mapeo se respeta lo capturado.
+      const pantallasArt = articuloUDCPantallas(item.ItemCode);
+      return {
+        ...base,
+        articulo: item,
+        tarifaPublica: esCT ? 0 : tarifaUdc.tarifa_publica,
+        renta: esCT ? 0 : (pantallasArt && pantallasArt.length > 0 ? pantallasArt.length : base.renta),
+        bonificacion: (esIM || esIN || esESP || esSrvCF) ? 0 : base.bonificacion,
+        plaza: udc?.plazaLabel || 'Ciudad de México / AM',
+        estado: udc?.plazaLabel || 'Ciudad de México / AM',
+        ciudades: udc?.ciudad ? [udc.ciudad] : base.ciudades,
+        formato: UDC_FORMATO,
+        tipo: 'Digital',
+      };
+    }
+
+    // Auto-set tarifa publica from ItemCode mapping
+    const tarifa = getTarifaFromArticulo(item);
+    // Auto-set estado and ciudades from ItemName (fallback to ItemCode)
+    const ciudadEstado = getCiudadEstadoFromArticulo(item.ItemName, item.ItemCode);
+    // Auto-set plaza: buscar el nombre de plaza dentro del ItemName (descripción SAP).
+    // Ej: "BONIFICACION DE ESPACIOS MI MACRO GUADALAJARA MODULO C" → match "GUADALAJARA"
+    // Comparamos SIN ACENTOS porque las plazas en BD pueden traer tilde
+    // (ej. "MÉRIDA") pero los ItemName de SAP vienen sin acento.
+    const itemNameNorm = stripAccents((item.ItemName || '').toUpperCase());
+    const plazaPorNombre = inventarioFilters?.plazas?.find(p =>
+      itemNameNorm.includes(stripAccents(p.plaza.toUpperCase()))
+    );
+    // Si no se encuentra por nombre, fallback al segmento del ItemCode (gd, gdl, mty, mx, mr, etc.)
+    const plazaAutoRaw = getPlazaFromArticle(item.ItemCode);
+    const plazaPorCodigo = inventarioFilters?.plazas?.find(p =>
+      stripAccents(p.plaza.toLowerCase()) === stripAccents(plazaAutoRaw.toLowerCase())
+    );
+    // Fallback: si MULTI_CITY_RULES dio un estado (ej. "Estado de México" para NAUC),
+    // intentar match contra plazas del backend (ej. "ESTADO DE MÉXICO")
+    const plazaPorEstado = ciudadEstado?.estado
+      ? inventarioFilters?.plazas?.find(p =>
+          p.plaza.toUpperCase() === ciudadEstado.estado.toUpperCase()
+        )
+      : null;
+    const plazaAuto = plazaPorNombre?.plaza
+      || plazaPorCodigo?.plaza
+      || plazaPorEstado?.plaza
+      || (plazaAutoRaw !== item.ItemCode ? plazaAutoRaw : '');
+    // Auto-set formato from ItemName (fallback to ItemCode)
+    const formatoBase = getFormatoFromArticulo(item.ItemName, item.ItemCode);
+    // Auto-set tipo from ItemName
+    const tipo = getTipoFromName(item.ItemName, item.ItemCode);
+    // Para artículos digitales: incluir PARABUS y MUPIS (los muebles físicos
+    // donde corre la pantalla digital rotando ambos formatos).
+    // Si el formato detectado es otro (ej. COLUMNA), agregar MUPIS además.
+    const formato = tipo === 'Digital'
+      ? (formatoBase && formatoBase !== 'PARABUS'
+          ? `${formatoBase}, PARABUS, MUPIS, COLUMNA`
+          : 'PARABUS, MUPIS, COLUMNA')
+      : formatoBase;
+    // Detect CT (cortesia) articles
+    const isCortesia = item.ItemCode.toUpperCase().startsWith('CT');
+    const isIntercambio = item.ItemCode.toUpperCase().startsWith('IN');
+    const isImpresion = item.ItemCode.toUpperCase().startsWith('IM');
+    const isEspecial = isEspecialArticle(item.ItemCode);
+    const isSrvCF = isServicioCFArticle(item.ItemCode);
+    const isTarifaCero = isCortesia;
+
+    return {
+      ...base,
+      articulo: item,
+      tarifaPublica: isTarifaCero ? 0 : tarifa.tarifa_publica,
+      renta: isCortesia ? 0 : base.renta,
+      bonificacion: (isImpresion || isIntercambio || isEspecial || isSrvCF) ? 0 : base.bonificacion,
+      plaza: plazaAuto || base.plaza,
+      estado: ciudadEstado?.estado || base.estado,
+      ciudades: ciudadEstado?.ciudades && ciudadEstado.ciudades.length > 0 ? ciudadEstado.ciudades : base.ciudades,
+      formato: formato || base.formato,
+      tipo: tipo || base.tipo,
+    };
+  };
+
+  // --- QEBooh: "Llenar circuito" ---------------------------------------------
+  // El chat deja una orden (artículo, periodo, caras, bonificación, NSE). Se
+  // selecciona el artículo con camposAlElegirArticulo (la misma lógica del
+  // selector) y se ponen los demás campos. NO se agrega: el usuario revisa y da
+  // "Agregar", que hace sus validaciones y la evaluación de autorización.
+  const circuitoPendiente = useQeboohStore((s) => s.circuitoPendiente);
+  const consumirCircuito = useQeboohStore((s) => s.consumirCircuito);
+  const aplicarOrdenCircuito = useEffectEvent(async (orden: OrdenCircuito) => {
+    if (editingCaraId) {
+      showToast('Termina o cancela la edición del circuito antes de usar la sugerencia de QEBooh.', 'warning');
+      return;
+    }
+    if (tipoPeriodo === 'mensual') {
+      showToast('Los periodos mensuales se capturan directo en el formulario.', 'warning');
+      return;
+    }
+    const codigo = orden.articulo.trim().toUpperCase();
+    const item = articulosFiltrados.find(a => a.ItemCode.toUpperCase() === codigo);
+    if (!item) {
+      const existe = (articulosData || []).some(a => a.ItemCode.toUpperCase() === codigo);
+      showToast(existe
+        ? `El artículo ${codigo} no está disponible en este formulario (no habilitado o no aplica para este periodo).`
+        : `El artículo ${codigo} no existe en el catálogo de SAP.`, 'error');
+      return;
+    }
+
+    const avisos: string[] = [];
+    const vacio: typeof newCara = {
+      ...newCara,
+      articulo: null, plaza: '', estado: '', ciudades: [], formato: '', tipo: '', nse: [],
+      periodo: '', periodoFinCat: '', periodoInicioCustom: '', periodoFinCustom: '', horaInicio: '', horaFin: '',
+      renta: 0, bonificacion: 0, tarifaPublica: 0, articuloBf: null,
+    };
+    const nuevo = await camposAlElegirArticulo(item, vacio);
+    if (!nuevo) return;
+
+    const code = item.ItemCode.toUpperCase();
+    const esCircuitoDig = !!parseCircuitoDigital(code);
+    const esCT = code.startsWith('CT');
+    const sinBonif = code.startsWith('IM') || code.startsWith('IN') || isEspecialArticle(code) || isServicioCFArticle(code);
+
+    // Caras y bonificación (los circuitos digitales fijan sus caras; las cortesías no llevan renta).
+    if (!esCircuitoDig && !esCT) {
+      if (orden.renta !== undefined) nuevo.renta = orden.renta;
+      if (orden.bonificacion !== undefined && !sinBonif) nuevo.bonificacion = orden.bonificacion;
+    } else if (orden.renta !== undefined || orden.bonificacion !== undefined) {
+      avisos.push(esCircuitoDig ? 'las caras del circuito digital son fijas' : 'en cortesías captura las caras a mano');
+    }
+    if (nuevo.bonificacion > 0 && orden.articuloBf) {
+      const bf = (articulosData || []).find(a => isBfCfArticle(a.ItemCode) && a.ItemCode.toUpperCase() === orden.articuloBf!.toUpperCase());
+      if (bf) nuevo.articuloBf = bf;
+      else avisos.push(`elige el artículo de bonificación (${orden.articuloBf} no está disponible)`);
+    }
+    if (orden.tarifaPublica !== undefined && !esCT) nuevo.tarifaPublica = orden.tarifaPublica;
+
+    // NSE: si la plaza no cambió, las opciones ya cargadas sirven para validar; si
+    // cambió, el formulario descarta solo los que no existan al cargar las nuevas.
+    if (orden.nse?.length && !esCircuitoDig) {
+      const mismaPlaza = nuevo.estado === newCara.estado && nuevo.ciudades.join('|') === newCara.ciudades.join('|');
+      const validos = mismaPlaza ? orden.nse.filter(n => filteredNse.includes(n)) : orden.nse;
+      if (validos.length < orden.nse.length) avisos.push(`NSE no disponible en la plaza: ${orden.nse.filter(n => !validos.includes(n)).join(', ')}`);
+      nuevo.nse = validos;
+    }
+
+    // Periodo: dentro del rango de la campaña. Con fin distinto, modo masivo.
+    if (orden.catorcenaInicio !== undefined && orden.anioInicio !== undefined) {
+      const claveIni = `${orden.anioInicio}-${orden.catorcenaInicio}`;
+      const enRango = (k: string) => availablePeriods.some(p => `${p.a_o}-${p.numero_catorcena}` === k);
+      if (enRango(claveIni)) {
+        nuevo.periodo = claveIni;
+        const claveFin = orden.catorcenaFin !== undefined ? `${orden.anioFin ?? orden.anioInicio}-${orden.catorcenaFin}` : '';
+        if (claveFin && claveFin !== claveIni) {
+          if (enRango(claveFin)) {
+            setModoMasivo(true);
+            nuevo.periodoFinCat = claveFin;
+          } else {
+            avisos.push(`Cat ${orden.catorcenaFin} está fuera del periodo de la campaña; se dejó solo Cat ${orden.catorcenaInicio}`);
+          }
+        }
+      } else {
+        avisos.push(`Cat ${orden.catorcenaInicio}/${orden.anioInicio} está fuera del periodo de la campaña; elige el periodo`);
+      }
+    }
+
+    setNewCara(nuevo);
+    if (step !== 3 && canAdvanceToStep(3)) setStep(3);
+    setTimeout(() => circuitFormRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 100);
+    showToast(
+      avisos.length
+        ? `QEBooh llenó el circuito. Revisa: ${avisos.join('; ')}.`
+        : 'QEBooh llenó el circuito. Revisa los datos y da "Agregar".',
+      avisos.length ? 'warning' : 'success',
+    );
+  });
+  useEffect(() => {
+    // Espera a que estén los catálogos del formulario; la orden se consume una vez.
+    if (!circuitoPendiente || !isOpen || !articulosData || !inventarioFilters) return;
+    const orden = circuitoPendiente;
+    consumirCircuito();
+    void aplicarOrdenCircuito(orden);
+  }, [circuitoPendiente, isOpen, articulosData, inventarioFilters, consumirCircuito]);
+
   // Validacion de campos requeridos por paso para bloquear avance.
   // El checkbox IMU no entra: puede o no estar activo, no afecta completar.
   const isStepComplete = (s: number): boolean => {
@@ -2726,12 +2946,93 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
   // En modo edición no bloqueamos (los datos ya existen y pueden ajustarse).
   const enforceStepLock = !isEditMode;
 
+  // --- QEBooh ---------------------------------------------------------------
+  // Con el chat abierto, el formulario se recorre a la izquierda en pantallas
+  // grandes para no quedar debajo de la ventana de QEBooh.
+  const chatAbierto = useChatStore((s) => s.isOpen);
+  // Resumen en texto de lo capturado, para que QEBooh aconseje sobre datos reales
+  // ("qué me falta", "qué artículo uso", "cuánto llevo"). Solo se calcula con el
+  // chat abierto; se borra al cerrar el formulario.
+  const setContextoFormulario = useQeboohStore((s) => s.setContextoFormulario);
+  const contextoParaQEBooh = useMemo(() => {
+    if (!isOpen || !chatAbierto) return null;
+    const pasos = ['Cliente', 'Campaña', 'Circuitos', 'Resumen'];
+    const lineas: string[] = [];
+    lineas.push(`Formulario: ${isEditMode ? 'Editar solicitud' : 'Nueva solicitud'}. Paso actual: ${step} de 4 (${pasos[step - 1] || ''}).`);
+
+    const faltan1: string[] = [];
+    if (!selectedCuic) faltan1.push('cliente (CUIC)');
+    if (selectedAsignados.length === 0) faltan1.push('al menos un asignado');
+    lineas.push(
+      'Paso 1 Cliente: ' + (selectedCuic
+        ? `CUIC ${selectedCuic.CUIC} · ${selectedCuic.T2_U_Marca || selectedCuic.T0_U_Cliente} · ${selectedCuic.T2_U_Producto || 'sin producto'} · ${selectedCuic.T0_U_RazonSocial} · base SAP ${selectedCuic.sap_database || 'sin dato'}`
+        : 'sin elegir') +
+      `. Asignados: ${selectedAsignados.map(a => a.nombre).join(', ') || 'ninguno'}.` +
+      (faltan1.length ? ` FALTA: ${faltan1.join(', ')}.` : ' Completo.'),
+    );
+
+    const periodoTxt = tipoPeriodo === 'mensual'
+      ? (yearInicio && yearFin && mesInicio && mesFin ? `${MESES[mesInicio - 1]} ${yearInicio} a ${MESES[mesFin - 1]} ${yearFin} (mensual)` : 'sin definir (mensual)')
+      : (yearInicio && yearFin && catorcenaInicio && catorcenaFin ? `Cat ${catorcenaInicio}/${yearInicio} a Cat ${catorcenaFin}/${yearFin}` : 'sin definir');
+    const faltan2: string[] = [];
+    if (!nombreCampania.trim()) faltan2.push('nombre de campaña');
+    if (periodoTxt.startsWith('sin definir')) faltan2.push('periodo');
+    if (!esUDC && !descripcion.trim()) faltan2.push('Descripción Tráfico');
+    if (!esUDC && !notas.trim()) faltan2.push('Notas Dirección');
+    const corto = (t: string) => (t.trim() ? `"${t.trim().slice(0, 120)}${t.trim().length > 120 ? '…' : ''}"` : 'vacío');
+    lineas.push(
+      `Paso 2 Campaña: nombre ${corto(nombreCampania)} · periodo ${periodoTxt} · Descripción Tráfico ${corto(descripcion)} · Notas Dirección ${corto(notas)}.` +
+      (faltan2.length ? ` FALTA: ${faltan2.join(', ')}.` : ' Completo.'),
+    );
+
+    const totalRenta = caras.reduce((s, c) => s + (Number(c.renta) || 0), 0);
+    const totalBonif = caras.reduce((s, c) => s + (Number(c.bonificacion) || 0), 0);
+    const totalInv = caras.reduce((s, c) => s + (Number(c.precioTotal) || 0), 0);
+    lineas.push(`Paso 3 Circuitos: ${caras.length} agregado(s). Caras de renta ${totalRenta}, bonificadas ${totalBonif}, inversión ${formatCurrency(totalInv)}.` +
+      (caras.length === 0 ? ' FALTA: al menos un circuito.' : ''));
+    for (const c of caras.slice(0, 30)) {
+      const aut = [c.autorizacion_dg && c.autorizacion_dg !== 'aprobado' ? `DG ${c.autorizacion_dg}` : '', c.autorizacion_dcm && c.autorizacion_dcm !== 'aprobado' ? `DCM ${c.autorizacion_dcm}` : '']
+        .filter(Boolean).join(', ');
+      lineas.push(
+        `- ${c.esBf ? '[bonificación] ' : ''}${c.articulo?.ItemCode} · ${c.formato} · ${c.tipo} · ${c.plaza || c.estado} · ` +
+        `${tipoPeriodo === 'mensual' ? `${MESES[c.catorcenaNum - 1] || c.catorcenaNum} ${c.catorcenaYear}` : `Cat ${c.catorcenaNum}/${c.catorcenaYear}`} · ` +
+        `renta ${c.renta}${c.bonificacion ? ` · bonif ${c.bonificacion}` : ''} · tarifa ${formatCurrency(c.tarifaPublica)} · importe ${formatCurrency(c.precioTotal)}` +
+        (aut ? ` · autorización: ${aut}` : ''),
+      );
+    }
+    if (caras.length > 30) lineas.push(`(y ${caras.length - 30} circuito(s) más)`);
+    if (invalidCaras.length > 0) lineas.push(`ATENCIÓN: ${invalidCaras.length} circuito(s) fuera del periodo de la campaña; hay que corregirlos para poder crear.`);
+
+    if (newCara.articulo || newCara.renta > 0 || newCara.plaza) {
+      const faltanC: string[] = [];
+      if (!newCara.articulo) faltanC.push('artículo');
+      if (!newCara.estado) faltanC.push('plaza');
+      if (!newCara.formato) faltanC.push('formato');
+      if (!newCara.tipo) faltanC.push('tipo');
+      if (newCara.nse.length === 0) faltanC.push('NSE');
+      if (!newCara.periodo) faltanC.push('periodo');
+      lineas.push(
+        `Circuito en captura (aún sin agregar): artículo ${newCara.articulo ? `${newCara.articulo.ItemCode} (${newCara.articulo.ItemName})` : 'sin elegir'} · ` +
+        `plaza ${newCara.plaza || newCara.estado || 'sin elegir'} · formato ${newCara.formato || 'sin elegir'} · tipo ${newCara.tipo || 'sin elegir'} · ` +
+        `NSE ${newCara.nse.join(', ') || 'sin elegir'} · periodo ${newCara.periodo || 'sin elegir'} · renta ${newCara.renta} · bonif ${newCara.bonificacion} · ` +
+        `tarifa ${formatCurrency(newCara.tarifaPublica)} · importe ${formatCurrency(newCara.tarifaPublica * newCara.renta)}` +
+        (faltanC.length ? `. Falta para agregarlo: ${faltanC.join(', ')}.` : '. Listo para dar "Agregar".'),
+      );
+    }
+    return lineas.join('\n');
+  }, [isOpen, chatAbierto, isEditMode, step, selectedCuic, selectedAsignados, tipoPeriodo, yearInicio, yearFin, catorcenaInicio, catorcenaFin,
+      mesInicio, mesFin, nombreCampania, descripcion, notas, esUDC, caras, invalidCaras, newCara]);
+  useEffect(() => {
+    setContextoFormulario(contextoParaQEBooh);
+  }, [contextoParaQEBooh, setContextoFormulario]);
+  useEffect(() => () => setContextoFormulario(null), [setContextoFormulario]);
+
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center">
+    <div className={`fixed inset-0 z-50 flex items-center justify-center ${chatAbierto ? 'lg:justify-start lg:pl-4' : ''}`}>
       <div className="absolute inset-0 bg-black/80 backdrop-blur-sm" />
-      <div className={`relative w-[97vw] max-w-[1800px] max-h-[95dvh] h-[95dvh] max-lg:landscape:h-[100dvh] max-lg:landscape:max-h-[100dvh] max-lg:landscape:rounded-none max-lg:landscape:mx-0 max-sm:w-full max-sm:h-[100dvh] max-sm:max-h-[100dvh] max-sm:rounded-none ${isDark ? 'bg-zinc-900 border-zinc-700' : 'bg-white border-gray-200'} rounded-2xl border shadow-2xl overflow-hidden flex flex-col`}>
+      <div className={`relative w-[97vw] max-w-[1800px] ${chatAbierto ? 'lg:max-w-[calc(100vw-510px)]' : ''} max-h-[95dvh] h-[95dvh] max-lg:landscape:h-[100dvh] max-lg:landscape:max-h-[100dvh] max-lg:landscape:rounded-none max-lg:landscape:mx-0 max-sm:w-full max-sm:h-[100dvh] max-sm:max-h-[100dvh] max-sm:rounded-none ${isDark ? 'bg-zinc-900 border-zinc-700' : 'bg-white border-gray-200'} rounded-2xl border shadow-2xl overflow-hidden flex flex-col`}>
         {/* Header */}
         <div className={`flex items-center justify-between px-4 sm:px-6 py-3 sm:py-4 max-lg:landscape:py-2 max-lg:landscape:px-3 border-b ${isDark ? 'border-zinc-800' : 'border-gray-200'}`}>
           <div className="flex items-center gap-4">
@@ -2798,7 +3099,11 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
         {/* Banner de borrador restaurado */}
         {restoredFromDraft && !isEditMode && (
           <div className="mx-4 mt-2 mb-1 px-3 py-2 rounded-lg bg-amber-500/10 border border-amber-500/30 flex items-center justify-between text-xs text-amber-300">
-            <span>Borrador restaurado. Puedes continuar donde lo dejaste.</span>
+            <span>
+              {prefillQEBooh
+                ? 'Prellenado por QEBooh. Revisa los datos, agrega los circuitos y crea la solicitud.'
+                : 'Borrador restaurado. Puedes continuar donde lo dejaste.'}
+            </span>
             <button
               type="button"
               onClick={() => { clearDraft(); resetForm(); }}
@@ -3320,130 +3625,8 @@ export function CreateSolicitudModal({ isOpen, onClose, editSolicitudId }: Props
                     options={articulosFiltrados}
                     value={newCara.articulo}
                     onChange={async (item) => {
-                      // Detectar CIRCUITO DIGITAL
-                      const circuito = parseCircuitoDigital(item.ItemCode);
-                      if (circuito) {
-                        // Unicidad por catorcena se valida en handleAddCara — el mismo CTO+plaza
-                        // se permite en distintas catorcenas/meses
-                        try {
-                          const det = await circuitosService.detalle(item.ItemCode);
-                          const tarifa = getTarifaFromArticulo(item);
-                          setCircuitoMuebles(det.muebles);
-                          setCircuitoFlujoContra({ flujo: det.flujo, contraflujo: det.contraflujo });
-                          // Formato como lista de los muebles reales del circuito (en lugar
-                          // del placeholder "MIXTO"). Como es multi-select, se ven varios
-                          // chips con cada formato presente en los inventarios del circuito.
-                          const formatosCircuito = Object.keys(det.muebles || {}).filter(Boolean);
-                          setNewCara({
-                            ...newCara,
-                            articulo: item,
-                            plaza: circuito.plazaLabel,
-                            estado: circuito.plazaLabel,
-                            ciudades: [],
-                            formato: formatosCircuito.length > 0 ? formatosCircuito.join(', ') : 'MIXTO',
-                            tipo: 'Digital',
-                            tarifaPublica: tarifa.tarifa_publica,
-                            renta: det.total, // fijo al tamaño del circuito
-                            bonificacion: 0,
-                            articuloBf: null,
-                          });
-                          return;
-                        } catch (e: any) {
-                          alert(`Error al cargar circuito: ${e?.message || e}`);
-                          return;
-                        }
-                      }
-
-                      // UDC (aeropuerto AICM): todo Digital, mensual, plaza AICM.
-                      // Excepción: gran formato (puente/cartelera) dentro de UDC cae
-                      // a la rama normal de abajo (autollenado CIMU: tipo/plaza reales).
-                      if (sapDbArticulos === 'UDC' && !esArticuloGranFormato(item.ItemName, item.ItemCode)) {
-                        const udc = parseArticuloUDC(item.ItemCode, item.ItemName);
-                        const tarifaUdc = getTarifaFromArticulo(item);
-                        const esCT = item.ItemCode.toUpperCase().startsWith('CT');
-                        const esIN = item.ItemCode.toUpperCase().startsWith('IN');
-                        const esIM = item.ItemCode.toUpperCase().startsWith('IM');
-                        const esESP = isEspecialArticle(item.ItemCode);
-                        const esSrvCF = isServicioCFArticle(item.ItemCode);
-                        // Pantallas físicas que mapea el artículo (digital: sin reserva
-                        // real, solo auto-selección/visual). Con mapeo, las "caras" se
-                        // autollenan al # de pantallas; sin mapeo se respeta lo capturado.
-                        const pantallasArt = articuloUDCPantallas(item.ItemCode);
-                        setNewCara({
-                          ...newCara,
-                          articulo: item,
-                          tarifaPublica: esCT ? 0 : tarifaUdc.tarifa_publica,
-                          renta: esCT ? 0 : (pantallasArt && pantallasArt.length > 0 ? pantallasArt.length : newCara.renta),
-                          bonificacion: (esIM || esIN || esESP || esSrvCF) ? 0 : newCara.bonificacion,
-                          plaza: udc?.plazaLabel || 'Ciudad de México / AM',
-                          estado: udc?.plazaLabel || 'Ciudad de México / AM',
-                          ciudades: udc?.ciudad ? [udc.ciudad] : newCara.ciudades,
-                          formato: UDC_FORMATO,
-                          tipo: 'Digital',
-                        });
-                        return;
-                      }
-
-                      // Auto-set tarifa publica from ItemCode mapping
-                      const tarifa = getTarifaFromArticulo(item);
-                      // Auto-set estado and ciudades from ItemName (fallback to ItemCode)
-                      const ciudadEstado = getCiudadEstadoFromArticulo(item.ItemName, item.ItemCode);
-                      // Auto-set plaza: buscar el nombre de plaza dentro del ItemName (descripción SAP).
-                      // Ej: "BONIFICACION DE ESPACIOS MI MACRO GUADALAJARA MODULO C" → match "GUADALAJARA"
-                      // Comparamos SIN ACENTOS porque las plazas en BD pueden traer tilde
-                      // (ej. "MÉRIDA") pero los ItemName de SAP vienen sin acento.
-                      const itemNameNorm = stripAccents((item.ItemName || '').toUpperCase());
-                      const plazaPorNombre = inventarioFilters?.plazas?.find(p =>
-                        itemNameNorm.includes(stripAccents(p.plaza.toUpperCase()))
-                      );
-                      // Si no se encuentra por nombre, fallback al segmento del ItemCode (gd, gdl, mty, mx, mr, etc.)
-                      const plazaAutoRaw = getPlazaFromArticle(item.ItemCode);
-                      const plazaPorCodigo = inventarioFilters?.plazas?.find(p =>
-                        stripAccents(p.plaza.toLowerCase()) === stripAccents(plazaAutoRaw.toLowerCase())
-                      );
-                      // Fallback: si MULTI_CITY_RULES dio un estado (ej. "Estado de México" para NAUC),
-                      // intentar match contra plazas del backend (ej. "ESTADO DE MÉXICO")
-                      const plazaPorEstado = ciudadEstado?.estado
-                        ? inventarioFilters?.plazas?.find(p =>
-                            p.plaza.toUpperCase() === ciudadEstado.estado.toUpperCase()
-                          )
-                        : null;
-                      const plazaAuto = plazaPorNombre?.plaza
-                        || plazaPorCodigo?.plaza
-                        || plazaPorEstado?.plaza
-                        || (plazaAutoRaw !== item.ItemCode ? plazaAutoRaw : '');
-                      // Auto-set formato from ItemName (fallback to ItemCode)
-                      const formatoBase = getFormatoFromArticulo(item.ItemName, item.ItemCode);
-                      // Auto-set tipo from ItemName
-                      const tipo = getTipoFromName(item.ItemName, item.ItemCode);
-                      // Para artículos digitales: incluir PARABUS y MUPIS (los muebles físicos
-                      // donde corre la pantalla digital rotando ambos formatos).
-                      // Si el formato detectado es otro (ej. COLUMNA), agregar MUPIS además.
-                      const formato = tipo === 'Digital'
-                        ? (formatoBase && formatoBase !== 'PARABUS'
-                            ? `${formatoBase}, PARABUS, MUPIS, COLUMNA`
-                            : 'PARABUS, MUPIS, COLUMNA')
-                        : formatoBase;
-                      // Detect CT (cortesia) articles
-                      const isCortesia = item.ItemCode.toUpperCase().startsWith('CT');
-                      const isIntercambio = item.ItemCode.toUpperCase().startsWith('IN');
-                      const isImpresion = item.ItemCode.toUpperCase().startsWith('IM');
-                      const isEspecial = isEspecialArticle(item.ItemCode);
-                      const isSrvCF = isServicioCFArticle(item.ItemCode);
-                      const isTarifaCero = isCortesia;
-
-                      setNewCara({
-                        ...newCara,
-                        articulo: item,
-                        tarifaPublica: isTarifaCero ? 0 : tarifa.tarifa_publica,
-                        renta: isCortesia ? 0 : newCara.renta,
-                        bonificacion: (isImpresion || isIntercambio || isEspecial || isSrvCF) ? 0 : newCara.bonificacion,
-                        plaza: plazaAuto || newCara.plaza,
-                        estado: ciudadEstado?.estado || newCara.estado,
-                        ciudades: ciudadEstado?.ciudades && ciudadEstado.ciudades.length > 0 ? ciudadEstado.ciudades : newCara.ciudades,
-                        formato: formato || newCara.formato,
-                        tipo: tipo || newCara.tipo,
-                      });
+                      const nuevo = await camposAlElegirArticulo(item, newCara);
+                      if (nuevo) setNewCara(nuevo);
                     }}
                     onClear={() => setNewCara({ ...newCara, articulo: null, tarifaPublica: 0, plaza: '', estado: '', ciudades: [], formato: '', tipo: '' })}
                     displayKey="ItemName"

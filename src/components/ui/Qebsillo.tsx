@@ -1,6 +1,6 @@
 import { useState, useRef, useEffect, useCallback, useMemo } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
-import { X, Send, Loader2, Bot, Trash2, ExternalLink } from 'lucide-react';
+import { X, Send, Loader2, Bot, Trash2, ExternalLink, FilePlus, ListPlus } from 'lucide-react';
 import { chatbotService } from '../../services/chatbot.service';
 import { useThemeStore } from '../../store/themeStore';
 import { useChatStore } from '../../store/chatStore';
@@ -8,6 +8,8 @@ import { useModalStore } from '../../store/modalStore';
 import { useAuthStore } from '../../store/authStore';
 import { getPermissions, RolePermissions } from '../../lib/permissions';
 import { getScreenContext } from '../../lib/screenContexts';
+import { useQeboohStore } from '../../store/qeboohStore';
+import { escribirBorradorDesdeQEBooh, hayBorradorSolicitud, type AccionQEBooh } from '../../lib/solicitudPrefill';
 
 // Map of module keywords to routes for inline links
 const MODULE_LINKS: { keyword: RegExp; route: string }[] = [
@@ -153,7 +155,7 @@ function buildPermsSummary(perms: RolePermissions): string {
   return restrictions.length > 0 ? restrictions.join('. ') : 'Acceso completo a la plataforma';
 }
 
-interface Message { role: 'user' | 'assistant'; content: string; }
+interface Message { role: 'user' | 'assistant'; content: string; acciones?: AccionQEBooh[]; }
 
 function RichText({ text, onNavigate, isDark }: { text: string; onNavigate: (route: string) => void; isDark: boolean }) {
   const matches: { index: number; length: number; route: string; original: string }[] = [];
@@ -212,6 +214,12 @@ export function QEBooh() {
   const currentScreen = useMemo(() => getScreenName(location.pathname), [location.pathname]);
   const suggestions = useMemo(() => getSuggestions(location.pathname), [location.pathname]);
   const uiContext = useMemo(() => getScreenContext(currentScreen, activeModal), [currentScreen, activeModal]);
+  // Lo que el usuario lleva capturado en el formulario abierto (lo publica el propio
+  // formulario). Viaja en un campo aparte de la descripción de pantalla: solo lo usa
+  // QEBooh con herramientas para aconsejar sobre los datos reales.
+  const contextoFormulario = useQeboohStore((s) => s.contextoFormulario);
+  const pedirNuevaSolicitud = useQeboohStore((s) => s.pedirNuevaSolicitud);
+  const pedirCircuito = useQeboohStore((s) => s.pedirCircuito);
 
   const scrollToBottom = useCallback(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -221,6 +229,36 @@ export function QEBooh() {
   useEffect(() => { if (isOpen && inputRef.current) inputRef.current.focus(); }, [isOpen]);
 
   const handleNavigate = (route: string) => { navigate(route); closeChat(); };
+
+  const formularioSolicitudAbierto = activeModal === 'Nueva Solicitud' || activeModal === 'Editar Solicitud';
+
+  // Botones de acción de QEBooh. El chat se queda abierto para seguir ayudando.
+  const handleAccion = (accion: AccionQEBooh) => {
+    // "Llenar circuito": lo aplica el formulario abierto (CreateSolicitudModal).
+    if (accion.tipo === 'llenar_circuito') {
+      if (!formularioSolicitudAbierto) {
+        window.alert('Abre el formulario de la solicitud y vuelve a dar clic.');
+        return;
+      }
+      pedirCircuito(accion.datos);
+      return;
+    }
+    // "Abrir solicitud prellenada": escribe el borrador del formulario y lo abre.
+    if (accion.tipo !== 'prefill_solicitud') return;
+    if (formularioSolicitudAbierto) {
+      window.alert('Cierra el formulario de solicitud que tienes abierto y vuelve a dar clic.');
+      return;
+    }
+    if (hayBorradorSolicitud() && !window.confirm('Tienes una solicitud sin terminar guardada como borrador. ¿Reemplazarla con la que preparó QEBooh?')) {
+      return;
+    }
+    if (!escribirBorradorDesdeQEBooh(accion.datos)) {
+      window.alert('No se pudo preparar el formulario en este navegador. Captura la solicitud manualmente.');
+      return;
+    }
+    pedirNuevaSolicitud();
+    if (location.pathname !== '/solicitudes') navigate('/solicitudes');
+  };
 
   const handleSend = async (text?: string) => {
     const msg = (text || input).trim();
@@ -233,8 +271,11 @@ export function QEBooh() {
     setIsLoading(true);
 
     try {
-      const reply = await chatbotService.send(newMessages, location.pathname, activeModal, permsSummary, uiContext);
-      setMessages(prev => [...prev, { role: 'assistant', content: reply }]);
+      const { reply, acciones } = await chatbotService.send(
+        newMessages.map(({ role, content }) => ({ role, content })),
+        location.pathname, activeModal, permsSummary, uiContext, contextoFormulario,
+      );
+      setMessages(prev => [...prev, { role: 'assistant', content: reply, acciones }]);
     } catch {
       setMessages(prev => [...prev, { role: 'assistant', content: 'Ups, tuve un problema al responder. Intenta de nuevo en un momento.' }]);
     } finally {
@@ -246,7 +287,7 @@ export function QEBooh() {
     if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handleSend(); }
   };
 
-  const renderAssistantMessage = (content: string) => {
+  const renderAssistantMessage = (content: string, acciones: AccionQEBooh[] = []) => {
     const { text, navActions } = parseResponse(content);
     return (
       <>
@@ -266,6 +307,24 @@ export function QEBooh() {
             ))}
           </div>
         )}
+        {acciones.map((a, i) => (
+          <button key={`accion-${i}`} onClick={() => handleAccion(a)}
+            className="mt-2 w-full flex items-center gap-2 px-3 py-2 rounded-xl text-left text-white bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-700 hover:to-pink-700 transition-colors">
+            {a.tipo === 'llenar_circuito' ? <ListPlus className="h-4 w-4 flex-shrink-0" /> : <FilePlus className="h-4 w-4 flex-shrink-0" />}
+            <span className="min-w-0">
+              <span className="block text-sm font-medium">
+                {a.tipo === 'prefill_solicitud'
+                  ? 'Abrir solicitud prellenada'
+                  : (a.datos.renta !== undefined || a.datos.catorcenaInicio !== undefined ? 'Llenar circuito en el formulario' : 'Usar este artículo')}
+              </span>
+              <span className="block text-xs text-white/80 truncate">
+                {a.tipo === 'prefill_solicitud'
+                  ? [a.datos.cliente.T2_U_Marca || a.datos.cliente.T0_U_Cliente, a.datos.nombreCampania].filter(Boolean).join(' · ')
+                  : (a.datos.descripcion || a.datos.articulo)}
+              </span>
+            </span>
+          </button>
+        ))}
       </>
     );
   };
@@ -334,7 +393,7 @@ export function QEBooh() {
                       ? 'bg-zinc-800 text-zinc-200 border border-zinc-700 rounded-bl-md'
                       : 'bg-gray-100 text-gray-800 border border-gray-200 rounded-bl-md'
                 }`}>
-                  {msg.role === 'assistant' ? renderAssistantMessage(msg.content) : msg.content}
+                  {msg.role === 'assistant' ? renderAssistantMessage(msg.content, msg.acciones) : msg.content}
                 </div>
               </div>
             ))}
