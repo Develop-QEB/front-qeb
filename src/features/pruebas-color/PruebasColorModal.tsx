@@ -1826,58 +1826,125 @@ function AtenderTareaModal({
   // aquí mismo. Al guardar: pruebasColorService.reenviar() sobreescribe la
   // prueba con el nuevo arte, vuelve a 'revision_artes' y el back crea una
   // nueva tarea de Revisión para Diseño (mismo flujo que al crear la prueba).
-  const [reenvioOpen, setReenvioOpen] = useState<{ pruebaId: number; nombre: string } | null>(null);
-  const [reenvioArchivoUrl, setReenvioArchivoUrl] = useState<string | null>(null);
-  const [reenvioArchivoNombre, setReenvioArchivoNombre] = useState<string>('');
-  const [reenvioEnlace, setReenvioEnlace] = useState('');
-  const [reenvioNombre, setReenvioNombre] = useState('');
-  const [reenvioSubiendo, setReenvioSubiendo] = useState(false);
-  const [reenvioGuardando, setReenvioGuardando] = useState(false);
-  const [reenvioError, setReenvioError] = useState<string | null>(null);
-  const resetReenvio = () => {
-    setReenvioOpen(null);
-    setReenvioArchivoUrl(null);
-    setReenvioArchivoNombre('');
-    setReenvioEnlace('');
-    setReenvioNombre('');
-    setReenvioError(null);
+  // Soporta N artes (tarea Corrección agrupada): estado por pruebaId en Maps.
+  type ReenvioFormState = {
+    nombreOriginal: string;
+    nombre: string;
+    archivoUrl: string | null;
+    archivoNombre: string;
+    enlace: string;
+    subiendo: boolean;
+    error: string | null;
   };
-  const subirReenvioArchivo = async (file: File) => {
-    setReenvioSubiendo(true);
-    setReenvioError(null);
+  const [reenvioForms, setReenvioForms] = useState<Map<number, ReenvioFormState>>(new Map());
+  const [reenvioGuardando, setReenvioGuardando] = useState(false);
+  const [reenvioMasivoError, setReenvioMasivoError] = useState<string | null>(null);
+  const openReenvio = (pruebaId: number, nombreArte: string) => {
+    setReenvioForms(prev => {
+      if (prev.has(pruebaId)) return prev;
+      const next = new Map(prev);
+      next.set(pruebaId, {
+        nombreOriginal: nombreArte,
+        nombre: nombreArte,
+        archivoUrl: null,
+        archivoNombre: '',
+        enlace: '',
+        subiendo: false,
+        error: null,
+      });
+      return next;
+    });
+  };
+  const closeReenvio = (pruebaId: number) => {
+    setReenvioForms(prev => {
+      if (!prev.has(pruebaId)) return prev;
+      const next = new Map(prev);
+      next.delete(pruebaId);
+      return next;
+    });
+  };
+  const updateReenvio = (pruebaId: number, patch: Partial<ReenvioFormState>) => {
+    setReenvioForms(prev => {
+      const cur = prev.get(pruebaId);
+      if (!cur) return prev;
+      const next = new Map(prev);
+      next.set(pruebaId, { ...cur, ...patch });
+      return next;
+    });
+  };
+  const subirReenvioArchivo = async (pruebaId: number, file: File) => {
+    updateReenvio(pruebaId, { subiendo: true, error: null });
     try {
       const res = await uploadsService.uploadFile(file, 'pruebas-color');
-      setReenvioArchivoUrl(res.url);
-      setReenvioArchivoNombre(file.name);
+      updateReenvio(pruebaId, { subiendo: false, archivoUrl: res.url, archivoNombre: file.name });
     } catch (e) {
-      setReenvioError(e instanceof Error ? e.message : 'Error al subir archivo');
-    } finally {
-      setReenvioSubiendo(false);
+      updateReenvio(pruebaId, { subiendo: false, error: e instanceof Error ? e.message : 'Error al subir archivo' });
     }
   };
-  const confirmarReenvio = async () => {
-    if (!reenvioOpen) return;
-    if (!reenvioArchivoUrl && !reenvioEnlace.trim()) {
-      setReenvioError('Debes subir un archivo o pegar un link del arte.');
-      return;
+  // Envía al back una sola prueba y devuelve true si tuvo éxito.
+  const enviarUnReenvio = async (pruebaId: number): Promise<boolean> => {
+    const form = reenvioForms.get(pruebaId);
+    if (!form) return false;
+    if (!form.archivoUrl && !form.enlace.trim()) {
+      updateReenvio(pruebaId, { error: 'Debes subir un archivo o pegar un link del arte.' });
+      return false;
     }
-    setReenvioGuardando(true);
-    setReenvioError(null);
     try {
-      await pruebasColorService.reenviar(reenvioOpen.pruebaId, {
-        archivo: reenvioArchivoUrl || '',
-        enlace_externo: reenvioEnlace.trim() || null,
-        nombre_arte: reenvioNombre.trim() || reenvioOpen.nombre,
+      await pruebasColorService.reenviar(pruebaId, {
+        archivo: form.archivoUrl || '',
+        enlace_externo: form.enlace.trim() || null,
+        nombre_arte: form.nombre.trim() || form.nombreOriginal,
       });
-      // Refrescar listados y cerrar el modal padre (la tarea Corrección se
-      // cierra en el back vía cerrarTareaAsociada).
+      return true;
+    } catch (e) {
+      updateReenvio(pruebaId, { error: e instanceof Error ? e.message : 'Error al reenviar la prueba' });
+      return false;
+    }
+  };
+  const confirmarReenvio = async (pruebaId: number) => {
+    setReenvioGuardando(true);
+    const ok = await enviarUnReenvio(pruebaId);
+    if (ok) {
       queryClient.invalidateQueries({ queryKey: ['pruebas-color'] });
       queryClient.invalidateQueries({ queryKey: ['tareas'] });
       queryClient.invalidateQueries({ queryKey: ['notificaciones'] });
-      resetReenvio();
+      closeReenvio(pruebaId);
+      // Si no quedan forms abiertos, cerramos el modal padre.
+      setReenvioForms(prev => {
+        if (prev.size === 0) onClose();
+        return prev;
+      });
+    }
+    setReenvioGuardando(false);
+  };
+  // Jos 2026-11-27: enviar TODOS los forms en un solo POST batch — el back
+  // actualiza las N pruebas y crea UNA sola tarea 'Revisión de artes'
+  // agrupada para Diseño (en vez de N tareas individuales).
+  const confirmarReenvioMasivo = async () => {
+    setReenvioMasivoError(null);
+    const entries = Array.from(reenvioForms.entries());
+    const faltantes = entries.filter(([, f]) => !f.archivoUrl && !f.enlace.trim()).map(([id]) => id);
+    if (faltantes.length > 0) {
+      setReenvioMasivoError(`Faltan archivos o links en ${faltantes.length} arte${faltantes.length === 1 ? '' : 's'}. Debes corregir TODOS antes de enviar.`);
+      return;
+    }
+    setReenvioGuardando(true);
+    try {
+      await pruebasColorService.reenviarBatch({
+        pruebas: entries.map(([pruebaId, f]) => ({
+          pruebaId,
+          archivo: f.archivoUrl || '',
+          enlace_externo: f.enlace.trim() || null,
+          nombre_arte: f.nombre.trim() || f.nombreOriginal,
+        })),
+      });
+      queryClient.invalidateQueries({ queryKey: ['pruebas-color'] });
+      queryClient.invalidateQueries({ queryKey: ['tareas'] });
+      queryClient.invalidateQueries({ queryKey: ['notificaciones'] });
+      setReenvioForms(new Map());
       onClose();
     } catch (e) {
-      setReenvioError(e instanceof Error ? e.message : 'Error al reenviar la prueba');
+      setReenvioMasivoError(e instanceof Error ? e.message : 'Error al reenviar pruebas en lote');
     } finally {
       setReenvioGuardando(false);
     }
@@ -2003,6 +2070,34 @@ function AtenderTareaModal({
       };
     } catch { return null; }
   }, [tarea.tipo, tarea.contenido]);
+  // Jos 2026-11-27: al abrir una tarea Corrección batch (N>1 artes),
+  // auto-abrimos el form de TODOS los artes para forzar al asesor a
+  // corregirlos todos antes de habilitar el botón masivo (no se permite
+  // enviar parcial — debe corregir las N pruebas para crear UNA sola
+  // tarea Revisión de artes nueva).
+  useEffect(() => {
+    if (!avisoRechazo) return;
+    if (avisoRechazo.artes.length <= 1) return;
+    setReenvioForms(prev => {
+      let next = prev;
+      for (const arte of avisoRechazo.artes) {
+        if (arte.pruebaColorId && !next.has(arte.pruebaColorId)) {
+          if (next === prev) next = new Map(prev);
+          next.set(arte.pruebaColorId, {
+            nombreOriginal: arte.nombreArte || '',
+            nombre: arte.nombreArte || '',
+            archivoUrl: null,
+            archivoNombre: '',
+            enlace: '',
+            subiendo: false,
+            error: null,
+          });
+        }
+      }
+      return next;
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [avisoRechazo?.artes.length]);
   // Jos 2026-11-12: la tarea Recepción guarda la guía PDF en evidencia
   // (JSON) y la fecha estimada en fecha_fin. Las leemos para mostrar al
   // abrir el detalle (así el usuario puede revisar antes de atenderla).
@@ -2322,103 +2417,124 @@ function AtenderTareaModal({
                         </div>
                       </div>
                     )}
-                    {arte.pruebaColorId && (
+                    {/* Botón "Subir nueva versión" por arte: abre el form
+                        inline específico de ese arte. */}
+                    {arte.pruebaColorId && !reenvioForms.has(arte.pruebaColorId) && (
                       <button
-                        onClick={() => {
-                          // Jos 2026-11-27: abre form inline aquí mismo para
-                          // subir la nueva versión del arte. Al guardar:
-                          // reenviar() sobreescribe la prueba, el back cierra
-                          // la tarea Corrección y crea una nueva Revisión de
-                          // artes para Diseño. No se navega a Propuestas.
-                          setReenvioOpen({ pruebaId: arte.pruebaColorId!, nombre: arte.nombreArte || '' });
-                          setReenvioNombre(arte.nombreArte || '');
-                        }}
+                        onClick={() => openReenvio(arte.pruebaColorId!, arte.nombreArte || '')}
                         className={`mt-1 inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold border transition-colors ${isDark ? 'border-fuchsia-500/60 text-fuchsia-100 bg-fuchsia-500/20 hover:bg-fuchsia-500/30' : 'border-fuchsia-400 text-fuchsia-800 bg-fuchsia-50 hover:bg-fuchsia-100'}`}
                       >
                         <Upload className="h-3.5 w-3.5" /> Subir nueva versión
                       </button>
                     )}
-                    {/* Form inline de reenvío — solo se pinta para el arte
-                        específico que el asesor eligió corregir. */}
-                    {reenvioOpen && reenvioOpen.pruebaId === arte.pruebaColorId && (
-                      <div className={`mt-3 rounded-lg border p-3 space-y-3 ${isDark ? 'bg-zinc-900/70 border-fuchsia-500/40' : 'bg-fuchsia-50/60 border-fuchsia-300'}`}>
-                        <div className={`text-xs font-semibold flex items-center gap-1.5 ${isDark ? 'text-fuchsia-200' : 'text-fuchsia-800'}`}>
-                          <Upload className="h-3.5 w-3.5" /> Subir nueva versión del arte
-                        </div>
-                        <div>
-                          <label className={`block text-[11px] font-medium mb-1 ${isDark ? 'text-zinc-300' : 'text-gray-700'}`}>Nombre del arte</label>
-                          <input
-                            type="text"
-                            value={reenvioNombre}
-                            onChange={(e) => setReenvioNombre(e.target.value)}
-                            placeholder={arte.nombreArte || 'Nombre'}
-                            disabled={reenvioGuardando}
-                            className={`w-full text-xs rounded border px-2 py-1.5 ${isDark ? 'bg-zinc-800 border-zinc-700 text-zinc-100' : 'bg-white border-gray-300 text-gray-900'}`}
-                          />
-                        </div>
-                        <div>
-                          <label className={`block text-[11px] font-medium mb-1 ${isDark ? 'text-zinc-300' : 'text-gray-700'}`}>Archivo (JPG/PNG/MP4)</label>
-                          <input
-                            type="file"
-                            accept="image/jpeg,image/png,video/mp4,.jpg,.jpeg,.png,.mp4"
-                            disabled={reenvioSubiendo || reenvioGuardando}
-                            onChange={(e) => {
-                              const f = e.target.files?.[0];
-                              if (f) subirReenvioArchivo(f);
-                            }}
-                            className={`block text-xs ${isDark ? 'text-zinc-300' : 'text-gray-700'}`}
-                          />
-                          {reenvioSubiendo && (
-                            <div className={`text-[11px] mt-1 flex items-center gap-1 ${isDark ? 'text-zinc-400' : 'text-gray-500'}`}>
-                              <Loader2 className="h-3 w-3 animate-spin" /> Subiendo…
-                            </div>
-                          )}
-                          {reenvioArchivoNombre && !reenvioSubiendo && (
-                            <div className={`text-[11px] mt-1 ${isDark ? 'text-emerald-300' : 'text-emerald-700'}`}>
-                              Archivo cargado: {reenvioArchivoNombre}
-                            </div>
-                          )}
-                        </div>
-                        <div>
-                          <label className={`block text-[11px] font-medium mb-1 ${isDark ? 'text-zinc-300' : 'text-gray-700'}`}>O pega un link (Drive, Dropbox, etc.)</label>
-                          <input
-                            type="url"
-                            value={reenvioEnlace}
-                            onChange={(e) => setReenvioEnlace(e.target.value)}
-                            placeholder="https://..."
-                            disabled={reenvioGuardando}
-                            className={`w-full text-xs rounded border px-2 py-1.5 ${isDark ? 'bg-zinc-800 border-zinc-700 text-zinc-100' : 'bg-white border-gray-300 text-gray-900'}`}
-                          />
-                        </div>
-                        {reenvioError && (
-                          <div className={`text-[11px] rounded px-2 py-1.5 ${isDark ? 'bg-red-500/15 text-red-200' : 'bg-red-50 text-red-700'}`}>
-                            {reenvioError}
+                    {/* Form inline de reenvío POR ARTE — nombre + archivo + link.
+                        Sin botón de guardado individual: el envío lo hace el
+                        botón global al final del bloque. */}
+                    {arte.pruebaColorId && reenvioForms.has(arte.pruebaColorId) && (() => {
+                      const pid = arte.pruebaColorId!;
+                      const f = reenvioForms.get(pid)!;
+                      return (
+                        <div className={`mt-3 rounded-lg border p-3 space-y-3 ${isDark ? 'bg-zinc-900/70 border-fuchsia-500/40' : 'bg-fuchsia-50/60 border-fuchsia-300'}`}>
+                          <div className={`text-xs font-semibold flex items-center justify-between gap-2 ${isDark ? 'text-fuchsia-200' : 'text-fuchsia-800'}`}>
+                            <span className="flex items-center gap-1.5">
+                              <Upload className="h-3.5 w-3.5" /> Subir nueva versión del arte
+                            </span>
+                            <button
+                              type="button"
+                              onClick={() => closeReenvio(pid)}
+                              disabled={reenvioGuardando}
+                              className={`text-[11px] font-medium ${isDark ? 'text-zinc-400 hover:text-zinc-200' : 'text-gray-500 hover:text-gray-700'}`}
+                            >
+                              Quitar
+                            </button>
                           </div>
-                        )}
-                        <div className="flex items-center gap-2">
-                          <button
-                            type="button"
-                            onClick={confirmarReenvio}
-                            disabled={reenvioSubiendo || reenvioGuardando || (!reenvioArchivoUrl && !reenvioEnlace.trim())}
-                            className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded text-xs font-semibold transition-colors disabled:opacity-50 ${isDark ? 'bg-fuchsia-500/30 text-fuchsia-100 hover:bg-fuchsia-500/40' : 'bg-fuchsia-500 text-white hover:bg-fuchsia-600'}`}
-                          >
-                            {reenvioGuardando ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Send className="h-3.5 w-3.5" />}
-                            Guardar y enviar a revisión
-                          </button>
-                          <button
-                            type="button"
-                            onClick={resetReenvio}
-                            disabled={reenvioGuardando}
-                            className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded text-xs font-medium transition-colors ${isDark ? 'text-zinc-300 hover:bg-zinc-800' : 'text-gray-700 hover:bg-gray-100'}`}
-                          >
-                            Cancelar
-                          </button>
+                          <div>
+                            <label className={`block text-[11px] font-medium mb-1 ${isDark ? 'text-zinc-300' : 'text-gray-700'}`}>Nombre del arte</label>
+                            <input
+                              type="text"
+                              value={f.nombre}
+                              onChange={(e) => updateReenvio(pid, { nombre: e.target.value })}
+                              placeholder={arte.nombreArte || 'Nombre'}
+                              disabled={reenvioGuardando}
+                              className={`w-full text-xs rounded border px-2 py-1.5 ${isDark ? 'bg-zinc-800 border-zinc-700 text-zinc-100' : 'bg-white border-gray-300 text-gray-900'}`}
+                            />
+                          </div>
+                          <div>
+                            <label className={`block text-[11px] font-medium mb-1 ${isDark ? 'text-zinc-300' : 'text-gray-700'}`}>Archivo (JPG/PNG/MP4)</label>
+                            <input
+                              type="file"
+                              accept="image/jpeg,image/png,video/mp4,.jpg,.jpeg,.png,.mp4"
+                              disabled={f.subiendo || reenvioGuardando}
+                              onChange={(e) => {
+                                const file = e.target.files?.[0];
+                                if (file) subirReenvioArchivo(pid, file);
+                              }}
+                              className={`block text-xs ${isDark ? 'text-zinc-300' : 'text-gray-700'}`}
+                            />
+                            {f.subiendo && (
+                              <div className={`text-[11px] mt-1 flex items-center gap-1 ${isDark ? 'text-zinc-400' : 'text-gray-500'}`}>
+                                <Loader2 className="h-3 w-3 animate-spin" /> Subiendo…
+                              </div>
+                            )}
+                            {f.archivoNombre && !f.subiendo && (
+                              <div className={`text-[11px] mt-1 ${isDark ? 'text-emerald-300' : 'text-emerald-700'}`}>
+                                Archivo cargado: {f.archivoNombre}
+                              </div>
+                            )}
+                          </div>
+                          <div>
+                            <label className={`block text-[11px] font-medium mb-1 ${isDark ? 'text-zinc-300' : 'text-gray-700'}`}>O pega un link (Drive, Dropbox, etc.)</label>
+                            <input
+                              type="url"
+                              value={f.enlace}
+                              onChange={(e) => updateReenvio(pid, { enlace: e.target.value })}
+                              placeholder="https://..."
+                              disabled={reenvioGuardando}
+                              className={`w-full text-xs rounded border px-2 py-1.5 ${isDark ? 'bg-zinc-800 border-zinc-700 text-zinc-100' : 'bg-white border-gray-300 text-gray-900'}`}
+                            />
+                          </div>
+                          {f.error && (
+                            <div className={`text-[11px] rounded px-2 py-1.5 ${isDark ? 'bg-red-500/15 text-red-200' : 'bg-red-50 text-red-700'}`}>
+                              {f.error}
+                            </div>
+                          )}
                         </div>
-                      </div>
-                    )}
+                      );
+                    })()}
                   </div>
                 ))}
               </div>
+              {/* Botón global al pie del bloque — un solo envío para los N
+                  artes que el asesor abrió. Si es 1 arte queda como el flujo
+                  original; si son N, los manda a todos en paralelo. */}
+              {reenvioForms.size > 0 && (() => {
+                const openCount = reenvioForms.size;
+                const listos = Array.from(reenvioForms.values()).filter(f => f.archivoUrl || f.enlace.trim()).length;
+                const todosListos = listos === openCount;
+                return (
+                  <div className={`mt-2 rounded-lg p-2.5 flex flex-col gap-2 border ${isDark ? 'bg-zinc-900/50 border-fuchsia-500/40' : 'bg-white border-fuchsia-300'}`}>
+                    {reenvioMasivoError && (
+                      <div className={`text-[11px] rounded px-2 py-1.5 ${isDark ? 'bg-red-500/15 text-red-200' : 'bg-red-50 text-red-700'}`}>
+                        {reenvioMasivoError}
+                      </div>
+                    )}
+                    <div className="flex items-center justify-between gap-2 flex-wrap">
+                      <div className={`text-[11px] ${isDark ? 'text-zinc-300' : 'text-gray-700'}`}>
+                        {listos} / {openCount} arte{openCount === 1 ? '' : 's'} con archivo o link cargado.
+                      </div>
+                      <button
+                        type="button"
+                        onClick={confirmarReenvioMasivo}
+                        disabled={reenvioGuardando || !todosListos}
+                        className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded text-xs font-semibold transition-colors disabled:opacity-50 ${isDark ? 'bg-fuchsia-500/30 text-fuchsia-100 hover:bg-fuchsia-500/40' : 'bg-fuchsia-500 text-white hover:bg-fuchsia-600'}`}
+                      >
+                        {reenvioGuardando ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Send className="h-3.5 w-3.5" />}
+                        Guardar y enviar {openCount > 1 ? `los ${openCount} artes` : 'a revisión'}
+                      </button>
+                    </div>
+                  </div>
+                );
+              })()}
             </div>
           )}
 
