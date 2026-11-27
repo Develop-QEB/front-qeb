@@ -1472,6 +1472,33 @@ function PruebaBatchCard({
 
 // ─── Tareas asociadas a una prueba (Revisión + Seguimiento) ─────────────
 // [Fix #258 — expand inline] Jos: las acciones aprobar/rechazar/finalizar
+// Jos 2026-11-27: helper para saber si una tarea (Impresión / Recepción /
+// cualquier tipo) referencia a una prueba específica en su contenido JSON.
+// Soporta ambos formatos: `pruebaColorId` singular y `pruebaColorIds` array
+// (batch). Si no hay contenido asume que sí aplica por compatibilidad.
+function tareaReferenciaA(
+  tarea: TareaAsociadaPruebaColor,
+  pruebaId: number,
+  tipo: string,
+): boolean {
+  if (tarea.tipo !== tipo) return false;
+  if (!tarea.contenido) return true;
+  try {
+    const c = JSON.parse(tarea.contenido);
+    const ids: number[] = [];
+    if (Array.isArray(c.pruebaColorIds)) {
+      for (const v of c.pruebaColorIds) {
+        const n = Number(v);
+        if (Number.isFinite(n)) ids.push(n);
+      }
+    }
+    const single = Number(c.pruebaColorId);
+    if (Number.isFinite(single)) ids.push(single);
+    if (ids.length === 0) return true;
+    return ids.includes(pruebaId);
+  } catch { return true; }
+}
+
 // NO deben ser botones directos del modal; deben vivir dentro de la "tarea
 // abierta". Implementacion: cada tarea es clickeable y al expandirla aparece
 // el panel con las acciones (resolver). El estado colapsado solo muestra el
@@ -1769,29 +1796,8 @@ function TareasAsociadasSection({
             puedeCrear={puedeCrear}
             puedeRevisar={puedeRevisar}
             esUltimaRevision={tareaAbierta.id === idUltimaRevision}
-            yaTieneImpresion={tareas.some(t => {
-              if (t.tipo !== 'Impresión') return false;
-              // Jos 2026-11-27: filtrar por pruebaColorId del arte que se
-              // está atendiendo — antes bloqueaba crear Impresión del arte
-              // B solo porque ya existía la del arte A del mismo lote.
-              if (!t.contenido) return true;
-              try {
-                const c = JSON.parse(t.contenido);
-                const pid = Number(c.pruebaColorId);
-                if (Number.isFinite(pid)) return pid === pruebaParaModal.id;
-                return true;
-              } catch { return true; }
-            })}
-            yaTieneRecepcion={tareas.some(t => {
-              if (t.tipo !== 'Recepción') return false;
-              if (!t.contenido) return true;
-              try {
-                const c = JSON.parse(t.contenido);
-                const pid = Number(c.pruebaColorId);
-                if (Number.isFinite(pid)) return pid === pruebaParaModal.id;
-                return true;
-              } catch { return true; }
-            })}
+            yaTieneImpresion={tareas.some(t => tareaReferenciaA(t, pruebaParaModal.id, 'Impresión'))}
+            yaTieneRecepcion={tareas.some(t => tareaReferenciaA(t, pruebaParaModal.id, 'Recepción'))}
             onClose={() => setOpenTareaId(null)}
             onAprobar={(opts) => resolver.mutate({ tareaId: tareaAbierta.id, accion: 'aprobar', comentario: opts?.comentario, archivo_adjunto: opts?.archivo_adjunto, enlace_adjunto: opts?.enlace_adjunto, pruebaIdObjetivo: pruebaParaModal.id })}
             onRechazar={(comentario, adjuntos) => resolver.mutate({ tareaId: tareaAbierta.id, accion: 'rechazar', comentario, archivo_adjunto: adjuntos?.archivo_adjunto, enlace_adjunto: adjuntos?.enlace_adjunto, pruebaIdObjetivo: pruebaParaModal.id })}
