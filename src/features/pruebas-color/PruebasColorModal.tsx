@@ -1561,6 +1561,12 @@ function TareasAsociadasSection({
   // del contenido JSON para pasarlas al AtenderRevisionBatchModal.
   const contenidoBatch = useMemo(() => {
     if (!tareaAbierta || !tareaAbierta.contenido) return null;
+    // Jos 2026-11-27: el modal batch (AtenderRevisionBatchModal) solo
+    // aplica a tareas tipo 'Revisión de artes' (donde Diseño
+    // aprueba/rechaza cada arte). Para 'Corrección' y 'Seguimiento'
+    // agrupadas, el AtenderTareaModal normal ya pinta la lista de N
+    // artes con su propia UI (aviso rechazo/seguimiento).
+    if (tareaAbierta.tipo !== 'Revisión de artes') return null;
     try {
       const c = JSON.parse(tareaAbierta.contenido);
       const ids = Array.isArray(c.pruebaColorIds)
