@@ -1769,8 +1769,29 @@ function TareasAsociadasSection({
             puedeCrear={puedeCrear}
             puedeRevisar={puedeRevisar}
             esUltimaRevision={tareaAbierta.id === idUltimaRevision}
-            yaTieneImpresion={tareas.some(t => t.tipo === 'Impresión')}
-            yaTieneRecepcion={tareas.some(t => t.tipo === 'Recepción')}
+            yaTieneImpresion={tareas.some(t => {
+              if (t.tipo !== 'Impresión') return false;
+              // Jos 2026-11-27: filtrar por pruebaColorId del arte que se
+              // está atendiendo — antes bloqueaba crear Impresión del arte
+              // B solo porque ya existía la del arte A del mismo lote.
+              if (!t.contenido) return true;
+              try {
+                const c = JSON.parse(t.contenido);
+                const pid = Number(c.pruebaColorId);
+                if (Number.isFinite(pid)) return pid === pruebaParaModal.id;
+                return true;
+              } catch { return true; }
+            })}
+            yaTieneRecepcion={tareas.some(t => {
+              if (t.tipo !== 'Recepción') return false;
+              if (!t.contenido) return true;
+              try {
+                const c = JSON.parse(t.contenido);
+                const pid = Number(c.pruebaColorId);
+                if (Number.isFinite(pid)) return pid === pruebaParaModal.id;
+                return true;
+              } catch { return true; }
+            })}
             onClose={() => setOpenTareaId(null)}
             onAprobar={(opts) => resolver.mutate({ tareaId: tareaAbierta.id, accion: 'aprobar', comentario: opts?.comentario, archivo_adjunto: opts?.archivo_adjunto, enlace_adjunto: opts?.enlace_adjunto, pruebaIdObjetivo: pruebaParaModal.id })}
             onRechazar={(comentario, adjuntos) => resolver.mutate({ tareaId: tareaAbierta.id, accion: 'rechazar', comentario, archivo_adjunto: adjuntos?.archivo_adjunto, enlace_adjunto: adjuntos?.enlace_adjunto, pruebaIdObjetivo: pruebaParaModal.id })}
